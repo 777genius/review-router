@@ -823,7 +823,11 @@ commit_and_open_pr() {
     git config user.name "ai-robot-review installer"
     git config user.email "ai-robot-review@example.invalid"
     git commit -m "ci: add ai-robot-review" >/dev/null
-    git push -u origin "$INSTALL_BRANCH" --force-with-lease >/dev/null
+    if expected_sha="$(git rev-parse "refs/remotes/origin/$INSTALL_BRANCH" 2>/dev/null)"; then
+      git push -u origin "$INSTALL_BRANCH" --force-with-lease="refs/heads/$INSTALL_BRANCH:$expected_sha" >/dev/null
+    else
+      git push -u origin "$INSTALL_BRANCH" >/dev/null
+    fi
   ) || {
     status=$?
     if [ "$status" -eq 42 ]; then

@@ -27,7 +27,10 @@ describe('MarkdownFormatter', () => {
     },
   });
 
-  const createFinding = (severity: 'critical' | 'major' | 'minor', overrides?: Partial<Finding>): Finding => ({
+  const createFinding = (
+    severity: 'critical' | 'major' | 'minor',
+    overrides?: Partial<Finding>
+  ): Finding => ({
     file: 'src/test.ts',
     line: 10,
     severity,
@@ -154,7 +157,9 @@ describe('MarkdownFormatter', () => {
 
       expect(output).toContain('Evidence: Medium Confidence (70%)');
       // Check that the evidence line doesn't have reasoning
-      const evidenceLine = output.split('\n').find(line => line.includes('Evidence:'));
+      const evidenceLine = output
+        .split('\n')
+        .find((line) => line.includes('Evidence:'));
       expect(evidenceLine).not.toContain(' — ');
     });
   });
@@ -172,7 +177,11 @@ describe('MarkdownFormatter', () => {
     it('does not include Test Coverage (removed for simplicity)', () => {
       const review = createMinimalReview();
       review.testHints = [
-        { file: 'src/test.ts', suggestedTestFile: '__tests__/test.test.ts', testPattern: 'unit' },
+        {
+          file: 'src/test.ts',
+          suggestedTestFile: '__tests__/test.test.ts',
+          testPattern: 'unit',
+        },
       ];
 
       const output = formatter.format(review);
@@ -253,7 +262,39 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('provider-1: success (1.2s, $0.0010, tokens 50)');
+      expect(output).toContain(
+        'provider-1: success (1.2s, $0.0010, tokens 50)'
+      );
+    });
+
+    it('hides API cost for OAuth CLI subscription providers', () => {
+      const review = createMinimalReview();
+      review.metrics.totalCost = 0;
+      review.metrics.totalTokens = 0;
+      review.runDetails = {
+        providers: [
+          {
+            name: 'codex/gpt-5.4-mini',
+            status: 'success',
+            durationSeconds: 1.2,
+            cost: 0,
+          },
+        ],
+        totalCost: 0,
+        totalTokens: 0,
+        durationSeconds: 1.5,
+        cacheHit: false,
+        synthesisModel: 'codex/gpt-5.4-mini',
+        providerPoolSize: 1,
+      };
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('OAuth subscription');
+      expect(output).not.toContain('$0.0000');
+      expect(output).not.toContain('Cost:');
+      expect(output).not.toContain('Tokens: 0');
+      expect(output).toContain('codex/gpt-5.4-mini: success (1.2s)');
     });
 
     it('includes provider error messages', () => {
@@ -317,7 +358,9 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('<details><summary>AI Generated Code Likelihood</summary>');
+      expect(output).toContain(
+        '<details><summary>AI Generated Code Likelihood</summary>'
+      );
       expect(output).toContain('Overall: 75.0% (likely)');
     });
   });
@@ -339,7 +382,9 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('<details><summary>Raw provider outputs</summary>');
+      expect(output).toContain(
+        '<details><summary>Raw provider outputs</summary>'
+      );
       expect(output).toContain('provider-1 [success] (1.0s)');
       expect(output).toContain('{"findings": []}');
     });

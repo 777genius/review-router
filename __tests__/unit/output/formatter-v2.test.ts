@@ -212,7 +212,9 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('Detected by: provider-1, provider-2, provider-3');
+      expect(output).toContain(
+        'Detected by: provider-1, provider-2, provider-3'
+      );
     });
 
     it('should include action items if present', () => {
@@ -256,6 +258,47 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('| Cost | $0.0250 |');
       expect(output).toContain('| Tokens | 5,000 |');
       expect(output).toContain('| Providers | 2/3 |');
+    });
+
+    it('should hide API cost for OAuth CLI subscription providers', () => {
+      const review = createMockReview({
+        runDetails: {
+          providers: [
+            {
+              name: 'codex/gpt-5.4-mini',
+              status: 'success',
+              durationSeconds: 3.5,
+              cost: 0,
+            },
+          ],
+          totalCost: 0,
+          totalTokens: 0,
+          durationSeconds: 5.5,
+          cacheHit: false,
+          synthesisModel: 'codex/gpt-5.4-mini',
+          providerPoolSize: 1,
+        },
+        metrics: {
+          totalFindings: 0,
+          critical: 0,
+          major: 0,
+          minor: 0,
+          providersUsed: 1,
+          providersSuccess: 1,
+          providersFailed: 0,
+          totalTokens: 0,
+          totalCost: 0,
+          durationSeconds: 5.5,
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('OAuth subscription');
+      expect(output).not.toContain('$0.0000');
+      expect(output).not.toContain('| Cost |');
+      expect(output).not.toContain('| Tokens | 0 |');
+      expect(output).not.toContain('codex/gpt-5.4-mini** (3.50s, $0.0000)');
     });
 
     it('should show cache hit indicator', () => {
@@ -306,7 +349,9 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('**Provider Performance:**');
-      expect(output).toContain('✅ **provider-1** (3.50s, $0.0050, 500 tokens)');
+      expect(output).toContain(
+        '✅ **provider-1** (3.50s, $0.0050, 500 tokens)'
+      );
       expect(output).toContain('⏱️ **provider-2** (30.00s)');
       expect(output).toContain('Request timed out after 30s');
     });
@@ -398,7 +443,9 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('## Summary');
-      expect(output).toContain('**1 critical issue** require immediate attention');
+      expect(output).toContain(
+        '**1 critical issue** require immediate attention'
+      );
       expect(output).toContain('1 major issue should be addressed');
       expect(output).toContain('1 minor improvement suggested');
       expect(output).toContain('Found across 3 files');

@@ -125,6 +125,8 @@ log "Org selected-repo smoke passed: $ORG -> $REPO_NAME"
 log "Setup PR: $pr_url"
 if is_true "$KEEP_REPO"; then
   log "Keeping repo because AI_ROBOT_REVIEW_E2E_KEEP_REPO=1"
+elif is_true "$SKIP_DELETE"; then
+  log "Cleanup removed org smoke secrets/variables. Temporary repo was kept because AI_ROBOT_REVIEW_E2E_SKIP_DELETE=1"
 else
   log "Cleanup will remove org smoke secrets/variables and repo"
 fi

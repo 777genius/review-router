@@ -3,6 +3,7 @@ import { Finding, ReviewResult } from '../types';
 import { logger } from '../utils/logger';
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -100,7 +101,7 @@ export class CodexProvider extends Provider {
 
     const agenticContext = this.shouldUseAgenticContext();
     const promptForCodex = agenticContext
-      ? this.wrapAgenticReviewPrompt(prompt)
+      ? await this.wrapAgenticReviewPrompt(prompt)
       : this.wrapPromptOnlyReviewPrompt(prompt);
 
     logger.info(
@@ -336,11 +337,15 @@ export class CodexProvider extends Provider {
     return !['0', 'false', 'no', 'off'].includes(value.trim().toLowerCase());
   }
 
-  private wrapAgenticReviewPrompt(prompt: string): string {
+  private async wrapAgenticReviewPrompt(prompt: string): Promise<string> {
+    const contextSeed = await this.buildRepositoryContextSeed(prompt);
+
     return [
       'You are running as ai-robot-review inside GitHub Actions.',
       '',
       'Use the deterministic PR context below as the source of truth for review scope.',
+      contextSeed,
+      contextSeed ? '' : '',
       'You may inspect related repository files before producing findings, but only with read-only shell commands such as rg, sed, cat, git diff, git show, git grep, ls, find, and pwd.',
       'Before deciding whether findings is empty or non-empty, run read-only exploration commands: inspect changed source files with git diff/sed, then use rg/git grep on imported or changed symbols to find related files.',
       'Inspect at least one directly related file when available, such as imports, called modules, schema/config files, tests, or callers.',
@@ -360,7 +365,7 @@ export class CodexProvider extends Provider {
       'The "findings" array may be empty. "severity" must be one of "critical", "major", or "minor".',
       'The "suggestion" field is required by schema; use null unless there is an exact safe replacement.',
       'Do not return markdown, prose, or a bare JSON array.',
-    ].join('\n');
+    ].filter((line) => line !== undefined).join('\n');
   }
 
   private wrapPromptOnlyReviewPrompt(prompt: string): string {
@@ -439,6 +444,172 @@ export class CodexProvider extends Provider {
     }
 
     return env;
+  }
+
+  private async buildRepositoryContextSeed(prompt: string): Promise<string> {
+    const changedFiles = this.extractChangedFiles(prompt)
+      .filter((file) => this.isContextReadableFile(file))
+      .slice(0, 5);
+
+    if (changedFiles.length === 0) {
+      return '';
+    }
+
+    const snippets: string[] = [];
+    const relatedFiles = new Set<string>();
+
+    for (const file of changedFiles) {
+      const content = await this.readRepoFileSnippet(file);
+      if (!content) continue;
+
+      snippets.push(this.formatContextSnippet(file, 'changed', content));
+      for (const related of this.extractRelativeImportFiles(file, content)) {
+        if (this.isContextReadableFile(related)) {
+          relatedFiles.add(related);
+        }
+      }
+    }
+
+    for (const file of [...relatedFiles].filter((file) => !changedFiles.includes(file)).slice(0, 8)) {
+      const content = await this.readRepoFileSnippet(file);
+      if (content) {
+        snippets.push(this.formatContextSnippet(file, 'related', content));
+      }
+    }
+
+    if (snippets.length === 0) {
+      return '';
+    }
+
+    return [
+      'DETERMINISTIC REPOSITORY CONTEXT SEED:',
+      'These snippets were read before Codex agentic exploration. Use them as evidence, but only comment on changed lines.',
+      ...snippets,
+      'END DETERMINISTIC REPOSITORY CONTEXT SEED',
+    ].join('\n');
+  }
+
+  private extractChangedFiles(prompt: string): string[] {
+    const files = new Set<string>();
+    const fileListPattern = /^- ([^\s]+) \((?:added|modified|removed|renamed|changed)/gm;
+    let match;
+
+    while ((match = fileListPattern.exec(prompt)) !== null) {
+      files.add(match[1]);
+    }
+
+    const diffPattern = /^diff --git a\/(.+?) b\/(.+?)$/gm;
+    while ((match = diffPattern.exec(prompt)) !== null) {
+      files.add(match[2]);
+    }
+
+    return [...files];
+  }
+
+  private isContextReadableFile(file: string): boolean {
+    const normalized = this.normalizeRepoPath(file);
+    if (!normalized) return false;
+    const lower = normalized.toLowerCase();
+
+    if (
+      lower.includes('/.git/') ||
+      lower.includes('/.codex/') ||
+      lower.includes('.env') ||
+      lower.includes('secret') ||
+      lower.includes('credential') ||
+      lower.endsWith('.pem') ||
+      lower.endsWith('.key') ||
+      lower.endsWith('auth.json')
+    ) {
+      return false;
+    }
+
+    return /\.(?:[cm]?js|jsx|tsx?|py|go|rs|java|kt|kts|dart|rb|php|cs|cpp|c|h|hpp|swift|scala|json|ya?ml|toml|sql|graphql|proto)$/i.test(normalized);
+  }
+
+  private normalizeRepoPath(file: string): string | null {
+    if (!file || file.includes('\0') || path.isAbsolute(file)) {
+      return null;
+    }
+
+    const normalized = path.normalize(file).replace(/\\/g, '/');
+    if (normalized === '.' || normalized.startsWith('../') || normalized === '..') {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  private async readRepoFileSnippet(file: string): Promise<string> {
+    const normalized = this.normalizeRepoPath(file);
+    if (!normalized) return '';
+
+    const repoRoot = process.cwd();
+    const fullPath = path.resolve(repoRoot, normalized);
+    if (!fullPath.startsWith(repoRoot + path.sep)) {
+      return '';
+    }
+
+    try {
+      const stat = await fs.stat(fullPath);
+      if (!stat.isFile() || stat.size > 200_000) {
+        return '';
+      }
+
+      const content = await fs.readFile(fullPath, 'utf8');
+      return content.split(/\r?\n/).slice(0, 220).join('\n').slice(0, 16_000);
+    } catch {
+      return '';
+    }
+  }
+
+  private extractRelativeImportFiles(fromFile: string, content: string): string[] {
+    const imports = new Set<string>();
+    const importPattern = /(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+|require\()\s*['"](\.{1,2}\/[^'"]+)['"]/g;
+    let match;
+
+    while ((match = importPattern.exec(content)) !== null) {
+      const resolved = this.resolveRelativeImport(fromFile, match[1]);
+      if (resolved) imports.add(resolved);
+    }
+
+    return [...imports];
+  }
+
+  private resolveRelativeImport(fromFile: string, specifier: string): string | null {
+    const base = path.dirname(fromFile);
+    const raw = this.normalizeRepoPath(path.join(base, specifier));
+    if (!raw) return null;
+
+    const candidates = [
+      raw,
+      ...['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json'].map((ext) => `${raw}${ext}`),
+      ...['.ts', '.tsx', '.js', '.jsx', '.json'].map((ext) => path.posix.join(raw, `index${ext}`)),
+    ];
+
+    for (const candidate of candidates) {
+      const normalized = this.normalizeRepoPath(candidate);
+      if (!normalized || !this.isContextReadableFile(normalized)) continue;
+      try {
+        const fullPath = path.resolve(process.cwd(), normalized);
+        if (fullPath.startsWith(process.cwd() + path.sep)) {
+          const stat = fsSync.statSync(fullPath);
+          if (stat.isFile()) return normalized;
+        }
+      } catch {
+        // Try next candidate.
+      }
+    }
+
+    return null;
+  }
+
+  private formatContextSnippet(file: string, role: 'changed' | 'related', content: string): string {
+    return [
+      `<context-file path="${file}" role="${role}">`,
+      content,
+      '</context-file>',
+    ].join('\n');
   }
 
   private async readOptionalFile(file: string): Promise<string> {

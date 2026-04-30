@@ -11983,7 +11983,7 @@ var decorateErrorWithCounts = (error2, attemptNumber, options) => {
   return error2;
 };
 async function pRetry(input, options) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     options = { ...options };
     options.onFailedAttempt ??= () => {
     };
@@ -12005,7 +12005,7 @@ async function pRetry(input, options) {
       try {
         const result = await input(attemptNumber);
         cleanUp();
-        resolve2(result);
+        resolve3(result);
       } catch (error2) {
         try {
           if (!(error2 instanceof Error)) {
@@ -12052,7 +12052,7 @@ async function withRetry(fn, options) {
           throw err;
         }
         logger.warn(`Retryable error: attempt ${attempt} of ${maxAttempts}`, err.message);
-        await new Promise((resolve2) => setTimeout(resolve2, delay));
+        await new Promise((resolve3) => setTimeout(resolve3, delay));
         delay = Math.min(delay * factor, options.maxTimeout ?? 4e3);
       }
     }
@@ -12291,7 +12291,7 @@ var OpenCodeProvider = class extends Provider {
     }
   }
   runCli(bin, args, timeoutMs) {
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const proc = (0, import_child_process.spawn)(bin, args, {
         stdio: ["ignore", "pipe", "pipe"],
         detached: true
@@ -12332,7 +12332,7 @@ var OpenCodeProvider = class extends Provider {
           if (code !== 0) {
             reject(new Error(`OpenCode CLI exited with code ${code}: ${stderr || stdout || "no output"}`));
           } else {
-            resolve2({ stdout: stdout.trim(), stderr: stderr.trim() });
+            resolve3({ stdout: stdout.trim(), stderr: stderr.trim() });
           }
         }
       });
@@ -12348,10 +12348,10 @@ var OpenCodeProvider = class extends Provider {
     throw new Error("OpenCode CLI is not available (opencode or npx opencode-ai)");
   }
   async canRun(cmd, args) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       const proc = (0, import_child_process.spawn)(cmd, args, { stdio: "ignore" });
-      proc.on("error", () => resolve2(false));
-      proc.on("close", (code) => resolve2(code === 0));
+      proc.on("error", () => resolve3(false));
+      proc.on("close", (code) => resolve3(code === 0));
     });
   }
   extractFindings(content) {
@@ -12457,7 +12457,7 @@ var ClaudeCodeProvider = class extends Provider {
     }
   }
   runCli(bin, args, timeoutMs) {
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const proc = (0, import_child_process2.spawn)(bin, args, {
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
@@ -12499,7 +12499,7 @@ var ClaudeCodeProvider = class extends Provider {
           if (code !== 0) {
             reject(new Error(`Claude Code CLI exited with code ${code}: ${stderr || stdout || "no output"}`));
           } else {
-            resolve2({ stdout: stdout.trim(), stderr: stderr.trim() });
+            resolve3({ stdout: stdout.trim(), stderr: stderr.trim() });
           }
         }
       });
@@ -12520,10 +12520,10 @@ var ClaudeCodeProvider = class extends Provider {
     throw new Error("Claude Code CLI is not available (tried: claude, /usr/local/bin/claude, ~/.local/bin/claude)");
   }
   async canRun(cmd, args) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       const proc = (0, import_child_process2.spawn)(cmd, args, { stdio: "ignore" });
-      proc.on("error", () => resolve2(false));
-      proc.on("close", (code) => resolve2(code === 0));
+      proc.on("error", () => resolve3(false));
+      proc.on("close", (code) => resolve3(code === 0));
     });
   }
   extractFindings(content) {
@@ -12547,6 +12547,7 @@ var ClaudeCodeProvider = class extends Provider {
 // src/providers/codex.ts
 var import_child_process3 = require("child_process");
 var fs5 = __toESM(require("fs/promises"));
+var fsSync = __toESM(require("fs"));
 var os3 = __toESM(require("os"));
 var path4 = __toESM(require("path"));
 var crypto3 = __toESM(require("crypto"));
@@ -12777,7 +12778,7 @@ var CodexProvider = class extends Provider {
     const started = Date.now();
     const binary2 = await this.resolveBinary();
     const agenticContext = this.shouldUseAgenticContext();
-    const promptForCodex = agenticContext ? this.wrapAgenticReviewPrompt(prompt) : this.wrapPromptOnlyReviewPrompt(prompt);
+    const promptForCodex = agenticContext ? await this.wrapAgenticReviewPrompt(prompt) : this.wrapPromptOnlyReviewPrompt(prompt);
     logger.info(
       `Running Codex CLI safely: codex exec --model ${this.model} --sandbox read-only --ephemeral ...`
     );
@@ -12875,7 +12876,7 @@ var CodexProvider = class extends Provider {
       });
       fd = await fs5.open(tmpFile, "r");
       const fdNum = fd.fd;
-      const { stdout, stderr } = await new Promise((resolve2, reject) => {
+      const { stdout, stderr } = await new Promise((resolve3, reject) => {
         const proc = (0, import_child_process3.spawn)(bin, args, {
           stdio: [fdNum, "pipe", "pipe"],
           detached: true,
@@ -12920,7 +12921,7 @@ var CodexProvider = class extends Provider {
                 )
               );
             } else {
-              resolve2({ stdout: stdout2, stderr: stderr2 });
+              resolve3({ stdout: stdout2, stderr: stderr2 });
             }
           }
         });
@@ -12960,11 +12961,14 @@ var CodexProvider = class extends Provider {
     if (value === void 0 || value === "") return defaultValue;
     return !["0", "false", "no", "off"].includes(value.trim().toLowerCase());
   }
-  wrapAgenticReviewPrompt(prompt) {
+  async wrapAgenticReviewPrompt(prompt) {
+    const contextSeed = await this.buildRepositoryContextSeed(prompt);
     return [
       "You are running as ai-robot-review inside GitHub Actions.",
       "",
       "Use the deterministic PR context below as the source of truth for review scope.",
+      contextSeed,
+      contextSeed ? "" : "",
       "You may inspect related repository files before producing findings, but only with read-only shell commands such as rg, sed, cat, git diff, git show, git grep, ls, find, and pwd.",
       "Before deciding whether findings is empty or non-empty, run read-only exploration commands: inspect changed source files with git diff/sed, then use rg/git grep on imported or changed symbols to find related files.",
       "Inspect at least one directly related file when available, such as imports, called modules, schema/config files, tests, or callers.",
@@ -12984,7 +12988,7 @@ var CodexProvider = class extends Provider {
       'The "findings" array may be empty. "severity" must be one of "critical", "major", or "minor".',
       'The "suggestion" field is required by schema; use null unless there is an exact safe replacement.',
       "Do not return markdown, prose, or a bare JSON array."
-    ].join("\n");
+    ].filter((line) => line !== void 0).join("\n");
   }
   wrapPromptOnlyReviewPrompt(prompt) {
     return [
@@ -13058,6 +13062,130 @@ var CodexProvider = class extends Provider {
       }
     }
     return env;
+  }
+  async buildRepositoryContextSeed(prompt) {
+    const changedFiles = this.extractChangedFiles(prompt).filter((file) => this.isContextReadableFile(file)).slice(0, 5);
+    if (changedFiles.length === 0) {
+      return "";
+    }
+    const snippets = [];
+    const relatedFiles = /* @__PURE__ */ new Set();
+    for (const file of changedFiles) {
+      const content = await this.readRepoFileSnippet(file);
+      if (!content) continue;
+      snippets.push(this.formatContextSnippet(file, "changed", content));
+      for (const related of this.extractRelativeImportFiles(file, content)) {
+        if (this.isContextReadableFile(related)) {
+          relatedFiles.add(related);
+        }
+      }
+    }
+    for (const file of [...relatedFiles].filter((file2) => !changedFiles.includes(file2)).slice(0, 8)) {
+      const content = await this.readRepoFileSnippet(file);
+      if (content) {
+        snippets.push(this.formatContextSnippet(file, "related", content));
+      }
+    }
+    if (snippets.length === 0) {
+      return "";
+    }
+    return [
+      "DETERMINISTIC REPOSITORY CONTEXT SEED:",
+      "These snippets were read before Codex agentic exploration. Use them as evidence, but only comment on changed lines.",
+      ...snippets,
+      "END DETERMINISTIC REPOSITORY CONTEXT SEED"
+    ].join("\n");
+  }
+  extractChangedFiles(prompt) {
+    const files = /* @__PURE__ */ new Set();
+    const fileListPattern = /^- ([^\s]+) \((?:added|modified|removed|renamed|changed)/gm;
+    let match2;
+    while ((match2 = fileListPattern.exec(prompt)) !== null) {
+      files.add(match2[1]);
+    }
+    const diffPattern = /^diff --git a\/(.+?) b\/(.+?)$/gm;
+    while ((match2 = diffPattern.exec(prompt)) !== null) {
+      files.add(match2[2]);
+    }
+    return [...files];
+  }
+  isContextReadableFile(file) {
+    const normalized = this.normalizeRepoPath(file);
+    if (!normalized) return false;
+    const lower = normalized.toLowerCase();
+    if (lower.includes("/.git/") || lower.includes("/.codex/") || lower.includes(".env") || lower.includes("secret") || lower.includes("credential") || lower.endsWith(".pem") || lower.endsWith(".key") || lower.endsWith("auth.json")) {
+      return false;
+    }
+    return /\.(?:[cm]?js|jsx|tsx?|py|go|rs|java|kt|kts|dart|rb|php|cs|cpp|c|h|hpp|swift|scala|json|ya?ml|toml|sql|graphql|proto)$/i.test(normalized);
+  }
+  normalizeRepoPath(file) {
+    if (!file || file.includes("\0") || path4.isAbsolute(file)) {
+      return null;
+    }
+    const normalized = path4.normalize(file).replace(/\\/g, "/");
+    if (normalized === "." || normalized.startsWith("../") || normalized === "..") {
+      return null;
+    }
+    return normalized;
+  }
+  async readRepoFileSnippet(file) {
+    const normalized = this.normalizeRepoPath(file);
+    if (!normalized) return "";
+    const repoRoot = process.cwd();
+    const fullPath = path4.resolve(repoRoot, normalized);
+    if (!fullPath.startsWith(repoRoot + path4.sep)) {
+      return "";
+    }
+    try {
+      const stat2 = await fs5.stat(fullPath);
+      if (!stat2.isFile() || stat2.size > 2e5) {
+        return "";
+      }
+      const content = await fs5.readFile(fullPath, "utf8");
+      return content.split(/\r?\n/).slice(0, 220).join("\n").slice(0, 16e3);
+    } catch {
+      return "";
+    }
+  }
+  extractRelativeImportFiles(fromFile, content) {
+    const imports = /* @__PURE__ */ new Set();
+    const importPattern = /(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+|require\()\s*['"](\.{1,2}\/[^'"]+)['"]/g;
+    let match2;
+    while ((match2 = importPattern.exec(content)) !== null) {
+      const resolved = this.resolveRelativeImport(fromFile, match2[1]);
+      if (resolved) imports.add(resolved);
+    }
+    return [...imports];
+  }
+  resolveRelativeImport(fromFile, specifier) {
+    const base = path4.dirname(fromFile);
+    const raw = this.normalizeRepoPath(path4.join(base, specifier));
+    if (!raw) return null;
+    const candidates = [
+      raw,
+      ...[".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json"].map((ext2) => `${raw}${ext2}`),
+      ...[".ts", ".tsx", ".js", ".jsx", ".json"].map((ext2) => path4.posix.join(raw, `index${ext2}`))
+    ];
+    for (const candidate of candidates) {
+      const normalized = this.normalizeRepoPath(candidate);
+      if (!normalized || !this.isContextReadableFile(normalized)) continue;
+      try {
+        const fullPath = path4.resolve(process.cwd(), normalized);
+        if (fullPath.startsWith(process.cwd() + path4.sep)) {
+          const stat2 = fsSync.statSync(fullPath);
+          if (stat2.isFile()) return normalized;
+        }
+      } catch {
+      }
+    }
+    return null;
+  }
+  formatContextSnippet(file, role, content) {
+    return [
+      `<context-file path="${file}" role="${role}">`,
+      content,
+      "</context-file>"
+    ].join("\n");
   }
   async readOptionalFile(file) {
     try {
@@ -13155,10 +13283,10 @@ var CodexProvider = class extends Provider {
     throw new Error("Codex CLI is not available (tried: codex, codex-cli)");
   }
   async canRun(cmd, args) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       const proc = (0, import_child_process3.spawn)(cmd, args, { stdio: "ignore" });
-      proc.on("error", () => resolve2(false));
-      proc.on("close", (code) => resolve2(code === 0));
+      proc.on("error", () => resolve3(false));
+      proc.on("close", (code) => resolve3(code === 0));
     });
   }
   extractFindings(content) {
@@ -13269,7 +13397,7 @@ var GeminiProvider = class extends Provider {
     }
   }
   runCli(bin, args, timeoutMs) {
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const proc = (0, import_child_process4.spawn)(bin, args, {
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
@@ -13311,7 +13439,7 @@ var GeminiProvider = class extends Provider {
           if (code !== 0) {
             reject(new Error(`Gemini CLI exited with code ${code}: ${stderr || stdout || "no output"}`));
           } else {
-            resolve2({ stdout: stdout.trim(), stderr: stderr.trim() });
+            resolve3({ stdout: stdout.trim(), stderr: stderr.trim() });
           }
         }
       });
@@ -13327,10 +13455,10 @@ var GeminiProvider = class extends Provider {
     throw new Error("Gemini CLI is not available (tried: gemini, npx @google/gemini-cli)");
   }
   async canRun(cmd, args) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       const proc = (0, import_child_process4.spawn)(cmd, args, { stdio: "ignore" });
-      proc.on("error", () => resolve2(false));
-      proc.on("close", (code) => resolve2(code === 0));
+      proc.on("error", () => resolve3(false));
+      proc.on("close", (code) => resolve3(code === 0));
     });
   }
   extractFindings(content) {
@@ -14753,7 +14881,7 @@ function pTimeout(promise, options) {
   } = options;
   let timer;
   let abortHandler;
-  const wrappedPromise = new Promise((resolve2, reject) => {
+  const wrappedPromise = new Promise((resolve3, reject) => {
     if (typeof milliseconds !== "number" || Math.sign(milliseconds) !== 1) {
       throw new TypeError(`Expected \`milliseconds\` to be a positive number, got \`${milliseconds}\``);
     }
@@ -14768,14 +14896,14 @@ function pTimeout(promise, options) {
       signal.addEventListener("abort", abortHandler, { once: true });
     }
     if (milliseconds === Number.POSITIVE_INFINITY) {
-      promise.then(resolve2, reject);
+      promise.then(resolve3, reject);
       return;
     }
     const timeoutError = new TimeoutError();
     timer = customTimers.setTimeout.call(void 0, () => {
       if (fallback) {
         try {
-          resolve2(fallback());
+          resolve3(fallback());
         } catch (error2) {
           reject(error2);
         }
@@ -14785,7 +14913,7 @@ function pTimeout(promise, options) {
         promise.cancel();
       }
       if (message === false) {
-        resolve2();
+        resolve3();
       } else if (message instanceof Error) {
         reject(message);
       } else {
@@ -14795,7 +14923,7 @@ function pTimeout(promise, options) {
     }, milliseconds);
     (async () => {
       try {
-        resolve2(await promise);
+        resolve3(await promise);
       } catch (error2) {
         reject(error2);
       }
@@ -15074,7 +15202,7 @@ var PQueue = class extends import_index.default {
       throwOnTimeout: this.#throwOnTimeout,
       ...options
     };
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       this.#queue.enqueue(async () => {
         this.#pending++;
         try {
@@ -15088,11 +15216,11 @@ var PQueue = class extends import_index.default {
             operation = Promise.race([operation, this.#throwOnAbort(options.signal)]);
           }
           const result = await operation;
-          resolve2(result);
+          resolve3(result);
           this.emit("completed", result);
         } catch (error2) {
           if (error2 instanceof TimeoutError && !options.throwOnTimeout) {
-            resolve2();
+            resolve3();
             return;
           }
           reject(error2);
@@ -15167,13 +15295,13 @@ var PQueue = class extends import_index.default {
     await this.#onEvent("idle");
   }
   async #onEvent(event, filter2) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       const listener = () => {
         if (filter2 && !filter2()) {
           return;
         }
         this.off(event, listener);
-        resolve2();
+        resolve3();
       };
       this.on(event, listener);
     });
@@ -16342,8 +16470,8 @@ var CacheStorage = class {
       await existingLock.promise;
     }
     let resolver;
-    const lockPromise = new Promise((resolve2) => {
-      resolver = resolve2;
+    const lockPromise = new Promise((resolve3) => {
+      resolver = resolve3;
     });
     this.locks.set(key, {
       promise: lockPromise,
@@ -17264,7 +17392,7 @@ ${content.substring(0, 500)}...`);
             () => octokit.rest.issues.createComment({ owner, repo, issue_number: prNumber, body: markedBody }),
             { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
           );
-          await new Promise((resolve2) => setTimeout(resolve2, 1e3));
+          await new Promise((resolve3) => setTimeout(resolve3, 1e3));
         }
         return;
       }
@@ -17279,7 +17407,7 @@ ${content.substring(0, 500)}...`);
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
       if (i < chunks.length - 1) {
-        await new Promise((resolve2) => setTimeout(resolve2, 1e3));
+        await new Promise((resolve3) => setTimeout(resolve3, 1e3));
       }
     }
   }
@@ -17597,7 +17725,7 @@ var GitHubRateLimitTracker = class {
     const waitMs = this.getWaitTimeMs();
     if (waitMs === 0) return;
     logger.info(`Waiting ${Math.ceil(waitMs / 1e3)} seconds for GitHub rate limit to reset...`);
-    await new Promise((resolve2) => setTimeout(resolve2, waitMs + 1e3));
+    await new Promise((resolve3) => setTimeout(resolve3, waitMs + 1e3));
   }
 };
 
@@ -17663,7 +17791,7 @@ var GitHubClient = class {
       debug(
         `Throttling GitHub API request (${delay}ms delay, ${status?.remaining} requests remaining)`
       );
-      await new Promise((resolve2) => setTimeout(resolve2, delay));
+      await new Promise((resolve3) => setTimeout(resolve3, delay));
     }
   }
   /**
@@ -19703,7 +19831,7 @@ var CircuitBreaker = class _CircuitBreaker {
     const lockKey = this.key(providerId);
     const previous = this.locks.get(lockKey)?.catch(() => void 0) ?? Promise.resolve();
     let release;
-    const current = new Promise((resolve2) => release = resolve2);
+    const current = new Promise((resolve3) => release = resolve3);
     const tail = previous.then(() => current);
     this.locks.set(lockKey, tail);
     const cleanupTimer = setTimeout(() => {
@@ -23232,8 +23360,8 @@ var path11 = {
   win32: { sep: "\\" },
   posix: { sep: "/" }
 };
-var sep = defaultPlatform === "win32" ? path11.win32.sep : path11.posix.sep;
-minimatch.sep = sep;
+var sep2 = defaultPlatform === "win32" ? path11.win32.sep : path11.posix.sep;
+minimatch.sep = sep2;
 var GLOBSTAR = Symbol("globstar **");
 minimatch.GLOBSTAR = GLOBSTAR;
 var qmark2 = "[^/]";

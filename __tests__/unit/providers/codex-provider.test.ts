@@ -1,5 +1,7 @@
 import { EventEmitter } from 'events';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { spawn } from 'child_process';
 import { CodexProvider } from '../../../src/providers/codex';
 
@@ -171,5 +173,43 @@ describe('CodexProvider', () => {
     expect(env.GITHUB_TOKEN).toBeUndefined();
     expect(env.INPUT_GITHUB_TOKEN).toBeUndefined();
     expect(env.OPENROUTER_API_KEY).toBeUndefined();
+  });
+
+  it('builds deterministic repository context seed from changed files and relative imports', async () => {
+    const oldCwd = process.cwd();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-context-seed-'));
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(
+      path.join(dir, 'src/passwordReset.js'),
+      "import { getPolicy } from './ratePolicies.js';\nconst policy = getPolicy('marketingEmailPreview');\n"
+    );
+    fs.writeFileSync(
+      path.join(dir, 'src/ratePolicies.js'),
+      "export const RATE_POLICIES = { passwordReset: { maxAttemptsPerHour: 3 } };\n"
+    );
+
+    try {
+      process.chdir(dir);
+      const provider = new CodexProvider('gpt-5.4-mini');
+      const seed = await (provider as any).buildRepositoryContextSeed(
+        [
+          'Files changed:',
+          '- src/passwordReset.js (modified, +1/-1)',
+          '',
+          'Diff:',
+          'diff --git a/src/passwordReset.js b/src/passwordReset.js',
+        ].join('\n')
+      );
+
+      expect(seed).toContain('DETERMINISTIC REPOSITORY CONTEXT SEED');
+      expect(seed).toContain('role="changed"');
+      expect(seed).toContain('src/passwordReset.js');
+      expect(seed).toContain('role="related"');
+      expect(seed).toContain('src/ratePolicies.js');
+      expect(seed).toContain('maxAttemptsPerHour: 3');
+    } finally {
+      process.chdir(oldCwd);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -16082,26 +16082,6 @@ var ConsensusEngine = class {
   }
 };
 
-// src/utils/suggestion-formatter.ts
-function countMaxConsecutiveBackticks(str2) {
-  const backtickSequences = str2.match(/`+/g);
-  if (!backtickSequences) {
-    return 0;
-  }
-  return Math.max(...backtickSequences.map((seq2) => seq2.length));
-}
-function formatSuggestionBlock(content) {
-  if (!content || content.trim() === "") {
-    return "";
-  }
-  const maxBackticks = countMaxConsecutiveBackticks(content);
-  const fenceCount = Math.max(3, maxBackticks + 1);
-  const fence = "`".repeat(fenceCount);
-  return `${fence}suggestion
-${content}
-${fence}`;
-}
-
 // src/utils/severity.ts
 var DISPLAYS = {
   critical: {
@@ -16242,12 +16222,6 @@ var SynthesisEngine = class {
       "",
       finding.message
     ];
-    if (finding.suggestion) {
-      const suggestionBlock = formatSuggestionBlock(finding.suggestion);
-      if (suggestionBlock) {
-        parts.push("", suggestionBlock);
-      }
-    }
     if (finding.providers && finding.providers.length > 1) {
       parts.push("", `Providers: ${finding.providers.join(", ")}`);
     }

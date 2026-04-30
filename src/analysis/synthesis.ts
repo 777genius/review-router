@@ -1,5 +1,4 @@
 import { Finding, InlineComment, PRContext, Review, ReviewConfig, ReviewMetrics, TestCoverageHint, AIAnalysis, ProviderResult, RunDetails, ImpactAnalysis } from '../types';
-import { formatSuggestionBlock } from '../utils/suggestion-formatter';
 import { compareSeverityDesc, severityHeading, severityLine } from '../utils/severity';
 
 export class SynthesisEngine {
@@ -151,12 +150,6 @@ export class SynthesisEngine {
       '',
       finding.message,
     ];
-    if (finding.suggestion) {
-      const suggestionBlock = formatSuggestionBlock(finding.suggestion);
-      if (suggestionBlock) {
-        parts.push('', suggestionBlock);
-      }
-    }
     if (finding.providers && finding.providers.length > 1) {
       parts.push('', `Providers: ${finding.providers.join(', ')}`);
     }

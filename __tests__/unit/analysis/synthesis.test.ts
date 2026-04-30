@@ -18,7 +18,7 @@ describe('SynthesisEngine', () => {
     headSha: 'head',
   };
 
-  it('formats inline suggestions as GitHub suggestion blocks', () => {
+  it('omits provider suggestions from inline comments', () => {
     const finding: Finding = {
       file: 'src/users.js',
       line: 10,
@@ -38,8 +38,8 @@ describe('SynthesisEngine', () => {
     expect(review.inlineComments[0].severity).toBe('critical');
     expect(review.inlineComments[0].body).toContain('🔴 Critical - SQL injection');
     expect(review.inlineComments[0].body).toContain('**Severity:** 🔴 **Critical**');
-    expect(review.inlineComments[0].body).toContain('```suggestion');
-    expect(review.inlineComments[0].body).toContain(finding.suggestion);
+    expect(review.inlineComments[0].body).not.toContain('```suggestion');
+    expect(review.inlineComments[0].body).not.toContain(finding.suggestion);
     expect(review.inlineComments[0].body).not.toContain('Suggestion:');
   });
 

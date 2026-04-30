@@ -70,7 +70,7 @@ function syncEnvFromInputs(): void {
 
   for (const key of inputKeys) {
     const value = core.getInput(key);
-    if (value) {
+    if (value && !process.env[key]) {
       process.env[key] = value;
     }
   }

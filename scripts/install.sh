@@ -734,36 +734,6 @@ jobs:
     timeout-minutes: 20
 YAML
 
-    cat <<YAML
-    env:
-      FAIL_ON_NO_HEALTHY_PROVIDERS: 'true'
-      INLINE_MAX_COMMENTS: '$INLINE_MAX_COMMENTS'
-      INLINE_MIN_SEVERITY: $INLINE_MIN_SEVERITY
-      MIN_CONFIDENCE: '0.6'
-      CONSENSUS_REQUIRED_FOR_CRITICAL: 'false'
-      UPDATE_PR_DESCRIPTION: 'true'
-      FAIL_ON_CRITICAL: '$FAIL_ON_CRITICAL'
-      FAIL_ON_MAJOR: '$FAIL_ON_MAJOR'
-      ENABLE_AST_ANALYSIS: '$ENABLE_AST_ANALYSIS'
-      ENABLE_SECURITY: '$ENABLE_SECURITY'
-      ENABLE_AI_DETECTION: 'false'
-      LEARNING_ENABLED: 'false'
-      GRAPH_ENABLED: '$GRAPH_ENABLED'
-YAML
-
-    if [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "openai" ]; then
-      cat <<YAML
-      CODEX_MODEL: \${{ vars.REVIEW_CODEX_MODEL }}
-      CODEX_REASONING_EFFORT: '$CODEX_REASONING_EFFORT'
-      CODEX_AGENTIC_CONTEXT: 'true'
-YAML
-    elif [ "$AUTH_MODE" = "openrouter" ]; then
-      cat <<'YAML'
-      REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}
-      SYNTHESIS_MODEL: ${{ vars.REVIEW_SYNTHESIS_MODEL }}
-YAML
-    fi
-
     cat <<'YAML'
     steps:
       - uses: actions/checkout@v6
@@ -874,6 +844,37 @@ YAML
     cat <<'YAML'
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
 YAML
+
+    cat <<YAML
+          FAIL_ON_NO_HEALTHY_PROVIDERS: 'true'
+          INLINE_MAX_COMMENTS: '$INLINE_MAX_COMMENTS'
+          INLINE_MIN_SEVERITY: '$INLINE_MIN_SEVERITY'
+          MIN_CONFIDENCE: '0.6'
+          CONSENSUS_REQUIRED_FOR_CRITICAL: 'false'
+          UPDATE_PR_DESCRIPTION: 'true'
+          FAIL_ON_CRITICAL: '$FAIL_ON_CRITICAL'
+          FAIL_ON_MAJOR: '$FAIL_ON_MAJOR'
+          ENABLE_AST_ANALYSIS: '$ENABLE_AST_ANALYSIS'
+          ENABLE_SECURITY: '$ENABLE_SECURITY'
+          ENABLE_AI_DETECTION: 'false'
+          LEARNING_ENABLED: 'false'
+          GRAPH_ENABLED: '$GRAPH_ENABLED'
+YAML
+
+    if [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "openai" ]; then
+      cat <<'YAML'
+          CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
+YAML
+      cat <<YAML
+          CODEX_REASONING_EFFORT: '$CODEX_REASONING_EFFORT'
+          CODEX_AGENTIC_CONTEXT: 'true'
+YAML
+    elif [ "$AUTH_MODE" = "openrouter" ]; then
+      cat <<'YAML'
+          REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}
+          SYNTHESIS_MODEL: ${{ vars.REVIEW_SYNTHESIS_MODEL }}
+YAML
+    fi
   } > "$workflow_file"
 }
 

@@ -14,6 +14,7 @@ type FileCohort = {
 type PatchLines = {
   additions: string[];
   deletions: string[];
+  context: string[];
 };
 
 export class PullRequestDescriptionUpdater {
@@ -345,59 +346,130 @@ export class PullRequestDescriptionUpdater {
   }
 
   private summarizeSourceFile(file: FileChange, patch: PatchLines): string {
-    const symbols = this.extractSymbols(patch.additions);
+    const symbols = this.extractSymbols([
+      ...patch.context,
+      ...patch.additions,
+      ...patch.deletions,
+    ]);
+    const topics = this.extractSourceTopics(patch);
+    const target =
+      symbols.length > 0
+        ? symbols.slice(0, 2).join(', ')
+        : this.basenameWithoutExtension(file.filename);
 
-    if (symbols.length > 0) {
-      return `${this.changeVerb(file)} source logic around ${symbols.slice(0, 3).join(', ')}.`;
+    if (topics.length > 0) {
+      return `${this.changeVerb(file)} ${target}: changes ${topics.join(', ')}.`;
     }
 
-    return `${this.changeVerb(file)} source implementation in ${this.basenameWithoutExtension(file.filename)}.`;
+    return `${this.changeVerb(file)} source implementation in ${target}.`;
   }
 
   private extractPatchLines(patch?: string): PatchLines {
-    if (!patch) return { additions: [], deletions: [] };
+    if (!patch) return { additions: [], deletions: [], context: [] };
 
     const additions: string[] = [];
     const deletions: string[] = [];
+    const context: string[] = [];
 
     for (const line of patch.split('\n')) {
       if (
         line.startsWith('+++') ||
-        line.startsWith('---') ||
-        line.startsWith('@@')
+        line.startsWith('---')
       ) {
+        continue;
+      }
+      if (line.startsWith('@@')) {
+        const headerContext = line.replace(/^@@[^@]*@@\s*/, '').trim();
+        if (headerContext) context.push(headerContext);
         continue;
       }
       if (line.startsWith('+')) {
         additions.push(line.slice(1).trim());
       } else if (line.startsWith('-')) {
         deletions.push(line.slice(1).trim());
+      } else if (line.trim()) {
+        context.push(line.trim());
       }
     }
 
-    return { additions, deletions };
+    return { additions, deletions, context };
   }
 
   private extractSymbols(lines: string[]): string[] {
-    const symbols: string[] = [];
+    const primary: string[] = [];
+    const secondary: string[] = [];
     const patterns = [
-      /\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/,
-      /\b(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/,
-      /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/,
-      /\b(?:describe|it|test)\(['"`]([^'"`]+)['"`]/,
+      { pattern: /\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/, primary: true },
+      { pattern: /\b(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/, primary: true },
+      { pattern: /\b(?:describe|it|test)\(['"`]([^'"`]+)['"`]/, primary: true },
+      { pattern: /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/, primary: false },
     ];
 
     for (const line of lines) {
-      for (const pattern of patterns) {
+      for (const { pattern, primary: isPrimary } of patterns) {
         const match = line.match(pattern);
         if (match?.[1]) {
-          symbols.push(this.truncate(match[1], 60));
+          const symbol = match[1];
+          if (!this.isGenericSymbol(symbol)) {
+            const target = isPrimary ? primary : secondary;
+            target.push(this.truncate(symbol, 60));
+          }
           break;
         }
       }
     }
 
-    return this.unique(symbols).slice(0, 5);
+    const selected = primary.length > 0 ? primary : secondary;
+    return this.unique(selected).slice(0, 5);
+  }
+
+  private extractSourceTopics(patch: PatchLines): string[] {
+    const added = patch.additions.join('\n').toLowerCase();
+    const deleted = patch.deletions.join('\n').toLowerCase();
+    const combined = `${added}\n${deleted}`;
+    const topics: string[] = [];
+
+    if (/\bdb\.query\b|\bselect\b|\binsert\b|\bupdate\b|\bdelete\b/.test(combined)) {
+      topics.push('database query construction');
+    }
+
+    if (
+      deleted.includes('?.') ||
+      deleted.includes('??') ||
+      /\bnull\b/.test(combined) ||
+      /\bfallback\b/.test(combined)
+    ) {
+      topics.push('fallback/null handling');
+    }
+
+    if (patch.additions.some((line) => line.startsWith('return ')) ||
+        patch.deletions.some((line) => line.startsWith('return '))) {
+      topics.push('return value handling');
+    }
+
+    if (/\bthrow\b|\bcatch\b|\btry\b/.test(combined)) {
+      topics.push('error handling');
+    }
+
+    if (/\bfetch\b|\baxios\b|\bhttp\b|\brequest\b/.test(combined)) {
+      topics.push('external request handling');
+    }
+
+    return this.unique(topics).slice(0, 3);
+  }
+
+  private isGenericSymbol(symbol: string): boolean {
+    return [
+      'data',
+      'error',
+      'item',
+      'result',
+      'results',
+      'row',
+      'rows',
+      'value',
+      'values',
+    ].includes(symbol.toLowerCase());
   }
 
   private extractConfigKeys(lines: string[]): string[] {

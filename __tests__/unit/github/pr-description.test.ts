@@ -128,6 +128,43 @@ describe('PullRequestDescriptionUpdater', () => {
     expect(block).not.toContain('1 modified with +18/-4 lines.');
   });
 
+  it('summarizes source files with function and behavior context', () => {
+    const updater = new PullRequestDescriptionUpdater(client, false);
+    const block = updater.buildGeneratedBlock(
+      createPR({
+        additions: 2,
+        deletions: 5,
+        files: [
+          {
+            filename: 'src/billing.js',
+            status: 'modified',
+            additions: 2,
+            deletions: 5,
+            changes: 7,
+            patch: [
+              '@@ -4,9 +4,6 @@ export async function getBillingSummary(db, plans, planId, email) {',
+              '   const plan = findPlan(plans, planId);',
+              '   const normalizedEmail = normalizeEmail(email);',
+              '-',
+              "-  return db.query('select * from billing where email = ? and plan = ?', [",
+              '-    normalizedEmail,',
+              "-    plan?.id ?? 'free',",
+              '-  ]);',
+              "+  const rows = await db.query(`select * from billing where email = '${normalizedEmail}' and plan = '${plan.id}' limit 1`);",
+              '+  return rows[0] || null;',
+              ' }',
+            ].join('\n'),
+          },
+        ],
+      })
+    );
+
+    expect(block).toContain(
+      'Updates getBillingSummary: changes database query construction, fallback/null handling, return value handling.'
+    );
+    expect(block).not.toContain('source logic around rows');
+  });
+
   it('updates pull request body through GitHub API', async () => {
     updateMock.mockResolvedValue({});
     const updater = new PullRequestDescriptionUpdater(client, false);

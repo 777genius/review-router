@@ -53,6 +53,9 @@ export const ReviewConfigSchema = z.object({
   graph_max_depth: z.number().int().min(1).max(10).optional(),
   graph_timeout_seconds: z.number().int().min(1).max(60).optional(),
 
+  codex_agentic_context: z.boolean().optional(),
+  codex_event_audit: z.boolean().optional(),
+
   generate_fix_prompts: z.boolean().optional(),
   fix_prompt_format: z.enum(['cursor', 'copilot', 'plain']).optional(),
 

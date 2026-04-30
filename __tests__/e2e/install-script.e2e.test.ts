@@ -94,6 +94,7 @@ describe('ai-robot-review curl installer e2e', () => {
     expect(workflow).toContain("REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}");
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '5'");
     expect(workflow).toContain("CODEX_REASONING_EFFORT: 'medium'");
+    expect(workflow).toContain("CODEX_AGENTIC_CONTEXT: 'true'");
     expect(workflow).toContain("MIN_CONFIDENCE: '0.6'");
     expect(workflow).toContain("CONSENSUS_REQUIRED_FOR_CRITICAL: 'false'");
     expect(workflow).not.toContain('\\${{');
@@ -114,6 +115,7 @@ describe('ai-robot-review curl installer e2e', () => {
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '10'");
     expect(workflow).toContain("INLINE_MIN_SEVERITY: minor");
     expect(workflow).toContain("CODEX_REASONING_EFFORT: 'high'");
+    expect(workflow).toContain("CODEX_AGENTIC_CONTEXT: 'true'");
     expect(workflow).toContain("GRAPH_ENABLED: 'true'");
     expect(workflow).not.toContain('CODEX_AUTH_JSON');
   });

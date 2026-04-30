@@ -119,6 +119,7 @@ workflow="$(gh api "repos/$REPO/contents/.github/workflows/ai-robot-review.yml?r
 # shellcheck disable=SC2016
 printf '%s' "$workflow" | grep -q 'OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}' || fatal "Workflow does not reference OPENROUTER_API_KEY"
 printf '%s' "$workflow" | grep -q 'CODEX_REASONING_EFFORT' || fatal "Workflow does not set CODEX_REASONING_EFFORT"
+printf '%s' "$workflow" | grep -q 'CODEX_AGENTIC_CONTEXT' || fatal "Workflow does not enable Codex agentic context"
 printf '%s' "$workflow" | grep -q 'fork != true' || fatal "Workflow does not skip fork PR secrets"
 
 log "Org selected-repo smoke passed: $ORG -> $REPO_NAME"

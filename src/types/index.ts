@@ -72,6 +72,9 @@ export interface ReviewConfig {
   graphMaxDepth?: number;
   graphTimeoutSeconds?: number;
 
+  codexAgenticContext?: boolean;
+  codexEventAudit?: boolean;
+
   generateFixPrompts?: boolean;
   fixPromptFormat?: string;
 

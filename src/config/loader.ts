@@ -107,6 +107,9 @@ export class ConfigLoader {
       incrementalEnabled: this.parseBoolean(env.INCREMENTAL_ENABLED),
       incrementalCacheTtlDays: this.parseNumber(env.INCREMENTAL_CACHE_TTL_DAYS),
 
+      codexAgenticContext: this.parseBoolean(env.CODEX_AGENTIC_CONTEXT),
+      codexEventAudit: this.parseBoolean(env.CODEX_EVENT_AUDIT),
+
       batchMaxFiles: this.parseNumber(env.BATCH_MAX_FILES),
       providerBatchOverrides: this.parseOverrides(env.PROVIDER_BATCH_OVERRIDES),
 
@@ -175,6 +178,8 @@ export class ConfigLoader {
       graphCacheEnabled: config.graph_cache_enabled,
       graphMaxDepth: config.graph_max_depth,
       graphTimeoutSeconds: config.graph_timeout_seconds,
+      codexAgenticContext: config.codex_agentic_context,
+      codexEventAudit: config.codex_event_audit,
       generateFixPrompts: config.generate_fix_prompts,
       fixPromptFormat: config.fix_prompt_format,
       analyticsEnabled: config.analytics_enabled,

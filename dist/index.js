@@ -7120,6 +7120,8 @@ var DEFAULT_CONFIG = {
   graphCacheEnabled: true,
   graphMaxDepth: 5,
   graphTimeoutSeconds: 10,
+  codexAgenticContext: true,
+  codexEventAudit: false,
   generateFixPrompts: false,
   fixPromptFormat: "plain",
   analyticsEnabled: true,
@@ -11321,6 +11323,8 @@ var ReviewConfigSchema = external_exports.object({
   graph_cache_enabled: external_exports.boolean().optional(),
   graph_max_depth: external_exports.number().int().min(1).max(10).optional(),
   graph_timeout_seconds: external_exports.number().int().min(1).max(60).optional(),
+  codex_agentic_context: external_exports.boolean().optional(),
+  codex_event_audit: external_exports.boolean().optional(),
   generate_fix_prompts: external_exports.boolean().optional(),
   fix_prompt_format: external_exports.enum(["cursor", "copilot", "plain"]).optional(),
   analytics_enabled: external_exports.boolean().optional(),
@@ -11698,6 +11702,8 @@ var ConfigLoader = class {
       enableAiDetection: this.parseBoolean(env.ENABLE_AI_DETECTION),
       incrementalEnabled: this.parseBoolean(env.INCREMENTAL_ENABLED),
       incrementalCacheTtlDays: this.parseNumber(env.INCREMENTAL_CACHE_TTL_DAYS),
+      codexAgenticContext: this.parseBoolean(env.CODEX_AGENTIC_CONTEXT),
+      codexEventAudit: this.parseBoolean(env.CODEX_EVENT_AUDIT),
       batchMaxFiles: this.parseNumber(env.BATCH_MAX_FILES),
       providerBatchOverrides: this.parseOverrides(env.PROVIDER_BATCH_OVERRIDES),
       skipTrivialChanges: this.parseBoolean(env.SKIP_TRIVIAL_CHANGES),
@@ -11762,6 +11768,8 @@ var ConfigLoader = class {
       graphCacheEnabled: config.graph_cache_enabled,
       graphMaxDepth: config.graph_max_depth,
       graphTimeoutSeconds: config.graph_timeout_seconds,
+      codexAgenticContext: config.codex_agentic_context,
+      codexEventAudit: config.codex_event_audit,
       generateFixPrompts: config.generate_fix_prompts,
       fixPromptFormat: config.fix_prompt_format,
       analyticsEnabled: config.analytics_enabled,
@@ -12708,9 +12716,10 @@ function calculateOptimalBatchSize(files, targetTokensPerBatch = 5e4, maxFilesPe
 
 // src/providers/codex.ts
 var CodexProvider = class extends Provider {
-  constructor(model) {
+  constructor(model, options = {}) {
     super(`codex/${model}`);
     this.model = model;
+    this.options = options;
   }
   // Verify the CLI is available and, by default, that the selected model works
   // with the current Codex auth. Binary-only checks can mark unsupported models
@@ -12740,14 +12749,17 @@ var CodexProvider = class extends Provider {
       if (mode === "none" || mode === "binary") {
         return true;
       }
-      const { stdout } = await this.runCliWithStdin(
+      const result = await this.runCliWithStdin(
         binary2,
-        this.buildExecArgs({ healthCheck: true }),
         "Respond with exactly: codex-health-ok",
-        timeoutMs
+        timeoutMs,
+        { healthCheck: true }
       );
-      if (!stdout.includes("codex-health-ok")) {
-        logger.warn(`Codex health check returned unexpected output for ${this.name}`);
+      const output = result.lastMessage || result.stdout;
+      if (!output.includes("codex-health-ok")) {
+        logger.warn(
+          `Codex health check returned unexpected output for ${this.name}`
+        );
         return false;
       }
       return true;
@@ -12755,24 +12767,40 @@ var CodexProvider = class extends Provider {
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
-      logger.warn(`Codex health check failed for ${this.name}: ${error2.message}`);
+      logger.warn(
+        `Codex health check failed for ${this.name}: ${error2.message}`
+      );
       return false;
     }
   }
   async review(prompt, timeoutMs) {
     const started = Date.now();
     const binary2 = await this.resolveBinary();
-    const args = this.buildExecArgs({ healthCheck: false });
-    logger.info(`Running Codex CLI: codex exec --model ${this.model} --dangerously-bypass-approvals-and-sandbox ...`);
+    const agenticContext = this.shouldUseAgenticContext();
+    const promptForCodex = agenticContext ? this.wrapAgenticReviewPrompt(prompt) : this.wrapPromptOnlyReviewPrompt(prompt);
+    logger.info(
+      `Running Codex CLI safely: codex exec --model ${this.model} --sandbox read-only --ephemeral ...`
+    );
     try {
-      const { stdout, stderr } = await this.runCliWithStdin(binary2, args, prompt, timeoutMs);
-      const content = stdout.trim();
+      const { stdout, stderr, lastMessage } = await this.runCliWithStdin(
+        binary2,
+        promptForCodex,
+        timeoutMs,
+        {
+          healthCheck: false,
+          outputSchema: this.buildFindingsSchema(),
+          eventAudit: this.shouldUseEventAudit()
+        }
+      );
+      const content = (lastMessage || stdout).trim();
       const durationSeconds = (Date.now() - started) / 1e3;
       logger.info(
-        `Codex CLI output for ${this.name}: stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
+        `Codex CLI output for ${this.name}: final=${content.length} bytes, stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
       );
       if (!content) {
-        throw new Error(`Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`);
+        throw new Error(
+          `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`
+        );
       }
       return {
         content,
@@ -12799,10 +12827,21 @@ var CodexProvider = class extends Provider {
       "exec",
       "--model",
       this.model,
-      "--dangerously-bypass-approvals-and-sandbox",
+      "--sandbox",
+      "read-only",
+      "--ephemeral",
+      "--ignore-user-config",
       "-c",
-      "approval_policy=never"
+      "approval_policy=never",
+      "--output-last-message",
+      options.outputLastMessageFile
     ];
+    if (options.outputSchemaFile) {
+      args.push("--output-schema", options.outputSchemaFile);
+    }
+    if (options.eventAudit) {
+      args.push("--json");
+    }
     const effort = options.healthCheck ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || "low" : process.env.CODEX_REASONING_EFFORT;
     if (effort) {
       const normalized = effort.trim().toLowerCase();
@@ -12813,25 +12852,43 @@ var CodexProvider = class extends Provider {
     args.push("-");
     return args;
   }
-  async runCliWithStdin(bin, args, stdin, timeoutMs) {
-    const tmpFile = path4.join(os3.tmpdir(), `codex-prompt-${crypto3.randomBytes(8).toString("hex")}.txt`);
+  async runCliWithStdin(bin, stdin, timeoutMs, options) {
+    const runId = crypto3.randomBytes(8).toString("hex");
+    const tmpFile = path4.join(os3.tmpdir(), `codex-prompt-${runId}.txt`);
+    const outputFile = path4.join(os3.tmpdir(), `codex-output-${runId}.txt`);
+    const schemaFile = options.outputSchema ? path4.join(os3.tmpdir(), `codex-schema-${runId}.json`) : void 0;
     let fd;
     try {
       await fs5.writeFile(tmpFile, stdin, { encoding: "utf8", mode: 384 });
+      await fs5.writeFile(outputFile, "", { encoding: "utf8", mode: 384 });
+      if (schemaFile) {
+        await fs5.writeFile(schemaFile, JSON.stringify(options.outputSchema), {
+          encoding: "utf8",
+          mode: 384
+        });
+      }
+      const args = this.buildExecArgs({
+        healthCheck: options.healthCheck,
+        outputLastMessageFile: outputFile,
+        outputSchemaFile: schemaFile,
+        eventAudit: options.eventAudit && !options.healthCheck
+      });
       fd = await fs5.open(tmpFile, "r");
       const fdNum = fd.fd;
-      return await new Promise((resolve2, reject) => {
+      const { stdout, stderr } = await new Promise((resolve2, reject) => {
         const proc = (0, import_child_process3.spawn)(bin, args, {
           stdio: [fdNum, "pipe", "pipe"],
           detached: true,
-          env: process.env
+          env: this.buildSafeEnv()
         });
-        let stdout = "";
-        let stderr = "";
+        let stdout2 = "";
+        let stderr2 = "";
         let timedOut = false;
         const timer = setTimeout(() => {
           timedOut = true;
-          logger.warn(`Codex CLI timeout (${timeoutMs}ms), killing process and all children`);
+          logger.warn(
+            `Codex CLI timeout (${timeoutMs}ms), killing process and all children`
+          );
           try {
             if (proc.pid) {
               process.kill(-proc.pid, "SIGKILL");
@@ -12842,10 +12899,10 @@ var CodexProvider = class extends Provider {
           reject(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
         }, timeoutMs);
         proc.stdout?.on("data", (chunk) => {
-          stdout += chunk.toString();
+          stdout2 += chunk.toString();
         });
         proc.stderr?.on("data", (chunk) => {
-          stderr += chunk.toString();
+          stderr2 += chunk.toString();
         });
         proc.on("error", (err) => {
           if (!timedOut) {
@@ -12857,32 +12914,226 @@ var CodexProvider = class extends Provider {
           if (!timedOut) {
             clearTimeout(timer);
             if (code !== 0) {
-              reject(new Error(`Codex CLI exited with code ${code}: ${this.formatCliError(stderr, stdout)}`));
+              reject(
+                new Error(
+                  `Codex CLI exited with code ${code}: ${this.formatCliError(stderr2, stdout2)}`
+                )
+              );
             } else {
-              resolve2({ stdout, stderr });
+              resolve2({ stdout: stdout2, stderr: stderr2 });
             }
           }
         });
       });
+      const lastMessage = await this.readOptionalFile(outputFile);
+      if (options.eventAudit && !options.healthCheck) {
+        this.logEventAudit(stdout);
+      }
+      return { stdout, stderr, lastMessage };
     } finally {
       try {
         if (fd) {
           await fd.close();
         }
         await fs5.unlink(tmpFile);
+        await fs5.unlink(outputFile);
+        if (schemaFile) {
+          await fs5.unlink(schemaFile);
+        }
       } catch {
       }
     }
   }
+  shouldUseAgenticContext() {
+    if (this.options.agenticContext !== void 0) {
+      return this.options.agenticContext;
+    }
+    return this.parseBooleanEnv(process.env.CODEX_AGENTIC_CONTEXT, true);
+  }
+  shouldUseEventAudit() {
+    if (this.options.eventAudit !== void 0) {
+      return this.options.eventAudit;
+    }
+    return this.parseBooleanEnv(process.env.CODEX_EVENT_AUDIT, false);
+  }
+  parseBooleanEnv(value, defaultValue) {
+    if (value === void 0 || value === "") return defaultValue;
+    return !["0", "false", "no", "off"].includes(value.trim().toLowerCase());
+  }
+  wrapAgenticReviewPrompt(prompt) {
+    return [
+      "You are running as ai-robot-review inside GitHub Actions.",
+      "",
+      "Use the deterministic PR context below as the source of truth for review scope.",
+      "You may inspect related repository files before producing findings, but only with read-only shell commands such as rg, sed, cat, git diff, git show, git grep, ls, find, and pwd.",
+      "Do not read environment variables, secret files, ~/.codex, git credentials, or GitHub token files.",
+      "Do not run package installation, tests, builds, formatters, network commands, or commands that write files.",
+      "Only report real bugs, data loss, crashes, or security vulnerabilities on changed lines from the diff.",
+      "If related context is insufficient, return no finding rather than guessing.",
+      "",
+      "<deterministic_review_prompt>",
+      prompt,
+      "</deterministic_review_prompt>",
+      "",
+      "FINAL OUTPUT CONTRACT:",
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","line":1,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
+      'The "findings" array may be empty. "severity" must be one of "critical", "major", or "minor".',
+      'The "suggestion" field is required by schema; use null unless there is an exact safe replacement.',
+      "Do not return markdown, prose, or a bare JSON array."
+    ].join("\n");
+  }
+  wrapPromptOnlyReviewPrompt(prompt) {
+    return [
+      "Use the deterministic PR context below. Do not assume access to extra context.",
+      "",
+      "<deterministic_review_prompt>",
+      prompt,
+      "</deterministic_review_prompt>",
+      "",
+      "FINAL OUTPUT CONTRACT:",
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","line":1,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
+      'The "findings" array may be empty. The "suggestion" field is required and may be null.',
+      "Do not return markdown, prose, or a bare JSON array."
+    ].join("\n");
+  }
+  buildFindingsSchema() {
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["findings"],
+      properties: {
+        findings: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "file",
+              "line",
+              "severity",
+              "title",
+              "message",
+              "suggestion"
+            ],
+            properties: {
+              file: { type: "string" },
+              line: { type: "integer" },
+              severity: {
+                type: "string",
+                enum: ["critical", "major", "minor"]
+              },
+              title: { type: "string" },
+              message: { type: "string" },
+              suggestion: { type: ["string", "null"] }
+            }
+          }
+        }
+      }
+    };
+  }
+  buildSafeEnv() {
+    const allowed = [
+      "PATH",
+      "HOME",
+      "CODEX_HOME",
+      "TMPDIR",
+      "TEMP",
+      "TMP",
+      "LANG",
+      "LC_ALL",
+      "LC_CTYPE",
+      "CI",
+      "GITHUB_WORKSPACE",
+      "OPENAI_API_KEY"
+    ];
+    const env = {};
+    for (const key of allowed) {
+      const value = process.env[key];
+      if (value !== void 0) {
+        env[key] = value;
+      }
+    }
+    return env;
+  }
+  async readOptionalFile(file) {
+    try {
+      return await fs5.readFile(file, "utf8");
+    } catch {
+      return "";
+    }
+  }
+  logEventAudit(stdout) {
+    const audit = this.extractEventAudit(stdout);
+    if (audit.commandCount === 0) {
+      logger.info("Codex event audit: no shell commands recorded");
+      return;
+    }
+    const commands = audit.commandNames.length > 0 ? audit.commandNames.join(", ") : "unknown";
+    const files = audit.fileCount > 0 ? `, files=${audit.fileCount}` : "";
+    logger.info(
+      `Codex event audit: commands=${audit.commandCount}, commandNames=${commands}${files}`
+    );
+  }
+  extractEventAudit(stdout) {
+    const commandNames = /* @__PURE__ */ new Set();
+    const files = /* @__PURE__ */ new Set();
+    let commandCount = 0;
+    for (const line of stdout.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line);
+        const item = event?.item;
+        if (item?.type !== "command_execution" || typeof item.command !== "string") {
+          continue;
+        }
+        commandCount += 1;
+        const commandName = this.extractCommandName(item.command);
+        if (commandName) commandNames.add(commandName);
+        for (const file of this.extractLikelyFilePaths(item.command)) {
+          files.add(file);
+        }
+      } catch {
+      }
+    }
+    return {
+      commandCount,
+      commandNames: [...commandNames].sort(),
+      fileCount: files.size
+    };
+  }
+  extractCommandName(command) {
+    const shellMatch = command.match(
+      /(?:^|\s)(?:\/[^\s]+\/)?(?:bash|zsh|sh)\s+-lc\s+["']?([^"']+)/
+    );
+    const normalized = shellMatch?.[1] || command;
+    const match2 = normalized.trim().match(/^([A-Za-z0-9_.-]+)/);
+    return match2?.[1] || null;
+  }
+  extractLikelyFilePaths(command) {
+    const matches = command.matchAll(
+      /(?:^|[\s"'`])((?:\.{0,2}\/)?[A-Za-z0-9_@./:+-]+\.(?:[cm]?js|tsx?|jsx|py|go|rs|java|kt|kts|dart|rb|php|cs|cpp|c|h|hpp|swift|scala|json|ya?ml|toml|md|sh|sql|graphql|proto))(?:$|[\s"'`])/g
+    );
+    return [...matches].map((match2) => match2[1]).filter(Boolean);
+  }
   formatCliError(stderr, stdout) {
-    const raw = (stderr || stdout || "no output").replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g"), "").replace(/www_authenticate_header:\s*"[^"]+"/gi, 'www_authenticate_header: "[redacted]"').replace(/authorization_uri="[^"]+"/gi, 'authorization_uri="[redacted]"').replace(/authorization_uri=\\?"[^"\\]*(?:\\.[^"\\]*)*\\?"/gi, 'authorization_uri="[redacted]"').replace(/https?:\/\/[^\s",)]+/gi, "[redacted-url]").replace(/session id:\s*[a-f0-9-]+/gi, "session id: [redacted]").replace(/thread\s+[a-f0-9-]{8,}/gi, "thread [redacted]");
-    const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter((line) => !line.startsWith("user") && !line.includes("Respond with exactly:"));
+    const raw = (stderr || stdout || "no output").replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g"), "").replace(
+      /www_authenticate_header:\s*"[^"]+"/gi,
+      'www_authenticate_header: "[redacted]"'
+    ).replace(/authorization_uri="[^"]+"/gi, 'authorization_uri="[redacted]"').replace(
+      /authorization_uri=\\?"[^"\\]*(?:\\.[^"\\]*)*\\?"/gi,
+      'authorization_uri="[redacted]"'
+    ).replace(/https?:\/\/[^\s",)]+/gi, "[redacted-url]").replace(/session id:\s*[a-f0-9-]+/gi, "session id: [redacted]").replace(/thread\s+[a-f0-9-]{8,}/gi, "thread [redacted]");
+    const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter(
+      (line) => !line.startsWith("user") && !line.includes("Respond with exactly:")
+    );
     const jsonMessages = Array.from(raw.matchAll(/"message"\s*:\s*"([^"]+)"/gi)).map((match2) => match2[1]).filter(Boolean);
     if (jsonMessages.length > 0) {
       return this.truncateCliError([...new Set(jsonMessages)].join(" "));
     }
     const important = lines.filter(
-      (line) => /not supported|invalid_request_error|auth|error|failed|timed out|timeout/i.test(line)
+      (line) => /not supported|invalid_request_error|auth|error|failed|timed out|timeout/i.test(
+        line
+      )
     );
     const summary = (important.length > 0 ? important : lines).join(" ");
     return this.truncateCliError(summary);
@@ -12918,7 +13169,10 @@ var CodexProvider = class extends Provider {
       if (Array.isArray(parsed)) return parsed;
       return parsed.findings || [];
     } catch (error2) {
-      logger.debug("Failed to parse findings from Codex response", error2);
+      logger.debug(
+        "Failed to parse findings from Codex response",
+        error2
+      );
     }
     return [];
   }
@@ -13547,7 +13801,10 @@ var ProviderRegistry = class {
       }
       if (name.startsWith("codex/")) {
         const model = name.replace("codex/", "");
-        list.push(new CodexProvider(model));
+        list.push(new CodexProvider(model, {
+          agenticContext: config.codexAgenticContext,
+          eventAudit: config.codexEventAudit
+        }));
         continue;
       }
       if (name.startsWith("gemini/")) {
@@ -24615,7 +24872,7 @@ var ReviewOrchestrator = class {
             (batch) => batchQueue.add(async () => {
               const batchDiff = filterDiffByFiles(reviewContext.diff, batch);
               const batchContext = { ...reviewContext, files: batch, diff: batchDiff };
-              const promptBuilder = new PromptBuilder(config, reviewIntensity);
+              const promptBuilder = new PromptBuilder(config, reviewIntensity, void 0, codeGraph);
               const prompt = await promptBuilder.build(batchContext);
               try {
                 const results = await this.components.llmExecutor.execute(healthy, prompt, intensityTimeout);
@@ -25147,6 +25404,8 @@ function syncEnvFromInputs() {
     "CODEX_HEALTHCHECK_MODE",
     "CODEX_HEALTHCHECK_REASONING_EFFORT",
     "CODEX_REASONING_EFFORT",
+    "CODEX_AGENTIC_CONTEXT",
+    "CODEX_EVENT_AUDIT",
     "FAIL_ON_NO_HEALTHY_PROVIDERS",
     "QUIET_MODE_ENABLED",
     "QUIET_MIN_CONFIDENCE",

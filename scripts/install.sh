@@ -787,7 +787,7 @@ YAML
 
       - name: Verify Codex OAuth headless mode
         run: |
-          codex exec --model gpt-5.4-mini -c model_reasoning_effort='"low"' --dangerously-bypass-approvals-and-sandbox --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
+          codex exec --model gpt-5.4-mini --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
           grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
 YAML
     elif [ "$AUTH_MODE" = "openai" ]; then
@@ -798,7 +798,7 @@ YAML
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           test -n "$OPENAI_API_KEY"
-          codex exec --model gpt-5.4-mini -c model_reasoning_effort='"low"' --dangerously-bypass-approvals-and-sandbox --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-api-ok"
+          codex exec --model gpt-5.4-mini --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-api-ok"
           grep -q "codex-api-ok" /tmp/codex-smoke.txt
 YAML
     fi
@@ -846,6 +846,7 @@ YAML
           CODEX_HEALTHCHECK_MODE: exec
           CODEX_HEALTHCHECK_REASONING_EFFORT: low
           CODEX_REASONING_EFFORT: '$CODEX_REASONING_EFFORT'
+          CODEX_AGENTIC_CONTEXT: 'true'
           FAIL_ON_NO_HEALTHY_PROVIDERS: 'true'
           INLINE_MAX_COMMENTS: '$INLINE_MAX_COMMENTS'
           INLINE_MIN_SEVERITY: $INLINE_MIN_SEVERITY

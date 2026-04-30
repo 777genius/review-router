@@ -312,7 +312,10 @@ export class ProviderRegistry {
 
       if (name.startsWith('codex/')) {
         const model = name.replace('codex/', '');
-        list.push(new CodexProvider(model));
+        list.push(new CodexProvider(model, {
+          agenticContext: config.codexAgenticContext,
+          eventAudit: config.codexEventAudit,
+        }));
         continue;
       }
 

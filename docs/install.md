@@ -139,7 +139,7 @@ The generated workflow installs the official Codex CLI and runs a headless smoke
 ```yaml
 - name: Verify Codex OAuth headless mode
   run: |
-    codex exec --model gpt-5.4-mini -c model_reasoning_effort='"low"' --dangerously-bypass-approvals-and-sandbox --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
+    codex exec --model gpt-5.4-mini --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
     grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
 ```
 
@@ -177,7 +177,10 @@ CONSENSUS_REQUIRED_FOR_CRITICAL=false
 FAIL_ON_NO_HEALTHY_PROVIDERS=true
 PROVIDER_MAX_PARALLEL=1
 CODEX_REASONING_EFFORT=medium
+CODEX_AGENTIC_CONTEXT=true
 ```
+
+`CODEX_AGENTIC_CONTEXT=true` lets Codex inspect related repository files in a read-only sandbox before returning strict JSON findings. It does not grant write access.
 
 ## Non-interactive examples
 

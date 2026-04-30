@@ -88,6 +88,14 @@ inputs:
     description: "Optional Codex reasoning effort override for review runs"
     required: false
     default: ""
+  CODEX_AGENTIC_CONTEXT:
+    description: "Allow Codex CLI to inspect related repository files in read-only sandbox before returning JSON findings"
+    required: false
+    default: "true"
+  CODEX_EVENT_AUDIT:
+    description: "Log a sanitized summary of Codex CLI tool commands and file path counts"
+    required: false
+    default: "false"
   FAIL_ON_NO_HEALTHY_PROVIDERS:
     description: "Fail the action if no provider passes health checks"
     required: false

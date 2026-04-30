@@ -15,6 +15,7 @@ import { CommentPoster } from '../../src/github/comment-poster';
 import { PullRequestLoader } from '../../src/github/pr-loader';
 import { Provider } from '../../src/providers/base';
 import { ContextRetriever } from '../../src/analysis/context';
+import { CodeGraph } from '../../src/analysis/context/graph-builder';
 import { ImpactAnalyzer } from '../../src/analysis/impact';
 import { EvidenceScorer } from '../../src/analysis/evidence';
 import { MermaidGenerator } from '../../src/output/mermaid';
@@ -193,6 +194,88 @@ describe('ReviewOrchestrator integration (offline)', () => {
     expect(review?.findings.length).toBeGreaterThanOrEqual(1); // At least one finding from AST or LLM
     expect(review?.inlineComments.length).toBe(1);
     expect((components.commentPoster as unknown as StubCommentPoster).postedSummary).toBeTruthy();
+  });
+
+  it('passes built code graph context into batch prompt builder when graph is enabled', async () => {
+    class CapturingLLMExecutor {
+      prompts: string[] = [];
+
+      async filterHealthyProviders(providers: Provider[]): Promise<{ healthy: Provider[]; healthCheckResults: ProviderResult[] }> {
+        return { healthy: providers, healthCheckResults: [] };
+      }
+
+      async execute(_providers: Provider[], prompt: string): Promise<ProviderResult[]> {
+        this.prompts.push(prompt);
+        return [];
+      }
+    }
+
+    class StubGraphBuilder {
+      async buildGraph(): Promise<CodeGraph> {
+        const graph = new CodeGraph(['src/index.ts'], 1);
+        graph.addDefinition({
+          name: 'handle',
+          file: 'src/index.ts',
+          line: 1,
+          type: 'function',
+          exported: true,
+        });
+        graph.addCall('src/index.ts', 'handle', 'validate');
+        return graph;
+      }
+
+      async updateGraph(graph: CodeGraph): Promise<CodeGraph> {
+        return graph;
+      }
+    }
+
+    const llmExecutor = new CapturingLLMExecutor();
+    const graphConfig: ReviewConfig = {
+      ...config,
+      graphEnabled: true,
+      graphCacheEnabled: false,
+      enableAstAnalysis: false,
+      enableSecurity: false,
+      providerLimit: 1,
+    };
+    const components: ReviewComponents = {
+      config: graphConfig,
+      providerRegistry: new StubProviderRegistry() as any,
+      promptBuilder: new PromptBuilder(graphConfig),
+      llmExecutor: llmExecutor as any,
+      deduplicator: new Deduplicator(),
+      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      synthesis: new SynthesisEngine(graphConfig),
+      testCoverage: new TestCoverageAnalyzer(),
+      astAnalyzer: new ASTAnalyzer(),
+      cache: new NoopCache(),
+      incrementalReviewer: {
+        shouldUseIncremental: async () => false,
+        getLastReview: async () => null,
+        saveReview: async () => {},
+        getChangedFilesSince: async () => [],
+        mergeFindings: (prev: any, curr: any) => curr,
+        generateIncrementalSummary: () => '',
+      } as any,
+      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      security: new SecurityScanner(),
+      rules: new RulesEngine([]),
+      prLoader: new StubPRLoader() as unknown as PullRequestLoader,
+      commentPoster: new StubCommentPoster() as unknown as CommentPoster,
+      formatter: new MarkdownFormatter(),
+      contextRetriever: new ContextRetriever(),
+      impactAnalyzer: new ImpactAnalyzer(),
+      evidenceScorer: new EvidenceScorer(),
+      mermaidGenerator: new MermaidGenerator(),
+      feedbackFilter: new StubFeedbackFilter() as unknown as FeedbackFilter,
+      graphBuilder: new StubGraphBuilder() as any,
+    };
+
+    const orchestrator = new ReviewOrchestrator(components);
+    await orchestrator.execute(1);
+
+    expect(llmExecutor.prompts[0]).toContain('CODE GRAPH CONTEXT');
+    expect(llmExecutor.prompts[0]).toContain('Calls: src/index.ts:validate');
   });
 
   it('handles provider failures gracefully', async () => {

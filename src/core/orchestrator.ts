@@ -473,7 +473,7 @@ export class ReviewOrchestrator {
             batchQueue.add(async () => {
               const batchDiff = filterDiffByFiles(reviewContext.diff, batch);
               const batchContext: PRContext = { ...reviewContext, files: batch, diff: batchDiff };
-              const promptBuilder = new PromptBuilder(config, reviewIntensity);
+              const promptBuilder = new PromptBuilder(config, reviewIntensity, undefined, codeGraph);
               const prompt = await promptBuilder.build(batchContext);
 
               try {

@@ -118,6 +118,28 @@ describe('ai-robot-review curl installer e2e', () => {
     expect(workflow).not.toContain('CODEX_AUTH_JSON');
   });
 
+  it('stores secrets and variables at org scope for selected repositories only', () => {
+    const result = runInstaller({
+      AI_ROBOT_REVIEW_SECRET_SCOPE: 'org',
+      AI_ROBOT_REVIEW_ORG: 'test-owner',
+      AI_ROBOT_REVIEW_ORG_SECRET_REPOS: 'test-repo',
+      AI_ROBOT_REVIEW_IDENTITY: 'actions',
+      AI_ROBOT_REVIEW_AUTH: 'openrouter',
+      AI_ROBOT_REVIEW_PRESET: 'safe',
+      AI_ROBOT_REVIEW_OPENROUTER_API_KEY: 'or-test-key',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Secret scope: org test-owner, selected repos: test-repo');
+    expect(result.stdout).toContain('gh secret set OPENROUTER_API_KEY --org test-owner --repos test-repo');
+    expect(result.stdout).toContain('gh variable set REVIEW_AUTH_MODE --org test-owner --repos test-repo');
+    expect(result.stdout).toContain('gh variable set REVIEW_PROVIDERS --org test-owner --repos test-repo');
+
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
+    expect(workflow).toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
+  });
+
   it('does not open GitHub App manifest flow in dry-run mode', () => {
     const result = runInstaller({
       AI_ROBOT_REVIEW_LOCAL_ONLY: '0',

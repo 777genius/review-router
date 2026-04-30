@@ -11,12 +11,38 @@ The installer supports macOS and Linux shells first. It requires `gh`, `git`, an
 ## What it creates
 
 - `.github/workflows/ai-robot-review.yml`
-- Repository variables such as `REVIEW_PROVIDERS` and `REVIEW_SYNTHESIS_MODEL`
-- Repository secrets for the selected auth mode
+- Repository or organization variables such as `REVIEW_PROVIDERS` and `REVIEW_SYNTHESIS_MODEL`
+- Repository or organization secrets for the selected auth mode
 - Branch `ai-robot-review/setup`
 - A setup PR with the workflow change
 
 Secrets are never deleted automatically. Existing secrets and variables are overwritten only after confirmation.
+
+## Secret scopes
+
+| Scope | Where secrets live | Repository access | Best for |
+| --- | --- | --- | --- |
+| `repo` | Target repository | Target repository only | Simple setup, personal repos, small private repos |
+| `org` | Organization Actions secrets/variables | Selected repositories only | Teams that want one central secret with explicit repository allow-list |
+
+`org` scope always uses selected repositories. It does not grant access to every repository in the organization.
+
+```bash
+AI_ROBOT_REVIEW_SECRET_SCOPE=org \
+AI_ROBOT_REVIEW_ORG=your-org \
+AI_ROBOT_REVIEW_ORG_SECRET_REPOS=repo-a,repo-b \
+bash scripts/install.sh
+```
+
+If `AI_ROBOT_REVIEW_ORG_SECRET_REPOS` is not set, the installer grants access only to the target repo name from `AI_ROBOT_REVIEW_REPO`.
+
+Managing organization secrets with `gh` requires organization-owner permissions and the `admin:org` OAuth scope:
+
+```bash
+gh auth refresh -s admin:org
+```
+
+Security note: org-level selected-repo secrets reduce sprawl and make rotation easier, but any workflow in an allowed repository can still access the secret. Protect `.github/workflows/**` with CODEOWNERS/reviews for repositories that can access Codex OAuth.
 
 ## Identity modes
 
@@ -93,6 +119,20 @@ CODEX_REASONING_EFFORT=medium
 
 ```bash
 AI_ROBOT_REVIEW_REPO=owner/repo \
+AI_ROBOT_REVIEW_IDENTITY=app \
+AI_ROBOT_REVIEW_AUTH=codex \
+AI_ROBOT_REVIEW_PRESET=safe \
+AI_ROBOT_REVIEW_YES=1 \
+bash scripts/install.sh
+```
+
+### GitHub App bot + Codex subscription using org selected-repo secrets
+
+```bash
+AI_ROBOT_REVIEW_REPO=your-org/repo-a \
+AI_ROBOT_REVIEW_SECRET_SCOPE=org \
+AI_ROBOT_REVIEW_ORG=your-org \
+AI_ROBOT_REVIEW_ORG_SECRET_REPOS=repo-a \
 AI_ROBOT_REVIEW_IDENTITY=app \
 AI_ROBOT_REVIEW_AUTH=codex \
 AI_ROBOT_REVIEW_PRESET=safe \

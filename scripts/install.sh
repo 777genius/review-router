@@ -18,6 +18,9 @@ OPENROUTER_DEFAULT_SYNTHESIS="openrouter/free"
 ACTION_REF="${AI_ROBOT_REVIEW_ACTION_REF:-$DEFAULT_ACTION_REF}"
 INSTALL_BRANCH="${AI_ROBOT_REVIEW_BRANCH:-$DEFAULT_BRANCH_NAME}"
 TARGET_REPO="${AI_ROBOT_REVIEW_REPO:-}"
+SECRET_SCOPE="${AI_ROBOT_REVIEW_SECRET_SCOPE:-}"
+ORG_NAME="${AI_ROBOT_REVIEW_ORG:-}"
+ORG_SELECTED_REPOS="${AI_ROBOT_REVIEW_ORG_SECRET_REPOS:-}"
 IDENTITY_MODE="${AI_ROBOT_REVIEW_IDENTITY:-}"
 AUTH_MODE="${AI_ROBOT_REVIEW_AUTH:-}"
 PRESET="${AI_ROBOT_REVIEW_PRESET:-}"
@@ -81,6 +84,47 @@ validate_repo() {
 
 repo_owner() { printf '%s' "$1" | cut -d/ -f1; }
 repo_name() { printf '%s' "$1" | cut -d/ -f2-; }
+
+normalize_secret_scope_env() {
+  case "$SECRET_SCOPE" in
+    organization|org-level|org_selected|org-selected) SECRET_SCOPE="org" ;;
+    repository|repo-level|repo_selected|repo-selected) SECRET_SCOPE="repo" ;;
+  esac
+}
+
+normalize_selected_repos() {
+  raw_repos="$1"
+  normalized=""
+  old_ifs="$IFS"
+  IFS=','
+  for item in $raw_repos; do
+    repo="$(printf '%s' "$item" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    [ -n "$repo" ] || continue
+    case "$repo" in
+      */*)
+        repo_owner_part="${repo%%/*}"
+        repo_name_part="${repo#*/}"
+        if [ "$repo_owner_part" != "$ORG_NAME" ]; then
+          IFS="$old_ifs"
+          fatal "Org selected repo $repo must belong to org $ORG_NAME"
+        fi
+        repo="$repo_name_part"
+        ;;
+    esac
+    printf '%s' "$repo" | grep -Eq '^[A-Za-z0-9_.-]+$' || {
+      IFS="$old_ifs"
+      fatal "Invalid selected repository name for org secret: $repo"
+    }
+    if [ -n "$normalized" ]; then
+      normalized="$normalized,$repo"
+    else
+      normalized="$repo"
+    fi
+  done
+  IFS="$old_ifs"
+  [ -n "$normalized" ] || fatal "At least one selected repository is required for org-level secrets"
+  printf '%s' "$normalized"
+}
 
 normalize_remote_repo() {
   remote="$1"
@@ -259,18 +303,48 @@ check_prerequisites() {
   fi
 }
 
+setup_secret_scope() {
+  normalize_secret_scope_env
+  validate_choice "SECRET_SCOPE" "$SECRET_SCOPE" \
+    "repo:Repository-level secrets and variables" \
+    "org:Organization-level secrets and variables, restricted to selected repositories"
+
+  if [ "$SECRET_SCOPE" = "org" ]; then
+    if [ -z "$ORG_NAME" ]; then
+      ORG_NAME="$(repo_owner "$TARGET_REPO")"
+    fi
+    ORG_SELECTED_REPOS="$(normalize_selected_repos "${ORG_SELECTED_REPOS:-$(repo_name "$TARGET_REPO")}")"
+
+    if ! is_true "$DRY_RUN" && ! is_true "$LOCAL_ONLY" && ! is_true "$SKIP_GH_CHECK"; then
+      owner_type="$(gh api "users/$ORG_NAME" --jq .type 2>/dev/null || true)"
+      [ "$owner_type" = "Organization" ] || fatal "AI_ROBOT_REVIEW_SECRET_SCOPE=org requires an organization owner. $ORG_NAME is $owner_type. Use repo scope for personal repositories."
+      if ! gh auth status 2>&1 | grep -q 'admin:org'; then
+        warn "Org-level secrets usually require gh admin:org scope. If setting secrets fails, run: gh auth refresh -s admin:org"
+      fi
+    fi
+  fi
+}
+
 secret_exists() {
   if is_true "$DRY_RUN" || is_true "$SKIP_GH_CHECK"; then
     return 1
   fi
-  gh secret list --repo "$TARGET_REPO" 2>/dev/null | awk '{print $1}' | grep -Fxq "$1"
+  if [ "$SECRET_SCOPE" = "org" ]; then
+    gh secret list --org "$ORG_NAME" --app actions 2>/dev/null | awk '{print $1}' | grep -Fxq "$1"
+  else
+    gh secret list --repo "$TARGET_REPO" 2>/dev/null | awk '{print $1}' | grep -Fxq "$1"
+  fi
 }
 
 variable_exists() {
   if is_true "$DRY_RUN" || is_true "$SKIP_GH_CHECK"; then
     return 1
   fi
-  gh variable list --repo "$TARGET_REPO" 2>/dev/null | awk '{print $1}' | grep -Fxq "$1"
+  if [ "$SECRET_SCOPE" = "org" ]; then
+    gh variable list --org "$ORG_NAME" 2>/dev/null | awk '{print $1}' | grep -Fxq "$1"
+  else
+    gh variable list --repo "$TARGET_REPO" 2>/dev/null | awk '{print $1}' | grep -Fxq "$1"
+  fi
 }
 
 set_repo_secret_from_file() {
@@ -278,16 +352,25 @@ set_repo_secret_from_file() {
   file_path="$2"
   [ -f "$file_path" ] || fatal "Secret file not found for $name: $file_path"
 
-  if secret_exists "$name" && ! confirm "Secret $name already exists in $TARGET_REPO. Overwrite?"; then
+  if secret_exists "$name" && ! confirm "Secret $name already exists in $SECRET_SCOPE scope. Overwrite?"; then
     warn "Keeping existing secret $name"
     return
   fi
 
   if is_true "$DRY_RUN" || is_true "$SKIP_GH_CHECK"; then
-    log "[dry-run] gh secret set $name --repo $TARGET_REPO < $file_path"
+    if [ "$SECRET_SCOPE" = "org" ]; then
+      log "[dry-run] gh secret set $name --org $ORG_NAME --repos $ORG_SELECTED_REPOS --app actions < $file_path"
+    else
+      log "[dry-run] gh secret set $name --repo $TARGET_REPO < $file_path"
+    fi
   else
-    gh secret set "$name" --repo "$TARGET_REPO" < "$file_path" >/dev/null
-    ok "Stored secret $name"
+    if [ "$SECRET_SCOPE" = "org" ]; then
+      gh secret set "$name" --org "$ORG_NAME" --repos "$ORG_SELECTED_REPOS" --app actions < "$file_path" >/dev/null
+      ok "Stored org secret $name for $ORG_NAME repos: $ORG_SELECTED_REPOS"
+    else
+      gh secret set "$name" --repo "$TARGET_REPO" < "$file_path" >/dev/null
+      ok "Stored repo secret $name"
+    fi
   fi
 }
 
@@ -308,16 +391,25 @@ set_repo_variable() {
   value="$2"
   [ -n "$value" ] || fatal "Variable $name cannot be empty"
 
-  if variable_exists "$name" && ! confirm "Variable $name already exists in $TARGET_REPO. Overwrite?"; then
+  if variable_exists "$name" && ! confirm "Variable $name already exists in $SECRET_SCOPE scope. Overwrite?"; then
     warn "Keeping existing variable $name"
     return
   fi
 
   if is_true "$DRY_RUN" || is_true "$SKIP_GH_CHECK"; then
-    log "[dry-run] gh variable set $name --repo $TARGET_REPO --body <redacted>"
+    if [ "$SECRET_SCOPE" = "org" ]; then
+      log "[dry-run] gh variable set $name --org $ORG_NAME --repos $ORG_SELECTED_REPOS --body <redacted>"
+    else
+      log "[dry-run] gh variable set $name --repo $TARGET_REPO --body <redacted>"
+    fi
   else
-    gh variable set "$name" --repo "$TARGET_REPO" --body "$value" >/dev/null
-    ok "Stored variable $name=$value"
+    if [ "$SECRET_SCOPE" = "org" ]; then
+      gh variable set "$name" --org "$ORG_NAME" --repos "$ORG_SELECTED_REPOS" --body "$value" >/dev/null
+      ok "Stored org variable $name=$value for $ORG_NAME repos: $ORG_SELECTED_REPOS"
+    else
+      gh variable set "$name" --repo "$TARGET_REPO" --body "$value" >/dev/null
+      ok "Stored repo variable $name=$value"
+    fi
   fi
 }
 
@@ -855,6 +947,10 @@ main() {
   check_prerequisites
   detect_repo
 
+  normalize_secret_scope_env
+  choose SECRET_SCOPE "Secrets and variables scope" "repo" \
+    "repo:Store secrets and variables on the target repository" \
+    "org:Store secrets and variables on the organization, restricted to selected repositories"
   choose IDENTITY_MODE "Comment identity" "app" \
     "app:GitHub App bot identity, better audit, creates user-owned App" \
     "actions:Default github-actions[bot], fastest setup, no App"
@@ -868,7 +964,13 @@ main() {
     "minimal:Fewer comments and less analysis"
 
   log ""
+  setup_secret_scope
   info "Target repo: $TARGET_REPO"
+  if [ "$SECRET_SCOPE" = "org" ]; then
+    info "Secret scope: org $ORG_NAME, selected repos: $ORG_SELECTED_REPOS"
+  else
+    info "Secret scope: repo $TARGET_REPO"
+  fi
   info "Identity: $IDENTITY_MODE"
   info "Auth mode: $AUTH_MODE"
   info "Preset: $PRESET"

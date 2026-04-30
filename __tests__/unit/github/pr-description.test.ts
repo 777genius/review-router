@@ -1,4 +1,5 @@
 import { PullRequestDescriptionUpdater } from '../../../src/github/pr-description';
+import { GitHubClient } from '../../../src/github/client';
 import { PRContext } from '../../../src/types';
 
 function createPR(overrides: Partial<PRContext> = {}): PRContext {
@@ -21,6 +22,25 @@ function createPR(overrides: Partial<PRContext> = {}): PRContext {
         additions: 18,
         deletions: 4,
         changes: 22,
+        patch: [
+          '@@ -1,6 +1,20 @@',
+          '+name: AI Robot Review',
+          '+on:',
+          '+  pull_request:',
+          '+  workflow_dispatch:',
+          '+jobs:',
+          '+  review:',
+          '+    steps:',
+          '+      - uses: actions/checkout@v6',
+          '+      - name: Restore Codex OAuth',
+          '+        env:',
+          '+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}',
+          '+      - name: Run AI Robot Review',
+          '+        uses: 777genius/multi-provider-code-review@main',
+          '+        with:',
+          '+          CODEX_MODEL: gpt-5.5',
+          '+          CODEX_REASONING_EFFORT: medium',
+        ].join('\n'),
       },
       {
         filename: 'test/main/services/team/TeamProvisioningService.test.ts',
@@ -28,6 +48,11 @@ function createPR(overrides: Partial<PRContext> = {}): PRContext {
         additions: 2,
         deletions: 0,
         changes: 2,
+        patch: [
+          '@@ -10,6 +10,8 @@',
+          '+describe("TeamProvisioningService", () => {',
+          '+  it("skips tmux PID lookup for legacy process markers", () => {});',
+        ].join('\n'),
       },
     ],
     ...overrides,
@@ -35,17 +60,18 @@ function createPR(overrides: Partial<PRContext> = {}): PRContext {
 }
 
 describe('PullRequestDescriptionUpdater', () => {
+  const updateMock = jest.fn();
   const client = {
     owner: 'owner',
     repo: 'repo',
     octokit: {
       rest: {
         pulls: {
-          update: jest.fn(),
+          update: updateMock,
         },
       },
     },
-  } as any;
+  } as unknown as GitHubClient;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -71,7 +97,10 @@ describe('PullRequestDescriptionUpdater', () => {
       '<!-- ai-robot-review-summary:end -->',
     ].join('\n');
 
-    const merged = updater.merge(oldBody, updater.buildGeneratedBlock(createPR()));
+    const merged = updater.merge(
+      oldBody,
+      updater.buildGeneratedBlock(createPR())
+    );
 
     expect(merged.startsWith('Manual PR description')).toBe(true);
     expect(merged).not.toContain('old generated text');
@@ -90,15 +119,22 @@ describe('PullRequestDescriptionUpdater', () => {
     expect(block).toContain('## Tests');
     expect(block).toContain('changed test file');
     expect(block).toContain('Walkthrough');
+    expect(block).toContain('runs it on pull requests and manual dispatch');
+    expect(block).toContain('restores Codex OAuth credentials');
+    expect(block).toContain('sets the Codex model');
+    expect(block).toContain('sets reasoning effort');
+    expect(block).toContain('uses the latest reviewer from the main branch');
+    expect(block).toContain('Line stats: 1 modified; +18/-4.');
+    expect(block).not.toContain('1 modified with +18/-4 lines.');
   });
 
   it('updates pull request body through GitHub API', async () => {
-    client.octokit.rest.pulls.update.mockResolvedValue({});
+    updateMock.mockResolvedValue({});
     const updater = new PullRequestDescriptionUpdater(client, false);
 
     await updater.update(createPR());
 
-    expect(client.octokit.rest.pulls.update).toHaveBeenCalledWith(
+    expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         owner: 'owner',
         repo: 'repo',

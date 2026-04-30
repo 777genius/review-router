@@ -17698,7 +17698,9 @@ var PullRequestDescriptionUpdater = class {
       return;
     }
     if (this.dryRun) {
-      logger.info(`[DRY RUN] Would update PR #${pr.number} description with AI Robot Review summary`);
+      logger.info(
+        `[DRY RUN] Would update PR #${pr.number} description with AI Robot Review summary`
+      );
       return;
     }
     await this.client.octokit.rest.pulls.update({
@@ -17707,7 +17709,9 @@ var PullRequestDescriptionUpdater = class {
       pull_number: pr.number,
       body: nextBody
     });
-    logger.info(`Updated PR #${pr.number} description with AI Robot Review summary`);
+    logger.info(
+      `Updated PR #${pr.number} description with AI Robot Review summary`
+    );
   }
   buildGeneratedBlock(pr) {
     const cohorts = this.groupFiles(pr.files);
@@ -17740,7 +17744,11 @@ var PullRequestDescriptionUpdater = class {
       END_MARKER
     ];
     if (changedFiles === 0) {
-      lines.splice(3, 0, "- no changed files were available for summary generation");
+      lines.splice(
+        3,
+        0,
+        "- no changed files were available for summary generation"
+      );
     }
     return lines.join("\n").trim();
   }
@@ -17766,7 +17774,9 @@ ${generatedBlock}` : generatedBlock;
       `change ${pr.files.length} file${pr.files.length === 1 ? "" : "s"} (${statusText || "no file status"}) with +${pr.additions}/-${pr.deletions} lines`
     );
     for (const cohort of cohorts.slice(0, 3)) {
-      bullets.push(`${this.verbForCohort(cohort)} ${cohort.files.length} ${this.cohortPhrase(cohort)} file${cohort.files.length === 1 ? "" : "s"}`);
+      bullets.push(
+        `${this.verbForCohort(cohort)} ${cohort.files.length} ${this.cohortPhrase(cohort)} file${cohort.files.length === 1 ? "" : "s"}`
+      );
     }
     return bullets;
   }
@@ -17807,9 +17817,200 @@ ${generatedBlock}` : generatedBlock;
   formatCohortRow(cohort) {
     const fileList = cohort.files.slice(0, 5).map((file) => `\`${file.filename}\``).join("<br>");
     const overflow = cohort.files.length > 5 ? `<br>and ${cohort.files.length - 5} more` : "";
-    const additions = cohort.files.reduce((sum, file) => sum + file.additions, 0);
-    const deletions = cohort.files.reduce((sum, file) => sum + file.deletions, 0);
-    return `| **${cohort.title}** <br> ${fileList}${overflow} | ${this.statusSummary(cohort.files)} with +${additions}/-${deletions} lines. |`;
+    return `| **${cohort.title}** <br> ${fileList}${overflow} | ${this.formatCohortSummary(cohort)} |`;
+  }
+  formatCohortSummary(cohort) {
+    const summaries = this.unique(
+      cohort.files.slice(0, 3).map((file) => this.summarizeFile(file))
+    );
+    const overflow = cohort.files.length > 3 ? `<br>Also updates ${cohort.files.length - 3} more file${cohort.files.length === 4 ? "" : "s"}.` : "";
+    return `${summaries.join("<br>")}${overflow}<br>${this.lineStats(cohort.files)}`;
+  }
+  summarizeFile(file) {
+    if (file.status === "removed") {
+      return `Removes ${this.fileKind(file)}.`;
+    }
+    if (file.status === "renamed") {
+      const previous = file.previousFilename ? ` from \`${file.previousFilename}\`` : "";
+      return `Renames ${this.fileKind(file)}${previous}.`;
+    }
+    const key = this.cohortKey(file.filename);
+    const patch = this.extractPatchLines(file.patch);
+    if (key === "ci") return this.summarizeWorkflowFile(file, patch);
+    if (key === "tests") return this.summarizeTestFile(file, patch);
+    if (key === "docs") return this.summarizeDocsFile(file, patch);
+    if (key === "dependencies")
+      return this.summarizeDependencyFile(file, patch);
+    if (key === "config" || key === "github")
+      return this.summarizeConfigFile(file, patch);
+    return this.summarizeSourceFile(file, patch);
+  }
+  summarizeWorkflowFile(file, patch) {
+    const added = patch.additions.join("\n").toLowerCase();
+    const parts = [];
+    if (file.filename.toLowerCase().includes("ai-robot-review")) {
+      parts.push(
+        `${this.changeVerb(file)} the AI Robot Review GitHub Actions workflow`
+      );
+    } else {
+      parts.push(`${this.changeVerb(file)} a GitHub Actions workflow`);
+    }
+    if (added.includes("pull_request") && added.includes("workflow_dispatch")) {
+      parts.push("runs it on pull requests and manual dispatch");
+    } else if (added.includes("pull_request")) {
+      parts.push("runs it on pull requests");
+    } else if (added.includes("workflow_dispatch")) {
+      parts.push("allows manual dispatch");
+    }
+    if (added.includes("codex_auth_json") || added.includes("codex_config_toml")) {
+      parts.push("restores Codex OAuth credentials");
+    }
+    if (added.includes("openai_api_key")) {
+      parts.push("supports OpenAI API-key auth");
+    }
+    if (added.includes("openrouter_api_key")) {
+      parts.push("supports OpenRouter API-key auth");
+    }
+    if (added.includes("codex_model") || added.includes("gpt-5.5")) {
+      parts.push("sets the Codex model");
+    }
+    if (added.includes("codex_reasoning_effort") || added.includes("reasoning_effort")) {
+      parts.push("sets reasoning effort");
+    }
+    if (added.includes("create-github-app-token")) {
+      parts.push("mints a GitHub App token for bot comments");
+    } else if (added.includes("github_token") || added.includes("github-token")) {
+      parts.push("posts comments with the repository GitHub token");
+    }
+    if (added.includes("multi-provider-code-review@main") || added.includes("ai-robot-review@main")) {
+      parts.push("uses the latest reviewer from the main branch");
+    }
+    return this.sentenceFromParts(parts);
+  }
+  summarizeTestFile(file, patch) {
+    const symbols = this.extractSymbols(patch.additions);
+    const target = this.basenameWithoutExtension(file.filename);
+    if (symbols.length > 0) {
+      return `${this.changeVerb(file)} test coverage for ${symbols.slice(0, 2).join(", ")}.`;
+    }
+    return `${this.changeVerb(file)} ${target} test coverage.`;
+  }
+  summarizeDocsFile(file, patch) {
+    const headings = patch.additions.map((line) => line.match(/^#{1,4}\s+(.+)/)?.[1]?.trim()).filter((heading) => Boolean(heading)).slice(0, 2);
+    if (headings.length > 0) {
+      return `${this.changeVerb(file)} documentation for ${headings.join(", ")}.`;
+    }
+    return `${this.changeVerb(file)} documentation content.`;
+  }
+  summarizeDependencyFile(file, patch) {
+    const additions = patch.additions.filter(
+      (line) => line.trim() && !line.trim().startsWith("#")
+    ).length;
+    const deletions = patch.deletions.filter(
+      (line) => line.trim() && !line.trim().startsWith("#")
+    ).length;
+    if (additions > 0 && deletions > 0) {
+      return `${this.changeVerb(file)} dependency lock entries and version metadata.`;
+    }
+    if (additions > 0) {
+      return `${this.changeVerb(file)} dependency entries.`;
+    }
+    return `${this.changeVerb(file)} dependency metadata.`;
+  }
+  summarizeConfigFile(file, patch) {
+    const symbols = this.extractConfigKeys(patch.additions).slice(0, 3);
+    if (symbols.length > 0) {
+      return `${this.changeVerb(file)} configuration for ${symbols.join(", ")}.`;
+    }
+    return `${this.changeVerb(file)} project configuration.`;
+  }
+  summarizeSourceFile(file, patch) {
+    const symbols = this.extractSymbols(patch.additions);
+    if (symbols.length > 0) {
+      return `${this.changeVerb(file)} source logic around ${symbols.slice(0, 3).join(", ")}.`;
+    }
+    return `${this.changeVerb(file)} source implementation in ${this.basenameWithoutExtension(file.filename)}.`;
+  }
+  extractPatchLines(patch) {
+    if (!patch) return { additions: [], deletions: [] };
+    const additions = [];
+    const deletions = [];
+    for (const line of patch.split("\n")) {
+      if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) {
+        continue;
+      }
+      if (line.startsWith("+")) {
+        additions.push(line.slice(1).trim());
+      } else if (line.startsWith("-")) {
+        deletions.push(line.slice(1).trim());
+      }
+    }
+    return { additions, deletions };
+  }
+  extractSymbols(lines) {
+    const symbols = [];
+    const patterns = [
+      /\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/,
+      /\b(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/,
+      /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/,
+      /\b(?:describe|it|test)\(['"`]([^'"`]+)['"`]/
+    ];
+    for (const line of lines) {
+      for (const pattern of patterns) {
+        const match2 = line.match(pattern);
+        if (match2?.[1]) {
+          symbols.push(this.truncate(match2[1], 60));
+          break;
+        }
+      }
+    }
+    return this.unique(symbols).slice(0, 5);
+  }
+  extractConfigKeys(lines) {
+    const keys = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      const match2 = trimmed.match(/^["']?([A-Za-z0-9_.-]+)["']?\s*[:=]/);
+      if (match2?.[1] && !match2[1].match(/^\d+$/)) {
+        keys.push(this.truncate(match2[1], 48));
+      }
+    }
+    return this.unique(keys);
+  }
+  sentenceFromParts(parts) {
+    if (parts.length === 0) return "Updates pull request automation.";
+    const [first, ...rest] = parts;
+    if (rest.length === 0) return `${first}.`;
+    return `${first}; ${rest.join("; ")}.`;
+  }
+  lineStats(files) {
+    const additions = files.reduce((sum, file) => sum + file.additions, 0);
+    const deletions = files.reduce((sum, file) => sum + file.deletions, 0);
+    return `Line stats: ${this.statusSummary(files)}; +${additions}/-${deletions}.`;
+  }
+  changeVerb(file) {
+    if (file.status === "added") return "Adds";
+    if (file.status === "removed") return "Removes";
+    return "Updates";
+  }
+  fileKind(file) {
+    const key = this.cohortKey(file.filename);
+    if (key === "ci") return "GitHub Actions workflow";
+    if (key === "tests") return "test file";
+    if (key === "docs") return "documentation file";
+    if (key === "dependencies") return "dependency file";
+    if (key === "config") return "configuration file";
+    return "source file";
+  }
+  basenameWithoutExtension(filename) {
+    const basename2 = filename.split("/").pop() || filename;
+    return basename2.replace(/\.[^.]+$/, "");
+  }
+  truncate(value, maxLength) {
+    return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+  }
+  unique(values) {
+    return Array.from(new Set(values.filter(Boolean)));
   }
   statusSummary(files) {
     return Object.entries(this.countBy(files, (file) => file.status)).map(([status, count]) => `${count} ${status}`).join(", ");
@@ -17832,12 +18033,20 @@ ${generatedBlock}` : generatedBlock;
   cohortKey(filename) {
     const lower = filename.toLowerCase();
     if (lower.startsWith(".github/workflows/")) return "ci";
-    if (/\b(test|tests|spec|__tests__)\b/.test(lower) || /\.(test|spec)\.[jt]sx?$/.test(lower)) return "tests";
+    if (/\b(test|tests|spec|__tests__)\b/.test(lower) || /\.(test|spec)\.[jt]sx?$/.test(lower))
+      return "tests";
     if (lower.endsWith(".md") || lower.startsWith("docs/")) return "docs";
-    if (/(package-lock|yarn.lock|pnpm-lock|pubspec.lock|gemfile.lock|poetry.lock|requirements\.txt)$/.test(lower)) return "dependencies";
-    if (/(^|\/)(package\.json|pubspec\.yaml|pom\.xml|build\.gradle|cargo\.toml|go\.mod)$/.test(lower)) return "config";
+    if (/(package-lock|yarn.lock|pnpm-lock|pubspec.lock|gemfile.lock|poetry.lock|requirements\.txt)$/.test(
+      lower
+    ))
+      return "dependencies";
+    if (/(^|\/)(package\.json|pubspec\.yaml|pom\.xml|build\.gradle|cargo\.toml|go\.mod)$/.test(
+      lower
+    ))
+      return "config";
     if (lower.startsWith(".github/")) return "github";
-    if (/\.(yml|yaml|json|toml|ini|env|config\.[jt]s)$/.test(lower)) return "config";
+    if (/\.(yml|yaml|json|toml|ini|env|config\.[jt]s)$/.test(lower))
+      return "config";
     return "source";
   }
   cohortTitle(key) {
@@ -17865,11 +18074,14 @@ ${generatedBlock}` : generatedBlock;
     return cohort.title.toLowerCase();
   }
   countBy(files, selector) {
-    return files.reduce((acc, file) => {
-      const key = selector(file);
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {});
+    return files.reduce(
+      (acc, file) => {
+        const key = selector(file);
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      },
+      {}
+    );
   }
 };
 
@@ -18155,11 +18367,7 @@ var MarkdownFormatterV2 = class {
     const criticalBadge = criticalCount > 0 ? `\u{1F534} **${criticalCount} Critical**` : `~~${criticalCount} Critical~~`;
     const majorBadge = majorCount > 0 ? `\u{1F7E1} **${majorCount} Major**` : `~~${majorCount} Major~~`;
     const minorBadge = minorCount > 0 ? `\u{1F535} ${minorCount} Minor` : `~~${minorCount} Minor~~`;
-    const parts = [
-      criticalBadge,
-      majorBadge,
-      minorBadge
-    ];
+    const parts = [criticalBadge, majorBadge, minorBadge];
     return parts.join(" \u2022 ");
   }
   formatRunSummary(review) {
@@ -18413,9 +18621,7 @@ var MarkdownFormatterV2 = class {
     return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
   }
   formatFooter(review) {
-    return `<sub>${this.formatRunSummary(review)}</sub>
-
-<sub>Powered by AI Robot Review</sub>`;
+    return `<sub>${this.formatRunSummary(review)} \u2022 Powered by AI Robot Review</sub>`;
   }
 };
 

@@ -102,11 +102,7 @@ export class MarkdownFormatterV2 {
       majorCount > 0 ? `🟡 **${majorCount} Major**` : `~~${majorCount} Major~~`;
     const minorBadge =
       minorCount > 0 ? `🔵 ${minorCount} Minor` : `~~${minorCount} Minor~~`;
-    const parts = [
-      criticalBadge,
-      majorBadge,
-      minorBadge,
-    ];
+    const parts = [criticalBadge, majorBadge, minorBadge];
 
     return parts.join(' • ');
   }
@@ -469,6 +465,6 @@ export class MarkdownFormatterV2 {
   }
 
   private formatFooter(review: Review): string {
-    return `<sub>${this.formatRunSummary(review)}</sub>\n\n<sub>Powered by AI Robot Review</sub>`;
+    return `<sub>${this.formatRunSummary(review)} • Powered by AI Robot Review</sub>`;
   }
 }

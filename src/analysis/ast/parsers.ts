@@ -11,19 +11,29 @@ export function detectLanguage(filename: string): Language {
 
 export function getParser(language: Language): any | null {
   const Parser = loadModule('tree-sitter');
-  if (!Parser) return null;
+  if (!Parser) {
+    debugParser(`tree-sitter unavailable for ${language}`);
+    return null;
+  }
 
   const parser = new Parser();
   try {
     if (language === 'typescript' || language === 'javascript') {
       const ts = loadModule('tree-sitter-typescript');
-      if (!ts?.typescript) return null;
-      parser.setLanguage(ts.typescript);
+      const grammar = language === 'javascript' ? (ts?.javascript ?? ts?.typescript) : ts?.typescript;
+      if (!grammar) {
+        debugParser(`tree-sitter-typescript grammar unavailable for ${language}; keys=${ts ? Object.keys(ts).join(',') : 'null'}`);
+        return null;
+      }
+      parser.setLanguage(grammar);
       return parser;
     }
     if (language === 'python') {
       const py = loadModule('tree-sitter-python');
-      if (!py) return null;
+      if (!py) {
+        debugParser('tree-sitter-python unavailable');
+        return null;
+      }
       parser.setLanguage(py);
       return parser;
     }
@@ -39,7 +49,8 @@ export function getParser(language: Language): any | null {
       parser.setLanguage(rust);
       return parser;
     }
-  } catch {
+  } catch (error) {
+    debugParser(`setLanguage failed for ${language}: ${(error as Error).message}`);
     return null;
   }
 
@@ -52,5 +63,12 @@ function loadModule(name: string): any | null {
     return require(name);
   } catch {
     return null;
+  }
+}
+
+function debugParser(message: string): void {
+  if (process.env.MPR_DEBUG_PARSERS === '1') {
+    // eslint-disable-next-line no-console
+    console.error(`[parser] ${message}`);
   }
 }

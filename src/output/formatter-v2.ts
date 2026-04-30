@@ -1,4 +1,6 @@
 import { Review, Finding } from '../types';
+import { formatSuggestionBlock } from '../utils/suggestion-formatter';
+import { getSeverityDisplay, severityLine } from '../utils/severity';
 
 /**
  * Enhanced Markdown Formatter
@@ -28,11 +30,11 @@ export class MarkdownFormatterV2 {
     lines.push(`> ${this.generatePRSummary(review)}`);
     lines.push('');
 
-    // Release notes (if significant changes)
-    if (this.hasSignificantChanges(review)) {
+    const releaseNotes = this.generateReleaseNotes(review).trim();
+    if (releaseNotes) {
       lines.push('## Release Notes');
       lines.push('');
-      lines.push(this.generateReleaseNotes(review));
+      lines.push(releaseNotes);
       lines.push('');
     }
 
@@ -43,12 +45,14 @@ export class MarkdownFormatterV2 {
       lines.push('## Findings');
       lines.push('');
 
-      const critical = review.findings.filter(f => f.severity === 'critical');
-      const major = review.findings.filter(f => f.severity === 'major');
-      const minor = review.findings.filter(f => f.severity === 'minor');
+      const critical = review.findings.filter((f) => f.severity === 'critical');
+      const major = review.findings.filter((f) => f.severity === 'major');
+      const minor = review.findings.filter((f) => f.severity === 'minor');
 
       if (critical.length > 0) {
-        lines.push(this.formatSeveritySection('🔴 Critical', critical, 'critical'));
+        lines.push(
+          this.formatSeveritySection('🔴 Critical', critical, 'critical')
+        );
       }
 
       if (major.length > 0) {
@@ -60,20 +64,12 @@ export class MarkdownFormatterV2 {
       }
     } else {
       // Only emit one “clear” block; avoid repeating the no-providers message
-      const allClearMessage = this.generateAllClearMessage(review, { suppressRepeat: true });
+      const allClearMessage = this.generateAllClearMessage(review, {
+        suppressRepeat: true,
+      });
       lines.push('## All Clear!');
       lines.push('');
       lines.push(`> ${allClearMessage}`);
-      lines.push('');
-    }
-
-    // Action items (if any)
-    if (review.actionItems && review.actionItems.length > 0) {
-      lines.push('## Action Items');
-      lines.push('');
-      review.actionItems.forEach(item => {
-        lines.push(`- [ ] ${item}`);
-      });
       lines.push('');
     }
 
@@ -87,7 +83,7 @@ export class MarkdownFormatterV2 {
     // Footer
     lines.push('---');
     lines.push('');
-    lines.push('*Powered by Multi-Provider Code Review* • To dismiss a finding, react with 👎');
+    lines.push(this.formatFooter());
 
     return lines.join('\n');
   }
@@ -98,17 +94,30 @@ export class MarkdownFormatterV2 {
     const majorCount = metrics.major;
     const minorCount = metrics.minor;
 
-    const criticalBadge = criticalCount > 0
-      ? `🔴 **${criticalCount} Critical**`
-      : `~~${criticalCount} Critical~~`;
-    const majorBadge = majorCount > 0
-      ? `🟡 **${majorCount} Major**`
-      : `~~${majorCount} Major~~`;
-    const minorBadge = minorCount > 0
-      ? `🔵 ${minorCount} Minor`
-      : `~~${minorCount} Minor~~`;
+    const criticalBadge =
+      criticalCount > 0
+        ? `🔴 **${criticalCount} Critical**`
+        : `~~${criticalCount} Critical~~`;
+    const majorBadge =
+      majorCount > 0 ? `🟡 **${majorCount} Major**` : `~~${majorCount} Major~~`;
+    const minorBadge =
+      minorCount > 0 ? `🔵 ${minorCount} Minor` : `~~${minorCount} Minor~~`;
+    const hideApiBilling = this.shouldHideApiBilling(review);
 
-    return `${criticalBadge} • ${majorBadge} • ${minorBadge} • ${metrics.durationSeconds.toFixed(1)}s • $${metrics.totalCost.toFixed(4)}`;
+    const parts = [
+      criticalBadge,
+      majorBadge,
+      minorBadge,
+      `${metrics.durationSeconds.toFixed(1)}s`,
+    ];
+
+    if (hideApiBilling) {
+      parts.push('OAuth subscription');
+    } else {
+      parts.push(`$${metrics.totalCost.toFixed(4)}`);
+    }
+
+    return parts.join(' • ');
   }
 
   private generatePRSummary(review: Review): string {
@@ -124,21 +133,28 @@ export class MarkdownFormatterV2 {
     const parts: string[] = [];
 
     if (metrics.critical > 0) {
-      parts.push(`**${metrics.critical} critical issue${metrics.critical > 1 ? 's' : ''}** require immediate attention`);
+      const verb = metrics.critical === 1 ? 'requires' : 'require';
+      parts.push(
+        `**${metrics.critical} critical issue${metrics.critical > 1 ? 's' : ''}** ${verb} immediate attention`
+      );
     }
 
     if (metrics.major > 0) {
-      parts.push(`${metrics.major} major issue${metrics.major > 1 ? 's' : ''} should be addressed`);
+      parts.push(
+        `${metrics.major} major issue${metrics.major > 1 ? 's' : ''} should be addressed`
+      );
     }
 
     if (metrics.minor > 0) {
-      parts.push(`${metrics.minor} minor improvement${metrics.minor > 1 ? 's' : ''} suggested`);
+      parts.push(
+        `${metrics.minor} minor improvement${metrics.minor > 1 ? 's' : ''} suggested`
+      );
     }
 
     const summary = parts.join(', ');
 
     // Add context about review scope
-    const filesReviewed = new Set(findings.map(f => f.file)).size;
+    const filesReviewed = new Set(findings.map((f) => f.file)).size;
     const context = `Found across ${filesReviewed} file${filesReviewed > 1 ? 's' : ''}.`;
 
     return `${summary}. ${context}`;
@@ -157,22 +173,17 @@ export class MarkdownFormatterV2 {
     return 'No issues found. Great job!';
   }
 
-  private hasSignificantChanges(review: Review): boolean {
-    // Generate release notes if there are critical or major findings
-    return review.metrics.critical > 0 || review.metrics.major > 0;
-  }
-
   private generateReleaseNotes(review: Review): string {
     const lines: string[] = [];
     const significant = review.findings.filter(
-      f => f.severity === 'critical' || f.severity === 'major'
+      (f) => f.severity === 'critical' || f.severity === 'major'
     );
 
     if (significant.length === 0) return '';
 
     // Group by category (skip findings without category)
     const byCategory = new Map<string, Finding[]>();
-    significant.forEach(f => {
+    significant.forEach((f) => {
       if (!f.category) return; // Skip findings without category
       if (!byCategory.has(f.category)) {
         byCategory.set(f.category, []);
@@ -182,14 +193,14 @@ export class MarkdownFormatterV2 {
 
     byCategory.forEach((findings, category) => {
       lines.push(`**${category}:**`);
-      findings.forEach(f => {
+      findings.forEach((f) => {
         const emoji = f.severity === 'critical' ? '🔴' : '🟡';
         lines.push(`- ${emoji} ${f.title}`);
       });
       lines.push('');
     });
 
-    return lines.join('\n');
+    return lines.join('\n').trim();
   }
 
   private formatSeveritySection(
@@ -204,7 +215,9 @@ export class MarkdownFormatterV2 {
 
     findings.forEach((finding, index) => {
       // Pass the index and total count for numbering (if count > 1)
-      lines.push(this.formatFinding(finding, severity, index + 1, findings.length));
+      lines.push(
+        this.formatFinding(finding, severity, index + 1, findings.length)
+      );
       if (index < findings.length - 1) {
         lines.push('');
       }
@@ -224,14 +237,17 @@ export class MarkdownFormatterV2 {
     const lines: string[] = [];
 
     // Finding header with collapsible details
-    const emoji = severity === 'critical' ? '🔴' : severity === 'major' ? '🟡' : '🔵';
+    const display = getSeverityDisplay(severity);
     const location = `\`${finding.file}:${finding.line}\``;
 
     // Add number prefix if there are multiple findings of this severity
     const numberPrefix = total > 1 ? `${index}. ` : '';
 
-    lines.push(`#### ${emoji} ${numberPrefix}${finding.title}`);
-    lines.push(`**Location:** ${location}${finding.category ? ` • **Category:** ${finding.category}` : ''}`);
+    lines.push(`#### ${display.emoji} ${numberPrefix}${finding.title}`);
+    lines.push(
+      `**Reported Location:** ${location}${finding.category ? ` • **Category:** ${finding.category}` : ''}`
+    );
+    lines.push(severityLine(severity));
     lines.push('');
 
     // Message
@@ -240,19 +256,13 @@ export class MarkdownFormatterV2 {
 
     // Suggestion (if present)
     if (finding.suggestion) {
-      lines.push('**Suggested Fix:**');
-      const trimmedSuggestion = finding.suggestion.trim();
-      // Check if suggestion is already fenced
-      if (trimmedSuggestion.startsWith('```')) {
-        // Already fenced, use as-is
-        lines.push(trimmedSuggestion);
-      } else {
-        // Not fenced, wrap it
-        lines.push('```');
-        lines.push(trimmedSuggestion);
-        lines.push('```');
+      const suggestionBlock = formatSuggestionBlock(finding.suggestion);
+      if (suggestionBlock) {
+        lines.push('**Suggested Fix:**');
+        lines.push('');
+        lines.push(suggestionBlock);
+        lines.push('');
       }
-      lines.push('');
     }
 
     // Evidence (if present) - put behind "View reasoning" collapsible
@@ -262,13 +272,17 @@ export class MarkdownFormatterV2 {
       if (finding.evidence.reasoning) {
         lines.push(`<details><summary>View reasoning</summary>`);
         lines.push('');
-        lines.push(`**Evidence:** ${finding.evidence.badge} (${confidence}% confidence)`);
+        lines.push(
+          `**Evidence:** ${finding.evidence.badge} (${confidence}% confidence)`
+        );
         lines.push('');
         lines.push(finding.evidence.reasoning);
         lines.push('</details>');
       } else {
         // No reasoning, show evidence inline
-        lines.push(`**Evidence:** ${finding.evidence.badge} (${confidence}% confidence)`);
+        lines.push(
+          `**Evidence:** ${finding.evidence.badge} (${confidence}% confidence)`
+        );
       }
       lines.push('');
     }
@@ -286,6 +300,7 @@ export class MarkdownFormatterV2 {
   private formatMetrics(review: Review): string {
     const lines: string[] = [];
     const { metrics, runDetails } = review;
+    const hideApiBilling = this.shouldHideApiBilling(review);
 
     lines.push('<details>');
     lines.push('<summary>Performance Metrics</summary>');
@@ -293,9 +308,18 @@ export class MarkdownFormatterV2 {
     lines.push('| Metric | Value |');
     lines.push('|--------|-------|');
     lines.push(`| Duration | ${metrics.durationSeconds.toFixed(2)}s |`);
-    lines.push(`| Cost | $${metrics.totalCost.toFixed(4)} |`);
-    lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
-    lines.push(`| Providers | ${metrics.providersSuccess}/${metrics.providersUsed} |`);
+    if (hideApiBilling) {
+      lines.push('| Billing | OAuth subscription |');
+      if (metrics.totalTokens > 0) {
+        lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
+      }
+    } else {
+      lines.push(`| Cost | $${metrics.totalCost.toFixed(4)} |`);
+      lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
+    }
+    lines.push(
+      `| Providers | ${metrics.providersSuccess}/${metrics.providersUsed} |`
+    );
 
     if (runDetails?.cacheHit) {
       lines.push(`| Cache | Hit |`);
@@ -308,16 +332,25 @@ export class MarkdownFormatterV2 {
       lines.push('**Provider Performance:**');
       lines.push('');
 
-      runDetails.providers.forEach(p => {
-        const statusEmoji = p.status === 'success' ? '✅'
-          : p.status === 'timeout' ? '⏱️'
-          : p.status === 'rate-limited' ? '⏸️'
-          : '❌';
+      runDetails.providers.forEach((p) => {
+        const statusEmoji =
+          p.status === 'success'
+            ? '✅'
+            : p.status === 'timeout'
+              ? '⏱️'
+              : p.status === 'rate-limited'
+                ? '⏸️'
+                : '❌';
 
-        const costStr = p.cost !== undefined ? `, $${p.cost.toFixed(4)}` : '';
+        const costStr =
+          !hideApiBilling && p.cost !== undefined
+            ? `, $${p.cost.toFixed(4)}`
+            : '';
         const tokensStr = p.tokens ? `, ${p.tokens} tokens` : '';
 
-        lines.push(`- ${statusEmoji} **${p.name}** (${p.durationSeconds.toFixed(2)}s${costStr}${tokensStr})`);
+        lines.push(
+          `- ${statusEmoji} **${p.name}** (${p.durationSeconds.toFixed(2)}s${costStr}${tokensStr})`
+        );
 
         if (p.errorMessage) {
           lines.push(`  <sub>${p.errorMessage}</sub>`);
@@ -332,6 +365,14 @@ export class MarkdownFormatterV2 {
     return lines.join('\n');
   }
 
+  private shouldHideApiBilling(review: Review): boolean {
+    const hasOAuthCliUsage = (review.runDetails?.providers || []).some((p) =>
+      /^(codex|claude|gemini|opencode)\//.test(p.name)
+    );
+
+    return review.metrics.totalCost === 0 && hasOAuthCliUsage;
+  }
+
   private formatAdvancedSections(review: Review): string {
     const lines: string[] = [];
 
@@ -340,16 +381,20 @@ export class MarkdownFormatterV2 {
       lines.push('<details>');
       lines.push('<summary>AI-Generated Code Analysis</summary>');
       lines.push('');
-      lines.push(`**Overall Likelihood:** ${(review.aiAnalysis.averageLikelihood * 100).toFixed(1)}%`);
+      lines.push(
+        `**Overall Likelihood:** ${(review.aiAnalysis.averageLikelihood * 100).toFixed(1)}%`
+      );
       lines.push('');
       lines.push(`**Consensus:** ${review.aiAnalysis.consensus}`);
       lines.push('');
 
       if (Object.keys(review.aiAnalysis.providerEstimates).length > 0) {
         lines.push('**Provider Estimates:**');
-        Object.entries(review.aiAnalysis.providerEstimates).forEach(([provider, likelihood]) => {
-          lines.push(`- ${provider}: ${(likelihood * 100).toFixed(1)}%`);
-        });
+        Object.entries(review.aiAnalysis.providerEstimates).forEach(
+          ([provider, likelihood]) => {
+            lines.push(`- ${provider}: ${(likelihood * 100).toFixed(1)}%`);
+          }
+        );
         lines.push('');
       }
 
@@ -358,12 +403,12 @@ export class MarkdownFormatterV2 {
     }
 
     // Impact Graph
-    if (review.mermaidDiagram && review.mermaidDiagram.trim()) {
+    if (this.shouldShowImpactGraph(review.mermaidDiagram)) {
       lines.push('<details>');
       lines.push('<summary>Impact Analysis Graph</summary>');
       lines.push('');
       lines.push('```mermaid');
-      lines.push(review.mermaidDiagram);
+      lines.push(review.mermaidDiagram!);
       lines.push('```');
       lines.push('</details>');
       lines.push('');
@@ -375,14 +420,20 @@ export class MarkdownFormatterV2 {
       lines.push('<summary>Raw Provider Outputs</summary>');
       lines.push('');
 
-      review.providerResults.forEach(result => {
-        const statusEmoji = result.status === 'success' ? '✅'
-          : result.status === 'timeout' ? '⏱️'
-          : result.status === 'rate-limited' ? '⏸️'
-          : '❌';
+      review.providerResults.forEach((result) => {
+        const statusEmoji =
+          result.status === 'success'
+            ? '✅'
+            : result.status === 'timeout'
+              ? '⏱️'
+              : result.status === 'rate-limited'
+                ? '⏸️'
+                : '❌';
 
         lines.push(`<details>`);
-        lines.push(`<summary>${statusEmoji} ${result.name} [${result.status}] (${result.durationSeconds.toFixed(2)}s)</summary>`);
+        lines.push(
+          `<summary>${statusEmoji} ${result.name} [${result.status}] (${result.durationSeconds.toFixed(2)}s)</summary>`
+        );
         lines.push('');
 
         if (result.result?.content) {
@@ -404,5 +455,16 @@ export class MarkdownFormatterV2 {
     }
 
     return lines.join('\n');
+  }
+
+  private shouldShowImpactGraph(mermaidDiagram?: string): boolean {
+    if (!mermaidDiagram?.trim()) return false;
+
+    // A graph with only standalone nodes adds noise in PR comments.
+    return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
+  }
+
+  private formatFooter(): string {
+    return '*Powered by Multi-Provider Code Review*';
   }
 }

@@ -102,7 +102,8 @@ describe('MarkdownFormatterV2', () => {
 
       expect(output).toContain('### 🔴 Critical (1)');
       expect(output).toContain('#### 🔴 Security Vulnerability');
-      expect(output).toContain('**Location:** `src/auth.ts:123`');
+      expect(output).toContain('**Reported Location:** `src/auth.ts:123`');
+      expect(output).toContain('**Severity:** 🔴 **Critical**');
       expect(output).toContain('SQL injection risk detected');
     });
 
@@ -211,10 +212,12 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('Detected by: provider-1, provider-2, provider-3');
+      expect(output).toContain(
+        'Detected by: provider-1, provider-2, provider-3'
+      );
     });
 
-    it('should include action items if present', () => {
+    it('should omit duplicated action items from summary output', () => {
       const review = createMockReview({
         actionItems: [
           'Update dependencies',
@@ -225,10 +228,10 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('## Action Items');
-      expect(output).toContain('- [ ] Update dependencies');
-      expect(output).toContain('- [ ] Add missing tests');
-      expect(output).toContain('- [ ] Fix security issues');
+      expect(output).not.toContain('## Action Items');
+      expect(output).not.toContain('- [ ] Update dependencies');
+      expect(output).not.toContain('- [ ] Add missing tests');
+      expect(output).not.toContain('- [ ] Fix security issues');
     });
 
     it('should format performance metrics table', () => {
@@ -255,6 +258,47 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('| Cost | $0.0250 |');
       expect(output).toContain('| Tokens | 5,000 |');
       expect(output).toContain('| Providers | 2/3 |');
+    });
+
+    it('should hide API cost for OAuth CLI subscription providers', () => {
+      const review = createMockReview({
+        runDetails: {
+          providers: [
+            {
+              name: 'codex/gpt-5.4-mini',
+              status: 'success',
+              durationSeconds: 3.5,
+              cost: 0,
+            },
+          ],
+          totalCost: 0,
+          totalTokens: 0,
+          durationSeconds: 5.5,
+          cacheHit: false,
+          synthesisModel: 'codex/gpt-5.4-mini',
+          providerPoolSize: 1,
+        },
+        metrics: {
+          totalFindings: 0,
+          critical: 0,
+          major: 0,
+          minor: 0,
+          providersUsed: 1,
+          providersSuccess: 1,
+          providersFailed: 0,
+          totalTokens: 0,
+          totalCost: 0,
+          durationSeconds: 5.5,
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('OAuth subscription');
+      expect(output).not.toContain('$0.0000');
+      expect(output).not.toContain('| Cost |');
+      expect(output).not.toContain('| Tokens | 0 |');
+      expect(output).not.toContain('codex/gpt-5.4-mini** (3.50s, $0.0000)');
     });
 
     it('should show cache hit indicator', () => {
@@ -305,7 +349,9 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('**Provider Performance:**');
-      expect(output).toContain('✅ **provider-1** (3.50s, $0.0050, 500 tokens)');
+      expect(output).toContain(
+        '✅ **provider-1** (3.50s, $0.0050, 500 tokens)'
+      );
       expect(output).toContain('⏱️ **provider-2** (30.00s)');
       expect(output).toContain('Request timed out after 30s');
     });
@@ -342,6 +388,17 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('```mermaid');
       expect(output).toContain('graph TD');
       expect(output).toContain('A --> B');
+    });
+
+    it('should omit impact graph when it only contains standalone nodes', () => {
+      const review = createMockReview({
+        mermaidDiagram: 'graph TD\nsrc_users_js["src/users.js"]',
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).not.toContain('Impact Analysis Graph');
+      expect(output).not.toContain('```mermaid');
     });
 
     it('should include raw provider outputs', () => {
@@ -397,7 +454,9 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('## Summary');
-      expect(output).toContain('**1 critical issue** require immediate attention');
+      expect(output).toContain(
+        '**1 critical issue** requires immediate attention'
+      );
       expect(output).toContain('1 major issue should be addressed');
       expect(output).toContain('1 minor improvement suggested');
       expect(output).toContain('Found across 3 files');
@@ -440,13 +499,50 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('🟡 Breaking API change');
     });
 
+    it('should omit empty release notes when significant findings have no categories', () => {
+      const review = createMockReview({
+        findings: [
+          createMockFinding({
+            severity: 'critical',
+            title: 'Security fix required',
+          }),
+        ],
+        metrics: {
+          ...createMockReview().metrics,
+          critical: 1,
+          totalFindings: 1,
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).not.toContain('## Release Notes');
+    });
+
     it('should include footer with branding', () => {
       const review = createMockReview();
       const output = formatter.format(review);
 
       expect(output).toContain('Powered by Multi-Provider Code Review');
-      expect(output).toContain('dismiss a finding');
-      expect(output).toContain('react with 👎');
+      expect(output).not.toContain('react 👎');
+    });
+
+    it('should not mention thumbs-down suppression in the footer', () => {
+      const review = createMockReview({
+        inlineComments: [
+          {
+            path: 'src/test.ts',
+            line: 42,
+            side: 'RIGHT',
+            body: 'Inline finding',
+          },
+        ],
+      });
+      const output = formatter.format(review);
+
+      expect(output).toContain('Powered by Multi-Provider Code Review');
+      expect(output).not.toContain('suppress an inline finding');
+      expect(output).not.toContain('react 👎');
     });
 
     it('should use collapsible sections for long content', () => {

@@ -140,4 +140,55 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect((orchestrator as any).components.llmExecutor.execute).not.toHaveBeenCalled();
     expect((orchestrator as any).components.reliabilityTracker.recordResult).toHaveBeenCalledWith('p1', false, 0, undefined);
   });
+
+  it('executes LLM review with one explicit healthy provider', async () => {
+    const provider = {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const execute = jest.fn().mockResolvedValue([
+      {
+        name: 'p1',
+        status: 'success',
+        result: {
+          content: '{"findings":[]}',
+          findings: [],
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        },
+        durationSeconds: 0,
+      } as ProviderResult,
+    ]);
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: ['p1'],
+        fallbackProviders: [],
+        providerLimit: 1,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute,
+      } as any,
+    });
+
+    const pr = makePR([{ filename: 'a.ts', status: 'modified', additions: 1, deletions: 0, changes: 1 }]);
+
+    const review = await orchestrator.executeReview(pr);
+
+    expect(review).toBeTruthy();
+    expect(execute).toHaveBeenCalledWith([provider], expect.any(String), expect.any(Number));
+  });
 });

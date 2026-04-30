@@ -6,6 +6,7 @@ import { logger } from '../../../src/utils/logger';
 jest.mock('../../../src/utils/logger', () => ({
   logger: {
     info: jest.fn(),
+    debug: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
   },
@@ -79,6 +80,16 @@ describe('CommentPoster', () => {
 
       await poster.postInline(123, comments, files);
 
+      const reviewCall = mockOctokit.rest.pulls.createReview.mock.calls[0][0];
+      expect(reviewCall.comments[0]).toEqual(
+        expect.objectContaining({
+          path: 'src/test.ts',
+          line: 10,
+          side: 'RIGHT',
+          body: 'Test comment',
+        })
+      );
+      expect(reviewCall.comments[0]).not.toHaveProperty('position');
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
         owner: 'test-owner',
         repo: 'test-repo',
@@ -91,6 +102,48 @@ describe('CommentPoster', () => {
           }),
         ]),
       });
+    });
+
+    it('anchors inline comments to the most relevant nearby added line', async () => {
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'src/users.js',
+          line: 9,
+          side: 'RIGHT' as const,
+          body: '**🔴 Critical - SQL injection**\n\nThe email value is inserted directly into the SQL string.',
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'src/users.js',
+          status: 'modified',
+          additions: 5,
+          deletions: 0,
+          changes: 5,
+          patch: [
+            '@@ -5,3 +5,8 @@',
+            '   }',
+            '   return id;',
+            ' }',
+            '+',
+            '+export async function findUserByEmail(db, email) {',
+            "+  const rows = await db.query(`SELECT * FROM users WHERE email = '${email}' LIMIT 1`);",
+            '+  return rows[0] || null;',
+            '+}',
+          ].join('\n'),
+        },
+      ];
+
+      await poster.postInline(123, comments, files);
+
+      const reviewCall = mockOctokit.rest.pulls.createReview.mock.calls[0][0];
+      expect(reviewCall.comments[0]).toEqual(
+        expect.objectContaining({
+          path: 'src/users.js',
+          line: 10,
+        })
+      );
     });
 
     it('splits large comments into chunks', async () => {

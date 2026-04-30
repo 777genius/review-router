@@ -5,12 +5,13 @@
 The Multi-Provider Code Review action is designed for high performance with the following targets:
 
 | PR Size | Files | Lines Changed | Target Duration | Typical Cost |
-|---------|-------|---------------|-----------------|--------------|
-| Small   | 5     | 100          | < 10s           | $0.001-0.005 |
-| Medium  | 20    | 500          | < 30s           | $0.005-0.020 |
-| Large   | 100   | 2000         | < 90s           | $0.020-0.100 |
+| ------- | ----- | ------------- | --------------- | ------------ |
+| Small   | 5     | 100           | < 10s           | $0.001-0.005 |
+| Medium  | 20    | 500           | < 30s           | $0.005-0.020 |
+| Large   | 100   | 2000          | < 90s           | $0.020-0.100 |
 
 **Actual performance depends on:**
+
 - Provider response times (typically 0.5-5 seconds each)
 - Network latency to provider APIs
 - Cache hit rate (incremental reviews are 6x faster, 80% cheaper)
@@ -25,21 +26,24 @@ The Multi-Provider Code Review action is designed for high performance with the 
 
 ```yaml
 - INCREMENTAL_ENABLED: true
-- INCREMENTAL_CACHE_TTL_DAYS: 7  # How long to keep review cache
+- INCREMENTAL_CACHE_TTL_DAYS: 7 # How long to keep review cache
 ```
 
 **Benefits:**
+
 - 6x faster on PR updates
 - 80% cost reduction for iterative reviews
 - Same quality as full review
 
 **How it works:**
+
 - Caches first review result
 - On PR update, only reviews newly changed files
 - Merges cached findings with new findings
 - Updates summary comment in place
 
 **When to use:**
+
 - All PR workflows (recommended default)
 - Especially useful for large PRs with multiple iterations
 
@@ -60,6 +64,7 @@ REVIEW_PROVIDERS: >-
 ```
 
 **Provider tips:**
+
 - Start with 2-3 providers for consensus
 - Use free providers for routine PRs
 - Use premium providers (GPT-4, Claude) for critical security reviews
@@ -70,10 +75,11 @@ REVIEW_PROVIDERS: >-
 **Tune parallel provider execution** based on API rate limits:
 
 ```yaml
-- PROVIDER_MAX_PARALLEL: 3  # Default: 5
+- PROVIDER_MAX_PARALLEL: 3 # Default: 5
 ```
 
 **Guidelines:**
+
 - 3-5 for free tier API keys
 - 5-10 for paid tier with high rate limits
 - Lower if experiencing rate limiting
@@ -90,15 +96,16 @@ REVIEW_PROVIDERS: >-
 - SKIP_BOTS: true
 
 # Size limits (skip very large PRs)
-- MIN_CHANGED_LINES: 5      # Skip trivial changes
-- MAX_CHANGED_FILES: 100    # Skip massive refactors
+- MIN_CHANGED_LINES: 5 # Skip trivial changes
+- MAX_CHANGED_FILES: 100 # Skip massive refactors
 
 # Comment limits
-- INLINE_MAX_COMMENTS: 15   # Cap inline comments per PR
-- INLINE_MIN_SEVERITY: major  # Only show major/critical inline
+- INLINE_MAX_COMMENTS: 15 # Cap inline comments per PR
+- INLINE_MIN_SEVERITY: major # Only show major/critical inline
 ```
 
 **Benefits:**
+
 - Skip PRs that don't need review
 - Avoid overwhelming developers with too many comments
 - Save API costs on routine updates
@@ -109,16 +116,18 @@ REVIEW_PROVIDERS: >-
 
 ```yaml
 - QUIET_MODE_ENABLED: true
-- QUIET_MIN_CONFIDENCE: 0.6  # Only show findings with ≥60% confidence
-- QUIET_USE_LEARNING: true   # Learn from user feedback
+- QUIET_MIN_CONFIDENCE: 0.6 # Only show findings with ≥60% confidence
+- QUIET_USE_LEARNING: true # Learn from user feedback
 ```
 
 **How it works:**
+
 - Analyzes provider agreement and evidence scores
 - Filters findings below confidence threshold
-- Learns from 👍/👎 reactions over time
+- Learns from reviewer feedback over time
 
 **When to use:**
+
 - High-velocity teams with many PRs
 - Established codebases with consistent patterns
 - When you're getting too many false positives
@@ -129,17 +138,18 @@ REVIEW_PROVIDERS: >-
 
 ```yaml
 # Features that add latency
-- ENABLE_AST_ANALYSIS: false   # AST analysis (~200-500ms)
-- ENABLE_TEST_HINTS: false     # Test coverage analysis (~100ms)
-- ENABLE_AI_DETECTION: false   # AI-generated code detection (~50ms)
-- ENABLE_SECURITY: true        # Keep security scanning (critical)
+- ENABLE_AST_ANALYSIS: false # AST analysis (~200-500ms)
+- ENABLE_TEST_HINTS: false # Test coverage analysis (~100ms)
+- ENABLE_AI_DETECTION: false # AI-generated code detection (~50ms)
+- ENABLE_SECURITY: true # Keep security scanning (critical)
 
 # Advanced features
-- GRAPH_ENABLED: false         # Code graph analysis (~500-1000ms)
-- ANALYTICS_ENABLED: true      # Keep for cost tracking
+- GRAPH_ENABLED: false # Code graph analysis (~500-1000ms)
+- ANALYTICS_ENABLED: true # Keep for cost tracking
 ```
 
 **Recommendations:**
+
 - Always keep `ENABLE_SECURITY: true` (critical vulnerabilities)
 - Disable AST/graph for speed, enable for thorough analysis
 - Disable test hints unless explicitly tracking coverage
@@ -155,12 +165,14 @@ REVIEW_PROVIDERS: >-
 ```
 
 **Best practices:**
+
 - Use consistent branch naming (e.g., `feature/*`, `fix/*`)
 - Avoid force-pushing to PR branches (breaks cache)
 - Keep `INCREMENTAL_CACHE_TTL_DAYS` at 7-14 days
 - Review cache directory size periodically
 
 **Cache invalidation triggers:**
+
 - New commits to PR (incremental review)
 - Branch force-push (full re-review)
 - Cache TTL expiration
@@ -171,10 +183,11 @@ REVIEW_PROVIDERS: >-
 **Prevent runaway costs:**
 
 ```yaml
-- BUDGET_MAX_USD: 0.50  # Hard stop at $0.50 per review
+- BUDGET_MAX_USD: 0.50 # Hard stop at $0.50 per review
 ```
 
 **Cost management:**
+
 - Set budget appropriate to PR importance
 - Use free providers for most PRs
 - Reserve budget for security/critical reviews
@@ -193,6 +206,7 @@ mpr analytics summary
 ```
 
 **Key metrics to watch:**
+
 - **Average review duration**: Should be <30s for typical PRs
 - **Cost per review**: Should be <$0.02 with free providers
 - **Cache hit rate**: Should be >60% with incremental reviews
@@ -213,9 +227,11 @@ mpr analytics summary
    - Large PR? (use `MAX_CHANGED_FILES` limit)
 
 3. **Enable debug logging**
+
    ```yaml
    - LOG_LEVEL: debug
    ```
+
    Check GitHub Action logs for bottlenecks
 
 4. **Use dry-run to profile**
@@ -239,13 +255,14 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2.0'      # 2 CPU cores recommended
-          memory: 2048M     # 2GB RAM recommended
+          cpus: '2.0' # 2 CPU cores recommended
+          memory: 2048M # 2GB RAM recommended
     volumes:
-      - mpr-cache:/app/.cache  # Persistent cache
+      - mpr-cache:/app/.cache # Persistent cache
 ```
 
 **Infrastructure tips:**
+
 - Run on cloud VM with fast network (AWS, GCP, Azure)
 - Use SSD storage for cache directory
 - Consider Redis for shared cache (multi-instance deployments)
@@ -261,6 +278,7 @@ FALLBACK_PROVIDERS: openrouter/mistralai/devstral-2512:free
 ```
 
 **How it works:**
+
 - If primary provider fails/rate-limited, use fallback
 - Adds latency (sequential attempt) but ensures completion
 - Good for production stability
@@ -275,6 +293,7 @@ FALLBACK_PROVIDERS: openrouter/mistralai/devstral-2512:free
 ```
 
 Create lightweight providers for specific checks:
+
 - Fast linting-style rules
 - Team-specific patterns
 - Custom security checks
@@ -316,6 +335,7 @@ QUIET_MIN_CONFIDENCE: 0.7
 ```
 
 **Profile:**
+
 - 1 fast provider
 - Minimal features
 - Aggressive filtering
@@ -340,6 +360,7 @@ QUIET_MODE_ENABLED: false
 ```
 
 **Profile:**
+
 - 3 premium providers
 - All features enabled
 - No filtering
@@ -360,6 +381,7 @@ BUDGET_MAX_USD: 0.01
 ```
 
 **Profile:**
+
 - Only free providers
 - Incremental reviews
 - Strict budget

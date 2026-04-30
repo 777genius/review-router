@@ -52,7 +52,7 @@ jobs:
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          REVIEW_PROVIDERS: openrouter/google/gemini-2.0-flash-exp:free,openrouter/mistralai/devstral-2512:free
+          REVIEW_PROVIDERS: openrouter/free
           INCREMENTAL_ENABLED: 'true'  # 6x faster on updates
         env:
           # Required when using OpenRouter providers (even free ones)
@@ -107,7 +107,8 @@ See [Self-Hosted Deployment Guide](docs/self-hosted.md) for details.
 ### API-Based Providers
 
 - **OpenRouter** (`openrouter/<model>`): 200+ models via single API
-  - Examples: `openrouter/google/gemini-2.0-flash-exp:free`, `openrouter/mistralai/devstral-2512:free`
+  - Recommended: `openrouter/free` - Automatically routes to best available free model
+  - Alternative: Specific models like `openrouter/google/gemini-2.0-flash-exp:free`
   - Requires: `OPENROUTER_API_KEY` environment variable
   - Get free API key: [openrouter.ai](https://openrouter.ai)
 
@@ -121,9 +122,10 @@ The following providers require local CLI installation and OAuth authentication.
   - Install: See [Claude Code documentation](https://docs.anthropic.com/claude-code)
 
 - **Codex CLI** (`codex/<model>`)
-  - Examples: `codex/gpt-5.1-codex-max`, `codex/gpt-5.1-codex`
+  - Examples verified with ChatGPT OAuth in CI: `codex/gpt-5.4-mini`, `codex/gpt-5.4`
   - Requires: `codex` CLI installed and authenticated (ChatGPT Pro subscription)
-  - Install: `npm install -g codex-cli`
+  - Install: `npm install -g @openai/codex@0.125.0`
+  - Recommended for CI: set `CODEX_HEALTHCHECK_MODE: exec` and `FAIL_ON_NO_HEALTHY_PROVIDERS: "true"`
 
 - **Gemini CLI** (`gemini/<model>`)
   - Examples: `gemini/gemini-2.0-flash`, `gemini/gemini-1.5-pro`
@@ -143,27 +145,79 @@ OAuth-based CLIs (Claude Code, Codex, Gemini) require credential setup for CI/CD
 2. **Store as GitHub Secrets** (encrypted storage)
 3. **Restore in CI workflow** before running reviews
 
-**See the [CI Setup Guide](docs/CI_SETUP.md) for detailed instructions** on:
-- Extracting OAuth credentials from macOS Keychain or config files
-- Creating GitHub Secrets for each CLI
-- Configuring workflows to restore credentials
-- Complete workflow examples
+#### Quick Setup (Automated)
+
+If you have all CLIs authenticated locally and GitHub CLI (`gh`) installed:
+
+```bash
+# Set secrets for current repository
+
+# Claude Code (macOS - uses Keychain)
+security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null | gh secret set CLAUDE_CODE_OAUTH
+
+# Claude Code (Linux - uses config file instead)
+cat ~/.config/claude/credentials.json | gh secret set CLAUDE_CODE_OAUTH
+
+# Codex and Gemini (same on macOS/Linux)
+cat ~/.codex/auth.json | gh secret set CODEX_AUTH_JSON
+cat ~/.codex/config.toml | gh secret set CODEX_CONFIG_TOML
+cat ~/.gemini/oauth_creds.json | gh secret set GEMINI_OAUTH_CREDS
+cat ~/.gemini/settings.json | gh secret set GEMINI_SETTINGS
+
+# For another repository, add: --repo owner/repo-name
+```
+
+**Note:** See [CI Setup Guide](docs/CI_SETUP.md) for platform-specific instructions (Linux/macOS/Windows).
+
+**See the [CI Setup Guide](docs/CI_SETUP.md) for:**
+- Detailed step-by-step instructions
+- Manual secret creation via GitHub UI
+- Complete workflow examples with credential restoration
+- Platform-specific notes (Linux, macOS, Windows)
 - Troubleshooting and security best practices
 
-**Quick Example:**
+**Workflow Example:**
 ```yaml
-- name: Setup Claude Code
-  if: ${{ secrets.CLAUDE_CODE_OAUTH != '' }}
+- name: Setup CLI Configuration Files
   run: |
-    mkdir -p ~/.config/claude
-    echo '${{ secrets.CLAUDE_CODE_OAUTH }}' > ~/.config/claude/credentials.json
-    chmod 600 ~/.config/claude/credentials.json
+    # Claude Code
+    if [ -n "${{ secrets.CLAUDE_CODE_OAUTH }}" ]; then
+      mkdir -p ~/.config/claude
+      echo '${{ secrets.CLAUDE_CODE_OAUTH }}' > ~/.config/claude/credentials.json
+      chmod 600 ~/.config/claude/credentials.json
+    fi
+    # Codex
+    if [ -n "${{ secrets.CODEX_AUTH_JSON }}" ]; then
+      mkdir -p ~/.codex
+      echo '${{ secrets.CODEX_AUTH_JSON }}' > ~/.codex/auth.json
+      echo '${{ secrets.CODEX_CONFIG_TOML }}' > ~/.codex/config.toml
+      chmod 600 ~/.codex/auth.json ~/.codex/config.toml
+    fi
+    # Gemini
+    if [ -n "${{ secrets.GEMINI_OAUTH_CREDS }}" ]; then
+      mkdir -p ~/.gemini
+      echo '${{ secrets.GEMINI_OAUTH_CREDS }}' > ~/.gemini/oauth_creds.json
+      echo '${{ secrets.GEMINI_SETTINGS }}' > ~/.gemini/settings.json
+      chmod 600 ~/.gemini/oauth_creds.json ~/.gemini/settings.json
+    fi
 
-- name: Run Review with Claude Code
-  run: npx multi-provider-code-review
-  env:
+- name: Run Review
+  uses: keithah/multi-provider-code-review@main
+  with:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    REVIEW_PROVIDERS: "claude/sonnet,claude/opus"
+    PR_NUMBER: ${{ github.event.pull_request.number }}
+    REVIEW_PROVIDERS: "codex/gpt-5.4-mini,codex/gpt-5.4"
+    SYNTHESIS_MODEL: "codex/gpt-5.4-mini"
+    PROVIDER_MAX_PARALLEL: "1"
+    PROVIDER_RETRIES: "0"
+    CODEX_HEALTHCHECK_MODE: "exec"
+    CODEX_HEALTHCHECK_REASONING_EFFORT: "low"
+    FAIL_ON_NO_HEALTHY_PROVIDERS: "true"
+    INLINE_MAX_COMMENTS: "5"
+    INLINE_MIN_SEVERITY: "minor"
+    ENABLE_AI_DETECTION: "false"
+    LEARNING_ENABLED: "false"
+    GRAPH_ENABLED: "false"
 ```
 
 ### Plugin System

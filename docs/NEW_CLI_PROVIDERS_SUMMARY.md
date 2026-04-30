@@ -51,7 +51,7 @@ All three providers follow the same pattern as `OpenCodeProvider`:
 
 #### Codex Provider
 - Binary paths: `codex`, `codex-cli`
-- Command: `codex --model <model> --dangerously-bypass-approvals-and-sandbox -c approval_policy=never <prompt>`
+- Command: `codex exec --model <model> --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never <prompt>`
 - Credentials: `~/.codex/auth.json`, `~/.codex/config.toml`
 
 #### Gemini Provider

@@ -107,6 +107,9 @@ export class ConfigLoader {
       incrementalEnabled: this.parseBoolean(env.INCREMENTAL_ENABLED),
       incrementalCacheTtlDays: this.parseNumber(env.INCREMENTAL_CACHE_TTL_DAYS),
 
+      codexAgenticContext: this.parseBoolean(env.CODEX_AGENTIC_CONTEXT),
+      codexEventAudit: this.parseBoolean(env.CODEX_EVENT_AUDIT),
+
       batchMaxFiles: this.parseNumber(env.BATCH_MAX_FILES),
       providerBatchOverrides: this.parseOverrides(env.PROVIDER_BATCH_OVERRIDES),
 
@@ -122,6 +125,10 @@ export class ConfigLoader {
       pathBasedIntensity: this.parseBoolean(env.PATH_BASED_INTENSITY),
       pathIntensityPatterns: env.PATH_INTENSITY_PATTERNS,
       pathDefaultIntensity: this.parseIntensity(env.PATH_DEFAULT_INTENSITY),
+      minConfidence: this.parseFloat(env.MIN_CONFIDENCE),
+      consensusRequiredForCritical: this.parseBoolean(env.CONSENSUS_REQUIRED_FOR_CRITICAL),
+      consensusMinAgreement: this.parseNumber(env.CONSENSUS_MIN_AGREEMENT),
+      suggestionSyntaxValidation: this.parseBoolean(env.SUGGESTION_SYNTAX_VALIDATION),
 
       dryRun: this.parseBoolean(env.DRY_RUN),
     };
@@ -171,6 +178,8 @@ export class ConfigLoader {
       graphCacheEnabled: config.graph_cache_enabled,
       graphMaxDepth: config.graph_max_depth,
       graphTimeoutSeconds: config.graph_timeout_seconds,
+      codexAgenticContext: config.codex_agentic_context,
+      codexEventAudit: config.codex_event_audit,
       generateFixPrompts: config.generate_fix_prompts,
       fixPromptFormat: config.fix_prompt_format,
       analyticsEnabled: config.analytics_enabled,
@@ -197,6 +206,11 @@ export class ConfigLoader {
       intensityProviderCounts: config.intensity_provider_counts,
       intensityTimeouts: config.intensity_timeouts,
       intensityPromptDepth: config.intensity_prompt_depth,
+      minConfidence: config.min_confidence,
+      confidenceThreshold: config.confidence_threshold,
+      consensusRequiredForCritical: config.consensus_required_for_critical,
+      consensusMinAgreement: config.consensus_min_agreement,
+      suggestionSyntaxValidation: config.suggestion_syntax_validation,
       dryRun: config.dry_run,
     };
   }

@@ -1,5 +1,5 @@
-import * as core from '@actions/core';
-import * as github from '@actions/github';
+import * as core from '../actions/core';
+import * as fs from 'fs';
 import { Octokit } from '@octokit/rest';
 import { GitHubRateLimitTracker } from './rate-limit';
 
@@ -10,18 +10,10 @@ export class GitHubClient {
   private readonly rateLimitTracker = new GitHubRateLimitTracker();
 
   constructor(token: string) {
-    this.octokit = github.getOctokit(token) as unknown as Octokit;
+    this.octokit = new Octokit({ auth: token });
 
-    // Try to get repository from environment or GitHub context
-    let repoEnv = process.env.GITHUB_REPOSITORY;
-    if (!repoEnv) {
-      try {
-        repoEnv = `${github.context.repo.owner}/${github.context.repo.repo}`;
-      } catch {
-        // If GitHub context is not available, use empty strings
-        repoEnv = '/';
-      }
-    }
+    // Prefer the explicit Actions env var, then fall back to the event payload.
+    const repoEnv = process.env.GITHUB_REPOSITORY || getRepositoryFromEventPayload() || '/';
 
     const [owner, repo] = repoEnv.split('/');
     this.owner = owner || '';
@@ -161,4 +153,40 @@ export class GitHubClient {
       return null;
     }
   }
+}
+
+function getRepositoryFromEventPayload(): string | undefined {
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (!eventPath) {
+    return undefined;
+  }
+
+  try {
+    const payload = JSON.parse(fs.readFileSync(eventPath, 'utf8')) as {
+      repository?: {
+        full_name?: string;
+        name?: string;
+        owner?: {
+          login?: string;
+          name?: string;
+        };
+      };
+      organization?: {
+        login?: string;
+      };
+    };
+
+    if (payload.repository?.full_name) {
+      return payload.repository.full_name;
+    }
+
+    const owner = payload.repository?.owner?.login || payload.repository?.owner?.name || payload.organization?.login;
+    if (owner && payload.repository?.name) {
+      return `${owner}/${payload.repository.name}`;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
 }

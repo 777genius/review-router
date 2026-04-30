@@ -28,6 +28,25 @@ describe('FindingFilter', () => {
       expect(stats.downgraded).toBe(0);
     });
 
+    test('keeps concrete password reset throttle regressions even with cautious wording', () => {
+      const findings: Finding[] = [
+        {
+          file: 'src/passwordReset.js',
+          line: 4,
+          severity: 'major',
+          title: 'Password reset throttling now uses the wrong policy',
+          message:
+            '`canRequestPasswordReset` now reads the `marketingEmailPreview` policy instead of the password reset policy, so reset requests can be incorrectly over-allowed.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered).toHaveLength(1);
+      expect(stats.kept).toBe(1);
+      expect(stats.filtered).toBe(0);
+    });
+
     test('filters documentation formatting issues', () => {
       const findings: Finding[] = [
         {
@@ -976,7 +995,7 @@ describe('FindingFilter', () => {
         },
       ];
 
-      const { findings: filtered, stats } = filter.filter(findings, '');
+      const { findings: filtered, stats: _stats } = filter.filter(findings, '');
 
       // Can be filtered as suggestion ("should be") or downgraded as code quality
       expect(filtered.length).toBeLessThanOrEqual(1);

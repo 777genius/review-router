@@ -39,7 +39,7 @@ inputs:
   SYNTHESIS_MODEL:
     description: "Model used for synthesis/prompts"
     required: false
-    default: "openrouter/google/gemini-2.0-flash-exp:free"
+    default: "openrouter/free"
   INLINE_MAX_COMMENTS:
     description: "Maximum inline comments"
     required: false
@@ -76,6 +76,30 @@ inputs:
     description: "Maximum providers to run in parallel"
     required: false
     default: "3"
+  CODEX_HEALTHCHECK_MODE:
+    description: "Codex provider health check mode: exec, binary, or none"
+    required: false
+    default: "exec"
+  CODEX_HEALTHCHECK_REASONING_EFFORT:
+    description: "Codex reasoning effort used for health checks"
+    required: false
+    default: "low"
+  CODEX_REASONING_EFFORT:
+    description: "Optional Codex reasoning effort override for review runs"
+    required: false
+    default: ""
+  CODEX_AGENTIC_CONTEXT:
+    description: "Allow Codex CLI to inspect related repository files in read-only sandbox before returning JSON findings"
+    required: false
+    default: "true"
+  CODEX_EVENT_AUDIT:
+    description: "Log a sanitized summary of Codex CLI tool commands and file path counts"
+    required: false
+    default: "false"
+  FAIL_ON_NO_HEALTHY_PROVIDERS:
+    description: "Fail the action if no provider passes health checks"
+    required: false
+    default: "false"
   DIFF_MAX_BYTES:
     description: "Maximum diff bytes to send to providers"
     required: false
@@ -132,6 +156,22 @@ inputs:
     description: "Minimum confidence threshold for quiet mode filtering (0.0-1.0)"
     required: false
     default: "0.5"
+  MIN_CONFIDENCE:
+    description: "Minimum confidence threshold for inline suggestions (0.0-1.0)"
+    required: false
+    default: ""
+  CONSENSUS_REQUIRED_FOR_CRITICAL:
+    description: "Require provider consensus before posting critical inline suggestions"
+    required: false
+    default: "true"
+  CONSENSUS_MIN_AGREEMENT:
+    description: "Minimum provider count required for critical suggestion consensus"
+    required: false
+    default: "2"
+  SUGGESTION_SYNTAX_VALIDATION:
+    description: "Validate suggestion syntax before posting GitHub suggestion blocks"
+    required: false
+    default: "true"
   GRAPH_ENABLED:
     description: "Enable code graph for dependency tracking"
     required: false
@@ -217,5 +257,5 @@ outputs:
     description: "Average AI-generated likelihood"
 
 runs:
-  using: "node20"
+  using: "node24"
   main: "dist/index.js"

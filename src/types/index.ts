@@ -72,6 +72,9 @@ export interface ReviewConfig {
   graphMaxDepth?: number;
   graphTimeoutSeconds?: number;
 
+  codexAgenticContext?: boolean;
+  codexEventAudit?: boolean;
+
   generateFixPrompts?: boolean;
   fixPromptFormat?: string;
 
@@ -119,6 +122,17 @@ export interface ReviewConfig {
     light: 'detailed' | 'standard' | 'brief';
   };
 
+  // Quality configuration
+  minConfidence?: number;
+  confidenceThreshold?: {
+    critical?: number;
+    major?: number;
+    minor?: number;
+  };
+  consensusRequiredForCritical?: boolean;
+  consensusMinAgreement?: number;
+  suggestionSyntaxValidation?: boolean;
+
   dryRun: boolean;
 }
 
@@ -135,6 +149,7 @@ export interface ReviewResult {
   findings?: Finding[];
   aiLikelihood?: number;
   aiReasoning?: string;
+  actualModel?: string;  // Actual model used (for routed providers like openrouter/free)
 }
 
 export interface ProviderResult {
@@ -158,6 +173,7 @@ export interface Finding {
   category?: string;
   evidence?: EvidenceScore;
   evidenceDetail?: EvidenceDetail;
+  hasConsensus?: boolean;  // Set during aggregation when multiple providers agree
 }
 
 export interface PRContext {
@@ -191,6 +207,13 @@ export interface InlineComment {
   line: number;
   side: 'LEFT' | 'RIGHT';
   body: string;
+  severity?: Severity;
+  title?: string;
+  category?: string;
+  provider?: string;
+  providers?: string[];
+  confidence?: number;
+  hasConsensus?: boolean;
 }
 
 export interface ReviewMetrics {

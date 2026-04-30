@@ -53,6 +53,9 @@ export const ReviewConfigSchema = z.object({
   graph_max_depth: z.number().int().min(1).max(10).optional(),
   graph_timeout_seconds: z.number().int().min(1).max(60).optional(),
 
+  codex_agentic_context: z.boolean().optional(),
+  codex_event_audit: z.boolean().optional(),
+
   generate_fix_prompts: z.boolean().optional(),
   fix_prompt_format: z.enum(['cursor', 'copilot', 'plain']).optional(),
 
@@ -100,6 +103,16 @@ export const ReviewConfigSchema = z.object({
     standard: z.enum(['detailed', 'standard', 'brief']),
     light: z.enum(['detailed', 'standard', 'brief']),
   }).optional(),
+
+  min_confidence: z.number().min(0).max(1).optional(),
+  confidence_threshold: z.object({
+    critical: z.number().min(0).max(1).optional(),
+    major: z.number().min(0).max(1).optional(),
+    minor: z.number().min(0).max(1).optional(),
+  }).optional(),
+  consensus_required_for_critical: z.boolean().optional(),
+  consensus_min_agreement: z.number().int().min(2).optional(),
+  suggestion_syntax_validation: z.boolean().optional(),
 
   dry_run: z.boolean().optional(),
 });

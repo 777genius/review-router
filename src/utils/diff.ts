@@ -141,6 +141,146 @@ export function mapLinesToPositions(patch: string | undefined): Map<number, numb
 }
 
 /**
+ * Pick the most relevant added line near an LLM-reported finding line.
+ *
+ * LLMs sometimes point to the function signature or adjacent context line instead
+ * of the exact changed line. GitHub accepts both if they are in the diff, but the
+ * review is more useful when anchored to the actual risky statement.
+ */
+export function chooseBestAddedLineForComment(
+  patch: string | undefined,
+  reportedLine: number,
+  commentBody: string,
+  searchRadius = 4
+): number {
+  const added = mapAddedLines(patch);
+  if (added.length === 0) return reportedLine;
+
+  const nearby = added.filter(line => Math.abs(line.line - reportedLine) <= searchRadius);
+  if (nearby.length === 0) return reportedLine;
+
+  const bodyTokens = tokenizeForLineScoring(commentBody);
+  const riskTerms = getRiskTerms(commentBody);
+
+  const score = (candidate: AddedLine): number => {
+    const content = candidate.content;
+    const lower = content.toLowerCase();
+    const codeTokens = tokenizeForLineScoring(content);
+    const overlap = Array.from(codeTokens).filter(token => bodyTokens.has(token)).length;
+    const proximity = Math.max(0, searchRadius + 1 - Math.abs(candidate.line - reportedLine));
+    const riskScore = riskTerms.reduce((sum, term) => sum + (term.test(lower) ? 3 : 0), 0);
+    const interpolationScore = /\$\{.+?\}/.test(content) ? 2 : 0;
+    const callScore = /\b[a-zA-Z_$][\w$]*\s*\(/.test(content) ? 1 : 0;
+    const declarationPenalty = /^\s*(export\s+)?(async\s+)?(function|class|interface|type)\b/.test(content) ? -2 : 0;
+
+    return proximity + overlap + riskScore + interpolationScore + callScore + declarationPenalty;
+  };
+
+  const current = nearby.find(line => line.line === reportedLine);
+  const currentScore = current ? score(current) : Number.NEGATIVE_INFINITY;
+  const best = [...nearby].sort((a, b) => score(b) - score(a) || Math.abs(a.line - reportedLine) - Math.abs(b.line - reportedLine))[0];
+  const bestScore = score(best);
+
+  return bestScore > currentScore + 1 ? best.line : reportedLine;
+}
+
+function tokenizeForLineScoring(text: string): Set<string> {
+  const stopWords = new Set([
+    'the', 'and', 'for', 'with', 'this', 'that', 'from', 'into', 'value',
+    'line', 'risk', 'issue', 'critical', 'major', 'minor', 'severity',
+  ]);
+
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9_$]+/g, ' ')
+      .split(/\s+/)
+      .filter(token => token.length >= 3 && !stopWords.has(token))
+  );
+}
+
+function getRiskTerms(commentBody: string): RegExp[] {
+  const body = commentBody.toLowerCase();
+  const terms: RegExp[] = [];
+
+  if (/\bsql\b|injection|query|database/.test(body)) {
+    terms.push(/\b(query|execute|exec|select|insert|update|delete|where)\b/, /`.*\$\{.*\}/);
+  }
+  if (/xss|html|script|sanitize/.test(body)) {
+    terms.push(/innerhtml|dangerouslysetinnerhtml|document\.write|sanitize|escape/);
+  }
+  if (/command|shell|rce|exec|spawn/.test(body)) {
+    terms.push(/\b(exec|spawn|execfile|system|shell_exec|popen)\b/);
+  }
+  if (/secret|token|password|credential/.test(body)) {
+    terms.push(/secret|token|password|credential|apikey|api_key/);
+  }
+
+  return terms;
+}
+
+/**
+ * Check if a line range is within a single contiguous hunk.
+ * Returns false if range crosses non-contiguous hunk boundaries.
+ *
+ * @param startLine - First line of range (inclusive)
+ * @param endLine - Last line of range (inclusive)
+ * @param patch - Unified diff patch string
+ * @returns true if range is within single hunk, false otherwise
+ */
+export function isRangeWithinSingleHunk(
+  startLine: number,
+  endLine: number,
+  patch: string | undefined
+): boolean {
+  if (!patch) return false;
+
+  const lines = patch.split('\n');
+  const hunkRegex = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+  const noNewlineMarker = '\\ No newline at end of file';
+
+  let currentNew = 0;
+  let foundStart = false;
+  let inActiveHunk = false;
+
+  for (const raw of lines) {
+    if (raw === noNewlineMarker) continue;
+
+    const hunkMatch = raw.match(hunkRegex);
+
+    if (hunkMatch) {
+      // New hunk starting
+      if (foundStart) {
+        // We found start but hit a new hunk before finding end
+        // This means range crosses hunk boundary
+        return false;
+      }
+      currentNew = parseInt(hunkMatch[2], 10);
+      inActiveHunk = true;
+      continue;
+    }
+
+    if (!inActiveHunk) continue;
+
+    // Track RIGHT side lines (added or context, not deleted)
+    if (raw.startsWith('+') || (!raw.startsWith('-') && raw.length > 0)) {
+      if (currentNew === startLine) {
+        foundStart = true;
+      }
+      if (currentNew === endLine) {
+        // Found end - only valid if we found start in same hunk
+        return foundStart;
+      }
+      currentNew += 1;
+    }
+    // Deleted lines don't advance currentNew (LEFT side only)
+  }
+
+  // Never found complete range
+  return false;
+}
+
+/**
  * Filter a full diff to only include chunks for the given files.
  * Uses lightweight line scanning with a minimal regex for headers.
  */

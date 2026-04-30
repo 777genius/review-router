@@ -23,6 +23,25 @@ describe('ConfigLoader', () => {
     expect(config.inlineMinSeverity).toBe(DEFAULT_CONFIG.inlineMinSeverity);
   });
 
+  it('maps CODEX_MODEL to a Codex provider when REVIEW_PROVIDERS is not set', () => {
+    process.env.CODEX_MODEL = 'gpt-5.5';
+
+    const config = ConfigLoader.load();
+
+    expect(config.providers).toEqual(['codex/gpt-5.5']);
+    expect(config.synthesisModel).toBe('codex/gpt-5.5');
+  });
+
+  it('keeps explicit REVIEW_PROVIDERS ahead of CODEX_MODEL', () => {
+    process.env.CODEX_MODEL = 'gpt-5.5';
+    process.env.REVIEW_PROVIDERS = 'openrouter/a';
+
+    const config = ConfigLoader.load();
+
+    expect(config.providers).toEqual(['openrouter/a']);
+    expect(config.synthesisModel).toBe(DEFAULT_CONFIG.synthesisModel);
+  });
+
   it('parses provider batch overrides and clamps to schema range', () => {
     process.env.PROVIDER_BATCH_OVERRIDES = '{"openrouter":250,"opencode":"2"}';
 

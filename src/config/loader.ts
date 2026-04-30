@@ -64,10 +64,17 @@ export class ConfigLoader {
 
   private static loadFromEnv(): Partial<ReviewConfig> {
     const env = process.env;
+    const codexProvider = this.codexProviderFromModel(env.CODEX_MODEL);
+    const explicitProviders = this.parseArray(env.REVIEW_PROVIDERS) || [];
+    const providers = explicitProviders.length > 0
+      ? explicitProviders
+      : codexProvider
+        ? [codexProvider]
+        : undefined;
 
     return {
-      providers: this.parseArray(env.REVIEW_PROVIDERS),
-      synthesisModel: env.SYNTHESIS_MODEL,
+      providers,
+      synthesisModel: env.SYNTHESIS_MODEL || (explicitProviders.length === 0 ? codexProvider : undefined),
       fallbackProviders: this.parseArray(env.FALLBACK_PROVIDERS),
       providerAllowlist: this.parseArray(env.PROVIDER_ALLOWLIST),
       providerBlocklist: this.parseArray(env.PROVIDER_BLOCKLIST),
@@ -236,6 +243,12 @@ export class ConfigLoader {
       .split(',')
       .map(v => v.trim())
       .filter(Boolean);
+  }
+
+  private static codexProviderFromModel(value?: string): string | undefined {
+    const model = value?.trim();
+    if (!model) return undefined;
+    return model.startsWith('codex/') ? model : `codex/${model}`;
   }
 
   private static parseBoolean(value?: string): boolean | undefined {

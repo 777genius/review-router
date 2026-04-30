@@ -9,6 +9,7 @@ function syncEnvFromInputs(): void {
     'REVIEW_PROVIDERS',
     'FALLBACK_PROVIDERS',
     'SYNTHESIS_MODEL',
+    'CODEX_MODEL',
     'INLINE_MAX_COMMENTS',
     'INLINE_MIN_SEVERITY',
     'INLINE_MIN_AGREEMENT',

@@ -1,5 +1,5 @@
 name: "AI Robot Review"
-description: "Hybrid AST + LLM code review with multiple providers"
+description: "AI Robot Review pull request reviewer with hybrid deterministic context and LLM analysis"
 author: "Keith Herrington"
 branding:
   icon: "check-circle"
@@ -39,7 +39,11 @@ inputs:
   SYNTHESIS_MODEL:
     description: "Model used for synthesis/prompts"
     required: false
-    default: "openrouter/free"
+    default: ""
+  CODEX_MODEL:
+    description: "Codex model id without provider prefix, for example gpt-5.5. If REVIEW_PROVIDERS is empty, this becomes codex/<model>."
+    required: false
+    default: ""
   INLINE_MAX_COMMENTS:
     description: "Maximum inline comments"
     required: false
@@ -51,7 +55,7 @@ inputs:
   INLINE_MIN_AGREEMENT:
     description: "Providers required to agree"
     required: false
-    default: "2"
+    default: "1"
   MIN_CHANGED_LINES:
     description: "Skip if below this line count"
     required: false
@@ -71,11 +75,11 @@ inputs:
   PROVIDER_RETRIES:
     description: "Retries per provider"
     required: false
-    default: "2"
+    default: "0"
   PROVIDER_MAX_PARALLEL:
     description: "Maximum providers to run in parallel"
     required: false
-    default: "3"
+    default: "1"
   CODEX_HEALTHCHECK_MODE:
     description: "Codex provider health check mode: exec, binary, or none"
     required: false
@@ -99,7 +103,7 @@ inputs:
   FAIL_ON_NO_HEALTHY_PROVIDERS:
     description: "Fail the action if no provider passes health checks"
     required: false
-    default: "false"
+    default: "true"
   DIFF_MAX_BYTES:
     description: "Maximum diff bytes to send to providers"
     required: false
@@ -131,7 +135,7 @@ inputs:
   ENABLE_AI_DETECTION:
     description: "Enable AI-generated code detection"
     required: false
-    default: "true"
+    default: "false"
   INCREMENTAL_ENABLED:
     description: "Enable incremental review (only review changed files on PR updates)"
     required: false
@@ -143,7 +147,7 @@ inputs:
   LEARNING_ENABLED:
     description: "Enable feedback learning system"
     required: false
-    default: "true"
+    default: "false"
   LEARNING_MIN_FEEDBACK_COUNT:
     description: "Minimum feedback count before adjusting confidence"
     required: false
@@ -163,7 +167,7 @@ inputs:
   CONSENSUS_REQUIRED_FOR_CRITICAL:
     description: "Require provider consensus before posting critical inline suggestions"
     required: false
-    default: "true"
+    default: "false"
   CONSENSUS_MIN_AGREEMENT:
     description: "Minimum provider count required for critical suggestion consensus"
     required: false
@@ -175,7 +179,7 @@ inputs:
   GRAPH_ENABLED:
     description: "Enable code graph for dependency tracking"
     required: false
-    default: "true"
+    default: "false"
   GRAPH_CACHE_ENABLED:
     description: "Cache code graph between runs"
     required: false
@@ -191,7 +195,7 @@ inputs:
   REPORT_BASENAME:
     description: "Base name for JSON/SARIF reports"
     required: false
-    default: "multi-provider-review"
+    default: "ai-robot-review"
   SKIP_TRIVIAL_CHANGES:
     description: "Skip reviews for trivial changes (dependency locks, docs, config files, test fixtures)"
     required: false

@@ -1,7 +1,7 @@
 {
   "name": "multi-provider-code-review",
   "version": "0.2.1",
-  "description": "Best-in-class multi-provider code review GitHub Action with hybrid AST + LLM analysis.",
+  "description": "AI Robot Review GitHub Action with hybrid deterministic context and LLM analysis.",
   "main": "dist/index.js",
   "type": "commonjs",
   "bin": {
@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/keithah/multi-provider-code-review.git"
+    "url": "git+https://github.com/777genius/multi-provider-code-review.git"
   },
   "keywords": [
     "github-action",
@@ -37,9 +37,9 @@
   ],
   "author": "Keith Herrington",
   "bugs": {
-    "url": "https://github.com/keithah/multi-provider-code-review/issues"
+    "url": "https://github.com/777genius/multi-provider-code-review/issues"
   },
-  "homepage": "https://github.com/keithah/multi-provider-code-review#readme",
+  "homepage": "https://github.com/777genius/multi-provider-code-review#readme",
   "engines": {
     "node": ">=20"
   },

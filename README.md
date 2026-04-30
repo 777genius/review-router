@@ -20,8 +20,7 @@ Hybrid AST + LLM GitHub Action that fuses multiple AI providers with consensus f
 
 ### Advanced Features ⚡ NEW v2.1
 - **📊 Analytics Dashboard** - Track costs, performance, and ROI with HTML/CSV/JSON reports
-- **🤖 Feedback Learning** - Improves over time based on 👍/👎 reactions
-- **🚫 Dismiss Findings** - Add 👎 reaction to suppress false positives on future reviews
+- **🤖 Feedback Learning** - Optional feedback signal support for future tuning
 - **🔍 Code Graph Analysis** - AST-based dependency tracking for better context
 - **⚙️ Auto-Fix Prompts** - Generate fix suggestions for AI IDEs (Cursor, Copilot)
 - **📈 Provider Reliability** - Track and rank providers by success rate and cost
@@ -35,31 +34,13 @@ Hybrid AST + LLM GitHub Action that fuses multiple AI providers with consensus f
 
 ## Quick Start
 
-### GitHub Action (Production)
-```yaml
-name: multi-provider-review
-on:
-  pull_request:
+### Curl installer
 
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Required for incremental review
-      - uses: keithah/multi-provider-code-review@main
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REVIEW_PROVIDERS: openrouter/free
-          INCREMENTAL_ENABLED: 'true'  # 6x faster on updates
-        env:
-          # Required when using OpenRouter providers (even free ones)
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+```bash
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
 ```
 
-**Note:** When using OpenRouter providers, set `OPENROUTER_API_KEY` in your repository secrets. Get a free API key at [openrouter.ai](https://openrouter.ai).
+The installer creates `.github/workflows/ai-robot-review.yml`, stores the required secrets/variables, and opens a setup PR instead of pushing directly to the default branch.
 
 
 ### CLI Mode (Local Development)
@@ -97,7 +78,7 @@ docker run -d \
   -e GITHUB_TOKEN=your_token \
   -e OPENROUTER_API_KEY=your_key \
   -v mpr-cache:/app/.cache \
-  multi-provider-review:latest
+  ai-robot-review:latest
 ```
 
 See [Self-Hosted Deployment Guide](docs/self-hosted.md) for details.
@@ -122,10 +103,10 @@ The following providers require local CLI installation and OAuth authentication.
   - Install: See [Claude Code documentation](https://docs.anthropic.com/claude-code)
 
 - **Codex CLI** (`codex/<model>`)
-  - Examples verified with ChatGPT OAuth in CI: `codex/gpt-5.4-mini`, `codex/gpt-5.4`
+  - Current recommended model input: `CODEX_MODEL: "gpt-5.5"` (internally mapped to `codex/gpt-5.5`)
   - Requires: `codex` CLI installed and authenticated (ChatGPT Pro subscription)
   - Install: `npm install -g @openai/codex@0.125.0`
-  - Recommended for CI: start with one Codex provider, then add a second model only for strict cross-checking
+  - Recommended for CI: start with one Codex model and `CODEX_REASONING_EFFORT: "medium"`
 
 - **Gemini CLI** (`gemini/<model>`)
   - Examples: `gemini/gemini-2.0-flash`, `gemini/gemini-1.5-pro`
@@ -202,19 +183,19 @@ cat ~/.gemini/settings.json | gh secret set GEMINI_SETTINGS
     fi
 
 - name: Run Review
-  uses: keithah/multi-provider-code-review@main
+  uses: 777genius/multi-provider-code-review@main
   with:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     PR_NUMBER: ${{ github.event.pull_request.number }}
-    REVIEW_PROVIDERS: "codex/gpt-5.4-mini"
-    SYNTHESIS_MODEL: "codex/gpt-5.4-mini"
+    CODEX_MODEL: "gpt-5.5"
     PROVIDER_MAX_PARALLEL: "1"
     PROVIDER_RETRIES: "0"
     CODEX_HEALTHCHECK_MODE: "exec"
     CODEX_HEALTHCHECK_REASONING_EFFORT: "low"
+    CODEX_REASONING_EFFORT: "medium"
     FAIL_ON_NO_HEALTHY_PROVIDERS: "true"
     INLINE_MAX_COMMENTS: "5"
-    INLINE_MIN_SEVERITY: "minor"
+    INLINE_MIN_SEVERITY: "major"
     ENABLE_AI_DETECTION: "false"
     LEARNING_ENABLED: "false"
     GRAPH_ENABLED: "false"
@@ -247,15 +228,16 @@ export PLUGIN_DIR=./plugins
 
 ### Providers
 - `REVIEW_PROVIDERS`: Comma-separated providers (examples: `openrouter/<model>`, `opencode/<model>`, `claude/<model>`, `codex/<model>`, `gemini/<model>`)
+- `CODEX_MODEL`: Codex model id without provider prefix, for example `gpt-5.5`. Used when `REVIEW_PROVIDERS` is empty.
 - `FALLBACK_PROVIDERS`: Backup providers if primary providers fail
 - `PROVIDER_DISCOVERY_LIMIT` (default: `8`): Max providers to discover/health-check
 - `PROVIDER_LIMIT` (default: `6`): Max providers to use for actual review
-- `PROVIDER_MAX_PARALLEL` (default: `3`): Max parallel provider execution
+- `PROVIDER_MAX_PARALLEL` (default: `1`): Max parallel provider execution
 
 ### Filtering & Thresholds
 - `INLINE_MAX_COMMENTS` (default: `5`): Maximum inline comments to post
 - `INLINE_MIN_SEVERITY` (default: `major`): Minimum severity for inline comments
-- `INLINE_MIN_AGREEMENT` (default: `2`): Providers required to agree
+- `INLINE_MIN_AGREEMENT` (default: `1`): Providers required to agree
 - `MIN_CHANGED_LINES` (default: `0`): Skip if below this line count
 - `MAX_CHANGED_FILES` (default: `0`): Skip if over this file count
 - `SKIP_LABELS`: Comma-separated labels to skip review
@@ -264,17 +246,17 @@ export PLUGIN_DIR=./plugins
 - `ENABLE_AST_ANALYSIS` (default: `true`): Fast AST-based analysis
 - `ENABLE_SECURITY` (default: `true`): Security secrets scanning
 - `ENABLE_TEST_HINTS` (default: `true`): Test coverage hints
-- `ENABLE_AI_DETECTION` (default: `true`): AI-generated code detection
+- `ENABLE_AI_DETECTION` (default: `false`): AI-generated code detection
 - `ENABLE_CACHING` (default: `true`): Cache findings for faster reviews
 
 ### Advanced Features (v2.1)
 - `ANALYTICS_ENABLED` (default: `true`): Track costs and performance
 - `ANALYTICS_MAX_REVIEWS` (default: `1000`): Max reviews to store
-- `LEARNING_ENABLED` (default: `true`): Learn from feedback reactions
+- `LEARNING_ENABLED` (default: `false`): Learn from feedback reactions
 - `LEARNING_MIN_FEEDBACK_COUNT` (default: `5`): Min feedback before learning
 - `QUIET_MODE_ENABLED` (default: `false`): Filter low-confidence findings
 - `QUIET_MIN_CONFIDENCE` (default: `0.5`): Confidence threshold for quiet mode
-- `GRAPH_ENABLED` (default: `true`): Enable code graph analysis
+- `GRAPH_ENABLED` (default: `false`): Enable code graph analysis
 - `GRAPH_MAX_DEPTH` (default: `5`): Max dependency depth
 - `GENERATE_FIX_PROMPTS` (default: `false`): Generate auto-fix suggestions
 - `FIX_PROMPT_FORMAT` (default: `plain`): Format for fix prompts (cursor, copilot, plain)
@@ -282,7 +264,7 @@ export PLUGIN_DIR=./plugins
 - `PLUGIN_DIR` (default: `./plugins`): Plugin directory path
 
 ### Output
-- `REPORT_BASENAME` (default: `multi-provider-review`): Base name for `*.json` and `*.sarif` files
+- `REPORT_BASENAME` (default: `ai-robot-review`): Base name for `*.json` and `*.sarif` files
 
 ## Development
 
@@ -328,7 +310,7 @@ Skip with: `git commit --no-verify`
 - **DX:** Pre-commit hooks, dry-run mode, structured logging
 
 ### ✅ Phase 2 Complete (Weeks 5-10)
-- **Feedback Learning:** Learns from 👍/👎 reactions, adjusts confidence thresholds
+- **Feedback Learning:** Optional feedback signals can adjust confidence thresholds
 - **Code Graph:** AST-based dependency tracking with O(1) lookups
 - **Quiet Mode:** Filters low-confidence findings using learned thresholds
 - **Auto-Fix Prompts:** Generates fix suggestions for AI IDEs (Cursor, Copilot, Plain)

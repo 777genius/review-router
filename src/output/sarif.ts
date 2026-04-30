@@ -29,9 +29,9 @@ export function buildSarif(findings: Finding[]): SARIFReport {
       {
         tool: {
           driver: {
-            name: 'multi-provider-code-review',
+            name: 'ai-robot-review',
             version: '2.0.0',
-            informationUri: 'https://github.com/keithah/multi-provider-code-review',
+            informationUri: 'https://github.com/777genius/multi-provider-code-review',
             rules,
           },
         },

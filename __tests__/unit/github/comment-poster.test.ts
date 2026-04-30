@@ -52,7 +52,7 @@ describe('CommentPoster', () => {
       });
       expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('<!-- multi-provider-code-review-bot -->'),
+          body: expect.stringContaining('<!-- ai-robot-review-bot -->'),
         })
       );
     });

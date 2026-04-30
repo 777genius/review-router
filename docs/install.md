@@ -75,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 ## What it creates
 
 - `.github/workflows/ai-robot-review.yml`
-- Repository or organization variables such as `REVIEW_PROVIDERS` and `REVIEW_SYNTHESIS_MODEL`
+- Repository or organization variables such as `REVIEW_CODEX_MODEL`, `REVIEW_AUTH_MODE`, or OpenRouter provider variables
 - Repository or organization secrets for the selected auth mode
 - Branch `ai-robot-review/setup`
 - A setup PR with the workflow change
@@ -139,25 +139,19 @@ The generated workflow installs the official Codex CLI and runs a headless smoke
 ```yaml
 - name: Verify Codex OAuth headless mode
   run: |
-    codex exec --model gpt-5.4-mini --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
+    codex exec --model "$CODEX_MODEL" --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
     grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
 ```
 
 Use this only in trusted automation. Do not put personal Codex OAuth credentials into public/open-source repos where untrusted workflow changes can access secrets. GitHub does not expose repository secrets to fork PR workflows by default, and the generated workflow skips fork PRs by default.
 
-Default Codex OAuth provider for `safe` and `minimal` presets:
+Default Codex model:
 
 ```text
-codex/gpt-5.4-mini
+gpt-5.5
 ```
 
-The `strict` preset uses two Codex models for extra cross-checking:
-
-```text
-codex/gpt-5.4-mini,codex/gpt-5.4
-```
-
-You can override this explicitly with `AI_ROBOT_REVIEW_PROVIDERS`.
+The installer stores it as `REVIEW_CODEX_MODEL`, and the action converts it internally to `codex/<model>`. Override it with `AI_ROBOT_REVIEW_CODEX_MODEL`, for example `AI_ROBOT_REVIEW_CODEX_MODEL=gpt-5.4`.
 
 ### OpenAI API key
 
@@ -171,8 +165,8 @@ Stores `OPENROUTER_API_KEY` and configures OpenRouter provider mode.
 
 | Preset    | Behavior                                                                                          |
 | --------- | ------------------------------------------------------------------------------------------------- |
-| `safe`    | Major+ inline comments, max 5 inline comments, one Codex provider, AST and security enabled, Codex effort `medium` |
-| `strict`  | Minor+ inline comments, max 10 inline comments, two Codex providers, graph context enabled, Codex effort `high` |
+| `safe`    | Major+ inline comments, max 5 inline comments, one Codex model, AST and security enabled, Codex effort `medium` |
+| `strict`  | Minor+ inline comments, max 10 inline comments, one Codex model, graph context enabled, Codex effort `high` |
 | `minimal` | Major+ inline comments, max 3 inline comments, AST disabled, security enabled, Codex effort `low` |
 
 Safe defaults include:

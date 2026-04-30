@@ -54,7 +54,9 @@ describe('ai-robot-review curl installer e2e', () => {
     expect(workflow).toContain('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '3'");
-    expect(workflow).toContain("CODEX_REASONING_EFFORT: 'low'");
+    expect(workflow).not.toContain('CODEX_REASONING_EFFORT');
+    expect(workflow).not.toContain('CODEX_MODEL');
+    expect(workflow).toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
     expect(workflow).toContain("ENABLE_AST_ANALYSIS: 'false'");
     expect(workflow).toContain("if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true }}");
     expect(workflow).not.toContain('actions/create-github-app-token');
@@ -67,7 +69,7 @@ describe('ai-robot-review curl installer e2e', () => {
     const authFile = path.join(codexDir, 'auth.json');
     const configFile = path.join(codexDir, 'config.toml');
     fs.writeFileSync(authFile, JSON.stringify({ auth_mode: 'chatgpt', tokens: { refresh_token: 'refresh-token' } }));
-    fs.writeFileSync(configFile, 'model = "gpt-5.4-mini"\n');
+    fs.writeFileSync(configFile, 'model = "gpt-5.5"\n');
 
     const result = runInstaller({
       AI_ROBOT_REVIEW_IDENTITY: 'app',
@@ -91,7 +93,8 @@ describe('ai-robot-review curl installer e2e', () => {
     expect(workflow).toContain('npm install -g @openai/codex@0.125.0');
     expect(workflow).toContain('CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}');
     expect(workflow).toContain('codex-oauth-ok');
-    expect(workflow).toContain("REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}");
+    expect(workflow).toContain('CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}');
+    expect(workflow).not.toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '5'");
     expect(workflow).toContain("CODEX_REASONING_EFFORT: 'medium'");
     expect(workflow).toContain("CODEX_AGENTIC_CONTEXT: 'true'");
@@ -112,6 +115,8 @@ describe('ai-robot-review curl installer e2e', () => {
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}');
     expect(workflow).toContain('codex-api-ok');
+    expect(workflow).toContain('CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}');
+    expect(workflow).not.toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '10'");
     expect(workflow).toContain("INLINE_MIN_SEVERITY: minor");
     expect(workflow).toContain("CODEX_REASONING_EFFORT: 'high'");
@@ -140,6 +145,7 @@ describe('ai-robot-review curl installer e2e', () => {
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
     expect(workflow).toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
+    expect(workflow).not.toContain('CODEX_MODEL');
   });
 
   it('does not open GitHub App manifest flow in dry-run mode', () => {

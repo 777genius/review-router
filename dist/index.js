@@ -7084,17 +7084,17 @@ var DEFAULT_CONFIG = {
   // Health-check pool size (higher = better reliability)
   providerLimit: 6,
   // Actual execution pool size (lower = lower costs)
-  providerRetries: 2,
-  providerMaxParallel: 3,
+  providerRetries: 0,
+  providerMaxParallel: 1,
   quietModeEnabled: false,
   quietMinConfidence: 0.5,
   quietUseLearning: true,
-  learningEnabled: true,
+  learningEnabled: false,
   learningMinFeedbackCount: 5,
   learningLookbackDays: 30,
   inlineMaxComments: 5,
   inlineMinSeverity: "major",
-  inlineMinAgreement: 2,
+  inlineMinAgreement: 1,
   skipLabels: [],
   skipDrafts: false,
   skipBots: true,
@@ -7107,7 +7107,7 @@ var DEFAULT_CONFIG = {
   enableSecurity: true,
   enableCaching: true,
   enableTestHints: true,
-  enableAiDetection: true,
+  enableAiDetection: false,
   incrementalEnabled: true,
   // Re-enabled with broad infrastructure exclusion
   incrementalCacheTtlDays: 7,
@@ -11667,9 +11667,12 @@ var ConfigLoader = class {
   }
   static loadFromEnv() {
     const env = process.env;
+    const codexProvider = this.codexProviderFromModel(env.CODEX_MODEL);
+    const explicitProviders = this.parseArray(env.REVIEW_PROVIDERS) || [];
+    const providers = explicitProviders.length > 0 ? explicitProviders : codexProvider ? [codexProvider] : void 0;
     return {
-      providers: this.parseArray(env.REVIEW_PROVIDERS),
-      synthesisModel: env.SYNTHESIS_MODEL,
+      providers,
+      synthesisModel: env.SYNTHESIS_MODEL || (explicitProviders.length === 0 ? codexProvider : void 0),
       fallbackProviders: this.parseArray(env.FALLBACK_PROVIDERS),
       providerAllowlist: this.parseArray(env.PROVIDER_ALLOWLIST),
       providerBlocklist: this.parseArray(env.PROVIDER_BLOCKLIST),
@@ -11818,6 +11821,11 @@ var ConfigLoader = class {
   static parseArray(value) {
     if (!value) return void 0;
     return value.split(",").map((v) => v.trim()).filter(Boolean);
+  }
+  static codexProviderFromModel(value) {
+    const model = value?.trim();
+    if (!model) return void 0;
+    return model.startsWith("codex/") ? model : `codex/${model}`;
   }
   static parseBoolean(value) {
     if (value === void 0) return void 0;
@@ -12101,7 +12109,7 @@ var OpenRouterProvider = class _OpenRouterProvider extends Provider {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${this.apiKey}`,
-            "HTTP-Referer": "https://github.com/keithah/multi-provider-code-review",
+            "HTTP-Referer": "https://github.com/777genius/multi-provider-code-review",
             "X-Title": "AI Robot Review"
           },
           body: JSON.stringify({
@@ -17343,7 +17351,10 @@ var CommentPoster = class _CommentPoster {
     this.providerWeightTracker = providerWeightTracker;
   }
   static MAX_COMMENT_SIZE = 6e4;
-  static BOT_COMMENT_MARKER = "<!-- multi-provider-code-review-bot -->";
+  static BOT_COMMENT_MARKER = "<!-- ai-robot-review-bot -->";
+  static LEGACY_BOT_COMMENT_MARKERS = [
+    "<!-- multi-provider-code-review-bot -->"
+  ];
   async postSummary(prNumber, body, updateExisting = true) {
     const chunks = this.chunk(body);
     if (this.dryRun) {
@@ -17430,11 +17441,15 @@ ${content.substring(0, 500)}...`);
         () => octokit.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 }),
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
-      return comments.data.filter((comment) => comment.body?.includes(_CommentPoster.BOT_COMMENT_MARKER)).map((comment) => ({ id: comment.id, body: comment.body ?? "" }));
+      return comments.data.filter((comment) => _CommentPoster.hasBotCommentMarker(comment.body)).map((comment) => ({ id: comment.id, body: comment.body ?? "" }));
     } catch (error2) {
       logger.warn("Failed to find existing bot comment", error2);
       return [];
     }
+  }
+  static hasBotCommentMarker(body) {
+    if (!body) return false;
+    return body.includes(_CommentPoster.BOT_COMMENT_MARKER) || _CommentPoster.LEGACY_BOT_COMMENT_MARKERS.some((marker) => body.includes(marker));
   }
   /**
    * Validate and filter suggestions through quality pipeline.
@@ -21847,9 +21862,9 @@ function buildSarif(findings) {
       {
         tool: {
           driver: {
-            name: "multi-provider-code-review",
+            name: "ai-robot-review",
             version: "2.0.0",
-            informationUri: "https://github.com/keithah/multi-provider-code-review",
+            informationUri: "https://github.com/777genius/multi-provider-code-review",
             rules
           }
         },
@@ -25142,7 +25157,7 @@ var ReviewOrchestrator = class {
       if (config.generateFixPrompts && this.components.promptGenerator) {
         const fixPrompts = this.components.promptGenerator.generateFixPrompts(review.findings);
         if (fixPrompts.length > 0) {
-          const basename2 = this.sanitizeFilename(process.env.REPORT_BASENAME || "multi-provider-review");
+          const basename2 = this.sanitizeFilename(process.env.REPORT_BASENAME || "ai-robot-review");
           const fixPromptsPath = import_path.default.join(process.cwd(), `${basename2}-fix-prompts.md`);
           const format = config.fixPromptFormat || "plain";
           await this.components.promptGenerator.saveToFile(fixPrompts, fixPromptsPath, format);
@@ -25392,7 +25407,7 @@ var ReviewOrchestrator = class {
       filename = import_path.default.basename(filename);
     }
     const sanitized = filename.replace(/[^a-zA-Z0-9_-]/g, "-").substring(0, 50);
-    return sanitized || "multi-provider-review";
+    return sanitized || "ai-robot-review";
   }
   cleanupQueue(queue) {
     queue.clear?.();
@@ -25486,7 +25501,7 @@ These types of changes are automatically filtered to save review time and API co
     };
   }
   async writeReports(review) {
-    const base = this.sanitizeFilename(process.env.REPORT_BASENAME || "multi-provider-review");
+    const base = this.sanitizeFilename(process.env.REPORT_BASENAME || "ai-robot-review");
     const sarifPath = import_path.default.join(process.cwd(), `${base}.sarif`);
     const jsonPath = import_path.default.join(process.cwd(), `${base}.json`);
     await fs12.writeFile(sarifPath, JSON.stringify(buildSarif(review.findings), null, 2), "utf8");
@@ -25501,6 +25516,7 @@ function syncEnvFromInputs() {
     "REVIEW_PROVIDERS",
     "FALLBACK_PROVIDERS",
     "SYNTHESIS_MODEL",
+    "CODEX_MODEL",
     "INLINE_MAX_COMMENTS",
     "INLINE_MIN_SEVERITY",
     "INLINE_MIN_AGREEMENT",

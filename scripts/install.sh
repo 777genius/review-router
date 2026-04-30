@@ -10,9 +10,7 @@ DEFAULT_ACTION_REF="777genius/multi-provider-code-review@main"
 DEFAULT_BRANCH_NAME="ai-robot-review/setup"
 WORKFLOW_PATH=".github/workflows/ai-robot-review.yml"
 CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
-CODEX_DEFAULT_PROVIDERS="codex/gpt-5.4-mini"
-CODEX_STRICT_PROVIDERS="codex/gpt-5.4-mini,codex/gpt-5.4"
-CODEX_DEFAULT_SYNTHESIS="codex/gpt-5.4-mini"
+DEFAULT_CODEX_MODEL="gpt-5.5"
 OPENROUTER_DEFAULT_PROVIDERS="openrouter/free"
 OPENROUTER_DEFAULT_SYNTHESIS="openrouter/free"
 
@@ -25,6 +23,7 @@ ORG_SELECTED_REPOS="${AI_ROBOT_REVIEW_ORG_SECRET_REPOS:-}"
 IDENTITY_MODE="${AI_ROBOT_REVIEW_IDENTITY:-}"
 AUTH_MODE="${AI_ROBOT_REVIEW_AUTH:-}"
 PRESET="${AI_ROBOT_REVIEW_PRESET:-}"
+CODEX_MODEL="${AI_ROBOT_REVIEW_CODEX_MODEL:-$DEFAULT_CODEX_MODEL}"
 DRY_RUN="${AI_ROBOT_REVIEW_DRY_RUN:-0}"
 NON_INTERACTIVE="${AI_ROBOT_REVIEW_NON_INTERACTIVE:-0}"
 LOCAL_ONLY="${AI_ROBOT_REVIEW_LOCAL_ONLY:-0}"
@@ -432,13 +431,6 @@ PY
 }
 
 setup_auth() {
-  codex_providers="$CODEX_DEFAULT_PROVIDERS"
-  if [ -n "${AI_ROBOT_REVIEW_PROVIDERS:-}" ]; then
-    codex_providers="$AI_ROBOT_REVIEW_PROVIDERS"
-  elif [ "$PRESET" = "strict" ]; then
-    codex_providers="$CODEX_STRICT_PROVIDERS"
-  fi
-
   case "$AUTH_MODE" in
     codex)
       auth_file="${AI_ROBOT_REVIEW_CODEX_AUTH_FILE:-${CODEX_HOME:-$HOME/.codex}/auth.json}"
@@ -452,15 +444,13 @@ setup_auth() {
         warn "Skipping CODEX_CONFIG_TOML by default to avoid carrying local plugins/hooks into CI. Set AI_ROBOT_REVIEW_INCLUDE_CODEX_CONFIG=1 if you need it."
       fi
       set_repo_variable REVIEW_AUTH_MODE "codex-oauth"
-      set_repo_variable REVIEW_PROVIDERS "$codex_providers"
-      set_repo_variable REVIEW_SYNTHESIS_MODEL "$CODEX_DEFAULT_SYNTHESIS"
+      set_repo_variable REVIEW_CODEX_MODEL "$CODEX_MODEL"
       ;;
     openai)
       prompt_secret AI_ROBOT_REVIEW_OPENAI_API_KEY "OpenAI API key"
       set_repo_secret_value OPENAI_API_KEY "$AI_ROBOT_REVIEW_OPENAI_API_KEY"
       set_repo_variable REVIEW_AUTH_MODE "openai-api"
-      set_repo_variable REVIEW_PROVIDERS "$codex_providers"
-      set_repo_variable REVIEW_SYNTHESIS_MODEL "$CODEX_DEFAULT_SYNTHESIS"
+      set_repo_variable REVIEW_CODEX_MODEL "$CODEX_MODEL"
       ;;
     openrouter)
       prompt_secret AI_ROBOT_REVIEW_OPENROUTER_API_KEY "OpenRouter API key"
@@ -738,6 +728,33 @@ jobs:
     timeout-minutes: 20
 YAML
 
+    cat <<YAML
+    env:
+      FAIL_ON_NO_HEALTHY_PROVIDERS: 'true'
+      INLINE_MAX_COMMENTS: '$INLINE_MAX_COMMENTS'
+      INLINE_MIN_SEVERITY: $INLINE_MIN_SEVERITY
+      MIN_CONFIDENCE: '0.6'
+      CONSENSUS_REQUIRED_FOR_CRITICAL: 'false'
+      ENABLE_AST_ANALYSIS: '$ENABLE_AST_ANALYSIS'
+      ENABLE_SECURITY: '$ENABLE_SECURITY'
+      ENABLE_AI_DETECTION: 'false'
+      LEARNING_ENABLED: 'false'
+      GRAPH_ENABLED: '$GRAPH_ENABLED'
+YAML
+
+    if [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "openai" ]; then
+      cat <<YAML
+      CODEX_MODEL: \${{ vars.REVIEW_CODEX_MODEL }}
+      CODEX_REASONING_EFFORT: '$CODEX_REASONING_EFFORT'
+      CODEX_AGENTIC_CONTEXT: 'true'
+YAML
+    elif [ "$AUTH_MODE" = "openrouter" ]; then
+      cat <<'YAML'
+      REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}
+      SYNTHESIS_MODEL: ${{ vars.REVIEW_SYNTHESIS_MODEL }}
+YAML
+    fi
+
     cat <<'YAML'
     steps:
       - uses: actions/checkout@v6
@@ -794,8 +811,10 @@ YAML
           fi
 
       - name: Verify Codex OAuth headless mode
+        env:
+          CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
         run: |
-          codex exec --model gpt-5.4-mini --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
+          codex exec --model "$CODEX_MODEL" --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
           grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
 YAML
     elif [ "$AUTH_MODE" = "openai" ]; then
@@ -803,10 +822,11 @@ YAML
 
       - name: Verify Codex API key headless mode
         env:
+          CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           test -n "$OPENAI_API_KEY"
-          codex exec --model gpt-5.4-mini --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-api-ok"
+          codex exec --model "$CODEX_MODEL" --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-api-ok"
           grep -q "codex-api-ok" /tmp/codex-smoke.txt
 YAML
     fi
@@ -844,33 +864,6 @@ YAML
 
     cat <<'YAML'
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-          REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}
-          SYNTHESIS_MODEL: ${{ vars.REVIEW_SYNTHESIS_MODEL }}
-YAML
-    cat <<YAML
-          PROVIDER_LIMIT: '2'
-          PROVIDER_MAX_PARALLEL: '1'
-          PROVIDER_RETRIES: '0'
-          CODEX_HEALTHCHECK_MODE: exec
-          CODEX_HEALTHCHECK_REASONING_EFFORT: low
-          CODEX_REASONING_EFFORT: '$CODEX_REASONING_EFFORT'
-          CODEX_AGENTIC_CONTEXT: 'true'
-          FAIL_ON_NO_HEALTHY_PROVIDERS: 'true'
-          INLINE_MAX_COMMENTS: '$INLINE_MAX_COMMENTS'
-          INLINE_MIN_SEVERITY: $INLINE_MIN_SEVERITY
-          INLINE_MIN_AGREEMENT: '1'
-          MIN_CONFIDENCE: '0.6'
-          CONSENSUS_REQUIRED_FOR_CRITICAL: 'false'
-          CONSENSUS_MIN_AGREEMENT: '2'
-          ENABLE_AST_ANALYSIS: '$ENABLE_AST_ANALYSIS'
-          ENABLE_SECURITY: '$ENABLE_SECURITY'
-          ENABLE_AI_DETECTION: 'false'
-          LEARNING_ENABLED: 'false'
-          GRAPH_ENABLED: '$GRAPH_ENABLED'
-          ENABLE_CACHING: 'true'
-          INCREMENTAL_ENABLED: 'true'
-          SKIP_TRIVIAL_CHANGES: 'true'
-          SKIP_DOCUMENTATION_ONLY: 'true'
 YAML
   } > "$workflow_file"
 }

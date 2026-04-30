@@ -18,18 +18,18 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   openrouterAllowPaid: false,  // IMPORTANT: Set to true only if you have OpenRouter credits
   providerDiscoveryLimit: 8,   // Health-check pool size (higher = better reliability)
   providerLimit: 6,             // Actual execution pool size (lower = lower costs)
-  providerRetries: 2,
-  providerMaxParallel: 3,
+  providerRetries: 0,
+  providerMaxParallel: 1,
   quietModeEnabled: false,
   quietMinConfidence: 0.5,
   quietUseLearning: true,
-  learningEnabled: true,
+  learningEnabled: false,
   learningMinFeedbackCount: 5,
   learningLookbackDays: 30,
 
   inlineMaxComments: 5,
   inlineMinSeverity: 'major',
-  inlineMinAgreement: 2,
+  inlineMinAgreement: 1,
 
   skipLabels: [],
   skipDrafts: false,
@@ -46,7 +46,7 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   enableSecurity: true,
   enableCaching: true,
   enableTestHints: true,
-  enableAiDetection: true,
+  enableAiDetection: false,
 
   incrementalEnabled: true, // Re-enabled with broad infrastructure exclusion
   incrementalCacheTtlDays: 7,

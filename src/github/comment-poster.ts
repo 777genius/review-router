@@ -11,7 +11,10 @@ import { detectLanguage } from '../analysis/ast/parsers';
 
 export class CommentPoster {
   private static readonly MAX_COMMENT_SIZE = 60_000;
-  private static readonly BOT_COMMENT_MARKER = '<!-- multi-provider-code-review-bot -->';
+  private static readonly BOT_COMMENT_MARKER = '<!-- ai-robot-review-bot -->';
+  private static readonly LEGACY_BOT_COMMENT_MARKERS = [
+    '<!-- multi-provider-code-review-bot -->',
+  ];
 
   constructor(
     private readonly client: GitHubClient,
@@ -117,12 +120,18 @@ export class CommentPoster {
 
       // Find comment with our marker
       return comments.data
-        .filter(comment => comment.body?.includes(CommentPoster.BOT_COMMENT_MARKER))
+        .filter(comment => CommentPoster.hasBotCommentMarker(comment.body))
         .map(comment => ({ id: comment.id, body: comment.body ?? '' }));
     } catch (error) {
       logger.warn('Failed to find existing bot comment', error as Error);
       return [];
     }
+  }
+
+  private static hasBotCommentMarker(body?: string): boolean {
+    if (!body) return false;
+    return body.includes(CommentPoster.BOT_COMMENT_MARKER)
+      || CommentPoster.LEGACY_BOT_COMMENT_MARKERS.some(marker => body.includes(marker));
   }
 
   /**

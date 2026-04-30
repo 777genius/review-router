@@ -113,7 +113,7 @@ export const DEFAULT_CONFIG: ReviewConfig = {
 
   dryRun: false,
   updatePrDescription: true,
-  failOnSeverity: 'major',
+  failOnSeverity: 'critical',
 };
 
 /**

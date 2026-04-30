@@ -55,7 +55,9 @@ describe('ai-robot-review curl installer e2e', () => {
     expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '3'");
     expect(workflow).toContain('UPDATE_PR_DESCRIPTION:');
-    expect(workflow).toContain("FAIL_ON_SEVERITY: 'major'");
+    expect(workflow).toContain("FAIL_ON_CRITICAL: 'true'");
+    expect(workflow).toContain("FAIL_ON_MAJOR: 'false'");
+    expect(workflow).not.toContain('FAIL_ON_SEVERITY:');
     expect(workflow).not.toContain('CODEX_REASONING_EFFORT');
     expect(workflow).not.toContain('CODEX_MODEL');
     expect(workflow).toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
@@ -101,7 +103,9 @@ describe('ai-robot-review curl installer e2e', () => {
     expect(workflow).toContain("CODEX_REASONING_EFFORT: 'medium'");
     expect(workflow).toContain("CODEX_AGENTIC_CONTEXT: 'true'");
     expect(workflow).toContain('UPDATE_PR_DESCRIPTION:');
-    expect(workflow).toContain("FAIL_ON_SEVERITY: 'major'");
+    expect(workflow).toContain("FAIL_ON_CRITICAL: 'true'");
+    expect(workflow).toContain("FAIL_ON_MAJOR: 'false'");
+    expect(workflow).not.toContain('FAIL_ON_SEVERITY:');
     expect(workflow).toContain("MIN_CONFIDENCE: '0.6'");
     expect(workflow).toContain("CONSENSUS_REQUIRED_FOR_CRITICAL: 'false'");
     expect(workflow).not.toContain('\\${{');
@@ -123,7 +127,9 @@ describe('ai-robot-review curl installer e2e', () => {
     expect(workflow).not.toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '10'");
     expect(workflow).toContain("INLINE_MIN_SEVERITY: minor");
-    expect(workflow).toContain("FAIL_ON_SEVERITY: 'minor'");
+    expect(workflow).toContain("FAIL_ON_CRITICAL: 'true'");
+    expect(workflow).toContain("FAIL_ON_MAJOR: 'true'");
+    expect(workflow).not.toContain('FAIL_ON_SEVERITY:');
     expect(workflow).toContain("CODEX_REASONING_EFFORT: 'high'");
     expect(workflow).toContain("CODEX_AGENTIC_CONTEXT: 'true'");
     expect(workflow).toContain("GRAPH_ENABLED: 'true'");

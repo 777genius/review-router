@@ -118,7 +118,7 @@ export class MarkdownFormatterV2 {
 
     if (this.shouldHideApiBilling(review)) {
       parts.push('OAuth subscription');
-    } else {
+    } else if (this.hasMeasuredApiBilling(review)) {
       parts.push(`$${metrics.totalCost.toFixed(4)}`);
     }
 
@@ -324,6 +324,8 @@ export class MarkdownFormatterV2 {
       if (metrics.totalTokens > 0) {
         lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
       }
+    } else if (!this.hasMeasuredApiBilling(review)) {
+      lines.push('| Billing | Not reported |');
     } else {
       lines.push(`| Cost | $${metrics.totalCost.toFixed(4)} |`);
       lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
@@ -382,6 +384,10 @@ export class MarkdownFormatterV2 {
     );
 
     return review.metrics.totalCost === 0 && hasOAuthCliUsage;
+  }
+
+  private hasMeasuredApiBilling(review: Review): boolean {
+    return review.metrics.totalCost > 0 || review.metrics.totalTokens > 0;
   }
 
   private didAllProviderRunsFail(review: Review): boolean {

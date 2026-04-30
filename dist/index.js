@@ -7172,7 +7172,7 @@ var DEFAULT_CONFIG = {
   },
   dryRun: false,
   updatePrDescription: true,
-  failOnSeverity: "major"
+  failOnSeverity: "critical"
 };
 var FALLBACK_STATIC_PROVIDERS = [
   "openrouter/free"
@@ -11729,7 +11729,11 @@ var ConfigLoader = class {
       consensusMinAgreement: this.parseNumber(env.CONSENSUS_MIN_AGREEMENT),
       suggestionSyntaxValidation: this.parseBoolean(env.SUGGESTION_SYNTAX_VALIDATION),
       updatePrDescription: this.parseBoolean(env.UPDATE_PR_DESCRIPTION),
-      failOnSeverity: this.parseFailOnSeverity(env.FAIL_ON_SEVERITY),
+      failOnSeverity: this.parseFailOnPolicy(
+        env.FAIL_ON_SEVERITY,
+        env.FAIL_ON_CRITICAL,
+        env.FAIL_ON_MAJOR
+      ),
       dryRun: this.parseBoolean(env.DRY_RUN)
     };
   }
@@ -11904,6 +11908,24 @@ var ConfigLoader = class {
       return normalized;
     }
     return void 0;
+  }
+  static parseFailOnPolicy(severity, critical, major) {
+    const explicitSeverity = this.parseFailOnSeverity(severity);
+    if (explicitSeverity !== void 0) {
+      return explicitSeverity;
+    }
+    const failOnCritical = this.parseBoolean(critical);
+    const failOnMajor = this.parseBoolean(major);
+    if (failOnCritical === void 0 && failOnMajor === void 0) {
+      return void 0;
+    }
+    if (failOnMajor) {
+      return "major";
+    }
+    if (failOnCritical) {
+      return "critical";
+    }
+    return "off";
   }
 };
 
@@ -15439,8 +15461,9 @@ var LLMExecutor = class {
     const queue = createQueue(this.config.providerMaxParallel);
     const healthyProviders = [];
     const healthCheckResults = [];
+    const tasks = [];
     for (const provider of providers) {
-      queue.add(async () => {
+      tasks.push(queue.add(async () => {
         const started = Date.now();
         try {
           const isHealthy = await provider.healthCheck(healthCheckTimeoutMs);
@@ -15479,8 +15502,9 @@ var LLMExecutor = class {
           healthCheckResults.push(result);
           logger.warn(`\u2717 Provider ${provider.name} health check error (${duration}ms): ${err.message}`);
         }
-      });
+      }));
     }
+    await Promise.all(tasks);
     await queue.onIdle();
     logger.info(`Health checks complete: ${healthyProviders.length}/${providers.length} provider(s) are responsive`);
     return { healthy: healthyProviders, healthCheckResults };
@@ -15488,8 +15512,9 @@ var LLMExecutor = class {
   async execute(providers, prompt, timeoutMs) {
     const queue = createQueue(this.config.providerMaxParallel);
     const results = [];
+    const tasks = [];
     for (const provider of providers) {
-      queue.add(async () => {
+      tasks.push(queue.add(async () => {
         const started = Date.now();
         const actualTimeoutMs = timeoutMs ?? this.config.runTimeoutSeconds * 1e3;
         const runner = async () => provider.review(prompt, actualTimeoutMs);
@@ -15524,8 +15549,9 @@ var LLMExecutor = class {
             durationSeconds: (Date.now() - started) / 1e3
           });
         }
-      });
+      }));
     }
+    await Promise.all(tasks);
     await queue.onIdle();
     return results;
   }
@@ -18474,7 +18500,7 @@ var MarkdownFormatterV2 = class {
     const parts = [`${metrics.durationSeconds.toFixed(1)}s`];
     if (this.shouldHideApiBilling(review)) {
       parts.push("OAuth subscription");
-    } else {
+    } else if (this.hasMeasuredApiBilling(review)) {
       parts.push(`$${metrics.totalCost.toFixed(4)}`);
     }
     return parts.join(" \u2022 ");
@@ -18623,6 +18649,8 @@ var MarkdownFormatterV2 = class {
       if (metrics.totalTokens > 0) {
         lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
       }
+    } else if (!this.hasMeasuredApiBilling(review)) {
+      lines.push("| Billing | Not reported |");
     } else {
       lines.push(`| Cost | $${metrics.totalCost.toFixed(4)} |`);
       lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
@@ -18658,6 +18686,9 @@ var MarkdownFormatterV2 = class {
       (p) => /^(codex|claude|gemini|opencode)\//.test(p.name)
     );
     return review.metrics.totalCost === 0 && hasOAuthCliUsage;
+  }
+  hasMeasuredApiBilling(review) {
+    return review.metrics.totalCost > 0 || review.metrics.totalTokens > 0;
   }
   didAllProviderRunsFail(review) {
     return review.metrics.providersUsed > 0 && review.metrics.providersSuccess === 0 && review.metrics.providersFailed > 0;
@@ -26183,6 +26214,8 @@ function syncEnvFromInputs() {
     "CONSENSUS_MIN_AGREEMENT",
     "SUGGESTION_SYNTAX_VALIDATION",
     "UPDATE_PR_DESCRIPTION",
+    "FAIL_ON_CRITICAL",
+    "FAIL_ON_MAJOR",
     "FAIL_ON_SEVERITY",
     "REPORT_BASENAME",
     "DRY_RUN"

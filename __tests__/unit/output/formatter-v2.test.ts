@@ -305,6 +305,39 @@ describe('MarkdownFormatterV2', () => {
       expect(output).not.toContain('codex/gpt-5.4-mini** (3.50s, $0.0000)');
     });
 
+    it('omits zero dollar footer when billing was not measured', () => {
+      const review = createMockReview({
+        runDetails: {
+          providers: [],
+          totalCost: 0,
+          totalTokens: 0,
+          durationSeconds: 0.2,
+          cacheHit: false,
+          synthesisModel: 'none',
+          providerPoolSize: 0,
+        },
+        metrics: {
+          totalFindings: 0,
+          critical: 0,
+          major: 0,
+          minor: 0,
+          providersUsed: 0,
+          providersSuccess: 0,
+          providersFailed: 0,
+          totalTokens: 0,
+          totalCost: 0,
+          durationSeconds: 0.2,
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('| Billing | Not reported |');
+      expect(output).toContain('<sub>0.2s • Powered by AI Robot Review</sub>');
+      expect(output).not.toContain('$0.0000');
+      expect(output).not.toContain('| Tokens | 0 |');
+    });
+
     it('should show cache hit indicator', () => {
       const review = createMockReview({
         runDetails: {

@@ -195,7 +195,8 @@ cat ~/.gemini/settings.json | gh secret set GEMINI_SETTINGS
     CODEX_REASONING_EFFORT: "medium"
     FAIL_ON_NO_HEALTHY_PROVIDERS: "true"
     UPDATE_PR_DESCRIPTION: "true"
-    FAIL_ON_SEVERITY: "major"
+    FAIL_ON_CRITICAL: "true"
+    FAIL_ON_MAJOR: "false"
     INLINE_MAX_COMMENTS: "5"
     INLINE_MIN_SEVERITY: "major"
     ENABLE_AI_DETECTION: "false"
@@ -240,7 +241,9 @@ export PLUGIN_DIR=./plugins
 - `INLINE_MAX_COMMENTS` (default: `5`): Maximum inline comments to post
 - `INLINE_MIN_SEVERITY` (default: `major`): Minimum severity for inline comments
 - `INLINE_MIN_AGREEMENT` (default: `1`): Providers required to agree
-- `FAIL_ON_SEVERITY` (default: `major`): Fail the check when findings at this severity or higher exist (`off`, `critical`, `major`, `minor`)
+- `FAIL_ON_CRITICAL` (default: `true`): Fail the check when critical findings exist
+- `FAIL_ON_MAJOR` (default: `false`): Fail the check when major findings exist
+- `FAIL_ON_SEVERITY` (default: unset): Advanced override for the failure threshold (`off`, `critical`, `major`, `minor`)
 - `MIN_CHANGED_LINES` (default: `0`): Skip if below this line count
 - `MAX_CHANGED_FILES` (default: `0`): Skip if over this file count
 - `SKIP_LABELS`: Comma-separated labels to skip review

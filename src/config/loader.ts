@@ -137,7 +137,11 @@ export class ConfigLoader {
       consensusMinAgreement: this.parseNumber(env.CONSENSUS_MIN_AGREEMENT),
       suggestionSyntaxValidation: this.parseBoolean(env.SUGGESTION_SYNTAX_VALIDATION),
       updatePrDescription: this.parseBoolean(env.UPDATE_PR_DESCRIPTION),
-      failOnSeverity: this.parseFailOnSeverity(env.FAIL_ON_SEVERITY),
+      failOnSeverity: this.parseFailOnPolicy(
+        env.FAIL_ON_SEVERITY,
+        env.FAIL_ON_CRITICAL,
+        env.FAIL_ON_MAJOR
+      ),
 
       dryRun: this.parseBoolean(env.DRY_RUN),
     };
@@ -332,5 +336,33 @@ export class ConfigLoader {
       return normalized as 'critical' | 'major' | 'minor';
     }
     return undefined;
+  }
+
+  private static parseFailOnPolicy(
+    severity?: string,
+    critical?: string,
+    major?: string
+  ): 'off' | 'critical' | 'major' | 'minor' | undefined {
+    const explicitSeverity = this.parseFailOnSeverity(severity);
+    if (explicitSeverity !== undefined) {
+      return explicitSeverity;
+    }
+
+    const failOnCritical = this.parseBoolean(critical);
+    const failOnMajor = this.parseBoolean(major);
+
+    if (failOnCritical === undefined && failOnMajor === undefined) {
+      return undefined;
+    }
+
+    if (failOnMajor) {
+      return 'major';
+    }
+
+    if (failOnCritical) {
+      return 'critical';
+    }
+
+    return 'off';
   }
 }

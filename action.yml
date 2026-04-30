@@ -180,10 +180,18 @@ inputs:
     description: "Append/update an AI Robot Review summary block in the pull request description without overwriting author text"
     required: false
     default: "true"
-  FAIL_ON_SEVERITY:
-    description: "Fail the check when findings at this severity or higher exist: off, critical, major, or minor"
+  FAIL_ON_CRITICAL:
+    description: "Fail the check when critical findings exist"
     required: false
-    default: "major"
+    default: "true"
+  FAIL_ON_MAJOR:
+    description: "Fail the check when major findings exist"
+    required: false
+    default: "false"
+  FAIL_ON_SEVERITY:
+    description: "Advanced override for failure threshold: off, critical, major, or minor. When set, overrides FAIL_ON_CRITICAL and FAIL_ON_MAJOR"
+    required: false
+    default: ""
   GRAPH_ENABLED:
     description: "Enable code graph for dependency tracking"
     required: false

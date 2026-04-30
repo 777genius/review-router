@@ -26,9 +26,10 @@ export class LLMExecutor {
     const queue = createQueue(this.config.providerMaxParallel);
     const healthyProviders: Provider[] = [];
     const healthCheckResults: ProviderResult[] = [];
+    const tasks: Array<Promise<void>> = [];
 
     for (const provider of providers) {
-      queue.add(async () => {
+      tasks.push(queue.add(async () => {
         const started = Date.now();
         try {
           const isHealthy = await provider.healthCheck(healthCheckTimeoutMs);
@@ -75,9 +76,10 @@ export class LLMExecutor {
           healthCheckResults.push(result);
           logger.warn(`✗ Provider ${provider.name} health check error (${duration}ms): ${err.message}`);
         }
-      });
+      }) as Promise<void>);
     }
 
+    await Promise.all(tasks);
     await queue.onIdle();
 
     logger.info(`Health checks complete: ${healthyProviders.length}/${providers.length} provider(s) are responsive`);
@@ -88,9 +90,10 @@ export class LLMExecutor {
   async execute(providers: Provider[], prompt: string, timeoutMs?: number): Promise<ProviderResult[]> {
     const queue = createQueue(this.config.providerMaxParallel);
     const results: ProviderResult[] = [];
+    const tasks: Array<Promise<void>> = [];
 
     for (const provider of providers) {
-      queue.add(async () => {
+      tasks.push(queue.add(async () => {
         const started = Date.now();
         const actualTimeoutMs = timeoutMs ?? (this.config.runTimeoutSeconds * 1000);
 
@@ -127,9 +130,10 @@ export class LLMExecutor {
             durationSeconds: (Date.now() - started) / 1000,
           });
         }
-      });
+      }) as Promise<void>);
     }
 
+    await Promise.all(tasks);
     await queue.onIdle();
     return results;
   }

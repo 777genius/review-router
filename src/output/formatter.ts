@@ -31,9 +31,11 @@ export class MarkdownFormatter {
       if (review.metrics.totalTokens > 0) {
         detailParts.push(`Tokens: ${review.metrics.totalTokens}`);
       }
-    } else {
+    } else if (this.hasMeasuredApiBilling(review)) {
       detailParts.push(`Cost: $${review.metrics.totalCost.toFixed(4)}`);
       detailParts.push(`Tokens: ${review.metrics.totalTokens}`);
+    } else {
+      detailParts.push('Billing: not reported');
     }
     lines.push(`- ${detailParts.join(' • ')}`);
     lines.push(
@@ -126,6 +128,10 @@ export class MarkdownFormatter {
     );
 
     return review.metrics.totalCost === 0 && hasOAuthCliUsage;
+  }
+
+  private hasMeasuredApiBilling(review: Review): boolean {
+    return review.metrics.totalCost > 0 || review.metrics.totalTokens > 0;
   }
 
   private printSeveritySection(

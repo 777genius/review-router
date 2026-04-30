@@ -668,6 +668,8 @@ preset_values() {
     safe)
       INLINE_MIN_SEVERITY="major"
       INLINE_MAX_COMMENTS="5"
+      FAIL_ON_CRITICAL="true"
+      FAIL_ON_MAJOR="false"
       CODEX_REASONING_EFFORT="medium"
       ENABLE_SECURITY="true"
       ENABLE_AST_ANALYSIS="true"
@@ -676,6 +678,8 @@ preset_values() {
     strict)
       INLINE_MIN_SEVERITY="minor"
       INLINE_MAX_COMMENTS="10"
+      FAIL_ON_CRITICAL="true"
+      FAIL_ON_MAJOR="true"
       CODEX_REASONING_EFFORT="high"
       ENABLE_SECURITY="true"
       ENABLE_AST_ANALYSIS="true"
@@ -684,6 +688,8 @@ preset_values() {
     minimal)
       INLINE_MIN_SEVERITY="major"
       INLINE_MAX_COMMENTS="3"
+      FAIL_ON_CRITICAL="true"
+      FAIL_ON_MAJOR="false"
       CODEX_REASONING_EFFORT="low"
       ENABLE_SECURITY="true"
       ENABLE_AST_ANALYSIS="false"
@@ -736,7 +742,8 @@ YAML
       MIN_CONFIDENCE: '0.6'
       CONSENSUS_REQUIRED_FOR_CRITICAL: 'false'
       UPDATE_PR_DESCRIPTION: 'true'
-      FAIL_ON_SEVERITY: '$INLINE_MIN_SEVERITY'
+      FAIL_ON_CRITICAL: '$FAIL_ON_CRITICAL'
+      FAIL_ON_MAJOR: '$FAIL_ON_MAJOR'
       ENABLE_AST_ANALYSIS: '$ENABLE_AST_ANALYSIS'
       ENABLE_SECURITY: '$ENABLE_SECURITY'
       ENABLE_AI_DETECTION: 'false'

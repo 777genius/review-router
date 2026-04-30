@@ -177,7 +177,8 @@ INLINE_MIN_SEVERITY=major
 MIN_CONFIDENCE=0.6
 CONSENSUS_REQUIRED_FOR_CRITICAL=false
 FAIL_ON_NO_HEALTHY_PROVIDERS=true
-FAIL_ON_SEVERITY=major
+FAIL_ON_CRITICAL=true
+FAIL_ON_MAJOR=false
 UPDATE_PR_DESCRIPTION=true
 PROVIDER_MAX_PARALLEL=1
 CODEX_REASONING_EFFORT=medium
@@ -186,7 +187,7 @@ CODEX_AGENTIC_CONTEXT=true
 
 `CODEX_AGENTIC_CONTEXT=true` lets Codex inspect related repository files in a read-only sandbox before returning strict JSON findings. It does not grant write access.
 
-`UPDATE_PR_DESCRIPTION=true` appends or updates only the `AI Robot Review` generated block in the pull request body. Author-written PR text stays above the generated block. `FAIL_ON_SEVERITY=major` makes the check fail after comments are posted when major or critical findings exist; set it to `off` if the reviewer should be informational only.
+`UPDATE_PR_DESCRIPTION=true` appends or updates only the `AI Robot Review` generated block in the pull request body. Author-written PR text stays above the generated block. `FAIL_ON_CRITICAL=true` and `FAIL_ON_MAJOR=false` make the check fail only for critical findings by default. Set `FAIL_ON_MAJOR=true` for stricter blocking, or set advanced `FAIL_ON_SEVERITY=off` if the reviewer should be informational only.
 
 ## Non-interactive examples
 

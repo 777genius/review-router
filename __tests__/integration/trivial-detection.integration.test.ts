@@ -7,10 +7,14 @@ import * as path from 'path';
 describe('Trivial Detection Integration', () => {
   let components: ReviewComponents;
   let orchestrator: ReviewOrchestrator;
+  const originalFailOnNoHealthyProviders = process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
 
   beforeAll(async () => {
+    process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = 'false';
     // Setup components in CLI mode (no GitHub API)
     components = await setupComponents({ cliMode: true, dryRun: true });
+    jest.spyOn(components.providerRegistry, 'createProviders').mockResolvedValue([]);
+    jest.spyOn(components.providerRegistry, 'discoverAdditionalFreeProviders').mockResolvedValue([]);
     orchestrator = new ReviewOrchestrator(components);
   });
 
@@ -21,6 +25,12 @@ describe('Trivial Detection Integration', () => {
       await fs.rm(cacheDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
+    }
+
+    if (originalFailOnNoHealthyProviders === undefined) {
+      delete process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
+    } else {
+      process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = originalFailOnNoHealthyProviders;
     }
   });
 

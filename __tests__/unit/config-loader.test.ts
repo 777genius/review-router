@@ -36,6 +36,34 @@ describe('ConfigLoader', () => {
     expect(config.synthesisModel).toBe('codex/gpt-5.5');
   });
 
+  it('defaults failure policy to critical-only', () => {
+    const config = ConfigLoader.load();
+
+    expect(config.failOnSeverity).toBe('critical');
+  });
+
+  it('derives failure policy from critical and major switches', () => {
+    process.env.FAIL_ON_CRITICAL = 'true';
+    process.env.FAIL_ON_MAJOR = 'false';
+
+    expect(ConfigLoader.load().failOnSeverity).toBe('critical');
+
+    process.env.FAIL_ON_MAJOR = 'true';
+    expect(ConfigLoader.load().failOnSeverity).toBe('major');
+
+    process.env.FAIL_ON_CRITICAL = 'false';
+    process.env.FAIL_ON_MAJOR = 'false';
+    expect(ConfigLoader.load().failOnSeverity).toBe('off');
+  });
+
+  it('keeps FAIL_ON_SEVERITY as an explicit override', () => {
+    process.env.FAIL_ON_CRITICAL = 'true';
+    process.env.FAIL_ON_MAJOR = 'false';
+    process.env.FAIL_ON_SEVERITY = 'off';
+
+    expect(ConfigLoader.load().failOnSeverity).toBe('off');
+  });
+
   it('keeps explicit REVIEW_PROVIDERS ahead of CODEX_MODEL', () => {
     process.env.CODEX_MODEL = 'gpt-5.5';
     process.env.REVIEW_PROVIDERS = 'openrouter/a';

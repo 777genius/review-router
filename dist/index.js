@@ -17501,7 +17501,9 @@ var MarkdownFormatterV2 = class {
       const major = review.findings.filter((f) => f.severity === "major");
       const minor = review.findings.filter((f) => f.severity === "minor");
       if (critical.length > 0) {
-        lines.push(this.formatSeveritySection("\u{1F534} Critical", critical, "critical"));
+        lines.push(
+          this.formatSeveritySection("\u{1F534} Critical", critical, "critical")
+        );
       }
       if (major.length > 0) {
         lines.push(this.formatSeveritySection("\u{1F7E1} Major", major, "major"));
@@ -17510,7 +17512,9 @@ var MarkdownFormatterV2 = class {
         lines.push(this.formatSeveritySection("\u{1F535} Minor", minor, "minor"));
       }
     } else {
-      const allClearMessage = this.generateAllClearMessage(review, { suppressRepeat: true });
+      const allClearMessage = this.generateAllClearMessage(review, {
+        suppressRepeat: true
+      });
       lines.push("## All Clear!");
       lines.push("");
       lines.push(`> ${allClearMessage}`);
@@ -17529,7 +17533,9 @@ var MarkdownFormatterV2 = class {
     lines.push(this.formatAdvancedSections(review));
     lines.push("---");
     lines.push("");
-    lines.push("*Powered by Multi-Provider Code Review* \u2022 To dismiss a finding, react with \u{1F44E}");
+    lines.push(
+      "*Powered by Multi-Provider Code Review* \u2022 To dismiss a finding, react with \u{1F44E}"
+    );
     return lines.join("\n");
   }
   formatQuickStats(review) {
@@ -17540,11 +17546,19 @@ var MarkdownFormatterV2 = class {
     const criticalBadge = criticalCount > 0 ? `\u{1F534} **${criticalCount} Critical**` : `~~${criticalCount} Critical~~`;
     const majorBadge = majorCount > 0 ? `\u{1F7E1} **${majorCount} Major**` : `~~${majorCount} Major~~`;
     const minorBadge = minorCount > 0 ? `\u{1F535} ${minorCount} Minor` : `~~${minorCount} Minor~~`;
-    const hasOAuthCliUsage = (review.runDetails?.providers || []).some(
-      (p) => /^(codex|claude|gemini|opencode)\//.test(p.name)
-    );
-    const costLabel = metrics.totalCost === 0 && metrics.totalTokens > 0 && hasOAuthCliUsage ? "$0.0000 OAuth" : `$${metrics.totalCost.toFixed(4)}`;
-    return `${criticalBadge} \u2022 ${majorBadge} \u2022 ${minorBadge} \u2022 ${metrics.durationSeconds.toFixed(1)}s \u2022 ${costLabel}`;
+    const hideApiBilling = this.shouldHideApiBilling(review);
+    const parts = [
+      criticalBadge,
+      majorBadge,
+      minorBadge,
+      `${metrics.durationSeconds.toFixed(1)}s`
+    ];
+    if (hideApiBilling) {
+      parts.push("OAuth subscription");
+    } else {
+      parts.push(`$${metrics.totalCost.toFixed(4)}`);
+    }
+    return parts.join(" \u2022 ");
   }
   generatePRSummary(review) {
     const { metrics, findings } = review;
@@ -17556,13 +17570,19 @@ var MarkdownFormatterV2 = class {
     }
     const parts = [];
     if (metrics.critical > 0) {
-      parts.push(`**${metrics.critical} critical issue${metrics.critical > 1 ? "s" : ""}** require immediate attention`);
+      parts.push(
+        `**${metrics.critical} critical issue${metrics.critical > 1 ? "s" : ""}** require immediate attention`
+      );
     }
     if (metrics.major > 0) {
-      parts.push(`${metrics.major} major issue${metrics.major > 1 ? "s" : ""} should be addressed`);
+      parts.push(
+        `${metrics.major} major issue${metrics.major > 1 ? "s" : ""} should be addressed`
+      );
     }
     if (metrics.minor > 0) {
-      parts.push(`${metrics.minor} minor improvement${metrics.minor > 1 ? "s" : ""} suggested`);
+      parts.push(
+        `${metrics.minor} minor improvement${metrics.minor > 1 ? "s" : ""} suggested`
+      );
     }
     const summary = parts.join(", ");
     const filesReviewed = new Set(findings.map((f) => f.file)).size;
@@ -17608,7 +17628,9 @@ var MarkdownFormatterV2 = class {
     lines.push(`### ${header} (${findings.length})`);
     lines.push("");
     findings.forEach((finding, index) => {
-      lines.push(this.formatFinding(finding, severity, index + 1, findings.length));
+      lines.push(
+        this.formatFinding(finding, severity, index + 1, findings.length)
+      );
       if (index < findings.length - 1) {
         lines.push("");
       }
@@ -17622,7 +17644,9 @@ var MarkdownFormatterV2 = class {
     const location = `\`${finding.file}:${finding.line}\``;
     const numberPrefix = total > 1 ? `${index}. ` : "";
     lines.push(`#### ${display.emoji} ${numberPrefix}${finding.title}`);
-    lines.push(`**Location:** ${location}${finding.category ? ` \u2022 **Category:** ${finding.category}` : ""}`);
+    lines.push(
+      `**Location:** ${location}${finding.category ? ` \u2022 **Category:** ${finding.category}` : ""}`
+    );
     lines.push(severityLine(severity));
     lines.push("");
     lines.push(finding.message);
@@ -17641,12 +17665,16 @@ var MarkdownFormatterV2 = class {
       if (finding.evidence.reasoning) {
         lines.push(`<details><summary>View reasoning</summary>`);
         lines.push("");
-        lines.push(`**Evidence:** ${finding.evidence.badge} (${confidence}% confidence)`);
+        lines.push(
+          `**Evidence:** ${finding.evidence.badge} (${confidence}% confidence)`
+        );
         lines.push("");
         lines.push(finding.evidence.reasoning);
         lines.push("</details>");
       } else {
-        lines.push(`**Evidence:** ${finding.evidence.badge} (${confidence}% confidence)`);
+        lines.push(
+          `**Evidence:** ${finding.evidence.badge} (${confidence}% confidence)`
+        );
       }
       lines.push("");
     }
@@ -17660,19 +17688,25 @@ var MarkdownFormatterV2 = class {
   formatMetrics(review) {
     const lines = [];
     const { metrics, runDetails } = review;
-    const hasOAuthCliUsage = (runDetails?.providers || []).some(
-      (p) => /^(codex|claude|gemini|opencode)\//.test(p.name)
-    );
-    const costDisplay = metrics.totalCost === 0 && metrics.totalTokens > 0 && hasOAuthCliUsage ? "$0.0000 (OAuth subscription, API cost not reported)" : `$${metrics.totalCost.toFixed(4)}`;
+    const hideApiBilling = this.shouldHideApiBilling(review);
     lines.push("<details>");
     lines.push("<summary>Performance Metrics</summary>");
     lines.push("");
     lines.push("| Metric | Value |");
     lines.push("|--------|-------|");
     lines.push(`| Duration | ${metrics.durationSeconds.toFixed(2)}s |`);
-    lines.push(`| Cost | ${costDisplay} |`);
-    lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
-    lines.push(`| Providers | ${metrics.providersSuccess}/${metrics.providersUsed} |`);
+    if (hideApiBilling) {
+      lines.push("| Billing | OAuth subscription |");
+      if (metrics.totalTokens > 0) {
+        lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
+      }
+    } else {
+      lines.push(`| Cost | $${metrics.totalCost.toFixed(4)} |`);
+      lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
+    }
+    lines.push(
+      `| Providers | ${metrics.providersSuccess}/${metrics.providersUsed} |`
+    );
     if (runDetails?.cacheHit) {
       lines.push(`| Cache | Hit |`);
     }
@@ -17682,9 +17716,11 @@ var MarkdownFormatterV2 = class {
       lines.push("");
       runDetails.providers.forEach((p) => {
         const statusEmoji = p.status === "success" ? "\u2705" : p.status === "timeout" ? "\u23F1\uFE0F" : p.status === "rate-limited" ? "\u23F8\uFE0F" : "\u274C";
-        const costStr = p.cost !== void 0 ? `, $${p.cost.toFixed(4)}` : "";
+        const costStr = !hideApiBilling && p.cost !== void 0 ? `, $${p.cost.toFixed(4)}` : "";
         const tokensStr = p.tokens ? `, ${p.tokens} tokens` : "";
-        lines.push(`- ${statusEmoji} **${p.name}** (${p.durationSeconds.toFixed(2)}s${costStr}${tokensStr})`);
+        lines.push(
+          `- ${statusEmoji} **${p.name}** (${p.durationSeconds.toFixed(2)}s${costStr}${tokensStr})`
+        );
         if (p.errorMessage) {
           lines.push(`  <sub>${p.errorMessage}</sub>`);
         }
@@ -17694,21 +17730,31 @@ var MarkdownFormatterV2 = class {
     lines.push("</details>");
     return lines.join("\n");
   }
+  shouldHideApiBilling(review) {
+    const hasOAuthCliUsage = (review.runDetails?.providers || []).some(
+      (p) => /^(codex|claude|gemini|opencode)\//.test(p.name)
+    );
+    return review.metrics.totalCost === 0 && hasOAuthCliUsage;
+  }
   formatAdvancedSections(review) {
     const lines = [];
     if (review.aiAnalysis) {
       lines.push("<details>");
       lines.push("<summary>AI-Generated Code Analysis</summary>");
       lines.push("");
-      lines.push(`**Overall Likelihood:** ${(review.aiAnalysis.averageLikelihood * 100).toFixed(1)}%`);
+      lines.push(
+        `**Overall Likelihood:** ${(review.aiAnalysis.averageLikelihood * 100).toFixed(1)}%`
+      );
       lines.push("");
       lines.push(`**Consensus:** ${review.aiAnalysis.consensus}`);
       lines.push("");
       if (Object.keys(review.aiAnalysis.providerEstimates).length > 0) {
         lines.push("**Provider Estimates:**");
-        Object.entries(review.aiAnalysis.providerEstimates).forEach(([provider, likelihood]) => {
-          lines.push(`- ${provider}: ${(likelihood * 100).toFixed(1)}%`);
-        });
+        Object.entries(review.aiAnalysis.providerEstimates).forEach(
+          ([provider, likelihood]) => {
+            lines.push(`- ${provider}: ${(likelihood * 100).toFixed(1)}%`);
+          }
+        );
         lines.push("");
       }
       lines.push("</details>");
@@ -17731,7 +17777,9 @@ var MarkdownFormatterV2 = class {
       review.providerResults.forEach((result) => {
         const statusEmoji = result.status === "success" ? "\u2705" : result.status === "timeout" ? "\u23F1\uFE0F" : result.status === "rate-limited" ? "\u23F8\uFE0F" : "\u274C";
         lines.push(`<details>`);
-        lines.push(`<summary>${statusEmoji} ${result.name} [${result.status}] (${result.durationSeconds.toFixed(2)}s)</summary>`);
+        lines.push(
+          `<summary>${statusEmoji} ${result.name} [${result.status}] (${result.durationSeconds.toFixed(2)}s)</summary>`
+        );
         lines.push("");
         if (result.result?.content) {
           lines.push(result.result.content.trim());

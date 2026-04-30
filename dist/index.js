@@ -12966,6 +12966,8 @@ var CodexProvider = class extends Provider {
       "",
       "Use the deterministic PR context below as the source of truth for review scope.",
       "You may inspect related repository files before producing findings, but only with read-only shell commands such as rg, sed, cat, git diff, git show, git grep, ls, find, and pwd.",
+      "Before returning a non-empty findings array, inspect the changed file and at least one directly related file when available, such as imports, called modules, schema/config files, or callers.",
+      "When a finding depends on related context, cite the concrete related file evidence in the message.",
       "Do not read environment variables, secret files, ~/.codex, git credentials, or GitHub token files.",
       "Do not run package installation, tests, builds, formatters, network commands, or commands that write files.",
       "Only report real bugs, data loss, crashes, or security vulnerabilities on changed lines from the diff.",
@@ -21443,7 +21445,7 @@ var FindingFilter = class {
   }
   isTrueSecurityIssue(finding) {
     const text = (finding.title + " " + finding.message).toLowerCase();
-    return text.includes("sql injection") || text.includes("xss") || text.includes("cross-site scripting") || text.includes("command injection") || text.includes("path traversal") || text.includes("remote code execution") || text.includes("arbitrary code") || text.includes("prototype pollution");
+    return text.includes("sql injection") || text.includes("xss") || text.includes("cross-site scripting") || text.includes("command injection") || text.includes("path traversal") || text.includes("remote code execution") || text.includes("arbitrary code") || text.includes("prototype pollution") || text.includes("wrong throttle") || text.includes("rate limit bypass") || text.includes("password reset") && (text.includes("rate limit") || text.includes("throttle") || text.includes("lockout")) || (text.includes("authorization") || text.includes("permission") || text.includes("privilege") || text.includes("access control")) && (text.includes("bypass") || text.includes("unauthorized") || text.includes("allows"));
   }
   isTestCodeQualityIssue(finding) {
     const text = (finding.title + " " + finding.message).toLowerCase();

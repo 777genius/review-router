@@ -334,7 +334,12 @@ export class FindingFilter {
       text.includes('path traversal') ||
       text.includes('remote code execution') ||
       text.includes('arbitrary code') ||
-      text.includes('prototype pollution')
+      text.includes('prototype pollution') ||
+      text.includes('wrong throttle') ||
+      text.includes('rate limit bypass') ||
+      (text.includes('password reset') && (text.includes('rate limit') || text.includes('throttle') || text.includes('lockout'))) ||
+      ((text.includes('authorization') || text.includes('permission') || text.includes('privilege') || text.includes('access control')) &&
+        (text.includes('bypass') || text.includes('unauthorized') || text.includes('allows')))
     );
   }
 

@@ -178,6 +178,12 @@ class NoopFeedbackFilter {
   async loadSuppressed(): Promise<Set<string>> {
     return new Set();
   }
+  async loadReviewCommentState(): Promise<{ suppressed: Set<string>; alreadyPosted: Set<string> }> {
+    return {
+      suppressed: new Set(),
+      alreadyPosted: new Set(),
+    };
+  }
   shouldPost(): boolean {
     return true;
   }

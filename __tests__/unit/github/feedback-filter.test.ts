@@ -2,6 +2,7 @@ import { FeedbackFilter } from '../../../src/github/feedback';
 import { GitHubClient } from '../../../src/github/client';
 import { InlineComment } from '../../../src/types';
 import { ProviderWeightTracker } from '../../../src/learning/provider-weights';
+import { fingerprintFromInlineComment } from '../../../src/github/comment-fingerprint';
 
 // Mock GitHubClient
 jest.mock('../../../src/github/client');
@@ -178,6 +179,90 @@ describe('FeedbackFilter', () => {
       const suppressed = await feedbackFilter.loadSuppressed(123);
 
       expect(suppressed.has('src/file.ts:5:plain text comment')).toBe(true);
+    });
+  });
+
+  describe('loadReviewCommentState', () => {
+    it('tracks existing AI Robot Review inline comments without thumbs-down', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'src/file.ts',
+          line: 10,
+          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+        },
+      ]);
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
+        data: [],
+      });
+
+      const state = await feedbackFilter.loadReviewCommentState(123);
+
+      expect(state.suppressed.size).toBe(0);
+      expect(state.alreadyPosted.has('src/file.ts:10:🟡 major - sql injection')).toBe(true);
+      expect(feedbackFilter.shouldPost(
+        {
+          path: 'src/file.ts',
+          line: 10,
+          side: 'RIGHT',
+          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+        },
+        state
+      )).toBe(false);
+    });
+
+    it('does not treat human review comments as already posted', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'src/file.ts',
+          line: 10,
+          body: '**SQL injection**\n\nHuman reviewer comment.',
+        },
+      ]);
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
+        data: [],
+      });
+
+      const state = await feedbackFilter.loadReviewCommentState(123);
+
+      expect(state.alreadyPosted.size).toBe(0);
+    });
+
+    it('uses hidden inline fingerprint markers for stable duplicate detection', async () => {
+      const existingBody =
+        '**🟡 Major - SQL injection**\n\nUse parameterized queries.';
+      const fingerprint = fingerprintFromInlineComment(
+        'src/file.ts',
+        10,
+        existingBody
+      );
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'src/file.ts',
+          line: 10,
+          body: `${existingBody}\n\n<!-- ai-robot-review-inline:${fingerprint} -->`,
+        },
+      ]);
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
+        data: [],
+      });
+
+      const state = await feedbackFilter.loadReviewCommentState(123);
+
+      expect(state.alreadyPosted.has(fingerprint)).toBe(true);
+      expect(
+        feedbackFilter.shouldPost(
+          {
+            path: 'src/file.ts',
+            line: 10,
+            side: 'RIGHT',
+            body: existingBody,
+          },
+          state
+        )
+      ).toBe(false);
     });
   });
 

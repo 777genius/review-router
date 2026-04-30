@@ -169,6 +169,10 @@ describe('GitHub integration mock (no network)', () => {
       mermaidGenerator: new MermaidGenerator(),
       feedbackFilter: {
         loadSuppressed: async () => new Set(),
+        loadReviewCommentState: async () => ({
+          suppressed: new Set(),
+          alreadyPosted: new Set(),
+        }),
         shouldPost: () => true,
       } as unknown as FeedbackFilter,
     };

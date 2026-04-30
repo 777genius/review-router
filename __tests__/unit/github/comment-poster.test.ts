@@ -86,9 +86,10 @@ describe('CommentPoster', () => {
           path: 'src/test.ts',
           line: 10,
           side: 'RIGHT',
-          body: 'Test comment',
+          body: expect.stringContaining('Test comment'),
         })
       );
+      expect(reviewCall.comments[0].body).toContain('<!-- ai-robot-review-inline:');
       expect(reviewCall.comments[0]).not.toHaveProperty('position');
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
         owner: 'test-owner',
@@ -98,7 +99,7 @@ describe('CommentPoster', () => {
         comments: expect.arrayContaining([
           expect.objectContaining({
             path: 'src/test.ts',
-            body: 'Test comment',
+            body: expect.stringContaining('Test comment'),
           }),
         ]),
       });

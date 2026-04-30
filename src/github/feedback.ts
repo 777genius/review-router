@@ -2,6 +2,17 @@ import { InlineComment } from '../types';
 import { GitHubClient } from './client';
 import { logger } from '../utils/logger';
 import { ProviderWeightTracker } from '../learning/provider-weights';
+import {
+  extractInlineFingerprint,
+  fingerprintFromInlineComment,
+  isAiRobotInlineComment,
+  signatureFromInlineComment,
+} from './comment-fingerprint';
+
+export interface ReviewCommentState {
+  suppressed: Set<string>;
+  alreadyPosted: Set<string>;
+}
 
 export class FeedbackFilter {
   constructor(
@@ -10,33 +21,54 @@ export class FeedbackFilter {
   ) {}
 
   async loadSuppressed(prNumber: number): Promise<Set<string>> {
+    return (await this.loadReviewCommentState(prNumber)).suppressed;
+  }
+
+  async loadReviewCommentState(prNumber: number): Promise<ReviewCommentState> {
     const { octokit, owner, repo } = this.client;
     const suppressed = new Set<string>();
+    const alreadyPosted = new Set<string>();
 
     try {
-      const comments = await octokit.paginate(octokit.rest.pulls.listReviewComments, {
-        owner,
-        repo,
-        pull_number: prNumber,
-        per_page: 100,
-      });
+      const comments = await octokit.paginate(
+        octokit.rest.pulls.listReviewComments,
+        {
+          owner,
+          repo,
+          pull_number: prNumber,
+          per_page: 100,
+        }
+      );
 
       for (const comment of comments) {
+        const line = comment.line ?? comment.original_line;
+        const body = comment.body || '';
+        const signature = this.signatureFromComment(comment.path, line, body);
+        const marker = extractInlineFingerprint(body);
+
+        if (isAiRobotInlineComment(body)) {
+          alreadyPosted.add(signature);
+          if (marker) alreadyPosted.add(marker);
+        }
+
         try {
-          const reactions = await octokit.rest.reactions.listForPullRequestReviewComment({
-            owner,
-            repo,
-            comment_id: comment.id,
-            per_page: 100,
-          });
-          const hasThumbsDown = reactions.data.some(r => r.content === '-1');
+          const reactions =
+            await octokit.rest.reactions.listForPullRequestReviewComment({
+              owner,
+              repo,
+              comment_id: comment.id,
+              per_page: 100,
+            });
+          const hasThumbsDown = reactions.data.some((r) => r.content === '-1');
           if (hasThumbsDown) {
-            const signature = this.signatureFromComment(comment.path, comment.line, comment.body || '');
             suppressed.add(signature);
+            if (marker) suppressed.add(marker);
 
             // Record negative feedback if weight tracker available
             if (this.providerWeightTracker) {
-              const providerMatch = comment.body?.match(/\*\*Provider:\*\* `([^`]+)`/);
+              const providerMatch = comment.body?.match(
+                /\*\*Provider:\*\* `([^`]+)`/
+              );
               const provider = providerMatch?.[1];
               if (provider) {
                 await this.providerWeightTracker.recordFeedback(provider, '👎');
@@ -44,24 +76,54 @@ export class FeedbackFilter {
             }
           }
         } catch (error) {
-          logger.warn(`Failed to load reactions for comment ${comment.id}`, error as Error);
+          logger.warn(
+            `Failed to load reactions for comment ${comment.id}`,
+            error as Error
+          );
         }
       }
     } catch (error) {
-      logger.warn('Failed to load review comments for feedback filter', error as Error);
+      logger.warn(
+        'Failed to load review comments for feedback filter',
+        error as Error
+      );
     }
 
-    return suppressed;
+    return { suppressed, alreadyPosted };
   }
 
-  shouldPost(comment: InlineComment, suppressed: Set<string>): boolean {
-    const signature = this.signatureFromComment(comment.path, comment.line, comment.body);
-    return !suppressed.has(signature);
+  shouldPost(
+    comment: InlineComment,
+    state: Set<string> | ReviewCommentState
+  ): boolean {
+    const signature = this.signatureFromComment(
+      comment.path,
+      comment.line,
+      comment.body
+    );
+    const fingerprint = fingerprintFromInlineComment(
+      comment.path,
+      comment.line,
+      comment.body
+    );
+
+    if (state instanceof Set) {
+      return !state.has(signature) && !state.has(fingerprint);
+    }
+
+    return (
+      !state.suppressed.has(signature) &&
+      !state.suppressed.has(fingerprint) &&
+      !state.alreadyPosted.has(signature) &&
+      !state.alreadyPosted.has(fingerprint)
+    );
   }
 
-  private signatureFromComment(path: string | undefined, line: number | null | undefined, body: string): string {
-    const titleMatch = body.match(/\*\*(.+?)\*\*/);
-    const title = titleMatch ? titleMatch[1] : (body.split('\n')[0] || 'unknown');
-    return `${(path || 'unknown').toLowerCase()}:${line ?? 0}:${title.toLowerCase()}`;
+  private signatureFromComment(
+    path: string | undefined,
+    line: number | null | undefined,
+    body: string
+  ): string {
+    return signatureFromInlineComment(path, line, body);
   }
 }

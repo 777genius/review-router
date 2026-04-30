@@ -85,7 +85,14 @@ function makeOrchestrator(overrides: Partial<ReviewComponents & { config: Review
     impactAnalyzer: { analyze: jest.fn().mockReturnValue([]) } as any,
     evidenceScorer: { score: jest.fn().mockReturnValue({ confidence: 1 }) } as any,
     mermaidGenerator: { generateImpactDiagram: jest.fn().mockReturnValue('') } as any,
-    feedbackFilter: { loadSuppressed: jest.fn().mockResolvedValue([]), shouldPost: jest.fn().mockReturnValue(true) } as any,
+    feedbackFilter: {
+      loadSuppressed: jest.fn().mockResolvedValue([]),
+      loadReviewCommentState: jest.fn().mockResolvedValue({
+        suppressed: new Set(),
+        alreadyPosted: new Set(),
+      }),
+      shouldPost: jest.fn().mockReturnValue(true),
+    } as any,
     reliabilityTracker: {
       isCircuitOpen: jest.fn().mockResolvedValue(false),
       rankProviders: jest.fn().mockResolvedValue([]),

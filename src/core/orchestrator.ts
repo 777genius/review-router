@@ -710,7 +710,8 @@ export class ReviewOrchestrator {
       }
 
       const markdown = this.components.formatter.format(review);
-      const suppressed = await this.components.feedbackFilter.loadSuppressed(pr.number);
+      const reviewCommentState =
+        await this.components.feedbackFilter.loadReviewCommentState(pr.number);
       await this.updatePullRequestDescription(pr);
 
       // Detect and record suggestion acceptances (positive feedback)
@@ -725,7 +726,9 @@ export class ReviewOrchestrator {
         }
       }
 
-      const inlineFiltered = review.inlineComments.filter(c => this.components.feedbackFilter.shouldPost(c, suppressed));
+      const inlineFiltered = review.inlineComments.filter(c =>
+        this.components.feedbackFilter.shouldPost(c, reviewCommentState)
+      );
 
     // If a progress tracker exists, reuse the same comment for the final review body
     if (progressTracker) {

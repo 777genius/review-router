@@ -17360,6 +17360,50 @@ function shouldPostSuggestion(finding, confidence, config) {
   return true;
 }
 
+// src/github/comment-fingerprint.ts
+var import_crypto2 = require("crypto");
+var INLINE_MARKER_RE = /<!--\s*ai-robot-review-inline:([a-f0-9]{16})\s*-->/i;
+var INLINE_MARKER_RE_GLOBAL = /<!--\s*ai-robot-review-inline:([a-f0-9]{16})\s*-->/gi;
+function signatureFromInlineComment(path13, line, body) {
+  const cleanBody = stripInlineFingerprintMarkers(body);
+  const titleMatch = cleanBody.match(/\*\*(.+?)\*\*/);
+  const title = titleMatch ? titleMatch[1] : cleanBody.split("\n")[0] || "unknown";
+  return [
+    (path13 || "unknown").toLowerCase(),
+    String(line ?? 0),
+    normalizeForSignature(title)
+  ].join(":");
+}
+function fingerprintFromInlineComment(path13, line, body) {
+  return (0, import_crypto2.createHash)("sha256").update(signatureFromInlineComment(path13, line, body)).digest("hex").slice(0, 16);
+}
+function inlineFingerprintMarker(fingerprint) {
+  return `<!-- ai-robot-review-inline:${fingerprint} -->`;
+}
+function extractInlineFingerprint(body) {
+  const match2 = body?.match(INLINE_MARKER_RE);
+  return match2?.[1]?.toLowerCase() ?? null;
+}
+function appendInlineFingerprintMarker(body, path13, line) {
+  if (extractInlineFingerprint(body)) return body;
+  return `${body.trimEnd()}
+
+${inlineFingerprintMarker(fingerprintFromInlineComment(path13, line, body))}`;
+}
+function stripInlineFingerprintMarkers(body) {
+  return body.replace(INLINE_MARKER_RE_GLOBAL, "").trim();
+}
+function isAiRobotInlineComment(body) {
+  if (!body) return false;
+  if (extractInlineFingerprint(body)) return true;
+  return /^\*\*(?:🔴 Critical|🟡 Major|🔵 Minor)\s+-\s+.+?\*\*/.test(
+    body.trim()
+  );
+}
+function normalizeForSignature(value) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 // src/github/comment-poster.ts
 var CommentPoster = class _CommentPoster {
   constructor(client, dryRun = false, config, suppressionTracker, providerWeightTracker) {
@@ -17615,7 +17659,7 @@ ${content.substring(0, 500)}...`);
           path: c.path,
           line: c.line,
           side: c.side || "RIGHT",
-          body: c.body
+          body: appendInlineFingerprintMarker(c.body, c.path, c.line)
         };
         const startLine = c.start_line;
         if (startLine !== void 0 && startLine !== c.line) {
@@ -18820,16 +18864,31 @@ var FeedbackFilter = class {
     this.providerWeightTracker = providerWeightTracker;
   }
   async loadSuppressed(prNumber) {
+    return (await this.loadReviewCommentState(prNumber)).suppressed;
+  }
+  async loadReviewCommentState(prNumber) {
     const { octokit, owner, repo } = this.client;
     const suppressed = /* @__PURE__ */ new Set();
+    const alreadyPosted = /* @__PURE__ */ new Set();
     try {
-      const comments = await octokit.paginate(octokit.rest.pulls.listReviewComments, {
-        owner,
-        repo,
-        pull_number: prNumber,
-        per_page: 100
-      });
+      const comments = await octokit.paginate(
+        octokit.rest.pulls.listReviewComments,
+        {
+          owner,
+          repo,
+          pull_number: prNumber,
+          per_page: 100
+        }
+      );
       for (const comment of comments) {
+        const line = comment.line ?? comment.original_line;
+        const body = comment.body || "";
+        const signature = this.signatureFromComment(comment.path, line, body);
+        const marker = extractInlineFingerprint(body);
+        if (isAiRobotInlineComment(body)) {
+          alreadyPosted.add(signature);
+          if (marker) alreadyPosted.add(marker);
+        }
         try {
           const reactions = await octokit.rest.reactions.listForPullRequestReviewComment({
             owner,
@@ -18839,10 +18898,12 @@ var FeedbackFilter = class {
           });
           const hasThumbsDown = reactions.data.some((r) => r.content === "-1");
           if (hasThumbsDown) {
-            const signature = this.signatureFromComment(comment.path, comment.line, comment.body || "");
             suppressed.add(signature);
+            if (marker) suppressed.add(marker);
             if (this.providerWeightTracker) {
-              const providerMatch = comment.body?.match(/\*\*Provider:\*\* `([^`]+)`/);
+              const providerMatch = comment.body?.match(
+                /\*\*Provider:\*\* `([^`]+)`/
+              );
               const provider = providerMatch?.[1];
               if (provider) {
                 await this.providerWeightTracker.recordFeedback(provider, "\u{1F44E}");
@@ -18850,22 +18911,38 @@ var FeedbackFilter = class {
             }
           }
         } catch (error2) {
-          logger.warn(`Failed to load reactions for comment ${comment.id}`, error2);
+          logger.warn(
+            `Failed to load reactions for comment ${comment.id}`,
+            error2
+          );
         }
       }
     } catch (error2) {
-      logger.warn("Failed to load review comments for feedback filter", error2);
+      logger.warn(
+        "Failed to load review comments for feedback filter",
+        error2
+      );
     }
-    return suppressed;
+    return { suppressed, alreadyPosted };
   }
-  shouldPost(comment, suppressed) {
-    const signature = this.signatureFromComment(comment.path, comment.line, comment.body);
-    return !suppressed.has(signature);
+  shouldPost(comment, state) {
+    const signature = this.signatureFromComment(
+      comment.path,
+      comment.line,
+      comment.body
+    );
+    const fingerprint = fingerprintFromInlineComment(
+      comment.path,
+      comment.line,
+      comment.body
+    );
+    if (state instanceof Set) {
+      return !state.has(signature) && !state.has(fingerprint);
+    }
+    return !state.suppressed.has(signature) && !state.suppressed.has(fingerprint) && !state.alreadyPosted.has(signature) && !state.alreadyPosted.has(fingerprint);
   }
   signatureFromComment(path13, line, body) {
-    const titleMatch = body.match(/\*\*(.+?)\*\*/);
-    const title = titleMatch ? titleMatch[1] : body.split("\n")[0] || "unknown";
-    return `${(path13 || "unknown").toLowerCase()}:${line ?? 0}:${title.toLowerCase()}`;
+    return signatureFromInlineComment(path13, line, body);
   }
 };
 
@@ -20066,7 +20143,7 @@ var PromptGenerator = class {
 };
 
 // src/utils/sanitize.ts
-var import_crypto2 = require("crypto");
+var import_crypto3 = require("crypto");
 function encodeURIComponentSafe(value) {
   if (typeof value !== "string") {
     return "invalid";
@@ -20075,7 +20152,7 @@ function encodeURIComponentSafe(value) {
   const normalized = encoded.replace(/[+]/g, "_").replace(/%/g, "_").replace(/[<>:"|?*]/g, "_");
   const MAX_PREFIX = 120;
   const prefix = normalized.length > MAX_PREFIX ? normalized.slice(0, MAX_PREFIX) : normalized;
-  const hashSuffix = (0, import_crypto2.createHash)("sha256").update(value).digest("hex").slice(0, 16);
+  const hashSuffix = (0, import_crypto3.createHash)("sha256").update(value).digest("hex").slice(0, 16);
   return `${prefix}-${hashSuffix}`;
 }
 
@@ -21176,7 +21253,7 @@ var BatchOrchestrator = class {
 };
 
 // src/learning/suppression-tracker.ts
-var import_crypto3 = require("crypto");
+var import_crypto4 = require("crypto");
 var SuppressionTracker = class _SuppressionTracker {
   constructor(storage, repoKey) {
     this.storage = storage;
@@ -21199,7 +21276,7 @@ var SuppressionTracker = class _SuppressionTracker {
     const ttl = scope === "pr" ? _SuppressionTracker.PR_TTL_MS : _SuppressionTracker.REPO_TTL_MS;
     const timestamp2 = Date.now();
     const pattern = {
-      id: (0, import_crypto3.randomUUID)(),
+      id: (0, import_crypto4.randomUUID)(),
       category: finding.category,
       file: finding.file,
       line: finding.line,
@@ -25641,7 +25718,7 @@ var ReviewOrchestrator = class {
         }
       }
       const markdown = this.components.formatter.format(review);
-      const suppressed = await this.components.feedbackFilter.loadSuppressed(pr.number);
+      const reviewCommentState = await this.components.feedbackFilter.loadReviewCommentState(pr.number);
       await this.updatePullRequestDescription(pr);
       if (this.components.acceptanceDetector && this.components.providerWeightTracker && this.components.githubClient) {
         try {
@@ -25650,7 +25727,9 @@ var ReviewOrchestrator = class {
           logger.debug("Failed to detect acceptances", error2);
         }
       }
-      const inlineFiltered = review.inlineComments.filter((c) => this.components.feedbackFilter.shouldPost(c, suppressed));
+      const inlineFiltered = review.inlineComments.filter(
+        (c) => this.components.feedbackFilter.shouldPost(c, reviewCommentState)
+      );
       if (progressTracker) {
         await progressTracker.replaceWith(markdown);
       } else {

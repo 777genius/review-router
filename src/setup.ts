@@ -163,6 +163,10 @@ async function createComponentsForCLI(config: ReviewConfig): Promise<ReviewCompo
   const feedbackFilter = {
     client: mockGitHubClient,
     loadSuppressed: async (): Promise<Set<string>> => new Set(),
+    loadReviewCommentState: async () => ({
+      suppressed: new Set<string>(),
+      alreadyPosted: new Set<string>(),
+    }),
     shouldPost: (): boolean => true,
     signatureFromComment: (): string => '',
   } as unknown as FeedbackFilter;

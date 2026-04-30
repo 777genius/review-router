@@ -8,6 +8,7 @@ import { validateSyntax, shouldPostSuggestion, calculateConfidence, ConfidenceSi
 import { SuppressionTracker } from '../learning/suppression-tracker';
 import { ProviderWeightTracker } from '../learning/provider-weights';
 import { detectLanguage } from '../analysis/ast/parsers';
+import { appendInlineFingerprintMarker } from './comment-fingerprint';
 
 export class CommentPoster {
   private static readonly MAX_COMMENT_SIZE = 60_000;
@@ -329,7 +330,7 @@ export class CommentPoster {
           path: c.path,
           line: c.line,
           side: c.side || 'RIGHT',
-          body: c.body,
+          body: appendInlineFingerprintMarker(c.body, c.path, c.line),
         };
         const startLine = (c as any).start_line;
         if (startLine !== undefined && startLine !== c.line) {

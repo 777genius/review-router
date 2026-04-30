@@ -5,6 +5,7 @@ describe('ProgressTracker', () => {
   let octokit: Octokit;
   let createCommentMock: jest.Mock;
   let updateCommentMock: jest.Mock;
+  let listCommentsMock: jest.Mock;
   let tracker: ProgressTracker;
 
   const config = {
@@ -17,12 +18,14 @@ describe('ProgressTracker', () => {
   beforeEach(() => {
     createCommentMock = jest.fn();
     updateCommentMock = jest.fn();
+    listCommentsMock = jest.fn().mockResolvedValue({ data: [] });
 
     octokit = {
       rest: {
         issues: {
           createComment: createCommentMock,
           updateComment: updateCommentMock,
+          listComments: listCommentsMock,
         },
       },
     } as any;
@@ -42,6 +45,25 @@ describe('ProgressTracker', () => {
         repo: 'test-repo',
         issue_number: 123,
         body: expect.stringContaining('🤖 AI Robot Review Progress'),
+      });
+    });
+
+    it('should reuse an existing AI Robot Review comment', async () => {
+      listCommentsMock.mockResolvedValue({
+        data: [
+          { id: 111, body: 'unrelated comment' },
+          { id: 999, body: '# AI Robot Review\n\nold summary' },
+        ],
+      });
+
+      await tracker.initialize();
+
+      expect(createCommentMock).not.toHaveBeenCalled();
+      expect(updateCommentMock).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        comment_id: 999,
+        body: expect.stringContaining('<!-- ai-robot-review-progress-tracker -->'),
       });
     });
 
@@ -180,6 +202,16 @@ describe('ProgressTracker', () => {
       const body = lastCall?.[0]?.body as string;
 
       expect(body).toContain('❌'); // All items failed
+    });
+
+    it('should preserve the hidden marker when replacing progress with final summary', async () => {
+      await tracker.replaceWith('# AI Robot Review\n\nfinal summary');
+
+      const lastCall = updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
+      const body = lastCall?.[0]?.body as string;
+
+      expect(body).toContain('# AI Robot Review');
+      expect(body).toContain('<!-- ai-robot-review-progress-tracker -->');
     });
   });
 

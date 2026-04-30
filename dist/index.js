@@ -24526,7 +24526,7 @@ function createDefaultPathMatcherConfig() {
 }
 
 // src/github/progress-tracker.ts
-var ProgressTracker = class {
+var ProgressTracker = class _ProgressTracker {
   constructor(octokit, config) {
     this.octokit = octokit;
     this.config = config;
@@ -24536,6 +24536,11 @@ var ProgressTracker = class {
   startTime = Date.now();
   totalCost = 0;
   overrideBody;
+  static MARKER = "<!-- ai-robot-review-progress-tracker -->";
+  static LEGACY_HEADERS = [
+    "# AI Robot Review",
+    "## \u{1F916} AI Robot Review Progress"
+  ];
   /**
    * Initialize progress tracking by creating the initial comment
    */
@@ -24546,6 +24551,13 @@ var ProgressTracker = class {
     }
     try {
       const body = this.formatProgressComment();
+      const existingCommentId = await this.findExistingCommentId();
+      if (existingCommentId) {
+        this.commentId = existingCommentId;
+        await this.updateComment();
+        logger.info("Progress tracker initialized from existing comment", { commentId: this.commentId });
+        return;
+      }
       const comment = await this.octokit.rest.issues.createComment({
         owner: this.config.owner,
         repo: this.config.repo,
@@ -24631,7 +24643,7 @@ var ProgressTracker = class {
         lines.push(`   \u2514\u2500 ${item.details}`);
       }
     }
-    lines.push("<!-- ai-robot-review-progress-tracker -->");
+    lines.push(_ProgressTracker.MARKER);
     return lines.join("\n");
   }
   /**
@@ -24671,13 +24683,40 @@ var ProgressTracker = class {
       logger.warn("Cannot replace progress: octokit.rest.issues.updateComment is missing");
       return;
     }
-    this.overrideBody = body;
+    this.overrideBody = this.withMarker(body);
     await this.octokit.rest.issues.updateComment({
       owner: this.config.owner,
       repo: this.config.repo,
       comment_id: this.commentId,
-      body
+      body: this.overrideBody
     });
+  }
+  async findExistingCommentId() {
+    if (!this.octokit?.rest?.issues?.listComments) {
+      return null;
+    }
+    try {
+      const comments = await this.octokit.rest.issues.listComments({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        issue_number: this.config.prNumber,
+        per_page: 100
+      });
+      const matching = comments.data.filter((comment) => this.isReviewComment(comment.body));
+      return matching.length > 0 ? matching[matching.length - 1].id : null;
+    } catch (error2) {
+      logger.warn("Failed to find existing progress comment", error2);
+      return null;
+    }
+  }
+  isReviewComment(body) {
+    if (!body) return false;
+    return body.includes(_ProgressTracker.MARKER) || _ProgressTracker.LEGACY_HEADERS.some((header) => body.startsWith(header));
+  }
+  withMarker(body) {
+    return body.includes(_ProgressTracker.MARKER) ? body : `${body.trimEnd()}
+
+${_ProgressTracker.MARKER}`;
   }
   /**
    * Get status emoji for visual feedback

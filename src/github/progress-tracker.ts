@@ -34,6 +34,11 @@ export class ProgressTracker {
   private startTime: number = Date.now();
   private totalCost: number = 0;
   private overrideBody?: string;
+  private static readonly MARKER = '<!-- ai-robot-review-progress-tracker -->';
+  private static readonly LEGACY_HEADERS = [
+    '# AI Robot Review',
+    '## 🤖 AI Robot Review Progress',
+  ];
 
   constructor(
     private octokit: Octokit,
@@ -50,6 +55,14 @@ export class ProgressTracker {
     }
     try {
       const body = this.formatProgressComment();
+      const existingCommentId = await this.findExistingCommentId();
+      if (existingCommentId) {
+        this.commentId = existingCommentId;
+        await this.updateComment();
+        logger.info('Progress tracker initialized from existing comment', { commentId: this.commentId });
+        return;
+      }
+
       const comment = await this.octokit.rest.issues.createComment({
         owner: this.config.owner,
         repo: this.config.repo,
@@ -163,7 +176,7 @@ export class ProgressTracker {
       }
     }
 
-    lines.push('<!-- ai-robot-review-progress-tracker -->');
+    lines.push(ProgressTracker.MARKER);
 
     return lines.join('\n');
   }
@@ -210,13 +223,46 @@ export class ProgressTracker {
       logger.warn('Cannot replace progress: octokit.rest.issues.updateComment is missing');
       return;
     }
-    this.overrideBody = body;
+    this.overrideBody = this.withMarker(body);
     await this.octokit.rest.issues.updateComment({
       owner: this.config.owner,
       repo: this.config.repo,
       comment_id: this.commentId,
-      body,
+      body: this.overrideBody,
     });
+  }
+
+  private async findExistingCommentId(): Promise<number | null> {
+    if (!this.octokit?.rest?.issues?.listComments) {
+      return null;
+    }
+
+    try {
+      const comments = await this.octokit.rest.issues.listComments({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        issue_number: this.config.prNumber,
+        per_page: 100,
+      });
+
+      const matching = comments.data.filter(comment => this.isReviewComment(comment.body));
+      return matching.length > 0 ? matching[matching.length - 1].id : null;
+    } catch (error) {
+      logger.warn('Failed to find existing progress comment', error as Error);
+      return null;
+    }
+  }
+
+  private isReviewComment(body?: string | null): boolean {
+    if (!body) return false;
+    return body.includes(ProgressTracker.MARKER)
+      || ProgressTracker.LEGACY_HEADERS.some(header => body.startsWith(header));
+  }
+
+  private withMarker(body: string): string {
+    return body.includes(ProgressTracker.MARKER)
+      ? body
+      : `${body.trimEnd()}\n\n${ProgressTracker.MARKER}`;
   }
 
   /**

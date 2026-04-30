@@ -1,7 +1,7 @@
 import { InlineComment, FileChange, Severity, ReviewConfig } from '../types';
 import { GitHubClient } from './client';
 import { logger } from '../utils/logger';
-import { mapLinesToPositions } from '../utils/diff';
+import { chooseBestAddedLineForComment, mapLinesToPositions } from '../utils/diff';
 import { withRetry } from '../utils/retry';
 import { isSuggestionLineValid, validateSuggestionRange, isDeletionOnlyFile } from '../utils/suggestion-validator';
 import { validateSyntax, shouldPostSuggestion, calculateConfidence, ConfidenceSignals } from '../validation';
@@ -252,6 +252,15 @@ export class CommentPoster {
     // Convert comments to GitHub API format, filtering out those without valid positions
     const apiComments = (await Promise.all(sortedComments
       .map(async c => {
+        const file = files.find(f => f.filename === c.path);
+        const correctedLine = c.side !== 'LEFT'
+          ? chooseBestAddedLineForComment(file?.patch, c.line, c.body)
+          : c.line;
+        if (correctedLine !== c.line) {
+          logger.debug(`Adjusted inline comment line for ${c.path}: ${c.line} -> ${correctedLine}`);
+          c.line = correctedLine;
+        }
+
         const posMap = positionMaps.get(c.path);
         const position = posMap?.get(c.line);
         if (!position) {
@@ -261,8 +270,6 @@ export class CommentPoster {
 
         // Validate suggestions can be applied at this line/range
         if (c.body.includes('```suggestion')) {
-          const file = files.find(f => f.filename === c.path);
-
           // Skip suggestions for deletion-only files
           if (!filesWithAdditionsSet.has(c.path)) {
             logger.debug(`Skipping suggestion for deletion-only file: ${c.path}`);

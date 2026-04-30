@@ -13809,6 +13809,71 @@ function mapLinesToPositions(patch) {
   }
   return map2;
 }
+function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchRadius = 4) {
+  const added = mapAddedLines(patch);
+  if (added.length === 0) return reportedLine;
+  const nearby = added.filter((line) => Math.abs(line.line - reportedLine) <= searchRadius);
+  if (nearby.length === 0) return reportedLine;
+  const bodyTokens = tokenizeForLineScoring(commentBody);
+  const riskTerms = getRiskTerms(commentBody);
+  const score = (candidate) => {
+    const content = candidate.content;
+    const lower = content.toLowerCase();
+    const codeTokens = tokenizeForLineScoring(content);
+    const overlap = Array.from(codeTokens).filter((token) => bodyTokens.has(token)).length;
+    const proximity = Math.max(0, searchRadius + 1 - Math.abs(candidate.line - reportedLine));
+    const riskScore = riskTerms.reduce((sum, term) => sum + (term.test(lower) ? 3 : 0), 0);
+    const interpolationScore = /\$\{.+?\}/.test(content) ? 2 : 0;
+    const callScore = /\b[a-zA-Z_$][\w$]*\s*\(/.test(content) ? 1 : 0;
+    const declarationPenalty = /^\s*(export\s+)?(async\s+)?(function|class|interface|type)\b/.test(content) ? -2 : 0;
+    return proximity + overlap + riskScore + interpolationScore + callScore + declarationPenalty;
+  };
+  const current = nearby.find((line) => line.line === reportedLine);
+  const currentScore = current ? score(current) : Number.NEGATIVE_INFINITY;
+  const best = [...nearby].sort((a, b) => score(b) - score(a) || Math.abs(a.line - reportedLine) - Math.abs(b.line - reportedLine))[0];
+  const bestScore = score(best);
+  return bestScore > currentScore + 1 ? best.line : reportedLine;
+}
+function tokenizeForLineScoring(text) {
+  const stopWords = /* @__PURE__ */ new Set([
+    "the",
+    "and",
+    "for",
+    "with",
+    "this",
+    "that",
+    "from",
+    "into",
+    "value",
+    "line",
+    "risk",
+    "issue",
+    "critical",
+    "major",
+    "minor",
+    "severity"
+  ]);
+  return new Set(
+    text.toLowerCase().replace(/[^a-z0-9_$]+/g, " ").split(/\s+/).filter((token) => token.length >= 3 && !stopWords.has(token))
+  );
+}
+function getRiskTerms(commentBody) {
+  const body = commentBody.toLowerCase();
+  const terms = [];
+  if (/\bsql\b|injection|query|database/.test(body)) {
+    terms.push(/\b(query|execute|exec|select|insert|update|delete|where)\b/, /`.*\$\{.*\}/);
+  }
+  if (/xss|html|script|sanitize/.test(body)) {
+    terms.push(/innerhtml|dangerouslysetinnerhtml|document\.write|sanitize|escape/);
+  }
+  if (/command|shell|rce|exec|spawn/.test(body)) {
+    terms.push(/\b(exec|spawn|execfile|system|shell_exec|popen)\b/);
+  }
+  if (/secret|token|password|credential/.test(body)) {
+    terms.push(/secret|token|password|credential|apikey|api_key/);
+  }
+  return terms;
+}
 function isRangeWithinSingleHunk(startLine, endLine, patch) {
   if (!patch) return false;
   const lines = patch.split("\n");
@@ -17067,6 +17132,12 @@ ${content.substring(0, 500)}...`);
     });
     const apiComments = (await Promise.all(
       sortedComments.map(async (c) => {
+        const file = files.find((f) => f.filename === c.path);
+        const correctedLine = c.side !== "LEFT" ? chooseBestAddedLineForComment(file?.patch, c.line, c.body) : c.line;
+        if (correctedLine !== c.line) {
+          logger.debug(`Adjusted inline comment line for ${c.path}: ${c.line} -> ${correctedLine}`);
+          c.line = correctedLine;
+        }
         const posMap = positionMaps.get(c.path);
         const position = posMap?.get(c.line);
         if (!position) {
@@ -17074,7 +17145,6 @@ ${content.substring(0, 500)}...`);
           return null;
         }
         if (c.body.includes("```suggestion")) {
-          const file = files.find((f) => f.filename === c.path);
           if (!filesWithAdditionsSet.has(c.path)) {
             logger.debug(`Skipping suggestion for deletion-only file: ${c.path}`);
             c.body = c.body.replace(/```suggestion[\s\S]*?```/g, "_Suggestion not available (file has no additions)_");

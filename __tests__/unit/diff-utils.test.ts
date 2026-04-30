@@ -1,4 +1,4 @@
-import { mapAddedLines, trimDiff } from '../../src/utils/diff';
+import { chooseBestAddedLineForComment, mapAddedLines, trimDiff } from '../../src/utils/diff';
 
 describe('mapAddedLines', () => {
   it('maps added lines to absolute new-file line numbers', () => {
@@ -10,6 +10,43 @@ describe('mapAddedLines', () => {
       { line: 12, content: 'addedB' },
       { line: 13, content: 'addedC' },
     ]);
+  });
+});
+
+describe('chooseBestAddedLineForComment', () => {
+  it('moves SQL injection comments from a nearby declaration to the risky query line', () => {
+    const patch = [
+      '@@ -5,3 +5,8 @@',
+      '   }',
+      '   return id;',
+      ' }',
+      '+',
+      '+export async function findUserByEmail(db, email) {',
+      "+  const rows = await db.query(`SELECT * FROM users WHERE email = '${email}' LIMIT 1`);",
+      '+  return rows[0] || null;',
+      '+}',
+    ].join('\n');
+
+    const result = chooseBestAddedLineForComment(
+      patch,
+      9,
+      'Critical SQL injection via email interpolation. The email value is inserted directly into the SQL string.'
+    );
+
+    expect(result).toBe(10);
+  });
+
+  it('keeps the reported line when there is no stronger nearby candidate', () => {
+    const patch = [
+      '@@ -1,2 +1,3 @@',
+      ' line1',
+      '+const value = normalize(input);',
+      ' line2',
+    ].join('\n');
+
+    const result = chooseBestAddedLineForComment(patch, 2, 'Minor cleanup.');
+
+    expect(result).toBe(2);
   });
 });
 

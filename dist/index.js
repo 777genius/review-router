@@ -24804,8 +24804,13 @@ var ReviewOrchestrator = class {
         const desiredOpenCode = Math.min(2, providers.filter((p) => p.name.startsWith("opencode/")).length);
         const MIN_OPENROUTER_HEALTHY = desiredOpenRouter;
         const MIN_OPENCODE_HEALTHY = desiredOpenCode;
-        const MIN_TOTAL_HEALTHY = Math.min(selectionLimit, Math.max(2, desiredOpenRouter + desiredOpenCode || 2));
-        const MIN_FALLBACK_HEALTHY = Math.min(2, selectionLimit);
+        const singleProviderMode = providers.length === 1 && config.providers.length === 1;
+        const defaultMinimumHealthy = singleProviderMode ? 1 : 2;
+        const MIN_TOTAL_HEALTHY = Math.min(
+          selectionLimit,
+          Math.max(defaultMinimumHealthy, desiredOpenRouter + desiredOpenCode || defaultMinimumHealthy)
+        );
+        const MIN_FALLBACK_HEALTHY = Math.min(defaultMinimumHealthy, selectionLimit);
         const countOpenCode = (list) => list.filter((p) => p.name.startsWith("opencode/")).length;
         const countOpenRouter = (list) => list.filter((p) => p.name.startsWith("openrouter/")).length;
         let attempts = 0;

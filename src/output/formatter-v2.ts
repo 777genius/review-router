@@ -83,7 +83,7 @@ export class MarkdownFormatterV2 {
     // Footer
     lines.push('---');
     lines.push('');
-    lines.push(this.formatFooter(review));
+    lines.push(this.formatFooter());
 
     return lines.join('\n');
   }
@@ -464,10 +464,7 @@ export class MarkdownFormatterV2 {
     return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
   }
 
-  private formatFooter(review: Review): string {
-    const base = '*Powered by Multi-Provider Code Review*';
-    if (review.inlineComments.length === 0) return base;
-
-    return `${base} • To suppress an inline finding on future reruns, react 👎 on that inline comment.`;
+  private formatFooter(): string {
+    return '*Powered by Multi-Provider Code Review*';
   }
 }

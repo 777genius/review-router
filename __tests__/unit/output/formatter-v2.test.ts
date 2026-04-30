@@ -519,7 +519,7 @@ describe('MarkdownFormatterV2', () => {
       expect(output).not.toContain('## Release Notes');
     });
 
-    it('should include footer with branding only when there are no inline comments', () => {
+    it('should include footer with branding', () => {
       const review = createMockReview();
       const output = formatter.format(review);
 
@@ -527,7 +527,7 @@ describe('MarkdownFormatterV2', () => {
       expect(output).not.toContain('react 👎');
     });
 
-    it('should explain that thumbs-down suppression applies to inline comments on reruns', () => {
+    it('should not mention thumbs-down suppression in the footer', () => {
       const review = createMockReview({
         inlineComments: [
           {
@@ -541,9 +541,8 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('Powered by Multi-Provider Code Review');
-      expect(output).toContain(
-        'To suppress an inline finding on future reruns, react 👎 on that inline comment.'
-      );
+      expect(output).not.toContain('suppress an inline finding');
+      expect(output).not.toContain('react 👎');
     });
 
     it('should use collapsible sections for long content', () => {

@@ -17526,7 +17526,7 @@ var MarkdownFormatterV2 = class {
     lines.push(this.formatAdvancedSections(review));
     lines.push("---");
     lines.push("");
-    lines.push(this.formatFooter(review));
+    lines.push(this.formatFooter());
     return lines.join("\n");
   }
   formatQuickStats(review) {
@@ -17791,10 +17791,8 @@ var MarkdownFormatterV2 = class {
     if (!mermaidDiagram?.trim()) return false;
     return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
   }
-  formatFooter(review) {
-    const base = "*Powered by Multi-Provider Code Review*";
-    if (review.inlineComments.length === 0) return base;
-    return `${base} \u2022 To suppress an inline finding on future reruns, react \u{1F44E} on that inline comment.`;
+  formatFooter() {
+    return "*Powered by Multi-Provider Code Review*";
   }
 };
 

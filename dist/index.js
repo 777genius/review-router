@@ -12867,13 +12867,20 @@ var CodexProvider = class extends Provider {
     }
   }
   formatCliError(stderr, stdout) {
-    const raw = (stderr || stdout || "no output").replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g"), "").replace(/www_authenticate_header:\s*"[^"]+"/gi, 'www_authenticate_header: "[redacted]"').replace(/authorization_uri="[^"]+"/gi, 'authorization_uri="[redacted]"').replace(/session id:\s*[a-f0-9-]+/gi, "session id: [redacted]");
+    const raw = (stderr || stdout || "no output").replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g"), "").replace(/www_authenticate_header:\s*"[^"]+"/gi, 'www_authenticate_header: "[redacted]"').replace(/authorization_uri="[^"]+"/gi, 'authorization_uri="[redacted]"').replace(/authorization_uri=\\?"[^"\\]*(?:\\.[^"\\]*)*\\?"/gi, 'authorization_uri="[redacted]"').replace(/https?:\/\/[^\s",)]+/gi, "[redacted-url]").replace(/session id:\s*[a-f0-9-]+/gi, "session id: [redacted]").replace(/thread\s+[a-f0-9-]{8,}/gi, "thread [redacted]");
     const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter((line) => !line.startsWith("user") && !line.includes("Respond with exactly:"));
+    const jsonMessages = Array.from(raw.matchAll(/"message"\s*:\s*"([^"]+)"/gi)).map((match2) => match2[1]).filter(Boolean);
+    if (jsonMessages.length > 0) {
+      return this.truncateCliError([...new Set(jsonMessages)].join(" "));
+    }
     const important = lines.filter(
       (line) => /not supported|invalid_request_error|auth|error|failed|timed out|timeout/i.test(line)
     );
     const summary = (important.length > 0 ? important : lines).join(" ");
-    return summary.length > 800 ? `${summary.slice(0, 800)}...` : summary;
+    return this.truncateCliError(summary);
+  }
+  truncateCliError(message) {
+    return message.length > 800 ? `${message.slice(0, 800)}...` : message;
   }
   async resolveBinary() {
     if (await this.canRun("codex", ["--version"])) {

@@ -65,9 +65,9 @@ Stores `OPENROUTER_API_KEY` and configures OpenRouter provider mode.
 
 | Preset | Behavior |
 | --- | --- |
-| `safe` | Major+ inline comments, max 5 inline comments, AST and security enabled |
-| `strict` | Minor+ inline comments, max 10 inline comments, graph context enabled |
-| `minimal` | Major+ inline comments, max 3 inline comments, AST disabled, security enabled |
+| `safe` | Major+ inline comments, max 5 inline comments, AST and security enabled, Codex effort `medium` |
+| `strict` | Minor+ inline comments, max 10 inline comments, graph context enabled, Codex effort `high` |
+| `minimal` | Major+ inline comments, max 3 inline comments, AST disabled, security enabled, Codex effort `low` |
 
 Safe defaults include:
 
@@ -78,6 +78,7 @@ MIN_CONFIDENCE=0.6
 CONSENSUS_REQUIRED_FOR_CRITICAL=false
 FAIL_ON_NO_HEALTHY_PROVIDERS=true
 PROVIDER_MAX_PARALLEL=1
+CODEX_REASONING_EFFORT=medium
 ```
 
 ## Non-interactive examples

@@ -577,6 +577,7 @@ preset_values() {
     safe)
       INLINE_MIN_SEVERITY="major"
       INLINE_MAX_COMMENTS="5"
+      CODEX_REASONING_EFFORT="medium"
       ENABLE_SECURITY="true"
       ENABLE_AST_ANALYSIS="true"
       GRAPH_ENABLED="false"
@@ -584,6 +585,7 @@ preset_values() {
     strict)
       INLINE_MIN_SEVERITY="minor"
       INLINE_MAX_COMMENTS="10"
+      CODEX_REASONING_EFFORT="high"
       ENABLE_SECURITY="true"
       ENABLE_AST_ANALYSIS="true"
       GRAPH_ENABLED="true"
@@ -591,6 +593,7 @@ preset_values() {
     minimal)
       INLINE_MIN_SEVERITY="major"
       INLINE_MAX_COMMENTS="3"
+      CODEX_REASONING_EFFORT="low"
       ENABLE_SECURITY="true"
       ENABLE_AST_ANALYSIS="false"
       GRAPH_ENABLED="false"
@@ -749,6 +752,7 @@ YAML
           PROVIDER_RETRIES: '0'
           CODEX_HEALTHCHECK_MODE: exec
           CODEX_HEALTHCHECK_REASONING_EFFORT: low
+          CODEX_REASONING_EFFORT: '$CODEX_REASONING_EFFORT'
           FAIL_ON_NO_HEALTHY_PROVIDERS: 'true'
           INLINE_MAX_COMMENTS: '$INLINE_MAX_COMMENTS'
           INLINE_MIN_SEVERITY: $INLINE_MIN_SEVERITY

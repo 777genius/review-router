@@ -52,15 +52,17 @@ export class CodexProvider extends Provider {
     const binary = await this.resolveBinary();
 
     // Codex CLI command:
-    // echo <prompt> | codex --model <model> --dangerously-bypass-approvals-and-sandbox -c approval_policy="never"
-    // Pass prompt via stdin to avoid "stdin is not a terminal" error
+    // codex exec --model <model> --dangerously-bypass-approvals-and-sandbox -c approval_policy="never" -
+    // The top-level `codex` command starts the interactive TUI and fails in CI.
     const args = [
+      'exec',
       '--model', this.model,
       '--dangerously-bypass-approvals-and-sandbox',
-      '-c', 'approval_policy=never'
+      '-c', 'approval_policy=never',
+      '-',
     ];
 
-    logger.info(`Running Codex CLI: codex --model ${this.model} --dangerously-bypass-approvals-and-sandbox ...`);
+    logger.info(`Running Codex CLI: codex exec --model ${this.model} --dangerously-bypass-approvals-and-sandbox ...`);
 
     try {
       const { stdout, stderr } = await this.runCliWithStdin(binary, args, prompt, timeoutMs);

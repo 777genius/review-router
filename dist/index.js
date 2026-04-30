@@ -32374,13 +32374,15 @@ var CodexProvider = class extends Provider {
     const started = Date.now();
     const binary2 = await this.resolveBinary();
     const args = [
+      "exec",
       "--model",
       this.model,
       "--dangerously-bypass-approvals-and-sandbox",
       "-c",
-      "approval_policy=never"
+      "approval_policy=never",
+      "-"
     ];
-    logger.info(`Running Codex CLI: codex --model ${this.model} --dangerously-bypass-approvals-and-sandbox ...`);
+    logger.info(`Running Codex CLI: codex exec --model ${this.model} --dangerously-bypass-approvals-and-sandbox ...`);
     try {
       const { stdout, stderr } = await this.runCliWithStdin(binary2, args, prompt, timeoutMs);
       const content = stdout.trim();
@@ -37341,8 +37343,9 @@ var MermaidGenerator = class {
 
 // src/github/feedback.ts
 var FeedbackFilter = class {
-  constructor(client) {
+  constructor(client, providerWeightTracker) {
     this.client = client;
+    this.providerWeightTracker = providerWeightTracker;
   }
   async loadSuppressed(prNumber) {
     const { octokit, owner, repo } = this.client;
@@ -37366,6 +37369,13 @@ var FeedbackFilter = class {
           if (hasThumbsDown) {
             const signature = this.signatureFromComment(comment.path, comment.line, comment.body || "");
             suppressed.add(signature);
+            if (this.providerWeightTracker) {
+              const providerMatch = comment.body?.match(/\*\*Provider:\*\* `([^`]+)`/);
+              const provider = providerMatch?.[1];
+              if (provider) {
+                await this.providerWeightTracker.recordFeedback(provider, "\u{1F44E}");
+              }
+            }
           }
         } catch (error2) {
           logger.warn(`Failed to load reactions for comment ${comment.id}`, error2);
@@ -40203,11 +40213,11 @@ async function createComponents(config, githubToken) {
   const impactAnalyzer = new ImpactAnalyzer();
   const evidenceScorer = new EvidenceScorer();
   const mermaidGenerator = new MermaidGenerator();
-  const feedbackFilter = new FeedbackFilter(githubClient);
   const cacheStorage = new CacheStorage();
   const repoKey = `${githubClient.owner}/${githubClient.repo}`;
   const suppressionTracker = new SuppressionTracker(cacheStorage, repoKey);
   const providerWeightTracker = new ProviderWeightTracker(cacheStorage);
+  const feedbackFilter = new FeedbackFilter(githubClient, providerWeightTracker);
   const acceptanceDetector = new AcceptanceDetector();
   const feedbackTracker = config.learningEnabled ? new FeedbackTracker(cacheStorage, config.learningMinFeedbackCount) : void 0;
   const promptEnricher = new PromptEnricher(suppressionTracker, feedbackTracker);
@@ -41331,6 +41341,7 @@ var openPattern = /\\{/g;
 var closePattern = /\\}/g;
 var commaPattern = /\\,/g;
 var periodPattern = /\\./g;
+var EXPANSION_MAX = 1e5;
 function numeric(str2) {
   return !isNaN(str2) ? parseInt(str2, 10) : str2.charCodeAt(0);
 }
@@ -41361,14 +41372,15 @@ function parseCommaParts(str2) {
   parts.push.apply(parts, p);
   return parts;
 }
-function expand(str2) {
+function expand(str2, options = {}) {
   if (!str2) {
     return [];
   }
+  const { max = EXPANSION_MAX } = options;
   if (str2.slice(0, 2) === "{}") {
     str2 = "\\{\\}" + str2.slice(2);
   }
-  return expand_(escapeBraces(str2), true).map(unescapeBraces);
+  return expand_(escapeBraces(str2), max, true).map(unescapeBraces);
 }
 function embrace(str2) {
   return "{" + str2 + "}";
@@ -41382,15 +41394,15 @@ function lte(i, y) {
 function gte(i, y) {
   return i >= y;
 }
-function expand_(str2, isTop) {
+function expand_(str2, max, isTop) {
   const expansions = [];
   const m = balanced("{", "}", str2);
   if (!m)
     return [str2];
   const pre = m.pre;
-  const post = m.post.length ? expand_(m.post, false) : [""];
+  const post = m.post.length ? expand_(m.post, max, false) : [""];
   if (/\$$/.test(m.pre)) {
-    for (let k = 0; k < post.length; k++) {
+    for (let k = 0; k < post.length && k < max; k++) {
       const expansion = pre + "{" + m.body + "}" + post[k];
       expansions.push(expansion);
     }
@@ -41402,7 +41414,7 @@ function expand_(str2, isTop) {
     if (!isSequence && !isOptions) {
       if (m.post.match(/,(?!,).*\}/)) {
         str2 = m.pre + "{" + m.body + escClose + m.post;
-        return expand_(str2);
+        return expand_(str2, max, true);
       }
       return [str2];
     }
@@ -41412,7 +41424,7 @@ function expand_(str2, isTop) {
     } else {
       n = parseCommaParts(m.body);
       if (n.length === 1 && n[0] !== void 0) {
-        n = expand_(n[0], false).map(embrace);
+        n = expand_(n[0], max, false).map(embrace);
         if (n.length === 1) {
           return post.map((p) => m.pre + n[0] + p);
         }
@@ -41458,11 +41470,11 @@ function expand_(str2, isTop) {
     } else {
       N = [];
       for (let j = 0; j < n.length; j++) {
-        N.push.apply(N, expand_(n[j], false));
+        N.push.apply(N, expand_(n[j], max, false));
       }
     }
     for (let j = 0; j < N.length; j++) {
-      for (let k = 0; k < post.length; k++) {
+      for (let k = 0; k < post.length && expansions.length < max; k++) {
         const expansion = pre + N[j] + post[k];
         if (!isTop || isSequence || expansion) {
           expansions.push(expansion);
@@ -44240,6 +44252,9 @@ function syncEnvFromInputs() {
     "PROVIDER_MAX_PARALLEL",
     "QUIET_MODE_ENABLED",
     "QUIET_MIN_CONFIDENCE",
+    "QUIET_USE_LEARNING",
+    "LEARNING_ENABLED",
+    "LEARNING_MIN_FEEDBACK_COUNT",
     "DIFF_MAX_BYTES",
     "RUN_TIMEOUT_SECONDS",
     "BUDGET_MAX_USD",
@@ -44250,6 +44265,21 @@ function syncEnvFromInputs() {
     "ENABLE_AI_DETECTION",
     "INCREMENTAL_ENABLED",
     "INCREMENTAL_CACHE_TTL_DAYS",
+    "GRAPH_ENABLED",
+    "GRAPH_CACHE_ENABLED",
+    "GRAPH_MAX_DEPTH",
+    "GRAPH_TIMEOUT_SECONDS",
+    "SKIP_TRIVIAL_CHANGES",
+    "SKIP_DEPENDENCY_UPDATES",
+    "SKIP_DOCUMENTATION_ONLY",
+    "SKIP_FORMATTING_ONLY",
+    "SKIP_TEST_FIXTURES",
+    "SKIP_CONFIG_FILES",
+    "SKIP_BUILD_ARTIFACTS",
+    "TRIVIAL_PATTERNS",
+    "PATH_BASED_INTENSITY",
+    "PATH_INTENSITY_PATTERNS",
+    "PATH_DEFAULT_INTENSITY",
     "REPORT_BASENAME",
     "DRY_RUN"
   ];

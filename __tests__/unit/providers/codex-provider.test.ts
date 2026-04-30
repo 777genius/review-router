@@ -212,4 +212,14 @@ describe('CodexProvider', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('sanitizes absolute workspace paths from model output', () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const content = (provider as any).sanitizeReviewContent(
+      '{"message":"See [src/ratePolicies.js](/home/runner/work/repo/repo/src/ratePolicies.js)"}'
+    );
+
+    expect(content).toContain('[src/ratePolicies.js](src/ratePolicies.js)');
+    expect(content).not.toContain('/home/runner/work/');
+  });
 });

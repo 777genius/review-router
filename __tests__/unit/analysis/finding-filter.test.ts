@@ -34,7 +34,7 @@ describe('FindingFilter', () => {
           file: 'src/passwordReset.js',
           line: 4,
           severity: 'major',
-          title: 'Wrong throttle policy',
+          title: 'Password reset throttling now uses the wrong policy',
           message:
             '`canRequestPasswordReset` now reads the `marketingEmailPreview` policy instead of the password reset policy, so reset requests can be incorrectly over-allowed.',
         },

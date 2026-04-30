@@ -119,7 +119,7 @@ export class CodexProvider extends Provider {
           eventAudit: this.shouldUseEventAudit(),
         }
       );
-      const content = (lastMessage || stdout).trim();
+      const content = this.sanitizeReviewContent((lastMessage || stdout).trim());
       const durationSeconds = (Date.now() - started) / 1000;
       logger.info(
         `Codex CLI output for ${this.name}: final=${content.length} bytes, stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
@@ -351,6 +351,7 @@ export class CodexProvider extends Provider {
       'Inspect at least one directly related file when available, such as imports, called modules, schema/config files, tests, or callers.',
       'Do not produce the final JSON until this context exploration is complete.',
       'When a finding depends on related context, cite the concrete related file evidence in the message.',
+      'Use repository-relative paths only. Do not include absolute local filesystem paths in findings.',
       'Do not read environment variables, secret files, ~/.codex, git credentials, or GitHub token files.',
       'Do not run package installation, tests, builds, formatters, network commands, or commands that write files.',
       'Only report real bugs, data loss, crashes, or security vulnerabilities on changed lines from the diff.',
@@ -444,6 +445,14 @@ export class CodexProvider extends Provider {
     }
 
     return env;
+  }
+
+  private sanitizeReviewContent(content: string): string {
+    const cwd = process.cwd().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return content
+      .replace(new RegExp(`${cwd}/?`, 'g'), '')
+      .replace(/\/home\/runner\/work\/[^/\s")]+\/[^/\s")]+\//g, '')
+      .replace(/\/private\/tmp\/[^/\s")]+\//g, '');
   }
 
   private async buildRepositoryContextSeed(prompt: string): Promise<string> {

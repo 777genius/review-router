@@ -12793,7 +12793,7 @@ var CodexProvider = class extends Provider {
           eventAudit: this.shouldUseEventAudit()
         }
       );
-      const content = (lastMessage || stdout).trim();
+      const content = this.sanitizeReviewContent((lastMessage || stdout).trim());
       const durationSeconds = (Date.now() - started) / 1e3;
       logger.info(
         `Codex CLI output for ${this.name}: final=${content.length} bytes, stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
@@ -12974,6 +12974,7 @@ var CodexProvider = class extends Provider {
       "Inspect at least one directly related file when available, such as imports, called modules, schema/config files, tests, or callers.",
       "Do not produce the final JSON until this context exploration is complete.",
       "When a finding depends on related context, cite the concrete related file evidence in the message.",
+      "Use repository-relative paths only. Do not include absolute local filesystem paths in findings.",
       "Do not read environment variables, secret files, ~/.codex, git credentials, or GitHub token files.",
       "Do not run package installation, tests, builds, formatters, network commands, or commands that write files.",
       "Only report real bugs, data loss, crashes, or security vulnerabilities on changed lines from the diff.",
@@ -13062,6 +13063,10 @@ var CodexProvider = class extends Provider {
       }
     }
     return env;
+  }
+  sanitizeReviewContent(content) {
+    const cwd = process.cwd().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return content.replace(new RegExp(`${cwd}/?`, "g"), "").replace(/\/home\/runner\/work\/[^/\s")]+\/[^/\s")]+\//g, "").replace(/\/private\/tmp\/[^/\s")]+\//g, "");
   }
   async buildRepositoryContextSeed(prompt) {
     const changedFiles = this.extractChangedFiles(prompt).filter((file) => this.isContextReadableFile(file)).slice(0, 5);
@@ -21575,7 +21580,7 @@ var FindingFilter = class {
   }
   isTrueSecurityIssue(finding) {
     const text = (finding.title + " " + finding.message).toLowerCase();
-    return text.includes("sql injection") || text.includes("xss") || text.includes("cross-site scripting") || text.includes("command injection") || text.includes("path traversal") || text.includes("remote code execution") || text.includes("arbitrary code") || text.includes("prototype pollution") || text.includes("wrong throttle") || text.includes("rate limit bypass") || text.includes("password reset") && (text.includes("rate limit") || text.includes("throttle") || text.includes("lockout")) || (text.includes("authorization") || text.includes("permission") || text.includes("privilege") || text.includes("access control")) && (text.includes("bypass") || text.includes("unauthorized") || text.includes("allows"));
+    return text.includes("sql injection") || text.includes("xss") || text.includes("cross-site scripting") || text.includes("command injection") || text.includes("path traversal") || text.includes("remote code execution") || text.includes("arbitrary code") || text.includes("prototype pollution") || text.includes("wrong throttle") || text.includes("wrong throttling") || text.includes("rate limit bypass") || text.includes("password reset") && (text.includes("rate limit") || text.includes("throttl") || text.includes("lockout")) || (text.includes("authorization") || text.includes("permission") || text.includes("privilege") || text.includes("access control")) && (text.includes("bypass") || text.includes("unauthorized") || text.includes("allows"));
   }
   isTestCodeQualityIssue(finding) {
     const text = (finding.title + " " + finding.message).toLowerCase();

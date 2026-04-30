@@ -16530,94 +16530,6 @@ var PullRequestLoader = class {
   }
 };
 
-// src/utils/code-snippet.ts
-function extractCodeSnippet(content, targetLine, contextLines = 3) {
-  if (!content || targetLine <= 0) {
-    return null;
-  }
-  const lines = content.split("\n");
-  if (targetLine > lines.length) {
-    return null;
-  }
-  const startIdx = Math.max(0, targetLine - 1 - contextLines);
-  const endIdx = Math.min(lines.length, targetLine + contextLines);
-  const snippetLines = lines.slice(startIdx, endIdx);
-  return {
-    startLine: startIdx + 1,
-    // Convert to 1-indexed
-    endLine: endIdx,
-    lines: snippetLines,
-    highlightLine: targetLine
-  };
-}
-function formatSnippet(snippet2, language = "", showLineNumbers = true) {
-  if (!snippet2 || snippet2.lines.length === 0) {
-    return "";
-  }
-  const { startLine, lines, highlightLine } = snippet2;
-  const formattedLines = lines.map((line, idx) => {
-    const lineNum = startLine + idx;
-    const isHighlight = lineNum === highlightLine;
-    const marker = isHighlight ? "\u2192" : " ";
-    if (showLineNumbers) {
-      const paddedNum = String(lineNum).padStart(4, " ");
-      return `${paddedNum}${marker} ${line}`;
-    } else {
-      return `${marker} ${line}`;
-    }
-  });
-  return `\`\`\`${language}
-${formattedLines.join("\n")}
-\`\`\``;
-}
-function detectLanguage2(filePath) {
-  const ext2 = filePath.split(".").pop()?.toLowerCase() || "";
-  const languageMap = {
-    "ts": "typescript",
-    "tsx": "tsx",
-    "js": "javascript",
-    "jsx": "jsx",
-    "py": "python",
-    "java": "java",
-    "go": "go",
-    "rs": "rust",
-    "c": "c",
-    "cpp": "cpp",
-    "h": "c",
-    "hpp": "cpp",
-    "cs": "csharp",
-    "rb": "ruby",
-    "php": "php",
-    "swift": "swift",
-    "kt": "kotlin",
-    "scala": "scala",
-    "sh": "bash",
-    "bash": "bash",
-    "zsh": "bash",
-    "yml": "yaml",
-    "yaml": "yaml",
-    "json": "json",
-    "xml": "xml",
-    "html": "html",
-    "css": "css",
-    "scss": "scss",
-    "sql": "sql",
-    "md": "markdown"
-  };
-  return languageMap[ext2] || "";
-}
-function createEnhancedCommentBody(originalBody, snippet2, filePath) {
-  if (!snippet2) {
-    return originalBody;
-  }
-  const language = detectLanguage2(filePath);
-  const formattedSnippet = formatSnippet(snippet2, language);
-  return `${originalBody}
-
-**Code Context:**
-${formattedSnippet}`;
-}
-
 // src/utils/suggestion-validator.ts
 function validateSuggestionLine(lineNumber, patch) {
   const lineMap = mapLinesToPositions(patch);
@@ -17087,7 +16999,7 @@ ${content.substring(0, 500)}...`);
     }
     return { valid: true, hasConsensus };
   }
-  async postInline(prNumber, comments, files, headSha) {
+  async postInline(prNumber, comments, files, _headSha) {
     if (comments.length === 0) return;
     const filesWithAdditions = files.filter((f) => !isDeletionOnlyFile(f));
     const filesWithAdditionsSet = new Set(filesWithAdditions.map((f) => f.filename));
@@ -17100,28 +17012,8 @@ ${content.substring(0, 500)}...`);
       if (pathCompare !== 0) return pathCompare;
       return a.line - b.line;
     });
-    const fileContentCache = /* @__PURE__ */ new Map();
-    const enhancedComments = await Promise.all(
-      sortedComments.map(async (c) => {
-        let enhancedBody = c.body;
-        if (headSha) {
-          let fileContent = fileContentCache.get(c.path);
-          if (fileContent === void 0) {
-            fileContent = await this.client.getFileContent(c.path, headSha);
-            fileContentCache.set(c.path, fileContent);
-          }
-          if (fileContent) {
-            const snippet2 = extractCodeSnippet(fileContent, c.line, 3);
-            if (snippet2) {
-              enhancedBody = createEnhancedCommentBody(c.body, snippet2, c.path);
-            }
-          }
-        }
-        return { ...c, body: enhancedBody };
-      })
-    );
     const apiComments = (await Promise.all(
-      enhancedComments.map(async (c) => {
+      sortedComments.map(async (c) => {
         const posMap = positionMaps.get(c.path);
         const position = posMap?.get(c.line);
         if (!position) {

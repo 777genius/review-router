@@ -3,7 +3,6 @@ import { GitHubClient } from './client';
 import { logger } from '../utils/logger';
 import { mapLinesToPositions } from '../utils/diff';
 import { withRetry } from '../utils/retry';
-import { extractCodeSnippet, createEnhancedCommentBody } from '../utils/code-snippet';
 import { isSuggestionLineValid, validateSuggestionRange, isDeletionOnlyFile } from '../utils/suggestion-validator';
 import { validateSyntax, shouldPostSuggestion, calculateConfidence, ConfidenceSignals } from '../validation';
 import { SuppressionTracker } from '../learning/suppression-tracker';
@@ -230,7 +229,7 @@ export class CommentPoster {
     return { valid: true, hasConsensus };
   }
 
-  async postInline(prNumber: number, comments: InlineComment[], files: FileChange[], headSha?: string): Promise<void> {
+  async postInline(prNumber: number, comments: InlineComment[], files: FileChange[], _headSha?: string): Promise<void> {
     if (comments.length === 0) return;
 
     // Filter out deletion-only files (no suggestions possible)
@@ -250,38 +249,8 @@ export class CommentPoster {
       return a.line - b.line;
     });
 
-    // Fetch file contents and enhance comments with code snippets (if headSha provided)
-    const fileContentCache = new Map<string, string | null>();
-
-    const enhancedComments = await Promise.all(
-      sortedComments.map(async (c) => {
-        let enhancedBody = c.body;
-
-        // Try to add code snippet if we have the commit SHA
-        if (headSha) {
-          // Check cache first
-          let fileContent = fileContentCache.get(c.path);
-
-          if (fileContent === undefined) {
-            // Not in cache, fetch it
-            fileContent = await this.client.getFileContent(c.path, headSha);
-            fileContentCache.set(c.path, fileContent);
-          }
-
-          if (fileContent) {
-            const snippet = extractCodeSnippet(fileContent, c.line, 3);
-            if (snippet) {
-              enhancedBody = createEnhancedCommentBody(c.body, snippet, c.path);
-            }
-          }
-        }
-
-        return { ...c, body: enhancedBody };
-      })
-    );
-
     // Convert comments to GitHub API format, filtering out those without valid positions
-    const apiComments = (await Promise.all(enhancedComments
+    const apiComments = (await Promise.all(sortedComments
       .map(async c => {
         const posMap = positionMaps.get(c.path);
         const position = posMap?.get(c.line);

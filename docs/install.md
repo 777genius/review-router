@@ -30,6 +30,8 @@ Use `AI_ROBOT_REVIEW_IDENTITY=app` instead of `actions` if you want comments fro
 
 Recommended team setup. Secrets and variables live at organization level, but only selected repositories can access them.
 
+For smoke tests, use a disposable test organization/repository or `AI_ROBOT_REVIEW_DRY_RUN=1`. Do not test org-level secrets against a production organization unless you intend to store real secrets there.
+
 ```bash
 gh auth refresh -s admin:org
 

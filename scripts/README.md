@@ -41,7 +41,7 @@ Curl installer for adding `ai-robot-review` to a target GitHub repository.
 
 **Usage:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
 ```
 
 See [`docs/install.md`](../docs/install.md) for identity modes, auth modes, and non-interactive setup examples.

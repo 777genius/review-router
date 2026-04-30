@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ai-robot-review installer
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
 
 set -Eeuo pipefail
 
 PRODUCT_NAME="ai-robot-review"
-DEFAULT_ACTION_REF="777genius/multi-provider-code-review@fix/codex-oauth-exec"
+DEFAULT_ACTION_REF="777genius/multi-provider-code-review@main"
 DEFAULT_BRANCH_NAME="ai-robot-review/setup"
 WORKFLOW_PATH=".github/workflows/ai-robot-review.yml"
 CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
@@ -984,7 +984,7 @@ main() {
 
   log ""
   ok "AI Robot Review setup complete"
-  log "Docs: https://github.com/777genius/multi-provider-code-review/blob/fix/codex-oauth-exec/docs/install.md"
+  log "Docs: https://github.com/777genius/multi-provider-code-review/blob/main/docs/install.md"
 }
 
 main "$@"

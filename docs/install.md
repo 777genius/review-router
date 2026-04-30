@@ -3,7 +3,7 @@
 `ai-robot-review` can be installed into any GitHub repository with a single `curl | bash` command. The installer writes a pull request workflow, stores the required repository secrets/variables, and opens a setup PR instead of pushing directly to the default branch.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
 ```
 
 The installer supports macOS and Linux shells first. It requires `gh`, `git`, and `curl`. GitHub App manifest setup uses `python3` when available; without `python3`, the installer prints manual App setup instructions.
@@ -15,7 +15,7 @@ The installer supports macOS and Linux shells first. It requires `gh`, `git`, an
 Fast setup for a single repository. Secrets and variables are stored on that repository only.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
   AI_ROBOT_REVIEW_REPO=owner/repo \
   AI_ROBOT_REVIEW_SECRET_SCOPE=repo \
   AI_ROBOT_REVIEW_IDENTITY=actions \
@@ -35,7 +35,7 @@ For smoke tests, use a disposable test organization/repository or `AI_ROBOT_REVI
 ```bash
 gh auth refresh -s admin:org
 
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
   AI_ROBOT_REVIEW_REPO=your-org/repo-a \
   AI_ROBOT_REVIEW_SECRET_SCOPE=org \
   AI_ROBOT_REVIEW_ORG=your-org \
@@ -62,7 +62,7 @@ The smoke script creates a temporary private repo, installs org-level selected-r
 For teams that do not want to store a personal Codex OAuth session:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
   AI_ROBOT_REVIEW_REPO=owner/repo \
   AI_ROBOT_REVIEW_SECRET_SCOPE=repo \
   AI_ROBOT_REVIEW_IDENTITY=actions \
@@ -92,7 +92,7 @@ Secrets are never deleted automatically. Existing secrets and variables are over
 `org` scope always uses selected repositories. It does not grant access to every repository in the organization.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
   AI_ROBOT_REVIEW_REPO=your-org/repo-a \
   AI_ROBOT_REVIEW_SECRET_SCOPE=org \
   AI_ROBOT_REVIEW_ORG=your-org \
@@ -187,7 +187,7 @@ CODEX_AGENTIC_CONTEXT=true
 ### GitHub App bot + Codex subscription
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
   AI_ROBOT_REVIEW_REPO=owner/repo \
   AI_ROBOT_REVIEW_IDENTITY=app \
   AI_ROBOT_REVIEW_AUTH=codex \
@@ -199,7 +199,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 ### GitHub App bot + Codex subscription using org selected-repo secrets
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
   AI_ROBOT_REVIEW_REPO=your-org/repo-a \
   AI_ROBOT_REVIEW_SECRET_SCOPE=org \
   AI_ROBOT_REVIEW_ORG=your-org \
@@ -214,7 +214,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 ### github-actions[bot] + OpenAI API key
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
   AI_ROBOT_REVIEW_REPO=owner/repo \
   AI_ROBOT_REVIEW_IDENTITY=actions \
   AI_ROBOT_REVIEW_AUTH=openai \
@@ -227,7 +227,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 ### github-actions[bot] + OpenRouter API key
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
   AI_ROBOT_REVIEW_REPO=owner/repo \
   AI_ROBOT_REVIEW_IDENTITY=actions \
   AI_ROBOT_REVIEW_AUTH=openrouter \

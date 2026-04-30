@@ -6,8 +6,8 @@
 set -Eeuo pipefail
 
 ORG="${AI_ROBOT_REVIEW_E2E_ORG:-${1:-}}"
-ACTION_REF="${AI_ROBOT_REVIEW_ACTION_REF:-777genius/multi-provider-code-review@fix/codex-oauth-exec}"
-INSTALL_SCRIPT_URL="${AI_ROBOT_REVIEW_INSTALL_SCRIPT_URL:-https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh}"
+ACTION_REF="${AI_ROBOT_REVIEW_ACTION_REF:-777genius/multi-provider-code-review@main}"
+INSTALL_SCRIPT_URL="${AI_ROBOT_REVIEW_INSTALL_SCRIPT_URL:-https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh}"
 REPO_PREFIX="${AI_ROBOT_REVIEW_E2E_REPO_PREFIX:-ai-robot-review-org-e2e}"
 KEEP_REPO="${AI_ROBOT_REVIEW_E2E_KEEP_REPO:-0}"
 SKIP_DELETE="${AI_ROBOT_REVIEW_E2E_SKIP_DELETE:-0}"

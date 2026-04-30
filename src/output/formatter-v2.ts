@@ -62,6 +62,11 @@ export class MarkdownFormatterV2 {
       if (minor.length > 0) {
         lines.push(this.formatSeveritySection('🔵 Minor', minor, 'minor'));
       }
+    } else if (this.didAllProviderRunsFail(review)) {
+      lines.push('## Review Incomplete');
+      lines.push('');
+      lines.push(`> ${this.generateAllClearMessage(review)}`);
+      lines.push('');
     } else {
       // Only emit one “clear” block; avoid repeating the no-providers message
       const allClearMessage = this.generateAllClearMessage(review, {
@@ -124,6 +129,9 @@ export class MarkdownFormatterV2 {
     const { metrics, findings } = review;
 
     if (findings.length === 0) {
+      if (this.didAllProviderRunsFail(review)) {
+        return 'LLM review did not complete because all configured providers failed. Static checks did not find issues. See Performance Metrics for the provider error.';
+      }
       if (metrics.providersSuccess === 0) {
         return 'LLM review skipped: no healthy providers were available. Static checks did not find issues.';
       }
@@ -165,6 +173,9 @@ export class MarkdownFormatterV2 {
     options: { suppressRepeat?: boolean } = {}
   ): string {
     const { metrics } = review;
+    if (this.didAllProviderRunsFail(review)) {
+      return 'No issues were found by static checks, but LLM review did not complete because all configured providers failed.';
+    }
     if (metrics.providersSuccess === 0) {
       return options.suppressRepeat
         ? 'LLM analysis skipped because no providers were healthy.'
@@ -371,6 +382,14 @@ export class MarkdownFormatterV2 {
     );
 
     return review.metrics.totalCost === 0 && hasOAuthCliUsage;
+  }
+
+  private didAllProviderRunsFail(review: Review): boolean {
+    return (
+      review.metrics.providersUsed > 0 &&
+      review.metrics.providersSuccess === 0 &&
+      review.metrics.providersFailed > 0
+    );
   }
 
   private formatAdvancedSections(review: Review): string {

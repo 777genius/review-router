@@ -323,6 +323,49 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('| Cache | Hit |');
     });
 
+    it('shows incomplete review state when all providers fail', () => {
+      const review = createMockReview({
+        metrics: {
+          totalFindings: 0,
+          critical: 0,
+          major: 0,
+          minor: 0,
+          providersUsed: 1,
+          providersSuccess: 0,
+          providersFailed: 1,
+          totalTokens: 0,
+          totalCost: 0,
+          durationSeconds: 4.2,
+        },
+        runDetails: {
+          providers: [
+            {
+              name: 'codex/gpt-5.5',
+              status: 'error',
+              durationSeconds: 4.2,
+              errorMessage:
+                'Codex CLI returned invalid review JSON: response was not valid JSON',
+            },
+          ],
+          totalCost: 0,
+          totalTokens: 0,
+          durationSeconds: 4.2,
+          cacheHit: false,
+          synthesisModel: 'codex/gpt-5.5',
+          providerPoolSize: 1,
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('## Review Incomplete');
+      expect(output).not.toContain('## All Clear!');
+      expect(output).toContain('LLM review did not complete');
+      expect(output).toContain(
+        'Codex CLI returned invalid review JSON: response was not valid JSON'
+      );
+    });
+
     it('should format provider performance details', () => {
       const review = createMockReview({
         runDetails: {

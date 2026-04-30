@@ -12830,15 +12830,17 @@ var CodexProvider = class extends Provider {
           `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`
         );
       }
+      const findings = this.parseFindingsStrict(content);
       return {
         content,
         durationSeconds,
         usage: this.estimateUsage(prompt, content),
-        findings: this.extractFindings(content)
+        findings
       };
     } catch (error2) {
-      logger.error(`Codex provider failed: ${this.name}`, error2);
-      throw error2;
+      const normalized = this.normalizeCodexError(error2);
+      logger.error(`Codex provider failed: ${this.name}`, normalized);
+      throw normalized;
     }
   }
   estimateUsage(prompt, content) {
@@ -12944,7 +12946,7 @@ var CodexProvider = class extends Provider {
             if (code !== 0) {
               reject(
                 new Error(
-                  `Codex CLI exited with code ${code}: ${this.formatCliError(stderr2, stdout2)}`
+                  `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr2, stdout2)}`
                 )
               );
             } else {
@@ -13286,7 +13288,7 @@ var CodexProvider = class extends Provider {
     ).replace(/authorization_uri="[^"]+"/gi, 'authorization_uri="[redacted]"').replace(
       /authorization_uri=\\?"[^"\\]*(?:\\.[^"\\]*)*\\?"/gi,
       'authorization_uri="[redacted]"'
-    ).replace(/https?:\/\/[^\s",)]+/gi, "[redacted-url]").replace(/session id:\s*[a-f0-9-]+/gi, "session id: [redacted]").replace(/thread\s+[a-f0-9-]{8,}/gi, "thread [redacted]");
+    ).replace(/https?:\/\/[^\s",)]+/gi, "[redacted-url]").replace(/sk-[A-Za-z0-9_-]{20,}/g, "[redacted-openai-key]").replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/"access_token"\s*:\s*"[^"]+"/gi, '"access_token":"[redacted]"').replace(/"refresh_token"\s*:\s*"[^"]+"/gi, '"refresh_token":"[redacted]"').replace(/session id:\s*[a-f0-9-]+/gi, "session id: [redacted]").replace(/thread\s+[a-f0-9-]{8,}/gi, "thread [redacted]");
     const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter(
       (line) => !line.startsWith("user") && !line.includes("Respond with exactly:")
     );
@@ -13304,6 +13306,16 @@ var CodexProvider = class extends Provider {
   }
   truncateCliError(message) {
     return message.length > 800 ? `${message.slice(0, 800)}...` : message;
+  }
+  normalizeCodexError(error2) {
+    const err = error2 instanceof Error ? error2 : new Error(String(error2));
+    const message = this.truncateCliError(
+      this.sanitizeReviewContent(this.formatCliError(err.message, ""))
+    );
+    const normalized = new Error(message || "Codex CLI failed");
+    normalized.name = err.name || "CodexProviderError";
+    normalized.stack = err.stack;
+    return normalized;
   }
   async resolveBinary() {
     if (await this.canRun("codex", ["--version"])) {
@@ -13323,15 +13335,7 @@ var CodexProvider = class extends Provider {
   }
   extractFindings(content) {
     try {
-      const match2 = content.match(/```json\s*([\s\S]*?)```/i);
-      if (match2) {
-        const parsed2 = JSON.parse(match2[1]);
-        if (Array.isArray(parsed2)) return parsed2;
-        return parsed2.findings || [];
-      }
-      const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) return parsed;
-      return parsed.findings || [];
+      return this.parseFindingsStrict(content);
     } catch (error2) {
       logger.debug(
         "Failed to parse findings from Codex response",
@@ -13339,6 +13343,52 @@ var CodexProvider = class extends Provider {
       );
     }
     return [];
+  }
+  parseFindingsStrict(content) {
+    const parsed = this.parseReviewJson(content);
+    const findings = Array.isArray(parsed) ? parsed : parsed?.findings;
+    if (!Array.isArray(findings)) {
+      throw new Error(
+        "Codex CLI returned invalid review JSON: expected an object with a findings array"
+      );
+    }
+    return findings.map((item, index) => {
+      if (!item || typeof item !== "object") {
+        throw new Error(
+          `Codex CLI returned invalid review JSON: findings[${index}] must be an object`
+        );
+      }
+      const raw = item;
+      const severity = raw.severity;
+      if (typeof raw.file !== "string" || !raw.file || !Number.isInteger(raw.line) || !["critical", "major", "minor"].includes(String(severity)) || typeof raw.title !== "string" || !raw.title || typeof raw.message !== "string" || !raw.message) {
+        throw new Error(
+          `Codex CLI returned invalid review JSON: findings[${index}] is missing required file, line, severity, title, or message`
+        );
+      }
+      const finding = {
+        file: raw.file,
+        line: raw.line,
+        severity,
+        title: raw.title,
+        message: raw.message
+      };
+      if (typeof raw.suggestion === "string" && raw.suggestion.trim()) {
+        finding.suggestion = raw.suggestion;
+      }
+      return finding;
+    });
+  }
+  parseReviewJson(content) {
+    const trimmed = content.trim();
+    const match2 = trimmed.match(/```json\s*([\s\S]*?)```/i);
+    const source = match2?.[1] ?? trimmed;
+    try {
+      return JSON.parse(source);
+    } catch {
+      throw new Error(
+        "Codex CLI returned invalid review JSON: response was not valid JSON"
+      );
+    }
   }
 };
 
@@ -18386,6 +18436,11 @@ var MarkdownFormatterV2 = class {
       if (minor.length > 0) {
         lines.push(this.formatSeveritySection("\u{1F535} Minor", minor, "minor"));
       }
+    } else if (this.didAllProviderRunsFail(review)) {
+      lines.push("## Review Incomplete");
+      lines.push("");
+      lines.push(`> ${this.generateAllClearMessage(review)}`);
+      lines.push("");
     } else {
       const allClearMessage = this.generateAllClearMessage(review, {
         suppressRepeat: true
@@ -18427,6 +18482,9 @@ var MarkdownFormatterV2 = class {
   generatePRSummary(review) {
     const { metrics, findings } = review;
     if (findings.length === 0) {
+      if (this.didAllProviderRunsFail(review)) {
+        return "LLM review did not complete because all configured providers failed. Static checks did not find issues. See Performance Metrics for the provider error.";
+      }
       if (metrics.providersSuccess === 0) {
         return "LLM review skipped: no healthy providers were available. Static checks did not find issues.";
       }
@@ -18456,6 +18514,9 @@ var MarkdownFormatterV2 = class {
   }
   generateAllClearMessage(review, options = {}) {
     const { metrics } = review;
+    if (this.didAllProviderRunsFail(review)) {
+      return "No issues were found by static checks, but LLM review did not complete because all configured providers failed.";
+    }
     if (metrics.providersSuccess === 0) {
       return options.suppressRepeat ? "LLM analysis skipped because no providers were healthy." : "LLM analysis skipped because no providers were healthy. Static checks found no issues.";
     }
@@ -18597,6 +18658,9 @@ var MarkdownFormatterV2 = class {
       (p) => /^(codex|claude|gemini|opencode)\//.test(p.name)
     );
     return review.metrics.totalCost === 0 && hasOAuthCliUsage;
+  }
+  didAllProviderRunsFail(review) {
+    return review.metrics.providersUsed > 0 && review.metrics.providersSuccess === 0 && review.metrics.providersFailed > 0;
   }
   formatAdvancedSections(review) {
     const lines = [];

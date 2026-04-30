@@ -202,6 +202,60 @@ describe('ReviewOrchestrator integration (offline)', () => {
     expect((components.commentPoster as unknown as StubCommentPoster).postedSummary).toBeTruthy();
   });
 
+  it('filters duplicate inline comments before posting', async () => {
+    class BlockingFeedbackFilter extends StubFeedbackFilter {
+      async loadReviewCommentState(): Promise<{ suppressed: Set<string>; alreadyPosted: Set<string> }> {
+        return {
+          suppressed: new Set(),
+          alreadyPosted: new Set(['existing-finding']),
+        };
+      }
+
+      shouldPost(): boolean {
+        return false;
+      }
+    }
+
+    const commentPoster = new StubCommentPoster();
+    const components: ReviewComponents = {
+      config,
+      providerRegistry: new StubProviderRegistry() as any,
+      promptBuilder: new PromptBuilder(config),
+      llmExecutor: new StubLLMExecutor() as any,
+      deduplicator: new Deduplicator(),
+      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      synthesis: new SynthesisEngine(config),
+      testCoverage: new TestCoverageAnalyzer(),
+      astAnalyzer: new ASTAnalyzer(),
+      cache: new NoopCache(),
+      incrementalReviewer: {
+        shouldUseIncremental: async () => false,
+        getLastReview: async () => null,
+        saveReview: async () => {},
+        getChangedFilesSince: async () => [],
+        mergeFindings: (prev: any, curr: any) => curr,
+        generateIncrementalSummary: () => '',
+      } as any,
+      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      security: new SecurityScanner(),
+      rules: new RulesEngine([]),
+      prLoader: new StubPRLoader() as unknown as PullRequestLoader,
+      commentPoster: commentPoster as unknown as CommentPoster,
+      formatter: new MarkdownFormatter(),
+      contextRetriever: new ContextRetriever(),
+      impactAnalyzer: new ImpactAnalyzer(),
+      evidenceScorer: new EvidenceScorer(),
+      mermaidGenerator: new MermaidGenerator(),
+      feedbackFilter: new BlockingFeedbackFilter() as unknown as FeedbackFilter,
+    };
+
+    const orchestrator = new ReviewOrchestrator(components);
+    const review = await orchestrator.execute(1);
+
+    expect(review?.inlineComments.length).toBe(1);
+    expect(commentPoster.postedInline).toEqual([]);
+  });
+
   it('passes built code graph context into batch prompt builder when graph is enabled', async () => {
     class CapturingLLMExecutor {
       prompts: string[] = [];

@@ -56,6 +56,9 @@ describe('MetricsCollector', () => {
     });
 
     it('should limit stored metrics to max count', async () => {
+      const storage = new CacheStorage(testCacheDir);
+      collector = new MetricsCollector(storage, { analyticsMaxReviews: 3 });
+
       // Test that old metrics are pruned when max is reached
       const review = {
         findings: [],
@@ -74,13 +77,14 @@ describe('MetricsCollector', () => {
       } as any;
 
       // Record more than max
-      for (let i = 0; i < 1100; i++) {
+      for (let i = 0; i < 5; i++) {
         await collector.recordReview(review, i);
       }
 
       const metrics = await collector.getMetrics();
-      expect(metrics.length).toBeLessThanOrEqual(1000);
-    }, 30000); // Increase timeout to 30 seconds for this test
+      expect(metrics).toHaveLength(3);
+      expect(metrics.map(metric => metric.prNumber)).toEqual([2, 3, 4]);
+    });
   });
 
   describe('getMetrics', () => {

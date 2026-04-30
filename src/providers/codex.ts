@@ -129,15 +129,18 @@ export class CodexProvider extends Provider {
           `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
         );
       }
+      const findings = this.parseFindingsStrict(content);
+
       return {
         content,
         durationSeconds,
         usage: this.estimateUsage(prompt, content),
-        findings: this.extractFindings(content),
+        findings,
       };
     } catch (error) {
-      logger.error(`Codex provider failed: ${this.name}`, error as Error);
-      throw error;
+      const normalized = this.normalizeCodexError(error);
+      logger.error(`Codex provider failed: ${this.name}`, normalized);
+      throw normalized;
     }
   }
 
@@ -282,7 +285,7 @@ export class CodexProvider extends Provider {
             if (code !== 0) {
               reject(
                 new Error(
-                  `Codex CLI exited with code ${code}: ${this.formatCliError(stderr, stdout)}`
+                  `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr, stdout)}`
                 )
               );
             } else {
@@ -713,6 +716,11 @@ export class CodexProvider extends Provider {
         'authorization_uri="[redacted]"'
       )
       .replace(/https?:\/\/[^\s",)]+/gi, '[redacted-url]')
+      .replace(/sk-[A-Za-z0-9_-]{20,}/g, '[redacted-openai-key]')
+      .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, '[redacted-github-token]')
+      .replace(/github_pat_[A-Za-z0-9_]+/g, '[redacted-github-token]')
+      .replace(/"access_token"\s*:\s*"[^"]+"/gi, '"access_token":"[redacted]"')
+      .replace(/"refresh_token"\s*:\s*"[^"]+"/gi, '"refresh_token":"[redacted]"')
       .replace(/session id:\s*[a-f0-9-]+/gi, 'session id: [redacted]')
       .replace(/thread\s+[a-f0-9-]{8,}/gi, 'thread [redacted]');
 
@@ -746,6 +754,17 @@ export class CodexProvider extends Provider {
     return message.length > 800 ? `${message.slice(0, 800)}...` : message;
   }
 
+  private normalizeCodexError(error: unknown): Error {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const message = this.truncateCliError(
+      this.sanitizeReviewContent(this.formatCliError(err.message, ''))
+    );
+    const normalized = new Error(message || 'Codex CLI failed');
+    normalized.name = err.name || 'CodexProviderError';
+    normalized.stack = err.stack;
+    return normalized;
+  }
+
   private async resolveBinary(): Promise<string> {
     // Try codex command directly
     if (await this.canRun('codex', ['--version'])) {
@@ -768,18 +787,7 @@ export class CodexProvider extends Provider {
 
   private extractFindings(content: string): Finding[] {
     try {
-      // Try markdown code block first
-      const match = content.match(/```json\s*([\s\S]*?)```/i);
-      if (match) {
-        const parsed = JSON.parse(match[1]);
-        if (Array.isArray(parsed)) return parsed;
-        return parsed.findings || [];
-      }
-
-      // Fallback: try parsing as plain JSON
-      const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) return parsed;
-      return parsed.findings || [];
+      return this.parseFindingsStrict(content);
     } catch (error) {
       logger.debug(
         'Failed to parse findings from Codex response',
@@ -787,5 +795,72 @@ export class CodexProvider extends Provider {
       );
     }
     return [];
+  }
+
+  private parseFindingsStrict(content: string): Finding[] {
+    const parsed = this.parseReviewJson(content);
+    const findings = Array.isArray(parsed)
+      ? parsed
+      : (parsed as { findings?: unknown })?.findings;
+
+    if (!Array.isArray(findings)) {
+      throw new Error(
+        'Codex CLI returned invalid review JSON: expected an object with a findings array'
+      );
+    }
+
+    return findings.map((item, index) => {
+      if (!item || typeof item !== 'object') {
+        throw new Error(
+          `Codex CLI returned invalid review JSON: findings[${index}] must be an object`
+        );
+      }
+
+      const raw = item as Record<string, unknown>;
+      const severity = raw.severity;
+
+      if (
+        typeof raw.file !== 'string' ||
+        !raw.file ||
+        !Number.isInteger(raw.line) ||
+        !['critical', 'major', 'minor'].includes(String(severity)) ||
+        typeof raw.title !== 'string' ||
+        !raw.title ||
+        typeof raw.message !== 'string' ||
+        !raw.message
+      ) {
+        throw new Error(
+          `Codex CLI returned invalid review JSON: findings[${index}] is missing required file, line, severity, title, or message`
+        );
+      }
+
+      const finding: Finding = {
+        file: raw.file,
+        line: raw.line as number,
+        severity: severity as Finding['severity'],
+        title: raw.title,
+        message: raw.message,
+      };
+
+      if (typeof raw.suggestion === 'string' && raw.suggestion.trim()) {
+        finding.suggestion = raw.suggestion;
+      }
+
+      return finding;
+    });
+  }
+
+  private parseReviewJson(content: string): unknown {
+    const trimmed = content.trim();
+    const match = trimmed.match(/```json\s*([\s\S]*?)```/i);
+    const source = match?.[1] ?? trimmed;
+
+    try {
+      return JSON.parse(source);
+    } catch {
+      throw new Error(
+        'Codex CLI returned invalid review JSON: response was not valid JSON'
+      );
+    }
   }
 }

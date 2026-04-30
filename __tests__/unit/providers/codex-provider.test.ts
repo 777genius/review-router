@@ -11,7 +11,7 @@ jest.mock('child_process', () => ({
 
 const spawnMock = spawn as unknown as jest.Mock;
 
-function createMockProcess(onStart?: () => void): any {
+function createMockProcess(onStart?: (proc: any) => void, closeCode = 0): any {
   const proc = new EventEmitter() as any;
   proc.stdout = new EventEmitter();
   proc.stderr = new EventEmitter();
@@ -19,8 +19,8 @@ function createMockProcess(onStart?: () => void): any {
   proc.pid = 12345;
 
   process.nextTick(() => {
-    onStart?.();
-    proc.emit('close', 0);
+    onStart?.(proc);
+    proc.emit('close', closeCode);
   });
 
   return proc;
@@ -103,8 +103,8 @@ describe('CodexProvider', () => {
       file: 'src/app.ts',
       line: 42,
       severity: 'major',
-      suggestion: null,
     });
+    expect(findings[0].suggestion).toBeUndefined();
   });
 
   it('reads final review content from --output-last-message instead of stdout', async () => {
@@ -136,6 +136,87 @@ describe('CodexProvider', () => {
     expect(execCall?.[1]).not.toContain(
       '--dangerously-bypass-approvals-and-sandbox'
     );
+  });
+
+  it('fails review when Codex returns invalid JSON instead of silently passing', async () => {
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess(() => {
+        const outputIndex = args.indexOf('--output-last-message');
+        fs.writeFileSync(args[outputIndex + 1], 'not json');
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: false,
+    });
+
+    await expect(provider.review('review prompt', 1000)).rejects.toThrow(
+      'Codex CLI returned invalid review JSON'
+    );
+  });
+
+  it('sanitizes Codex CLI failure messages before surfacing them', async () => {
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess(
+        (proc) => {
+          proc.stderr.emit(
+            'data',
+            [
+              'invalid_request_error: auth failed',
+              'https://auth.openai.com/device?user_code=secret',
+              'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+              '"refresh_token":"refresh-secret"',
+            ].join('\n')
+          );
+        },
+        1
+      );
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: false,
+    });
+
+    let thrown: Error | undefined;
+    try {
+      await provider.review('review prompt', 1000);
+    } catch (error) {
+      thrown = error as Error;
+    }
+
+    expect(thrown?.message).toContain('Codex CLI failed with exit code 1');
+    expect(thrown?.message).not.toContain('auth.openai.com');
+    expect(thrown?.message).not.toContain(
+      'sk-proj-abcdefghijklmnopqrstuvwxyz123456'
+    );
+    expect(thrown?.message).not.toContain('refresh-secret');
+  });
+
+  it('redacts secrets from raw Codex CLI error text', () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const formatted = (provider as any).formatCliError(
+      [
+        'https://auth.openai.com/device?user_code=secret',
+        'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+        '"refresh_token":"refresh-secret"',
+      ].join('\n'),
+      ''
+    );
+
+    expect(formatted).toContain('[redacted-url]');
+    expect(formatted).toContain('[redacted-openai-key]');
+    expect(formatted).toContain('"refresh_token":"[redacted]"');
+    expect(formatted).not.toContain('auth.openai.com');
+    expect(formatted).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
+    expect(formatted).not.toContain('refresh-secret');
   });
 
   it('passes only sanitized env to review spawn', async () => {

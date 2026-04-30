@@ -3,6 +3,7 @@
  */
 
 export type Severity = 'critical' | 'major' | 'minor';
+export type FailOnSeverity = Severity | 'off';
 
 /**
  * Configuration for multi-provider code review
@@ -132,6 +133,8 @@ export interface ReviewConfig {
   consensusRequiredForCritical?: boolean;
   consensusMinAgreement?: number;
   suggestionSyntaxValidation?: boolean;
+  updatePrDescription?: boolean;
+  failOnSeverity?: FailOnSeverity;
 
   dryRun: boolean;
 }

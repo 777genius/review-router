@@ -76,8 +76,7 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('🔴 **1 Critical**');
       expect(output).toContain('🟡 **1 Major**');
       expect(output).toContain('🔵 1 Minor');
-      expect(output).toContain('10.5s');
-      expect(output).toContain('$0.0100');
+      expect(output).toContain('<sub>10.5s • $0.0100</sub>');
     });
 
     it('should format critical findings with emoji', () => {
@@ -295,6 +294,7 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('OAuth subscription');
+      expect(output).toContain('<sub>5.5s • OAuth subscription</sub>');
       expect(output).not.toContain('$0.0000');
       expect(output).not.toContain('| Cost |');
       expect(output).not.toContain('| Tokens | 0 |');
@@ -524,6 +524,7 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('Powered by AI Robot Review');
+      expect(output).toContain('<sub>5.5s • $0.0050</sub>');
       expect(output).not.toContain('react 👎');
     });
 

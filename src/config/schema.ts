@@ -113,6 +113,8 @@ export const ReviewConfigSchema = z.object({
   consensus_required_for_critical: z.boolean().optional(),
   consensus_min_agreement: z.number().int().min(2).optional(),
   suggestion_syntax_validation: z.boolean().optional(),
+  update_pr_description: z.boolean().optional(),
+  fail_on_severity: z.enum(['off', 'critical', 'major', 'minor']).optional(),
 
   dry_run: z.boolean().optional(),
 });

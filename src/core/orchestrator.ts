@@ -46,6 +46,7 @@ import { mapAddedLines, filterDiffByFiles } from '../utils/diff';
 import { BatchOrchestrator } from './batch-orchestrator';
 import { ProgressTracker } from '../github/progress-tracker';
 import { GitHubClient } from '../github/client';
+import { PullRequestDescriptionUpdater } from '../github/pr-description';
 import * as fs from 'fs/promises';
 import path from 'path';
 
@@ -83,6 +84,7 @@ export interface ReviewComponents {
   metricsCollector?: MetricsCollector;
   batchOrchestrator?: BatchOrchestrator;
   githubClient?: GitHubClient;
+  prDescriptionUpdater?: PullRequestDescriptionUpdater;
   acceptanceDetector?: AcceptanceDetector;
   providerWeightTracker?: ProviderWeightTracker;
 }
@@ -709,6 +711,7 @@ export class ReviewOrchestrator {
 
       const markdown = this.components.formatter.format(review);
       const suppressed = await this.components.feedbackFilter.loadSuppressed(pr.number);
+      await this.updatePullRequestDescription(pr);
 
       // Detect and record suggestion acceptances (positive feedback)
       if (this.components.acceptanceDetector &&
@@ -861,6 +864,18 @@ export class ReviewOrchestrator {
       );
     } else {
       logger.debug('No suggestion acceptances detected');
+    }
+  }
+
+  private async updatePullRequestDescription(pr: PRContext): Promise<void> {
+    if (!this.components.config.updatePrDescription || !this.components.prDescriptionUpdater) {
+      return;
+    }
+
+    try {
+      await this.components.prDescriptionUpdater.update(pr);
+    } catch (error) {
+      logger.warn('Failed to update PR description summary', error as Error);
     }
   }
 

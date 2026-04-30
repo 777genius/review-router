@@ -194,6 +194,8 @@ cat ~/.gemini/settings.json | gh secret set GEMINI_SETTINGS
     CODEX_HEALTHCHECK_REASONING_EFFORT: "low"
     CODEX_REASONING_EFFORT: "medium"
     FAIL_ON_NO_HEALTHY_PROVIDERS: "true"
+    UPDATE_PR_DESCRIPTION: "true"
+    FAIL_ON_SEVERITY: "major"
     INLINE_MAX_COMMENTS: "5"
     INLINE_MIN_SEVERITY: "major"
     ENABLE_AI_DETECTION: "false"
@@ -238,6 +240,7 @@ export PLUGIN_DIR=./plugins
 - `INLINE_MAX_COMMENTS` (default: `5`): Maximum inline comments to post
 - `INLINE_MIN_SEVERITY` (default: `major`): Minimum severity for inline comments
 - `INLINE_MIN_AGREEMENT` (default: `1`): Providers required to agree
+- `FAIL_ON_SEVERITY` (default: `major`): Fail the check when findings at this severity or higher exist (`off`, `critical`, `major`, `minor`)
 - `MIN_CHANGED_LINES` (default: `0`): Skip if below this line count
 - `MAX_CHANGED_FILES` (default: `0`): Skip if over this file count
 - `SKIP_LABELS`: Comma-separated labels to skip review
@@ -248,6 +251,7 @@ export PLUGIN_DIR=./plugins
 - `ENABLE_TEST_HINTS` (default: `true`): Test coverage hints
 - `ENABLE_AI_DETECTION` (default: `false`): AI-generated code detection
 - `ENABLE_CACHING` (default: `true`): Cache findings for faster reviews
+- `UPDATE_PR_DESCRIPTION` (default: `true`): Append/update an AI Robot Review block in the PR description while preserving author text above it
 
 ### Advanced Features (v2.1)
 - `ANALYTICS_ENABLED` (default: `true`): Track costs and performance

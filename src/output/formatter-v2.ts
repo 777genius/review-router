@@ -20,7 +20,7 @@ export class MarkdownFormatterV2 {
     lines.push('# AI Robot Review');
     lines.push('');
 
-    // Quick stats summary
+    // Finding stats summary
     lines.push(this.formatQuickStats(review));
     lines.push('');
 
@@ -83,7 +83,7 @@ export class MarkdownFormatterV2 {
     // Footer
     lines.push('---');
     lines.push('');
-    lines.push(this.formatFooter());
+    lines.push(this.formatFooter(review));
 
     return lines.join('\n');
   }
@@ -102,16 +102,20 @@ export class MarkdownFormatterV2 {
       majorCount > 0 ? `🟡 **${majorCount} Major**` : `~~${majorCount} Major~~`;
     const minorBadge =
       minorCount > 0 ? `🔵 ${minorCount} Minor` : `~~${minorCount} Minor~~`;
-    const hideApiBilling = this.shouldHideApiBilling(review);
-
     const parts = [
       criticalBadge,
       majorBadge,
       minorBadge,
-      `${metrics.durationSeconds.toFixed(1)}s`,
     ];
 
-    if (hideApiBilling) {
+    return parts.join(' • ');
+  }
+
+  private formatRunSummary(review: Review): string {
+    const { metrics } = review;
+    const parts = [`${metrics.durationSeconds.toFixed(1)}s`];
+
+    if (this.shouldHideApiBilling(review)) {
       parts.push('OAuth subscription');
     } else {
       parts.push(`$${metrics.totalCost.toFixed(4)}`);
@@ -464,7 +468,7 @@ export class MarkdownFormatterV2 {
     return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
   }
 
-  private formatFooter(): string {
-    return '*Powered by AI Robot Review*';
+  private formatFooter(review: Review): string {
+    return `<sub>${this.formatRunSummary(review)}</sub>\n\n<sub>Powered by AI Robot Review</sub>`;
   }
 }

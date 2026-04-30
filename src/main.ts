@@ -3,6 +3,7 @@ import { ConfigLoader } from './config/loader';
 import { createComponents } from './setup';
 import { ReviewOrchestrator } from './core/orchestrator';
 import { validateRequired, validatePositiveInteger, ValidationError, formatValidationError } from './utils/validation';
+import { Severity, Review } from './types';
 
 function syncEnvFromInputs(): void {
   const inputKeys = [
@@ -59,6 +60,8 @@ function syncEnvFromInputs(): void {
     'CONSENSUS_REQUIRED_FOR_CRITICAL',
     'CONSENSUS_MIN_AGREEMENT',
     'SUGGESTION_SYNTAX_VALIDATION',
+    'UPDATE_PR_DESCRIPTION',
+    'FAIL_ON_SEVERITY',
     'REPORT_BASENAME',
     'DRY_RUN',
   ];
@@ -107,6 +110,15 @@ async function run(): Promise<void> {
       core.setOutput('ai_likelihood', review.aiAnalysis.averageLikelihood);
     }
 
+    const blockingFindings = getBlockingFindings(review, config.failOnSeverity);
+    if (blockingFindings.length > 0) {
+      core.setFailed(
+        `AI Robot Review found ${blockingFindings.length} ${config.failOnSeverity}+ finding(s). ` +
+        'Review comments were posted before failing this check.'
+      );
+      return;
+    }
+
     core.info('Review completed successfully');
   } catch (error) {
     const err = error as Error;
@@ -132,6 +144,18 @@ async function run(): Promise<void> {
     // core.setFailed() sets process.exitCode, so explicit process.exit() is unnecessary
     // Removed process.exit(1) to allow proper cleanup and resource disposal
   }
+}
+
+function getBlockingFindings(review: Review, threshold: Severity | 'off' | undefined) {
+  if (!threshold || threshold === 'off') return [];
+
+  const rank: Record<Severity, number> = {
+    critical: 3,
+    major: 2,
+    minor: 1,
+  };
+  const minRank = rank[threshold];
+  return review.findings.filter(finding => rank[finding.severity] >= minRank);
 }
 
 // core.setFailed() in run() sets process.exitCode, so we don't need explicit process.exit()

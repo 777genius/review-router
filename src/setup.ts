@@ -16,6 +16,7 @@ import { SecurityScanner } from './security/scanner';
 import { RuleLoader } from './rules/loader';
 import { PullRequestLoader } from './github/pr-loader';
 import { CommentPoster } from './github/comment-poster';
+import { PullRequestDescriptionUpdater } from './github/pr-description';
 import { GitHubClient } from './github/client';
 import { MarkdownFormatterV2 } from './output/formatter-v2';
 import { ReviewComponents } from './core/orchestrator';
@@ -156,6 +157,7 @@ async function createComponentsForCLI(config: ReviewConfig): Promise<ReviewCompo
     suppressionTracker,
     providerWeightTracker
   ); // Always dry-run in CLI
+  const prDescriptionUpdater = new PullRequestDescriptionUpdater(mockGitHubClient, true);
   const formatter = new MarkdownFormatterV2();
   // Create a mock FeedbackFilter that always allows posts (no suppression in CLI mode)
   const feedbackFilter = {
@@ -182,6 +184,7 @@ async function createComponentsForCLI(config: ReviewConfig): Promise<ReviewCompo
     rules,
     prLoader,
     commentPoster,
+    prDescriptionUpdater,
     formatter,
     contextRetriever,
     impactAnalyzer,
@@ -258,6 +261,7 @@ export async function createComponents(config: ReviewConfig, githubToken: string
     suppressionTracker,
     providerWeightTracker
   );
+  const prDescriptionUpdater = new PullRequestDescriptionUpdater(githubClient, config.dryRun);
   const formatter = new MarkdownFormatterV2();
   const quietModeFilter = config.quietModeEnabled
     ? new QuietModeFilter(
@@ -303,6 +307,7 @@ export async function createComponents(config: ReviewConfig, githubToken: string
     rules,
     prLoader,
     commentPoster,
+    prDescriptionUpdater,
     formatter,
     contextRetriever,
     impactAnalyzer,

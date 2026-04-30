@@ -13,6 +13,8 @@ describe('ConfigLoader', () => {
     process.env.INLINE_MAX_COMMENTS = '7';
     process.env.BUDGET_MAX_USD = '1.5';
     process.env.ENABLE_AST_ANALYSIS = 'false';
+    process.env.UPDATE_PR_DESCRIPTION = 'false';
+    process.env.FAIL_ON_SEVERITY = 'critical';
 
     const config = ConfigLoader.load();
 
@@ -20,6 +22,8 @@ describe('ConfigLoader', () => {
     expect(config.inlineMaxComments).toBe(7);
     expect(config.budgetMaxUsd).toBe(1.5);
     expect(config.enableAstAnalysis).toBe(false);
+    expect(config.updatePrDescription).toBe(false);
+    expect(config.failOnSeverity).toBe('critical');
     expect(config.inlineMinSeverity).toBe(DEFAULT_CONFIG.inlineMinSeverity);
   });
 

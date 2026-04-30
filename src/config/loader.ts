@@ -136,6 +136,8 @@ export class ConfigLoader {
       consensusRequiredForCritical: this.parseBoolean(env.CONSENSUS_REQUIRED_FOR_CRITICAL),
       consensusMinAgreement: this.parseNumber(env.CONSENSUS_MIN_AGREEMENT),
       suggestionSyntaxValidation: this.parseBoolean(env.SUGGESTION_SYNTAX_VALIDATION),
+      updatePrDescription: this.parseBoolean(env.UPDATE_PR_DESCRIPTION),
+      failOnSeverity: this.parseFailOnSeverity(env.FAIL_ON_SEVERITY),
 
       dryRun: this.parseBoolean(env.DRY_RUN),
     };
@@ -218,6 +220,8 @@ export class ConfigLoader {
       consensusRequiredForCritical: config.consensus_required_for_critical,
       consensusMinAgreement: config.consensus_min_agreement,
       suggestionSyntaxValidation: config.suggestion_syntax_validation,
+      updatePrDescription: config.update_pr_description,
+      failOnSeverity: config.fail_on_severity,
       dryRun: config.dry_run,
     };
   }
@@ -314,6 +318,18 @@ export class ConfigLoader {
     const normalized = value.toLowerCase();
     if (normalized === 'thorough' || normalized === 'standard' || normalized === 'light') {
       return normalized as 'thorough' | 'standard' | 'light';
+    }
+    return undefined;
+  }
+
+  private static parseFailOnSeverity(value?: string): 'off' | 'critical' | 'major' | 'minor' | undefined {
+    if (!value) return undefined;
+    const normalized = value.toLowerCase();
+    if (normalized === 'off' || normalized === 'false' || normalized === 'none') {
+      return 'off';
+    }
+    if (normalized === 'critical' || normalized === 'major' || normalized === 'minor') {
+      return normalized as 'critical' | 'major' | 'minor';
     }
     return undefined;
   }

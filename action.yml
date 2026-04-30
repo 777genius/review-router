@@ -176,6 +176,14 @@ inputs:
     description: "Validate suggestion syntax before posting GitHub suggestion blocks"
     required: false
     default: "true"
+  UPDATE_PR_DESCRIPTION:
+    description: "Append/update an AI Robot Review summary block in the pull request description without overwriting author text"
+    required: false
+    default: "true"
+  FAIL_ON_SEVERITY:
+    description: "Fail the check when findings at this severity or higher exist: off, critical, major, or minor"
+    required: false
+    default: "major"
   GRAPH_ENABLED:
     description: "Enable code graph for dependency tracking"
     required: false

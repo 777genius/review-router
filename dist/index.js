@@ -7170,7 +7170,9 @@ var DEFAULT_CONFIG = {
     standard: "standard",
     light: "brief"
   },
-  dryRun: false
+  dryRun: false,
+  updatePrDescription: true,
+  failOnSeverity: "major"
 };
 var FALLBACK_STATIC_PROVIDERS = [
   "openrouter/free"
@@ -11375,6 +11377,8 @@ var ReviewConfigSchema = external_exports.object({
   consensus_required_for_critical: external_exports.boolean().optional(),
   consensus_min_agreement: external_exports.number().int().min(2).optional(),
   suggestion_syntax_validation: external_exports.boolean().optional(),
+  update_pr_description: external_exports.boolean().optional(),
+  fail_on_severity: external_exports.enum(["off", "critical", "major", "minor"]).optional(),
   dry_run: external_exports.boolean().optional()
 });
 
@@ -11724,6 +11728,8 @@ var ConfigLoader = class {
       consensusRequiredForCritical: this.parseBoolean(env.CONSENSUS_REQUIRED_FOR_CRITICAL),
       consensusMinAgreement: this.parseNumber(env.CONSENSUS_MIN_AGREEMENT),
       suggestionSyntaxValidation: this.parseBoolean(env.SUGGESTION_SYNTAX_VALIDATION),
+      updatePrDescription: this.parseBoolean(env.UPDATE_PR_DESCRIPTION),
+      failOnSeverity: this.parseFailOnSeverity(env.FAIL_ON_SEVERITY),
       dryRun: this.parseBoolean(env.DRY_RUN)
     };
   }
@@ -11804,6 +11810,8 @@ var ConfigLoader = class {
       consensusRequiredForCritical: config.consensus_required_for_critical,
       consensusMinAgreement: config.consensus_min_agreement,
       suggestionSyntaxValidation: config.suggestion_syntax_validation,
+      updatePrDescription: config.update_pr_description,
+      failOnSeverity: config.fail_on_severity,
       dryRun: config.dry_run
     };
   }
@@ -11882,6 +11890,17 @@ var ConfigLoader = class {
     if (!value) return void 0;
     const normalized = value.toLowerCase();
     if (normalized === "thorough" || normalized === "standard" || normalized === "light") {
+      return normalized;
+    }
+    return void 0;
+  }
+  static parseFailOnSeverity(value) {
+    if (!value) return void 0;
+    const normalized = value.toLowerCase();
+    if (normalized === "off" || normalized === "false" || normalized === "none") {
+      return "off";
+    }
+    if (normalized === "critical" || normalized === "major" || normalized === "minor") {
       return normalized;
     }
     return void 0;
@@ -17664,6 +17683,196 @@ ${comment.body.substring(0, 200)}...`);
   }
 };
 
+// src/github/pr-description.ts
+var START_MARKER = "<!-- ai-robot-review-summary:start -->";
+var END_MARKER = "<!-- ai-robot-review-summary:end -->";
+var PullRequestDescriptionUpdater = class {
+  constructor(client, dryRun = false) {
+    this.client = client;
+    this.dryRun = dryRun;
+  }
+  async update(pr) {
+    const nextBody = this.merge(pr.body || "", this.buildGeneratedBlock(pr));
+    if (nextBody === (pr.body || "")) {
+      logger.debug("PR description already up to date");
+      return;
+    }
+    if (this.dryRun) {
+      logger.info(`[DRY RUN] Would update PR #${pr.number} description with AI Robot Review summary`);
+      return;
+    }
+    await this.client.octokit.rest.pulls.update({
+      owner: this.client.owner,
+      repo: this.client.repo,
+      pull_number: pr.number,
+      body: nextBody
+    });
+    logger.info(`Updated PR #${pr.number} description with AI Robot Review summary`);
+  }
+  buildGeneratedBlock(pr) {
+    const cohorts = this.groupFiles(pr.files);
+    const changedFiles = pr.files.length;
+    const summaryBullets = this.buildSummaryBullets(pr, cohorts);
+    const lines = [
+      START_MARKER,
+      "## Summary by AI Robot Review",
+      "",
+      ...summaryBullets.map((item) => `- ${item}`),
+      "",
+      ...this.formatTestsSection(cohorts),
+      "",
+      this.formatFilesDetails(pr.files),
+      "",
+      "<details>",
+      "<summary>\u{1F4DD} Walkthrough</summary>",
+      "",
+      "## Walkthrough",
+      "",
+      this.buildWalkthrough(pr, cohorts),
+      "",
+      "## Changes",
+      "",
+      "| Cohort / File(s) | Summary |",
+      "|---|---|",
+      ...cohorts.map((cohort) => this.formatCohortRow(cohort)),
+      "",
+      "</details>",
+      END_MARKER
+    ];
+    if (changedFiles === 0) {
+      lines.splice(3, 0, "- no changed files were available for summary generation");
+    }
+    return lines.join("\n").trim();
+  }
+  merge(existingBody, generatedBlock) {
+    const preserved = this.removeExistingBlock(existingBody).trim();
+    return preserved ? `${preserved}
+
+${generatedBlock}` : generatedBlock;
+  }
+  removeExistingBlock(body) {
+    const start = body.indexOf(START_MARKER);
+    const end = body.indexOf(END_MARKER);
+    if (start === -1 || end === -1 || end < start) {
+      return body;
+    }
+    return `${body.slice(0, start)}${body.slice(end + END_MARKER.length)}`;
+  }
+  buildSummaryBullets(pr, cohorts) {
+    const bullets = [];
+    const statusCounts = this.countBy(pr.files, (file) => file.status);
+    const statusText = Object.entries(statusCounts).map(([status, count]) => `${count} ${status}`).join(", ");
+    bullets.push(
+      `change ${pr.files.length} file${pr.files.length === 1 ? "" : "s"} (${statusText || "no file status"}) with +${pr.additions}/-${pr.deletions} lines`
+    );
+    for (const cohort of cohorts.slice(0, 3)) {
+      bullets.push(`${this.verbForCohort(cohort)} ${cohort.files.length} ${this.cohortPhrase(cohort)} file${cohort.files.length === 1 ? "" : "s"}`);
+    }
+    return bullets;
+  }
+  buildWalkthrough(pr, cohorts) {
+    if (pr.files.length === 0) {
+      return "No changed files were available from the pull request payload.";
+    }
+    const cohortText = cohorts.slice(0, 4).map((cohort) => `${cohort.files.length} ${this.cohortPhrase(cohort)}`).join(", ");
+    return `This PR updates ${pr.files.length} file${pr.files.length === 1 ? "" : "s"} across ${cohortText}. The generated summary is based on the GitHub pull request file list and diff metadata, and the author's description above is preserved.`;
+  }
+  formatFilesDetails(files) {
+    const lines = [
+      "<details>",
+      `<summary>\u{1F4D2} Files selected for processing (${files.length})</summary>`,
+      ""
+    ];
+    for (const file of files.slice(0, 50)) {
+      lines.push(`* \`${file.filename}\``);
+    }
+    if (files.length > 50) {
+      lines.push(`* ...and ${files.length - 50} more`);
+    }
+    lines.push("", "</details>");
+    return lines.join("\n");
+  }
+  formatTestsSection(cohorts) {
+    const tests = cohorts.find((cohort) => cohort.key === "tests");
+    if (!tests || tests.files.length === 0) {
+      return [];
+    }
+    return [
+      "## Tests",
+      "",
+      ...tests.files.slice(0, 10).map((file) => `- changed test file: \`${file.filename}\``),
+      ...tests.files.length > 10 ? [`- and ${tests.files.length - 10} more test files`] : []
+    ];
+  }
+  formatCohortRow(cohort) {
+    const fileList = cohort.files.slice(0, 5).map((file) => `\`${file.filename}\``).join("<br>");
+    const overflow = cohort.files.length > 5 ? `<br>and ${cohort.files.length - 5} more` : "";
+    const additions = cohort.files.reduce((sum, file) => sum + file.additions, 0);
+    const deletions = cohort.files.reduce((sum, file) => sum + file.deletions, 0);
+    return `| **${cohort.title}** <br> ${fileList}${overflow} | ${this.statusSummary(cohort.files)} with +${additions}/-${deletions} lines. |`;
+  }
+  statusSummary(files) {
+    return Object.entries(this.countBy(files, (file) => file.status)).map(([status, count]) => `${count} ${status}`).join(", ");
+  }
+  groupFiles(files) {
+    const groups = /* @__PURE__ */ new Map();
+    for (const file of files) {
+      const key = this.cohortKey(file.filename);
+      const title = this.cohortTitle(key);
+      if (!groups.has(key)) {
+        groups.set(key, { key, title, files: [] });
+      }
+      groups.get(key).files.push(file);
+    }
+    return Array.from(groups.values()).sort((a, b) => {
+      const diff = b.files.length - a.files.length;
+      return diff || a.title.localeCompare(b.title);
+    });
+  }
+  cohortKey(filename) {
+    const lower = filename.toLowerCase();
+    if (lower.startsWith(".github/workflows/")) return "ci";
+    if (/\b(test|tests|spec|__tests__)\b/.test(lower) || /\.(test|spec)\.[jt]sx?$/.test(lower)) return "tests";
+    if (lower.endsWith(".md") || lower.startsWith("docs/")) return "docs";
+    if (/(package-lock|yarn.lock|pnpm-lock|pubspec.lock|gemfile.lock|poetry.lock|requirements\.txt)$/.test(lower)) return "dependencies";
+    if (/(^|\/)(package\.json|pubspec\.yaml|pom\.xml|build\.gradle|cargo\.toml|go\.mod)$/.test(lower)) return "config";
+    if (lower.startsWith(".github/")) return "github";
+    if (/\.(yml|yaml|json|toml|ini|env|config\.[jt]s)$/.test(lower)) return "config";
+    return "source";
+  }
+  cohortTitle(key) {
+    const titles = {
+      ci: "CI workflow",
+      tests: "Tests",
+      docs: "Documentation",
+      dependencies: "Dependencies",
+      config: "Configuration",
+      github: "GitHub automation",
+      source: "Source"
+    };
+    return titles[key] || "Other";
+  }
+  verbForCohort(cohort) {
+    if (cohort.key === "tests") return "update";
+    if (cohort.key === "docs") return "document";
+    if (cohort.key === "dependencies") return "adjust";
+    if (cohort.key === "ci" || cohort.key === "github") return "configure";
+    return "update";
+  }
+  cohortPhrase(cohort) {
+    if (cohort.key === "ci") return "CI workflow";
+    if (cohort.key === "github") return "GitHub automation";
+    return cohort.title.toLowerCase();
+  }
+  countBy(files, selector) {
+    return files.reduce((acc, file) => {
+      const key = selector(file);
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+  }
+};
+
 // src/github/client.ts
 var fs10 = __toESM(require("fs"));
 var import_rest = __toESM(require_dist_node12());
@@ -17935,7 +18144,7 @@ var MarkdownFormatterV2 = class {
     lines.push(this.formatAdvancedSections(review));
     lines.push("---");
     lines.push("");
-    lines.push(this.formatFooter());
+    lines.push(this.formatFooter(review));
     return lines.join("\n");
   }
   formatQuickStats(review) {
@@ -17946,14 +18155,17 @@ var MarkdownFormatterV2 = class {
     const criticalBadge = criticalCount > 0 ? `\u{1F534} **${criticalCount} Critical**` : `~~${criticalCount} Critical~~`;
     const majorBadge = majorCount > 0 ? `\u{1F7E1} **${majorCount} Major**` : `~~${majorCount} Major~~`;
     const minorBadge = minorCount > 0 ? `\u{1F535} ${minorCount} Minor` : `~~${minorCount} Minor~~`;
-    const hideApiBilling = this.shouldHideApiBilling(review);
     const parts = [
       criticalBadge,
       majorBadge,
-      minorBadge,
-      `${metrics.durationSeconds.toFixed(1)}s`
+      minorBadge
     ];
-    if (hideApiBilling) {
+    return parts.join(" \u2022 ");
+  }
+  formatRunSummary(review) {
+    const { metrics } = review;
+    const parts = [`${metrics.durationSeconds.toFixed(1)}s`];
+    if (this.shouldHideApiBilling(review)) {
       parts.push("OAuth subscription");
     } else {
       parts.push(`$${metrics.totalCost.toFixed(4)}`);
@@ -18200,8 +18412,10 @@ var MarkdownFormatterV2 = class {
     if (!mermaidDiagram?.trim()) return false;
     return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
   }
-  formatFooter() {
-    return "*Powered by AI Robot Review*";
+  formatFooter(review) {
+    return `<sub>${this.formatRunSummary(review)}</sub>
+
+<sub>Powered by AI Robot Review</sub>`;
   }
 };
 
@@ -21281,6 +21495,7 @@ async function createComponents(config, githubToken) {
     suppressionTracker,
     providerWeightTracker
   );
+  const prDescriptionUpdater = new PullRequestDescriptionUpdater(githubClient, config.dryRun);
   const formatter = new MarkdownFormatterV2();
   const quietModeFilter = config.quietModeEnabled ? new QuietModeFilter(
     {
@@ -21319,6 +21534,7 @@ async function createComponents(config, githubToken) {
     rules,
     prLoader,
     commentPoster,
+    prDescriptionUpdater,
     formatter,
     contextRetriever,
     impactAnalyzer,
@@ -25220,6 +25436,7 @@ var ReviewOrchestrator = class {
       }
       const markdown = this.components.formatter.format(review);
       const suppressed = await this.components.feedbackFilter.loadSuppressed(pr.number);
+      await this.updatePullRequestDescription(pr);
       if (this.components.acceptanceDetector && this.components.providerWeightTracker && this.components.githubClient) {
         try {
           await this.detectAndRecordAcceptances(pr.number);
@@ -25327,6 +25544,16 @@ var ReviewOrchestrator = class {
       );
     } else {
       logger.debug("No suggestion acceptances detected");
+    }
+  }
+  async updatePullRequestDescription(pr) {
+    if (!this.components.config.updatePrDescription || !this.components.prDescriptionUpdater) {
+      return;
+    }
+    try {
+      await this.components.prDescriptionUpdater.update(pr);
+    } catch (error2) {
+      logger.warn("Failed to update PR description summary", error2);
     }
   }
   /**
@@ -25606,6 +25833,8 @@ function syncEnvFromInputs() {
     "CONSENSUS_REQUIRED_FOR_CRITICAL",
     "CONSENSUS_MIN_AGREEMENT",
     "SUGGESTION_SYNTAX_VALIDATION",
+    "UPDATE_PR_DESCRIPTION",
+    "FAIL_ON_SEVERITY",
     "REPORT_BASENAME",
     "DRY_RUN"
   ];
@@ -25643,6 +25872,13 @@ async function run() {
     if (review.aiAnalysis) {
       setOutput("ai_likelihood", review.aiAnalysis.averageLikelihood);
     }
+    const blockingFindings = getBlockingFindings(review, config.failOnSeverity);
+    if (blockingFindings.length > 0) {
+      setFailed(
+        `AI Robot Review found ${blockingFindings.length} ${config.failOnSeverity}+ finding(s). Review comments were posted before failing this check.`
+      );
+      return;
+    }
     info("Review completed successfully");
   } catch (error2) {
     const err = error2;
@@ -25663,6 +25899,16 @@ ${formatted}`);
       }
     }
   }
+}
+function getBlockingFindings(review, threshold) {
+  if (!threshold || threshold === "off") return [];
+  const rank = {
+    critical: 3,
+    major: 2,
+    minor: 1
+  };
+  const minRank = rank[threshold];
+  return review.findings.filter((finding) => rank[finding.severity] >= minRank);
 }
 run().catch((error2) => {
   setFailed(`Unhandled error: ${error2.message}`);

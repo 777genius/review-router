@@ -5,6 +5,8 @@ import { createQueue } from '../../utils/parallel';
 import { withRetry } from '../../utils/retry';
 import { logger } from '../../utils/logger';
 
+type ErrorWithCode = Error & { code?: string };
+
 export class LLMExecutor {
   constructor(private readonly config: ReviewConfig) {}
 
@@ -57,13 +59,13 @@ export class LLMExecutor {
           }
         } catch (error) {
           const duration = Date.now() - started;
-          const err = error as Error;
+          const err = error as ErrorWithCode;
 
           // Determine if this is a timeout error
           let status: ProviderResult['status'] = 'error';
           if (err.message.toLowerCase().includes('timed out') ||
               err.message.toLowerCase().includes('timeout') ||
-              (err as any).code === 'ETIMEDOUT') {
+              err.code === 'ETIMEDOUT') {
             status = 'timeout';
           }
 
@@ -115,11 +117,11 @@ export class LLMExecutor {
             durationSeconds: (Date.now() - started) / 1000,
           });
         } catch (error) {
-          const err = error as Error;
+          const err = error as ErrorWithCode;
           let status: ProviderResult['status'] = 'error';
           if (err instanceof RateLimitError) {
             status = 'rate-limited';
-          } else if (err.name === 'TimeoutError' || err.message.toLowerCase().includes('timed out') || (err as any).code === 'ETIMEDOUT') {
+          } else if (err.name === 'TimeoutError' || err.message.toLowerCase().includes('timed out') || err.code === 'ETIMEDOUT') {
             status = 'timeout';
           }
           logger.warn(`Provider ${provider.name} failed: ${err.message}`);

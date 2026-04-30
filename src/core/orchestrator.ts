@@ -286,7 +286,10 @@ export class ReviewOrchestrator {
       }
 
       // Apply intensity to provider selection and timeouts
-      const intensityProviderLimit = config.intensityProviderCounts?.[reviewIntensity] ?? config.providerLimit;
+      const configuredIntensityProviderLimit = config.intensityProviderCounts?.[reviewIntensity] ?? config.providerLimit;
+      const intensityProviderLimit = config.providerLimit > 0
+        ? Math.min(config.providerLimit, configuredIntensityProviderLimit)
+        : configuredIntensityProviderLimit;
       const intensityTimeout = config.intensityTimeouts?.[reviewIntensity] ?? (config.runTimeoutSeconds * 1000);
 
       logger.info(

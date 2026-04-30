@@ -71,7 +71,7 @@ inputs:
   PROVIDER_LIMIT:
     description: "Limit number of providers to rotate"
     required: false
-    default: "6"
+    default: "1"
   PROVIDER_RETRIES:
     description: "Retries per provider"
     required: false

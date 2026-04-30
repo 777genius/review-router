@@ -7075,14 +7075,14 @@ var DEFAULT_CONFIG = {
   // COST CONTROLS:
   // - openrouterAllowPaid: false = Only free models (blocks models with $/token pricing)
   // - providerDiscoveryLimit: 8 = Health-check up to 8 providers for reliability
-  // - providerLimit: 6 = Actually use only 6 providers to control API usage
+  // - providerLimit: 1 = Use one provider by default; opt in to consensus/multi-provider mode explicitly
   // - budgetMaxUsd: 0 = No budget allocated for paid APIs
   // Combined these settings ensure zero cost when using default configuration
   openrouterAllowPaid: false,
   // IMPORTANT: Set to true only if you have OpenRouter credits
   providerDiscoveryLimit: 8,
   // Health-check pool size (higher = better reliability)
-  providerLimit: 6,
+  providerLimit: 1,
   // Actual execution pool size (lower = lower costs)
   providerRetries: 0,
   providerMaxParallel: 1,
@@ -24900,7 +24900,8 @@ var ReviewOrchestrator = class {
           logger.debug(`Matched paths: ${intensityResult.matchedPaths.join(", ")}`);
         }
       }
-      const intensityProviderLimit = config.intensityProviderCounts?.[reviewIntensity] ?? config.providerLimit;
+      const configuredIntensityProviderLimit = config.intensityProviderCounts?.[reviewIntensity] ?? config.providerLimit;
+      const intensityProviderLimit = config.providerLimit > 0 ? Math.min(config.providerLimit, configuredIntensityProviderLimit) : configuredIntensityProviderLimit;
       const intensityTimeout = config.intensityTimeouts?.[reviewIntensity] ?? config.runTimeoutSeconds * 1e3;
       logger.info(
         `Intensity settings: ${intensityProviderLimit} providers, ${intensityTimeout}ms timeout (${reviewIntensity} mode)`

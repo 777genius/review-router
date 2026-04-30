@@ -27,7 +27,7 @@ export interface ReviewConfig {
   providerAllowlist: string[];
   providerBlocklist: string[];
   providerDiscoveryLimit?: number; // Max providers to discover/health-check (default: 8)
-  providerLimit: number;           // Max providers to use for actual review (default: 6)
+  providerLimit: number;           // Max providers to use for actual review (default: 1)
   providerRetries: number;
   providerMaxParallel: number;
   openrouterAllowPaid?: boolean;

@@ -231,7 +231,7 @@ export PLUGIN_DIR=./plugins
 - `CODEX_MODEL`: Codex model id without provider prefix, for example `gpt-5.5`. Used when `REVIEW_PROVIDERS` is empty.
 - `FALLBACK_PROVIDERS`: Backup providers if primary providers fail
 - `PROVIDER_DISCOVERY_LIMIT` (default: `8`): Max providers to discover/health-check
-- `PROVIDER_LIMIT` (default: `6`): Max providers to use for actual review
+- `PROVIDER_LIMIT` (default: `1`): Max providers to use for actual review
 - `PROVIDER_MAX_PARALLEL` (default: `1`): Max parallel provider execution
 
 ### Filtering & Thresholds

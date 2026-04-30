@@ -1,4 +1,4 @@
-import * as core from '@actions/core';
+import * as core from './actions/core';
 import { ConfigLoader } from './config/loader';
 import { createComponents } from './setup';
 import { ReviewOrchestrator } from './core/orchestrator';

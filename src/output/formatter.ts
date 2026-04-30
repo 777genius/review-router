@@ -19,8 +19,14 @@ export class MarkdownFormatter {
     lines.push('\n---');
     lines.push('<details><summary>Run details (usage, cost, providers, status)</summary>');
     lines.push('');
+    const hasOAuthCliUsage = (review.runDetails?.providers || []).some(p =>
+      /^(codex|claude|gemini|opencode)\//.test(p.name)
+    );
+    const costDisplay = review.metrics.totalCost === 0 && review.metrics.totalTokens > 0 && hasOAuthCliUsage
+      ? '$0.0000 (OAuth subscription, API cost not reported)'
+      : `$${review.metrics.totalCost.toFixed(4)}`;
     lines.push(
-      `- Duration: ${review.metrics.durationSeconds.toFixed(1)}s • Cost: $${review.metrics.totalCost.toFixed(4)} • Tokens: ${review.metrics.totalTokens}`
+      `- Duration: ${review.metrics.durationSeconds.toFixed(1)}s • Cost: ${costDisplay} • Tokens: ${review.metrics.totalTokens}`
     );
     lines.push(`- Providers used: ${review.metrics.providersUsed} (success ${review.metrics.providersSuccess}, failed ${review.metrics.providersFailed})`);
     if (review.runDetails) {

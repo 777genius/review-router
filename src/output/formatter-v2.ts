@@ -108,8 +108,14 @@ export class MarkdownFormatterV2 {
     const minorBadge = minorCount > 0
       ? `🔵 ${minorCount} Minor`
       : `~~${minorCount} Minor~~`;
+    const hasOAuthCliUsage = (review.runDetails?.providers || []).some(p =>
+      /^(codex|claude|gemini|opencode)\//.test(p.name)
+    );
+    const costLabel = metrics.totalCost === 0 && metrics.totalTokens > 0 && hasOAuthCliUsage
+      ? '$0.0000 OAuth'
+      : `$${metrics.totalCost.toFixed(4)}`;
 
-    return `${criticalBadge} • ${majorBadge} • ${minorBadge} • ${metrics.durationSeconds.toFixed(1)}s • $${metrics.totalCost.toFixed(4)}`;
+    return `${criticalBadge} • ${majorBadge} • ${minorBadge} • ${metrics.durationSeconds.toFixed(1)}s • ${costLabel}`;
   }
 
   private generatePRSummary(review: Review): string {
@@ -281,6 +287,12 @@ export class MarkdownFormatterV2 {
   private formatMetrics(review: Review): string {
     const lines: string[] = [];
     const { metrics, runDetails } = review;
+    const hasOAuthCliUsage = (runDetails?.providers || []).some(p =>
+      /^(codex|claude|gemini|opencode)\//.test(p.name)
+    );
+    const costDisplay = metrics.totalCost === 0 && metrics.totalTokens > 0 && hasOAuthCliUsage
+      ? '$0.0000 (OAuth subscription, API cost not reported)'
+      : `$${metrics.totalCost.toFixed(4)}`;
 
     lines.push('<details>');
     lines.push('<summary>Performance Metrics</summary>');
@@ -288,7 +300,7 @@ export class MarkdownFormatterV2 {
     lines.push('| Metric | Value |');
     lines.push('|--------|-------|');
     lines.push(`| Duration | ${metrics.durationSeconds.toFixed(2)}s |`);
-    lines.push(`| Cost | $${metrics.totalCost.toFixed(4)} |`);
+    lines.push(`| Cost | ${costDisplay} |`);
     lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
     lines.push(`| Providers | ${metrics.providersSuccess}/${metrics.providersUsed} |`);
 

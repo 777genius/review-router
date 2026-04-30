@@ -6,6 +6,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { estimateTokensSimple } from '../utils/token-estimation';
 
 export class CodexProvider extends Provider {
   constructor(private readonly model: string) {
@@ -89,12 +90,24 @@ export class CodexProvider extends Provider {
       return {
         content,
         durationSeconds,
+        usage: this.estimateUsage(prompt, content),
         findings: this.extractFindings(content),
       };
     } catch (error) {
       logger.error(`Codex provider failed: ${this.name}`, error as Error);
       throw error;
     }
+  }
+
+  private estimateUsage(prompt: string, content: string) {
+    const promptTokens = estimateTokensSimple(prompt).tokens;
+    const completionTokens = estimateTokensSimple(content).tokens;
+
+    return {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+    };
   }
 
   private buildExecArgs(options: { healthCheck: boolean }): string[] {
@@ -155,7 +168,7 @@ export class CodexProvider extends Provider {
             if (proc.pid) {
               process.kill(-proc.pid, 'SIGKILL');
             }
-          } catch (err) {
+          } catch {
             proc.kill('SIGKILL');
           }
 
@@ -178,7 +191,7 @@ export class CodexProvider extends Provider {
           if (!timedOut) {
             clearTimeout(timer);
             if (code !== 0) {
-              reject(new Error(`Codex CLI exited with code ${code}: ${stderr || stdout || 'no output'}`));
+              reject(new Error(`Codex CLI exited with code ${code}: ${this.formatCliError(stderr, stdout)}`));
             } else {
               resolve({ stdout, stderr });
             }
@@ -196,6 +209,27 @@ export class CodexProvider extends Provider {
         // Ignore cleanup errors
       }
     }
+  }
+
+  private formatCliError(stderr: string, stdout: string): string {
+    const raw = (stderr || stdout || 'no output')
+      .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g'), '')
+      .replace(/www_authenticate_header:\s*"[^"]+"/gi, 'www_authenticate_header: "[redacted]"')
+      .replace(/authorization_uri="[^"]+"/gi, 'authorization_uri="[redacted]"')
+      .replace(/session id:\s*[a-f0-9-]+/gi, 'session id: [redacted]');
+
+    const lines = raw
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .filter(line => !line.startsWith('user') && !line.includes('Respond with exactly:'));
+
+    const important = lines.filter(line =>
+      /not supported|invalid_request_error|auth|error|failed|timed out|timeout/i.test(line)
+    );
+    const summary = (important.length > 0 ? important : lines).join(' ');
+
+    return summary.length > 800 ? `${summary.slice(0, 800)}...` : summary;
   }
 
   private async resolveBinary(): Promise<string> {

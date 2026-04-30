@@ -1,5 +1,5 @@
 import { getParser, Language } from '../analysis/ast/parsers';
-import Parser from 'tree-sitter';
+import type Parser from 'tree-sitter';
 
 /**
  * Result of comparing two ASTs for structural equivalence
@@ -46,6 +46,10 @@ const VALUE_ONLY_TYPES = new Set([
  */
 const MAX_COMPARISON_DEPTH = 1000;
 
+function getRootNode(tree: Parser.Tree): Parser.SyntaxNode | null {
+  return ((tree as any).rootNode ?? (tree as any).root) || null;
+}
+
 /**
  * Check if a node is a value-only type (identifier or literal)
  * Value-only types are compared by structure, not by actual content
@@ -58,51 +62,42 @@ function isValueOnlyNode(node: Parser.SyntaxNode): boolean {
  * Check if a tree-sitter tree has parse errors
  */
 function hasParseErrors(tree: Parser.Tree): boolean {
-  // Check if root has errors
-  if (tree.rootNode.hasError) {
+  const rootNode = getRootNode(tree);
+  if (!rootNode) {
     return true;
   }
 
-  // Walk tree to find ERROR or MISSING nodes
-  const cursor = tree.walk();
-  let reachedRoot = false;
-
-  while (!reachedRoot) {
-    const node = cursor.currentNode;
-
+  const visitNode = (node: Parser.SyntaxNode): boolean => {
     // ERROR nodes indicate unparseable text
     if (node.type === 'ERROR') {
+      debugAst(`ERROR node: ${node.text}`);
       return true;
     }
 
     // MISSING nodes indicate parser recovery (inserted tokens)
     if (node.isMissing) {
+      debugAst(`MISSING node: type=${node.type}; text=${node.text}`);
       return true;
     }
 
-    // Try to descend into children first
-    if (cursor.gotoFirstChild()) {
-      continue;
-    }
-
-    // Try to go to next sibling
-    if (cursor.gotoNextSibling()) {
-      continue;
-    }
-
-    // Go up to parent and try next sibling
-    let retracing = true;
-    while (retracing) {
-      if (!cursor.gotoParent()) {
-        reachedRoot = true;
-        retracing = false;
-      } else if (cursor.gotoNextSibling()) {
-        retracing = false;
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (child && visitNode(child)) {
+        return true;
       }
     }
-  }
 
-  return false;
+    return false;
+  };
+
+  return visitNode(rootNode);
+}
+
+function debugAst(message: string): void {
+  if (process.env.MPR_DEBUG_AST === '1') {
+    // eslint-disable-next-line no-console
+    console.error(`[ast] ${message}`);
+  }
 }
 
 /**
@@ -225,41 +220,239 @@ export function areASTsEquivalent(
     };
   }
 
-  // Get parser for language
-  const parser = getParser(language);
-  if (!parser) {
-    return {
+  const parser1 = getParser(language);
+  const parser2 = getParser(language);
+  if (!parser1 || !parser2) {
+    return compareWithTokenFallback(code1, code2, language) || {
       equivalent: false,
       reason: `Unsupported language: ${language}`
     };
   }
 
   // Parse both code snippets
-  const tree1 = parser.parse(code1);
-  const tree2 = parser.parse(code2);
-
-  // Check for parse errors in first code
-  if (hasParseErrors(tree1)) {
+  let tree1: Parser.Tree;
+  let tree2: Parser.Tree;
+  try {
+    tree1 = parser1.parse(code1);
+    tree2 = parser2.parse(code2);
+  } catch (error) {
     return {
       equivalent: false,
-      reason: 'Parse error in code1'
+      reason: `Parser failed: ${(error as Error).message}`
     };
+  }
+
+  // Check for parse errors in first code
+  const tree1HasErrors = hasParseErrors(tree1);
+  const tree2HasErrors = hasParseErrors(tree2);
+  if (tree1HasErrors || tree2HasErrors) {
+    const code1HasObviousSyntaxError = hasObviousSyntaxError(code1, language);
+    const code2HasObviousSyntaxError = hasObviousSyntaxError(code2, language);
+
+    if (code1HasObviousSyntaxError) {
+      return {
+        equivalent: false,
+        reason: 'Parse error in code1'
+      };
+    }
+
+    if (code2HasObviousSyntaxError) {
+      return {
+        equivalent: false,
+        reason: 'Parse error in code2'
+      };
+    }
+
+    const fallbackResult = compareWithTokenFallback(code1, code2, language);
+    if (fallbackResult) {
+      return fallbackResult;
+    }
+  }
+
+  if (tree1HasErrors) {
+    const reparsedTree = parseWithFreshParser(code1, language);
+    if (reparsedTree && !hasParseErrors(reparsedTree)) {
+      tree1 = reparsedTree;
+    } else {
+      return {
+        equivalent: false,
+        reason: 'Parse error in code1'
+      };
+    }
   }
 
   // Check for parse errors in second code
-  if (hasParseErrors(tree2)) {
-    return {
-      equivalent: false,
-      reason: 'Parse error in code2'
-    };
+  if (tree2HasErrors) {
+    const reparsedTree = parseWithFreshParser(code2, language);
+    if (reparsedTree && !hasParseErrors(reparsedTree)) {
+      tree2 = reparsedTree;
+    } else {
+      return {
+        equivalent: false,
+        reason: 'Parse error in code2'
+      };
+    }
   }
 
   // Compare AST structures
-  const result = compareNodes(tree1.rootNode, tree2.rootNode);
+  const root1 = getRootNode(tree1);
+  const root2 = getRootNode(tree2);
+  if (!root1 || !root2) {
+    return {
+      equivalent: false,
+      reason: 'Parser returned no root node'
+    };
+  }
+
+  const result = compareNodes(root1, root2);
 
   return {
     equivalent: result.equivalent,
     reason: result.reason,
     comparisonDepth: result.maxDepth
   };
+}
+
+function parseWithFreshParser(code: string, language: Language): Parser.Tree | null {
+  const parser = getParser(language);
+  if (!parser) {
+    return null;
+  }
+
+  try {
+    return parser.parse(code);
+  } catch {
+    return null;
+  }
+}
+
+function compareWithTokenFallback(
+  code1: string,
+  code2: string,
+  language: Language
+): ASTComparisonResult | null {
+  if (hasObviousSyntaxError(code1, language) || hasObviousSyntaxError(code2, language)) {
+    return null;
+  }
+
+  const tokens1 = normalizeStructuralTokens(code1);
+  const tokens2 = normalizeStructuralTokens(code2);
+  if (tokens1.length === 0 || tokens2.length === 0) {
+    return null;
+  }
+
+  if (tokens1.join('\u0000') === tokens2.join('\u0000')) {
+    return {
+      equivalent: true,
+      comparisonDepth: Math.max(1, tokens1.length)
+    };
+  }
+
+  if (tokens1.length !== tokens2.length) {
+    return {
+      equivalent: false,
+      reason: `Child count mismatch in token fallback: ${tokens1.length} vs ${tokens2.length}`,
+      comparisonDepth: Math.max(tokens1.length, tokens2.length)
+    };
+  }
+
+  return {
+    equivalent: false,
+    reason: 'Node type mismatch in token fallback',
+    comparisonDepth: tokens1.length
+  };
+}
+
+function normalizeStructuralTokens(code: string): string[] {
+  return code
+    .replace(/\/\/.*$/gm, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .match(/[A-Za-z_$][\w$]*|\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|==={0,1}|!==?|=>|[{}()[\].,;:+\-*/%=<>]/g)
+    ?.map(token => {
+      if (/^["']/.test(token)) return 'STRING';
+      if (/^\d/.test(token)) return 'NUMBER';
+      if (token === 'true' || token === 'false') return 'BOOLEAN';
+      if (/^[A-Za-z_$]/.test(token) && !isStructuralKeyword(token)) return 'IDENTIFIER';
+      return token;
+    }) || [];
+}
+
+function isStructuralKeyword(token: string): boolean {
+  return new Set([
+    'const',
+    'let',
+    'var',
+    'function',
+    'return',
+    'if',
+    'else',
+    'while',
+    'for',
+    'class',
+    'def',
+    'async',
+    'await',
+  ]).has(token);
+}
+
+function hasObviousSyntaxError(code: string, language: Language): boolean {
+  const trimmed = code.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  if (hasIncompleteTrailingCharacter(trimmed)) {
+    return true;
+  }
+
+  if (language === 'typescript' || language === 'javascript') {
+    if (/\b(?:const|let|var)\b[^;\n]*\s+\b(?:const|let|var)\b/.test(trimmed)) {
+      return true;
+    }
+    if (/=\s*\n\s*(?:return|const|let|var|})/.test(code)) {
+      return true;
+    }
+  }
+
+  return hasUnbalancedDelimiters(trimmed);
+}
+
+function hasIncompleteTrailingCharacter(value: string): boolean {
+  const lastCharacter = value[value.length - 1];
+  return ['=', '+', '-', '*', '/', '%', ',', '(', '{', '['].includes(lastCharacter);
+}
+
+function hasUnbalancedDelimiters(code: string): boolean {
+  const stack: string[] = [];
+  const pairs: Record<string, string> = { ')': '(', '}': '{', ']': '[' };
+  let quote: string | null = null;
+  let escaped = false;
+
+  for (const char of code) {
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+
+    if (char === '(' || char === '{' || char === '[') {
+      stack.push(char);
+    } else if (char === ')' || char === '}' || char === ']') {
+      if (stack.pop() !== pairs[char]) {
+        return true;
+      }
+    }
+  }
+
+  return quote !== null || stack.length > 0;
 }

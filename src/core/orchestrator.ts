@@ -42,7 +42,7 @@ import { createQueue } from '../utils/parallel';
 import PQueue from 'p-queue';
 import { ReviewConfig, Review, PRContext, RunDetails, Finding, FileChange, UnchangedContext, ProviderResult, ReviewIntensity } from '../types';
 import { logger } from '../utils/logger';
-import { mapAddedLines, filterDiffByFiles } from '../utils/diff';
+import { chooseBestAddedLineForComment, mapAddedLines, filterDiffByFiles } from '../utils/diff';
 import { BatchOrchestrator } from './batch-orchestrator';
 import { ProgressTracker } from '../github/progress-tracker';
 import { GitHubClient } from '../github/client';
@@ -1071,9 +1071,22 @@ export class ReviewOrchestrator {
     codeGraph?: CodeGraph
   ): Finding {
     const file = files.find(f => f.filename === finding.file);
+    const correctedLine = chooseBestAddedLineForComment(
+      file?.patch,
+      finding.line,
+      `${finding.title}\n${finding.message}`
+    );
+    const normalizedFinding = correctedLine !== finding.line
+      ? { ...finding, line: correctedLine }
+      : finding;
+
+    if (correctedLine !== finding.line) {
+      logger.debug(`Adjusted finding line for ${finding.file}: ${finding.line} -> ${correctedLine}`);
+    }
+
     const changedLines = mapAddedLines(file?.patch);
-    const hasDirectEvidence = changedLines.some(l => l.line === finding.line);
-    const astConfirmed = Boolean(finding.providers?.includes('ast') || finding.provider === 'ast');
+    const hasDirectEvidence = changedLines.some(l => l.line === normalizedFinding.line);
+    const astConfirmed = Boolean(normalizedFinding.providers?.includes('ast') || normalizedFinding.provider === 'ast');
 
     // Enhanced graph confirmation using code graph
     let graphConfirmed = context.some(ctx => ctx.file === finding.file);
@@ -1088,7 +1101,7 @@ export class ReviewOrchestrator {
       .flatMap(ctx => ctx.affectedCode);
 
     const evidence = this.components.evidenceScorer.score(
-      finding,
+      normalizedFinding,
       providerCount,
       astConfirmed,
       graphConfirmed,
@@ -1096,7 +1109,7 @@ export class ReviewOrchestrator {
     );
 
     return {
-      ...finding,
+      ...normalizedFinding,
       evidence,
       evidenceDetail: {
         changedLines: changedLines.map(c => c.line),

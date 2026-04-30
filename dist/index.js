@@ -26082,9 +26082,19 @@ var ReviewOrchestrator = class {
    */
   enrichFinding(finding, files, context, providerCount, codeGraph) {
     const file = files.find((f) => f.filename === finding.file);
+    const correctedLine = chooseBestAddedLineForComment(
+      file?.patch,
+      finding.line,
+      `${finding.title}
+${finding.message}`
+    );
+    const normalizedFinding = correctedLine !== finding.line ? { ...finding, line: correctedLine } : finding;
+    if (correctedLine !== finding.line) {
+      logger.debug(`Adjusted finding line for ${finding.file}: ${finding.line} -> ${correctedLine}`);
+    }
     const changedLines = mapAddedLines(file?.patch);
-    const hasDirectEvidence = changedLines.some((l) => l.line === finding.line);
-    const astConfirmed = Boolean(finding.providers?.includes("ast") || finding.provider === "ast");
+    const hasDirectEvidence = changedLines.some((l) => l.line === normalizedFinding.line);
+    const astConfirmed = Boolean(normalizedFinding.providers?.includes("ast") || normalizedFinding.provider === "ast");
     let graphConfirmed = context.some((ctx) => ctx.file === finding.file);
     if (codeGraph && !graphConfirmed) {
       const dependents = codeGraph.getDependents(finding.file);
@@ -26092,14 +26102,14 @@ var ReviewOrchestrator = class {
     }
     const relatedSnippets = context.filter((ctx) => ctx.file === finding.file).flatMap((ctx) => ctx.affectedCode);
     const evidence = this.components.evidenceScorer.score(
-      finding,
+      normalizedFinding,
       providerCount,
       astConfirmed,
       graphConfirmed,
       hasDirectEvidence
     );
     return {
-      ...finding,
+      ...normalizedFinding,
       evidence,
       evidenceDetail: {
         changedLines: changedLines.map((c) => c.line),

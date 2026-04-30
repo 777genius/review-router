@@ -256,6 +256,123 @@ describe('ReviewOrchestrator integration (offline)', () => {
     expect(commentPoster.postedInline).toEqual([]);
   });
 
+  it('normalizes model-reported finding lines before rendering the summary', async () => {
+    class LineMismatchLLMExecutor {
+      async filterHealthyProviders(providers: Provider[]): Promise<{ healthy: Provider[]; healthCheckResults: ProviderResult[] }> {
+        return { healthy: providers, healthCheckResults: [] };
+      }
+
+      async execute(): Promise<ProviderResult[]> {
+        return [
+          {
+            name: 'fake/model',
+            status: 'success',
+            result: {
+              content: 'ok',
+              findings: [
+                {
+                  file: 'src/billing.js',
+                  line: 8,
+                  severity: 'critical',
+                  title: 'Interpolated billing query allows SQL injection',
+                  message: 'The changed line builds SQL with normalizedEmail inside the query string.',
+                },
+              ],
+            },
+            durationSeconds: 0.1,
+          },
+        ];
+      }
+    }
+
+    class BillingPRLoader {
+      async load(): Promise<PRContext> {
+        return {
+          number: 4,
+          title: 'Billing regression',
+          body: '',
+          author: 'dev',
+          draft: false,
+          labels: [],
+          files: [
+            {
+              filename: 'src/billing.js',
+              status: 'modified',
+              additions: 2,
+              deletions: 5,
+              changes: 7,
+              patch: [
+                '@@ -4,9 +4,6 @@ export async function getBillingSummary(db, plans, planId, email) {',
+                ' export async function getBillingSummary(db, plans, planId, email) {',
+                '   const plan = findPlan(plans, planId);',
+                '   const normalizedEmail = normalizeEmail(email);',
+                "-  return db.query('select * from billing where email = ? and plan = ?', [",
+                '-    normalizedEmail,',
+                "-    plan?.id ?? 'free',",
+                '-  ]);',
+                "+  const rows = await db.query(`select * from billing where email = '${normalizedEmail}' and plan = '${plan.id}' limit 1`);",
+                '+  return rows[0] || null;',
+                ' }',
+              ].join('\n'),
+            },
+          ],
+          diff: '',
+          additions: 2,
+          deletions: 5,
+          baseSha: 'base',
+          headSha: 'head',
+        };
+      }
+    }
+
+    const lineConfig = {
+      ...config,
+      inlineMaxComments: 5,
+      enableAstAnalysis: false,
+      enableSecurity: false,
+    };
+    const commentPoster = new StubCommentPoster();
+    const components: ReviewComponents = {
+      config: lineConfig,
+      providerRegistry: new StubProviderRegistry() as any,
+      promptBuilder: new PromptBuilder(lineConfig),
+      llmExecutor: new LineMismatchLLMExecutor() as any,
+      deduplicator: new Deduplicator(),
+      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      synthesis: new SynthesisEngine(lineConfig),
+      testCoverage: new TestCoverageAnalyzer(),
+      astAnalyzer: new ASTAnalyzer(),
+      cache: new NoopCache(),
+      incrementalReviewer: {
+        shouldUseIncremental: async () => false,
+        getLastReview: async () => null,
+        saveReview: async () => {},
+        getChangedFilesSince: async () => [],
+        mergeFindings: (prev: any, curr: any) => curr,
+        generateIncrementalSummary: () => '',
+      } as any,
+      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      security: new SecurityScanner(),
+      rules: new RulesEngine([]),
+      prLoader: new BillingPRLoader() as unknown as PullRequestLoader,
+      commentPoster: commentPoster as unknown as CommentPoster,
+      formatter: new MarkdownFormatter(),
+      contextRetriever: new ContextRetriever(),
+      impactAnalyzer: new ImpactAnalyzer(),
+      evidenceScorer: new EvidenceScorer(),
+      mermaidGenerator: new MermaidGenerator(),
+      feedbackFilter: new StubFeedbackFilter() as unknown as FeedbackFilter,
+    };
+
+    const review = await new ReviewOrchestrator(components).execute(4);
+    const finding = review?.findings.find(f => f.title.includes('Interpolated billing query'));
+
+    expect(finding?.line).toBe(7);
+    expect(review?.inlineComments[0].line).toBe(7);
+    expect(commentPoster.postedSummary).toContain('src/billing.js:7');
+    expect(commentPoster.postedSummary).not.toContain('src/billing.js:8');
+  });
+
   it('passes built code graph context into batch prompt builder when graph is enabled', async () => {
     class CapturingLLMExecutor {
       prompts: string[] = [];

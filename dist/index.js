@@ -32340,9 +32340,12 @@ var CodexProvider = class extends Provider {
     super(`codex/${model}`);
     this.model = model;
   }
-  // Lightweight health check: verify CLI is available
+  // Verify the CLI is available and, by default, that the selected model works
+  // with the current Codex auth. Binary-only checks can mark unsupported models
+  // as healthy, which then creates green "no provider" review runs.
   async healthCheck(_timeoutMs = 5e3) {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5e3);
+    const mode = (process.env.CODEX_HEALTHCHECK_MODE || "exec").toLowerCase();
     let timeoutId;
     let isTimedOut = false;
     const timeoutPromise = new Promise((_, reject) => {
@@ -32352,15 +32355,29 @@ var CodexProvider = class extends Provider {
       }, timeoutMs);
     });
     try {
-      await Promise.race([
-        this.resolveBinary().then(() => {
+      const binary2 = await Promise.race([
+        this.resolveBinary().then((resolved) => {
           if (isTimedOut) {
             logger.debug(`Codex binary resolved after timeout (${this.name})`);
           }
+          return resolved;
         }),
         timeoutPromise
       ]);
       clearTimeout(timeoutId);
+      if (mode === "none" || mode === "binary") {
+        return true;
+      }
+      const { stdout } = await this.runCliWithStdin(
+        binary2,
+        this.buildExecArgs({ healthCheck: true }),
+        "Respond with exactly: codex-health-ok",
+        timeoutMs
+      );
+      if (!stdout.includes("codex-health-ok")) {
+        logger.warn(`Codex health check returned unexpected output for ${this.name}`);
+        return false;
+      }
       return true;
     } catch (error2) {
       if (timeoutId) {
@@ -32373,15 +32390,7 @@ var CodexProvider = class extends Provider {
   async review(prompt, timeoutMs) {
     const started = Date.now();
     const binary2 = await this.resolveBinary();
-    const args = [
-      "exec",
-      "--model",
-      this.model,
-      "--dangerously-bypass-approvals-and-sandbox",
-      "-c",
-      "approval_policy=never",
-      "-"
-    ];
+    const args = this.buildExecArgs({ healthCheck: false });
     logger.info(`Running Codex CLI: codex exec --model ${this.model} --dangerously-bypass-approvals-and-sandbox ...`);
     try {
       const { stdout, stderr } = await this.runCliWithStdin(binary2, args, prompt, timeoutMs);
@@ -32402,6 +32411,25 @@ var CodexProvider = class extends Provider {
       logger.error(`Codex provider failed: ${this.name}`, error2);
       throw error2;
     }
+  }
+  buildExecArgs(options) {
+    const args = [
+      "exec",
+      "--model",
+      this.model,
+      "--dangerously-bypass-approvals-and-sandbox",
+      "-c",
+      "approval_policy=never"
+    ];
+    const effort = options.healthCheck ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || "low" : process.env.CODEX_REASONING_EFFORT;
+    if (effort) {
+      const normalized = effort.trim().toLowerCase();
+      if (/^[a-z]+$/.test(normalized)) {
+        args.push("-c", `model_reasoning_effort="${normalized}"`);
+      }
+    }
+    args.push("-");
+    return args;
   }
   async runCliWithStdin(bin, args, stdin, timeoutMs) {
     const tmpFile = path4.join(os3.tmpdir(), `codex-prompt-${crypto3.randomBytes(8).toString("hex")}.txt`);
@@ -35074,6 +35102,26 @@ var ConsensusEngine = class {
   }
 };
 
+// src/utils/suggestion-formatter.ts
+function countMaxConsecutiveBackticks(str2) {
+  const backtickSequences = str2.match(/`+/g);
+  if (!backtickSequences) {
+    return 0;
+  }
+  return Math.max(...backtickSequences.map((seq2) => seq2.length));
+}
+function formatSuggestionBlock(content) {
+  if (!content || content.trim() === "") {
+    return "";
+  }
+  const maxBackticks = countMaxConsecutiveBackticks(content);
+  const fenceCount = Math.max(3, maxBackticks + 1);
+  const fence = "`".repeat(fenceCount);
+  return `${fence}suggestion
+${content}
+${fence}`;
+}
+
 // src/analysis/synthesis.ts
 var SynthesisEngine = class {
   constructor(config) {
@@ -35170,7 +35218,10 @@ var SynthesisEngine = class {
   commentBody(finding) {
     const parts = [`**${finding.title}**`, finding.message];
     if (finding.suggestion) {
-      parts.push("", `Suggestion: ${finding.suggestion}`);
+      const suggestionBlock = formatSuggestionBlock(finding.suggestion);
+      if (suggestionBlock) {
+        parts.push("", suggestionBlock);
+      }
     }
     if (finding.providers && finding.providers.length > 1) {
       parts.push("", `Providers: ${finding.providers.join(", ")}`);
@@ -36587,14 +36638,16 @@ ${content.substring(0, 500)}...`);
             }
           }
         }
-        const apiComment = { path: c.path, position, body: c.body };
+        const apiComment = {
+          path: c.path,
+          line: c.line,
+          side: c.side || "RIGHT",
+          body: c.body
+        };
         const startLine = c.start_line;
         if (startLine !== void 0 && startLine !== c.line) {
           apiComment.start_line = startLine;
-          apiComment.line = c.line;
           apiComment.start_side = "RIGHT";
-          apiComment.side = "RIGHT";
-          delete apiComment.position;
         }
         return apiComment;
       })
@@ -36606,7 +36659,7 @@ ${content.substring(0, 500)}...`);
     if (this.dryRun) {
       logger.info(`[DRY RUN] Would post ${apiComments.length} inline comment(s) to PR #${prNumber}`);
       for (const comment of apiComments) {
-        logger.info(`[DRY RUN] Inline comment at ${comment.path}:${comment.position}:
+        logger.info(`[DRY RUN] Inline comment at ${comment.path}:${comment.line}:
 ${comment.body.substring(0, 200)}...`);
       }
       return;
@@ -36864,26 +36917,6 @@ var GitHubClient = class {
     }
   }
 };
-
-// src/utils/suggestion-formatter.ts
-function countMaxConsecutiveBackticks(str2) {
-  const backtickSequences = str2.match(/`+/g);
-  if (!backtickSequences) {
-    return 0;
-  }
-  return Math.max(...backtickSequences.map((seq2) => seq2.length));
-}
-function formatSuggestionBlock(content) {
-  if (!content || content.trim() === "") {
-    return "";
-  }
-  const maxBackticks = countMaxConsecutiveBackticks(content);
-  const fenceCount = Math.max(3, maxBackticks + 1);
-  const fence = "`".repeat(fenceCount);
-  return `${fence}suggestion
-${content}
-${fence}`;
-}
 
 // src/output/formatter-v2.ts
 var MarkdownFormatterV2 = class {
@@ -43673,6 +43706,9 @@ var ReviewOrchestrator = class {
         const meetsPrimaryTargets = healthy.length >= MIN_TOTAL_HEALTHY && countOpenCode(healthy) >= MIN_OPENCODE_HEALTHY && countOpenRouter(healthy) >= MIN_OPENROUTER_HEALTHY;
         if (!meetsPrimaryTargets && healthy.length < MIN_FALLBACK_HEALTHY) {
           logger.warn("Insufficient healthy providers after retries; skipping LLM execution");
+          if (process.env.FAIL_ON_NO_HEALTHY_PROVIDERS === "true" && healthy.length === 0) {
+            throw new Error("No healthy providers available; failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true");
+          }
           providerResults = allHealthResults;
           await this.recordReliability(providerResults);
           await progressTracker?.updateProgress(
@@ -44250,6 +44286,10 @@ function syncEnvFromInputs() {
     "PROVIDER_LIMIT",
     "PROVIDER_RETRIES",
     "PROVIDER_MAX_PARALLEL",
+    "CODEX_HEALTHCHECK_MODE",
+    "CODEX_HEALTHCHECK_REASONING_EFFORT",
+    "CODEX_REASONING_EFFORT",
+    "FAIL_ON_NO_HEALTHY_PROVIDERS",
     "QUIET_MODE_ENABLED",
     "QUIET_MIN_CONFIDENCE",
     "QUIET_USE_LEARNING",

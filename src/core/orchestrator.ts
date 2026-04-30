@@ -410,6 +410,9 @@ export class ReviewOrchestrator {
 
         if (!meetsPrimaryTargets && healthy.length < MIN_FALLBACK_HEALTHY) {
           logger.warn('Insufficient healthy providers after retries; skipping LLM execution');
+          if (process.env.FAIL_ON_NO_HEALTHY_PROVIDERS === 'true' && healthy.length === 0) {
+            throw new Error('No healthy providers available; failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true');
+          }
           providerResults = allHealthResults;
           await this.recordReliability(providerResults);
           await progressTracker?.updateProgress(

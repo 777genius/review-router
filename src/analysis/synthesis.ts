@@ -1,4 +1,5 @@
 import { Finding, InlineComment, PRContext, Review, ReviewConfig, ReviewMetrics, TestCoverageHint, AIAnalysis, ProviderResult, RunDetails, ImpactAnalysis } from '../types';
+import { formatSuggestionBlock } from '../utils/suggestion-formatter';
 
 export class SynthesisEngine {
   constructor(private readonly config: ReviewConfig) {}
@@ -140,7 +141,10 @@ export class SynthesisEngine {
   private commentBody(finding: Finding): string {
     const parts = [`**${finding.title}**`, finding.message];
     if (finding.suggestion) {
-      parts.push('', `Suggestion: ${finding.suggestion}`);
+      const suggestionBlock = formatSuggestionBlock(finding.suggestion);
+      if (suggestionBlock) {
+        parts.push('', suggestionBlock);
+      }
     }
     if (finding.providers && finding.providers.length > 1) {
       parts.push('', `Providers: ${finding.providers.join(', ')}`);

@@ -12,9 +12,12 @@ export class CodexProvider extends Provider {
     super(`codex/${model}`);
   }
 
-  // Lightweight health check: verify CLI is available
+  // Verify the CLI is available and, by default, that the selected model works
+  // with the current Codex auth. Binary-only checks can mark unsupported models
+  // as healthy, which then creates green "no provider" review runs.
   async healthCheck(_timeoutMs: number = 5000): Promise<boolean> {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5000);
+    const mode = (process.env.CODEX_HEALTHCHECK_MODE || 'exec').toLowerCase();
 
     let timeoutId: NodeJS.Timeout;
     let isTimedOut = false;
@@ -27,15 +30,33 @@ export class CodexProvider extends Provider {
     });
 
     try {
-      await Promise.race([
-        this.resolveBinary().then(() => {
+      const binary = await Promise.race([
+        this.resolveBinary().then((resolved) => {
           if (isTimedOut) {
             logger.debug(`Codex binary resolved after timeout (${this.name})`);
           }
+          return resolved;
         }),
         timeoutPromise
       ]);
       clearTimeout(timeoutId!);
+
+      if (mode === 'none' || mode === 'binary') {
+        return true;
+      }
+
+      const { stdout } = await this.runCliWithStdin(
+        binary,
+        this.buildExecArgs({ healthCheck: true }),
+        'Respond with exactly: codex-health-ok',
+        timeoutMs
+      );
+
+      if (!stdout.includes('codex-health-ok')) {
+        logger.warn(`Codex health check returned unexpected output for ${this.name}`);
+        return false;
+      }
+
       return true;
     } catch (error) {
       if (timeoutId!) {
@@ -51,16 +72,7 @@ export class CodexProvider extends Provider {
 
     const binary = await this.resolveBinary();
 
-    // Codex CLI command:
-    // codex exec --model <model> --dangerously-bypass-approvals-and-sandbox -c approval_policy="never" -
-    // The top-level `codex` command starts the interactive TUI and fails in CI.
-    const args = [
-      'exec',
-      '--model', this.model,
-      '--dangerously-bypass-approvals-and-sandbox',
-      '-c', 'approval_policy=never',
-      '-',
-    ];
+    const args = this.buildExecArgs({ healthCheck: false });
 
     logger.info(`Running Codex CLI: codex exec --model ${this.model} --dangerously-bypass-approvals-and-sandbox ...`);
 
@@ -83,6 +95,32 @@ export class CodexProvider extends Provider {
       logger.error(`Codex provider failed: ${this.name}`, error as Error);
       throw error;
     }
+  }
+
+  private buildExecArgs(options: { healthCheck: boolean }): string[] {
+    // Codex CLI command:
+    // codex exec --model <model> --dangerously-bypass-approvals-and-sandbox -c approval_policy="never" -
+    // The top-level `codex` command starts the interactive TUI and fails in CI.
+    const args = [
+      'exec',
+      '--model', this.model,
+      '--dangerously-bypass-approvals-and-sandbox',
+      '-c', 'approval_policy=never',
+    ];
+
+    const effort = options.healthCheck
+      ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || 'low'
+      : process.env.CODEX_REASONING_EFFORT;
+
+    if (effort) {
+      const normalized = effort.trim().toLowerCase();
+      if (/^[a-z]+$/.test(normalized)) {
+        args.push('-c', `model_reasoning_effort="${normalized}"`);
+      }
+    }
+
+    args.push('-');
+    return args;
   }
 
   private async runCliWithStdin(bin: string, args: string[], stdin: string, timeoutMs: number): Promise<{ stdout: string; stderr: string }> {

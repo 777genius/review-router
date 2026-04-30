@@ -340,19 +340,21 @@ export class CommentPoster {
           }
         }
 
-        const apiComment: any = { path: c.path, position, body: c.body };
+        const apiComment: any = {
+          path: c.path,
+          line: c.line,
+          side: c.side || 'RIGHT',
+          body: c.body,
+        };
         const startLine = (c as any).start_line;
         if (startLine !== undefined && startLine !== c.line) {
-          // Multi-line: use line-based parameters instead of position
+          // Multi-line: use line-based parameters.
           apiComment.start_line = startLine;
-          apiComment.line = c.line;
           apiComment.start_side = 'RIGHT';
-          apiComment.side = 'RIGHT';
-          delete apiComment.position; // Can't use both position and line
         }
         return apiComment;
       })
-    )).filter((c): c is { path: string; position: number; body: string } => c !== null);
+    )).filter((c): c is { path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string } => c !== null);
 
     if (apiComments.length === 0) {
       logger.info('No inline comments with valid diff positions to post');
@@ -362,7 +364,7 @@ export class CommentPoster {
     if (this.dryRun) {
       logger.info(`[DRY RUN] Would post ${apiComments.length} inline comment(s) to PR #${prNumber}`);
       for (const comment of apiComments) {
-        logger.info(`[DRY RUN] Inline comment at ${comment.path}:${comment.position}:\n${comment.body.substring(0, 200)}...`);
+        logger.info(`[DRY RUN] Inline comment at ${comment.path}:${comment.line}:\n${comment.body.substring(0, 200)}...`);
       }
       return;
     }

@@ -79,6 +79,16 @@ describe('CommentPoster', () => {
 
       await poster.postInline(123, comments, files);
 
+      const reviewCall = mockOctokit.rest.pulls.createReview.mock.calls[0][0];
+      expect(reviewCall.comments[0]).toEqual(
+        expect.objectContaining({
+          path: 'src/test.ts',
+          line: 10,
+          side: 'RIGHT',
+          body: 'Test comment',
+        })
+      );
+      expect(reviewCall.comments[0]).not.toHaveProperty('position');
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
         owner: 'test-owner',
         repo: 'test-repo',

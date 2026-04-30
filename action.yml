@@ -76,6 +76,22 @@ inputs:
     description: "Maximum providers to run in parallel"
     required: false
     default: "3"
+  CODEX_HEALTHCHECK_MODE:
+    description: "Codex provider health check mode: exec, binary, or none"
+    required: false
+    default: "exec"
+  CODEX_HEALTHCHECK_REASONING_EFFORT:
+    description: "Codex reasoning effort used for health checks"
+    required: false
+    default: "low"
+  CODEX_REASONING_EFFORT:
+    description: "Optional Codex reasoning effort override for review runs"
+    required: false
+    default: ""
+  FAIL_ON_NO_HEALTHY_PROVIDERS:
+    description: "Fail the action if no provider passes health checks"
+    required: false
+    default: "false"
   DIFF_MAX_BYTES:
     description: "Maximum diff bytes to send to providers"
     required: false

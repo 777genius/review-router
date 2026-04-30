@@ -797,6 +797,7 @@ prepare_worktree() {
   default_branch="$(gh repo view "$TARGET_REPO" --json defaultBranchRef -q .defaultBranchRef.name)"
   (
     cd "$WORKDIR"
+    git fetch origin "refs/heads/$INSTALL_BRANCH:refs/remotes/origin/$INSTALL_BRANCH" --depth=1 >/dev/null 2>&1 || true
     git checkout -B "$INSTALL_BRANCH" "origin/$default_branch" >/dev/null 2>&1 || git checkout -B "$INSTALL_BRANCH" >/dev/null
   )
 }

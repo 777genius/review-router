@@ -48,14 +48,14 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 
 This uses `gh secret set --org your-org --repos repo-a,repo-b --app actions`, not `--visibility all`.
 
-To run a destructive real org e2e smoke test against a disposable organization:
+To run a real org e2e smoke test against a disposable organization without granting `delete_repo`:
 
 ```bash
-gh auth refresh -s admin:org -s delete_repo
-AI_ROBOT_REVIEW_E2E_ORG=your-test-org bash scripts/e2e-org-installer-smoke.sh
+gh auth refresh -s admin:org
+AI_ROBOT_REVIEW_E2E_ORG=your-test-org AI_ROBOT_REVIEW_E2E_SKIP_DELETE=1 bash scripts/e2e-org-installer-smoke.sh
 ```
 
-The smoke script creates a temporary private repo, installs org-level selected-repo secrets/variables, verifies `visibility=selected` and `numSelectedRepos=1`, verifies the setup PR/workflow, then deletes the temporary repo and smoke secrets/variables.
+The smoke script creates a temporary private repo, installs org-level selected-repo secrets/variables, verifies `visibility=selected` and `numSelectedRepos=1`, verifies the setup PR/workflow, then deletes the smoke secrets/variables. With `AI_ROBOT_REVIEW_E2E_SKIP_DELETE=1`, it leaves the temporary repo for manual deletion so the CLI does not need `delete_repo`.
 
 ### API key instead of Codex OAuth
 

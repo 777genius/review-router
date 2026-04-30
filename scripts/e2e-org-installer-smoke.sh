@@ -56,8 +56,8 @@ owner_type="$(gh api "users/$ORG" --jq .type 2>/dev/null || true)"
 if ! gh auth status 2>&1 | grep -q 'admin:org'; then
   fatal "gh token needs admin:org. Run: gh auth refresh -s admin:org"
 fi
-if ! gh auth status 2>&1 | grep -q 'delete_repo'; then
-  fatal "gh token needs delete_repo for automatic cleanup. Run: gh auth refresh -s delete_repo"
+if ! is_true "$KEEP_REPO" && ! is_true "$SKIP_DELETE" && ! gh auth status 2>&1 | grep -q 'delete_repo'; then
+  fatal "gh token needs delete_repo for automatic repo cleanup. To avoid this broad scope, rerun with AI_ROBOT_REVIEW_E2E_SKIP_DELETE=1 and delete the temporary repo manually."
 fi
 
 existing_secret="$(gh secret list --org "$ORG" --app actions --json name --jq '.[] | select(.name=="OPENROUTER_API_KEY") | .name')"

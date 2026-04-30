@@ -342,7 +342,7 @@ export class CodexProvider extends Provider {
       '',
       'Use the deterministic PR context below as the source of truth for review scope.',
       'You may inspect related repository files before producing findings, but only with read-only shell commands such as rg, sed, cat, git diff, git show, git grep, ls, find, and pwd.',
-      'Before returning a non-empty findings array, inspect the changed file and at least one directly related file when available, such as imports, called modules, schema/config files, or callers.',
+      'Before deciding whether findings is empty or non-empty, inspect the changed source file and at least one directly related file when available, such as imports, called modules, schema/config files, or callers.',
       'When a finding depends on related context, cite the concrete related file evidence in the message.',
       'Do not read environment variables, secret files, ~/.codex, git credentials, or GitHub token files.',
       'Do not run package installation, tests, builds, formatters, network commands, or commands that write files.',

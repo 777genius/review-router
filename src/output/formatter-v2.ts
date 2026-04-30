@@ -30,11 +30,11 @@ export class MarkdownFormatterV2 {
     lines.push(`> ${this.generatePRSummary(review)}`);
     lines.push('');
 
-    // Release notes (if significant changes)
-    if (this.hasSignificantChanges(review)) {
+    const releaseNotes = this.generateReleaseNotes(review).trim();
+    if (releaseNotes) {
       lines.push('## Release Notes');
       lines.push('');
-      lines.push(this.generateReleaseNotes(review));
+      lines.push(releaseNotes);
       lines.push('');
     }
 
@@ -73,16 +73,6 @@ export class MarkdownFormatterV2 {
       lines.push('');
     }
 
-    // Action items (if any)
-    if (review.actionItems && review.actionItems.length > 0) {
-      lines.push('## Action Items');
-      lines.push('');
-      review.actionItems.forEach((item) => {
-        lines.push(`- [ ] ${item}`);
-      });
-      lines.push('');
-    }
-
     // Performance & metrics
     lines.push(this.formatMetrics(review));
     lines.push('');
@@ -93,9 +83,7 @@ export class MarkdownFormatterV2 {
     // Footer
     lines.push('---');
     lines.push('');
-    lines.push(
-      '*Powered by Multi-Provider Code Review* • To dismiss a finding, react with 👎'
-    );
+    lines.push(this.formatFooter(review));
 
     return lines.join('\n');
   }
@@ -145,8 +133,9 @@ export class MarkdownFormatterV2 {
     const parts: string[] = [];
 
     if (metrics.critical > 0) {
+      const verb = metrics.critical === 1 ? 'requires' : 'require';
       parts.push(
-        `**${metrics.critical} critical issue${metrics.critical > 1 ? 's' : ''}** require immediate attention`
+        `**${metrics.critical} critical issue${metrics.critical > 1 ? 's' : ''}** ${verb} immediate attention`
       );
     }
 
@@ -184,11 +173,6 @@ export class MarkdownFormatterV2 {
     return 'No issues found. Great job!';
   }
 
-  private hasSignificantChanges(review: Review): boolean {
-    // Generate release notes if there are critical or major findings
-    return review.metrics.critical > 0 || review.metrics.major > 0;
-  }
-
   private generateReleaseNotes(review: Review): string {
     const lines: string[] = [];
     const significant = review.findings.filter(
@@ -216,7 +200,7 @@ export class MarkdownFormatterV2 {
       lines.push('');
     });
 
-    return lines.join('\n');
+    return lines.join('\n').trim();
   }
 
   private formatSeveritySection(
@@ -261,7 +245,7 @@ export class MarkdownFormatterV2 {
 
     lines.push(`#### ${display.emoji} ${numberPrefix}${finding.title}`);
     lines.push(
-      `**Location:** ${location}${finding.category ? ` • **Category:** ${finding.category}` : ''}`
+      `**Reported Location:** ${location}${finding.category ? ` • **Category:** ${finding.category}` : ''}`
     );
     lines.push(severityLine(severity));
     lines.push('');
@@ -419,12 +403,12 @@ export class MarkdownFormatterV2 {
     }
 
     // Impact Graph
-    if (review.mermaidDiagram && review.mermaidDiagram.trim()) {
+    if (this.shouldShowImpactGraph(review.mermaidDiagram)) {
       lines.push('<details>');
       lines.push('<summary>Impact Analysis Graph</summary>');
       lines.push('');
       lines.push('```mermaid');
-      lines.push(review.mermaidDiagram);
+      lines.push(review.mermaidDiagram!);
       lines.push('```');
       lines.push('</details>');
       lines.push('');
@@ -471,5 +455,19 @@ export class MarkdownFormatterV2 {
     }
 
     return lines.join('\n');
+  }
+
+  private shouldShowImpactGraph(mermaidDiagram?: string): boolean {
+    if (!mermaidDiagram?.trim()) return false;
+
+    // A graph with only standalone nodes adds noise in PR comments.
+    return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
+  }
+
+  private formatFooter(review: Review): string {
+    const base = '*Powered by Multi-Provider Code Review*';
+    if (review.inlineComments.length === 0) return base;
+
+    return `${base} • To suppress an inline finding on future reruns, react 👎 on that inline comment.`;
   }
 }

@@ -17487,10 +17487,11 @@ var MarkdownFormatterV2 = class {
     lines.push("");
     lines.push(`> ${this.generatePRSummary(review)}`);
     lines.push("");
-    if (this.hasSignificantChanges(review)) {
+    const releaseNotes = this.generateReleaseNotes(review).trim();
+    if (releaseNotes) {
       lines.push("## Release Notes");
       lines.push("");
-      lines.push(this.generateReleaseNotes(review));
+      lines.push(releaseNotes);
       lines.push("");
     }
     const hasFindings = review.findings.length > 0;
@@ -17520,22 +17521,12 @@ var MarkdownFormatterV2 = class {
       lines.push(`> ${allClearMessage}`);
       lines.push("");
     }
-    if (review.actionItems && review.actionItems.length > 0) {
-      lines.push("## Action Items");
-      lines.push("");
-      review.actionItems.forEach((item) => {
-        lines.push(`- [ ] ${item}`);
-      });
-      lines.push("");
-    }
     lines.push(this.formatMetrics(review));
     lines.push("");
     lines.push(this.formatAdvancedSections(review));
     lines.push("---");
     lines.push("");
-    lines.push(
-      "*Powered by Multi-Provider Code Review* \u2022 To dismiss a finding, react with \u{1F44E}"
-    );
+    lines.push(this.formatFooter(review));
     return lines.join("\n");
   }
   formatQuickStats(review) {
@@ -17570,8 +17561,9 @@ var MarkdownFormatterV2 = class {
     }
     const parts = [];
     if (metrics.critical > 0) {
+      const verb = metrics.critical === 1 ? "requires" : "require";
       parts.push(
-        `**${metrics.critical} critical issue${metrics.critical > 1 ? "s" : ""}** require immediate attention`
+        `**${metrics.critical} critical issue${metrics.critical > 1 ? "s" : ""}** ${verb} immediate attention`
       );
     }
     if (metrics.major > 0) {
@@ -17596,9 +17588,6 @@ var MarkdownFormatterV2 = class {
     }
     return "No issues found. Great job!";
   }
-  hasSignificantChanges(review) {
-    return review.metrics.critical > 0 || review.metrics.major > 0;
-  }
   generateReleaseNotes(review) {
     const lines = [];
     const significant = review.findings.filter(
@@ -17621,7 +17610,7 @@ var MarkdownFormatterV2 = class {
       });
       lines.push("");
     });
-    return lines.join("\n");
+    return lines.join("\n").trim();
   }
   formatSeveritySection(header, findings, severity) {
     const lines = [];
@@ -17645,7 +17634,7 @@ var MarkdownFormatterV2 = class {
     const numberPrefix = total > 1 ? `${index}. ` : "";
     lines.push(`#### ${display.emoji} ${numberPrefix}${finding.title}`);
     lines.push(
-      `**Location:** ${location}${finding.category ? ` \u2022 **Category:** ${finding.category}` : ""}`
+      `**Reported Location:** ${location}${finding.category ? ` \u2022 **Category:** ${finding.category}` : ""}`
     );
     lines.push(severityLine(severity));
     lines.push("");
@@ -17760,7 +17749,7 @@ var MarkdownFormatterV2 = class {
       lines.push("</details>");
       lines.push("");
     }
-    if (review.mermaidDiagram && review.mermaidDiagram.trim()) {
+    if (this.shouldShowImpactGraph(review.mermaidDiagram)) {
       lines.push("<details>");
       lines.push("<summary>Impact Analysis Graph</summary>");
       lines.push("");
@@ -17797,6 +17786,15 @@ var MarkdownFormatterV2 = class {
       lines.push("");
     }
     return lines.join("\n");
+  }
+  shouldShowImpactGraph(mermaidDiagram) {
+    if (!mermaidDiagram?.trim()) return false;
+    return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
+  }
+  formatFooter(review) {
+    const base = "*Powered by Multi-Provider Code Review*";
+    if (review.inlineComments.length === 0) return base;
+    return `${base} \u2022 To suppress an inline finding on future reruns, react \u{1F44E} on that inline comment.`;
   }
 };
 

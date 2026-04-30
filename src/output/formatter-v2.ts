@@ -1,5 +1,4 @@
 import { Review, Finding } from '../types';
-import { formatSuggestionBlock } from '../utils/suggestion-formatter';
 import { getSeverityDisplay, severityLine } from '../utils/severity';
 
 /**
@@ -265,17 +264,6 @@ export class MarkdownFormatterV2 {
     lines.push(finding.message);
     lines.push('');
 
-    // Suggestion (if present)
-    if (finding.suggestion) {
-      const suggestionBlock = formatSuggestionBlock(finding.suggestion);
-      if (suggestionBlock) {
-        lines.push('**Suggested Fix:**');
-        lines.push('');
-        lines.push(suggestionBlock);
-        lines.push('');
-      }
-    }
-
     // Evidence (if present) - put behind "View reasoning" collapsible
     if (finding.evidence) {
       const confidence = Math.round(finding.evidence.confidence * 100);
@@ -435,46 +423,6 @@ export class MarkdownFormatterV2 {
       lines.push('```mermaid');
       lines.push(review.mermaidDiagram!);
       lines.push('```');
-      lines.push('</details>');
-      lines.push('');
-    }
-
-    // Raw Provider Outputs
-    if (review.providerResults && review.providerResults.length > 0) {
-      lines.push('<details>');
-      lines.push('<summary>Raw Provider Outputs</summary>');
-      lines.push('');
-
-      review.providerResults.forEach((result) => {
-        const statusEmoji =
-          result.status === 'success'
-            ? '✅'
-            : result.status === 'timeout'
-              ? '⏱️'
-              : result.status === 'rate-limited'
-                ? '⏸️'
-                : '❌';
-
-        lines.push(`<details>`);
-        lines.push(
-          `<summary>${statusEmoji} ${result.name} [${result.status}] (${result.durationSeconds.toFixed(2)}s)</summary>`
-        );
-        lines.push('');
-
-        if (result.result?.content) {
-          lines.push(result.result.content.trim());
-        } else if (result.error) {
-          lines.push('```');
-          lines.push(`Error: ${result.error.message}`);
-          lines.push('```');
-        } else {
-          lines.push('*No content available*');
-        }
-
-        lines.push('</details>');
-        lines.push('');
-      });
-
       lines.push('</details>');
       lines.push('');
     }

@@ -167,7 +167,7 @@ export class SynthesisEngine {
     const items = findings
       .filter(f => f.severity !== 'minor')
       .slice(0, 5)
-      .map(f => `${f.file}:${f.line} — ${f.title}`);
+      .map(f => `${f.file}:${f.line} - ${f.title}`);
 
     return Array.from(new Set(items));
   }

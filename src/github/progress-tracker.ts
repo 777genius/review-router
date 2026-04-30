@@ -73,7 +73,7 @@ export class ProgressTracker {
       this.commentId = comment.data.id;
       logger.info('Progress tracker initialized', { commentId: this.commentId });
     } catch (error) {
-      logger.error('Failed to initialize progress tracker', error as Error);
+      logger.warn('Failed to initialize progress tracker', error as Error);
       // Continue without progress tracking rather than failing the review
     }
   }
@@ -206,7 +206,7 @@ export class ProgressTracker {
 
       logger.debug('Progress comment updated', { commentId: this.commentId });
     } catch (error) {
-      logger.error('Failed to update progress comment', error as Error);
+      logger.warn('Failed to update progress comment', error as Error);
       // Don't throw - progress tracking failure shouldn't stop the review
     }
   }
@@ -214,22 +214,29 @@ export class ProgressTracker {
   /**
    * Replace the progress comment with a final body (e.g., combined progress + review)
    */
-  async replaceWith(body: string): Promise<void> {
+  async replaceWith(body: string): Promise<boolean> {
     if (!this.commentId) {
       logger.warn('Cannot replace progress: comment not initialized');
-      return;
+      return false;
     }
     if (!this.octokit?.rest?.issues?.updateComment) {
       logger.warn('Cannot replace progress: octokit.rest.issues.updateComment is missing');
-      return;
+      return false;
     }
-    this.overrideBody = this.withMarker(body);
-    await this.octokit.rest.issues.updateComment({
-      owner: this.config.owner,
-      repo: this.config.repo,
-      comment_id: this.commentId,
-      body: this.overrideBody,
-    });
+
+    try {
+      this.overrideBody = this.withMarker(body);
+      await this.octokit.rest.issues.updateComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        comment_id: this.commentId,
+        body: this.overrideBody,
+      });
+      return true;
+    } catch (error) {
+      logger.warn('Failed to replace progress comment with final summary', error as Error);
+      return false;
+    }
   }
 
   private async findExistingCommentId(): Promise<number | null> {

@@ -134,7 +134,7 @@ describe('Graceful degradation integration', () => {
     expect(output).not.toContain('Suggested fix:');
   });
 
-  it('formatter handles finding with valid suggestion', () => {
+  it('formatter omits suggestions from summary findings', () => {
     const findingWithSuggestion = {
       file: 'test.ts',
       line: 10,
@@ -168,10 +168,9 @@ describe('Graceful degradation integration', () => {
     const formatter = new MarkdownFormatter();
     const output = formatter.format(review);
 
-    // Finding should have suggestion block
     expect(output).toContain('test.ts:10');
     expect(output).toContain('Use const');
-    expect(output).toContain('```suggestion');
-    expect(output).toContain('const x = 1;');
+    expect(output).not.toContain('```suggestion');
+    expect(output).not.toContain('const x = 1;');
   });
 });

@@ -150,7 +150,7 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('#### 🔵 Code Style');
     });
 
-    it('should include suggestions in formatted findings', () => {
+    it('should omit suggested fixes from the summary comment', () => {
       const finding = createMockFinding({
         suggestion: 'Use const instead of let',
       });
@@ -166,8 +166,8 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('**Suggested Fix:**');
-      expect(output).toContain('Use const instead of let');
+      expect(output).not.toContain('**Suggested Fix:**');
+      expect(output).not.toContain('Use const instead of let');
     });
 
     it('should include evidence with confidence percentage', () => {
@@ -481,7 +481,7 @@ describe('MarkdownFormatterV2', () => {
       expect(output).not.toContain('```mermaid');
     });
 
-    it('should include raw provider outputs', () => {
+    it('should omit raw provider outputs from the PR summary', () => {
       const review = createMockReview({
         providerResults: [
           {
@@ -503,11 +503,9 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('Raw Provider Outputs');
-      expect(output).toContain('✅ provider-1 [success] (3.50s)');
-      expect(output).toContain('This is the provider review content');
-      expect(output).toContain('❌ provider-2 [error] (1.00s)');
-      expect(output).toContain('Error: API rate limited');
+      expect(output).not.toContain('Raw Provider Outputs');
+      expect(output).not.toContain('This is the provider review content');
+      expect(output).not.toContain('Error: API rate limited');
     });
 
     it('should generate PR summary with findings count', () => {

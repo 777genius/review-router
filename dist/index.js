@@ -16254,7 +16254,7 @@ var SynthesisEngine = class {
     return parts.join("\n");
   }
   buildActionItems(findings) {
-    const items = findings.filter((f) => f.severity !== "minor").slice(0, 5).map((f) => `${f.file}:${f.line} \u2014 ${f.title}`);
+    const items = findings.filter((f) => f.severity !== "minor").slice(0, 5).map((f) => `${f.file}:${f.line} - ${f.title}`);
     return Array.from(new Set(items));
   }
 };
@@ -18612,15 +18612,6 @@ var MarkdownFormatterV2 = class {
     lines.push("");
     lines.push(finding.message);
     lines.push("");
-    if (finding.suggestion) {
-      const suggestionBlock = formatSuggestionBlock(finding.suggestion);
-      if (suggestionBlock) {
-        lines.push("**Suggested Fix:**");
-        lines.push("");
-        lines.push(suggestionBlock);
-        lines.push("");
-      }
-    }
     if (finding.evidence) {
       const confidence = Math.round(finding.evidence.confidence * 100);
       if (finding.evidence.reasoning) {
@@ -18736,32 +18727,6 @@ var MarkdownFormatterV2 = class {
       lines.push("```mermaid");
       lines.push(review.mermaidDiagram);
       lines.push("```");
-      lines.push("</details>");
-      lines.push("");
-    }
-    if (review.providerResults && review.providerResults.length > 0) {
-      lines.push("<details>");
-      lines.push("<summary>Raw Provider Outputs</summary>");
-      lines.push("");
-      review.providerResults.forEach((result) => {
-        const statusEmoji = result.status === "success" ? "\u2705" : result.status === "timeout" ? "\u23F1\uFE0F" : result.status === "rate-limited" ? "\u23F8\uFE0F" : "\u274C";
-        lines.push(`<details>`);
-        lines.push(
-          `<summary>${statusEmoji} ${result.name} [${result.status}] (${result.durationSeconds.toFixed(2)}s)</summary>`
-        );
-        lines.push("");
-        if (result.result?.content) {
-          lines.push(result.result.content.trim());
-        } else if (result.error) {
-          lines.push("```");
-          lines.push(`Error: ${result.error.message}`);
-          lines.push("```");
-        } else {
-          lines.push("*No content available*");
-        }
-        lines.push("</details>");
-        lines.push("");
-      });
       lines.push("</details>");
       lines.push("");
     }
@@ -25173,7 +25138,7 @@ var ProgressTracker = class _ProgressTracker {
       this.commentId = comment.data.id;
       logger.info("Progress tracker initialized", { commentId: this.commentId });
     } catch (error2) {
-      logger.error("Failed to initialize progress tracker", error2);
+      logger.warn("Failed to initialize progress tracker", error2);
     }
   }
   /**
@@ -25274,7 +25239,7 @@ var ProgressTracker = class _ProgressTracker {
       });
       logger.debug("Progress comment updated", { commentId: this.commentId });
     } catch (error2) {
-      logger.error("Failed to update progress comment", error2);
+      logger.warn("Failed to update progress comment", error2);
     }
   }
   /**
@@ -25283,19 +25248,25 @@ var ProgressTracker = class _ProgressTracker {
   async replaceWith(body) {
     if (!this.commentId) {
       logger.warn("Cannot replace progress: comment not initialized");
-      return;
+      return false;
     }
     if (!this.octokit?.rest?.issues?.updateComment) {
       logger.warn("Cannot replace progress: octokit.rest.issues.updateComment is missing");
-      return;
+      return false;
     }
-    this.overrideBody = this.withMarker(body);
-    await this.octokit.rest.issues.updateComment({
-      owner: this.config.owner,
-      repo: this.config.repo,
-      comment_id: this.commentId,
-      body: this.overrideBody
-    });
+    try {
+      this.overrideBody = this.withMarker(body);
+      await this.octokit.rest.issues.updateComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        comment_id: this.commentId,
+        body: this.overrideBody
+      });
+      return true;
+    } catch (error2) {
+      logger.warn("Failed to replace progress comment with final summary", error2);
+      return false;
+    }
   }
   async findExistingCommentId() {
     if (!this.octokit?.rest?.issues?.listComments) {
@@ -25838,7 +25809,10 @@ var ReviewOrchestrator = class {
         (c) => this.components.feedbackFilter.shouldPost(c, reviewCommentState)
       );
       if (progressTracker) {
-        await progressTracker.replaceWith(markdown);
+        const replaced = await progressTracker.replaceWith(markdown);
+        if (!replaced) {
+          await this.components.commentPoster.postSummary(pr.number, markdown, useIncremental);
+        }
       } else {
         await this.components.commentPoster.postSummary(pr.number, markdown, useIncremental);
       }

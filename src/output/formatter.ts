@@ -1,5 +1,4 @@
 import { Review } from '../types';
-import { formatSuggestionBlock } from '../utils/suggestion-formatter';
 import { severityLine } from '../utils/severity';
 
 export class MarkdownFormatter {
@@ -82,43 +81,6 @@ export class MarkdownFormatter {
       lines.push('</details>');
     }
 
-    if (review.providerResults && review.providerResults.length > 0) {
-      lines.push('\n<details><summary>Raw provider outputs</summary>');
-      lines.push('');
-      for (const result of review.providerResults) {
-        lines.push(
-          `<details><summary>${result.name} [${result.status}] (${result.durationSeconds.toFixed(1)}s)</summary>`
-        );
-        lines.push('');
-
-        if (result.result?.content) {
-          // Success: show review content
-          lines.push(result.result.content.trim());
-        } else if (result.error) {
-          // Failure: show error message only (not stack trace)
-          // Stack traces are logged server-side for diagnostics
-          lines.push('```');
-          lines.push(`Error: ${result.error.message}`);
-          lines.push('```');
-
-          // Log full error details server-side for debugging
-          if (result.error.stack) {
-            console.error(
-              `Provider ${result.name} failed with stack trace:`,
-              result.error.stack
-            );
-          }
-        } else {
-          // No content and no error (shouldn't happen)
-          lines.push('_no content_');
-        }
-
-        lines.push('</details>');
-        lines.push('');
-      }
-      lines.push('</details>');
-    }
-
     return lines.join('\n');
   }
 
@@ -145,14 +107,6 @@ export class MarkdownFormatter {
       lines.push(`- ${f.file}:${f.line} - ${f.title}`);
       lines.push(`  ${severityLine(f.severity)}`);
       lines.push(`  ${f.message}`);
-      if (f.suggestion) {
-        const suggestionBlock = formatSuggestionBlock(f.suggestion);
-        if (suggestionBlock) {
-          lines.push('');
-          lines.push('  **Suggested fix:**');
-          lines.push(suggestionBlock);
-        }
-      }
       if (f.evidence) {
         lines.push(
           `  Evidence: ${f.evidence.badge} (${Math.round(f.evidence.confidence * 100)}%)${f.evidence.reasoning ? ` - ${f.evidence.reasoning}` : ''}`

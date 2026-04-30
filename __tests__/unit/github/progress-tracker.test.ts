@@ -205,7 +205,7 @@ describe('ProgressTracker', () => {
     });
 
     it('should preserve the hidden marker when replacing progress with final summary', async () => {
-      await tracker.replaceWith('# AI Robot Review\n\nfinal summary');
+      await expect(tracker.replaceWith('# AI Robot Review\n\nfinal summary')).resolves.toBe(true);
 
       const lastCall = updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
       const body = lastCall?.[0]?.body as string;
@@ -237,6 +237,12 @@ describe('ProgressTracker', () => {
 
       // Should not throw even if finalize fails
       await expect(tracker.finalize(true)).resolves.not.toThrow();
+    });
+
+    it('should report replace failures without throwing', async () => {
+      updateCommentMock.mockRejectedValue(new Error('API Error'));
+
+      await expect(tracker.replaceWith('# AI Robot Review\n\nfinal summary')).resolves.toBe(false);
     });
   });
 });

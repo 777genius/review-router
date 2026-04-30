@@ -730,9 +730,12 @@ export class ReviewOrchestrator {
         this.components.feedbackFilter.shouldPost(c, reviewCommentState)
       );
 
-    // If a progress tracker exists, reuse the same comment for the final review body
+    // If replacing the progress comment fails transiently, still publish the final summary.
     if (progressTracker) {
-      await progressTracker.replaceWith(markdown);
+      const replaced = await progressTracker.replaceWith(markdown);
+      if (!replaced) {
+        await this.components.commentPoster.postSummary(pr.number, markdown, useIncremental);
+      }
     } else {
       await this.components.commentPoster.postSummary(pr.number, markdown, useIncremental);
     }

@@ -110,7 +110,7 @@ describe('MarkdownFormatter', () => {
   });
 
   describe('Finding Details', () => {
-    it('includes suggestion when present', () => {
+    it('omits suggestions from summary findings', () => {
       const review = createMinimalReview();
       review.findings = [
         createFinding('major', { suggestion: 'Use const instead of let' }),
@@ -118,9 +118,9 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('**Suggested fix:**');
-      expect(output).toContain('```suggestion');
-      expect(output).toContain('Use const instead of let');
+      expect(output).not.toContain('**Suggested fix:**');
+      expect(output).not.toContain('```suggestion');
+      expect(output).not.toContain('Use const instead of let');
     });
 
     it('includes evidence when present', () => {
@@ -160,7 +160,7 @@ describe('MarkdownFormatter', () => {
       const evidenceLine = output
         .split('\n')
         .find((line) => line.includes('Evidence:'));
-      expect(evidenceLine).not.toContain(' — ');
+      expect(evidenceLine).not.toContain(' - ');
     });
   });
 
@@ -366,7 +366,7 @@ describe('MarkdownFormatter', () => {
   });
 
   describe('Provider Results', () => {
-    it('includes raw provider outputs', () => {
+    it('omits raw provider outputs from the summary', () => {
       const review = createMinimalReview();
       review.providerResults = [
         {
@@ -382,14 +382,12 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain(
-        '<details><summary>Raw provider outputs</summary>'
-      );
-      expect(output).toContain('provider-1 [success] (1.0s)');
-      expect(output).toContain('{"findings": []}');
+      expect(output).not.toContain('Raw provider outputs');
+      expect(output).not.toContain('provider-1 [success] (1.0s)');
+      expect(output).not.toContain('{"findings": []}');
     });
 
-    it('handles provider results without content', () => {
+    it('omits raw provider errors from the summary', () => {
       const review = createMinimalReview();
       review.providerResults = [
         {
@@ -402,9 +400,8 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      // Should show error message, not "_no content_"
-      expect(output).toContain('Error: Failed');
-      expect(output).toContain('provider-1 [error]');
+      expect(output).not.toContain('Error: Failed');
+      expect(output).not.toContain('provider-1 [error]');
     });
   });
 });

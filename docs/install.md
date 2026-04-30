@@ -8,6 +8,59 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 
 The installer supports macOS and Linux shells first. It requires `gh`, `git`, and `curl`. GitHub App manifest setup uses `python3` when available; without `python3`, the installer prints manual App setup instructions.
 
+## Quick start
+
+### One repository
+
+Fast setup for a single repository. Secrets and variables are stored on that repository only.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+  AI_ROBOT_REVIEW_REPO=owner/repo \
+  AI_ROBOT_REVIEW_SECRET_SCOPE=repo \
+  AI_ROBOT_REVIEW_IDENTITY=actions \
+  AI_ROBOT_REVIEW_AUTH=codex \
+  AI_ROBOT_REVIEW_PRESET=safe \
+  bash
+```
+
+Use `AI_ROBOT_REVIEW_IDENTITY=app` instead of `actions` if you want comments from a dedicated GitHub App bot instead of `github-actions[bot]`.
+
+### Organization selected repositories
+
+Recommended team setup. Secrets and variables live at organization level, but only selected repositories can access them.
+
+```bash
+gh auth refresh -s admin:org
+
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+  AI_ROBOT_REVIEW_REPO=your-org/repo-a \
+  AI_ROBOT_REVIEW_SECRET_SCOPE=org \
+  AI_ROBOT_REVIEW_ORG=your-org \
+  AI_ROBOT_REVIEW_ORG_SECRET_REPOS=repo-a,repo-b \
+  AI_ROBOT_REVIEW_IDENTITY=app \
+  AI_ROBOT_REVIEW_AUTH=codex \
+  AI_ROBOT_REVIEW_PRESET=safe \
+  bash
+```
+
+This uses `gh secret set --org your-org --repos repo-a,repo-b --app actions`, not `--visibility all`.
+
+### API key instead of Codex OAuth
+
+For teams that do not want to store a personal Codex OAuth session:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+  AI_ROBOT_REVIEW_REPO=owner/repo \
+  AI_ROBOT_REVIEW_SECRET_SCOPE=repo \
+  AI_ROBOT_REVIEW_IDENTITY=actions \
+  AI_ROBOT_REVIEW_AUTH=openai \
+  AI_ROBOT_REVIEW_OPENAI_API_KEY=sk-... \
+  AI_ROBOT_REVIEW_PRESET=safe \
+  bash
+```
+
 ## What it creates
 
 - `.github/workflows/ai-robot-review.yml`
@@ -20,18 +73,20 @@ Secrets are never deleted automatically. Existing secrets and variables are over
 
 ## Secret scopes
 
-| Scope | Where secrets live | Repository access | Best for |
-| --- | --- | --- | --- |
-| `repo` | Target repository | Target repository only | Simple setup, personal repos, small private repos |
-| `org` | Organization Actions secrets/variables | Selected repositories only | Teams that want one central secret with explicit repository allow-list |
+| Scope  | Where secrets live                     | Repository access          | Best for                                                               |
+| ------ | -------------------------------------- | -------------------------- | ---------------------------------------------------------------------- |
+| `repo` | Target repository                      | Target repository only     | Simple setup, personal repos, small private repos                      |
+| `org`  | Organization Actions secrets/variables | Selected repositories only | Teams that want one central secret with explicit repository allow-list |
 
 `org` scope always uses selected repositories. It does not grant access to every repository in the organization.
 
 ```bash
-AI_ROBOT_REVIEW_SECRET_SCOPE=org \
-AI_ROBOT_REVIEW_ORG=your-org \
-AI_ROBOT_REVIEW_ORG_SECRET_REPOS=repo-a,repo-b \
-bash scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+  AI_ROBOT_REVIEW_REPO=your-org/repo-a \
+  AI_ROBOT_REVIEW_SECRET_SCOPE=org \
+  AI_ROBOT_REVIEW_ORG=your-org \
+  AI_ROBOT_REVIEW_ORG_SECRET_REPOS=repo-a,repo-b \
+  bash
 ```
 
 If `AI_ROBOT_REVIEW_ORG_SECRET_REPOS` is not set, the installer grants access only to the target repo name from `AI_ROBOT_REVIEW_REPO`.
@@ -46,10 +101,10 @@ Security note: org-level selected-repo secrets reduce sprawl and make rotation e
 
 ## Identity modes
 
-| Mode | Comment author | Best for | Tradeoff |
-| --- | --- | --- | --- |
-| `GitHub App bot` | `ai-robot-review-... [bot]` | Production repos, cleaner audit trail, branded bot identity | Creates a user-owned GitHub App and requires installation on the repo |
-| `github-actions[bot]` | `github-actions[bot]` | Fast setup, tests, small teams | Default name/avatar, weaker identity/audit separation |
+| Mode                  | Comment author              | Best for                                                    | Tradeoff                                                              |
+| --------------------- | --------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- |
+| `GitHub App bot`      | `ai-robot-review-... [bot]` | Production repos, cleaner audit trail, branded bot identity | Creates a user-owned GitHub App and requires installation on the repo |
+| `github-actions[bot]` | `github-actions[bot]`       | Fast setup, tests, small teams                              | Default name/avatar, weaker identity/audit separation                 |
 
 Recommendation:
 
@@ -95,10 +150,10 @@ Stores `OPENROUTER_API_KEY` and configures OpenRouter provider mode.
 
 ## Review presets
 
-| Preset | Behavior |
-| --- | --- |
-| `safe` | Major+ inline comments, max 5 inline comments, AST and security enabled, Codex effort `medium` |
-| `strict` | Minor+ inline comments, max 10 inline comments, graph context enabled, Codex effort `high` |
+| Preset    | Behavior                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| `safe`    | Major+ inline comments, max 5 inline comments, AST and security enabled, Codex effort `medium`    |
+| `strict`  | Minor+ inline comments, max 10 inline comments, graph context enabled, Codex effort `high`        |
 | `minimal` | Major+ inline comments, max 3 inline comments, AST disabled, security enabled, Codex effort `low` |
 
 Safe defaults include:
@@ -118,50 +173,54 @@ CODEX_REASONING_EFFORT=medium
 ### GitHub App bot + Codex subscription
 
 ```bash
-AI_ROBOT_REVIEW_REPO=owner/repo \
-AI_ROBOT_REVIEW_IDENTITY=app \
-AI_ROBOT_REVIEW_AUTH=codex \
-AI_ROBOT_REVIEW_PRESET=safe \
-AI_ROBOT_REVIEW_YES=1 \
-bash scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+  AI_ROBOT_REVIEW_REPO=owner/repo \
+  AI_ROBOT_REVIEW_IDENTITY=app \
+  AI_ROBOT_REVIEW_AUTH=codex \
+  AI_ROBOT_REVIEW_PRESET=safe \
+  AI_ROBOT_REVIEW_YES=1 \
+  bash
 ```
 
 ### GitHub App bot + Codex subscription using org selected-repo secrets
 
 ```bash
-AI_ROBOT_REVIEW_REPO=your-org/repo-a \
-AI_ROBOT_REVIEW_SECRET_SCOPE=org \
-AI_ROBOT_REVIEW_ORG=your-org \
-AI_ROBOT_REVIEW_ORG_SECRET_REPOS=repo-a \
-AI_ROBOT_REVIEW_IDENTITY=app \
-AI_ROBOT_REVIEW_AUTH=codex \
-AI_ROBOT_REVIEW_PRESET=safe \
-AI_ROBOT_REVIEW_YES=1 \
-bash scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+  AI_ROBOT_REVIEW_REPO=your-org/repo-a \
+  AI_ROBOT_REVIEW_SECRET_SCOPE=org \
+  AI_ROBOT_REVIEW_ORG=your-org \
+  AI_ROBOT_REVIEW_ORG_SECRET_REPOS=repo-a \
+  AI_ROBOT_REVIEW_IDENTITY=app \
+  AI_ROBOT_REVIEW_AUTH=codex \
+  AI_ROBOT_REVIEW_PRESET=safe \
+  AI_ROBOT_REVIEW_YES=1 \
+  bash
 ```
 
 ### github-actions[bot] + OpenAI API key
 
 ```bash
-AI_ROBOT_REVIEW_REPO=owner/repo \
-AI_ROBOT_REVIEW_IDENTITY=actions \
-AI_ROBOT_REVIEW_AUTH=openai \
-AI_ROBOT_REVIEW_OPENAI_API_KEY=sk-... \
-AI_ROBOT_REVIEW_PRESET=safe \
-AI_ROBOT_REVIEW_YES=1 \
-bash scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+  AI_ROBOT_REVIEW_REPO=owner/repo \
+  AI_ROBOT_REVIEW_IDENTITY=actions \
+  AI_ROBOT_REVIEW_AUTH=openai \
+  AI_ROBOT_REVIEW_OPENAI_API_KEY=sk-... \
+  AI_ROBOT_REVIEW_PRESET=safe \
+  AI_ROBOT_REVIEW_YES=1 \
+  bash
 ```
 
 ### github-actions[bot] + OpenRouter API key
 
 ```bash
-AI_ROBOT_REVIEW_REPO=owner/repo \
-AI_ROBOT_REVIEW_IDENTITY=actions \
-AI_ROBOT_REVIEW_AUTH=openrouter \
-AI_ROBOT_REVIEW_OPENROUTER_API_KEY=sk-or-... \
-AI_ROBOT_REVIEW_PRESET=minimal \
-AI_ROBOT_REVIEW_YES=1 \
-bash scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/fix/codex-oauth-exec/scripts/install.sh | env \
+  AI_ROBOT_REVIEW_REPO=owner/repo \
+  AI_ROBOT_REVIEW_IDENTITY=actions \
+  AI_ROBOT_REVIEW_AUTH=openrouter \
+  AI_ROBOT_REVIEW_OPENROUTER_API_KEY=sk-or-... \
+  AI_ROBOT_REVIEW_PRESET=minimal \
+  AI_ROBOT_REVIEW_YES=1 \
+  bash
 ```
 
 ## Local dry-run / e2e mode

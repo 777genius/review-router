@@ -103,6 +103,7 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('### 🔴 Critical (1)');
       expect(output).toContain('#### 🔴 Security Vulnerability');
       expect(output).toContain('**Location:** `src/auth.ts:123`');
+      expect(output).toContain('**Severity:** 🔴 **Critical**');
       expect(output).toContain('SQL injection risk detected');
     });
 

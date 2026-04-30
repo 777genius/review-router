@@ -205,6 +205,13 @@ export interface InlineComment {
   line: number;
   side: 'LEFT' | 'RIGHT';
   body: string;
+  severity?: Severity;
+  title?: string;
+  category?: string;
+  provider?: string;
+  providers?: string[];
+  confidence?: number;
+  hasConsensus?: boolean;
 }
 
 export interface ReviewMetrics {

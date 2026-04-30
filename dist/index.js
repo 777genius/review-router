@@ -15532,6 +15532,42 @@ ${content}
 ${fence}`;
 }
 
+// src/utils/severity.ts
+var DISPLAYS = {
+  critical: {
+    emoji: "\u{1F534}",
+    label: "Critical",
+    rank: 3,
+    description: "blocks merge; security, data loss, or production breakage risk"
+  },
+  major: {
+    emoji: "\u{1F7E1}",
+    label: "Major",
+    rank: 2,
+    description: "should fix before merge; correctness, reliability, or maintainability risk"
+  },
+  minor: {
+    emoji: "\u{1F535}",
+    label: "Minor",
+    rank: 1,
+    description: "non-blocking improvement; cleanup, clarity, or small maintainability issue"
+  }
+};
+function getSeverityDisplay(severity) {
+  return DISPLAYS[severity];
+}
+function compareSeverityDesc(a, b) {
+  return DISPLAYS[b].rank - DISPLAYS[a].rank;
+}
+function severityHeading(severity, title) {
+  const display = getSeverityDisplay(severity);
+  return `${display.emoji} ${display.label} - ${title}`;
+}
+function severityLine(severity) {
+  const display = getSeverityDisplay(severity);
+  return `**Severity:** ${display.emoji} **${display.label}** - ${display.description}.`;
+}
+
 // src/analysis/synthesis.ts
 var SynthesisEngine = class {
   constructor(config) {
@@ -15612,21 +15648,30 @@ var SynthesisEngine = class {
     ].join("\n");
   }
   buildInlineComments(findings) {
-    const severityOrder = {
-      critical: 3,
-      major: 2,
-      minor: 1
-    };
-    const sorted = findings.filter((f) => severityOrder[f.severity] >= severityOrder[this.config.inlineMinSeverity]).slice(0, this.config.inlineMaxComments);
+    const minSeverity = this.config.inlineMinSeverity;
+    const sorted = findings.filter((f) => compareSeverityDesc(minSeverity, f.severity) >= 0).sort((a, b) => compareSeverityDesc(a.severity, b.severity) || a.file.localeCompare(b.file) || a.line - b.line).slice(0, this.config.inlineMaxComments);
     return sorted.map((f) => ({
       path: f.file,
       line: f.line,
       side: "RIGHT",
-      body: this.commentBody(f)
+      body: this.commentBody(f),
+      severity: f.severity,
+      title: f.title,
+      category: f.category,
+      provider: f.provider,
+      providers: f.providers,
+      confidence: f.confidence,
+      hasConsensus: f.hasConsensus
     }));
   }
   commentBody(finding) {
-    const parts = [`**${finding.title}**`, finding.message];
+    const parts = [
+      `**${severityHeading(finding.severity, finding.title)}**`,
+      "",
+      severityLine(finding.severity),
+      "",
+      finding.message
+    ];
     if (finding.suggestion) {
       const suggestionBlock = formatSuggestionBlock(finding.suggestion);
       if (suggestionBlock) {
@@ -17495,11 +17540,12 @@ var MarkdownFormatterV2 = class {
   }
   formatFinding(finding, severity, index, total) {
     const lines = [];
-    const emoji = severity === "critical" ? "\u{1F534}" : severity === "major" ? "\u{1F7E1}" : "\u{1F535}";
+    const display = getSeverityDisplay(severity);
     const location = `\`${finding.file}:${finding.line}\``;
     const numberPrefix = total > 1 ? `${index}. ` : "";
-    lines.push(`#### ${emoji} ${numberPrefix}${finding.title}`);
+    lines.push(`#### ${display.emoji} ${numberPrefix}${finding.title}`);
     lines.push(`**Location:** ${location}${finding.category ? ` \u2022 **Category:** ${finding.category}` : ""}`);
+    lines.push(severityLine(severity));
     lines.push("");
     lines.push(finding.message);
     lines.push("");

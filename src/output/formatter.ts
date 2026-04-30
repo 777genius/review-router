@@ -1,5 +1,6 @@
 import { Review } from '../types';
 import { formatSuggestionBlock } from '../utils/suggestion-formatter';
+import { severityLine } from '../utils/severity';
 
 export class MarkdownFormatter {
   format(review: Review): string {
@@ -101,7 +102,8 @@ export class MarkdownFormatter {
     if (findings.length === 0) return;
     lines.push(`\n### ${title}`);
     findings.forEach(f => {
-      lines.push(`- ${f.file}:${f.line} — ${f.title}`);
+      lines.push(`- ${f.file}:${f.line} - ${f.title}`);
+      lines.push(`  ${severityLine(f.severity)}`);
       lines.push(`  ${f.message}`);
       if (f.suggestion) {
         const suggestionBlock = formatSuggestionBlock(f.suggestion);
@@ -113,7 +115,7 @@ export class MarkdownFormatter {
       }
       if (f.evidence) {
         lines.push(
-          `  Evidence: ${f.evidence.badge} (${Math.round(f.evidence.confidence * 100)}%)${f.evidence.reasoning ? ` — ${f.evidence.reasoning}` : ''}`
+          `  Evidence: ${f.evidence.badge} (${Math.round(f.evidence.confidence * 100)}%)${f.evidence.reasoning ? ` - ${f.evidence.reasoning}` : ''}`
         );
       }
     });

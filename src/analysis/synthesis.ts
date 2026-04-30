@@ -1,5 +1,6 @@
 import { Finding, InlineComment, PRContext, Review, ReviewConfig, ReviewMetrics, TestCoverageHint, AIAnalysis, ProviderResult, RunDetails, ImpactAnalysis } from '../types';
 import { formatSuggestionBlock } from '../utils/suggestion-formatter';
+import { compareSeverityDesc, severityHeading, severityLine } from '../utils/severity';
 
 export class SynthesisEngine {
   constructor(private readonly config: ReviewConfig) {}
@@ -120,14 +121,11 @@ export class SynthesisEngine {
   }
 
   private buildInlineComments(findings: Finding[]): InlineComment[] {
-    const severityOrder: Record<'critical' | 'major' | 'minor', number> = {
-      critical: 3,
-      major: 2,
-      minor: 1,
-    };
+    const minSeverity = this.config.inlineMinSeverity;
 
     const sorted = findings
-      .filter(f => severityOrder[f.severity] >= severityOrder[this.config.inlineMinSeverity])
+      .filter(f => compareSeverityDesc(minSeverity, f.severity) >= 0)
+      .sort((a, b) => compareSeverityDesc(a.severity, b.severity) || a.file.localeCompare(b.file) || a.line - b.line)
       .slice(0, this.config.inlineMaxComments);
 
     return sorted.map(f => ({
@@ -135,11 +133,24 @@ export class SynthesisEngine {
       line: f.line,
       side: 'RIGHT',
       body: this.commentBody(f),
+      severity: f.severity,
+      title: f.title,
+      category: f.category,
+      provider: f.provider,
+      providers: f.providers,
+      confidence: f.confidence,
+      hasConsensus: f.hasConsensus,
     }));
   }
 
   private commentBody(finding: Finding): string {
-    const parts = [`**${finding.title}**`, finding.message];
+    const parts = [
+      `**${severityHeading(finding.severity, finding.title)}**`,
+      '',
+      severityLine(finding.severity),
+      '',
+      finding.message,
+    ];
     if (finding.suggestion) {
       const suggestionBlock = formatSuggestionBlock(finding.suggestion);
       if (suggestionBlock) {

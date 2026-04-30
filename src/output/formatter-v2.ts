@@ -1,5 +1,6 @@
 import { Review, Finding } from '../types';
 import { formatSuggestionBlock } from '../utils/suggestion-formatter';
+import { getSeverityDisplay, severityLine } from '../utils/severity';
 
 /**
  * Enhanced Markdown Formatter
@@ -231,14 +232,15 @@ export class MarkdownFormatterV2 {
     const lines: string[] = [];
 
     // Finding header with collapsible details
-    const emoji = severity === 'critical' ? '🔴' : severity === 'major' ? '🟡' : '🔵';
+    const display = getSeverityDisplay(severity);
     const location = `\`${finding.file}:${finding.line}\``;
 
     // Add number prefix if there are multiple findings of this severity
     const numberPrefix = total > 1 ? `${index}. ` : '';
 
-    lines.push(`#### ${emoji} ${numberPrefix}${finding.title}`);
+    lines.push(`#### ${display.emoji} ${numberPrefix}${finding.title}`);
     lines.push(`**Location:** ${location}${finding.category ? ` • **Category:** ${finding.category}` : ''}`);
+    lines.push(severityLine(severity));
     lines.push('');
 
     // Message

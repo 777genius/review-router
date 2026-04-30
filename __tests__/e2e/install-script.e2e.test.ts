@@ -50,7 +50,7 @@ describe('ai-robot-review curl installer e2e', () => {
 
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('name: AI Robot Review');
-    expect(workflow).toContain('uses: 777genius/multi-provider-code-review@fix/codex-oauth-exec');
+    expect(workflow).toContain('uses: 777genius/multi-provider-code-review@main');
     expect(workflow).toContain('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '3'");

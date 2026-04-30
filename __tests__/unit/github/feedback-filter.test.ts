@@ -7,10 +7,22 @@ import { fingerprintFromInlineComment } from '../../../src/github/comment-finger
 // Mock GitHubClient
 jest.mock('../../../src/github/client');
 
+type MockOctokit = {
+  rest: {
+    pulls: {
+      listReviewComments: jest.Mock;
+    };
+    reactions: {
+      listForPullRequestReviewComment: jest.Mock;
+    };
+  };
+  paginate: jest.Mock;
+};
+
 describe('FeedbackFilter', () => {
   let feedbackFilter: FeedbackFilter;
   let mockClient: jest.Mocked<GitHubClient>;
-  let mockOctokit: any;
+  let mockOctokit: MockOctokit;
 
   beforeEach(() => {
     mockOctokit = {
@@ -29,7 +41,7 @@ describe('FeedbackFilter', () => {
       octokit: mockOctokit,
       owner: 'test-owner',
       repo: 'test-repo',
-    } as any;
+    } as unknown as jest.Mocked<GitHubClient>;
 
     feedbackFilter = new FeedbackFilter(mockClient);
   });
@@ -199,7 +211,7 @@ describe('FeedbackFilter', () => {
       const state = await feedbackFilter.loadReviewCommentState(123);
 
       expect(state.suppressed.size).toBe(0);
-      expect(state.alreadyPosted.has('src/file.ts:10:🟡 major - sql injection')).toBe(true);
+      expect(state.alreadyPosted.has('src/file.ts:10:major')).toBe(true);
       expect(feedbackFilter.shouldPost(
         {
           path: 'src/file.ts',
@@ -263,6 +275,32 @@ describe('FeedbackFilter', () => {
           state
         )
       ).toBe(false);
+    });
+
+    it('blocks duplicates when model rewrites the title for the same severity and line', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'src/file.ts',
+          line: 10,
+          body: '**🟡 Major - Unknown plan crashes lookup**\n\nUse a fallback.',
+        },
+      ]);
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
+        data: [],
+      });
+
+      const state = await feedbackFilter.loadReviewCommentState(123);
+
+      expect(feedbackFilter.shouldPost(
+        {
+          path: 'src/file.ts',
+          line: 10,
+          side: 'RIGHT',
+          body: '**🟡 Major - Missing plan crashes billing lookup**\n\nUse a fallback.',
+        },
+        state
+      )).toBe(false);
     });
   });
 

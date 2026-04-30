@@ -9,6 +9,15 @@ export function signatureFromInlineComment(
   body: string
 ): string {
   const cleanBody = stripInlineFingerprintMarkers(body);
+  const severity = extractSeverity(cleanBody);
+  if (severity) {
+    return [
+      (path || 'unknown').toLowerCase(),
+      String(line ?? 0),
+      severity,
+    ].join(':');
+  }
+
   const titleMatch = cleanBody.match(/\*\*(.+?)\*\*/);
   const title = titleMatch
     ? titleMatch[1]
@@ -64,4 +73,9 @@ export function isAiRobotInlineComment(body?: string | null): boolean {
 
 function normalizeForSignature(value: string): string {
   return value.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function extractSeverity(body: string): string | null {
+  const match = body.match(/\*\*(?:[^\w*`]*\s*)?(critical|major|minor)\s*-/i);
+  return match?.[1]?.toLowerCase() ?? null;
 }

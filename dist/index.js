@@ -17442,6 +17442,14 @@ var INLINE_MARKER_RE = /<!--\s*ai-robot-review-inline:([a-f0-9]{16})\s*-->/i;
 var INLINE_MARKER_RE_GLOBAL = /<!--\s*ai-robot-review-inline:([a-f0-9]{16})\s*-->/gi;
 function signatureFromInlineComment(path13, line, body) {
   const cleanBody = stripInlineFingerprintMarkers(body);
+  const severity = extractSeverity(cleanBody);
+  if (severity) {
+    return [
+      (path13 || "unknown").toLowerCase(),
+      String(line ?? 0),
+      severity
+    ].join(":");
+  }
   const titleMatch = cleanBody.match(/\*\*(.+?)\*\*/);
   const title = titleMatch ? titleMatch[1] : cleanBody.split("\n")[0] || "unknown";
   return [
@@ -17478,6 +17486,10 @@ function isAiRobotInlineComment(body) {
 }
 function normalizeForSignature(value) {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+function extractSeverity(body) {
+  const match2 = body.match(/\*\*(?:[^\w*`]*\s*)?(critical|major|minor)\s*-/i);
+  return match2?.[1]?.toLowerCase() ?? null;
 }
 
 // src/github/comment-poster.ts

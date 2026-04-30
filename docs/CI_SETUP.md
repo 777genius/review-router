@@ -261,7 +261,7 @@ gh secret set GEMINI_SETTINGS --body "$(cat ~/.gemini/settings.json)"
 Here's a complete workflow that sets up all three CLIs and runs multi-provider code review:
 
 ```yaml
-name: Multi-Provider Code Review
+name: AI Robot Review
 
 on:
   pull_request:
@@ -325,7 +325,7 @@ jobs:
           chmod 600 ~/.gemini/oauth_creds.json ~/.gemini/settings.json
 
       # Run multi-provider code review
-      - name: Run Multi-Provider Code Review
+      - name: Run AI Robot Review
         run: npx multi-provider-code-review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

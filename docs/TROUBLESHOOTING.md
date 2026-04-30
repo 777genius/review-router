@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-This guide helps you diagnose and fix common issues with Multi-Provider Code Review.
+This guide helps you diagnose and fix common issues with AI Robot Review.
 
 ## Table of Contents
 
@@ -475,7 +475,7 @@ env:
 
 1. Go to Actions tab in GitHub
 2. Click on failed workflow run
-3. Expand "Multi-Provider Code Review" step
+3. Expand "AI Robot Review" step
 4. Look for error messages
 
 ### Download Artifacts

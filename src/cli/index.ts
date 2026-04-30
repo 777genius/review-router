@@ -223,7 +223,7 @@ Examples:
    */
   private showHelp(): void {
     const help = `
-Multi-Provider Code Review CLI
+AI Robot Review CLI
 
 Usage:
   mpr review [target] [options]    Run code review

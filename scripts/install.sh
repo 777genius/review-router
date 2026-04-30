@@ -10,7 +10,8 @@ DEFAULT_ACTION_REF="777genius/multi-provider-code-review@main"
 DEFAULT_BRANCH_NAME="ai-robot-review/setup"
 WORKFLOW_PATH=".github/workflows/ai-robot-review.yml"
 CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
-CODEX_DEFAULT_PROVIDERS="codex/gpt-5.4-mini,codex/gpt-5.4"
+CODEX_DEFAULT_PROVIDERS="codex/gpt-5.4-mini"
+CODEX_STRICT_PROVIDERS="codex/gpt-5.4-mini,codex/gpt-5.4"
 CODEX_DEFAULT_SYNTHESIS="codex/gpt-5.4-mini"
 OPENROUTER_DEFAULT_PROVIDERS="openrouter/free"
 OPENROUTER_DEFAULT_SYNTHESIS="openrouter/free"
@@ -431,6 +432,13 @@ PY
 }
 
 setup_auth() {
+  codex_providers="$CODEX_DEFAULT_PROVIDERS"
+  if [ -n "${AI_ROBOT_REVIEW_PROVIDERS:-}" ]; then
+    codex_providers="$AI_ROBOT_REVIEW_PROVIDERS"
+  elif [ "$PRESET" = "strict" ]; then
+    codex_providers="$CODEX_STRICT_PROVIDERS"
+  fi
+
   case "$AUTH_MODE" in
     codex)
       auth_file="${AI_ROBOT_REVIEW_CODEX_AUTH_FILE:-${CODEX_HOME:-$HOME/.codex}/auth.json}"
@@ -444,14 +452,14 @@ setup_auth() {
         warn "Skipping CODEX_CONFIG_TOML by default to avoid carrying local plugins/hooks into CI. Set AI_ROBOT_REVIEW_INCLUDE_CODEX_CONFIG=1 if you need it."
       fi
       set_repo_variable REVIEW_AUTH_MODE "codex-oauth"
-      set_repo_variable REVIEW_PROVIDERS "$CODEX_DEFAULT_PROVIDERS"
+      set_repo_variable REVIEW_PROVIDERS "$codex_providers"
       set_repo_variable REVIEW_SYNTHESIS_MODEL "$CODEX_DEFAULT_SYNTHESIS"
       ;;
     openai)
       prompt_secret AI_ROBOT_REVIEW_OPENAI_API_KEY "OpenAI API key"
       set_repo_secret_value OPENAI_API_KEY "$AI_ROBOT_REVIEW_OPENAI_API_KEY"
       set_repo_variable REVIEW_AUTH_MODE "openai-api"
-      set_repo_variable REVIEW_PROVIDERS "$CODEX_DEFAULT_PROVIDERS"
+      set_repo_variable REVIEW_PROVIDERS "$codex_providers"
       set_repo_variable REVIEW_SYNTHESIS_MODEL "$CODEX_DEFAULT_SYNTHESIS"
       ;;
     openrouter)

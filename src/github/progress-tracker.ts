@@ -25,7 +25,6 @@ export interface ProgressTrackerConfig {
  * Inspired by Claude Code Action's progress tracking approach:
  * - Single comment that updates throughout review
  * - Checkboxes show completion status
- * - Duration and cost metadata attached
  *
  * Update strategy: milestone-based (only major events to minimize API calls)
  */
@@ -141,13 +140,13 @@ export class ProgressTracker {
   }
 
   /**
-   * Format progress comment with checkboxes, status emojis, and metadata
+   * Format progress comment with checkboxes and status emojis
    */
   private formatProgressComment(): string {
     const lines: string[] = [];
 
     // Header
-    lines.push('## 🤖 Multi-Provider Code Review Progress\n');
+    lines.push('## 🤖 AI Robot Review Progress\n');
 
     // Progress items with checkboxes
     const sortedItems = Array.from(this.items.values()).sort(
@@ -157,29 +156,14 @@ export class ProgressTracker {
     for (const item of sortedItems) {
       const checkbox = item.status === 'completed' ? '[x]' : '[ ]';
       const emoji = this.getStatusEmoji(item.status);
-      const duration = this.getDurationString(item);
-
-      lines.push(`${checkbox} ${emoji} ${item.label}${duration}`);
+      lines.push(`${checkbox} ${emoji} ${item.label}`);
 
       if (item.details) {
         lines.push(`   └─ ${item.details}`);
       }
     }
 
-    // Metadata footer
-    lines.push('\n---');
-
-    const totalDuration = Date.now() - this.startTime;
-    const durationStr = this.formatDuration(totalDuration);
-
-    lines.push(`**Duration**: ${durationStr}`);
-
-    if (this.totalCost > 0) {
-      lines.push(`**Cost**: $${this.totalCost.toFixed(4)}`);
-    }
-
-    lines.push(`**Last updated**: ${new Date().toISOString()}`);
-    lines.push('<!-- multi-provider-progress-tracker -->');
+    lines.push('<!-- ai-robot-review-progress-tracker -->');
 
     return lines.join('\n');
   }
@@ -250,33 +234,6 @@ export class ProgressTracker {
         return '⏳';
       default:
         return '⬜';
-    }
-  }
-
-  /**
-   * Get duration string for an item
-   */
-  private getDurationString(item: ProgressItem): string {
-    if (!item.endTime || !item.startTime) {
-      return '';
-    }
-
-    const duration = item.endTime - item.startTime;
-    return ` (${this.formatDuration(duration)})`;
-  }
-
-  /**
-   * Format duration in human-readable format
-   */
-  private formatDuration(ms: number): string {
-    if (ms < 1000) {
-      return `${ms}ms`;
-    } else if (ms < 60000) {
-      return `${(ms / 1000).toFixed(1)}s`;
-    } else {
-      const minutes = Math.floor(ms / 60000);
-      const seconds = Math.floor((ms % 60000) / 1000);
-      return `${minutes}m ${seconds}s`;
     }
   }
 }

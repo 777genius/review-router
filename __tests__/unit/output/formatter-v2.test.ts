@@ -44,7 +44,7 @@ describe('MarkdownFormatterV2', () => {
       const review = createMockReview();
       const output = formatter.format(review);
 
-      expect(output).toContain('# Multi-Provider Code Review');
+      expect(output).toContain('# AI Robot Review');
       expect(output).toContain('## All Clear!');
       expect(output).toContain('No issues found. Great job!');
       expect(output).toContain('Performance Metrics');
@@ -523,7 +523,7 @@ describe('MarkdownFormatterV2', () => {
       const review = createMockReview();
       const output = formatter.format(review);
 
-      expect(output).toContain('Powered by Multi-Provider Code Review');
+      expect(output).toContain('Powered by AI Robot Review');
       expect(output).not.toContain('react 👎');
     });
 
@@ -540,7 +540,7 @@ describe('MarkdownFormatterV2', () => {
       });
       const output = formatter.format(review);
 
-      expect(output).toContain('Powered by Multi-Provider Code Review');
+      expect(output).toContain('Powered by AI Robot Review');
       expect(output).not.toContain('suppress an inline finding');
       expect(output).not.toContain('react 👎');
     });

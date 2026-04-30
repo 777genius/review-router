@@ -2,7 +2,7 @@
 
 ## Performance Characteristics
 
-The Multi-Provider Code Review action is designed for high performance with the following targets:
+The AI Robot Review action is designed for high performance with the following targets:
 
 | PR Size | Files | Lines Changed | Target Duration | Typical Cost |
 | ------- | ----- | ------------- | --------------- | ------------ |

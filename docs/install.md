@@ -145,11 +145,19 @@ The generated workflow installs the official Codex CLI and runs a headless smoke
 
 Use this only in trusted automation. Do not put personal Codex OAuth credentials into public/open-source repos where untrusted workflow changes can access secrets. GitHub does not expose repository secrets to fork PR workflows by default, and the generated workflow skips fork PRs by default.
 
-Default Codex OAuth providers:
+Default Codex OAuth provider for `safe` and `minimal` presets:
+
+```text
+codex/gpt-5.4-mini
+```
+
+The `strict` preset uses two Codex models for extra cross-checking:
 
 ```text
 codex/gpt-5.4-mini,codex/gpt-5.4
 ```
+
+You can override this explicitly with `AI_ROBOT_REVIEW_PROVIDERS`.
 
 ### OpenAI API key
 
@@ -163,8 +171,8 @@ Stores `OPENROUTER_API_KEY` and configures OpenRouter provider mode.
 
 | Preset    | Behavior                                                                                          |
 | --------- | ------------------------------------------------------------------------------------------------- |
-| `safe`    | Major+ inline comments, max 5 inline comments, AST and security enabled, Codex effort `medium`    |
-| `strict`  | Minor+ inline comments, max 10 inline comments, graph context enabled, Codex effort `high`        |
+| `safe`    | Major+ inline comments, max 5 inline comments, one Codex provider, AST and security enabled, Codex effort `medium` |
+| `strict`  | Minor+ inline comments, max 10 inline comments, two Codex providers, graph context enabled, Codex effort `high` |
 | `minimal` | Major+ inline comments, max 3 inline comments, AST disabled, security enabled, Codex effort `low` |
 
 Safe defaults include:

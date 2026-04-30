@@ -2,7 +2,7 @@
 
 ## Overview
 
-Multi-Provider Code Review implements security best practices:
+AI Robot Review implements security best practices:
 
 - **Secrets detection**: Scans for 15+ types of hardcoded credentials
 - **Input validation**: Prevents path traversal and injection attacks

@@ -14,7 +14,7 @@ export class TerminalFormatter {
     // Header
     lines.push('');
     lines.push(colors.cyan('═'.repeat(80)));
-    lines.push(colors.bold(colors.cyan('  Multi-Provider Code Review')));
+    lines.push(colors.bold(colors.cyan('  AI Robot Review')));
     lines.push(colors.cyan('═'.repeat(80)));
     lines.push('');
 

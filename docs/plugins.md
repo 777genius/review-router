@@ -1,6 +1,6 @@
 # Plugin Development Guide
 
-Create custom LLM provider plugins for Multi-Provider Code Review.
+Create custom LLM provider plugins for AI Robot Review.
 
 ## Overview
 

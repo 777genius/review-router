@@ -2,7 +2,7 @@
 
 ## Overview
 
-Multi-Provider Code Review implements robust error handling to ensure reliability:
+AI Robot Review implements robust error handling to ensure reliability:
 
 - **Graceful degradation**: Continue with partial results when providers fail
 - **Automatic retries**: Retry transient failures with exponential backoff

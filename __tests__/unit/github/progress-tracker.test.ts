@@ -41,7 +41,7 @@ describe('ProgressTracker', () => {
         owner: 'test-owner',
         repo: 'test-repo',
         issue_number: 123,
-        body: expect.stringContaining('🤖 Multi-Provider Code Review Progress'),
+        body: expect.stringContaining('🤖 AI Robot Review Progress'),
       });
     });
 
@@ -135,21 +135,7 @@ describe('ProgressTracker', () => {
       expect(body).toContain('⏳'); // Pending
     });
 
-    it('should include duration for completed items', async () => {
-      tracker.addItem('item1', 'Test Item');
-
-      // Small delay to ensure measurable duration
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      await tracker.updateProgress('item1', 'completed');
-
-      const lastCall = updateCommentMock.mock.calls[0];
-      const body = lastCall?.[0]?.body as string;
-
-      expect(body).toMatch(/\(\d+ms\)/); // Duration in milliseconds
-    });
-
-    it('should include metadata footer', async () => {
+    it('should keep progress metadata hidden and minimal', async () => {
       tracker.setTotalCost(0.0123);
 
       tracker.addItem('item1', 'Test');
@@ -158,10 +144,10 @@ describe('ProgressTracker', () => {
       const lastCall = updateCommentMock.mock.calls[0];
       const body = lastCall?.[0]?.body as string;
 
-      expect(body).toContain('**Duration**:');
-      expect(body).toContain('**Cost**: $0.0123');
-      expect(body).toContain('**Last updated**:');
-      expect(body).toContain('<!-- multi-provider-progress-tracker -->');
+      expect(body).toContain('<!-- ai-robot-review-progress-tracker -->');
+      expect(body).not.toContain('**Duration**:');
+      expect(body).not.toContain('**Cost**:');
+      expect(body).not.toContain('**Last updated**:');
     });
   });
 
@@ -194,37 +180,6 @@ describe('ProgressTracker', () => {
       const body = lastCall?.[0]?.body as string;
 
       expect(body).toContain('❌'); // All items failed
-    });
-  });
-
-  describe('duration formatting', () => {
-    beforeEach(async () => {
-      createCommentMock.mockResolvedValue({ data: { id: 456 } } as any);
-      await tracker.initialize();
-    });
-
-    it('should format milliseconds correctly', async () => {
-      tracker.addItem('item1', 'Fast Item');
-
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      await tracker.updateProgress('item1', 'completed');
-
-      const lastCall = updateCommentMock.mock.calls[0];
-      const body = lastCall?.[0]?.body as string;
-
-      expect(body).toMatch(/\d+ms/);
-    });
-
-    it('should format seconds correctly for longer durations', async () => {
-      tracker.addItem('item1', 'Slow Item');
-
-      await new Promise((resolve) => setTimeout(resolve, 1100));
-      await tracker.updateProgress('item1', 'completed');
-
-      const lastCall = updateCommentMock.mock.calls[0];
-      const body = lastCall?.[0]?.body as string;
-
-      expect(body).toMatch(/\d+\.\d+s/);
     });
   });
 

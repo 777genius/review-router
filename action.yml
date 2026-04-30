@@ -1,4 +1,4 @@
-name: "Multi-Provider Code Review"
+name: "AI Robot Review"
 description: "Hybrid AST + LLM code review with multiple providers"
 author: "Keith Herrington"
 branding:

@@ -1,4 +1,4 @@
-# Multi-Provider Code Review (TypeScript v0.2.1)
+# AI Robot Review (TypeScript v0.2.1)
 
 **Status:** Production Ready ✅ | All Phases Complete | Enterprise Features Live
 
@@ -125,7 +125,7 @@ The following providers require local CLI installation and OAuth authentication.
   - Examples verified with ChatGPT OAuth in CI: `codex/gpt-5.4-mini`, `codex/gpt-5.4`
   - Requires: `codex` CLI installed and authenticated (ChatGPT Pro subscription)
   - Install: `npm install -g @openai/codex@0.125.0`
-  - Recommended for CI: set `CODEX_HEALTHCHECK_MODE: exec` and `FAIL_ON_NO_HEALTHY_PROVIDERS: "true"`
+  - Recommended for CI: start with one Codex provider, then add a second model only for strict cross-checking
 
 - **Gemini CLI** (`gemini/<model>`)
   - Examples: `gemini/gemini-2.0-flash`, `gemini/gemini-1.5-pro`
@@ -206,7 +206,7 @@ cat ~/.gemini/settings.json | gh secret set GEMINI_SETTINGS
   with:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     PR_NUMBER: ${{ github.event.pull_request.number }}
-    REVIEW_PROVIDERS: "codex/gpt-5.4-mini,codex/gpt-5.4"
+    REVIEW_PROVIDERS: "codex/gpt-5.4-mini"
     SYNTHESIS_MODEL: "codex/gpt-5.4-mini"
     PROVIDER_MAX_PARALLEL: "1"
     PROVIDER_RETRIES: "0"

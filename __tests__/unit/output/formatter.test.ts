@@ -44,7 +44,7 @@ describe('MarkdownFormatter', () => {
       const review = createMinimalReview();
       const output = formatter.format(review);
 
-      expect(output).toContain('## Multi Provider Review Summary');
+      expect(output).toContain('## AI Robot Review Summary');
       expect(output).toContain('Test summary');
       expect(output).toContain('Duration: 1.5s');
       expect(output).toContain('Cost: $0.0010');

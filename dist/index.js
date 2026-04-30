@@ -12102,7 +12102,7 @@ var OpenRouterProvider = class _OpenRouterProvider extends Provider {
             "Content-Type": "application/json",
             Authorization: `Bearer ${this.apiKey}`,
             "HTTP-Referer": "https://github.com/keithah/multi-provider-code-review",
-            "X-Title": "Multi-Provider Code Review"
+            "X-Title": "AI Robot Review"
           },
           body: JSON.stringify({
             model: apiModelId,
@@ -17873,7 +17873,7 @@ function getRepositoryFromEventPayload() {
 var MarkdownFormatterV2 = class {
   format(review) {
     const lines = [];
-    lines.push("# Multi-Provider Code Review");
+    lines.push("# AI Robot Review");
     lines.push("");
     lines.push(this.formatQuickStats(review));
     lines.push("");
@@ -18186,7 +18186,7 @@ var MarkdownFormatterV2 = class {
     return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
   }
   formatFooter() {
-    return "*Powered by Multi-Provider Code Review*";
+    return "*Powered by AI Robot Review*";
   }
 };
 
@@ -24600,32 +24600,23 @@ var ProgressTracker = class {
     });
   }
   /**
-   * Format progress comment with checkboxes, status emojis, and metadata
+   * Format progress comment with checkboxes and status emojis
    */
   formatProgressComment() {
     const lines = [];
-    lines.push("## \u{1F916} Multi-Provider Code Review Progress\n");
+    lines.push("## \u{1F916} AI Robot Review Progress\n");
     const sortedItems = Array.from(this.items.values()).sort(
       (a, b) => (a.startTime || 0) - (b.startTime || 0)
     );
     for (const item of sortedItems) {
       const checkbox = item.status === "completed" ? "[x]" : "[ ]";
       const emoji = this.getStatusEmoji(item.status);
-      const duration = this.getDurationString(item);
-      lines.push(`${checkbox} ${emoji} ${item.label}${duration}`);
+      lines.push(`${checkbox} ${emoji} ${item.label}`);
       if (item.details) {
         lines.push(`   \u2514\u2500 ${item.details}`);
       }
     }
-    lines.push("\n---");
-    const totalDuration = Date.now() - this.startTime;
-    const durationStr = this.formatDuration(totalDuration);
-    lines.push(`**Duration**: ${durationStr}`);
-    if (this.totalCost > 0) {
-      lines.push(`**Cost**: $${this.totalCost.toFixed(4)}`);
-    }
-    lines.push(`**Last updated**: ${(/* @__PURE__ */ new Date()).toISOString()}`);
-    lines.push("<!-- multi-provider-progress-tracker -->");
+    lines.push("<!-- ai-robot-review-progress-tracker -->");
     return lines.join("\n");
   }
   /**
@@ -24688,30 +24679,6 @@ var ProgressTracker = class {
         return "\u23F3";
       default:
         return "\u2B1C";
-    }
-  }
-  /**
-   * Get duration string for an item
-   */
-  getDurationString(item) {
-    if (!item.endTime || !item.startTime) {
-      return "";
-    }
-    const duration = item.endTime - item.startTime;
-    return ` (${this.formatDuration(duration)})`;
-  }
-  /**
-   * Format duration in human-readable format
-   */
-  formatDuration(ms) {
-    if (ms < 1e3) {
-      return `${ms}ms`;
-    } else if (ms < 6e4) {
-      return `${(ms / 1e3).toFixed(1)}s`;
-    } else {
-      const minutes = Math.floor(ms / 6e4);
-      const seconds = Math.floor(ms % 6e4 / 1e3);
-      return `${minutes}m ${seconds}s`;
     }
   }
 };

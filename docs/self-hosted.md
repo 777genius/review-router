@@ -1,6 +1,6 @@
 # Self-Hosted Deployment Guide
 
-Deploy Multi-Provider Code Review in your own infrastructure using Docker.
+Deploy AI Robot Review in your own infrastructure using Docker.
 
 ## Quick Start
 

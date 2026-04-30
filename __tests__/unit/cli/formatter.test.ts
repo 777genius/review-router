@@ -33,7 +33,7 @@ describe('TerminalFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('Multi-Provider Code Review');
+      expect(output).toContain('AI Robot Review');
       expect(output).toContain('No issues found!');
       expect(output).toContain('Duration:');
       expect(output).toContain('5.00s');

@@ -5,7 +5,7 @@ import { severityLine } from '../utils/severity';
 export class MarkdownFormatter {
   format(review: Review): string {
     const lines: string[] = [];
-    lines.push('## Multi Provider Review Summary');
+    lines.push('## AI Robot Review Summary');
     lines.push('');
     lines.push(review.summary);
 

@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Multi-Provider Code Review
+      - name: AI Robot Review
         uses: keithah/multi-provider-code-review@v0.2.1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

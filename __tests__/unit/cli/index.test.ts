@@ -144,7 +144,7 @@ describe('CLI', () => {
 
       (cli as any).showHelp();
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Multi-Provider Code Review CLI'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('AI Robot Review CLI'));
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Usage:'));
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('mpr review'));
 

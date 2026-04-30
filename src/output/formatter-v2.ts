@@ -17,7 +17,7 @@ export class MarkdownFormatterV2 {
     const lines: string[] = [];
 
     // Header with branding
-    lines.push('# Multi-Provider Code Review');
+    lines.push('# AI Robot Review');
     lines.push('');
 
     // Quick stats summary
@@ -465,6 +465,6 @@ export class MarkdownFormatterV2 {
   }
 
   private formatFooter(): string {
-    return '*Powered by Multi-Provider Code Review*';
+    return '*Powered by AI Robot Review*';
   }
 }

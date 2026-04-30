@@ -397,7 +397,7 @@ Lines 60-65: Multiple test assertions detected (it, expect)
 
 ### Before Auto-Detection
 ```
-Multi-Provider Code Review
+AI Robot Review
 🔴 2 Critical • 🟡 4 Major
 
 1. 🔴 Missing null validation in encodeURIComponentSafe
@@ -413,7 +413,7 @@ False Positives: 5 out of 6 (83%)
 
 ### After Auto-Detection
 ```
-Multi-Provider Code Review
+AI Robot Review
 ~~0 Critical~~ • 🟡 1 Major
 
 ## Defensive Programming Context (Auto-Detected)

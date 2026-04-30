@@ -4,7 +4,7 @@ Track costs, performance, and ROI with built-in analytics dashboard.
 
 ## Overview
 
-Multi-Provider Code Review includes comprehensive analytics to help you:
+AI Robot Review includes comprehensive analytics to help you:
 - **Track costs** across providers and over time
 - **Measure performance** (review speed, cache hit rates)
 - **Calculate ROI** (cost vs time saved)

@@ -79,6 +79,8 @@ describe('ai-robot-review curl installer e2e', () => {
     });
 
     expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Skipping CODEX_CONFIG_TOML by default');
+    expect(result.stdout).not.toContain('gh secret set CODEX_CONFIG_TOML');
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
     expect(workflow).toContain('client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}');

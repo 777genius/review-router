@@ -345,10 +345,11 @@ setup_auth() {
       config_file="${AI_ROBOT_REVIEW_CODEX_CONFIG_FILE:-${CODEX_HOME:-$HOME/.codex}/config.toml}"
       verify_codex_auth_file "$auth_file"
       set_repo_secret_from_file CODEX_AUTH_JSON "$auth_file"
-      if [ -f "$config_file" ]; then
+      if is_true "${AI_ROBOT_REVIEW_INCLUDE_CODEX_CONFIG:-0}"; then
+        [ -f "$config_file" ] || fatal "Codex config file not found: $config_file"
         set_repo_secret_from_file CODEX_CONFIG_TOML "$config_file"
       else
-        warn "Codex config not found at $config_file; skipping CODEX_CONFIG_TOML"
+        warn "Skipping CODEX_CONFIG_TOML by default to avoid carrying local plugins/hooks into CI. Set AI_ROBOT_REVIEW_INCLUDE_CODEX_CONFIG=1 if you need it."
       fi
       set_repo_variable REVIEW_AUTH_MODE "codex-oauth"
       set_repo_variable REVIEW_PROVIDERS "$CODEX_DEFAULT_PROVIDERS"

@@ -34,7 +34,13 @@ Recommendation:
 
 ### Codex ChatGPT subscription
 
-Uses the local Codex CLI OAuth session from `~/.codex/auth.json` and stores it in the target repo as `CODEX_AUTH_JSON`. If `~/.codex/config.toml` exists, it is stored as `CODEX_CONFIG_TOML`.
+Uses the local Codex CLI OAuth session from `~/.codex/auth.json` and stores it in the target repo as `CODEX_AUTH_JSON`.
+
+By default, the installer does not copy `~/.codex/config.toml`. Local Codex config can contain plugins, hooks, or UI-specific settings that are noisy and expensive in CI. If you intentionally need it, opt in:
+
+```bash
+AI_ROBOT_REVIEW_INCLUDE_CODEX_CONFIG=1 bash scripts/install.sh
+```
 
 The generated workflow installs the official Codex CLI and runs a headless smoke check before review:
 

@@ -104,9 +104,8 @@ export const ReviewConfigSchema = z.object({
   min_confidence: z.number().min(0).max(1).optional(),
   confidence_threshold: z.object({
     critical: z.number().min(0).max(1).optional(),
-    high: z.number().min(0).max(1).optional(),
-    medium: z.number().min(0).max(1).optional(),
-    low: z.number().min(0).max(1).optional(),
+    major: z.number().min(0).max(1).optional(),
+    minor: z.number().min(0).max(1).optional(),
   }).optional(),
   consensus_required_for_critical: z.boolean().optional(),
   consensus_min_agreement: z.number().int().min(2).optional(),

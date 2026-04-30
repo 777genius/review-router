@@ -123,9 +123,8 @@ export interface ReviewConfig {
   minConfidence?: number;
   confidenceThreshold?: {
     critical?: number;
-    high?: number;
-    medium?: number;
-    low?: number;
+    major?: number;
+    minor?: number;
   };
   consensusRequiredForCritical?: boolean;
   consensusMinAgreement?: number;

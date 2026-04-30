@@ -11365,9 +11365,8 @@ var ReviewConfigSchema = external_exports.object({
   min_confidence: external_exports.number().min(0).max(1).optional(),
   confidence_threshold: external_exports.object({
     critical: external_exports.number().min(0).max(1).optional(),
-    high: external_exports.number().min(0).max(1).optional(),
-    medium: external_exports.number().min(0).max(1).optional(),
-    low: external_exports.number().min(0).max(1).optional()
+    major: external_exports.number().min(0).max(1).optional(),
+    minor: external_exports.number().min(0).max(1).optional()
   }).optional(),
   consensus_required_for_critical: external_exports.boolean().optional(),
   consensus_min_agreement: external_exports.number().int().min(2).optional(),
@@ -11712,6 +11711,10 @@ var ConfigLoader = class {
       pathBasedIntensity: this.parseBoolean(env.PATH_BASED_INTENSITY),
       pathIntensityPatterns: env.PATH_INTENSITY_PATTERNS,
       pathDefaultIntensity: this.parseIntensity(env.PATH_DEFAULT_INTENSITY),
+      minConfidence: this.parseFloat(env.MIN_CONFIDENCE),
+      consensusRequiredForCritical: this.parseBoolean(env.CONSENSUS_REQUIRED_FOR_CRITICAL),
+      consensusMinAgreement: this.parseNumber(env.CONSENSUS_MIN_AGREEMENT),
+      suggestionSyntaxValidation: this.parseBoolean(env.SUGGESTION_SYNTAX_VALIDATION),
       dryRun: this.parseBoolean(env.DRY_RUN)
     };
   }
@@ -11785,6 +11788,11 @@ var ConfigLoader = class {
       intensityProviderCounts: config.intensity_provider_counts,
       intensityTimeouts: config.intensity_timeouts,
       intensityPromptDepth: config.intensity_prompt_depth,
+      minConfidence: config.min_confidence,
+      confidenceThreshold: config.confidence_threshold,
+      consensusRequiredForCritical: config.consensus_required_for_critical,
+      consensusMinAgreement: config.consensus_min_agreement,
+      suggestionSyntaxValidation: config.suggestion_syntax_validation,
       dryRun: config.dry_run
     };
   }
@@ -25056,6 +25064,10 @@ function syncEnvFromInputs() {
     "PATH_BASED_INTENSITY",
     "PATH_INTENSITY_PATTERNS",
     "PATH_DEFAULT_INTENSITY",
+    "MIN_CONFIDENCE",
+    "CONSENSUS_REQUIRED_FOR_CRITICAL",
+    "CONSENSUS_MIN_AGREEMENT",
+    "SUGGESTION_SYNTAX_VALIDATION",
     "REPORT_BASENAME",
     "DRY_RUN"
   ];

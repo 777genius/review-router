@@ -122,6 +122,10 @@ export class ConfigLoader {
       pathBasedIntensity: this.parseBoolean(env.PATH_BASED_INTENSITY),
       pathIntensityPatterns: env.PATH_INTENSITY_PATTERNS,
       pathDefaultIntensity: this.parseIntensity(env.PATH_DEFAULT_INTENSITY),
+      minConfidence: this.parseFloat(env.MIN_CONFIDENCE),
+      consensusRequiredForCritical: this.parseBoolean(env.CONSENSUS_REQUIRED_FOR_CRITICAL),
+      consensusMinAgreement: this.parseNumber(env.CONSENSUS_MIN_AGREEMENT),
+      suggestionSyntaxValidation: this.parseBoolean(env.SUGGESTION_SYNTAX_VALIDATION),
 
       dryRun: this.parseBoolean(env.DRY_RUN),
     };
@@ -197,6 +201,11 @@ export class ConfigLoader {
       intensityProviderCounts: config.intensity_provider_counts,
       intensityTimeouts: config.intensity_timeouts,
       intensityPromptDepth: config.intensity_prompt_depth,
+      minConfidence: config.min_confidence,
+      confidenceThreshold: config.confidence_threshold,
+      consensusRequiredForCritical: config.consensus_required_for_critical,
+      consensusMinAgreement: config.consensus_min_agreement,
+      suggestionSyntaxValidation: config.suggestion_syntax_validation,
       dryRun: config.dry_run,
     };
   }

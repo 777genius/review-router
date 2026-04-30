@@ -148,6 +148,22 @@ inputs:
     description: "Minimum confidence threshold for quiet mode filtering (0.0-1.0)"
     required: false
     default: "0.5"
+  MIN_CONFIDENCE:
+    description: "Minimum confidence threshold for inline suggestions (0.0-1.0)"
+    required: false
+    default: ""
+  CONSENSUS_REQUIRED_FOR_CRITICAL:
+    description: "Require provider consensus before posting critical inline suggestions"
+    required: false
+    default: "true"
+  CONSENSUS_MIN_AGREEMENT:
+    description: "Minimum provider count required for critical suggestion consensus"
+    required: false
+    default: "2"
+  SUGGESTION_SYNTAX_VALIDATION:
+    description: "Validate suggestion syntax before posting GitHub suggestion blocks"
+    required: false
+    default: "true"
   GRAPH_ENABLED:
     description: "Enable code graph for dependency tracking"
     required: false

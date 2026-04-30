@@ -32,6 +32,20 @@ describe('ConfigLoader', () => {
     expect(config.providerBatchOverrides?.opencode).toBe(2); // string numeric accepted
   });
 
+  it('parses suggestion quality overrides from environment', () => {
+    process.env.MIN_CONFIDENCE = '0.6';
+    process.env.CONSENSUS_REQUIRED_FOR_CRITICAL = 'false';
+    process.env.CONSENSUS_MIN_AGREEMENT = '3';
+    process.env.SUGGESTION_SYNTAX_VALIDATION = 'false';
+
+    const config = ConfigLoader.load();
+
+    expect(config.minConfidence).toBe(0.6);
+    expect(config.consensusRequiredForCritical).toBe(false);
+    expect(config.consensusMinAgreement).toBe(3);
+    expect(config.suggestionSyntaxValidation).toBe(false);
+  });
+
   it('ignores non-numeric or negative provider batch overrides', () => {
     process.env.PROVIDER_BATCH_OVERRIDES = '{"bad":"abc","neg":-1}';
 

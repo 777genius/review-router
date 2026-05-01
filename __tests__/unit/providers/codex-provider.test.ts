@@ -73,15 +73,16 @@ describe('CodexProvider', () => {
 
     expect(args).toEqual(
       expect.arrayContaining([
+        '--skip-git-repo-check',
         '--disable',
         'shell_tool',
         'unified_exec',
         'browser_use',
         'computer_use',
         'plugins',
-        '--skip-git-repo-check',
       ])
     );
+    expect(args.indexOf('--skip-git-repo-check')).toBe(1);
   });
 
   it('sanitizes spawned Codex environment', () => {

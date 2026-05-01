@@ -13296,6 +13296,9 @@ var CodexProvider = class extends Provider {
       "--output-last-message",
       options.outputLastMessageFile
     ];
+    if (options.skipGitRepoCheck) {
+      args.splice(1, 0, "--skip-git-repo-check");
+    }
     if (options.disableTools) {
       args.push(
         "--disable",
@@ -13315,9 +13318,6 @@ var CodexProvider = class extends Provider {
         "--disable",
         "plugins"
       );
-    }
-    if (options.skipGitRepoCheck) {
-      args.push("--skip-git-repo-check");
     }
     if (options.outputSchemaFile) {
       args.push("--output-schema", options.outputSchemaFile);
@@ -27768,6 +27768,8 @@ function sanitizeError(error2) {
 var fs14 = __toESM(require("fs/promises"));
 var os6 = __toESM(require("os"));
 var path13 = __toESM(require("path"));
+var import_child_process7 = require("child_process");
+var import_util5 = require("util");
 var INTENTS = [
   "question",
   "disagreement",
@@ -27780,6 +27782,7 @@ var SUGGESTED_ACTIONS = [
   "suggest_rr_skip",
   "ask_for_details"
 ];
+var execFileAsync = (0, import_util5.promisify)(import_child_process7.execFile);
 var CodexDiscussionResponder = class {
   constructor(model, timeoutMs) {
     this.model = model;
@@ -27792,6 +27795,7 @@ var CodexDiscussionResponder = class {
     });
     const cwd = await fs14.mkdtemp(path13.join(os6.tmpdir(), "review-router-chat-"));
     try {
+      await initializeEmptyGitRepository(cwd);
       const content = await provider.runStructuredPrompt(
         this.buildPrompt(context),
         this.buildSchema(),
@@ -27930,6 +27934,12 @@ function redactSecrets(value) {
 }
 function escapeAttr(value) {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+async function initializeEmptyGitRepository(cwd) {
+  try {
+    await execFileAsync("git", ["init", "-q"], { cwd, timeout: 5e3 });
+  } catch {
+  }
 }
 
 // src/main.ts

@@ -1,6 +1,8 @@
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { CodexProvider } from '../providers/codex';
 import {
   DiscussionIntent,
@@ -23,6 +25,7 @@ const SUGGESTED_ACTIONS: DiscussionSuggestedAction[] = [
   'suggest_rr_skip',
   'ask_for_details',
 ];
+const execFileAsync = promisify(execFile);
 
 export class CodexDiscussionResponder implements DiscussionResponder {
   constructor(
@@ -38,6 +41,7 @@ export class CodexDiscussionResponder implements DiscussionResponder {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'review-router-chat-'));
 
     try {
+      await initializeEmptyGitRepository(cwd);
       const content = await provider.runStructuredPrompt(
         this.buildPrompt(context),
         this.buildSchema(),
@@ -211,4 +215,13 @@ function redactSecrets(value: string): string {
 
 function escapeAttr(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+async function initializeEmptyGitRepository(cwd: string): Promise<void> {
+  try {
+    await execFileAsync('git', ['init', '-q'], { cwd, timeout: 5000 });
+  } catch {
+    // Codex also receives --skip-git-repo-check. The empty repo is a CI
+    // compatibility layer, not a hard dependency for discussion replies.
+  }
 }

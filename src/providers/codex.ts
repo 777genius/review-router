@@ -220,6 +220,10 @@ export class CodexProvider extends Provider {
       options.outputLastMessageFile,
     ];
 
+    if (options.skipGitRepoCheck) {
+      args.splice(1, 0, '--skip-git-repo-check');
+    }
+
     if (options.disableTools) {
       args.push(
         '--disable',
@@ -239,10 +243,6 @@ export class CodexProvider extends Provider {
         '--disable',
         'plugins'
       );
-    }
-
-    if (options.skipGitRepoCheck) {
-      args.push('--skip-git-repo-check');
     }
 
     if (options.outputSchemaFile) {

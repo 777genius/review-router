@@ -830,11 +830,15 @@ describe('FindingFilter', () => {
 
     test('keeps SQL interpolation regressions even when phrased cautiously', () => {
       const diff = `diff --git a/src/users.js b/src/users.js
-@@ -7,7 +7,7 @@ export function normalizeEmail(email) {
+index 51097d9..d0723db 100644
+--- a/src/users.js
++++ b/src/users.js
+@@ -3,8 +3,7 @@ function normalizeEmail(email) {
  }
 
  export async function findUserByEmail(db, email) {
--  const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);
+-  const normalized = normalizeEmail(email);
+-  const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [normalized]);
 +  const rows = await db.query(\`SELECT * FROM users WHERE email = '\${email}' LIMIT 1\`);
    return rows[0] || null;
  }`;
@@ -842,7 +846,7 @@ describe('FindingFilter', () => {
       const findings: Finding[] = [
         {
           file: 'src/users.js',
-          line: 10,
+          line: 6,
           severity: 'major',
           title: 'Email is interpolated into SQL',
           message:

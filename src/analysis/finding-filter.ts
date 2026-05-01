@@ -674,16 +674,39 @@ export class FindingFilter {
       return false; // No line number to check
     }
 
-    // Extract the line from the diff
-    const lines = diffContent.split('\n');
-    const lineIndex = finding.line - 1;
-
-    if (lineIndex < 0 || lineIndex >= lines.length) {
-      return false; // Line number out of bounds
+    // Do not suppress concrete security findings just because the model's line
+    // maps near hunk context. GitHub validation later decides whether it is postable.
+    if (this.isTrueSecurityIssue(finding)) {
+      return false;
     }
 
-    const line = lines[lineIndex].trim();
+    const patchLike = diffContent.includes('@@') || diffContent.includes('diff --git ');
+    const mappedLine = this.findNewFileLineInDiff(finding.file, finding.line, diffContent);
 
+    if (patchLike && mappedLine === null) {
+      return false; // Cannot prove the line is wrong from this patch.
+    }
+
+    if (!patchLike && mappedLine === null) {
+      // Legacy fallback for tests/plain snippets that pass raw code instead of a patch.
+      const lines = diffContent.split('\n');
+      const lineIndex = finding.line - 1;
+
+      if (lineIndex < 0 || lineIndex >= lines.length) {
+        return false; // Line number out of bounds
+      }
+
+      return this.isBlankBraceOrCommentLine(lines[lineIndex].trim(), finding.line);
+    }
+
+    if (mappedLine === null) {
+      return false;
+    }
+
+    return this.isBlankBraceOrCommentLine(mappedLine.trim(), finding.line);
+  }
+
+  private isBlankBraceOrCommentLine(line: string, lineNumber: number): boolean {
     // Check if the line is just a closing brace, blank, or comment
     if (
       line === '' ||
@@ -695,11 +718,59 @@ export class FindingFilter {
       line.startsWith('/*') ||
       line.startsWith('*')
     ) {
-      logger.debug(`Line ${finding.line} is blank/brace/comment, likely incorrect line number`);
+      logger.debug(`Line ${lineNumber} is blank/brace/comment, likely incorrect line number`);
       return true;
     }
 
     return false;
+  }
+
+  private findNewFileLineInDiff(file: string, lineNumber: number, diffContent: string): string | null {
+    let currentFile: string | null = null;
+    let newLine: number | null = null;
+
+    for (const rawLine of diffContent.split('\n')) {
+      const fileMatch = rawLine.match(/^diff --git a\/.+ b\/(.+)$/);
+      if (fileMatch) {
+        currentFile = fileMatch[1];
+        newLine = null;
+        continue;
+      }
+
+      const newFileMatch = rawLine.match(/^\+\+\+ b\/(.+)$/);
+      if (newFileMatch) {
+        currentFile = newFileMatch[1];
+        continue;
+      }
+
+      const hunkMatch = rawLine.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (hunkMatch) {
+        newLine = Number(hunkMatch[1]);
+        continue;
+      }
+
+      if (newLine === null || currentFile !== file) {
+        continue;
+      }
+
+      if (rawLine.startsWith('---') || rawLine.startsWith('+++')) {
+        continue;
+      }
+
+      if (rawLine.startsWith('-')) {
+        continue;
+      }
+
+      if (rawLine.startsWith('+') || rawLine.startsWith(' ')) {
+        const lineText = rawLine.slice(1);
+        if (newLine === lineNumber) {
+          return lineText;
+        }
+        newLine++;
+      }
+    }
+
+    return null;
   }
 
   /**

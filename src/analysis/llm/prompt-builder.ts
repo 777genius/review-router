@@ -127,7 +127,7 @@ export class PromptBuilder {
     const _depth = this.config.intensityPromptDepth?.[this.intensity] ?? 'standard';
 
     const instructions = [
-      `You are a code reviewer. ONLY report actual bugs - code that will crash, lose data, or have security vulnerabilities.`,
+      `You are a code reviewer. ONLY report actual bugs - code that will crash, lose data, create security vulnerabilities, or cause clear user-visible functional regressions.`,
       '',
       'CRITICAL RULES (READ CAREFULLY):',
       '',
@@ -144,11 +144,13 @@ export class PromptBuilder {
       '   • Missing validation (TypeScript types handle this)',
       '   • Incomplete/potential issues (unless code WILL crash)',
       '   • Performance opinions (unless exponential complexity)',
+      '   • Product preference disagreements without concrete broken behavior',
       '',
       '3. ONLY report if code WILL:',
       '   • Crash at runtime',
       '   • Lose or corrupt data',
       '   • Have SQL injection, XSS, command injection, or RCE vulnerability',
+      '   • Break a reachable user flow, such as permanent loading, dead-end navigation, hidden required content, or wrong access control state',
       '',
     ];
 

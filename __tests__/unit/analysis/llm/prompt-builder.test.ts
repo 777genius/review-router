@@ -62,6 +62,16 @@ describe('PromptBuilder', () => {
       expect(prompt).toContain('resource leak');
     });
 
+    it('treats clear user-visible regressions as reportable bugs', async () => {
+      const builder = new PromptBuilder(DEFAULT_CONFIG);
+      const prompt = await builder.build(mockPR);
+
+      expect(prompt).toContain('user-visible functional regressions');
+      expect(prompt).toContain('permanent loading');
+      expect(prompt).toContain('dead-end navigation');
+      expect(prompt).toContain('wrong access control state');
+    });
+
     it('specifies non-fixable issue types', async () => {
       const builder = new PromptBuilder(DEFAULT_CONFIG);
       const prompt = await builder.build(mockPR);

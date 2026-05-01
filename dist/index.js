@@ -13406,7 +13406,7 @@ var CodexProvider = class extends Provider {
       "Use repository-relative paths only. Do not include absolute local filesystem paths in findings.",
       "Do not read environment variables, secret files, ~/.codex, git credentials, or GitHub token files.",
       "Do not run package installation, tests, builds, formatters, network commands, or commands that write files.",
-      "Only report real bugs, data loss, crashes, or security vulnerabilities on changed lines from the diff.",
+      "Only report real bugs on changed lines from the diff: crashes, data loss, security vulnerabilities, or clear user-visible functional regressions such as permanent loading, dead-end navigation, hidden required content, or wrong access control state.",
       "If related context is insufficient, return no finding rather than guessing.",
       "",
       "<deterministic_review_prompt>",
@@ -14902,7 +14902,7 @@ var PromptBuilder = class {
     }
     const _depth = this.config.intensityPromptDepth?.[this.intensity] ?? "standard";
     const instructions = [
-      `You are a code reviewer. ONLY report actual bugs - code that will crash, lose data, or have security vulnerabilities.`,
+      `You are a code reviewer. ONLY report actual bugs - code that will crash, lose data, create security vulnerabilities, or cause clear user-visible functional regressions.`,
       "",
       "CRITICAL RULES (READ CAREFULLY):",
       "",
@@ -14919,11 +14919,13 @@ var PromptBuilder = class {
       "   \u2022 Missing validation (TypeScript types handle this)",
       "   \u2022 Incomplete/potential issues (unless code WILL crash)",
       "   \u2022 Performance opinions (unless exponential complexity)",
+      "   \u2022 Product preference disagreements without concrete broken behavior",
       "",
       "3. ONLY report if code WILL:",
       "   \u2022 Crash at runtime",
       "   \u2022 Lose or corrupt data",
       "   \u2022 Have SQL injection, XSS, command injection, or RCE vulnerability",
+      "   \u2022 Break a reachable user flow, such as permanent loading, dead-end navigation, hidden required content, or wrong access control state",
       ""
     ];
     if (compacted.summaryOnlyFiles.length > 0) {

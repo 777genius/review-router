@@ -81,6 +81,16 @@ describe('CodexProvider', () => {
     expect(env.OPENROUTER_API_KEY).toBeUndefined();
   });
 
+  it('allows agentic review findings for concrete user-visible regressions', async () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const prompt = await (provider as any).wrapAgenticReviewPrompt('review prompt');
+
+    expect(prompt).toContain('user-visible functional regressions');
+    expect(prompt).toContain('permanent loading');
+    expect(prompt).toContain('dead-end navigation');
+    expect(prompt).toContain('wrong access control state');
+  });
+
   it('parses strict schema findings with nullable suggestion', () => {
     const provider = new CodexProvider('gpt-5.4-mini');
     const findings = (provider as any).extractFindings(

@@ -357,7 +357,7 @@ export class CodexProvider extends Provider {
       'Use repository-relative paths only. Do not include absolute local filesystem paths in findings.',
       'Do not read environment variables, secret files, ~/.codex, git credentials, or GitHub token files.',
       'Do not run package installation, tests, builds, formatters, network commands, or commands that write files.',
-      'Only report real bugs, data loss, crashes, or security vulnerabilities on changed lines from the diff.',
+      'Only report real bugs on changed lines from the diff: crashes, data loss, security vulnerabilities, or clear user-visible functional regressions such as permanent loading, dead-end navigation, hidden required content, or wrong access control state.',
       'If related context is insufficient, return no finding rather than guessing.',
       '',
       '<deterministic_review_prompt>',

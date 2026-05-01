@@ -828,6 +828,37 @@ describe('FindingFilter', () => {
       expect(filtered[0].line).toBe(1);
     });
 
+    test('keeps SQL interpolation regressions even when phrased cautiously', () => {
+      const diff = `diff --git a/src/users.js b/src/users.js
+@@ -7,7 +7,7 @@ export function normalizeEmail(email) {
+ }
+
+ export async function findUserByEmail(db, email) {
+-  const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);
++  const rows = await db.query(\`SELECT * FROM users WHERE email = '\${email}' LIMIT 1\`);
+   return rows[0] || null;
+ }`;
+
+      const findings: Finding[] = [
+        {
+          file: 'src/users.js',
+          line: 10,
+          severity: 'major',
+          title: 'Email is interpolated into SQL',
+          message:
+            'The user-controlled email is directly interpolated into the SQL query, so a crafted value can alter the WHERE clause. Keep using a parameterized query.',
+          suggestion: "const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);",
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, diff);
+
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].title).toBe('Email is interpolated into SQL');
+      expect(stats.kept).toBe(1);
+      expect(stats.filtered).toBe(0);
+    });
+
     test('filters generic findings with line:1 that mention "entire file" or "class lacks"', () => {
       const findings: Finding[] = [
         {

@@ -326,8 +326,25 @@ export class FindingFilter {
 
   private isTrueSecurityIssue(finding: Finding): boolean {
     const text = (finding.title + ' ' + finding.message).toLowerCase();
+    const mentionsSqlSink = /\b(sql|query|database)\b/.test(text) || text.includes('db.query');
+    const mentionsUntrustedInput =
+      /\b(user input|untrusted|attacker|crafted|request|email|parameter|input)\b/.test(text);
+    const mentionsUnsafeSqlConstruction =
+      text.includes('interpolat') ||
+      text.includes('concatenat') ||
+      text.includes('template literal') ||
+      text.includes('raw sql') ||
+      text.includes('unescaped') ||
+      text.includes('unsanitized') ||
+      text.includes('directly') ||
+      text.includes('not parameterized') ||
+      text.includes('parameterized query') ||
+      text.includes('${');
+
     return (
       text.includes('sql injection') ||
+      (mentionsSqlSink && text.includes('injection')) ||
+      (mentionsSqlSink && mentionsUntrustedInput && mentionsUnsafeSqlConstruction) ||
       text.includes('xss') ||
       text.includes('cross-site scripting') ||
       text.includes('command injection') ||

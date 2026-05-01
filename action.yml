@@ -113,7 +113,7 @@ inputs:
   CODEX_HEALTHCHECK_MODE:
     description: "Codex provider health check mode: exec, binary, or none"
     required: false
-    default: "exec"
+    default: "binary"
   CODEX_HEALTHCHECK_REASONING_EFFORT:
     description: "Codex reasoning effort used for health checks"
     required: false

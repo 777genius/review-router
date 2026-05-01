@@ -115,7 +115,7 @@ function failureDetails(kind: FailureKind): { summary: string; steps: string[] }
         summary: 'The Codex CLI could not run successfully in CI.',
         steps: [
           'Verify the workflow installs `@openai/codex` before running ReviewRouter.',
-          'Check the `Verify Codex OAuth headless mode` or `Verify Codex API key headless mode` step.',
+          'Check the ReviewRouter run logs for the Codex CLI error. Usage-limit errors usually need a later rerun or a lower-cost model.',
           'If this is a model issue, verify `REVIEW_CODEX_MODEL` is a current supported Codex model.',
         ],
       };
@@ -124,7 +124,7 @@ function failureDetails(kind: FailureKind): { summary: string; steps: string[] }
         summary: 'No configured review provider passed the health check.',
         steps: [
           'Check provider credentials and model variables.',
-          'For Codex OAuth, verify the smoke step can run `codex exec` headlessly.',
+          'For Codex OAuth, verify `CODEX_AUTH_JSON` is present and the account has available Codex usage.',
           'For OpenRouter or OpenAI API mode, verify the API key secret is available to this repository.',
         ],
       };

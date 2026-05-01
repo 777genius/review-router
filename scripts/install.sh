@@ -1117,25 +1117,15 @@ YAML
             printf '%s' "$CODEX_CONFIG_TOML" > ~/.codex/config.toml
             chmod 600 ~/.codex/config.toml
           fi
-
-      - name: Verify Codex OAuth headless mode
-        env:
-          CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
-        run: |
-          codex exec --model "$CODEX_MODEL" --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
-          grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
 YAML
     elif [ "$AUTH_MODE" = "openai" ]; then
       cat <<'YAML'
 
-      - name: Verify Codex API key headless mode
+      - name: Validate OpenAI API key secret
         env:
-          CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           test -n "$OPENAI_API_KEY"
-          codex exec --model "$CODEX_MODEL" --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-api-ok"
-          grep -q "codex-api-ok" /tmp/codex-smoke.txt
 YAML
     fi
 
@@ -1198,6 +1188,7 @@ YAML
 YAML
       cat <<YAML
           CODEX_REASONING_EFFORT: '$CODEX_REASONING_EFFORT'
+          CODEX_HEALTHCHECK_MODE: 'binary'
           CODEX_AGENTIC_CONTEXT: 'true'
 YAML
     elif [ "$AUTH_MODE" = "openrouter" ]; then

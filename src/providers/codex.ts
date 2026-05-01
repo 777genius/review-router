@@ -38,12 +38,12 @@ export class CodexProvider extends Provider {
     super(`codex/${model}`);
   }
 
-  // Verify the CLI is available and, by default, that the selected model works
-  // with the current Codex auth. Binary-only checks can mark unsupported models
-  // as healthy, which then creates green "no provider" review runs.
+  // Verify the CLI is available. Model/auth failures are surfaced by the real
+  // review call; a model-exec health check costs an extra Codex subscription
+  // request and can exhaust limited OAuth usage before review starts.
   async healthCheck(_timeoutMs: number = 5000): Promise<boolean> {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5000);
-    const mode = (process.env.CODEX_HEALTHCHECK_MODE || 'exec').toLowerCase();
+    const mode = (process.env.CODEX_HEALTHCHECK_MODE || 'binary').toLowerCase();
 
     let timeoutId: NodeJS.Timeout;
     let isTimedOut = false;

@@ -220,7 +220,7 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain(
       'CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}'
     );
-    expect(workflow).toContain('codex-oauth-ok');
+    expect(workflow).not.toContain('codex-oauth-ok');
     expect(workflow).toContain('CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}');
     expect(workflow).not.toContain(
       'REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}'
@@ -228,6 +228,7 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '5'");
     expect(workflow).toContain("INLINE_MIN_SEVERITY: 'major'");
     expect(workflow).toContain("CODEX_REASONING_EFFORT: 'medium'");
+    expect(workflow).toContain("CODEX_HEALTHCHECK_MODE: 'binary'");
     expect(workflow).toContain("CODEX_AGENTIC_CONTEXT: 'true'");
     expect(workflow).toContain('UPDATE_PR_DESCRIPTION:');
     expect(workflow).toContain("FAIL_ON_CRITICAL: 'true'");
@@ -473,7 +474,8 @@ describe('review-router curl installer e2e', () => {
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}');
-    expect(workflow).toContain('codex-api-ok');
+    expect(workflow).toContain('Validate OpenAI API key secret');
+    expect(workflow).not.toContain('codex-api-ok');
     expect(workflow).toContain('CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}');
     expect(workflow).not.toContain(
       'REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}'
@@ -484,6 +486,7 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain("FAIL_ON_MAJOR: 'true'");
     expect(workflow).not.toContain('FAIL_ON_SEVERITY:');
     expect(workflow).toContain("CODEX_REASONING_EFFORT: 'high'");
+    expect(workflow).toContain("CODEX_HEALTHCHECK_MODE: 'binary'");
     expect(workflow).toContain("CODEX_AGENTIC_CONTEXT: 'true'");
     expect(workflow).toContain("GRAPH_ENABLED: 'true'");
     expect(workflow).not.toContain('CODEX_AUTH_JSON');

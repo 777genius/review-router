@@ -61,6 +61,47 @@ describe('CodexProvider', () => {
     expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
   });
 
+  it('uses binary-only health checks by default to avoid consuming Codex usage', async () => {
+    spawnMock.mockImplementation((_cmd: string, _args: string[]) =>
+      createMockProcess()
+    );
+
+    const provider = new CodexProvider('gpt-5.4-mini');
+    await expect(provider.healthCheck(1000)).resolves.toBe(true);
+
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    expect(spawnMock.mock.calls[0][0]).toBe('codex');
+    expect(spawnMock.mock.calls[0][1]).toEqual(['--version']);
+    expect(
+      spawnMock.mock.calls.some(
+        (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+      )
+    ).toBe(false);
+  });
+
+  it('supports explicit exec health checks when requested', async () => {
+    process.env.CODEX_HEALTHCHECK_MODE = 'exec';
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess(() => {
+        const outputIndex = args.indexOf('--output-last-message');
+        fs.writeFileSync(args[outputIndex + 1], 'codex-health-ok');
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini');
+    await expect(provider.healthCheck(1000)).resolves.toBe(true);
+
+    const execCall = spawnMock.mock.calls.find(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+    expect(execCall).toBeTruthy();
+    expect(execCall?.[1]).toContain('gpt-5.4-mini');
+  });
+
   it('can disable interactive/tool features for isolated discussion prompts', () => {
     const provider = new CodexProvider('gpt-5.4-mini');
     const args = (provider as any).buildExecArgs({

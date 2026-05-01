@@ -134,13 +134,6 @@ jobs:
             chmod 600 ~/.codex/config.toml
           fi
 
-      - name: Verify Codex OAuth headless mode
-        env:
-          CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
-        run: |
-          codex exec --model "$CODEX_MODEL" --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
-          grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
-
       - name: Run ReviewRouter
         uses: 777genius/review-router@v1
         env:
@@ -150,6 +143,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
           CODEX_REASONING_EFFORT: 'medium'
+          CODEX_HEALTHCHECK_MODE: 'binary'
           CODEX_AGENTIC_CONTEXT: 'true'
           FAIL_ON_NO_HEALTHY_PROVIDERS: 'true'
           INLINE_MAX_COMMENTS: '5'

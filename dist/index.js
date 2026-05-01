@@ -13152,12 +13152,12 @@ var CodexProvider = class extends Provider {
     this.model = model;
     this.options = options;
   }
-  // Verify the CLI is available and, by default, that the selected model works
-  // with the current Codex auth. Binary-only checks can mark unsupported models
-  // as healthy, which then creates green "no provider" review runs.
+  // Verify the CLI is available. Model/auth failures are surfaced by the real
+  // review call; a model-exec health check costs an extra Codex subscription
+  // request and can exhaust limited OAuth usage before review starts.
   async healthCheck(_timeoutMs = 5e3) {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5e3);
-    const mode = (process.env.CODEX_HEALTHCHECK_MODE || "exec").toLowerCase();
+    const mode = (process.env.CODEX_HEALTHCHECK_MODE || "binary").toLowerCase();
     let timeoutId;
     let isTimedOut = false;
     const timeoutPromise = new Promise((_, reject) => {
@@ -27206,7 +27206,7 @@ function failureDetails(kind) {
         summary: "The Codex CLI could not run successfully in CI.",
         steps: [
           "Verify the workflow installs `@openai/codex` before running ReviewRouter.",
-          "Check the `Verify Codex OAuth headless mode` or `Verify Codex API key headless mode` step.",
+          "Check the ReviewRouter run logs for the Codex CLI error. Usage-limit errors usually need a later rerun or a lower-cost model.",
           "If this is a model issue, verify `REVIEW_CODEX_MODEL` is a current supported Codex model."
         ]
       };
@@ -27215,7 +27215,7 @@ function failureDetails(kind) {
         summary: "No configured review provider passed the health check.",
         steps: [
           "Check provider credentials and model variables.",
-          "For Codex OAuth, verify the smoke step can run `codex exec` headlessly.",
+          "For Codex OAuth, verify `CODEX_AUTH_JSON` is present and the account has available Codex usage.",
           "For OpenRouter or OpenAI API mode, verify the API key secret is available to this repository."
         ]
       };

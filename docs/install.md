@@ -222,14 +222,20 @@ By default, the installer does not copy `~/.codex/config.toml`. Local Codex conf
 REVIEW_ROUTER_INCLUDE_CODEX_CONFIG=1 bash scripts/install.sh
 ```
 
-The generated workflow installs the official Codex CLI and runs a headless smoke check before review:
+The generated workflow installs the official Codex CLI and restores OAuth credentials before review. It does not run a separate headless smoke prompt by default because that would consume an extra Codex subscription request on every PR run and rerun.
 
 ```yaml
-- name: Verify Codex OAuth headless mode
+- name: Restore Codex OAuth config
+  env:
+    CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
   run: |
-    codex exec --model "$CODEX_MODEL" --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
-    grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
+    test -n "$CODEX_AUTH_JSON"
+    mkdir -p ~/.codex
+    printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
+    chmod 600 ~/.codex/auth.json
 ```
+
+ReviewRouter uses a binary-only Codex health check by default. The real review call is the authoritative auth/model check. If you explicitly want an extra model-exec health check, set `CODEX_HEALTHCHECK_MODE=exec`, but expect higher subscription usage.
 
 Use this only in trusted automation. Do not put personal Codex OAuth credentials into public/open-source repos where untrusted workflow changes can access secrets. GitHub does not expose repository secrets to fork PR workflows by default, and the generated workflow skips fork PRs by default.
 

@@ -4,6 +4,7 @@ import { createComponents } from './setup';
 import { ReviewOrchestrator } from './core/orchestrator';
 import { validateRequired, validatePositiveInteger, ValidationError, formatValidationError } from './utils/validation';
 import { Severity, Review } from './types';
+import { postReviewFailureSummary } from './github/failure-summary';
 
 function syncEnvFromInputs(): void {
   const inputKeys = [
@@ -82,9 +83,12 @@ function syncEnvFromInputs(): void {
 }
 
 async function run(): Promise<void> {
+  let token: string | undefined;
+  let prNumber: number | undefined;
+
   try {
     syncEnvFromInputs();
-    const token = core.getInput('GITHUB_TOKEN') || process.env.GITHUB_TOKEN;
+    token = core.getInput('GITHUB_TOKEN') || process.env.GITHUB_TOKEN;
 
     validateRequired(token, 'GITHUB_TOKEN');
 
@@ -95,7 +99,7 @@ async function run(): Promise<void> {
     const prInput = core.getInput('PR_NUMBER') || process.env.PR_NUMBER;
     validateRequired(prInput, 'PR_NUMBER');
 
-    const prNumber = validatePositiveInteger(prInput, 'PR_NUMBER');
+    prNumber = validatePositiveInteger(prInput, 'PR_NUMBER');
 
     if (config.dryRun) {
       core.info('🔍 DRY RUN MODE - Review will run but no comments will be posted');
@@ -147,6 +151,8 @@ async function run(): Promise<void> {
         core.error('Operation timed out. Consider increasing the timeout value.');
       }
     }
+
+    await postReviewFailureSummary(err, token, prNumber);
 
     // core.setFailed() sets process.exitCode, so explicit process.exit() is unnecessary
     // Removed process.exit(1) to allow proper cleanup and resource disposal

@@ -59,7 +59,7 @@ export function getParser(language: Language): any | null {
 
 function loadModule(name: string): any | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
     return require(name);
   } catch {
     return null;

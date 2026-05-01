@@ -1,4 +1,4 @@
-import type { Finding, Severity } from '../types';
+import type { Finding } from '../types';
 
 /**
  * Confidence calculation constants.

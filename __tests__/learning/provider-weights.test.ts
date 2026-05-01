@@ -1,4 +1,4 @@
-import { ProviderWeightTracker, ProviderWeight } from '../../src/learning/provider-weights';
+import { ProviderWeightTracker } from '../../src/learning/provider-weights';
 import { CacheStorage } from '../../src/cache/storage';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -23,7 +23,6 @@ describe('ProviderWeightTracker', () => {
     it('should record positive feedback', async () => {
       await tracker.recordFeedback('claude', '👍');
 
-      const weight = await tracker.getWeight('claude');
       const allWeights = await tracker.getAllWeights();
 
       expect(allWeights['claude']).toBeDefined();

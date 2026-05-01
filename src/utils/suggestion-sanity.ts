@@ -89,7 +89,7 @@ export function validateSuggestionSanity(
 
   // Check 4: Verify it contains code syntax indicators
   // Code typically has: {} () [] ; = => -> : :: < >
-  const hasCodeSyntax = /[{}()\[\];=<>:]/.test(trimmed);
+  const hasCodeSyntax = /[{}()[\];=<>:]/.test(trimmed);
   if (!hasCodeSyntax) {
     return {
       isValid: false,

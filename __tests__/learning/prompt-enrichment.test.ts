@@ -1,4 +1,4 @@
-import { PromptEnricher, EnrichmentContext } from '../../src/learning/prompt-enrichment';
+import { PromptEnricher } from '../../src/learning/prompt-enrichment';
 import { SuppressionTracker } from '../../src/learning/suppression-tracker';
 import { FeedbackTracker, CategoryStats } from '../../src/learning/feedback-tracker';
 

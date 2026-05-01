@@ -675,6 +675,16 @@ preset_values() {
       ENABLE_AST_ANALYSIS="true"
       GRAPH_ENABLED="false"
       ;;
+    blocking)
+      INLINE_MIN_SEVERITY="major"
+      INLINE_MAX_COMMENTS="5"
+      FAIL_ON_CRITICAL="true"
+      FAIL_ON_MAJOR="true"
+      CODEX_REASONING_EFFORT="medium"
+      ENABLE_SECURITY="true"
+      ENABLE_AST_ANALYSIS="true"
+      GRAPH_ENABLED="false"
+      ;;
     strict)
       INLINE_MIN_SEVERITY="minor"
       INLINE_MAX_COMMENTS="10"
@@ -972,6 +982,7 @@ main() {
     "openrouter:OpenRouter API key with openrouter/free"
   choose PRESET "Review preset" "safe" \
     "safe:Balanced defaults, major+ inline comments" \
+    "blocking:Safe review depth, but fail CI on major+ findings" \
     "strict:More comments and graph context" \
     "minimal:Fewer comments and less analysis"
 

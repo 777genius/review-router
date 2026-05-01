@@ -11966,7 +11966,7 @@ function add(a, b) {
 Respond with: {"findings": [{"file": "test.ts", "line": 1, "severity": "minor", "title": "title", "message": "msg"}]}`;
       await this.review(testPrompt, timeoutMs);
       return true;
-    } catch (error2) {
+    } catch {
       return false;
     }
   }
@@ -12349,7 +12349,7 @@ var OpenCodeProvider = class extends Provider {
       try {
         await fs3.unlink(promptFile);
         await fs3.rmdir(tmpDir);
-      } catch (err) {
+      } catch {
       }
     }
   }
@@ -12372,7 +12372,7 @@ var OpenCodeProvider = class extends Provider {
           if (proc.pid) {
             process.kill(-proc.pid, "SIGKILL");
           }
-        } catch (err) {
+        } catch {
           proc.kill("SIGKILL");
         }
         reject(new Error(`OpenCode CLI timed out after ${timeoutMs}ms`));
@@ -12515,7 +12515,7 @@ var ClaudeCodeProvider = class extends Provider {
       try {
         await fs4.unlink(promptFile);
         await fs4.rmdir(tmpDir);
-      } catch (err) {
+      } catch {
       }
     }
   }
@@ -12539,7 +12539,7 @@ var ClaudeCodeProvider = class extends Provider {
           if (proc.pid) {
             process.kill(-proc.pid, "SIGKILL");
           }
-        } catch (err) {
+        } catch {
           proc.kill("SIGKILL");
         }
         reject(new Error(`Claude Code CLI timed out after ${timeoutMs}ms`));
@@ -13874,7 +13874,7 @@ var GeminiProvider = class extends Provider {
       try {
         await fs6.unlink(promptFile);
         await fs6.rmdir(tmpDir);
-      } catch (err) {
+      } catch {
       }
     }
   }
@@ -13898,7 +13898,7 @@ var GeminiProvider = class extends Provider {
           if (proc.pid) {
             process.kill(-proc.pid, "SIGKILL");
           }
-        } catch (err) {
+        } catch {
           proc.kill("SIGKILL");
         }
         reject(new Error(`Gemini CLI timed out after ${timeoutMs}ms`));
@@ -14096,7 +14096,7 @@ function parseOpenCodeModels(output) {
               contextWindow: parsed.limit?.context
             });
           }
-        } catch (e) {
+        } catch {
         }
       }
       currentModel = line.trim();
@@ -14118,7 +14118,7 @@ function parseOpenCodeModels(output) {
           contextWindow: parsed.limit?.context
         });
       }
-    } catch (e) {
+    } catch {
     }
   }
   return models;
@@ -16787,7 +16787,7 @@ function unversionCache(cached, maxAge) {
       return null;
     }
     return parsed.data;
-  } catch (error2) {
+  } catch {
     return null;
   }
 }
@@ -21344,7 +21344,7 @@ var PluginLoader = class {
       logger.info(`Loading plugins from: ${pluginDir}`);
       try {
         await fs11.access(pluginDir);
-      } catch (error2) {
+      } catch {
         logger.warn(`Plugin directory does not exist: ${pluginDir}`);
         return;
       }
@@ -21368,7 +21368,7 @@ var PluginLoader = class {
       const indexPath = path10.join(pluginPath, "index.js");
       try {
         await fs11.access(indexPath);
-      } catch (error2) {
+      } catch {
         logger.debug(`Plugin at ${pluginPath} missing index.js, skipping`);
         return;
       }
@@ -21455,7 +21455,7 @@ var PluginLoader = class {
     const manifestPath = path10.join(pluginPath, "plugin-manifest.json");
     try {
       await fs11.access(manifestPath);
-    } catch (error2) {
+    } catch {
       logger.debug(`No manifest found for plugin at ${pluginPath}, skipping integrity check`);
       return;
     }
@@ -22233,7 +22233,7 @@ function validateSuggestionSanity(suggestion) {
       reason: "Suggestion too long (>50 lines)"
     };
   }
-  const hasCodeSyntax = /[{}()\[\];=<>:]/.test(trimmed);
+  const hasCodeSyntax = /[{}()[\];=<>:]/.test(trimmed);
   if (!hasCodeSyntax) {
     return {
       isValid: false,
@@ -26455,6 +26455,150 @@ These types of changes are automatically filtered to save review time and API co
   }
 };
 
+// src/github/failure-summary.ts
+function formatReviewFailureSummary(error2, prNumber) {
+  const kind = classifyFailure(error2);
+  const safeMessage = sanitizeFailureMessage(error2.message || String(error2));
+  const details = failureDetails(kind);
+  return [
+    "# AI Robot Review",
+    "",
+    "\u{1F534} **Review failed before comments could be completed.**",
+    "",
+    prNumber ? `PR: #${prNumber}` : void 0,
+    "",
+    "## What failed",
+    "",
+    details.summary,
+    "",
+    "## Error",
+    "",
+    "```text",
+    safeMessage,
+    "```",
+    "",
+    "## How to fix",
+    "",
+    ...details.steps.map((step) => `- ${step}`)
+  ].filter((line) => line !== void 0).join("\n");
+}
+async function postReviewFailureSummary(error2, token, prNumber) {
+  if (!token || !prNumber || prNumber <= 0) return;
+  try {
+    const client = new GitHubClient(token);
+    const poster = new CommentPoster(client, false);
+    await poster.postSummary(prNumber, formatReviewFailureSummary(error2, prNumber), true);
+  } catch (postError) {
+    logger.warn("Failed to post review failure summary", postError);
+  }
+}
+function classifyFailure(error2) {
+  const message = `${error2.name || ""} ${error2.message || ""}`.toLowerCase();
+  if (message.includes("configuration error") || message.includes("validation")) {
+    return "configuration";
+  }
+  if (message.includes("codex_auth_json") || message.includes("auth.json") || message.includes("refresh_token") || message.includes("auth_mode") || message.includes("chatgpt")) {
+    return "codex-oauth";
+  }
+  if (message.includes("openai_api_key") || message.includes("api key")) {
+    return "codex-api";
+  }
+  if (message.includes("no healthy providers")) {
+    return "no-providers";
+  }
+  if (message.includes("codex") || message.includes("enoent") || message.includes("command not found")) {
+    return "codex-cli";
+  }
+  if (message.includes("timeout") || message.includes("timed out")) {
+    return "timeout";
+  }
+  if (message.includes("rate limit") || message.includes("rate-limit")) {
+    return "rate-limit";
+  }
+  return "unknown";
+}
+function failureDetails(kind) {
+  switch (kind) {
+    case "codex-oauth":
+      return {
+        summary: "Codex OAuth authentication is missing, invalid, or expired.",
+        steps: [
+          "Verify `CODEX_AUTH_JSON` exists in repository or selected organization Actions secrets.",
+          "Verify the secret contains `auth_mode=chatgpt` and a refresh token from a trusted local Codex login.",
+          "Re-run the installer or rotate the Codex OAuth secret if the local session was revoked."
+        ]
+      };
+    case "codex-api":
+      return {
+        summary: "Codex API-key mode is configured, but the OpenAI API key is missing or invalid.",
+        steps: [
+          "Verify `OPENAI_API_KEY` exists in repository or selected organization Actions secrets.",
+          "Verify the key has access to the configured `REVIEW_CODEX_MODEL`.",
+          "If you intended to use ChatGPT subscription OAuth, reinstall with `AI_ROBOT_REVIEW_AUTH=codex`."
+        ]
+      };
+    case "codex-cli":
+      return {
+        summary: "The Codex CLI could not run successfully in CI.",
+        steps: [
+          "Verify the workflow installs `@openai/codex` before running AI Robot Review.",
+          "Check the `Verify Codex OAuth headless mode` or `Verify Codex API key headless mode` step.",
+          "If this is a model issue, verify `REVIEW_CODEX_MODEL` is a current supported Codex model."
+        ]
+      };
+    case "no-providers":
+      return {
+        summary: "No configured review provider passed the health check.",
+        steps: [
+          "Check provider credentials and model variables.",
+          "For Codex OAuth, verify the smoke step can run `codex exec` headlessly.",
+          "For OpenRouter or OpenAI API mode, verify the API key secret is available to this repository."
+        ]
+      };
+    case "timeout":
+      return {
+        summary: "The review timed out before a complete result was produced.",
+        steps: [
+          "Reduce PR size or keep smart diff compaction enabled.",
+          "Increase `RUN_TIMEOUT_SECONDS` only after confirming the provider is healthy.",
+          "Check whether the provider stderr shows repeated retries or network failures."
+        ]
+      };
+    case "rate-limit":
+      return {
+        summary: "The review hit a provider or GitHub API rate limit.",
+        steps: [
+          "Re-run the workflow after the rate limit resets.",
+          "Reduce provider count or run only one Codex model for this repository.",
+          "For API-key mode, check provider quota and billing limits."
+        ]
+      };
+    case "configuration":
+      return {
+        summary: "AI Robot Review configuration is invalid.",
+        steps: [
+          "Check the workflow inputs in `.github/workflows/ai-robot-review.yml`.",
+          "Verify required values such as `GITHUB_TOKEN`, `PR_NUMBER`, model variables, and provider credentials.",
+          "Re-run the installer if the workflow was manually edited."
+        ]
+      };
+    default:
+      return {
+        summary: "The review failed with an unexpected error.",
+        steps: [
+          "Open the failed workflow run and inspect the `Run AI Robot Review` step.",
+          "Verify credentials, model variables, and repository permissions.",
+          "If the error looks internal, file an issue with the sanitized workflow log."
+        ]
+      };
+  }
+}
+function sanitizeFailureMessage(message) {
+  const redacted = message.replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***");
+  return redacted.length > 1200 ? `${redacted.slice(0, 1200)}
+... truncated ...` : redacted;
+}
+
 // src/main.ts
 function syncEnvFromInputs() {
   const inputKeys = [
@@ -26531,16 +26675,18 @@ function syncEnvFromInputs() {
   }
 }
 async function run() {
+  let token;
+  let prNumber;
   try {
     syncEnvFromInputs();
-    const token = getInput("GITHUB_TOKEN") || process.env.GITHUB_TOKEN;
+    token = getInput("GITHUB_TOKEN") || process.env.GITHUB_TOKEN;
     validateRequired(token, "GITHUB_TOKEN");
     const config = ConfigLoader.load();
     const components = await createComponents(config, token);
     const orchestrator = new ReviewOrchestrator(components);
     const prInput = getInput("PR_NUMBER") || process.env.PR_NUMBER;
     validateRequired(prInput, "PR_NUMBER");
-    const prNumber = validatePositiveInteger(prInput, "PR_NUMBER");
+    prNumber = validatePositiveInteger(prInput, "PR_NUMBER");
     if (config.dryRun) {
       info("\u{1F50D} DRY RUN MODE - Review will run but no comments will be posted");
     }
@@ -26583,6 +26729,7 @@ ${formatted}`);
         error("Operation timed out. Consider increasing the timeout value.");
       }
     }
+    await postReviewFailureSummary(err, token, prNumber);
   }
 }
 function getBlockingFindings(review, threshold) {

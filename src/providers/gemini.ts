@@ -92,7 +92,7 @@ export class GeminiProvider extends Provider {
       try {
         await fs.unlink(promptFile);
         await fs.rmdir(tmpDir);
-      } catch (err) {
+      } catch {
         // Ignore cleanup errors
       }
     }
@@ -127,7 +127,7 @@ export class GeminiProvider extends Provider {
           if (proc.pid) {
             process.kill(-proc.pid, 'SIGKILL');
           }
-        } catch (err) {
+        } catch {
           // Fallback: kill just the main process
           proc.kill('SIGKILL');
         }

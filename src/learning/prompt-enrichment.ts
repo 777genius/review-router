@@ -1,6 +1,5 @@
-import { SuppressionTracker, SuppressionPattern } from './suppression-tracker';
+import { SuppressionTracker } from './suppression-tracker';
 import { FeedbackTracker, CategoryStats } from './feedback-tracker';
-import { logger } from '../utils/logger';
 
 export interface EnrichmentContext {
   suppressedCategories: string[];        // Categories with active suppressions

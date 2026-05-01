@@ -120,7 +120,7 @@ export function unversionCache<T>(
     }
 
     return parsed.data;
-  } catch (error) {
+  } catch {
     // JSON parse error or any other exception → treat as cache miss
     return null;
   }

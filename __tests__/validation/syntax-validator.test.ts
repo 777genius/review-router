@@ -127,8 +127,6 @@ describe('validateSyntax', () => {
     it('returns skipped when parser not available', () => {
       // This simulates missing tree-sitter grammar
       // In actual implementation, getParser returns null when grammar unavailable
-      const code = 'const x = 42;';
-
       // Mock scenario is hard to test directly without breaking imports
       // This test ensures the interface supports skipped state
       const mockResult: SyntaxValidationResult = {

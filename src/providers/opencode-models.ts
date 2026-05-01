@@ -47,7 +47,7 @@ function parseOpenCodeModels(output: string): OpenCodeModel[] {
               contextWindow: parsed.limit?.context,
             });
           }
-        } catch (e) {
+        } catch {
           // Ignore parse errors
         }
       }
@@ -74,7 +74,7 @@ function parseOpenCodeModels(output: string): OpenCodeModel[] {
           contextWindow: parsed.limit?.context,
         });
       }
-    } catch (e) {
+    } catch {
       // Ignore parse errors
     }
   }

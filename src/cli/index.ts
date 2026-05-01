@@ -264,7 +264,7 @@ Exit Codes:
    * Show version
    */
   private showVersion(): void {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
     const pkg = require('../../package.json');
     console.log(`multi-provider-code-review v${pkg.version}`);
   }

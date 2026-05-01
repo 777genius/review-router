@@ -26,7 +26,7 @@ Respond with: {"findings": [{"file": "test.ts", "line": 1, "severity": "minor", 
 
       await this.review(testPrompt, timeoutMs);
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }

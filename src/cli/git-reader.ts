@@ -28,7 +28,7 @@ export class GitReader {
   getCurrentCommit(): string | null {
     try {
       return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    } catch (error) {
+    } catch {
       // HEAD doesn't exist in brand-new repos with no commits
       return null;
     }
@@ -140,7 +140,7 @@ export class GitReader {
 
     try {
       parentSha = execFileSync('git', ['rev-parse', `${commitRef}^`], { encoding: 'utf8' }).trim();
-    } catch (error) {
+    } catch {
       // No parent - this is the initial commit
       parentSha = GitReader.EMPTY_TREE_SHA;
       isInitialCommit = true;

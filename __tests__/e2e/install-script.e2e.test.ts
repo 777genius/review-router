@@ -138,6 +138,24 @@ describe('ai-robot-review curl installer e2e', () => {
     expect(workflow).not.toContain('CODEX_AUTH_JSON');
   });
 
+  it('generates blocking preset workflow that fails on major findings', () => {
+    const result = runInstaller({
+      AI_ROBOT_REVIEW_IDENTITY: 'actions',
+      AI_ROBOT_REVIEW_AUTH: 'openai',
+      AI_ROBOT_REVIEW_PRESET: 'blocking',
+      AI_ROBOT_REVIEW_OPENAI_API_KEY: 'sk-test-key',
+    });
+
+    expect(result.status).toBe(0);
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain("INLINE_MAX_COMMENTS: '5'");
+    expect(workflow).toContain("INLINE_MIN_SEVERITY: 'major'");
+    expect(workflow).toContain("FAIL_ON_CRITICAL: 'true'");
+    expect(workflow).toContain("FAIL_ON_MAJOR: 'true'");
+    expect(workflow).toContain("CODEX_REASONING_EFFORT: 'medium'");
+    expect(workflow).toContain("GRAPH_ENABLED: 'false'");
+  });
+
   it('stores secrets and variables at org scope for selected repositories only', () => {
     const result = runInstaller({
       AI_ROBOT_REVIEW_SECRET_SCOPE: 'org',

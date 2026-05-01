@@ -109,7 +109,7 @@ export class PluginLoader {
       // Check if directory exists
       try {
         await fs.access(pluginDir);
-      } catch (error) {
+      } catch {
         logger.warn(`Plugin directory does not exist: ${pluginDir}`);
         return;
       }
@@ -140,7 +140,7 @@ export class PluginLoader {
       // Check if plugin entry point exists
       try {
         await fs.access(indexPath);
-      } catch (error) {
+      } catch {
         logger.debug(`Plugin at ${pluginPath} missing index.js, skipping`);
         return;
       }
@@ -261,7 +261,7 @@ export class PluginLoader {
 
     try {
       await fs.access(manifestPath);
-    } catch (error) {
+    } catch {
       // Manifest is optional - if it doesn't exist, skip verification
       logger.debug(`No manifest found for plugin at ${pluginPath}, skipping integrity check`);
       return;

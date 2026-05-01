@@ -7,7 +7,6 @@
 
 import {
   validateSuggestionSanity,
-  SuggestionSanityResult,
 } from '../../../src/utils/suggestion-sanity';
 
 describe('validateSuggestionSanity', () => {

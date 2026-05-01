@@ -57,6 +57,14 @@ AI_ROBOT_REVIEW_E2E_ORG=your-test-org AI_ROBOT_REVIEW_E2E_SKIP_DELETE=1 bash scr
 
 The smoke script creates a temporary private repo, installs org-level selected-repo secrets/variables, verifies `visibility=selected` and `numSelectedRepos=1`, verifies the setup PR/workflow, then deletes the smoke secrets/variables. With `AI_ROBOT_REVIEW_E2E_SKIP_DELETE=1`, it leaves the temporary repo for manual deletion so the CLI does not need `delete_repo`.
 
+To verify reruns do not duplicate inline comments on a disposable smoke repository:
+
+```bash
+AI_ROBOT_REVIEW_E2E_REPO=owner/repo bash scripts/e2e-rerun-dedup-smoke.sh
+```
+
+The script opens a temporary PR with a known review fixture, waits for the first review, pushes an empty commit, waits for the rerun, and fails if the inline comment count increases.
+
 ### API key instead of Codex OAuth
 
 For teams that do not want to store a personal Codex OAuth session:
@@ -109,6 +117,13 @@ gh auth refresh -s admin:org
 ```
 
 Security note: org-level selected-repo secrets reduce sprawl and make rotation easier, but any workflow in an allowed repository can still access the secret. Protect `.github/workflows/**` with CODEOWNERS/reviews for repositories that can access Codex OAuth.
+
+Repository collaborators normally cannot read Actions secret values in the GitHub UI. The practical risk is workflow-code access: anyone who can modify a workflow on a branch where secrets are available can try to exfiltrate secrets in CI. For Codex OAuth, use one of these controls:
+
+- Prefer org-level selected-repository secrets for teams, scoped only to the repositories that need review.
+- Protect `.github/workflows/**` with CODEOWNERS and required reviews.
+- Skip secret-backed review for fork PRs, which the installer does by default.
+- Use OpenAI API-key mode for shared team automation if you do not want to store a personal ChatGPT OAuth session.
 
 ## Identity modes
 
@@ -166,6 +181,7 @@ Stores `OPENROUTER_API_KEY` and configures OpenRouter provider mode.
 | Preset    | Behavior                                                                                          |
 | --------- | ------------------------------------------------------------------------------------------------- |
 | `safe`    | Major+ inline comments, max 5 inline comments, one Codex model, AST and security enabled, Codex effort `medium` |
+| `blocking` | Same review depth as `safe`, but fails CI on Major+ findings |
 | `strict`  | Minor+ inline comments, max 10 inline comments, one Codex model, graph context enabled, Codex effort `high` |
 | `minimal` | Major+ inline comments, max 3 inline comments, AST disabled, security enabled, Codex effort `low` |
 
@@ -189,6 +205,14 @@ CODEX_AGENTIC_CONTEXT=true
 
 `UPDATE_PR_DESCRIPTION=true` appends or updates only the `AI Robot Review` generated block in the pull request body. Author-written PR text stays above the generated block. `FAIL_ON_CRITICAL=true` and `FAIL_ON_MAJOR=false` make the check fail only for critical findings by default. Set `FAIL_ON_MAJOR=true` for stricter blocking, or set advanced `FAIL_ON_SEVERITY=off` if the reviewer should be informational only.
 
+For production repositories, prefer:
+
+```bash
+AI_ROBOT_REVIEW_PRESET=blocking
+```
+
+This keeps the safer `safe` review depth, but makes Major findings block the pull request. Use `safe` during rollout if you want advisory comments first.
+
 ## Non-interactive examples
 
 ### GitHub App bot + Codex subscription
@@ -198,10 +222,24 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
   AI_ROBOT_REVIEW_REPO=owner/repo \
   AI_ROBOT_REVIEW_IDENTITY=app \
   AI_ROBOT_REVIEW_AUTH=codex \
-  AI_ROBOT_REVIEW_PRESET=safe \
+AI_ROBOT_REVIEW_PRESET=safe \
   AI_ROBOT_REVIEW_YES=1 \
   bash
 ```
+
+### Blocking production gate
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+  AI_ROBOT_REVIEW_REPO=owner/repo \
+  AI_ROBOT_REVIEW_IDENTITY=app \
+  AI_ROBOT_REVIEW_AUTH=codex \
+  AI_ROBOT_REVIEW_PRESET=blocking \
+  AI_ROBOT_REVIEW_YES=1 \
+  bash
+```
+
+`blocking` fails the `AI Robot Review / review` check for Major and Critical findings. Mark this check as required in branch protection if you want it to gate merges.
 
 ### GitHub App bot + Codex subscription using org selected-repo secrets
 

@@ -1,5 +1,4 @@
-import { areASTsEquivalent, ASTComparisonResult } from '../../src/validation/ast-comparator';
-import { Language } from '../../src/analysis/ast/parsers';
+import { areASTsEquivalent } from '../../src/validation/ast-comparator';
 
 describe('AST Comparator', () => {
   describe('areASTsEquivalent', () => {

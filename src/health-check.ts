@@ -28,7 +28,7 @@ async function healthCheck(): Promise<void> {
     for (const file of requiredFiles) {
       try {
         await fs.access(file);
-      } catch (error) {
+      } catch {
         throw new Error(`Required file missing: ${file}`);
       }
     }
@@ -49,7 +49,7 @@ async function healthCheck(): Promise<void> {
       const testFile = path.join(cacheDir, '.health-check');
       await fs.writeFile(testFile, 'OK', 'utf8');
       await fs.unlink(testFile);
-    } catch (error) {
+    } catch {
       throw new Error(`Cache directory not writable: ${cacheDir}`);
     }
 

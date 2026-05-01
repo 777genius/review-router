@@ -1285,6 +1285,23 @@ YAML
           mkdir -p ~/.codex
           printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
           chmod 600 ~/.codex/auth.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = `${process.env.HOME}/.codex/auth.json`;
+          function fail(message) {
+            console.error(`ReviewRouter Codex OAuth auth check failed: ${message}`);
+            console.error('Fix: run `codex login` on a trusted machine, then rerun the ReviewRouter installer or update CODEX_AUTH_JSON to reseed auth.json.');
+            process.exit(1);
+          }
+          let data;
+          try {
+            data = JSON.parse(fs.readFileSync(path, 'utf8'));
+          } catch (error) {
+            fail(`auth.json is not valid JSON (${error.message})`);
+          }
+          if (data.auth_mode !== 'chatgpt') fail('auth.json auth_mode must be chatgpt');
+          if (!data.tokens || !data.tokens.refresh_token) fail('auth.json tokens.refresh_token is missing; reseed auth.json');
+          NODE
           if [ -n "$CODEX_CONFIG_TOML" ]; then
             printf '%s' "$CODEX_CONFIG_TOML" > ~/.codex/config.toml
             chmod 600 ~/.codex/config.toml
@@ -1469,6 +1486,23 @@ YAML
           mkdir -p ~/.codex
           printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
           chmod 600 ~/.codex/auth.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = `${process.env.HOME}/.codex/auth.json`;
+          function fail(message) {
+            console.error(`ReviewRouter Codex OAuth auth check failed: ${message}`);
+            console.error('Fix: run `codex login` on a trusted machine, then rerun the ReviewRouter installer or update CODEX_AUTH_JSON to reseed auth.json.');
+            process.exit(1);
+          }
+          let data;
+          try {
+            data = JSON.parse(fs.readFileSync(path, 'utf8'));
+          } catch (error) {
+            fail(`auth.json is not valid JSON (${error.message})`);
+          }
+          if (data.auth_mode !== 'chatgpt') fail('auth.json auth_mode must be chatgpt');
+          if (!data.tokens || !data.tokens.refresh_token) fail('auth.json tokens.refresh_token is missing; reseed auth.json');
+          NODE
           if [ -n "$CODEX_CONFIG_TOML" ]; then
             printf '%s' "$CODEX_CONFIG_TOML" > ~/.codex/config.toml
             chmod 600 ~/.codex/config.toml

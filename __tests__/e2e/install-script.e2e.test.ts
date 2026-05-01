@@ -287,6 +287,10 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain(
       'CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}'
     );
+    expect(workflow).toContain(
+      'ReviewRouter Codex OAuth auth check failed'
+    );
+    expect(workflow).toContain('reseed auth.json');
     expect(workflow).not.toContain('codex-oauth-ok');
     expect(workflow).toContain('CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}');
     expect(workflow).not.toContain(
@@ -313,6 +317,10 @@ describe('review-router curl installer e2e', () => {
     expect(interactionWorkflow).toContain(
       'Restore Codex OAuth config for discussion replies'
     );
+    expect(interactionWorkflow).toContain(
+      'ReviewRouter Codex OAuth auth check failed'
+    );
+    expect(interactionWorkflow).toContain('reseed auth.json');
     expect(interactionWorkflow).toContain(
       'GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}'
     );

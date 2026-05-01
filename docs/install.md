@@ -160,6 +160,47 @@ Recommendation:
 - Use `GitHub App bot` for production repositories.
 - Use `github-actions[bot]` when you want the simplest setup and do not care about comment branding.
 
+### GitHub App setup modes
+
+When `REVIEW_ROUTER_IDENTITY=app`, the installer asks how to configure the App credentials:
+
+| Mode     | Behavior                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------- |
+| `create` | Creates a new user-owned GitHub App through the manifest flow and saves a local profile. |
+| `saved`  | Reuses a local profile previously created or imported by this installer.                 |
+| `manual` | Prompts for existing App ID, Client ID, slug, and `.pem`, then saves a local profile.    |
+
+Local profiles are stored under `~/.config/review-router/apps` by default. Override this with `REVIEW_ROUTER_APP_PROFILE_DIR`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_IDENTITY=app \
+  REVIEW_ROUTER_APP_SETUP=saved \
+  REVIEW_ROUTER_APP_PROFILE=review-router-owner-repo \
+  REVIEW_ROUTER_AUTH=codex \
+  REVIEW_ROUTER_PRESET=safe \
+  bash
+```
+
+To import an existing App without using the browser manifest flow:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_IDENTITY=app \
+  REVIEW_ROUTER_APP_SETUP=manual \
+  REVIEW_ROUTER_APP_CLIENT_ID=Iv1... \
+  REVIEW_ROUTER_APP_ID=123456 \
+  REVIEW_ROUTER_APP_SLUG=review-router-owner \
+  REVIEW_ROUTER_APP_PRIVATE_KEY_FILE=/path/to/private-key.pem \
+  REVIEW_ROUTER_AUTH=codex \
+  REVIEW_ROUTER_PRESET=safe \
+  bash
+```
+
+GitHub does not let the installer download an existing GitHub App private key. Keep the `.pem` file from App creation, or generate a new private key in the App settings before using `manual`.
+
 ## Auth modes
 
 ### Codex ChatGPT subscription

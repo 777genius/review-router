@@ -40,6 +40,9 @@ SECRET_SCOPE="$(env_first REVIEW_ROUTER_SECRET_SCOPE AI_ROBOT_REVIEW_SECRET_SCOP
 ORG_NAME="$(env_first REVIEW_ROUTER_ORG AI_ROBOT_REVIEW_ORG || true)"
 ORG_SELECTED_REPOS="$(env_first REVIEW_ROUTER_ORG_SECRET_REPOS AI_ROBOT_REVIEW_ORG_SECRET_REPOS || true)"
 IDENTITY_MODE="$(env_first REVIEW_ROUTER_IDENTITY AI_ROBOT_REVIEW_IDENTITY || true)"
+APP_SETUP="$(env_first REVIEW_ROUTER_APP_SETUP AI_ROBOT_REVIEW_APP_SETUP || true)"
+APP_PROFILE="$(env_first REVIEW_ROUTER_APP_PROFILE AI_ROBOT_REVIEW_APP_PROFILE || true)"
+APP_PROFILE_DIR="$(env_first REVIEW_ROUTER_APP_PROFILE_DIR AI_ROBOT_REVIEW_APP_PROFILE_DIR || true)"
 AUTH_MODE="$(env_first REVIEW_ROUTER_AUTH AI_ROBOT_REVIEW_AUTH || true)"
 PRESET="$(env_first REVIEW_ROUTER_PRESET AI_ROBOT_REVIEW_PRESET || true)"
 CODEX_MODEL="$(env_first REVIEW_ROUTER_CODEX_MODEL AI_ROBOT_REVIEW_CODEX_MODEL || printf '%s' "$DEFAULT_CODEX_MODEL")"
@@ -553,12 +556,150 @@ safe_app_name() {
   printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | sed 's/^-//; s/-$//; s/--*/-/g' | cut -c1-34
 }
 
+app_profile_dir() {
+  if [ -n "$APP_PROFILE_DIR" ]; then
+    printf '%s' "$APP_PROFILE_DIR"
+  elif [ -n "${XDG_CONFIG_HOME:-}" ]; then
+    printf '%s/review-router/apps' "$XDG_CONFIG_HOME"
+  else
+    printf '%s/.config/review-router/apps' "$HOME"
+  fi
+}
+
+shell_quote() {
+  printf '%q' "$1"
+}
+
+validate_app_private_key_file() {
+  key_file="$1"
+  [ -f "$key_file" ] || fatal "GitHub App private key file not found: $key_file"
+  [ -r "$key_file" ] || fatal "GitHub App private key file is not readable: $key_file"
+  grep -q 'BEGIN .*PRIVATE KEY' "$key_file" || fatal "GitHub App private key file does not look like a PEM private key: $key_file"
+}
+
+profile_path_for_slug() {
+  slug="$1"
+  printf '%s/%s.env' "$(app_profile_dir)" "$slug"
+}
+
+save_app_profile() {
+  app_id="$1"
+  client_id="$2"
+  slug="$3"
+  app_name="$4"
+  private_key_file="$5"
+  [ -n "$app_id" ] || fatal "APP_ID is required for GitHub App profile"
+  [ -n "$client_id" ] || fatal "APP_CLIENT_ID is required for GitHub App profile"
+  [ -n "$slug" ] || fatal "APP_SLUG is required for GitHub App profile"
+  validate_app_private_key_file "$private_key_file"
+
+  profile_dir="$(app_profile_dir)"
+  mkdir -p "$profile_dir"
+  chmod 700 "$profile_dir" 2>/dev/null || true
+
+  safe_slug="$(printf '%s' "$slug" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | sed 's/^-//; s/-$//; s/--*/-/g')"
+  [ -n "$safe_slug" ] || fatal "Invalid GitHub App slug for profile: $slug"
+
+  saved_key="$profile_dir/$safe_slug.private-key.pem"
+  if [ "$(cd "$(dirname "$private_key_file")" && pwd)/$(basename "$private_key_file")" != "$(cd "$profile_dir" && pwd)/$(basename "$saved_key")" ]; then
+    cp "$private_key_file" "$saved_key"
+  fi
+  chmod 600 "$saved_key"
+
+  profile_file="$profile_dir/$safe_slug.env"
+  {
+    printf 'APP_ID=%s\n' "$(shell_quote "$app_id")"
+    printf 'APP_CLIENT_ID=%s\n' "$(shell_quote "$client_id")"
+    printf 'APP_SLUG=%s\n' "$(shell_quote "$slug")"
+    printf 'APP_NAME=%s\n' "$(shell_quote "${app_name:-$slug}")"
+    printf 'APP_PRIVATE_KEY_FILE=%s\n' "$(shell_quote "$saved_key")"
+  } > "$profile_file"
+  chmod 600 "$profile_file"
+  SAVED_APP_PROFILE_FILE="$profile_file"
+  ok "Saved GitHub App profile: $profile_file"
+}
+
+load_app_profile() {
+  profile="$1"
+  profile_dir="$(app_profile_dir)"
+  if [ -f "$profile" ]; then
+    profile_file="$profile"
+  else
+    profile_slug="${profile%.env}"
+    profile_file="$profile_dir/$profile_slug.env"
+  fi
+  [ -f "$profile_file" ] || fatal "Saved GitHub App profile not found: $profile_file"
+
+  APP_ID=""
+  APP_CLIENT_ID=""
+  APP_SLUG=""
+  APP_NAME=""
+  APP_PRIVATE_KEY_FILE=""
+  # shellcheck disable=SC1090
+  . "$profile_file"
+  [ -n "${APP_ID:-}" ] || fatal "APP_ID missing in profile: $profile_file"
+  [ -n "${APP_CLIENT_ID:-}" ] || fatal "APP_CLIENT_ID missing in profile: $profile_file"
+  [ -n "${APP_SLUG:-}" ] || fatal "APP_SLUG missing in profile: $profile_file"
+  [ -n "${APP_PRIVATE_KEY_FILE:-}" ] || fatal "APP_PRIVATE_KEY_FILE missing in profile: $profile_file"
+  validate_app_private_key_file "$APP_PRIVATE_KEY_FILE"
+  ok "Loaded GitHub App profile: ${APP_NAME:-$APP_SLUG} ($APP_SLUG)"
+}
+
+select_saved_app_profile() {
+  profile_dir="$(app_profile_dir)"
+  if [ -n "$APP_PROFILE" ]; then
+    load_app_profile "$APP_PROFILE"
+    return
+  fi
+
+  [ -d "$profile_dir" ] || fatal "No saved GitHub App profiles found in $profile_dir. Use REVIEW_ROUTER_APP_SETUP=create or REVIEW_ROUTER_APP_SETUP=manual first."
+
+  profiles=()
+  for profile_file in "$profile_dir"/*.env; do
+    [ -f "$profile_file" ] || continue
+    profiles+=("$profile_file")
+  done
+  [ "${#profiles[@]}" -gt 0 ] || fatal "No saved GitHub App profiles found in $profile_dir. Use REVIEW_ROUTER_APP_SETUP=create or REVIEW_ROUTER_APP_SETUP=manual first."
+
+  if [ "${#profiles[@]}" -eq 1 ]; then
+    load_app_profile "${profiles[0]}"
+    return
+  fi
+  if is_true "$NON_INTERACTIVE"; then
+    fatal "Multiple saved GitHub App profiles found in $profile_dir. Set REVIEW_ROUTER_APP_PROFILE to the profile slug or .env path."
+  fi
+
+  options=()
+  first_slug=""
+  for profile_file in "${profiles[@]}"; do
+    slug="$(basename "$profile_file" .env)"
+    [ -n "$first_slug" ] || first_slug="$slug"
+    options+=("$slug:$profile_file")
+  done
+  choose APP_PROFILE "Saved GitHub App profile" "$first_slug" "${options[@]}"
+  load_app_profile "$APP_PROFILE"
+}
+
+store_loaded_app_credentials() {
+  set_repo_variable REVIEW_APP_CLIENT_ID "$APP_CLIENT_ID"
+  set_repo_variable REVIEW_APP_ID "$APP_ID"
+  set_repo_variable REVIEW_APP_SLUG "$APP_SLUG"
+  set_repo_secret_from_file REVIEW_APP_PRIVATE_KEY "$APP_PRIVATE_KEY_FILE"
+}
+
 manual_app_setup() {
   app_name="$1"
-  warn "python3 is not available; falling back to manual GitHub App setup."
-  log "Create a private GitHub App named: $app_name"
-  log "Permissions: Contents read, Issues write, Pull requests write. Webhooks: disabled."
-  log "After creating it, generate a private key and provide the values below."
+  reason="${2:-manual}"
+  if [ "$reason" = "missing-python" ]; then
+    warn "python3 is not available; falling back to manual GitHub App setup."
+    log "Create a private GitHub App named: $app_name"
+    log "Permissions: Contents read, Issues write, Pull requests write. Webhooks: disabled."
+    log "After creating it, generate a private key and provide the values below."
+  else
+    log "Reuse an existing GitHub App by entering its credentials."
+    log "The App must have Contents read, Issues write, and Pull requests write permissions."
+    log "GitHub does not expose existing private keys; use a .pem you already saved or generate a new key in the App settings."
+  fi
   REVIEW_ROUTER_APP_CLIENT_ID="$(env_first REVIEW_ROUTER_APP_CLIENT_ID AI_ROBOT_REVIEW_APP_CLIENT_ID || true)"
   REVIEW_ROUTER_APP_ID="$(env_first REVIEW_ROUTER_APP_ID AI_ROBOT_REVIEW_APP_ID || true)"
   REVIEW_ROUTER_APP_SLUG="$(env_first REVIEW_ROUTER_APP_SLUG AI_ROBOT_REVIEW_APP_SLUG || true)"
@@ -567,11 +708,15 @@ manual_app_setup() {
   prompt_text REVIEW_ROUTER_APP_ID "GitHub App ID" ""
   prompt_text REVIEW_ROUTER_APP_SLUG "GitHub App slug" ""
   prompt_text REVIEW_ROUTER_APP_PRIVATE_KEY_FILE "Path to GitHub App private key .pem" ""
+  validate_app_private_key_file "$REVIEW_ROUTER_APP_PRIVATE_KEY_FILE"
+  save_app_profile "$REVIEW_ROUTER_APP_ID" "$REVIEW_ROUTER_APP_CLIENT_ID" "$REVIEW_ROUTER_APP_SLUG" "$app_name" "$REVIEW_ROUTER_APP_PRIVATE_KEY_FILE"
+  load_app_profile "$SAVED_APP_PROFILE_FILE"
+  store_loaded_app_credentials
+}
 
-  set_repo_variable REVIEW_APP_CLIENT_ID "$REVIEW_ROUTER_APP_CLIENT_ID"
-  set_repo_variable REVIEW_APP_ID "$REVIEW_ROUTER_APP_ID"
-  set_repo_variable REVIEW_APP_SLUG "$REVIEW_ROUTER_APP_SLUG"
-  set_repo_secret_from_file REVIEW_APP_PRIVATE_KEY "$REVIEW_ROUTER_APP_PRIVATE_KEY_FILE"
+reuse_saved_app_setup() {
+  select_saved_app_profile
+  store_loaded_app_credentials
 }
 
 create_github_app_with_manifest() {
@@ -585,7 +730,7 @@ create_github_app_with_manifest() {
   fi
 
   if ! command -v python3 >/dev/null 2>&1; then
-    manual_app_setup "$app_name"
+    manual_app_setup "$app_name" "missing-python"
     return
   fi
 
@@ -724,10 +869,9 @@ PY
 
   # shellcheck disable=SC1090
   . "$env_file"
-  set_repo_variable REVIEW_APP_CLIENT_ID "$APP_CLIENT_ID"
-  set_repo_variable REVIEW_APP_ID "$APP_ID"
-  set_repo_variable REVIEW_APP_SLUG "$APP_SLUG"
-  set_repo_secret_from_file REVIEW_APP_PRIVATE_KEY "$APP_PRIVATE_KEY_FILE"
+  save_app_profile "$APP_ID" "$APP_CLIENT_ID" "$APP_SLUG" "$APP_NAME" "$APP_PRIVATE_KEY_FILE"
+  load_app_profile "$SAVED_APP_PROFILE_FILE"
+  store_loaded_app_credentials
   rm -rf "$tmp_dir"
 
   ok "GitHub App credentials saved for $TARGET_REPO"
@@ -740,7 +884,37 @@ setup_identity() {
       app_name="$(safe_app_name)"
       log ""
       log "GitHub App bot mode: comments will come from a dedicated App bot, not github-actions[bot]."
-      create_github_app_with_manifest "$app_name"
+      if [ -z "$APP_SETUP" ] && [ -n "$APP_PROFILE" ]; then
+        APP_SETUP="saved"
+      fi
+      if [ -z "$APP_SETUP" ] \
+        && [ -n "${REVIEW_ROUTER_APP_CLIENT_ID:-${AI_ROBOT_REVIEW_APP_CLIENT_ID:-}}" ] \
+        && [ -n "${REVIEW_ROUTER_APP_ID:-${AI_ROBOT_REVIEW_APP_ID:-}}" ] \
+        && [ -n "${REVIEW_ROUTER_APP_SLUG:-${AI_ROBOT_REVIEW_APP_SLUG:-}}" ] \
+        && [ -n "${REVIEW_ROUTER_APP_PRIVATE_KEY_FILE:-${AI_ROBOT_REVIEW_APP_PRIVATE_KEY_FILE:-}}" ]; then
+        APP_SETUP="manual"
+      fi
+      if [ -z "$APP_SETUP" ]; then
+        choose APP_SETUP "GitHub App setup" "create" \
+          "create:Create a new user-owned GitHub App" \
+          "saved:Reuse a locally saved GitHub App profile" \
+          "manual:Enter existing GitHub App credentials and save a profile"
+      fi
+      case "$APP_SETUP" in
+        create|new)
+          APP_SETUP="create"
+          create_github_app_with_manifest "$app_name"
+          ;;
+        saved|reuse)
+          APP_SETUP="saved"
+          reuse_saved_app_setup
+          ;;
+        manual|existing)
+          APP_SETUP="manual"
+          manual_app_setup "$app_name" "manual"
+          ;;
+        *) fatal "Unsupported REVIEW_ROUTER_APP_SETUP: $APP_SETUP. Use create, saved, or manual." ;;
+      esac
       ;;
     actions)
       log ""

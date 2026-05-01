@@ -59,6 +59,7 @@ Available but still experimental:
 - **Codex subscription mode:** run reviews with Codex CLI OAuth from a ChatGPT subscription.
 - **API key modes:** use Codex CLI with `OPENAI_API_KEY`, or use OpenRouter with `OPENROUTER_API_KEY`.
 - **GitHub identity options:** post as `github-actions[bot]` or as your own GitHub App bot.
+- **Reusable App profiles:** create a GitHub App once, then reuse its saved local profile for more repositories.
 - **Read-only agentic context:** Codex starts from the PR diff, then may inspect related repository files in a read-only sandbox.
 - **Strict JSON findings:** provider output is parsed into `{file,line,severity,title,message,suggestion}` before posting.
 - **Inline comments:** posts only valid comments on changed lines, with severity labels in the comment body.

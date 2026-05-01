@@ -20,6 +20,7 @@ function runInstaller(env: Record<string, string>, workdir = makeTempDir('airr-w
       REVIEW_ROUTER_SKIP_GH_CHECK: '1',
       REVIEW_ROUTER_REPO: 'test-owner/test-repo',
       REVIEW_ROUTER_WORKDIR: workdir,
+      REVIEW_ROUTER_APP_PROFILE_DIR: path.join(workdir, '.review-router-apps'),
       ...env,
     },
     encoding: 'utf-8',
@@ -34,6 +35,20 @@ function runInstaller(env: Record<string, string>, workdir = makeTempDir('airr-w
 
 function workflowText(workflowPath: string): string {
   return fs.readFileSync(workflowPath, 'utf-8');
+}
+
+function writePrivateKeyFixture(dir: string, name = 'app.private-key.pem'): string {
+  const keyFile = path.join(dir, name);
+  fs.writeFileSync(
+    keyFile,
+    [
+      '-----BEGIN PRIVATE KEY-----',
+      'test-private-key',
+      '-----END PRIVATE KEY-----',
+      '',
+    ].join('\n')
+  );
+  return keyFile;
 }
 
 describe('review-router curl installer e2e', () => {
@@ -170,6 +185,121 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).not.toContain('\\${{');
   });
 
+  it('imports existing GitHub App credentials manually and saves a local profile', () => {
+    const appDir = makeTempDir('airr-manual-app-');
+    const privateKeyFile = writePrivateKeyFixture(appDir);
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'app',
+      REVIEW_ROUTER_APP_SETUP: 'manual',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_APP_CLIENT_ID: 'Iv1.manual-client-id',
+      REVIEW_ROUTER_APP_ID: '12345',
+      REVIEW_ROUTER_APP_SLUG: 'review-router-manual',
+      REVIEW_ROUTER_APP_PRIVATE_KEY_FILE: privateKeyFile,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Saved GitHub App profile:');
+    expect(result.stdout).toContain('Loaded GitHub App profile:');
+    expect(result.stdout).toContain('gh secret set REVIEW_APP_PRIVATE_KEY --repo test-owner/test-repo');
+    const profilePath = path.join(result.workdir, '.review-router-apps', 'review-router-manual.env');
+    const savedKeyPath = path.join(result.workdir, '.review-router-apps', 'review-router-manual.private-key.pem');
+    expect(fs.existsSync(profilePath)).toBe(true);
+    expect(fs.existsSync(savedKeyPath)).toBe(true);
+    expect(fs.readFileSync(profilePath, 'utf-8')).toContain('APP_SLUG=review-router-manual');
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain('uses: actions/create-github-app-token@v3');
+    expect(workflow).toContain('GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}');
+  });
+
+  it('keeps existing GitHub App credential env vars working without explicit app setup mode', () => {
+    const appDir = makeTempDir('airr-compat-app-');
+    const privateKeyFile = writePrivateKeyFixture(appDir);
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'app',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_APP_CLIENT_ID: 'Iv1.compat-client-id',
+      REVIEW_ROUTER_APP_ID: '22222',
+      REVIEW_ROUTER_APP_SLUG: 'review-router-compat',
+      REVIEW_ROUTER_APP_PRIVATE_KEY_FILE: privateKeyFile,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Saved GitHub App profile:');
+    expect(result.stdout).not.toContain('Skipping GitHub App creation in dry-run/local-only/test mode');
+    expect(fs.existsSync(path.join(result.workdir, '.review-router-apps', 'review-router-compat.env'))).toBe(true);
+  });
+
+  it('reuses a saved GitHub App profile', () => {
+    const workdir = makeTempDir('airr-saved-app-workdir-');
+    const profileDir = path.join(workdir, '.review-router-apps');
+    fs.mkdirSync(profileDir, { recursive: true });
+    const privateKeyFile = writePrivateKeyFixture(profileDir, 'saved-router.private-key.pem');
+    fs.writeFileSync(
+      path.join(profileDir, 'saved-router.env'),
+      [
+        'APP_ID=98765',
+        'APP_CLIENT_ID=Iv1.saved-client-id',
+        'APP_SLUG=saved-router',
+        'APP_NAME=saved-router',
+        `APP_PRIVATE_KEY_FILE=${privateKeyFile}`,
+        '',
+      ].join('\n')
+    );
+
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'app',
+      REVIEW_ROUTER_APP_SETUP: 'saved',
+      REVIEW_ROUTER_APP_PROFILE: 'saved-router',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+    }, workdir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Loaded GitHub App profile: saved-router (saved-router)');
+    expect(result.stdout).toContain('gh secret set REVIEW_APP_PRIVATE_KEY --repo test-owner/test-repo');
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain('uses: actions/create-github-app-token@v3');
+    expect(workflow).toContain('repositories: test-repo');
+  });
+
+  it('requires an explicit saved profile in non-interactive mode when multiple profiles exist', () => {
+    const workdir = makeTempDir('airr-multiple-app-workdir-');
+    const profileDir = path.join(workdir, '.review-router-apps');
+    fs.mkdirSync(profileDir, { recursive: true });
+    for (const slug of ['first-router', 'second-router']) {
+      const privateKeyFile = writePrivateKeyFixture(profileDir, `${slug}.private-key.pem`);
+      fs.writeFileSync(
+        path.join(profileDir, `${slug}.env`),
+        [
+          'APP_ID=98765',
+          `APP_CLIENT_ID=Iv1.${slug}`,
+          `APP_SLUG=${slug}`,
+          `APP_NAME=${slug}`,
+          `APP_PRIVATE_KEY_FILE=${privateKeyFile}`,
+          '',
+        ].join('\n')
+      );
+    }
+
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'app',
+      REVIEW_ROUTER_APP_SETUP: 'saved',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+    }, workdir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr + result.stdout).toContain('Multiple saved GitHub App profiles found');
+    expect(fs.existsSync(result.workflowPath)).toBe(false);
+  });
+
   it('generates Codex CLI API-key workflow without requiring local OAuth auth', () => {
     const result = runInstaller({
       REVIEW_ROUTER_IDENTITY: 'actions',
@@ -250,6 +380,42 @@ describe('review-router curl installer e2e', () => {
     expect(result.stdout).toContain('Skipping GitHub App creation in dry-run/local-only/test mode');
     expect(result.stdout).toContain('would clone test-owner/test-repo');
     expect(result.stdout).toContain('would commit .github/workflows/review-router.yml');
+  });
+
+  it('fails clearly when saved GitHub App profiles are missing', () => {
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'app',
+      REVIEW_ROUTER_APP_SETUP: 'saved',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr + result.stdout).toContain('No saved GitHub App profiles found');
+    expect(fs.existsSync(result.workflowPath)).toBe(false);
+  });
+
+  it('rejects invalid GitHub App private key before writing workflow', () => {
+    const appDir = makeTempDir('airr-bad-app-');
+    const badKeyFile = path.join(appDir, 'bad.pem');
+    fs.writeFileSync(badKeyFile, 'not a pem key');
+
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'app',
+      REVIEW_ROUTER_APP_SETUP: 'manual',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_APP_CLIENT_ID: 'Iv1.bad-client-id',
+      REVIEW_ROUTER_APP_ID: '12345',
+      REVIEW_ROUTER_APP_SLUG: 'bad-router',
+      REVIEW_ROUTER_APP_PRIVATE_KEY_FILE: badKeyFile,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr + result.stdout).toContain('does not look like a PEM private key');
+    expect(fs.existsSync(result.workflowPath)).toBe(false);
   });
 
   it('rejects invalid Codex OAuth files before writing workflow', () => {

@@ -13,8 +13,8 @@ describe('New CLI Providers', () => {
     });
 
     it('should validate codex/ provider names', () => {
-      expect(Provider.validate('codex/gpt-5.1-codex-max')).toBe(true);
-      expect(Provider.validate('codex/gpt-5.1-codex')).toBe(true);
+      expect(Provider.validate('codex/gpt-5.5')).toBe(true);
+      expect(Provider.validate('codex/gpt-5.4')).toBe(true);
       expect(Provider.validate('codex/')).toBe(false);
     });
 
@@ -55,16 +55,16 @@ describe('New CLI Providers', () => {
 
   describe('CodexProvider', () => {
     it('should create provider with correct name format', () => {
-      const provider = new CodexProvider('gpt-5.1-codex-max');
-      expect(provider.name).toBe('codex/gpt-5.1-codex-max');
+      const provider = new CodexProvider('gpt-5.5');
+      expect(provider.name).toBe('codex/gpt-5.5');
     });
 
     it('should create provider for different models', () => {
-      const maxModel = new CodexProvider('gpt-5.1-codex-max');
-      const standardModel = new CodexProvider('gpt-5.1-codex');
+      const maxModel = new CodexProvider('gpt-5.5');
+      const standardModel = new CodexProvider('gpt-5.4');
 
-      expect(maxModel.name).toBe('codex/gpt-5.1-codex-max');
-      expect(standardModel.name).toBe('codex/gpt-5.1-codex');
+      expect(maxModel.name).toBe('codex/gpt-5.5');
+      expect(standardModel.name).toBe('codex/gpt-5.4');
     });
   });
 

@@ -9,7 +9,8 @@ Create a private GitHub App with these repository permissions:
 
 - Contents: read
 - Issues: write
-- Pull requests: write
+- Pull requests: write (used for review comments and optional AI discussion replies)
+- Actions: write (used by the interaction workflow to rerun failed review jobs after `/rr skip`)
 - Metadata: read (GitHub grants this automatically)
 
 No webhooks are required for GitHub Actions mode.
@@ -27,6 +28,7 @@ Then mint an installation token before running the review action:
 
 ```yaml
 permissions:
+  actions: write
   contents: read
   issues: write
   pull-requests: write
@@ -45,6 +47,7 @@ jobs:
           private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
+          permission-actions: write
           permission-contents: read
           permission-issues: write
           permission-pull-requests: write
@@ -64,6 +67,7 @@ jobs:
   "description": "Posts Codex-powered pull request reviews from a dedicated GitHub App bot identity.",
   "public": false,
   "default_permissions": {
+    "actions": "write",
     "contents": "read",
     "issues": "write",
     "pull_requests": "write"

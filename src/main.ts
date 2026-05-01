@@ -1,13 +1,35 @@
 import * as core from './actions/core';
+import * as fs from 'fs';
 import { ConfigLoader } from './config/loader';
 import { createComponents } from './setup';
 import { ReviewOrchestrator } from './core/orchestrator';
-import { validateRequired, validatePositiveInteger, ValidationError, formatValidationError } from './utils/validation';
+import {
+  validateRequired,
+  validatePositiveInteger,
+  ValidationError,
+  formatValidationError,
+} from './utils/validation';
 import { Severity, Review } from './types';
 import { postReviewFailureSummary } from './github/failure-summary';
+import { GitHubClient } from './github/client';
+import { ReviewLedger } from './github/ledger';
+import { ReviewInteractionHandler } from './github/interaction';
+import {
+  loadDiscussionOptionsFromEnv,
+  ReviewDiscussionHandler,
+} from './github/discussion';
+import { CodexDiscussionResponder } from './discussion/codex-responder';
 
 function syncEnvFromInputs(): void {
   const inputKeys = [
+    'REVIEW_ROUTER_MODE',
+    'REVIEW_ROUTER_LEDGER_KEY',
+    'REVIEW_ROUTER_ALLOW_AUTHOR_SKIP',
+    'REVIEW_ROUTER_REVIEW_WORKFLOW_FILE',
+    'REVIEW_ROUTER_DISCUSSION_MODE',
+    'REVIEW_ROUTER_DISCUSSION_MAX_PER_PR',
+    'REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD',
+    'REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS',
     'REVIEW_PROVIDERS',
     'FALLBACK_PROVIDERS',
     'SYNTHESIS_MODEL',
@@ -92,6 +114,21 @@ async function run(): Promise<void> {
 
     validateRequired(token, 'GITHUB_TOKEN');
 
+    if (
+      (process.env.REVIEW_ROUTER_MODE ||
+        core.getInput('REVIEW_ROUTER_MODE')) === 'interaction'
+    ) {
+      await runInteraction(token!);
+      return;
+    }
+    if (
+      (process.env.REVIEW_ROUTER_MODE ||
+        core.getInput('REVIEW_ROUTER_MODE')) === 'interaction-preflight'
+    ) {
+      await runInteractionPreflight(token!);
+      return;
+    }
+
     const config = ConfigLoader.load();
     const components = await createComponents(config, token!);
     const orchestrator = new ReviewOrchestrator(components);
@@ -102,7 +139,9 @@ async function run(): Promise<void> {
     prNumber = validatePositiveInteger(prInput, 'PR_NUMBER');
 
     if (config.dryRun) {
-      core.info('🔍 DRY RUN MODE - Review will run but no comments will be posted');
+      core.info(
+        '🔍 DRY RUN MODE - Review will run but no comments will be posted'
+      );
     }
 
     core.info(`Starting review for PR #${prNumber}`);
@@ -114,7 +153,10 @@ async function run(): Promise<void> {
     }
 
     core.setOutput('findings_count', review.findings.length);
-    core.setOutput('critical_count', review.findings.filter(f => f.severity === 'critical').length);
+    core.setOutput(
+      'critical_count',
+      review.findings.filter((f) => f.severity === 'critical').length
+    );
     core.setOutput('cost_usd', review.metrics.totalCost.toFixed(4));
     core.setOutput('total_cost', review.metrics.totalCost.toFixed(4));
     if (review.aiAnalysis) {
@@ -125,7 +167,7 @@ async function run(): Promise<void> {
     if (blockingFindings.length > 0) {
       core.setFailed(
         `ReviewRouter found ${blockingFindings.length} ${config.failOnSeverity}+ finding(s). ` +
-        'Review comments were posted before failing this check.'
+          'Review comments were posted before failing this check.'
       );
       return;
     }
@@ -146,9 +188,13 @@ async function run(): Promise<void> {
       } else if (err.message.includes('EACCES')) {
         core.error('Permission denied. Check file permissions.');
       } else if (err.message.includes('rate limit')) {
-        core.error('API rate limit exceeded. Consider using caching or reducing provider count.');
+        core.error(
+          'API rate limit exceeded. Consider using caching or reducing provider count.'
+        );
       } else if (err.message.includes('timeout')) {
-        core.error('Operation timed out. Consider increasing the timeout value.');
+        core.error(
+          'Operation timed out. Consider increasing the timeout value.'
+        );
       }
     }
 
@@ -159,7 +205,10 @@ async function run(): Promise<void> {
   }
 }
 
-function getBlockingFindings(review: Review, threshold: Severity | 'off' | undefined) {
+function getBlockingFindings(
+  review: Review,
+  threshold: Severity | 'off' | undefined
+) {
   if (!threshold || threshold === 'off') return [];
 
   const rank: Record<Severity, number> = {
@@ -168,7 +217,73 @@ function getBlockingFindings(review: Review, threshold: Severity | 'off' | undef
     minor: 1,
   };
   const minRank = rank[threshold];
-  return review.findings.filter(finding => rank[finding.severity] >= minRank);
+  return review.findings.filter((finding) => rank[finding.severity] >= minRank);
+}
+
+async function runInteraction(token: string): Promise<void> {
+  const githubClient = new GitHubClient(token);
+  const ledger = new ReviewLedger(
+    githubClient,
+    process.env.REVIEW_ROUTER_LEDGER_KEY,
+    /^true$/i.test(process.env.DRY_RUN || '')
+  );
+  const discussionHandler = createDiscussionHandler(githubClient);
+  const handler = new ReviewInteractionHandler(
+    githubClient,
+    ledger,
+    discussionHandler
+  );
+  await handler.execute();
+}
+
+async function runInteractionPreflight(token: string): Promise<void> {
+  const githubClient = new GitHubClient(token);
+  const discussionHandler = createDiscussionHandler(githubClient);
+  const payload = JSON.parse(
+    fs.readFileSync(process.env.GITHUB_EVENT_PATH || '', 'utf8')
+  );
+  const command = String(payload?.comment?.body || '')
+    .trim()
+    .startsWith('/rr ');
+  const result = command
+    ? {
+        shouldRun: true,
+        needsDiscussion: false,
+        reason: 'ReviewRouter command',
+      }
+    : await discussionHandler.preflight(payload);
+
+  core.setOutput('should_run', result.shouldRun ? 'true' : 'false');
+  core.setOutput('needs_discussion', result.needsDiscussion ? 'true' : 'false');
+  core.setOutput('reason', result.reason);
+  core.info(
+    `Interaction preflight: should_run=${result.shouldRun}, needs_discussion=${result.needsDiscussion}, reason=${result.reason}`
+  );
+}
+
+function createDiscussionHandler(
+  githubClient: GitHubClient
+): ReviewDiscussionHandler {
+  const options = loadDiscussionOptionsFromEnv();
+  const model = process.env.CODEX_MODEL || 'gpt-5.5';
+  const timeoutSeconds = parsePositiveInteger(
+    process.env.REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS,
+    60
+  );
+  const responder =
+    options.mode === 'off'
+      ? undefined
+      : new CodexDiscussionResponder(model, timeoutSeconds * 1000);
+
+  return new ReviewDiscussionHandler(githubClient, responder, options);
+}
+
+function parsePositiveInteger(
+  value: string | undefined,
+  defaultValue: number
+): number {
+  const parsed = Number.parseInt(value || '', 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : defaultValue;
 }
 
 // core.setFailed() in run() sets process.exitCode, so we don't need explicit process.exit()

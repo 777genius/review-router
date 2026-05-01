@@ -37,7 +37,7 @@ docker-compose up -d
 
 4. **Check logs:**
 ```bash
-docker-compose logs -f multi-provider-review
+docker-compose logs -f review-router
 ```
 
 5. **View analytics:**
@@ -57,7 +57,7 @@ ls -la reports/
 ### Build Image
 
 ```bash
-docker build -t multi-provider-review:latest .
+docker build -t review-router:latest .
 ```
 
 ### Run Container
@@ -70,7 +70,7 @@ docker run -d \
   -e OPENROUTER_API_KEY=sk-or-v1-your-key \
   -v mpr-cache:/app/.cache \
   -v $(pwd)/reports:/app/reports \
-  multi-provider-review:latest
+  review-router:latest
 ```
 
 ## Webhook Mode (Optional)
@@ -209,8 +209,8 @@ Analytics reports are saved to `./reports/`:
 ls -la reports/
 # analytics-dashboard.html
 # analytics-export.csv
-# multi-provider-review.sarif
-# multi-provider-review.json
+# review-router.sarif
+# review-router.json
 ```
 
 ## Monitoring
@@ -234,7 +234,7 @@ docker exec mpr-review node -e "console.log('healthy')"
 docker-compose logs -f
 
 # Filter by service
-docker-compose logs -f multi-provider-review
+docker-compose logs -f review-router
 docker-compose logs -f mpr-webhook
 
 # Export logs
@@ -273,7 +273,7 @@ secrets:
     file: ./secrets/openrouter_key.txt
 
 services:
-  multi-provider-review:
+  review-router:
     secrets:
       - github_token
       - openrouter_key
@@ -310,7 +310,7 @@ Set memory and CPU limits:
 
 ```yaml
 services:
-  multi-provider-review:
+  review-router:
     deploy:
       resources:
         limits:
@@ -327,7 +327,7 @@ services:
 
 ```bash
 # Check logs
-docker-compose logs multi-provider-review
+docker-compose logs review-router
 
 # Common issues:
 # - Missing GITHUB_TOKEN or OPENROUTER_API_KEY
@@ -355,8 +355,8 @@ curl -X POST http://localhost:3000/webhook \
 
 ```bash
 # Increase memory limit
-docker-compose up -d --scale multi-provider-review=1 \
-  --memory 4g multi-provider-review
+docker-compose up -d --scale review-router=1 \
+  --memory 4g review-router
 ```
 
 ### Cache Issues
@@ -385,13 +385,13 @@ docker-compose up -d
 
 ```bash
 # Scale up new version
-docker-compose up -d --scale multi-provider-review=2
+docker-compose up -d --scale review-router=2
 
 # Wait for health check
 sleep 10
 
 # Scale down old version
-docker-compose up -d --scale multi-provider-review=1
+docker-compose up -d --scale review-router=1
 ```
 
 ## Support

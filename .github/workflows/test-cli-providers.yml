@@ -90,16 +90,16 @@ jobs:
             echo "⚠️ Gemini CLI not installed"
           fi
 
-      # Test with multi-provider-code-review
-      - name: Install multi-provider-code-review
-        run: npm install -g multi-provider-code-review
+      # Test the ReviewRouter CLI from this checkout.
+      - name: Build ReviewRouter CLI
+        run: |
+          npm ci
+          npm run build:cli
 
       - name: Test provider validation
         run: |
           echo "Testing provider name validation..."
-          # This will be handled by the multi-provider-code-review tool
-          # Just verify the installation
-          which mpr || echo "mpr command not found"
+          node dist/cli/index.js version
 
       - name: Summary
         run: |
@@ -114,5 +114,5 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
           echo "1. Update workflow to install CLI binaries properly" >> $GITHUB_STEP_SUMMARY
-          echo "2. Test actual review with: \`REVIEW_PROVIDERS='claude/sonnet,codex/gpt-5.1-codex-max,gemini/gemini-2.0-flash'\`" >> $GITHUB_STEP_SUMMARY
+          echo "2. Test actual review with: \`REVIEW_PROVIDERS='claude/sonnet,codex/gpt-5.5,gemini/gemini-2.0-flash'\`" >> $GITHUB_STEP_SUMMARY
           echo "3. See docs/CI_SETUP.md for complete setup instructions" >> $GITHUB_STEP_SUMMARY

@@ -18,6 +18,9 @@ type CodexRunOptions = {
   healthCheck: boolean;
   outputSchema?: unknown;
   eventAudit?: boolean;
+  cwd?: string;
+  includeWorkspaceEnv?: boolean;
+  disableTools?: boolean;
 };
 
 type CodexRunResult = {
@@ -119,7 +122,9 @@ export class CodexProvider extends Provider {
           eventAudit: this.shouldUseEventAudit(),
         }
       );
-      const content = this.sanitizeReviewContent((lastMessage || stdout).trim());
+      const content = this.sanitizeReviewContent(
+        (lastMessage || stdout).trim()
+      );
       const durationSeconds = (Date.now() - started) / 1000;
       logger.info(
         `Codex CLI output for ${this.name}: final=${content.length} bytes, stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
@@ -144,6 +149,39 @@ export class CodexProvider extends Provider {
     }
   }
 
+  async runStructuredPrompt(
+    prompt: string,
+    outputSchema: unknown,
+    timeoutMs: number,
+    options: {
+      cwd?: string;
+      eventAudit?: boolean;
+      includeWorkspaceEnv?: boolean;
+    } = {}
+  ): Promise<string> {
+    const binary = await this.resolveBinary();
+    const { stdout, stderr, lastMessage } = await this.runCliWithStdin(
+      binary,
+      prompt,
+      timeoutMs,
+      {
+        healthCheck: false,
+        outputSchema,
+        eventAudit: options.eventAudit,
+        cwd: options.cwd,
+        includeWorkspaceEnv: options.includeWorkspaceEnv,
+        disableTools: true,
+      }
+    );
+    const content = this.sanitizeReviewContent((lastMessage || stdout).trim());
+    if (!content) {
+      throw new Error(
+        `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
+      );
+    }
+    return content;
+  }
+
   private estimateUsage(prompt: string, content: string) {
     const promptTokens = estimateTokensSimple(prompt).tokens;
     const completionTokens = estimateTokensSimple(content).tokens;
@@ -160,6 +198,7 @@ export class CodexProvider extends Provider {
     outputLastMessageFile: string;
     outputSchemaFile?: string;
     eventAudit?: boolean;
+    disableTools?: boolean;
   }): string[] {
     // The top-level `codex` command starts the interactive TUI and fails in CI.
     const args = [
@@ -170,11 +209,33 @@ export class CodexProvider extends Provider {
       'read-only',
       '--ephemeral',
       '--ignore-user-config',
+      '--ignore-rules',
       '-c',
       'approval_policy=never',
       '--output-last-message',
       options.outputLastMessageFile,
     ];
+
+    if (options.disableTools) {
+      args.push(
+        '--disable',
+        'shell_tool',
+        '--disable',
+        'unified_exec',
+        '--disable',
+        'browser_use',
+        '--disable',
+        'computer_use',
+        '--disable',
+        'js_repl',
+        '--disable',
+        'tool_search',
+        '--disable',
+        'web_search_request',
+        '--disable',
+        'plugins'
+      );
+    }
 
     if (options.outputSchemaFile) {
       args.push('--output-schema', options.outputSchemaFile);
@@ -229,6 +290,7 @@ export class CodexProvider extends Provider {
         outputLastMessageFile: outputFile,
         outputSchemaFile: schemaFile,
         eventAudit: options.eventAudit && !options.healthCheck,
+        disableTools: options.disableTools,
       });
 
       // Use stdin redirection via file descriptor instead of shell
@@ -243,7 +305,8 @@ export class CodexProvider extends Provider {
         const proc = spawn(bin, args, {
           stdio: [fdNum, 'pipe', 'pipe'],
           detached: true,
-          env: this.buildSafeEnv(),
+          cwd: options.cwd || process.cwd(),
+          env: this.buildSafeEnv(options.includeWorkspaceEnv !== false),
         });
 
         let stdout = '';
@@ -369,7 +432,9 @@ export class CodexProvider extends Provider {
       'The "findings" array may be empty. "severity" must be one of "critical", "major", or "minor".',
       'The "suggestion" field is required by schema; use null unless there is an exact safe replacement.',
       'Do not return markdown, prose, or a bare JSON array.',
-    ].filter((line) => line !== undefined).join('\n');
+    ]
+      .filter((line) => line !== undefined)
+      .join('\n');
   }
 
   private wrapPromptOnlyReviewPrompt(prompt: string): string {
@@ -423,7 +488,7 @@ export class CodexProvider extends Provider {
     };
   }
 
-  private buildSafeEnv(): NodeJS.ProcessEnv {
+  private buildSafeEnv(includeWorkspaceEnv = true): NodeJS.ProcessEnv {
     const allowed = [
       'PATH',
       'HOME',
@@ -435,9 +500,11 @@ export class CodexProvider extends Provider {
       'LC_ALL',
       'LC_CTYPE',
       'CI',
-      'GITHUB_WORKSPACE',
       'OPENAI_API_KEY',
     ];
+    if (includeWorkspaceEnv) {
+      allowed.push('GITHUB_WORKSPACE');
+    }
 
     const env: NodeJS.ProcessEnv = {};
     for (const key of allowed) {
@@ -482,7 +549,9 @@ export class CodexProvider extends Provider {
       }
     }
 
-    for (const file of [...relatedFiles].filter((file) => !changedFiles.includes(file)).slice(0, 8)) {
+    for (const file of [...relatedFiles]
+      .filter((file) => !changedFiles.includes(file))
+      .slice(0, 8)) {
       const content = await this.readRepoFileSnippet(file);
       if (content) {
         snippets.push(this.formatContextSnippet(file, 'related', content));
@@ -503,7 +572,8 @@ export class CodexProvider extends Provider {
 
   private extractChangedFiles(prompt: string): string[] {
     const files = new Set<string>();
-    const fileListPattern = /^- ([^\s]+) \((?:added|modified|removed|renamed|changed)/gm;
+    const fileListPattern =
+      /^- ([^\s]+) \((?:added|modified|removed|renamed|changed)/gm;
     let match;
 
     while ((match = fileListPattern.exec(prompt)) !== null) {
@@ -536,7 +606,9 @@ export class CodexProvider extends Provider {
       return false;
     }
 
-    return /\.(?:[cm]?js|jsx|tsx?|py|go|rs|java|kt|kts|dart|rb|php|cs|cpp|c|h|hpp|swift|scala|json|ya?ml|toml|sql|graphql|proto)$/i.test(normalized);
+    return /\.(?:[cm]?js|jsx|tsx?|py|go|rs|java|kt|kts|dart|rb|php|cs|cpp|c|h|hpp|swift|scala|json|ya?ml|toml|sql|graphql|proto)$/i.test(
+      normalized
+    );
   }
 
   private normalizeRepoPath(file: string): string | null {
@@ -545,7 +617,11 @@ export class CodexProvider extends Provider {
     }
 
     const normalized = path.normalize(file).replace(/\\/g, '/');
-    if (normalized === '.' || normalized.startsWith('../') || normalized === '..') {
+    if (
+      normalized === '.' ||
+      normalized.startsWith('../') ||
+      normalized === '..'
+    ) {
       return null;
     }
 
@@ -575,9 +651,13 @@ export class CodexProvider extends Provider {
     }
   }
 
-  private extractRelativeImportFiles(fromFile: string, content: string): string[] {
+  private extractRelativeImportFiles(
+    fromFile: string,
+    content: string
+  ): string[] {
     const imports = new Set<string>();
-    const importPattern = /(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+|require\()\s*['"](\.{1,2}\/[^'"]+)['"]/g;
+    const importPattern =
+      /(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+|require\()\s*['"](\.{1,2}\/[^'"]+)['"]/g;
     let match;
 
     while ((match = importPattern.exec(content)) !== null) {
@@ -588,15 +668,22 @@ export class CodexProvider extends Provider {
     return [...imports];
   }
 
-  private resolveRelativeImport(fromFile: string, specifier: string): string | null {
+  private resolveRelativeImport(
+    fromFile: string,
+    specifier: string
+  ): string | null {
     const base = path.dirname(fromFile);
     const raw = this.normalizeRepoPath(path.join(base, specifier));
     if (!raw) return null;
 
     const candidates = [
       raw,
-      ...['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json'].map((ext) => `${raw}${ext}`),
-      ...['.ts', '.tsx', '.js', '.jsx', '.json'].map((ext) => path.posix.join(raw, `index${ext}`)),
+      ...['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json'].map(
+        (ext) => `${raw}${ext}`
+      ),
+      ...['.ts', '.tsx', '.js', '.jsx', '.json'].map((ext) =>
+        path.posix.join(raw, `index${ext}`)
+      ),
     ];
 
     for (const candidate of candidates) {
@@ -616,7 +703,11 @@ export class CodexProvider extends Provider {
     return null;
   }
 
-  private formatContextSnippet(file: string, role: 'changed' | 'related', content: string): string {
+  private formatContextSnippet(
+    file: string,
+    role: 'changed' | 'related',
+    content: string
+  ): string {
     return [
       `<context-file path="${file}" role="${role}">`,
       content,
@@ -720,7 +811,10 @@ export class CodexProvider extends Provider {
       .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, '[redacted-github-token]')
       .replace(/github_pat_[A-Za-z0-9_]+/g, '[redacted-github-token]')
       .replace(/"access_token"\s*:\s*"[^"]+"/gi, '"access_token":"[redacted]"')
-      .replace(/"refresh_token"\s*:\s*"[^"]+"/gi, '"refresh_token":"[redacted]"')
+      .replace(
+        /"refresh_token"\s*:\s*"[^"]+"/gi,
+        '"refresh_token":"[redacted]"'
+      )
       .replace(/session id:\s*[a-f0-9-]+/gi, 'session id: [redacted]')
       .replace(/thread\s+[a-f0-9-]{8,}/gi, 'thread [redacted]');
 

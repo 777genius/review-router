@@ -297,7 +297,7 @@ USER node
 RUN setcap cap_net_bind_service=+ep /usr/local/bin/node
 
 # Read-only filesystem where possible
-docker run --read-only --tmpfs /tmp multi-provider-review
+docker run --read-only --tmpfs /tmp review-router
 ```
 
 **Environment variables:**
@@ -307,7 +307,7 @@ docker run \
   --env-file /dev/null \
   -e GITHUB_TOKEN=$(vault read -field=token secret/github) \
   -e OPENROUTER_API_KEY=$(vault read -field=key secret/openrouter) \
-  multi-provider-review
+  review-router
 ```
 
 ### Network Security

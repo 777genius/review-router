@@ -85,7 +85,7 @@ for (const symbol of symbolsToRemove) {
 
 ### 4. Create Review Hints File
 
-We just added `.github/multi-provider-review-hints.md` with:
+We just added `.github/review-router-hints.md` with:
 - Known correct implementations and their line numbers
 - Test coverage references
 - Explanations of algorithms and security properties
@@ -298,7 +298,7 @@ test('copyFrom creates independent copies', () => {
 Based on our current experience with false positives:
 
 1. ✅ **Added documentation tags** to graph-builder.ts
-2. ✅ **Created review hints file** at `.github/multi-provider-review-hints.md`
+2. ✅ **Created review hints file** at `.github/review-router-hints.md`
 3. ⏭️ **Configure review tool** to use hints file (if supported)
 4. ⏭️ **Train review process** to verify findings before commenting
 5. ⏭️ **Add custom ESLint rules** for project-specific patterns
@@ -343,6 +343,6 @@ The goal is **high signal-to-noise ratio**: maximize real bugs caught, minimize 
 ---
 
 **Related Documentation**:
-- `.github/multi-provider-review-hints.md` - Context for automated reviews
+- `.github/review-router-hints.md` - Context for automated reviews
 - `docs/DEVELOPMENT_PLAN_V3.md` - Future enhancements (v0.3.2+)
 - `docs/TROUBLESHOOTING.md` - Common review tool issues

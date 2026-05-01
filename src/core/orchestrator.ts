@@ -15,7 +15,7 @@ import { CommentPoster } from '../github/comment-poster';
 import { MarkdownFormatter } from '../output/formatter';
 import { MarkdownFormatterV2 } from '../output/formatter-v2';
 import { MermaidGenerator } from '../output/mermaid';
-import { FeedbackFilter } from '../github/feedback';
+import { FeedbackFilter, ReviewCommentState } from '../github/feedback';
 import { FindingFilter } from '../analysis/finding-filter';
 import { buildJson } from '../output/json';
 import { buildSarif } from '../output/sarif';
@@ -709,9 +709,13 @@ export class ReviewOrchestrator {
         }
       }
 
-      const markdown = this.components.formatter.format(review);
       const reviewCommentState =
-        await this.components.feedbackFilter.loadReviewCommentState(pr.number);
+        await this.components.feedbackFilter.loadReviewCommentState(pr.number, pr.headSha);
+      const dismissedCount = this.applyCommandDismissals(review, reviewCommentState);
+      if (dismissedCount > 0) {
+        logger.info(`Applied ${dismissedCount} /rr skip dismissal(s) before publishing review`);
+      }
+      const markdown = this.components.formatter.format(review);
       await this.updatePullRequestDescription(pr);
 
       // Detect and record suggestion acceptances (positive feedback)
@@ -1135,6 +1139,36 @@ export class ReviewOrchestrator {
     // Fallback to simple threshold filtering
     const threshold = config.quietMinConfidence ?? 0.5;
     return findings.filter(f => (f.evidence?.confidence ?? 1) >= threshold);
+  }
+
+  private applyCommandDismissals(
+    review: Review,
+    state: ReviewCommentState
+  ): number {
+    const hasDismissals =
+      (state.commandDismissed?.size ?? 0) > 0 ||
+      (state.commandDismissedComments?.length ?? 0) > 0;
+    if (!hasDismissals) return 0;
+
+    const before = review.findings.length;
+    review.findings = review.findings.filter(finding =>
+      !this.components.feedbackFilter.isFindingCommandDismissed(finding, state)
+    );
+    review.inlineComments = review.inlineComments.filter(comment =>
+      !this.components.feedbackFilter.isInlineCommandDismissed(comment, state)
+    );
+    review.actionItems = Array.from(new Set(
+      review.findings
+        .filter(finding => finding.severity !== 'minor')
+        .slice(0, 5)
+        .map(finding => `${finding.file}:${finding.line} - ${finding.title}`)
+    ));
+    review.metrics.totalFindings = review.findings.length;
+    review.metrics.critical = review.findings.filter(finding => finding.severity === 'critical').length;
+    review.metrics.major = review.findings.filter(finding => finding.severity === 'major').length;
+    review.metrics.minor = review.findings.filter(finding => finding.severity === 'minor').length;
+
+    return before - review.findings.length;
   }
 
   /**

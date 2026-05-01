@@ -52,12 +52,34 @@ describe('CodexProvider', () => {
     expect(args).toContain('read-only');
     expect(args).toContain('--ephemeral');
     expect(args).toContain('--ignore-user-config');
+    expect(args).toContain('--ignore-rules');
     expect(args).toContain('--output-schema');
     expect(args).toContain('/tmp/codex-schema.json');
     expect(args).toContain('--output-last-message');
     expect(args).toContain('/tmp/codex-output.txt');
     expect(args).toContain('--json');
     expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+  });
+
+  it('can disable interactive/tool features for isolated discussion prompts', () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+      outputSchemaFile: '/tmp/codex-schema.json',
+      disableTools: true,
+    });
+
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '--disable',
+        'shell_tool',
+        'unified_exec',
+        'browser_use',
+        'computer_use',
+        'plugins',
+      ])
+    );
   });
 
   it('sanitizes spawned Codex environment', () => {
@@ -83,7 +105,9 @@ describe('CodexProvider', () => {
 
   it('allows agentic review findings for concrete user-visible regressions', async () => {
     const provider = new CodexProvider('gpt-5.4-mini');
-    const prompt = await (provider as any).wrapAgenticReviewPrompt('review prompt');
+    const prompt = await (provider as any).wrapAgenticReviewPrompt(
+      'review prompt'
+    );
 
     expect(prompt).toContain('user-visible functional regressions');
     expect(prompt).toContain('permanent loading');
@@ -175,20 +199,17 @@ describe('CodexProvider', () => {
         return createMockProcess();
       }
 
-      return createMockProcess(
-        (proc) => {
-          proc.stderr.emit(
-            'data',
-            [
-              'invalid_request_error: auth failed',
-              'https://auth.openai.com/device?user_code=secret',
-              'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
-              '"refresh_token":"refresh-secret"',
-            ].join('\n')
-          );
-        },
-        1
-      );
+      return createMockProcess((proc) => {
+        proc.stderr.emit(
+          'data',
+          [
+            'invalid_request_error: auth failed',
+            'https://auth.openai.com/device?user_code=secret',
+            'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+            '"refresh_token":"refresh-secret"',
+          ].join('\n')
+        );
+      }, 1);
     });
 
     const provider = new CodexProvider('gpt-5.4-mini', {
@@ -266,6 +287,60 @@ describe('CodexProvider', () => {
     expect(env.OPENROUTER_API_KEY).toBeUndefined();
   });
 
+  it('runs structured prompts in isolated cwd without workspace env or tools', async () => {
+    process.env.PATH = '/usr/bin';
+    process.env.HOME = '/home/runner';
+    process.env.GITHUB_WORKSPACE = '/home/runner/work/repo/repo';
+
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-structured-cwd-'));
+    spawnMock.mockImplementation(
+      (_cmd: string, args: string[], _options: any) => {
+        if (args.includes('--version')) {
+          return createMockProcess();
+        }
+
+        return createMockProcess(() => {
+          const outputIndex = args.indexOf('--output-last-message');
+          fs.writeFileSync(args[outputIndex + 1], '{"ok":true}');
+        });
+      }
+    );
+
+    try {
+      const provider = new CodexProvider('gpt-5.4-mini');
+      const content = await provider.runStructuredPrompt(
+        'Return JSON',
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['ok'],
+          properties: { ok: { type: 'boolean' } },
+        },
+        1000,
+        { cwd, includeWorkspaceEnv: false }
+      );
+
+      const execCall = spawnMock.mock.calls.find(
+        (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+      );
+      expect(content).toBe('{"ok":true}');
+      expect(execCall?.[2]?.cwd).toBe(cwd);
+      expect(execCall?.[2]?.env.GITHUB_WORKSPACE).toBeUndefined();
+      expect(execCall?.[1]).toEqual(
+        expect.arrayContaining([
+          '--ignore-rules',
+          '--disable',
+          'shell_tool',
+          'unified_exec',
+          'browser_use',
+          'plugins',
+        ])
+      );
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('builds deterministic repository context seed from changed files and relative imports', async () => {
     const oldCwd = process.cwd();
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-context-seed-'));
@@ -276,7 +351,7 @@ describe('CodexProvider', () => {
     );
     fs.writeFileSync(
       path.join(dir, 'src/ratePolicies.js'),
-      "export const RATE_POLICIES = { passwordReset: { maxAttemptsPerHour: 3 } };\n"
+      'export const RATE_POLICIES = { passwordReset: { maxAttemptsPerHour: 3 } };\n'
     );
 
     try {

@@ -1,42 +1,66 @@
-import { InlineComment } from '../types';
+import { Finding, InlineComment } from '../types';
 import { GitHubClient } from './client';
 import { logger } from '../utils/logger';
 import { ProviderWeightTracker } from '../learning/provider-weights';
+import { severityHeading, severityLine } from '../utils/severity';
 import {
   extractInlineFingerprint,
+  findingFingerprintFromFinding,
+  findingFingerprintFromInlineComment,
   fingerprintFromInlineComment,
   InlineCommentReference,
   isReviewRouterInlineComment,
   isLikelySameInlineFinding,
   signatureFromInlineComment,
 } from './comment-fingerprint';
+import { ReviewLedger } from './ledger';
 
 export interface ReviewCommentState {
   suppressed: Set<string>;
   alreadyPosted: Set<string>;
+  commandDismissed?: Set<string>;
   suppressedComments: InlineCommentReference[];
   alreadyPostedComments: InlineCommentReference[];
+  commandDismissedComments?: InlineCommentReference[];
+}
+
+interface ReviewCommentApiItem {
+  id?: number;
+  path?: string;
+  line?: number | null;
+  original_line?: number | null;
+  body?: string | null;
+  in_reply_to_id?: number | null;
+  user?: {
+    login?: string | null;
+  } | null;
 }
 
 export class FeedbackFilter {
   constructor(
     private readonly client: GitHubClient,
-    private readonly providerWeightTracker?: ProviderWeightTracker
+    _providerWeightTracker?: ProviderWeightTracker,
+    private readonly ledger?: ReviewLedger
   ) {}
 
   async loadSuppressed(prNumber: number): Promise<Set<string>> {
     return (await this.loadReviewCommentState(prNumber)).suppressed;
   }
 
-  async loadReviewCommentState(prNumber: number): Promise<ReviewCommentState> {
+  async loadReviewCommentState(
+    prNumber: number,
+    headSha?: string
+  ): Promise<ReviewCommentState> {
     const { octokit, owner, repo } = this.client;
     const suppressed = new Set<string>();
     const alreadyPosted = new Set<string>();
+    const commandDismissed = new Set<string>();
     const suppressedComments: InlineCommentReference[] = [];
     const alreadyPostedComments: InlineCommentReference[] = [];
+    const commandDismissedComments: InlineCommentReference[] = [];
 
     try {
-      const comments = await octokit.paginate(
+      const comments = (await octokit.paginate(
         octokit.rest.pulls.listReviewComments,
         {
           owner,
@@ -44,8 +68,7 @@ export class FeedbackFilter {
           pull_number: prNumber,
           per_page: 100,
         }
-      );
-
+      )) as ReviewCommentApiItem[];
       for (const comment of comments) {
         const activeLine = comment.line;
         const line = activeLine ?? comment.original_line;
@@ -66,41 +89,7 @@ export class FeedbackFilter {
           });
         }
 
-        try {
-          const reactions =
-            await octokit.rest.reactions.listForPullRequestReviewComment({
-              owner,
-              repo,
-              comment_id: comment.id,
-              per_page: 100,
-            });
-          const hasThumbsDown = reactions.data.some((r) => r.content === '-1');
-          if (hasThumbsDown) {
-            suppressed.add(signature);
-            if (marker) suppressed.add(marker);
-            suppressedComments.push({
-              path: comment.path,
-              line,
-              body,
-            });
-
-            // Record negative feedback if weight tracker available
-            if (this.providerWeightTracker) {
-              const providerMatch = comment.body?.match(
-                /\*\*Provider:\*\* `([^`]+)`/
-              );
-              const provider = providerMatch?.[1];
-              if (provider) {
-                await this.providerWeightTracker.recordFeedback(provider, '👎');
-              }
-            }
-          }
-        } catch (error) {
-          logger.warn(
-            `Failed to load reactions for comment ${comment.id}`,
-            error as Error
-          );
-        }
+        if (typeof comment.id !== 'number') continue;
       }
     } catch (error) {
       logger.warn(
@@ -109,7 +98,47 @@ export class FeedbackFilter {
       );
     }
 
-    return { suppressed, alreadyPosted, suppressedComments, alreadyPostedComments };
+    if (this.ledger) {
+      try {
+        const loaded = await this.ledger.load(prNumber);
+        if (!loaded.valid) {
+          logger.warn(
+            `ReviewRouter override ledger ignored: ${loaded.invalidReason || 'invalid ledger'}`
+          );
+        } else {
+          for (const skip of this.ledger.activeSkips(loaded.payload, headSha)) {
+            commandDismissed.add(skip.fingerprint);
+            if (skip.legacyFingerprint)
+              commandDismissed.add(skip.legacyFingerprint);
+            if (skip.path) {
+              commandDismissedComments.push({
+                path: skip.path,
+                line: skip.line,
+                body: [
+                  `**${skip.severity} - ${skip.title || 'Skipped finding'}**`,
+                  '',
+                  skip.reason || 'Skipped by maintainer command.',
+                ].join('\n'),
+              });
+            }
+          }
+        }
+      } catch (error) {
+        logger.warn(
+          'Failed to load ReviewRouter override ledger',
+          error as Error
+        );
+      }
+    }
+
+    return {
+      suppressed,
+      alreadyPosted,
+      commandDismissed,
+      suppressedComments,
+      alreadyPostedComments,
+      commandDismissedComments,
+    };
   }
 
   shouldPost(
@@ -134,12 +163,79 @@ export class FeedbackFilter {
     return (
       !state.suppressed.has(signature) &&
       !state.suppressed.has(fingerprint) &&
+      !(state.commandDismissed?.has(signature) ?? false) &&
+      !(state.commandDismissed?.has(fingerprint) ?? false) &&
       !state.alreadyPosted.has(signature) &&
       !state.alreadyPosted.has(fingerprint) &&
-      !state.suppressedComments.some(existing =>
+      !state.suppressedComments.some((existing) =>
         isLikelySameInlineFinding(existing, comment)
       ) &&
-      !state.alreadyPostedComments.some(existing =>
+      !(
+        state.commandDismissedComments?.some((existing) =>
+          isLikelySameInlineFinding(existing, comment)
+        ) ?? false
+      ) &&
+      !state.alreadyPostedComments.some((existing) =>
+        isLikelySameInlineFinding(existing, comment)
+      )
+    );
+  }
+
+  isFindingCommandDismissed(
+    finding: Finding,
+    state: ReviewCommentState
+  ): boolean {
+    const body = [
+      `**${severityHeading(finding.severity, finding.title)}**`,
+      '',
+      severityLine(finding.severity),
+      '',
+      finding.message,
+    ].join('\n');
+    const findingFingerprint = findingFingerprintFromFinding(finding);
+    if (state.commandDismissed?.has(findingFingerprint) ?? false) {
+      return true;
+    }
+    return this.isCommandDismissed(
+      { path: finding.file, line: finding.line, body },
+      state
+    );
+  }
+
+  isInlineCommandDismissed(
+    comment: InlineComment,
+    state: ReviewCommentState
+  ): boolean {
+    return this.isCommandDismissed(comment, state);
+  }
+
+  private isCommandDismissed(
+    comment: InlineCommentReference,
+    state: ReviewCommentState
+  ): boolean {
+    const commandDismissed = state.commandDismissed ?? new Set<string>();
+    const commandDismissedComments = state.commandDismissedComments ?? [];
+    const signature = this.signatureFromComment(
+      comment.path,
+      comment.line,
+      comment.body
+    );
+    const fingerprint = fingerprintFromInlineComment(
+      comment.path,
+      comment.line,
+      comment.body
+    );
+    const findingFingerprint = findingFingerprintFromInlineComment(
+      comment.path,
+      comment.line,
+      comment.body
+    );
+
+    return (
+      commandDismissed.has(signature) ||
+      commandDismissed.has(fingerprint) ||
+      commandDismissed.has(findingFingerprint) ||
+      commandDismissedComments.some((existing) =>
         isLikelySameInlineFinding(existing, comment)
       )
     );

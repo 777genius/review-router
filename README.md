@@ -66,6 +66,8 @@ Available but still experimental:
 - **PR summary:** updates one summary comment instead of creating a new summary on every run.
 - **PR description summary:** adds a generated `Summary`, selected files list, and walkthrough block while preserving author text above it.
 - **Merge gating:** fail the check for critical or major findings when configured.
+- **Human override:** reply `/rr skip` to a ReviewRouter inline comment to dismiss that finding after a maintainer confirms it is not actionable.
+- **AI discussion replies:** with Codex auth modes, ordinary replies to ReviewRouter findings can get an AI explanation. If the model agrees a finding is likely a false positive, it suggests `/rr skip`; it does not unblock CI by itself.
 - **Large diff compaction:** compact very large, generated, lockfile, and migration diffs so they do not dominate the prompt.
 - **Secret handling:** fork PRs are skipped by default, Codex runs with a sanitized child-process environment, and workflows avoid printing secret values.
 
@@ -74,6 +76,7 @@ Available but still experimental:
 - No hosted SaaS backend.
 - No shared global branded GitHub App.
 - No automatic mutation of repository files.
+- No automatic CI unblock from free-form human text by default.
 - No automatic deletion or moving of old inline discussions by default.
 - No claim that token or dollar cost is always available for Codex subscription OAuth. For OAuth runs the UI reports `OAuth subscription` instead of API billing cost.
 
@@ -102,7 +105,7 @@ concurrency:
 
 jobs:
   review:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.fork != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -140,6 +143,8 @@ jobs:
 
       - name: Run ReviewRouter
         uses: 777genius/review-router@v1
+        env:
+          REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
@@ -159,6 +164,49 @@ jobs:
           ENABLE_AI_DETECTION: 'false'
           LEARNING_ENABLED: 'false'
           GRAPH_ENABLED: 'false'
+```
+
+The installer also writes a separate non-required interaction workflow:
+
+```yaml
+name: ReviewRouter Interaction
+
+on:
+  pull_request_review_comment:
+    types: [created, edited]
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  interaction:
+    if: ${{ github.event.pull_request.head.repo.fork != true && github.event.comment.user.type != 'Bot' && (startsWith(github.event.comment.body, '/rr ') || vars.REVIEW_ROUTER_DISCUSSION_MODE == 'suggest') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preflight ReviewRouter interaction
+        id: preflight
+        uses: 777genius/review-router@v1
+        with:
+          REVIEW_ROUTER_MODE: interaction-preflight
+          REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Codex setup is conditional and only runs when a plain-text discussion reply
+      # needs an AI answer. /rr skip stays fast and does not start Codex.
+
+      - name: Handle ReviewRouter interaction
+        if: steps.preflight.outputs.should_run == 'true'
+        uses: 777genius/review-router@v1
+        env:
+          REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
+        with:
+          REVIEW_ROUTER_MODE: interaction
+          REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
+          REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: review-router.yml
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 For strict blocking, set:
@@ -247,6 +295,27 @@ ReviewRouter suppresses duplicate inline comments when a rerun reports the same 
 - semantic overlap in title/body/code tokens.
 
 It intentionally does not delete or move existing inline discussions by default. Deleting old comments can hide review history and is easy to get wrong when a model slightly changes wording. If a future lifecycle mode is added, it should be opt-in and heavily tested.
+
+## Human Overrides
+
+If ReviewRouter posts a blocking finding that a maintainer has verified as not actionable, reply to that inline comment with:
+
+```text
+/rr skip
+/rr skip optional reason
+```
+
+The reason is optional. `/rr skip` is handled by the separate `ReviewRouter Interaction` workflow. It writes a signed PR ledger comment, then reruns the failed `ReviewRouter / review` check when the token has `actions: write`.
+
+Permission policy:
+
+- Critical and Major findings require `maintain` or `admin`.
+- Minor findings allow `write`, `maintain`, or `admin`.
+- PR authors cannot skip blocking findings by default.
+
+The signed ledger prevents a manually edited bot-looking comment from unblocking a PR.
+
+With Codex auth modes, the installer sets `REVIEW_ROUTER_DISCUSSION_MODE=suggest`. In that mode, ordinary human replies to ReviewRouter inline findings can receive an AI explanation in the same review thread. If the AI agrees the finding is likely a false positive, it suggests that a maintainer reply `/rr skip`. The AI discussion path does not write the ledger and does not unblock CI.
 
 ## Security Notes
 

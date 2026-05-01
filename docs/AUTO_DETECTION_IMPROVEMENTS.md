@@ -181,7 +181,7 @@ npm test -- --testPathPattern="prompt-builder"
 ## Related Documentation
 
 - [IMPROVING_CODE_REVIEWS.md](./IMPROVING_CODE_REVIEWS.md) - Guide for improving review accuracy
-- [.github/multi-provider-review-hints.md](../.github/multi-provider-review-hints.md) - Context for static analyzers
+- [.github/review-router-hints.md](../.github/review-router-hints.md) - Context for static analyzers
 - [DEVELOPMENT_PLAN_V3.md](../DEVELOPMENT_PLAN_V3.md) - Roadmap for v0.3.2+
 
 ## Technical Implementation

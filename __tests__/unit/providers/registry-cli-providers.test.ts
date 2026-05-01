@@ -32,14 +32,14 @@ describe('ProviderRegistry - New CLI Providers', () => {
     it('should instantiate Codex providers', async () => {
       const config: ReviewConfig = {
         ...DEFAULT_CONFIG,
-        providers: ['codex/gpt-5.1-codex-max'],
+        providers: ['codex/gpt-5.5'],
       };
 
       const providers = (registry as any).instantiate(config.providers, config);
 
       expect(providers).toHaveLength(1);
       expect(providers[0]).toBeInstanceOf(CodexProvider);
-      expect(providers[0].name).toBe('codex/gpt-5.1-codex-max');
+      expect(providers[0].name).toBe('codex/gpt-5.5');
     });
 
     it('should instantiate Gemini providers', async () => {
@@ -62,7 +62,7 @@ describe('ProviderRegistry - New CLI Providers', () => {
         ...DEFAULT_CONFIG,
         providers: [
           'claude/sonnet',
-          'codex/gpt-5.1-codex-max',
+          'codex/gpt-5.5',
           'gemini/gemini-2.0-flash',
         ],
       };

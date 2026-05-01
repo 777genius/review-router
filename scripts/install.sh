@@ -14,8 +14,10 @@ DEFAULT_RELEASE_ACTION_REF="777genius/review-router@$LATEST_RELEASE_TAG"
 DEFAULT_MAIN_ACTION_REF="777genius/review-router@main"
 DEFAULT_BRANCH_NAME="review-router/setup"
 WORKFLOW_PATH=".github/workflows/review-router.yml"
+INTERACTION_WORKFLOW_PATH=".github/workflows/review-router-interaction.yml"
 CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
 DEFAULT_CODEX_MODEL="gpt-5.5"
+DEFAULT_APP_LOGO_URL="https://i.imgur.com/Yz9XIQM.png"
 OPENROUTER_DEFAULT_PROVIDERS="openrouter/free"
 OPENROUTER_DEFAULT_SYNTHESIS="openrouter/free"
 
@@ -43,7 +45,9 @@ IDENTITY_MODE="$(env_first REVIEW_ROUTER_IDENTITY AI_ROBOT_REVIEW_IDENTITY || tr
 APP_SETUP="$(env_first REVIEW_ROUTER_APP_SETUP AI_ROBOT_REVIEW_APP_SETUP || true)"
 APP_PROFILE="$(env_first REVIEW_ROUTER_APP_PROFILE AI_ROBOT_REVIEW_APP_PROFILE || true)"
 APP_PROFILE_DIR="$(env_first REVIEW_ROUTER_APP_PROFILE_DIR AI_ROBOT_REVIEW_APP_PROFILE_DIR || true)"
+APP_LOGO_URL="$(env_first REVIEW_ROUTER_APP_LOGO_URL AI_ROBOT_REVIEW_APP_LOGO_URL || printf '%s' "$DEFAULT_APP_LOGO_URL")"
 AUTH_MODE="$(env_first REVIEW_ROUTER_AUTH AI_ROBOT_REVIEW_AUTH || true)"
+DISCUSSION_MODE="$(env_first REVIEW_ROUTER_DISCUSSION_MODE AI_ROBOT_REVIEW_DISCUSSION_MODE || true)"
 PRESET="$(env_first REVIEW_ROUTER_PRESET AI_ROBOT_REVIEW_PRESET || true)"
 CODEX_MODEL="$(env_first REVIEW_ROUTER_CODEX_MODEL AI_ROBOT_REVIEW_CODEX_MODEL || printf '%s' "$DEFAULT_CODEX_MODEL")"
 DRY_RUN="$(env_first REVIEW_ROUTER_DRY_RUN AI_ROBOT_REVIEW_DRY_RUN || printf '0')"
@@ -81,6 +85,13 @@ is_true() {
   case "${1:-}" in
     1|true|TRUE|yes|YES|y|Y) return 0 ;;
     *) return 1 ;;
+  esac
+}
+
+validate_discussion_mode() {
+  case "${1:-}" in
+    off|suggest) return 0 ;;
+    *) fatal "Unsupported REVIEW_ROUTER_DISCUSSION_MODE: ${1:-}. Use off or suggest." ;;
   esac
 }
 
@@ -469,6 +480,24 @@ set_repo_secret_value() {
   rm -f "$tmp_file"
 }
 
+generate_ledger_key() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s:%s:%s' "$TARGET_REPO" "$RANDOM" "$(date +%s%N)" | shasum -a 256 | awk '{print $1}'
+  else
+    printf '%s:%s:%s' "$TARGET_REPO" "$RANDOM" "$(date +%s%N)" | sha256sum | awk '{print $1}'
+  fi
+}
+
+setup_ledger_secret() {
+  REVIEW_ROUTER_LEDGER_KEY_VALUE="$(env_first REVIEW_ROUTER_LEDGER_KEY AI_ROBOT_REVIEW_LEDGER_KEY || true)"
+  if [ -z "$REVIEW_ROUTER_LEDGER_KEY_VALUE" ]; then
+    REVIEW_ROUTER_LEDGER_KEY_VALUE="$(generate_ledger_key)"
+  fi
+  set_repo_secret_value REVIEW_ROUTER_LEDGER_KEY "$REVIEW_ROUTER_LEDGER_KEY_VALUE"
+}
+
 set_repo_variable() {
   name="$1"
   value="$2"
@@ -516,6 +545,8 @@ PY
 setup_auth() {
   case "$AUTH_MODE" in
     codex)
+      if [ -z "$DISCUSSION_MODE" ]; then DISCUSSION_MODE="suggest"; fi
+      validate_discussion_mode "$DISCUSSION_MODE"
       auth_file="$(env_first REVIEW_ROUTER_CODEX_AUTH_FILE AI_ROBOT_REVIEW_CODEX_AUTH_FILE || printf '%s' "${CODEX_HOME:-$HOME/.codex}/auth.json")"
       config_file="$(env_first REVIEW_ROUTER_CODEX_CONFIG_FILE AI_ROBOT_REVIEW_CODEX_CONFIG_FILE || printf '%s' "${CODEX_HOME:-$HOME/.codex}/config.toml")"
       verify_codex_auth_file "$auth_file"
@@ -529,21 +560,32 @@ setup_auth() {
       fi
       set_repo_variable REVIEW_AUTH_MODE "codex-oauth"
       set_repo_variable REVIEW_CODEX_MODEL "$CODEX_MODEL"
+      set_repo_variable REVIEW_ROUTER_DISCUSSION_MODE "$DISCUSSION_MODE"
       ;;
     openai)
+      if [ -z "$DISCUSSION_MODE" ]; then DISCUSSION_MODE="suggest"; fi
+      validate_discussion_mode "$DISCUSSION_MODE"
       REVIEW_ROUTER_OPENAI_API_KEY="$(env_first REVIEW_ROUTER_OPENAI_API_KEY AI_ROBOT_REVIEW_OPENAI_API_KEY || true)"
       prompt_secret REVIEW_ROUTER_OPENAI_API_KEY "OpenAI API key"
       set_repo_secret_value OPENAI_API_KEY "$REVIEW_ROUTER_OPENAI_API_KEY"
       set_repo_variable REVIEW_AUTH_MODE "openai-api"
       set_repo_variable REVIEW_CODEX_MODEL "$CODEX_MODEL"
+      set_repo_variable REVIEW_ROUTER_DISCUSSION_MODE "$DISCUSSION_MODE"
       ;;
     openrouter)
+      if [ -z "$DISCUSSION_MODE" ]; then DISCUSSION_MODE="off"; fi
+      validate_discussion_mode "$DISCUSSION_MODE"
+      if [ "$DISCUSSION_MODE" != "off" ]; then
+        warn "AI discussion replies currently require Codex CLI auth. For OpenRouter installs, REVIEW_ROUTER_DISCUSSION_MODE will be set to off."
+        DISCUSSION_MODE="off"
+      fi
       REVIEW_ROUTER_OPENROUTER_API_KEY="$(env_first REVIEW_ROUTER_OPENROUTER_API_KEY AI_ROBOT_REVIEW_OPENROUTER_API_KEY || true)"
       prompt_secret REVIEW_ROUTER_OPENROUTER_API_KEY "OpenRouter API key"
       set_repo_secret_value OPENROUTER_API_KEY "$REVIEW_ROUTER_OPENROUTER_API_KEY"
       set_repo_variable REVIEW_AUTH_MODE "openrouter-api"
       set_repo_variable REVIEW_PROVIDERS "$OPENROUTER_DEFAULT_PROVIDERS"
       set_repo_variable REVIEW_SYNTHESIS_MODEL "$OPENROUTER_DEFAULT_SYNTHESIS"
+      set_repo_variable REVIEW_ROUTER_DISCUSSION_MODE "$DISCUSSION_MODE"
       ;;
     *) fatal "Unsupported auth mode: $AUTH_MODE" ;;
   esac
@@ -687,17 +729,27 @@ store_loaded_app_credentials() {
   set_repo_secret_from_file REVIEW_APP_PRIVATE_KEY "$APP_PRIVATE_KEY_FILE"
 }
 
+print_app_logo_instruction() {
+  app_slug="${1:-${APP_SLUG:-}}"
+  [ -n "$app_slug" ] || return
+  log ""
+  info "Optional: upload the ReviewRouter logo for this GitHub App"
+  log "App settings: https://github.com/settings/apps/$app_slug"
+  log "Logo: $APP_LOGO_URL"
+  log "Recommended: PNG/JPG/GIF under 1 MB, 200x200"
+}
+
 manual_app_setup() {
   app_name="$1"
   reason="${2:-manual}"
   if [ "$reason" = "missing-python" ]; then
     warn "python3 is not available; falling back to manual GitHub App setup."
     log "Create a private GitHub App named: $app_name"
-    log "Permissions: Contents read, Issues write, Pull requests write. Webhooks: disabled."
+    log "Permissions: Contents read, Issues write, Pull requests write, Actions write. Webhooks: disabled."
     log "After creating it, generate a private key and provide the values below."
   else
     log "Reuse an existing GitHub App by entering its credentials."
-    log "The App must have Contents read, Issues write, and Pull requests write permissions."
+    log "The App must have Contents read, Issues write, Pull requests write, and Actions write permissions."
     log "GitHub does not expose existing private keys; use a .pem you already saved or generate a new key in the App settings."
   fi
   REVIEW_ROUTER_APP_CLIENT_ID="$(env_first REVIEW_ROUTER_APP_CLIENT_ID AI_ROBOT_REVIEW_APP_CLIENT_ID || true)"
@@ -712,6 +764,7 @@ manual_app_setup() {
   save_app_profile "$REVIEW_ROUTER_APP_ID" "$REVIEW_ROUTER_APP_CLIENT_ID" "$REVIEW_ROUTER_APP_SLUG" "$app_name" "$REVIEW_ROUTER_APP_PRIVATE_KEY_FILE"
   load_app_profile "$SAVED_APP_PROFILE_FILE"
   store_loaded_app_credentials
+  print_app_logo_instruction "$APP_SLUG"
 }
 
 reuse_saved_app_setup() {
@@ -738,8 +791,9 @@ create_github_app_with_manifest() {
   env_file="$tmp_dir/app.env"
 
   info "Creating user-owned GitHub App via manifest flow"
-  python3 - "$app_name" "$TARGET_REPO" "$env_file" "$NO_BROWSER" <<'PY'
+  python3 - "$app_name" "$TARGET_REPO" "$env_file" "$NO_BROWSER" "$APP_LOGO_URL" <<'PY'
 import http.server
+import html
 import json
 import os
 import secrets
@@ -751,7 +805,8 @@ import threading
 import urllib.parse
 import webbrowser
 
-app_name, target_repo, env_file, no_browser = sys.argv[1:5]
+app_name, target_repo, env_file, no_browser, app_logo_url = sys.argv[1:6]
+app_logo_url_html = html.escape(app_logo_url, quote=True)
 state = secrets.token_urlsafe(18)
 result = {}
 error = {}
@@ -782,6 +837,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     'active': False,
                 },
                 'default_permissions': {
+                    'actions': 'write',
                     'contents': 'read',
                     'issues': 'write',
                     'pull_requests': 'write',
@@ -795,7 +851,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <html><head><meta charset="utf-8"><title>Create {app_name}</title></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:760px;margin:40px auto;line-height:1.45;">
 <h1>Create {app_name}</h1>
-<p>This creates a private GitHub App with Contents read, Issues write, and Pull requests write permissions.</p>
+<p>This creates a private GitHub App with Contents read, Issues write, Pull requests write, and Actions write permissions.</p>
 <form action="https://github.com/settings/apps/new?state={state}" method="post">
   <input type="hidden" name="manifest" value='{manifest_json}'>
   <button style="font-size:18px;padding:10px 16px;" type="submit">Create GitHub App</button>
@@ -838,6 +894,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p><strong>App:</strong> {app['name']} (<code>{app['slug']}[bot]</code>)</p>
 <p><strong>Next step:</strong> install the App on <code>{target_repo}</code>.</p>
 <p><a style="font-size:18px;" href="{install_url}">Install {app['slug']} on repositories</a></p>
+<p><strong>Optional logo:</strong> upload the <a href="{app_logo_url_html}">ReviewRouter logo</a> in App settings. Recommended: PNG/JPG/GIF under 1 MB, 200x200.</p>
 <p>Return to the terminal after installing the App.</p>
 </body></html>''')
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
@@ -876,6 +933,7 @@ PY
 
   ok "GitHub App credentials saved for $TARGET_REPO"
   warn "Make sure the App is installed on $TARGET_REPO before the first review run."
+  print_app_logo_instruction "$APP_SLUG"
 }
 
 setup_identity() {
@@ -1000,7 +1058,7 @@ concurrency:
 
 jobs:
   review:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.fork != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 YAML
@@ -1087,14 +1145,16 @@ YAML
 YAML
     printf '        uses: %s\n' "$ACTION_REF"
 
+    cat <<'YAML'
+        env:
+          REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
+YAML
     if [ "$AUTH_MODE" = "openai" ]; then
       cat <<'YAML'
-        env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 YAML
     elif [ "$AUTH_MODE" = "openrouter" ]; then
       cat <<'YAML'
-        env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 YAML
     fi
@@ -1146,6 +1206,151 @@ YAML
           SYNTHESIS_MODEL: ${{ vars.REVIEW_SYNTHESIS_MODEL }}
 YAML
     fi
+	  } > "$workflow_file"
+}
+
+write_interaction_workflow() {
+  workflow_file="$1"
+  repo_name_value="$(repo_name "$TARGET_REPO")"
+  mkdir -p "$(dirname "$workflow_file")"
+
+  {
+    cat <<'YAML'
+name: ReviewRouter Interaction
+
+on:
+  pull_request_review_comment:
+    types: [created, edited]
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: review-router-interaction-${{ github.event.pull_request.number || github.event.comment.id }}
+  cancel-in-progress: false
+
+jobs:
+  interaction:
+    if: ${{ github.event.pull_request.head.repo.fork != true && github.event.comment.user.type != 'Bot' && (startsWith(github.event.comment.body, '/rr ') || vars.REVIEW_ROUTER_DISCUSSION_MODE == 'suggest') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+YAML
+
+    if [ "$IDENTITY_MODE" = "app" ]; then
+      cat <<'YAML'
+      - name: Create review GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+YAML
+      printf '          repositories: %s\n' "$repo_name_value"
+      cat <<'YAML'
+          permission-actions: write
+          permission-contents: read
+          permission-issues: write
+          permission-pull-requests: write
+YAML
+    fi
+
+    cat <<'YAML'
+      - name: Preflight ReviewRouter interaction
+        id: preflight
+YAML
+    printf '        uses: %s\n' "$ACTION_REF"
+    cat <<'YAML'
+        with:
+          REVIEW_ROUTER_MODE: interaction-preflight
+          REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
+YAML
+    if [ "$IDENTITY_MODE" = "app" ]; then
+      cat <<'YAML'
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+YAML
+    else
+      cat <<'YAML'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+YAML
+    fi
+
+    if [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "openai" ]; then
+      cat <<YAML
+
+      - uses: actions/setup-node@v6
+        if: steps.preflight.outputs.needs_discussion == 'true'
+        with:
+          node-version: '24'
+
+      - name: Install official Codex CLI for discussion replies
+        if: steps.preflight.outputs.needs_discussion == 'true'
+        run: npm install -g $CODEX_NPM_PACKAGE
+YAML
+    fi
+
+    if [ "$AUTH_MODE" = "codex" ]; then
+      cat <<'YAML'
+
+      - name: Restore Codex OAuth config for discussion replies
+        if: steps.preflight.outputs.needs_discussion == 'true'
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+          CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+        run: |
+          test -n "$CODEX_AUTH_JSON"
+          mkdir -p ~/.codex
+          printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
+          chmod 600 ~/.codex/auth.json
+          if [ -n "$CODEX_CONFIG_TOML" ]; then
+            printf '%s' "$CODEX_CONFIG_TOML" > ~/.codex/config.toml
+            chmod 600 ~/.codex/config.toml
+          fi
+YAML
+    fi
+
+    cat <<'YAML'
+
+      - name: Handle ReviewRouter interaction
+        if: steps.preflight.outputs.should_run == 'true'
+YAML
+    printf '        uses: %s\n' "$ACTION_REF"
+    cat <<'YAML'
+        env:
+          REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
+YAML
+    if [ "$AUTH_MODE" = "openai" ]; then
+      cat <<'YAML'
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+YAML
+    fi
+    cat <<'YAML'
+        with:
+          REVIEW_ROUTER_MODE: interaction
+          REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
+          REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS: '60'
+          REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: review-router.yml
+          REVIEW_ROUTER_ALLOW_AUTHOR_SKIP: 'false'
+YAML
+    if [ "$IDENTITY_MODE" = "app" ]; then
+      cat <<'YAML'
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+YAML
+    else
+      cat <<'YAML'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+YAML
+    fi
+    if [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "openai" ]; then
+      cat <<'YAML'
+          CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
+          CODEX_REASONING_EFFORT: 'medium'
+YAML
+    fi
   } > "$workflow_file"
 }
 
@@ -1179,19 +1384,19 @@ prepare_worktree() {
 
 commit_and_open_pr() {
   if is_true "$LOCAL_ONLY"; then
-    ok "Workflow written locally to $WORKDIR/$WORKFLOW_PATH"
+    ok "Workflows written locally to $WORKDIR/$WORKFLOW_PATH and $WORKDIR/$INTERACTION_WORKFLOW_PATH"
     return
   fi
 
   if is_true "$DRY_RUN" || is_true "$SKIP_GH_CHECK"; then
-    log "[dry-run] would commit $WORKFLOW_PATH on branch $INSTALL_BRANCH and open a PR"
+    log "[dry-run] would commit $WORKFLOW_PATH and $INTERACTION_WORKFLOW_PATH on branch $INSTALL_BRANCH and open a PR"
     return
   fi
 
   default_branch="$(gh repo view "$TARGET_REPO" --json defaultBranchRef -q .defaultBranchRef.name)"
   (
     cd "$WORKDIR"
-    git add "$WORKFLOW_PATH"
+	    git add "$WORKFLOW_PATH" "$INTERACTION_WORKFLOW_PATH"
     if git diff --cached --quiet; then
       exit 42
     fi
@@ -1269,8 +1474,10 @@ main() {
 
   setup_identity
   setup_auth
+  setup_ledger_secret
   prepare_worktree
   write_workflow "$WORKDIR/$WORKFLOW_PATH"
+  write_interaction_workflow "$WORKDIR/$INTERACTION_WORKFLOW_PATH"
   commit_and_open_pr
 
   log ""

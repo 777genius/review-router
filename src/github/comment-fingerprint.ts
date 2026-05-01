@@ -1,7 +1,14 @@
 import { createHash } from 'crypto';
+import { Finding } from '../types';
 
-const INLINE_MARKER_RE = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/i;
-const INLINE_MARKER_RE_GLOBAL = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/gi;
+const INLINE_MARKER_RE =
+  /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/i;
+const INLINE_MARKER_RE_GLOBAL =
+  /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/gi;
+const FINDING_MARKER_RE =
+  /<!--\s*review-router-finding:([a-f0-9]{24,64})\s*-->/i;
+const FINDING_MARKER_RE_GLOBAL =
+  /<!--\s*review-router-finding:([a-f0-9]{24,64})\s*-->/gi;
 const MAX_NEARBY_LINE_DISTANCE = 12;
 
 export interface InlineCommentReference {
@@ -52,8 +59,17 @@ export function inlineFingerprintMarker(fingerprint: string): string {
   return `<!-- review-router-inline:${fingerprint} -->`;
 }
 
+export function findingFingerprintMarker(fingerprint: string): string {
+  return `<!-- review-router-finding:${fingerprint} -->`;
+}
+
 export function extractInlineFingerprint(body?: string | null): string | null {
   const match = body?.match(INLINE_MARKER_RE);
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+export function extractFindingFingerprint(body?: string | null): string | null {
+  const match = body?.match(FINDING_MARKER_RE);
   return match?.[1]?.toLowerCase() ?? null;
 }
 
@@ -62,12 +78,27 @@ export function appendInlineFingerprintMarker(
   path: string | undefined,
   line: number | null | undefined
 ): string {
-  if (extractInlineFingerprint(body)) return body;
-  return `${body.trimEnd()}\n\n${inlineFingerprintMarker(fingerprintFromInlineComment(path, line, body))}`;
+  const parts = [body.trimEnd()];
+  if (!extractInlineFingerprint(body)) {
+    parts.push(
+      inlineFingerprintMarker(fingerprintFromInlineComment(path, line, body))
+    );
+  }
+  if (!extractFindingFingerprint(body)) {
+    parts.push(
+      findingFingerprintMarker(
+        findingFingerprintFromInlineComment(path, line, body)
+      )
+    );
+  }
+  return parts.join('\n\n');
 }
 
 export function stripInlineFingerprintMarkers(body: string): string {
-  return body.replace(INLINE_MARKER_RE_GLOBAL, '').trim();
+  return body
+    .replace(INLINE_MARKER_RE_GLOBAL, '')
+    .replace(FINDING_MARKER_RE_GLOBAL, '')
+    .trim();
 }
 
 export function isReviewRouterInlineComment(body?: string | null): boolean {
@@ -79,6 +110,40 @@ export function isReviewRouterInlineComment(body?: string | null): boolean {
 }
 
 export const isAiRobotInlineComment = isReviewRouterInlineComment;
+
+export function findingFingerprintFromFinding(finding: Finding): string {
+  return stableFindingFingerprint({
+    path: finding.file,
+    severity: finding.severity,
+    title: finding.title,
+    message: finding.message,
+  });
+}
+
+export function findingFingerprintFromInlineComment(
+  path: string | undefined,
+  _line: number | null | undefined,
+  body: string
+): string {
+  const marker = extractFindingFingerprint(body);
+  if (marker) return marker;
+
+  const cleanBody = stripInlineFingerprintMarkers(body);
+  return stableFindingFingerprint({
+    path,
+    severity: extractSeverity(cleanBody) || 'unknown',
+    title: extractNormalizedTitle(cleanBody),
+    message: extractCoreMessage(cleanBody),
+  });
+}
+
+export function extractInlineSeverity(body: string): string | null {
+  return extractSeverity(stripInlineFingerprintMarkers(body));
+}
+
+export function extractInlineTitle(body: string): string {
+  return stripSeverityPrefix(extractTitle(stripInlineFingerprintMarkers(body)));
+}
 
 export function isLikelySameInlineFinding(
   existing: InlineCommentReference,
@@ -92,7 +157,11 @@ export function isLikelySameInlineFinding(
   const candidateBody = stripInlineFingerprintMarkers(candidate.body);
   const existingSeverity = extractSeverity(existingBody);
   const candidateSeverity = extractSeverity(candidateBody);
-  if (existingSeverity && candidateSeverity && existingSeverity !== candidateSeverity) {
+  if (
+    existingSeverity &&
+    candidateSeverity &&
+    existingSeverity !== candidateSeverity
+  ) {
     return false;
   }
 
@@ -103,7 +172,10 @@ export function isLikelySameInlineFinding(
 
   const existingTitleTokens = tokenize(extractTitle(existingBody));
   const candidateTitleTokens = tokenize(extractTitle(candidateBody));
-  const titleSimilarity = diceSimilarity(existingTitleTokens, candidateTitleTokens);
+  const titleSimilarity = diceSimilarity(
+    existingTitleTokens,
+    candidateTitleTokens
+  );
 
   const existingTokens = tokenize(semanticText(existingBody));
   const candidateTokens = tokenize(semanticText(candidateBody));
@@ -111,7 +183,10 @@ export function isLikelySameInlineFinding(
 
   const existingCodeTokens = extractCodeTokens(existingBody);
   const candidateCodeTokens = extractCodeTokens(candidateBody);
-  const sharedCodeTokens = intersectionSize(existingCodeTokens, candidateCodeTokens);
+  const sharedCodeTokens = intersectionSize(
+    existingCodeTokens,
+    candidateCodeTokens
+  );
 
   if (nearbyLine && titleSimilarity >= 0.45) return true;
   if (nearbyLine && bodySimilarity >= 0.38) return true;
@@ -135,6 +210,44 @@ function extractTitle(body: string): string {
   return titleMatch?.[1] ?? body.split('\n')[0] ?? '';
 }
 
+function stripSeverityPrefix(value: string): string {
+  return value
+    .replace(/^[^\w`]*\s*(critical|major|minor)\s*-\s*/i, '')
+    .replace(/^[^\w`]*\s*/, '')
+    .trim();
+}
+
+function extractNormalizedTitle(body: string): string {
+  return stripSeverityPrefix(extractTitle(body));
+}
+
+function extractCoreMessage(body: string): string {
+  return semanticText(body)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^\*\*.+\*\*$/.test(line))
+    .slice(0, 6)
+    .join(' ');
+}
+
+function stableFindingFingerprint(input: {
+  path: string | undefined;
+  severity: string;
+  title: string;
+  message: string;
+}): string {
+  const canonical = [
+    'review-router-finding-v2',
+    (input.path || 'unknown').toLowerCase(),
+    normalizeForSignature(input.severity),
+    normalizeForSignature(stripSeverityPrefix(input.title)),
+    normalizeForSignature(input.message).slice(0, 800),
+  ].join('\n');
+
+  return createHash('sha256').update(canonical).digest('hex').slice(0, 32);
+}
+
 function semanticText(body: string): string {
   return body
     .replace(/```[\s\S]*?```/g, ' ')
@@ -150,8 +263,8 @@ function tokenize(value: string): Set<string> {
     .replace(/[^a-z0-9_]+/g, ' ');
   const tokens = normalized
     .split(/\s+/)
-    .map(token => token.trim())
-    .filter(token => token.length >= 3 && !STOPWORDS.has(token));
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !STOPWORDS.has(token));
   return new Set(tokens);
 }
 
@@ -166,9 +279,7 @@ function extractCodeTokens(body: string): Set<string> {
 }
 
 function splitIdentifiers(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/[_./:-]+/g, ' ');
+  return value.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_./:-]+/g, ' ');
 }
 
 function diceSimilarity(a: Set<string>, b: Set<string>): number {

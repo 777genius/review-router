@@ -99,7 +99,7 @@ All tests passing:
 
 ```bash
 # Set providers via environment variable
-export REVIEW_PROVIDERS="claude/sonnet,codex/gpt-5.1-codex-max,gemini/gemini-2.0-flash"
+export REVIEW_PROVIDERS="claude/sonnet,codex/gpt-5.5,gemini/gemini-2.0-flash"
 
 # Run review
 mpr review
@@ -112,7 +112,7 @@ mpr review
   run: npx review-router
   env:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    REVIEW_PROVIDERS: "claude/sonnet,claude/opus,codex/gpt-5.1-codex-max,gemini/gemini-2.0-flash"
+    REVIEW_PROVIDERS: "claude/sonnet,claude/opus,codex/gpt-5.5,gemini/gemini-2.0-flash"
 ```
 
 ### Configuration File
@@ -122,7 +122,7 @@ mpr review
   "providers": [
     "claude/sonnet",
     "claude/opus",
-    "codex/gpt-5.1-codex-max",
+    "codex/gpt-5.5",
     "gemini/gemini-2.0-flash",
     "gemini/gemini-1.5-pro"
   ],
@@ -220,7 +220,7 @@ codex auth login
 gemini auth login
 
 # Test with dry-run
-export REVIEW_PROVIDERS="claude/sonnet,codex/gpt-5.1-codex-max,gemini/gemini-2.0-flash"
+export REVIEW_PROVIDERS="claude/sonnet,codex/gpt-5.5,gemini/gemini-2.0-flash"
 mpr review --dry-run
 
 # Test actual review
@@ -274,7 +274,7 @@ For existing users upgrading to this version:
 **Option 1: Environment Variable**
 ```bash
 # Add to existing providers
-export REVIEW_PROVIDERS="openrouter/google/gemini-2.0-flash-exp:free,claude/sonnet,codex/gpt-5.1-codex-max"
+export REVIEW_PROVIDERS="openrouter/google/gemini-2.0-flash-exp:free,claude/sonnet,codex/gpt-5.5"
 ```
 
 **Option 2: Configuration File**
@@ -284,7 +284,7 @@ export REVIEW_PROVIDERS="openrouter/google/gemini-2.0-flash-exp:free,claude/sonn
     "openrouter/google/gemini-2.0-flash-exp:free",
     "opencode/minimax-m2.1-free",
     "claude/sonnet",
-    "codex/gpt-5.1-codex-max",
+    "codex/gpt-5.5",
     "gemini/gemini-2.0-flash"
   ]
 }

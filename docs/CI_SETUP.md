@@ -180,7 +180,7 @@ cat ~/.codex/config.toml
 profile = "default"
 
 [profiles.default]
-model = "gpt-5.1-codex-max"
+model = "gpt-5.5"
 sandbox_mode = "danger-full-access"
 approval_policy = "never"
 ```
@@ -330,7 +330,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Optional: Specify which providers to use
-          # REVIEW_PROVIDERS: "claude/sonnet,codex/gpt-5.1-codex-max,gemini/gemini-2.0-flash"
+          # REVIEW_PROVIDERS: "claude/sonnet,codex/gpt-5.5,gemini/gemini-2.0-flash"
 ```
 
 ---
@@ -346,18 +346,18 @@ Set the `REVIEW_PROVIDERS` environment variable to specify which providers and m
   run: npx review-router
   env:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    REVIEW_PROVIDERS: "claude/sonnet,claude/opus,codex/gpt-5.1-codex-max,gemini/gemini-2.0-flash,gemini/gemini-1.5-pro"
+    REVIEW_PROVIDERS: "claude/sonnet,claude/opus,codex/gpt-5.5,gemini/gemini-2.0-flash,gemini/gemini-1.5-pro"
 ```
 
 ### Using Configuration File
 
-Create `.multi-provider-review.json` in your repository:
+Create `.review-router.json` in your repository:
 
 ```json
 {
   "providers": [
     "claude/sonnet",
-    "codex/gpt-5.1-codex-max",
+    "codex/gpt-5.5",
     "gemini/gemini-2.0-flash"
   ],
   "providerLimit": 3,
@@ -438,7 +438,7 @@ GitHub Actions automatically masks secrets in logs, but be cautious:
 
 ### Codex Model Not Found
 
-**Symptom**: `Error: Model gpt-5.1-codex-max not found`
+**Symptom**: `Error: Model gpt-5.5 not found`
 
 **Solutions**:
 1. Verify your OpenAI account subscription:
@@ -505,7 +505,7 @@ All three CLIs may encounter rate limits:
    ```yaml
    - uses: actions/cache@v3
      with:
-       path: ~/.cache/multi-provider-review
+       path: ~/.cache/review-router
        key: review-cache-${{ github.sha }}
    ```
 

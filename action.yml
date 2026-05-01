@@ -11,7 +11,38 @@ inputs:
     required: true
   PR_NUMBER:
     description: "Pull request number"
-    required: true
+    required: false
+  REVIEW_ROUTER_MODE:
+    description: "Execution mode: review or interaction"
+    required: false
+    default: "review"
+  REVIEW_ROUTER_LEDGER_KEY:
+    description: "HMAC key used to verify the signed override ledger"
+    required: false
+  REVIEW_ROUTER_ALLOW_AUTHOR_SKIP:
+    description: "Allow PR authors to skip blocking findings"
+    required: false
+    default: "false"
+  REVIEW_ROUTER_REVIEW_WORKFLOW_FILE:
+    description: "Review workflow file name used when rerunning failed jobs after /rr commands"
+    required: false
+    default: "review-router.yml"
+  REVIEW_ROUTER_DISCUSSION_MODE:
+    description: "AI discussion mode for human replies to ReviewRouter inline findings: off or suggest"
+    required: false
+    default: "off"
+  REVIEW_ROUTER_DISCUSSION_MAX_PER_PR:
+    description: "Maximum AI discussion replies per pull request"
+    required: false
+    default: "20"
+  REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD:
+    description: "Maximum AI discussion replies per ReviewRouter finding thread"
+    required: false
+    default: "5"
+  REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS:
+    description: "Timeout for AI discussion replies"
+    required: false
+    default: "60"
   REVIEW_PROVIDERS:
     description: |
       Comma-separated provider list (e.g., "openrouter/model1,opencode/model2").

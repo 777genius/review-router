@@ -1,8 +1,10 @@
 import { FeedbackFilter } from '../../../src/github/feedback';
 import { GitHubClient } from '../../../src/github/client';
 import { InlineComment } from '../../../src/types';
-import { ProviderWeightTracker } from '../../../src/learning/provider-weights';
-import { fingerprintFromInlineComment } from '../../../src/github/comment-fingerprint';
+import {
+  findingFingerprintFromInlineComment,
+  fingerprintFromInlineComment,
+} from '../../../src/github/comment-fingerprint';
 
 // Mock GitHubClient
 jest.mock('../../../src/github/client');
@@ -14,6 +16,9 @@ type MockOctokit = {
     };
     reactions: {
       listForPullRequestReviewComment: jest.Mock;
+    };
+    repos: {
+      getCollaboratorPermissionLevel: jest.Mock;
     };
   };
   paginate: jest.Mock;
@@ -32,6 +37,9 @@ describe('FeedbackFilter', () => {
         },
         reactions: {
           listForPullRequestReviewComment: jest.fn(),
+        },
+        repos: {
+          getCollaboratorPermissionLevel: jest.fn(),
         },
       },
       paginate: jest.fn(),
@@ -64,7 +72,7 @@ describe('FeedbackFilter', () => {
       );
     });
 
-    it('should identify suppressed comments with thumbs-down reactions', async () => {
+    it('does not treat thumbs-down reactions as override state', async () => {
       const mockComments = [
         {
           id: 1,
@@ -82,115 +90,12 @@ describe('FeedbackFilter', () => {
 
       mockOctokit.paginate.mockResolvedValue(mockComments);
 
-      // First comment has thumbs-down, second doesn't
-      mockOctokit.rest.reactions.listForPullRequestReviewComment
-        .mockResolvedValueOnce({
-          data: [{ content: '-1' }], // Thumbs down
-        })
-        .mockResolvedValueOnce({
-          data: [{ content: '+1' }], // Thumbs up
-        });
-
       const suppressed = await feedbackFilter.loadSuppressed(123);
 
-      expect(suppressed.size).toBe(1);
-      expect(suppressed.has('src/file.ts:10:security issue')).toBe(true);
-      expect(suppressed.has('src/other.ts:20:performance issue')).toBe(false);
-    });
-
-    it('should handle multiple reactions on same comment', async () => {
-      const mockComments = [
-        {
-          id: 1,
-          path: 'src/file.ts',
-          line: 10,
-          body: '**Issue Title**\nDescription',
-        },
-      ];
-
-      mockOctokit.paginate.mockResolvedValue(mockComments);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [
-          { content: '+1' }, // Thumbs up
-          { content: '-1' }, // Thumbs down
-          { content: 'laugh' }, // Other reaction
-        ],
-      });
-
-      const suppressed = await feedbackFilter.loadSuppressed(123);
-
-      expect(suppressed.size).toBe(1);
-      expect(suppressed.has('src/file.ts:10:issue title')).toBe(true);
-    });
-
-    it('should handle errors gracefully when loading reactions', async () => {
-      const mockComments = [
-        {
-          id: 1,
-          path: 'src/file.ts',
-          line: 10,
-          body: '**Issue**\nDescription',
-        },
-      ];
-
-      mockOctokit.paginate.mockResolvedValue(mockComments);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockRejectedValue(
-        new Error('API rate limited')
-      );
-
-      const suppressed = await feedbackFilter.loadSuppressed(123);
-
-      // Should not throw, should return empty set
       expect(suppressed.size).toBe(0);
-    });
-
-    it('should handle errors when loading comments', async () => {
-      mockOctokit.paginate.mockRejectedValue(new Error('Network error'));
-
-      const suppressed = await feedbackFilter.loadSuppressed(123);
-
-      // Should not throw, should return empty set
-      expect(suppressed.size).toBe(0);
-    });
-
-    it('should extract title from bold text in comment body', async () => {
-      const mockComments = [
-        {
-          id: 1,
-          path: 'src/file.ts',
-          line: 15,
-          body: '**Extracted Title**\nMore details here',
-        },
-      ];
-
-      mockOctokit.paginate.mockResolvedValue(mockComments);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [{ content: '-1' }],
-      });
-
-      const suppressed = await feedbackFilter.loadSuppressed(123);
-
-      expect(suppressed.has('src/file.ts:15:extracted title')).toBe(true);
-    });
-
-    it('should use first line as fallback when no bold text', async () => {
-      const mockComments = [
-        {
-          id: 1,
-          path: 'src/file.ts',
-          line: 5,
-          body: 'Plain text comment\nMore details',
-        },
-      ];
-
-      mockOctokit.paginate.mockResolvedValue(mockComments);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [{ content: '-1' }],
-      });
-
-      const suppressed = await feedbackFilter.loadSuppressed(123);
-
-      expect(suppressed.has('src/file.ts:5:plain text comment')).toBe(true);
+      expect(
+        mockOctokit.rest.reactions.listForPullRequestReviewComment
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -204,23 +109,27 @@ describe('FeedbackFilter', () => {
           body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
         },
       ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [],
-      });
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue(
+        {
+          data: [],
+        }
+      );
 
       const state = await feedbackFilter.loadReviewCommentState(123);
 
       expect(state.suppressed.size).toBe(0);
       expect(state.alreadyPosted.has('src/file.ts:10:major')).toBe(true);
-      expect(feedbackFilter.shouldPost(
-        {
-          path: 'src/file.ts',
-          line: 10,
-          side: 'RIGHT',
-          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
-        },
-        state
-      )).toBe(false);
+      expect(
+        feedbackFilter.shouldPost(
+          {
+            path: 'src/file.ts',
+            line: 10,
+            side: 'RIGHT',
+            body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+          },
+          state
+        )
+      ).toBe(false);
     });
 
     it('does not treat human review comments as already posted', async () => {
@@ -232,9 +141,11 @@ describe('FeedbackFilter', () => {
           body: '**SQL injection**\n\nHuman reviewer comment.',
         },
       ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [],
-      });
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue(
+        {
+          data: [],
+        }
+      );
 
       const state = await feedbackFilter.loadReviewCommentState(123);
 
@@ -257,9 +168,11 @@ describe('FeedbackFilter', () => {
           body: `${existingBody}\n\n<!-- review-router-inline:${fingerprint} -->`,
         },
       ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [],
-      });
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue(
+        {
+          data: [],
+        }
+      );
 
       const state = await feedbackFilter.loadReviewCommentState(123);
 
@@ -286,21 +199,25 @@ describe('FeedbackFilter', () => {
           body: '**🟡 Major - Unknown plan crashes lookup**\n\nUse a fallback.',
         },
       ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [],
-      });
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue(
+        {
+          data: [],
+        }
+      );
 
       const state = await feedbackFilter.loadReviewCommentState(123);
 
-      expect(feedbackFilter.shouldPost(
-        {
-          path: 'src/file.ts',
-          line: 10,
-          side: 'RIGHT',
-          body: '**🟡 Major - Missing plan crashes billing lookup**\n\nUse a fallback.',
-        },
-        state
-      )).toBe(false);
+      expect(
+        feedbackFilter.shouldPost(
+          {
+            path: 'src/file.ts',
+            line: 10,
+            side: 'RIGHT',
+            body: '**🟡 Major - Missing plan crashes billing lookup**\n\nUse a fallback.',
+          },
+          state
+        )
+      ).toBe(false);
     });
 
     it('blocks semantic duplicates when the model shifts the line and rewrites the title', async () => {
@@ -316,25 +233,29 @@ describe('FeedbackFilter', () => {
           ].join('\n'),
         },
       ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [],
-      });
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue(
+        {
+          data: [],
+        }
+      );
 
       const state = await feedbackFilter.loadReviewCommentState(123);
 
-      expect(feedbackFilter.shouldPost(
-        {
-          path: 'lib/app/chat/chats_page.dart',
-          line: 54,
-          side: 'RIGHT',
-          body: [
-            '**🟡 Major - Direct links to hidden paid chats hang**',
-            '',
-            'When `hidePaidFeaturesInfo` is true this branch removes every unavailable paid course from `courseItems`, so opening a direct chat link hangs.',
-          ].join('\n'),
-        },
-        state
-      )).toBe(false);
+      expect(
+        feedbackFilter.shouldPost(
+          {
+            path: 'lib/app/chat/chats_page.dart',
+            line: 54,
+            side: 'RIGHT',
+            body: [
+              '**🟡 Major - Direct links to hidden paid chats hang**',
+              '',
+              'When `hidePaidFeaturesInfo` is true this branch removes every unavailable paid course from `courseItems`, so opening a direct chat link hangs.',
+            ].join('\n'),
+          },
+          state
+        )
+      ).toBe(false);
     });
 
     it('does not treat outdated ReviewRouter comments as already posted', async () => {
@@ -347,22 +268,157 @@ describe('FeedbackFilter', () => {
           body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
         },
       ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [],
-      });
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue(
+        {
+          data: [],
+        }
+      );
 
       const state = await feedbackFilter.loadReviewCommentState(123);
 
       expect(state.alreadyPosted.size).toBe(0);
-      expect(feedbackFilter.shouldPost(
+      expect(
+        feedbackFilter.shouldPost(
+          {
+            path: 'src/file.ts',
+            line: 10,
+            side: 'RIGHT',
+            body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+          },
+          state
+        )
+      ).toBe(true);
+    });
+
+    it('uses valid signed ledger skip entries to suppress matching findings', async () => {
+      const parentBody = [
+        '**🟡 Major - SQL injection**',
+        '',
+        '**Severity:** 🟡 **Major** - should fix before merge; correctness, reliability, or maintainability risk.',
+        '',
+        'Use parameterized queries.',
+      ].join('\n');
+      const findingFingerprint = findingFingerprintFromInlineComment(
+        'src/file.ts',
+        10,
+        parentBody
+      );
+      const ledger = {
+        load: jest.fn().mockResolvedValue({
+          valid: true,
+          payload: {
+            version: 1,
+            repo: 'test-owner/test-repo',
+            pr: 123,
+            entries: [],
+          },
+        }),
+        activeSkips: jest.fn().mockReturnValue([
+          {
+            action: 'skip',
+            fingerprint: findingFingerprint,
+            severity: 'major',
+            path: 'src/file.ts',
+            line: 10,
+            title: 'SQL injection',
+            reason: 'validated false positive',
+            actor: 'maintainer',
+            actorRole: 'maintain',
+            parentCommentId: 10,
+            createdAt: '2026-05-01T00:00:00.000Z',
+          },
+        ]),
+      };
+      feedbackFilter = new FeedbackFilter(mockClient, undefined, ledger as any);
+
+      mockOctokit.paginate.mockResolvedValue([
         {
+          id: 10,
           path: 'src/file.ts',
           line: 10,
-          side: 'RIGHT',
+          body: parentBody,
+        },
+      ]);
+
+      const state = await feedbackFilter.loadReviewCommentState(123);
+
+      expect(state.commandDismissed?.has(findingFingerprint)).toBe(true);
+      expect(
+        feedbackFilter.shouldPost(
+          {
+            path: 'src/file.ts',
+            line: 10,
+            side: 'RIGHT',
+            body: parentBody,
+          },
+          state
+        )
+      ).toBe(false);
+      expect(
+        feedbackFilter.isFindingCommandDismissed(
+          {
+            file: 'src/file.ts',
+            line: 10,
+            severity: 'major',
+            title: 'SQL injection',
+            message: 'Use parameterized queries.',
+          },
+          state
+        )
+      ).toBe(true);
+    });
+
+    it('ignores invalid ledger state and keeps active duplicate suppression', async () => {
+      const ledger = {
+        load: jest.fn().mockResolvedValue({
+          valid: false,
+          payload: {
+            version: 1,
+            repo: 'test-owner/test-repo',
+            pr: 123,
+            entries: [],
+          },
+          invalidReason: 'bad signature',
+        }),
+        activeSkips: jest.fn(),
+      };
+      feedbackFilter = new FeedbackFilter(mockClient, undefined, ledger as any);
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 10,
+          path: 'src/file.ts',
+          line: 10,
           body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
         },
-        state
-      )).toBe(true);
+      ]);
+
+      const state = await feedbackFilter.loadReviewCommentState(123);
+
+      expect(state.commandDismissed?.size).toBe(0);
+      expect(ledger.activeSkips).not.toHaveBeenCalled();
+      expect(
+        feedbackFilter.isFindingCommandDismissed(
+          {
+            file: 'src/file.ts',
+            line: 10,
+            severity: 'major',
+            title: 'SQL injection',
+            message: 'Use parameterized queries.',
+          },
+          state
+        )
+      ).toBe(false);
+      expect(
+        feedbackFilter.shouldPost(
+          {
+            path: 'src/file.ts',
+            line: 10,
+            side: 'RIGHT',
+            body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+          },
+          state
+        )
+      ).toBe(false);
     });
   });
 
@@ -452,59 +508,12 @@ describe('FeedbackFilter', () => {
     });
   });
 
-  describe('negative feedback recording', () => {
-    it('records negative feedback when comment has thumbs-down and provider', async () => {
+  describe('reaction feedback', () => {
+    it('does not use reactions for dismissal or provider learning', async () => {
       const mockWeightTracker = {
         recordFeedback: jest.fn().mockResolvedValue(undefined),
-      } as unknown as ProviderWeightTracker;
-
-      const filter = new FeedbackFilter(mockClient, mockWeightTracker);
-
-      // Mock comment with provider attribution and thumbs-down
-      mockOctokit.paginate.mockResolvedValue([
-        {
-          id: 1,
-          path: 'test.ts',
-          line: 10,
-          body: '**Issue Title**\n\n**Provider:** `claude`',
-        },
-      ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [{ content: '-1' }],
-      });
-
-      await filter.loadSuppressed(123);
-
-      expect(mockWeightTracker.recordFeedback).toHaveBeenCalledWith('claude', '👎');
-    });
-
-    it('does not record feedback when no provider in comment', async () => {
-      const mockWeightTracker = {
-        recordFeedback: jest.fn().mockResolvedValue(undefined),
-      } as unknown as ProviderWeightTracker;
-
-      const filter = new FeedbackFilter(mockClient, mockWeightTracker);
-
-      // Mock comment without provider attribution
-      mockOctokit.paginate.mockResolvedValue([
-        {
-          id: 1,
-          path: 'test.ts',
-          line: 10,
-          body: '**Issue Title**\n\nSome description without provider',
-        },
-      ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [{ content: '-1' }],
-      });
-
-      await filter.loadSuppressed(123);
-
-      expect(mockWeightTracker.recordFeedback).not.toHaveBeenCalled();
-    });
-
-    it('works without weight tracker (backward compatible)', async () => {
-      const filter = new FeedbackFilter(mockClient);
+      };
+      const filter = new FeedbackFilter(mockClient, mockWeightTracker as any);
 
       mockOctokit.paginate.mockResolvedValue([
         {
@@ -514,74 +523,14 @@ describe('FeedbackFilter', () => {
           body: '**Issue Title**\n\n**Provider:** `claude`',
         },
       ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [{ content: '-1' }],
-      });
 
-      // Should not throw, suppression still works
       const suppressed = await filter.loadSuppressed(123);
-      expect(suppressed.size).toBe(1);
-    });
 
-    it('extracts provider and records feedback for multiple dismissals', async () => {
-      const mockWeightTracker = {
-        recordFeedback: jest.fn().mockResolvedValue(undefined),
-      } as unknown as ProviderWeightTracker;
-
-      const filter = new FeedbackFilter(mockClient, mockWeightTracker);
-
-      // Mock multiple comments with different providers
-      mockOctokit.paginate.mockResolvedValue([
-        {
-          id: 1,
-          path: 'test.ts',
-          line: 10,
-          body: '**Issue 1**\n\n**Provider:** `openai`',
-        },
-        {
-          id: 2,
-          path: 'test.ts',
-          line: 20,
-          body: '**Issue 2**\n\n**Provider:** `anthropic`',
-        },
-      ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment
-        .mockResolvedValueOnce({
-          data: [{ content: '-1' }],
-        })
-        .mockResolvedValueOnce({
-          data: [{ content: '-1' }],
-        });
-
-      await filter.loadSuppressed(123);
-
-      expect(mockWeightTracker.recordFeedback).toHaveBeenCalledWith('openai', '👎');
-      expect(mockWeightTracker.recordFeedback).toHaveBeenCalledWith('anthropic', '👎');
-      expect(mockWeightTracker.recordFeedback).toHaveBeenCalledTimes(2);
-    });
-
-    it('does not record feedback when no thumbs-down reaction', async () => {
-      const mockWeightTracker = {
-        recordFeedback: jest.fn().mockResolvedValue(undefined),
-      } as unknown as ProviderWeightTracker;
-
-      const filter = new FeedbackFilter(mockClient, mockWeightTracker);
-
-      mockOctokit.paginate.mockResolvedValue([
-        {
-          id: 1,
-          path: 'test.ts',
-          line: 10,
-          body: '**Issue Title**\n\n**Provider:** `claude`',
-        },
-      ]);
-      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
-        data: [{ content: '+1' }], // Thumbs up, not down
-      });
-
-      await filter.loadSuppressed(123);
-
+      expect(suppressed.size).toBe(0);
       expect(mockWeightTracker.recordFeedback).not.toHaveBeenCalled();
+      expect(
+        mockOctokit.rest.reactions.listForPullRequestReviewComment
+      ).not.toHaveBeenCalled();
     });
   });
 });

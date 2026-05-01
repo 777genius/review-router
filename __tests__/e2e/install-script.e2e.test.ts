@@ -10,7 +10,10 @@ function makeTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
-function runInstaller(env: Record<string, string>, workdir = makeTempDir('airr-workdir-')) {
+function runInstaller(
+  env: Record<string, string>,
+  workdir = makeTempDir('airr-workdir-')
+) {
   const result = spawnSync('bash', [installerPath], {
     cwd: repoRoot,
     env: {
@@ -30,6 +33,10 @@ function runInstaller(env: Record<string, string>, workdir = makeTempDir('airr-w
     ...result,
     workdir,
     workflowPath: path.join(workdir, '.github/workflows/review-router.yml'),
+    interactionWorkflowPath: path.join(
+      workdir,
+      '.github/workflows/review-router-interaction.yml'
+    ),
   };
 }
 
@@ -37,7 +44,10 @@ function workflowText(workflowPath: string): string {
   return fs.readFileSync(workflowPath, 'utf-8');
 }
 
-function writePrivateKeyFixture(dir: string, name = 'app.private-key.pem'): string {
+function writePrivateKeyFixture(
+  dir: string,
+  name = 'app.private-key.pem'
+): string {
   const keyFile = path.join(dir, name);
   fs.writeFileSync(
     keyFile,
@@ -68,7 +78,9 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain('uses: 777genius/review-router@v1');
     expect(result.stdout).toContain('Action ref: 777genius/review-router@v1');
     expect(workflow).toContain('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
-    expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
+    expect(workflow).toContain(
+      'OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}'
+    );
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '3'");
     expect(workflow).toContain("INLINE_MIN_SEVERITY: 'major'");
     expect(workflow).toContain('UPDATE_PR_DESCRIPTION:');
@@ -77,9 +89,32 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).not.toContain('FAIL_ON_SEVERITY:');
     expect(workflow).not.toContain('CODEX_REASONING_EFFORT');
     expect(workflow).not.toContain('CODEX_MODEL');
-    expect(workflow).toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
+    expect(workflow).toContain(
+      'REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}'
+    );
     expect(workflow).toContain("ENABLE_AST_ANALYSIS: 'false'");
-    expect(workflow).toContain("if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true }}");
+    expect(workflow).not.toContain('pull_request_review_comment:');
+    expect(workflow).toContain(
+      "if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.fork != true }}"
+    );
+    expect(workflow).toContain(
+      'REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}'
+    );
+    const interactionWorkflow = workflowText(result.interactionWorkflowPath);
+    expect(interactionWorkflow).toContain('name: ReviewRouter Interaction');
+    expect(interactionWorkflow).toContain('pull_request_review_comment:');
+    expect(interactionWorkflow).toContain('actions: write');
+    expect(interactionWorkflow).toContain('pull-requests: write');
+    expect(interactionWorkflow).toContain(
+      "github.event.comment.user.type != 'Bot'"
+    );
+    expect(interactionWorkflow).toContain(
+      'REVIEW_ROUTER_MODE: interaction-preflight'
+    );
+    expect(interactionWorkflow).toContain('REVIEW_ROUTER_MODE: interaction');
+    expect(interactionWorkflow).toContain(
+      'REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}'
+    );
     expect(workflow).not.toContain('actions/create-github-app-token');
     expect(workflow).not.toContain('actions/setup-node');
     expect(workflow).not.toContain('\\${{');
@@ -112,7 +147,9 @@ describe('review-router curl installer e2e', () => {
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('uses: 777genius/review-router@v1.0.2');
-    expect(result.stdout).toContain('Action ref: 777genius/review-router@v1.0.2');
+    expect(result.stdout).toContain(
+      'Action ref: 777genius/review-router@v1.0.2'
+    );
   });
 
   it('keeps legacy AI_ROBOT_REVIEW environment aliases working', () => {
@@ -136,7 +173,9 @@ describe('review-router curl installer e2e', () => {
     });
 
     expect(result.status).toBe(0);
-    const workflow = workflowText(path.join(workdir, '.github/workflows/review-router.yml'));
+    const workflow = workflowText(
+      path.join(workdir, '.github/workflows/review-router.yml')
+    );
     expect(workflow).toContain('uses: 777genius/review-router@main');
     expect(result.stdout).toContain('ReviewRouter setup complete');
   });
@@ -145,7 +184,13 @@ describe('review-router curl installer e2e', () => {
     const codexDir = makeTempDir('airr-codex-');
     const authFile = path.join(codexDir, 'auth.json');
     const configFile = path.join(codexDir, 'config.toml');
-    fs.writeFileSync(authFile, JSON.stringify({ auth_mode: 'chatgpt', tokens: { refresh_token: 'refresh-token' } }));
+    fs.writeFileSync(
+      authFile,
+      JSON.stringify({
+        auth_mode: 'chatgpt',
+        tokens: { refresh_token: 'refresh-token' },
+      })
+    );
     fs.writeFileSync(configFile, 'model = "gpt-5.5"\n');
 
     const result = runInstaller({
@@ -163,15 +208,23 @@ describe('review-router curl installer e2e', () => {
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
     expect(workflow).toContain('client-id: ${{ vars.REVIEW_APP_CLIENT_ID }}');
-    expect(workflow).toContain('private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}');
+    expect(workflow).toContain(
+      'private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}'
+    );
     expect(workflow).toContain('repositories: test-repo');
-    expect(workflow).toContain('GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}');
+    expect(workflow).toContain(
+      'GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}'
+    );
     expect(workflow).not.toContain('secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain('npm install -g @openai/codex@0.125.0');
-    expect(workflow).toContain('CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}');
+    expect(workflow).toContain(
+      'CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}'
+    );
     expect(workflow).toContain('codex-oauth-ok');
     expect(workflow).toContain('CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}');
-    expect(workflow).not.toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
+    expect(workflow).not.toContain(
+      'REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}'
+    );
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '5'");
     expect(workflow).toContain("INLINE_MIN_SEVERITY: 'major'");
     expect(workflow).toContain("CODEX_REASONING_EFFORT: 'medium'");
@@ -183,6 +236,18 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain("MIN_CONFIDENCE: '0.6'");
     expect(workflow).toContain("CONSENSUS_REQUIRED_FOR_CRITICAL: 'false'");
     expect(workflow).not.toContain('\\${{');
+    const interactionWorkflow = workflowText(result.interactionWorkflowPath);
+    expect(interactionWorkflow).toContain('permission-actions: write');
+    expect(interactionWorkflow).toContain('permission-pull-requests: write');
+    expect(interactionWorkflow).toContain(
+      'Install official Codex CLI for discussion replies'
+    );
+    expect(interactionWorkflow).toContain(
+      'Restore Codex OAuth config for discussion replies'
+    );
+    expect(interactionWorkflow).toContain(
+      'GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}'
+    );
   });
 
   it('imports existing GitHub App credentials manually and saves a local profile', () => {
@@ -203,17 +268,45 @@ describe('review-router curl installer e2e', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Saved GitHub App profile:');
     expect(result.stdout).toContain('Loaded GitHub App profile:');
-    expect(result.stdout).toContain('gh secret set REVIEW_APP_PRIVATE_KEY --repo test-owner/test-repo');
-    const profilePath = path.join(result.workdir, '.review-router-apps', 'review-router-manual.env');
-    const savedKeyPath = path.join(result.workdir, '.review-router-apps', 'review-router-manual.private-key.pem');
+    expect(result.stdout).toContain(
+      'Optional: upload the ReviewRouter logo for this GitHub App'
+    );
+    expect(result.stdout).toContain(
+      'https://github.com/settings/apps/review-router-manual'
+    );
+    expect(result.stdout).toContain('https://i.imgur.com/Yz9XIQM.png');
+    expect(result.stdout).toContain(
+      'gh secret set REVIEW_APP_PRIVATE_KEY --repo test-owner/test-repo'
+    );
+    const profilePath = path.join(
+      result.workdir,
+      '.review-router-apps',
+      'review-router-manual.env'
+    );
+    const savedKeyPath = path.join(
+      result.workdir,
+      '.review-router-apps',
+      'review-router-manual.private-key.pem'
+    );
     expect(fs.existsSync(profilePath)).toBe(true);
     expect(fs.existsSync(savedKeyPath)).toBe(true);
-    expect(fs.readFileSync(profilePath, 'utf-8')).toContain('APP_SLUG=review-router-manual');
-    expect(fs.readFileSync(profilePath, 'utf-8')).toContain('APP_PRIVATE_KEY_FILE=');
-    expect(fs.readFileSync(savedKeyPath, 'utf-8')).toBe(fs.readFileSync(privateKeyFile, 'utf-8'));
+    expect(fs.readFileSync(profilePath, 'utf-8')).toContain(
+      'APP_SLUG=review-router-manual'
+    );
+    expect(fs.readFileSync(profilePath, 'utf-8')).toContain(
+      'APP_PRIVATE_KEY_FILE='
+    );
+    expect(fs.readFileSync(savedKeyPath, 'utf-8')).toBe(
+      fs.readFileSync(privateKeyFile, 'utf-8')
+    );
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
-    expect(workflow).toContain('GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}');
+    expect(workflow).toContain(
+      'GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}'
+    );
+    expect(workflowText(result.interactionWorkflowPath)).toContain(
+      'permission-actions: write'
+    );
   });
 
   it('keeps existing GitHub App credential env vars working without explicit app setup mode', () => {
@@ -232,15 +325,28 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Saved GitHub App profile:');
-    expect(result.stdout).not.toContain('Skipping GitHub App creation in dry-run/local-only/test mode');
-    expect(fs.existsSync(path.join(result.workdir, '.review-router-apps', 'review-router-compat.env'))).toBe(true);
+    expect(result.stdout).not.toContain(
+      'Skipping GitHub App creation in dry-run/local-only/test mode'
+    );
+    expect(
+      fs.existsSync(
+        path.join(
+          result.workdir,
+          '.review-router-apps',
+          'review-router-compat.env'
+        )
+      )
+    ).toBe(true);
   });
 
   it('reuses a saved GitHub App profile', () => {
     const workdir = makeTempDir('airr-saved-app-workdir-');
     const profileDir = path.join(workdir, '.review-router-apps');
     fs.mkdirSync(profileDir, { recursive: true });
-    const privateKeyFile = writePrivateKeyFixture(profileDir, 'saved-router.private-key.pem');
+    const privateKeyFile = writePrivateKeyFixture(
+      profileDir,
+      'saved-router.private-key.pem'
+    );
     fs.writeFileSync(
       path.join(profileDir, 'saved-router.env'),
       [
@@ -253,18 +359,25 @@ describe('review-router curl installer e2e', () => {
       ].join('\n')
     );
 
-    const result = runInstaller({
-      REVIEW_ROUTER_IDENTITY: 'app',
-      REVIEW_ROUTER_APP_SETUP: 'saved',
-      REVIEW_ROUTER_APP_PROFILE: 'saved-router',
-      REVIEW_ROUTER_AUTH: 'openrouter',
-      REVIEW_ROUTER_PRESET: 'safe',
-      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
-    }, workdir);
+    const result = runInstaller(
+      {
+        REVIEW_ROUTER_IDENTITY: 'app',
+        REVIEW_ROUTER_APP_SETUP: 'saved',
+        REVIEW_ROUTER_APP_PROFILE: 'saved-router',
+        REVIEW_ROUTER_AUTH: 'openrouter',
+        REVIEW_ROUTER_PRESET: 'safe',
+        REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      },
+      workdir
+    );
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('Loaded GitHub App profile: saved-router (saved-router)');
-    expect(result.stdout).toContain('gh secret set REVIEW_APP_PRIVATE_KEY --repo test-owner/test-repo');
+    expect(result.stdout).toContain(
+      'Loaded GitHub App profile: saved-router (saved-router)'
+    );
+    expect(result.stdout).toContain(
+      'gh secret set REVIEW_APP_PRIVATE_KEY --repo test-owner/test-repo'
+    );
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
     expect(workflow).toContain('repositories: test-repo');
@@ -274,7 +387,10 @@ describe('review-router curl installer e2e', () => {
     const workdir = makeTempDir('airr-missing-key-app-workdir-');
     const profileDir = path.join(workdir, '.review-router-apps');
     fs.mkdirSync(profileDir, { recursive: true });
-    const missingKeyFile = path.join(profileDir, 'missing-router.private-key.pem');
+    const missingKeyFile = path.join(
+      profileDir,
+      'missing-router.private-key.pem'
+    );
     fs.writeFileSync(
       path.join(profileDir, 'missing-router.env'),
       [
@@ -287,17 +403,22 @@ describe('review-router curl installer e2e', () => {
       ].join('\n')
     );
 
-    const result = runInstaller({
-      REVIEW_ROUTER_IDENTITY: 'app',
-      REVIEW_ROUTER_APP_SETUP: 'saved',
-      REVIEW_ROUTER_APP_PROFILE: 'missing-router',
-      REVIEW_ROUTER_AUTH: 'openrouter',
-      REVIEW_ROUTER_PRESET: 'safe',
-      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
-    }, workdir);
+    const result = runInstaller(
+      {
+        REVIEW_ROUTER_IDENTITY: 'app',
+        REVIEW_ROUTER_APP_SETUP: 'saved',
+        REVIEW_ROUTER_APP_PROFILE: 'missing-router',
+        REVIEW_ROUTER_AUTH: 'openrouter',
+        REVIEW_ROUTER_PRESET: 'safe',
+        REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      },
+      workdir
+    );
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr + result.stdout).toContain('GitHub App private key file not found');
+    expect(result.stderr + result.stdout).toContain(
+      'GitHub App private key file not found'
+    );
     expect(fs.existsSync(result.workflowPath)).toBe(false);
   });
 
@@ -306,7 +427,10 @@ describe('review-router curl installer e2e', () => {
     const profileDir = path.join(workdir, '.review-router-apps');
     fs.mkdirSync(profileDir, { recursive: true });
     for (const slug of ['first-router', 'second-router']) {
-      const privateKeyFile = writePrivateKeyFixture(profileDir, `${slug}.private-key.pem`);
+      const privateKeyFile = writePrivateKeyFixture(
+        profileDir,
+        `${slug}.private-key.pem`
+      );
       fs.writeFileSync(
         path.join(profileDir, `${slug}.env`),
         [
@@ -320,16 +444,21 @@ describe('review-router curl installer e2e', () => {
       );
     }
 
-    const result = runInstaller({
-      REVIEW_ROUTER_IDENTITY: 'app',
-      REVIEW_ROUTER_APP_SETUP: 'saved',
-      REVIEW_ROUTER_AUTH: 'openrouter',
-      REVIEW_ROUTER_PRESET: 'safe',
-      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
-    }, workdir);
+    const result = runInstaller(
+      {
+        REVIEW_ROUTER_IDENTITY: 'app',
+        REVIEW_ROUTER_APP_SETUP: 'saved',
+        REVIEW_ROUTER_AUTH: 'openrouter',
+        REVIEW_ROUTER_PRESET: 'safe',
+        REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      },
+      workdir
+    );
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr + result.stdout).toContain('Multiple saved GitHub App profiles found');
+    expect(result.stderr + result.stdout).toContain(
+      'Multiple saved GitHub App profiles found'
+    );
     expect(fs.existsSync(result.workflowPath)).toBe(false);
   });
 
@@ -346,7 +475,9 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain('OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}');
     expect(workflow).toContain('codex-api-ok');
     expect(workflow).toContain('CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}');
-    expect(workflow).not.toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
+    expect(workflow).not.toContain(
+      'REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}'
+    );
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '10'");
     expect(workflow).toContain("INLINE_MIN_SEVERITY: 'minor'");
     expect(workflow).toContain("FAIL_ON_CRITICAL: 'true'");
@@ -388,14 +519,26 @@ describe('review-router curl installer e2e', () => {
     });
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('Secret scope: org test-owner, selected repos: test-repo');
-    expect(result.stdout).toContain('gh secret set OPENROUTER_API_KEY --org test-owner --repos test-repo');
-    expect(result.stdout).toContain('gh variable set REVIEW_AUTH_MODE --org test-owner --repos test-repo');
-    expect(result.stdout).toContain('gh variable set REVIEW_PROVIDERS --org test-owner --repos test-repo');
+    expect(result.stdout).toContain(
+      'Secret scope: org test-owner, selected repos: test-repo'
+    );
+    expect(result.stdout).toContain(
+      'gh secret set OPENROUTER_API_KEY --org test-owner --repos test-repo'
+    );
+    expect(result.stdout).toContain(
+      'gh variable set REVIEW_AUTH_MODE --org test-owner --repos test-repo'
+    );
+    expect(result.stdout).toContain(
+      'gh variable set REVIEW_PROVIDERS --org test-owner --repos test-repo'
+    );
 
     const workflow = workflowText(result.workflowPath);
-    expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
-    expect(workflow).toContain('REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}');
+    expect(workflow).toContain(
+      'OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}'
+    );
+    expect(workflow).toContain(
+      'REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS }}'
+    );
     expect(workflow).not.toContain('CODEX_MODEL');
   });
 
@@ -410,9 +553,13 @@ describe('review-router curl installer e2e', () => {
     });
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('Skipping GitHub App creation in dry-run/local-only/test mode');
+    expect(result.stdout).toContain(
+      'Skipping GitHub App creation in dry-run/local-only/test mode'
+    );
     expect(result.stdout).toContain('would clone test-owner/test-repo');
-    expect(result.stdout).toContain('would commit .github/workflows/review-router.yml');
+    expect(result.stdout).toContain(
+      'would commit .github/workflows/review-router.yml and .github/workflows/review-router-interaction.yml'
+    );
   });
 
   it('fails clearly when saved GitHub App profiles are missing', () => {
@@ -425,7 +572,9 @@ describe('review-router curl installer e2e', () => {
     });
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr + result.stdout).toContain('No saved GitHub App profiles found');
+    expect(result.stderr + result.stdout).toContain(
+      'No saved GitHub App profiles found'
+    );
     expect(fs.existsSync(result.workflowPath)).toBe(false);
   });
 
@@ -447,14 +596,19 @@ describe('review-router curl installer e2e', () => {
     });
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr + result.stdout).toContain('does not look like a PEM private key');
+    expect(result.stderr + result.stdout).toContain(
+      'does not look like a PEM private key'
+    );
     expect(fs.existsSync(result.workflowPath)).toBe(false);
   });
 
   it('rejects invalid Codex OAuth files before writing workflow', () => {
     const codexDir = makeTempDir('airr-bad-codex-');
     const authFile = path.join(codexDir, 'auth.json');
-    fs.writeFileSync(authFile, JSON.stringify({ auth_mode: 'chatgpt', tokens: {} }));
+    fs.writeFileSync(
+      authFile,
+      JSON.stringify({ auth_mode: 'chatgpt', tokens: {} })
+    );
 
     const result = runInstaller({
       REVIEW_ROUTER_IDENTITY: 'actions',
@@ -464,7 +618,9 @@ describe('review-router curl installer e2e', () => {
     });
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr + result.stdout).toContain('tokens.refresh_token is missing');
+    expect(result.stderr + result.stdout).toContain(
+      'tokens.refresh_token is missing'
+    );
     expect(fs.existsSync(result.workflowPath)).toBe(false);
   });
 });

@@ -106,6 +106,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
 ## What it creates
 
 - `.github/workflows/review-router.yml`
+- `.github/workflows/review-router-interaction.yml`
 - Repository or organization variables such as `REVIEW_CODEX_MODEL`, `REVIEW_AUTH_MODE`, or OpenRouter provider variables
 - Repository or organization secrets for the selected auth mode
 - Branch `review-router/setup`
@@ -201,6 +202,14 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
 
 GitHub does not let the installer download an existing GitHub App private key. Keep the `.pem` file from App creation, or generate a new private key in the App settings before using `manual`.
 
+Optional App logo setup:
+
+- Open `https://github.com/settings/apps/<slug>`.
+- Upload the ReviewRouter logo: `https://i.imgur.com/Yz9XIQM.png`.
+- Recommended format: PNG/JPG/GIF under 1 MB, 200x200.
+
+The installer prints these links after `create` and `manual` App setup. GitHub does not currently let the manifest flow set the App avatar automatically, so this remains a manual upload step.
+
 ## Auth modes
 
 ### Codex ChatGPT subscription
@@ -263,6 +272,8 @@ UPDATE_PR_DESCRIPTION=true
 PROVIDER_MAX_PARALLEL=1
 CODEX_REASONING_EFFORT=medium
 CODEX_AGENTIC_CONTEXT=true
+REVIEW_ROUTER_DISCUSSION_MODE=suggest
+REVIEW_ROUTER_LEDGER_KEY=<generated secret>
 ```
 
 `CODEX_AGENTIC_CONTEXT=true` lets Codex inspect related repository files in a read-only sandbox before returning strict JSON findings. It does not grant write access.
@@ -276,6 +287,29 @@ REVIEW_ROUTER_PRESET=blocking
 ```
 
 This keeps the safer `safe` review depth, but makes Major findings block the pull request. Use `safe` during rollout if you want advisory comments first.
+
+## Human override
+
+If a blocking inline finding is a verified false positive, reply to that specific ReviewRouter inline comment:
+
+```text
+/rr skip
+/rr skip optional reason
+```
+
+The reason is optional. The installer generates a second non-required workflow, `.github/workflows/review-router-interaction.yml`, for `/rr ...` replies and optional discussion replies. `/rr skip` does not run Codex and does not checkout pull request code. It only verifies the command, updates the signed PR ledger, and reruns the failed `ReviewRouter / review` check when the token has `actions: write`.
+
+Permission policy:
+
+- Critical and Major findings require `maintain` or `admin`.
+- Minor findings allow `write`, `maintain`, or `admin`.
+- PR authors cannot skip blocking findings by default.
+
+The skip state is stored in one bot-owned PR comment and signed with `REVIEW_ROUTER_LEDGER_KEY`. If the ledger is edited by hand or the key is missing, ReviewRouter ignores the override state and keeps the PR blocked.
+
+With Codex OAuth or OpenAI API-key modes, new installs set `REVIEW_ROUTER_DISCUSSION_MODE=suggest`. A normal human reply to a ReviewRouter inline finding can receive an AI explanation in the same review thread. If the AI agrees the finding is likely a false positive, it suggests that a maintainer reply `/rr skip`. It does not write the ledger or unblock CI from free-form text.
+
+OpenRouter installs currently set `REVIEW_ROUTER_DISCUSSION_MODE=off` because discussion replies use the Codex CLI responder first. The handler is provider-oriented, so other responders can be added without changing the GitHub command/ledger flow.
 
 ## Non-interactive examples
 

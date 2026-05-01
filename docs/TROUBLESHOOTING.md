@@ -483,7 +483,7 @@ env:
 Reports are saved as workflow artifacts:
 1. Go to workflow run
 2. Scroll to "Artifacts" section
-3. Download `multi-provider-review.json` and `multi-provider-review.sarif`
+3. Download `review-router.json` and `review-router.sarif`
 
 ### Test Locally with CLI
 

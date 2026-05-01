@@ -50,8 +50,8 @@ describe('review-router curl installer e2e', () => {
 
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('name: ReviewRouter');
-    expect(workflow).toContain('uses: 777genius/review-router@v1.0.0');
-    expect(result.stdout).toContain('Action ref: 777genius/review-router@v1.0.0');
+    expect(workflow).toContain('uses: 777genius/review-router@v1.0.1');
+    expect(result.stdout).toContain('Action ref: 777genius/review-router@v1.0.1');
     expect(workflow).toContain('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '3'");

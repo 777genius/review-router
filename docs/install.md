@@ -11,7 +11,7 @@ The installer supports macOS and Linux shells first. It requires `gh`, `git`, an
 The generated workflow uses the latest pinned release tag by default:
 
 ```text
-777genius/review-router@v1.0.0
+777genius/review-router@v1.0.1
 ```
 
 Use `REVIEW_ROUTER_ACTION_REF_MODE=main` if you want the target repository to run the newest `main` branch on every workflow run. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.

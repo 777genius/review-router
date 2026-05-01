@@ -135,7 +135,7 @@ jobs:
           grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
 
       - name: Run ReviewRouter
-        uses: 777genius/review-router@v1.0.0
+        uses: 777genius/review-router@v1.0.1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}

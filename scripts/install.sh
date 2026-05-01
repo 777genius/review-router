@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 
 PRODUCT_NAME="review-router"
-LATEST_RELEASE_TAG="v1.0.0"
+LATEST_RELEASE_TAG="v1.0.1"
 DEFAULT_ACTION_REF_MODE="release"
 DEFAULT_RELEASE_ACTION_REF="777genius/review-router@$LATEST_RELEASE_TAG"
 DEFAULT_MAIN_ACTION_REF="777genius/review-router@main"
@@ -77,6 +77,34 @@ is_true() {
     1|true|TRUE|yes|YES|y|Y) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+read_interactive() {
+  local __var_name="$1"
+  if [ -r /dev/tty ]; then
+    IFS= read -r "${__var_name?}" < /dev/tty
+    return $?
+  fi
+  if [ -t 0 ]; then
+    IFS= read -r "${__var_name?}"
+    return $?
+  fi
+  return 1
+}
+
+ensure_interactive_input() {
+  if [ -r /dev/tty ] || [ -t 0 ]; then
+    return 0
+  fi
+  fatal "Interactive input is unavailable. Re-run from a terminal or set REVIEW_ROUTER_NON_INTERACTIVE=1 with the required REVIEW_ROUTER_* environment variables."
+}
+
+stty_interactive() {
+  if [ -r /dev/tty ]; then
+    stty "$@" < /dev/tty
+  else
+    stty "$@"
+  fi
 }
 
 require_cmd() {
@@ -200,12 +228,13 @@ prompt_text() {
     fatal "$var_name is required in non-interactive mode"
   fi
 
+  ensure_interactive_input
   if [ -n "$default_value" ]; then
     printf '%s [%s]: ' "$label" "$default_value" >&2
   else
     printf '%s: ' "$label" >&2
   fi
-  IFS= read -r answer
+  read_interactive answer || fatal "Could not read interactive input for: $label"
   if [ -z "$answer" ]; then
     answer="$default_value"
   fi
@@ -225,11 +254,15 @@ prompt_secret() {
     fatal "$var_name is required in non-interactive mode"
   fi
 
+  ensure_interactive_input
   printf '%s: ' "$label" >&2
-  stty_state="$(stty -g 2>/dev/null || true)"
-  stty -echo 2>/dev/null || true
-  IFS= read -r answer
-  [ -z "$stty_state" ] || stty "$stty_state" 2>/dev/null || true
+  stty_state="$(stty_interactive -g 2>/dev/null || true)"
+  stty_interactive -echo 2>/dev/null || true
+  read_interactive answer || {
+    [ -z "$stty_state" ] || stty_interactive "$stty_state" 2>/dev/null || true
+    fatal "Could not read interactive input for: $label"
+  }
+  [ -z "$stty_state" ] || stty_interactive "$stty_state" 2>/dev/null || true
   printf '\n' >&2
   [ -n "$answer" ] || fatal "$label is required"
   eval "$var_name=\"$answer\""
@@ -251,6 +284,7 @@ choose() {
     return
   fi
 
+  ensure_interactive_input
   log ""
   log "${BOLD}$prompt${NC}"
   i=1
@@ -261,7 +295,7 @@ choose() {
     i=$((i + 1))
   done
   printf 'Choose [%s]: ' "$default_value" >&2
-  IFS= read -r answer
+  read_interactive answer || fatal "Could not read interactive input for: $prompt"
   if [ -z "$answer" ]; then
     answer="$default_value"
   fi
@@ -323,8 +357,9 @@ confirm() {
   if is_true "$NON_INTERACTIVE"; then
     return 1
   fi
+  ensure_interactive_input
   printf '%s [y/N]: ' "$message" >&2
-  IFS= read -r answer
+  read_interactive answer || fatal "Could not read interactive input for confirmation"
   case "$answer" in
     y|Y|yes|YES) return 0 ;;
     *) return 1 ;;

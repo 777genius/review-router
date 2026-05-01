@@ -96,8 +96,8 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
-    expect(workflow).toContain('uses: 777genius/review-router@v1.0.1');
-    expect(result.stdout).toContain('Action ref: 777genius/review-router@v1.0.1');
+    expect(workflow).toContain('uses: 777genius/review-router@v1.0.2');
+    expect(result.stdout).toContain('Action ref: 777genius/review-router@v1.0.2');
   });
 
   it('keeps legacy AI_ROBOT_REVIEW environment aliases working', () => {

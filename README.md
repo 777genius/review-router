@@ -171,7 +171,7 @@ Then make `ReviewRouter / review` a required status check in branch protection.
 If you want an exact pinned release instead of the auto-updating stable major tag, use:
 
 ```yaml
-uses: 777genius/review-router@v1.0.1
+uses: 777genius/review-router@v1.0.2
 ```
 
 If you intentionally want the live branch, use:

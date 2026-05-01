@@ -1,6 +1,6 @@
 # AI Robot Review
 
-AI Robot Review is a GitHub Action for pull request review with Codex CLI, OpenAI API, or OpenRouter.
+AI Robot Review is a GitHub Action for pull request review with Codex CLI OAuth, Codex CLI API-key mode, or OpenRouter.
 
 Current focus: a practical PR reviewer that can run from GitHub Actions, post a PR summary, post a small number of inline findings, and optionally fail the check on serious issues. The Codex path is designed to use a ChatGPT subscription OAuth login instead of OpenAI API billing.
 
@@ -18,16 +18,17 @@ What has been tested end-to-end:
 - Duplicate suppression across reruns when the model rewrites the same finding or the line shifts slightly.
 - Blocking merge checks with `FAIL_ON_MAJOR=true` or `FAIL_ON_CRITICAL=true`.
 
-What should still be treated as experimental:
+Available but still experimental:
 
 - Multi-provider consensus beyond the simple one-provider Codex setup.
+- OpenAI API-key mode through Codex CLI and OpenRouter mode. The installer can generate these workflows, but the current hardened E2E path is Codex OAuth.
 - Code graph context on large mixed-language repos.
 - Analytics, learning, plugin, and self-hosted flows inherited from the upstream project.
 
 ## Core Features
 
 - **Codex subscription mode:** run reviews with Codex CLI OAuth from a ChatGPT subscription.
-- **API key mode:** use OpenAI API key or OpenRouter API key instead.
+- **API key modes:** use Codex CLI with `OPENAI_API_KEY`, or use OpenRouter with `OPENROUTER_API_KEY`.
 - **GitHub identity options:** post as `github-actions[bot]` or as your own GitHub App bot.
 - **Read-only agentic context:** Codex starts from the PR diff, then may inspect related repository files in a read-only sandbox.
 - **Strict JSON findings:** provider output is parsed into `{file,line,severity,title,message,suggestion}` before posting.
@@ -36,7 +37,7 @@ What should still be treated as experimental:
 - **PR description summary:** adds a generated `Summary`, selected files list, and walkthrough block while preserving author text above it.
 - **Merge gating:** fail the check for critical or major findings when configured.
 - **Large diff compaction:** compact very large, generated, lockfile, and migration diffs so they do not dominate the prompt.
-- **Secret handling:** fork PRs are skipped by default, Codex runs with a sanitized environment, and GitHub secrets are not printed.
+- **Secret handling:** fork PRs are skipped by default, Codex runs with a sanitized child-process environment, and workflows avoid printing secret values.
 
 ## Non-Goals For v1
 
@@ -44,7 +45,7 @@ What should still be treated as experimental:
 - No shared global branded GitHub App.
 - No automatic mutation of repository files.
 - No automatic deletion or moving of old inline discussions by default.
-- No claim that token or dollar cost is available for Codex subscription OAuth. For OAuth runs the UI reports `OAuth subscription` instead of API billing cost.
+- No claim that token or dollar cost is always available for Codex subscription OAuth. For OAuth runs the UI reports `OAuth subscription` instead of API billing cost.
 
 ## Quick Start
 
@@ -58,7 +59,7 @@ The installer:
 
 - detects or asks for the target `owner/repo`;
 - lets you choose `github-actions[bot]` or GitHub App bot identity;
-- lets you choose Codex subscription OAuth, OpenAI API key, or OpenRouter API key;
+- lets you choose Codex subscription OAuth, Codex CLI with OpenAI API key, or OpenRouter API key;
 - creates `.github/workflows/ai-robot-review.yml` on a setup branch;
 - opens a setup PR instead of pushing directly to the default branch.
 
@@ -171,9 +172,9 @@ Recommended variable:
 
 - `REVIEW_CODEX_MODEL=gpt-5.5`
 
-### OpenAI API Key
+### Codex CLI With OpenAI API Key
 
-Use this when shared automation should not depend on a personal Codex OAuth login.
+Use this when shared automation should not depend on a personal Codex OAuth login. This still runs through Codex CLI, but authenticates with `OPENAI_API_KEY`.
 
 Required secret:
 
@@ -204,6 +205,14 @@ Required secret:
 | `GRAPH_ENABLED` | `false` | Optional code graph context. Keep off until validated for your repo. |
 | `LEARNING_ENABLED` | `false` | Experimental feedback-learning path. |
 
+## Review Scope And Limits
+
+- The default production-friendly setup reviews the full PR diff on each run and relies on deduplication to avoid repeated inline comments.
+- It does not guarantee finding every bug. Treat it as an automated reviewer, not a replacement for required human review.
+- Inline comments can only be posted on changed diff lines. Findings that depend only on unchanged context may be summarized or omitted if they cannot be anchored safely.
+- Agentic context is read-only. Codex may inspect related files, but should not install dependencies, run tests, run builds, access network resources, or write files.
+- Large generated files, lockfiles, and migrations are compacted to protect prompt budget. This is intentional, but it means those files may receive less detailed review.
+
 ## Comment Deduplication
 
 AI Robot Review suppresses duplicate inline comments when a rerun reports the same issue again. The dedup check uses:
@@ -220,7 +229,7 @@ It intentionally does not delete or move existing inline discussions by default.
 - Do not run secret-backed review on untrusted fork PRs. The installer-generated workflow skips those by default.
 - GitHub Secrets values are hidden in the UI, but anyone who can change workflow files can attempt exfiltration. Protect `.github/workflows/**` with CODEOWNERS and branch protection.
 - For organizations, prefer organization-level selected-repository secrets so the Codex OAuth credential is only available to approved repos.
-- Codex provider runs with a sanitized environment and read-only sandbox. It should not receive `GITHUB_TOKEN`, `OPENROUTER_API_KEY`, or arbitrary `INPUT_*` variables.
+- The spawned Codex process receives only allowlisted environment variables such as `PATH`, `HOME`, temp variables, locale variables, `GITHUB_WORKSPACE`, and `OPENAI_API_KEY` when API-key mode is used. It should not receive `GITHUB_TOKEN`, `OPENROUTER_API_KEY`, or arbitrary `INPUT_*` variables.
 
 ## Development
 

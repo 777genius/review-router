@@ -1,5 +1,5 @@
 name: "AI Robot Review"
-description: "AI Robot Review pull request reviewer with hybrid deterministic context and LLM analysis"
+description: "AI Robot Review pull request reviewer that posts summaries, inline findings, and optional merge-blocking checks"
 author: "Keith Herrington"
 branding:
   icon: "check-circle"
@@ -20,9 +20,8 @@ inputs:
       - Previously: Defaulted to specific hardcoded providers
       - Now: Defaults to empty string (enables dynamic discovery)
 
-      DEFAULT (empty): Enables dynamic provider discovery - automatically selects best free models
-      from OpenRouter API (if OPENROUTER_API_KEY set), OpenCode CLI, and hardcoded fallbacks.
-      Well-tested and recommended for most users.
+      DEFAULT (empty): Uses provider discovery from configured credentials and available CLIs.
+      For the hardened Codex setup, prefer setting CODEX_MODEL and leaving this empty.
 
       CUSTOM: Override discovery with specific providers. Disables automatic fallback chain.
       Use when you need specific models or want predictable provider selection.
@@ -290,9 +289,9 @@ outputs:
   critical_count:
     description: "Critical findings count"
   cost_usd:
-    description: "Total cost in USD"
+    description: "Total API cost in USD when available; Codex OAuth subscription runs may report 0"
   total_cost:
-    description: "Total cost in USD (alias for cost_usd)"
+    description: "Total API cost in USD when available (alias for cost_usd)"
   ai_likelihood:
     description: "Average AI-generated likelihood"
 

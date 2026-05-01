@@ -1,0 +1,13 @@
+# ReviewRouter security-sensitive ownership rules.
+# Effective only when branch protection requires Code Owner reviews.
+
+.github/CODEOWNERS @777genius
+.github/workflows/** @777genius
+.github/review-router-hints.md @777genius
+
+action.yml @777genius
+scripts/install.sh @777genius
+src/** @777genius
+dist/** @777genius
+package.json @777genius
+package-lock.json @777genius

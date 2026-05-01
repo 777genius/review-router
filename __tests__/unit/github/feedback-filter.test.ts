@@ -303,6 +303,40 @@ describe('FeedbackFilter', () => {
       )).toBe(false);
     });
 
+    it('blocks semantic duplicates when the model shifts the line and rewrites the title', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'lib/app/chat/chats_page.dart',
+          line: 52,
+          body: [
+            '**🟡 Major - Deep links to hidden paid chats spin forever**',
+            '',
+            'When `hidePaidFeaturesInfo` is true, this branch removes every inaccessible course from `courseItems`, so a direct chat link can keep waiting forever.',
+          ].join('\n'),
+        },
+      ]);
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
+        data: [],
+      });
+
+      const state = await feedbackFilter.loadReviewCommentState(123);
+
+      expect(feedbackFilter.shouldPost(
+        {
+          path: 'lib/app/chat/chats_page.dart',
+          line: 54,
+          side: 'RIGHT',
+          body: [
+            '**🟡 Major - Direct links to hidden paid chats hang**',
+            '',
+            'When `hidePaidFeaturesInfo` is true this branch removes every unavailable paid course from `courseItems`, so opening a direct chat link hangs.',
+          ].join('\n'),
+        },
+        state
+      )).toBe(false);
+    });
+
     it('does not treat outdated AI Robot Review comments as already posted', async () => {
       mockOctokit.paginate.mockResolvedValue([
         {

@@ -17560,6 +17560,7 @@ function shouldPostSuggestion(finding, confidence, config) {
 var import_crypto2 = require("crypto");
 var INLINE_MARKER_RE = /<!--\s*ai-robot-review-inline:([a-f0-9]{16})\s*-->/i;
 var INLINE_MARKER_RE_GLOBAL = /<!--\s*ai-robot-review-inline:([a-f0-9]{16})\s*-->/gi;
+var MAX_NEARBY_LINE_DISTANCE = 12;
 function signatureFromInlineComment(path13, line, body) {
   const cleanBody = stripInlineFingerprintMarkers(body);
   const severity = extractSeverity(cleanBody);
@@ -17604,6 +17605,35 @@ function isAiRobotInlineComment(body) {
     body.trim()
   );
 }
+function isLikelySameInlineFinding(existing, candidate) {
+  const existingPath = (existing.path || "").toLowerCase();
+  const candidatePath = (candidate.path || "").toLowerCase();
+  if (!existingPath || existingPath !== candidatePath) return false;
+  const existingBody = stripInlineFingerprintMarkers(existing.body);
+  const candidateBody = stripInlineFingerprintMarkers(candidate.body);
+  const existingSeverity = extractSeverity(existingBody);
+  const candidateSeverity = extractSeverity(candidateBody);
+  if (existingSeverity && candidateSeverity && existingSeverity !== candidateSeverity) {
+    return false;
+  }
+  const existingLine = existing.line ?? 0;
+  const candidateLine = candidate.line ?? 0;
+  const lineDistance = Math.abs(existingLine - candidateLine);
+  const nearbyLine = lineDistance <= MAX_NEARBY_LINE_DISTANCE;
+  const existingTitleTokens = tokenize(extractTitle(existingBody));
+  const candidateTitleTokens = tokenize(extractTitle(candidateBody));
+  const titleSimilarity = diceSimilarity(existingTitleTokens, candidateTitleTokens);
+  const existingTokens = tokenize(semanticText(existingBody));
+  const candidateTokens = tokenize(semanticText(candidateBody));
+  const bodySimilarity = diceSimilarity(existingTokens, candidateTokens);
+  const existingCodeTokens = extractCodeTokens(existingBody);
+  const candidateCodeTokens = extractCodeTokens(candidateBody);
+  const sharedCodeTokens = intersectionSize(existingCodeTokens, candidateCodeTokens);
+  if (nearbyLine && titleSimilarity >= 0.45) return true;
+  if (nearbyLine && bodySimilarity >= 0.38) return true;
+  if (nearbyLine && sharedCodeTokens > 0 && bodySimilarity >= 0.24) return true;
+  return titleSimilarity >= 0.6 && bodySimilarity >= 0.55;
+}
 function normalizeForSignature(value) {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -17611,6 +17641,85 @@ function extractSeverity(body) {
   const match2 = body.match(/\*\*(?:[^\w*`]*\s*)?(critical|major|minor)\s*-/i);
   return match2?.[1]?.toLowerCase() ?? null;
 }
+function extractTitle(body) {
+  const titleMatch = body.match(/\*\*(.+?)\*\*/);
+  return titleMatch?.[1] ?? body.split("\n")[0] ?? "";
+}
+function semanticText(body) {
+  return body.replace(/```[\s\S]*?```/g, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/\*\*Severity:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Suggestion:\*\*[\s\S]*?(?:\n\n|$)/gi, " ");
+}
+function tokenize(value) {
+  const normalized = splitIdentifiers(value).toLowerCase().replace(/[^a-z0-9_]+/g, " ");
+  const tokens = normalized.split(/\s+/).map((token) => token.trim()).filter((token) => token.length >= 3 && !STOPWORDS.has(token));
+  return new Set(tokens);
+}
+function extractCodeTokens(body) {
+  const tokens = /* @__PURE__ */ new Set();
+  for (const match2 of body.matchAll(/`([^`\n]{2,120})`/g)) {
+    for (const token of tokenize(match2[1])) {
+      tokens.add(token);
+    }
+  }
+  return tokens;
+}
+function splitIdentifiers(value) {
+  return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_./:-]+/g, " ");
+}
+function diceSimilarity(a, b) {
+  if (a.size === 0 || b.size === 0) return 0;
+  return 2 * intersectionSize(a, b) / (a.size + b.size);
+}
+function intersectionSize(a, b) {
+  let count = 0;
+  for (const token of a) {
+    if (b.has(token)) count += 1;
+  }
+  return count;
+}
+var STOPWORDS = /* @__PURE__ */ new Set([
+  "about",
+  "after",
+  "also",
+  "and",
+  "are",
+  "because",
+  "before",
+  "branch",
+  "but",
+  "can",
+  "cannot",
+  "comment",
+  "could",
+  "does",
+  "every",
+  "file",
+  "for",
+  "from",
+  "has",
+  "have",
+  "into",
+  "line",
+  "lines",
+  "major",
+  "minor",
+  "must",
+  "not",
+  "only",
+  "return",
+  "should",
+  "that",
+  "the",
+  "this",
+  "true",
+  "use",
+  "uses",
+  "using",
+  "when",
+  "where",
+  "will",
+  "with",
+  "would"
+]);
 
 // src/github/comment-poster.ts
 var CommentPoster = class _CommentPoster {
@@ -17722,8 +17831,9 @@ ${content.substring(0, 500)}...`);
     if (!body) return false;
     return body.includes(_CommentPoster.BOT_COMMENT_MARKER) || _CommentPoster.LEGACY_BOT_COMMENT_MARKERS.some((marker) => body.includes(marker));
   }
-  async loadActiveInlineCommentKeys(prNumber) {
+  async loadActiveInlineComments(prNumber) {
     const keys = /* @__PURE__ */ new Set();
+    const activeComments = [];
     const { octokit, owner, repo } = this.client;
     try {
       const comments = await octokit.paginate(
@@ -17739,6 +17849,11 @@ ${content.substring(0, 500)}...`);
         const activeLine = comment.line;
         const body = comment.body || "";
         if (activeLine == null || !isAiRobotInlineComment(body)) continue;
+        activeComments.push({
+          path: comment.path,
+          line: activeLine,
+          body
+        });
         keys.add(signatureFromInlineComment(comment.path, activeLine, body));
         keys.add(fingerprintFromInlineComment(comment.path, activeLine, body));
         const marker = extractInlineFingerprint(body);
@@ -17747,11 +17862,13 @@ ${content.substring(0, 500)}...`);
     } catch (error2) {
       logger.warn("Failed to load existing inline comments for deduplication", error2);
     }
-    return keys;
+    return { keys, comments: activeComments };
   }
-  hasInlineDuplicate(activeKeys, path13, line, body) {
+  hasInlineDuplicate(activeComments, path13, line, body) {
     const marker = extractInlineFingerprint(body);
-    return activeKeys.has(signatureFromInlineComment(path13, line, body)) || activeKeys.has(fingerprintFromInlineComment(path13, line, body)) || (marker ? activeKeys.has(marker) : false);
+    return activeComments.keys.has(signatureFromInlineComment(path13, line, body)) || activeComments.keys.has(fingerprintFromInlineComment(path13, line, body)) || (marker ? activeComments.keys.has(marker) : false) || activeComments.comments.some(
+      (comment) => isLikelySameInlineFinding(comment, { path: path13, line, body })
+    );
   }
   /**
    * Validate and filter suggestions through quality pipeline.
@@ -17830,7 +17947,7 @@ ${content.substring(0, 500)}...`);
   }
   async postInline(prNumber, comments, files, _headSha) {
     if (comments.length === 0) return;
-    const activeInlineKeys = this.dryRun ? /* @__PURE__ */ new Set() : await this.loadActiveInlineCommentKeys(prNumber);
+    const activeInlineComments = this.dryRun ? { keys: /* @__PURE__ */ new Set(), comments: [] } : await this.loadActiveInlineComments(prNumber);
     const filesWithAdditions = files.filter((f) => !isDeletionOnlyFile(f));
     const filesWithAdditionsSet = new Set(filesWithAdditions.map((f) => f.filename));
     const positionMaps = /* @__PURE__ */ new Map();
@@ -17901,14 +18018,19 @@ ${content.substring(0, 500)}...`);
           side: c.side || "RIGHT",
           body: appendInlineFingerprintMarker(c.body, c.path, c.line)
         };
-        if (this.hasInlineDuplicate(activeInlineKeys, c.path, c.line, apiComment.body)) {
+        if (this.hasInlineDuplicate(activeInlineComments, c.path, c.line, apiComment.body)) {
           logger.info(`Skipping duplicate active inline comment at ${c.path}:${c.line}`);
           return null;
         }
-        activeInlineKeys.add(signatureFromInlineComment(c.path, c.line, apiComment.body));
-        activeInlineKeys.add(fingerprintFromInlineComment(c.path, c.line, apiComment.body));
+        activeInlineComments.keys.add(signatureFromInlineComment(c.path, c.line, apiComment.body));
+        activeInlineComments.keys.add(fingerprintFromInlineComment(c.path, c.line, apiComment.body));
         const marker = extractInlineFingerprint(apiComment.body);
-        if (marker) activeInlineKeys.add(marker);
+        if (marker) activeInlineComments.keys.add(marker);
+        activeInlineComments.comments.push({
+          path: c.path,
+          line: c.line,
+          body: apiComment.body
+        });
         const startLine = c.start_line;
         if (startLine !== void 0 && startLine !== c.line) {
           apiComment.start_line = startLine;
@@ -19243,6 +19365,8 @@ var FeedbackFilter = class {
     const { octokit, owner, repo } = this.client;
     const suppressed = /* @__PURE__ */ new Set();
     const alreadyPosted = /* @__PURE__ */ new Set();
+    const suppressedComments = [];
+    const alreadyPostedComments = [];
     try {
       const comments = await octokit.paginate(
         octokit.rest.pulls.listReviewComments,
@@ -19262,6 +19386,11 @@ var FeedbackFilter = class {
         if (isAiRobotInlineComment(body) && activeLine != null) {
           alreadyPosted.add(signature);
           if (marker) alreadyPosted.add(marker);
+          alreadyPostedComments.push({
+            path: comment.path,
+            line: activeLine,
+            body
+          });
         }
         try {
           const reactions = await octokit.rest.reactions.listForPullRequestReviewComment({
@@ -19274,6 +19403,11 @@ var FeedbackFilter = class {
           if (hasThumbsDown) {
             suppressed.add(signature);
             if (marker) suppressed.add(marker);
+            suppressedComments.push({
+              path: comment.path,
+              line,
+              body
+            });
             if (this.providerWeightTracker) {
               const providerMatch = comment.body?.match(
                 /\*\*Provider:\*\* `([^`]+)`/
@@ -19297,7 +19431,7 @@ var FeedbackFilter = class {
         error2
       );
     }
-    return { suppressed, alreadyPosted };
+    return { suppressed, alreadyPosted, suppressedComments, alreadyPostedComments };
   }
   shouldPost(comment, state) {
     const signature = this.signatureFromComment(
@@ -19313,7 +19447,11 @@ var FeedbackFilter = class {
     if (state instanceof Set) {
       return !state.has(signature) && !state.has(fingerprint);
     }
-    return !state.suppressed.has(signature) && !state.suppressed.has(fingerprint) && !state.alreadyPosted.has(signature) && !state.alreadyPosted.has(fingerprint);
+    return !state.suppressed.has(signature) && !state.suppressed.has(fingerprint) && !state.alreadyPosted.has(signature) && !state.alreadyPosted.has(fingerprint) && !state.suppressedComments.some(
+      (existing) => isLikelySameInlineFinding(existing, comment)
+    ) && !state.alreadyPostedComments.some(
+      (existing) => isLikelySameInlineFinding(existing, comment)
+    );
   }
   signatureFromComment(path13, line, body) {
     return signatureFromInlineComment(path13, line, body);

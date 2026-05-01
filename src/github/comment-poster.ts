@@ -12,9 +12,16 @@ import {
   appendInlineFingerprintMarker,
   extractInlineFingerprint,
   fingerprintFromInlineComment,
+  InlineCommentReference,
   isAiRobotInlineComment,
+  isLikelySameInlineFinding,
   signatureFromInlineComment,
 } from './comment-fingerprint';
+
+interface ActiveInlineComments {
+  keys: Set<string>;
+  comments: InlineCommentReference[];
+}
 
 export class CommentPoster {
   private static readonly MAX_COMMENT_SIZE = 60_000;
@@ -141,8 +148,9 @@ export class CommentPoster {
       || CommentPoster.LEGACY_BOT_COMMENT_MARKERS.some(marker => body.includes(marker));
   }
 
-  private async loadActiveInlineCommentKeys(prNumber: number): Promise<Set<string>> {
+  private async loadActiveInlineComments(prNumber: number): Promise<ActiveInlineComments> {
     const keys = new Set<string>();
+    const activeComments: InlineCommentReference[] = [];
     const { octokit, owner, repo } = this.client;
 
     try {
@@ -161,6 +169,11 @@ export class CommentPoster {
         const body = comment.body || '';
         if (activeLine == null || !isAiRobotInlineComment(body)) continue;
 
+        activeComments.push({
+          path: comment.path,
+          line: activeLine,
+          body,
+        });
         keys.add(signatureFromInlineComment(comment.path, activeLine, body));
         keys.add(fingerprintFromInlineComment(comment.path, activeLine, body));
 
@@ -171,20 +184,23 @@ export class CommentPoster {
       logger.warn('Failed to load existing inline comments for deduplication', error as Error);
     }
 
-    return keys;
+    return { keys, comments: activeComments };
   }
 
   private hasInlineDuplicate(
-    activeKeys: Set<string>,
+    activeComments: ActiveInlineComments,
     path: string,
     line: number,
     body: string
   ): boolean {
     const marker = extractInlineFingerprint(body);
     return (
-      activeKeys.has(signatureFromInlineComment(path, line, body)) ||
-      activeKeys.has(fingerprintFromInlineComment(path, line, body)) ||
-      (marker ? activeKeys.has(marker) : false)
+      activeComments.keys.has(signatureFromInlineComment(path, line, body)) ||
+      activeComments.keys.has(fingerprintFromInlineComment(path, line, body)) ||
+      (marker ? activeComments.keys.has(marker) : false) ||
+      activeComments.comments.some(comment =>
+        isLikelySameInlineFinding(comment, { path, line, body })
+      )
     );
   }
 
@@ -294,9 +310,9 @@ export class CommentPoster {
 
   async postInline(prNumber: number, comments: InlineComment[], files: FileChange[], _headSha?: string): Promise<void> {
     if (comments.length === 0) return;
-    const activeInlineKeys = this.dryRun
-      ? new Set<string>()
-      : await this.loadActiveInlineCommentKeys(prNumber);
+    const activeInlineComments = this.dryRun
+      ? { keys: new Set<string>(), comments: [] }
+      : await this.loadActiveInlineComments(prNumber);
 
     // Filter out deletion-only files (no suggestions possible)
     const filesWithAdditions = files.filter(f => !isDeletionOnlyFile(f));
@@ -389,15 +405,20 @@ export class CommentPoster {
           body: appendInlineFingerprintMarker(c.body, c.path, c.line),
         };
 
-        if (this.hasInlineDuplicate(activeInlineKeys, c.path, c.line, apiComment.body)) {
+        if (this.hasInlineDuplicate(activeInlineComments, c.path, c.line, apiComment.body)) {
           logger.info(`Skipping duplicate active inline comment at ${c.path}:${c.line}`);
           return null;
         }
 
-        activeInlineKeys.add(signatureFromInlineComment(c.path, c.line, apiComment.body));
-        activeInlineKeys.add(fingerprintFromInlineComment(c.path, c.line, apiComment.body));
+        activeInlineComments.keys.add(signatureFromInlineComment(c.path, c.line, apiComment.body));
+        activeInlineComments.keys.add(fingerprintFromInlineComment(c.path, c.line, apiComment.body));
         const marker = extractInlineFingerprint(apiComment.body);
-        if (marker) activeInlineKeys.add(marker);
+        if (marker) activeInlineComments.keys.add(marker);
+        activeInlineComments.comments.push({
+          path: c.path,
+          line: c.line,
+          body: apiComment.body,
+        });
 
         const startLine = (c as any).start_line;
         if (startLine !== undefined && startLine !== c.line) {

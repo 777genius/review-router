@@ -5,13 +5,17 @@ import { ProviderWeightTracker } from '../learning/provider-weights';
 import {
   extractInlineFingerprint,
   fingerprintFromInlineComment,
+  InlineCommentReference,
   isAiRobotInlineComment,
+  isLikelySameInlineFinding,
   signatureFromInlineComment,
 } from './comment-fingerprint';
 
 export interface ReviewCommentState {
   suppressed: Set<string>;
   alreadyPosted: Set<string>;
+  suppressedComments: InlineCommentReference[];
+  alreadyPostedComments: InlineCommentReference[];
 }
 
 export class FeedbackFilter {
@@ -28,6 +32,8 @@ export class FeedbackFilter {
     const { octokit, owner, repo } = this.client;
     const suppressed = new Set<string>();
     const alreadyPosted = new Set<string>();
+    const suppressedComments: InlineCommentReference[] = [];
+    const alreadyPostedComments: InlineCommentReference[] = [];
 
     try {
       const comments = await octokit.paginate(
@@ -53,6 +59,11 @@ export class FeedbackFilter {
         if (isAiRobotInlineComment(body) && activeLine != null) {
           alreadyPosted.add(signature);
           if (marker) alreadyPosted.add(marker);
+          alreadyPostedComments.push({
+            path: comment.path,
+            line: activeLine,
+            body,
+          });
         }
 
         try {
@@ -67,6 +78,11 @@ export class FeedbackFilter {
           if (hasThumbsDown) {
             suppressed.add(signature);
             if (marker) suppressed.add(marker);
+            suppressedComments.push({
+              path: comment.path,
+              line,
+              body,
+            });
 
             // Record negative feedback if weight tracker available
             if (this.providerWeightTracker) {
@@ -93,7 +109,7 @@ export class FeedbackFilter {
       );
     }
 
-    return { suppressed, alreadyPosted };
+    return { suppressed, alreadyPosted, suppressedComments, alreadyPostedComments };
   }
 
   shouldPost(
@@ -119,7 +135,13 @@ export class FeedbackFilter {
       !state.suppressed.has(signature) &&
       !state.suppressed.has(fingerprint) &&
       !state.alreadyPosted.has(signature) &&
-      !state.alreadyPosted.has(fingerprint)
+      !state.alreadyPosted.has(fingerprint) &&
+      !state.suppressedComments.some(existing =>
+        isLikelySameInlineFinding(existing, comment)
+      ) &&
+      !state.alreadyPostedComments.some(existing =>
+        isLikelySameInlineFinding(existing, comment)
+      )
     );
   }
 

@@ -197,6 +197,66 @@ describe('CommentPoster', () => {
       );
     });
 
+    it('skips semantic duplicate inline comments after small line shifts and model rewrites', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'lib/app/chat/chats_page.dart',
+          line: 52,
+          body: [
+            '**🟡 Major - Deep links to hidden paid chats spin forever**',
+            '',
+            '**Severity:** 🟡 **Major** - should fix before merge; correctness risk.',
+            '',
+            'When `hidePaidFeaturesInfo` is true, this branch removes every inaccessible course from `courseItems`, so a direct chat link can keep waiting forever.',
+            '',
+            '<!-- ai-robot-review-inline:legacy -->',
+          ].join('\n'),
+        },
+      ]);
+
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'lib/app/chat/chats_page.dart',
+          line: 54,
+          side: 'RIGHT' as const,
+          body: [
+            '**🟡 Major - Direct links to hidden paid chats hang**',
+            '',
+            '**Severity:** 🟡 **Major** - should fix before merge; correctness risk.',
+            '',
+            'When `hidePaidFeaturesInfo` is true this branch removes every unavailable paid course from `courseItems`, so opening a direct chat link hangs.',
+          ].join('\n'),
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'lib/app/chat/chats_page.dart',
+          status: 'modified',
+          additions: 5,
+          deletions: 0,
+          changes: 5,
+          patch: [
+            '@@ -50,3 +50,8 @@',
+            ' context line',
+            '+final courseItems = courses.where((course) => course.available).toList();',
+            '+if (hidePaidFeaturesInfo) {',
+            '+  courseItems.removeWhere((course) => !course.isFree);',
+            '+}',
+            '+return courseItems;',
+          ].join('\n'),
+        },
+      ];
+
+      await poster.postInline(123, comments, files);
+
+      expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        'Skipping duplicate active inline comment at lib/app/chat/chats_page.dart:53'
+      );
+    });
+
     it('does not treat outdated inline comments as active duplicates', async () => {
       mockOctokit.paginate.mockResolvedValue([
         {

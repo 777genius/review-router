@@ -1,6 +1,8 @@
 # ReviewRouter
 
-ReviewRouter is a GitHub Action for pull request review with Codex CLI OAuth, Codex CLI API-key mode, or OpenRouter.
+ReviewRouter is a GitHub Action for pull request review with Codex, OpenRouter, and experimental CLI providers for Claude Code, Gemini, and OpenCode.
+
+The production-focused installer currently hardens the Codex and OpenRouter paths first. The other provider adapters are still available through `REVIEW_PROVIDERS`, but they are not yet the recommended zero-config setup path.
 
 Current focus: a practical PR reviewer that can run from GitHub Actions, post a PR summary, post a small number of inline findings, and optionally fail the check on serious issues. The Codex path is designed to use a ChatGPT subscription OAuth login instead of OpenAI API billing.
 
@@ -22,13 +24,13 @@ The installer:
 - detects or asks for the target `owner/repo`;
 - lets you choose `github-actions[bot]` or GitHub App bot identity;
 - lets you choose Codex subscription OAuth, Codex CLI with OpenAI API key, or OpenRouter API key;
-- lets you choose a pinned latest release tag or live `main` for the generated workflow;
+- lets you choose stable `v1`, a pinned exact release tag, or live `main` for the generated workflow;
 - creates `.github/workflows/review-router.yml` on a setup branch;
 - opens a setup PR instead of pushing directly to the default branch.
 
 See [docs/install.md](./docs/install.md) for organization-level secrets, selected repositories, GitHub App setup, and security notes.
 
-By default, the generated workflow uses the latest release tag for stability. If you want a repository to always run the newest `main` code, set `REVIEW_ROUTER_ACTION_REF_MODE=main` when installing.
+By default, the generated workflow uses `777genius/review-router@v1`, a stable major tag that moves to the latest compatible v1 release. Use `REVIEW_ROUTER_ACTION_REF_MODE=release` for an exact pinned tag, or `REVIEW_ROUTER_ACTION_REF_MODE=main` for the live branch.
 
 ## Status
 
@@ -47,7 +49,8 @@ What has been tested end-to-end:
 Available but still experimental:
 
 - Multi-provider consensus beyond the simple one-provider Codex setup.
-- OpenAI API-key mode through Codex CLI and OpenRouter mode. The installer can generate these workflows, but the current hardened E2E path is Codex OAuth.
+- OpenAI API-key mode through Codex CLI and OpenRouter mode. The installer can generate these workflows, but the most hardened E2E path is Codex OAuth.
+- Claude Code, Gemini CLI, and OpenCode adapters. They exist in the engine, but still need the same read-only sandboxing, strict schema enforcement, env sanitization, installer credential setup, and real PR E2E coverage as the Codex path.
 - Code graph context on large mixed-language repos.
 - Analytics, learning, plugin, and self-hosted flows inherited from the upstream project.
 
@@ -135,7 +138,7 @@ jobs:
           grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
 
       - name: Run ReviewRouter
-        uses: 777genius/review-router@v1.0.1
+        uses: 777genius/review-router@v1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
@@ -165,7 +168,13 @@ FAIL_ON_MAJOR: 'true'
 
 Then make `ReviewRouter / review` a required status check in branch protection.
 
-If you intentionally want the live branch instead of the pinned release, use:
+If you want an exact pinned release instead of the auto-updating stable major tag, use:
+
+```yaml
+uses: 777genius/review-router@v1.0.1
+```
+
+If you intentionally want the live branch, use:
 
 ```yaml
 uses: 777genius/review-router@main

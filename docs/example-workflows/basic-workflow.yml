@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 0
 
       - name: ReviewRouter
-        uses: 777genius/review-router@v1.0.1
+        uses: 777genius/review-router@v1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

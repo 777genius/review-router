@@ -8,13 +8,13 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
 
 The installer supports macOS and Linux shells first. It requires `gh`, `git`, and `curl`. GitHub App manifest setup uses `python3` when available; without `python3`, the installer prints manual App setup instructions.
 
-The generated workflow uses the latest pinned release tag by default:
+The generated workflow uses the stable major tag by default:
 
 ```text
-777genius/review-router@v1.0.1
+777genius/review-router@v1
 ```
 
-Use `REVIEW_ROUTER_ACTION_REF_MODE=main` if you want the target repository to run the newest `main` branch on every workflow run. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
+`@v1` is moved to the latest compatible stable v1 release. Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.1`. Use `REVIEW_ROUTER_ACTION_REF_MODE=main` if you want the target repository to run the newest `main` branch on every workflow run. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
 
 ## Quick start
 

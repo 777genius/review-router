@@ -50,8 +50,8 @@ describe('review-router curl installer e2e', () => {
 
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('name: ReviewRouter');
-    expect(workflow).toContain('uses: 777genius/review-router@v1.0.1');
-    expect(result.stdout).toContain('Action ref: 777genius/review-router@v1.0.1');
+    expect(workflow).toContain('uses: 777genius/review-router@v1');
+    expect(result.stdout).toContain('Action ref: 777genius/review-router@v1');
     expect(workflow).toContain('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '3'");
@@ -83,6 +83,21 @@ describe('review-router curl installer e2e', () => {
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('uses: 777genius/review-router@main');
     expect(result.stdout).toContain('Action ref: 777genius/review-router@main');
+  });
+
+  it('can generate an exact pinned release workflow when requested', () => {
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'minimal',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_ACTION_REF_MODE: 'release',
+    });
+
+    expect(result.status).toBe(0);
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain('uses: 777genius/review-router@v1.0.1');
+    expect(result.stdout).toContain('Action ref: 777genius/review-router@v1.0.1');
   });
 
   it('keeps legacy AI_ROBOT_REVIEW environment aliases working', () => {

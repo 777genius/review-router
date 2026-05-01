@@ -36,7 +36,7 @@ function createPR(overrides: Partial<PRContext> = {}): PRContext {
           '+        env:',
           '+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}',
           '+      - name: Run ReviewRouter',
-          '+        uses: 777genius/multi-provider-code-review@main',
+          '+        uses: 777genius/review-router@main',
           '+        with:',
           '+          CODEX_MODEL: gpt-5.5',
           '+          CODEX_REASONING_EFFORT: medium',

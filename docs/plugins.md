@@ -607,7 +607,7 @@ async review(prompt, timeoutMs) {
 
 For plugin development help:
 - Example plugins: `src/plugins/example-plugin.ts`
-- GitHub Issues: https://github.com/777genius/multi-provider-code-review/issues
+- GitHub Issues: https://github.com/777genius/review-router/issues
 - Provider interface: `src/providers/base.ts`
 
 ## License

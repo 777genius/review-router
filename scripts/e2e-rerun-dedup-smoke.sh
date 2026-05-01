@@ -98,7 +98,7 @@ jobs:
           printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
           chmod 600 ~/.codex/auth.json
       - name: Run ReviewRouter
-        uses: 777genius/multi-provider-code-review@main
+        uses: 777genius/review-router@main
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}

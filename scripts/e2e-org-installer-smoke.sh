@@ -6,8 +6,8 @@
 set -Eeuo pipefail
 
 ORG="${REVIEW_ROUTER_E2E_ORG:-${1:-}}"
-ACTION_REF="${REVIEW_ROUTER_ACTION_REF:-777genius/multi-provider-code-review@main}"
-INSTALL_SCRIPT_URL="${REVIEW_ROUTER_INSTALL_SCRIPT_URL:-https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh}"
+ACTION_REF="${REVIEW_ROUTER_ACTION_REF:-777genius/review-router@main}"
+INSTALL_SCRIPT_URL="${REVIEW_ROUTER_INSTALL_SCRIPT_URL:-https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh}"
 REPO_PREFIX="${REVIEW_ROUTER_E2E_REPO_PREFIX:-review-router-org-e2e}"
 KEEP_REPO="${REVIEW_ROUTER_E2E_KEEP_REPO:-0}"
 SKIP_DELETE="${REVIEW_ROUTER_E2E_SKIP_DELETE:-0}"

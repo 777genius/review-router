@@ -41,7 +41,7 @@ Curl installer for adding `review-router` to a target GitHub repository.
 
 **Usage:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | bash
 ```
 
 See [`docs/install.md`](../docs/install.md) for identity modes, auth modes, and non-interactive setup examples.

@@ -3,7 +3,7 @@
 
 # Build arguments for metadata
 ARG BUILD_DATE
-ARG VERSION=0.3.0-alpha.1
+ARG VERSION=0.3.0-alpha.2
 
 # Use node:20-alpine for Docker builds (pinned to Node.js v20.x LTS, not "latest")
 # Node.js 20 is the active LTS version with long-term support until 2026-04-30
@@ -38,13 +38,13 @@ FROM node:20-alpine
 
 # Pass build arguments to production stage
 ARG BUILD_DATE
-ARG VERSION=0.3.0-alpha.1
+ARG VERSION=0.3.0-alpha.2
 
 # Add metadata labels (OCI standard)
 LABEL org.opencontainers.image.title="ReviewRouter"
 LABEL org.opencontainers.image.description="AI-powered code review with multiple LLM providers"
 LABEL org.opencontainers.image.vendor="ReviewRouter"
-LABEL org.opencontainers.image.source="https://github.com/777genius/multi-provider-code-review"
+LABEL org.opencontainers.image.source="https://github.com/777genius/review-router"
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 

@@ -50,8 +50,8 @@ describe('review-router curl installer e2e', () => {
 
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('name: ReviewRouter');
-    expect(workflow).toContain('uses: 777genius/multi-provider-code-review@v0.3.0-alpha.1');
-    expect(result.stdout).toContain('Action ref: 777genius/multi-provider-code-review@v0.3.0-alpha.1');
+    expect(workflow).toContain('uses: 777genius/review-router@v0.3.0-alpha.2');
+    expect(result.stdout).toContain('Action ref: 777genius/review-router@v0.3.0-alpha.2');
     expect(workflow).toContain('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '3'");
@@ -81,8 +81,8 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
-    expect(workflow).toContain('uses: 777genius/multi-provider-code-review@main');
-    expect(result.stdout).toContain('Action ref: 777genius/multi-provider-code-review@main');
+    expect(workflow).toContain('uses: 777genius/review-router@main');
+    expect(result.stdout).toContain('Action ref: 777genius/review-router@main');
   });
 
   it('keeps legacy AI_ROBOT_REVIEW environment aliases working', () => {
@@ -107,7 +107,7 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     const workflow = workflowText(path.join(workdir, '.github/workflows/review-router.yml'));
-    expect(workflow).toContain('uses: 777genius/multi-provider-code-review@main');
+    expect(workflow).toContain('uses: 777genius/review-router@main');
     expect(result.stdout).toContain('ReviewRouter setup complete');
   });
 

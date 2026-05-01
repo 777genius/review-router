@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # review-router installer
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | bash
 
 set -Eeuo pipefail
 
 PRODUCT_NAME="review-router"
-LATEST_RELEASE_TAG="v0.3.0-alpha.1"
+LATEST_RELEASE_TAG="v0.3.0-alpha.2"
 DEFAULT_ACTION_REF_MODE="release"
-DEFAULT_RELEASE_ACTION_REF="777genius/multi-provider-code-review@$LATEST_RELEASE_TAG"
-DEFAULT_MAIN_ACTION_REF="777genius/multi-provider-code-review@main"
+DEFAULT_RELEASE_ACTION_REF="777genius/review-router@$LATEST_RELEASE_TAG"
+DEFAULT_MAIN_ACTION_REF="777genius/review-router@main"
 DEFAULT_BRANCH_NAME="review-router/setup"
 WORKFLOW_PATH=".github/workflows/review-router.yml"
 CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
@@ -586,7 +586,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             callback = f'http://127.0.0.1:{self.server.server_address[1]}/callback'
             manifest = {
                 'name': app_name,
-                'url': 'https://github.com/777genius/multi-provider-code-review',
+                'url': 'https://github.com/777genius/review-router',
                 'description': 'ReviewRouter posts Codex-powered pull request reviews from a dedicated GitHub App bot identity.',
                 'public': False,
                 'redirect_url': callback,
@@ -1059,7 +1059,7 @@ main() {
 
   log ""
   ok "ReviewRouter setup complete"
-  log "Docs: https://github.com/777genius/multi-provider-code-review/blob/main/docs/install.md"
+  log "Docs: https://github.com/777genius/review-router/blob/main/docs/install.md"
 }
 
 main "$@"

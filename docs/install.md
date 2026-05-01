@@ -3,7 +3,7 @@
 ReviewRouter can be installed into any GitHub repository with a single `curl | bash` command. The installer writes a pull request workflow, stores the required repository secrets/variables, and opens a setup PR instead of pushing directly to the default branch.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | bash
 ```
 
 The installer supports macOS and Linux shells first. It requires `gh`, `git`, and `curl`. GitHub App manifest setup uses `python3` when available; without `python3`, the installer prints manual App setup instructions.
@@ -11,7 +11,7 @@ The installer supports macOS and Linux shells first. It requires `gh`, `git`, an
 The generated workflow uses the latest pinned release tag by default:
 
 ```text
-777genius/multi-provider-code-review@v0.3.0-alpha.1
+777genius/review-router@v0.3.0-alpha.2
 ```
 
 Use `REVIEW_ROUTER_ACTION_REF_MODE=main` if you want the target repository to run the newest `main` branch on every workflow run. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
@@ -23,7 +23,7 @@ Use `REVIEW_ROUTER_ACTION_REF_MODE=main` if you want the target repository to ru
 Fast setup for a single repository. Secrets and variables are stored on that repository only.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
   REVIEW_ROUTER_REPO=owner/repo \
   REVIEW_ROUTER_SECRET_SCOPE=repo \
   REVIEW_ROUTER_IDENTITY=actions \
@@ -43,7 +43,7 @@ For smoke tests, use a disposable test organization/repository or `REVIEW_ROUTER
 ```bash
 gh auth refresh -s admin:org
 
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
   REVIEW_ROUTER_REPO=your-org/repo-a \
   REVIEW_ROUTER_SECRET_SCOPE=org \
   REVIEW_ROUTER_ORG=your-org \
@@ -78,7 +78,7 @@ The script opens a temporary PR with a known review fixture, waits for the first
 For teams that do not want to store a personal Codex OAuth session:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
   REVIEW_ROUTER_REPO=owner/repo \
   REVIEW_ROUTER_SECRET_SCOPE=repo \
   REVIEW_ROUTER_IDENTITY=actions \
@@ -93,7 +93,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 Use this when you deliberately want every workflow run to pull the newest reviewer code from `main`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
   REVIEW_ROUTER_REPO=owner/repo \
   REVIEW_ROUTER_ACTION_REF_MODE=main \
   REVIEW_ROUTER_SECRET_SCOPE=repo \
@@ -123,7 +123,7 @@ Secrets are never deleted automatically. Existing secrets and variables are over
 `org` scope always uses selected repositories. It does not grant access to every repository in the organization.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
   REVIEW_ROUTER_REPO=your-org/repo-a \
   REVIEW_ROUTER_SECRET_SCOPE=org \
   REVIEW_ROUTER_ORG=your-org \
@@ -241,7 +241,7 @@ This keeps the safer `safe` review depth, but makes Major findings block the pul
 ### GitHub App bot + Codex subscription
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
   REVIEW_ROUTER_REPO=owner/repo \
   REVIEW_ROUTER_IDENTITY=app \
   REVIEW_ROUTER_AUTH=codex \
@@ -253,7 +253,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 ### Blocking production gate
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
   REVIEW_ROUTER_REPO=owner/repo \
   REVIEW_ROUTER_IDENTITY=app \
   REVIEW_ROUTER_AUTH=codex \
@@ -267,7 +267,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 ### GitHub App bot + Codex subscription using org selected-repo secrets
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
   REVIEW_ROUTER_REPO=your-org/repo-a \
   REVIEW_ROUTER_SECRET_SCOPE=org \
   REVIEW_ROUTER_ORG=your-org \
@@ -282,7 +282,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 ### github-actions[bot] + OpenAI API key
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
   REVIEW_ROUTER_REPO=owner/repo \
   REVIEW_ROUTER_IDENTITY=actions \
   REVIEW_ROUTER_AUTH=openai \
@@ -295,7 +295,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 ### github-actions[bot] + OpenRouter API key
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
   REVIEW_ROUTER_REPO=owner/repo \
   REVIEW_ROUTER_IDENTITY=actions \
   REVIEW_ROUTER_AUTH=openrouter \

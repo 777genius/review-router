@@ -516,7 +516,7 @@ chmod 755 reports
 
 For analytics questions:
 - Example dashboard: `reports/analytics-dashboard.html`
-- GitHub Issues: https://github.com/777genius/multi-provider-code-review/issues
+- GitHub Issues: https://github.com/777genius/review-router/issues
 - Analytics code: `src/analytics/`
 
 ## License

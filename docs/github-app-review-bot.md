@@ -49,7 +49,7 @@ jobs:
           permission-issues: write
           permission-pull-requests: write
 
-      - uses: 777genius/multi-provider-code-review@v0.3.0-alpha.1
+      - uses: 777genius/review-router@v0.3.0-alpha.2
         with:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -60,7 +60,7 @@ jobs:
 ```json
 {
   "name": "777genius Codex Reviewer",
-  "url": "https://github.com/777genius/multi-provider-code-review",
+  "url": "https://github.com/777genius/review-router",
   "description": "Posts Codex-powered pull request reviews from a dedicated GitHub App bot identity.",
   "public": false,
   "default_permissions": {

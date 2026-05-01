@@ -31,7 +31,7 @@ export function buildSarif(findings: Finding[]): SARIFReport {
           driver: {
             name: 'review-router',
             version: '2.0.0',
-            informationUri: 'https://github.com/777genius/multi-provider-code-review',
+            informationUri: 'https://github.com/777genius/review-router',
             rules,
           },
         },

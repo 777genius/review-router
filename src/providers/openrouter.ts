@@ -44,7 +44,7 @@ export class OpenRouterProvider extends Provider {
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${this.apiKey}`,
-              'HTTP-Referer': 'https://github.com/777genius/multi-provider-code-review',
+              'HTTP-Referer': 'https://github.com/777genius/review-router',
               'X-Title': 'ReviewRouter',
             },
             body: JSON.stringify({

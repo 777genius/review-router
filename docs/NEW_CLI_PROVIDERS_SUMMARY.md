@@ -299,7 +299,7 @@ export REVIEW_PROVIDERS="openrouter/google/gemini-2.0-flash-exp:free,claude/sonn
 ## Support
 
 For issues or questions:
-- **GitHub Issues**: [Report bugs](https://github.com/777genius/multi-provider-code-review/issues)
+- **GitHub Issues**: [Report bugs](https://github.com/777genius/review-router/issues)
 - **Documentation**: Check [docs/](./docs/) directory
 - **CI/CD Help**: See [CI_SETUP.md](./CI_SETUP.md) troubleshooting section
 

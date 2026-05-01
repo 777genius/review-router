@@ -8,8 +8,8 @@ Deploy ReviewRouter in your own infrastructure using Docker.
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/777genius/multi-provider-code-review.git
-cd multi-provider-code-review
+git clone https://github.com/777genius/review-router.git
+cd review-router
 ```
 
 2. **Create environment file:**
@@ -397,8 +397,8 @@ docker-compose up -d --scale multi-provider-review=1
 ## Support
 
 For issues and questions:
-- GitHub Issues: https://github.com/777genius/multi-provider-code-review/issues
-- Documentation: https://github.com/777genius/multi-provider-code-review/tree/main/docs
+- GitHub Issues: https://github.com/777genius/review-router/issues
+- Documentation: https://github.com/777genius/review-router/tree/main/docs
 
 ## License
 

@@ -10,7 +10,7 @@ Run the installer inside the local checkout of the repository you want to config
 
 ```bash
 cd /path/to/your-repo
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | bash
 ```
 
 That is the recommended path because the installer can detect the GitHub remote, create a setup branch, write `.github/workflows/review-router.yml`, push the branch, and open a setup PR.
@@ -135,7 +135,7 @@ jobs:
           grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
 
       - name: Run ReviewRouter
-        uses: 777genius/multi-provider-code-review@v0.3.0-alpha.1
+        uses: 777genius/review-router@v0.3.0-alpha.2
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
@@ -168,7 +168,7 @@ Then make `ReviewRouter / review` a required status check in branch protection.
 If you intentionally want the live branch instead of the pinned release, use:
 
 ```yaml
-uses: 777genius/multi-provider-code-review@main
+uses: 777genius/review-router@main
 ```
 
 ## Provider Modes

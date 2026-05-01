@@ -4,6 +4,29 @@ AI Robot Review is a GitHub Action for pull request review with Codex CLI OAuth,
 
 Current focus: a practical PR reviewer that can run from GitHub Actions, post a PR summary, post a small number of inline findings, and optionally fail the check on serious issues. The Codex path is designed to use a ChatGPT subscription OAuth login instead of OpenAI API billing.
 
+## Quick Start
+
+Run the installer inside the local checkout of the repository you want to configure:
+
+```bash
+cd /path/to/your-repo
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
+```
+
+That is the recommended path because the installer can detect the GitHub remote, create a setup branch, write `.github/workflows/ai-robot-review.yml`, push the branch, and open a setup PR.
+
+If you run it outside a git checkout, it can still ask for `owner/repo` and use the GitHub API, but the local-checkout flow is easier to inspect before merging.
+
+The installer:
+
+- detects or asks for the target `owner/repo`;
+- lets you choose `github-actions[bot]` or GitHub App bot identity;
+- lets you choose Codex subscription OAuth, Codex CLI with OpenAI API key, or OpenRouter API key;
+- creates `.github/workflows/ai-robot-review.yml` on a setup branch;
+- opens a setup PR instead of pushing directly to the default branch.
+
+See [docs/install.md](./docs/install.md) for organization-level secrets, selected repositories, GitHub App setup, and security notes.
+
 ## Status
 
 This is an actively stabilized fork of `keithah/multi-provider-code-review`.
@@ -46,24 +69,6 @@ Available but still experimental:
 - No automatic mutation of repository files.
 - No automatic deletion or moving of old inline discussions by default.
 - No claim that token or dollar cost is always available for Codex subscription OAuth. For OAuth runs the UI reports `OAuth subscription` instead of API billing cost.
-
-## Quick Start
-
-Run the installer from a local checkout of the repository you want to configure:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
-```
-
-The installer:
-
-- detects or asks for the target `owner/repo`;
-- lets you choose `github-actions[bot]` or GitHub App bot identity;
-- lets you choose Codex subscription OAuth, Codex CLI with OpenAI API key, or OpenRouter API key;
-- creates `.github/workflows/ai-robot-review.yml` on a setup branch;
-- opens a setup PR instead of pushing directly to the default branch.
-
-See [docs/install.md](./docs/install.md) for organization-level secrets, selected repositories, GitHub App setup, and security notes.
 
 ## Recommended Codex Workflow
 

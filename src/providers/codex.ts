@@ -858,13 +858,30 @@ export class CodexProvider extends Provider {
 
   private normalizeCodexError(error: unknown): Error {
     const err = error instanceof Error ? error : new Error(String(error));
-    const message = this.truncateCliError(
+    const rawMessage = this.truncateCliError(
       this.sanitizeReviewContent(this.formatCliError(err.message, ''))
     );
+    const message = this.withActionableAuthHint(rawMessage);
     const normalized = new Error(message || 'Codex CLI failed');
     normalized.name = err.name || 'CodexProviderError';
     normalized.stack = err.stack;
     return normalized;
+  }
+
+  private withActionableAuthHint(message: string): string {
+    if (!message) return message;
+    if (
+      !/(401|unauthorized|access token|refresh token|auth|login)/i.test(message)
+    ) {
+      return message;
+    }
+
+    const hint =
+      'Codex authentication failed. If using ChatGPT subscription OAuth, reseed auth.json by running `codex login` on a trusted machine and updating CODEX_AUTH_JSON. If using API-key mode, verify OPENAI_API_KEY.';
+
+    return message.includes('reseed auth.json')
+      ? message
+      : this.truncateCliError(`${message} ${hint}`);
   }
 
   private async resolveBinary(): Promise<string> {

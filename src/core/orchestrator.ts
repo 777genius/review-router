@@ -36,6 +36,7 @@ import { ReliabilityTracker } from '../providers/reliability-tracker';
 import { MetricsCollector } from '../analytics/metrics-collector';
 import { TrivialDetector } from '../analysis/trivial-detector';
 import { PathMatcher, createDefaultPathMatcherConfig, PathPattern } from '../analysis/path-matcher';
+import { buildReviewCoverage } from '../analysis/review-coverage';
 import { z } from 'zod';
 import { Provider } from '../providers/base';
 import { createQueue } from '../utils/parallel';
@@ -175,6 +176,7 @@ export class ReviewOrchestrator {
 
       // Check for trivial changes (dependency locks, docs, config files, test fixtures)
       let reviewContext = pr;
+      let skippedTrivialFiles: FileChange[] = [];
       if (config.skipTrivialChanges) {
         const trivialDetector = new TrivialDetector({
           enabled: true,
@@ -193,6 +195,15 @@ export class ReviewOrchestrator {
           // Entire PR is trivial - post simple comment and skip review
           logger.info(`Skipping review: ${trivialResult.reason}`);
           const trivialReview = this.createTrivialReview(trivialResult.reason!, pr.files.length, start);
+          trivialReview.coverage = buildReviewCoverage(
+            { ...pr, files: [], diff: '' },
+            config,
+            {
+              totalFiles: pr.files.length,
+              skippedFiles: pr.files,
+              mode: 'full',
+            }
+          );
           const markdown = this.components.formatter.format(trivialReview);
           await this.components.commentPoster.postSummary(pr.number, markdown, false);
 
@@ -214,6 +225,7 @@ export class ReviewOrchestrator {
         // Some files are trivial - filter them out before review (create new context, don't mutate)
         if (trivialResult.trivialFiles.length > 0) {
           logger.info(`Filtering ${trivialResult.trivialFiles.length} trivial files from review: ${trivialResult.trivialFiles.join(', ')}`);
+          skippedTrivialFiles = pr.files.filter(f => trivialResult.trivialFiles.includes(f.filename));
           const nonTrivialFiles = pr.files.filter(f => trivialResult.nonTrivialFiles.includes(f.filename));
           reviewContext = {
             ...pr,
@@ -650,6 +662,11 @@ export class ReviewOrchestrator {
         impactAnalysis,
         mermaidDiagram
       );
+      review.coverage = buildReviewCoverage(reviewPR, config, {
+        totalFiles: pr.files.length,
+        skippedFiles: skippedTrivialFiles,
+        mode: useIncremental && lastReviewData ? 'incremental' : 'full',
+      });
 
       // Merge with previous review if incremental
       if (useIncremental && lastReviewData) {

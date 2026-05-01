@@ -69,7 +69,21 @@ Available but still experimental:
 - **Human override:** reply `/rr skip` to a ReviewRouter inline comment to dismiss that finding after a maintainer confirms it is not actionable.
 - **AI discussion replies:** with Codex auth modes, ordinary replies to ReviewRouter findings can get an AI explanation. If the model agrees a finding is likely a false positive, it suggests `/rr skip`; it does not unblock CI by itself.
 - **Large diff compaction:** compact very large, generated, lockfile, and migration diffs so they do not dominate the prompt.
+- **Review scope report:** the summary shows full-diff, compacted, metadata-only, and skipped file counts so large PRs are auditable.
 - **Secret handling:** fork PRs are skipped by default, Codex runs with a sanitized child-process environment, and workflows avoid printing secret values.
+
+## Security Model
+
+ReviewRouter is designed for trusted repository automation, not for running arbitrary untrusted PR code with secrets.
+
+- The generated review workflow uses `pull_request`, not `pull_request_target`.
+- Fork PRs skip secret-backed review by default.
+- Codex runs in a read-only sandbox and receives a sanitized child-process environment.
+- Codex OAuth stores ChatGPT-managed `auth.json` as an Actions secret. Use this only for trusted private automation.
+- For public/open-source repositories, prefer OpenAI API-key mode or OpenRouter instead of personal Codex OAuth.
+- Protect `.github/workflows/**`, `action.yml`, `scripts/install.sh`, `src/**`, and `dist/**` with CODEOWNERS and branch protection.
+
+GitHub-hosted runners are ephemeral. Codex can refresh `auth.json`, but the refreshed file disappears when the job ends unless you use a trusted self-hosted runner with persistent `CODEX_HOME` or a separate secure storage write-back flow. ReviewRouter does not write refreshed personal OAuth credentials back to repository secrets by default.
 
 ## Non-Goals For v1
 
@@ -124,14 +138,17 @@ jobs:
         env:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
           CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+          REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: secret
         run: |
           test -n "$CODEX_AUTH_JSON"
-          mkdir -p ~/.codex
-          printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
-          chmod 600 ~/.codex/auth.json
+          export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+          mkdir -p "$CODEX_HOME"
+          chmod 700 "$CODEX_HOME"
+          printf '%s' "$CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"
+          chmod 600 "$CODEX_HOME/auth.json"
           if [ -n "$CODEX_CONFIG_TOML" ]; then
-            printf '%s' "$CODEX_CONFIG_TOML" > ~/.codex/config.toml
-            chmod 600 ~/.codex/config.toml
+            printf '%s' "$CODEX_CONFIG_TOML" > "$CODEX_HOME/config.toml"
+            chmod 600 "$CODEX_HOME/config.toml"
           fi
 
       - name: Run ReviewRouter

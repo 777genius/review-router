@@ -250,6 +250,32 @@ export interface AIAnalysis {
   consensus: string;
 }
 
+export type ReviewCoverageFileStatus =
+  | 'full'
+  | 'compacted'
+  | 'metadata-only'
+  | 'skipped';
+
+export interface ReviewCoverageFile {
+  path: string;
+  status: ReviewCoverageFileStatus;
+  reason?: string;
+  additions?: number;
+  deletions?: number;
+}
+
+export interface ReviewCoverage {
+  mode: 'full' | 'incremental';
+  totalFiles: number;
+  filesConsidered: number;
+  fullDiffFiles: number;
+  compactedFiles: number;
+  metadataOnlyFiles: number;
+  skippedFiles: number;
+  agenticContext: boolean;
+  files: ReviewCoverageFile[];
+}
+
 export interface Review {
   summary: string;
   findings: Finding[];
@@ -260,6 +286,7 @@ export interface Review {
   aiAnalysis?: AIAnalysis;
   providerResults?: ProviderResult[];
   runDetails?: RunDetails;
+  coverage?: ReviewCoverage;
   impactAnalysis?: ImpactAnalysis;
   mermaidDiagram?: string;
 }

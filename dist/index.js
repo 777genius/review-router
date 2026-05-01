@@ -13775,13 +13775,22 @@ var CodexProvider = class extends Provider {
   }
   normalizeCodexError(error2) {
     const err = error2 instanceof Error ? error2 : new Error(String(error2));
-    const message = this.truncateCliError(
+    const rawMessage = this.truncateCliError(
       this.sanitizeReviewContent(this.formatCliError(err.message, ""))
     );
+    const message = this.withActionableAuthHint(rawMessage);
     const normalized = new Error(message || "Codex CLI failed");
     normalized.name = err.name || "CodexProviderError";
     normalized.stack = err.stack;
     return normalized;
+  }
+  withActionableAuthHint(message) {
+    if (!message) return message;
+    if (!/(401|unauthorized|access token|refresh token|auth|login)/i.test(message)) {
+      return message;
+    }
+    const hint = "Codex authentication failed. If using ChatGPT subscription OAuth, reseed auth.json by running `codex login` on a trusted machine and updating CODEX_AUTH_JSON. If using API-key mode, verify OPENAI_API_KEY.";
+    return message.includes("reseed auth.json") ? message : this.truncateCliError(`${message} ${hint}`);
   }
   async resolveBinary() {
     if (await this.canRun("codex", ["--version"])) {
@@ -19115,6 +19124,11 @@ var MarkdownFormatterV2 = class {
     lines.push("");
     lines.push(`> ${this.generatePRSummary(review)}`);
     lines.push("");
+    const reviewScope = this.formatReviewScope(review);
+    if (reviewScope) {
+      lines.push(reviewScope);
+      lines.push("");
+    }
     const releaseNotes = this.generateReleaseNotes(review).trim();
     if (releaseNotes) {
       lines.push("## Release Notes");
@@ -19204,6 +19218,9 @@ var MarkdownFormatterV2 = class {
         const override = count === 1 ? "override" : "overrides";
         return `No active findings. ${count} ${noun} ${verb} dismissed by maintainer/admin \`/rr skip\` ${override}.`;
       }
+      if (this.hasScopeLimitations(review)) {
+        return "No issues detected in reviewed files. Some files were compacted or metadata-only; see Review Scope.";
+      }
       return "This PR looks great! No issues detected by the automated review.";
     }
     const parts = [];
@@ -19240,7 +19257,52 @@ var MarkdownFormatterV2 = class {
       const count = metrics.dismissedFindings ?? 0;
       return `${count} finding${count === 1 ? "" : "s"} dismissed by maintainer/admin \`/rr skip\` override${count === 1 ? "" : "s"}. No active findings remain.`;
     }
+    if (this.hasScopeLimitations(review)) {
+      return "No issues found in reviewed files. Some files were compacted or metadata-only; see Review Scope.";
+    }
     return "No issues found. Great job!";
+  }
+  formatReviewScope(review) {
+    const coverage = review.coverage;
+    if (!coverage) return "";
+    const lines = [];
+    const limitedFiles = coverage.files.filter(
+      (file) => file.status === "compacted" || file.status === "metadata-only" || file.status === "skipped"
+    );
+    lines.push("<details>");
+    lines.push("<summary>Review Scope</summary>");
+    lines.push("");
+    lines.push("| Scope | Count |");
+    lines.push("|-------|------:|");
+    lines.push(`| Total PR files | ${coverage.totalFiles} |`);
+    lines.push(`| Files considered by reviewer | ${coverage.filesConsidered} |`);
+    lines.push(`| Full diff in prompt | ${coverage.fullDiffFiles} |`);
+    lines.push(`| Compacted in prompt | ${coverage.compactedFiles} |`);
+    lines.push(`| Metadata-only or trimmed | ${coverage.metadataOnlyFiles} |`);
+    lines.push(`| Skipped before LLM review | ${coverage.skippedFiles} |`);
+    lines.push(
+      `| Codex agentic context | ${coverage.agenticContext ? "Enabled for Codex providers" : "Disabled"} |`
+    );
+    lines.push(`| Review mode | ${coverage.mode} |`);
+    if (limitedFiles.length > 0) {
+      lines.push("");
+      lines.push("Files not shown as full diffs in the primary prompt:");
+      lines.push("");
+      limitedFiles.slice(0, 20).forEach((file) => {
+        const reason = file.reason ? ` - ${file.reason}` : "";
+        lines.push(`- \`${file.path}\` - ${file.status}${reason}`);
+      });
+      if (limitedFiles.length > 20) {
+        lines.push(`- ...and ${limitedFiles.length - 20} more`);
+      }
+      lines.push("");
+      lines.push(
+        'Codex providers with agentic context can inspect related files read-only during review. This section is still shown so a "no findings" result on a large PR is auditable.'
+      );
+    }
+    lines.push("");
+    lines.push("</details>");
+    return lines.join("\n");
   }
   generateReleaseNotes(review) {
     const lines = [];
@@ -19380,6 +19442,11 @@ var MarkdownFormatterV2 = class {
   }
   hasDismissedFindings(review) {
     return (review.metrics.dismissedFindings ?? 0) > 0;
+  }
+  hasScopeLimitations(review) {
+    const coverage = review.coverage;
+    if (!coverage) return false;
+    return coverage.compactedFiles > 0 || coverage.metadataOnlyFiles > 0 || coverage.skippedFiles > 0;
   }
   didAllProviderRunsFail(review) {
     return review.metrics.providersUsed > 0 && review.metrics.providersSuccess === 0 && review.metrics.providersFailed > 0;
@@ -26146,6 +26213,101 @@ function createDefaultPathMatcherConfig() {
   };
 }
 
+// src/analysis/review-coverage.ts
+function buildReviewCoverage(pr, config, options = {}) {
+  const compacted = compactDiffForPrompt(pr.diff, pr.files, {
+    enabled: config.smartDiffCompaction ?? true,
+    maxFullFileBytes: config.maxFullDiffFileBytes,
+    maxFullFileChanges: config.maxFullDiffFileChanges
+  });
+  const trimmedDiff = trimDiff(compacted.diff, config.diffMaxBytes);
+  const pathsBeforeTrim = extractDiffDestinationPaths(compacted.diff);
+  const pathsAfterTrim = extractDiffDestinationPaths(trimmedDiff);
+  const compactedByFile = new Map(
+    compacted.summaryOnlyFiles.map((file) => [file.filename, file])
+  );
+  const reviewedFiles = pr.files.map((file) => {
+    const compactedFile = compactedByFile.get(file.filename);
+    const wasInPromptBeforeTrim = pathsBeforeTrim.has(file.filename);
+    const isInPrompt = pathsAfterTrim.has(file.filename);
+    const base = {
+      path: file.filename,
+      additions: file.additions,
+      deletions: file.deletions
+    };
+    if (!isInPrompt) {
+      return {
+        ...base,
+        status: "metadata-only",
+        reason: wasInPromptBeforeTrim ? "trimmed by prompt byte budget" : "no unified diff patch available"
+      };
+    }
+    if (compactedFile) {
+      return {
+        ...base,
+        status: "compacted",
+        reason: compactedFile.reason
+      };
+    }
+    return {
+      ...base,
+      status: "full"
+    };
+  });
+  const skippedFiles = (options.skippedFiles ?? []).map((file) => ({
+    path: file.filename,
+    status: "skipped",
+    reason: "trivial or low-signal file excluded before LLM review",
+    additions: file.additions,
+    deletions: file.deletions
+  }));
+  const files = [...reviewedFiles, ...skippedFiles];
+  return {
+    mode: options.mode ?? "full",
+    totalFiles: options.totalFiles ?? files.length,
+    filesConsidered: pr.files.length,
+    fullDiffFiles: countByStatus(files, "full"),
+    compactedFiles: countByStatus(files, "compacted"),
+    metadataOnlyFiles: countByStatus(files, "metadata-only"),
+    skippedFiles: countByStatus(files, "skipped"),
+    agenticContext: config.codexAgenticContext ?? false,
+    files
+  };
+}
+function countByStatus(files, status) {
+  return files.filter((file) => file.status === status).length;
+}
+function extractDiffDestinationPaths(diff) {
+  const paths = /* @__PURE__ */ new Set();
+  const diffGitPattern = /^diff --git\s+a\/(.+?)\s+b\/(.+)$/gm;
+  let match2;
+  while ((match2 = diffGitPattern.exec(diff)) !== null) {
+    paths.add(unquoteGitPath2(match2[2].trim()));
+  }
+  return paths;
+}
+function unquoteGitPath2(path14) {
+  if (path14.startsWith('"') && path14.endsWith('"')) {
+    path14 = path14.slice(1, -1);
+  }
+  return path14.replace(/\\([\\"tnr])/g, (_match, char) => {
+    switch (char) {
+      case "\\":
+        return "\\";
+      case '"':
+        return '"';
+      case "t":
+        return "	";
+      case "n":
+        return "\n";
+      case "r":
+        return "\r";
+      default:
+        return char;
+    }
+  });
+}
+
 // src/github/progress-tracker.ts
 var ProgressTracker = class _ProgressTracker {
   constructor(octokit, config) {
@@ -26443,6 +26605,7 @@ var ReviewOrchestrator = class {
         }
       }
       let reviewContext = pr;
+      let skippedTrivialFiles = [];
       if (config.skipTrivialChanges) {
         const trivialDetector = new TrivialDetector({
           enabled: true,
@@ -26458,6 +26621,15 @@ var ReviewOrchestrator = class {
         if (trivialResult.isTrivial) {
           logger.info(`Skipping review: ${trivialResult.reason}`);
           const trivialReview = this.createTrivialReview(trivialResult.reason, pr.files.length, start);
+          trivialReview.coverage = buildReviewCoverage(
+            { ...pr, files: [], diff: "" },
+            config,
+            {
+              totalFiles: pr.files.length,
+              skippedFiles: pr.files,
+              mode: "full"
+            }
+          );
           const markdown2 = this.components.formatter.format(trivialReview);
           await this.components.commentPoster.postSummary(pr.number, markdown2, false);
           if (config.analyticsEnabled && this.components.metricsCollector) {
@@ -26474,6 +26646,7 @@ var ReviewOrchestrator = class {
         }
         if (trivialResult.trivialFiles.length > 0) {
           logger.info(`Filtering ${trivialResult.trivialFiles.length} trivial files from review: ${trivialResult.trivialFiles.join(", ")}`);
+          skippedTrivialFiles = pr.files.filter((f) => trivialResult.trivialFiles.includes(f.filename));
           const nonTrivialFiles = pr.files.filter((f) => trivialResult.nonTrivialFiles.includes(f.filename));
           reviewContext = {
             ...pr,
@@ -26806,6 +26979,11 @@ var ReviewOrchestrator = class {
         impactAnalysis,
         mermaidDiagram
       );
+      review.coverage = buildReviewCoverage(reviewPR, config, {
+        totalFiles: pr.files.length,
+        skippedFiles: skippedTrivialFiles,
+        mode: useIncremental && lastReviewData ? "incremental" : "full"
+      });
       if (useIncremental && lastReviewData) {
         review.findings = this.components.incrementalReviewer.mergeFindings(
           lastReviewData.findings,
@@ -27297,6 +27475,9 @@ function classifyFailure(error2) {
   if (message.includes("configuration error") || message.includes("validation")) {
     return "configuration";
   }
+  if (message.includes("codex") && (message.includes("401") || message.includes("unauthorized") || message.includes("access token") || message.includes("refresh token") || message.includes("reseed auth.json"))) {
+    return "codex-oauth";
+  }
   if (message.includes("codex_auth_json") || message.includes("auth.json") || message.includes("refresh_token") || message.includes("auth_mode") || message.includes("chatgpt")) {
     return "codex-oauth";
   }
@@ -27321,11 +27502,12 @@ function failureDetails(kind) {
   switch (kind) {
     case "codex-oauth":
       return {
-        summary: "Codex OAuth authentication is missing, invalid, or expired.",
+        summary: "Codex OAuth authentication is missing, invalid, stale, or expired.",
         steps: [
           "Verify `CODEX_AUTH_JSON` exists in repository or selected organization Actions secrets.",
           "Verify the secret contains `auth_mode=chatgpt` and a refresh token from a trusted local Codex login.",
-          "Re-run the installer or rotate the Codex OAuth secret if the local session was revoked."
+          "Reseed `auth.json`: run `codex login` on a trusted machine, then rerun the installer or update `CODEX_AUTH_JSON`.",
+          "For automatic refresh without reseeding, use a trusted self-hosted runner with persistent `CODEX_HOME`; GitHub-hosted runners are ephemeral."
         ]
       };
     case "codex-api":
@@ -27394,7 +27576,7 @@ function failureDetails(kind) {
   }
 }
 function sanitizeFailureMessage(message) {
-  const redacted = message.replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***");
+  const redacted = message.replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/(access_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***");
   return redacted.length > 1200 ? `${redacted.slice(0, 1200)}
 ... truncated ...` : redacted;
 }

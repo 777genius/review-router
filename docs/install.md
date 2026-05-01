@@ -267,11 +267,14 @@ The generated workflow installs the official Codex CLI and restores OAuth creden
 - name: Restore Codex OAuth config
   env:
     CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+    REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: secret
   run: |
     test -n "$CODEX_AUTH_JSON"
-    mkdir -p ~/.codex
-    printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
-    chmod 600 ~/.codex/auth.json
+    export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+    mkdir -p "$CODEX_HOME"
+    chmod 700 "$CODEX_HOME"
+    printf '%s' "$CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"
+    chmod 600 "$CODEX_HOME/auth.json"
 ```
 
 ReviewRouter uses a binary-only Codex health check by default. The real review call is the authoritative auth/model check. If you explicitly want an extra model-exec health check, set `CODEX_HEALTHCHECK_MODE=exec`, but expect higher subscription usage.
@@ -279,6 +282,16 @@ ReviewRouter uses a binary-only Codex health check by default. The real review c
 Use this only in trusted automation. Do not put personal Codex OAuth credentials into public/open-source repos where untrusted workflow changes can access secrets. GitHub does not expose repository secrets to fork PR workflows by default, and the generated workflow skips fork PRs by default.
 
 Important auth freshness note: on GitHub-hosted runners, the runner filesystem is ephemeral. Codex can refresh `auth.json` during a run, but ReviewRouter cannot safely write the refreshed file back to GitHub Actions secrets automatically. If the stored secret becomes stale or a refresh token is rotated, run `codex login` again on a trusted machine and rerun the installer or update `CODEX_AUTH_JSON`. For fully automatic long-running auth, prefer an OpenAI API key or a trusted self-hosted runner with persistent `CODEX_HOME`.
+
+For trusted self-hosted runners, you can let Codex maintain the refreshed file on disk:
+
+```bash
+REVIEW_ROUTER_RUNS_ON=self-hosted \
+REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE=persistent \
+bash scripts/install.sh
+```
+
+`persistent` mode seeds `auth.json` only when the file is missing. Later runs reuse the refreshed file. This only helps when `CODEX_HOME` survives between jobs; it does not make GitHub-hosted runners persistent.
 
 Default Codex model:
 

@@ -50,6 +50,8 @@ AUTH_MODE="$(env_first REVIEW_ROUTER_AUTH AI_ROBOT_REVIEW_AUTH || true)"
 DISCUSSION_MODE="$(env_first REVIEW_ROUTER_DISCUSSION_MODE AI_ROBOT_REVIEW_DISCUSSION_MODE || true)"
 PRESET="$(env_first REVIEW_ROUTER_PRESET AI_ROBOT_REVIEW_PRESET || true)"
 CODEX_MODEL="$(env_first REVIEW_ROUTER_CODEX_MODEL AI_ROBOT_REVIEW_CODEX_MODEL || printf '%s' "$DEFAULT_CODEX_MODEL")"
+RUNS_ON="$(env_first REVIEW_ROUTER_RUNS_ON AI_ROBOT_REVIEW_RUNS_ON || printf 'ubuntu-latest')"
+CODEX_AUTH_PERSISTENCE="$(env_first REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE AI_ROBOT_REVIEW_CODEX_AUTH_PERSISTENCE || printf 'secret')"
 DRY_RUN="$(env_first REVIEW_ROUTER_DRY_RUN AI_ROBOT_REVIEW_DRY_RUN || printf '0')"
 NON_INTERACTIVE="$(env_first REVIEW_ROUTER_NON_INTERACTIVE AI_ROBOT_REVIEW_NON_INTERACTIVE || printf '0')"
 LOCAL_ONLY="$(env_first REVIEW_ROUTER_LOCAL_ONLY AI_ROBOT_REVIEW_LOCAL_ONLY || printf '0')"
@@ -93,6 +95,13 @@ validate_discussion_mode() {
   case "${1:-}" in
     off|suggest) return 0 ;;
     *) fatal "Unsupported REVIEW_ROUTER_DISCUSSION_MODE: ${1:-}. Use off or suggest." ;;
+  esac
+}
+
+validate_codex_auth_persistence() {
+  case "${1:-}" in
+    secret|persistent) return 0 ;;
+    *) fatal "Unsupported REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: ${1:-}. Use secret or persistent." ;;
   esac
 }
 
@@ -562,7 +571,16 @@ run_security_advisory() {
   info "Security advisory"
   if [ "$AUTH_MODE" = "codex" ]; then
     warn "Codex OAuth stores your ChatGPT-managed Codex auth.json as an Actions secret. Use it only for trusted private automation; prefer OpenAI API key mode for public/open-source repositories."
-    warn "GitHub-hosted runners are ephemeral. If Codex refreshes auth.json during a run, ReviewRouter cannot persist the refreshed file back to GitHub secrets automatically; reseed auth.json if Codex starts returning 401."
+    if [ "$CODEX_AUTH_PERSISTENCE" = "persistent" ]; then
+      ok "Codex auth persistence is set to persistent; this only helps on trusted self-hosted runners with persistent CODEX_HOME."
+      case "$RUNS_ON" in
+        ubuntu-latest|macos-latest|windows-latest)
+          warn "Persistent Codex auth was selected with a GitHub-hosted runner label ($RUNS_ON). The runner filesystem is ephemeral, so refreshed auth.json will not survive the job."
+          ;;
+      esac
+    else
+      warn "GitHub-hosted runners are ephemeral. If Codex refreshes auth.json during a run, ReviewRouter cannot persist the refreshed file back to GitHub secrets automatically; reseed auth.json if Codex starts returning 401."
+    fi
   else
     ok "Auth mode does not store Codex OAuth auth.json"
   fi
@@ -1231,7 +1249,9 @@ concurrency:
 jobs:
   review:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.fork != true }}
-    runs-on: ubuntu-latest
+YAML
+    printf '    runs-on: %s\n' "$RUNS_ON"
+    cat <<'YAML'
     timeout-minutes: 20
 YAML
 
@@ -1280,14 +1300,24 @@ YAML
         env:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
           CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+YAML
+      printf '          REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: %s\n' "$CODEX_AUTH_PERSISTENCE"
+      cat <<'YAML'
         run: |
           test -n "$CODEX_AUTH_JSON"
-          mkdir -p ~/.codex
-          printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
-          chmod 600 ~/.codex/auth.json
+          export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+          mkdir -p "$CODEX_HOME"
+          chmod 700 "$CODEX_HOME"
+          if [ "$REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE" = "persistent" ] && [ -f "$CODEX_HOME/auth.json" ]; then
+            echo "Using existing persistent Codex auth.json"
+          else
+            printf '%s' "$CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"
+          fi
+          chmod 600 "$CODEX_HOME/auth.json"
           node <<'NODE'
           const fs = require('node:fs');
-          const path = `${process.env.HOME}/.codex/auth.json`;
+          const codexHome = process.env.CODEX_HOME || `${process.env.HOME}/.codex`;
+          const path = `${codexHome}/auth.json`;
           function fail(message) {
             console.error(`ReviewRouter Codex OAuth auth check failed: ${message}`);
             console.error('Fix: run `codex login` on a trusted machine, then rerun the ReviewRouter installer or update CODEX_AUTH_JSON to reseed auth.json.');
@@ -1303,8 +1333,8 @@ YAML
           if (!data.tokens || !data.tokens.refresh_token) fail('auth.json tokens.refresh_token is missing; reseed auth.json');
           NODE
           if [ -n "$CODEX_CONFIG_TOML" ]; then
-            printf '%s' "$CODEX_CONFIG_TOML" > ~/.codex/config.toml
-            chmod 600 ~/.codex/config.toml
+            printf '%s' "$CODEX_CONFIG_TOML" > "$CODEX_HOME/config.toml"
+            chmod 600 "$CODEX_HOME/config.toml"
           fi
 YAML
     elif [ "$AUTH_MODE" = "openai" ]; then
@@ -1415,7 +1445,9 @@ concurrency:
 jobs:
   interaction:
     if: ${{ github.event.pull_request.head.repo.fork != true && github.event.comment.user.type != 'Bot' && (startsWith(github.event.comment.body, '/rr ') || vars.REVIEW_ROUTER_DISCUSSION_MODE == 'suggest') }}
-    runs-on: ubuntu-latest
+YAML
+    printf '    runs-on: %s\n' "$RUNS_ON"
+    cat <<'YAML'
     timeout-minutes: 10
     steps:
 YAML
@@ -1481,14 +1513,24 @@ YAML
         env:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
           CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+YAML
+      printf '          REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: %s\n' "$CODEX_AUTH_PERSISTENCE"
+      cat <<'YAML'
         run: |
           test -n "$CODEX_AUTH_JSON"
-          mkdir -p ~/.codex
-          printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
-          chmod 600 ~/.codex/auth.json
+          export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+          mkdir -p "$CODEX_HOME"
+          chmod 700 "$CODEX_HOME"
+          if [ "$REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE" = "persistent" ] && [ -f "$CODEX_HOME/auth.json" ]; then
+            echo "Using existing persistent Codex auth.json"
+          else
+            printf '%s' "$CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"
+          fi
+          chmod 600 "$CODEX_HOME/auth.json"
           node <<'NODE'
           const fs = require('node:fs');
-          const path = `${process.env.HOME}/.codex/auth.json`;
+          const codexHome = process.env.CODEX_HOME || `${process.env.HOME}/.codex`;
+          const path = `${codexHome}/auth.json`;
           function fail(message) {
             console.error(`ReviewRouter Codex OAuth auth check failed: ${message}`);
             console.error('Fix: run `codex login` on a trusted machine, then rerun the ReviewRouter installer or update CODEX_AUTH_JSON to reseed auth.json.');
@@ -1504,8 +1546,8 @@ YAML
           if (!data.tokens || !data.tokens.refresh_token) fail('auth.json tokens.refresh_token is missing; reseed auth.json');
           NODE
           if [ -n "$CODEX_CONFIG_TOML" ]; then
-            printf '%s' "$CODEX_CONFIG_TOML" > ~/.codex/config.toml
-            chmod 600 ~/.codex/config.toml
+            printf '%s' "$CODEX_CONFIG_TOML" > "$CODEX_HOME/config.toml"
+            chmod 600 "$CODEX_HOME/config.toml"
           fi
 YAML
     fi
@@ -1624,6 +1666,10 @@ print_setup_summary() {
   fi
   log "Auth mode: $AUTH_MODE"
   log "Preset: $PRESET"
+  log "Runner: $RUNS_ON"
+  if [ "$AUTH_MODE" = "codex" ]; then
+    log "Codex auth persistence: $CODEX_AUTH_PERSISTENCE"
+  fi
   if [ "$SECRET_SCOPE" = "org" ]; then
     log "Secrets/vars: org $ORG_NAME, selected repos: $ORG_SELECTED_REPOS"
   else
@@ -1736,6 +1782,7 @@ main() {
     "blocking:Safe review depth, but fail CI on major+ findings" \
     "strict:More comments and graph context" \
     "minimal:Fewer comments and less analysis"
+  validate_codex_auth_persistence "$CODEX_AUTH_PERSISTENCE"
 
   log ""
   setup_secret_scope

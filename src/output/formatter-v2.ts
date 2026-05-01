@@ -29,6 +29,12 @@ export class MarkdownFormatterV2 {
     lines.push(`> ${this.generatePRSummary(review)}`);
     lines.push('');
 
+    const reviewScope = this.formatReviewScope(review);
+    if (reviewScope) {
+      lines.push(reviewScope);
+      lines.push('');
+    }
+
     const releaseNotes = this.generateReleaseNotes(review).trim();
     if (releaseNotes) {
       lines.push('## Release Notes');
@@ -146,6 +152,9 @@ export class MarkdownFormatterV2 {
         const override = count === 1 ? 'override' : 'overrides';
         return `No active findings. ${count} ${noun} ${verb} dismissed by maintainer/admin \`/rr skip\` ${override}.`;
       }
+      if (this.hasScopeLimitations(review)) {
+        return 'No issues detected in reviewed files. Some files were compacted or metadata-only; see Review Scope.';
+      }
       return 'This PR looks great! No issues detected by the automated review.';
     }
 
@@ -196,7 +205,60 @@ export class MarkdownFormatterV2 {
       const count = metrics.dismissedFindings ?? 0;
       return `${count} finding${count === 1 ? '' : 's'} dismissed by maintainer/admin \`/rr skip\` override${count === 1 ? '' : 's'}. No active findings remain.`;
     }
+    if (this.hasScopeLimitations(review)) {
+      return 'No issues found in reviewed files. Some files were compacted or metadata-only; see Review Scope.';
+    }
     return 'No issues found. Great job!';
+  }
+
+  private formatReviewScope(review: Review): string {
+    const coverage = review.coverage;
+    if (!coverage) return '';
+
+    const lines: string[] = [];
+    const limitedFiles = coverage.files.filter(file =>
+      file.status === 'compacted' ||
+      file.status === 'metadata-only' ||
+      file.status === 'skipped'
+    );
+
+    lines.push('<details>');
+    lines.push('<summary>Review Scope</summary>');
+    lines.push('');
+    lines.push('| Scope | Count |');
+    lines.push('|-------|------:|');
+    lines.push(`| Total PR files | ${coverage.totalFiles} |`);
+    lines.push(`| Files considered by reviewer | ${coverage.filesConsidered} |`);
+    lines.push(`| Full diff in prompt | ${coverage.fullDiffFiles} |`);
+    lines.push(`| Compacted in prompt | ${coverage.compactedFiles} |`);
+    lines.push(`| Metadata-only or trimmed | ${coverage.metadataOnlyFiles} |`);
+    lines.push(`| Skipped before LLM review | ${coverage.skippedFiles} |`);
+    lines.push(
+      `| Codex agentic context | ${coverage.agenticContext ? 'Enabled for Codex providers' : 'Disabled'} |`
+    );
+    lines.push(`| Review mode | ${coverage.mode} |`);
+
+    if (limitedFiles.length > 0) {
+      lines.push('');
+      lines.push('Files not shown as full diffs in the primary prompt:');
+      lines.push('');
+      limitedFiles.slice(0, 20).forEach(file => {
+        const reason = file.reason ? ` - ${file.reason}` : '';
+        lines.push(`- \`${file.path}\` - ${file.status}${reason}`);
+      });
+      if (limitedFiles.length > 20) {
+        lines.push(`- ...and ${limitedFiles.length - 20} more`);
+      }
+      lines.push('');
+      lines.push(
+        'Codex providers with agentic context can inspect related files read-only during review. This section is still shown so a "no findings" result on a large PR is auditable.'
+      );
+    }
+
+    lines.push('');
+    lines.push('</details>');
+
+    return lines.join('\n');
   }
 
   private generateReleaseNotes(review: Review): string {
@@ -399,6 +461,16 @@ export class MarkdownFormatterV2 {
 
   private hasDismissedFindings(review: Review): boolean {
     return (review.metrics.dismissedFindings ?? 0) > 0;
+  }
+
+  private hasScopeLimitations(review: Review): boolean {
+    const coverage = review.coverage;
+    if (!coverage) return false;
+    return (
+      coverage.compactedFiles > 0 ||
+      coverage.metadataOnlyFiles > 0 ||
+      coverage.skippedFiles > 0
+    );
   }
 
   private didAllProviderRunsFail(review: Review): boolean {

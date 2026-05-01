@@ -8,6 +8,12 @@ export class MarkdownFormatter {
     lines.push('');
     lines.push(review.summary);
 
+    const scope = this.formatReviewScope(review);
+    if (scope) {
+      lines.push('');
+      lines.push(scope);
+    }
+
     const critical = review.findings.filter((f) => f.severity === 'critical');
     const major = review.findings.filter((f) => f.severity === 'major');
     const minor = review.findings.filter((f) => f.severity === 'minor');
@@ -94,6 +100,43 @@ export class MarkdownFormatter {
 
   private hasMeasuredApiBilling(review: Review): boolean {
     return review.metrics.totalCost > 0 || review.metrics.totalTokens > 0;
+  }
+
+  private formatReviewScope(review: Review): string {
+    const coverage = review.coverage;
+    if (!coverage) return '';
+
+    const limitedFiles = coverage.files.filter(file =>
+      file.status === 'compacted' ||
+      file.status === 'metadata-only' ||
+      file.status === 'skipped'
+    );
+    const lines = [
+      '<details><summary>Review Scope</summary>',
+      '',
+      `- Total PR files: ${coverage.totalFiles}`,
+      `- Files considered by reviewer: ${coverage.filesConsidered}`,
+      `- Full diff in prompt: ${coverage.fullDiffFiles}`,
+      `- Compacted in prompt: ${coverage.compactedFiles}`,
+      `- Metadata-only or trimmed: ${coverage.metadataOnlyFiles}`,
+      `- Skipped before LLM review: ${coverage.skippedFiles}`,
+      `- Codex agentic context: ${coverage.agenticContext ? 'enabled for Codex providers' : 'disabled'}`,
+      `- Review mode: ${coverage.mode}`,
+    ];
+
+    if (limitedFiles.length > 0) {
+      lines.push('', 'Files not shown as full diffs in the primary prompt:');
+      limitedFiles.slice(0, 20).forEach(file => {
+        const reason = file.reason ? ` - ${file.reason}` : '';
+        lines.push(`- \`${file.path}\` - ${file.status}${reason}`);
+      });
+      if (limitedFiles.length > 20) {
+        lines.push(`- ...and ${limitedFiles.length - 20} more`);
+      }
+    }
+
+    lines.push('', '</details>');
+    return lines.join('\n');
   }
 
   private printSeveritySection(

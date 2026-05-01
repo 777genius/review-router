@@ -10,19 +10,33 @@ describe('formatReviewFailureSummary', () => {
     expect(body).toContain('# ReviewRouter');
     expect(body).toContain('Codex OAuth authentication is missing');
     expect(body).toContain('`CODEX_AUTH_JSON`');
+    expect(body).toContain('Reseed `auth.json`');
     expect(body).toContain('PR: #123');
+  });
+
+  it('classifies Codex 401 failures as OAuth reseed failures', () => {
+    const body = formatReviewFailureSummary(
+      new Error('All LLM providers failed during review. codex/gpt-5.5: 401 Unauthorized access token could not be refreshed'),
+      123
+    );
+
+    expect(body).toContain('Codex OAuth authentication is missing');
+    expect(body).toContain('Reseed `auth.json`');
+    expect(body).toContain('self-hosted runner with persistent `CODEX_HOME`');
   });
 
   it('redacts obvious secrets from error messages', () => {
     const body = formatReviewFailureSummary(
-      new Error('failed with OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz and refresh_token: secret-refresh'),
+      new Error('failed with OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz and refresh_token: secret-refresh and access_token: access-secret'),
       123
     );
 
     expect(body).toContain('OPENAI_API_KEY=***');
     expect(body).toContain('refresh_token: ***');
+    expect(body).toContain('access_token: ***');
     expect(body).not.toContain('sk-abcdefghijklmnopqrstuvwxyz');
     expect(body).not.toContain('secret-refresh');
+    expect(body).not.toContain('access-secret');
   });
 
   it('formats no-provider failures', () => {

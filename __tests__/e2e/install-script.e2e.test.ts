@@ -288,6 +288,12 @@ describe('review-router curl installer e2e', () => {
       'CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}'
     );
     expect(workflow).toContain(
+      'REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: secret'
+    );
+    expect(workflow).toContain(
+      'printf \'%s\' "$CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"'
+    );
+    expect(workflow).toContain(
       'ReviewRouter Codex OAuth auth check failed'
     );
     expect(workflow).toContain('reseed auth.json');
@@ -323,6 +329,40 @@ describe('review-router curl installer e2e', () => {
     expect(interactionWorkflow).toContain('reseed auth.json');
     expect(interactionWorkflow).toContain(
       'GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}'
+    );
+  });
+
+  it('can generate persistent Codex OAuth auth mode for self-hosted runners', () => {
+    const codexDir = makeTempDir('airr-persistent-codex-');
+    const authFile = path.join(codexDir, 'auth.json');
+    fs.writeFileSync(
+      authFile,
+      JSON.stringify({
+        auth_mode: 'chatgpt',
+        tokens: { refresh_token: 'refresh-token' },
+      })
+    );
+
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'codex',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_CODEX_AUTH_FILE: authFile,
+      REVIEW_ROUTER_RUNS_ON: 'self-hosted',
+      REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: 'persistent',
+    });
+
+    expect(result.status).toBe(0);
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain('runs-on: self-hosted');
+    expect(workflow).toContain(
+      'REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: persistent'
+    );
+    expect(workflow).toContain(
+      'Using existing persistent Codex auth.json'
+    );
+    expect(result.stdout).toContain(
+      'Codex auth persistence is set to persistent'
     );
   });
 

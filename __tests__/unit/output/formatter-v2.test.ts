@@ -50,6 +50,52 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('Performance Metrics');
     });
 
+    it('shows review scope when large files are compacted or skipped', () => {
+      const review = createMockReview({
+        coverage: {
+          mode: 'full',
+          totalFiles: 4,
+          filesConsidered: 3,
+          fullDiffFiles: 1,
+          compactedFiles: 1,
+          metadataOnlyFiles: 1,
+          skippedFiles: 1,
+          agenticContext: true,
+          files: [
+            { path: 'src/app.ts', status: 'full' },
+            {
+              path: 'db/migrations/001.sql',
+              status: 'compacted',
+              reason: 'migration artifact',
+            },
+            {
+              path: 'assets/logo.png',
+              status: 'metadata-only',
+              reason: 'no unified diff patch available',
+            },
+            {
+              path: 'package-lock.json',
+              status: 'skipped',
+              reason: 'trivial or low-signal file excluded before LLM review',
+            },
+          ],
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('No issues detected in reviewed files');
+      expect(output).toContain('## All Clear!');
+      expect(output).toContain('Review Scope');
+      expect(output).toContain('| Full diff in prompt | 1 |');
+      expect(output).toContain('| Compacted in prompt | 1 |');
+      expect(output).toContain('| Metadata-only or trimmed | 1 |');
+      expect(output).toContain('| Skipped before LLM review | 1 |');
+      expect(output).toContain('Enabled for Codex providers');
+      expect(output).toContain('`db/migrations/001.sql` - compacted');
+      expect(output).toContain('`package-lock.json` - skipped');
+    });
+
     it('should not claim all clear when findings were dismissed by command override', () => {
       const review = createMockReview({
         metrics: {

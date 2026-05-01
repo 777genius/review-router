@@ -63,6 +63,16 @@ function classifyFailure(error: Error): FailureKind {
     return 'configuration';
   }
   if (
+    message.includes('codex') &&
+    (message.includes('401') ||
+      message.includes('unauthorized') ||
+      message.includes('access token') ||
+      message.includes('refresh token') ||
+      message.includes('reseed auth.json'))
+  ) {
+    return 'codex-oauth';
+  }
+  if (
     message.includes('codex_auth_json') ||
     message.includes('auth.json') ||
     message.includes('refresh_token') ||
@@ -94,11 +104,12 @@ function failureDetails(kind: FailureKind): { summary: string; steps: string[] }
   switch (kind) {
     case 'codex-oauth':
       return {
-        summary: 'Codex OAuth authentication is missing, invalid, or expired.',
+        summary: 'Codex OAuth authentication is missing, invalid, stale, or expired.',
         steps: [
           'Verify `CODEX_AUTH_JSON` exists in repository or selected organization Actions secrets.',
           'Verify the secret contains `auth_mode=chatgpt` and a refresh token from a trusted local Codex login.',
-          'Re-run the installer or rotate the Codex OAuth secret if the local session was revoked.',
+          'Reseed `auth.json`: run `codex login` on a trusted machine, then rerun the installer or update `CODEX_AUTH_JSON`.',
+          'For automatic refresh without reseeding, use a trusted self-hosted runner with persistent `CODEX_HOME`; GitHub-hosted runners are ephemeral.',
         ],
       };
     case 'codex-api':
@@ -172,6 +183,7 @@ function sanitizeFailureMessage(message: string): string {
     .replace(/sk-[A-Za-z0-9_-]{16,}/g, 'sk-***')
     .replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, 'gh*-***')
     .replace(/github_pat_[A-Za-z0-9_]+/g, 'github_pat_***')
+    .replace(/(access_token["'\s:=]+)[^"',\s}]+/gi, '$1***')
     .replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, '$1***')
     .replace(/(authorization:\s*bearer\s+)[^\s]+/gi, '$1***')
     .replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, '$1***')

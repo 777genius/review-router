@@ -67,6 +67,9 @@ export interface ReviewConfig {
   providerBatchOverrides?: Record<string, number>;
   enableTokenAwareBatching?: boolean;
   targetTokensPerBatch?: number;
+  smartDiffCompaction?: boolean;
+  maxFullDiffFileBytes?: number;
+  maxFullDiffFileChanges?: number;
 
   graphEnabled?: boolean;
   graphCacheEnabled?: boolean;

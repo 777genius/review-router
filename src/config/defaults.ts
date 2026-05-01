@@ -55,6 +55,9 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   providerBatchOverrides: {},
   enableTokenAwareBatching: true,
   targetTokensPerBatch: 50000, // ~50k tokens per batch
+  smartDiffCompaction: true,
+  maxFullDiffFileBytes: 40_000,
+  maxFullDiffFileChanges: 800,
 
   graphEnabled: false,
   graphCacheEnabled: true,

@@ -1,5 +1,5 @@
 import { PRContext, ReviewConfig, ReviewIntensity } from '../../types';
-import { trimDiff } from '../../utils/diff';
+import { compactDiffForPrompt, trimDiff } from '../../utils/diff';
 import { checkContextWindowFit, ContextFitCheck, estimateTokensConservative } from '../../utils/token-estimation';
 import { logger } from '../../utils/logger';
 import { ValidationDetector } from '../context/validation-detector';
@@ -86,8 +86,17 @@ export class PromptBuilder {
       throw new Error('Invalid PR context: files must be an array');
     }
 
-    const diff = trimDiff(pr.diff, this.config.diffMaxBytes);
-    const skipSuggestions = this.shouldSkipSuggestions(diff);
+    const compacted = compactDiffForPrompt(pr.diff, pr.files, {
+      enabled: this.config.smartDiffCompaction ?? true,
+      maxFullFileBytes: this.config.maxFullDiffFileBytes,
+      maxFullFileChanges: this.config.maxFullDiffFileChanges,
+    });
+    const diff = trimDiff(compacted.diff, this.config.diffMaxBytes);
+    const summaryOnlyFiles = new Map(
+      compacted.summaryOnlyFiles.map(file => [file.filename, file])
+    );
+    const skipSuggestions =
+      compacted.summaryOnlyFiles.length > 0 || this.shouldSkipSuggestions(pr.diff);
 
     // Extract which files are actually in the trimmed diff to avoid false positives
     const filesInDiff = new Set<string>();
@@ -102,7 +111,13 @@ export class PromptBuilder {
     const excludedCount = pr.files.length - includedFiles.length;
 
     const fileList = [
-      ...includedFiles.map(f => `- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})`),
+      ...includedFiles.map(f => {
+        const summaryOnly = summaryOnlyFiles.get(f.filename);
+        const suffix = summaryOnly
+          ? `, summary-only in prompt: ${summaryOnly.reason}`
+          : '';
+        return `- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions}${suffix})`;
+      }),
     ];
 
     if (excludedCount > 0) {
@@ -121,6 +136,7 @@ export class PromptBuilder {
       '   • Workflow/CI: .github/workflows/*, .github/actions/*, *.yml in .github/',
       '   • Config: *.json, *.yaml, *.yml (except for syntax errors)',
       '   • Docs: *.md, README*, CHANGELOG*',
+      '   • Generated/migration/lock files unless you inspect the actual diff and find a real runtime/data risk',
       '',
       '2. NEVER report these (they are NOT bugs):',
       '   • Suggestions ("Consider", "Add", "Should", "Could", "Ensure that", "Validate")',
@@ -135,6 +151,15 @@ export class PromptBuilder {
       '   • Have SQL injection, XSS, command injection, or RCE vulnerability',
       '',
     ];
+
+    if (compacted.summaryOnlyFiles.length > 0) {
+      instructions.push(
+        'SMART DIFF COMPACTION:',
+        `${compacted.summaryOnlyFiles.length} large or low-signal file(s) are summary-only in the primary diff.`,
+        'Do not infer bugs from summary metadata. If one of those files matters, inspect it with read-only commands like `git diff -- <file>` before reporting a finding.',
+        ''
+      );
+    }
 
     // Conditionally include suggestion field based on context size
     if (skipSuggestions) {

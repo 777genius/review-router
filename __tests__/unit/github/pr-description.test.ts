@@ -84,7 +84,7 @@ describe('PullRequestDescriptionUpdater', () => {
 
     expect(merged.startsWith('Manual PR description')).toBe(true);
     expect(merged).toContain('<!-- ai-robot-review-summary:start -->');
-    expect(merged).toContain('## Summary by AI Robot Review');
+    expect(merged).toContain('## Summary');
   });
 
   it('replaces only the previous generated block', () => {
@@ -126,6 +126,63 @@ describe('PullRequestDescriptionUpdater', () => {
     expect(block).toContain('uses the latest reviewer from the main branch');
     expect(block).toContain('Line stats: 1 modified; +18/-4.');
     expect(block).not.toContain('1 modified with +18/-4 lines.');
+  });
+
+  it('puts semantic summary bullets at the top', () => {
+    const updater = new PullRequestDescriptionUpdater(client, false);
+    const block = updater.buildGeneratedBlock(
+      createPR({
+        title: 'feat: apple moderation mode #RAZRABOTKA-155',
+        additions: 8079,
+        deletions: 86,
+        files: [
+          {
+            filename: 'tvolkova_client/lib/src/protocol/user_profile/user_profile.dart',
+            status: 'modified',
+            additions: 12,
+            deletions: 0,
+            changes: 12,
+            patch: '+  bool? hidePaidFeaturesInfo;',
+          },
+          {
+            filename: 'tvolkova_flutter/lib/admin/users/user_full_info/widgets/hide_paid_features_checkbox.dart',
+            status: 'added',
+            additions: 36,
+            deletions: 0,
+            changes: 36,
+            patch: '+class HidePaidFeaturesCheckbox extends StatelessWidget {}',
+          },
+          {
+            filename: 'tvolkova_flutter/lib/app/learning/course_locked_stub.dart',
+            status: 'modified',
+            additions: 8,
+            deletions: 3,
+            changes: 11,
+            patch: '+if (profile.hidePaidFeaturesInfo == true) return const SizedBox();',
+          },
+          {
+            filename: 'tvolkova_server/migrations/20260430152122670/definition.json',
+            status: 'added',
+            additions: 4214,
+            deletions: 0,
+            changes: 4214,
+            patch: '+{"hidePaidFeaturesInfo": true}',
+          },
+        ],
+      })
+    );
+
+    expect(block).toContain('## Summary');
+    expect(block).toContain(
+      '- add hide paid features info support to user profile models and protocol types'
+    );
+    expect(block).toContain('- add admin user controls for hide paid features info');
+    expect(block).toContain(
+      '- update learning and course screens to respect hide paid features info'
+    );
+    expect(block).toContain(
+      '- add generated server artifacts and migration metadata for hide paid features info'
+    );
   });
 
   it('summarizes source files with function and behavior context', () => {

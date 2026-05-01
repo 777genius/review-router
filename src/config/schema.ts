@@ -47,6 +47,9 @@ export const ReviewConfigSchema = z.object({
   provider_batch_overrides: z.record(z.coerce.number().int().min(1).max(200)).optional(),
   enable_token_aware_batching: z.boolean().optional(),
   target_tokens_per_batch: z.number().int().min(1000).optional(),
+  smart_diff_compaction: z.boolean().optional(),
+  max_full_diff_file_bytes: z.number().int().min(1000).optional(),
+  max_full_diff_file_changes: z.number().int().min(1).optional(),
 
   graph_enabled: z.boolean().optional(),
   graph_cache_enabled: z.boolean().optional(),

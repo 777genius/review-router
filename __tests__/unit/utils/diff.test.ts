@@ -1,4 +1,8 @@
-import { filterDiffByFiles, isRangeWithinSingleHunk } from '../../../src/utils/diff';
+import {
+  compactDiffForPrompt,
+  filterDiffByFiles,
+  isRangeWithinSingleHunk,
+} from '../../../src/utils/diff';
 
 const sampleDiff = `diff --git a/src/old.ts b/src/new.ts
 similarity index 88%
@@ -69,6 +73,89 @@ Binary files a/img/logo.png and b/img/logo.png differ
 `;
     const result = filterDiffByFiles(diff, [{ filename: 'src/weird.ts' }]);
     expect(result).toContain('src/weird.ts');
+  });
+});
+
+describe('compactDiffForPrompt', () => {
+  it('keeps source diffs and summarizes large generated files', () => {
+    const diff = `diff --git a/src/billing.ts b/src/billing.ts
+--- a/src/billing.ts
++++ b/src/billing.ts
+@@
++const safe = true;
+diff --git a/server/migrations/20260430/definition.json b/server/migrations/20260430/definition.json
+--- a/server/migrations/20260430/definition.json
++++ b/server/migrations/20260430/definition.json
+@@
++${'{"table":"users"}\n+'.repeat(1000)}
+diff --git a/pubspec.lock b/pubspec.lock
+--- a/pubspec.lock
++++ b/pubspec.lock
+@@
++dependency: 1.0.0
+`;
+
+    const result = compactDiffForPrompt(
+      diff,
+      [
+        {
+          filename: 'src/billing.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+        {
+          filename: 'server/migrations/20260430/definition.json',
+          status: 'added',
+          additions: 1000,
+          deletions: 0,
+          changes: 1000,
+        },
+        {
+          filename: 'pubspec.lock',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ],
+      { enabled: true, maxFullFileBytes: 1000, maxFullFileChanges: 800 }
+    );
+
+    expect(result.diff).toContain('const safe = true');
+    expect(result.diff).toContain('full diff omitted from primary prompt');
+    expect(result.diff).toContain('server/migrations/20260430/definition.json');
+    expect(result.diff).toContain('pubspec.lock');
+    expect(result.diff).not.toContain('{"table":"users"}');
+    expect(result.summaryOnlyFiles.map((file) => file.filename)).toEqual([
+      'server/migrations/20260430/definition.json',
+      'pubspec.lock',
+    ]);
+  });
+
+  it('can be disabled', () => {
+    const diff = `diff --git a/pubspec.lock b/pubspec.lock
+@@
++dependency: 1.0.0
+`;
+
+    const result = compactDiffForPrompt(
+      diff,
+      [
+        {
+          filename: 'pubspec.lock',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ],
+      { enabled: false }
+    );
+
+    expect(result.diff).toBe(diff);
+    expect(result.summaryOnlyFiles).toEqual([]);
   });
 });
 

@@ -86,6 +86,42 @@ describe('PromptBuilder', () => {
       expect(prompt).toContain('SUGGESTION FIELD (optional)');
       expect(prompt).toContain('Only include "suggestion" for FIXABLE issues');
     });
+
+    it('summarizes low-signal large diffs in the prompt', async () => {
+      const builder = new PromptBuilder({
+        ...DEFAULT_CONFIG,
+        smartDiffCompaction: true,
+        maxFullDiffFileBytes: 1000,
+      });
+      const pr: PRContext = {
+        ...mockPR,
+        files: [
+          ...mockPR.files,
+          {
+            filename: 'server/migrations/20260430/definition.json',
+            status: 'added',
+            additions: 1000,
+            deletions: 0,
+            changes: 1000,
+          },
+        ],
+        diff: [
+          mockPR.diff,
+          'diff --git a/server/migrations/20260430/definition.json b/server/migrations/20260430/definition.json',
+          '@@',
+          `+${'{"table":"users"}\n+'.repeat(1000)}`,
+        ].join('\n'),
+      };
+
+      const prompt = await builder.build(pr);
+
+      expect(prompt).toContain('SMART DIFF COMPACTION');
+      expect(prompt).toContain('summary-only in prompt: migration artifact');
+      expect(prompt).toContain('full diff omitted from primary prompt');
+      expect(prompt).toContain('git diff --');
+      expect(prompt).not.toContain('{"table":"users"}');
+      expect(prompt).toContain('+new line');
+    });
   });
 
   describe('token-aware suggestion instructions', () => {

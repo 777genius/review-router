@@ -6,6 +6,7 @@
  */
 
 import { FileChange } from '../types';
+import { getSummaryOnlyDiffReason } from './diff';
 
 export interface TokenEstimate {
   tokens: number;
@@ -176,6 +177,15 @@ export function checkContextWindowFit(
  * Estimate tokens for a file change
  */
 export function estimateTokensForFile(file: FileChange): number {
+  const patchBytes = file.patch ? Buffer.byteLength(file.patch, 'utf8') : 0;
+  const summaryOnlyReason = getSummaryOnlyDiffReason(file.filename, patchBytes, file.changes);
+  const lowSignalSummary =
+    summaryOnlyReason &&
+    /dependency lock|generated file|migration artifact/.test(summaryOnlyReason);
+  if (lowSignalSummary || (patchBytes > 0 && summaryOnlyReason)) {
+    return 120;
+  }
+
   // Use patch content if available
   if (file.patch) {
     const estimate = estimateTokensForDiff(file.patch);

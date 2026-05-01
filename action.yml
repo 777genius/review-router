@@ -108,6 +108,26 @@ inputs:
     description: "Maximum diff bytes to send to providers"
     required: false
     default: "120000"
+  SMART_DIFF_COMPACTION:
+    description: "Replace large/generated/lock diffs with compact summaries in the prompt while keeping changed source diffs reviewable"
+    required: false
+    default: "true"
+  MAX_FULL_DIFF_FILE_BYTES:
+    description: "Maximum per-file diff bytes kept verbatim before smart diff compaction"
+    required: false
+    default: "40000"
+  MAX_FULL_DIFF_FILE_CHANGES:
+    description: "Maximum per-file changed lines kept verbatim before smart diff compaction"
+    required: false
+    default: "800"
+  ENABLE_TOKEN_AWARE_BATCHING:
+    description: "Split review batches using estimated prompt token size"
+    required: false
+    default: "true"
+  TARGET_TOKENS_PER_BATCH:
+    description: "Approximate target prompt tokens per review batch"
+    required: false
+    default: "50000"
   RUN_TIMEOUT_SECONDS:
     description: "Timeout per provider run"
     required: false

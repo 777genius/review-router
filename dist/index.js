@@ -7116,6 +7116,9 @@ var DEFAULT_CONFIG = {
   enableTokenAwareBatching: true,
   targetTokensPerBatch: 5e4,
   // ~50k tokens per batch
+  smartDiffCompaction: true,
+  maxFullDiffFileBytes: 4e4,
+  maxFullDiffFileChanges: 800,
   graphEnabled: false,
   graphCacheEnabled: true,
   graphMaxDepth: 5,
@@ -11321,6 +11324,9 @@ var ReviewConfigSchema = external_exports.object({
   provider_batch_overrides: external_exports.record(external_exports.coerce.number().int().min(1).max(200)).optional(),
   enable_token_aware_batching: external_exports.boolean().optional(),
   target_tokens_per_batch: external_exports.number().int().min(1e3).optional(),
+  smart_diff_compaction: external_exports.boolean().optional(),
+  max_full_diff_file_bytes: external_exports.number().int().min(1e3).optional(),
+  max_full_diff_file_changes: external_exports.number().int().min(1).optional(),
   graph_enabled: external_exports.boolean().optional(),
   graph_cache_enabled: external_exports.boolean().optional(),
   graph_max_depth: external_exports.number().int().min(1).max(10).optional(),
@@ -11713,6 +11719,11 @@ var ConfigLoader = class {
       codexEventAudit: this.parseBoolean(env.CODEX_EVENT_AUDIT),
       batchMaxFiles: this.parseNumber(env.BATCH_MAX_FILES),
       providerBatchOverrides: this.parseOverrides(env.PROVIDER_BATCH_OVERRIDES),
+      enableTokenAwareBatching: this.parseBoolean(env.ENABLE_TOKEN_AWARE_BATCHING),
+      targetTokensPerBatch: this.parseNumber(env.TARGET_TOKENS_PER_BATCH),
+      smartDiffCompaction: this.parseBoolean(env.SMART_DIFF_COMPACTION),
+      maxFullDiffFileBytes: this.parseNumber(env.MAX_FULL_DIFF_FILE_BYTES),
+      maxFullDiffFileChanges: this.parseNumber(env.MAX_FULL_DIFF_FILE_CHANGES),
       skipTrivialChanges: this.parseBoolean(env.SKIP_TRIVIAL_CHANGES),
       skipDependencyUpdates: this.parseBoolean(env.SKIP_DEPENDENCY_UPDATES),
       skipDocumentationOnly: this.parseBoolean(env.SKIP_DOCUMENTATION_ONLY),
@@ -11777,6 +11788,9 @@ var ConfigLoader = class {
       providerBatchOverrides: config.provider_batch_overrides,
       enableTokenAwareBatching: config.enable_token_aware_batching,
       targetTokensPerBatch: config.target_tokens_per_batch,
+      smartDiffCompaction: config.smart_diff_compaction,
+      maxFullDiffFileBytes: config.max_full_diff_file_bytes,
+      maxFullDiffFileChanges: config.max_full_diff_file_changes,
       graphEnabled: config.graph_enabled,
       graphCacheEnabled: config.graph_cache_enabled,
       graphMaxDepth: config.graph_max_depth,
@@ -12601,6 +12615,364 @@ var os3 = __toESM(require("os"));
 var path4 = __toESM(require("path"));
 var crypto3 = __toESM(require("crypto"));
 
+// src/utils/diff.ts
+function trimDiff(diff, maxBytes) {
+  const buf = Buffer.from(diff, "utf8");
+  if (buf.byteLength <= maxBytes) return diff;
+  const fileChunks = [];
+  const lines = diff.split("\n");
+  let currentChunk = [];
+  for (const line of lines) {
+    if (line.startsWith("diff --git ") && currentChunk.length > 0) {
+      fileChunks.push(currentChunk.join("\n"));
+      currentChunk = [line];
+    } else {
+      currentChunk.push(line);
+    }
+  }
+  if (currentChunk.length > 0) {
+    fileChunks.push(currentChunk.join("\n"));
+  }
+  const includedChunks = [];
+  let currentBytes = 0;
+  const truncationMarker = "\n\n...remaining files truncated to stay within size limit...\n";
+  const markerBytes = Buffer.byteLength(truncationMarker, "utf8");
+  for (const chunk of fileChunks) {
+    const chunkBytes = Buffer.byteLength(chunk, "utf8");
+    if (currentBytes + chunkBytes + markerBytes > maxBytes && includedChunks.length > 0) {
+      break;
+    }
+    includedChunks.push(chunk);
+    currentBytes += chunkBytes + 1;
+  }
+  if (includedChunks.length < fileChunks.length) {
+    const truncatedCount = fileChunks.length - includedChunks.length;
+    return includedChunks.join("\n") + `
+
+...${truncatedCount} file(s) truncated to stay within size limit...
+`;
+  }
+  return includedChunks.join("\n");
+}
+function mapAddedLines(patch) {
+  if (!patch) return [];
+  const lines = patch.split("\n");
+  const added = [];
+  let currentNew = 0;
+  const hunkRegex = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+  const noNewlineMarker = "\\ No newline at end of file";
+  for (const raw of lines) {
+    if (raw === noNewlineMarker) {
+      continue;
+    }
+    const hunkMatch = raw.match(hunkRegex);
+    if (hunkMatch) {
+      currentNew = parseInt(hunkMatch[2], 10);
+      continue;
+    }
+    if (raw.startsWith("+")) {
+      added.push({ line: currentNew, content: raw.slice(1) });
+      currentNew += 1;
+    } else if (raw.startsWith("-")) {
+    } else {
+      currentNew += 1;
+    }
+  }
+  return added;
+}
+function mapLinesToPositions(patch) {
+  const map2 = /* @__PURE__ */ new Map();
+  if (!patch) return map2;
+  const lines = patch.split("\n");
+  let currentNew = 0;
+  let position = 0;
+  const hunkRegex = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+  const noNewlineMarker = "\\ No newline at end of file";
+  for (const raw of lines) {
+    if (raw === noNewlineMarker) {
+      continue;
+    }
+    position += 1;
+    const hunkMatch = raw.match(hunkRegex);
+    if (hunkMatch) {
+      currentNew = parseInt(hunkMatch[2], 10);
+      continue;
+    }
+    if (raw.startsWith("+")) {
+      map2.set(currentNew, position);
+      currentNew += 1;
+    } else if (raw.startsWith("-")) {
+    } else {
+      map2.set(currentNew, position);
+      currentNew += 1;
+    }
+  }
+  return map2;
+}
+function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchRadius = 4) {
+  const added = mapAddedLines(patch);
+  if (added.length === 0) return reportedLine;
+  const nearby = added.filter((line) => Math.abs(line.line - reportedLine) <= searchRadius);
+  if (nearby.length === 0) return reportedLine;
+  const bodyTokens = tokenizeForLineScoring(commentBody);
+  const riskTerms = getRiskTerms(commentBody);
+  const score = (candidate) => {
+    const content = candidate.content;
+    const lower = content.toLowerCase();
+    const codeTokens = tokenizeForLineScoring(content);
+    const overlap = Array.from(codeTokens).filter((token) => bodyTokens.has(token)).length;
+    const proximity = Math.max(0, searchRadius + 1 - Math.abs(candidate.line - reportedLine));
+    const riskScore = riskTerms.reduce((sum, term) => sum + (term.test(lower) ? 3 : 0), 0);
+    const interpolationScore = /\$\{.+?\}/.test(content) ? 2 : 0;
+    const callScore = /\b[a-zA-Z_$][\w$]*\s*\(/.test(content) ? 1 : 0;
+    const declarationPenalty = /^\s*(export\s+)?(async\s+)?(function|class|interface|type)\b/.test(content) ? -2 : 0;
+    return proximity + overlap + riskScore + interpolationScore + callScore + declarationPenalty;
+  };
+  const current = nearby.find((line) => line.line === reportedLine);
+  const currentScore = current ? score(current) : Number.NEGATIVE_INFINITY;
+  const best = [...nearby].sort((a, b) => score(b) - score(a) || Math.abs(a.line - reportedLine) - Math.abs(b.line - reportedLine))[0];
+  const bestScore = score(best);
+  return bestScore > currentScore + 1 ? best.line : reportedLine;
+}
+function tokenizeForLineScoring(text) {
+  const stopWords = /* @__PURE__ */ new Set([
+    "the",
+    "and",
+    "for",
+    "with",
+    "this",
+    "that",
+    "from",
+    "into",
+    "value",
+    "line",
+    "risk",
+    "issue",
+    "critical",
+    "major",
+    "minor",
+    "severity"
+  ]);
+  return new Set(
+    text.toLowerCase().replace(/[^a-z0-9_$]+/g, " ").split(/\s+/).filter((token) => token.length >= 3 && !stopWords.has(token))
+  );
+}
+function getRiskTerms(commentBody) {
+  const body = commentBody.toLowerCase();
+  const terms = [];
+  if (/\bsql\b|injection|query|database/.test(body)) {
+    terms.push(/\b(query|execute|exec|select|insert|update|delete|where)\b/, /`.*\$\{.*\}/);
+  }
+  if (/xss|html|script|sanitize/.test(body)) {
+    terms.push(/innerhtml|dangerouslysetinnerhtml|document\.write|sanitize|escape/);
+  }
+  if (/command|shell|rce|exec|spawn/.test(body)) {
+    terms.push(/\b(exec|spawn|execfile|system|shell_exec|popen)\b/);
+  }
+  if (/secret|token|password|credential/.test(body)) {
+    terms.push(/secret|token|password|credential|apikey|api_key/);
+  }
+  return terms;
+}
+function isRangeWithinSingleHunk(startLine, endLine, patch) {
+  if (!patch) return false;
+  const lines = patch.split("\n");
+  const hunkRegex = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+  const noNewlineMarker = "\\ No newline at end of file";
+  let currentNew = 0;
+  let foundStart = false;
+  let inActiveHunk = false;
+  for (const raw of lines) {
+    if (raw === noNewlineMarker) continue;
+    const hunkMatch = raw.match(hunkRegex);
+    if (hunkMatch) {
+      if (foundStart) {
+        return false;
+      }
+      currentNew = parseInt(hunkMatch[2], 10);
+      inActiveHunk = true;
+      continue;
+    }
+    if (!inActiveHunk) continue;
+    if (raw.startsWith("+") || !raw.startsWith("-") && raw.length > 0) {
+      if (currentNew === startLine) {
+        foundStart = true;
+      }
+      if (currentNew === endLine) {
+        return foundStart;
+      }
+      currentNew += 1;
+    }
+  }
+  return false;
+}
+function filterDiffByFiles(diff, files) {
+  if (files.length === 0) return "";
+  if (!diff || diff.trim().length === 0) return "";
+  const target = new Set(files.map((f) => f.filename));
+  const lines = diff.split("\n");
+  const chunks = [];
+  let currentChunk = [];
+  let includeCurrent = false;
+  const pushChunkIfIncluded = () => {
+    if (includeCurrent && currentChunk.length > 0) {
+      chunks.push(currentChunk.join("\n"));
+    }
+    currentChunk = [];
+    includeCurrent = false;
+  };
+  for (const line of lines) {
+    const normalizedLine = line.replace(/\r$/, "");
+    const isHeader = normalizedLine.startsWith("diff --git ");
+    if (isHeader) {
+      pushChunkIfIncluded();
+      const match2 = normalizedLine.match(/^diff --git\s+a\/(.+?)\s+b\/(.+)$/);
+      if (!match2) {
+        currentChunk.push(line);
+        continue;
+      }
+      const rawA = match2[1].trim();
+      const rawB = match2[2].trim();
+      const aPath = unquoteGitPath(rawA);
+      const bPath = unquoteGitPath(rawB);
+      includeCurrent = target.has(bPath) || target.has(aPath);
+      currentChunk.push(line);
+    } else {
+      currentChunk.push(line);
+    }
+  }
+  pushChunkIfIncluded();
+  return chunks.join("\n").trimEnd();
+}
+function compactDiffForPrompt(diff, files, options = {}) {
+  if (!options.enabled || !diff.trim()) {
+    return { diff, summaryOnlyFiles: [] };
+  }
+  const maxFullFileBytes = options.maxFullFileBytes ?? 4e4;
+  const maxFullFileChanges = options.maxFullFileChanges ?? 800;
+  const fileByName = new Map(files.map((file) => [file.filename, file]));
+  const chunks = splitDiffIntoChunks(diff);
+  const output = [];
+  const summaryOnlyFiles = [];
+  for (const chunk of chunks) {
+    if (!chunk.bPath) {
+      output.push(chunk.text);
+      continue;
+    }
+    const file = fileByName.get(chunk.bPath) || fileByName.get(chunk.aPath);
+    const filename = file?.filename || chunk.bPath;
+    const bytes = Buffer.byteLength(chunk.text, "utf8");
+    const changes = file?.changes ?? 0;
+    const reason = getSummaryOnlyDiffReason(filename, bytes, changes, {
+      maxFullFileBytes,
+      maxFullFileChanges
+    });
+    if (!reason) {
+      output.push(chunk.text);
+      continue;
+    }
+    const metadata = {
+      filename,
+      reason,
+      additions: file?.additions ?? 0,
+      deletions: file?.deletions ?? 0,
+      changes,
+      bytes
+    };
+    summaryOnlyFiles.push(metadata);
+    output.push(formatSummaryOnlyChunk(chunk, metadata));
+  }
+  return {
+    diff: output.join("\n").trimEnd(),
+    summaryOnlyFiles
+  };
+}
+function splitDiffIntoChunks(diff) {
+  const lines = diff.split("\n");
+  const chunks = [];
+  let current = [];
+  let currentA = "";
+  let currentB = "";
+  const push = () => {
+    if (current.length > 0) {
+      chunks.push({ aPath: currentA, bPath: currentB, text: current.join("\n") });
+    }
+    current = [];
+    currentA = "";
+    currentB = "";
+  };
+  for (const line of lines) {
+    const normalizedLine = line.replace(/\r$/, "");
+    const match2 = normalizedLine.match(/^diff --git\s+a\/(.+?)\s+b\/(.+)$/);
+    if (match2) {
+      push();
+      currentA = unquoteGitPath(match2[1].trim());
+      currentB = unquoteGitPath(match2[2].trim());
+    }
+    current.push(line);
+  }
+  push();
+  return chunks;
+}
+function getSummaryOnlyDiffReason(filename, bytes, changes, options = {}) {
+  const maxFullFileBytes = options.maxFullFileBytes ?? 4e4;
+  const maxFullFileChanges = options.maxFullFileChanges ?? 800;
+  const lower = filename.toLowerCase();
+  if (isDependencyLockPath(lower)) return "dependency lock file";
+  if (isGeneratedPath(lower)) return "generated file";
+  if (isMigrationArtifactPath(lower)) return "migration artifact";
+  if (bytes > maxFullFileBytes) return `large diff over ${maxFullFileBytes} bytes`;
+  if (changes > maxFullFileChanges) return `large diff over ${maxFullFileChanges} changed lines`;
+  return null;
+}
+function isDependencyLockPath(lower) {
+  return /(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|pubspec\.lock|gemfile\.lock|cargo\.lock|poetry\.lock|go\.sum|composer\.lock|pdm\.lock|pipfile\.lock)$/.test(lower);
+}
+function isGeneratedPath(lower) {
+  return lower.includes("/generated/") || lower.includes("/generated_") || /\.(g|freezed|pb|pbenum|pbjson|pbserver)\.dart$/.test(lower) || /\.generated\.[jt]sx?$/.test(lower) || /\.min\.(js|css)$/.test(lower) || /\.map$/.test(lower);
+}
+function isMigrationArtifactPath(lower) {
+  return /(^|\/)migrations?\//.test(lower) || /(^|\/)schema\//.test(lower) || /(^|\/)prisma\/migrations\//.test(lower);
+}
+function formatSummaryOnlyChunk(chunk, file) {
+  return [
+    `diff --git a/${chunk.aPath} b/${chunk.bPath}`,
+    `# AI Robot Review: full diff omitted from primary prompt (${file.reason}).`,
+    `# File: ${file.filename}`,
+    `# Stats: +${file.additions}/-${file.deletions}, ${file.changes} changed lines, ${file.bytes} diff bytes.`,
+    "# If this file is relevant, inspect it with read-only commands before reporting findings:",
+    `#   git diff -- ${shellQuote(file.filename)}`
+  ].join("\n");
+}
+function shellQuote(value) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+function unquoteGitPath(path13) {
+  if (path13.startsWith('"') && path13.endsWith('"')) {
+    path13 = path13.slice(1, -1);
+  }
+  try {
+    path13 = path13.replace(/\\([\\"tnr])/g, (_m, ch) => {
+      switch (ch) {
+        case "\\":
+          return "\\";
+        case '"':
+          return '"';
+        case "t":
+          return "	";
+        case "n":
+          return "\n";
+        case "r":
+          return "\r";
+        default:
+          return ch;
+      }
+    });
+  } catch {
+  }
+  return path13;
+}
+
 // src/utils/token-estimation.ts
 function estimateTokensSimple(text) {
   const characters = text.length;
@@ -12700,6 +13072,12 @@ function checkContextWindowFit(prompt, modelId, reservedTokensForResponse = 2e3)
   };
 }
 function estimateTokensForFile(file) {
+  const patchBytes = file.patch ? Buffer.byteLength(file.patch, "utf8") : 0;
+  const summaryOnlyReason = getSummaryOnlyDiffReason(file.filename, patchBytes, file.changes);
+  const lowSignalSummary = summaryOnlyReason && /dependency lock|generated file|migration artifact/.test(summaryOnlyReason);
+  if (lowSignalSummary || patchBytes > 0 && summaryOnlyReason) {
+    return 120;
+  }
   if (file.patch) {
     const estimate = estimateTokensForDiff(file.patch);
     return estimate.tokens;
@@ -14208,261 +14586,6 @@ var ProviderRegistry = class {
   }
 };
 
-// src/utils/diff.ts
-function trimDiff(diff, maxBytes) {
-  const buf = Buffer.from(diff, "utf8");
-  if (buf.byteLength <= maxBytes) return diff;
-  const fileChunks = [];
-  const lines = diff.split("\n");
-  let currentChunk = [];
-  for (const line of lines) {
-    if (line.startsWith("diff --git ") && currentChunk.length > 0) {
-      fileChunks.push(currentChunk.join("\n"));
-      currentChunk = [line];
-    } else {
-      currentChunk.push(line);
-    }
-  }
-  if (currentChunk.length > 0) {
-    fileChunks.push(currentChunk.join("\n"));
-  }
-  const includedChunks = [];
-  let currentBytes = 0;
-  const truncationMarker = "\n\n...remaining files truncated to stay within size limit...\n";
-  const markerBytes = Buffer.byteLength(truncationMarker, "utf8");
-  for (const chunk of fileChunks) {
-    const chunkBytes = Buffer.byteLength(chunk, "utf8");
-    if (currentBytes + chunkBytes + markerBytes > maxBytes && includedChunks.length > 0) {
-      break;
-    }
-    includedChunks.push(chunk);
-    currentBytes += chunkBytes + 1;
-  }
-  if (includedChunks.length < fileChunks.length) {
-    const truncatedCount = fileChunks.length - includedChunks.length;
-    return includedChunks.join("\n") + `
-
-...${truncatedCount} file(s) truncated to stay within size limit...
-`;
-  }
-  return includedChunks.join("\n");
-}
-function mapAddedLines(patch) {
-  if (!patch) return [];
-  const lines = patch.split("\n");
-  const added = [];
-  let currentNew = 0;
-  const hunkRegex = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
-  const noNewlineMarker = "\\ No newline at end of file";
-  for (const raw of lines) {
-    if (raw === noNewlineMarker) {
-      continue;
-    }
-    const hunkMatch = raw.match(hunkRegex);
-    if (hunkMatch) {
-      currentNew = parseInt(hunkMatch[2], 10);
-      continue;
-    }
-    if (raw.startsWith("+")) {
-      added.push({ line: currentNew, content: raw.slice(1) });
-      currentNew += 1;
-    } else if (raw.startsWith("-")) {
-    } else {
-      currentNew += 1;
-    }
-  }
-  return added;
-}
-function mapLinesToPositions(patch) {
-  const map2 = /* @__PURE__ */ new Map();
-  if (!patch) return map2;
-  const lines = patch.split("\n");
-  let currentNew = 0;
-  let position = 0;
-  const hunkRegex = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
-  const noNewlineMarker = "\\ No newline at end of file";
-  for (const raw of lines) {
-    if (raw === noNewlineMarker) {
-      continue;
-    }
-    position += 1;
-    const hunkMatch = raw.match(hunkRegex);
-    if (hunkMatch) {
-      currentNew = parseInt(hunkMatch[2], 10);
-      continue;
-    }
-    if (raw.startsWith("+")) {
-      map2.set(currentNew, position);
-      currentNew += 1;
-    } else if (raw.startsWith("-")) {
-    } else {
-      map2.set(currentNew, position);
-      currentNew += 1;
-    }
-  }
-  return map2;
-}
-function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchRadius = 4) {
-  const added = mapAddedLines(patch);
-  if (added.length === 0) return reportedLine;
-  const nearby = added.filter((line) => Math.abs(line.line - reportedLine) <= searchRadius);
-  if (nearby.length === 0) return reportedLine;
-  const bodyTokens = tokenizeForLineScoring(commentBody);
-  const riskTerms = getRiskTerms(commentBody);
-  const score = (candidate) => {
-    const content = candidate.content;
-    const lower = content.toLowerCase();
-    const codeTokens = tokenizeForLineScoring(content);
-    const overlap = Array.from(codeTokens).filter((token) => bodyTokens.has(token)).length;
-    const proximity = Math.max(0, searchRadius + 1 - Math.abs(candidate.line - reportedLine));
-    const riskScore = riskTerms.reduce((sum, term) => sum + (term.test(lower) ? 3 : 0), 0);
-    const interpolationScore = /\$\{.+?\}/.test(content) ? 2 : 0;
-    const callScore = /\b[a-zA-Z_$][\w$]*\s*\(/.test(content) ? 1 : 0;
-    const declarationPenalty = /^\s*(export\s+)?(async\s+)?(function|class|interface|type)\b/.test(content) ? -2 : 0;
-    return proximity + overlap + riskScore + interpolationScore + callScore + declarationPenalty;
-  };
-  const current = nearby.find((line) => line.line === reportedLine);
-  const currentScore = current ? score(current) : Number.NEGATIVE_INFINITY;
-  const best = [...nearby].sort((a, b) => score(b) - score(a) || Math.abs(a.line - reportedLine) - Math.abs(b.line - reportedLine))[0];
-  const bestScore = score(best);
-  return bestScore > currentScore + 1 ? best.line : reportedLine;
-}
-function tokenizeForLineScoring(text) {
-  const stopWords = /* @__PURE__ */ new Set([
-    "the",
-    "and",
-    "for",
-    "with",
-    "this",
-    "that",
-    "from",
-    "into",
-    "value",
-    "line",
-    "risk",
-    "issue",
-    "critical",
-    "major",
-    "minor",
-    "severity"
-  ]);
-  return new Set(
-    text.toLowerCase().replace(/[^a-z0-9_$]+/g, " ").split(/\s+/).filter((token) => token.length >= 3 && !stopWords.has(token))
-  );
-}
-function getRiskTerms(commentBody) {
-  const body = commentBody.toLowerCase();
-  const terms = [];
-  if (/\bsql\b|injection|query|database/.test(body)) {
-    terms.push(/\b(query|execute|exec|select|insert|update|delete|where)\b/, /`.*\$\{.*\}/);
-  }
-  if (/xss|html|script|sanitize/.test(body)) {
-    terms.push(/innerhtml|dangerouslysetinnerhtml|document\.write|sanitize|escape/);
-  }
-  if (/command|shell|rce|exec|spawn/.test(body)) {
-    terms.push(/\b(exec|spawn|execfile|system|shell_exec|popen)\b/);
-  }
-  if (/secret|token|password|credential/.test(body)) {
-    terms.push(/secret|token|password|credential|apikey|api_key/);
-  }
-  return terms;
-}
-function isRangeWithinSingleHunk(startLine, endLine, patch) {
-  if (!patch) return false;
-  const lines = patch.split("\n");
-  const hunkRegex = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
-  const noNewlineMarker = "\\ No newline at end of file";
-  let currentNew = 0;
-  let foundStart = false;
-  let inActiveHunk = false;
-  for (const raw of lines) {
-    if (raw === noNewlineMarker) continue;
-    const hunkMatch = raw.match(hunkRegex);
-    if (hunkMatch) {
-      if (foundStart) {
-        return false;
-      }
-      currentNew = parseInt(hunkMatch[2], 10);
-      inActiveHunk = true;
-      continue;
-    }
-    if (!inActiveHunk) continue;
-    if (raw.startsWith("+") || !raw.startsWith("-") && raw.length > 0) {
-      if (currentNew === startLine) {
-        foundStart = true;
-      }
-      if (currentNew === endLine) {
-        return foundStart;
-      }
-      currentNew += 1;
-    }
-  }
-  return false;
-}
-function filterDiffByFiles(diff, files) {
-  if (files.length === 0) return "";
-  if (!diff || diff.trim().length === 0) return "";
-  const target = new Set(files.map((f) => f.filename));
-  const lines = diff.split("\n");
-  const chunks = [];
-  let currentChunk = [];
-  let includeCurrent = false;
-  const pushChunkIfIncluded = () => {
-    if (includeCurrent && currentChunk.length > 0) {
-      chunks.push(currentChunk.join("\n"));
-    }
-    currentChunk = [];
-    includeCurrent = false;
-  };
-  for (const line of lines) {
-    const normalizedLine = line.replace(/\r$/, "");
-    const isHeader = normalizedLine.startsWith("diff --git ");
-    if (isHeader) {
-      pushChunkIfIncluded();
-      const match2 = normalizedLine.match(/^diff --git\s+a\/(.+?)\s+b\/(.+)$/);
-      if (!match2) {
-        currentChunk.push(line);
-        continue;
-      }
-      const rawA = match2[1].trim();
-      const rawB = match2[2].trim();
-      const aPath = unquoteGitPath(rawA);
-      const bPath = unquoteGitPath(rawB);
-      includeCurrent = target.has(bPath) || target.has(aPath);
-      currentChunk.push(line);
-    } else {
-      currentChunk.push(line);
-    }
-  }
-  pushChunkIfIncluded();
-  return chunks.join("\n").trimEnd();
-}
-function unquoteGitPath(path13) {
-  if (path13.startsWith('"') && path13.endsWith('"')) {
-    path13 = path13.slice(1, -1);
-  }
-  try {
-    path13 = path13.replace(/\\([\\"tnr])/g, (_m, ch) => {
-      switch (ch) {
-        case "\\":
-          return "\\";
-        case '"':
-          return '"';
-        case "t":
-          return "	";
-        case "n":
-          return "\n";
-        case "r":
-          return "\r";
-        default:
-          return ch;
-      }
-    });
-  } catch {
-  }
-  return path13;
-}
-
 // src/analysis/context/validation-detector.ts
 var ValidationDetector = class {
   /**
@@ -14749,8 +14872,16 @@ var PromptBuilder = class {
     if (!Array.isArray(pr.files)) {
       throw new Error("Invalid PR context: files must be an array");
     }
-    const diff = trimDiff(pr.diff, this.config.diffMaxBytes);
-    const skipSuggestions = this.shouldSkipSuggestions(diff);
+    const compacted = compactDiffForPrompt(pr.diff, pr.files, {
+      enabled: this.config.smartDiffCompaction ?? true,
+      maxFullFileBytes: this.config.maxFullDiffFileBytes,
+      maxFullFileChanges: this.config.maxFullDiffFileChanges
+    });
+    const diff = trimDiff(compacted.diff, this.config.diffMaxBytes);
+    const summaryOnlyFiles = new Map(
+      compacted.summaryOnlyFiles.map((file) => [file.filename, file])
+    );
+    const skipSuggestions = compacted.summaryOnlyFiles.length > 0 || this.shouldSkipSuggestions(pr.diff);
     const filesInDiff = /* @__PURE__ */ new Set();
     const diffGitPattern = /^diff --git a\/(.+?) b\/(.+?)$/gm;
     let match2;
@@ -14760,7 +14891,11 @@ var PromptBuilder = class {
     const includedFiles = pr.files.filter((f) => filesInDiff.has(f.filename));
     const excludedCount = pr.files.length - includedFiles.length;
     const fileList = [
-      ...includedFiles.map((f) => `- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})`)
+      ...includedFiles.map((f) => {
+        const summaryOnly = summaryOnlyFiles.get(f.filename);
+        const suffix = summaryOnly ? `, summary-only in prompt: ${summaryOnly.reason}` : "";
+        return `- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions}${suffix})`;
+      })
     ];
     if (excludedCount > 0) {
       fileList.push(`  (${excludedCount} additional file(s) truncated)`);
@@ -14776,6 +14911,7 @@ var PromptBuilder = class {
       "   \u2022 Workflow/CI: .github/workflows/*, .github/actions/*, *.yml in .github/",
       "   \u2022 Config: *.json, *.yaml, *.yml (except for syntax errors)",
       "   \u2022 Docs: *.md, README*, CHANGELOG*",
+      "   \u2022 Generated/migration/lock files unless you inspect the actual diff and find a real runtime/data risk",
       "",
       "2. NEVER report these (they are NOT bugs):",
       '   \u2022 Suggestions ("Consider", "Add", "Should", "Could", "Ensure that", "Validate")',
@@ -14790,6 +14926,14 @@ var PromptBuilder = class {
       "   \u2022 Have SQL injection, XSS, command injection, or RCE vulnerability",
       ""
     ];
+    if (compacted.summaryOnlyFiles.length > 0) {
+      instructions.push(
+        "SMART DIFF COMPACTION:",
+        `${compacted.summaryOnlyFiles.length} large or low-signal file(s) are summary-only in the primary diff.`,
+        "Do not infer bugs from summary metadata. If one of those files matters, inspect it with read-only commands like `git diff -- <file>` before reporting a finding.",
+        ""
+      );
+    }
     if (skipSuggestions) {
       instructions.push("Return JSON: [{file, line, severity, title, message}]", "");
     } else {
@@ -17825,7 +17969,7 @@ var PullRequestDescriptionUpdater = class {
     const summaryBullets = this.buildSummaryBullets(pr, cohorts);
     const lines = [
       START_MARKER,
-      "## Summary by AI Robot Review",
+      "## Summary",
       "",
       ...summaryBullets.map((item) => `- ${item}`),
       "",
@@ -17873,18 +18017,66 @@ ${generatedBlock}` : generatedBlock;
     return `${body.slice(0, start)}${body.slice(end + END_MARKER.length)}`;
   }
   buildSummaryBullets(pr, cohorts) {
-    const bullets = [];
+    const bullets = this.buildNarrativeBullets(pr, cohorts);
     const statusCounts = this.countBy(pr.files, (file) => file.status);
     const statusText = Object.entries(statusCounts).map(([status, count]) => `${count} ${status}`).join(", ");
-    bullets.push(
-      `change ${pr.files.length} file${pr.files.length === 1 ? "" : "s"} (${statusText || "no file status"}) with +${pr.additions}/-${pr.deletions} lines`
-    );
-    for (const cohort of cohorts.slice(0, 3)) {
+    if (bullets.length === 0) {
       bullets.push(
-        `${this.verbForCohort(cohort)} ${cohort.files.length} ${this.cohortPhrase(cohort)} file${cohort.files.length === 1 ? "" : "s"}`
+        `change ${pr.files.length} file${pr.files.length === 1 ? "" : "s"} (${statusText || "no file status"}) with +${pr.additions}/-${pr.deletions} lines`
       );
     }
-    return bullets;
+    if (pr.files.length > 1) {
+      bullets.push(
+        `touch ${pr.files.length} file${pr.files.length === 1 ? "" : "s"} (${statusText || "no file status"}) with +${pr.additions}/-${pr.deletions} lines`
+      );
+    }
+    return bullets.slice(0, 6);
+  }
+  buildNarrativeBullets(pr, cohorts) {
+    const bullets = [];
+    const feature = this.inferPrimaryFeature(pr);
+    const allFiles = cohorts.flatMap((cohort) => cohort.files);
+    const hasPath = (pattern) => allFiles.some((file) => pattern.test(file.filename.toLowerCase()));
+    const hasSourcePath = (pattern) => allFiles.some(
+      (file) => this.cohortKey(file.filename) === "source" && pattern.test(file.filename.toLowerCase())
+    );
+    if (hasPath(/user[_-]?profile|protocol|models?\/user/) && feature) {
+      bullets.push(`add ${feature} support to user profile models and protocol types`);
+    }
+    if (hasSourcePath(/admin\/users|user_full_info|admin/)) {
+      bullets.push(
+        feature ? `add admin user controls for ${feature}` : "update admin user detail controls"
+      );
+    }
+    if (hasSourcePath(/learning|course|module|catalog/)) {
+      bullets.push(
+        feature ? `update learning and course screens to respect ${feature}` : "update learning and course screen behavior"
+      );
+    }
+    if (hasSourcePath(/chat/)) {
+      bullets.push("update chat UI logic touched by the feature flow");
+    }
+    if (hasPath(/(^|\/)migrations?\//) || hasPath(/(^|\/)generated\//)) {
+      bullets.push(
+        feature ? `add generated server artifacts and migration metadata for ${feature}` : "add generated server artifacts and migration metadata"
+      );
+    }
+    const tests = cohorts.find((cohort) => cohort.key === "tests");
+    if (tests && tests.files.length > 0) {
+      bullets.push(`update ${tests.files.length} test file${tests.files.length === 1 ? "" : "s"}`);
+    }
+    if (bullets.length < 2) {
+      for (const cohort of cohorts) {
+        for (const file of cohort.files) {
+          const summary = this.summarizeFile(file);
+          if (!summary) continue;
+          bullets.push(this.lowercaseFirst(summary.replace(/\.$/, "")));
+          if (bullets.length >= 4) break;
+        }
+        if (bullets.length >= 4) break;
+      }
+    }
+    return this.unique(bullets).slice(0, 5);
   }
   buildWalkthrough(pr, cohorts) {
     if (pr.files.length === 0) {
@@ -18074,7 +18266,8 @@ ${generatedBlock}` : generatedBlock;
       { pattern: /\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/, primary: true },
       { pattern: /\b(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/, primary: true },
       { pattern: /\b(?:describe|it|test)\(['"`]([^'"`]+)['"`]/, primary: true },
-      { pattern: /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/, primary: false }
+      { pattern: /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/, primary: false },
+      { pattern: /\b(?:final|var|late|static|const|bool\??|int\??|double\??|num\??|String\??|DateTime\??)\s+([A-Za-z_$][\w$]*)\b/, primary: false }
     ];
     for (const line of lines) {
       for (const { pattern, primary: isPrimary } of patterns) {
@@ -18114,6 +18307,39 @@ ${deleted}`;
       topics.push("external request handling");
     }
     return this.unique(topics).slice(0, 3);
+  }
+  inferPrimaryFeature(pr) {
+    const candidates = [];
+    for (const file of pr.files) {
+      const patch = this.extractPatchLines(file.patch);
+      candidates.push(
+        ...this.extractConfigKeys(patch.additions),
+        ...this.extractSymbols([...patch.additions, ...patch.context])
+      );
+      const pathParts = file.filename.split(/[/.]/).flatMap((part) => part.split(/[_-]/)).filter((part) => part.length >= 4);
+      candidates.push(...pathParts);
+    }
+    const ranked = this.unique(candidates).map((candidate) => ({
+      raw: candidate,
+      words: this.humanizeIdentifier(candidate),
+      score: this.featureScore(candidate)
+    })).filter((candidate) => candidate.score > 0 && candidate.words.split(" ").length >= 2).sort((a, b) => b.score - a.score || b.raw.length - a.raw.length);
+    return ranked[0]?.words || null;
+  }
+  featureScore(value) {
+    const lower = value.toLowerCase();
+    let score = 0;
+    if (/hide|hidden|show|visible|visibility/.test(lower)) score += 4;
+    if (/paid|premium|feature|access|moderation|profile|course|chat/.test(lower)) score += 3;
+    if (/info|setting|flag|mode/.test(lower)) score += 2;
+    if (/[A-Z]/.test(value) || value.includes("_") || value.includes("-")) score += 2;
+    if (/checkbox|button|widget|row|dialog|header|page|screen|sliver/.test(lower)) score -= 5;
+    if (/^(id|name|type|data|value|status|created|updated|deleted|module|table|serverpod)$/.test(lower)) score -= 4;
+    if (/^\d+$/.test(lower)) score -= 10;
+    return score;
+  }
+  humanizeIdentifier(value) {
+    return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
   }
   isGenericSymbol(symbol) {
     return [
@@ -18170,6 +18396,9 @@ ${deleted}`;
   }
   truncate(value, maxLength) {
     return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+  }
+  lowercaseFirst(value) {
+    return value ? value.charAt(0).toLowerCase() + value.slice(1) : value;
   }
   unique(values) {
     return Array.from(new Set(values.filter(Boolean)));
@@ -26211,6 +26440,11 @@ function syncEnvFromInputs() {
     "LEARNING_ENABLED",
     "LEARNING_MIN_FEEDBACK_COUNT",
     "DIFF_MAX_BYTES",
+    "SMART_DIFF_COMPACTION",
+    "MAX_FULL_DIFF_FILE_BYTES",
+    "MAX_FULL_DIFF_FILE_CHANGES",
+    "ENABLE_TOKEN_AWARE_BATCHING",
+    "TARGET_TOKENS_PER_BATCH",
     "RUN_TIMEOUT_SECONDS",
     "BUDGET_MAX_USD",
     "ENABLE_AST_ANALYSIS",

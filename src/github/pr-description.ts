@@ -57,7 +57,7 @@ export class PullRequestDescriptionUpdater {
 
     const lines: string[] = [
       START_MARKER,
-      '## Summary by AI Robot Review',
+      '## Summary',
       '',
       ...summaryBullets.map((item) => `- ${item}`),
       '',
@@ -110,23 +110,94 @@ export class PullRequestDescriptionUpdater {
   }
 
   private buildSummaryBullets(pr: PRContext, cohorts: FileCohort[]): string[] {
-    const bullets: string[] = [];
+    const bullets: string[] = this.buildNarrativeBullets(pr, cohorts);
     const statusCounts = this.countBy(pr.files, (file) => file.status);
     const statusText = Object.entries(statusCounts)
       .map(([status, count]) => `${count} ${status}`)
       .join(', ');
 
-    bullets.push(
-      `change ${pr.files.length} file${pr.files.length === 1 ? '' : 's'} (${statusText || 'no file status'}) with +${pr.additions}/-${pr.deletions} lines`
-    );
-
-    for (const cohort of cohorts.slice(0, 3)) {
+    if (bullets.length === 0) {
       bullets.push(
-        `${this.verbForCohort(cohort)} ${cohort.files.length} ${this.cohortPhrase(cohort)} file${cohort.files.length === 1 ? '' : 's'}`
+        `change ${pr.files.length} file${pr.files.length === 1 ? '' : 's'} (${statusText || 'no file status'}) with +${pr.additions}/-${pr.deletions} lines`
       );
     }
 
-    return bullets;
+    if (pr.files.length > 1) {
+      bullets.push(
+        `touch ${pr.files.length} file${pr.files.length === 1 ? '' : 's'} (${statusText || 'no file status'}) with +${pr.additions}/-${pr.deletions} lines`
+      );
+    }
+
+    return bullets.slice(0, 6);
+  }
+
+  private buildNarrativeBullets(pr: PRContext, cohorts: FileCohort[]): string[] {
+    const bullets: string[] = [];
+    const feature = this.inferPrimaryFeature(pr);
+    const allFiles = cohorts.flatMap((cohort) => cohort.files);
+
+    const hasPath = (pattern: RegExp) =>
+      allFiles.some((file) => pattern.test(file.filename.toLowerCase()));
+    const hasSourcePath = (pattern: RegExp) =>
+      allFiles.some(
+        (file) =>
+          this.cohortKey(file.filename) === 'source' &&
+          pattern.test(file.filename.toLowerCase())
+      );
+
+    if (
+      hasPath(/user[_-]?profile|protocol|models?\/user/) &&
+      feature
+    ) {
+      bullets.push(`add ${feature} support to user profile models and protocol types`);
+    }
+
+    if (hasSourcePath(/admin\/users|user_full_info|admin/)) {
+      bullets.push(
+        feature
+          ? `add admin user controls for ${feature}`
+          : 'update admin user detail controls'
+      );
+    }
+
+    if (hasSourcePath(/learning|course|module|catalog/)) {
+      bullets.push(
+        feature
+          ? `update learning and course screens to respect ${feature}`
+          : 'update learning and course screen behavior'
+      );
+    }
+
+    if (hasSourcePath(/chat/)) {
+      bullets.push('update chat UI logic touched by the feature flow');
+    }
+
+    if (hasPath(/(^|\/)migrations?\//) || hasPath(/(^|\/)generated\//)) {
+      bullets.push(
+        feature
+          ? `add generated server artifacts and migration metadata for ${feature}`
+          : 'add generated server artifacts and migration metadata'
+      );
+    }
+
+    const tests = cohorts.find((cohort) => cohort.key === 'tests');
+    if (tests && tests.files.length > 0) {
+      bullets.push(`update ${tests.files.length} test file${tests.files.length === 1 ? '' : 's'}`);
+    }
+
+    if (bullets.length < 2) {
+      for (const cohort of cohorts) {
+        for (const file of cohort.files) {
+          const summary = this.summarizeFile(file);
+          if (!summary) continue;
+          bullets.push(this.lowercaseFirst(summary.replace(/\.$/, '')));
+          if (bullets.length >= 4) break;
+        }
+        if (bullets.length >= 4) break;
+      }
+    }
+
+    return this.unique(bullets).slice(0, 5);
   }
 
   private buildWalkthrough(pr: PRContext, cohorts: FileCohort[]): string {
@@ -403,6 +474,7 @@ export class PullRequestDescriptionUpdater {
       { pattern: /\b(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/, primary: true },
       { pattern: /\b(?:describe|it|test)\(['"`]([^'"`]+)['"`]/, primary: true },
       { pattern: /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/, primary: false },
+      { pattern: /\b(?:final|var|late|static|const|bool\??|int\??|double\??|num\??|String\??|DateTime\??)\s+([A-Za-z_$][\w$]*)\b/, primary: false },
     ];
 
     for (const line of lines) {
@@ -456,6 +528,57 @@ export class PullRequestDescriptionUpdater {
     }
 
     return this.unique(topics).slice(0, 3);
+  }
+
+  private inferPrimaryFeature(pr: PRContext): string | null {
+    const candidates: string[] = [];
+
+    for (const file of pr.files) {
+      const patch = this.extractPatchLines(file.patch);
+      candidates.push(
+        ...this.extractConfigKeys(patch.additions),
+        ...this.extractSymbols([...patch.additions, ...patch.context])
+      );
+
+      const pathParts = file.filename
+        .split(/[/.]/)
+        .flatMap((part) => part.split(/[_-]/))
+        .filter((part) => part.length >= 4);
+      candidates.push(...pathParts);
+    }
+
+    const ranked = this.unique(candidates)
+      .map((candidate) => ({
+        raw: candidate,
+        words: this.humanizeIdentifier(candidate),
+        score: this.featureScore(candidate),
+      }))
+      .filter((candidate) => candidate.score > 0 && candidate.words.split(' ').length >= 2)
+      .sort((a, b) => b.score - a.score || b.raw.length - a.raw.length);
+
+    return ranked[0]?.words || null;
+  }
+
+  private featureScore(value: string): number {
+    const lower = value.toLowerCase();
+    let score = 0;
+    if (/hide|hidden|show|visible|visibility/.test(lower)) score += 4;
+    if (/paid|premium|feature|access|moderation|profile|course|chat/.test(lower)) score += 3;
+    if (/info|setting|flag|mode/.test(lower)) score += 2;
+    if (/[A-Z]/.test(value) || value.includes('_') || value.includes('-')) score += 2;
+    if (/checkbox|button|widget|row|dialog|header|page|screen|sliver/.test(lower)) score -= 5;
+    if (/^(id|name|type|data|value|status|created|updated|deleted|module|table|serverpod)$/.test(lower)) score -= 4;
+    if (/^\d+$/.test(lower)) score -= 10;
+    return score;
+  }
+
+  private humanizeIdentifier(value: string): string {
+    return value
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
   }
 
   private isGenericSymbol(symbol: string): boolean {
@@ -526,6 +649,10 @@ export class PullRequestDescriptionUpdater {
     return value.length > maxLength
       ? `${value.slice(0, maxLength - 1)}...`
       : value;
+  }
+
+  private lowercaseFirst(value: string): string {
+    return value ? value.charAt(0).toLowerCase() + value.slice(1) : value;
   }
 
   private unique(values: string[]): string[] {

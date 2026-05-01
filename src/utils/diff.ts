@@ -330,6 +330,184 @@ export function filterDiffByFiles(diff: string, files: { filename: string }[]): 
   return chunks.join('\n').trimEnd();
 }
 
+export interface CompactedDiffFile {
+  filename: string;
+  reason: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  bytes: number;
+}
+
+export interface CompactedDiffResult {
+  diff: string;
+  summaryOnlyFiles: CompactedDiffFile[];
+}
+
+export interface CompactDiffOptions {
+  enabled?: boolean;
+  maxFullFileBytes?: number;
+  maxFullFileChanges?: number;
+}
+
+interface DiffChunk {
+  aPath: string;
+  bPath: string;
+  text: string;
+}
+
+/**
+ * Keep high-value source diffs verbatim and replace low-signal or huge files
+ * with metadata summaries. Codex can still inspect omitted files with git diff
+ * in agentic read-only mode, but the primary prompt stays focused.
+ */
+export function compactDiffForPrompt(
+  diff: string,
+  files: Array<{
+    filename: string;
+    status: string;
+    additions: number;
+    deletions: number;
+    changes: number;
+  }>,
+  options: CompactDiffOptions = {}
+): CompactedDiffResult {
+  if (!options.enabled || !diff.trim()) {
+    return { diff, summaryOnlyFiles: [] };
+  }
+
+  const maxFullFileBytes = options.maxFullFileBytes ?? 40_000;
+  const maxFullFileChanges = options.maxFullFileChanges ?? 800;
+  const fileByName = new Map(files.map(file => [file.filename, file]));
+  const chunks = splitDiffIntoChunks(diff);
+  const output: string[] = [];
+  const summaryOnlyFiles: CompactedDiffFile[] = [];
+
+  for (const chunk of chunks) {
+    if (!chunk.bPath) {
+      output.push(chunk.text);
+      continue;
+    }
+    const file = fileByName.get(chunk.bPath) || fileByName.get(chunk.aPath);
+    const filename = file?.filename || chunk.bPath;
+    const bytes = Buffer.byteLength(chunk.text, 'utf8');
+    const changes = file?.changes ?? 0;
+    const reason = getSummaryOnlyDiffReason(filename, bytes, changes, {
+      maxFullFileBytes,
+      maxFullFileChanges,
+    });
+
+    if (!reason) {
+      output.push(chunk.text);
+      continue;
+    }
+
+    const metadata: CompactedDiffFile = {
+      filename,
+      reason,
+      additions: file?.additions ?? 0,
+      deletions: file?.deletions ?? 0,
+      changes,
+      bytes,
+    };
+    summaryOnlyFiles.push(metadata);
+    output.push(formatSummaryOnlyChunk(chunk, metadata));
+  }
+
+  return {
+    diff: output.join('\n').trimEnd(),
+    summaryOnlyFiles,
+  };
+}
+
+function splitDiffIntoChunks(diff: string): DiffChunk[] {
+  const lines = diff.split('\n');
+  const chunks: DiffChunk[] = [];
+  let current: string[] = [];
+  let currentA = '';
+  let currentB = '';
+
+  const push = () => {
+    if (current.length > 0) {
+      chunks.push({ aPath: currentA, bPath: currentB, text: current.join('\n') });
+    }
+    current = [];
+    currentA = '';
+    currentB = '';
+  };
+
+  for (const line of lines) {
+    const normalizedLine = line.replace(/\r$/, '');
+    const match = normalizedLine.match(/^diff --git\s+a\/(.+?)\s+b\/(.+)$/);
+    if (match) {
+      push();
+      currentA = unquoteGitPath(match[1].trim());
+      currentB = unquoteGitPath(match[2].trim());
+    }
+    current.push(line);
+  }
+
+  push();
+  return chunks;
+}
+
+export function getSummaryOnlyDiffReason(
+  filename: string,
+  bytes: number,
+  changes: number,
+  options: { maxFullFileBytes?: number; maxFullFileChanges?: number } = {}
+): string | null {
+  const maxFullFileBytes = options.maxFullFileBytes ?? 40_000;
+  const maxFullFileChanges = options.maxFullFileChanges ?? 800;
+  const lower = filename.toLowerCase();
+
+  if (isDependencyLockPath(lower)) return 'dependency lock file';
+  if (isGeneratedPath(lower)) return 'generated file';
+  if (isMigrationArtifactPath(lower)) return 'migration artifact';
+  if (bytes > maxFullFileBytes) return `large diff over ${maxFullFileBytes} bytes`;
+  if (changes > maxFullFileChanges) return `large diff over ${maxFullFileChanges} changed lines`;
+
+  return null;
+}
+
+function isDependencyLockPath(lower: string): boolean {
+  return /(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|pubspec\.lock|gemfile\.lock|cargo\.lock|poetry\.lock|go\.sum|composer\.lock|pdm\.lock|pipfile\.lock)$/.test(lower);
+}
+
+function isGeneratedPath(lower: string): boolean {
+  return (
+    lower.includes('/generated/') ||
+    lower.includes('/generated_') ||
+    /\.(g|freezed|pb|pbenum|pbjson|pbserver)\.dart$/.test(lower) ||
+    /\.generated\.[jt]sx?$/.test(lower) ||
+    /\.min\.(js|css)$/.test(lower) ||
+    /\.map$/.test(lower)
+  );
+}
+
+function isMigrationArtifactPath(lower: string): boolean {
+  return (
+    /(^|\/)migrations?\//.test(lower) ||
+    /(^|\/)schema\//.test(lower) ||
+    /(^|\/)prisma\/migrations\//.test(lower)
+  );
+}
+
+function formatSummaryOnlyChunk(chunk: DiffChunk, file: CompactedDiffFile): string {
+  return [
+    `diff --git a/${chunk.aPath} b/${chunk.bPath}`,
+    `# AI Robot Review: full diff omitted from primary prompt (${file.reason}).`,
+    `# File: ${file.filename}`,
+    `# Stats: +${file.additions}/-${file.deletions}, ${file.changes} changed lines, ${file.bytes} diff bytes.`,
+    '# If this file is relevant, inspect it with read-only commands before reporting findings:',
+    `#   git diff -- ${shellQuote(file.filename)}`,
+  ].join('\n');
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 function unquoteGitPath(path: string): string {
   // Git may quote paths with spaces or special chars using C-style escapes
   if (path.startsWith('"') && path.endsWith('"')) {

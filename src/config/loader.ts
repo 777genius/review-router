@@ -119,6 +119,11 @@ export class ConfigLoader {
 
       batchMaxFiles: this.parseNumber(env.BATCH_MAX_FILES),
       providerBatchOverrides: this.parseOverrides(env.PROVIDER_BATCH_OVERRIDES),
+      enableTokenAwareBatching: this.parseBoolean(env.ENABLE_TOKEN_AWARE_BATCHING),
+      targetTokensPerBatch: this.parseNumber(env.TARGET_TOKENS_PER_BATCH),
+      smartDiffCompaction: this.parseBoolean(env.SMART_DIFF_COMPACTION),
+      maxFullDiffFileBytes: this.parseNumber(env.MAX_FULL_DIFF_FILE_BYTES),
+      maxFullDiffFileChanges: this.parseNumber(env.MAX_FULL_DIFF_FILE_CHANGES),
 
       skipTrivialChanges: this.parseBoolean(env.SKIP_TRIVIAL_CHANGES),
       skipDependencyUpdates: this.parseBoolean(env.SKIP_DEPENDENCY_UPDATES),
@@ -187,6 +192,9 @@ export class ConfigLoader {
       providerBatchOverrides: config.provider_batch_overrides,
       enableTokenAwareBatching: config.enable_token_aware_batching,
       targetTokensPerBatch: config.target_tokens_per_batch,
+      smartDiffCompaction: config.smart_diff_compaction,
+      maxFullDiffFileBytes: config.max_full_diff_file_bytes,
+      maxFullDiffFileChanges: config.max_full_diff_file_changes,
       graphEnabled: config.graph_enabled,
       graphCacheEnabled: config.graph_cache_enabled,
       graphMaxDepth: config.graph_max_depth,

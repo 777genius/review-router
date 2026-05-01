@@ -26505,8 +26505,8 @@ ${finding.message}`
     const changedLines = mapAddedLines(file?.patch);
     const hasDirectEvidence = changedLines.some((l) => l.line === normalizedFinding.line);
     const astConfirmed = Boolean(normalizedFinding.providers?.includes("ast") || normalizedFinding.provider === "ast");
-    let graphConfirmed = context.some((ctx) => ctx.file === finding.file);
-    if (codeGraph && !graphConfirmed) {
+    let graphConfirmed = false;
+    if (codeGraph) {
       const dependents = codeGraph.getDependents(finding.file);
       graphConfirmed = dependents.length > 0;
     }

@@ -1088,9 +1088,9 @@ export class ReviewOrchestrator {
     const hasDirectEvidence = changedLines.some(l => l.line === normalizedFinding.line);
     const astConfirmed = Boolean(normalizedFinding.providers?.includes('ast') || normalizedFinding.provider === 'ast');
 
-    // Enhanced graph confirmation using code graph
-    let graphConfirmed = context.some(ctx => ctx.file === finding.file);
-    if (codeGraph && !graphConfirmed) {
+    // Only claim graph confirmation when an actual code graph was built.
+    let graphConfirmed = false;
+    if (codeGraph) {
       // Check if the file has dependents (is used elsewhere)
       const dependents = codeGraph.getDependents(finding.file);
       graphConfirmed = dependents.length > 0;

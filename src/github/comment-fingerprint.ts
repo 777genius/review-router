@@ -155,15 +155,6 @@ export function isLikelySameInlineFinding(
 
   const existingBody = stripInlineFingerprintMarkers(existing.body);
   const candidateBody = stripInlineFingerprintMarkers(candidate.body);
-  const existingSeverity = extractSeverity(existingBody);
-  const candidateSeverity = extractSeverity(candidateBody);
-  if (
-    existingSeverity &&
-    candidateSeverity &&
-    existingSeverity !== candidateSeverity
-  ) {
-    return false;
-  }
 
   const existingLine = existing.line ?? 0;
   const candidateLine = candidate.line ?? 0;

@@ -17721,11 +17721,6 @@ function isLikelySameInlineFinding(existing, candidate) {
   if (!existingPath || existingPath !== candidatePath) return false;
   const existingBody = stripInlineFingerprintMarkers(existing.body);
   const candidateBody = stripInlineFingerprintMarkers(candidate.body);
-  const existingSeverity = extractSeverity(existingBody);
-  const candidateSeverity = extractSeverity(candidateBody);
-  if (existingSeverity && candidateSeverity && existingSeverity !== candidateSeverity) {
-    return false;
-  }
   const existingLine = existing.line ?? 0;
   const candidateLine = candidate.line ?? 0;
   const lineDistance = Math.abs(existingLine - candidateLine);

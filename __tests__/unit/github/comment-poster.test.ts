@@ -292,6 +292,66 @@ describe('CommentPoster', () => {
       );
     });
 
+    it('skips semantic duplicates when severity drifts between runs', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'src/users.js',
+          line: 6,
+          body: [
+            '**🔴 Critical - SQL injection in email lookup**',
+            '',
+            '**Severity:** 🔴 **Critical** - blocks merge; security risk.',
+            '',
+            'The changed query interpolates `email` directly into SQL, so a crafted email can alter the WHERE clause.',
+            '',
+            '<!-- review-router-inline:legacy -->',
+          ].join('\n'),
+        },
+      ]);
+
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'src/users.js',
+          line: 6,
+          side: 'RIGHT' as const,
+          body: [
+            '**🟡 Major - SQL injection in email lookup**',
+            '',
+            '**Severity:** 🟡 **Major** - should fix before merge; correctness risk.',
+            '',
+            'The query interpolates `email` directly into SQL, allowing a crafted email to change the WHERE clause.',
+          ].join('\n'),
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'src/users.js',
+          status: 'modified',
+          additions: 1,
+          deletions: 2,
+          changes: 3,
+          patch: [
+            '@@ -3,8 +3,7 @@ function normalizeEmail(email) {',
+            ' }',
+            ' async function findUserByEmail(db, email) {',
+            "-  const normalized = normalizeEmail(email);",
+            "-  const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [normalized]);",
+            "+  const rows = await db.query(`SELECT * FROM users WHERE email = '${email}' LIMIT 1`);",
+            '   return rows[0] || null;',
+          ].join('\n'),
+        },
+      ];
+
+      await poster.postInline(123, comments, files);
+
+      expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        'Skipping duplicate active inline comment at src/users.js:5'
+      );
+    });
+
     it('does not treat outdated inline comments as active duplicates', async () => {
       mockOctokit.paginate.mockResolvedValue([
         {

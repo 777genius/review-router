@@ -14,7 +14,7 @@ The generated workflow uses the stable major tag by default:
 777genius/review-router@v1
 ```
 
-`@v1` is moved to the latest compatible stable v1 release. Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.2`. Use `REVIEW_ROUTER_ACTION_REF_MODE=main` if you want the target repository to run the newest `main` branch on every workflow run. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
+`@v1` is moved to the latest compatible stable v1 release. Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.3`. Use `REVIEW_ROUTER_ACTION_REF_MODE=main` if you want the target repository to run the newest `main` branch on every workflow run. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
 
 ## Quick start
 

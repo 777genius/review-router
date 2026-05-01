@@ -1,405 +1,243 @@
-# AI Robot Review (TypeScript v0.2.1)
+# AI Robot Review
 
-**Status:** Production Ready ✅ | All Phases Complete | Enterprise Features Live
+AI Robot Review is a GitHub Action for pull request review with Codex CLI, OpenAI API, or OpenRouter.
 
-Hybrid AST + LLM GitHub Action that fuses multiple AI providers with consensus filtering, cost tracking, and security scanning. Now with incremental review (6x faster), CLI mode, analytics dashboard, and self-hosted deployment.
+Current focus: a practical PR reviewer that can run from GitHub Actions, post a PR summary, post a small number of inline findings, and optionally fail the check on serious issues. The Codex path is designed to use a ChatGPT subscription OAuth login instead of OpenAI API billing.
 
-## Features
+## Status
 
-### Core Capabilities
-- **Multi-provider execution** with rotation, retries, and rate-limit awareness
-- **Hybrid analysis:** fast AST heuristics + deep LLM prompts
-- **Consensus-based inline comments** with severity thresholds
-- **Cost estimation/tracking** and budget guardrails
-- **Incremental review** (6x faster, 80% cheaper on PR updates)
-- **CLI mode** for local development workflows
-- **Dry-run mode** for previewing reviews without posting
-- Chunked GitHub comment posting with JSON + SARIF report output
-- Optional test coverage hints, AI code detection, and secrets scanning
-- 85%+ test coverage with comprehensive benchmarks
+This is an actively stabilized fork of `keithah/multi-provider-code-review`.
 
-### Advanced Features ⚡ NEW v2.1
-- **📊 Analytics Dashboard** - Track costs, performance, and ROI with HTML/CSV/JSON reports
-- **🤖 Feedback Learning** - Optional feedback signal support for future tuning
-- **🔍 Code Graph Analysis** - AST-based dependency tracking for better context
-- **⚙️ Auto-Fix Prompts** - Generate fix suggestions for AI IDEs (Cursor, Copilot)
-- **📈 Provider Reliability** - Track and rank providers by success rate and cost
-- **🐳 Self-Hosted Deployment** - Docker & webhook server for enterprise use
-- **🔌 Plugin System** - Add custom LLM providers without modifying core code
+What has been tested end-to-end:
 
-### Safety Defaults
-- **Path patterns** are validated to prevent injection/traversal: allowed chars `[A-Za-z0-9._-/*?{}[] ,]`, leading `!` (negation) and `..` segments are blocked.
-- **Batch overrides** (`PROVIDER_BATCH_OVERRIDES`) must be integers 1-200; out-of-range values are clamped with a warning.
-- **Concurrency control**: workflow runs use a simple `${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}` group to avoid duplicate reviews per commit/ref.
+- Codex CLI OAuth in GitHub Actions using `~/.codex/auth.json` restored from GitHub Secrets.
+- `codex exec` in read-only sandbox mode with strict JSON output for inline review comments.
+- PR summary comment updates.
+- PR description summary block updates without overwriting author text.
+- Inline comments on changed lines.
+- Duplicate suppression across reruns when the model rewrites the same finding or the line shifts slightly.
+- Blocking merge checks with `FAIL_ON_MAJOR=true` or `FAIL_ON_CRITICAL=true`.
+
+What should still be treated as experimental:
+
+- Multi-provider consensus beyond the simple one-provider Codex setup.
+- Code graph context on large mixed-language repos.
+- Analytics, learning, plugin, and self-hosted flows inherited from the upstream project.
+
+## Core Features
+
+- **Codex subscription mode:** run reviews with Codex CLI OAuth from a ChatGPT subscription.
+- **API key mode:** use OpenAI API key or OpenRouter API key instead.
+- **GitHub identity options:** post as `github-actions[bot]` or as your own GitHub App bot.
+- **Read-only agentic context:** Codex starts from the PR diff, then may inspect related repository files in a read-only sandbox.
+- **Strict JSON findings:** provider output is parsed into `{file,line,severity,title,message,suggestion}` before posting.
+- **Inline comments:** posts only valid comments on changed lines, with severity labels in the comment body.
+- **PR summary:** updates one summary comment instead of creating a new summary on every run.
+- **PR description summary:** adds a generated `Summary`, selected files list, and walkthrough block while preserving author text above it.
+- **Merge gating:** fail the check for critical or major findings when configured.
+- **Large diff compaction:** compact very large, generated, lockfile, and migration diffs so they do not dominate the prompt.
+- **Secret handling:** fork PRs are skipped by default, Codex runs with a sanitized environment, and GitHub secrets are not printed.
+
+## Non-Goals For v1
+
+- No hosted SaaS backend.
+- No shared global branded GitHub App.
+- No automatic mutation of repository files.
+- No automatic deletion or moving of old inline discussions by default.
+- No claim that token or dollar cost is available for Codex subscription OAuth. For OAuth runs the UI reports `OAuth subscription` instead of API billing cost.
 
 ## Quick Start
 
-### Curl installer
+Run the installer from a local checkout of the repository you want to configure:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
 ```
 
-The installer creates `.github/workflows/ai-robot-review.yml`, stores the required secrets/variables, and opens a setup PR instead of pushing directly to the default branch.
+The installer:
 
+- detects or asks for the target `owner/repo`;
+- lets you choose `github-actions[bot]` or GitHub App bot identity;
+- lets you choose Codex subscription OAuth, OpenAI API key, or OpenRouter API key;
+- creates `.github/workflows/ai-robot-review.yml` on a setup branch;
+- opens a setup PR instead of pushing directly to the default branch.
 
-### CLI Mode (Local Development)
-```bash
-# Install globally
-npm install -g multi-provider-code-review
+See [docs/install.md](./docs/install.md) for organization-level secrets, selected repositories, GitHub App setup, and security notes.
 
-# Review uncommitted changes
-mpr review
+## Recommended Codex Workflow
 
-# Review specific commit
-mpr review HEAD~1
-
-# Review branch comparison
-mpr review main..feature
-
-# Preview without running (dry-run)
-mpr review --dry-run
-
-# Generate analytics dashboard
-mpr analytics generate
-
-# View analytics summary
-mpr analytics summary
-```
-
-### Self-Hosted (Enterprise)
-```bash
-# Using Docker Compose
-docker-compose up -d
-
-# Or standalone Docker
-docker run -d \
-  --name mpr-review \
-  -e GITHUB_TOKEN=your_token \
-  -e OPENROUTER_API_KEY=your_key \
-  -v mpr-cache:/app/.cache \
-  ai-robot-review:latest
-```
-
-See [Self-Hosted Deployment Guide](docs/self-hosted.md) for details.
-
-## Supported Providers
-
-### API-Based Providers
-
-- **OpenRouter** (`openrouter/<model>`): 200+ models via single API
-  - Recommended: `openrouter/free` - Automatically routes to best available free model
-  - Alternative: Specific models like `openrouter/google/gemini-2.0-flash-exp:free`
-  - Requires: `OPENROUTER_API_KEY` environment variable
-  - Get free API key: [openrouter.ai](https://openrouter.ai)
-
-### OAuth CLI Providers
-
-The following providers require local CLI installation and OAuth authentication. These are ideal for development environments and can be configured for CI/CD.
-
-- **Claude Code CLI** (`claude/<model>`)
-  - Examples: `claude/sonnet`, `claude/opus`, `claude/haiku`
-  - Requires: `claude` CLI installed and authenticated
-  - Install: See [Claude Code documentation](https://docs.anthropic.com/claude-code)
-
-- **Codex CLI** (`codex/<model>`)
-  - Current recommended model input: `CODEX_MODEL: "gpt-5.5"` (internally mapped to `codex/gpt-5.5`)
-  - Requires: `codex` CLI installed and authenticated (ChatGPT Pro subscription)
-  - Install: `npm install -g @openai/codex@0.125.0`
-  - Recommended for CI: start with one Codex model and `CODEX_REASONING_EFFORT: "medium"`
-
-- **Gemini CLI** (`gemini/<model>`)
-  - Examples: `gemini/gemini-2.0-flash`, `gemini/gemini-1.5-pro`
-  - Requires: `gemini` CLI installed and authenticated (Google Cloud account)
-  - Install: `npm install -g @google/gemini-cli`
-
-- **OpenCode CLI** (`opencode/<model>`)
-  - Examples: `opencode/minimax-m2.1-free`, `opencode/deepseek/deepseek-chat`
-  - Requires: `opencode` CLI installed
-  - Install: `npm install -g opencode-ai`
-
-### GitHub Actions Integration for OAuth CLIs
-
-OAuth-based CLIs (Claude Code, Codex, Gemini) require credential setup for CI/CD:
-
-1. **Extract credentials** from your local machine (where you're authenticated)
-2. **Store as GitHub Secrets** (encrypted storage)
-3. **Restore in CI workflow** before running reviews
-
-#### Quick Setup (Automated)
-
-If you have all CLIs authenticated locally and GitHub CLI (`gh`) installed:
-
-```bash
-# Set secrets for current repository
-
-# Claude Code (macOS - uses Keychain)
-security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null | gh secret set CLAUDE_CODE_OAUTH
-
-# Claude Code (Linux - uses config file instead)
-cat ~/.config/claude/credentials.json | gh secret set CLAUDE_CODE_OAUTH
-
-# Codex and Gemini (same on macOS/Linux)
-cat ~/.codex/auth.json | gh secret set CODEX_AUTH_JSON
-cat ~/.codex/config.toml | gh secret set CODEX_CONFIG_TOML
-cat ~/.gemini/oauth_creds.json | gh secret set GEMINI_OAUTH_CREDS
-cat ~/.gemini/settings.json | gh secret set GEMINI_SETTINGS
-
-# For another repository, add: --repo owner/repo-name
-```
-
-**Note:** See [CI Setup Guide](docs/CI_SETUP.md) for platform-specific instructions (Linux/macOS/Windows).
-
-**See the [CI Setup Guide](docs/CI_SETUP.md) for:**
-- Detailed step-by-step instructions
-- Manual secret creation via GitHub UI
-- Complete workflow examples with credential restoration
-- Platform-specific notes (Linux, macOS, Windows)
-- Troubleshooting and security best practices
-
-**Workflow Example:**
 ```yaml
-- name: Setup CLI Configuration Files
-  run: |
-    # Claude Code
-    if [ -n "${{ secrets.CLAUDE_CODE_OAUTH }}" ]; then
-      mkdir -p ~/.config/claude
-      echo '${{ secrets.CLAUDE_CODE_OAUTH }}' > ~/.config/claude/credentials.json
-      chmod 600 ~/.config/claude/credentials.json
-    fi
-    # Codex
-    if [ -n "${{ secrets.CODEX_AUTH_JSON }}" ]; then
-      mkdir -p ~/.codex
-      echo '${{ secrets.CODEX_AUTH_JSON }}' > ~/.codex/auth.json
-      echo '${{ secrets.CODEX_CONFIG_TOML }}' > ~/.codex/config.toml
-      chmod 600 ~/.codex/auth.json ~/.codex/config.toml
-    fi
-    # Gemini
-    if [ -n "${{ secrets.GEMINI_OAUTH_CREDS }}" ]; then
-      mkdir -p ~/.gemini
-      echo '${{ secrets.GEMINI_OAUTH_CREDS }}' > ~/.gemini/oauth_creds.json
-      echo '${{ secrets.GEMINI_SETTINGS }}' > ~/.gemini/settings.json
-      chmod 600 ~/.gemini/oauth_creds.json ~/.gemini/settings.json
-    fi
+name: AI Robot Review
 
-- name: Run Review
-  uses: 777genius/multi-provider-code-review@main
-  with:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    PR_NUMBER: ${{ github.event.pull_request.number }}
-    CODEX_MODEL: "gpt-5.5"
-    PROVIDER_MAX_PARALLEL: "1"
-    PROVIDER_RETRIES: "0"
-    CODEX_HEALTHCHECK_MODE: "exec"
-    CODEX_HEALTHCHECK_REASONING_EFFORT: "low"
-    CODEX_REASONING_EFFORT: "medium"
-    FAIL_ON_NO_HEALTHY_PROVIDERS: "true"
-    UPDATE_PR_DESCRIPTION: "true"
-    FAIL_ON_CRITICAL: "true"
-    FAIL_ON_MAJOR: "false"
-    INLINE_MAX_COMMENTS: "5"
-    INLINE_MIN_SEVERITY: "major"
-    ENABLE_AI_DETECTION: "false"
-    LEARNING_ENABLED: "false"
-    GRAPH_ENABLED: "false"
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: ai-robot-review-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Install official Codex CLI
+        run: npm install -g @openai/codex@0.125.0
+
+      - name: Restore Codex OAuth config
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+          CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+        run: |
+          test -n "$CODEX_AUTH_JSON"
+          mkdir -p ~/.codex
+          printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
+          chmod 600 ~/.codex/auth.json
+          if [ -n "$CODEX_CONFIG_TOML" ]; then
+            printf '%s' "$CODEX_CONFIG_TOML" > ~/.codex/config.toml
+            chmod 600 ~/.codex/config.toml
+          fi
+
+      - name: Verify Codex OAuth headless mode
+        env:
+          CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
+        run: |
+          codex exec --model "$CODEX_MODEL" --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
+          grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
+
+      - name: Run AI Robot Review
+        uses: 777genius/multi-provider-code-review@main
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
+          CODEX_REASONING_EFFORT: 'medium'
+          CODEX_AGENTIC_CONTEXT: 'true'
+          FAIL_ON_NO_HEALTHY_PROVIDERS: 'true'
+          INLINE_MAX_COMMENTS: '5'
+          INLINE_MIN_SEVERITY: major
+          MIN_CONFIDENCE: '0.6'
+          CONSENSUS_REQUIRED_FOR_CRITICAL: 'false'
+          UPDATE_PR_DESCRIPTION: 'true'
+          FAIL_ON_CRITICAL: 'true'
+          FAIL_ON_MAJOR: 'false'
+          ENABLE_AST_ANALYSIS: 'true'
+          ENABLE_SECURITY: 'true'
+          ENABLE_AI_DETECTION: 'false'
+          LEARNING_ENABLED: 'false'
+          GRAPH_ENABLED: 'false'
 ```
 
-### Plugin System
+For strict blocking, set:
 
-Add custom LLM providers without modifying core code:
-
-```bash
-# Enable plugins
-export PLUGINS_ENABLED=true
-export PLUGIN_DIR=./plugins
-
-# Create custom provider
-# See docs/plugins.md for details
+```yaml
+FAIL_ON_MAJOR: 'true'
 ```
 
-## Key Inputs
+Then make `AI Robot Review / review` a required status check in branch protection.
 
-### Required
-- `GITHUB_TOKEN`: token with PR read/write scope
-- `PR_NUMBER`: pull request number to review
+## Provider Modes
 
-### Performance & Cost
-- `INCREMENTAL_ENABLED` (default: `true`): Enable 6x faster incremental reviews
-- `INCREMENTAL_CACHE_TTL_DAYS` (default: `7`): Cache lifetime for incremental reviews
-- `BUDGET_MAX_USD` (default: `0`): Skip if estimated cost exceeds this amount
-- `DRY_RUN` (default: `false`): Preview mode without posting to GitHub
+### Codex OAuth Subscription
 
-### Providers
-- `REVIEW_PROVIDERS`: Comma-separated providers (examples: `openrouter/<model>`, `opencode/<model>`, `claude/<model>`, `codex/<model>`, `gemini/<model>`)
-- `CODEX_MODEL`: Codex model id without provider prefix, for example `gpt-5.5`. Used when `REVIEW_PROVIDERS` is empty.
-- `FALLBACK_PROVIDERS`: Backup providers if primary providers fail
-- `PROVIDER_DISCOVERY_LIMIT` (default: `8`): Max providers to discover/health-check
-- `PROVIDER_LIMIT` (default: `1`): Max providers to use for actual review
-- `PROVIDER_MAX_PARALLEL` (default: `1`): Max parallel provider execution
+Use this when you want Codex through your ChatGPT subscription.
 
-### Filtering & Thresholds
-- `INLINE_MAX_COMMENTS` (default: `5`): Maximum inline comments to post
-- `INLINE_MIN_SEVERITY` (default: `major`): Minimum severity for inline comments
-- `INLINE_MIN_AGREEMENT` (default: `1`): Providers required to agree
-- `FAIL_ON_CRITICAL` (default: `true`): Fail the check when critical findings exist
-- `FAIL_ON_MAJOR` (default: `false`): Fail the check when major findings exist
-- `FAIL_ON_SEVERITY` (default: unset): Advanced override for the failure threshold (`off`, `critical`, `major`, `minor`)
-- `MIN_CHANGED_LINES` (default: `0`): Skip if below this line count
-- `MAX_CHANGED_FILES` (default: `0`): Skip if over this file count
-- `SKIP_LABELS`: Comma-separated labels to skip review
+Required secrets or organization selected-repo secrets:
 
-### Features
-- `ENABLE_AST_ANALYSIS` (default: `true`): Fast AST-based analysis
-- `ENABLE_SECURITY` (default: `true`): Security secrets scanning
-- `ENABLE_TEST_HINTS` (default: `true`): Test coverage hints
-- `ENABLE_AI_DETECTION` (default: `false`): AI-generated code detection
-- `ENABLE_CACHING` (default: `true`): Cache findings for faster reviews
-- `UPDATE_PR_DESCRIPTION` (default: `true`): Append/update an AI Robot Review block in the PR description while preserving author text above it
+- `CODEX_AUTH_JSON`: contents of `~/.codex/auth.json`
+- `CODEX_CONFIG_TOML`: optional, usually leave unset unless you intentionally need local Codex config in CI
 
-### Advanced Features (v2.1)
-- `ANALYTICS_ENABLED` (default: `true`): Track costs and performance
-- `ANALYTICS_MAX_REVIEWS` (default: `1000`): Max reviews to store
-- `LEARNING_ENABLED` (default: `false`): Learn from feedback reactions
-- `LEARNING_MIN_FEEDBACK_COUNT` (default: `5`): Min feedback before learning
-- `QUIET_MODE_ENABLED` (default: `false`): Filter low-confidence findings
-- `QUIET_MIN_CONFIDENCE` (default: `0.5`): Confidence threshold for quiet mode
-- `GRAPH_ENABLED` (default: `false`): Enable code graph analysis
-- `GRAPH_MAX_DEPTH` (default: `5`): Max dependency depth
-- `GENERATE_FIX_PROMPTS` (default: `false`): Generate auto-fix suggestions
-- `FIX_PROMPT_FORMAT` (default: `plain`): Format for fix prompts (cursor, copilot, plain)
-- `PLUGINS_ENABLED` (default: `false`): Enable custom provider plugins
-- `PLUGIN_DIR` (default: `./plugins`): Plugin directory path
+Recommended variable:
 
-### Output
-- `REPORT_BASENAME` (default: `ai-robot-review`): Base name for `*.json` and `*.sarif` files
+- `REVIEW_CODEX_MODEL=gpt-5.5`
+
+### OpenAI API Key
+
+Use this when shared automation should not depend on a personal Codex OAuth login.
+
+Required secret:
+
+- `OPENAI_API_KEY`
+
+### OpenRouter API Key
+
+Use this if you want model routing through OpenRouter.
+
+Required secret:
+
+- `OPENROUTER_API_KEY`
+
+## Important Inputs
+
+| Input | Default | Notes |
+|---|---:|---|
+| `CODEX_MODEL` | empty | Codex model id, for example `gpt-5.5`. |
+| `CODEX_REASONING_EFFORT` | empty | Codex effort for review runs, for example `medium`. |
+| `CODEX_AGENTIC_CONTEXT` | `true` | Lets Codex inspect related files in read-only mode. |
+| `INLINE_MAX_COMMENTS` | `5` | Caps inline comment noise. |
+| `INLINE_MIN_SEVERITY` | `major` | Controls which findings become inline comments. |
+| `MIN_CONFIDENCE` | empty | Optional confidence threshold for inline suggestions. |
+| `FAIL_ON_CRITICAL` | `true` | Fails the check on critical findings. |
+| `FAIL_ON_MAJOR` | `false` | Set `true` to block PRs on major findings. |
+| `UPDATE_PR_DESCRIPTION` | `true` | Adds or updates only the generated AI Robot Review block. |
+| `SMART_DIFF_COMPACTION` | `true` | Summarizes oversized/generated diffs before prompt construction. |
+| `GRAPH_ENABLED` | `false` | Optional code graph context. Keep off until validated for your repo. |
+| `LEARNING_ENABLED` | `false` | Experimental feedback-learning path. |
+
+## Comment Deduplication
+
+AI Robot Review suppresses duplicate inline comments when a rerun reports the same issue again. The dedup check uses:
+
+- hidden inline fingerprints for exact matches;
+- same file and severity;
+- nearby line distance;
+- semantic overlap in title/body/code tokens.
+
+It intentionally does not delete or move existing inline discussions by default. Deleting old comments can hide review history and is easy to get wrong when a model slightly changes wording. If a future lifecycle mode is added, it should be opt-in and heavily tested.
+
+## Security Notes
+
+- Do not run secret-backed review on untrusted fork PRs. The installer-generated workflow skips those by default.
+- GitHub Secrets values are hidden in the UI, but anyone who can change workflow files can attempt exfiltration. Protect `.github/workflows/**` with CODEOWNERS and branch protection.
+- For organizations, prefer organization-level selected-repository secrets so the Codex OAuth credential is only available to approved repos.
+- Codex provider runs with a sanitized environment and read-only sandbox. It should not receive `GITHUB_TOKEN`, `OPENROUTER_API_KEY`, or arbitrary `INPUT_*` variables.
 
 ## Development
 
-### Setup
 ```bash
 npm install
-npm run hooks:install  # Install pre-commit hooks
+npm run lint
+npm run typecheck
+npm test -- --runInBand
+npm run build
+git diff --check
 ```
 
-### Build & Test
-```bash
-npm run build          # Bundle action and CLI
-npm run build:prod     # Minified production build
-npm run test           # All tests
-npm run test:unit      # Fast unit tests only
-npm run test:coverage  # Coverage report (target: 85%)
-npm run benchmark      # Performance benchmarks
-```
-
-### Quality Checks
-```bash
-npm run lint           # ESLint
-npm run format         # Prettier formatting
-npm run typecheck      # TypeScript type checking
-```
-
-### Pre-commit Hook
-The pre-commit hook automatically runs on every commit:
-- Type checking
-- Linting
-- Fast unit tests
-- Build verification
-
-Skip with: `git commit --no-verify`
-
-## Project Status
-
-### ✅ Phase 1 Complete (Weeks 1-4)
-- **Test Coverage:** 85%+ with 42 test files, 5,192 lines of test code
-- **Incremental Review:** 6x faster, 80% cheaper on PR updates
-- **CLI Mode:** Full local development workflow
-- **Performance:** All benchmarks exceed targets by 10-100x
-- **DX:** Pre-commit hooks, dry-run mode, structured logging
-
-### ✅ Phase 2 Complete (Weeks 5-10)
-- **Feedback Learning:** Optional feedback signals can adjust confidence thresholds
-- **Code Graph:** AST-based dependency tracking with O(1) lookups
-- **Quiet Mode:** Filters low-confidence findings using learned thresholds
-- **Auto-Fix Prompts:** Generates fix suggestions for AI IDEs (Cursor, Copilot, Plain)
-- **Provider Reliability:** Tracks success rates, false positives, and cost per provider
-- **Comprehensive Tests:** Full test coverage for all Phase 2 features
-
-### ✅ Phase 3 Complete (Weeks 11-14)
-- **Analytics Dashboard:** HTML/CSV/JSON reports with cost trends, ROI calculation
-- **Self-Hosted Deployment:** Docker + docker-compose with webhook server
-- **Plugin System:** Load custom LLM providers dynamically
-- **Enterprise Features:** Webhook server, health checks, graceful shutdown
-- **Documentation:** Complete guides for self-hosting, plugins, and analytics
-- **Security Hardening:** Secret redaction, resource leak fixes, path traversal protection
-
-**All 14 weeks of v0.2.1 development plan delivered.** Production ready with 303/306 tests passing (99%). Ready for enterprise deployment.
-
-See [DEVELOPMENT_PLAN_V2.1.md](./DEVELOPMENT_PLAN_V2.1.md) for detailed roadmap.
-
-## Analytics Dashboard
-
-Track costs, performance, and ROI with the built-in analytics dashboard.
-
-### Quick Access
-
-```bash
-# Generate interactive HTML dashboard
-mpr analytics generate
-
-# View summary in terminal
-mpr analytics summary
-
-# Generate CSV export for spreadsheets
-mpr analytics generate --format csv
-```
-
-### Dashboard Includes
-
-- **Cost Trends**: Daily cost and review count over time
-- **Performance**: Review speed, cache hit rates, optimization trends
-- **ROI Analysis**: Automatic calculation of cost vs time saved
-- **Provider Performance**: Success rates, costs, and reliability by provider
-- **Findings Distribution**: Issues by severity and category
-- **Summary Cards**: Total reviews, costs, findings, cache effectiveness
-
-### Output Files
-
-- `reports/analytics-dashboard.html` - Interactive HTML dashboard (open in browser)
-- `reports/analytics-export.csv` - Spreadsheet-compatible data
-- `reports/analytics-metrics.json` - Raw metrics for custom processing
-
-### Configuration
-
-```yaml
-# Enable analytics (default: true)
-ANALYTICS_ENABLED: 'true'
-
-# Maximum reviews to store (default: 1000)
-ANALYTICS_MAX_REVIEWS: '1000'
-```
-
-**See [Analytics Guide](./docs/analytics.md) for complete documentation including:**
-- GitHub Actions integration for automated reports
-- Slack/email notifications
-- Cost optimization strategies
-- Custom data processing examples
+The action bundle is committed in `dist/`, so run `npm run build` before committing code changes that affect the action runtime.
 
 ## Documentation
 
-### Getting Started
-- **[User Guide](./docs/user-guide.md)** - Dismissing findings, feedback learning, and usage tips
-- **[Performance Guide](./docs/PERFORMANCE.md)** - Optimization strategies and configuration tuning
-- **[Security Guide](./docs/SECURITY.md)** - Security features, best practices, and threat model
-- **[Error Handling Guide](./docs/ERROR_HANDLING.md)** - Error recovery and debugging strategies
-- **[Troubleshooting Guide](./docs/TROUBLESHOOTING.md)** - Common issues and solutions
-- **[Improving Code Reviews](./docs/IMPROVING_CODE_REVIEWS.md)** - Reducing false positives and improving review accuracy
-- **[Auto-Detection System](./docs/AUTO_DETECTION_IMPROVEMENTS.md)** - How auto-detection reduces false positives by 60%
-- **[Self-Hosted Deployment](./docs/self-hosted.md)** - Docker deployment and webhook setup
-- **[Plugin Development](./docs/plugins.md)** - Create custom LLM provider plugins
-- **[Analytics Guide](./docs/analytics.md)** - Track costs, performance, and ROI
-
-### Development
-- **[DEVELOPMENT_PLAN_V2.1.md](./DEVELOPMENT_PLAN_V2.1.md)** - Complete development roadmap and status
-- **[INCREMENTAL_REVIEW.md](./INCREMENTAL_REVIEW.md)** - Incremental review system documentation
-- **[scripts/README.md](./scripts/README.md)** - Development scripts and hooks
-- **[`__tests__/benchmarks/README.md`](./__tests__/benchmarks/README.md)** - Performance benchmarking guide
+- [Installer guide](./docs/install.md)
+- [Troubleshooting](./docs/TROUBLESHOOTING.md)
+- [Security guide](./docs/SECURITY.md)
+- [Performance guide](./docs/PERFORMANCE.md)

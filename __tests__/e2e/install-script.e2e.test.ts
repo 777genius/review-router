@@ -209,6 +209,8 @@ describe('review-router curl installer e2e', () => {
     expect(fs.existsSync(profilePath)).toBe(true);
     expect(fs.existsSync(savedKeyPath)).toBe(true);
     expect(fs.readFileSync(profilePath, 'utf-8')).toContain('APP_SLUG=review-router-manual');
+    expect(fs.readFileSync(profilePath, 'utf-8')).toContain('APP_PRIVATE_KEY_FILE=');
+    expect(fs.readFileSync(savedKeyPath, 'utf-8')).toBe(fs.readFileSync(privateKeyFile, 'utf-8'));
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
     expect(workflow).toContain('GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}');
@@ -266,6 +268,37 @@ describe('review-router curl installer e2e', () => {
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
     expect(workflow).toContain('repositories: test-repo');
+  });
+
+  it('fails saved GitHub App profile when the saved private key is missing', () => {
+    const workdir = makeTempDir('airr-missing-key-app-workdir-');
+    const profileDir = path.join(workdir, '.review-router-apps');
+    fs.mkdirSync(profileDir, { recursive: true });
+    const missingKeyFile = path.join(profileDir, 'missing-router.private-key.pem');
+    fs.writeFileSync(
+      path.join(profileDir, 'missing-router.env'),
+      [
+        'APP_ID=98765',
+        'APP_CLIENT_ID=Iv1.missing-client-id',
+        'APP_SLUG=missing-router',
+        'APP_NAME=missing-router',
+        `APP_PRIVATE_KEY_FILE=${missingKeyFile}`,
+        '',
+      ].join('\n')
+    );
+
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'app',
+      REVIEW_ROUTER_APP_SETUP: 'saved',
+      REVIEW_ROUTER_APP_PROFILE: 'missing-router',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+    }, workdir);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr + result.stdout).toContain('GitHub App private key file not found');
+    expect(fs.existsSync(result.workflowPath)).toBe(false);
   });
 
   it('requires an explicit saved profile in non-interactive mode when multiple profiles exist', () => {

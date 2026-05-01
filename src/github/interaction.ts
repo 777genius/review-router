@@ -257,6 +257,12 @@ export class ReviewInteractionHandler {
       );
     } catch (error) {
       const reason = sanitizeNoticeError(error);
+      if (reason.includes('Resource not accessible by integration')) {
+        logger.info(
+          `GitHub token cannot ${resolved ? 'resolve' : 'unresolve'} ReviewRouter conversation for comment ${parentCommentId}; skip state was still recorded and the review check can rerun`
+        );
+        return;
+      }
       logger.warn(
         `Failed to ${resolved ? 'resolve' : 'unresolve'} ReviewRouter conversation for comment ${parentCommentId}: ${reason}`
       );

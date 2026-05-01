@@ -305,7 +305,7 @@ If a blocking inline finding is a verified false positive, reply to that specifi
 
 The reason is optional. The installer generates a second non-required workflow, `.github/workflows/review-router-interaction.yml`, for `/rr ...` replies and optional discussion replies. `/rr skip` does not run Codex and does not checkout pull request code. It only verifies the command, updates the signed PR ledger, and reruns the failed `ReviewRouter / review` check when the token has `actions: write`.
 
-ReviewRouter also attempts to mark the skipped review thread as resolved. GitHub does not currently allow the standard `github-actions[bot]` token to run the `resolveReviewThread` GraphQL mutation, even with `pull-requests: write`, so this is best-effort in Actions bot mode. GitHub App bot mode can use the App installation token when GitHub grants that mutation to the App.
+ReviewRouter also attempts to mark the skipped review thread as resolved. GitHub currently rejects the `resolveReviewThread` GraphQL mutation for standard `github-actions[bot]` tokens, and our smoke test showed the same rejection for a GitHub App installation token with `pull_requests:write`. Treat automatic thread resolution as best-effort only. The signed skip ledger and CI rerun do not depend on GitHub's resolved/unresolved thread state.
 
 Permission policy:
 

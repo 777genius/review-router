@@ -21,6 +21,7 @@ type CodexRunOptions = {
   cwd?: string;
   includeWorkspaceEnv?: boolean;
   disableTools?: boolean;
+  skipGitRepoCheck?: boolean;
 };
 
 type CodexRunResult = {
@@ -157,6 +158,7 @@ export class CodexProvider extends Provider {
       cwd?: string;
       eventAudit?: boolean;
       includeWorkspaceEnv?: boolean;
+      skipGitRepoCheck?: boolean;
     } = {}
   ): Promise<string> {
     const binary = await this.resolveBinary();
@@ -171,6 +173,7 @@ export class CodexProvider extends Provider {
         cwd: options.cwd,
         includeWorkspaceEnv: options.includeWorkspaceEnv,
         disableTools: true,
+        skipGitRepoCheck: options.skipGitRepoCheck,
       }
     );
     const content = this.sanitizeReviewContent((lastMessage || stdout).trim());
@@ -199,6 +202,7 @@ export class CodexProvider extends Provider {
     outputSchemaFile?: string;
     eventAudit?: boolean;
     disableTools?: boolean;
+    skipGitRepoCheck?: boolean;
   }): string[] {
     // The top-level `codex` command starts the interactive TUI and fails in CI.
     const args = [
@@ -235,6 +239,10 @@ export class CodexProvider extends Provider {
         '--disable',
         'plugins'
       );
+    }
+
+    if (options.skipGitRepoCheck) {
+      args.push('--skip-git-repo-check');
     }
 
     if (options.outputSchemaFile) {

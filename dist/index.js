@@ -13260,7 +13260,8 @@ var CodexProvider = class extends Provider {
         eventAudit: options.eventAudit,
         cwd: options.cwd,
         includeWorkspaceEnv: options.includeWorkspaceEnv,
-        disableTools: true
+        disableTools: true,
+        skipGitRepoCheck: options.skipGitRepoCheck
       }
     );
     const content = this.sanitizeReviewContent((lastMessage || stdout).trim());
@@ -13314,6 +13315,9 @@ var CodexProvider = class extends Provider {
         "--disable",
         "plugins"
       );
+    }
+    if (options.skipGitRepoCheck) {
+      args.push("--skip-git-repo-check");
     }
     if (options.outputSchemaFile) {
       args.push("--output-schema", options.outputSchemaFile);
@@ -27795,7 +27799,8 @@ var CodexDiscussionResponder = class {
         {
           cwd,
           eventAudit: false,
-          includeWorkspaceEnv: false
+          includeWorkspaceEnv: false,
+          skipGitRepoCheck: true
         }
       );
       return this.parse(content);

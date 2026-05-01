@@ -68,6 +68,7 @@ describe('CodexProvider', () => {
       outputLastMessageFile: '/tmp/codex-output.txt',
       outputSchemaFile: '/tmp/codex-schema.json',
       disableTools: true,
+      skipGitRepoCheck: true,
     });
 
     expect(args).toEqual(
@@ -78,6 +79,7 @@ describe('CodexProvider', () => {
         'browser_use',
         'computer_use',
         'plugins',
+        '--skip-git-repo-check',
       ])
     );
   });
@@ -336,6 +338,7 @@ describe('CodexProvider', () => {
           'plugins',
         ])
       );
+      expect(execCall?.[1]).not.toContain('--skip-git-repo-check');
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }

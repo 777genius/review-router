@@ -47,6 +47,7 @@ describe('CodexDiscussionResponder', () => {
       expect.objectContaining({
         includeWorkspaceEnv: false,
         eventAudit: false,
+        skipGitRepoCheck: true,
       })
     );
   });

@@ -46,6 +46,7 @@ export class CodexDiscussionResponder implements DiscussionResponder {
           cwd,
           eventAudit: false,
           includeWorkspaceEnv: false,
+          skipGitRepoCheck: true,
         }
       );
       return this.parse(content);

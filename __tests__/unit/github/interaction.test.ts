@@ -30,6 +30,7 @@ function makeClient() {
       },
       actions: {
         listWorkflowRunsForRepo: jest.fn(),
+        getWorkflowRun: jest.fn(),
         reRunWorkflowFailedJobs: jest.fn().mockResolvedValue({}),
       },
     },
@@ -180,6 +181,59 @@ describe('ReviewInteractionHandler', () => {
         issue_number: 123,
         body: expect.stringContaining('reviewrouter-ledger:v1'),
       })
+    );
+    expect(octokit.rest.actions.reRunWorkflowFailedJobs).toHaveBeenCalledWith(
+      expect.objectContaining({ run_id: 456 })
+    );
+  });
+
+  it('waits for an active review rerun and reruns again if it still fails', async () => {
+    const { client, octokit } = makeClient();
+    process.env.REVIEW_ROUTER_RERUN_WAIT_SECONDS = '1';
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 11,
+        in_reply_to_id: 10,
+        body: '/rr skip',
+        user: { login: 'maintainer' },
+      },
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc', repo: { fork: false } },
+        user: { login: 'author' },
+      },
+    });
+    octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+    octokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
+      data: {
+        workflow_runs: [
+          {
+            id: 456,
+            path: '.github/workflows/review-router.yml',
+            head_sha: 'abc',
+            status: 'in_progress',
+            conclusion: null,
+            updated_at: '2026-05-01T17:46:44Z',
+            pull_requests: [{ number: 123 }],
+          },
+        ],
+      },
+    });
+    octokit.rest.actions.getWorkflowRun.mockResolvedValue({
+      data: {
+        id: 456,
+        status: 'completed',
+        conclusion: 'failure',
+      },
+    });
+
+    const ledger = new ReviewLedger(client, 'test-secret');
+    await new ReviewInteractionHandler(client, ledger).execute();
+
+    expect(octokit.rest.actions.getWorkflowRun).toHaveBeenCalledWith(
+      expect.objectContaining({ run_id: 456 })
     );
     expect(octokit.rest.actions.reRunWorkflowFailedJobs).toHaveBeenCalledWith(
       expect.objectContaining({ run_id: 456 })

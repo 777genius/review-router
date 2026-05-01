@@ -36,6 +36,24 @@ interface ReviewCommentApiItem {
 
 type RepoRole = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
 
+type ReviewRerunResult =
+  | { outcome: 'rerun'; runId: number }
+  | { outcome: 'already-running'; runId: number }
+  | { outcome: 'already-succeeded'; runId: number }
+  | { outcome: 'not-started'; reason: string };
+
+interface WorkflowRunSummary {
+  id?: number;
+  path?: string | null;
+  head_sha?: string | null;
+  status?: string | null;
+  conclusion?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  run_started_at?: string | null;
+  pull_requests?: Array<{ number?: number | null }> | null;
+}
+
 interface ReviewThreadsQueryResult {
   repository?: {
     pullRequest?: {
@@ -179,13 +197,25 @@ export class ReviewInteractionHandler {
       command.kind === 'skip'
     );
 
-    const rerun = await this.rerunFailedReview(
+    const rerun = await this.rerunReviewAfterOverride(
       prNumber,
       payload.pull_request?.head?.sha
     );
-    if (rerun.started) {
+    if (rerun.outcome === 'rerun') {
       logger.info(
         `Requested rerun of ReviewRouter workflow run ${rerun.runId}`
+      );
+      return;
+    }
+    if (rerun.outcome === 'already-running') {
+      logger.info(
+        `ReviewRouter workflow run ${rerun.runId} is already running; skip state was recorded for the next check result`
+      );
+      return;
+    }
+    if (rerun.outcome === 'already-succeeded') {
+      logger.info(
+        `ReviewRouter workflow run ${rerun.runId} already completed successfully after the override`
       );
       return;
     }
@@ -355,14 +385,12 @@ export class ReviewInteractionHandler {
     }
   }
 
-  private async rerunFailedReview(
+  private async rerunReviewAfterOverride(
     prNumber: number,
     headSha?: string
-  ): Promise<
-    { started: true; runId: number } | { started: false; reason: string }
-  > {
+  ): Promise<ReviewRerunResult> {
     if (!headSha) {
-      return { started: false, reason: 'missing PR head SHA' };
+      return { outcome: 'not-started', reason: 'missing PR head SHA' };
     }
 
     const { octokit, owner, repo } = this.client;
@@ -376,24 +404,46 @@ export class ReviewInteractionHandler {
         event: 'pull_request',
         per_page: 50,
       });
-      const run = response.data.workflow_runs.find((candidate) => {
-        const path = String(candidate.path || '');
-        const matchesWorkflow =
-          path.endsWith(`/${workflowFile}`) || path === workflowFile;
-        const matchesSha = candidate.head_sha === headSha;
-        const failed =
-          candidate.conclusion === 'failure' ||
-          candidate.conclusion === 'cancelled' ||
-          candidate.conclusion === 'timed_out';
-        const matchesPr = (candidate.pull_requests || []).some(
-          (pr) => pr.number === prNumber
-        );
-        return matchesWorkflow && matchesSha && failed && matchesPr;
-      });
+      const workflowRuns = response.data.workflow_runs as WorkflowRunSummary[];
+      const matchingRuns = workflowRuns
+        .filter((candidate) =>
+          this.matchesReviewWorkflowRun(
+            candidate as WorkflowRunSummary,
+            workflowFile,
+            prNumber,
+            headSha
+          )
+        )
+        .sort(compareWorkflowRunsNewestFirst);
+
+      const activeRun = matchingRuns.find(
+        (candidate) => candidate.status && candidate.status !== 'completed'
+      );
+      if (activeRun?.id) {
+        const settledRun = await this.waitForWorkflowRunToSettle(activeRun.id);
+        if (settledRun?.status !== 'completed') {
+          return { outcome: 'already-running', runId: activeRun.id };
+        }
+        if (isFailedWorkflowConclusion(settledRun.conclusion)) {
+          await octokit.rest.actions.reRunWorkflowFailedJobs({
+            owner,
+            repo,
+            run_id: activeRun.id,
+          });
+          return { outcome: 'rerun', runId: activeRun.id };
+        }
+        if (settledRun.conclusion === 'success') {
+          return { outcome: 'already-succeeded', runId: activeRun.id };
+        }
+      }
+
+      const run = matchingRuns.find((candidate) =>
+        isFailedWorkflowConclusion(candidate.conclusion)
+      );
 
       if (!run?.id) {
         return {
-          started: false,
+          outcome: 'not-started',
           reason: `no failed ${workflowFile} run found for the current PR head SHA`,
         };
       }
@@ -403,17 +453,65 @@ export class ReviewInteractionHandler {
         repo,
         run_id: run.id,
       });
-      return { started: true, runId: run.id };
+      return { outcome: 'rerun', runId: run.id };
     } catch (error) {
       const err = error as { status?: number; message?: string };
       if (err.status === 403) {
         return {
-          started: false,
+          outcome: 'not-started',
           reason: 'token is missing Actions: write permission',
         };
       }
-      return { started: false, reason: err.message || 'GitHub API error' };
+      return {
+        outcome: 'not-started',
+        reason: err.message || 'GitHub API error',
+      };
     }
+  }
+
+  private matchesReviewWorkflowRun(
+    candidate: WorkflowRunSummary,
+    workflowFile: string,
+    prNumber: number,
+    headSha: string
+  ): boolean {
+    const path = String(candidate.path || '');
+    const matchesWorkflow =
+      path.endsWith(`/${workflowFile}`) || path === workflowFile;
+    const matchesSha = candidate.head_sha === headSha;
+    const matchesPr = (candidate.pull_requests || []).some(
+      (pr) => pr.number === prNumber
+    );
+    return matchesWorkflow && matchesSha && matchesPr;
+  }
+
+  private async waitForWorkflowRunToSettle(
+    runId: number
+  ): Promise<WorkflowRunSummary | null> {
+    const waitSeconds = Number(
+      process.env.REVIEW_ROUTER_RERUN_WAIT_SECONDS || '90'
+    );
+    const waitMs = Number.isFinite(waitSeconds)
+      ? Math.max(0, waitSeconds * 1000)
+      : 90_000;
+    const deadline = Date.now() + waitMs;
+
+    let lastRun: WorkflowRunSummary | null = null;
+    do {
+      const response = await this.client.octokit.rest.actions.getWorkflowRun({
+        owner: this.client.owner,
+        repo: this.client.repo,
+        run_id: runId,
+      });
+      const run = response.data as WorkflowRunSummary;
+      lastRun = run;
+      if (run.status === 'completed' || Date.now() >= deadline) {
+        return run;
+      }
+      await sleep(Math.min(5000, Math.max(250, deadline - Date.now())));
+    } while (Date.now() < deadline);
+
+    return lastRun;
   }
 
   private async postNotice(prNumber: number, body: string): Promise<void> {
@@ -425,6 +523,32 @@ export class ReviewInteractionHandler {
       body,
     });
   }
+}
+
+function isFailedWorkflowConclusion(conclusion?: string | null): boolean {
+  return (
+    conclusion === 'failure' ||
+    conclusion === 'cancelled' ||
+    conclusion === 'timed_out'
+  );
+}
+
+function compareWorkflowRunsNewestFirst(
+  a: WorkflowRunSummary,
+  b: WorkflowRunSummary
+): number {
+  return workflowRunTime(b) - workflowRunTime(a);
+}
+
+function workflowRunTime(run: WorkflowRunSummary): number {
+  const value = run.updated_at || run.run_started_at || run.created_at || '';
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
+}
+
+async function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return;
+  await new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function parseCommand(body: string): ParsedCommand | null {

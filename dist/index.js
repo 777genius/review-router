@@ -27685,13 +27685,25 @@ var ReviewInteractionHandler = class {
       parentId,
       command.kind === "skip"
     );
-    const rerun = await this.rerunFailedReview(
+    const rerun = await this.rerunReviewAfterOverride(
       prNumber,
       payload.pull_request?.head?.sha
     );
-    if (rerun.started) {
+    if (rerun.outcome === "rerun") {
       logger.info(
         `Requested rerun of ReviewRouter workflow run ${rerun.runId}`
+      );
+      return;
+    }
+    if (rerun.outcome === "already-running") {
+      logger.info(
+        `ReviewRouter workflow run ${rerun.runId} is already running; skip state was recorded for the next check result`
+      );
+      return;
+    }
+    if (rerun.outcome === "already-succeeded") {
+      logger.info(
+        `ReviewRouter workflow run ${rerun.runId} already completed successfully after the override`
       );
       return;
     }
@@ -27827,9 +27839,9 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
       return "none";
     }
   }
-  async rerunFailedReview(prNumber, headSha) {
+  async rerunReviewAfterOverride(prNumber, headSha) {
     if (!headSha) {
-      return { started: false, reason: "missing PR head SHA" };
+      return { outcome: "not-started", reason: "missing PR head SHA" };
     }
     const { octokit, owner, repo } = this.client;
     const workflowFile = process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || "review-router.yml";
@@ -27840,19 +27852,41 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
         event: "pull_request",
         per_page: 50
       });
-      const run2 = response.data.workflow_runs.find((candidate) => {
-        const path14 = String(candidate.path || "");
-        const matchesWorkflow = path14.endsWith(`/${workflowFile}`) || path14 === workflowFile;
-        const matchesSha = candidate.head_sha === headSha;
-        const failed = candidate.conclusion === "failure" || candidate.conclusion === "cancelled" || candidate.conclusion === "timed_out";
-        const matchesPr = (candidate.pull_requests || []).some(
-          (pr) => pr.number === prNumber
-        );
-        return matchesWorkflow && matchesSha && failed && matchesPr;
-      });
+      const workflowRuns = response.data.workflow_runs;
+      const matchingRuns = workflowRuns.filter(
+        (candidate) => this.matchesReviewWorkflowRun(
+          candidate,
+          workflowFile,
+          prNumber,
+          headSha
+        )
+      ).sort(compareWorkflowRunsNewestFirst);
+      const activeRun = matchingRuns.find(
+        (candidate) => candidate.status && candidate.status !== "completed"
+      );
+      if (activeRun?.id) {
+        const settledRun = await this.waitForWorkflowRunToSettle(activeRun.id);
+        if (settledRun?.status !== "completed") {
+          return { outcome: "already-running", runId: activeRun.id };
+        }
+        if (isFailedWorkflowConclusion(settledRun.conclusion)) {
+          await octokit.rest.actions.reRunWorkflowFailedJobs({
+            owner,
+            repo,
+            run_id: activeRun.id
+          });
+          return { outcome: "rerun", runId: activeRun.id };
+        }
+        if (settledRun.conclusion === "success") {
+          return { outcome: "already-succeeded", runId: activeRun.id };
+        }
+      }
+      const run2 = matchingRuns.find(
+        (candidate) => isFailedWorkflowConclusion(candidate.conclusion)
+      );
       if (!run2?.id) {
         return {
-          started: false,
+          outcome: "not-started",
           reason: `no failed ${workflowFile} run found for the current PR head SHA`
         };
       }
@@ -27861,17 +27895,51 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
         repo,
         run_id: run2.id
       });
-      return { started: true, runId: run2.id };
+      return { outcome: "rerun", runId: run2.id };
     } catch (error2) {
       const err = error2;
       if (err.status === 403) {
         return {
-          started: false,
+          outcome: "not-started",
           reason: "token is missing Actions: write permission"
         };
       }
-      return { started: false, reason: err.message || "GitHub API error" };
+      return {
+        outcome: "not-started",
+        reason: err.message || "GitHub API error"
+      };
     }
+  }
+  matchesReviewWorkflowRun(candidate, workflowFile, prNumber, headSha) {
+    const path14 = String(candidate.path || "");
+    const matchesWorkflow = path14.endsWith(`/${workflowFile}`) || path14 === workflowFile;
+    const matchesSha = candidate.head_sha === headSha;
+    const matchesPr = (candidate.pull_requests || []).some(
+      (pr) => pr.number === prNumber
+    );
+    return matchesWorkflow && matchesSha && matchesPr;
+  }
+  async waitForWorkflowRunToSettle(runId) {
+    const waitSeconds = Number(
+      process.env.REVIEW_ROUTER_RERUN_WAIT_SECONDS || "90"
+    );
+    const waitMs = Number.isFinite(waitSeconds) ? Math.max(0, waitSeconds * 1e3) : 9e4;
+    const deadline = Date.now() + waitMs;
+    let lastRun = null;
+    do {
+      const response = await this.client.octokit.rest.actions.getWorkflowRun({
+        owner: this.client.owner,
+        repo: this.client.repo,
+        run_id: runId
+      });
+      const run2 = response.data;
+      lastRun = run2;
+      if (run2.status === "completed" || Date.now() >= deadline) {
+        return run2;
+      }
+      await sleep(Math.min(5e3, Math.max(250, deadline - Date.now())));
+    } while (Date.now() < deadline);
+    return lastRun;
   }
   async postNotice(prNumber, body) {
     const { octokit, owner, repo } = this.client;
@@ -27883,6 +27951,21 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     });
   }
 };
+function isFailedWorkflowConclusion(conclusion) {
+  return conclusion === "failure" || conclusion === "cancelled" || conclusion === "timed_out";
+}
+function compareWorkflowRunsNewestFirst(a, b) {
+  return workflowRunTime(b) - workflowRunTime(a);
+}
+function workflowRunTime(run2) {
+  const value = run2.updated_at || run2.run_started_at || run2.created_at || "";
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
+}
+async function sleep(ms) {
+  if (ms <= 0) return;
+  await new Promise((resolve3) => setTimeout(resolve3, ms));
+}
 function parseCommand(body) {
   const trimmed = body.trim();
   const match2 = trimmed.match(/^\/rr\s+(skip|unskip|status)\b[\s:,-]*(.*)$/is);

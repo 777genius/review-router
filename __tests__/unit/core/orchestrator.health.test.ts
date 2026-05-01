@@ -198,4 +198,67 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(review).toBeTruthy();
     expect(execute).toHaveBeenCalledWith([provider], expect.any(String), expect.any(Number));
   });
+
+  it('fails when every LLM provider fails and provider failure is configured as blocking', async () => {
+    const previousFailOnNoHealthy = process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
+    process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';
+
+    const provider = {
+      name: 'codex/gpt-5.5',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const execute = jest.fn().mockResolvedValue([
+      {
+        name: 'codex/gpt-5.5',
+        status: 'error',
+        error: new Error('Codex CLI failed: OPENAI_API_KEY=sk-1234567890abcdef refresh_token=secret-value'),
+        durationSeconds: 0,
+      } as ProviderResult,
+    ]);
+
+    try {
+      const orchestrator = makeOrchestrator({
+        config: {
+          ...DEFAULT_CONFIG,
+          dryRun: true,
+          enableCaching: false,
+          analyticsEnabled: false,
+          graphEnabled: false,
+          providers: ['codex/gpt-5.5'],
+          fallbackProviders: [],
+          providerLimit: 1,
+        },
+        providerRegistry: {
+          createProviders: jest.fn().mockResolvedValue([provider]),
+          discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+        } as any,
+        llmExecutor: {
+          filterHealthyProviders: jest.fn().mockResolvedValue({
+            healthy: [provider],
+            healthCheckResults: [],
+          }),
+          execute,
+        } as any,
+      });
+
+      const pr = makePR([{ filename: 'a.ts', status: 'modified', additions: 1, deletions: 0, changes: 1 }]);
+
+      let thrown: Error | undefined;
+      try {
+        await orchestrator.executeReview(pr);
+      } catch (error) {
+        thrown = error as Error;
+      }
+
+      expect(thrown?.message).toMatch(/All LLM providers failed during review/);
+      expect(thrown?.message).not.toMatch(/sk-1234567890abcdef|secret-value/);
+    } finally {
+      if (previousFailOnNoHealthy === undefined) {
+        delete process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
+      } else {
+        process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = previousFailOnNoHealthy;
+      }
+    }
+  });
 });

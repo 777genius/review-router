@@ -26615,8 +26615,17 @@ var ReviewOrchestrator = class {
           if (batchFailures > 0) {
             if (batchSuccesses === 0) {
               const failedNames = mergedResults.filter((r) => r.status !== "success").map((r) => r.name).join(", ");
-              logger.error(`All LLM batches failed (${batchFailures}/${batches.length}): ${failedNames}. Continuing with static analysis only.`);
+              const providerFailureSummary = this.formatProviderFailureSummary(mergedResults);
+              const failOnProviderFailure = process.env.FAIL_ON_NO_HEALTHY_PROVIDERS === "true";
+              logger.error(
+                `All LLM batches failed (${batchFailures}/${batches.length}): ${failedNames}. ` + (failOnProviderFailure ? "Failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true." : "Continuing with static analysis only.")
+              );
               await progressTracker?.updateProgress("llm", "failed", `All batches failed: ${failedNames}`);
+              if (failOnProviderFailure) {
+                throw new Error(
+                  `All LLM providers failed during review; failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true. ${providerFailureSummary}`
+                );
+              }
             } else {
               logger.warn(`Partial batch failure: ${batchFailures} failed, ${batchSuccesses} succeeded. Using successful results.`);
               await progressTracker?.updateProgress("llm", "completed", `Batches: ${batchSuccesses}/${batches.length} succeeded`);
@@ -26868,6 +26877,20 @@ var ReviewOrchestrator = class {
     } catch (error2) {
       logger.warn("Failed to update PR description summary", error2);
     }
+  }
+  formatProviderFailureSummary(results) {
+    const failures = results.filter((result) => result.status !== "success").map((result) => {
+      const reason = result.error?.message || result.status;
+      return `${result.name}: ${this.redactProviderFailureReason(reason)}`;
+    });
+    if (failures.length === 0) {
+      return "No provider error details were reported.";
+    }
+    const summary = failures.join("; ");
+    return summary.length > 1e3 ? `${summary.slice(0, 1e3)}...` : summary;
+  }
+  redactProviderFailureReason(reason) {
+    return reason.replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***");
   }
   /**
    * Run all static analysis operations in parallel

@@ -134,6 +134,25 @@ REVIEW_ROUTER_SKIP_APP_DOCTOR=1
 
 Do not use this for production rollout. Without `Actions: write`, `/rr skip` can record the signed ledger but cannot rerun the failed review check automatically.
 
+## Security advisory
+
+The installer prints a security advisory before writing workflows.
+
+It always reminds you that generated workflows:
+
+- use `pull_request`, not `pull_request_target`
+- skip fork PR secret-backed review by default
+- keep `/rr skip` handling in a separate workflow
+
+When GitHub API access is available, it also checks:
+
+- whether the target repository is public while using Codex OAuth
+- whether the default branch has branch protection
+- whether a CODEOWNERS file exists
+- whether CODEOWNERS appears to cover `.github/workflows/**`
+
+These checks are warnings, not hard blockers. The main risk is not that collaborators can read Actions secrets in the GitHub UI. The practical risk is workflow-code access: anyone who can get a malicious workflow merged into a repository or push a same-repository branch where secrets are available can try to exfiltrate secrets during CI.
+
 ## Secret scopes
 
 | Scope  | Where secrets live                     | Repository access          | Best for                                                               |
@@ -258,6 +277,8 @@ The generated workflow installs the official Codex CLI and restores OAuth creden
 ReviewRouter uses a binary-only Codex health check by default. The real review call is the authoritative auth/model check. If you explicitly want an extra model-exec health check, set `CODEX_HEALTHCHECK_MODE=exec`, but expect higher subscription usage.
 
 Use this only in trusted automation. Do not put personal Codex OAuth credentials into public/open-source repos where untrusted workflow changes can access secrets. GitHub does not expose repository secrets to fork PR workflows by default, and the generated workflow skips fork PRs by default.
+
+Important auth freshness note: on GitHub-hosted runners, the runner filesystem is ephemeral. Codex can refresh `auth.json` during a run, but ReviewRouter cannot safely write the refreshed file back to GitHub Actions secrets automatically. If the stored secret becomes stale or a refresh token is rotated, run `codex login` again on a trusted machine and rerun the installer or update `CODEX_AUTH_JSON`. For fully automatic long-running auth, prefer an OpenAI API key or a trusted self-hosted runner with persistent `CODEX_HOME`.
 
 Default Codex model:
 

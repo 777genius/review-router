@@ -530,6 +530,78 @@ can_run_remote_checks() {
   ! is_true "$DRY_RUN" && ! is_true "$LOCAL_ONLY" && ! is_true "$SKIP_GH_CHECK"
 }
 
+decode_base64_to_stdout() {
+  if base64 --decode >/dev/null 2>&1 </dev/null; then
+    base64 --decode
+  else
+    base64 -D
+  fi
+}
+
+read_github_file() {
+  repo_path="$1"
+  ref="$2"
+  encoded="$(gh api "repos/$TARGET_REPO/contents/$repo_path?ref=$ref" --jq '.content' 2>/dev/null || true)"
+  [ -n "$encoded" ] || return 1
+  printf '%s' "$encoded" | tr -d '\n' | decode_base64_to_stdout 2>/dev/null
+}
+
+find_codeowners_content() {
+  ref="$1"
+  for codeowners_path in CODEOWNERS .github/CODEOWNERS docs/CODEOWNERS; do
+    if content="$(read_github_file "$codeowners_path" "$ref")"; then
+      printf '%s\n' "$content"
+      return 0
+    fi
+  done
+  return 1
+}
+
+run_security_advisory() {
+  log ""
+  info "Security advisory"
+  if [ "$AUTH_MODE" = "codex" ]; then
+    warn "Codex OAuth stores your ChatGPT-managed Codex auth.json as an Actions secret. Use it only for trusted private automation; prefer OpenAI API key mode for public/open-source repositories."
+    warn "GitHub-hosted runners are ephemeral. If Codex refreshes auth.json during a run, ReviewRouter cannot persist the refreshed file back to GitHub secrets automatically; reseed auth.json if Codex starts returning 401."
+  else
+    ok "Auth mode does not store Codex OAuth auth.json"
+  fi
+  ok "Generated workflows use pull_request, skip fork PR secret-backed review, and do not use pull_request_target."
+
+  if ! can_run_remote_checks; then
+    warn "Skipping remote repository hardening checks in dry-run/local-only mode"
+    return
+  fi
+
+  repo_visibility="$(gh repo view "$TARGET_REPO" --json visibility --jq '.visibility' 2>/dev/null || true)"
+  default_branch="$(gh repo view "$TARGET_REPO" --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || true)"
+  [ -n "$default_branch" ] || default_branch="main"
+
+  if [ "$AUTH_MODE" = "codex" ] && [ "$repo_visibility" = "PUBLIC" ]; then
+    warn "Target repository is public and auth mode is Codex OAuth. GitHub does not pass Actions secrets to fork PR workflows, but Codex OAuth is still not recommended for public/open-source repos."
+  fi
+
+  if gh api "repos/$TARGET_REPO/branches/$default_branch/protection" >/dev/null 2>&1; then
+    ok "Default branch protection is enabled on $default_branch"
+    if [ "$(gh api "repos/$TARGET_REPO/branches/$default_branch/protection" --jq '.required_pull_request_reviews != null' 2>/dev/null || printf 'false')" != "true" ]; then
+      warn "Default branch protection exists, but required pull request reviews were not detected. Require reviews for workflow changes before relying on secret-backed review."
+    fi
+  else
+    warn "Default branch protection was not detected on $default_branch. Protect the branch before storing Codex OAuth or provider API secrets."
+  fi
+
+  if codeowners="$(find_codeowners_content "$default_branch")"; then
+    ok "CODEOWNERS file detected"
+    if printf '%s\n' "$codeowners" | grep -Eq '(^|[[:space:]])\.github/(\*\*|workflows(/|\*\*)?)'; then
+      ok "CODEOWNERS appears to cover .github workflows"
+    else
+      warn "CODEOWNERS exists, but .github/workflows/** ownership was not detected. Add a workflow owners rule for stronger secret protection."
+    fi
+  else
+    warn "CODEOWNERS was not detected. Add CODEOWNERS for .github/workflows/** so workflow changes require trusted reviewers."
+  fi
+}
+
 verify_codex_auth_file() {
   auth_file="$1"
   [ -f "$auth_file" ] || fatal "Codex auth file not found: $auth_file. Run: codex login"
@@ -1644,6 +1716,7 @@ main() {
   info "Preset: $PRESET"
   info "Action ref: $ACTION_REF"
 
+  run_security_advisory
   setup_identity
   setup_auth
   setup_ledger_secret

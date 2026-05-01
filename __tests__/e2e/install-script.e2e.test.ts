@@ -122,6 +122,13 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     expect(fs.existsSync(result.workflowPath)).toBe(true);
+    expect(result.stdout).toContain('Security advisory');
+    expect(result.stdout).toContain(
+      'Generated workflows use pull_request, skip fork PR secret-backed review, and do not use pull_request_target.'
+    );
+    expect(result.stdout).toContain(
+      'Skipping remote repository hardening checks in dry-run/local-only mode'
+    );
     expect(result.stdout).toContain('ReviewRouter doctor');
     expect(result.stdout).toContain('Workflow files are present');
     expect(result.stdout).toContain(
@@ -260,6 +267,9 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('ReviewRouter doctor');
+    expect(result.stdout).toContain(
+      'Codex OAuth stores your ChatGPT-managed Codex auth.json as an Actions secret'
+    );
     expect(result.stdout).toContain('Skipping CODEX_CONFIG_TOML by default');
     expect(result.stdout).not.toContain('gh secret set CODEX_CONFIG_TOML');
     const workflow = workflowText(result.workflowPath);

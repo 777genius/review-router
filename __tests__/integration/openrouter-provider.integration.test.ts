@@ -340,7 +340,7 @@ describe('OpenRouterProvider Integration', () => {
       expect(capturedRequest.method).toBe('POST');
       expect(capturedRequest.headers['Authorization']).toBe('Bearer test-api-key');
       expect(capturedRequest.headers['Content-Type']).toBe('application/json');
-      expect(capturedRequest.headers['HTTP-Referer']).toContain('multi-provider-code-review');
+      expect(capturedRequest.headers['HTTP-Referer']).toContain('review-router');
 
       const body = JSON.parse(capturedRequest.body);
       expect(body.model).toBe('test-model');

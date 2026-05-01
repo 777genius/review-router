@@ -27564,9 +27564,9 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
         `${resolved ? "Resolved" : "Unresolved"} ReviewRouter conversation for comment ${parentCommentId}`
       );
     } catch (error2) {
+      const reason = sanitizeNoticeError(error2);
       logger.warn(
-        `Failed to ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}`,
-        error2
+        `Failed to ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}: ${reason}`
       );
     }
   }

@@ -256,9 +256,9 @@ export class ReviewInteractionHandler {
         `${resolved ? 'Resolved' : 'Unresolved'} ReviewRouter conversation for comment ${parentCommentId}`
       );
     } catch (error) {
+      const reason = sanitizeNoticeError(error);
       logger.warn(
-        `Failed to ${resolved ? 'resolve' : 'unresolve'} ReviewRouter conversation for comment ${parentCommentId}`,
-        error as Error
+        `Failed to ${resolved ? 'resolve' : 'unresolve'} ReviewRouter conversation for comment ${parentCommentId}: ${reason}`
       );
     }
   }

@@ -233,6 +233,7 @@ export interface ReviewMetrics {
   totalTokens: number;
   totalCost: number;
   durationSeconds: number;
+  dismissedFindings?: number;
   cached?: boolean;
 }
 

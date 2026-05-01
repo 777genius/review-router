@@ -50,6 +50,23 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('Performance Metrics');
     });
 
+    it('should not claim all clear when findings were dismissed by command override', () => {
+      const review = createMockReview({
+        metrics: {
+          ...createMockReview().metrics,
+          dismissedFindings: 1,
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('## No Active Findings');
+      expect(output).not.toContain('## All Clear!');
+      expect(output).toContain('1 finding dismissed by maintainer/admin `/rr skip` override');
+      expect(output).toContain('| Overrides | 1 dismissed |');
+      expect(output).not.toContain('This PR looks great! No issues detected');
+    });
+
     it('should include quick stats summary', () => {
       const review = createMockReview({
         findings: [

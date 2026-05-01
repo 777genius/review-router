@@ -66,6 +66,11 @@ export class MarkdownFormatterV2 {
       lines.push('');
       lines.push(`> ${this.generateAllClearMessage(review)}`);
       lines.push('');
+    } else if (this.hasDismissedFindings(review)) {
+      lines.push('## No Active Findings');
+      lines.push('');
+      lines.push(`> ${this.generateAllClearMessage(review)}`);
+      lines.push('');
     } else {
       // Only emit one “clear” block; avoid repeating the no-providers message
       const allClearMessage = this.generateAllClearMessage(review, {
@@ -134,6 +139,10 @@ export class MarkdownFormatterV2 {
       if (metrics.providersSuccess === 0) {
         return 'LLM review skipped: no healthy providers were available. Static checks did not find issues.';
       }
+      if (this.hasDismissedFindings(review)) {
+        const count = metrics.dismissedFindings ?? 0;
+        return `No active findings. ${count} finding${count === 1 ? '' : 's'} were dismissed by maintainer/admin \`/rr skip\` override${count === 1 ? '' : 's'}.`;
+      }
       return 'This PR looks great! No issues detected by the automated review.';
     }
 
@@ -179,6 +188,10 @@ export class MarkdownFormatterV2 {
       return options.suppressRepeat
         ? 'LLM analysis skipped because no providers were healthy.'
         : 'LLM analysis skipped because no providers were healthy. Static checks found no issues.';
+    }
+    if (this.hasDismissedFindings(review)) {
+      const count = metrics.dismissedFindings ?? 0;
+      return `${count} finding${count === 1 ? '' : 's'} dismissed by maintainer/admin \`/rr skip\` override${count === 1 ? '' : 's'}. No active findings remain.`;
     }
     return 'No issues found. Great job!';
   }
@@ -321,6 +334,9 @@ export class MarkdownFormatterV2 {
     lines.push(
       `| Providers | ${metrics.providersSuccess}/${metrics.providersUsed} |`
     );
+    if (this.hasDismissedFindings(review)) {
+      lines.push(`| Overrides | ${metrics.dismissedFindings} dismissed |`);
+    }
 
     if (runDetails?.cacheHit) {
       lines.push(`| Cache | Hit |`);
@@ -376,6 +392,10 @@ export class MarkdownFormatterV2 {
 
   private hasMeasuredApiBilling(review: Review): boolean {
     return review.metrics.totalCost > 0 || review.metrics.totalTokens > 0;
+  }
+
+  private hasDismissedFindings(review: Review): boolean {
+    return (review.metrics.dismissedFindings ?? 0) > 0;
   }
 
   private didAllProviderRunsFail(review: Review): boolean {

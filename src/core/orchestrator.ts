@@ -1206,6 +1206,8 @@ export class ReviewOrchestrator {
     review.metrics.critical = review.findings.filter(finding => finding.severity === 'critical').length;
     review.metrics.major = review.findings.filter(finding => finding.severity === 'major').length;
     review.metrics.minor = review.findings.filter(finding => finding.severity === 'minor').length;
+    review.metrics.dismissedFindings =
+      (review.metrics.dismissedFindings ?? 0) + (before - review.findings.length);
 
     return before - review.findings.length;
   }

@@ -19053,6 +19053,11 @@ var MarkdownFormatterV2 = class {
       lines.push("");
       lines.push(`> ${this.generateAllClearMessage(review)}`);
       lines.push("");
+    } else if (this.hasDismissedFindings(review)) {
+      lines.push("## No Active Findings");
+      lines.push("");
+      lines.push(`> ${this.generateAllClearMessage(review)}`);
+      lines.push("");
     } else {
       const allClearMessage = this.generateAllClearMessage(review, {
         suppressRepeat: true
@@ -19100,6 +19105,10 @@ var MarkdownFormatterV2 = class {
       if (metrics.providersSuccess === 0) {
         return "LLM review skipped: no healthy providers were available. Static checks did not find issues.";
       }
+      if (this.hasDismissedFindings(review)) {
+        const count = metrics.dismissedFindings ?? 0;
+        return `No active findings. ${count} finding${count === 1 ? "" : "s"} were dismissed by maintainer/admin \`/rr skip\` override${count === 1 ? "" : "s"}.`;
+      }
       return "This PR looks great! No issues detected by the automated review.";
     }
     const parts = [];
@@ -19131,6 +19140,10 @@ var MarkdownFormatterV2 = class {
     }
     if (metrics.providersSuccess === 0) {
       return options.suppressRepeat ? "LLM analysis skipped because no providers were healthy." : "LLM analysis skipped because no providers were healthy. Static checks found no issues.";
+    }
+    if (this.hasDismissedFindings(review)) {
+      const count = metrics.dismissedFindings ?? 0;
+      return `${count} finding${count === 1 ? "" : "s"} dismissed by maintainer/admin \`/rr skip\` override${count === 1 ? "" : "s"}. No active findings remain.`;
     }
     return "No issues found. Great job!";
   }
@@ -19235,6 +19248,9 @@ var MarkdownFormatterV2 = class {
     lines.push(
       `| Providers | ${metrics.providersSuccess}/${metrics.providersUsed} |`
     );
+    if (this.hasDismissedFindings(review)) {
+      lines.push(`| Overrides | ${metrics.dismissedFindings} dismissed |`);
+    }
     if (runDetails?.cacheHit) {
       lines.push(`| Cache | Hit |`);
     }
@@ -19266,6 +19282,9 @@ var MarkdownFormatterV2 = class {
   }
   hasMeasuredApiBilling(review) {
     return review.metrics.totalCost > 0 || review.metrics.totalTokens > 0;
+  }
+  hasDismissedFindings(review) {
+    return (review.metrics.dismissedFindings ?? 0) > 0;
   }
   didAllProviderRunsFail(review) {
     return review.metrics.providersUsed > 0 && review.metrics.providersSuccess === 0 && review.metrics.providersFailed > 0;
@@ -27088,6 +27107,7 @@ ${finding.message}`
     review.metrics.critical = review.findings.filter((finding) => finding.severity === "critical").length;
     review.metrics.major = review.findings.filter((finding) => finding.severity === "major").length;
     review.metrics.minor = review.findings.filter((finding) => finding.severity === "minor").length;
+    review.metrics.dismissedFindings = (review.metrics.dismissedFindings ?? 0) + (before - review.findings.length);
     return before - review.findings.length;
   }
   /**

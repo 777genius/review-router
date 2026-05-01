@@ -26,6 +26,7 @@ interface ActiveInlineComments {
 export class CommentPoster {
   private static readonly MAX_COMMENT_SIZE = 60_000;
   private static readonly BOT_COMMENT_MARKER = '<!-- review-router-bot -->';
+  private static readonly INLINE_SKIP_HELP_MARKER = '<!-- review-router-skip-help -->';
   private static readonly LEGACY_BOT_COMMENT_MARKERS = [
     '<!-- ai-robot-review-bot -->',
     '<!-- multi-provider-code-review-bot -->',
@@ -403,7 +404,10 @@ export class CommentPoster {
           path: c.path,
           line: c.line,
           side: c.side || 'RIGHT',
-          body: appendInlineFingerprintMarker(c.body, c.path, c.line),
+          body: CommentPoster.withSkipHelpFooter(
+            appendInlineFingerprintMarker(c.body, c.path, c.line),
+            (c as any).severity
+          ),
         };
 
         if (this.hasInlineDuplicate(activeInlineComments, c.path, c.line, apiComment.body)) {
@@ -490,5 +494,20 @@ export class CommentPoster {
     if (current.trim()) chunks.push(current.trim());
     logger.info(`Prepared ${chunks.length} comment chunk(s)`);
     return chunks;
+  }
+
+  private static withSkipHelpFooter(body: string, severity?: Severity): string {
+    if (body.includes(CommentPoster.INLINE_SKIP_HELP_MARKER)) {
+      return body;
+    }
+
+    const actor =
+      severity === 'minor'
+        ? 'Someone with write access'
+        : 'A maintainer/admin';
+    return [
+      body.trimEnd(),
+      `<sub>${CommentPoster.INLINE_SKIP_HELP_MARKER}${actor} can reply \`/rr skip\` if this finding is a false positive. ReviewRouter records a signed override and reruns the check.</sub>`,
+    ].join('\n\n');
   }
 }

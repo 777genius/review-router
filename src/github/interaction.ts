@@ -320,15 +320,15 @@ function isRoleAllowed(
   actor: string,
   prAuthor: string
 ): boolean {
-  if (
-    (severity === 'critical' || severity === 'major') &&
-    actor.toLowerCase() === prAuthor.toLowerCase() &&
-    process.env.REVIEW_ROUTER_ALLOW_AUTHOR_SKIP !== 'true'
-  ) {
-    return false;
-  }
   if (severity === 'critical' || severity === 'major') {
-    return role === 'maintain' || role === 'admin';
+    if (role === 'maintain' || role === 'admin') {
+      return true;
+    }
+    return (
+      actor.toLowerCase() === prAuthor.toLowerCase() &&
+      process.env.REVIEW_ROUTER_ALLOW_AUTHOR_SKIP === 'true' &&
+      role === 'write'
+    );
   }
   return role === 'write' || role === 'maintain' || role === 'admin';
 }
@@ -347,9 +347,11 @@ function getRoleDenialReason(
   if (
     isBlocking &&
     actor.toLowerCase() === prAuthor.toLowerCase() &&
+    role !== 'maintain' &&
+    role !== 'admin' &&
     process.env.REVIEW_ROUTER_ALLOW_AUTHOR_SKIP !== 'true'
   ) {
-    return `@${actor} cannot skip this ${severity} finding because PR authors cannot override blocking ReviewRouter findings by default. A maintainer or admin who is not the PR author can reply \`/rr skip\`, or the repository can explicitly set \`REVIEW_ROUTER_ALLOW_AUTHOR_SKIP=true\`.`;
+    return `@${actor} cannot skip this ${severity} finding because PR authors without maintain/admin permission cannot override blocking ReviewRouter findings by default. A maintainer or admin can reply \`/rr skip\`, or the repository can explicitly set \`REVIEW_ROUTER_ALLOW_AUTHOR_SKIP=true\` for trusted same-repo authors.`;
   }
 
   return `@${actor} cannot skip this ${severity} finding. Required role: ${severity === 'minor' ? 'write, maintain, or admin' : 'maintain or admin'}.`;

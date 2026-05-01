@@ -67,6 +67,7 @@ describe('CommentPoster', () => {
           line: 10,
           side: 'RIGHT' as const,
           body: 'Test comment',
+          severity: 'major',
         },
       ];
       const files: FileChange[] = [
@@ -92,6 +93,10 @@ describe('CommentPoster', () => {
         })
       );
       expect(reviewCall.comments[0].body).toContain('<!-- review-router-inline:');
+      expect(reviewCall.comments[0].body).toContain('<!-- review-router-skip-help -->');
+      expect(reviewCall.comments[0].body).toContain(
+        'A maintainer/admin can reply `/rr skip` if this finding is a false positive'
+      );
       expect(reviewCall.comments[0]).not.toHaveProperty('position');
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
         owner: 'test-owner',

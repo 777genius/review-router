@@ -157,7 +157,7 @@ describe('ReviewInteractionHandler', () => {
     );
   });
 
-  it('rejects blocking skips from PR authors by default', async () => {
+  it('rejects blocking skips from PR authors without maintain/admin permission by default', async () => {
     const { client, octokit } = makeClient();
     process.env.GITHUB_EVENT_PATH = writeEvent({
       comment: {
@@ -173,7 +173,7 @@ describe('ReviewInteractionHandler', () => {
       },
     });
     octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
-      data: { permission: 'admin', role_name: 'admin' },
+      data: { permission: 'write', role_name: 'write' },
     });
 
     const ledger = new ReviewLedger(client, 'test-secret');
@@ -184,9 +184,55 @@ describe('ReviewInteractionHandler', () => {
       expect.objectContaining({
         issue_number: 123,
         body: expect.stringContaining(
-          'PR authors cannot override blocking ReviewRouter findings by default'
+          'PR authors without maintain/admin permission cannot override blocking ReviewRouter findings by default'
         ),
       })
+    );
+  });
+
+  it('allows blocking skips from PR authors with admin permission', async () => {
+    const { client, octokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 11,
+        in_reply_to_id: 10,
+        body: '/rr skip owner verified',
+        user: { login: 'owner' },
+      },
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc', repo: { fork: false } },
+        user: { login: 'Owner' },
+      },
+    });
+    octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'admin', role_name: 'admin' },
+    });
+    octokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
+      data: {
+        workflow_runs: [
+          {
+            id: 456,
+            path: '.github/workflows/review-router.yml',
+            head_sha: 'abc',
+            conclusion: 'failure',
+            pull_requests: [{ number: 123 }],
+          },
+        ],
+      },
+    });
+
+    const ledger = new ReviewLedger(client, 'test-secret');
+    await new ReviewInteractionHandler(client, ledger).execute();
+
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_number: 123,
+        body: expect.stringContaining('reviewrouter-ledger:v1'),
+      })
+    );
+    expect(octokit.rest.actions.reRunWorkflowFailedJobs).toHaveBeenCalledWith(
+      expect.objectContaining({ run_id: 456 })
     );
   });
 

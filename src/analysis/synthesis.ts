@@ -1,5 +1,9 @@
 import { Finding, InlineComment, PRContext, Review, ReviewConfig, ReviewMetrics, TestCoverageHint, AIAnalysis, ProviderResult, RunDetails, ImpactAnalysis } from '../types';
-import { compareSeverityDesc, severityHeading, severityLine } from '../utils/severity';
+import { compareSeverityDesc, getSeverityDisplay } from '../utils/severity';
+import {
+  countMaxConsecutiveBackticks,
+  formatSuggestionBlock,
+} from '../utils/suggestion-formatter';
 
 export class SynthesisEngine {
   constructor(private readonly config: ReviewConfig) {}
@@ -139,21 +143,89 @@ export class SynthesisEngine {
       providers: f.providers,
       confidence: f.confidence,
       hasConsensus: f.hasConsensus,
+      suggestion: f.suggestion,
     }));
   }
 
   private commentBody(finding: Finding): string {
     const parts = [
-      `**${severityHeading(finding.severity, finding.title)}**`,
+      this.inlineHeader(finding),
       '',
-      severityLine(finding.severity),
+      `**${finding.title}**`,
       '',
-      finding.message,
+      finding.message.trim(),
     ];
+    if (finding.suggestion) {
+      parts.push('', this.suggestedFixDetails(finding.suggestion));
+      parts.push('', '<!-- suggestion_start -->');
+      parts.push('', this.committableSuggestionDetails(finding.suggestion));
+      parts.push('', '<!-- suggestion_end -->');
+    }
+    parts.push('', this.agentPromptDetails(finding));
     if (finding.providers && finding.providers.length > 1) {
       parts.push('', `Providers: ${finding.providers.join(', ')}`);
     }
     return parts.join('\n');
+  }
+
+  private inlineHeader(finding: Finding): string {
+    const display = getSeverityDisplay(finding.severity);
+    const labels = [`_${display.emoji} ${display.label}_`];
+    if (finding.suggestion) {
+      labels.push('_⚡ Quick win_');
+    }
+    return labels.join(' | ');
+  }
+
+  private suggestedFixDetails(suggestion: string): string {
+    return [
+      '<details>',
+      '<summary>Suggested fix</summary>',
+      '',
+      this.formatCodeFence('diff', suggestionToDiff(suggestion)),
+      '</details>',
+    ].join('\n');
+  }
+
+  private committableSuggestionDetails(suggestion: string): string {
+    return [
+      '<details>',
+      '<summary>📝 Committable suggestion</summary>',
+      '',
+      '> ‼️ **IMPORTANT**',
+      '> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no indentation issues. Test the change before merging.',
+      '',
+      formatSuggestionBlock(suggestion),
+      '',
+      '</details>',
+    ].join('\n');
+  }
+
+  private agentPromptDetails(finding: Finding): string {
+    return [
+      '<details>',
+      '<summary>🤖 Prompt for AI Agents</summary>',
+      '',
+      this.formatCodeFence(
+        'text',
+        [
+          'Verify this finding against the current code and only fix it if needed.',
+          '',
+          `In \`@${finding.file}\` around line ${finding.line}, ${finding.message.trim()}`,
+          finding.suggestion
+            ? `Apply this candidate fix if it is still correct:\n\n${finding.suggestion.trim()}`
+            : 'If the finding is valid, produce a minimal safe fix and update or add tests when appropriate.',
+        ].join('\n')
+      ),
+      '</details>',
+    ].join('\n');
+  }
+
+  private formatCodeFence(language: string, content: string): string {
+    const fence = '`'.repeat(
+      Math.max(3, countMaxConsecutiveBackticks(content) + 1)
+    );
+    return `${fence}${language}\n${content.trimEnd()}\n${fence}`;
   }
 
   private buildActionItems(findings: Finding[]): string[] {
@@ -164,4 +236,12 @@ export class SynthesisEngine {
 
     return Array.from(new Set(items));
   }
+}
+
+function suggestionToDiff(suggestion: string): string {
+  return suggestion
+    .trimEnd()
+    .split('\n')
+    .map((line) => `+${line}`)
+    .join('\n');
 }

@@ -16330,6 +16330,26 @@ function severityLine(severity) {
   return `**Severity:** ${display.emoji} **${display.label}** - ${display.description}.`;
 }
 
+// src/utils/suggestion-formatter.ts
+function countMaxConsecutiveBackticks(str2) {
+  const backtickSequences = str2.match(/`+/g);
+  if (!backtickSequences) {
+    return 0;
+  }
+  return Math.max(...backtickSequences.map((seq2) => seq2.length));
+}
+function formatSuggestionBlock(content) {
+  if (!content || content.trim() === "") {
+    return "";
+  }
+  const maxBackticks = countMaxConsecutiveBackticks(content);
+  const fenceCount = Math.max(3, maxBackticks + 1);
+  const fence = "`".repeat(fenceCount);
+  return `${fence}suggestion
+${content}
+${fence}`;
+}
+
 // src/analysis/synthesis.ts
 var SynthesisEngine = class {
   constructor(config) {
@@ -16423,27 +16443,95 @@ var SynthesisEngine = class {
       provider: f.provider,
       providers: f.providers,
       confidence: f.confidence,
-      hasConsensus: f.hasConsensus
+      hasConsensus: f.hasConsensus,
+      suggestion: f.suggestion
     }));
   }
   commentBody(finding) {
     const parts = [
-      `**${severityHeading(finding.severity, finding.title)}**`,
+      this.inlineHeader(finding),
       "",
-      severityLine(finding.severity),
+      `**${finding.title}**`,
       "",
-      finding.message
+      finding.message.trim()
     ];
+    if (finding.suggestion) {
+      parts.push("", this.suggestedFixDetails(finding.suggestion));
+      parts.push("", "<!-- suggestion_start -->");
+      parts.push("", this.committableSuggestionDetails(finding.suggestion));
+      parts.push("", "<!-- suggestion_end -->");
+    }
+    parts.push("", this.agentPromptDetails(finding));
     if (finding.providers && finding.providers.length > 1) {
       parts.push("", `Providers: ${finding.providers.join(", ")}`);
     }
     return parts.join("\n");
+  }
+  inlineHeader(finding) {
+    const display = getSeverityDisplay(finding.severity);
+    const labels = [`_${display.emoji} ${display.label}_`];
+    if (finding.suggestion) {
+      labels.push("_\u26A1 Quick win_");
+    }
+    return labels.join(" | ");
+  }
+  suggestedFixDetails(suggestion) {
+    return [
+      "<details>",
+      "<summary>Suggested fix</summary>",
+      "",
+      this.formatCodeFence("diff", suggestionToDiff(suggestion)),
+      "</details>"
+    ].join("\n");
+  }
+  committableSuggestionDetails(suggestion) {
+    return [
+      "<details>",
+      "<summary>\u{1F4DD} Committable suggestion</summary>",
+      "",
+      "> \u203C\uFE0F **IMPORTANT**",
+      "> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no indentation issues. Test the change before merging.",
+      "",
+      formatSuggestionBlock(suggestion),
+      "",
+      "</details>"
+    ].join("\n");
+  }
+  agentPromptDetails(finding) {
+    return [
+      "<details>",
+      "<summary>\u{1F916} Prompt for AI Agents</summary>",
+      "",
+      this.formatCodeFence(
+        "text",
+        [
+          "Verify this finding against the current code and only fix it if needed.",
+          "",
+          `In \`@${finding.file}\` around line ${finding.line}, ${finding.message.trim()}`,
+          finding.suggestion ? `Apply this candidate fix if it is still correct:
+
+${finding.suggestion.trim()}` : "If the finding is valid, produce a minimal safe fix and update or add tests when appropriate."
+        ].join("\n")
+      ),
+      "</details>"
+    ].join("\n");
+  }
+  formatCodeFence(language, content) {
+    const fence = "`".repeat(
+      Math.max(3, countMaxConsecutiveBackticks(content) + 1)
+    );
+    return `${fence}${language}
+${content.trimEnd()}
+${fence}`;
   }
   buildActionItems(findings) {
     const items = findings.filter((f) => f.severity !== "minor").slice(0, 5).map((f) => `${f.file}:${f.line} - ${f.title}`);
     return Array.from(new Set(items));
   }
 };
+function suggestionToDiff(suggestion) {
+  return suggestion.trimEnd().split("\n").map((line) => `+${line}`).join("\n");
+}
 
 // src/analysis/test-coverage.ts
 var fs8 = __toESM(require("fs"));
@@ -17686,9 +17774,8 @@ function stripInlineFingerprintMarkers(body) {
 function isReviewRouterInlineComment(body) {
   if (!body) return false;
   if (extractInlineFingerprint(body)) return true;
-  return /^\*\*(?:🔴 Critical|🟡 Major|🔵 Minor)\s+-\s+.+?\*\*/.test(
-    body.trim()
-  );
+  const trimmed = body.trim();
+  return /^\*\*(?:🔴 Critical|🟡 Major|🔵 Minor)\s+-\s+.+?\*\*/.test(trimmed) || /^_(?:🔴 Critical|🟡 Major|🔵 Minor)_/.test(trimmed);
 }
 function findingFingerprintFromFinding(finding) {
   return stableFindingFingerprint({
@@ -17749,7 +17836,7 @@ function normalizeForSignature(value) {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 function extractSeverity(body) {
-  const match2 = body.match(/\*\*(?:[^\w*`]*\s*)?(critical|major|minor)\s*-/i);
+  const match2 = body.match(/\*\*(?:[^\w*`]*\s*)?(critical|major|minor)\s*-/i) || body.match(/^_(?:[^\w_]*\s*)?(critical|major|minor)_/i);
   return match2?.[1]?.toLowerCase() ?? null;
 }
 function extractTitle(body) {
@@ -19851,9 +19938,7 @@ var ReviewLedger = class {
       `signature=${signature}`,
       "-->",
       "",
-      "## ReviewRouter override ledger",
-      "",
-      "This bot-owned comment stores signed `/rr skip` state for this pull request. Do not edit it manually.",
+      "<sub>ReviewRouter override state - signed `/rr skip` records for reruns. Do not edit.</sub>",
       "",
       "<details>",
       "<summary>Active skips</summary>",
@@ -27408,6 +27493,11 @@ var ReviewInteractionHandler = class {
     logger.info(
       `Accepted /rr ${command.kind} from ${actor} for ${entry.path}:${entry.line}`
     );
+    await this.setReviewThreadResolved(
+      prNumber,
+      parentId,
+      command.kind === "skip"
+    );
     const rerun = await this.rerunFailedReview(
       prNumber,
       payload.pull_request?.head?.sha
@@ -27442,6 +27532,89 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
       }
     );
     return comments.find((comment) => comment.id === commentId);
+  }
+  async setReviewThreadResolved(prNumber, parentCommentId, resolved) {
+    try {
+      const thread = await this.findReviewThread(prNumber, parentCommentId);
+      if (!thread) {
+        logger.warn(
+          `Could not find review thread for comment ${parentCommentId}; leaving GitHub conversation state unchanged`
+        );
+        return;
+      }
+      if (thread.isResolved === resolved) {
+        return;
+      }
+      const mutation = resolved ? `mutation($threadId: ID!) {
+            resolveReviewThread(input: { threadId: $threadId }) {
+              thread { id isResolved }
+            }
+          }` : `mutation($threadId: ID!) {
+            unresolveReviewThread(input: { threadId: $threadId }) {
+              thread { id isResolved }
+            }
+          }`;
+      await this.graphql(mutation, { threadId: thread.id });
+      logger.info(
+        `${resolved ? "Resolved" : "Unresolved"} ReviewRouter conversation for comment ${parentCommentId}`
+      );
+    } catch (error2) {
+      logger.warn(
+        `Failed to ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}`,
+        error2
+      );
+    }
+  }
+  async findReviewThread(prNumber, commentId) {
+    const query = `query($owner: String!, $repo: String!, $number: Int!, $after: String) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100, after: $after) {
+            nodes {
+              id
+              isResolved
+              comments(first: 100) {
+                nodes {
+                  databaseId
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    }`;
+    let after = null;
+    for (let page = 0; page < 10; page += 1) {
+      const result = await this.graphql(query, {
+        owner: this.client.owner,
+        repo: this.client.repo,
+        number: prNumber,
+        after
+      });
+      const threads = result.repository?.pullRequest?.reviewThreads;
+      for (const thread of threads?.nodes || []) {
+        const hasComment = (thread.comments?.nodes || []).some(
+          (comment) => comment.databaseId === commentId
+        );
+        if (hasComment) {
+          return { id: thread.id, isResolved: Boolean(thread.isResolved) };
+        }
+      }
+      if (!threads?.pageInfo?.hasNextPage) break;
+      after = threads.pageInfo.endCursor || null;
+    }
+    return null;
+  }
+  async graphql(query, variables) {
+    const graphql = this.client.octokit.graphql;
+    if (typeof graphql !== "function") {
+      throw new Error("Octokit GraphQL client is not available");
+    }
+    return graphql(query, variables);
   }
   async getRole(username) {
     const { octokit, owner, repo } = this.client;

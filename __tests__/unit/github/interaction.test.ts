@@ -33,6 +33,31 @@ function makeClient() {
         reRunWorkflowFailedJobs: jest.fn().mockResolvedValue({}),
       },
     },
+    graphql: jest.fn((query: string) => {
+      if (query.includes('reviewThreads')) {
+        return Promise.resolve({
+          repository: {
+            pullRequest: {
+              reviewThreads: {
+                nodes: [
+                  {
+                    id: 'PRRT_thread_1',
+                    isResolved: false,
+                    comments: { nodes: [{ databaseId: 10 }] },
+                  },
+                ],
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          },
+        });
+      }
+      return Promise.resolve({
+        resolveReviewThread: {
+          thread: { id: 'PRRT_thread_1', isResolved: true },
+        },
+      });
+    }) as jest.Mock,
     paginate: jest.fn((method: jest.Mock) => {
       if (method === listReviewComments) {
         return Promise.resolve([
@@ -109,6 +134,10 @@ describe('ReviewInteractionHandler', () => {
     expect(octokit.rest.actions.reRunWorkflowFailedJobs).toHaveBeenCalledWith(
       expect.objectContaining({ run_id: 456 })
     );
+    expect(octokit.graphql).toHaveBeenCalledWith(
+      expect.stringContaining('resolveReviewThread'),
+      { threadId: 'PRRT_thread_1' }
+    );
   });
 
   it('records /rr skip without requiring a reason', async () => {
@@ -154,6 +183,72 @@ describe('ReviewInteractionHandler', () => {
     );
     expect(octokit.rest.actions.reRunWorkflowFailedJobs).toHaveBeenCalledWith(
       expect.objectContaining({ run_id: 456 })
+    );
+  });
+
+  it('unresolves the conversation for /rr unskip', async () => {
+    const { client, octokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 11,
+        in_reply_to_id: 10,
+        body: '/rr unskip',
+        user: { login: 'maintainer' },
+      },
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc', repo: { fork: false } },
+        user: { login: 'author' },
+      },
+    });
+    octokit.graphql.mockImplementation((query: string) => {
+      if (query.includes('reviewThreads')) {
+        return Promise.resolve({
+          repository: {
+            pullRequest: {
+              reviewThreads: {
+                nodes: [
+                  {
+                    id: 'PRRT_thread_1',
+                    isResolved: true,
+                    comments: { nodes: [{ databaseId: 10 }] },
+                  },
+                ],
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          },
+        });
+      }
+      return Promise.resolve({
+        unresolveReviewThread: {
+          thread: { id: 'PRRT_thread_1', isResolved: false },
+        },
+      });
+    });
+    octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+    octokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
+      data: {
+        workflow_runs: [
+          {
+            id: 456,
+            path: '.github/workflows/review-router.yml',
+            head_sha: 'abc',
+            conclusion: 'failure',
+            pull_requests: [{ number: 123 }],
+          },
+        ],
+      },
+    });
+
+    const ledger = new ReviewLedger(client, 'test-secret');
+    await new ReviewInteractionHandler(client, ledger).execute();
+
+    expect(octokit.graphql).toHaveBeenCalledWith(
+      expect.stringContaining('unresolveReviewThread'),
+      { threadId: 'PRRT_thread_1' }
     );
   });
 

@@ -104,8 +104,10 @@ export function stripInlineFingerprintMarkers(body: string): string {
 export function isReviewRouterInlineComment(body?: string | null): boolean {
   if (!body) return false;
   if (extractInlineFingerprint(body)) return true;
-  return /^\*\*(?:🔴 Critical|🟡 Major|🔵 Minor)\s+-\s+.+?\*\*/.test(
-    body.trim()
+  const trimmed = body.trim();
+  return (
+    /^\*\*(?:🔴 Critical|🟡 Major|🔵 Minor)\s+-\s+.+?\*\*/.test(trimmed) ||
+    /^_(?:🔴 Critical|🟡 Major|🔵 Minor)_/.test(trimmed)
   );
 }
 
@@ -192,7 +194,9 @@ function normalizeForSignature(value: string): string {
 }
 
 function extractSeverity(body: string): string | null {
-  const match = body.match(/\*\*(?:[^\w*`]*\s*)?(critical|major|minor)\s*-/i);
+  const match =
+    body.match(/\*\*(?:[^\w*`]*\s*)?(critical|major|minor)\s*-/i) ||
+    body.match(/^_(?:[^\w_]*\s*)?(critical|major|minor)_/i);
   return match?.[1]?.toLowerCase() ?? null;
 }
 

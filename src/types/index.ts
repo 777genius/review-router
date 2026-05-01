@@ -220,6 +220,7 @@ export interface InlineComment {
   providers?: string[];
   confidence?: number;
   hasConsensus?: boolean;
+  suggestion?: string;
 }
 
 export interface ReviewMetrics {

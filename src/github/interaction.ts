@@ -36,6 +36,28 @@ interface ReviewCommentApiItem {
 
 type RepoRole = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
 
+interface ReviewThreadsQueryResult {
+  repository?: {
+    pullRequest?: {
+      reviewThreads?: {
+        nodes?: Array<{
+          id: string;
+          isResolved?: boolean;
+          comments?: {
+            nodes?: Array<{
+              databaseId?: number | null;
+            }>;
+          };
+        }>;
+        pageInfo?: {
+          hasNextPage?: boolean;
+          endCursor?: string | null;
+        };
+      };
+    };
+  };
+}
+
 export class ReviewInteractionHandler {
   constructor(
     private readonly client: GitHubClient,
@@ -151,6 +173,12 @@ export class ReviewInteractionHandler {
       `Accepted /rr ${command.kind} from ${actor} for ${entry.path}:${entry.line}`
     );
 
+    await this.setReviewThreadResolved(
+      prNumber,
+      parentId,
+      command.kind === 'skip'
+    );
+
     const rerun = await this.rerunFailedReview(
       prNumber,
       payload.pull_request?.head?.sha
@@ -191,6 +219,115 @@ export class ReviewInteractionHandler {
       }
     )) as ReviewCommentApiItem[];
     return comments.find((comment) => comment.id === commentId);
+  }
+
+  private async setReviewThreadResolved(
+    prNumber: number,
+    parentCommentId: number,
+    resolved: boolean
+  ): Promise<void> {
+    try {
+      const thread = await this.findReviewThread(prNumber, parentCommentId);
+      if (!thread) {
+        logger.warn(
+          `Could not find review thread for comment ${parentCommentId}; leaving GitHub conversation state unchanged`
+        );
+        return;
+      }
+
+      if (thread.isResolved === resolved) {
+        return;
+      }
+
+      const mutation = resolved
+        ? `mutation($threadId: ID!) {
+            resolveReviewThread(input: { threadId: $threadId }) {
+              thread { id isResolved }
+            }
+          }`
+        : `mutation($threadId: ID!) {
+            unresolveReviewThread(input: { threadId: $threadId }) {
+              thread { id isResolved }
+            }
+          }`;
+
+      await this.graphql(mutation, { threadId: thread.id });
+      logger.info(
+        `${resolved ? 'Resolved' : 'Unresolved'} ReviewRouter conversation for comment ${parentCommentId}`
+      );
+    } catch (error) {
+      logger.warn(
+        `Failed to ${resolved ? 'resolve' : 'unresolve'} ReviewRouter conversation for comment ${parentCommentId}`,
+        error as Error
+      );
+    }
+  }
+
+  private async findReviewThread(
+    prNumber: number,
+    commentId: number
+  ): Promise<{ id: string; isResolved: boolean } | null> {
+    const query = `query($owner: String!, $repo: String!, $number: Int!, $after: String) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100, after: $after) {
+            nodes {
+              id
+              isResolved
+              comments(first: 100) {
+                nodes {
+                  databaseId
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    }`;
+
+    let after: string | null = null;
+    for (let page = 0; page < 10; page += 1) {
+      const result: ReviewThreadsQueryResult =
+        await this.graphql<ReviewThreadsQueryResult>(query, {
+          owner: this.client.owner,
+          repo: this.client.repo,
+          number: prNumber,
+          after,
+        });
+      const threads: NonNullable<
+        NonNullable<
+          NonNullable<ReviewThreadsQueryResult['repository']>['pullRequest']
+        >['reviewThreads']
+      > | undefined = result.repository?.pullRequest?.reviewThreads;
+      for (const thread of threads?.nodes || []) {
+        const hasComment = (thread.comments?.nodes || []).some(
+          (comment: { databaseId?: number | null }) =>
+            comment.databaseId === commentId
+        );
+        if (hasComment) {
+          return { id: thread.id, isResolved: Boolean(thread.isResolved) };
+        }
+      }
+      if (!threads?.pageInfo?.hasNextPage) break;
+      after = threads.pageInfo.endCursor || null;
+    }
+
+    return null;
+  }
+
+  private async graphql<T = unknown>(
+    query: string,
+    variables: Record<string, unknown>
+  ): Promise<T> {
+    const graphql = (this.client.octokit as any).graphql;
+    if (typeof graphql !== 'function') {
+      throw new Error('Octokit GraphQL client is not available');
+    }
+    return graphql(query, variables) as Promise<T>;
   }
 
   private async getRole(username: string): Promise<RepoRole> {

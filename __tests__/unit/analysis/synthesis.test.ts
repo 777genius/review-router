@@ -18,7 +18,7 @@ describe('SynthesisEngine', () => {
     headSha: 'head',
   };
 
-  it('omits provider suggestions from inline comments', () => {
+  it('formats inline comments with committable suggestions when available', () => {
     const finding: Finding = {
       file: 'src/users.js',
       line: 10,
@@ -36,11 +36,15 @@ describe('SynthesisEngine', () => {
 
     expect(review.inlineComments).toHaveLength(1);
     expect(review.inlineComments[0].severity).toBe('critical');
-    expect(review.inlineComments[0].body).toContain('🔴 Critical - SQL injection');
-    expect(review.inlineComments[0].body).toContain('**Severity:** 🔴 **Critical**');
-    expect(review.inlineComments[0].body).not.toContain('```suggestion');
-    expect(review.inlineComments[0].body).not.toContain(finding.suggestion);
-    expect(review.inlineComments[0].body).not.toContain('Suggestion:');
+    expect(review.inlineComments[0].suggestion).toBe(finding.suggestion);
+    expect(review.inlineComments[0].body).toContain('_🔴 Critical_');
+    expect(review.inlineComments[0].body).toContain('_⚡ Quick win_');
+    expect(review.inlineComments[0].body).toContain('**SQL injection**');
+    expect(review.inlineComments[0].body).toContain('<summary>Suggested fix</summary>');
+    expect(review.inlineComments[0].body).toContain('<summary>📝 Committable suggestion</summary>');
+    expect(review.inlineComments[0].body).toContain('```suggestion');
+    expect(review.inlineComments[0].body).toContain(finding.suggestion);
+    expect(review.inlineComments[0].body).toContain('<summary>🤖 Prompt for AI Agents</summary>');
   });
 
   it('sorts inline comments by severity before applying the inline limit', () => {
@@ -75,7 +79,9 @@ describe('SynthesisEngine', () => {
     }).synthesize(findings, pr);
 
     expect(review.inlineComments.map(comment => comment.severity)).toEqual(['critical', 'major']);
-    expect(review.inlineComments[0].body).toContain('🔴 Critical - Critical issue');
-    expect(review.inlineComments[1].body).toContain('🟡 Major - Major issue');
+    expect(review.inlineComments[0].body).toContain('_🔴 Critical_');
+    expect(review.inlineComments[0].body).toContain('**Critical issue**');
+    expect(review.inlineComments[1].body).toContain('_🟡 Major_');
+    expect(review.inlineComments[1].body).toContain('**Major issue**');
   });
 });

@@ -47,6 +47,31 @@ describe('SynthesisEngine', () => {
     expect(review.inlineComments[0].body).toContain('<summary>🤖 Prompt for AI Agents</summary>');
   });
 
+  it('does not render committable suggestions for multi-line suggestions without a range', () => {
+    const finding: Finding = {
+      file: 'src/users.js',
+      line: 10,
+      severity: 'major',
+      title: 'Email lookup bypass',
+      message: 'The query no longer filters by email.',
+      suggestion: [
+        'const normalized = normalizeEmail(email);',
+        "const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [normalized]);",
+      ].join('\n'),
+    };
+
+    const review = new SynthesisEngine({
+      ...DEFAULT_CONFIG,
+      inlineMinSeverity: 'minor',
+      inlineMaxComments: 5,
+    }).synthesize([finding], pr);
+
+    expect(review.inlineComments[0].body).toContain('<summary>Suggested fix</summary>');
+    expect(review.inlineComments[0].body).toContain('<summary>🤖 Prompt for AI Agents</summary>');
+    expect(review.inlineComments[0].body).not.toContain('<summary>📝 Committable suggestion</summary>');
+    expect(review.inlineComments[0].body).not.toContain('```suggestion');
+  });
+
   it('sorts inline comments by severity before applying the inline limit', () => {
     const findings: Finding[] = [
       {

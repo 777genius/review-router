@@ -157,9 +157,11 @@ export class SynthesisEngine {
     ];
     if (finding.suggestion) {
       parts.push('', this.suggestedFixDetails(finding.suggestion));
-      parts.push('', '<!-- suggestion_start -->');
-      parts.push('', this.committableSuggestionDetails(finding.suggestion));
-      parts.push('', '<!-- suggestion_end -->');
+      if (isSingleLineSuggestion(finding.suggestion)) {
+        parts.push('', '<!-- suggestion_start -->');
+        parts.push('', this.committableSuggestionDetails(finding.suggestion));
+        parts.push('', '<!-- suggestion_end -->');
+      }
     }
     parts.push('', this.agentPromptDetails(finding));
     if (finding.providers && finding.providers.length > 1) {
@@ -244,4 +246,8 @@ function suggestionToDiff(suggestion: string): string {
     .split('\n')
     .map((line) => `+${line}`)
     .join('\n');
+}
+
+function isSingleLineSuggestion(suggestion: string): boolean {
+  return suggestion.trimEnd().split('\n').length === 1;
 }

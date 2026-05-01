@@ -16457,9 +16457,11 @@ var SynthesisEngine = class {
     ];
     if (finding.suggestion) {
       parts.push("", this.suggestedFixDetails(finding.suggestion));
-      parts.push("", "<!-- suggestion_start -->");
-      parts.push("", this.committableSuggestionDetails(finding.suggestion));
-      parts.push("", "<!-- suggestion_end -->");
+      if (isSingleLineSuggestion(finding.suggestion)) {
+        parts.push("", "<!-- suggestion_start -->");
+        parts.push("", this.committableSuggestionDetails(finding.suggestion));
+        parts.push("", "<!-- suggestion_end -->");
+      }
     }
     parts.push("", this.agentPromptDetails(finding));
     if (finding.providers && finding.providers.length > 1) {
@@ -16531,6 +16533,9 @@ ${fence}`;
 };
 function suggestionToDiff(suggestion) {
   return suggestion.trimEnd().split("\n").map((line) => `+${line}`).join("\n");
+}
+function isSingleLineSuggestion(suggestion) {
+  return suggestion.trimEnd().split("\n").length === 1;
 }
 
 // src/analysis/test-coverage.ts

@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 
 PRODUCT_NAME="review-router"
-LATEST_RELEASE_TAG="v0.3.0-alpha.2"
+LATEST_RELEASE_TAG="v1.0.0"
 DEFAULT_ACTION_REF_MODE="release"
 DEFAULT_RELEASE_ACTION_REF="777genius/review-router@$LATEST_RELEASE_TAG"
 DEFAULT_MAIN_ACTION_REF="777genius/review-router@main"

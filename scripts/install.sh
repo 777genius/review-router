@@ -55,6 +55,7 @@ NON_INTERACTIVE="$(env_first REVIEW_ROUTER_NON_INTERACTIVE AI_ROBOT_REVIEW_NON_I
 LOCAL_ONLY="$(env_first REVIEW_ROUTER_LOCAL_ONLY AI_ROBOT_REVIEW_LOCAL_ONLY || printf '0')"
 SKIP_GH_CHECK="$(env_first REVIEW_ROUTER_SKIP_GH_CHECK AI_ROBOT_REVIEW_SKIP_GH_CHECK || printf '0')"
 SKIP_APP_CREATE="$(env_first REVIEW_ROUTER_SKIP_APP_CREATE AI_ROBOT_REVIEW_SKIP_APP_CREATE || printf '0')"
+SKIP_APP_DOCTOR="$(env_first REVIEW_ROUTER_SKIP_APP_DOCTOR AI_ROBOT_REVIEW_SKIP_APP_DOCTOR || printf '0')"
 YES="$(env_first REVIEW_ROUTER_YES AI_ROBOT_REVIEW_YES || printf '0')"
 NO_BROWSER="$(env_first REVIEW_ROUTER_NO_BROWSER AI_ROBOT_REVIEW_NO_BROWSER || printf '0')"
 WORKDIR_OVERRIDE="$(env_first REVIEW_ROUTER_WORKDIR AI_ROBOT_REVIEW_WORKDIR || true)"
@@ -525,6 +526,10 @@ set_repo_variable() {
   fi
 }
 
+can_run_remote_checks() {
+  ! is_true "$DRY_RUN" && ! is_true "$LOCAL_ONLY" && ! is_true "$SKIP_GH_CHECK"
+}
+
 verify_codex_auth_file() {
   auth_file="$1"
   [ -f "$auth_file" ] || fatal "Codex auth file not found: $auth_file. Run: codex login"
@@ -687,6 +692,85 @@ load_app_profile() {
   ok "Loaded GitHub App profile: ${APP_NAME:-$APP_SLUG} ($APP_SLUG)"
 }
 
+run_app_doctor() {
+  [ "$IDENTITY_MODE" = "app" ] || return
+  if is_true "$SKIP_APP_DOCTOR"; then
+    warn "Skipping GitHub App doctor because REVIEW_ROUTER_SKIP_APP_DOCTOR=1"
+    return
+  fi
+  if ! can_run_remote_checks; then
+    warn "Skipping GitHub App doctor in dry-run/local-only mode"
+    return
+  fi
+
+  require_cmd python3
+  require_cmd openssl
+  info "Running GitHub App doctor for $APP_SLUG on $TARGET_REPO"
+  app_jwt="$(python3 - "$APP_ID" "$APP_PRIVATE_KEY_FILE" <<'PY'
+import base64
+import json
+import subprocess
+import sys
+import time
+
+app_id, key_file = sys.argv[1:3]
+
+def b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode('ascii').rstrip('=')
+
+now = int(time.time())
+header = b64url(json.dumps({'alg': 'RS256', 'typ': 'JWT'}, separators=(',', ':')).encode())
+payload = b64url(json.dumps({'iat': now - 60, 'exp': now + 540, 'iss': app_id}, separators=(',', ':')).encode())
+signing_input = f'{header}.{payload}'.encode()
+proc = subprocess.run(
+    ['openssl', 'dgst', '-sha256', '-sign', key_file],
+    input=signing_input,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    check=False,
+)
+if proc.returncode != 0:
+    raise SystemExit(f'Could not sign GitHub App JWT with {key_file}: {proc.stderr.decode(errors="ignore").strip()}')
+print(f'{header}.{payload}.{b64url(proc.stdout)}')
+PY
+)"
+
+  app_id_actual="$(gh api /app -H "Authorization: Bearer $app_jwt" --jq '.id')"
+  app_client_id_actual="$(gh api /app -H "Authorization: Bearer $app_jwt" --jq '.client_id')"
+  app_slug_actual="$(gh api /app -H "Authorization: Bearer $app_jwt" --jq '.slug')"
+
+  [ "$app_id_actual" = "$APP_ID" ] || fatal "GitHub App private key belongs to App ID $app_id_actual, not configured APP_ID $APP_ID"
+  [ "$app_client_id_actual" = "$APP_CLIENT_ID" ] || fatal "GitHub App client ID mismatch: API returned $app_client_id_actual, profile has $APP_CLIENT_ID"
+  [ "$app_slug_actual" = "$APP_SLUG" ] || fatal "GitHub App slug mismatch: API returned $app_slug_actual, profile has $APP_SLUG"
+
+  missing_permissions=""
+  actual_actions="$(gh api /app -H "Authorization: Bearer $app_jwt" --jq '.permissions.actions // ""')"
+  actual_contents="$(gh api /app -H "Authorization: Bearer $app_jwt" --jq '.permissions.contents // ""')"
+  actual_issues="$(gh api /app -H "Authorization: Bearer $app_jwt" --jq '.permissions.issues // ""')"
+  actual_pull_requests="$(gh api /app -H "Authorization: Bearer $app_jwt" --jq '.permissions.pull_requests // ""')"
+  [ "$actual_actions" = "write" ] || missing_permissions="$missing_permissions actions:write (current: ${actual_actions:-none})"
+  case "$actual_contents" in
+    read|write) ;;
+    *) missing_permissions="$missing_permissions contents:read (current: ${actual_contents:-none})" ;;
+  esac
+  [ "$actual_issues" = "write" ] || missing_permissions="$missing_permissions issues:write (current: ${actual_issues:-none})"
+  [ "$actual_pull_requests" = "write" ] || missing_permissions="$missing_permissions pull_requests:write (current: ${actual_pull_requests:-none})"
+  [ -z "$missing_permissions" ] || fatal "GitHub App is missing required permissions:$missing_permissions. Open https://github.com/settings/apps/$APP_SLUG/permissions, update permissions, then approve the installation update."
+
+  installed=0
+  installation_ids="$(gh api /app/installations -H "Authorization: Bearer $app_jwt" --paginate --jq '.[].id')"
+  for installation_id in $installation_ids; do
+    installation_token="$(gh api --method POST "/app/installations/$installation_id/access_tokens" -H "Authorization: Bearer $app_jwt" --jq '.token')"
+    if gh api "/repos/$TARGET_REPO" -H "Authorization: Bearer $installation_token" >/dev/null 2>&1; then
+      installed=1
+      break
+    fi
+  done
+  [ "$installed" = "1" ] || fatal "GitHub App $APP_SLUG is not installed on $TARGET_REPO. Install it here: https://github.com/apps/$APP_SLUG/installations/new"
+
+  ok "GitHub App doctor passed"
+}
+
 select_saved_app_profile() {
   profile_dir="$(app_profile_dir)"
   if [ -n "$APP_PROFILE" ]; then
@@ -723,10 +807,21 @@ select_saved_app_profile() {
 }
 
 store_loaded_app_credentials() {
+  run_app_doctor
   set_repo_variable REVIEW_APP_CLIENT_ID "$APP_CLIENT_ID"
   set_repo_variable REVIEW_APP_ID "$APP_ID"
   set_repo_variable REVIEW_APP_SLUG "$APP_SLUG"
   set_repo_secret_from_file REVIEW_APP_PRIVATE_KEY "$APP_PRIVATE_KEY_FILE"
+}
+
+confirm_app_installation_ready() {
+  [ "$IDENTITY_MODE" = "app" ] || return
+  if is_true "$SKIP_APP_DOCTOR" || ! can_run_remote_checks || is_true "$NON_INTERACTIVE"; then
+    return
+  fi
+  log ""
+  log "Install URL: https://github.com/apps/$APP_SLUG/installations/new"
+  confirm "Have you installed $APP_SLUG on $TARGET_REPO?" || fatal "Install the GitHub App on $TARGET_REPO, then rerun the installer."
 }
 
 print_app_logo_instruction() {
@@ -776,6 +871,10 @@ create_github_app_with_manifest() {
   app_name="$1"
   if is_true "$DRY_RUN" || is_true "$LOCAL_ONLY" || is_true "$SKIP_APP_CREATE"; then
     warn "Skipping GitHub App creation in dry-run/local-only/test mode"
+    APP_CLIENT_ID="Iv1.local-test-client-id"
+    APP_ID="0"
+    APP_SLUG="$app_name"
+    APP_NAME="$app_name"
     set_repo_variable REVIEW_APP_CLIENT_ID "Iv1.local-test-client-id"
     set_repo_variable REVIEW_APP_ID "0"
     set_repo_variable REVIEW_APP_SLUG "$app_name"
@@ -928,6 +1027,7 @@ PY
   . "$env_file"
   save_app_profile "$APP_ID" "$APP_CLIENT_ID" "$APP_SLUG" "$APP_NAME" "$APP_PRIVATE_KEY_FILE"
   load_app_profile "$SAVED_APP_PROFILE_FILE"
+  confirm_app_installation_ready
   store_loaded_app_credentials
   rm -rf "$tmp_dir"
 
@@ -1345,6 +1445,87 @@ YAML
   } > "$workflow_file"
 }
 
+required_secret_names() {
+  printf '%s\n' REVIEW_ROUTER_LEDGER_KEY
+  case "$AUTH_MODE" in
+    codex) printf '%s\n' CODEX_AUTH_JSON ;;
+    openai) printf '%s\n' OPENAI_API_KEY ;;
+    openrouter) printf '%s\n' OPENROUTER_API_KEY ;;
+  esac
+  if [ "$IDENTITY_MODE" = "app" ]; then
+    printf '%s\n' REVIEW_APP_PRIVATE_KEY
+  fi
+}
+
+required_variable_names() {
+  printf '%s\n' REVIEW_AUTH_MODE REVIEW_ROUTER_DISCUSSION_MODE
+  case "$AUTH_MODE" in
+    codex|openai) printf '%s\n' REVIEW_CODEX_MODEL ;;
+    openrouter) printf '%s\n' REVIEW_PROVIDERS REVIEW_SYNTHESIS_MODEL ;;
+  esac
+  if [ "$IDENTITY_MODE" = "app" ]; then
+    printf '%s\n' REVIEW_APP_CLIENT_ID REVIEW_APP_ID REVIEW_APP_SLUG
+  fi
+}
+
+run_setup_doctor() {
+  log ""
+  info "ReviewRouter doctor"
+  [ -f "$WORKDIR/$WORKFLOW_PATH" ] || fatal "Doctor failed: missing $WORKFLOW_PATH"
+  [ -f "$WORKDIR/$INTERACTION_WORKFLOW_PATH" ] || fatal "Doctor failed: missing $INTERACTION_WORKFLOW_PATH"
+  ok "Workflow files are present"
+
+  if ! can_run_remote_checks; then
+    warn "Skipping remote secret/variable doctor in dry-run/local-only mode"
+    return
+  fi
+
+  missing_items=""
+  while IFS= read -r secret_name; do
+    [ -n "$secret_name" ] || continue
+    if secret_exists "$secret_name"; then
+      ok "Secret exists: $secret_name"
+    else
+      missing_items="$missing_items secret:$secret_name"
+    fi
+  done <<EOF
+$(required_secret_names)
+EOF
+
+  while IFS= read -r variable_name; do
+    [ -n "$variable_name" ] || continue
+    if variable_exists "$variable_name"; then
+      ok "Variable exists: $variable_name"
+    else
+      missing_items="$missing_items variable:$variable_name"
+    fi
+  done <<EOF
+$(required_variable_names)
+EOF
+
+  [ -z "$missing_items" ] || fatal "Doctor failed: missing required GitHub configuration:$missing_items"
+  ok "Required GitHub secrets and variables are present"
+}
+
+print_setup_summary() {
+  log ""
+  log "${BOLD}Setup summary${NC}"
+  log "Repository: $TARGET_REPO"
+  log "Action ref: $ACTION_REF"
+  log "Identity: $IDENTITY_MODE"
+  if [ "$IDENTITY_MODE" = "app" ]; then
+    log "GitHub App: ${APP_SLUG:-unknown}[bot]"
+  fi
+  log "Auth mode: $AUTH_MODE"
+  log "Preset: $PRESET"
+  if [ "$SECRET_SCOPE" = "org" ]; then
+    log "Secrets/vars: org $ORG_NAME, selected repos: $ORG_SELECTED_REPOS"
+  else
+    log "Secrets/vars: repo $TARGET_REPO"
+  fi
+  log "Workflows: $WORKFLOW_PATH, $INTERACTION_WORKFLOW_PATH"
+}
+
 prepare_worktree() {
   if is_true "$LOCAL_ONLY"; then
     if [ -n "$WORKDIR_OVERRIDE" ]; then
@@ -1469,10 +1650,12 @@ main() {
   prepare_worktree
   write_workflow "$WORKDIR/$WORKFLOW_PATH"
   write_interaction_workflow "$WORKDIR/$INTERACTION_WORKFLOW_PATH"
+  run_setup_doctor
   commit_and_open_pr
 
   log ""
   ok "ReviewRouter setup complete"
+  print_setup_summary
   log "Docs: https://github.com/777genius/review-router/blob/main/docs/install.md"
 }
 

@@ -61,6 +61,56 @@ function writePrivateKeyFixture(
   return keyFile;
 }
 
+function writeFakeAppDoctorBin(dir: string): string {
+  const binDir = path.join(dir, 'fake-bin');
+  fs.mkdirSync(binDir, { recursive: true });
+
+  const ghPath = path.join(binDir, 'gh');
+  fs.writeFileSync(
+    ghPath,
+    [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      'if [ "${1:-}" = "auth" ] && [ "${2:-}" = "status" ]; then exit 0; fi',
+      'if [ "${1:-}" = "api" ] && [ "${2:-}" = "/app" ]; then',
+      '  args="$*"',
+      '  case "$args" in',
+      '    *".id"*) printf "12345\\n"; exit 0 ;;',
+      '    *".client_id"*) printf "Iv1.doctor-client-id\\n"; exit 0 ;;',
+      '    *".slug"*) printf "review-router-doctor\\n"; exit 0 ;;',
+      '    *".permissions.actions"*) exit 0 ;;',
+      '    *".permissions.contents"*) printf "read\\n"; exit 0 ;;',
+      '    *".permissions.issues"*) printf "write\\n"; exit 0 ;;',
+      '    *".permissions.pull_requests"*) printf "write\\n"; exit 0 ;;',
+      '  esac',
+      'fi',
+      'printf "unexpected gh call: %s\\n" "$*" >&2',
+      'exit 1',
+      '',
+    ].join('\n')
+  );
+  fs.chmodSync(ghPath, 0o755);
+
+  const opensslPath = path.join(binDir, 'openssl');
+  fs.writeFileSync(
+    opensslPath,
+    [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      'if [ "${1:-}" = "dgst" ]; then',
+      '  printf "fake-signature"',
+      '  exit 0',
+      'fi',
+      'printf "unexpected openssl call: %s\\n" "$*" >&2',
+      'exit 1',
+      '',
+    ].join('\n')
+  );
+  fs.chmodSync(opensslPath, 0o755);
+
+  return binDir;
+}
+
 describe('review-router curl installer e2e', () => {
   it('generates github-actions bot workflow for OpenRouter auth without GitHub App setup', () => {
     const result = runInstaller({
@@ -72,6 +122,12 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     expect(fs.existsSync(result.workflowPath)).toBe(true);
+    expect(result.stdout).toContain('ReviewRouter doctor');
+    expect(result.stdout).toContain('Workflow files are present');
+    expect(result.stdout).toContain(
+      'Skipping remote secret/variable doctor in dry-run/local-only mode'
+    );
+    expect(result.stdout).toContain('Setup summary');
 
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('name: ReviewRouter');
@@ -203,6 +259,7 @@ describe('review-router curl installer e2e', () => {
     });
 
     expect(result.status).toBe(0);
+    expect(result.stdout).toContain('ReviewRouter doctor');
     expect(result.stdout).toContain('Skipping CODEX_CONFIG_TOML by default');
     expect(result.stdout).not.toContain('gh secret set CODEX_CONFIG_TOML');
     const workflow = workflowText(result.workflowPath);
@@ -267,6 +324,9 @@ describe('review-router curl installer e2e', () => {
     });
 
     expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      'Skipping GitHub App doctor in dry-run/local-only mode'
+    );
     expect(result.stdout).toContain('Saved GitHub App profile:');
     expect(result.stdout).toContain('Loaded GitHub App profile:');
     expect(result.stdout).toContain(
@@ -308,6 +368,37 @@ describe('review-router curl installer e2e', () => {
     expect(workflowText(result.interactionWorkflowPath)).toContain(
       'permission-actions: write'
     );
+  });
+
+  it('fails before writing workflows when GitHub App doctor detects missing Actions write permission', () => {
+    const workdir = makeTempDir('airr-app-doctor-workdir-');
+    const fakeBin = writeFakeAppDoctorBin(workdir);
+    const privateKeyFile = writePrivateKeyFixture(workdir);
+
+    const result = runInstaller(
+      {
+        PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
+        REVIEW_ROUTER_LOCAL_ONLY: '0',
+        REVIEW_ROUTER_SKIP_GH_CHECK: '0',
+        REVIEW_ROUTER_IDENTITY: 'app',
+        REVIEW_ROUTER_APP_SETUP: 'manual',
+        REVIEW_ROUTER_AUTH: 'openrouter',
+        REVIEW_ROUTER_PRESET: 'safe',
+        REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+        REVIEW_ROUTER_APP_CLIENT_ID: 'Iv1.doctor-client-id',
+        REVIEW_ROUTER_APP_ID: '12345',
+        REVIEW_ROUTER_APP_SLUG: 'review-router-doctor',
+        REVIEW_ROUTER_APP_PRIVATE_KEY_FILE: privateKeyFile,
+      },
+      workdir
+    );
+
+    expect(result.status).toBe(1);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(
+      'GitHub App is missing required permissions: actions:write (current: none)'
+    );
+    expect(fs.existsSync(result.workflowPath)).toBe(false);
+    expect(fs.existsSync(result.interactionWorkflowPath)).toBe(false);
   });
 
   it('keeps existing GitHub App credential env vars working without explicit app setup mode', () => {

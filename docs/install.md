@@ -114,6 +114,26 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
 
 Secrets are never deleted automatically. Existing secrets and variables are overwritten only after confirmation.
 
+## Installer Doctor
+
+The installer runs a doctor check before opening the setup PR.
+
+It verifies:
+
+- workflow files were written
+- required secrets and variables exist in the selected repo/org scope
+- GitHub App profiles match their private key
+- GitHub App mode has required permissions: `Actions: write`, `Contents: read`, `Issues: write`, `Pull requests: write`
+- the selected App is installed on the target repository
+
+If you intentionally need to bypass App validation for a temporary/manual setup, use:
+
+```bash
+REVIEW_ROUTER_SKIP_APP_DOCTOR=1
+```
+
+Do not use this for production rollout. Without `Actions: write`, `/rr skip` can record the signed ledger but cannot rerun the failed review check automatically.
+
 ## Secret scopes
 
 | Scope  | Where secrets live                     | Repository access          | Best for                                                               |

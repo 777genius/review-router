@@ -302,6 +302,34 @@ describe('FeedbackFilter', () => {
         state
       )).toBe(false);
     });
+
+    it('does not treat outdated AI Robot Review comments as already posted', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'src/file.ts',
+          line: null,
+          original_line: 10,
+          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+        },
+      ]);
+      mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
+        data: [],
+      });
+
+      const state = await feedbackFilter.loadReviewCommentState(123);
+
+      expect(state.alreadyPosted.size).toBe(0);
+      expect(feedbackFilter.shouldPost(
+        {
+          path: 'src/file.ts',
+          line: 10,
+          side: 'RIGHT',
+          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+        },
+        state
+      )).toBe(true);
+    });
   });
 
   describe('shouldPost', () => {

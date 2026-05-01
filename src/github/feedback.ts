@@ -41,12 +41,16 @@ export class FeedbackFilter {
       );
 
       for (const comment of comments) {
-        const line = comment.line ?? comment.original_line;
+        const activeLine = comment.line;
+        const line = activeLine ?? comment.original_line;
         const body = comment.body || '';
         const signature = this.signatureFromComment(comment.path, line, body);
         const marker = extractInlineFingerprint(body);
 
-        if (isAiRobotInlineComment(body)) {
+        // Only active review comments should suppress reposting. Outdated
+        // comments have line=null and should not hide a fresh current-diff
+        // comment if the finding still exists after a new push.
+        if (isAiRobotInlineComment(body) && activeLine != null) {
           alreadyPosted.add(signature);
           if (marker) alreadyPosted.add(marker);
         }

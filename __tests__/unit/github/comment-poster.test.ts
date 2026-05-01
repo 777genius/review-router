@@ -26,8 +26,10 @@ describe('CommentPoster', () => {
         },
         pulls: {
           createReview: jest.fn().mockResolvedValue({}),
+          listReviewComments: jest.fn(),
         },
       },
+      paginate: jest.fn().mockResolvedValue([]),
     };
 
     mockClient = {
@@ -145,6 +147,90 @@ describe('CommentPoster', () => {
           line: 10,
         })
       );
+    });
+
+    it('skips duplicate inline comments after correcting the anchor line', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'src/users.js',
+          line: 10,
+          body: '**🔴 Critical - SQL injection**\n\nThe email value is inserted directly into the SQL string.\n\n<!-- ai-robot-review-inline:legacy -->',
+        },
+      ]);
+
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'src/users.js',
+          line: 9,
+          side: 'RIGHT' as const,
+          body: '**🔴 Critical - SQL injection**\n\nThe email value is inserted directly into the SQL string.',
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'src/users.js',
+          status: 'modified',
+          additions: 5,
+          deletions: 0,
+          changes: 5,
+          patch: [
+            '@@ -5,3 +5,8 @@',
+            '   }',
+            '   return id;',
+            ' }',
+            '+',
+            '+export async function findUserByEmail(db, email) {',
+            "+  const rows = await db.query(`SELECT * FROM users WHERE email = '${email}' LIMIT 1`);",
+            '+  return rows[0] || null;',
+            '+}',
+          ].join('\n'),
+        },
+      ];
+
+      await poster.postInline(123, comments, files);
+
+      expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        'Skipping duplicate active inline comment at src/users.js:10'
+      );
+    });
+
+    it('does not treat outdated inline comments as active duplicates', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'src/test.ts',
+          line: null,
+          original_line: 10,
+          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+        },
+      ]);
+
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'src/test.ts',
+          line: 10,
+          side: 'RIGHT' as const,
+          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'src/test.ts',
+          status: 'modified',
+          additions: 5,
+          deletions: 2,
+          changes: 7,
+          patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+        },
+      ];
+
+      await poster.postInline(123, comments, files);
+
+      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
     });
 
     it('splits large comments into chunks', async () => {

@@ -8,7 +8,13 @@ import { validateSyntax, shouldPostSuggestion, calculateConfidence, ConfidenceSi
 import { SuppressionTracker } from '../learning/suppression-tracker';
 import { ProviderWeightTracker } from '../learning/provider-weights';
 import { detectLanguage } from '../analysis/ast/parsers';
-import { appendInlineFingerprintMarker } from './comment-fingerprint';
+import {
+  appendInlineFingerprintMarker,
+  extractInlineFingerprint,
+  fingerprintFromInlineComment,
+  isAiRobotInlineComment,
+  signatureFromInlineComment,
+} from './comment-fingerprint';
 
 export class CommentPoster {
   private static readonly MAX_COMMENT_SIZE = 60_000;
@@ -135,6 +141,53 @@ export class CommentPoster {
       || CommentPoster.LEGACY_BOT_COMMENT_MARKERS.some(marker => body.includes(marker));
   }
 
+  private async loadActiveInlineCommentKeys(prNumber: number): Promise<Set<string>> {
+    const keys = new Set<string>();
+    const { octokit, owner, repo } = this.client;
+
+    try {
+      const comments = await octokit.paginate(
+        octokit.rest.pulls.listReviewComments,
+        {
+          owner,
+          repo,
+          pull_number: prNumber,
+          per_page: 100,
+        }
+      );
+
+      for (const comment of comments) {
+        const activeLine = comment.line;
+        const body = comment.body || '';
+        if (activeLine == null || !isAiRobotInlineComment(body)) continue;
+
+        keys.add(signatureFromInlineComment(comment.path, activeLine, body));
+        keys.add(fingerprintFromInlineComment(comment.path, activeLine, body));
+
+        const marker = extractInlineFingerprint(body);
+        if (marker) keys.add(marker);
+      }
+    } catch (error) {
+      logger.warn('Failed to load existing inline comments for deduplication', error as Error);
+    }
+
+    return keys;
+  }
+
+  private hasInlineDuplicate(
+    activeKeys: Set<string>,
+    path: string,
+    line: number,
+    body: string
+  ): boolean {
+    const marker = extractInlineFingerprint(body);
+    return (
+      activeKeys.has(signatureFromInlineComment(path, line, body)) ||
+      activeKeys.has(fingerprintFromInlineComment(path, line, body)) ||
+      (marker ? activeKeys.has(marker) : false)
+    );
+  }
+
   /**
    * Validate and filter suggestions through quality pipeline.
    * Reads pre-computed hasConsensus from Finding (set during aggregation).
@@ -241,6 +294,9 @@ export class CommentPoster {
 
   async postInline(prNumber: number, comments: InlineComment[], files: FileChange[], _headSha?: string): Promise<void> {
     if (comments.length === 0) return;
+    const activeInlineKeys = this.dryRun
+      ? new Set<string>()
+      : await this.loadActiveInlineCommentKeys(prNumber);
 
     // Filter out deletion-only files (no suggestions possible)
     const filesWithAdditions = files.filter(f => !isDeletionOnlyFile(f));
@@ -332,6 +388,17 @@ export class CommentPoster {
           side: c.side || 'RIGHT',
           body: appendInlineFingerprintMarker(c.body, c.path, c.line),
         };
+
+        if (this.hasInlineDuplicate(activeInlineKeys, c.path, c.line, apiComment.body)) {
+          logger.info(`Skipping duplicate active inline comment at ${c.path}:${c.line}`);
+          return null;
+        }
+
+        activeInlineKeys.add(signatureFromInlineComment(c.path, c.line, apiComment.body));
+        activeInlineKeys.add(fingerprintFromInlineComment(c.path, c.line, apiComment.body));
+        const marker = extractInlineFingerprint(apiComment.body);
+        if (marker) activeInlineKeys.add(marker);
+
         const startLine = (c as any).start_line;
         if (startLine !== undefined && startLine !== c.line) {
           // Multi-line: use line-based parameters.

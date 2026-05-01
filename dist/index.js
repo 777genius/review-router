@@ -17722,6 +17722,37 @@ ${content.substring(0, 500)}...`);
     if (!body) return false;
     return body.includes(_CommentPoster.BOT_COMMENT_MARKER) || _CommentPoster.LEGACY_BOT_COMMENT_MARKERS.some((marker) => body.includes(marker));
   }
+  async loadActiveInlineCommentKeys(prNumber) {
+    const keys = /* @__PURE__ */ new Set();
+    const { octokit, owner, repo } = this.client;
+    try {
+      const comments = await octokit.paginate(
+        octokit.rest.pulls.listReviewComments,
+        {
+          owner,
+          repo,
+          pull_number: prNumber,
+          per_page: 100
+        }
+      );
+      for (const comment of comments) {
+        const activeLine = comment.line;
+        const body = comment.body || "";
+        if (activeLine == null || !isAiRobotInlineComment(body)) continue;
+        keys.add(signatureFromInlineComment(comment.path, activeLine, body));
+        keys.add(fingerprintFromInlineComment(comment.path, activeLine, body));
+        const marker = extractInlineFingerprint(body);
+        if (marker) keys.add(marker);
+      }
+    } catch (error2) {
+      logger.warn("Failed to load existing inline comments for deduplication", error2);
+    }
+    return keys;
+  }
+  hasInlineDuplicate(activeKeys, path13, line, body) {
+    const marker = extractInlineFingerprint(body);
+    return activeKeys.has(signatureFromInlineComment(path13, line, body)) || activeKeys.has(fingerprintFromInlineComment(path13, line, body)) || (marker ? activeKeys.has(marker) : false);
+  }
   /**
    * Validate and filter suggestions through quality pipeline.
    * Reads pre-computed hasConsensus from Finding (set during aggregation).
@@ -17799,6 +17830,7 @@ ${content.substring(0, 500)}...`);
   }
   async postInline(prNumber, comments, files, _headSha) {
     if (comments.length === 0) return;
+    const activeInlineKeys = this.dryRun ? /* @__PURE__ */ new Set() : await this.loadActiveInlineCommentKeys(prNumber);
     const filesWithAdditions = files.filter((f) => !isDeletionOnlyFile(f));
     const filesWithAdditionsSet = new Set(filesWithAdditions.map((f) => f.filename));
     const positionMaps = /* @__PURE__ */ new Map();
@@ -17869,6 +17901,14 @@ ${content.substring(0, 500)}...`);
           side: c.side || "RIGHT",
           body: appendInlineFingerprintMarker(c.body, c.path, c.line)
         };
+        if (this.hasInlineDuplicate(activeInlineKeys, c.path, c.line, apiComment.body)) {
+          logger.info(`Skipping duplicate active inline comment at ${c.path}:${c.line}`);
+          return null;
+        }
+        activeInlineKeys.add(signatureFromInlineComment(c.path, c.line, apiComment.body));
+        activeInlineKeys.add(fingerprintFromInlineComment(c.path, c.line, apiComment.body));
+        const marker = extractInlineFingerprint(apiComment.body);
+        if (marker) activeInlineKeys.add(marker);
         const startLine = c.start_line;
         if (startLine !== void 0 && startLine !== c.line) {
           apiComment.start_line = startLine;
@@ -19214,11 +19254,12 @@ var FeedbackFilter = class {
         }
       );
       for (const comment of comments) {
-        const line = comment.line ?? comment.original_line;
+        const activeLine = comment.line;
+        const line = activeLine ?? comment.original_line;
         const body = comment.body || "";
         const signature = this.signatureFromComment(comment.path, line, body);
         const marker = extractInlineFingerprint(body);
-        if (isAiRobotInlineComment(body)) {
+        if (isAiRobotInlineComment(body) && activeLine != null) {
           alreadyPosted.add(signature);
           if (marker) alreadyPosted.add(marker);
         }

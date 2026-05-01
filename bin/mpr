@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Multi-Provider Code Review CLI
+ * ReviewRouter CLI
  *
  * Entry point for the mpr command
  */

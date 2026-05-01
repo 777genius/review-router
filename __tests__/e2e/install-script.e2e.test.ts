@@ -15,11 +15,11 @@ function runInstaller(env: Record<string, string>, workdir = makeTempDir('airr-w
     cwd: repoRoot,
     env: {
       ...process.env,
-      AI_ROBOT_REVIEW_NON_INTERACTIVE: '1',
-      AI_ROBOT_REVIEW_LOCAL_ONLY: '1',
-      AI_ROBOT_REVIEW_SKIP_GH_CHECK: '1',
-      AI_ROBOT_REVIEW_REPO: 'test-owner/test-repo',
-      AI_ROBOT_REVIEW_WORKDIR: workdir,
+      REVIEW_ROUTER_NON_INTERACTIVE: '1',
+      REVIEW_ROUTER_LOCAL_ONLY: '1',
+      REVIEW_ROUTER_SKIP_GH_CHECK: '1',
+      REVIEW_ROUTER_REPO: 'test-owner/test-repo',
+      REVIEW_ROUTER_WORKDIR: workdir,
       ...env,
     },
     encoding: 'utf-8',
@@ -28,7 +28,7 @@ function runInstaller(env: Record<string, string>, workdir = makeTempDir('airr-w
   return {
     ...result,
     workdir,
-    workflowPath: path.join(workdir, '.github/workflows/ai-robot-review.yml'),
+    workflowPath: path.join(workdir, '.github/workflows/review-router.yml'),
   };
 }
 
@@ -36,21 +36,22 @@ function workflowText(workflowPath: string): string {
   return fs.readFileSync(workflowPath, 'utf-8');
 }
 
-describe('ai-robot-review curl installer e2e', () => {
+describe('review-router curl installer e2e', () => {
   it('generates github-actions bot workflow for OpenRouter auth without GitHub App setup', () => {
     const result = runInstaller({
-      AI_ROBOT_REVIEW_IDENTITY: 'actions',
-      AI_ROBOT_REVIEW_AUTH: 'openrouter',
-      AI_ROBOT_REVIEW_PRESET: 'minimal',
-      AI_ROBOT_REVIEW_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'minimal',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
     });
 
     expect(result.status).toBe(0);
     expect(fs.existsSync(result.workflowPath)).toBe(true);
 
     const workflow = workflowText(result.workflowPath);
-    expect(workflow).toContain('name: AI Robot Review');
-    expect(workflow).toContain('uses: 777genius/multi-provider-code-review@main');
+    expect(workflow).toContain('name: ReviewRouter');
+    expect(workflow).toContain('uses: 777genius/multi-provider-code-review@v0.3.0-alpha.1');
+    expect(result.stdout).toContain('Action ref: 777genius/multi-provider-code-review@v0.3.0-alpha.1');
     expect(workflow).toContain('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain('OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}');
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '3'");
@@ -69,6 +70,47 @@ describe('ai-robot-review curl installer e2e', () => {
     expect(workflow).not.toContain('\\${{');
   });
 
+  it('can generate a live main-branch workflow when requested', () => {
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'minimal',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_ACTION_REF_MODE: 'main',
+    });
+
+    expect(result.status).toBe(0);
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain('uses: 777genius/multi-provider-code-review@main');
+    expect(result.stdout).toContain('Action ref: 777genius/multi-provider-code-review@main');
+  });
+
+  it('keeps legacy AI_ROBOT_REVIEW environment aliases working', () => {
+    const workdir = makeTempDir('airr-legacy-workdir-');
+    const result = spawnSync('bash', [installerPath], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        AI_ROBOT_REVIEW_NON_INTERACTIVE: '1',
+        AI_ROBOT_REVIEW_LOCAL_ONLY: '1',
+        AI_ROBOT_REVIEW_SKIP_GH_CHECK: '1',
+        AI_ROBOT_REVIEW_REPO: 'test-owner/test-repo',
+        AI_ROBOT_REVIEW_WORKDIR: workdir,
+        AI_ROBOT_REVIEW_IDENTITY: 'actions',
+        AI_ROBOT_REVIEW_AUTH: 'openrouter',
+        AI_ROBOT_REVIEW_PRESET: 'minimal',
+        AI_ROBOT_REVIEW_OPENROUTER_API_KEY: 'or-test-key',
+        AI_ROBOT_REVIEW_ACTION_REF_MODE: 'main',
+      },
+      encoding: 'utf-8',
+    });
+
+    expect(result.status).toBe(0);
+    const workflow = workflowText(path.join(workdir, '.github/workflows/review-router.yml'));
+    expect(workflow).toContain('uses: 777genius/multi-provider-code-review@main');
+    expect(result.stdout).toContain('ReviewRouter setup complete');
+  });
+
   it('generates GitHub App bot workflow for Codex OAuth auth', () => {
     const codexDir = makeTempDir('airr-codex-');
     const authFile = path.join(codexDir, 'auth.json');
@@ -77,12 +119,12 @@ describe('ai-robot-review curl installer e2e', () => {
     fs.writeFileSync(configFile, 'model = "gpt-5.5"\n');
 
     const result = runInstaller({
-      AI_ROBOT_REVIEW_IDENTITY: 'app',
-      AI_ROBOT_REVIEW_AUTH: 'codex',
-      AI_ROBOT_REVIEW_PRESET: 'safe',
-      AI_ROBOT_REVIEW_SKIP_APP_CREATE: '1',
-      AI_ROBOT_REVIEW_CODEX_AUTH_FILE: authFile,
-      AI_ROBOT_REVIEW_CODEX_CONFIG_FILE: configFile,
+      REVIEW_ROUTER_IDENTITY: 'app',
+      REVIEW_ROUTER_AUTH: 'codex',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_SKIP_APP_CREATE: '1',
+      REVIEW_ROUTER_CODEX_AUTH_FILE: authFile,
+      REVIEW_ROUTER_CODEX_CONFIG_FILE: configFile,
     });
 
     expect(result.status).toBe(0);
@@ -115,10 +157,10 @@ describe('ai-robot-review curl installer e2e', () => {
 
   it('generates Codex CLI API-key workflow without requiring local OAuth auth', () => {
     const result = runInstaller({
-      AI_ROBOT_REVIEW_IDENTITY: 'actions',
-      AI_ROBOT_REVIEW_AUTH: 'openai',
-      AI_ROBOT_REVIEW_PRESET: 'strict',
-      AI_ROBOT_REVIEW_OPENAI_API_KEY: 'sk-test-key',
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'openai',
+      REVIEW_ROUTER_PRESET: 'strict',
+      REVIEW_ROUTER_OPENAI_API_KEY: 'sk-test-key',
     });
 
     expect(result.status).toBe(0);
@@ -140,10 +182,10 @@ describe('ai-robot-review curl installer e2e', () => {
 
   it('generates blocking preset workflow that fails on major findings', () => {
     const result = runInstaller({
-      AI_ROBOT_REVIEW_IDENTITY: 'actions',
-      AI_ROBOT_REVIEW_AUTH: 'openai',
-      AI_ROBOT_REVIEW_PRESET: 'blocking',
-      AI_ROBOT_REVIEW_OPENAI_API_KEY: 'sk-test-key',
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'openai',
+      REVIEW_ROUTER_PRESET: 'blocking',
+      REVIEW_ROUTER_OPENAI_API_KEY: 'sk-test-key',
     });
 
     expect(result.status).toBe(0);
@@ -158,13 +200,13 @@ describe('ai-robot-review curl installer e2e', () => {
 
   it('stores secrets and variables at org scope for selected repositories only', () => {
     const result = runInstaller({
-      AI_ROBOT_REVIEW_SECRET_SCOPE: 'org',
-      AI_ROBOT_REVIEW_ORG: 'test-owner',
-      AI_ROBOT_REVIEW_ORG_SECRET_REPOS: 'test-repo',
-      AI_ROBOT_REVIEW_IDENTITY: 'actions',
-      AI_ROBOT_REVIEW_AUTH: 'openrouter',
-      AI_ROBOT_REVIEW_PRESET: 'safe',
-      AI_ROBOT_REVIEW_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_SECRET_SCOPE: 'org',
+      REVIEW_ROUTER_ORG: 'test-owner',
+      REVIEW_ROUTER_ORG_SECRET_REPOS: 'test-repo',
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
     });
 
     expect(result.status).toBe(0);
@@ -181,18 +223,18 @@ describe('ai-robot-review curl installer e2e', () => {
 
   it('does not open GitHub App manifest flow in dry-run mode', () => {
     const result = runInstaller({
-      AI_ROBOT_REVIEW_LOCAL_ONLY: '0',
-      AI_ROBOT_REVIEW_DRY_RUN: '1',
-      AI_ROBOT_REVIEW_IDENTITY: 'app',
-      AI_ROBOT_REVIEW_AUTH: 'openrouter',
-      AI_ROBOT_REVIEW_PRESET: 'safe',
-      AI_ROBOT_REVIEW_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_LOCAL_ONLY: '0',
+      REVIEW_ROUTER_DRY_RUN: '1',
+      REVIEW_ROUTER_IDENTITY: 'app',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
     });
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Skipping GitHub App creation in dry-run/local-only/test mode');
     expect(result.stdout).toContain('would clone test-owner/test-repo');
-    expect(result.stdout).toContain('would commit .github/workflows/ai-robot-review.yml');
+    expect(result.stdout).toContain('would commit .github/workflows/review-router.yml');
   });
 
   it('rejects invalid Codex OAuth files before writing workflow', () => {
@@ -201,10 +243,10 @@ describe('ai-robot-review curl installer e2e', () => {
     fs.writeFileSync(authFile, JSON.stringify({ auth_mode: 'chatgpt', tokens: {} }));
 
     const result = runInstaller({
-      AI_ROBOT_REVIEW_IDENTITY: 'actions',
-      AI_ROBOT_REVIEW_AUTH: 'codex',
-      AI_ROBOT_REVIEW_PRESET: 'safe',
-      AI_ROBOT_REVIEW_CODEX_AUTH_FILE: authFile,
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'codex',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_CODEX_AUTH_FILE: authFile,
     });
 
     expect(result.status).not.toBe(0);

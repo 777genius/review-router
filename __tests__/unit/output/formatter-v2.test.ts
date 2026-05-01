@@ -44,7 +44,7 @@ describe('MarkdownFormatterV2', () => {
       const review = createMockReview();
       const output = formatter.format(review);
 
-      expect(output).toContain('# AI Robot Review');
+      expect(output).toContain('# ReviewRouter');
       expect(output).toContain('## All Clear!');
       expect(output).toContain('No issues found. Great job!');
       expect(output).toContain('Performance Metrics');
@@ -77,7 +77,7 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('🟡 **1 Major**');
       expect(output).toContain('🔵 1 Minor');
       expect(output).toContain(
-        '<sub>10.5s • $0.0100 • Powered by AI Robot Review</sub>'
+        '<sub>10.5s • $0.0100 • Powered by ReviewRouter</sub>'
       );
     });
 
@@ -297,7 +297,7 @@ describe('MarkdownFormatterV2', () => {
 
       expect(output).toContain('OAuth subscription');
       expect(output).toContain(
-        '<sub>5.5s • OAuth subscription • Powered by AI Robot Review</sub>'
+        '<sub>5.5s • OAuth subscription • Powered by ReviewRouter</sub>'
       );
       expect(output).not.toContain('$0.0000');
       expect(output).not.toContain('| Cost |');
@@ -333,7 +333,7 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('| Billing | Not reported |');
-      expect(output).toContain('<sub>0.2s • Powered by AI Robot Review</sub>');
+      expect(output).toContain('<sub>0.2s • Powered by ReviewRouter</sub>');
       expect(output).not.toContain('$0.0000');
       expect(output).not.toContain('| Tokens | 0 |');
     });
@@ -601,9 +601,9 @@ describe('MarkdownFormatterV2', () => {
       const review = createMockReview();
       const output = formatter.format(review);
 
-      expect(output).toContain('Powered by AI Robot Review');
+      expect(output).toContain('Powered by ReviewRouter');
       expect(output).toContain(
-        '<sub>5.5s • $0.0050 • Powered by AI Robot Review</sub>'
+        '<sub>5.5s • $0.0050 • Powered by ReviewRouter</sub>'
       );
       expect(output).not.toContain('react 👎');
     });
@@ -621,7 +621,7 @@ describe('MarkdownFormatterV2', () => {
       });
       const output = formatter.format(review);
 
-      expect(output).toContain('Powered by AI Robot Review');
+      expect(output).toContain('Powered by ReviewRouter');
       expect(output).not.toContain('suppress an inline finding');
       expect(output).not.toContain('react 👎');
     });

@@ -1,4 +1,4 @@
-name: Multi-Provider Code Review
+name: ReviewRouter
 
 on:
   pull_request:
@@ -199,7 +199,7 @@ jobs:
             echo "⚠️  GEMINI_OAUTH_CREDS not set, Gemini providers will be skipped"
           fi
 
-      - name: Multi-Provider Code Review
+      - name: ReviewRouter
         # Run if PR number resolved AND (not a fork PR OR not a pull_request event)
         # Fork detection: github.event.pull_request.head.repo.fork only exists for pull_request events
         # - For pull_request: Skip if fork (github.event.pull_request.head.repo.fork == true)

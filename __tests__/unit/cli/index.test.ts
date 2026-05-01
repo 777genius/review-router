@@ -144,9 +144,9 @@ describe('CLI', () => {
 
       (cli as any).showHelp();
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('AI Robot Review CLI'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('ReviewRouter CLI'));
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Usage:'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('mpr review'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('review-router review'));
 
       consoleSpy.mockRestore();
     });
@@ -158,7 +158,7 @@ describe('CLI', () => {
 
       (cli as any).showVersion();
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('multi-provider-code-review'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('review-router'));
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining(pkg.version));
 
       consoleSpy.mockRestore();

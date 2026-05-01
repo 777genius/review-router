@@ -4,32 +4,32 @@ set -euo pipefail
 # Real GitHub smoke test for rerun deduplication.
 #
 # Required:
-#   AI_ROBOT_REVIEW_E2E_REPO=owner/repo
+#   REVIEW_ROUTER_E2E_REPO=owner/repo
 #   CODEX_AUTH_JSON or ~/.codex/auth.json
 #
 # Optional:
-#   AI_ROBOT_REVIEW_E2E_BASE_BRANCH=main
-#   AI_ROBOT_REVIEW_E2E_MODEL=gpt-5.5
-#   AI_ROBOT_REVIEW_E2E_KEEP_BRANCH=1
+#   REVIEW_ROUTER_E2E_BASE_BRANCH=main
+#   REVIEW_ROUTER_E2E_MODEL=gpt-5.5
+#   REVIEW_ROUTER_E2E_KEEP_BRANCH=1
 
-log() { printf '[ai-robot-review e2e] %s\n' "$*"; }
-fatal() { printf '[ai-robot-review e2e] ERROR: %s\n' "$*" >&2; exit 1; }
+log() { printf '[review-router e2e] %s\n' "$*"; }
+fatal() { printf '[review-router e2e] ERROR: %s\n' "$*" >&2; exit 1; }
 
 command -v gh >/dev/null 2>&1 || fatal "gh is required"
 command -v git >/dev/null 2>&1 || fatal "git is required"
 command -v jq >/dev/null 2>&1 || fatal "jq is required"
 
-repo="${AI_ROBOT_REVIEW_E2E_REPO:-}"
-[ -n "$repo" ] || fatal "Set AI_ROBOT_REVIEW_E2E_REPO=owner/repo"
+repo="${REVIEW_ROUTER_E2E_REPO:-}"
+[ -n "$repo" ] || fatal "Set REVIEW_ROUTER_E2E_REPO=owner/repo"
 
-base_branch="${AI_ROBOT_REVIEW_E2E_BASE_BRANCH:-main}"
-model="${AI_ROBOT_REVIEW_E2E_MODEL:-gpt-5.5}"
-branch="ai-robot-review/e2e-dedup-$(date +%s)"
+base_branch="${REVIEW_ROUTER_E2E_BASE_BRANCH:-main}"
+model="${REVIEW_ROUTER_E2E_MODEL:-gpt-5.5}"
+branch="review-router/e2e-dedup-$(date +%s)"
 tmpdir="$(mktemp -d)"
 pr_number=""
 
 cleanup() {
-  if [ "${AI_ROBOT_REVIEW_E2E_KEEP_BRANCH:-0}" != "1" ] && [ -n "$branch" ]; then
+  if [ "${REVIEW_ROUTER_E2E_KEEP_BRANCH:-0}" != "1" ] && [ -n "$branch" ]; then
     gh api -X DELETE "repos/$repo/git/refs/heads/$branch" >/dev/null 2>&1 || true
   fi
   rm -rf "$tmpdir"
@@ -55,8 +55,8 @@ git fetch origin "$base_branch" --quiet
 git checkout -B "$branch" "origin/$base_branch" --quiet
 
 mkdir -p .github/workflows src
-cat > .github/workflows/ai-robot-review.yml <<'YAML'
-name: AI Robot Review
+cat > .github/workflows/review-router.yml <<'YAML'
+name: ReviewRouter
 
 on:
   pull_request:
@@ -73,7 +73,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ai-robot-review-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  group: review-router-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -97,7 +97,7 @@ jobs:
           mkdir -p ~/.codex
           printf '%s' "$CODEX_AUTH_JSON" > ~/.codex/auth.json
           chmod 600 ~/.codex/auth.json
-      - name: Run AI Robot Review
+      - name: Run ReviewRouter
         uses: 777genius/multi-provider-code-review@main
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -120,12 +120,12 @@ export async function findUserByEmail(db, email) {
 }
 JS
 
-git add .github/workflows/ai-robot-review.yml src/users.js
+git add .github/workflows/review-router.yml src/users.js
 git commit -m "test: add vulnerable review fixture" --quiet
 git push -u origin "$branch" --quiet
 
 log "Opening PR"
-pr_url="$(gh pr create --repo "$repo" --base "$base_branch" --head "$branch" --title "AI Robot Review dedup smoke" --body "Temporary smoke PR for inline dedup validation.")"
+pr_url="$(gh pr create --repo "$repo" --base "$base_branch" --head "$branch" --title "ReviewRouter dedup smoke" --body "Temporary smoke PR for inline dedup validation.")"
 pr_number="${pr_url##*/}"
 log "PR #$pr_number: $pr_url"
 
@@ -133,7 +133,7 @@ wait_for_latest_run() {
   local label="$1"
   local run_id=""
   for _ in $(seq 1 60); do
-    run_id="$(gh run list --repo "$repo" --workflow ai-robot-review.yml --branch "$branch" --limit 1 --json databaseId,status --jq '.[0].databaseId // empty')"
+    run_id="$(gh run list --repo "$repo" --workflow review-router.yml --branch "$branch" --limit 1 --json databaseId,status --jq '.[0].databaseId // empty')"
     if [ -n "$run_id" ]; then
       log "Waiting for $label run $run_id"
       gh run watch "$run_id" --repo "$repo" --exit-status
@@ -146,7 +146,7 @@ wait_for_latest_run() {
 
 count_inline() {
   gh api "repos/$repo/pulls/$pr_number/comments" --paginate \
-    --jq '[.[] | select(.body | contains("ai-robot-review-inline") or test("^\\*\\*(🔴 Critical|🟡 Major|🔵 Minor)"))] | length'
+    --jq '[.[] | select(.body | contains("review-router-inline") or test("^\\*\\*(🔴 Critical|🟡 Major|🔵 Minor)"))] | length'
 }
 
 wait_for_latest_run "initial"

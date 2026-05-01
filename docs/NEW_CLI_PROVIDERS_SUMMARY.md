@@ -109,7 +109,7 @@ mpr review
 
 ```yaml
 - name: Run Multi-Provider Review
-  run: npx multi-provider-code-review
+  run: npx review-router
   env:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     REVIEW_PROVIDERS: "claude/sonnet,claude/opus,codex/gpt-5.1-codex-max,gemini/gemini-2.0-flash"
@@ -299,7 +299,7 @@ export REVIEW_PROVIDERS="openrouter/google/gemini-2.0-flash-exp:free,claude/sonn
 ## Support
 
 For issues or questions:
-- **GitHub Issues**: [Report bugs](https://github.com/keithah/multi-provider-code-review/issues)
+- **GitHub Issues**: [Report bugs](https://github.com/777genius/multi-provider-code-review/issues)
 - **Documentation**: Check [docs/](./docs/) directory
 - **CI/CD Help**: See [CI_SETUP.md](./CI_SETUP.md) troubleshooting section
 

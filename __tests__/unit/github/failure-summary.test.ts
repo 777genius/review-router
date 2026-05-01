@@ -7,7 +7,7 @@ describe('formatReviewFailureSummary', () => {
       123
     );
 
-    expect(body).toContain('# AI Robot Review');
+    expect(body).toContain('# ReviewRouter');
     expect(body).toContain('Codex OAuth authentication is missing');
     expect(body).toContain('`CODEX_AUTH_JSON`');
     expect(body).toContain('PR: #123');

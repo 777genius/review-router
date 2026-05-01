@@ -496,7 +496,7 @@ function isMigrationArtifactPath(lower: string): boolean {
 function formatSummaryOnlyChunk(chunk: DiffChunk, file: CompactedDiffFile): string {
   return [
     `diff --git a/${chunk.aPath} b/${chunk.bPath}`,
-    `# AI Robot Review: full diff omitted from primary prompt (${file.reason}).`,
+    `# ReviewRouter: full diff omitted from primary prompt (${file.reason}).`,
     `# File: ${file.filename}`,
     `# Stats: +${file.additions}/-${file.deletions}, ${file.changes} changed lines, ${file.bytes} diff bytes.`,
     '# If this file is relevant, inspect it with read-only commands before reporting findings:',

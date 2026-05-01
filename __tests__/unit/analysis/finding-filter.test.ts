@@ -537,14 +537,14 @@ describe('FindingFilter', () => {
 
       const findings: Finding[] = [
         {
-          file: '.github/workflows/multi-provider-review.yml',
+          file: '.github/workflows/review-router.yml',
           line: 97,
           severity: 'critical',
           title: 'Security Risk: Fork PR Secret Exposure',
           message: 'Fork PRs could access secrets',
         },
         {
-          file: '.github/workflows/multi-provider-review.yml',
+          file: '.github/workflows/review-router.yml',
           line: 142,
           severity: 'critical',
           title: 'Fork PR Security Risk',

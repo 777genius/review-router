@@ -49,7 +49,7 @@ jobs:
           permission-issues: write
           permission-pull-requests: write
 
-      - uses: OWNER/multi-provider-code-review@main
+      - uses: 777genius/multi-provider-code-review@v0.3.0-alpha.1
         with:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

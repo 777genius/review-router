@@ -682,7 +682,7 @@ export class ReviewOrchestrator {
         const fixPrompts = this.components.promptGenerator.generateFixPrompts(review.findings);
         if (fixPrompts.length > 0) {
           // Sanitize REPORT_BASENAME to prevent path traversal
-          const basename = this.sanitizeFilename(process.env.REPORT_BASENAME || 'ai-robot-review');
+          const basename = this.sanitizeFilename(process.env.REPORT_BASENAME || 'review-router');
           const fixPromptsPath = path.join(process.cwd(), `${basename}-fix-prompts.md`);
           const format = (config.fixPromptFormat as 'cursor' | 'copilot' | 'plain') || 'plain';
           await this.components.promptGenerator.saveToFile(fixPrompts, fixPromptsPath, format);
@@ -1051,7 +1051,7 @@ export class ReviewOrchestrator {
       .substring(0, 50);
 
     // Ensure we don't end up with an empty string
-    return sanitized || 'ai-robot-review';
+    return sanitized || 'review-router';
   }
 
   private cleanupQueue(queue: PQueue): void {
@@ -1175,7 +1175,7 @@ export class ReviewOrchestrator {
 
   private async writeReports(review: Review): Promise<void> {
     // Sanitize REPORT_BASENAME to prevent path traversal
-    const base = this.sanitizeFilename(process.env.REPORT_BASENAME || 'ai-robot-review');
+    const base = this.sanitizeFilename(process.env.REPORT_BASENAME || 'review-router');
     const sarifPath = path.join(process.cwd(), `${base}.sarif`);
     const jsonPath = path.join(process.cwd(), `${base}.json`);
 

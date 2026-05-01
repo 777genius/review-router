@@ -6,7 +6,7 @@ import {
   extractInlineFingerprint,
   fingerprintFromInlineComment,
   InlineCommentReference,
-  isAiRobotInlineComment,
+  isReviewRouterInlineComment,
   isLikelySameInlineFinding,
   signatureFromInlineComment,
 } from './comment-fingerprint';
@@ -56,7 +56,7 @@ export class FeedbackFilter {
         // Only active review comments should suppress reposting. Outdated
         // comments have line=null and should not hide a fresh current-diff
         // comment if the finding still exists after a new push.
-        if (isAiRobotInlineComment(body) && activeLine != null) {
+        if (isReviewRouterInlineComment(body) && activeLine != null) {
           alreadyPosted.add(signature);
           if (marker) alreadyPosted.add(marker);
           alreadyPostedComments.push({

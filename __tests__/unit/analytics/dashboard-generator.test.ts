@@ -112,7 +112,7 @@ describe('DashboardGenerator', () => {
       const html = await generator.generateDashboard();
 
       expect(html).toContain('<!DOCTYPE html>');
-      expect(html).toContain('AI Robot Review Analytics');
+      expect(html).toContain('ReviewRouter Analytics');
     });
 
     it('should include cost trends', async () => {

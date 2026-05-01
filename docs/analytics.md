@@ -4,7 +4,7 @@ Track costs, performance, and ROI with built-in analytics dashboard.
 
 ## Overview
 
-AI Robot Review includes comprehensive analytics to help you:
+ReviewRouter includes comprehensive analytics to help you:
 - **Track costs** across providers and over time
 - **Measure performance** (review speed, cache hit rates)
 - **Calculate ROI** (cost vs time saved)
@@ -516,7 +516,7 @@ chmod 755 reports
 
 For analytics questions:
 - Example dashboard: `reports/analytics-dashboard.html`
-- GitHub Issues: https://github.com/keithah/multi-provider-code-review/issues
+- GitHub Issues: https://github.com/777genius/multi-provider-code-review/issues
 - Analytics code: `src/analytics/`
 
 ## License

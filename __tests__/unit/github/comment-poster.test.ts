@@ -54,7 +54,7 @@ describe('CommentPoster', () => {
       });
       expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('<!-- ai-robot-review-bot -->'),
+          body: expect.stringContaining('<!-- review-router-bot -->'),
         })
       );
     });
@@ -91,7 +91,7 @@ describe('CommentPoster', () => {
           body: expect.stringContaining('Test comment'),
         })
       );
-      expect(reviewCall.comments[0].body).toContain('<!-- ai-robot-review-inline:');
+      expect(reviewCall.comments[0].body).toContain('<!-- review-router-inline:');
       expect(reviewCall.comments[0]).not.toHaveProperty('position');
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
         owner: 'test-owner',
@@ -155,7 +155,7 @@ describe('CommentPoster', () => {
           id: 1,
           path: 'src/users.js',
           line: 10,
-          body: '**🔴 Critical - SQL injection**\n\nThe email value is inserted directly into the SQL string.\n\n<!-- ai-robot-review-inline:legacy -->',
+          body: '**🔴 Critical - SQL injection**\n\nThe email value is inserted directly into the SQL string.\n\n<!-- review-router-inline:legacy -->',
         },
       ]);
 
@@ -197,6 +197,41 @@ describe('CommentPoster', () => {
       );
     });
 
+    it('recognizes legacy AI Robot Review inline fingerprints for deduplication', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'src/users.js',
+          line: 10,
+          body: '**🔴 Critical - SQL injection**\n\nThe email value is inserted directly into the SQL string.\n\n<!-- ai-robot-review-inline:0123456789abcdef -->',
+        },
+      ]);
+
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'src/users.js',
+          line: 10,
+          side: 'RIGHT' as const,
+          body: '**🔴 Critical - SQL injection**\n\nThe email value is inserted directly into the SQL string.',
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'src/users.js',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: "+  const rows = await db.query(`SELECT * FROM users WHERE email = '${email}' LIMIT 1`);",
+        },
+      ];
+
+      await poster.postInline(123, comments, files);
+
+      expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled();
+    });
+
     it('skips semantic duplicate inline comments after small line shifts and model rewrites', async () => {
       mockOctokit.paginate.mockResolvedValue([
         {
@@ -210,7 +245,7 @@ describe('CommentPoster', () => {
             '',
             'When `hidePaidFeaturesInfo` is true, this branch removes every inaccessible course from `courseItems`, so a direct chat link can keep waiting forever.',
             '',
-            '<!-- ai-robot-review-inline:legacy -->',
+            '<!-- review-router-inline:legacy -->',
           ].join('\n'),
         },
       ]);

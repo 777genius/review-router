@@ -344,7 +344,7 @@ export class CodexProvider extends Provider {
     const contextSeed = await this.buildRepositoryContextSeed(prompt);
 
     return [
-      'You are running as ai-robot-review inside GitHub Actions.',
+      'You are running as review-router inside GitHub Actions.',
       '',
       'Use the deterministic PR context below as the source of truth for review scope.',
       contextSeed,

@@ -256,12 +256,12 @@ gh secret set GEMINI_SETTINGS --body "$(cat ~/.gemini/settings.json)"
 
 ## Complete GitHub Actions Workflow Example
 
-**⚠️ Important:** The workflow in this repository (`.github/workflows/multi-provider-review.yml`) has been updated to properly create CLI configuration files from secrets. If you're using an older version of this action, make sure to update to the latest version or copy the credential setup steps shown below.
+**⚠️ Important:** The workflow in this repository (`.github/workflows/review-router.yml`) has been updated to properly create CLI configuration files from secrets. If you're using an older version of this action, make sure to update to the latest version or copy the credential setup steps shown below.
 
 Here's a complete workflow that sets up all three CLIs and runs multi-provider code review:
 
 ```yaml
-name: AI Robot Review
+name: ReviewRouter
 
 on:
   pull_request:
@@ -325,8 +325,8 @@ jobs:
           chmod 600 ~/.gemini/oauth_creds.json ~/.gemini/settings.json
 
       # Run multi-provider code review
-      - name: Run AI Robot Review
-        run: npx multi-provider-code-review
+      - name: Run ReviewRouter
+        run: npx review-router
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Optional: Specify which providers to use
@@ -343,7 +343,7 @@ Set the `REVIEW_PROVIDERS` environment variable to specify which providers and m
 
 ```yaml
 - name: Run Code Review
-  run: npx multi-provider-code-review
+  run: npx review-router
   env:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     REVIEW_PROVIDERS: "claude/sonnet,claude/opus,codex/gpt-5.1-codex-max,gemini/gemini-2.0-flash,gemini/gemini-1.5-pro"

@@ -34,8 +34,13 @@ export class ProgressTracker {
   private startTime: number = Date.now();
   private totalCost: number = 0;
   private overrideBody?: string;
-  private static readonly MARKER = '<!-- ai-robot-review-progress-tracker -->';
+  private static readonly MARKER = '<!-- review-router-progress-tracker -->';
+  private static readonly LEGACY_MARKERS = [
+    '<!-- ai-robot-review-progress-tracker -->',
+  ];
   private static readonly LEGACY_HEADERS = [
+    '# ReviewRouter',
+    '## 🤖 ReviewRouter Progress',
     '# AI Robot Review',
     '## 🤖 AI Robot Review Progress',
   ];
@@ -159,7 +164,7 @@ export class ProgressTracker {
     const lines: string[] = [];
 
     // Header
-    lines.push('## 🤖 AI Robot Review Progress\n');
+    lines.push('## 🤖 ReviewRouter Progress\n');
 
     // Progress items with checkboxes
     const sortedItems = Array.from(this.items.values()).sort(
@@ -263,6 +268,7 @@ export class ProgressTracker {
   private isReviewComment(body?: string | null): boolean {
     if (!body) return false;
     return body.includes(ProgressTracker.MARKER)
+      || ProgressTracker.LEGACY_MARKERS.some(marker => body.includes(marker))
       || ProgressTracker.LEGACY_HEADERS.some(header => body.startsWith(header));
   }
 

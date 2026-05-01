@@ -1,4 +1,4 @@
-# Project Milestones: GitHub Commit Suggestions for Multi-Provider Code Review
+# Project Milestones: GitHub Commit Suggestions for ReviewRouter
 
 ## v0.5 MVP (Shipped: 2026-02-05)
 

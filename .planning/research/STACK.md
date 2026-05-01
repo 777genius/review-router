@@ -1,6 +1,6 @@
 # Stack Research
 
-**Domain:** GitHub Commit Suggestions for Multi-Provider Code Review Action
+**Domain:** GitHub Commit Suggestions for ReviewRouter Action
 **Researched:** 2026-02-04
 **Confidence:** HIGH
 

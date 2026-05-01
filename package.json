@@ -1,10 +1,11 @@
 {
-  "name": "multi-provider-code-review",
-  "version": "0.2.1",
-  "description": "AI Robot Review GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
+  "name": "review-router",
+  "version": "0.3.0-alpha.1",
+  "description": "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   "main": "dist/index.js",
   "type": "commonjs",
   "bin": {
+    "review-router": "./bin/mpr",
     "mpr": "./bin/mpr"
   },
   "license": "MIT",

@@ -16,3 +16,4 @@ IMPLEMENTATION_PLANS.md
 *.sarif
 multi-provider-review.json
 ai-robot-review.json
+review-router.json

@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 
-const INLINE_MARKER_RE = /<!--\s*ai-robot-review-inline:([a-f0-9]{16})\s*-->/i;
-const INLINE_MARKER_RE_GLOBAL = /<!--\s*ai-robot-review-inline:([a-f0-9]{16})\s*-->/gi;
+const INLINE_MARKER_RE = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/i;
+const INLINE_MARKER_RE_GLOBAL = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/gi;
 const MAX_NEARBY_LINE_DISTANCE = 12;
 
 export interface InlineCommentReference {
@@ -49,7 +49,7 @@ export function fingerprintFromInlineComment(
 }
 
 export function inlineFingerprintMarker(fingerprint: string): string {
-  return `<!-- ai-robot-review-inline:${fingerprint} -->`;
+  return `<!-- review-router-inline:${fingerprint} -->`;
 }
 
 export function extractInlineFingerprint(body?: string | null): string | null {
@@ -70,13 +70,15 @@ export function stripInlineFingerprintMarkers(body: string): string {
   return body.replace(INLINE_MARKER_RE_GLOBAL, '').trim();
 }
 
-export function isAiRobotInlineComment(body?: string | null): boolean {
+export function isReviewRouterInlineComment(body?: string | null): boolean {
   if (!body) return false;
   if (extractInlineFingerprint(body)) return true;
   return /^\*\*(?:🔴 Critical|🟡 Major|🔵 Minor)\s+-\s+.+?\*\*/.test(
     body.trim()
   );
 }
+
+export const isAiRobotInlineComment = isReviewRouterInlineComment;
 
 export function isLikelySameInlineFinding(
   existing: InlineCommentReference,

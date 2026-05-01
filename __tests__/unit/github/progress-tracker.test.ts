@@ -44,15 +44,15 @@ describe('ProgressTracker', () => {
         owner: 'test-owner',
         repo: 'test-repo',
         issue_number: 123,
-        body: expect.stringContaining('🤖 AI Robot Review Progress'),
+        body: expect.stringContaining('🤖 ReviewRouter Progress'),
       });
     });
 
-    it('should reuse an existing AI Robot Review comment', async () => {
+    it('should reuse an existing ReviewRouter comment', async () => {
       listCommentsMock.mockResolvedValue({
         data: [
           { id: 111, body: 'unrelated comment' },
-          { id: 999, body: '# AI Robot Review\n\nold summary' },
+          { id: 999, body: '# ReviewRouter\n\nold summary' },
         ],
       });
 
@@ -63,7 +63,25 @@ describe('ProgressTracker', () => {
         owner: 'test-owner',
         repo: 'test-repo',
         comment_id: 999,
-        body: expect.stringContaining('<!-- ai-robot-review-progress-tracker -->'),
+        body: expect.stringContaining('<!-- review-router-progress-tracker -->'),
+      });
+    });
+
+    it('should reuse a legacy AI Robot Review progress comment', async () => {
+      listCommentsMock.mockResolvedValue({
+        data: [
+          { id: 999, body: '## 🤖 AI Robot Review Progress\n\n<!-- ai-robot-review-progress-tracker -->' },
+        ],
+      });
+
+      await tracker.initialize();
+
+      expect(createCommentMock).not.toHaveBeenCalled();
+      expect(updateCommentMock).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        comment_id: 999,
+        body: expect.stringContaining('<!-- review-router-progress-tracker -->'),
       });
     });
 
@@ -166,7 +184,7 @@ describe('ProgressTracker', () => {
       const lastCall = updateCommentMock.mock.calls[0];
       const body = lastCall?.[0]?.body as string;
 
-      expect(body).toContain('<!-- ai-robot-review-progress-tracker -->');
+      expect(body).toContain('<!-- review-router-progress-tracker -->');
       expect(body).not.toContain('**Duration**:');
       expect(body).not.toContain('**Cost**:');
       expect(body).not.toContain('**Last updated**:');
@@ -205,13 +223,13 @@ describe('ProgressTracker', () => {
     });
 
     it('should preserve the hidden marker when replacing progress with final summary', async () => {
-      await expect(tracker.replaceWith('# AI Robot Review\n\nfinal summary')).resolves.toBe(true);
+      await expect(tracker.replaceWith('# ReviewRouter\n\nfinal summary')).resolves.toBe(true);
 
       const lastCall = updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
       const body = lastCall?.[0]?.body as string;
 
-      expect(body).toContain('# AI Robot Review');
-      expect(body).toContain('<!-- ai-robot-review-progress-tracker -->');
+      expect(body).toContain('# ReviewRouter');
+      expect(body).toContain('<!-- review-router-progress-tracker -->');
     });
   });
 
@@ -242,7 +260,7 @@ describe('ProgressTracker', () => {
     it('should report replace failures without throwing', async () => {
       updateCommentMock.mockRejectedValue(new Error('API Error'));
 
-      await expect(tracker.replaceWith('# AI Robot Review\n\nfinal summary')).resolves.toBe(false);
+      await expect(tracker.replaceWith('# ReviewRouter\n\nfinal summary')).resolves.toBe(false);
     });
   });
 });

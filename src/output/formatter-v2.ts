@@ -16,7 +16,7 @@ export class MarkdownFormatterV2 {
     const lines: string[] = [];
 
     // Header with branding
-    lines.push('# AI Robot Review');
+    lines.push('# ReviewRouter');
     lines.push('');
 
     // Finding stats summary
@@ -438,6 +438,6 @@ export class MarkdownFormatterV2 {
   }
 
   private formatFooter(review: Review): string {
-    return `<sub>${this.formatRunSummary(review)} • Powered by AI Robot Review</sub>`;
+    return `<sub>${this.formatRunSummary(review)} • Powered by ReviewRouter</sub>`;
   }
 }

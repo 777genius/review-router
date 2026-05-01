@@ -1,37 +1,54 @@
 #!/usr/bin/env bash
-# ai-robot-review installer
+# review-router installer
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
 
 set -Eeuo pipefail
 
-PRODUCT_NAME="ai-robot-review"
-DEFAULT_ACTION_REF="777genius/multi-provider-code-review@main"
-DEFAULT_BRANCH_NAME="ai-robot-review/setup"
-WORKFLOW_PATH=".github/workflows/ai-robot-review.yml"
+PRODUCT_NAME="review-router"
+LATEST_RELEASE_TAG="v0.3.0-alpha.1"
+DEFAULT_ACTION_REF_MODE="release"
+DEFAULT_RELEASE_ACTION_REF="777genius/multi-provider-code-review@$LATEST_RELEASE_TAG"
+DEFAULT_MAIN_ACTION_REF="777genius/multi-provider-code-review@main"
+DEFAULT_BRANCH_NAME="review-router/setup"
+WORKFLOW_PATH=".github/workflows/review-router.yml"
 CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
 DEFAULT_CODEX_MODEL="gpt-5.5"
 OPENROUTER_DEFAULT_PROVIDERS="openrouter/free"
 OPENROUTER_DEFAULT_SYNTHESIS="openrouter/free"
 
-ACTION_REF="${AI_ROBOT_REVIEW_ACTION_REF:-$DEFAULT_ACTION_REF}"
-INSTALL_BRANCH="${AI_ROBOT_REVIEW_BRANCH:-$DEFAULT_BRANCH_NAME}"
-TARGET_REPO="${AI_ROBOT_REVIEW_REPO:-}"
-SECRET_SCOPE="${AI_ROBOT_REVIEW_SECRET_SCOPE:-}"
-ORG_NAME="${AI_ROBOT_REVIEW_ORG:-}"
-ORG_SELECTED_REPOS="${AI_ROBOT_REVIEW_ORG_SECRET_REPOS:-}"
-IDENTITY_MODE="${AI_ROBOT_REVIEW_IDENTITY:-}"
-AUTH_MODE="${AI_ROBOT_REVIEW_AUTH:-}"
-PRESET="${AI_ROBOT_REVIEW_PRESET:-}"
-CODEX_MODEL="${AI_ROBOT_REVIEW_CODEX_MODEL:-$DEFAULT_CODEX_MODEL}"
-DRY_RUN="${AI_ROBOT_REVIEW_DRY_RUN:-0}"
-NON_INTERACTIVE="${AI_ROBOT_REVIEW_NON_INTERACTIVE:-0}"
-LOCAL_ONLY="${AI_ROBOT_REVIEW_LOCAL_ONLY:-0}"
-SKIP_GH_CHECK="${AI_ROBOT_REVIEW_SKIP_GH_CHECK:-0}"
-SKIP_APP_CREATE="${AI_ROBOT_REVIEW_SKIP_APP_CREATE:-0}"
-YES="${AI_ROBOT_REVIEW_YES:-0}"
-NO_BROWSER="${AI_ROBOT_REVIEW_NO_BROWSER:-0}"
-WORKDIR_OVERRIDE="${AI_ROBOT_REVIEW_WORKDIR:-}"
+env_first() {
+  local key value
+  for key in "$@"; do
+    value="${!key-}"
+    if [ -n "$value" ]; then
+      printf '%s' "$value"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ACTION_REF_EXPLICIT="$(env_first REVIEW_ROUTER_ACTION_REF AI_ROBOT_REVIEW_ACTION_REF || true)"
+ACTION_REF_MODE="$(env_first REVIEW_ROUTER_ACTION_REF_MODE AI_ROBOT_REVIEW_ACTION_REF_MODE || true)"
+ACTION_REF=""
+INSTALL_BRANCH="$(env_first REVIEW_ROUTER_BRANCH AI_ROBOT_REVIEW_BRANCH || printf '%s' "$DEFAULT_BRANCH_NAME")"
+TARGET_REPO="$(env_first REVIEW_ROUTER_REPO AI_ROBOT_REVIEW_REPO || true)"
+SECRET_SCOPE="$(env_first REVIEW_ROUTER_SECRET_SCOPE AI_ROBOT_REVIEW_SECRET_SCOPE || true)"
+ORG_NAME="$(env_first REVIEW_ROUTER_ORG AI_ROBOT_REVIEW_ORG || true)"
+ORG_SELECTED_REPOS="$(env_first REVIEW_ROUTER_ORG_SECRET_REPOS AI_ROBOT_REVIEW_ORG_SECRET_REPOS || true)"
+IDENTITY_MODE="$(env_first REVIEW_ROUTER_IDENTITY AI_ROBOT_REVIEW_IDENTITY || true)"
+AUTH_MODE="$(env_first REVIEW_ROUTER_AUTH AI_ROBOT_REVIEW_AUTH || true)"
+PRESET="$(env_first REVIEW_ROUTER_PRESET AI_ROBOT_REVIEW_PRESET || true)"
+CODEX_MODEL="$(env_first REVIEW_ROUTER_CODEX_MODEL AI_ROBOT_REVIEW_CODEX_MODEL || printf '%s' "$DEFAULT_CODEX_MODEL")"
+DRY_RUN="$(env_first REVIEW_ROUTER_DRY_RUN AI_ROBOT_REVIEW_DRY_RUN || printf '0')"
+NON_INTERACTIVE="$(env_first REVIEW_ROUTER_NON_INTERACTIVE AI_ROBOT_REVIEW_NON_INTERACTIVE || printf '0')"
+LOCAL_ONLY="$(env_first REVIEW_ROUTER_LOCAL_ONLY AI_ROBOT_REVIEW_LOCAL_ONLY || printf '0')"
+SKIP_GH_CHECK="$(env_first REVIEW_ROUTER_SKIP_GH_CHECK AI_ROBOT_REVIEW_SKIP_GH_CHECK || printf '0')"
+SKIP_APP_CREATE="$(env_first REVIEW_ROUTER_SKIP_APP_CREATE AI_ROBOT_REVIEW_SKIP_APP_CREATE || printf '0')"
+YES="$(env_first REVIEW_ROUTER_YES AI_ROBOT_REVIEW_YES || printf '0')"
+NO_BROWSER="$(env_first REVIEW_ROUTER_NO_BROWSER AI_ROBOT_REVIEW_NO_BROWSER || printf '0')"
+WORKDIR_OVERRIDE="$(env_first REVIEW_ROUTER_WORKDIR AI_ROBOT_REVIEW_WORKDIR || true)"
 
 if [ -t 1 ]; then
   BOLD='\033[1m'
@@ -276,6 +293,28 @@ validate_choice() {
   fatal "Invalid $var_name: $value"
 }
 
+resolve_action_ref() {
+  if [ -n "$ACTION_REF_EXPLICIT" ]; then
+    ACTION_REF="$ACTION_REF_EXPLICIT"
+    ACTION_REF_MODE="custom"
+    return
+  fi
+
+  case "$ACTION_REF_MODE" in
+    release|tag|stable|latest)
+      ACTION_REF_MODE="release"
+      ACTION_REF="$DEFAULT_RELEASE_ACTION_REF"
+      ;;
+    main|live|dev)
+      ACTION_REF_MODE="main"
+      ACTION_REF="$DEFAULT_MAIN_ACTION_REF"
+      ;;
+    *)
+      fatal "Unsupported REVIEW_ROUTER_ACTION_REF_MODE: $ACTION_REF_MODE. Use release, main, or REVIEW_ROUTER_ACTION_REF=owner/repo@ref."
+      ;;
+  esac
+}
+
 confirm() {
   message="$1"
   if is_true "$YES"; then
@@ -299,7 +338,7 @@ check_prerequisites() {
     require_cmd gh
     gh auth status >/dev/null 2>&1 || fatal "gh is not authenticated. Run: gh auth login"
   elif ! is_true "$DRY_RUN" && ! is_true "$LOCAL_ONLY"; then
-    fatal "AI_ROBOT_REVIEW_SKIP_GH_CHECK is only allowed with dry-run/local-only setup"
+    fatal "REVIEW_ROUTER_SKIP_GH_CHECK is only allowed with dry-run/local-only setup"
   fi
 }
 
@@ -317,7 +356,7 @@ setup_secret_scope() {
 
     if ! is_true "$DRY_RUN" && ! is_true "$LOCAL_ONLY" && ! is_true "$SKIP_GH_CHECK"; then
       owner_type="$(gh api "users/$ORG_NAME" --jq .type 2>/dev/null || true)"
-      [ "$owner_type" = "Organization" ] || fatal "AI_ROBOT_REVIEW_SECRET_SCOPE=org requires an organization owner. $ORG_NAME is $owner_type. Use repo scope for personal repositories."
+      [ "$owner_type" = "Organization" ] || fatal "REVIEW_ROUTER_SECRET_SCOPE=org requires an organization owner. $ORG_NAME is $owner_type. Use repo scope for personal repositories."
       if ! gh auth status 2>&1 | grep -q 'admin:org'; then
         warn "Org-level secrets usually require gh admin:org scope. If setting secrets fails, run: gh auth refresh -s admin:org"
       fi
@@ -433,28 +472,31 @@ PY
 setup_auth() {
   case "$AUTH_MODE" in
     codex)
-      auth_file="${AI_ROBOT_REVIEW_CODEX_AUTH_FILE:-${CODEX_HOME:-$HOME/.codex}/auth.json}"
-      config_file="${AI_ROBOT_REVIEW_CODEX_CONFIG_FILE:-${CODEX_HOME:-$HOME/.codex}/config.toml}"
+      auth_file="$(env_first REVIEW_ROUTER_CODEX_AUTH_FILE AI_ROBOT_REVIEW_CODEX_AUTH_FILE || printf '%s' "${CODEX_HOME:-$HOME/.codex}/auth.json")"
+      config_file="$(env_first REVIEW_ROUTER_CODEX_CONFIG_FILE AI_ROBOT_REVIEW_CODEX_CONFIG_FILE || printf '%s' "${CODEX_HOME:-$HOME/.codex}/config.toml")"
       verify_codex_auth_file "$auth_file"
       set_repo_secret_from_file CODEX_AUTH_JSON "$auth_file"
-      if is_true "${AI_ROBOT_REVIEW_INCLUDE_CODEX_CONFIG:-0}"; then
+      include_codex_config="$(env_first REVIEW_ROUTER_INCLUDE_CODEX_CONFIG AI_ROBOT_REVIEW_INCLUDE_CODEX_CONFIG || printf '0')"
+      if is_true "$include_codex_config"; then
         [ -f "$config_file" ] || fatal "Codex config file not found: $config_file"
         set_repo_secret_from_file CODEX_CONFIG_TOML "$config_file"
       else
-        warn "Skipping CODEX_CONFIG_TOML by default to avoid carrying local plugins/hooks into CI. Set AI_ROBOT_REVIEW_INCLUDE_CODEX_CONFIG=1 if you need it."
+        warn "Skipping CODEX_CONFIG_TOML by default to avoid carrying local plugins/hooks into CI. Set REVIEW_ROUTER_INCLUDE_CODEX_CONFIG=1 if you need it."
       fi
       set_repo_variable REVIEW_AUTH_MODE "codex-oauth"
       set_repo_variable REVIEW_CODEX_MODEL "$CODEX_MODEL"
       ;;
     openai)
-      prompt_secret AI_ROBOT_REVIEW_OPENAI_API_KEY "OpenAI API key"
-      set_repo_secret_value OPENAI_API_KEY "$AI_ROBOT_REVIEW_OPENAI_API_KEY"
+      REVIEW_ROUTER_OPENAI_API_KEY="$(env_first REVIEW_ROUTER_OPENAI_API_KEY AI_ROBOT_REVIEW_OPENAI_API_KEY || true)"
+      prompt_secret REVIEW_ROUTER_OPENAI_API_KEY "OpenAI API key"
+      set_repo_secret_value OPENAI_API_KEY "$REVIEW_ROUTER_OPENAI_API_KEY"
       set_repo_variable REVIEW_AUTH_MODE "openai-api"
       set_repo_variable REVIEW_CODEX_MODEL "$CODEX_MODEL"
       ;;
     openrouter)
-      prompt_secret AI_ROBOT_REVIEW_OPENROUTER_API_KEY "OpenRouter API key"
-      set_repo_secret_value OPENROUTER_API_KEY "$AI_ROBOT_REVIEW_OPENROUTER_API_KEY"
+      REVIEW_ROUTER_OPENROUTER_API_KEY="$(env_first REVIEW_ROUTER_OPENROUTER_API_KEY AI_ROBOT_REVIEW_OPENROUTER_API_KEY || true)"
+      prompt_secret REVIEW_ROUTER_OPENROUTER_API_KEY "OpenRouter API key"
+      set_repo_secret_value OPENROUTER_API_KEY "$REVIEW_ROUTER_OPENROUTER_API_KEY"
       set_repo_variable REVIEW_AUTH_MODE "openrouter-api"
       set_repo_variable REVIEW_PROVIDERS "$OPENROUTER_DEFAULT_PROVIDERS"
       set_repo_variable REVIEW_SYNTHESIS_MODEL "$OPENROUTER_DEFAULT_SYNTHESIS"
@@ -466,7 +508,7 @@ setup_auth() {
 safe_app_name() {
   owner="$(repo_owner "$TARGET_REPO")"
   repo="$(repo_name "$TARGET_REPO")"
-  raw="${AI_ROBOT_REVIEW_APP_NAME:-$PRODUCT_NAME-$owner-$repo}"
+  raw="$(env_first REVIEW_ROUTER_APP_NAME AI_ROBOT_REVIEW_APP_NAME || printf '%s' "$PRODUCT_NAME-$owner-$repo")"
   printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | sed 's/^-//; s/-$//; s/--*/-/g' | cut -c1-34
 }
 
@@ -476,15 +518,19 @@ manual_app_setup() {
   log "Create a private GitHub App named: $app_name"
   log "Permissions: Contents read, Issues write, Pull requests write. Webhooks: disabled."
   log "After creating it, generate a private key and provide the values below."
-  prompt_text AI_ROBOT_REVIEW_APP_CLIENT_ID "GitHub App client ID" ""
-  prompt_text AI_ROBOT_REVIEW_APP_ID "GitHub App ID" ""
-  prompt_text AI_ROBOT_REVIEW_APP_SLUG "GitHub App slug" ""
-  prompt_text AI_ROBOT_REVIEW_APP_PRIVATE_KEY_FILE "Path to GitHub App private key .pem" ""
+  REVIEW_ROUTER_APP_CLIENT_ID="$(env_first REVIEW_ROUTER_APP_CLIENT_ID AI_ROBOT_REVIEW_APP_CLIENT_ID || true)"
+  REVIEW_ROUTER_APP_ID="$(env_first REVIEW_ROUTER_APP_ID AI_ROBOT_REVIEW_APP_ID || true)"
+  REVIEW_ROUTER_APP_SLUG="$(env_first REVIEW_ROUTER_APP_SLUG AI_ROBOT_REVIEW_APP_SLUG || true)"
+  REVIEW_ROUTER_APP_PRIVATE_KEY_FILE="$(env_first REVIEW_ROUTER_APP_PRIVATE_KEY_FILE AI_ROBOT_REVIEW_APP_PRIVATE_KEY_FILE || true)"
+  prompt_text REVIEW_ROUTER_APP_CLIENT_ID "GitHub App client ID" ""
+  prompt_text REVIEW_ROUTER_APP_ID "GitHub App ID" ""
+  prompt_text REVIEW_ROUTER_APP_SLUG "GitHub App slug" ""
+  prompt_text REVIEW_ROUTER_APP_PRIVATE_KEY_FILE "Path to GitHub App private key .pem" ""
 
-  set_repo_variable REVIEW_APP_CLIENT_ID "$AI_ROBOT_REVIEW_APP_CLIENT_ID"
-  set_repo_variable REVIEW_APP_ID "$AI_ROBOT_REVIEW_APP_ID"
-  set_repo_variable REVIEW_APP_SLUG "$AI_ROBOT_REVIEW_APP_SLUG"
-  set_repo_secret_from_file REVIEW_APP_PRIVATE_KEY "$AI_ROBOT_REVIEW_APP_PRIVATE_KEY_FILE"
+  set_repo_variable REVIEW_APP_CLIENT_ID "$REVIEW_ROUTER_APP_CLIENT_ID"
+  set_repo_variable REVIEW_APP_ID "$REVIEW_ROUTER_APP_ID"
+  set_repo_variable REVIEW_APP_SLUG "$REVIEW_ROUTER_APP_SLUG"
+  set_repo_secret_from_file REVIEW_APP_PRIVATE_KEY "$REVIEW_ROUTER_APP_PRIVATE_KEY_FILE"
 }
 
 create_github_app_with_manifest() {
@@ -541,12 +587,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             manifest = {
                 'name': app_name,
                 'url': 'https://github.com/777genius/multi-provider-code-review',
-                'description': 'AI Robot Review posts Codex-powered pull request reviews from a dedicated GitHub App bot identity.',
+                'description': 'ReviewRouter posts Codex-powered pull request reviews from a dedicated GitHub App bot identity.',
                 'public': False,
                 'redirect_url': callback,
                 'callback_urls': [callback],
                 'hook_attributes': {
-                    'url': 'https://example.invalid/ai-robot-review-webhook-disabled',
+                    'url': 'https://example.invalid/review-router-webhook-disabled',
                     'active': False,
                 },
                 'default_permissions': {
@@ -717,7 +763,7 @@ write_workflow() {
 
   {
     cat <<'YAML'
-name: AI Robot Review
+name: ReviewRouter
 
 on:
   pull_request:
@@ -734,7 +780,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ai-robot-review-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  group: review-router-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -822,7 +868,7 @@ YAML
 
     cat <<'YAML'
 
-      - name: Run AI Robot Review
+      - name: Run ReviewRouter
 YAML
     printf '        uses: %s\n' "$ACTION_REF"
 
@@ -934,9 +980,9 @@ commit_and_open_pr() {
     if git diff --cached --quiet; then
       exit 42
     fi
-    git config user.name "ai-robot-review installer"
-    git config user.email "ai-robot-review@example.invalid"
-    git commit -m "ci: add ai-robot-review" >/dev/null
+    git config user.name "review-router installer"
+    git config user.email "review-router@example.invalid"
+    git commit -m "ci: add review-router" >/dev/null
     if expected_sha="$(git rev-parse "refs/remotes/origin/$INSTALL_BRANCH" 2>/dev/null)"; then
       git push -u origin "$INSTALL_BRANCH" --force-with-lease="refs/heads/$INSTALL_BRANCH:$expected_sha" >/dev/null
     else
@@ -958,18 +1004,24 @@ commit_and_open_pr() {
       --repo "$TARGET_REPO" \
       --base "$default_branch" \
       --head "$INSTALL_BRANCH" \
-      --title "ci: add ai-robot-review" \
-      --body "Adds AI Robot Review pull request automation. Installer mode: identity=$IDENTITY_MODE, auth=$AUTH_MODE, preset=$PRESET." >/dev/null
+      --title "ci: add review-router" \
+      --body "Adds ReviewRouter pull request automation. Installer mode: identity=$IDENTITY_MODE, auth=$AUTH_MODE, preset=$PRESET." >/dev/null
     ok "Opened setup PR for $TARGET_REPO"
   fi
 }
 
 main() {
-  log "${BOLD}AI Robot Review installer${NC}"
+  log "${BOLD}ReviewRouter installer${NC}"
   check_prerequisites
   detect_repo
 
   normalize_secret_scope_env
+  if [ -z "$ACTION_REF_EXPLICIT" ] && [ -z "$ACTION_REF_MODE" ]; then
+    choose ACTION_REF_MODE "Action version" "$DEFAULT_ACTION_REF_MODE" \
+      "release:Pinned latest release tag ($LATEST_RELEASE_TAG), safest for most repositories" \
+      "main:Live main branch, gets every update immediately"
+  fi
+  resolve_action_ref
   choose SECRET_SCOPE "Secrets and variables scope" "repo" \
     "repo:Store secrets and variables on the target repository" \
     "org:Store secrets and variables on the organization, restricted to selected repositories"
@@ -997,6 +1049,7 @@ main() {
   info "Identity: $IDENTITY_MODE"
   info "Auth mode: $AUTH_MODE"
   info "Preset: $PRESET"
+  info "Action ref: $ACTION_REF"
 
   setup_identity
   setup_auth
@@ -1005,7 +1058,7 @@ main() {
   commit_and_open_pr
 
   log ""
-  ok "AI Robot Review setup complete"
+  ok "ReviewRouter setup complete"
   log "Docs: https://github.com/777genius/multi-provider-code-review/blob/main/docs/install.md"
 }
 

@@ -124,7 +124,7 @@ async function run(): Promise<void> {
     const blockingFindings = getBlockingFindings(review, config.failOnSeverity);
     if (blockingFindings.length > 0) {
       core.setFailed(
-        `AI Robot Review found ${blockingFindings.length} ${config.failOnSeverity}+ finding(s). ` +
+        `ReviewRouter found ${blockingFindings.length} ${config.failOnSeverity}+ finding(s). ` +
         'Review comments were posted before failing this check.'
       );
       return;

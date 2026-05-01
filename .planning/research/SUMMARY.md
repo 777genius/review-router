@@ -1,6 +1,6 @@
 # Project Research Summary
 
-**Project:** GitHub Commit Suggestions for Multi-Provider Code Review
+**Project:** GitHub Commit Suggestions for ReviewRouter
 **Domain:** Code review automation with AI-generated inline fixes
 **Researched:** 2026-02-04
 **Confidence:** HIGH

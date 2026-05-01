@@ -1,6 +1,6 @@
-# AI Robot Review
+# ReviewRouter
 
-AI Robot Review is a GitHub Action for pull request review with Codex CLI OAuth, Codex CLI API-key mode, or OpenRouter.
+ReviewRouter is a GitHub Action for pull request review with Codex CLI OAuth, Codex CLI API-key mode, or OpenRouter.
 
 Current focus: a practical PR reviewer that can run from GitHub Actions, post a PR summary, post a small number of inline findings, and optionally fail the check on serious issues. The Codex path is designed to use a ChatGPT subscription OAuth login instead of OpenAI API billing.
 
@@ -13,7 +13,7 @@ cd /path/to/your-repo
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
 ```
 
-That is the recommended path because the installer can detect the GitHub remote, create a setup branch, write `.github/workflows/ai-robot-review.yml`, push the branch, and open a setup PR.
+That is the recommended path because the installer can detect the GitHub remote, create a setup branch, write `.github/workflows/review-router.yml`, push the branch, and open a setup PR.
 
 If you run it outside a git checkout, it can still ask for `owner/repo` and use the GitHub API, but the local-checkout flow is easier to inspect before merging.
 
@@ -22,10 +22,13 @@ The installer:
 - detects or asks for the target `owner/repo`;
 - lets you choose `github-actions[bot]` or GitHub App bot identity;
 - lets you choose Codex subscription OAuth, Codex CLI with OpenAI API key, or OpenRouter API key;
-- creates `.github/workflows/ai-robot-review.yml` on a setup branch;
+- lets you choose a pinned latest release tag or live `main` for the generated workflow;
+- creates `.github/workflows/review-router.yml` on a setup branch;
 - opens a setup PR instead of pushing directly to the default branch.
 
 See [docs/install.md](./docs/install.md) for organization-level secrets, selected repositories, GitHub App setup, and security notes.
+
+By default, the generated workflow uses the latest release tag for stability. If you want a repository to always run the newest `main` code, set `REVIEW_ROUTER_ACTION_REF_MODE=main` when installing.
 
 ## Status
 
@@ -73,7 +76,7 @@ Available but still experimental:
 ## Recommended Codex Workflow
 
 ```yaml
-name: AI Robot Review
+name: ReviewRouter
 
 on:
   pull_request:
@@ -90,7 +93,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ai-robot-review-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  group: review-router-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -131,8 +134,8 @@ jobs:
           codex exec --model "$CODEX_MODEL" --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never -c model_reasoning_effort='"low"' --output-last-message /tmp/codex-smoke.txt "Respond with exactly: codex-oauth-ok"
           grep -q "codex-oauth-ok" /tmp/codex-smoke.txt
 
-      - name: Run AI Robot Review
-        uses: 777genius/multi-provider-code-review@main
+      - name: Run ReviewRouter
+        uses: 777genius/multi-provider-code-review@v0.3.0-alpha.1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
@@ -160,7 +163,13 @@ For strict blocking, set:
 FAIL_ON_MAJOR: 'true'
 ```
 
-Then make `AI Robot Review / review` a required status check in branch protection.
+Then make `ReviewRouter / review` a required status check in branch protection.
+
+If you intentionally want the live branch instead of the pinned release, use:
+
+```yaml
+uses: 777genius/multi-provider-code-review@main
+```
 
 ## Provider Modes
 
@@ -205,7 +214,7 @@ Required secret:
 | `MIN_CONFIDENCE` | empty | Optional confidence threshold for inline suggestions. |
 | `FAIL_ON_CRITICAL` | `true` | Fails the check on critical findings. |
 | `FAIL_ON_MAJOR` | `false` | Set `true` to block PRs on major findings. |
-| `UPDATE_PR_DESCRIPTION` | `true` | Adds or updates only the generated AI Robot Review block. |
+| `UPDATE_PR_DESCRIPTION` | `true` | Adds or updates only the generated ReviewRouter block. |
 | `SMART_DIFF_COMPACTION` | `true` | Summarizes oversized/generated diffs before prompt construction. |
 | `GRAPH_ENABLED` | `false` | Optional code graph context. Keep off until validated for your repo. |
 | `LEARNING_ENABLED` | `false` | Experimental feedback-learning path. |
@@ -220,7 +229,7 @@ Required secret:
 
 ## Comment Deduplication
 
-AI Robot Review suppresses duplicate inline comments when a rerun reports the same issue again. The dedup check uses:
+ReviewRouter suppresses duplicate inline comments when a rerun reports the same issue again. The dedup check uses:
 
 - hidden inline fingerprints for exact matches;
 - same file and severity;

@@ -1,12 +1,20 @@
-# ai-robot-review installer
+# ReviewRouter installer
 
-`ai-robot-review` can be installed into any GitHub repository with a single `curl | bash` command. The installer writes a pull request workflow, stores the required repository secrets/variables, and opens a setup PR instead of pushing directly to the default branch.
+ReviewRouter can be installed into any GitHub repository with a single `curl | bash` command. The installer writes a pull request workflow, stores the required repository secrets/variables, and opens a setup PR instead of pushing directly to the default branch.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | bash
 ```
 
 The installer supports macOS and Linux shells first. It requires `gh`, `git`, and `curl`. GitHub App manifest setup uses `python3` when available; without `python3`, the installer prints manual App setup instructions.
+
+The generated workflow uses the latest pinned release tag by default:
+
+```text
+777genius/multi-provider-code-review@v0.3.0-alpha.1
+```
+
+Use `REVIEW_ROUTER_ACTION_REF_MODE=main` if you want the target repository to run the newest `main` branch on every workflow run. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
 
 ## Quick start
 
@@ -16,33 +24,33 @@ Fast setup for a single repository. Secrets and variables are stored on that rep
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
-  AI_ROBOT_REVIEW_REPO=owner/repo \
-  AI_ROBOT_REVIEW_SECRET_SCOPE=repo \
-  AI_ROBOT_REVIEW_IDENTITY=actions \
-  AI_ROBOT_REVIEW_AUTH=codex \
-  AI_ROBOT_REVIEW_PRESET=safe \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_SECRET_SCOPE=repo \
+  REVIEW_ROUTER_IDENTITY=actions \
+  REVIEW_ROUTER_AUTH=codex \
+  REVIEW_ROUTER_PRESET=safe \
   bash
 ```
 
-Use `AI_ROBOT_REVIEW_IDENTITY=app` instead of `actions` if you want comments from a dedicated GitHub App bot instead of `github-actions[bot]`.
+Use `REVIEW_ROUTER_IDENTITY=app` instead of `actions` if you want comments from a dedicated GitHub App bot instead of `github-actions[bot]`.
 
 ### Organization selected repositories
 
 Recommended team setup. Secrets and variables live at organization level, but only selected repositories can access them.
 
-For smoke tests, use a disposable test organization/repository or `AI_ROBOT_REVIEW_DRY_RUN=1`. Do not test org-level secrets against a production organization unless you intend to store real secrets there.
+For smoke tests, use a disposable test organization/repository or `REVIEW_ROUTER_DRY_RUN=1`. Do not test org-level secrets against a production organization unless you intend to store real secrets there.
 
 ```bash
 gh auth refresh -s admin:org
 
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
-  AI_ROBOT_REVIEW_REPO=your-org/repo-a \
-  AI_ROBOT_REVIEW_SECRET_SCOPE=org \
-  AI_ROBOT_REVIEW_ORG=your-org \
-  AI_ROBOT_REVIEW_ORG_SECRET_REPOS=repo-a,repo-b \
-  AI_ROBOT_REVIEW_IDENTITY=app \
-  AI_ROBOT_REVIEW_AUTH=codex \
-  AI_ROBOT_REVIEW_PRESET=safe \
+  REVIEW_ROUTER_REPO=your-org/repo-a \
+  REVIEW_ROUTER_SECRET_SCOPE=org \
+  REVIEW_ROUTER_ORG=your-org \
+  REVIEW_ROUTER_ORG_SECRET_REPOS=repo-a,repo-b \
+  REVIEW_ROUTER_IDENTITY=app \
+  REVIEW_ROUTER_AUTH=codex \
+  REVIEW_ROUTER_PRESET=safe \
   bash
 ```
 
@@ -52,15 +60,15 @@ To run a real org e2e smoke test against a disposable organization without grant
 
 ```bash
 gh auth refresh -s admin:org
-AI_ROBOT_REVIEW_E2E_ORG=your-test-org AI_ROBOT_REVIEW_E2E_SKIP_DELETE=1 bash scripts/e2e-org-installer-smoke.sh
+REVIEW_ROUTER_E2E_ORG=your-test-org REVIEW_ROUTER_E2E_SKIP_DELETE=1 bash scripts/e2e-org-installer-smoke.sh
 ```
 
-The smoke script creates a temporary private repo, installs org-level selected-repo secrets/variables, verifies `visibility=selected` and `numSelectedRepos=1`, verifies the setup PR/workflow, then deletes the smoke secrets/variables. With `AI_ROBOT_REVIEW_E2E_SKIP_DELETE=1`, it leaves the temporary repo for manual deletion so the CLI does not need `delete_repo`.
+The smoke script creates a temporary private repo, installs org-level selected-repo secrets/variables, verifies `visibility=selected` and `numSelectedRepos=1`, verifies the setup PR/workflow, then deletes the smoke secrets/variables. With `REVIEW_ROUTER_E2E_SKIP_DELETE=1`, it leaves the temporary repo for manual deletion so the CLI does not need `delete_repo`.
 
 To verify reruns do not duplicate inline comments on a disposable smoke repository:
 
 ```bash
-AI_ROBOT_REVIEW_E2E_REPO=owner/repo bash scripts/e2e-rerun-dedup-smoke.sh
+REVIEW_ROUTER_E2E_REPO=owner/repo bash scripts/e2e-rerun-dedup-smoke.sh
 ```
 
 The script opens a temporary PR with a known review fixture, waits for the first review, pushes an empty commit, waits for the rerun, and fails if the inline comment count increases.
@@ -71,21 +79,36 @@ For teams that do not want to store a personal Codex OAuth session:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
-  AI_ROBOT_REVIEW_REPO=owner/repo \
-  AI_ROBOT_REVIEW_SECRET_SCOPE=repo \
-  AI_ROBOT_REVIEW_IDENTITY=actions \
-  AI_ROBOT_REVIEW_AUTH=openai \
-  AI_ROBOT_REVIEW_OPENAI_API_KEY=sk-... \
-  AI_ROBOT_REVIEW_PRESET=safe \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_SECRET_SCOPE=repo \
+  REVIEW_ROUTER_IDENTITY=actions \
+  REVIEW_ROUTER_AUTH=openai \
+  REVIEW_ROUTER_OPENAI_API_KEY=sk-... \
+  REVIEW_ROUTER_PRESET=safe \
+  bash
+```
+
+### Live main instead of release tag
+
+Use this when you deliberately want every workflow run to pull the newest reviewer code from `main`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_ACTION_REF_MODE=main \
+  REVIEW_ROUTER_SECRET_SCOPE=repo \
+  REVIEW_ROUTER_IDENTITY=actions \
+  REVIEW_ROUTER_AUTH=codex \
+  REVIEW_ROUTER_PRESET=safe \
   bash
 ```
 
 ## What it creates
 
-- `.github/workflows/ai-robot-review.yml`
+- `.github/workflows/review-router.yml`
 - Repository or organization variables such as `REVIEW_CODEX_MODEL`, `REVIEW_AUTH_MODE`, or OpenRouter provider variables
 - Repository or organization secrets for the selected auth mode
-- Branch `ai-robot-review/setup`
+- Branch `review-router/setup`
 - A setup PR with the workflow change
 
 Secrets are never deleted automatically. Existing secrets and variables are overwritten only after confirmation.
@@ -101,14 +124,14 @@ Secrets are never deleted automatically. Existing secrets and variables are over
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
-  AI_ROBOT_REVIEW_REPO=your-org/repo-a \
-  AI_ROBOT_REVIEW_SECRET_SCOPE=org \
-  AI_ROBOT_REVIEW_ORG=your-org \
-  AI_ROBOT_REVIEW_ORG_SECRET_REPOS=repo-a,repo-b \
+  REVIEW_ROUTER_REPO=your-org/repo-a \
+  REVIEW_ROUTER_SECRET_SCOPE=org \
+  REVIEW_ROUTER_ORG=your-org \
+  REVIEW_ROUTER_ORG_SECRET_REPOS=repo-a,repo-b \
   bash
 ```
 
-If `AI_ROBOT_REVIEW_ORG_SECRET_REPOS` is not set, the installer grants access only to the target repo name from `AI_ROBOT_REVIEW_REPO`.
+If `REVIEW_ROUTER_ORG_SECRET_REPOS` is not set, the installer grants access only to the target repo name from `REVIEW_ROUTER_REPO`.
 
 Managing organization secrets with `gh` requires organization-owner permissions and the `admin:org` OAuth scope:
 
@@ -129,7 +152,7 @@ Repository collaborators normally cannot read Actions secret values in the GitHu
 
 | Mode                  | Comment author              | Best for                                                    | Tradeoff                                                              |
 | --------------------- | --------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------- |
-| `GitHub App bot`      | `ai-robot-review-... [bot]` | Production repos, cleaner audit trail, branded bot identity | Creates a user-owned GitHub App and requires installation on the repo |
+| `GitHub App bot`      | `review-router-... [bot]` | Production repos, cleaner audit trail, branded bot identity | Creates a user-owned GitHub App and requires installation on the repo |
 | `github-actions[bot]` | `github-actions[bot]`       | Fast setup, tests, small teams                              | Default name/avatar, weaker identity/audit separation                 |
 
 Recommendation:
@@ -146,7 +169,7 @@ Uses the local Codex CLI OAuth session from `~/.codex/auth.json` and stores it i
 By default, the installer does not copy `~/.codex/config.toml`. Local Codex config can contain plugins, hooks, or UI-specific settings that are noisy and expensive in CI. If you intentionally need it, opt in:
 
 ```bash
-AI_ROBOT_REVIEW_INCLUDE_CODEX_CONFIG=1 bash scripts/install.sh
+REVIEW_ROUTER_INCLUDE_CODEX_CONFIG=1 bash scripts/install.sh
 ```
 
 The generated workflow installs the official Codex CLI and runs a headless smoke check before review:
@@ -166,7 +189,7 @@ Default Codex model:
 gpt-5.5
 ```
 
-The installer stores it as `REVIEW_CODEX_MODEL`, and the action converts it internally to `codex/<model>`. Override it with `AI_ROBOT_REVIEW_CODEX_MODEL`, for example `AI_ROBOT_REVIEW_CODEX_MODEL=gpt-5.4`.
+The installer stores it as `REVIEW_CODEX_MODEL`, and the action converts it internally to `codex/<model>`. Override it with `REVIEW_ROUTER_CODEX_MODEL`, for example `REVIEW_ROUTER_CODEX_MODEL=gpt-5.4`.
 
 ### OpenAI API key
 
@@ -203,12 +226,12 @@ CODEX_AGENTIC_CONTEXT=true
 
 `CODEX_AGENTIC_CONTEXT=true` lets Codex inspect related repository files in a read-only sandbox before returning strict JSON findings. It does not grant write access.
 
-`UPDATE_PR_DESCRIPTION=true` appends or updates only the `AI Robot Review` generated block in the pull request body. Author-written PR text stays above the generated block. `FAIL_ON_CRITICAL=true` and `FAIL_ON_MAJOR=false` make the check fail only for critical findings by default. Set `FAIL_ON_MAJOR=true` for stricter blocking, or set advanced `FAIL_ON_SEVERITY=off` if the reviewer should be informational only.
+`UPDATE_PR_DESCRIPTION=true` appends or updates only the `ReviewRouter` generated block in the pull request body. Author-written PR text stays above the generated block. `FAIL_ON_CRITICAL=true` and `FAIL_ON_MAJOR=false` make the check fail only for critical findings by default. Set `FAIL_ON_MAJOR=true` for stricter blocking, or set advanced `FAIL_ON_SEVERITY=off` if the reviewer should be informational only.
 
 For production repositories, prefer:
 
 ```bash
-AI_ROBOT_REVIEW_PRESET=blocking
+REVIEW_ROUTER_PRESET=blocking
 ```
 
 This keeps the safer `safe` review depth, but makes Major findings block the pull request. Use `safe` during rollout if you want advisory comments first.
@@ -219,11 +242,11 @@ This keeps the safer `safe` review depth, but makes Major findings block the pul
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
-  AI_ROBOT_REVIEW_REPO=owner/repo \
-  AI_ROBOT_REVIEW_IDENTITY=app \
-  AI_ROBOT_REVIEW_AUTH=codex \
-AI_ROBOT_REVIEW_PRESET=safe \
-  AI_ROBOT_REVIEW_YES=1 \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_IDENTITY=app \
+  REVIEW_ROUTER_AUTH=codex \
+  REVIEW_ROUTER_PRESET=safe \
+  REVIEW_ROUTER_YES=1 \
   bash
 ```
 
@@ -231,28 +254,28 @@ AI_ROBOT_REVIEW_PRESET=safe \
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
-  AI_ROBOT_REVIEW_REPO=owner/repo \
-  AI_ROBOT_REVIEW_IDENTITY=app \
-  AI_ROBOT_REVIEW_AUTH=codex \
-  AI_ROBOT_REVIEW_PRESET=blocking \
-  AI_ROBOT_REVIEW_YES=1 \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_IDENTITY=app \
+  REVIEW_ROUTER_AUTH=codex \
+  REVIEW_ROUTER_PRESET=blocking \
+  REVIEW_ROUTER_YES=1 \
   bash
 ```
 
-`blocking` fails the `AI Robot Review / review` check for Major and Critical findings. Mark this check as required in branch protection if you want it to gate merges.
+`blocking` fails the `ReviewRouter / review` check for Major and Critical findings. Mark this check as required in branch protection if you want it to gate merges.
 
 ### GitHub App bot + Codex subscription using org selected-repo secrets
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
-  AI_ROBOT_REVIEW_REPO=your-org/repo-a \
-  AI_ROBOT_REVIEW_SECRET_SCOPE=org \
-  AI_ROBOT_REVIEW_ORG=your-org \
-  AI_ROBOT_REVIEW_ORG_SECRET_REPOS=repo-a \
-  AI_ROBOT_REVIEW_IDENTITY=app \
-  AI_ROBOT_REVIEW_AUTH=codex \
-  AI_ROBOT_REVIEW_PRESET=safe \
-  AI_ROBOT_REVIEW_YES=1 \
+  REVIEW_ROUTER_REPO=your-org/repo-a \
+  REVIEW_ROUTER_SECRET_SCOPE=org \
+  REVIEW_ROUTER_ORG=your-org \
+  REVIEW_ROUTER_ORG_SECRET_REPOS=repo-a \
+  REVIEW_ROUTER_IDENTITY=app \
+  REVIEW_ROUTER_AUTH=codex \
+  REVIEW_ROUTER_PRESET=safe \
+  REVIEW_ROUTER_YES=1 \
   bash
 ```
 
@@ -260,12 +283,12 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
-  AI_ROBOT_REVIEW_REPO=owner/repo \
-  AI_ROBOT_REVIEW_IDENTITY=actions \
-  AI_ROBOT_REVIEW_AUTH=openai \
-  AI_ROBOT_REVIEW_OPENAI_API_KEY=sk-... \
-  AI_ROBOT_REVIEW_PRESET=safe \
-  AI_ROBOT_REVIEW_YES=1 \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_IDENTITY=actions \
+  REVIEW_ROUTER_AUTH=openai \
+  REVIEW_ROUTER_OPENAI_API_KEY=sk-... \
+  REVIEW_ROUTER_PRESET=safe \
+  REVIEW_ROUTER_YES=1 \
   bash
 ```
 
@@ -273,12 +296,12 @@ curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-revie
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/multi-provider-code-review/main/scripts/install.sh | env \
-  AI_ROBOT_REVIEW_REPO=owner/repo \
-  AI_ROBOT_REVIEW_IDENTITY=actions \
-  AI_ROBOT_REVIEW_AUTH=openrouter \
-  AI_ROBOT_REVIEW_OPENROUTER_API_KEY=sk-or-... \
-  AI_ROBOT_REVIEW_PRESET=minimal \
-  AI_ROBOT_REVIEW_YES=1 \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_IDENTITY=actions \
+  REVIEW_ROUTER_AUTH=openrouter \
+  REVIEW_ROUTER_OPENROUTER_API_KEY=sk-or-... \
+  REVIEW_ROUTER_PRESET=minimal \
+  REVIEW_ROUTER_YES=1 \
   bash
 ```
 
@@ -288,17 +311,17 @@ For tests, the installer can write the workflow into a local directory without t
 
 ```bash
 TMP_DIR=$(mktemp -d)
-AI_ROBOT_REVIEW_NON_INTERACTIVE=1 \
-AI_ROBOT_REVIEW_LOCAL_ONLY=1 \
-AI_ROBOT_REVIEW_SKIP_GH_CHECK=1 \
-AI_ROBOT_REVIEW_REPO=owner/repo \
-AI_ROBOT_REVIEW_IDENTITY=actions \
-AI_ROBOT_REVIEW_AUTH=openrouter \
-AI_ROBOT_REVIEW_OPENROUTER_API_KEY=dummy \
-AI_ROBOT_REVIEW_WORKDIR="$TMP_DIR" \
+REVIEW_ROUTER_NON_INTERACTIVE=1 \
+REVIEW_ROUTER_LOCAL_ONLY=1 \
+REVIEW_ROUTER_SKIP_GH_CHECK=1 \
+REVIEW_ROUTER_REPO=owner/repo \
+REVIEW_ROUTER_IDENTITY=actions \
+REVIEW_ROUTER_AUTH=openrouter \
+REVIEW_ROUTER_OPENROUTER_API_KEY=dummy \
+REVIEW_ROUTER_WORKDIR="$TMP_DIR" \
 bash scripts/install.sh
 
-cat "$TMP_DIR/.github/workflows/ai-robot-review.yml"
+cat "$TMP_DIR/.github/workflows/review-router.yml"
 ```
 
 ## Workflow defaults

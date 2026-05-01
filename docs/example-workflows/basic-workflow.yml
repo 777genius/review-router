@@ -16,8 +16,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: AI Robot Review
-        uses: keithah/multi-provider-code-review@v0.2.1
+      - name: ReviewRouter
+        uses: 777genius/multi-provider-code-review@v0.3.0-alpha.1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

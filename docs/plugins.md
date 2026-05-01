@@ -1,6 +1,6 @@
 # Plugin Development Guide
 
-Create custom LLM provider plugins for AI Robot Review.
+Create custom LLM provider plugins for ReviewRouter.
 
 ## Overview
 
@@ -524,7 +524,7 @@ ENV PLUGINS_ENABLED=true
   "main": "index.js",
   "files": ["index.js"],
   "peerDependencies": {
-    "multi-provider-code-review": "^2.0.0"
+    "review-router": "^0.3.0"
   }
 }
 ```
@@ -607,7 +607,7 @@ async review(prompt, timeoutMs) {
 
 For plugin development help:
 - Example plugins: `src/plugins/example-plugin.ts`
-- GitHub Issues: https://github.com/keithah/multi-provider-code-review/issues
+- GitHub Issues: https://github.com/777genius/multi-provider-code-review/issues
 - Provider interface: `src/providers/base.ts`
 
 ## License

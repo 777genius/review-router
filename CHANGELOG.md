@@ -249,7 +249,7 @@ If you need to rollback to v0.2.1:
    - Token-aware batching reverts to fixed batch sizes
 
 5. **Report Rollback**:
-   - If you needed to rollback, please report the issue: https://github.com/anthropics/multi-provider-code-review/issues
+   - If you needed to rollback, please report the issue: https://github.com/777genius/multi-provider-code-review/issues
    - Include error messages, workflow logs, and configuration
 
 ### Monitoring Recommendations

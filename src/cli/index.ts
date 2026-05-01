@@ -223,13 +223,15 @@ Examples:
    */
   private showHelp(): void {
     const help = `
-AI Robot Review CLI
+ReviewRouter CLI
 
 Usage:
-  mpr review [target] [options]    Run code review
-  mpr analytics <command> [options] Manage analytics and dashboards
-  mpr help                         Show this help
-  mpr version                      Show version
+  review-router review [target] [options]
+                                   Run code review
+  review-router analytics <command> [options]
+                                   Manage analytics and dashboards
+  review-router help               Show this help
+  review-router version            Show version
 
 Review Targets:
   (none)                          Review uncommitted changes
@@ -245,11 +247,13 @@ Analytics Commands:
   generate [options]              Generate analytics dashboard
 
 Examples:
-  mpr review                      Review uncommitted changes
-  mpr review HEAD~1               Review last commit
-  mpr review main..feature        Review feature branch
-  mpr analytics summary           Show analytics summary
-  mpr analytics generate          Generate HTML dashboard
+  review-router review            Review uncommitted changes
+  review-router review HEAD~1     Review last commit
+  review-router review main..feature
+                                   Review feature branch
+  review-router analytics summary Show analytics summary
+  review-router analytics generate
+                                   Generate HTML dashboard
 
 Exit Codes:
   0    No issues or only minor issues
@@ -266,7 +270,7 @@ Exit Codes:
   private showVersion(): void {
     // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
     const pkg = require('../../package.json');
-    console.log(`multi-provider-code-review v${pkg.version}`);
+    console.log(`review-router v${pkg.version}`);
   }
 }
 

@@ -18,7 +18,7 @@ export function formatReviewFailureSummary(error: Error, prNumber?: number): str
   const details = failureDetails(kind);
 
   return [
-    '# AI Robot Review',
+    '# ReviewRouter',
     '',
     '🔴 **Review failed before comments could be completed.**',
     '',
@@ -107,14 +107,14 @@ function failureDetails(kind: FailureKind): { summary: string; steps: string[] }
         steps: [
           'Verify `OPENAI_API_KEY` exists in repository or selected organization Actions secrets.',
           'Verify the key has access to the configured `REVIEW_CODEX_MODEL`.',
-          'If you intended to use ChatGPT subscription OAuth, reinstall with `AI_ROBOT_REVIEW_AUTH=codex`.',
+          'If you intended to use ChatGPT subscription OAuth, reinstall with `REVIEW_ROUTER_AUTH=codex`.',
         ],
       };
     case 'codex-cli':
       return {
         summary: 'The Codex CLI could not run successfully in CI.',
         steps: [
-          'Verify the workflow installs `@openai/codex` before running AI Robot Review.',
+          'Verify the workflow installs `@openai/codex` before running ReviewRouter.',
           'Check the `Verify Codex OAuth headless mode` or `Verify Codex API key headless mode` step.',
           'If this is a model issue, verify `REVIEW_CODEX_MODEL` is a current supported Codex model.',
         ],
@@ -148,9 +148,9 @@ function failureDetails(kind: FailureKind): { summary: string; steps: string[] }
       };
     case 'configuration':
       return {
-        summary: 'AI Robot Review configuration is invalid.',
+        summary: 'ReviewRouter configuration is invalid.',
         steps: [
-          'Check the workflow inputs in `.github/workflows/ai-robot-review.yml`.',
+          'Check the workflow inputs in `.github/workflows/review-router.yml`.',
           'Verify required values such as `GITHUB_TOKEN`, `PR_NUMBER`, model variables, and provider credentials.',
           'Re-run the installer if the workflow was manually edited.',
         ],
@@ -159,7 +159,7 @@ function failureDetails(kind: FailureKind): { summary: string; steps: string[] }
       return {
         summary: 'The review failed with an unexpected error.',
         steps: [
-          'Open the failed workflow run and inspect the `Run AI Robot Review` step.',
+          'Open the failed workflow run and inspect the `Run ReviewRouter` step.',
           'Verify credentials, model variables, and repository permissions.',
           'If the error looks internal, file an issue with the sanitized workflow log.',
         ],

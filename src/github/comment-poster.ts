@@ -13,7 +13,7 @@ import {
   extractInlineFingerprint,
   fingerprintFromInlineComment,
   InlineCommentReference,
-  isAiRobotInlineComment,
+  isReviewRouterInlineComment,
   isLikelySameInlineFinding,
   signatureFromInlineComment,
 } from './comment-fingerprint';
@@ -25,8 +25,9 @@ interface ActiveInlineComments {
 
 export class CommentPoster {
   private static readonly MAX_COMMENT_SIZE = 60_000;
-  private static readonly BOT_COMMENT_MARKER = '<!-- ai-robot-review-bot -->';
+  private static readonly BOT_COMMENT_MARKER = '<!-- review-router-bot -->';
   private static readonly LEGACY_BOT_COMMENT_MARKERS = [
+    '<!-- ai-robot-review-bot -->',
     '<!-- multi-provider-code-review-bot -->',
   ];
 
@@ -167,7 +168,7 @@ export class CommentPoster {
       for (const comment of comments) {
         const activeLine = comment.line;
         const body = comment.body || '';
-        if (activeLine == null || !isAiRobotInlineComment(body)) continue;
+        if (activeLine == null || !isReviewRouterInlineComment(body)) continue;
 
         activeComments.push({
           path: comment.path,

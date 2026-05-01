@@ -17,14 +17,14 @@ function createPR(overrides: Partial<PRContext> = {}): PRContext {
     diff: '',
     files: [
       {
-        filename: '.github/workflows/ai-robot-review.yml',
+        filename: '.github/workflows/review-router.yml',
         status: 'modified',
         additions: 18,
         deletions: 4,
         changes: 22,
         patch: [
           '@@ -1,6 +1,20 @@',
-          '+name: AI Robot Review',
+          '+name: ReviewRouter',
           '+on:',
           '+  pull_request:',
           '+  workflow_dispatch:',
@@ -35,7 +35,7 @@ function createPR(overrides: Partial<PRContext> = {}): PRContext {
           '+      - name: Restore Codex OAuth',
           '+        env:',
           '+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}',
-          '+      - name: Run AI Robot Review',
+          '+      - name: Run ReviewRouter',
           '+        uses: 777genius/multi-provider-code-review@main',
           '+        with:',
           '+          CODEX_MODEL: gpt-5.5',
@@ -83,11 +83,31 @@ describe('PullRequestDescriptionUpdater', () => {
     const merged = updater.merge('Manual PR description', block);
 
     expect(merged.startsWith('Manual PR description')).toBe(true);
-    expect(merged).toContain('<!-- ai-robot-review-summary:start -->');
+    expect(merged).toContain('<!-- review-router-summary:start -->');
     expect(merged).toContain('## Summary');
   });
 
   it('replaces only the previous generated block', () => {
+    const updater = new PullRequestDescriptionUpdater(client, false);
+    const oldBody = [
+      'Manual PR description',
+      '',
+      '<!-- review-router-summary:start -->',
+      'old generated text',
+      '<!-- review-router-summary:end -->',
+    ].join('\n');
+
+    const merged = updater.merge(
+      oldBody,
+      updater.buildGeneratedBlock(createPR())
+    );
+
+    expect(merged.startsWith('Manual PR description')).toBe(true);
+    expect(merged).not.toContain('old generated text');
+    expect(merged.match(/review-router-summary:start/g)).toHaveLength(1);
+  });
+
+  it('replaces legacy AI Robot Review generated blocks', () => {
     const updater = new PullRequestDescriptionUpdater(client, false);
     const oldBody = [
       'Manual PR description',
@@ -104,15 +124,17 @@ describe('PullRequestDescriptionUpdater', () => {
 
     expect(merged.startsWith('Manual PR description')).toBe(true);
     expect(merged).not.toContain('old generated text');
-    expect(merged.match(/ai-robot-review-summary:start/g)).toHaveLength(1);
+    expect(merged).not.toContain('ai-robot-review-summary');
+    expect(merged.match(/review-router-summary:start/g)).toHaveLength(1);
   });
+
 
   it('generates file list and walkthrough cohorts', () => {
     const updater = new PullRequestDescriptionUpdater(client, false);
     const block = updater.buildGeneratedBlock(createPR());
 
     expect(block).toContain('Files selected for processing (2)');
-    expect(block).toContain('`.github/workflows/ai-robot-review.yml`');
+    expect(block).toContain('`.github/workflows/review-router.yml`');
     expect(block).toContain('TeamProvisioningService.test.ts');
     expect(block).toContain('CI workflow');
     expect(block).toContain('Tests');

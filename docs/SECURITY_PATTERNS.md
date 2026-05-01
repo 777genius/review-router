@@ -1,6 +1,6 @@
 # Security Patterns & Regex Safety
 
-This document explains how AI Robot Review safely handles user-provided patterns and protects against regex-related attacks.
+This document explains how ReviewRouter safely handles user-provided patterns and protects against regex-related attacks.
 
 ## Table of Contents
 

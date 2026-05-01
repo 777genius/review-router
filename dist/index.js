@@ -12165,7 +12165,7 @@ var OpenRouterProvider = class _OpenRouterProvider extends Provider {
             "Content-Type": "application/json",
             Authorization: `Bearer ${this.apiKey}`,
             "HTTP-Referer": "https://github.com/777genius/multi-provider-code-review",
-            "X-Title": "AI Robot Review"
+            "X-Title": "ReviewRouter"
           },
           body: JSON.stringify({
             model: apiModelId,
@@ -12937,7 +12937,7 @@ function isMigrationArtifactPath(lower) {
 function formatSummaryOnlyChunk(chunk, file) {
   return [
     `diff --git a/${chunk.aPath} b/${chunk.bPath}`,
-    `# AI Robot Review: full diff omitted from primary prompt (${file.reason}).`,
+    `# ReviewRouter: full diff omitted from primary prompt (${file.reason}).`,
     `# File: ${file.filename}`,
     `# Stats: +${file.additions}/-${file.deletions}, ${file.changes} changed lines, ${file.bytes} diff bytes.`,
     "# If this file is relevant, inspect it with read-only commands before reporting findings:",
@@ -13393,7 +13393,7 @@ var CodexProvider = class extends Provider {
   async wrapAgenticReviewPrompt(prompt) {
     const contextSeed = await this.buildRepositoryContextSeed(prompt);
     return [
-      "You are running as ai-robot-review inside GitHub Actions.",
+      "You are running as review-router inside GitHub Actions.",
       "",
       "Use the deterministic PR context below as the source of truth for review scope.",
       contextSeed,
@@ -17558,8 +17558,8 @@ function shouldPostSuggestion(finding, confidence, config) {
 
 // src/github/comment-fingerprint.ts
 var import_crypto2 = require("crypto");
-var INLINE_MARKER_RE = /<!--\s*ai-robot-review-inline:([a-f0-9]{16})\s*-->/i;
-var INLINE_MARKER_RE_GLOBAL = /<!--\s*ai-robot-review-inline:([a-f0-9]{16})\s*-->/gi;
+var INLINE_MARKER_RE = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/i;
+var INLINE_MARKER_RE_GLOBAL = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/gi;
 var MAX_NEARBY_LINE_DISTANCE = 12;
 function signatureFromInlineComment(path13, line, body) {
   const cleanBody = stripInlineFingerprintMarkers(body);
@@ -17583,7 +17583,7 @@ function fingerprintFromInlineComment(path13, line, body) {
   return (0, import_crypto2.createHash)("sha256").update(signatureFromInlineComment(path13, line, body)).digest("hex").slice(0, 16);
 }
 function inlineFingerprintMarker(fingerprint) {
-  return `<!-- ai-robot-review-inline:${fingerprint} -->`;
+  return `<!-- review-router-inline:${fingerprint} -->`;
 }
 function extractInlineFingerprint(body) {
   const match2 = body?.match(INLINE_MARKER_RE);
@@ -17598,7 +17598,7 @@ ${inlineFingerprintMarker(fingerprintFromInlineComment(path13, line, body))}`;
 function stripInlineFingerprintMarkers(body) {
   return body.replace(INLINE_MARKER_RE_GLOBAL, "").trim();
 }
-function isAiRobotInlineComment(body) {
+function isReviewRouterInlineComment(body) {
   if (!body) return false;
   if (extractInlineFingerprint(body)) return true;
   return /^\*\*(?:🔴 Critical|🟡 Major|🔵 Minor)\s+-\s+.+?\*\*/.test(
@@ -17731,8 +17731,9 @@ var CommentPoster = class _CommentPoster {
     this.providerWeightTracker = providerWeightTracker;
   }
   static MAX_COMMENT_SIZE = 6e4;
-  static BOT_COMMENT_MARKER = "<!-- ai-robot-review-bot -->";
+  static BOT_COMMENT_MARKER = "<!-- review-router-bot -->";
   static LEGACY_BOT_COMMENT_MARKERS = [
+    "<!-- ai-robot-review-bot -->",
     "<!-- multi-provider-code-review-bot -->"
   ];
   async postSummary(prNumber, body, updateExisting = true) {
@@ -17848,7 +17849,7 @@ ${content.substring(0, 500)}...`);
       for (const comment of comments) {
         const activeLine = comment.line;
         const body = comment.body || "";
-        if (activeLine == null || !isAiRobotInlineComment(body)) continue;
+        if (activeLine == null || !isReviewRouterInlineComment(body)) continue;
         activeComments.push({
           path: comment.path,
           line: activeLine,
@@ -18098,8 +18099,11 @@ ${comment.body.substring(0, 200)}...`);
 };
 
 // src/github/pr-description.ts
-var START_MARKER = "<!-- ai-robot-review-summary:start -->";
-var END_MARKER = "<!-- ai-robot-review-summary:end -->";
+var START_MARKER = "<!-- review-router-summary:start -->";
+var END_MARKER = "<!-- review-router-summary:end -->";
+var LEGACY_MARKER_PAIRS = [
+  ["<!-- ai-robot-review-summary:start -->", "<!-- ai-robot-review-summary:end -->"]
+];
 var PullRequestDescriptionUpdater = class {
   constructor(client, dryRun = false) {
     this.client = client;
@@ -18113,7 +18117,7 @@ var PullRequestDescriptionUpdater = class {
     }
     if (this.dryRun) {
       logger.info(
-        `[DRY RUN] Would update PR #${pr.number} description with AI Robot Review summary`
+        `[DRY RUN] Would update PR #${pr.number} description with ReviewRouter summary`
       );
       return;
     }
@@ -18124,7 +18128,7 @@ var PullRequestDescriptionUpdater = class {
       body: nextBody
     });
     logger.info(
-      `Updated PR #${pr.number} description with AI Robot Review summary`
+      `Updated PR #${pr.number} description with ReviewRouter summary`
     );
   }
   buildGeneratedBlock(pr) {
@@ -18173,12 +18177,15 @@ var PullRequestDescriptionUpdater = class {
 ${generatedBlock}` : generatedBlock;
   }
   removeExistingBlock(body) {
-    const start = body.indexOf(START_MARKER);
-    const end = body.indexOf(END_MARKER);
-    if (start === -1 || end === -1 || end < start) {
-      return body;
+    const markerPairs = [[START_MARKER, END_MARKER], ...LEGACY_MARKER_PAIRS];
+    for (const [startMarker, endMarker] of markerPairs) {
+      const start = body.indexOf(startMarker);
+      const end = body.indexOf(endMarker);
+      if (start !== -1 && end !== -1 && end >= start) {
+        return `${body.slice(0, start)}${body.slice(end + endMarker.length)}`;
+      }
     }
-    return `${body.slice(0, start)}${body.slice(end + END_MARKER.length)}`;
+    return body;
   }
   buildSummaryBullets(pr, cohorts) {
     const bullets = this.buildNarrativeBullets(pr, cohorts);
@@ -18310,9 +18317,9 @@ ${generatedBlock}` : generatedBlock;
   summarizeWorkflowFile(file, patch) {
     const added = patch.additions.join("\n").toLowerCase();
     const parts = [];
-    if (file.filename.toLowerCase().includes("ai-robot-review")) {
+    if (file.filename.toLowerCase().includes("review-router")) {
       parts.push(
-        `${this.changeVerb(file)} the AI Robot Review GitHub Actions workflow`
+        `${this.changeVerb(file)} the ReviewRouter GitHub Actions workflow`
       );
     } else {
       parts.push(`${this.changeVerb(file)} a GitHub Actions workflow`);
@@ -18344,7 +18351,7 @@ ${generatedBlock}` : generatedBlock;
     } else if (added.includes("github_token") || added.includes("github-token")) {
       parts.push("posts comments with the repository GitHub token");
     }
-    if (added.includes("multi-provider-code-review@main") || added.includes("ai-robot-review@main")) {
+    if (added.includes("multi-provider-code-review@main") || added.includes("review-router@main")) {
       parts.push("uses the latest reviewer from the main branch");
     }
     return this.sentenceFromParts(parts);
@@ -18864,7 +18871,7 @@ function getRepositoryFromEventPayload() {
 var MarkdownFormatterV2 = class {
   format(review) {
     const lines = [];
-    lines.push("# AI Robot Review");
+    lines.push("# ReviewRouter");
     lines.push("");
     lines.push(this.formatQuickStats(review));
     lines.push("");
@@ -19160,7 +19167,7 @@ var MarkdownFormatterV2 = class {
     return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
   }
   formatFooter(review) {
-    return `<sub>${this.formatRunSummary(review)} \u2022 Powered by AI Robot Review</sub>`;
+    return `<sub>${this.formatRunSummary(review)} \u2022 Powered by ReviewRouter</sub>`;
   }
 };
 
@@ -19383,7 +19390,7 @@ var FeedbackFilter = class {
         const body = comment.body || "";
         const signature = this.signatureFromComment(comment.path, line, body);
         const marker = extractInlineFingerprint(body);
-        if (isAiRobotInlineComment(body) && activeLine != null) {
+        if (isReviewRouterInlineComment(body) && activeLine != null) {
           alreadyPosted.add(signature);
           if (marker) alreadyPosted.add(marker);
           alreadyPostedComments.push({
@@ -22873,7 +22880,7 @@ function buildSarif(findings) {
       {
         tool: {
           driver: {
-            name: "ai-robot-review",
+            name: "review-router",
             version: "2.0.0",
             informationUri: "https://github.com/777genius/multi-provider-code-review",
             rules
@@ -25547,8 +25554,13 @@ var ProgressTracker = class _ProgressTracker {
   startTime = Date.now();
   totalCost = 0;
   overrideBody;
-  static MARKER = "<!-- ai-robot-review-progress-tracker -->";
+  static MARKER = "<!-- review-router-progress-tracker -->";
+  static LEGACY_MARKERS = [
+    "<!-- ai-robot-review-progress-tracker -->"
+  ];
   static LEGACY_HEADERS = [
+    "# ReviewRouter",
+    "## \u{1F916} ReviewRouter Progress",
     "# AI Robot Review",
     "## \u{1F916} AI Robot Review Progress"
   ];
@@ -25642,7 +25654,7 @@ var ProgressTracker = class _ProgressTracker {
    */
   formatProgressComment() {
     const lines = [];
-    lines.push("## \u{1F916} AI Robot Review Progress\n");
+    lines.push("## \u{1F916} ReviewRouter Progress\n");
     const sortedItems = Array.from(this.items.values()).sort(
       (a, b) => (a.startTime || 0) - (b.startTime || 0)
     );
@@ -25728,7 +25740,7 @@ var ProgressTracker = class _ProgressTracker {
   }
   isReviewComment(body) {
     if (!body) return false;
-    return body.includes(_ProgressTracker.MARKER) || _ProgressTracker.LEGACY_HEADERS.some((header) => body.startsWith(header));
+    return body.includes(_ProgressTracker.MARKER) || _ProgressTracker.LEGACY_MARKERS.some((marker) => body.includes(marker)) || _ProgressTracker.LEGACY_HEADERS.some((header) => body.startsWith(header));
   }
   withMarker(body) {
     return body.includes(_ProgressTracker.MARKER) ? body : `${body.trimEnd()}
@@ -26214,7 +26226,7 @@ var ReviewOrchestrator = class {
       if (config.generateFixPrompts && this.components.promptGenerator) {
         const fixPrompts = this.components.promptGenerator.generateFixPrompts(review.findings);
         if (fixPrompts.length > 0) {
-          const basename2 = this.sanitizeFilename(process.env.REPORT_BASENAME || "ai-robot-review");
+          const basename2 = this.sanitizeFilename(process.env.REPORT_BASENAME || "review-router");
           const fixPromptsPath = import_path.default.join(process.cwd(), `${basename2}-fix-prompts.md`);
           const format = config.fixPromptFormat || "plain";
           await this.components.promptGenerator.saveToFile(fixPrompts, fixPromptsPath, format);
@@ -26480,7 +26492,7 @@ var ReviewOrchestrator = class {
       filename = import_path.default.basename(filename);
     }
     const sanitized = filename.replace(/[^a-zA-Z0-9_-]/g, "-").substring(0, 50);
-    return sanitized || "ai-robot-review";
+    return sanitized || "review-router";
   }
   cleanupQueue(queue) {
     queue.clear?.();
@@ -26584,7 +26596,7 @@ These types of changes are automatically filtered to save review time and API co
     };
   }
   async writeReports(review) {
-    const base = this.sanitizeFilename(process.env.REPORT_BASENAME || "ai-robot-review");
+    const base = this.sanitizeFilename(process.env.REPORT_BASENAME || "review-router");
     const sarifPath = import_path.default.join(process.cwd(), `${base}.sarif`);
     const jsonPath = import_path.default.join(process.cwd(), `${base}.json`);
     await fs12.writeFile(sarifPath, JSON.stringify(buildSarif(review.findings), null, 2), "utf8");
@@ -26599,7 +26611,7 @@ function formatReviewFailureSummary(error2, prNumber) {
   const safeMessage = sanitizeFailureMessage(error2.message || String(error2));
   const details = failureDetails(kind);
   return [
-    "# AI Robot Review",
+    "# ReviewRouter",
     "",
     "\u{1F534} **Review failed before comments could be completed.**",
     "",
@@ -26672,14 +26684,14 @@ function failureDetails(kind) {
         steps: [
           "Verify `OPENAI_API_KEY` exists in repository or selected organization Actions secrets.",
           "Verify the key has access to the configured `REVIEW_CODEX_MODEL`.",
-          "If you intended to use ChatGPT subscription OAuth, reinstall with `AI_ROBOT_REVIEW_AUTH=codex`."
+          "If you intended to use ChatGPT subscription OAuth, reinstall with `REVIEW_ROUTER_AUTH=codex`."
         ]
       };
     case "codex-cli":
       return {
         summary: "The Codex CLI could not run successfully in CI.",
         steps: [
-          "Verify the workflow installs `@openai/codex` before running AI Robot Review.",
+          "Verify the workflow installs `@openai/codex` before running ReviewRouter.",
           "Check the `Verify Codex OAuth headless mode` or `Verify Codex API key headless mode` step.",
           "If this is a model issue, verify `REVIEW_CODEX_MODEL` is a current supported Codex model."
         ]
@@ -26713,9 +26725,9 @@ function failureDetails(kind) {
       };
     case "configuration":
       return {
-        summary: "AI Robot Review configuration is invalid.",
+        summary: "ReviewRouter configuration is invalid.",
         steps: [
-          "Check the workflow inputs in `.github/workflows/ai-robot-review.yml`.",
+          "Check the workflow inputs in `.github/workflows/review-router.yml`.",
           "Verify required values such as `GITHUB_TOKEN`, `PR_NUMBER`, model variables, and provider credentials.",
           "Re-run the installer if the workflow was manually edited."
         ]
@@ -26724,7 +26736,7 @@ function failureDetails(kind) {
       return {
         summary: "The review failed with an unexpected error.",
         steps: [
-          "Open the failed workflow run and inspect the `Run AI Robot Review` step.",
+          "Open the failed workflow run and inspect the `Run ReviewRouter` step.",
           "Verify credentials, model variables, and repository permissions.",
           "If the error looks internal, file an issue with the sanitized workflow log."
         ]
@@ -26844,7 +26856,7 @@ async function run() {
     const blockingFindings = getBlockingFindings(review, config.failOnSeverity);
     if (blockingFindings.length > 0) {
       setFailed(
-        `AI Robot Review found ${blockingFindings.length} ${config.failOnSeverity}+ finding(s). Review comments were posted before failing this check.`
+        `ReviewRouter found ${blockingFindings.length} ${config.failOnSeverity}+ finding(s). Review comments were posted before failing this check.`
       );
       return;
     }

@@ -37,7 +37,7 @@ git commit --no-verify
 
 ### install.sh
 
-Curl installer for adding `ai-robot-review` to a target GitHub repository.
+Curl installer for adding `review-router` to a target GitHub repository.
 
 **Usage:**
 ```bash

@@ -2,8 +2,11 @@ import { FileChange, PRContext } from '../types';
 import { GitHubClient } from './client';
 import { logger } from '../utils/logger';
 
-const START_MARKER = '<!-- ai-robot-review-summary:start -->';
-const END_MARKER = '<!-- ai-robot-review-summary:end -->';
+const START_MARKER = '<!-- review-router-summary:start -->';
+const END_MARKER = '<!-- review-router-summary:end -->';
+const LEGACY_MARKER_PAIRS = [
+  ['<!-- ai-robot-review-summary:start -->', '<!-- ai-robot-review-summary:end -->'],
+] as const;
 
 type FileCohort = {
   key: string;
@@ -33,7 +36,7 @@ export class PullRequestDescriptionUpdater {
 
     if (this.dryRun) {
       logger.info(
-        `[DRY RUN] Would update PR #${pr.number} description with AI Robot Review summary`
+        `[DRY RUN] Would update PR #${pr.number} description with ReviewRouter summary`
       );
       return;
     }
@@ -46,7 +49,7 @@ export class PullRequestDescriptionUpdater {
     });
 
     logger.info(
-      `Updated PR #${pr.number} description with AI Robot Review summary`
+      `Updated PR #${pr.number} description with ReviewRouter summary`
     );
   }
 
@@ -99,14 +102,18 @@ export class PullRequestDescriptionUpdater {
   }
 
   private removeExistingBlock(body: string): string {
-    const start = body.indexOf(START_MARKER);
-    const end = body.indexOf(END_MARKER);
+    const markerPairs = [[START_MARKER, END_MARKER] as const, ...LEGACY_MARKER_PAIRS];
 
-    if (start === -1 || end === -1 || end < start) {
-      return body;
+    for (const [startMarker, endMarker] of markerPairs) {
+      const start = body.indexOf(startMarker);
+      const end = body.indexOf(endMarker);
+
+      if (start !== -1 && end !== -1 && end >= start) {
+        return `${body.slice(0, start)}${body.slice(end + endMarker.length)}`;
+      }
     }
 
-    return `${body.slice(0, start)}${body.slice(end + END_MARKER.length)}`;
+    return body;
   }
 
   private buildSummaryBullets(pr: PRContext, cohorts: FileCohort[]): string[] {
@@ -302,9 +309,9 @@ export class PullRequestDescriptionUpdater {
     const added = patch.additions.join('\n').toLowerCase();
     const parts: string[] = [];
 
-    if (file.filename.toLowerCase().includes('ai-robot-review')) {
+    if (file.filename.toLowerCase().includes('review-router')) {
       parts.push(
-        `${this.changeVerb(file)} the AI Robot Review GitHub Actions workflow`
+        `${this.changeVerb(file)} the ReviewRouter GitHub Actions workflow`
       );
     } else {
       parts.push(`${this.changeVerb(file)} a GitHub Actions workflow`);
@@ -355,7 +362,7 @@ export class PullRequestDescriptionUpdater {
 
     if (
       added.includes('multi-provider-code-review@main') ||
-      added.includes('ai-robot-review@main')
+      added.includes('review-router@main')
     ) {
       parts.push('uses the latest reviewer from the main branch');
     }

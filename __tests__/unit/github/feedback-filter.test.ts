@@ -195,7 +195,7 @@ describe('FeedbackFilter', () => {
   });
 
   describe('loadReviewCommentState', () => {
-    it('tracks existing AI Robot Review inline comments without thumbs-down', async () => {
+    it('tracks existing ReviewRouter inline comments without thumbs-down', async () => {
       mockOctokit.paginate.mockResolvedValue([
         {
           id: 1,
@@ -254,7 +254,7 @@ describe('FeedbackFilter', () => {
           id: 1,
           path: 'src/file.ts',
           line: 10,
-          body: `${existingBody}\n\n<!-- ai-robot-review-inline:${fingerprint} -->`,
+          body: `${existingBody}\n\n<!-- review-router-inline:${fingerprint} -->`,
         },
       ]);
       mockOctokit.rest.reactions.listForPullRequestReviewComment.mockResolvedValue({
@@ -337,7 +337,7 @@ describe('FeedbackFilter', () => {
       )).toBe(false);
     });
 
-    it('does not treat outdated AI Robot Review comments as already posted', async () => {
+    it('does not treat outdated ReviewRouter comments as already posted', async () => {
       mockOctokit.paginate.mockResolvedValue([
         {
           id: 1,

@@ -24,7 +24,7 @@ describe('buildSarif', () => {
     const findings: Finding[] = [];
     const sarif = buildSarif(findings);
 
-    expect(sarif.runs[0].tool.driver.name).toBe('ai-robot-review');
+    expect(sarif.runs[0].tool.driver.name).toBe('review-router');
     expect(sarif.runs[0].tool.driver.version).toBe('2.0.0');
     expect(sarif.runs[0].tool.driver.informationUri).toContain('github.com');
   });

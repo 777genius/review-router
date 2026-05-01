@@ -2,7 +2,7 @@
 
 ## Performance Characteristics
 
-The AI Robot Review action is designed for high performance with the following targets:
+The ReviewRouter action is designed for high performance with the following targets:
 
 | PR Size | Files | Lines Changed | Target Duration | Typical Cost |
 | ------- | ----- | ------------- | --------------- | ------------ |

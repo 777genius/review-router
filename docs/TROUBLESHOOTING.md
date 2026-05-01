@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-This guide helps you diagnose and fix common issues with AI Robot Review.
+This guide helps you diagnose and fix common issues with ReviewRouter.
 
 ## Table of Contents
 
@@ -475,7 +475,7 @@ env:
 
 1. Go to Actions tab in GitHub
 2. Click on failed workflow run
-3. Expand "AI Robot Review" step
+3. Expand "ReviewRouter" step
 4. Look for error messages
 
 ### Download Artifacts
@@ -493,7 +493,7 @@ git clone <your-repo>
 cd <your-repo>
 
 # Install CLI
-npm install -g multi-provider-code-review
+npm install -g review-router
 
 # Review locally
 mpr review
@@ -540,7 +540,7 @@ mpr review --dry-run
 ### Report Issues
 If you've tried the solutions above and still have issues:
 
-1. **Check existing issues:** [GitHub Issues](https://github.com/keithah/multi-provider-code-review/issues)
+1. **Check existing issues:** [GitHub Issues](https://github.com/777genius/multi-provider-code-review/issues)
 2. **Create new issue with:**
    - Error message (full stack trace)
    - Configuration (sanitized - no API keys!)

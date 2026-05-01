@@ -1,5 +1,5 @@
-name: "AI Robot Review"
-description: "AI Robot Review pull request reviewer that posts summaries, inline findings, and optional merge-blocking checks"
+name: "ReviewRouter"
+description: "ReviewRouter pull request reviewer that posts summaries, inline findings, and optional merge-blocking checks"
 author: "Keith Herrington"
 branding:
   icon: "check-circle"
@@ -196,7 +196,7 @@ inputs:
     required: false
     default: "true"
   UPDATE_PR_DESCRIPTION:
-    description: "Append/update an AI Robot Review summary block in the pull request description without overwriting author text"
+    description: "Append/update a ReviewRouter summary block in the pull request description without overwriting author text"
     required: false
     default: "true"
   FAIL_ON_CRITICAL:
@@ -230,7 +230,7 @@ inputs:
   REPORT_BASENAME:
     description: "Base name for JSON/SARIF reports"
     required: false
-    default: "ai-robot-review"
+    default: "review-router"
   SKIP_TRIVIAL_CHANGES:
     description: "Skip reviews for trivial changes (dependency locks, docs, config files, test fixtures)"
     required: false

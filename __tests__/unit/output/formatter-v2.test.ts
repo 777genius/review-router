@@ -62,6 +62,9 @@ describe('MarkdownFormatterV2', () => {
 
       expect(output).toContain('## No Active Findings');
       expect(output).not.toContain('## All Clear!');
+      expect(output).toContain(
+        'No active findings. 1 finding was dismissed by maintainer/admin `/rr skip` override.'
+      );
       expect(output).toContain('1 finding dismissed by maintainer/admin `/rr skip` override');
       expect(output).toContain('| Overrides | 1 dismissed |');
       expect(output).not.toContain('This PR looks great! No issues detected');

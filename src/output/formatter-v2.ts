@@ -141,7 +141,10 @@ export class MarkdownFormatterV2 {
       }
       if (this.hasDismissedFindings(review)) {
         const count = metrics.dismissedFindings ?? 0;
-        return `No active findings. ${count} finding${count === 1 ? '' : 's'} were dismissed by maintainer/admin \`/rr skip\` override${count === 1 ? '' : 's'}.`;
+        const noun = count === 1 ? 'finding' : 'findings';
+        const verb = count === 1 ? 'was' : 'were';
+        const override = count === 1 ? 'override' : 'overrides';
+        return `No active findings. ${count} ${noun} ${verb} dismissed by maintainer/admin \`/rr skip\` ${override}.`;
       }
       return 'This PR looks great! No issues detected by the automated review.';
     }

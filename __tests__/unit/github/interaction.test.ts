@@ -183,7 +183,9 @@ describe('ReviewInteractionHandler', () => {
     expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_number: 123,
-        body: expect.stringContaining('cannot skip this major finding'),
+        body: expect.stringContaining(
+          'PR authors cannot override blocking ReviewRouter findings by default'
+        ),
       })
     );
   });

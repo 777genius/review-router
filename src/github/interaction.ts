@@ -106,12 +106,9 @@ export class ReviewInteractionHandler {
     const severity = normalizeSeverity(extractInlineSeverity(parent.body));
     const role = await this.getRole(actor);
     const prAuthor = payload.pull_request?.user?.login || '';
-    const allowed = isRoleAllowed(role, severity, actor, prAuthor);
-    if (!allowed) {
-      await this.postNotice(
-        prNumber,
-        `@${actor} cannot ${command.kind} this ${severity} finding. Required role: ${severity === 'minor' ? 'write, maintain, or admin' : 'maintain or admin'}.`
-      );
+    const denialReason = getRoleDenialReason(role, severity, actor, prAuthor);
+    if (denialReason) {
+      await this.postNotice(prNumber, denialReason);
       return;
     }
 
@@ -334,6 +331,28 @@ function isRoleAllowed(
     return role === 'maintain' || role === 'admin';
   }
   return role === 'write' || role === 'maintain' || role === 'admin';
+}
+
+function getRoleDenialReason(
+  role: RepoRole,
+  severity: Severity,
+  actor: string,
+  prAuthor: string
+): string | null {
+  if (isRoleAllowed(role, severity, actor, prAuthor)) {
+    return null;
+  }
+
+  const isBlocking = severity === 'critical' || severity === 'major';
+  if (
+    isBlocking &&
+    actor.toLowerCase() === prAuthor.toLowerCase() &&
+    process.env.REVIEW_ROUTER_ALLOW_AUTHOR_SKIP !== 'true'
+  ) {
+    return `@${actor} cannot skip this ${severity} finding because PR authors cannot override blocking ReviewRouter findings by default. A maintainer or admin who is not the PR author can reply \`/rr skip\`, or the repository can explicitly set \`REVIEW_ROUTER_ALLOW_AUTHOR_SKIP=true\`.`;
+  }
+
+  return `@${actor} cannot skip this ${severity} finding. Required role: ${severity === 'minor' ? 'write, maintain, or admin' : 'maintain or admin'}.`;
 }
 
 function readEventPayload(): ReviewCommentEventPayload {

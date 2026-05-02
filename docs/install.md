@@ -465,6 +465,8 @@ bash scripts/install.sh
 cat "$TMP_DIR/.github/workflows/review-router.yml"
 ```
 
+When the installer is run from inside the target repository, the normal GitHub setup path now reuses the current local repository object database through a temporary `git worktree`. It does not switch your current branch or write workflow files into your current checkout, but it avoids a full `gh repo clone`.
+
 ## Workflow defaults
 
 The generated workflow currently uses:

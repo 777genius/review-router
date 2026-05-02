@@ -61,6 +61,8 @@ SKIP_APP_DOCTOR="$(env_first REVIEW_ROUTER_SKIP_APP_DOCTOR AI_ROBOT_REVIEW_SKIP_
 YES="$(env_first REVIEW_ROUTER_YES AI_ROBOT_REVIEW_YES || printf '0')"
 NO_BROWSER="$(env_first REVIEW_ROUTER_NO_BROWSER AI_ROBOT_REVIEW_NO_BROWSER || printf '0')"
 WORKDIR_OVERRIDE="$(env_first REVIEW_ROUTER_WORKDIR AI_ROBOT_REVIEW_WORKDIR || true)"
+WORKDIR_IS_GIT_WORKTREE=0
+WORKDIR_SOURCE_REPO=""
 
 case "$APP_LOGO_URL" in
   http://*|https://*) ;;
@@ -542,6 +544,16 @@ set_repo_variable() {
 
 can_run_remote_checks() {
   ! is_true "$DRY_RUN" && ! is_true "$LOCAL_ONLY" && ! is_true "$SKIP_GH_CHECK"
+}
+
+current_checkout_for_target_repo() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  remote_url="$(git -C "$repo_root" config --get remote.origin.url || true)"
+  [ -n "$remote_url" ] || return 1
+  detected_repo="$(normalize_remote_repo "$remote_url" 2>/dev/null || true)"
+  [ "$detected_repo" = "$TARGET_REPO" ] || return 1
+  printf '%s' "$repo_root"
 }
 
 decode_base64_to_stdout() {
@@ -1758,6 +1770,24 @@ prepare_worktree() {
     return
   fi
 
+  if current_repo_root="$(current_checkout_for_target_repo)"; then
+    default_branch="$(gh repo view "$TARGET_REPO" --json defaultBranchRef -q .defaultBranchRef.name)"
+    tmp_parent="$(mktemp -d)"
+    WORKDIR="$tmp_parent/worktree"
+    WORKDIR_IS_GIT_WORKTREE=1
+    WORKDIR_SOURCE_REPO="$current_repo_root"
+    info "Using current checkout at $current_repo_root to create a temporary setup worktree"
+    (
+      cd "$current_repo_root"
+      git fetch origin "refs/heads/$default_branch:refs/remotes/origin/$default_branch" --depth=1 >/dev/null 2>&1 || git fetch origin "$default_branch" --depth=1 >/dev/null
+      git fetch origin "refs/heads/$INSTALL_BRANCH:refs/remotes/origin/$INSTALL_BRANCH" --depth=1 >/dev/null 2>&1 || true
+      git worktree add --detach "$WORKDIR" "origin/$default_branch" >/dev/null
+      cd "$WORKDIR"
+      git checkout -B "$INSTALL_BRANCH" "origin/$default_branch" >/dev/null 2>&1 || git checkout -B "$INSTALL_BRANCH" >/dev/null
+    )
+    return
+  fi
+
   info "Cloning $TARGET_REPO into a temporary worktree"
   gh repo clone "$TARGET_REPO" "$WORKDIR" -- --depth=1 >/dev/null
   default_branch="$(gh repo view "$TARGET_REPO" --json defaultBranchRef -q .defaultBranchRef.name)"
@@ -1766,6 +1796,13 @@ prepare_worktree() {
     git fetch origin "refs/heads/$INSTALL_BRANCH:refs/remotes/origin/$INSTALL_BRANCH" --depth=1 >/dev/null 2>&1 || true
     git checkout -B "$INSTALL_BRANCH" "origin/$default_branch" >/dev/null 2>&1 || git checkout -B "$INSTALL_BRANCH" >/dev/null
   )
+}
+
+cleanup_worktree() {
+  if [ "${WORKDIR_IS_GIT_WORKTREE:-0}" = "1" ] && [ -n "${WORKDIR_SOURCE_REPO:-}" ] && [ -n "${WORKDIR:-}" ]; then
+    git -C "$WORKDIR_SOURCE_REPO" worktree remove --force "$WORKDIR" >/dev/null 2>&1 || true
+    rmdir "$(dirname "$WORKDIR")" >/dev/null 2>&1 || true
+  fi
 }
 
 commit_and_open_pr() {
@@ -1868,6 +1905,7 @@ main() {
   write_interaction_workflow "$WORKDIR/$INTERACTION_WORKFLOW_PATH"
   run_setup_doctor
   commit_and_open_pr
+  cleanup_worktree
 
   log ""
   ok "ReviewRouter setup complete"

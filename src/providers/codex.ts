@@ -432,6 +432,7 @@ export class CodexProvider extends Provider {
       '- For large PRs, prioritize changed files with security, auth, persistence, migrations, concurrency, realtime/eventing, billing, external API, public contract, or data-loss impact before low-risk formatting or generated files.',
       '',
       'For CRUD, realtime, cache, or repository-state changes, explicitly compare create/update/delete side effects, broadcasts, invalidation, and listener update paths.',
+      'For destructive operations such as delete/remove/archive/revoke/cancel, distinguish direct caller response handling from global side effects. A local API response that updates only the caller does not prove other open clients, subscribers, caches, workers, or projections are invalidated. If create/update paths broadcast, invalidate, enqueue, or publish but the new destructive path does not, report it when the changed line is the destructive config/call and no framework evidence proves equivalent global propagation.',
       'When a changed file uses framework APIs from a dependency, you may inspect read-only language package caches referenced by lockfiles, such as ~/.pub-cache/git, but never inspect secrets or credentials.',
       'Do not produce the final JSON until this context exploration is complete.',
       'When a finding depends on related context, cite the concrete related file evidence in the message.',

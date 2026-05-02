@@ -170,6 +170,11 @@ describe('CodexProvider', () => {
     expect(prompt).toContain('Cargo.toml');
     expect(prompt).toContain('trace the nearest imports/includes/exports');
     expect(prompt).toContain('treat the issue as insufficiently proven');
+    expect(prompt).toContain('distinguish direct caller response handling');
+    expect(prompt).toContain('does not prove other open clients');
+    expect(prompt).toContain(
+      'no framework evidence proves equivalent global propagation'
+    );
   });
 
   it('parses strict schema findings with nullable suggestion', () => {

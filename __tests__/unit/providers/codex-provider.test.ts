@@ -155,6 +155,8 @@ describe('CodexProvider', () => {
 
     expect(prompt).toContain('user-visible functional regressions');
     expect(prompt).toContain('permanent loading');
+    expect(prompt).toContain('stale UI state');
+    expect(prompt).toContain('create/update/delete side effects');
     expect(prompt).toContain('dead-end navigation');
     expect(prompt).toContain('wrong access control state');
   });
@@ -418,6 +420,54 @@ describe('CodexProvider', () => {
       expect(seed).toContain('role="related"');
       expect(seed).toContain('src/ratePolicies.js');
       expect(seed).toContain('maxAttemptsPerHour: 3');
+    } finally {
+      process.chdir(oldCwd);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('adds Dart package imports and identifier-related files to context seed', async () => {
+    const oldCwd = process.cwd();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-dart-context-'));
+    fs.mkdirSync(path.join(dir, 'app/lib/src'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'app/lib/data'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'server/lib/src/crud'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'app/pubspec.yaml'), 'name: app\n');
+    fs.writeFileSync(path.join(dir, 'server/pubspec.yaml'), 'name: server\n');
+    fs.writeFileSync(
+      path.join(dir, 'app/lib/data/repository_actions_extension.dart'),
+      'class DwRepository { static Future<bool> deleteModel(Object model) async => true; }\n'
+    );
+    fs.writeFileSync(
+      path.join(dir, 'server/lib/src/crud/lesson_crud_config.dart'),
+      'final lessonCrudConfig = DwDeleteConfig(afterDelete: notifyGeneralUpdates);\n'
+    );
+    fs.writeFileSync(
+      path.join(dir, 'server/lib/src/crud/course_crud_config.dart'),
+      [
+        "import 'package:app/data/repository_actions_extension.dart';",
+        'final courseCrudConfig = DwDeleteConfig(allowDelete: canDelete);',
+        'final channel = UpdateChannels.generalUpdatesChannel;',
+      ].join('\n')
+    );
+
+    try {
+      process.chdir(dir);
+      const provider = new CodexProvider('gpt-5.4-mini');
+      const seed = await (provider as any).buildRepositoryContextSeed(
+        [
+          'Files changed:',
+          '- server/lib/src/crud/course_crud_config.dart (modified, +1/-1)',
+          '',
+          'Diff:',
+          'diff --git a/server/lib/src/crud/course_crud_config.dart b/server/lib/src/crud/course_crud_config.dart',
+        ].join('\n')
+      );
+
+      expect(seed).toContain('server/lib/src/crud/course_crud_config.dart');
+      expect(seed).toContain('app/lib/data/repository_actions_extension.dart');
+      expect(seed).toContain('server/lib/src/crud/lesson_crud_config.dart');
+      expect(seed).toContain('afterDelete: notifyGeneralUpdates');
     } finally {
       process.chdir(oldCwd);
       fs.rmSync(dir, { recursive: true, force: true });

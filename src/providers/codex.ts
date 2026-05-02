@@ -423,13 +423,15 @@ export class CodexProvider extends Provider {
       'You may inspect related repository files before producing findings, but only with read-only shell commands such as rg, sed, cat, git diff, git show, git grep, ls, find, and pwd.',
       'Before deciding whether findings is empty or non-empty, run read-only exploration commands: inspect changed source files with git diff/sed, then use rg/git grep on imported or changed symbols to find related files.',
       'Inspect at least one directly related file when available, such as imports, called modules, schema/config files, tests, or callers.',
+      'For CRUD, realtime, cache, or repository-state changes, explicitly compare create/update/delete side effects, broadcasts, invalidation, and listener update paths.',
+      'When a changed file uses framework APIs from a dependency, you may inspect read-only language package caches referenced by lockfiles, such as ~/.pub-cache/git, but never inspect secrets or credentials.',
       'Do not produce the final JSON until this context exploration is complete.',
       'When a finding depends on related context, cite the concrete related file evidence in the message.',
       'Use repository-relative paths only. Do not include absolute local filesystem paths in findings.',
       'Do not read environment variables, secret files, ~/.codex, git credentials, or GitHub token files.',
       'Do not run package installation, tests, builds, formatters, network commands, or commands that write files.',
-      'Only report real bugs on changed lines from the diff: crashes, data loss, security vulnerabilities, or clear user-visible functional regressions such as permanent loading, dead-end navigation, hidden required content, or wrong access control state.',
-      'If related context is insufficient, return no finding rather than guessing.',
+      'Only report real bugs on changed lines from the diff: crashes, data loss, security vulnerabilities, or clear user-visible functional regressions such as permanent loading, stale UI state, dead-end navigation, hidden required content, or wrong access control state.',
+      'A repeated local repository pattern, adjacent implementation, generated protocol/schema file, or direct dependency source counts as concrete evidence. If there is still no concrete evidence after exploration, return no finding rather than guessing.',
       '',
       '<deterministic_review_prompt>',
       prompt,
@@ -550,10 +552,16 @@ export class CodexProvider extends Provider {
       if (!content) continue;
 
       snippets.push(this.formatContextSnippet(file, 'changed', content));
-      for (const related of this.extractRelativeImportFiles(file, content)) {
+      for (const related of this.extractRelatedImportFiles(file, content)) {
         if (this.isContextReadableFile(related)) {
           relatedFiles.add(related);
         }
+      }
+    }
+
+    for (const related of this.findIdentifierRelatedFiles(changedFiles)) {
+      if (this.isContextReadableFile(related)) {
+        relatedFiles.add(related);
       }
     }
 
@@ -659,17 +667,20 @@ export class CodexProvider extends Provider {
     }
   }
 
-  private extractRelativeImportFiles(
+  private extractRelatedImportFiles(
     fromFile: string,
     content: string
   ): string[] {
     const imports = new Set<string>();
     const importPattern =
-      /(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+|require\()\s*['"](\.{1,2}\/[^'"]+)['"]/g;
+      /(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+|require\(|import\s+|export\s+)\s*['"]([^'"]+)['"]/g;
     let match;
 
     while ((match = importPattern.exec(content)) !== null) {
-      const resolved = this.resolveRelativeImport(fromFile, match[1]);
+      const specifier = match[1];
+      const resolved = specifier.startsWith('.')
+        ? this.resolveRelativeImport(fromFile, specifier)
+        : this.resolvePackageImport(specifier);
       if (resolved) imports.add(resolved);
     }
 
@@ -690,6 +701,246 @@ export class CodexProvider extends Provider {
         (ext) => `${raw}${ext}`
       ),
       ...['.ts', '.tsx', '.js', '.jsx', '.json'].map((ext) =>
+        path.posix.join(raw, `index${ext}`)
+      ),
+    ];
+
+    for (const candidate of candidates) {
+      const normalized = this.normalizeRepoPath(candidate);
+      if (!normalized || !this.isContextReadableFile(normalized)) continue;
+      try {
+        const fullPath = path.resolve(process.cwd(), normalized);
+        if (fullPath.startsWith(process.cwd() + path.sep)) {
+          const stat = fsSync.statSync(fullPath);
+          if (stat.isFile()) return normalized;
+        }
+      } catch {
+        // Try next candidate.
+      }
+    }
+
+    return null;
+  }
+
+  private resolvePackageImport(specifier: string): string | null {
+    const match = /^package:([^/]+)\/(.+)$/.exec(specifier);
+    if (!match) return null;
+
+    const [, packageName, packagePath] = match;
+    const roots = this.getWorkspacePackageRoots();
+    const root = roots.get(packageName);
+    if (!root) return null;
+
+    return this.resolveImportCandidate(path.posix.join(root, packagePath));
+  }
+
+  private getWorkspacePackageRoots(): Map<string, string> {
+    const roots = new Map<string, string>();
+
+    for (const pubspec of this.findPubspecFiles(process.cwd(), 3)) {
+      try {
+        const content = fsSync.readFileSync(pubspec, 'utf8');
+        const name = /^name:\s*['"]?([^'"\s#]+)['"]?/m.exec(content)?.[1];
+        if (!name) continue;
+
+        const packageDir = path.relative(process.cwd(), path.dirname(pubspec))
+          .replace(/\\/g, '/');
+        const libDir = packageDir === ''
+          ? 'lib'
+          : path.posix.join(packageDir, 'lib');
+        roots.set(name, libDir);
+      } catch {
+        // Ignore malformed or unreadable pubspec files.
+      }
+    }
+
+    return roots;
+  }
+
+  private findPubspecFiles(root: string, maxDepth: number): string[] {
+    const found: string[] = [];
+
+    const walk = (dir: string, depth: number) => {
+      if (depth > maxDepth || found.length >= 50) return;
+
+      let entries: fsSync.Dirent[];
+      try {
+        entries = fsSync.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+
+      if (entries.some(entry => entry.isFile() && entry.name === 'pubspec.yaml')) {
+        found.push(path.join(dir, 'pubspec.yaml'));
+      }
+
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (this.shouldSkipContextDirectory(entry.name)) continue;
+        walk(path.join(dir, entry.name), depth + 1);
+      }
+    };
+
+    walk(root, 0);
+    return found;
+  }
+
+  private findIdentifierRelatedFiles(changedFiles: string[]): string[] {
+    const changedContents = changedFiles
+      .map(file => this.readRepoFileSync(file))
+      .filter(Boolean)
+      .join('\n');
+    if (!changedContents) return [];
+
+    const identifiers = this.extractContextIdentifiers(changedContents);
+    if (identifiers.length === 0) return [];
+
+    const candidates = this.findContextCandidateFiles(process.cwd(), 5);
+    const changed = new Set(changedFiles);
+    const scored: Array<{ file: string; score: number }> = [];
+
+    for (const file of candidates) {
+      if (changed.has(file)) continue;
+
+      const content = this.readRepoFileSync(file);
+      if (!content) continue;
+
+      let score = 0;
+      for (const identifier of identifiers) {
+        if (content.includes(identifier)) score += this.contextIdentifierWeight(identifier);
+      }
+
+      if (score > 0) {
+        scored.push({ file, score });
+      }
+    }
+
+    return scored
+      .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file))
+      .slice(0, 8)
+      .map(item => item.file);
+  }
+
+  private extractContextIdentifiers(content: string): string[] {
+    const identifiers = new Set<string>();
+    const importantPatterns = [
+      /\b[A-Z][A-Za-z0-9_]*(?:Config|Provider|Repository|Endpoint|Widget|Dialog|Service)\b/g,
+      /\bDw[A-Za-z0-9_]+\b/g,
+      /\bUpdateChannels\.[A-Za-z0-9_]+\b/g,
+      /\b[a-z][A-Za-z0-9_]*(?:Config|Provider|Repository|Endpoint|Channel|Model|Wrapper)\b/g,
+    ];
+
+    for (const pattern of importantPatterns) {
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        identifiers.add(match[0]);
+      }
+    }
+
+    return [...identifiers]
+      .filter(identifier => identifier.length >= 5)
+      .filter(identifier => !this.isNoisyContextIdentifier(identifier))
+      .slice(0, 40);
+  }
+
+  private contextIdentifierWeight(identifier: string): number {
+    if (identifier.startsWith('Dw')) return 4;
+    if (identifier.startsWith('UpdateChannels.')) return 4;
+    if (/(Config|Repository|Endpoint|Wrapper)$/.test(identifier)) return 3;
+    return 1;
+  }
+
+  private isNoisyContextIdentifier(identifier: string): boolean {
+    return [
+      'BuildContext',
+      'ConsumerWidget',
+      'ConsumerState',
+      'ConsumerStatefulWidget',
+      'TextEditingController',
+      'StatefulWidget',
+      'StatelessWidget',
+      'Widget',
+    ].includes(identifier);
+  }
+
+  private findContextCandidateFiles(root: string, maxDepth: number): string[] {
+    const files: string[] = [];
+
+    const walk = (dir: string, depth: number) => {
+      if (depth > maxDepth || files.length >= 2000) return;
+
+      let entries: fsSync.Dirent[];
+      try {
+        entries = fsSync.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (!this.shouldSkipContextDirectory(entry.name)) {
+            walk(fullPath, depth + 1);
+          }
+          continue;
+        }
+
+        if (!entry.isFile()) continue;
+
+        const relative = path.relative(root, fullPath).replace(/\\/g, '/');
+        if (!this.isContextReadableFile(relative)) continue;
+
+        try {
+          const stat = fsSync.statSync(fullPath);
+          if (stat.size <= 200_000) files.push(relative);
+        } catch {
+          // Ignore files that disappear during traversal.
+        }
+      }
+    };
+
+    walk(root, 0);
+    return files;
+  }
+
+  private shouldSkipContextDirectory(name: string): boolean {
+    return [
+      '.git',
+      '.codex',
+      '.dart_tool',
+      'node_modules',
+      'build',
+      'dist',
+      'coverage',
+      '.next',
+      '.turbo',
+    ].includes(name);
+  }
+
+  private readRepoFileSync(file: string): string {
+    const normalized = this.normalizeRepoPath(file);
+    if (!normalized) return '';
+
+    const repoRoot = process.cwd();
+    const fullPath = path.resolve(repoRoot, normalized);
+    if (!fullPath.startsWith(repoRoot + path.sep)) return '';
+
+    try {
+      const stat = fsSync.statSync(fullPath);
+      if (!stat.isFile() || stat.size > 200_000) return '';
+      return fsSync.readFileSync(fullPath, 'utf8');
+    } catch {
+      return '';
+    }
+  }
+
+  private resolveImportCandidate(raw: string): string | null {
+    const candidates = [
+      raw,
+      ...['.dart', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json'].map(
+        (ext) => `${raw}${ext}`
+      ),
+      ...['.dart', '.ts', '.tsx', '.js', '.jsx', '.json'].map((ext) =>
         path.posix.join(raw, `index${ext}`)
       ),
     ];

@@ -50,6 +50,7 @@ AUTH_MODE="$(env_first REVIEW_ROUTER_AUTH AI_ROBOT_REVIEW_AUTH || true)"
 DISCUSSION_MODE="$(env_first REVIEW_ROUTER_DISCUSSION_MODE AI_ROBOT_REVIEW_DISCUSSION_MODE || true)"
 PRESET="$(env_first REVIEW_ROUTER_PRESET AI_ROBOT_REVIEW_PRESET || true)"
 CODEX_MODEL="$(env_first REVIEW_ROUTER_CODEX_MODEL AI_ROBOT_REVIEW_CODEX_MODEL || printf '%s' "$DEFAULT_CODEX_MODEL")"
+CODEX_EFFORT_OVERRIDE="$(env_first REVIEW_ROUTER_CODEX_EFFORT AI_ROBOT_REVIEW_CODEX_EFFORT || true)"
 RUNS_ON="$(env_first REVIEW_ROUTER_RUNS_ON AI_ROBOT_REVIEW_RUNS_ON || printf 'ubuntu-latest')"
 CODEX_AUTH_PERSISTENCE="$(env_first REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE AI_ROBOT_REVIEW_CODEX_AUTH_PERSISTENCE || printf 'secret')"
 DRY_RUN="$(env_first REVIEW_ROUTER_DRY_RUN AI_ROBOT_REVIEW_DRY_RUN || printf '0')"
@@ -655,6 +656,7 @@ PY
 }
 
 setup_auth() {
+  preset_values
   case "$AUTH_MODE" in
     codex)
       if [ -z "$DISCUSSION_MODE" ]; then DISCUSSION_MODE="suggest"; fi
@@ -672,6 +674,7 @@ setup_auth() {
       fi
       set_repo_variable REVIEW_AUTH_MODE "codex-oauth"
       set_repo_variable REVIEW_CODEX_MODEL "$CODEX_MODEL"
+      set_repo_variable REVIEW_CODEX_EFFORT "$CODEX_REASONING_EFFORT"
       set_repo_variable REVIEW_ROUTER_DISCUSSION_MODE "$DISCUSSION_MODE"
       ;;
     openai)
@@ -682,6 +685,7 @@ setup_auth() {
       set_repo_secret_value OPENAI_API_KEY "$REVIEW_ROUTER_OPENAI_API_KEY"
       set_repo_variable REVIEW_AUTH_MODE "openai-api"
       set_repo_variable REVIEW_CODEX_MODEL "$CODEX_MODEL"
+      set_repo_variable REVIEW_CODEX_EFFORT "$CODEX_REASONING_EFFORT"
       set_repo_variable REVIEW_ROUTER_DISCUSSION_MODE "$DISCUSSION_MODE"
       ;;
     openrouter)
@@ -1290,6 +1294,12 @@ preset_values() {
       ;;
     *) fatal "Unsupported preset: $PRESET" ;;
   esac
+  if [ -n "$CODEX_EFFORT_OVERRIDE" ]; then
+    case "$CODEX_EFFORT_OVERRIDE" in
+      low|medium|high|xhigh) CODEX_REASONING_EFFORT="$CODEX_EFFORT_OVERRIDE" ;;
+      *) fatal "Unsupported REVIEW_ROUTER_CODEX_EFFORT: $CODEX_EFFORT_OVERRIDE. Use low, medium, high, or xhigh." ;;
+    esac
+  fi
 }
 
 write_workflow() {
@@ -1478,9 +1488,9 @@ YAML
     if [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "openai" ]; then
       cat <<'YAML'
           CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
+          CODEX_REASONING_EFFORT: ${{ vars.REVIEW_CODEX_EFFORT || 'medium' }}
 YAML
       cat <<YAML
-          CODEX_REASONING_EFFORT: '$CODEX_REASONING_EFFORT'
           CODEX_HEALTHCHECK_MODE: 'binary'
           CODEX_AGENTIC_CONTEXT: 'true'
 YAML
@@ -1661,7 +1671,7 @@ YAML
     if [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "openai" ]; then
       cat <<'YAML'
           CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}
-          CODEX_REASONING_EFFORT: 'medium'
+          CODEX_REASONING_EFFORT: ${{ vars.REVIEW_CODEX_EFFORT || 'medium' }}
 YAML
     fi
   } > "$workflow_file"
@@ -1682,7 +1692,7 @@ required_secret_names() {
 required_variable_names() {
   printf '%s\n' REVIEW_AUTH_MODE REVIEW_ROUTER_DISCUSSION_MODE
   case "$AUTH_MODE" in
-    codex|openai) printf '%s\n' REVIEW_CODEX_MODEL ;;
+    codex|openai) printf '%s\n' REVIEW_CODEX_MODEL REVIEW_CODEX_EFFORT ;;
     openrouter) printf '%s\n' REVIEW_PROVIDERS REVIEW_SYNTHESIS_MODEL ;;
   esac
   if [ "$IDENTITY_MODE" = "app" ]; then

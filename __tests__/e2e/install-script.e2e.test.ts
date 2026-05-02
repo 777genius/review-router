@@ -370,7 +370,9 @@ describe('review-router curl installer e2e', () => {
     );
     expect(workflow).toContain("INLINE_MAX_COMMENTS: '5'");
     expect(workflow).toContain("INLINE_MIN_SEVERITY: 'major'");
-    expect(workflow).toContain("CODEX_REASONING_EFFORT: 'medium'");
+    expect(workflow).toContain(
+      "CODEX_REASONING_EFFORT: ${{ vars.REVIEW_CODEX_EFFORT || 'medium' }}"
+    );
     expect(workflow).toContain("CODEX_HEALTHCHECK_MODE: 'binary'");
     expect(workflow).toContain("CODEX_AGENTIC_CONTEXT: 'true'");
     expect(workflow).toContain('UPDATE_PR_DESCRIPTION:');
@@ -744,7 +746,9 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain("FAIL_ON_CRITICAL: 'true'");
     expect(workflow).toContain("FAIL_ON_MAJOR: 'true'");
     expect(workflow).not.toContain('FAIL_ON_SEVERITY:');
-    expect(workflow).toContain("CODEX_REASONING_EFFORT: 'high'");
+    expect(workflow).toContain(
+      "CODEX_REASONING_EFFORT: ${{ vars.REVIEW_CODEX_EFFORT || 'medium' }}"
+    );
     expect(workflow).toContain("CODEX_HEALTHCHECK_MODE: 'binary'");
     expect(workflow).toContain("CODEX_AGENTIC_CONTEXT: 'true'");
     expect(workflow).toContain("GRAPH_ENABLED: 'true'");
@@ -765,7 +769,9 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain("INLINE_MIN_SEVERITY: 'major'");
     expect(workflow).toContain("FAIL_ON_CRITICAL: 'true'");
     expect(workflow).toContain("FAIL_ON_MAJOR: 'true'");
-    expect(workflow).toContain("CODEX_REASONING_EFFORT: 'medium'");
+    expect(workflow).toContain(
+      "CODEX_REASONING_EFFORT: ${{ vars.REVIEW_CODEX_EFFORT || 'medium' }}"
+    );
     expect(workflow).toContain("GRAPH_ENABLED: 'false'");
   });
 

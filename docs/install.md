@@ -305,6 +305,8 @@ gpt-5.5
 
 The installer stores it as `REVIEW_CODEX_MODEL`, and the action converts it internally to `codex/<model>`. Override it with `REVIEW_ROUTER_CODEX_MODEL`, for example `REVIEW_ROUTER_CODEX_MODEL=gpt-5.4`.
 
+Codex reasoning effort is stored as `REVIEW_CODEX_EFFORT`. Presets choose a default effort, and you can override it with `REVIEW_ROUTER_CODEX_EFFORT=low|medium|high|xhigh`.
+
 ### OpenAI API key
 
 Stores `OPENAI_API_KEY` and uses the Codex CLI in API-key mode. This is better for shared/team automation when you do not want to store a personal ChatGPT OAuth session.
@@ -338,6 +340,8 @@ CODEX_REASONING_EFFORT=medium
 CODEX_AGENTIC_CONTEXT=true
 REVIEW_ROUTER_DISCUSSION_MODE=suggest
 REVIEW_ROUTER_LEDGER_KEY=<generated secret>
+REVIEW_CODEX_MODEL=gpt-5.5
+REVIEW_CODEX_EFFORT=medium
 ```
 
 `CODEX_AGENTIC_CONTEXT=true` lets Codex inspect related repository files in a read-only sandbox before returning strict JSON findings. It does not grant write access.

@@ -27436,6 +27436,12 @@ These types of changes are automatically filtered to save review time and API co
 };
 
 // src/github/failure-summary.ts
+var REVIEW_ROUTER_BOT_MARKER = "<!-- review-router-bot -->";
+var LEGACY_BOT_MARKERS = [
+  "<!-- ai-robot-review-bot -->",
+  "<!-- multi-provider-code-review-bot -->"
+];
+var FAILURE_SUMMARY_TEXT = "Review failed before comments could be completed";
 function formatReviewFailureSummary(error2, prNumber) {
   const kind = classifyFailure(error2);
   const safeMessage = sanitizeFailureMessage(error2.message || String(error2));
@@ -27470,6 +27476,34 @@ async function postReviewFailureSummary(error2, token, prNumber) {
     await poster.postSummary(prNumber, formatReviewFailureSummary(error2, prNumber), true);
   } catch (postError) {
     logger.warn("Failed to post review failure summary", postError);
+  }
+}
+async function clearReviewFailureSummaries(token, prNumber) {
+  if (!token || !prNumber || prNumber <= 0) return;
+  try {
+    const client = new GitHubClient(token);
+    await clearReviewFailureSummariesForClient(client, prNumber);
+  } catch (clearError) {
+    logger.warn("Failed to clear stale review failure summaries", clearError);
+  }
+}
+async function clearReviewFailureSummariesForClient(client, prNumber) {
+  const { octokit, owner, repo } = client;
+  const comments = await listIssueComments(client, prNumber);
+  const staleFailureComments = comments.filter(
+    (comment) => isReviewFailureSummary(comment.body)
+  );
+  for (const comment of staleFailureComments) {
+    await octokit.rest.issues.deleteComment({
+      owner,
+      repo,
+      comment_id: comment.id
+    });
+  }
+  if (staleFailureComments.length > 0) {
+    logger.info(
+      `Deleted ${staleFailureComments.length} stale ReviewRouter failure summary comment(s)`
+    );
   }
 }
 function classifyFailure(error2) {
@@ -27576,6 +27610,27 @@ function failureDetails(kind) {
         ]
       };
   }
+}
+async function listIssueComments(client, prNumber) {
+  const { octokit, owner, repo } = client;
+  const params = {
+    owner,
+    repo,
+    issue_number: prNumber,
+    per_page: 100
+  };
+  if (typeof octokit.paginate === "function") {
+    return octokit.paginate(octokit.rest.issues.listComments, params);
+  }
+  const response = await octokit.rest.issues.listComments(params);
+  return response.data;
+}
+function isReviewFailureSummary(body) {
+  if (!body) return false;
+  return hasReviewRouterBotMarker(body) && body.includes(FAILURE_SUMMARY_TEXT);
+}
+function hasReviewRouterBotMarker(body) {
+  return body.includes(REVIEW_ROUTER_BOT_MARKER) || LEGACY_BOT_MARKERS.some((marker) => body.includes(marker));
 }
 function sanitizeFailureMessage(message) {
   const redacted = message.replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/(access_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***");
@@ -28570,6 +28625,7 @@ async function run() {
       info("Review skipped");
       return;
     }
+    await clearReviewFailureSummaries(token, prNumber);
     setOutput("findings_count", review.findings.length);
     setOutput(
       "critical_count",

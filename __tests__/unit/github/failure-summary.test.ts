@@ -1,4 +1,14 @@
-import { formatReviewFailureSummary } from '../../../src/github/failure-summary';
+import {
+  clearReviewFailureSummariesForClient,
+  formatReviewFailureSummary,
+} from '../../../src/github/failure-summary';
+
+jest.mock('../../../src/utils/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+  },
+}));
 
 describe('formatReviewFailureSummary', () => {
   it('formats Codex OAuth failures with actionable checks', () => {
@@ -46,5 +56,54 @@ describe('formatReviewFailureSummary', () => {
 
     expect(body).toContain('No configured review provider passed the health check');
     expect(body).toContain('Check provider credentials and model variables');
+  });
+
+  it('deletes only stale ReviewRouter failure summaries', async () => {
+    const listComments = jest.fn();
+    const deleteComment = jest.fn().mockResolvedValue({});
+    const mockClient = {
+      owner: 'owner',
+      repo: 'repo',
+      octokit: {
+        rest: {
+          issues: {
+            listComments,
+            deleteComment,
+          },
+        },
+        paginate: jest.fn().mockResolvedValue([
+          {
+            id: 1,
+            body: '<!-- review-router-bot -->\n\n🔴 **Review failed before comments could be completed.**',
+          },
+          {
+            id: 2,
+            body: '<!-- review-router-bot -->\n\n# ReviewRouter\n\n0 findings',
+          },
+          {
+            id: 3,
+            body: 'Human comment mentioning Review failed before comments could be completed.',
+          },
+        ]),
+      },
+    } as any;
+
+    await clearReviewFailureSummariesForClient(mockClient, 123);
+
+    expect(mockClient.octokit.paginate).toHaveBeenCalledWith(
+      listComments,
+      {
+        owner: 'owner',
+        repo: 'repo',
+        issue_number: 123,
+        per_page: 100,
+      }
+    );
+    expect(deleteComment).toHaveBeenCalledTimes(1);
+    expect(deleteComment).toHaveBeenCalledWith({
+      owner: 'owner',
+      repo: 'repo',
+      comment_id: 1,
+    });
   });
 });

@@ -10,7 +10,10 @@ import {
   formatValidationError,
 } from './utils/validation';
 import { Severity, Review } from './types';
-import { postReviewFailureSummary } from './github/failure-summary';
+import {
+  clearReviewFailureSummaries,
+  postReviewFailureSummary,
+} from './github/failure-summary';
 import { GitHubClient } from './github/client';
 import { ReviewLedger } from './github/ledger';
 import { ReviewInteractionHandler } from './github/interaction';
@@ -151,6 +154,8 @@ async function run(): Promise<void> {
       core.info('Review skipped');
       return;
     }
+
+    await clearReviewFailureSummaries(token, prNumber);
 
     core.setOutput('findings_count', review.findings.length);
     core.setOutput(

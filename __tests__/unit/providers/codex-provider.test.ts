@@ -2,14 +2,16 @@ import { EventEmitter } from 'events';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { CodexProvider } from '../../../src/providers/codex';
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
+  spawnSync: jest.fn(),
 }));
 
 const spawnMock = spawn as unknown as jest.Mock;
+const spawnSyncMock = spawnSync as unknown as jest.Mock;
 
 function createMockProcess(onStart?: (proc: any) => void, closeCode = 0): any {
   const proc = new EventEmitter() as any;
@@ -32,6 +34,7 @@ describe('CodexProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
+    spawnSyncMock.mockReturnValue({ status: 0, stdout: '', stderr: '' });
   });
 
   afterAll(() => {
@@ -470,6 +473,42 @@ describe('CodexProvider', () => {
       expect(seed).toContain('afterDelete: notifyGeneralUpdates');
     } finally {
       process.chdir(oldCwd);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('parses git dependency metadata from pubspec.lock for dependency context', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-lock-'));
+    const lockfile = path.join(dir, 'pubspec.lock');
+    fs.writeFileSync(
+      lockfile,
+      [
+        'packages:',
+        '  dartway_serverpod_core_server:',
+        '    dependency: "direct main"',
+        '    description:',
+        '      path: "packages/dartway_serverpod_core/dartway_serverpod_core_server"',
+        '      ref: master',
+        '      resolved-ref: "39ec91e397daec37f5252cd1291c9aa72e434ea1"',
+        '      url: "https://github.com/dartway/dartway.git"',
+        '    source: git',
+        '    version: "0.0.0"',
+      ].join('\n')
+    );
+
+    try {
+      const provider = new CodexProvider('gpt-5.4-mini');
+      expect(
+        (provider as any).parseGitDependencyFromLockfile(
+          lockfile,
+          'dartway_serverpod_core_server'
+        )
+      ).toEqual({
+        url: 'https://github.com/dartway/dartway.git',
+        ref: '39ec91e397daec37f5252cd1291c9aa72e434ea1',
+        path: 'packages/dartway_serverpod_core/dartway_serverpod_core_server',
+      });
+    } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });

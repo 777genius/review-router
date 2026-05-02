@@ -13690,9 +13690,140 @@ var CodexProvider = class extends Provider {
     if (!match2) return null;
     const [, packageName, packagePath] = match2;
     const roots = this.getWorkspacePackageRoots();
-    const root = roots.get(packageName);
+    const root = roots.get(packageName) || this.getDependencyPackageRoot(packageName);
     if (!root) return null;
     return this.resolveImportCandidate(path4.posix.join(root, packagePath));
+  }
+  getDependencyPackageRoot(packageName) {
+    if (!this.parseBooleanEnv(process.env.CODEX_DEPENDENCY_CONTEXT, true)) {
+      return null;
+    }
+    const dependency = this.findGitDependency(packageName);
+    if (!dependency) return null;
+    const safePackage = packageName.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    const cacheKey = crypto3.createHash("sha1").update(`${dependency.url}:${dependency.ref}:${dependency.path}`).digest("hex").slice(0, 10);
+    const checkoutDir = path4.join(
+      process.cwd(),
+      ".review-router-deps",
+      `${safePackage}-${cacheKey}`
+    );
+    const root = path4.posix.join(
+      ".review-router-deps",
+      `${safePackage}-${cacheKey}`,
+      dependency.path
+    );
+    if (fsSync.existsSync(path4.join(checkoutDir, dependency.path))) {
+      return root;
+    }
+    if (!this.isSafeDependencyGitUrl(dependency.url)) {
+      logger.debug(`Skipping dependency context for ${packageName}: unsupported git URL`);
+      return null;
+    }
+    try {
+      fsSync.mkdirSync(path4.dirname(checkoutDir), { recursive: true });
+      fsSync.rmSync(checkoutDir, { recursive: true, force: true });
+      fsSync.mkdirSync(checkoutDir, { recursive: true });
+      this.runGitForDependency(["init", "--quiet"], checkoutDir);
+      this.runGitForDependency(["remote", "add", "origin", dependency.url], checkoutDir);
+      this.runGitForDependency(
+        ["fetch", "--quiet", "--depth", "1", "origin", dependency.ref],
+        checkoutDir
+      );
+      this.runGitForDependency(["checkout", "--quiet", "FETCH_HEAD"], checkoutDir);
+      if (fsSync.existsSync(path4.join(checkoutDir, dependency.path))) {
+        logger.info(`Loaded dependency context for ${packageName} from ${dependency.url}@${dependency.ref}`);
+        return root;
+      }
+    } catch (error2) {
+      logger.debug(
+        `Failed to load dependency context for ${packageName}: ${error2.message}`
+      );
+      fsSync.rmSync(checkoutDir, { recursive: true, force: true });
+    }
+    return null;
+  }
+  findGitDependency(packageName) {
+    for (const lockfile of this.findPubspecLockFiles(process.cwd(), 3)) {
+      const dependency = this.parseGitDependencyFromLockfile(lockfile, packageName);
+      if (dependency) return dependency;
+    }
+    return null;
+  }
+  findPubspecLockFiles(root, maxDepth) {
+    const found = [];
+    const walk = (dir, depth) => {
+      if (depth > maxDepth || found.length >= 50) return;
+      let entries;
+      try {
+        entries = fsSync.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      if (entries.some((entry) => entry.isFile() && entry.name === "pubspec.lock")) {
+        found.push(path4.join(dir, "pubspec.lock"));
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (this.shouldSkipContextDirectory(entry.name)) continue;
+        walk(path4.join(dir, entry.name), depth + 1);
+      }
+    };
+    walk(root, 0);
+    return found;
+  }
+  parseGitDependencyFromLockfile(lockfile, packageName) {
+    let content = "";
+    try {
+      content = fsSync.readFileSync(lockfile, "utf8");
+    } catch {
+      return null;
+    }
+    const escapedName = packageName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const blockMatch = new RegExp(
+      `^  ${escapedName}:\\n([\\s\\S]*?)(?=^  [^\\s].*:\\n|(?![\\s\\S]))`,
+      "m"
+    ).exec(content);
+    const block = blockMatch?.[1];
+    if (!block || !/^\s{4}source:\s+git\s*$/m.test(block)) {
+      return null;
+    }
+    const url = this.extractYamlScalar(block, "url");
+    const dependencyPath = this.extractYamlScalar(block, "path");
+    const ref = this.extractYamlScalar(block, "resolved-ref") || this.extractYamlScalar(block, "ref");
+    if (!url || !dependencyPath || !ref) return null;
+    return {
+      url,
+      ref,
+      path: dependencyPath.replace(/^\/+/, "")
+    };
+  }
+  extractYamlScalar(block, key) {
+    const match2 = new RegExp(`^\\s+${key}:\\s+(.+?)\\s*$`, "m").exec(block);
+    if (!match2) return null;
+    return match2[1].replace(/^['"]|['"]$/g, "");
+  }
+  isSafeDependencyGitUrl(url) {
+    return /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/.test(url);
+  }
+  runGitForDependency(args, cwd) {
+    const result = (0, import_child_process3.spawnSync)("git", args, {
+      cwd,
+      encoding: "utf8",
+      timeout: 2e4,
+      env: {
+        PATH: process.env.PATH || "",
+        LANG: process.env.LANG || "C",
+        LC_ALL: process.env.LC_ALL || "C",
+        HOME: path4.join(os3.tmpdir(), "review-router-git-home"),
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_CONFIG_NOSYSTEM: "1"
+      }
+    });
+    if (result.status !== 0) {
+      throw new Error(
+        `git ${args[0]} failed: ${(result.stderr || result.stdout || "").slice(0, 200)}`
+      );
+    }
   }
   getWorkspacePackageRoots() {
     const roots = /* @__PURE__ */ new Map();

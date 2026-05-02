@@ -1,7 +1,7 @@
 import { Provider } from './base';
 import { Finding, ReviewResult } from '../types';
 import { logger } from '../utils/logger';
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as os from 'os';
@@ -728,10 +728,179 @@ export class CodexProvider extends Provider {
 
     const [, packageName, packagePath] = match;
     const roots = this.getWorkspacePackageRoots();
-    const root = roots.get(packageName);
+    const root = roots.get(packageName) || this.getDependencyPackageRoot(packageName);
     if (!root) return null;
 
     return this.resolveImportCandidate(path.posix.join(root, packagePath));
+  }
+
+  private getDependencyPackageRoot(packageName: string): string | null {
+    if (!this.parseBooleanEnv(process.env.CODEX_DEPENDENCY_CONTEXT, true)) {
+      return null;
+    }
+
+    const dependency = this.findGitDependency(packageName);
+    if (!dependency) return null;
+
+    const safePackage = packageName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const cacheKey = crypto
+      .createHash('sha1')
+      .update(`${dependency.url}:${dependency.ref}:${dependency.path}`)
+      .digest('hex')
+      .slice(0, 10);
+    const checkoutDir = path.join(
+      process.cwd(),
+      '.review-router-deps',
+      `${safePackage}-${cacheKey}`
+    );
+    const root = path.posix.join(
+      '.review-router-deps',
+      `${safePackage}-${cacheKey}`,
+      dependency.path
+    );
+
+    if (fsSync.existsSync(path.join(checkoutDir, dependency.path))) {
+      return root;
+    }
+
+    if (!this.isSafeDependencyGitUrl(dependency.url)) {
+      logger.debug(`Skipping dependency context for ${packageName}: unsupported git URL`);
+      return null;
+    }
+
+    try {
+      fsSync.mkdirSync(path.dirname(checkoutDir), { recursive: true });
+      fsSync.rmSync(checkoutDir, { recursive: true, force: true });
+      fsSync.mkdirSync(checkoutDir, { recursive: true });
+
+      this.runGitForDependency(['init', '--quiet'], checkoutDir);
+      this.runGitForDependency(['remote', 'add', 'origin', dependency.url], checkoutDir);
+      this.runGitForDependency(
+        ['fetch', '--quiet', '--depth', '1', 'origin', dependency.ref],
+        checkoutDir
+      );
+      this.runGitForDependency(['checkout', '--quiet', 'FETCH_HEAD'], checkoutDir);
+
+      if (fsSync.existsSync(path.join(checkoutDir, dependency.path))) {
+        logger.info(`Loaded dependency context for ${packageName} from ${dependency.url}@${dependency.ref}`);
+        return root;
+      }
+    } catch (error) {
+      logger.debug(
+        `Failed to load dependency context for ${packageName}: ${(error as Error).message}`
+      );
+      fsSync.rmSync(checkoutDir, { recursive: true, force: true });
+    }
+
+    return null;
+  }
+
+  private findGitDependency(packageName: string): {
+    url: string;
+    ref: string;
+    path: string;
+  } | null {
+    for (const lockfile of this.findPubspecLockFiles(process.cwd(), 3)) {
+      const dependency = this.parseGitDependencyFromLockfile(lockfile, packageName);
+      if (dependency) return dependency;
+    }
+    return null;
+  }
+
+  private findPubspecLockFiles(root: string, maxDepth: number): string[] {
+    const found: string[] = [];
+
+    const walk = (dir: string, depth: number) => {
+      if (depth > maxDepth || found.length >= 50) return;
+
+      let entries: fsSync.Dirent[];
+      try {
+        entries = fsSync.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+
+      if (entries.some(entry => entry.isFile() && entry.name === 'pubspec.lock')) {
+        found.push(path.join(dir, 'pubspec.lock'));
+      }
+
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (this.shouldSkipContextDirectory(entry.name)) continue;
+        walk(path.join(dir, entry.name), depth + 1);
+      }
+    };
+
+    walk(root, 0);
+    return found;
+  }
+
+  private parseGitDependencyFromLockfile(
+    lockfile: string,
+    packageName: string
+  ): { url: string; ref: string; path: string } | null {
+    let content = '';
+    try {
+      content = fsSync.readFileSync(lockfile, 'utf8');
+    } catch {
+      return null;
+    }
+
+    const escapedName = packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const blockMatch = new RegExp(
+      `^  ${escapedName}:\\n([\\s\\S]*?)(?=^  [^\\s].*:\\n|(?![\\s\\S]))`,
+      'm'
+    ).exec(content);
+    const block = blockMatch?.[1];
+    if (!block || !/^\s{4}source:\s+git\s*$/m.test(block)) {
+      return null;
+    }
+
+    const url = this.extractYamlScalar(block, 'url');
+    const dependencyPath = this.extractYamlScalar(block, 'path');
+    const ref =
+      this.extractYamlScalar(block, 'resolved-ref') ||
+      this.extractYamlScalar(block, 'ref');
+
+    if (!url || !dependencyPath || !ref) return null;
+
+    return {
+      url,
+      ref,
+      path: dependencyPath.replace(/^\/+/, ''),
+    };
+  }
+
+  private extractYamlScalar(block: string, key: string): string | null {
+    const match = new RegExp(`^\\s+${key}:\\s+(.+?)\\s*$`, 'm').exec(block);
+    if (!match) return null;
+    return match[1].replace(/^['"]|['"]$/g, '');
+  }
+
+  private isSafeDependencyGitUrl(url: string): boolean {
+    return /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/.test(url);
+  }
+
+  private runGitForDependency(args: string[], cwd: string): void {
+    const result = spawnSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      timeout: 20_000,
+      env: {
+        PATH: process.env.PATH || '',
+        LANG: process.env.LANG || 'C',
+        LC_ALL: process.env.LC_ALL || 'C',
+        HOME: path.join(os.tmpdir(), 'review-router-git-home'),
+        GIT_TERMINAL_PROMPT: '0',
+        GIT_CONFIG_NOSYSTEM: '1',
+      },
+    });
+
+    if (result.status !== 0) {
+      throw new Error(
+        `git ${args[0]} failed: ${(result.stderr || result.stdout || '').slice(0, 200)}`
+      );
+    }
   }
 
   private getWorkspacePackageRoots(): Map<string, string> {

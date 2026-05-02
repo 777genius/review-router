@@ -26707,7 +26707,9 @@ var ReviewOrchestrator = class {
       }
       const configuredIntensityProviderLimit = config.intensityProviderCounts?.[reviewIntensity] ?? config.providerLimit;
       const intensityProviderLimit = config.providerLimit > 0 ? Math.min(config.providerLimit, configuredIntensityProviderLimit) : configuredIntensityProviderLimit;
-      const intensityTimeout = config.intensityTimeouts?.[reviewIntensity] ?? config.runTimeoutSeconds * 1e3;
+      const baseTimeout = config.runTimeoutSeconds * 1e3;
+      const configuredIntensityTimeout = config.intensityTimeouts?.[reviewIntensity] ?? baseTimeout;
+      const intensityTimeout = Math.max(configuredIntensityTimeout, baseTimeout);
       logger.info(
         `Intensity settings: ${intensityProviderLimit} providers, ${intensityTimeout}ms timeout (${reviewIntensity} mode)`
       );

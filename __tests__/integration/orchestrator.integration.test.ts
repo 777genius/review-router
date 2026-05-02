@@ -38,12 +38,15 @@ class FakeProvider extends Provider {
 }
 
 class StubLLMExecutor {
+  lastTimeoutMs: number | undefined;
+
   async filterHealthyProviders(providers: Provider[]): Promise<{ healthy: Provider[]; healthCheckResults: ProviderResult[] }> {
     // In tests, assume all providers are healthy
     return { healthy: providers, healthCheckResults: [] };
   }
 
-  async execute(): Promise<ProviderResult[]> {
+  async execute(_providers?: Provider[], _prompt?: string, timeoutMs?: number): Promise<ProviderResult[]> {
+    this.lastTimeoutMs = timeoutMs;
     const provider = new FakeProvider();
     const result = await provider.review('', 1000);
     return [
@@ -161,11 +164,12 @@ describe('ReviewOrchestrator integration (offline)', () => {
   };
 
   it('merges AST/security/static with LLM findings and respects inline limit only for inline comments', async () => {
+    const llmExecutor = new StubLLMExecutor();
     const components: ReviewComponents = {
       config,
       providerRegistry: new StubProviderRegistry() as any,
       promptBuilder: new PromptBuilder(config),
-      llmExecutor: new StubLLMExecutor() as any,
+      llmExecutor: llmExecutor as any,
       deduplicator: new Deduplicator(),
       consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
       synthesis: new SynthesisEngine(config),
@@ -200,6 +204,55 @@ describe('ReviewOrchestrator integration (offline)', () => {
     expect(review?.findings.length).toBeGreaterThanOrEqual(1); // At least one finding from AST or LLM
     expect(review?.inlineComments.length).toBe(1);
     expect((components.commentPoster as unknown as StubCommentPoster).postedSummary).toBeTruthy();
+  });
+
+  it('uses RUN_TIMEOUT_SECONDS as a floor for intensity timeout', async () => {
+    const llmExecutor = new StubLLMExecutor();
+    const components: ReviewComponents = {
+      config: {
+        ...config,
+        runTimeoutSeconds: 600,
+        pathDefaultIntensity: 'standard',
+        intensityTimeouts: {
+          thorough: 180000,
+          standard: 120000,
+          light: 60000,
+        },
+      },
+      providerRegistry: new StubProviderRegistry() as any,
+      promptBuilder: new PromptBuilder(config),
+      llmExecutor: llmExecutor as any,
+      deduplicator: new Deduplicator(),
+      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      synthesis: new SynthesisEngine(config),
+      testCoverage: new TestCoverageAnalyzer(),
+      astAnalyzer: new ASTAnalyzer(),
+      cache: new NoopCache(),
+      incrementalReviewer: {
+        shouldUseIncremental: async () => false,
+        getLastReview: async () => null,
+        saveReview: async () => {},
+        getChangedFilesSince: async () => [],
+        mergeFindings: (prev: any, curr: any) => curr,
+        generateIncrementalSummary: () => '',
+      } as any,
+      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      security: new SecurityScanner(),
+      rules: new RulesEngine([]),
+      prLoader: new StubPRLoader() as unknown as PullRequestLoader,
+      commentPoster: new StubCommentPoster() as unknown as CommentPoster,
+      formatter: new MarkdownFormatter(),
+      contextRetriever: new ContextRetriever(),
+      impactAnalyzer: new ImpactAnalyzer(),
+      evidenceScorer: new EvidenceScorer(),
+      mermaidGenerator: new MermaidGenerator(),
+      feedbackFilter: new StubFeedbackFilter() as unknown as FeedbackFilter,
+    };
+
+    const orchestrator = new ReviewOrchestrator(components);
+    await orchestrator.execute(1);
+
+    expect(llmExecutor.lastTimeoutMs).toBe(600000);
   });
 
   it('filters duplicate inline comments before posting', async () => {

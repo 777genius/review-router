@@ -13456,6 +13456,14 @@ var CodexProvider = class extends Provider {
       "You may inspect related repository files before producing findings, but only with read-only shell commands such as rg, sed, cat, git diff, git show, git grep, ls, find, and pwd.",
       "Before deciding whether findings is empty or non-empty, run read-only exploration commands: inspect changed source files with git diff/sed, then use rg/git grep on imported or changed symbols to find related files.",
       "Inspect at least one directly related file when available, such as imports, called modules, schema/config files, tests, or callers.",
+      "",
+      "Universal context discovery checklist:",
+      "- First identify the project ecosystems from changed file extensions plus nearby manifests, lockfiles, workspace files, and build config such as package.json, pnpm-workspace.yaml, tsconfig.json, pubspec.yaml, pubspec.lock, go.mod, Cargo.toml, pyproject.toml, requirements.txt, pom.xml, build.gradle, composer.json, Gemfile, Dockerfile, Makefile, and CI workflow files.",
+      "- For every changed symbol or behavior, trace the nearest imports/includes/exports, dependency injection registrations, routes/controllers, schema files, generated protocol files, database migrations, ORM models, event names, feature flags, cache keys, permissions, and public API contracts before reporting a finding.",
+      "- Prefer repo-local evidence: sibling implementations, previous patterns, tests, mocks, fixtures, generated clients, migration history, and direct callers/callees found with rg/git grep.",
+      "- For dependencies, inspect committed lockfiles and already available read-only package source/cache directories when present. If dependency source is unavailable and repo-local evidence is not enough, treat the issue as insufficiently proven instead of guessing.",
+      "- For large PRs, prioritize changed files with security, auth, persistence, migrations, concurrency, realtime/eventing, billing, external API, public contract, or data-loss impact before low-risk formatting or generated files.",
+      "",
       "For CRUD, realtime, cache, or repository-state changes, explicitly compare create/update/delete side effects, broadcasts, invalidation, and listener update paths.",
       "When a changed file uses framework APIs from a dependency, you may inspect read-only language package caches referenced by lockfiles, such as ~/.pub-cache/git, but never inspect secrets or credentials.",
       "Do not produce the final JSON until this context exploration is complete.",
@@ -13716,7 +13724,9 @@ var CodexProvider = class extends Provider {
       return root;
     }
     if (!this.isSafeDependencyGitUrl(dependency.url)) {
-      logger.debug(`Skipping dependency context for ${packageName}: unsupported git URL`);
+      logger.debug(
+        `Skipping dependency context for ${packageName}: unsupported git URL`
+      );
       return null;
     }
     try {
@@ -13724,14 +13734,22 @@ var CodexProvider = class extends Provider {
       fsSync.rmSync(checkoutDir, { recursive: true, force: true });
       fsSync.mkdirSync(checkoutDir, { recursive: true });
       this.runGitForDependency(["init", "--quiet"], checkoutDir);
-      this.runGitForDependency(["remote", "add", "origin", dependency.url], checkoutDir);
+      this.runGitForDependency(
+        ["remote", "add", "origin", dependency.url],
+        checkoutDir
+      );
       this.runGitForDependency(
         ["fetch", "--quiet", "--depth", "1", "origin", dependency.ref],
         checkoutDir
       );
-      this.runGitForDependency(["checkout", "--quiet", "FETCH_HEAD"], checkoutDir);
+      this.runGitForDependency(
+        ["checkout", "--quiet", "FETCH_HEAD"],
+        checkoutDir
+      );
       if (fsSync.existsSync(path4.join(checkoutDir, dependency.path))) {
-        logger.info(`Loaded dependency context for ${packageName} from ${dependency.url}@${dependency.ref}`);
+        logger.info(
+          `Loaded dependency context for ${packageName} from ${dependency.url}@${dependency.ref}`
+        );
         return root;
       }
     } catch (error2) {
@@ -13744,7 +13762,10 @@ var CodexProvider = class extends Provider {
   }
   findGitDependency(packageName) {
     for (const lockfile of this.findPubspecLockFiles(process.cwd(), 3)) {
-      const dependency = this.parseGitDependencyFromLockfile(lockfile, packageName);
+      const dependency = this.parseGitDependencyFromLockfile(
+        lockfile,
+        packageName
+      );
       if (dependency) return dependency;
     }
     return null;
@@ -13803,7 +13824,9 @@ var CodexProvider = class extends Provider {
     return match2[1].replace(/^['"]|['"]$/g, "");
   }
   isSafeDependencyGitUrl(url) {
-    return /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/.test(url);
+    return /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/.test(
+      url
+    );
   }
   runGitForDependency(args, cwd) {
     const result = (0, import_child_process3.spawnSync)("git", args, {
@@ -13876,7 +13899,8 @@ var CodexProvider = class extends Provider {
       if (!content) continue;
       let score = 0;
       for (const identifier of identifiers) {
-        if (content.includes(identifier)) score += this.contextIdentifierWeight(identifier);
+        if (content.includes(identifier))
+          score += this.contextIdentifierWeight(identifier);
       }
       if (score > 0) {
         scored.push({ file, score });

@@ -162,6 +162,14 @@ describe('CodexProvider', () => {
     expect(prompt).toContain('create/update/delete side effects');
     expect(prompt).toContain('dead-end navigation');
     expect(prompt).toContain('wrong access control state');
+    expect(prompt).toContain('Universal context discovery checklist');
+    expect(prompt).toContain('package.json');
+    expect(prompt).toContain('pubspec.lock');
+    expect(prompt).toContain('go.mod');
+    expect(prompt).toContain('pyproject.toml');
+    expect(prompt).toContain('Cargo.toml');
+    expect(prompt).toContain('trace the nearest imports/includes/exports');
+    expect(prompt).toContain('treat the issue as insufficiently proven');
   });
 
   it('parses strict schema findings with nullable suggestion', () => {

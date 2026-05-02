@@ -423,6 +423,14 @@ export class CodexProvider extends Provider {
       'You may inspect related repository files before producing findings, but only with read-only shell commands such as rg, sed, cat, git diff, git show, git grep, ls, find, and pwd.',
       'Before deciding whether findings is empty or non-empty, run read-only exploration commands: inspect changed source files with git diff/sed, then use rg/git grep on imported or changed symbols to find related files.',
       'Inspect at least one directly related file when available, such as imports, called modules, schema/config files, tests, or callers.',
+      '',
+      'Universal context discovery checklist:',
+      '- First identify the project ecosystems from changed file extensions plus nearby manifests, lockfiles, workspace files, and build config such as package.json, pnpm-workspace.yaml, tsconfig.json, pubspec.yaml, pubspec.lock, go.mod, Cargo.toml, pyproject.toml, requirements.txt, pom.xml, build.gradle, composer.json, Gemfile, Dockerfile, Makefile, and CI workflow files.',
+      '- For every changed symbol or behavior, trace the nearest imports/includes/exports, dependency injection registrations, routes/controllers, schema files, generated protocol files, database migrations, ORM models, event names, feature flags, cache keys, permissions, and public API contracts before reporting a finding.',
+      '- Prefer repo-local evidence: sibling implementations, previous patterns, tests, mocks, fixtures, generated clients, migration history, and direct callers/callees found with rg/git grep.',
+      '- For dependencies, inspect committed lockfiles and already available read-only package source/cache directories when present. If dependency source is unavailable and repo-local evidence is not enough, treat the issue as insufficiently proven instead of guessing.',
+      '- For large PRs, prioritize changed files with security, auth, persistence, migrations, concurrency, realtime/eventing, billing, external API, public contract, or data-loss impact before low-risk formatting or generated files.',
+      '',
       'For CRUD, realtime, cache, or repository-state changes, explicitly compare create/update/delete side effects, broadcasts, invalidation, and listener update paths.',
       'When a changed file uses framework APIs from a dependency, you may inspect read-only language package caches referenced by lockfiles, such as ~/.pub-cache/git, but never inspect secrets or credentials.',
       'Do not produce the final JSON until this context exploration is complete.',
@@ -728,7 +736,8 @@ export class CodexProvider extends Provider {
 
     const [, packageName, packagePath] = match;
     const roots = this.getWorkspacePackageRoots();
-    const root = roots.get(packageName) || this.getDependencyPackageRoot(packageName);
+    const root =
+      roots.get(packageName) || this.getDependencyPackageRoot(packageName);
     if (!root) return null;
 
     return this.resolveImportCandidate(path.posix.join(root, packagePath));
@@ -764,7 +773,9 @@ export class CodexProvider extends Provider {
     }
 
     if (!this.isSafeDependencyGitUrl(dependency.url)) {
-      logger.debug(`Skipping dependency context for ${packageName}: unsupported git URL`);
+      logger.debug(
+        `Skipping dependency context for ${packageName}: unsupported git URL`
+      );
       return null;
     }
 
@@ -774,15 +785,23 @@ export class CodexProvider extends Provider {
       fsSync.mkdirSync(checkoutDir, { recursive: true });
 
       this.runGitForDependency(['init', '--quiet'], checkoutDir);
-      this.runGitForDependency(['remote', 'add', 'origin', dependency.url], checkoutDir);
+      this.runGitForDependency(
+        ['remote', 'add', 'origin', dependency.url],
+        checkoutDir
+      );
       this.runGitForDependency(
         ['fetch', '--quiet', '--depth', '1', 'origin', dependency.ref],
         checkoutDir
       );
-      this.runGitForDependency(['checkout', '--quiet', 'FETCH_HEAD'], checkoutDir);
+      this.runGitForDependency(
+        ['checkout', '--quiet', 'FETCH_HEAD'],
+        checkoutDir
+      );
 
       if (fsSync.existsSync(path.join(checkoutDir, dependency.path))) {
-        logger.info(`Loaded dependency context for ${packageName} from ${dependency.url}@${dependency.ref}`);
+        logger.info(
+          `Loaded dependency context for ${packageName} from ${dependency.url}@${dependency.ref}`
+        );
         return root;
       }
     } catch (error) {
@@ -801,7 +820,10 @@ export class CodexProvider extends Provider {
     path: string;
   } | null {
     for (const lockfile of this.findPubspecLockFiles(process.cwd(), 3)) {
-      const dependency = this.parseGitDependencyFromLockfile(lockfile, packageName);
+      const dependency = this.parseGitDependencyFromLockfile(
+        lockfile,
+        packageName
+      );
       if (dependency) return dependency;
     }
     return null;
@@ -820,7 +842,9 @@ export class CodexProvider extends Provider {
         return;
       }
 
-      if (entries.some(entry => entry.isFile() && entry.name === 'pubspec.lock')) {
+      if (
+        entries.some((entry) => entry.isFile() && entry.name === 'pubspec.lock')
+      ) {
         found.push(path.join(dir, 'pubspec.lock'));
       }
 
@@ -878,7 +902,9 @@ export class CodexProvider extends Provider {
   }
 
   private isSafeDependencyGitUrl(url: string): boolean {
-    return /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/.test(url);
+    return /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/.test(
+      url
+    );
   }
 
   private runGitForDependency(args: string[], cwd: string): void {
@@ -912,11 +938,11 @@ export class CodexProvider extends Provider {
         const name = /^name:\s*['"]?([^'"\s#]+)['"]?/m.exec(content)?.[1];
         if (!name) continue;
 
-        const packageDir = path.relative(process.cwd(), path.dirname(pubspec))
+        const packageDir = path
+          .relative(process.cwd(), path.dirname(pubspec))
           .replace(/\\/g, '/');
-        const libDir = packageDir === ''
-          ? 'lib'
-          : path.posix.join(packageDir, 'lib');
+        const libDir =
+          packageDir === '' ? 'lib' : path.posix.join(packageDir, 'lib');
         roots.set(name, libDir);
       } catch {
         // Ignore malformed or unreadable pubspec files.
@@ -939,7 +965,9 @@ export class CodexProvider extends Provider {
         return;
       }
 
-      if (entries.some(entry => entry.isFile() && entry.name === 'pubspec.yaml')) {
+      if (
+        entries.some((entry) => entry.isFile() && entry.name === 'pubspec.yaml')
+      ) {
         found.push(path.join(dir, 'pubspec.yaml'));
       }
 
@@ -956,7 +984,7 @@ export class CodexProvider extends Provider {
 
   private findIdentifierRelatedFiles(changedFiles: string[]): string[] {
     const changedContents = changedFiles
-      .map(file => this.readRepoFileSync(file))
+      .map((file) => this.readRepoFileSync(file))
       .filter(Boolean)
       .join('\n');
     if (!changedContents) return [];
@@ -976,7 +1004,8 @@ export class CodexProvider extends Provider {
 
       let score = 0;
       for (const identifier of identifiers) {
-        if (content.includes(identifier)) score += this.contextIdentifierWeight(identifier);
+        if (content.includes(identifier))
+          score += this.contextIdentifierWeight(identifier);
       }
 
       if (score > 0) {
@@ -987,7 +1016,7 @@ export class CodexProvider extends Provider {
     return scored
       .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file))
       .slice(0, 8)
-      .map(item => item.file);
+      .map((item) => item.file);
   }
 
   private extractContextIdentifiers(content: string): string[] {
@@ -1007,8 +1036,8 @@ export class CodexProvider extends Provider {
     }
 
     return [...identifiers]
-      .filter(identifier => identifier.length >= 5)
-      .filter(identifier => !this.isNoisyContextIdentifier(identifier))
+      .filter((identifier) => identifier.length >= 5)
+      .filter((identifier) => !this.isNoisyContextIdentifier(identifier))
       .slice(0, 40);
   }
 

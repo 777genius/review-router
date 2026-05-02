@@ -62,6 +62,11 @@ YES="$(env_first REVIEW_ROUTER_YES AI_ROBOT_REVIEW_YES || printf '0')"
 NO_BROWSER="$(env_first REVIEW_ROUTER_NO_BROWSER AI_ROBOT_REVIEW_NO_BROWSER || printf '0')"
 WORKDIR_OVERRIDE="$(env_first REVIEW_ROUTER_WORKDIR AI_ROBOT_REVIEW_WORKDIR || true)"
 
+case "$APP_LOGO_URL" in
+  http://*|https://*) ;;
+  *) APP_LOGO_URL="https://$APP_LOGO_URL" ;;
+esac
+
 if [ -t 1 ]; then
   BOLD='\033[1m'
   GREEN='\033[0;32m'
@@ -719,6 +724,15 @@ profile_path_for_slug() {
   printf '%s/%s.env' "$(app_profile_dir)" "$slug"
 }
 
+has_saved_app_profiles() {
+  profile_dir="$(app_profile_dir)"
+  [ -d "$profile_dir" ] || return 1
+  for profile_file in "$profile_dir"/*.env; do
+    [ -f "$profile_file" ] && return 0
+  done
+  return 1
+}
+
 save_app_profile() {
   app_id="$1"
   client_id="$2"
@@ -848,17 +862,69 @@ PY
   [ -z "$missing_permissions" ] || fatal "GitHub App is missing required permissions:$missing_permissions. Open https://github.com/settings/apps/$APP_SLUG/permissions, update permissions, then approve the installation update."
 
   installed=0
+  installed_accounts=""
   installation_ids="$(gh api /app/installations -H "Authorization: Bearer $app_jwt" --paginate --jq '.[].id')"
   for installation_id in $installation_ids; do
+    account_login="$(gh api "/app/installations/$installation_id" -H "Authorization: Bearer $app_jwt" --jq '.account.login // .account.slug // empty' 2>/dev/null || true)"
+    repo_selection="$(gh api "/app/installations/$installation_id" -H "Authorization: Bearer $app_jwt" --jq '.repository_selection // empty' 2>/dev/null || true)"
+    if [ -n "$account_login" ]; then
+      if [ -n "$installed_accounts" ]; then
+        installed_accounts="$installed_accounts, $account_login ($repo_selection)"
+      else
+        installed_accounts="$account_login ($repo_selection)"
+      fi
+    fi
     installation_token="$(gh api --method POST "/app/installations/$installation_id/access_tokens" -H "Authorization: Bearer $app_jwt" --jq '.token')"
     if gh api "/repos/$TARGET_REPO" -H "Authorization: Bearer $installation_token" >/dev/null 2>&1; then
       installed=1
       break
     fi
   done
-  [ "$installed" = "1" ] || fatal "GitHub App $APP_SLUG is not installed on $TARGET_REPO. Install it here: https://github.com/apps/$APP_SLUG/installations/new"
+  if [ "$installed" != "1" ]; then
+    warn "GitHub App $APP_SLUG is not installed on $TARGET_REPO yet."
+    if [ -n "$installed_accounts" ]; then
+      warn "Current App installations visible to this private key: $installed_accounts"
+      warn "Target repository owner is $(repo_owner "$TARGET_REPO"). Install the App for that account/org and include $(repo_name "$TARGET_REPO")."
+    else
+      warn "No installations are visible to this GitHub App private key yet."
+    fi
+    return 2
+  fi
 
   ok "GitHub App doctor passed"
+}
+
+ensure_app_doctor_passes() {
+  [ "$IDENTITY_MODE" = "app" ] || return
+  attempts=0
+  install_url="https://github.com/apps/$APP_SLUG/installations/new"
+
+  while :; do
+    if run_app_doctor; then
+      return
+    else
+      status="$?"
+    fi
+    [ "$status" = "2" ] || return "$status"
+
+    attempts=$((attempts + 1))
+    log ""
+    warn "ReviewRouter cannot access $TARGET_REPO through $APP_SLUG yet."
+    log "Install URL: $install_url"
+    log "Select owner/account $(repo_owner "$TARGET_REPO"), choose repository $(repo_name "$TARGET_REPO"), approve the installation, then retry."
+
+    if is_true "$NON_INTERACTIVE"; then
+      fatal "Install the GitHub App on $TARGET_REPO, then rerun the installer: $install_url"
+    fi
+    if is_true "$YES"; then
+      if [ "$attempts" -ge 5 ]; then
+        fatal "GitHub App $APP_SLUG still cannot access $TARGET_REPO after $attempts checks. Install it here, then rerun the installer: $install_url"
+      fi
+      sleep 3
+      continue
+    fi
+    confirm "I installed $APP_SLUG on $TARGET_REPO. Retry the check?" || fatal "Install the GitHub App on $TARGET_REPO, then rerun the installer: $install_url"
+  done
 }
 
 select_saved_app_profile() {
@@ -897,21 +963,11 @@ select_saved_app_profile() {
 }
 
 store_loaded_app_credentials() {
-  run_app_doctor
+  ensure_app_doctor_passes
   set_repo_variable REVIEW_APP_CLIENT_ID "$APP_CLIENT_ID"
   set_repo_variable REVIEW_APP_ID "$APP_ID"
   set_repo_variable REVIEW_APP_SLUG "$APP_SLUG"
   set_repo_secret_from_file REVIEW_APP_PRIVATE_KEY "$APP_PRIVATE_KEY_FILE"
-}
-
-confirm_app_installation_ready() {
-  [ "$IDENTITY_MODE" = "app" ] || return
-  if is_true "$SKIP_APP_DOCTOR" || ! can_run_remote_checks || is_true "$NON_INTERACTIVE"; then
-    return
-  fi
-  log ""
-  log "Install URL: https://github.com/apps/$APP_SLUG/installations/new"
-  confirm "Have you installed $APP_SLUG on $TARGET_REPO?" || fatal "Install the GitHub App on $TARGET_REPO, then rerun the installer."
 }
 
 print_app_logo_instruction() {
@@ -933,9 +989,10 @@ manual_app_setup() {
     log "Permissions: Contents read, Issues write, Pull requests write, Actions write. Webhooks: disabled."
     log "After creating it, generate a private key and provide the values below."
   else
-    log "Reuse an existing GitHub App by entering its credentials."
+    log "Import an existing GitHub App by entering its credentials."
     log "The App must have Contents read, Issues write, Pull requests write, and Actions write permissions."
     log "GitHub does not expose existing private keys; use a .pem you already saved or generate a new key in the App settings."
+    log "After import, this machine will save a local reusable profile under $(app_profile_dir)."
   fi
   REVIEW_ROUTER_APP_CLIENT_ID="$(env_first REVIEW_ROUTER_APP_CLIENT_ID AI_ROBOT_REVIEW_APP_CLIENT_ID || true)"
   REVIEW_ROUTER_APP_ID="$(env_first REVIEW_ROUTER_APP_ID AI_ROBOT_REVIEW_APP_ID || true)"
@@ -1117,7 +1174,6 @@ PY
   . "$env_file"
   save_app_profile "$APP_ID" "$APP_CLIENT_ID" "$APP_SLUG" "$APP_NAME" "$APP_PRIVATE_KEY_FILE"
   load_app_profile "$SAVED_APP_PROFILE_FILE"
-  confirm_app_installation_ready
   store_loaded_app_credentials
   rm -rf "$tmp_dir"
 
@@ -1143,10 +1199,16 @@ setup_identity() {
         APP_SETUP="manual"
       fi
       if [ -z "$APP_SETUP" ]; then
-        choose APP_SETUP "GitHub App setup" "create" \
-          "create:Create a new user-owned GitHub App" \
-          "saved:Reuse a locally saved GitHub App profile" \
-          "manual:Enter existing GitHub App credentials and save a profile"
+        app_setup_options=(
+          "create:Create a new user-owned GitHub App"
+        )
+        if has_saved_app_profiles; then
+          app_setup_options+=("saved:Reuse a locally saved GitHub App profile")
+        else
+          warn "No saved GitHub App profiles found yet. Choose create, or manual if you already have an App ID and .pem key."
+        fi
+        app_setup_options+=("manual:Import existing GitHub App credentials (.pem required) and save a profile")
+        choose APP_SETUP "GitHub App setup" "create" "${app_setup_options[@]}"
       fi
       case "$APP_SETUP" in
         create|new)

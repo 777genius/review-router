@@ -207,8 +207,8 @@ When `REVIEW_ROUTER_IDENTITY=app`, the installer asks how to configure the App c
 | Mode     | Behavior                                                                                 |
 | -------- | ---------------------------------------------------------------------------------------- |
 | `create` | Creates a new user-owned GitHub App through the manifest flow and saves a local profile. |
-| `saved`  | Reuses a local profile previously created or imported by this installer.                 |
-| `manual` | Prompts for existing App ID, Client ID, slug, and `.pem`, then saves a local profile.    |
+| `saved`  | Reuses a local profile previously created or imported by this installer. Hidden in interactive setup until a local profile exists. |
+| `manual` | Imports an existing App ID, Client ID, slug, and `.pem`, then saves a local reusable profile. |
 
 Local profiles are stored under `~/.config/review-router/apps` by default. Override this with `REVIEW_ROUTER_APP_PROFILE_DIR`.
 
@@ -240,6 +240,10 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
 ```
 
 GitHub does not let the installer download an existing GitHub App private key. Keep the `.pem` file from App creation, or generate a new private key in the App settings before using `manual`.
+
+If no local profiles exist yet, the interactive installer shows only `create` and `manual`. Use `manual` when you already have a GitHub App and a private key file. After that import, future installs on this machine can use `saved`.
+
+After App creation/import, the installer verifies that the App can access the target repository. If the App is not installed on that repository yet, it prints the `https://github.com/apps/<slug>/installations/new` link and lets you retry the check instead of writing a broken workflow.
 
 Optional App logo setup:
 

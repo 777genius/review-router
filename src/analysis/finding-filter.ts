@@ -73,8 +73,9 @@ export class FindingFilter {
     }
 
     if (stats.filtered > 0 || stats.downgraded > 0) {
+      const reasonSummary = this.formatReasonSummary(stats.reasons);
       logger.info(
-        `Finding filter: ${stats.filtered} filtered, ${stats.downgraded} downgraded, ${stats.kept} kept (from ${stats.total} total)`
+        `Finding filter: ${stats.filtered} filtered, ${stats.downgraded} downgraded, ${stats.kept} kept (from ${stats.total} total)${reasonSummary}`
       );
     }
 
@@ -370,6 +371,27 @@ export class FindingFilter {
       text.includes('allows login') ||
       text.includes('login succeeds') ||
       text.includes('logged in as');
+    const mentionsPrivilegedDefaultUser =
+      (text.includes('admin') ||
+        text.includes('privilege') ||
+        text.includes('privileged') ||
+        text.includes('role')) &&
+      (text.includes('default') ||
+        text.includes('fallback') ||
+        text.includes('hard-coded') ||
+        text.includes('hardcoded') ||
+        text.includes('first row') ||
+        text.includes('fabricated')) &&
+      (text.includes('user') || text.includes('row') || text.includes('record'));
+    const mentionsNoQueryArguments =
+      text.includes('no arguments') ||
+      text.includes('without arguments') ||
+      text.includes('without sql') ||
+      text.includes('without parameters') ||
+      text.includes('missing sql') ||
+      text.includes('missing parameters') ||
+      text.includes('called with no args') ||
+      text.includes('called without args');
 
     return (
       text.includes('sql injection') ||
@@ -379,6 +401,8 @@ export class FindingFilter {
       text.includes('authentication bypass') ||
       (mentionsAuthBoundary && mentionsAuthBypass) ||
       (authRelatedFile && mentionsSqlSink && mentionsAuthBypass) ||
+      (mentionsSqlSink && mentionsPrivilegedDefaultUser && mentionsNoQueryArguments) ||
+      (authRelatedFile && mentionsPrivilegedDefaultUser) ||
       text.includes('xss') ||
       text.includes('cross-site scripting') ||
       text.includes('command injection') ||
@@ -393,6 +417,18 @@ export class FindingFilter {
       ((text.includes('authorization') || text.includes('permission') || text.includes('privilege') || text.includes('access control')) &&
         (text.includes('bypass') || text.includes('unauthorized') || text.includes('allows')))
     );
+  }
+
+  private formatReasonSummary(reasons: Record<string, number>): string {
+    const entries = Object.entries(reasons)
+      .sort(([leftReason], [rightReason]) => leftReason.localeCompare(rightReason))
+      .map(([reason, count]) => `${reason}=${count}`);
+
+    if (entries.length === 0) {
+      return '';
+    }
+
+    return `; reasons: ${entries.join(', ')}`;
   }
 
   private isTestCodeQualityIssue(finding: Finding): boolean {
@@ -996,8 +1032,8 @@ export class FindingFilter {
       text.includes('inconsistent') && text.includes('error handling') ||
       text.includes('inconsistency') && !this.isTrueSecurityIssue(finding) ||
       // Hard-coded values
-      text.includes('hard-coded') ||
-      text.includes('hardcoded') ||
+      (text.includes('hard-coded') && !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('hardcoded') && !this.isTrueSecurityIssue(finding)) ||
       // Inefficiency (unless extreme)
       (text.includes('inefficient') && !text.includes('exponential')) ||
       text.includes('performance issue') ||

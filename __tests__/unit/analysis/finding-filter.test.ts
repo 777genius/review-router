@@ -102,6 +102,28 @@ index 51097d9..d0723db 100644
       expect(stats.filtered).toBe(0);
     });
 
+    test('keeps default admin row regressions even when phrased as a hard-coded fallback', () => {
+      const findings: Finding[] = [
+        {
+          file: 'db.js',
+          line: 4,
+          severity: 'critical',
+          title: 'Query without arguments returns a hard-coded admin row',
+          message:
+            'When db.query is called with no arguments, it falls back to a default admin user record. The auth path calls this query without SQL or parameters.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].title).toBe(
+        'Query without arguments returns a hard-coded admin row'
+      );
+      expect(stats.kept).toBe(1);
+      expect(stats.filtered).toBe(0);
+    });
+
     test('still filters generic validation suggestions with cautious wording', () => {
       const findings: Finding[] = [
         {

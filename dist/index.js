@@ -23444,8 +23444,9 @@ var FindingFilter = class {
       logger.debug(`Removed ${duplicatesRemoved} duplicate findings`);
     }
     if (stats.filtered > 0 || stats.downgraded > 0) {
+      const reasonSummary = this.formatReasonSummary(stats.reasons);
       logger.info(
-        `Finding filter: ${stats.filtered} filtered, ${stats.downgraded} downgraded, ${stats.kept} kept (from ${stats.total} total)`
+        `Finding filter: ${stats.filtered} filtered, ${stats.downgraded} downgraded, ${stats.kept} kept (from ${stats.total} total)${reasonSummary}`
       );
     }
     return { findings: deduplicated, stats };
@@ -23580,7 +23581,16 @@ var FindingFilter = class {
     const mentionsAuthBoundary = /\b(auth|authenticate|authentication|authorization|login|signin|sign-in|session|credential|permission|privilege)\b/.test(text) || text.includes("access control") || text.includes("canlogin") || text.includes("finduserbyemail");
     const authRelatedFile = /(^|\/)(auth|authentication|login|session|user|users)\.[jt]sx?$/.test(file);
     const mentionsAuthBypass = text.includes("bypass") || text.includes("unauthorized") || text.includes("without checking") || text.includes("without verifying") || text.includes("without arguments") || text.includes("without sql") || text.includes("no sql") || text.includes("no parameters") || text.includes("unconditional") || text.includes("unconditionally") || text.includes("any email") || text.includes("any input") || text.includes("any user") || text.includes("ignores email") || text.includes("ignores the email") || text.includes("first row") || text.includes("truthy") || text.includes("returns a user") || text.includes("returns the first user") || text.includes("allows login") || text.includes("login succeeds") || text.includes("logged in as");
-    return text.includes("sql injection") || mentionsSqlSink && text.includes("injection") || mentionsSqlSink && mentionsUntrustedInput && mentionsUnsafeSqlConstruction || text.includes("login bypass") || text.includes("authentication bypass") || mentionsAuthBoundary && mentionsAuthBypass || authRelatedFile && mentionsSqlSink && mentionsAuthBypass || text.includes("xss") || text.includes("cross-site scripting") || text.includes("command injection") || text.includes("path traversal") || text.includes("remote code execution") || text.includes("arbitrary code") || text.includes("prototype pollution") || text.includes("wrong throttle") || text.includes("wrong throttling") || text.includes("rate limit bypass") || text.includes("password reset") && (text.includes("rate limit") || text.includes("throttl") || text.includes("lockout")) || (text.includes("authorization") || text.includes("permission") || text.includes("privilege") || text.includes("access control")) && (text.includes("bypass") || text.includes("unauthorized") || text.includes("allows"));
+    const mentionsPrivilegedDefaultUser = (text.includes("admin") || text.includes("privilege") || text.includes("privileged") || text.includes("role")) && (text.includes("default") || text.includes("fallback") || text.includes("hard-coded") || text.includes("hardcoded") || text.includes("first row") || text.includes("fabricated")) && (text.includes("user") || text.includes("row") || text.includes("record"));
+    const mentionsNoQueryArguments = text.includes("no arguments") || text.includes("without arguments") || text.includes("without sql") || text.includes("without parameters") || text.includes("missing sql") || text.includes("missing parameters") || text.includes("called with no args") || text.includes("called without args");
+    return text.includes("sql injection") || mentionsSqlSink && text.includes("injection") || mentionsSqlSink && mentionsUntrustedInput && mentionsUnsafeSqlConstruction || text.includes("login bypass") || text.includes("authentication bypass") || mentionsAuthBoundary && mentionsAuthBypass || authRelatedFile && mentionsSqlSink && mentionsAuthBypass || mentionsSqlSink && mentionsPrivilegedDefaultUser && mentionsNoQueryArguments || authRelatedFile && mentionsPrivilegedDefaultUser || text.includes("xss") || text.includes("cross-site scripting") || text.includes("command injection") || text.includes("path traversal") || text.includes("remote code execution") || text.includes("arbitrary code") || text.includes("prototype pollution") || text.includes("wrong throttle") || text.includes("wrong throttling") || text.includes("rate limit bypass") || text.includes("password reset") && (text.includes("rate limit") || text.includes("throttl") || text.includes("lockout")) || (text.includes("authorization") || text.includes("permission") || text.includes("privilege") || text.includes("access control")) && (text.includes("bypass") || text.includes("unauthorized") || text.includes("allows"));
+  }
+  formatReasonSummary(reasons) {
+    const entries = Object.entries(reasons).sort(([leftReason], [rightReason]) => leftReason.localeCompare(rightReason)).map(([reason, count]) => `${reason}=${count}`);
+    if (entries.length === 0) {
+      return "";
+    }
+    return `; reasons: ${entries.join(", ")}`;
   }
   isTestCodeQualityIssue(finding) {
     const text = (finding.title + " " + finding.message).toLowerCase();
@@ -23850,7 +23860,7 @@ var FindingFilter = class {
     return (
       // Input validation (unless security-related)
       text.includes("missing") && text.includes("validation") && !this.isTrueSecurityIssue(finding) || text.includes("missing") && text.includes("input validation") && !this.isTrueSecurityIssue(finding) || text.includes("missing") && text.includes("error handling") && !text.includes("crash") || text.includes("missing") && text.includes("type safety") && !this.isTrueSecurityIssue(finding) || text.includes("missing") && text.includes("runtime") && !this.isTrueSecurityIssue(finding) || text.includes("lacks") && text.includes("validation") || text.includes("inconsistent") && text.includes("error handling") || text.includes("inconsistency") && !this.isTrueSecurityIssue(finding) || // Hard-coded values
-      text.includes("hard-coded") || text.includes("hardcoded") || // Inefficiency (unless extreme)
+      text.includes("hard-coded") && !this.isTrueSecurityIssue(finding) || text.includes("hardcoded") && !this.isTrueSecurityIssue(finding) || // Inefficiency (unless extreme)
       text.includes("inefficient") && !text.includes("exponential") || text.includes("performance issue") || text.includes("potential performance") || // Monolithic / structure
       text.includes("monolithic") || text.includes("complexity") || text.includes("cyclomatic") || text.includes("readability") || text.includes("code complexity") || text.includes("excessive") || text.includes("duplication") || text.includes("duplicate") || text.includes("conditional statements") || text.includes("conditional logic") || text.includes("flaky test") || text.includes("race condition") && !text.includes("crash") && !this.isTrueSecurityIssue(finding) || text.includes("timing") && (text.includes("assumption") || text.includes("dependent")) || // Comments
       text.includes("comment") || text.includes("documentation") || // Pattern validation complaints (TypeScript/library already validates)

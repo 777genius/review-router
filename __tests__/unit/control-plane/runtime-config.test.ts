@@ -1,0 +1,135 @@
+import { applyControlPlaneRuntimeConfig } from '../../../src/control-plane/runtime-config';
+
+describe('applyControlPlaneRuntimeConfig', () => {
+  const baseEnv = {
+    REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+    REVIEWROUTER_API_URL: 'https://app.reviewrouter.dev',
+    REVIEWROUTER_OIDC_AUDIENCE: 'reviewrouter',
+    REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'true',
+    REVIEWROUTER_ACTION_VERSION: 'v1.0.3',
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'github-request-token',
+    ACTIONS_ID_TOKEN_REQUEST_URL:
+      'https://token.actions.githubusercontent.com/request',
+    CODEX_MODEL: 'static-model',
+  };
+
+  it('skips when OIDC runtime config mode is not enabled', async () => {
+    const env: NodeJS.ProcessEnv = {
+      ...baseEnv,
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: 'static',
+    };
+    const fetchImpl = jest.fn();
+
+    await expect(
+      applyControlPlaneRuntimeConfig({ env, fetchImpl })
+    ).resolves.toEqual({ status: 'skipped' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('fetches runtime config through GitHub OIDC and applies safe env values', async () => {
+    const env: NodeJS.ProcessEnv = { ...baseEnv };
+    const fetchImpl = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockResolvedValueOnce(jsonResponse({ value: 'github-oidc-token' }))
+      .mockResolvedValueOnce(jsonResponse({ sessionToken: 'rr-session' }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          protocolVersion: 1,
+          configVersion: 7,
+          runtimeEnv: {
+            CODEX_MODEL: 'gpt-5.5',
+            CODEX_REASONING_EFFORT: 'medium',
+            REVIEW_AUTH_MODE: 'codex-oauth',
+          },
+        })
+      );
+
+    const result = await applyControlPlaneRuntimeConfig({ env, fetchImpl });
+
+    expect(result).toEqual({ status: 'applied', configVersion: 7 });
+    expect(env.CODEX_MODEL).toBe('gpt-5.5');
+    expect(env.CODEX_REASONING_EFFORT).toBe('medium');
+    expect(env.REVIEW_AUTH_MODE).toBe('codex-oauth');
+    expect(String(fetchImpl.mock.calls[0][0])).toContain(
+      'audience=reviewrouter'
+    );
+    expect(fetchImpl.mock.calls[2][1]?.headers).toMatchObject({
+      Authorization: 'Bearer rr-session',
+      'x-reviewrouter-action-version': 'v1.0.3',
+    });
+  });
+
+  it('falls back to static workflow env when config fetch is unavailable', async () => {
+    const env: NodeJS.ProcessEnv = { ...baseEnv };
+    const warnings: string[] = [];
+    const fetchImpl = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockRejectedValueOnce(new Error('network_down'));
+
+    const result = await applyControlPlaneRuntimeConfig({
+      env,
+      fetchImpl,
+      logger: { info: jest.fn(), warn: (message) => warnings.push(message) },
+    });
+
+    expect(result).toEqual({ status: 'fallback', reason: 'network_down' });
+    expect(env.CODEX_MODEL).toBe('static-model');
+    expect(warnings[0]).toContain('using static workflow config');
+  });
+
+  it('does not fall back when the installed action version is blocked', async () => {
+    const env: NodeJS.ProcessEnv = { ...baseEnv };
+    const fetchImpl = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockResolvedValueOnce(jsonResponse({ value: 'github-oidc-token' }))
+      .mockResolvedValueOnce(jsonResponse({ sessionToken: 'rr-session' }))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: {
+              code: 'action_version_blocked',
+              message: 'blocked',
+              retryable: false,
+            },
+          },
+          426
+        )
+      );
+
+    await expect(
+      applyControlPlaneRuntimeConfig({ env, fetchImpl })
+    ).rejects.toThrow('Installed ReviewRouter Action version is blocked');
+  });
+
+  it('rejects unsafe runtime env keys from the control plane', async () => {
+    const env: NodeJS.ProcessEnv = {
+      ...baseEnv,
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+    };
+    const fetchImpl = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockResolvedValueOnce(jsonResponse({ value: 'github-oidc-token' }))
+      .mockResolvedValueOnce(jsonResponse({ sessionToken: 'rr-session' }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          protocolVersion: 1,
+          configVersion: 7,
+          runtimeEnv: {
+            OPENAI_API_KEY: 'must-not-be-sent-by-control-plane',
+          },
+        })
+      );
+
+    await expect(
+      applyControlPlaneRuntimeConfig({ env, fetchImpl })
+    ).rejects.toThrow('runtime_config_unsafe_env');
+  });
+});
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as Response;
+}

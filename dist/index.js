@@ -28872,6 +28872,260 @@ async function initializeEmptyGitRepository(cwd) {
   }
 }
 
+// package.json
+var package_default = {
+  name: "review-router",
+  version: "1.0.3",
+  description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
+  main: "dist/index.js",
+  type: "commonjs",
+  bin: {
+    "review-router": "./bin/mpr",
+    mpr: "./bin/mpr"
+  },
+  license: "MIT",
+  scripts: {
+    build: "npm run build:action && npm run build:cli",
+    "build:action": "esbuild src/main.ts --bundle --platform=node --target=node24 --outfile=dist/index.js --sourcemap --external:tree-sitter --external:tree-sitter-*",
+    "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --target=node24 --outfile=dist/cli/index.js --sourcemap --external:tree-sitter --external:tree-sitter-*",
+    "build:prod": "npm run build:action -- --minify && npm run build:cli -- --minify",
+    test: "jest",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest --testPathIgnorePatterns=integration --testPathIgnorePatterns=benchmarks",
+    benchmark: "jest __tests__/benchmarks --verbose",
+    lint: 'eslint "src/**/*.ts" "__tests__/**/*.ts"',
+    format: 'prettier --write "src/**/*.ts" "__tests__/**/*.ts"',
+    "format:check": 'prettier --check "src/**/*.ts" "__tests__/**/*.ts"',
+    typecheck: "tsc --noEmit",
+    "hooks:install": "bash scripts/install-hooks.sh",
+    prepare: "npm run build:prod"
+  },
+  repository: {
+    type: "git",
+    url: "git+https://github.com/777genius/review-router.git"
+  },
+  keywords: [
+    "github-action",
+    "code-review",
+    "llm",
+    "ast",
+    "multi-provider"
+  ],
+  author: "Keith Herrington",
+  bugs: {
+    url: "https://github.com/777genius/review-router/issues"
+  },
+  homepage: "https://github.com/777genius/review-router#readme",
+  engines: {
+    node: ">=20"
+  },
+  dependencies: {
+    "@octokit/rest": "^20.1.2",
+    "js-yaml": "^4.1.1",
+    minimatch: "^10.2.5",
+    "p-queue": "^8.1.1",
+    "p-retry": "^6.2.1",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-python": "^0.21.0",
+    "tree-sitter-typescript": "^0.21.2",
+    zod: "^3.23.8"
+  },
+  devDependencies: {
+    "@types/jest": "^29.5.14",
+    "@types/js-yaml": "^4.0.9",
+    "@types/nock": "^10.0.3",
+    "@types/node": "^20.19.30",
+    "@typescript-eslint/eslint-plugin": "^8.59.1",
+    "@typescript-eslint/parser": "^8.59.1",
+    esbuild: "^0.25.0",
+    eslint: "^8.57.1",
+    jest: "^29.7.0",
+    nock: "^14.0.10",
+    prettier: "^3.8.0",
+    "ts-jest": "^29.4.6",
+    typescript: "^5.9.3"
+  },
+  optionalDependencies: {
+    "tree-sitter-go": "^0.21.0",
+    "tree-sitter-rust": "^0.21.0"
+  }
+};
+
+// src/control-plane/runtime-config.ts
+async function applyControlPlaneRuntimeConfig(input = {}) {
+  const env = input.env ?? process.env;
+  if (env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== "oidc") {
+    return { status: "skipped" };
+  }
+  const fallbackEnabled = env.REVIEWROUTER_STATIC_CONFIG_FALLBACK !== "false";
+  try {
+    const apiUrl = requireEnv(env, "REVIEWROUTER_API_URL");
+    const audience = env.REVIEWROUTER_OIDC_AUDIENCE || "reviewrouter";
+    const oidcToken = await requestGitHubOidcToken({
+      env,
+      audience,
+      fetchImpl: input.fetchImpl ?? fetch
+    });
+    const session = await exchangeActionSession({
+      apiUrl,
+      audience,
+      oidcToken,
+      fetchImpl: input.fetchImpl ?? fetch
+    });
+    const config = await fetchRuntimeConfig({
+      apiUrl,
+      sessionToken: session.sessionToken,
+      actionVersion: input.actionVersion ?? resolveActionVersion(env),
+      fetchImpl: input.fetchImpl ?? fetch
+    });
+    applyRuntimeEnv(config.runtimeEnv, env);
+    input.logger?.info(
+      `ReviewRouter runtime config applied (version ${config.configVersion}).`
+    );
+    return { status: "applied", configVersion: config.configVersion };
+  } catch (error2) {
+    const message = error2 instanceof Error ? error2.message : "unknown_error";
+    if (message === "action_version_blocked") {
+      throw new Error(
+        "Installed ReviewRouter Action version is blocked. Update the workflow action ref before retrying."
+      );
+    }
+    if (fallbackEnabled) {
+      input.logger?.warn(
+        `ReviewRouter runtime config unavailable; using static workflow config. Reason: ${safeReason(message)}`
+      );
+      return { status: "fallback", reason: safeReason(message) };
+    }
+    throw error2;
+  }
+}
+function resolveActionVersion(env) {
+  return env.REVIEWROUTER_ACTION_VERSION?.trim() || package_default.version || "unknown";
+}
+async function requestGitHubOidcToken(input) {
+  const requestToken = requireEnv(input.env, "ACTIONS_ID_TOKEN_REQUEST_TOKEN");
+  const requestUrl = new URL(
+    requireEnv(input.env, "ACTIONS_ID_TOKEN_REQUEST_URL")
+  );
+  requestUrl.searchParams.set("audience", input.audience);
+  const response = await input.fetchImpl(requestUrl.toString(), {
+    headers: { Authorization: `Bearer ${requestToken}` }
+  });
+  if (!response.ok) {
+    throw new Error(`github_oidc_unavailable:${response.status}`);
+  }
+  const body = await response.json();
+  if (typeof body.value !== "string" || body.value.length === 0) {
+    throw new Error("github_oidc_invalid_response");
+  }
+  return body.value;
+}
+async function exchangeActionSession(input) {
+  const response = await input.fetchImpl(
+    joinApiPath(input.apiUrl, "/api/action/v1/session/exchange"),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        oidcToken: input.oidcToken,
+        audience: input.audience
+      })
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`action_session_exchange_failed:${response.status}`);
+  }
+  const body = await response.json();
+  if (typeof body.sessionToken !== "string" || body.sessionToken.length === 0) {
+    throw new Error("action_session_invalid_response");
+  }
+  return { sessionToken: body.sessionToken };
+}
+async function fetchRuntimeConfig(input) {
+  const response = await input.fetchImpl(
+    joinApiPath(input.apiUrl, "/api/action/v1/config"),
+    {
+      headers: {
+        Authorization: `Bearer ${input.sessionToken}`,
+        "x-reviewrouter-action-version": input.actionVersion
+      }
+    }
+  );
+  if (!response.ok) {
+    const code = await readSafeErrorCode(response);
+    if (response.status === 426 || code === "action_version_blocked") {
+      throw new Error("action_version_blocked");
+    }
+    throw new Error(`runtime_config_fetch_failed:${response.status}`);
+  }
+  return parseRuntimeConfig(await response.json());
+}
+function parseRuntimeConfig(value) {
+  if (!value || typeof value !== "object") {
+    throw new Error("runtime_config_invalid_response");
+  }
+  const input = value;
+  if (input.protocolVersion !== 1 || typeof input.configVersion !== "number") {
+    throw new Error("runtime_config_invalid_response");
+  }
+  if (!input.runtimeEnv || typeof input.runtimeEnv !== "object") {
+    throw new Error("runtime_config_invalid_response");
+  }
+  const runtimeEnv = {};
+  for (const [key, rawValue] of Object.entries(input.runtimeEnv)) {
+    if (!isSafeRuntimeEnvKey(key) || typeof rawValue !== "string") {
+      throw new Error("runtime_config_unsafe_env");
+    }
+    runtimeEnv[key] = rawValue;
+  }
+  return {
+    protocolVersion: 1,
+    configVersion: input.configVersion,
+    runtimeEnv
+  };
+}
+function applyRuntimeEnv(runtimeEnv, env) {
+  for (const [key, value] of Object.entries(runtimeEnv)) {
+    env[key] = value;
+  }
+}
+function isSafeRuntimeEnvKey(key) {
+  if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+    return false;
+  }
+  return !/(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|AUTH_JSON)/.test(key);
+}
+async function readSafeErrorCode(response) {
+  try {
+    const body = await response.json();
+    if (typeof body.error === "string") {
+      return body.error;
+    }
+    if (typeof body.error?.code === "string") {
+      return body.error.code;
+    }
+  } catch {
+    return void 0;
+  }
+  return void 0;
+}
+function joinApiPath(apiUrl, path14) {
+  return new URL(path14, ensureTrailingSlash(apiUrl)).toString();
+}
+function ensureTrailingSlash(value) {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+function requireEnv(env, key) {
+  const value = env[key]?.trim();
+  if (!value) {
+    throw new Error(`missing_${key}`);
+  }
+  return value;
+}
+function safeReason(message) {
+  return message.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, "<redacted>");
+}
+
 // src/main.ts
 function syncEnvFromInputs() {
   const inputKeys = [
@@ -28960,6 +29214,12 @@ async function run() {
   let prNumber;
   try {
     syncEnvFromInputs();
+    await applyControlPlaneRuntimeConfig({
+      logger: {
+        info,
+        warn: (message) => warning(message)
+      }
+    });
     token = getInput("GITHUB_TOKEN") || process.env.GITHUB_TOKEN;
     validateRequired(token, "GITHUB_TOKEN");
     if ((process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE")) === "interaction") {

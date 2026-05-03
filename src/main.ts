@@ -22,6 +22,7 @@ import {
   ReviewDiscussionHandler,
 } from './github/discussion';
 import { CodexDiscussionResponder } from './discussion/codex-responder';
+import { applyControlPlaneRuntimeConfig } from './control-plane/runtime-config';
 
 function syncEnvFromInputs(): void {
   const inputKeys = [
@@ -113,6 +114,12 @@ async function run(): Promise<void> {
 
   try {
     syncEnvFromInputs();
+    await applyControlPlaneRuntimeConfig({
+      logger: {
+        info: core.info,
+        warn: (message) => core.warning(message),
+      },
+    });
     token = core.getInput('GITHUB_TOKEN') || process.env.GITHUB_TOKEN;
 
     validateRequired(token, 'GITHUB_TOKEN');

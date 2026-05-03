@@ -47,6 +47,59 @@ describe('FindingFilter', () => {
       expect(stats.filtered).toBe(0);
     });
 
+    test('keeps concrete authentication bypass regressions even with cautious wording', () => {
+      const diff = `diff --git a/src/auth.js b/src/auth.js
+index 51097d9..d0723db 100644
+--- a/src/auth.js
++++ b/src/auth.js
+@@ -3,9 +3,8 @@ export async function findUserByEmail(db, email) {
+-  const normalizedEmail = normalizeEmail(email);
+-  const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
++  const rows = await db.query();
+   return rows[0] || null;
+ }
+
+ export async function canLogin(db, email) {
+   return Boolean(await findUserByEmail(db, email));
+ }`;
+
+      const findings: Finding[] = [
+        {
+          file: 'src/auth.js',
+          line: 5,
+          severity: 'critical',
+          title: 'Potential login bypass',
+          message:
+            'findUserByEmail now calls db.query() without the email filter and returns the first row, so canLogin can become truthy for any email.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, diff);
+
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].title).toBe('Potential login bypass');
+      expect(stats.kept).toBe(1);
+      expect(stats.filtered).toBe(0);
+    });
+
+    test('still filters generic validation suggestions with cautious wording', () => {
+      const findings: Finding[] = [
+        {
+          file: 'src/config.ts',
+          line: 12,
+          severity: 'major',
+          title: 'Potential validation improvement',
+          message: 'This could be more robust if runtime validation were added.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered).toHaveLength(0);
+      expect(stats.filtered).toBe(1);
+      expect(stats.reasons['suggestion/optimization (not a bug)']).toBe(1);
+    });
+
     test('filters documentation formatting issues', () => {
       const findings: Finding[] = [
         {

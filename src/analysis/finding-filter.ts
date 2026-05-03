@@ -340,11 +340,36 @@ export class FindingFilter {
       text.includes('not parameterized') ||
       text.includes('parameterized query') ||
       text.includes('${');
+    const mentionsAuthBoundary =
+      /\b(auth|authenticate|authentication|authorization|login|signin|sign-in|session|credential|permission|privilege)\b/.test(text) ||
+      text.includes('access control') ||
+      text.includes('canlogin') ||
+      text.includes('finduserbyemail');
+    const mentionsAuthBypass =
+      text.includes('bypass') ||
+      text.includes('unauthorized') ||
+      text.includes('without checking') ||
+      text.includes('without verifying') ||
+      text.includes('unconditional') ||
+      text.includes('unconditionally') ||
+      text.includes('any email') ||
+      text.includes('any input') ||
+      text.includes('any user') ||
+      text.includes('first row') ||
+      text.includes('truthy') ||
+      text.includes('returns a user') ||
+      text.includes('returns the first user') ||
+      text.includes('allows login') ||
+      text.includes('login succeeds') ||
+      text.includes('logged in as');
 
     return (
       text.includes('sql injection') ||
       (mentionsSqlSink && text.includes('injection')) ||
       (mentionsSqlSink && mentionsUntrustedInput && mentionsUnsafeSqlConstruction) ||
+      text.includes('login bypass') ||
+      text.includes('authentication bypass') ||
+      (mentionsAuthBoundary && mentionsAuthBypass) ||
       text.includes('xss') ||
       text.includes('cross-site scripting') ||
       text.includes('command injection') ||

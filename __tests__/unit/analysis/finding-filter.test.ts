@@ -82,6 +82,26 @@ index 51097d9..d0723db 100644
       expect(stats.filtered).toBe(0);
     });
 
+    test('keeps auth-file query regressions even without explicit bypass wording', () => {
+      const findings: Finding[] = [
+        {
+          file: 'auth.js',
+          line: 5,
+          severity: 'critical',
+          title: 'Query ignores the email filter',
+          message:
+            'db.query() is called without SQL or parameters and returns the first row for any email.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].title).toBe('Query ignores the email filter');
+      expect(stats.kept).toBe(1);
+      expect(stats.filtered).toBe(0);
+    });
+
     test('still filters generic validation suggestions with cautious wording', () => {
       const findings: Finding[] = [
         {

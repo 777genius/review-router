@@ -326,6 +326,7 @@ export class FindingFilter {
 
   private isTrueSecurityIssue(finding: Finding): boolean {
     const text = (finding.title + ' ' + finding.message).toLowerCase();
+    const file = finding.file.toLowerCase();
     const mentionsSqlSink = /\b(sql|query|database)\b/.test(text) || text.includes('db.query');
     const mentionsUntrustedInput =
       /\b(user input|untrusted|attacker|crafted|request|email|parameter|input)\b/.test(text);
@@ -345,16 +346,23 @@ export class FindingFilter {
       text.includes('access control') ||
       text.includes('canlogin') ||
       text.includes('finduserbyemail');
+    const authRelatedFile = /(^|\/)(auth|authentication|login|session|user|users)\.[jt]sx?$/.test(file);
     const mentionsAuthBypass =
       text.includes('bypass') ||
       text.includes('unauthorized') ||
       text.includes('without checking') ||
       text.includes('without verifying') ||
+      text.includes('without arguments') ||
+      text.includes('without sql') ||
+      text.includes('no sql') ||
+      text.includes('no parameters') ||
       text.includes('unconditional') ||
       text.includes('unconditionally') ||
       text.includes('any email') ||
       text.includes('any input') ||
       text.includes('any user') ||
+      text.includes('ignores email') ||
+      text.includes('ignores the email') ||
       text.includes('first row') ||
       text.includes('truthy') ||
       text.includes('returns a user') ||
@@ -370,6 +378,7 @@ export class FindingFilter {
       text.includes('login bypass') ||
       text.includes('authentication bypass') ||
       (mentionsAuthBoundary && mentionsAuthBypass) ||
+      (authRelatedFile && mentionsSqlSink && mentionsAuthBypass) ||
       text.includes('xss') ||
       text.includes('cross-site scripting') ||
       text.includes('command injection') ||

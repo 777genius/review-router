@@ -22,7 +22,11 @@ import {
   ReviewDiscussionHandler,
 } from './github/discussion';
 import { CodexDiscussionResponder } from './discussion/codex-responder';
-import { applyControlPlaneRuntimeConfig } from './control-plane/runtime-config';
+import {
+  applyControlPlaneRuntimeConfig,
+  RuntimeConfigResult,
+} from './control-plane/runtime-config';
+import { reportControlPlaneActionHealth } from './control-plane/health-report';
 
 function syncEnvFromInputs(): void {
   const inputKeys = [
@@ -111,10 +115,12 @@ function syncEnvFromInputs(): void {
 async function run(): Promise<void> {
   let token: string | undefined;
   let prNumber: number | undefined;
+  let runtimeConfig: RuntimeConfigResult | undefined;
+  const startedAt = new Date();
 
   try {
     syncEnvFromInputs();
-    await applyControlPlaneRuntimeConfig({
+    runtimeConfig = await applyControlPlaneRuntimeConfig({
       logger: {
         info: core.info,
         warn: (message) => core.warning(message),
@@ -159,6 +165,15 @@ async function run(): Promise<void> {
 
     if (!review) {
       core.info('Review skipped');
+      await reportControlPlaneActionHealth({
+        runtimeConfig,
+        review,
+        startedAt,
+        logger: {
+          info: core.info,
+          warn: (message) => core.warning(message),
+        },
+      });
       return;
     }
 
@@ -177,6 +192,15 @@ async function run(): Promise<void> {
 
     const blockingFindings = getBlockingFindings(review, config.failOnSeverity);
     if (blockingFindings.length > 0) {
+      await reportControlPlaneActionHealth({
+        runtimeConfig,
+        review,
+        startedAt,
+        logger: {
+          info: core.info,
+          warn: (message) => core.warning(message),
+        },
+      });
       core.setFailed(
         `ReviewRouter found ${blockingFindings.length} ${config.failOnSeverity}+ finding(s). ` +
           'Review comments were posted before failing this check.'
@@ -184,6 +208,15 @@ async function run(): Promise<void> {
       return;
     }
 
+    await reportControlPlaneActionHealth({
+      runtimeConfig,
+      review,
+      startedAt,
+      logger: {
+        info: core.info,
+        warn: (message) => core.warning(message),
+      },
+    });
     core.info('Review completed successfully');
   } catch (error) {
     const err = error as Error;
@@ -211,6 +244,15 @@ async function run(): Promise<void> {
     }
 
     await postReviewFailureSummary(err, token, prNumber);
+    await reportControlPlaneActionHealth({
+      runtimeConfig,
+      error,
+      startedAt,
+      logger: {
+        info: core.info,
+        warn: (message) => core.warning(message),
+      },
+    });
 
     // core.setFailed() sets process.exitCode, so explicit process.exit() is unnecessary
     // Removed process.exit(1) to allow proper cleanup and resource disposal

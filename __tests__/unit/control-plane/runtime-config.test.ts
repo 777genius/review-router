@@ -46,7 +46,13 @@ describe('applyControlPlaneRuntimeConfig', () => {
 
     const result = await applyControlPlaneRuntimeConfig({ env, fetchImpl });
 
-    expect(result).toEqual({ status: 'applied', configVersion: 7 });
+    expect(result).toEqual({
+      status: 'applied',
+      apiUrl: 'https://app.reviewrouter.dev',
+      actionVersion: 'v1.0.3',
+      configVersion: 7,
+      sessionToken: 'rr-session',
+    });
     expect(env.CODEX_MODEL).toBe('gpt-5.5');
     expect(env.CODEX_REASONING_EFFORT).toBe('medium');
     expect(env.REVIEW_AUTH_MODE).toBe('codex-oauth');

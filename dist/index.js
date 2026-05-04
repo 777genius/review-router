@@ -28972,17 +28972,24 @@ async function applyControlPlaneRuntimeConfig(input = {}) {
       oidcToken,
       fetchImpl: input.fetchImpl ?? fetch
     });
+    const actionVersion = input.actionVersion ?? resolveActionVersion(env);
     const config = await fetchRuntimeConfig({
       apiUrl,
       sessionToken: session.sessionToken,
-      actionVersion: input.actionVersion ?? resolveActionVersion(env),
+      actionVersion,
       fetchImpl: input.fetchImpl ?? fetch
     });
     applyRuntimeEnv(config.runtimeEnv, env);
     input.logger?.info(
       `ReviewRouter runtime config applied (version ${config.configVersion}).`
     );
-    return { status: "applied", configVersion: config.configVersion };
+    return {
+      status: "applied",
+      apiUrl,
+      actionVersion,
+      configVersion: config.configVersion,
+      sessionToken: session.sessionToken
+    };
   } catch (error2) {
     const message = error2 instanceof Error ? error2.message : "unknown_error";
     if (message === "action_version_blocked") {
@@ -29126,6 +29133,147 @@ function safeReason(message) {
   return message.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, "<redacted>");
 }
 
+// src/control-plane/health-report.ts
+async function reportControlPlaneActionHealth(input) {
+  if (!input.runtimeConfig || input.runtimeConfig.status !== "applied") {
+    return;
+  }
+  const env = input.env ?? process.env;
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const outcome = classifyOutcome({
+    review: input.review,
+    error: input.error,
+    env
+  });
+  const report = {
+    actionVersion: input.runtimeConfig.actionVersion,
+    configVersion: input.runtimeConfig.configVersion,
+    providerSetupState: outcome.providerSetupState,
+    providerHealth: outcome.providerHealth,
+    safeErrorCategory: outcome.safeErrorCategory,
+    ...outcome.safeErrorSummary ? { safeErrorSummary: outcome.safeErrorSummary } : {},
+    startedAt: input.startedAt.toISOString(),
+    finishedAt: (input.finishedAt ?? /* @__PURE__ */ new Date()).toISOString()
+  };
+  try {
+    const response = await fetchImpl(
+      joinApiPath2(input.runtimeConfig.apiUrl, "/api/action/v1/health-report"),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${input.runtimeConfig.sessionToken}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(report)
+      }
+    );
+    if (!response.ok) {
+      input.logger?.warn(
+        `ReviewRouter health report was not accepted (${response.status}).`
+      );
+      return;
+    }
+    input.logger?.info("ReviewRouter health report sent.");
+  } catch {
+    input.logger?.warn("ReviewRouter health report could not be sent.");
+  }
+}
+function classifyOutcome(input) {
+  const missingSecretCategory = classifyMissingProviderSecret(input.env);
+  if (missingSecretCategory) {
+    return {
+      providerSetupState: "missing",
+      providerHealth: "failed",
+      safeErrorCategory: "provider_auth_missing",
+      safeErrorSummary: missingSecretCategory
+    };
+  }
+  if (input.error) {
+    const category = classifyErrorCategory(input.error);
+    return {
+      providerSetupState: category === "provider_auth_invalid" ? "stale_or_invalid" : "unknown",
+      providerHealth: category === "provider_rate_limited" ? "degraded" : "failed",
+      safeErrorCategory: category,
+      safeErrorSummary: safeErrorSummaryForCategory(category)
+    };
+  }
+  if (!input.review) {
+    return {
+      providerSetupState: "configured",
+      providerHealth: "skipped",
+      safeErrorCategory: "none"
+    };
+  }
+  const providersFailed = input.review.metrics.providersFailed;
+  const providersSuccess = input.review.metrics.providersSuccess;
+  if (providersSuccess === 0 && providersFailed > 0) {
+    return {
+      providerSetupState: "unknown",
+      providerHealth: "failed",
+      safeErrorCategory: "runtime_error",
+      safeErrorSummary: "Review providers did not complete successfully."
+    };
+  }
+  if (providersFailed > 0) {
+    return {
+      providerSetupState: "configured",
+      providerHealth: "degraded",
+      safeErrorCategory: "runtime_error",
+      safeErrorSummary: "Review completed with at least one provider failure."
+    };
+  }
+  return {
+    providerSetupState: "configured",
+    providerHealth: "ok",
+    safeErrorCategory: "none"
+  };
+}
+function classifyMissingProviderSecret(env) {
+  const authMode = env?.REVIEW_AUTH_MODE;
+  if (authMode === "codex-oauth" && !env?.CODEX_AUTH_JSON) {
+    return "CODEX_AUTH_JSON GitHub Actions secret is missing.";
+  }
+  if (authMode === "openai-api" && !env?.OPENAI_API_KEY) {
+    return "OPENAI_API_KEY GitHub Actions secret is missing.";
+  }
+  if (authMode === "openrouter-api" && !env?.OPENROUTER_API_KEY) {
+    return "OPENROUTER_API_KEY GitHub Actions secret is missing.";
+  }
+  return void 0;
+}
+function classifyErrorCategory(error2) {
+  const message = error2 instanceof Error ? error2.message : String(error2);
+  const normalized = message.toLowerCase();
+  if (normalized.includes("rate limit") || normalized.includes("429")) {
+    return "provider_rate_limited";
+  }
+  if (normalized.includes("auth") || normalized.includes("unauthorized") || normalized.includes("401") || normalized.includes("forbidden") || normalized.includes("403")) {
+    return "provider_auth_invalid";
+  }
+  return "runtime_error";
+}
+function safeErrorSummaryForCategory(category) {
+  switch (category) {
+    case "provider_rate_limited":
+      return "Provider rate limit was reached.";
+    case "provider_auth_invalid":
+      return "Provider authentication failed or is stale.";
+    case "runtime_error":
+      return "Review failed before completion. See GitHub Actions logs.";
+    case "none":
+    case "oidc_unavailable":
+    case "config_unavailable":
+    case "provider_auth_missing":
+      return void 0;
+  }
+}
+function joinApiPath2(apiUrl, path14) {
+  return new URL(path14, ensureTrailingSlash2(apiUrl)).toString();
+}
+function ensureTrailingSlash2(value) {
+  return value.endsWith("/") ? value : `${value}/`;
+}
+
 // src/main.ts
 function syncEnvFromInputs() {
   const inputKeys = [
@@ -29212,9 +29360,11 @@ function syncEnvFromInputs() {
 async function run() {
   let token;
   let prNumber;
+  let runtimeConfig;
+  const startedAt = /* @__PURE__ */ new Date();
   try {
     syncEnvFromInputs();
-    await applyControlPlaneRuntimeConfig({
+    runtimeConfig = await applyControlPlaneRuntimeConfig({
       logger: {
         info,
         warn: (message) => warning(message)
@@ -29245,6 +29395,15 @@ async function run() {
     const review = await orchestrator.execute(prNumber);
     if (!review) {
       info("Review skipped");
+      await reportControlPlaneActionHealth({
+        runtimeConfig,
+        review,
+        startedAt,
+        logger: {
+          info,
+          warn: (message) => warning(message)
+        }
+      });
       return;
     }
     await clearReviewFailureSummaries(token, prNumber);
@@ -29260,11 +29419,29 @@ async function run() {
     }
     const blockingFindings = getBlockingFindings(review, config.failOnSeverity);
     if (blockingFindings.length > 0) {
+      await reportControlPlaneActionHealth({
+        runtimeConfig,
+        review,
+        startedAt,
+        logger: {
+          info,
+          warn: (message) => warning(message)
+        }
+      });
       setFailed(
         `ReviewRouter found ${blockingFindings.length} ${config.failOnSeverity}+ finding(s). Review comments were posted before failing this check.`
       );
       return;
     }
+    await reportControlPlaneActionHealth({
+      runtimeConfig,
+      review,
+      startedAt,
+      logger: {
+        info,
+        warn: (message) => warning(message)
+      }
+    });
     info("Review completed successfully");
   } catch (error2) {
     const err = error2;
@@ -29289,6 +29466,15 @@ ${formatted}`);
       }
     }
     await postReviewFailureSummary(err, token, prNumber);
+    await reportControlPlaneActionHealth({
+      runtimeConfig,
+      error: error2,
+      startedAt,
+      logger: {
+        info,
+        warn: (message) => warning(message)
+      }
+    });
   }
 }
 function getBlockingFindings(review, threshold) {

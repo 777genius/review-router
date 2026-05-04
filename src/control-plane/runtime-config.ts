@@ -15,7 +15,13 @@ type RuntimeConfigResponse = {
 
 export type RuntimeConfigResult =
   | { readonly status: 'skipped' }
-  | { readonly status: 'applied'; readonly configVersion: number }
+  | {
+      readonly status: 'applied';
+      readonly apiUrl: string;
+      readonly actionVersion: string;
+      readonly configVersion: number;
+      readonly sessionToken: string;
+    }
   | { readonly status: 'fallback'; readonly reason: string };
 
 export async function applyControlPlaneRuntimeConfig(
@@ -47,10 +53,11 @@ export async function applyControlPlaneRuntimeConfig(
       oidcToken,
       fetchImpl: input.fetchImpl ?? fetch,
     });
+    const actionVersion = input.actionVersion ?? resolveActionVersion(env);
     const config = await fetchRuntimeConfig({
       apiUrl,
       sessionToken: session.sessionToken,
-      actionVersion: input.actionVersion ?? resolveActionVersion(env),
+      actionVersion,
       fetchImpl: input.fetchImpl ?? fetch,
     });
 
@@ -58,7 +65,13 @@ export async function applyControlPlaneRuntimeConfig(
     input.logger?.info(
       `ReviewRouter runtime config applied (version ${config.configVersion}).`
     );
-    return { status: 'applied', configVersion: config.configVersion };
+    return {
+      status: 'applied',
+      apiUrl,
+      actionVersion,
+      configVersion: config.configVersion,
+      sessionToken: session.sessionToken,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown_error';
     if (message === 'action_version_blocked') {

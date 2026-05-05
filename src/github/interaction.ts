@@ -80,7 +80,8 @@ export class ReviewInteractionHandler {
   constructor(
     private readonly client: GitHubClient,
     private readonly ledger: ReviewLedger,
-    private readonly discussionHandler?: ReviewDiscussionHandler
+    private readonly discussionHandler?: ReviewDiscussionHandler,
+    private readonly actionsClient: GitHubClient = client
   ) {}
 
   async execute(): Promise<void> {
@@ -334,11 +335,13 @@ export class ReviewInteractionHandler {
           number: prNumber,
           after,
         });
-      const threads: NonNullable<
-        NonNullable<
-          NonNullable<ReviewThreadsQueryResult['repository']>['pullRequest']
-        >['reviewThreads']
-      > | undefined = result.repository?.pullRequest?.reviewThreads;
+      const threads:
+        | NonNullable<
+            NonNullable<
+              NonNullable<ReviewThreadsQueryResult['repository']>['pullRequest']
+            >['reviewThreads']
+          >
+        | undefined = result.repository?.pullRequest?.reviewThreads;
       for (const thread of threads?.nodes || []) {
         const hasComment = (thread.comments?.nodes || []).some(
           (comment: { databaseId?: number | null }) =>
@@ -367,7 +370,7 @@ export class ReviewInteractionHandler {
   }
 
   private async getRole(username: string): Promise<RepoRole> {
-    const { octokit, owner, repo } = this.client;
+    const { octokit, owner, repo } = this.actionsClient;
     try {
       const response = await octokit.rest.repos.getCollaboratorPermissionLevel({
         owner,
@@ -498,11 +501,12 @@ export class ReviewInteractionHandler {
 
     let lastRun: WorkflowRunSummary | null = null;
     do {
-      const response = await this.client.octokit.rest.actions.getWorkflowRun({
-        owner: this.client.owner,
-        repo: this.client.repo,
-        run_id: runId,
-      });
+      const response =
+        await this.actionsClient.octokit.rest.actions.getWorkflowRun({
+          owner: this.actionsClient.owner,
+          repo: this.actionsClient.repo,
+          run_id: runId,
+        });
       const run = response.data as WorkflowRunSummary;
       lastRun = run;
       if (run.status === 'completed' || Date.now() >= deadline) {
@@ -548,7 +552,7 @@ function workflowRunTime(run: WorkflowRunSummary): number {
 
 async function sleep(ms: number): Promise<void> {
   if (ms <= 0) return;
-  await new Promise(resolve => setTimeout(resolve, ms));
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function parseCommand(body: string): ParsedCommand | null {

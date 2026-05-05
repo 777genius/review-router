@@ -28003,10 +28003,11 @@ function sanitizeFailureMessage(message) {
 // src/github/interaction.ts
 var fs13 = __toESM(require("fs"));
 var ReviewInteractionHandler = class {
-  constructor(client, ledger, discussionHandler) {
+  constructor(client, ledger, discussionHandler, actionsClient = client) {
     this.client = client;
     this.ledger = ledger;
     this.discussionHandler = discussionHandler;
+    this.actionsClient = actionsClient;
   }
   async execute() {
     const payload = readEventPayload();
@@ -28241,7 +28242,7 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     return graphql(query, variables);
   }
   async getRole(username) {
-    const { octokit, owner, repo } = this.client;
+    const { octokit, owner, repo } = this.actionsClient;
     try {
       const response = await octokit.rest.repos.getCollaboratorPermissionLevel({
         owner,
@@ -28346,9 +28347,9 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     const deadline = Date.now() + waitMs;
     let lastRun = null;
     do {
-      const response = await this.client.octokit.rest.actions.getWorkflowRun({
-        owner: this.client.owner,
-        repo: this.client.repo,
+      const response = await this.actionsClient.octokit.rest.actions.getWorkflowRun({
+        owner: this.actionsClient.owner,
+        repo: this.actionsClient.repo,
         run_id: runId
       });
       const run2 = response.data;
@@ -29493,9 +29494,10 @@ async function run() {
         warn: (message) => warning(message)
       }
     });
+    const fallbackToken = token;
     token = commentToken.token;
     if ((process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE")) === "interaction") {
-      await runInteraction(token);
+      await runInteraction(token, fallbackToken);
       return;
     }
     if ((process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE")) === "interaction-preflight") {
@@ -29609,8 +29611,9 @@ function getBlockingFindings(review, threshold) {
   const minRank = rank[threshold];
   return review.findings.filter((finding) => rank[finding.severity] >= minRank);
 }
-async function runInteraction(token) {
+async function runInteraction(token, actionsToken) {
   const githubClient = new GitHubClient(token);
+  const actionsClient = actionsToken && actionsToken !== token ? new GitHubClient(actionsToken) : githubClient;
   const ledger = new ReviewLedger(
     githubClient,
     process.env.REVIEW_ROUTER_LEDGER_KEY,
@@ -29620,7 +29623,8 @@ async function runInteraction(token) {
   const handler = new ReviewInteractionHandler(
     githubClient,
     ledger,
-    discussionHandler
+    discussionHandler,
+    actionsClient
   );
   await handler.execute();
 }

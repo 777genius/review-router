@@ -139,13 +139,14 @@ async function run(): Promise<void> {
         warn: (message) => core.warning(message),
       },
     });
+    const fallbackToken = token;
     token = commentToken.token;
 
     if (
       (process.env.REVIEW_ROUTER_MODE ||
         core.getInput('REVIEW_ROUTER_MODE')) === 'interaction'
     ) {
-      await runInteraction(token!);
+      await runInteraction(token!, fallbackToken);
       return;
     }
     if (
@@ -285,8 +286,15 @@ function getBlockingFindings(
   return review.findings.filter((finding) => rank[finding.severity] >= minRank);
 }
 
-async function runInteraction(token: string): Promise<void> {
+async function runInteraction(
+  token: string,
+  actionsToken?: string
+): Promise<void> {
   const githubClient = new GitHubClient(token);
+  const actionsClient =
+    actionsToken && actionsToken !== token
+      ? new GitHubClient(actionsToken)
+      : githubClient;
   const ledger = new ReviewLedger(
     githubClient,
     process.env.REVIEW_ROUTER_LEDGER_KEY,
@@ -296,7 +304,8 @@ async function runInteraction(token: string): Promise<void> {
   const handler = new ReviewInteractionHandler(
     githubClient,
     ledger,
-    discussionHandler
+    discussionHandler,
+    actionsClient
   );
   await handler.execute();
 }

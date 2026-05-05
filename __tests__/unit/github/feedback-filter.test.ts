@@ -343,6 +343,9 @@ describe('FeedbackFilter', () => {
       const state = await feedbackFilter.loadReviewCommentState(123);
 
       expect(state.commandDismissed?.has(findingFingerprint)).toBe(true);
+      expect(state.commandDismissedLocations?.has('src/file.ts:10')).toBe(
+        true
+      );
       expect(
         feedbackFilter.shouldPost(
           {
@@ -366,6 +369,31 @@ describe('FeedbackFilter', () => {
           state
         )
       ).toBe(true);
+      expect(
+        feedbackFilter.isFindingCommandDismissed(
+          {
+            file: 'src/file.ts',
+            line: 10,
+            severity: 'critical',
+            title: 'Authentication bypass uses an unfiltered user lookup',
+            message:
+              'The rerun can phrase the same skipped finding differently, but it is still on the skipped line for the same head SHA.',
+          },
+          state
+        )
+      ).toBe(true);
+      expect(
+        feedbackFilter.isFindingCommandDismissed(
+          {
+            file: 'src/file.ts',
+            line: 11,
+            severity: 'critical',
+            title: 'Different line should still block',
+            message: 'A skip is exact to the dismissed path and line.',
+          },
+          state
+        )
+      ).toBe(false);
     });
 
     it('ignores invalid ledger state and keeps active duplicate suppression', async () => {

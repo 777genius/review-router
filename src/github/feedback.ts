@@ -19,6 +19,7 @@ export interface ReviewCommentState {
   suppressed: Set<string>;
   alreadyPosted: Set<string>;
   commandDismissed?: Set<string>;
+  commandDismissedLocations?: Set<string>;
   suppressedComments: InlineCommentReference[];
   alreadyPostedComments: InlineCommentReference[];
   commandDismissedComments?: InlineCommentReference[];
@@ -55,6 +56,7 @@ export class FeedbackFilter {
     const suppressed = new Set<string>();
     const alreadyPosted = new Set<string>();
     const commandDismissed = new Set<string>();
+    const commandDismissedLocations = new Set<string>();
     const suppressedComments: InlineCommentReference[] = [];
     const alreadyPostedComments: InlineCommentReference[] = [];
     const commandDismissedComments: InlineCommentReference[] = [];
@@ -110,6 +112,8 @@ export class FeedbackFilter {
             commandDismissed.add(skip.fingerprint);
             if (skip.legacyFingerprint)
               commandDismissed.add(skip.legacyFingerprint);
+            const location = locationKey(skip.path, skip.line);
+            if (location) commandDismissedLocations.add(location);
             if (skip.path) {
               commandDismissedComments.push({
                 path: skip.path,
@@ -135,6 +139,7 @@ export class FeedbackFilter {
       suppressed,
       alreadyPosted,
       commandDismissed,
+      commandDismissedLocations,
       suppressedComments,
       alreadyPostedComments,
       commandDismissedComments,
@@ -155,6 +160,7 @@ export class FeedbackFilter {
       comment.line,
       comment.body
     );
+    const location = locationKey(comment.path, comment.line);
 
     if (state instanceof Set) {
       return !state.has(signature) && !state.has(fingerprint);
@@ -165,6 +171,7 @@ export class FeedbackFilter {
       !state.suppressed.has(fingerprint) &&
       !(state.commandDismissed?.has(signature) ?? false) &&
       !(state.commandDismissed?.has(fingerprint) ?? false) &&
+      !(location ? state.commandDismissedLocations?.has(location) : false) &&
       !state.alreadyPosted.has(signature) &&
       !state.alreadyPosted.has(fingerprint) &&
       !state.suppressedComments.some((existing) =>
@@ -215,6 +222,8 @@ export class FeedbackFilter {
   ): boolean {
     const commandDismissed = state.commandDismissed ?? new Set<string>();
     const commandDismissedComments = state.commandDismissedComments ?? [];
+    const commandDismissedLocations =
+      state.commandDismissedLocations ?? new Set<string>();
     const signature = this.signatureFromComment(
       comment.path,
       comment.line,
@@ -230,11 +239,13 @@ export class FeedbackFilter {
       comment.line,
       comment.body
     );
+    const location = locationKey(comment.path, comment.line);
 
     return (
       commandDismissed.has(signature) ||
       commandDismissed.has(fingerprint) ||
       commandDismissed.has(findingFingerprint) ||
+      (location ? commandDismissedLocations.has(location) : false) ||
       commandDismissedComments.some((existing) =>
         isLikelySameInlineFinding(existing, comment)
       )
@@ -248,4 +259,12 @@ export class FeedbackFilter {
   ): string {
     return signatureFromInlineComment(path, line, body);
   }
+}
+
+function locationKey(
+  path: string | undefined,
+  line: number | null | undefined
+): string | null {
+  if (!path || line == null) return null;
+  return `${path.toLowerCase()}:${line}`;
 }

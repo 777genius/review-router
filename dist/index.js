@@ -20046,6 +20046,7 @@ var FeedbackFilter = class {
     const suppressed = /* @__PURE__ */ new Set();
     const alreadyPosted = /* @__PURE__ */ new Set();
     const commandDismissed = /* @__PURE__ */ new Set();
+    const commandDismissedLocations = /* @__PURE__ */ new Set();
     const suppressedComments = [];
     const alreadyPostedComments = [];
     const commandDismissedComments = [];
@@ -20094,6 +20095,8 @@ var FeedbackFilter = class {
             commandDismissed.add(skip.fingerprint);
             if (skip.legacyFingerprint)
               commandDismissed.add(skip.legacyFingerprint);
+            const location = locationKey(skip.path, skip.line);
+            if (location) commandDismissedLocations.add(location);
             if (skip.path) {
               commandDismissedComments.push({
                 path: skip.path,
@@ -20118,6 +20121,7 @@ var FeedbackFilter = class {
       suppressed,
       alreadyPosted,
       commandDismissed,
+      commandDismissedLocations,
       suppressedComments,
       alreadyPostedComments,
       commandDismissedComments
@@ -20134,10 +20138,11 @@ var FeedbackFilter = class {
       comment.line,
       comment.body
     );
+    const location = locationKey(comment.path, comment.line);
     if (state instanceof Set) {
       return !state.has(signature) && !state.has(fingerprint);
     }
-    return !state.suppressed.has(signature) && !state.suppressed.has(fingerprint) && !(state.commandDismissed?.has(signature) ?? false) && !(state.commandDismissed?.has(fingerprint) ?? false) && !state.alreadyPosted.has(signature) && !state.alreadyPosted.has(fingerprint) && !state.suppressedComments.some(
+    return !state.suppressed.has(signature) && !state.suppressed.has(fingerprint) && !(state.commandDismissed?.has(signature) ?? false) && !(state.commandDismissed?.has(fingerprint) ?? false) && !(location ? state.commandDismissedLocations?.has(location) : false) && !state.alreadyPosted.has(signature) && !state.alreadyPosted.has(fingerprint) && !state.suppressedComments.some(
       (existing) => isLikelySameInlineFinding(existing, comment)
     ) && !(state.commandDismissedComments?.some(
       (existing) => isLikelySameInlineFinding(existing, comment)
@@ -20168,6 +20173,7 @@ var FeedbackFilter = class {
   isCommandDismissed(comment, state) {
     const commandDismissed = state.commandDismissed ?? /* @__PURE__ */ new Set();
     const commandDismissedComments = state.commandDismissedComments ?? [];
+    const commandDismissedLocations = state.commandDismissedLocations ?? /* @__PURE__ */ new Set();
     const signature = this.signatureFromComment(
       comment.path,
       comment.line,
@@ -20183,7 +20189,8 @@ var FeedbackFilter = class {
       comment.line,
       comment.body
     );
-    return commandDismissed.has(signature) || commandDismissed.has(fingerprint) || commandDismissed.has(findingFingerprint) || commandDismissedComments.some(
+    const location = locationKey(comment.path, comment.line);
+    return commandDismissed.has(signature) || commandDismissed.has(fingerprint) || commandDismissed.has(findingFingerprint) || (location ? commandDismissedLocations.has(location) : false) || commandDismissedComments.some(
       (existing) => isLikelySameInlineFinding(existing, comment)
     );
   }
@@ -20191,6 +20198,10 @@ var FeedbackFilter = class {
     return signatureFromInlineComment(path14, line, body);
   }
 };
+function locationKey(path14, line) {
+  if (!path14 || line == null) return null;
+  return `${path14.toLowerCase()}:${line}`;
+}
 
 // src/github/ledger.ts
 var import_crypto3 = require("crypto");

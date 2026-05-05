@@ -7,8 +7,12 @@ branding:
 
 inputs:
   GITHUB_TOKEN:
-    description: "GitHub token"
+    description: "Fallback GitHub token. SaaS installs can exchange GitHub OIDC for a short-lived ReviewRouter App comment token."
     required: true
+  REVIEWROUTER_COMMENT_TOKEN_MODE:
+    description: "Comment author token mode: github-token or app-oidc"
+    required: false
+    default: "github-token"
   PR_NUMBER:
     description: "Pull request number"
     required: false

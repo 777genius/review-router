@@ -26,6 +26,7 @@ import {
   applyControlPlaneRuntimeConfig,
   RuntimeConfigResult,
 } from './control-plane/runtime-config';
+import { resolveGitHubCommentToken } from './control-plane/comment-token';
 import { reportControlPlaneActionHealth } from './control-plane/health-report';
 
 function syncEnvFromInputs(): void {
@@ -102,6 +103,7 @@ function syncEnvFromInputs(): void {
     'FAIL_ON_SEVERITY',
     'REPORT_BASENAME',
     'DRY_RUN',
+    'REVIEWROUTER_COMMENT_TOKEN_MODE',
   ];
 
   for (const key of inputKeys) {
@@ -129,6 +131,15 @@ async function run(): Promise<void> {
     token = core.getInput('GITHUB_TOKEN') || process.env.GITHUB_TOKEN;
 
     validateRequired(token, 'GITHUB_TOKEN');
+    const commentToken = await resolveGitHubCommentToken({
+      fallbackToken: token!,
+      runtimeConfig,
+      logger: {
+        info: core.info,
+        warn: (message) => core.warning(message),
+      },
+    });
+    token = commentToken.token;
 
     if (
       (process.env.REVIEW_ROUTER_MODE ||

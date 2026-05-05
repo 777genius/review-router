@@ -15548,7 +15548,7 @@ var getAbortedReason = (signal) => {
 function pTimeout(promise, options) {
   const {
     milliseconds,
-    fallback,
+    fallback: fallback2,
     message,
     customTimers = { setTimeout, clearTimeout }
   } = options;
@@ -15574,9 +15574,9 @@ function pTimeout(promise, options) {
     }
     const timeoutError = new TimeoutError();
     timer = customTimers.setTimeout.call(void 0, () => {
-      if (fallback) {
+      if (fallback2) {
         try {
-          resolve3(fallback());
+          resolve3(fallback2());
         } catch (error2) {
           reject(error2);
         }
@@ -29133,6 +29133,83 @@ function safeReason(message) {
   return message.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, "<redacted>");
 }
 
+// src/control-plane/comment-token.ts
+async function resolveGitHubCommentToken(input) {
+  const env = input.env ?? process.env;
+  if (env.REVIEWROUTER_COMMENT_TOKEN_MODE !== "app-oidc") {
+    return {
+      status: "fallback",
+      token: input.fallbackToken,
+      reason: "comment_token_mode_disabled"
+    };
+  }
+  if (!input.runtimeConfig || input.runtimeConfig.status !== "applied") {
+    return fallback(input, "runtime_oidc_session_unavailable");
+  }
+  try {
+    const result = await fetchCommentToken({
+      apiUrl: input.runtimeConfig.apiUrl,
+      sessionToken: input.runtimeConfig.sessionToken,
+      fetchImpl: input.fetchImpl ?? fetch
+    });
+    input.logger?.info(
+      `ReviewRouter App comment identity enabled for ${result.repository}; token expires at ${result.expiresAt}.`
+    );
+    return {
+      status: "app",
+      token: result.token,
+      repository: result.repository,
+      expiresAt: result.expiresAt
+    };
+  } catch (error2) {
+    const message = error2 instanceof Error ? error2.message : "unknown_error";
+    return fallback(input, safeReason2(message));
+  }
+}
+async function fetchCommentToken(input) {
+  const response = await input.fetchImpl(
+    joinApiPath2(input.apiUrl, "/api/action/v1/comment-token"),
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${input.sessionToken}`,
+        "content-type": "application/json"
+      }
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`comment_token_fetch_failed:${response.status}`);
+  }
+  return parseCommentTokenResponse(await response.json());
+}
+function parseCommentTokenResponse(value) {
+  if (!value || typeof value !== "object") {
+    throw new Error("comment_token_invalid_response");
+  }
+  const input = value;
+  if (input.protocolVersion !== 1 || typeof input.token !== "string" || input.token.length === 0 || typeof input.expiresAt !== "string" || typeof input.repository !== "string" || input.repository.length === 0) {
+    throw new Error("comment_token_invalid_response");
+  }
+  return {
+    protocolVersion: 1,
+    token: input.token,
+    expiresAt: input.expiresAt,
+    repository: input.repository
+  };
+}
+function fallback(input, reason) {
+  input.logger?.warn(
+    `ReviewRouter App comment identity unavailable; falling back to github-actions[bot]. Reason: ${reason}`
+  );
+  return { status: "fallback", token: input.fallbackToken, reason };
+}
+function joinApiPath2(apiUrl, path14) {
+  return `${apiUrl.replace(/\/+$/, "")}${path14}`;
+}
+function safeReason2(message) {
+  return message.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 120);
+}
+
 // src/control-plane/health-report.ts
 async function reportControlPlaneActionHealth(input) {
   if (!input.runtimeConfig || input.runtimeConfig.status !== "applied") {
@@ -29157,7 +29234,7 @@ async function reportControlPlaneActionHealth(input) {
   };
   try {
     const response = await fetchImpl(
-      joinApiPath2(input.runtimeConfig.apiUrl, "/api/action/v1/health-report"),
+      joinApiPath3(input.runtimeConfig.apiUrl, "/api/action/v1/health-report"),
       {
         method: "POST",
         headers: {
@@ -29267,7 +29344,7 @@ function safeErrorSummaryForCategory(category) {
       return void 0;
   }
 }
-function joinApiPath2(apiUrl, path14) {
+function joinApiPath3(apiUrl, path14) {
   return new URL(path14, ensureTrailingSlash2(apiUrl)).toString();
 }
 function ensureTrailingSlash2(value) {
@@ -29348,7 +29425,8 @@ function syncEnvFromInputs() {
     "FAIL_ON_MAJOR",
     "FAIL_ON_SEVERITY",
     "REPORT_BASENAME",
-    "DRY_RUN"
+    "DRY_RUN",
+    "REVIEWROUTER_COMMENT_TOKEN_MODE"
   ];
   for (const key of inputKeys) {
     const value = getInput(key);
@@ -29372,6 +29450,15 @@ async function run() {
     });
     token = getInput("GITHUB_TOKEN") || process.env.GITHUB_TOKEN;
     validateRequired(token, "GITHUB_TOKEN");
+    const commentToken = await resolveGitHubCommentToken({
+      fallbackToken: token,
+      runtimeConfig,
+      logger: {
+        info,
+        warn: (message) => warning(message)
+      }
+    });
+    token = commentToken.token;
     if ((process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE")) === "interaction") {
       await runInteraction(token);
       return;

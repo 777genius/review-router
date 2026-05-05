@@ -1,14 +1,20 @@
 name: Test CLI Providers
 
 on:
-  workflow_dispatch:  # Manual trigger for testing
-  pull_request:
-    paths:
-      - '.github/workflows/test-cli-providers.yml'
+  workflow_dispatch: # Manual trigger for testing
+
+permissions:
+  contents: read
 
 jobs:
   test-cli-providers:
     runs-on: ubuntu-latest
+    env:
+      CLAUDE_CODE_OAUTH_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH != '' && '1' || '0' }}
+      CODEX_AUTH_JSON_PRESENT: ${{ secrets.CODEX_AUTH_JSON != '' && '1' || '0' }}
+      CODEX_CONFIG_TOML_PRESENT: ${{ secrets.CODEX_CONFIG_TOML != '' && '1' || '0' }}
+      GEMINI_OAUTH_CREDS_PRESENT: ${{ secrets.GEMINI_OAUTH_CREDS != '' && '1' || '0' }}
+      GEMINI_SETTINGS_PRESENT: ${{ secrets.GEMINI_SETTINGS != '' && '1' || '0' }}
 
     steps:
       - name: Checkout code
@@ -17,14 +23,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       # Install CLI tools
       - name: Install Gemini CLI
         run: npm install -g @google/gemini-cli
 
       - name: Install Codex CLI
-        run: npm install -g codex-cli
+        run: npm install -g @openai/codex@0.125.0
 
       - name: Install Claude Code CLI
         run: |
@@ -34,7 +40,7 @@ jobs:
 
       # Restore OAuth credentials from secrets
       - name: Setup Claude Code credentials
-        if: ${{ secrets.CLAUDE_CODE_OAUTH != '' }}
+        if: env.CLAUDE_CODE_OAUTH_PRESENT == '1'
         run: |
           mkdir -p ~/.config/claude
           echo '${{ secrets.CLAUDE_CODE_OAUTH }}' > ~/.config/claude/credentials.json
@@ -42,26 +48,32 @@ jobs:
           echo "✅ Claude Code credentials configured"
 
       - name: Setup Codex credentials
-        if: ${{ secrets.CODEX_AUTH_JSON != '' }}
+        if: env.CODEX_AUTH_JSON_PRESENT == '1'
         run: |
           mkdir -p ~/.codex
           echo '${{ secrets.CODEX_AUTH_JSON }}' > ~/.codex/auth.json
-          echo '${{ secrets.CODEX_CONFIG_TOML }}' > ~/.codex/config.toml
-          chmod 600 ~/.codex/auth.json ~/.codex/config.toml
+          chmod 600 ~/.codex/auth.json
+          if [ "${CODEX_CONFIG_TOML_PRESENT}" = "1" ]; then
+            echo '${{ secrets.CODEX_CONFIG_TOML }}' > ~/.codex/config.toml
+            chmod 600 ~/.codex/config.toml
+          fi
           echo "✅ Codex credentials configured"
 
       - name: Setup Gemini credentials
-        if: ${{ secrets.GEMINI_OAUTH_CREDS != '' }}
+        if: env.GEMINI_OAUTH_CREDS_PRESENT == '1'
         run: |
           mkdir -p ~/.gemini
           echo '${{ secrets.GEMINI_OAUTH_CREDS }}' > ~/.gemini/oauth_creds.json
-          echo '${{ secrets.GEMINI_SETTINGS }}' > ~/.gemini/settings.json
-          chmod 600 ~/.gemini/oauth_creds.json ~/.gemini/settings.json
+          chmod 600 ~/.gemini/oauth_creds.json
+          if [ "${GEMINI_SETTINGS_PRESENT}" = "1" ]; then
+            echo '${{ secrets.GEMINI_SETTINGS }}' > ~/.gemini/settings.json
+            chmod 600 ~/.gemini/settings.json
+          fi
           echo "✅ Gemini credentials configured"
 
       # Verify CLIs can authenticate
       - name: Verify Claude Code
-        if: ${{ secrets.CLAUDE_CODE_OAUTH != '' }}
+        if: env.CLAUDE_CODE_OAUTH_PRESENT == '1'
         continue-on-error: true
         run: |
           if command -v claude &> /dev/null; then
@@ -71,7 +83,7 @@ jobs:
           fi
 
       - name: Verify Codex
-        if: ${{ secrets.CODEX_AUTH_JSON != '' }}
+        if: env.CODEX_AUTH_JSON_PRESENT == '1'
         continue-on-error: true
         run: |
           if command -v codex &> /dev/null; then
@@ -81,7 +93,7 @@ jobs:
           fi
 
       - name: Verify Gemini
-        if: ${{ secrets.GEMINI_OAUTH_CREDS != '' }}
+        if: env.GEMINI_OAUTH_CREDS_PRESENT == '1'
         continue-on-error: true
         run: |
           if command -v gemini &> /dev/null; then
@@ -106,11 +118,11 @@ jobs:
           echo "## CLI Provider Setup Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Secrets Configured:" >> $GITHUB_STEP_SUMMARY
-          echo "- CLAUDE_CODE_OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH != '' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON != '' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML != '' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- GEMINI_OAUTH_CREDS: ${{ secrets.GEMINI_OAUTH_CREDS != '' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- GEMINI_SETTINGS: ${{ secrets.GEMINI_SETTINGS != '' && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- CLAUDE_CODE_OAUTH: ${CLAUDE_CODE_OAUTH_PRESENT}" >> $GITHUB_STEP_SUMMARY
+          echo "- CODEX_AUTH_JSON: ${CODEX_AUTH_JSON_PRESENT}" >> $GITHUB_STEP_SUMMARY
+          echo "- CODEX_CONFIG_TOML: ${CODEX_CONFIG_TOML_PRESENT}" >> $GITHUB_STEP_SUMMARY
+          echo "- GEMINI_OAUTH_CREDS: ${GEMINI_OAUTH_CREDS_PRESENT}" >> $GITHUB_STEP_SUMMARY
+          echo "- GEMINI_SETTINGS: ${GEMINI_SETTINGS_PRESENT}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
           echo "1. Update workflow to install CLI binaries properly" >> $GITHUB_STEP_SUMMARY

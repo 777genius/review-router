@@ -29191,7 +29191,8 @@ async function fetchCommentToken(input) {
       headers: {
         Authorization: `Bearer ${input.sessionToken}`,
         "content-type": "application/json"
-      }
+      },
+      body: "{}"
     }
   );
   if (!response.ok) {

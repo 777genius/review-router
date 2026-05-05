@@ -57,6 +57,7 @@ describe('resolveGitHubCommentToken', () => {
     );
     expect(fetchImpl.mock.calls[0][1]).toMatchObject({
       method: 'POST',
+      body: '{}',
       headers: {
         Authorization: 'Bearer rr-session',
         'content-type': 'application/json',

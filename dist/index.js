@@ -28980,6 +28980,11 @@ async function applyControlPlaneRuntimeConfig(input = {}) {
       fetchImpl: input.fetchImpl ?? fetch
     });
     applyRuntimeEnv(config.runtimeEnv, env);
+    if (config.ignoredRuntimeEnvKeys.length > 0) {
+      input.logger?.warn(
+        `ReviewRouter runtime config ignored unsafe env keys: ${config.ignoredRuntimeEnvKeys.join(", ")}`
+      );
+    }
     input.logger?.info(
       `ReviewRouter runtime config applied (version ${config.configVersion}).`
     );
@@ -29079,16 +29084,19 @@ function parseRuntimeConfig(value) {
     throw new Error("runtime_config_invalid_response");
   }
   const runtimeEnv = {};
+  const ignoredRuntimeEnvKeys = [];
   for (const [key, rawValue] of Object.entries(input.runtimeEnv)) {
     if (!isSafeRuntimeEnvKey(key) || typeof rawValue !== "string") {
-      throw new Error("runtime_config_unsafe_env");
+      ignoredRuntimeEnvKeys.push(safeEnvKeyLabel(key));
+      continue;
     }
     runtimeEnv[key] = rawValue;
   }
   return {
     protocolVersion: 1,
     configVersion: input.configVersion,
-    runtimeEnv
+    runtimeEnv,
+    ignoredRuntimeEnvKeys
   };
 }
 function applyRuntimeEnv(runtimeEnv, env) {
@@ -29101,6 +29109,12 @@ function isSafeRuntimeEnvKey(key) {
     return false;
   }
   return !/(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|AUTH_JSON)/.test(key);
+}
+function safeEnvKeyLabel(key) {
+  if (/^[A-Z_][A-Z0-9_]{0,80}$/.test(key)) {
+    return key;
+  }
+  return "<invalid-env-key>";
 }
 async function readSafeErrorCode(response) {
   try {

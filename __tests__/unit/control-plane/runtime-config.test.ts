@@ -107,11 +107,9 @@ describe('applyControlPlaneRuntimeConfig', () => {
     ).rejects.toThrow('Installed ReviewRouter Action version is blocked');
   });
 
-  it('rejects unsafe runtime env keys from the control plane', async () => {
-    const env: NodeJS.ProcessEnv = {
-      ...baseEnv,
-      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
-    };
+  it('ignores unsafe runtime env keys without losing the OIDC session', async () => {
+    const env: NodeJS.ProcessEnv = { ...baseEnv };
+    const warnings: string[] = [];
     const fetchImpl = jest
       .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
       .mockResolvedValueOnce(jsonResponse({ value: 'github-oidc-token' }))
@@ -121,14 +119,25 @@ describe('applyControlPlaneRuntimeConfig', () => {
           protocolVersion: 1,
           configVersion: 7,
           runtimeEnv: {
+            CODEX_MODEL: 'gpt-5.5',
             OPENAI_API_KEY: 'must-not-be-sent-by-control-plane',
           },
         })
       );
 
     await expect(
-      applyControlPlaneRuntimeConfig({ env, fetchImpl })
-    ).rejects.toThrow('runtime_config_unsafe_env');
+      applyControlPlaneRuntimeConfig({
+        env,
+        fetchImpl,
+        logger: { info: jest.fn(), warn: (message) => warnings.push(message) },
+      })
+    ).resolves.toMatchObject({
+      status: 'applied',
+      sessionToken: 'rr-session',
+    });
+    expect(env.CODEX_MODEL).toBe('gpt-5.5');
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(warnings[0]).toContain('OPENAI_API_KEY');
   });
 });
 

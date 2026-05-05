@@ -11,6 +11,7 @@ type RuntimeConfigResponse = {
   readonly protocolVersion: 1;
   readonly configVersion: number;
   readonly runtimeEnv: Record<string, string>;
+  readonly ignoredRuntimeEnvKeys: readonly string[];
 };
 
 export type RuntimeConfigResult =
@@ -62,6 +63,11 @@ export async function applyControlPlaneRuntimeConfig(
     });
 
     applyRuntimeEnv(config.runtimeEnv, env);
+    if (config.ignoredRuntimeEnvKeys.length > 0) {
+      input.logger?.warn(
+        `ReviewRouter runtime config ignored unsafe env keys: ${config.ignoredRuntimeEnvKeys.join(', ')}`
+      );
+    }
     input.logger?.info(
       `ReviewRouter runtime config applied (version ${config.configVersion}).`
     );
@@ -191,9 +197,11 @@ function parseRuntimeConfig(value: unknown): RuntimeConfigResponse {
   }
 
   const runtimeEnv: Record<string, string> = {};
+  const ignoredRuntimeEnvKeys: string[] = [];
   for (const [key, rawValue] of Object.entries(input.runtimeEnv)) {
     if (!isSafeRuntimeEnvKey(key) || typeof rawValue !== 'string') {
-      throw new Error('runtime_config_unsafe_env');
+      ignoredRuntimeEnvKeys.push(safeEnvKeyLabel(key));
+      continue;
     }
     runtimeEnv[key] = rawValue;
   }
@@ -202,6 +210,7 @@ function parseRuntimeConfig(value: unknown): RuntimeConfigResponse {
     protocolVersion: 1,
     configVersion: input.configVersion,
     runtimeEnv,
+    ignoredRuntimeEnvKeys,
   };
 }
 
@@ -219,6 +228,13 @@ function isSafeRuntimeEnvKey(key: string): boolean {
     return false;
   }
   return !/(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|AUTH_JSON)/.test(key);
+}
+
+function safeEnvKeyLabel(key: string): string {
+  if (/^[A-Z_][A-Z0-9_]{0,80}$/.test(key)) {
+    return key;
+  }
+  return '<invalid-env-key>';
 }
 
 async function readSafeErrorCode(

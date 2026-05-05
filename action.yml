@@ -12,7 +12,6 @@ inputs:
   REVIEWROUTER_COMMENT_TOKEN_MODE:
     description: "Comment author token mode: github-token or app-oidc"
     required: false
-    default: "github-token"
   PR_NUMBER:
     description: "Pull request number"
     required: false

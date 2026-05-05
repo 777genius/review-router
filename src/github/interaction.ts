@@ -362,7 +362,7 @@ export class ReviewInteractionHandler {
     query: string,
     variables: Record<string, unknown>
   ): Promise<T> {
-    const graphql = (this.client.octokit as any).graphql;
+    const graphql = (this.actionsClient.octokit as any).graphql;
     if (typeof graphql !== 'function') {
       throw new Error('Octokit GraphQL client is not available');
     }

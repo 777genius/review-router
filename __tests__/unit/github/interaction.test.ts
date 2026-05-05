@@ -190,6 +190,11 @@ describe('ReviewInteractionHandler', () => {
     expect(
       actionsOctokit.rest.actions.reRunWorkflowFailedJobs
     ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
+    expect(actionsOctokit.graphql).toHaveBeenCalledWith(
+      expect.stringContaining('resolveReviewThread'),
+      { threadId: 'PRRT_thread_1' }
+    );
+    expect(commentOctokit.graphql).not.toHaveBeenCalled();
     expect(
       commentOctokit.rest.actions.reRunWorkflowFailedJobs
     ).not.toHaveBeenCalled();

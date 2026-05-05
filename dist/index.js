@@ -28235,7 +28235,7 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     return null;
   }
   async graphql(query, variables) {
-    const graphql = this.client.octokit.graphql;
+    const graphql = this.actionsClient.octokit.graphql;
     if (typeof graphql !== "function") {
       throw new Error("Octokit GraphQL client is not available");
     }

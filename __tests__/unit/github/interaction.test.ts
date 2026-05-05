@@ -286,6 +286,52 @@ describe('ReviewInteractionHandler', () => {
     );
   });
 
+  it('does not post a rerun warning when the current review run already succeeded', async () => {
+    const { client, octokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 11,
+        in_reply_to_id: 10,
+        body: '/rr skip already handled',
+        user: { login: 'maintainer' },
+      },
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc', repo: { fork: false } },
+        user: { login: 'author' },
+      },
+    });
+    octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+    octokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
+      data: {
+        workflow_runs: [
+          {
+            id: 456,
+            path: '.github/workflows/reviewrouter.yml',
+            head_sha: 'abc',
+            status: 'completed',
+            conclusion: 'success',
+            pull_requests: [{ number: 123 }],
+          },
+        ],
+      },
+    });
+
+    const ledger = new ReviewLedger(client, 'test-secret');
+    await new ReviewInteractionHandler(client, ledger).execute();
+
+    expect(octokit.rest.actions.reRunWorkflowFailedJobs).not.toHaveBeenCalled();
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_number: 123,
+        body: expect.not.stringContaining('could not automatically rerun'),
+      })
+    );
+  });
+
   it('waits for an active review rerun and reruns again if it still fails', async () => {
     const { client, octokit } = makeClient();
     process.env.REVIEW_ROUTER_RERUN_WAIT_SECONDS = '1';

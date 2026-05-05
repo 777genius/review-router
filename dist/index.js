@@ -28330,10 +28330,24 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
           return { outcome: "already-succeeded", runId: activeRun.id };
         }
       }
-      const run2 = matchingRuns.find(
+      const latestCompletedRun = matchingRuns.find(
+        (candidate) => candidate.status === "completed"
+      );
+      if (latestCompletedRun?.id && latestCompletedRun.conclusion === "success") {
+        return { outcome: "already-succeeded", runId: latestCompletedRun.id };
+      }
+      if (latestCompletedRun?.id && isFailedWorkflowConclusion(latestCompletedRun.conclusion)) {
+        await octokit.rest.actions.reRunWorkflowFailedJobs({
+          owner,
+          repo,
+          run_id: latestCompletedRun.id
+        });
+        return { outcome: "rerun", runId: latestCompletedRun.id };
+      }
+      const failedRun = matchingRuns.find(
         (candidate) => isFailedWorkflowConclusion(candidate.conclusion)
       );
-      if (!run2?.id) {
+      if (!failedRun?.id) {
         return {
           outcome: "not-started",
           reason: `no failed ${workflowFile} run found for the current PR head SHA`
@@ -28342,9 +28356,9 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
       await octokit.rest.actions.reRunWorkflowFailedJobs({
         owner,
         repo,
-        run_id: run2.id
+        run_id: failedRun.id
       });
-      return { outcome: "rerun", runId: run2.id };
+      return { outcome: "rerun", runId: failedRun.id };
     } catch (error2) {
       const err = error2;
       if (err.status === 403) {
@@ -28361,7 +28375,15 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
   }
   matchesReviewWorkflowRun(candidate, workflowFile, prNumber, headSha) {
     const path14 = String(candidate.path || "");
-    const matchesWorkflow = path14.endsWith(`/${workflowFile}`) || path14 === workflowFile;
+    const knownWorkflowFiles = [
+      workflowFile,
+      "review-router.yml",
+      "reviewrouter.yml",
+      "ai-robot-review.yml"
+    ];
+    const matchesWorkflow = knownWorkflowFiles.some(
+      (file) => path14.endsWith(`/${file}`) || path14 === file
+    );
     const matchesSha = candidate.head_sha === headSha;
     const matchesPr = (candidate.pull_requests || []).some(
       (pr) => pr.number === prNumber

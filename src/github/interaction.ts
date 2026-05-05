@@ -479,11 +479,32 @@ export class ReviewInteractionHandler {
         }
       }
 
-      const run = matchingRuns.find((candidate) =>
+      const latestCompletedRun = matchingRuns.find(
+        (candidate) => candidate.status === 'completed'
+      );
+      if (
+        latestCompletedRun?.id &&
+        latestCompletedRun.conclusion === 'success'
+      ) {
+        return { outcome: 'already-succeeded', runId: latestCompletedRun.id };
+      }
+      if (
+        latestCompletedRun?.id &&
+        isFailedWorkflowConclusion(latestCompletedRun.conclusion)
+      ) {
+        await octokit.rest.actions.reRunWorkflowFailedJobs({
+          owner,
+          repo,
+          run_id: latestCompletedRun.id,
+        });
+        return { outcome: 'rerun', runId: latestCompletedRun.id };
+      }
+
+      const failedRun = matchingRuns.find((candidate) =>
         isFailedWorkflowConclusion(candidate.conclusion)
       );
 
-      if (!run?.id) {
+      if (!failedRun?.id) {
         return {
           outcome: 'not-started',
           reason: `no failed ${workflowFile} run found for the current PR head SHA`,
@@ -493,9 +514,9 @@ export class ReviewInteractionHandler {
       await octokit.rest.actions.reRunWorkflowFailedJobs({
         owner,
         repo,
-        run_id: run.id,
+        run_id: failedRun.id,
       });
-      return { outcome: 'rerun', runId: run.id };
+      return { outcome: 'rerun', runId: failedRun.id };
     } catch (error) {
       const err = error as { status?: number; message?: string };
       if (err.status === 403) {
@@ -518,8 +539,15 @@ export class ReviewInteractionHandler {
     headSha: string
   ): boolean {
     const path = String(candidate.path || '');
-    const matchesWorkflow =
-      path.endsWith(`/${workflowFile}`) || path === workflowFile;
+    const knownWorkflowFiles = [
+      workflowFile,
+      'review-router.yml',
+      'reviewrouter.yml',
+      'ai-robot-review.yml',
+    ];
+    const matchesWorkflow = knownWorkflowFiles.some(
+      (file) => path.endsWith(`/${file}`) || path === file
+    );
     const matchesSha = candidate.head_sha === headSha;
     const matchesPr = (candidate.pull_requests || []).some(
       (pr) => pr.number === prNumber

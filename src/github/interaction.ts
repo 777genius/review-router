@@ -396,7 +396,7 @@ export class ReviewInteractionHandler {
       return { outcome: 'not-started', reason: 'missing PR head SHA' };
     }
 
-    const { octokit, owner, repo } = this.client;
+    const { octokit, owner, repo } = this.actionsClient;
     const workflowFile =
       process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || 'review-router.yml';
 

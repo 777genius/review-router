@@ -141,6 +141,66 @@ describe('ReviewInteractionHandler', () => {
     );
   });
 
+  it('uses the workflow token client for rerunning checks when comments use an App token', async () => {
+    const { client: commentClient, octokit: commentOctokit } = makeClient();
+    const { client: actionsClient, octokit: actionsOctokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 11,
+        in_reply_to_id: 10,
+        body: '/rr skip validated by maintainer',
+        user: { login: 'maintainer' },
+      },
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc', repo: { fork: false } },
+        user: { login: 'author' },
+      },
+    });
+    actionsOctokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+    actionsOctokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
+      data: {
+        workflow_runs: [
+          {
+            id: 456,
+            path: '.github/workflows/review-router.yml',
+            head_sha: 'abc',
+            conclusion: 'failure',
+            pull_requests: [{ number: 123 }],
+          },
+        ],
+      },
+    });
+    commentOctokit.rest.actions.listWorkflowRunsForRepo.mockRejectedValue(
+      Object.assign(new Error('App token must not rerun workflows'), {
+        status: 403,
+      })
+    );
+
+    const ledger = new ReviewLedger(commentClient, 'test-secret');
+    await new ReviewInteractionHandler(
+      commentClient,
+      ledger,
+      undefined,
+      actionsClient
+    ).execute();
+
+    expect(
+      actionsOctokit.rest.actions.reRunWorkflowFailedJobs
+    ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
+    expect(
+      commentOctokit.rest.actions.reRunWorkflowFailedJobs
+    ).not.toHaveBeenCalled();
+    expect(commentOctokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_number: 123,
+        body: expect.stringContaining('reviewrouter-ledger:v1'),
+      })
+    );
+  });
+
   it('records /rr skip without requiring a reason', async () => {
     const { client, octokit } = makeClient();
     process.env.GITHUB_EVENT_PATH = writeEvent({

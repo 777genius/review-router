@@ -28263,7 +28263,7 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     if (!headSha) {
       return { outcome: "not-started", reason: "missing PR head SHA" };
     }
-    const { octokit, owner, repo } = this.client;
+    const { octokit, owner, repo } = this.actionsClient;
     const workflowFile = process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || "review-router.yml";
     try {
       const response = await octokit.rest.actions.listWorkflowRunsForRepo({

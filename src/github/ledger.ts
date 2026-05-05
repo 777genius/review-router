@@ -18,6 +18,7 @@ export interface LedgerEntry {
   path?: string;
   line?: number | null;
   title?: string;
+  body?: string;
   reason?: string;
   actor: string;
   actorRole: string;
@@ -145,12 +146,7 @@ export class ReviewLedger {
     const seen = new Set<string>();
     for (const entry of byFingerprint.values()) {
       if (entry.action !== 'skip') continue;
-      if (
-        headSha &&
-        entry.headSha &&
-        entry.headSha !== headSha &&
-        process.env.REVIEW_ROUTER_KEEP_SKIPS_ACROSS_PUSHES !== 'true'
-      ) {
+      if (shouldExpireSkipOnPush(headSha, entry.headSha)) {
         continue;
       }
       if (seen.has(entry.fingerprint)) continue;
@@ -283,6 +279,24 @@ export class ReviewLedger {
       entries: [],
     };
   }
+}
+
+function shouldExpireSkipOnPush(
+  currentHeadSha: string | undefined,
+  entryHeadSha: string | undefined
+): boolean {
+  if (!currentHeadSha || !entryHeadSha || currentHeadSha === entryHeadSha) {
+    return false;
+  }
+
+  // Maintainer overrides should normally survive new commits in the same PR.
+  // Matching is still deterministic and semantic in FeedbackFilter, so this
+  // does not blindly suppress unrelated findings on the same line.
+  if (process.env.REVIEW_ROUTER_EXPIRE_SKIPS_ON_PUSH === 'true') {
+    return true;
+  }
+
+  return process.env.REVIEW_ROUTER_KEEP_SKIPS_ACROSS_PUSHES === 'false';
 }
 
 export function canonicalJson(value: unknown): string {

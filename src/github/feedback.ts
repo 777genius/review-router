@@ -1,4 +1,4 @@
-import { Finding, InlineComment } from '../types';
+import { Finding, InlineComment, Severity } from '../types';
 import { GitHubClient } from './client';
 import { logger } from '../utils/logger';
 import { ProviderWeightTracker } from '../learning/provider-weights';
@@ -8,6 +8,8 @@ import {
   findingFingerprintFromFinding,
   findingFingerprintFromInlineComment,
   fingerprintFromInlineComment,
+  extractInlineSeverity,
+  extractInlineTitle,
   InlineCommentReference,
   isReviewRouterInlineComment,
   isLikelySameInlineFinding,
@@ -20,9 +22,17 @@ export interface ReviewCommentState {
   alreadyPosted: Set<string>;
   commandDismissed?: Set<string>;
   commandDismissedLocations?: Set<string>;
+  commandDismissedFindings?: DismissedFindingReference[];
   suppressedComments: InlineCommentReference[];
   alreadyPostedComments: InlineCommentReference[];
   commandDismissedComments?: InlineCommentReference[];
+}
+
+interface DismissedFindingReference extends InlineCommentReference {
+  fingerprint: string;
+  legacyFingerprint?: string;
+  severity?: Severity;
+  title?: string;
 }
 
 interface ReviewCommentApiItem {
@@ -60,6 +70,7 @@ export class FeedbackFilter {
     const suppressedComments: InlineCommentReference[] = [];
     const alreadyPostedComments: InlineCommentReference[] = [];
     const commandDismissedComments: InlineCommentReference[] = [];
+    const commandDismissedFindings: DismissedFindingReference[] = [];
 
     try {
       const comments = (await octokit.paginate(
@@ -110,20 +121,21 @@ export class FeedbackFilter {
         } else {
           for (const skip of this.ledger.activeSkips(loaded.payload, headSha)) {
             commandDismissed.add(skip.fingerprint);
-            if (skip.legacyFingerprint)
-              commandDismissed.add(skip.legacyFingerprint);
             const location = locationKey(skip.path, skip.line);
             if (location) commandDismissedLocations.add(location);
             if (skip.path) {
-              commandDismissedComments.push({
+              const body = skippedFindingBody(skip);
+              const reference: DismissedFindingReference = {
                 path: skip.path,
                 line: skip.line,
-                body: [
-                  `**${skip.severity} - ${skip.title || 'Skipped finding'}**`,
-                  '',
-                  skip.reason || 'Skipped by maintainer command.',
-                ].join('\n'),
-              });
+                body,
+                fingerprint: skip.fingerprint,
+                legacyFingerprint: skip.legacyFingerprint,
+                severity: skip.severity,
+                title: skip.title,
+              };
+              commandDismissedComments.push(reference);
+              commandDismissedFindings.push(reference);
             }
           }
         }
@@ -140,6 +152,7 @@ export class FeedbackFilter {
       alreadyPosted,
       commandDismissed,
       commandDismissedLocations,
+      commandDismissedFindings,
       suppressedComments,
       alreadyPostedComments,
       commandDismissedComments,
@@ -160,7 +173,6 @@ export class FeedbackFilter {
       comment.line,
       comment.body
     );
-    const location = locationKey(comment.path, comment.line);
 
     if (state instanceof Set) {
       return !state.has(signature) && !state.has(fingerprint);
@@ -171,15 +183,14 @@ export class FeedbackFilter {
       !state.suppressed.has(fingerprint) &&
       !(state.commandDismissed?.has(signature) ?? false) &&
       !(state.commandDismissed?.has(fingerprint) ?? false) &&
-      !(location ? state.commandDismissedLocations?.has(location) : false) &&
       !state.alreadyPosted.has(signature) &&
       !state.alreadyPosted.has(fingerprint) &&
       !state.suppressedComments.some((existing) =>
         isLikelySameInlineFinding(existing, comment)
       ) &&
       !(
-        state.commandDismissedComments?.some((existing) =>
-          isLikelySameInlineFinding(existing, comment)
+        state.commandDismissedFindings?.some((existing) =>
+          isLikelySameDismissedFinding(existing, comment)
         ) ?? false
       ) &&
       !state.alreadyPostedComments.some((existing) =>
@@ -221,9 +232,6 @@ export class FeedbackFilter {
     state: ReviewCommentState
   ): boolean {
     const commandDismissed = state.commandDismissed ?? new Set<string>();
-    const commandDismissedComments = state.commandDismissedComments ?? [];
-    const commandDismissedLocations =
-      state.commandDismissedLocations ?? new Set<string>();
     const signature = this.signatureFromComment(
       comment.path,
       comment.line,
@@ -239,15 +247,14 @@ export class FeedbackFilter {
       comment.line,
       comment.body
     );
-    const location = locationKey(comment.path, comment.line);
+    const commandDismissedFindings = state.commandDismissedFindings ?? [];
 
     return (
       commandDismissed.has(signature) ||
       commandDismissed.has(fingerprint) ||
       commandDismissed.has(findingFingerprint) ||
-      (location ? commandDismissedLocations.has(location) : false) ||
-      commandDismissedComments.some((existing) =>
-        isLikelySameInlineFinding(existing, comment)
+      commandDismissedFindings.some((existing) =>
+        isLikelySameDismissedFinding(existing, comment)
       )
     );
   }
@@ -260,6 +267,161 @@ export class FeedbackFilter {
     return signatureFromInlineComment(path, line, body);
   }
 }
+
+function skippedFindingBody(skip: {
+  severity: Severity;
+  title?: string;
+  body?: string;
+  reason?: string;
+}): string {
+  if (skip.body?.trim()) return skip.body;
+
+  return [
+    `**${skip.severity} - ${skip.title || 'Skipped finding'}**`,
+    '',
+    skip.reason || 'Skipped by maintainer command.',
+  ].join('\n');
+}
+
+function isLikelySameDismissedFinding(
+  existing: DismissedFindingReference,
+  candidate: InlineCommentReference
+): boolean {
+  const existingPath = (existing.path || '').toLowerCase();
+  const candidatePath = (candidate.path || '').toLowerCase();
+  if (!existingPath || existingPath !== candidatePath) {
+    return false;
+  }
+
+  const existingLine = existing.line ?? 0;
+  const candidateLine = candidate.line ?? 0;
+  const lineDistance = Math.abs(existingLine - candidateLine);
+  const sameLine = lineDistance === 0;
+  const nearbyLine = lineDistance <= 4;
+  if (!sameLine && !nearbyLine) {
+    return false;
+  }
+
+  const candidateSeverity = normalizeSeverity(
+    extractInlineSeverity(candidate.body)
+  );
+  const severityCompatible =
+    !existing.severity ||
+    !candidateSeverity ||
+    existing.severity === candidateSeverity;
+
+  const existingTitle = existing.title || extractInlineTitle(existing.body);
+  const candidateTitle = extractInlineTitle(candidate.body);
+  const titleSimilarity = tokenSimilarity(existingTitle, candidateTitle);
+  const bodySimilarity = tokenSimilarity(existing.body, candidate.body);
+  const sharedCodeTokens = intersectionSize(
+    codeTokens(existing.body),
+    codeTokens(candidate.body)
+  );
+
+  if (sameLine && severityCompatible && titleSimilarity >= 0.34) return true;
+  if (sameLine && severityCompatible && bodySimilarity >= 0.28) return true;
+  if (
+    sameLine &&
+    severityCompatible &&
+    sharedCodeTokens > 0 &&
+    bodySimilarity >= 0.2
+  ) {
+    return true;
+  }
+
+  if (nearbyLine && severityCompatible && titleSimilarity >= 0.48) return true;
+  if (nearbyLine && severityCompatible && bodySimilarity >= 0.4) return true;
+  if (
+    nearbyLine &&
+    severityCompatible &&
+    sharedCodeTokens > 0 &&
+    bodySimilarity >= 0.3
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function normalizeSeverity(value: string | null): Severity | null {
+  if (value === 'critical' || value === 'major' || value === 'minor') {
+    return value;
+  }
+  return null;
+}
+
+function tokenSimilarity(a: string, b: string): number {
+  const left = tokenize(a);
+  const right = tokenize(b);
+  if (left.size === 0 || right.size === 0) return 0;
+  return (2 * intersectionSize(left, right)) / (left.size + right.size);
+}
+
+function tokenize(value: string): Set<string> {
+  return new Set(
+    splitIdentifiers(value)
+      .toLowerCase()
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/[^a-z0-9_]+/g, ' ')
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 3 && !TOKEN_STOPWORDS.has(token))
+  );
+}
+
+function codeTokens(body: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const match of body.matchAll(/`([^`\n]{2,120})`/g)) {
+    for (const token of tokenize(match[1])) {
+      tokens.add(token);
+    }
+  }
+  return tokens;
+}
+
+function splitIdentifiers(value: string): string {
+  return value.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_./:-]+/g, ' ');
+}
+
+function intersectionSize(a: Set<string>, b: Set<string>): number {
+  let count = 0;
+  for (const token of a) {
+    if (b.has(token)) count += 1;
+  }
+  return count;
+}
+
+const TOKEN_STOPWORDS = new Set([
+  'and',
+  'any',
+  'are',
+  'because',
+  'but',
+  'can',
+  'cannot',
+  'critical',
+  'does',
+  'file',
+  'for',
+  'from',
+  'has',
+  'line',
+  'lines',
+  'major',
+  'minor',
+  'not',
+  'null',
+  'only',
+  'should',
+  'that',
+  'the',
+  'this',
+  'use',
+  'when',
+  'with',
+]);
 
 function locationKey(
   path: string | undefined,

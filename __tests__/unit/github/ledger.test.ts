@@ -178,4 +178,62 @@ describe('ReviewLedger', () => {
 
     expect(ledger.activeSkips(payload)).toHaveLength(0);
   });
+
+  it('keeps active skips across new commits by default', async () => {
+    const { client } = makeClient([]);
+    const ledger = new ReviewLedger(client, 'test-secret', true);
+    const payload = {
+      version: 1 as const,
+      repo: 'test-owner/test-repo',
+      pr: 123,
+      entries: [
+        {
+          action: 'skip' as const,
+          fingerprint: 'abc123',
+          severity: 'major' as const,
+          actor: 'maintainer',
+          actorRole: 'maintain',
+          headSha: 'old-head',
+          parentCommentId: 1,
+          createdAt: '2026-05-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    expect(ledger.activeSkips(payload, 'new-head')).toHaveLength(1);
+  });
+
+  it('can expire active skips on push when explicitly configured', async () => {
+    const previous = process.env.REVIEW_ROUTER_EXPIRE_SKIPS_ON_PUSH;
+    process.env.REVIEW_ROUTER_EXPIRE_SKIPS_ON_PUSH = 'true';
+    const { client } = makeClient([]);
+    const ledger = new ReviewLedger(client, 'test-secret', true);
+    const payload = {
+      version: 1 as const,
+      repo: 'test-owner/test-repo',
+      pr: 123,
+      entries: [
+        {
+          action: 'skip' as const,
+          fingerprint: 'abc123',
+          severity: 'major' as const,
+          actor: 'maintainer',
+          actorRole: 'maintain',
+          headSha: 'old-head',
+          parentCommentId: 1,
+          createdAt: '2026-05-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    try {
+      expect(ledger.activeSkips(payload, 'new-head')).toHaveLength(0);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.REVIEW_ROUTER_EXPIRE_SKIPS_ON_PUSH;
+      } else {
+        process.env.REVIEW_ROUTER_EXPIRE_SKIPS_ON_PUSH = previous;
+      }
+    }
+  });
 });

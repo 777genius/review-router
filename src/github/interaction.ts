@@ -8,6 +8,7 @@ import {
   extractInlineTitle,
   findingFingerprintFromInlineComment,
   isReviewRouterInlineComment,
+  stripInlineFingerprintMarkers,
 } from './comment-fingerprint';
 import { Severity } from '../types';
 import { logger } from '../utils/logger';
@@ -173,6 +174,7 @@ export class ReviewInteractionHandler {
       path: parent.path,
       line: parent.line ?? parent.original_line ?? null,
       title: extractInlineTitle(parent.body),
+      body: compactLedgerBody(parent.body),
       reason: command.reason,
       actor,
       actorRole: role,
@@ -657,6 +659,13 @@ function removeDismissalNotice(body: string): string {
     .replace(new RegExp(`\\n?${start}[\\s\\S]*?${end}\\n?`, 'g'), '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+function compactLedgerBody(body: string): string {
+  return stripInlineFingerprintMarkers(removeDismissalNotice(body))
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, 4000);
 }
 
 function sanitizeInlineActor(actor: string): string {

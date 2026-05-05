@@ -12722,8 +12722,8 @@ function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchR
   const score = (candidate) => {
     const content = candidate.content;
     const lower = content.toLowerCase();
-    const codeTokens = tokenizeForLineScoring(content);
-    const overlap = Array.from(codeTokens).filter((token) => bodyTokens.has(token)).length;
+    const codeTokens2 = tokenizeForLineScoring(content);
+    const overlap = Array.from(codeTokens2).filter((token) => bodyTokens.has(token)).length;
     const proximity = Math.max(0, searchRadius + 1 - Math.abs(candidate.line - reportedLine));
     const riskScore = riskTerms.reduce((sum, term) => sum + (term.test(lower) ? 3 : 0), 0);
     const interpolationScore = /\$\{.+?\}/.test(content) ? 2 : 0;
@@ -20050,6 +20050,7 @@ var FeedbackFilter = class {
     const suppressedComments = [];
     const alreadyPostedComments = [];
     const commandDismissedComments = [];
+    const commandDismissedFindings = [];
     try {
       const comments = await octokit.paginate(
         octokit.rest.pulls.listReviewComments,
@@ -20093,20 +20094,21 @@ var FeedbackFilter = class {
         } else {
           for (const skip of this.ledger.activeSkips(loaded.payload, headSha)) {
             commandDismissed.add(skip.fingerprint);
-            if (skip.legacyFingerprint)
-              commandDismissed.add(skip.legacyFingerprint);
             const location = locationKey(skip.path, skip.line);
             if (location) commandDismissedLocations.add(location);
             if (skip.path) {
-              commandDismissedComments.push({
+              const body = skippedFindingBody(skip);
+              const reference = {
                 path: skip.path,
                 line: skip.line,
-                body: [
-                  `**${skip.severity} - ${skip.title || "Skipped finding"}**`,
-                  "",
-                  skip.reason || "Skipped by maintainer command."
-                ].join("\n")
-              });
+                body,
+                fingerprint: skip.fingerprint,
+                legacyFingerprint: skip.legacyFingerprint,
+                severity: skip.severity,
+                title: skip.title
+              };
+              commandDismissedComments.push(reference);
+              commandDismissedFindings.push(reference);
             }
           }
         }
@@ -20122,6 +20124,7 @@ var FeedbackFilter = class {
       alreadyPosted,
       commandDismissed,
       commandDismissedLocations,
+      commandDismissedFindings,
       suppressedComments,
       alreadyPostedComments,
       commandDismissedComments
@@ -20138,14 +20141,13 @@ var FeedbackFilter = class {
       comment.line,
       comment.body
     );
-    const location = locationKey(comment.path, comment.line);
     if (state instanceof Set) {
       return !state.has(signature) && !state.has(fingerprint);
     }
-    return !state.suppressed.has(signature) && !state.suppressed.has(fingerprint) && !(state.commandDismissed?.has(signature) ?? false) && !(state.commandDismissed?.has(fingerprint) ?? false) && !(location ? state.commandDismissedLocations?.has(location) : false) && !state.alreadyPosted.has(signature) && !state.alreadyPosted.has(fingerprint) && !state.suppressedComments.some(
+    return !state.suppressed.has(signature) && !state.suppressed.has(fingerprint) && !(state.commandDismissed?.has(signature) ?? false) && !(state.commandDismissed?.has(fingerprint) ?? false) && !state.alreadyPosted.has(signature) && !state.alreadyPosted.has(fingerprint) && !state.suppressedComments.some(
       (existing) => isLikelySameInlineFinding(existing, comment)
-    ) && !(state.commandDismissedComments?.some(
-      (existing) => isLikelySameInlineFinding(existing, comment)
+    ) && !(state.commandDismissedFindings?.some(
+      (existing) => isLikelySameDismissedFinding(existing, comment)
     ) ?? false) && !state.alreadyPostedComments.some(
       (existing) => isLikelySameInlineFinding(existing, comment)
     );
@@ -20172,8 +20174,6 @@ var FeedbackFilter = class {
   }
   isCommandDismissed(comment, state) {
     const commandDismissed = state.commandDismissed ?? /* @__PURE__ */ new Set();
-    const commandDismissedComments = state.commandDismissedComments ?? [];
-    const commandDismissedLocations = state.commandDismissedLocations ?? /* @__PURE__ */ new Set();
     const signature = this.signatureFromComment(
       comment.path,
       comment.line,
@@ -20189,15 +20189,126 @@ var FeedbackFilter = class {
       comment.line,
       comment.body
     );
-    const location = locationKey(comment.path, comment.line);
-    return commandDismissed.has(signature) || commandDismissed.has(fingerprint) || commandDismissed.has(findingFingerprint) || (location ? commandDismissedLocations.has(location) : false) || commandDismissedComments.some(
-      (existing) => isLikelySameInlineFinding(existing, comment)
+    const commandDismissedFindings = state.commandDismissedFindings ?? [];
+    return commandDismissed.has(signature) || commandDismissed.has(fingerprint) || commandDismissed.has(findingFingerprint) || commandDismissedFindings.some(
+      (existing) => isLikelySameDismissedFinding(existing, comment)
     );
   }
   signatureFromComment(path14, line, body) {
     return signatureFromInlineComment(path14, line, body);
   }
 };
+function skippedFindingBody(skip) {
+  if (skip.body?.trim()) return skip.body;
+  return [
+    `**${skip.severity} - ${skip.title || "Skipped finding"}**`,
+    "",
+    skip.reason || "Skipped by maintainer command."
+  ].join("\n");
+}
+function isLikelySameDismissedFinding(existing, candidate) {
+  const existingPath = (existing.path || "").toLowerCase();
+  const candidatePath = (candidate.path || "").toLowerCase();
+  if (!existingPath || existingPath !== candidatePath) {
+    return false;
+  }
+  const existingLine = existing.line ?? 0;
+  const candidateLine = candidate.line ?? 0;
+  const lineDistance = Math.abs(existingLine - candidateLine);
+  const sameLine = lineDistance === 0;
+  const nearbyLine = lineDistance <= 4;
+  if (!sameLine && !nearbyLine) {
+    return false;
+  }
+  const candidateSeverity = normalizeSeverity(
+    extractInlineSeverity(candidate.body)
+  );
+  const severityCompatible = !existing.severity || !candidateSeverity || existing.severity === candidateSeverity;
+  const existingTitle = existing.title || extractInlineTitle(existing.body);
+  const candidateTitle = extractInlineTitle(candidate.body);
+  const titleSimilarity = tokenSimilarity(existingTitle, candidateTitle);
+  const bodySimilarity = tokenSimilarity(existing.body, candidate.body);
+  const sharedCodeTokens = intersectionSize2(
+    codeTokens(existing.body),
+    codeTokens(candidate.body)
+  );
+  if (sameLine && severityCompatible && titleSimilarity >= 0.34) return true;
+  if (sameLine && severityCompatible && bodySimilarity >= 0.28) return true;
+  if (sameLine && severityCompatible && sharedCodeTokens > 0 && bodySimilarity >= 0.2) {
+    return true;
+  }
+  if (nearbyLine && severityCompatible && titleSimilarity >= 0.48) return true;
+  if (nearbyLine && severityCompatible && bodySimilarity >= 0.4) return true;
+  if (nearbyLine && severityCompatible && sharedCodeTokens > 0 && bodySimilarity >= 0.3) {
+    return true;
+  }
+  return false;
+}
+function normalizeSeverity(value) {
+  if (value === "critical" || value === "major" || value === "minor") {
+    return value;
+  }
+  return null;
+}
+function tokenSimilarity(a, b) {
+  const left = tokenize2(a);
+  const right = tokenize2(b);
+  if (left.size === 0 || right.size === 0) return 0;
+  return 2 * intersectionSize2(left, right) / (left.size + right.size);
+}
+function tokenize2(value) {
+  return new Set(
+    splitIdentifiers2(value).toLowerCase().replace(/<!--[\s\S]*?-->/g, " ").replace(/```[\s\S]*?```/g, " ").replace(/[^a-z0-9_]+/g, " ").split(/\s+/).map((token) => token.trim()).filter((token) => token.length >= 3 && !TOKEN_STOPWORDS.has(token))
+  );
+}
+function codeTokens(body) {
+  const tokens = /* @__PURE__ */ new Set();
+  for (const match2 of body.matchAll(/`([^`\n]{2,120})`/g)) {
+    for (const token of tokenize2(match2[1])) {
+      tokens.add(token);
+    }
+  }
+  return tokens;
+}
+function splitIdentifiers2(value) {
+  return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_./:-]+/g, " ");
+}
+function intersectionSize2(a, b) {
+  let count = 0;
+  for (const token of a) {
+    if (b.has(token)) count += 1;
+  }
+  return count;
+}
+var TOKEN_STOPWORDS = /* @__PURE__ */ new Set([
+  "and",
+  "any",
+  "are",
+  "because",
+  "but",
+  "can",
+  "cannot",
+  "critical",
+  "does",
+  "file",
+  "for",
+  "from",
+  "has",
+  "line",
+  "lines",
+  "major",
+  "minor",
+  "not",
+  "null",
+  "only",
+  "should",
+  "that",
+  "the",
+  "this",
+  "use",
+  "when",
+  "with"
+]);
 function locationKey(path14, line) {
   if (!path14 || line == null) return null;
   return `${path14.toLowerCase()}:${line}`;
@@ -20286,7 +20397,7 @@ var ReviewLedger = class {
     const seen = /* @__PURE__ */ new Set();
     for (const entry of byFingerprint.values()) {
       if (entry.action !== "skip") continue;
-      if (headSha && entry.headSha && entry.headSha !== headSha && process.env.REVIEW_ROUTER_KEEP_SKIPS_ACROSS_PUSHES !== "true") {
+      if (shouldExpireSkipOnPush(headSha, entry.headSha)) {
         continue;
       }
       if (seen.has(entry.fingerprint)) continue;
@@ -20391,6 +20502,15 @@ var ReviewLedger = class {
     };
   }
 };
+function shouldExpireSkipOnPush(currentHeadSha, entryHeadSha) {
+  if (!currentHeadSha || !entryHeadSha || currentHeadSha === entryHeadSha) {
+    return false;
+  }
+  if (process.env.REVIEW_ROUTER_EXPIRE_SKIPS_ON_PUSH === "true") {
+    return true;
+  }
+  return process.env.REVIEW_ROUTER_KEEP_SKIPS_ACROSS_PUSHES === "false";
+}
 function canonicalJson(value) {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
@@ -28071,7 +28191,7 @@ var ReviewInteractionHandler = class {
       return;
     }
     const actor = comment.user?.login || "unknown";
-    const severity = normalizeSeverity(extractInlineSeverity(parent.body));
+    const severity = normalizeSeverity2(extractInlineSeverity(parent.body));
     const role = await this.getRole(actor);
     const prAuthor = payload.pull_request?.user?.login || "";
     const denialReason = getRoleDenialReason(role, severity, actor, prAuthor);
@@ -28093,6 +28213,7 @@ var ReviewInteractionHandler = class {
       path: parent.path,
       line: parent.line ?? parent.original_line ?? null,
       title: extractInlineTitle(parent.body),
+      body: compactLedgerBody(parent.body),
       reason: command.reason,
       actor,
       actorRole: role,
@@ -28477,6 +28598,9 @@ function removeDismissalNotice(body) {
   const end = escapeRegExp(DISMISSAL_MARKER_END);
   return body.replace(new RegExp(`\\n?${start}[\\s\\S]*?${end}\\n?`, "g"), "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
+function compactLedgerBody(body) {
+  return stripInlineFingerprintMarkers(removeDismissalNotice(body)).replace(/\n{3,}/g, "\n\n").trim().slice(0, 4e3);
+}
 function sanitizeInlineActor(actor) {
   return actor.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 39) || "maintainer";
 }
@@ -28487,7 +28611,7 @@ function formatDismissalReason(reason) {
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-function normalizeSeverity(value) {
+function normalizeSeverity2(value) {
   if (value === "critical" || value === "major" || value === "minor") {
     return value;
   }

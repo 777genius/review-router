@@ -34,6 +34,9 @@ interface ReviewCommentApiItem {
   } | null;
 }
 
+const DISMISSAL_MARKER_START = '<!-- review-router-dismissal:start -->';
+const DISMISSAL_MARKER_END = '<!-- review-router-dismissal:end -->';
+
 type RepoRole = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
 
 type ReviewRerunResult =
@@ -192,6 +195,12 @@ export class ReviewInteractionHandler {
       `Accepted /rr ${command.kind} from ${actor} for ${entry.path}:${entry.line}`
     );
 
+    await this.setInlineCommentDismissalState(parentId, parent.body, {
+      dismissed: command.kind === 'skip',
+      actor,
+      reason: command.reason,
+    });
+
     await this.setReviewThreadResolved(
       prNumber,
       parentId,
@@ -250,6 +259,36 @@ export class ReviewInteractionHandler {
       }
     )) as ReviewCommentApiItem[];
     return comments.find((comment) => comment.id === commentId);
+  }
+
+  private async setInlineCommentDismissalState(
+    commentId: number,
+    currentBody: string,
+    input: { dismissed: boolean; actor: string; reason: string }
+  ): Promise<void> {
+    const nextBody = input.dismissed
+      ? addDismissalNotice(currentBody, input.actor, input.reason)
+      : removeDismissalNotice(currentBody);
+    if (nextBody === currentBody) {
+      return;
+    }
+
+    try {
+      const { octokit, owner, repo } = this.client;
+      await octokit.rest.pulls.updateReviewComment({
+        owner,
+        repo,
+        comment_id: commentId,
+        body: nextBody,
+      });
+      logger.info(
+        `${input.dismissed ? 'Marked' : 'Unmarked'} ReviewRouter inline comment ${commentId} as dismissed`
+      );
+    } catch (error) {
+      logger.warn(
+        `Failed to update ReviewRouter inline dismissal state for comment ${commentId}: ${sanitizeNoticeError(error)}`
+      );
+    }
   }
 
   private async setReviewThreadResolved(
@@ -563,6 +602,50 @@ function parseCommand(body: string): ParsedCommand | null {
     kind: match[1].toLowerCase() as CommandKind,
     reason: (match[2] || '').trim(),
   };
+}
+
+function addDismissalNotice(
+  body: string,
+  actor: string,
+  reason: string
+): string {
+  const cleanBody = removeDismissalNotice(body).trimEnd();
+  const notice = [
+    DISMISSAL_MARKER_START,
+    `<sub>Dismissed by @${sanitizeInlineActor(actor)} via \`/rr skip\`; this finding no longer blocks ReviewRouter.${formatDismissalReason(reason)}</sub>`,
+    DISMISSAL_MARKER_END,
+  ].join('\n');
+  const lines = cleanBody.split('\n');
+  if (lines.length <= 1) {
+    return `${cleanBody}\n\n${notice}`;
+  }
+  return [lines[0], '', notice, ...lines.slice(1)].join('\n');
+}
+
+function removeDismissalNotice(body: string): string {
+  const start = escapeRegExp(DISMISSAL_MARKER_START);
+  const end = escapeRegExp(DISMISSAL_MARKER_END);
+  return body
+    .replace(new RegExp(`\\n?${start}[\\s\\S]*?${end}\\n?`, 'g'), '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function sanitizeInlineActor(actor: string): string {
+  return actor.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 39) || 'maintainer';
+}
+
+function formatDismissalReason(reason: string): string {
+  const normalized = reason
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+  return normalized ? ` Reason: ${normalized}` : '';
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function normalizeSeverity(value: string | null): Severity {

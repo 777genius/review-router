@@ -14,12 +14,16 @@ function writeEvent(payload: unknown): string {
   return file;
 }
 
-function makeClient() {
+function makeClient(options: { parentBody?: string } = {}) {
   const listReviewComments = jest.fn();
+  const updateReviewComment = jest.fn().mockResolvedValue({});
   const listComments = jest.fn();
+  const parentBody =
+    options.parentBody ||
+    '**🟡 Major - SQL injection**\n\nUse parameterized queries.';
   const octokit = {
     rest: {
-      pulls: { listReviewComments },
+      pulls: { listReviewComments, updateReviewComment },
       issues: {
         listComments,
         createComment: jest.fn().mockResolvedValue({}),
@@ -66,7 +70,7 @@ function makeClient() {
             id: 10,
             path: 'src/file.ts',
             line: 10,
-            body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+            body: parentBody,
           },
         ]);
       }
@@ -139,6 +143,19 @@ describe('ReviewInteractionHandler', () => {
       expect.stringContaining('resolveReviewThread'),
       { threadId: 'PRRT_thread_1' }
     );
+    expect(octokit.rest.pulls.updateReviewComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comment_id: 10,
+        body: expect.stringContaining('review-router-dismissal:start'),
+      })
+    );
+    expect(octokit.rest.pulls.updateReviewComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining(
+          'Dismissed by @maintainer via `/rr skip`; this finding no longer blocks ReviewRouter. Reason: validated elsewhere'
+        ),
+      })
+    );
   });
 
   it('uses the workflow token client for rerunning checks when comments use an App token', async () => {
@@ -204,6 +221,15 @@ describe('ReviewInteractionHandler', () => {
         body: expect.stringContaining('reviewrouter-ledger:v1'),
       })
     );
+    expect(commentOctokit.rest.pulls.updateReviewComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comment_id: 10,
+        body: expect.stringContaining('review-router-dismissal:start'),
+      })
+    );
+    expect(
+      actionsOctokit.rest.pulls.updateReviewComment
+    ).not.toHaveBeenCalled();
   });
 
   it('records /rr skip without requiring a reason', async () => {
@@ -249,6 +275,14 @@ describe('ReviewInteractionHandler', () => {
     );
     expect(octokit.rest.actions.reRunWorkflowFailedJobs).toHaveBeenCalledWith(
       expect.objectContaining({ run_id: 456 })
+    );
+    expect(octokit.rest.pulls.updateReviewComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comment_id: 10,
+        body: expect.stringContaining(
+          'Dismissed by @maintainer via `/rr skip`; this finding no longer blocks ReviewRouter.'
+        ),
+      })
     );
   });
 
@@ -306,7 +340,10 @@ describe('ReviewInteractionHandler', () => {
   });
 
   it('unresolves the conversation for /rr unskip', async () => {
-    const { client, octokit } = makeClient();
+    const { client, octokit } = makeClient({
+      parentBody:
+        '**🟡 Major - SQL injection**\n\n<!-- review-router-dismissal:start -->\n<sub>Dismissed by @maintainer via `/rr skip`; this finding no longer blocks ReviewRouter.</sub>\n<!-- review-router-dismissal:end -->\nUse parameterized queries.',
+    });
     process.env.GITHUB_EVENT_PATH = writeEvent({
       comment: {
         id: 11,
@@ -368,6 +405,12 @@ describe('ReviewInteractionHandler', () => {
     expect(octokit.graphql).toHaveBeenCalledWith(
       expect.stringContaining('unresolveReviewThread'),
       { threadId: 'PRRT_thread_1' }
+    );
+    expect(octokit.rest.pulls.updateReviewComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comment_id: 10,
+        body: expect.not.stringContaining('review-router-dismissal:start'),
+      })
     );
   });
 

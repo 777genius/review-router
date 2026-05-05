@@ -1528,7 +1528,6 @@ concurrency:
 
 jobs:
   interaction:
-    if: ${{ github.event.pull_request.head.repo.fork != true && github.event.comment.user.type != 'Bot' && (startsWith(github.event.comment.body, '/rr ') || vars.REVIEW_ROUTER_DISCUSSION_MODE == 'suggest') }}
 YAML
     printf '    runs-on: %s\n' "$RUNS_ON"
     cat <<'YAML'

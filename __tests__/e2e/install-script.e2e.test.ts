@@ -234,8 +234,11 @@ describe('review-router curl installer e2e', () => {
     expect(interactionWorkflow).toContain('pull_request_review_comment:');
     expect(interactionWorkflow).toContain('actions: write');
     expect(interactionWorkflow).toContain('pull-requests: write');
-    expect(interactionWorkflow).toContain(
+    expect(interactionWorkflow).not.toContain(
       "github.event.comment.user.type != 'Bot'"
+    );
+    expect(interactionWorkflow).not.toContain(
+      "startsWith(github.event.comment.body, '/rr ')"
     );
     expect(interactionWorkflow).toContain(
       'REVIEW_ROUTER_MODE: interaction-preflight'

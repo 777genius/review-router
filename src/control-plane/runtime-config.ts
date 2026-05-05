@@ -227,6 +227,9 @@ function isSafeRuntimeEnvKey(key: string): boolean {
   if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
     return false;
   }
+  if (key === 'TARGET_TOKENS_PER_BATCH') {
+    return true;
+  }
   return !/(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|AUTH_JSON)/.test(key);
 }
 

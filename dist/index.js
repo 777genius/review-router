@@ -29108,6 +29108,9 @@ function isSafeRuntimeEnvKey(key) {
   if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
     return false;
   }
+  if (key === "TARGET_TOKENS_PER_BATCH") {
+    return true;
+  }
   return !/(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|AUTH_JSON)/.test(key);
 }
 function safeEnvKeyLabel(key) {
@@ -29192,7 +29195,10 @@ async function fetchCommentToken(input) {
     }
   );
   if (!response.ok) {
-    throw new Error(`comment_token_fetch_failed:${response.status}`);
+    const code = await readSafeErrorCode2(response);
+    throw new Error(
+      `comment_token_fetch_failed:${response.status}${code ? `:${code}` : ""}`
+    );
   }
   return parseCommentTokenResponse(await response.json());
 }
@@ -29219,6 +29225,20 @@ function fallback(input, reason) {
 }
 function joinApiPath2(apiUrl, path14) {
   return `${apiUrl.replace(/\/+$/, "")}${path14}`;
+}
+async function readSafeErrorCode2(response) {
+  try {
+    const body = await response.json();
+    if (typeof body.error === "string") {
+      return safeReason2(body.error);
+    }
+    if (typeof body.error?.code === "string") {
+      return safeReason2(body.error.code);
+    }
+  } catch {
+    return void 0;
+  }
+  return void 0;
 }
 function safeReason2(message) {
   return message.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 120);

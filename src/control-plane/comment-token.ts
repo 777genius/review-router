@@ -84,7 +84,10 @@ async function fetchCommentToken(input: {
     }
   );
   if (!response.ok) {
-    throw new Error(`comment_token_fetch_failed:${response.status}`);
+    const code = await readSafeErrorCode(response);
+    throw new Error(
+      `comment_token_fetch_failed:${response.status}${code ? `:${code}` : ''}`
+    );
   }
 
   return parseCommentTokenResponse(await response.json());
@@ -134,6 +137,25 @@ function fallback(
 
 function joinApiPath(apiUrl: string, path: string): string {
   return `${apiUrl.replace(/\/+$/, '')}${path}`;
+}
+
+async function readSafeErrorCode(
+  response: Response
+): Promise<string | undefined> {
+  try {
+    const body = (await response.json()) as {
+      error?: { code?: unknown } | string;
+    };
+    if (typeof body.error === 'string') {
+      return safeReason(body.error);
+    }
+    if (typeof body.error?.code === 'string') {
+      return safeReason(body.error.code);
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 function safeReason(message: string): string {

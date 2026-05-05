@@ -120,6 +120,7 @@ describe('applyControlPlaneRuntimeConfig', () => {
           configVersion: 7,
           runtimeEnv: {
             CODEX_MODEL: 'gpt-5.5',
+            TARGET_TOKENS_PER_BATCH: '50000',
             OPENAI_API_KEY: 'must-not-be-sent-by-control-plane',
           },
         })
@@ -136,8 +137,10 @@ describe('applyControlPlaneRuntimeConfig', () => {
       sessionToken: 'rr-session',
     });
     expect(env.CODEX_MODEL).toBe('gpt-5.5');
+    expect(env.TARGET_TOKENS_PER_BATCH).toBe('50000');
     expect(env.OPENAI_API_KEY).toBeUndefined();
     expect(warnings[0]).toContain('OPENAI_API_KEY');
+    expect(warnings[0]).not.toContain('TARGET_TOKENS_PER_BATCH');
   });
 });
 

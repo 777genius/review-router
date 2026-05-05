@@ -99,6 +99,35 @@ describe('resolveGitHubCommentToken', () => {
     expect(warnings[0]).not.toContain('ghs_secret_token_value');
     expect(warnings[0]).toContain('[redacted-github-token]');
   });
+
+  it('includes safe server error codes in fallback warnings', async () => {
+    const warnings: string[] = [];
+    const fetchImpl = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: {
+              code: 'comment_token_unavailable',
+              message: 'safe message',
+            },
+          },
+          503
+        )
+      );
+
+    await resolveGitHubCommentToken({
+      fallbackToken: 'github-token',
+      runtimeConfig,
+      env: { REVIEWROUTER_COMMENT_TOKEN_MODE: 'app-oidc' },
+      fetchImpl,
+      logger: { info: jest.fn(), warn: (message) => warnings.push(message) },
+    });
+
+    expect(warnings[0]).toContain(
+      'comment_token_fetch_failed:503:comment_token_unavailable'
+    );
+  });
 });
 
 function jsonResponse(body: unknown, status = 200): Response {

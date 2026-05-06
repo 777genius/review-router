@@ -77,3 +77,28 @@ jobs:
           test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
           test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
           echo "oidc_request_env=present"
+
+      - name: Inspect non-sensitive OIDC claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl -fsSL \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=reviewrouter")"
+          token="$(printf '%s' "$response" | node -e "let raw='';process.stdin.on('data',d=>raw+=d);process.stdin.on('end',()=>process.stdout.write(JSON.parse(raw).value || ''))")"
+          test -n "$token"
+          node - "$token" <<'NODE'
+          const token = process.argv[2];
+          const payload = token.split('.')[1] || '';
+          const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+          const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+          const claims = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+          const selected = {
+            repository: claims.repository,
+            repository_id: claims.repository_id,
+            event_name: claims.event_name,
+            workflow_ref: claims.workflow_ref,
+            job_workflow_ref: claims.job_workflow_ref || null,
+          };
+          console.log(JSON.stringify(selected, null, 2));
+          NODE

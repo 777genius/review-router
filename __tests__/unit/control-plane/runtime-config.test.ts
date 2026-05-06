@@ -6,7 +6,7 @@ describe('applyControlPlaneRuntimeConfig', () => {
     REVIEWROUTER_API_URL: 'https://app.reviewrouter.dev',
     REVIEWROUTER_OIDC_AUDIENCE: 'reviewrouter',
     REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'true',
-    REVIEWROUTER_ACTION_VERSION: 'v1.0.3',
+    REVIEWROUTER_ACTION_VERSION: 'v1.0.4',
     ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'github-request-token',
     ACTIONS_ID_TOKEN_REQUEST_URL:
       'https://token.actions.githubusercontent.com/request',
@@ -49,7 +49,7 @@ describe('applyControlPlaneRuntimeConfig', () => {
     expect(result).toEqual({
       status: 'applied',
       apiUrl: 'https://app.reviewrouter.dev',
-      actionVersion: 'v1.0.3',
+      actionVersion: 'v1.0.4',
       configVersion: 7,
       sessionToken: 'rr-session',
     });
@@ -61,7 +61,7 @@ describe('applyControlPlaneRuntimeConfig', () => {
     );
     expect(fetchImpl.mock.calls[2][1]?.headers).toMatchObject({
       Authorization: 'Bearer rr-session',
-      'x-reviewrouter-action-version': 'v1.0.3',
+      'x-reviewrouter-action-version': 'v1.0.4',
     });
   });
 

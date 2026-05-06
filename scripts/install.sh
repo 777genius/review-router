@@ -6,9 +6,9 @@
 set -Eeuo pipefail
 
 PRODUCT_NAME="review-router"
-LATEST_RELEASE_TAG="v1.0.3"
+LATEST_RELEASE_TAG="v1.0.4"
 LATEST_MAJOR_TAG="v1"
-DEFAULT_ACTION_REF_MODE="main"
+DEFAULT_ACTION_REF_MODE="stable"
 DEFAULT_STABLE_ACTION_REF="777genius/review-router@$LATEST_MAJOR_TAG"
 DEFAULT_RELEASE_ACTION_REF="777genius/review-router@$LATEST_RELEASE_TAG"
 DEFAULT_MAIN_ACTION_REF="777genius/review-router@main"
@@ -408,11 +408,11 @@ validate_action_ref_for_workflow_style() {
 
   local ref
   ref="${ACTION_REF##*@}"
-  if printf '%s' "$ref" | grep -Eq '^(main|[a-fA-F0-9]{40})$'; then
+  if printf '%s' "$ref" | grep -Eq '^(main|v1|v1\.[0-9]+\.[0-9]+|[a-fA-F0-9]{40})$'; then
     return 0
   fi
 
-  fatal "Compact reusable workflow is only available from @main or a reusable-capable commit until the next release. Use REVIEW_ROUTER_ACTION_REF_MODE=main, REVIEW_ROUTER_ACTION_REF=777genius/review-router@<40-char-sha>, or REVIEW_ROUTER_WORKFLOW_STYLE=explicit."
+  fatal "Compact reusable workflow requires @main, @v1, @v1.x.x, or a reusable-capable 40-character commit SHA. Use REVIEW_ROUTER_WORKFLOW_STYLE=explicit for custom forks or legacy refs."
 }
 
 confirm() {
@@ -2078,9 +2078,9 @@ main() {
   normalize_secret_scope_env
   if [ -z "$ACTION_REF_EXPLICIT" ] && [ -z "$ACTION_REF_MODE" ]; then
     choose ACTION_REF_MODE "Action version" "$DEFAULT_ACTION_REF_MODE" \
-      "stable:Stable major tag ($LATEST_MAJOR_TAG), use after the next release updates reusable workflows" \
+      "stable:Stable major tag ($LATEST_MAJOR_TAG), recommended for most repositories" \
       "release:Pinned exact release tag ($LATEST_RELEASE_TAG), maximum reproducibility" \
-      "main:Live main branch, recommended until reusable ships in the next release"
+      "main:Live main branch, gets every update immediately"
   fi
   resolve_action_ref
   case "$WORKFLOW_STYLE" in

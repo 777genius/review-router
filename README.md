@@ -31,7 +31,7 @@ The installer:
 
 See [docs/install.md](./docs/install.md) for organization-level secrets, selected repositories, GitHub App setup, and security notes.
 
-By default, the generated workflow currently uses `777genius/review-router@main` so compact reusable workflows work before the next release tag is cut. After release, use `REVIEW_ROUTER_ACTION_REF_MODE=stable` for the moving `v1` tag, or `REVIEW_ROUTER_ACTION_REF_MODE=release` for an exact pinned tag.
+By default, the generated workflow uses the stable moving major tag `777genius/review-router@v1`. Choose `REVIEW_ROUTER_ACTION_REF_MODE=release` for an exact pinned tag, or `REVIEW_ROUTER_ACTION_REF_MODE=main` for live dogfood/dev updates.
 
 ## Status
 
@@ -153,7 +153,7 @@ jobs:
           fi
 
       - name: Run ReviewRouter
-        uses: 777genius/review-router@main
+        uses: 777genius/review-router@v1
         env:
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
         with:
@@ -200,7 +200,7 @@ jobs:
     steps:
       - name: Preflight ReviewRouter interaction
         id: preflight
-        uses: 777genius/review-router@main
+        uses: 777genius/review-router@v1
         with:
           REVIEW_ROUTER_MODE: interaction-preflight
           REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
@@ -211,7 +211,7 @@ jobs:
 
       - name: Handle ReviewRouter interaction
         if: steps.preflight.outputs.should_run == 'true'
-        uses: 777genius/review-router@main
+        uses: 777genius/review-router@v1
         env:
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
         with:
@@ -232,10 +232,10 @@ Then make `ReviewRouter / review` a required status check in branch protection.
 If you use the full explicit workflow and want an exact pinned release, use:
 
 ```yaml
-uses: 777genius/review-router@v1.0.3
+uses: 777genius/review-router@v1.0.4
 ```
 
-For compact reusable workflow installs before the next release, use:
+For live dogfood/dev installs, use:
 
 ```yaml
 uses: 777genius/review-router@main

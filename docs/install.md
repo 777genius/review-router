@@ -8,13 +8,13 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
 
 The installer supports macOS and Linux shells first. It requires `gh`, `git`, and `curl`. GitHub App manifest setup uses `python3` when available; without `python3`, the installer prints manual App setup instructions.
 
-The generated workflow currently uses live `main` by default so compact reusable workflows work before the next release tag is cut:
+The generated workflow uses the stable moving major tag by default:
 
 ```text
-777genius/review-router@main
+777genius/review-router@v1
 ```
 
-Use `REVIEW_ROUTER_ACTION_REF_MODE=stable` after the next release moves `@v1` to a reusable-capable version. Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.3`. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
+Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.4`. Use `REVIEW_ROUTER_ACTION_REF_MODE=main` for live dogfood/dev updates. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
 
 ## Quick start
 

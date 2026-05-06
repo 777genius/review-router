@@ -1,0 +1,79 @@
+name: ReviewRouter Reusable Prototype
+
+on:
+  workflow_call:
+    inputs:
+      review_auth_mode:
+        required: false
+        type: string
+        default: codex-oauth
+      code_model:
+        required: false
+        type: string
+        default: gpt-5.5
+      dry_run:
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      CODEX_AUTH_JSON:
+        required: false
+      OPENAI_API_KEY:
+        required: false
+      OPENROUTER_API_KEY:
+        required: false
+
+jobs:
+  reusable-smoke:
+    name: reusable smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout caller repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Verify caller context and inputs
+        shell: bash
+        env:
+          REVIEW_AUTH_MODE: ${{ inputs.review_auth_mode }}
+          CODE_MODEL: ${{ inputs.code_model }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -d .git
+          test -n "$GITHUB_REPOSITORY"
+          test -n "$REVIEW_AUTH_MODE"
+          test -n "$CODE_MODEL"
+          echo "caller_repository=$GITHUB_REPOSITORY"
+          echo "event_name=$GITHUB_EVENT_NAME"
+          echo "review_auth_mode=$REVIEW_AUTH_MODE"
+          echo "code_model=$CODE_MODEL"
+          echo "dry_run=$DRY_RUN"
+          if [ -n "${CODEX_AUTH_JSON:-}" ]; then
+            echo "codex_secret_present=yes"
+          else
+            echo "codex_secret_present=no"
+          fi
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
+            echo "openai_secret_present=yes"
+          fi
+          if [ -n "${OPENROUTER_API_KEY:-}" ]; then
+            echo "openrouter_secret_present=yes"
+          fi
+
+      - name: Verify OIDC request plumbing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          echo "oidc_request_env=present"

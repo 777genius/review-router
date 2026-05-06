@@ -8,7 +8,7 @@ set -Eeuo pipefail
 PRODUCT_NAME="review-router"
 LATEST_RELEASE_TAG="v1.0.3"
 LATEST_MAJOR_TAG="v1"
-DEFAULT_ACTION_REF_MODE="stable"
+DEFAULT_ACTION_REF_MODE="main"
 DEFAULT_STABLE_ACTION_REF="777genius/review-router@$LATEST_MAJOR_TAG"
 DEFAULT_RELEASE_ACTION_REF="777genius/review-router@$LATEST_RELEASE_TAG"
 DEFAULT_MAIN_ACTION_REF="777genius/review-router@main"
@@ -399,6 +399,20 @@ resolve_action_ref() {
       fatal "Unsupported REVIEW_ROUTER_ACTION_REF_MODE: $ACTION_REF_MODE. Use stable, release, main, or REVIEW_ROUTER_ACTION_REF=owner/repo@ref."
       ;;
   esac
+}
+
+validate_action_ref_for_workflow_style() {
+  if [ "$WORKFLOW_STYLE" != "reusable" ]; then
+    return 0
+  fi
+
+  local ref
+  ref="${ACTION_REF##*@}"
+  if printf '%s' "$ref" | grep -Eq '^(main|[a-fA-F0-9]{40})$'; then
+    return 0
+  fi
+
+  fatal "Compact reusable workflow is only available from @main or a reusable-capable commit until the next release. Use REVIEW_ROUTER_ACTION_REF_MODE=main, REVIEW_ROUTER_ACTION_REF=777genius/review-router@<40-char-sha>, or REVIEW_ROUTER_WORKFLOW_STYLE=explicit."
 }
 
 confirm() {
@@ -2064,15 +2078,16 @@ main() {
   normalize_secret_scope_env
   if [ -z "$ACTION_REF_EXPLICIT" ] && [ -z "$ACTION_REF_MODE" ]; then
     choose ACTION_REF_MODE "Action version" "$DEFAULT_ACTION_REF_MODE" \
-      "stable:Stable major tag ($LATEST_MAJOR_TAG), receives compatible stable updates automatically" \
+      "stable:Stable major tag ($LATEST_MAJOR_TAG), use after the next release updates reusable workflows" \
       "release:Pinned exact release tag ($LATEST_RELEASE_TAG), maximum reproducibility" \
-      "main:Live main branch, gets every update immediately"
+      "main:Live main branch, recommended until reusable ships in the next release"
   fi
   resolve_action_ref
   case "$WORKFLOW_STYLE" in
     reusable|explicit) ;;
     *) fatal "Unsupported REVIEW_ROUTER_WORKFLOW_STYLE: $WORKFLOW_STYLE. Use reusable or explicit." ;;
   esac
+  validate_action_ref_for_workflow_style
   choose SECRET_SCOPE "Secrets and variables scope" "repo" \
     "repo:Store secrets and variables on the target repository" \
     "org:Store secrets and variables on the organization, restricted to selected repositories"

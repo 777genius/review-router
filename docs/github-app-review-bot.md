@@ -52,7 +52,7 @@ jobs:
           permission-issues: write
           permission-pull-requests: write
 
-      - uses: 777genius/review-router@v1
+      - uses: 777genius/review-router@main
         with:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

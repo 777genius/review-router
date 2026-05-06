@@ -7,7 +7,7 @@ on:
         description: 'ReviewRouter runtime ref: main, v1, v1.x.x, or a 40-char commit SHA'
         required: false
         type: string
-        default: v1
+        default: main
       api_url:
         description: 'ReviewRouter API URL used for OIDC runtime config and App comment tokens'
         required: false

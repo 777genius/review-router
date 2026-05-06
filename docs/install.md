@@ -8,13 +8,13 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
 
 The installer supports macOS and Linux shells first. It requires `gh`, `git`, and `curl`. GitHub App manifest setup uses `python3` when available; without `python3`, the installer prints manual App setup instructions.
 
-The generated workflow uses the stable major tag by default:
+The generated workflow currently uses live `main` by default so compact reusable workflows work before the next release tag is cut:
 
 ```text
-777genius/review-router@v1
+777genius/review-router@main
 ```
 
-`@v1` is moved to the latest compatible stable v1 release. Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.3`. Use `REVIEW_ROUTER_ACTION_REF_MODE=main` if you want the target repository to run the newest `main` branch on every workflow run. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
+Use `REVIEW_ROUTER_ACTION_REF_MODE=stable` after the next release moves `@v1` to a reusable-capable version. Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.3`. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
 
 ## Quick start
 
@@ -88,7 +88,23 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
   bash
 ```
 
-### Live main instead of release tag
+### Stable or release refs
+
+The compact reusable workflow needs reusable workflow files to exist in the selected ref. Until the next release is cut, keep the default `main` ref. If you choose `REVIEW_ROUTER_ACTION_REF_MODE=stable` or `release` with compact reusable before that release, the installer stops with a clear error instead of creating a broken workflow.
+
+Use this only when you deliberately want to pin the full explicit workflow to the latest release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_WORKFLOW_STYLE=explicit \
+  REVIEW_ROUTER_ACTION_REF_MODE=release \
+  REVIEW_ROUTER_SECRET_SCOPE=repo \
+  REVIEW_ROUTER_IDENTITY=actions \
+  REVIEW_ROUTER_AUTH=codex \
+  REVIEW_ROUTER_PRESET=safe \
+  bash
+```
 
 Use this when you deliberately want every workflow run to pull the newest reviewer code from `main`:
 

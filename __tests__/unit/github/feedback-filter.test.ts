@@ -408,6 +408,74 @@ describe('FeedbackFilter', () => {
       ).toBe(false);
     });
 
+    it('keeps a maintainer skip when the same issue is reclassified from major to critical', async () => {
+      const parentBody = [
+        '_🟡 Major_ | _⚡ Quick win_',
+        '',
+        '**Email lookup ignores requested address**',
+        '',
+        '`findUserByEmail` now returns `db.users[0]` regardless of the `email` argument, so `canLogin(db, email)` allows any email whenever the database has at least one user.',
+      ].join('\n');
+      const ledger = {
+        load: jest.fn().mockResolvedValue({
+          valid: true,
+          payload: {
+            version: 1,
+            repo: 'test-owner/test-repo',
+            pr: 123,
+            entries: [],
+          },
+        }),
+        activeSkips: jest.fn().mockReturnValue([
+          {
+            action: 'skip',
+            fingerprint: 'old-fingerprint',
+            severity: 'major',
+            path: 'src.js',
+            line: 2,
+            title: 'Email lookup ignores requested address',
+            body: parentBody,
+            reason: '',
+            actor: 'maintainer',
+            actorRole: 'admin',
+            parentCommentId: 10,
+            createdAt: '2026-05-01T00:00:00.000Z',
+          },
+        ]),
+      };
+      feedbackFilter = new FeedbackFilter(mockClient, undefined, ledger as any);
+      mockOctokit.paginate.mockResolvedValue([]);
+
+      const state = await feedbackFilter.loadReviewCommentState(123);
+
+      expect(
+        feedbackFilter.isFindingCommandDismissed(
+          {
+            file: 'src.js',
+            line: 2,
+            severity: 'critical',
+            title: 'Email lookup now authenticates the wrong user',
+            message:
+              '`findUserByEmail` returns `db.users[0]` without comparing `email`, and `canLogin` treats any returned user as authorization. Any unknown email can log in when the database has at least one user.',
+          },
+          state
+        )
+      ).toBe(true);
+      expect(
+        feedbackFilter.isFindingCommandDismissed(
+          {
+            file: 'src.js',
+            line: 2,
+            severity: 'critical',
+            title: 'Password hash comparison is missing',
+            message:
+              'The code accepts a request without validating the password hash.',
+          },
+          state
+        )
+      ).toBe(false);
+    });
+
     it('keeps a maintainer skip across model title rewrites when the location and issue are still the same', async () => {
       const ledger = {
         load: jest.fn().mockResolvedValue({

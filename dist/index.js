@@ -20237,6 +20237,12 @@ function isLikelySameDismissedFinding(existing, candidate) {
   if (sameLine && severityCompatible && sharedCodeTokens > 0 && bodySimilarity >= 0.2) {
     return true;
   }
+  if (sameLine && !severityCompatible && titleSimilarity >= 0.38 && bodySimilarity >= 0.25) {
+    return true;
+  }
+  if (sameLine && !severityCompatible && sharedCodeTokens >= 2 && bodySimilarity >= 0.2) {
+    return true;
+  }
   if (nearbyLine && severityCompatible && titleSimilarity >= 0.48) return true;
   if (nearbyLine && severityCompatible && bodySimilarity >= 0.4) return true;
   if (nearbyLine && severityCompatible && sharedCodeTokens > 0 && bodySimilarity >= 0.3) {

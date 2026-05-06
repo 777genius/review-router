@@ -18648,6 +18648,7 @@ ${comment.body.substring(0, 200)}...`);
         }),
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
+      await this.deleteInlineFallbackComments(prNumber);
     } catch (error2) {
       if (!_CommentPoster.shouldFallbackInlineReviewError(error2)) {
         throw error2;
@@ -18659,6 +18660,8 @@ ${comment.body.substring(0, 200)}...`);
       const remainingComments = headSha ? await this.postIndividualInlineComments(prNumber, apiComments, headSha, error2) : apiComments;
       if (remainingComments.length > 0) {
         await this.postInlineFallback(prNumber, remainingComments, error2);
+      } else {
+        await this.deleteInlineFallbackComments(prNumber);
       }
     }
   }
@@ -18796,6 +18799,19 @@ ${comment.body.substring(0, 200)}...`);
     } catch (error2) {
       logger.warn("Failed to find existing inline fallback comment", error2);
       return [];
+    }
+  }
+  async deleteInlineFallbackComments(prNumber) {
+    const { octokit, owner, repo } = this.client;
+    const existingComments = await this.findInlineFallbackComments(prNumber);
+    for (const comment of existingComments) {
+      await withRetry(
+        () => octokit.rest.issues.deleteComment({ owner, repo, comment_id: comment.id }),
+        { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+      );
+    }
+    if (existingComments.length > 0) {
+      logger.info(`Deleted ${existingComments.length} stale inline fallback comment(s) after inline comments posted successfully`);
     }
   }
   static formatInlineFallbackBody(comments, error2) {
@@ -29186,7 +29202,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.7",
+  version: "1.0.8",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

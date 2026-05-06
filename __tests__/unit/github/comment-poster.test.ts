@@ -116,6 +116,48 @@ describe('CommentPoster', () => {
       });
     });
 
+    it('deletes stale PR-comment fallback after batch inline review succeeds', async () => {
+      mockOctokit.rest.issues.listComments.mockResolvedValue({
+        data: [
+          {
+            id: 77,
+            body: '<!-- review-router-inline-fallback -->\n\nold fallback',
+          },
+        ],
+      });
+
+      const poster = new CommentPoster(mockClient, false);
+      await poster.postInline(
+        123,
+        [
+          {
+            path: 'src/test.ts',
+            line: 10,
+            side: 'RIGHT' as const,
+            body: '**🟡 Major - Test finding**\n\nBody',
+            severity: 'major',
+          },
+        ],
+        [
+          {
+            filename: 'src/test.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+            patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+          },
+        ]
+      );
+
+      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.issues.deleteComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        comment_id: 77,
+      });
+    });
+
     it('anchors inline comments to the most relevant nearby added line', async () => {
       const poster = new CommentPoster(mockClient, false);
       const comments: InlineComment[] = [
@@ -498,6 +540,55 @@ describe('CommentPoster', () => {
         body: expect.stringContaining('Test finding'),
       });
       expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
+    it('deletes stale PR-comment fallback after individual inline retry succeeds', async () => {
+      const error = new Error(
+        'Unprocessable Entity: "An internal error occurred, please try again."'
+      ) as Error & { status: number };
+      error.status = 422;
+      mockOctokit.rest.pulls.createReview.mockRejectedValue(error);
+      mockOctokit.rest.issues.listComments.mockResolvedValue({
+        data: [
+          {
+            id: 88,
+            body: '<!-- review-router-inline-fallback -->\n\nold fallback',
+          },
+        ],
+      });
+
+      const poster = new CommentPoster(mockClient, false);
+      await poster.postInline(
+        123,
+        [
+          {
+            path: 'src/test.ts',
+            line: 10,
+            side: 'RIGHT' as const,
+            body: '**🟡 Major - Test finding**\n\nBody',
+            severity: 'major',
+          },
+        ],
+        [
+          {
+            filename: 'src/test.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+            patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+          },
+        ],
+        'abc123'
+      );
+
+      expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.issues.deleteComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        comment_id: 88,
+      });
     });
 
     it('retries individual inline comments without committable suggestion before PR-comment fallback', async () => {

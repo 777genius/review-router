@@ -470,6 +470,7 @@ export class CommentPoster {
         }),
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
+      await this.deleteInlineFallbackComments(prNumber);
     } catch (error) {
       if (!CommentPoster.shouldFallbackInlineReviewError(error)) {
         throw error;
@@ -484,6 +485,8 @@ export class CommentPoster {
         : apiComments;
       if (remainingComments.length > 0) {
         await this.postInlineFallback(prNumber, remainingComments, error as Error);
+      } else {
+        await this.deleteInlineFallbackComments(prNumber);
       }
     }
   }
@@ -654,6 +657,22 @@ export class CommentPoster {
     } catch (error) {
       logger.warn('Failed to find existing inline fallback comment', error as Error);
       return [];
+    }
+  }
+
+  private async deleteInlineFallbackComments(prNumber: number): Promise<void> {
+    const { octokit, owner, repo } = this.client;
+    const existingComments = await this.findInlineFallbackComments(prNumber);
+
+    for (const comment of existingComments) {
+      await withRetry(
+        () => octokit.rest.issues.deleteComment({ owner, repo, comment_id: comment.id }),
+        { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
+      );
+    }
+
+    if (existingComments.length > 0) {
+      logger.info(`Deleted ${existingComments.length} stale inline fallback comment(s) after inline comments posted successfully`);
     }
   }
 

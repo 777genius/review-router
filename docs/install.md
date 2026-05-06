@@ -365,9 +365,7 @@ If a blocking inline finding is a verified false positive, reply to that specifi
 /rr skip optional reason
 ```
 
-The reason is optional. The installer generates a second non-required workflow, `.github/workflows/review-router-interaction.yml`, for `/rr ...` replies and optional discussion replies. `/rr skip` does not run Codex and does not checkout pull request code. It only verifies the command, updates the signed PR ledger, and reruns the failed `ReviewRouter / review` check when the token has `actions: write`.
-
-ReviewRouter also attempts to mark the skipped review thread as resolved. GitHub currently rejects the `resolveReviewThread` GraphQL mutation for standard `github-actions[bot]` tokens, and our smoke test showed the same rejection for a GitHub App installation token with `pull_requests:write`. Treat automatic thread resolution as best-effort unless you explicitly provide `REVIEW_ROUTER_THREAD_RESOLVE_TOKEN` as a repo/org secret with a trusted user or fine-grained PAT that can resolve review conversations. The signed skip ledger and CI rerun do not depend on GitHub's resolved/unresolved thread state.
+The reason is optional. The installer generates a second non-required workflow, `.github/workflows/review-router-interaction.yml`, for `/rr ...` replies and optional discussion replies. `/rr skip` does not run Codex, does not checkout pull request code, and does not try to mark the GitHub review conversation as resolved. It only verifies the command, updates the signed PR ledger, marks the inline comment body as dismissed, and reruns the failed `ReviewRouter / review` check when the token has `actions: write`.
 
 Permission policy:
 

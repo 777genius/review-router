@@ -245,9 +245,6 @@ describe('review-router curl installer e2e', () => {
     );
     expect(interactionWorkflow).toContain('REVIEW_ROUTER_MODE: interaction');
     expect(interactionWorkflow).toContain(
-      'REVIEW_ROUTER_THREAD_RESOLVE_TOKEN: ${{ secrets.REVIEW_ROUTER_THREAD_RESOLVE_TOKEN }}'
-    );
-    expect(interactionWorkflow).toContain(
       'REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}'
     );
     expect(workflow).not.toContain('actions/create-github-app-token');

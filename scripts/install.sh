@@ -1644,7 +1644,6 @@ YAML
     cat <<'YAML'
         env:
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
-          REVIEW_ROUTER_THREAD_RESOLVE_TOKEN: ${{ secrets.REVIEW_ROUTER_THREAD_RESOLVE_TOKEN }}
 YAML
     if [ "$AUTH_MODE" = "openai" ]; then
       cat <<'YAML'

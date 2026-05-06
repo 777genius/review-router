@@ -38,31 +38,7 @@ function makeClient(options: { parentBody?: string } = {}) {
         reRunWorkflowFailedJobs: jest.fn().mockResolvedValue({}),
       },
     },
-    graphql: jest.fn((query: string) => {
-      if (query.includes('reviewThreads')) {
-        return Promise.resolve({
-          repository: {
-            pullRequest: {
-              reviewThreads: {
-                nodes: [
-                  {
-                    id: 'PRRT_thread_1',
-                    isResolved: false,
-                    comments: { nodes: [{ databaseId: 10 }] },
-                  },
-                ],
-                pageInfo: { hasNextPage: false, endCursor: null },
-              },
-            },
-          },
-        });
-      }
-      return Promise.resolve({
-        resolveReviewThread: {
-          thread: { id: 'PRRT_thread_1', isResolved: true },
-        },
-      });
-    }) as jest.Mock,
+    graphql: jest.fn().mockResolvedValue({}) as jest.Mock,
     paginate: jest.fn((method: jest.Mock) => {
       if (method === listReviewComments) {
         return Promise.resolve([
@@ -139,10 +115,7 @@ describe('ReviewInteractionHandler', () => {
     expect(octokit.rest.actions.reRunWorkflowFailedJobs).toHaveBeenCalledWith(
       expect.objectContaining({ run_id: 456 })
     );
-    expect(octokit.graphql).toHaveBeenCalledWith(
-      expect.stringContaining('resolveReviewThread'),
-      { threadId: 'PRRT_thread_1' }
-    );
+    expect(octokit.graphql).not.toHaveBeenCalled();
     expect(octokit.rest.pulls.updateReviewComment).toHaveBeenCalledWith(
       expect.objectContaining({
         comment_id: 10,
@@ -207,10 +180,7 @@ describe('ReviewInteractionHandler', () => {
     expect(
       actionsOctokit.rest.actions.reRunWorkflowFailedJobs
     ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
-    expect(commentOctokit.graphql).toHaveBeenCalledWith(
-      expect.stringContaining('resolveReviewThread'),
-      { threadId: 'PRRT_thread_1' }
-    );
+    expect(commentOctokit.graphql).not.toHaveBeenCalled();
     expect(actionsOctokit.graphql).not.toHaveBeenCalled();
     expect(
       commentOctokit.rest.actions.reRunWorkflowFailedJobs
@@ -230,175 +200,6 @@ describe('ReviewInteractionHandler', () => {
     expect(
       actionsOctokit.rest.pulls.updateReviewComment
     ).not.toHaveBeenCalled();
-  });
-
-  it('falls back to the workflow token if the comment token cannot resolve the conversation', async () => {
-    const { client: commentClient, octokit: commentOctokit } = makeClient();
-    const { client: actionsClient, octokit: actionsOctokit } = makeClient();
-    process.env.GITHUB_EVENT_PATH = writeEvent({
-      comment: {
-        id: 11,
-        in_reply_to_id: 10,
-        body: '/rr skip verified',
-        user: { login: 'maintainer' },
-      },
-      pull_request: {
-        number: 123,
-        head: { sha: 'abc', repo: { fork: false } },
-        user: { login: 'author' },
-      },
-    });
-    commentOctokit.graphql.mockRejectedValue(
-      new Error('Resource not accessible by integration')
-    );
-    actionsOctokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
-      data: { permission: 'write', role_name: 'maintain' },
-    });
-    actionsOctokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
-      data: {
-        workflow_runs: [
-          {
-            id: 456,
-            path: '.github/workflows/review-router.yml',
-            head_sha: 'abc',
-            conclusion: 'failure',
-            pull_requests: [{ number: 123 }],
-          },
-        ],
-      },
-    });
-
-    const ledger = new ReviewLedger(commentClient, 'test-secret');
-    await new ReviewInteractionHandler(
-      commentClient,
-      ledger,
-      undefined,
-      actionsClient
-    ).execute();
-
-    expect(commentOctokit.graphql).toHaveBeenCalledWith(
-      expect.stringContaining('reviewThreads'),
-      expect.objectContaining({ number: 123 })
-    );
-    expect(actionsOctokit.graphql).toHaveBeenCalledWith(
-      expect.stringContaining('resolveReviewThread'),
-      { threadId: 'PRRT_thread_1' }
-    );
-    expect(
-      actionsOctokit.rest.actions.reRunWorkflowFailedJobs
-    ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
-  });
-
-  it('uses a dedicated thread resolver token before App and workflow tokens', async () => {
-    const { client: commentClient, octokit: commentOctokit } = makeClient();
-    const { client: actionsClient, octokit: actionsOctokit } = makeClient();
-    const { client: resolverClient, octokit: resolverOctokit } = makeClient();
-    process.env.GITHUB_EVENT_PATH = writeEvent({
-      comment: {
-        id: 11,
-        in_reply_to_id: 10,
-        body: '/rr skip verified',
-        user: { login: 'maintainer' },
-      },
-      pull_request: {
-        number: 123,
-        head: { sha: 'abc', repo: { fork: false } },
-        user: { login: 'author' },
-      },
-    });
-    actionsOctokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
-      data: { permission: 'write', role_name: 'maintain' },
-    });
-    actionsOctokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
-      data: {
-        workflow_runs: [
-          {
-            id: 456,
-            path: '.github/workflows/review-router.yml',
-            head_sha: 'abc',
-            conclusion: 'failure',
-            pull_requests: [{ number: 123 }],
-          },
-        ],
-      },
-    });
-
-    const ledger = new ReviewLedger(commentClient, 'test-secret');
-    await new ReviewInteractionHandler(
-      commentClient,
-      ledger,
-      undefined,
-      actionsClient,
-      resolverClient
-    ).execute();
-
-    expect(resolverOctokit.graphql).toHaveBeenCalledWith(
-      expect.stringContaining('resolveReviewThread'),
-      { threadId: 'PRRT_thread_1' }
-    );
-    expect(commentOctokit.graphql).not.toHaveBeenCalled();
-    expect(actionsOctokit.graphql).not.toHaveBeenCalled();
-    expect(
-      actionsOctokit.rest.actions.reRunWorkflowFailedJobs
-    ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
-  });
-
-  it('records /rr skip even when GitHub refuses to resolve the conversation', async () => {
-    const { client: commentClient, octokit: commentOctokit } = makeClient();
-    const { client: actionsClient, octokit: actionsOctokit } = makeClient();
-    process.env.GITHUB_EVENT_PATH = writeEvent({
-      comment: {
-        id: 11,
-        in_reply_to_id: 10,
-        body: '/rr skip verified',
-        user: { login: 'maintainer' },
-      },
-      pull_request: {
-        number: 123,
-        head: { sha: 'abc', repo: { fork: false } },
-        user: { login: 'author' },
-      },
-    });
-    commentOctokit.graphql.mockRejectedValue(
-      new Error('Resource not accessible by integration')
-    );
-    actionsOctokit.graphql.mockRejectedValue(
-      new Error('Resource not accessible by integration')
-    );
-    actionsOctokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
-      data: { permission: 'write', role_name: 'maintain' },
-    });
-    actionsOctokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
-      data: {
-        workflow_runs: [
-          {
-            id: 456,
-            path: '.github/workflows/review-router.yml',
-            head_sha: 'abc',
-            conclusion: 'failure',
-            pull_requests: [{ number: 123 }],
-          },
-        ],
-      },
-    });
-
-    const ledger = new ReviewLedger(commentClient, 'test-secret');
-    await new ReviewInteractionHandler(
-      commentClient,
-      ledger,
-      undefined,
-      actionsClient
-    ).execute();
-
-    expect(commentOctokit.rest.issues.createComment).toHaveBeenCalledWith(
-      expect.objectContaining({
-        issue_number: 123,
-        body: expect.stringContaining('reviewrouter-ledger:v1'),
-      })
-    );
-    expect(
-      actionsOctokit.rest.actions.reRunWorkflowFailedJobs
-    ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
   });
 
   it('records /rr skip without requiring a reason', async () => {
@@ -554,7 +355,7 @@ describe('ReviewInteractionHandler', () => {
     );
   });
 
-  it('unresolves the conversation for /rr unskip', async () => {
+  it('removes the dismissal marker for /rr unskip', async () => {
     const { client, octokit } = makeClient({
       parentBody:
         '**🟡 Major - SQL injection**\n\n<!-- review-router-dismissal:start -->\n<sub>Dismissed by @maintainer via `/rr skip`; this finding no longer blocks ReviewRouter.</sub>\n<!-- review-router-dismissal:end -->\nUse parameterized queries.',
@@ -571,31 +372,6 @@ describe('ReviewInteractionHandler', () => {
         head: { sha: 'abc', repo: { fork: false } },
         user: { login: 'author' },
       },
-    });
-    octokit.graphql.mockImplementation((query: string) => {
-      if (query.includes('reviewThreads')) {
-        return Promise.resolve({
-          repository: {
-            pullRequest: {
-              reviewThreads: {
-                nodes: [
-                  {
-                    id: 'PRRT_thread_1',
-                    isResolved: true,
-                    comments: { nodes: [{ databaseId: 10 }] },
-                  },
-                ],
-                pageInfo: { hasNextPage: false, endCursor: null },
-              },
-            },
-          },
-        });
-      }
-      return Promise.resolve({
-        unresolveReviewThread: {
-          thread: { id: 'PRRT_thread_1', isResolved: false },
-        },
-      });
     });
     octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
       data: { permission: 'write', role_name: 'maintain' },
@@ -617,10 +393,7 @@ describe('ReviewInteractionHandler', () => {
     const ledger = new ReviewLedger(client, 'test-secret');
     await new ReviewInteractionHandler(client, ledger).execute();
 
-    expect(octokit.graphql).toHaveBeenCalledWith(
-      expect.stringContaining('unresolveReviewThread'),
-      { threadId: 'PRRT_thread_1' }
-    );
+    expect(octokit.graphql).not.toHaveBeenCalled();
     expect(octokit.rest.pulls.updateReviewComment).toHaveBeenCalledWith(
       expect.objectContaining({
         comment_id: 10,

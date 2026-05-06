@@ -33,7 +33,6 @@ function syncEnvFromInputs(): void {
   const inputKeys = [
     'REVIEW_ROUTER_MODE',
     'REVIEW_ROUTER_LEDGER_KEY',
-    'REVIEW_ROUTER_THREAD_RESOLVE_TOKEN',
     'REVIEW_ROUTER_ALLOW_AUTHOR_SKIP',
     'REVIEW_ROUTER_REVIEW_WORKFLOW_FILE',
     'REVIEW_ROUTER_DISCUSSION_MODE',
@@ -296,11 +295,6 @@ async function runInteraction(
     actionsToken && actionsToken !== token
       ? new GitHubClient(actionsToken)
       : githubClient;
-  const threadResolveToken =
-    process.env.REVIEW_ROUTER_THREAD_RESOLVE_TOKEN || '';
-  const threadResolverClient = threadResolveToken
-    ? new GitHubClient(threadResolveToken)
-    : undefined;
   const ledger = new ReviewLedger(
     githubClient,
     process.env.REVIEW_ROUTER_LEDGER_KEY,
@@ -311,8 +305,7 @@ async function runInteraction(
     githubClient,
     ledger,
     discussionHandler,
-    actionsClient,
-    threadResolverClient
+    actionsClient
   );
   await handler.execute();
 }

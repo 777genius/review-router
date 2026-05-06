@@ -23,6 +23,9 @@ describe('CommentPoster', () => {
       rest: {
         issues: {
           createComment: jest.fn().mockResolvedValue({}),
+          updateComment: jest.fn().mockResolvedValue({}),
+          deleteComment: jest.fn().mockResolvedValue({}),
+          listComments: jest.fn().mockResolvedValue({ data: [] }),
         },
         pulls: {
           createReview: jest.fn().mockResolvedValue({}),
@@ -391,6 +394,143 @@ describe('CommentPoster', () => {
       await poster.postInline(123, comments, files);
 
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to a PR comment when GitHub rejects inline review creation with 422', async () => {
+      const error = new Error(
+        'Unprocessable Entity: "An internal error occurred, please try again."'
+      ) as Error & { status: number };
+      error.status = 422;
+      mockOctokit.rest.pulls.createReview.mockRejectedValue(error);
+
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'src/test.ts',
+          line: 10,
+          side: 'RIGHT' as const,
+          body: [
+            '**🔴 Critical - Auth bypass**',
+            '',
+            'The changed lookup ignores the requested email.',
+            '',
+            '```suggestion',
+            'return db.users.find((user) => user.email === email) || null;',
+            '```',
+          ].join('\n'),
+          severity: 'critical',
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'src/test.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 1,
+          changes: 2,
+          patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+        },
+      ];
+
+      await expect(poster.postInline(123, comments, files)).resolves.toBeUndefined();
+
+      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        issue_number: 123,
+        body: expect.stringContaining('<!-- review-router-inline-fallback -->'),
+      });
+      expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('src/test.ts:10'),
+        })
+      );
+      expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('Committable suggestion is only available on inline review comments'),
+        })
+      );
+    });
+
+    it('updates an existing inline fallback comment instead of duplicating it', async () => {
+      const error = new Error('Validation Failed') as Error & { status: number };
+      error.status = 422;
+      mockOctokit.rest.pulls.createReview.mockRejectedValue(error);
+      mockOctokit.rest.issues.listComments.mockResolvedValue({
+        data: [
+          {
+            id: 77,
+            body: '<!-- review-router-inline-fallback -->\n\nold fallback',
+          },
+        ],
+      });
+
+      const poster = new CommentPoster(mockClient, false);
+      await poster.postInline(
+        123,
+        [
+          {
+            path: 'src/test.ts',
+            line: 10,
+            side: 'RIGHT' as const,
+            body: '**🟡 Major - Test finding**\n\nBody',
+            severity: 'major',
+          },
+        ],
+        [
+          {
+            filename: 'src/test.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+            patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+          },
+        ]
+      );
+
+      expect(mockOctokit.rest.issues.updateComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        comment_id: 77,
+        body: expect.stringContaining('src/test.ts:10'),
+      });
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
+    it('does not fallback for non-review-position permission failures', async () => {
+      const error = new Error('Resource not accessible by integration') as Error & { status: number };
+      error.status = 403;
+      mockOctokit.rest.pulls.createReview.mockRejectedValue(error);
+
+      const poster = new CommentPoster(mockClient, false);
+
+      await expect(
+        poster.postInline(
+          123,
+          [
+            {
+              path: 'src/test.ts',
+              line: 10,
+              side: 'RIGHT' as const,
+              body: 'Test comment',
+              severity: 'major',
+            },
+          ],
+          [
+            {
+              filename: 'src/test.ts',
+              status: 'modified',
+              additions: 1,
+              deletions: 0,
+              changes: 1,
+              patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+            },
+          ]
+        )
+      ).rejects.toThrow('Resource not accessible by integration');
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
     });
 
     it('splits large comments into chunks', async () => {

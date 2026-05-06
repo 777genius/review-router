@@ -18311,6 +18311,7 @@ var CommentPoster = class _CommentPoster {
   }
   static MAX_COMMENT_SIZE = 6e4;
   static BOT_COMMENT_MARKER = "<!-- review-router-bot -->";
+  static INLINE_FALLBACK_MARKER = "<!-- review-router-inline-fallback -->";
   static INLINE_SKIP_HELP_MARKER = "<!-- review-router-skip-help -->";
   static LEGACY_BOT_COMMENT_MARKERS = [
     "<!-- ai-robot-review-bot -->",
@@ -18636,16 +18637,111 @@ ${comment.body.substring(0, 200)}...`);
       return;
     }
     const { octokit, owner, repo } = this.client;
-    await withRetry(
-      () => octokit.rest.pulls.createReview({
-        owner,
-        repo,
-        pull_number: prNumber,
-        event: "COMMENT",
-        comments: apiComments
-      }),
-      { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
-    );
+    try {
+      await withRetry(
+        () => octokit.rest.pulls.createReview({
+          owner,
+          repo,
+          pull_number: prNumber,
+          event: "COMMENT",
+          comments: apiComments
+        }),
+        { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+      );
+    } catch (error2) {
+      if (!_CommentPoster.shouldFallbackInlineReviewError(error2)) {
+        throw error2;
+      }
+      logger.warn(
+        "GitHub inline review API failed; posting inline findings as a PR comment fallback",
+        error2
+      );
+      await this.postInlineFallback(prNumber, apiComments, error2);
+    }
+  }
+  static shouldFallbackInlineReviewError(error2) {
+    const maybeError = error2;
+    const message = maybeError?.message || String(error2);
+    return maybeError?.status === 422 || /unprocessable entity/i.test(message) || /internal error occurred/i.test(message) || /validation failed/i.test(message);
+  }
+  async postInlineFallback(prNumber, comments, error2) {
+    const { octokit, owner, repo } = this.client;
+    const body = _CommentPoster.formatInlineFallbackBody(comments, error2);
+    const chunks = this.chunk(body);
+    const existingComments = await this.findInlineFallbackComments(prNumber);
+    const updates = Math.min(existingComments.length, chunks.length);
+    for (let i = 0; i < updates; i++) {
+      await withRetry(
+        () => octokit.rest.issues.updateComment({
+          owner,
+          repo,
+          comment_id: existingComments[i].id,
+          body: chunks[i]
+        }),
+        { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+      );
+    }
+    for (let i = existingComments.length; i < chunks.length; i++) {
+      await withRetry(
+        () => octokit.rest.issues.createComment({
+          owner,
+          repo,
+          issue_number: prNumber,
+          body: chunks[i]
+        }),
+        { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+      );
+    }
+    for (const stale of existingComments.slice(chunks.length)) {
+      await withRetry(
+        () => octokit.rest.issues.deleteComment({ owner, repo, comment_id: stale.id }),
+        { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+      );
+    }
+  }
+  async findInlineFallbackComments(prNumber) {
+    const { octokit, owner, repo } = this.client;
+    try {
+      const comments = await withRetry(
+        () => octokit.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 }),
+        { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+      );
+      return comments.data.filter((comment) => (comment.body || "").includes(_CommentPoster.INLINE_FALLBACK_MARKER)).map((comment) => ({ id: comment.id, body: comment.body ?? "" }));
+    } catch (error2) {
+      logger.warn("Failed to find existing inline fallback comment", error2);
+      return [];
+    }
+  }
+  static formatInlineFallbackBody(comments, error2) {
+    const errorMessage = (error2.message || String(error2)).slice(0, 2e3);
+    const items = comments.map((comment, index) => [
+      `### ${index + 1}. ${comment.path}:${comment.line}`,
+      "",
+      _CommentPoster.stripUnsupportedFallbackText(comment.body)
+    ].join("\n")).join("\n\n---\n\n");
+    return [
+      _CommentPoster.INLINE_FALLBACK_MARKER,
+      "",
+      "# ReviewRouter inline fallback",
+      "",
+      "GitHub could not create inline review comments for this run, so ReviewRouter is posting the findings as a normal PR comment. Severity gating still uses these findings.",
+      "",
+      "<details>",
+      "<summary>GitHub API error</summary>",
+      "",
+      "```text",
+      errorMessage,
+      "```",
+      "",
+      "</details>",
+      "",
+      "## Findings",
+      "",
+      items
+    ].join("\n");
+  }
+  static stripUnsupportedFallbackText(body) {
+    return body.replace(/<sub><!-- review-router-skip-help -->[\s\S]*?<\/sub>/g, "").replace(/```suggestion[\s\S]*?```/g, "_Committable suggestion is only available on inline review comments._").trim();
   }
   chunk(content) {
     const paragraphs = content.split("\n\n");

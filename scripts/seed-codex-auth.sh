@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Seed Codex ChatGPT OAuth auth into GitHub Actions secrets without sending it to ReviewRouter SaaS.
 # Usage examples:
-#   curl -fsSL https://app.reviewrouter.dev/install/codex | REVIEW_ROUTER_REPO=owner/repo bash
-#   REVIEW_ROUTER_SECRET_SCOPE=org REVIEW_ROUTER_ORG=my-org REVIEW_ROUTER_ORG_SECRET_REPOS=repo-a,repo-b bash scripts/seed-codex-auth.sh
+#   curl -fsSL https://reviewrouter.site/install/codex | REVIEW_ROUTER_CONFIRM_WRITE=1 REVIEW_ROUTER_REPO=owner/repo bash
+#   REVIEW_ROUTER_CONFIRM_WRITE=1 REVIEW_ROUTER_SECRET_SCOPE=org REVIEW_ROUTER_ORG=my-org REVIEW_ROUTER_ORG_SECRET_REPOS=repo-a,repo-b bash scripts/seed-codex-auth.sh
 
 set -Eeuo pipefail
 
@@ -13,9 +13,11 @@ ORG_NAME="${REVIEW_ROUTER_ORG:-}"
 ORG_SELECTED_REPOS="${REVIEW_ROUTER_ORG_SECRET_REPOS:-}"
 INCLUDE_CODEX_CONFIG="${REVIEW_ROUTER_INCLUDE_CODEX_CONFIG:-0}"
 DRY_RUN="${REVIEW_ROUTER_DRY_RUN:-0}"
+CONFIRM_WRITE="${REVIEW_ROUTER_CONFIRM_WRITE:-${REVIEW_ROUTER_YES:-0}}"
 CODEX_BASE_HOME="${REVIEW_ROUTER_CODEX_HOME:-${CODEX_HOME:-$HOME/.codex}}"
 CODEX_AUTH_FILE="${REVIEW_ROUTER_CODEX_AUTH_FILE:-$CODEX_BASE_HOME/auth.json}"
 CODEX_CONFIG_FILE="${REVIEW_ROUTER_CODEX_CONFIG_FILE:-$CODEX_BASE_HOME/config.toml}"
+CODEX_AUTH_STALE_DAYS="${REVIEW_ROUTER_CODEX_AUTH_STALE_DAYS:-30}"
 
 if [ -t 1 ]; then
   GREEN='\033[0;32m'
@@ -37,6 +39,31 @@ ok() { log "${GREEN}OK${NC} $*"; }
 warn() { log "${YELLOW}WARN${NC} $*"; }
 fatal() { log "${RED}ERROR${NC} $*" >&2; exit 1; }
 
+usage() {
+  cat <<'EOF'
+ReviewRouter Codex OAuth secret seeding
+
+Usage:
+  bash scripts/seed-codex-auth.sh [options]
+
+Options:
+  --dry-run                 Print gh secret commands without writing secrets.
+  --yes, --confirm-write    Allow non-interactive secret writes after verifying the target.
+  --repo owner/repo         Target repository for repo-scoped secrets.
+  --scope repo|org          Secret scope. Defaults to repo.
+  --org org                 Organization for org selected-repository secrets.
+  --repos repo-a,repo-b     Selected repositories for org-scoped secrets.
+  --include-config          Also write CODEX_CONFIG_TOML.
+  --codex-home path         Codex home containing auth.json and config.toml.
+  --auth-file path          Explicit Codex auth.json path.
+  --config-file path        Explicit Codex config.toml path.
+  --stale-days days         Warn when auth.json last_refresh is older than this. Defaults to 30.
+  -h, --help                Show this help.
+
+Environment variables with the same REVIEW_ROUTER_* names are still supported.
+EOF
+}
+
 is_true() {
   case "${1:-}" in
     1|true|TRUE|yes|YES|y|Y) return 0 ;;
@@ -46,6 +73,101 @@ is_true() {
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fatal "Missing required command: $1"
+}
+
+require_arg() {
+  option="$1"
+  value="${2:-}"
+  [ -n "$value" ] || fatal "$option requires a value"
+}
+
+parse_args() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --dry-run)
+        DRY_RUN="1"
+        ;;
+      --yes|--confirm-write)
+        CONFIRM_WRITE="1"
+        ;;
+      --repo)
+        shift
+        require_arg "--repo" "${1:-}"
+        TARGET_REPO="$1"
+        ;;
+      --scope)
+        shift
+        require_arg "--scope" "${1:-}"
+        SECRET_SCOPE="$1"
+        ;;
+      --org)
+        shift
+        require_arg "--org" "${1:-}"
+        ORG_NAME="$1"
+        ;;
+      --repos|--selected-repos)
+        shift
+        require_arg "--repos" "${1:-}"
+        ORG_SELECTED_REPOS="$1"
+        ;;
+      --include-config)
+        INCLUDE_CODEX_CONFIG="1"
+        ;;
+      --codex-home)
+        shift
+        require_arg "--codex-home" "${1:-}"
+        CODEX_BASE_HOME="$1"
+        CODEX_AUTH_FILE="$CODEX_BASE_HOME/auth.json"
+        CODEX_CONFIG_FILE="$CODEX_BASE_HOME/config.toml"
+        ;;
+      --auth-file)
+        shift
+        require_arg "--auth-file" "${1:-}"
+        CODEX_AUTH_FILE="$1"
+        ;;
+      --config-file)
+        shift
+        require_arg "--config-file" "${1:-}"
+        CODEX_CONFIG_FILE="$1"
+        ;;
+      --stale-days)
+        shift
+        require_arg "--stale-days" "${1:-}"
+        CODEX_AUTH_STALE_DAYS="$1"
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      --)
+        shift
+        break
+        ;;
+      *)
+        fatal "Unknown option: $1"
+        ;;
+    esac
+    shift
+  done
+}
+
+confirm_secret_write() {
+  if is_true "$DRY_RUN" || is_true "$CONFIRM_WRITE"; then
+    return
+  fi
+
+  warn "This will create or overwrite GitHub Actions secrets for the target below."
+  warn "ReviewRouter SaaS will not receive the secret value; gh writes it directly to GitHub."
+
+  if [ ! -t 0 ]; then
+    fatal "Refusing to write secrets in non-interactive mode without confirmation. Set REVIEW_ROUTER_CONFIRM_WRITE=1 after verifying the target."
+  fi
+
+  printf 'Type "write secrets" to continue: ' >&2
+  read -r answer
+  if [ "$answer" != "write secrets" ]; then
+    fatal "Secret write cancelled."
+  fi
 }
 
 normalize_remote_repo() {
@@ -157,37 +279,77 @@ normalize_org_repos() {
 }
 
 validate_codex_auth_file() {
-  [ -f "$CODEX_AUTH_FILE" ] || fatal "Codex auth file not found: $CODEX_AUTH_FILE. Run: codex login"
-  [ -r "$CODEX_AUTH_FILE" ] || fatal "Codex auth file is not readable: $CODEX_AUTH_FILE"
+  [ -f "$CODEX_AUTH_FILE" ] || fatal "Codex auth file not found: $CODEX_AUTH_FILE. To reseed auth.json, run: codex login"
+  [ -r "$CODEX_AUTH_FILE" ] || fatal "Codex auth file is not readable: $CODEX_AUTH_FILE. To reseed auth.json, run: codex login"
 
   if command -v node >/dev/null 2>&1; then
-    node - "$CODEX_AUTH_FILE" <<'NODE'
+    node - "$CODEX_AUTH_FILE" "$CODEX_AUTH_STALE_DAYS" <<'NODE'
 const fs = require('node:fs');
 const path = process.argv[2];
+const staleDays = Number(process.argv[3] || '30');
+const staleDaysLabel = staleDays === 1 ? '1 day' : `${staleDays} days`;
 function fail(message) {
   console.error(message);
   process.exit(1);
+}
+function warn(message) {
+  console.error(`WARN ${message}`);
 }
 let data;
 try {
   data = JSON.parse(fs.readFileSync(path, 'utf8'));
 } catch (error) {
-  fail(`auth.json is not valid JSON: ${error.message}`);
+  fail(`auth.json is not valid JSON: ${error.message}. To reseed auth.json, run codex login and rerun this command.`);
 }
-if (data.auth_mode !== 'chatgpt') fail('auth.json auth_mode must be chatgpt');
-if (!data.tokens || !data.tokens.refresh_token) fail('auth.json tokens.refresh_token is missing');
+if (data.auth_mode !== 'chatgpt') fail('auth.json auth_mode must be chatgpt. To reseed auth.json, run codex login and rerun this command.');
+if (!data.tokens || !data.tokens.refresh_token) fail('auth.json tokens.refresh_token is missing. To reseed auth.json, run codex login and rerun this command.');
+if (!Number.isFinite(staleDays) || staleDays <= 0) fail('stale-days must be a positive number');
+if (!data.last_refresh) {
+  warn('auth.json last_refresh is missing. If CI later reports Codex auth errors, run codex login and reseed auth.json.');
+} else {
+  const refreshedAt = Date.parse(data.last_refresh);
+  if (!Number.isFinite(refreshedAt)) {
+    warn('auth.json last_refresh is not parseable. If CI later reports Codex auth errors, run codex login and reseed auth.json.');
+  } else {
+    const ageDays = (Date.now() - refreshedAt) / 86_400_000;
+    if (ageDays > staleDays) {
+      warn(`auth.json last_refresh is older than ${staleDaysLabel}. Re-run codex login and reseed auth.json if CI reports Codex auth failures.`);
+    }
+  }
+}
 NODE
   elif command -v python3 >/dev/null 2>&1; then
-    python3 - "$CODEX_AUTH_FILE" <<'PY'
+    python3 - "$CODEX_AUTH_FILE" "$CODEX_AUTH_STALE_DAYS" <<'PY'
+from datetime import datetime, timezone
 import json
 import sys
 path = sys.argv[1]
-with open(path, 'r', encoding='utf-8') as f:
-    data = json.load(f)
+stale_days = float(sys.argv[2] or '30')
+stale_days_label = '1 day' if stale_days == 1 else f'{stale_days:g} days'
+def warn(message):
+    print(f'WARN {message}', file=sys.stderr)
+try:
+    with open(path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+except json.JSONDecodeError as exc:
+    raise SystemExit(f'auth.json is not valid JSON: {exc}. To reseed auth.json, run codex login and rerun this command.')
 if data.get('auth_mode') != 'chatgpt':
-    raise SystemExit('auth.json auth_mode must be chatgpt')
+    raise SystemExit('auth.json auth_mode must be chatgpt. To reseed auth.json, run codex login and rerun this command.')
 if not ((data.get('tokens') or {}).get('refresh_token')):
-    raise SystemExit('auth.json tokens.refresh_token is missing')
+    raise SystemExit('auth.json tokens.refresh_token is missing. To reseed auth.json, run codex login and rerun this command.')
+if stale_days <= 0:
+    raise SystemExit('stale-days must be a positive number')
+last_refresh = data.get('last_refresh')
+if not last_refresh:
+    warn('auth.json last_refresh is missing. If CI later reports Codex auth errors, run codex login and reseed auth.json.')
+else:
+    try:
+        refreshed_at = datetime.fromisoformat(last_refresh.replace('Z', '+00:00'))
+        age_days = (datetime.now(timezone.utc) - refreshed_at).total_seconds() / 86400
+        if age_days > stale_days:
+            warn(f'auth.json last_refresh is older than {stale_days_label}. Re-run codex login and reseed auth.json if CI reports Codex auth failures.')
+    except ValueError:
+        warn('auth.json last_refresh is not parseable. If CI later reports Codex auth errors, run codex login and reseed auth.json.')
 PY
   else
     fatal "Need node or python3 to validate auth.json safely."
@@ -218,6 +380,7 @@ store_secret_from_file() {
 }
 
 main() {
+  parse_args "$@"
   log "${PRODUCT_NAME} Codex OAuth secret seeding"
   require_cmd gh
   normalize_secret_scope
@@ -228,6 +391,7 @@ main() {
 
   gh auth status >/dev/null 2>&1 || fatal "gh is not authenticated. Run: gh auth login"
   validate_codex_auth_file
+  ok "Validated auth.json before writing secrets"
 
   info "Target repo: $TARGET_REPO"
   if [ "$SECRET_SCOPE" = "org" ]; then
@@ -236,6 +400,7 @@ main() {
     info "Secret scope: repo $TARGET_REPO"
   fi
   info "Codex auth file: $CODEX_AUTH_FILE"
+  confirm_secret_write
 
   store_secret_from_file CODEX_AUTH_JSON "$CODEX_AUTH_FILE"
 

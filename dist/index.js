@@ -18677,6 +18677,8 @@ ${comment.body.substring(0, 200)}...`);
             path: comment.path,
             line: comment.line,
             side: comment.side,
+            ...comment.start_line !== void 0 ? { start_line: comment.start_line } : {},
+            ...comment.start_side !== void 0 ? { start_side: comment.start_side } : {},
             body: comment.body
           }),
           { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
@@ -18685,6 +18687,35 @@ ${comment.body.substring(0, 200)}...`);
       } catch (error2) {
         if (!_CommentPoster.shouldFallbackInlineReviewError(error2)) {
           throw error2;
+        }
+        const retryComment = _CommentPoster.withoutCommittableSuggestionForInlineRetry(comment);
+        if (retryComment.body !== comment.body) {
+          try {
+            await withRetry(
+              () => octokit.rest.pulls.createReviewComment({
+                owner,
+                repo,
+                pull_number: prNumber,
+                commit_id: headSha,
+                path: retryComment.path,
+                line: retryComment.line,
+                side: retryComment.side,
+                ...retryComment.start_line !== void 0 ? { start_line: retryComment.start_line } : {},
+                ...retryComment.start_side !== void 0 ? { start_side: retryComment.start_side } : {},
+                body: retryComment.body
+              }),
+              { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+            );
+            logger.info(
+              `Posted inline comment at ${comment.path}:${comment.line} after removing committable suggestion block rejected by GitHub`
+            );
+            postedCount++;
+            continue;
+          } catch (retryError) {
+            if (!_CommentPoster.shouldFallbackInlineReviewError(retryError)) {
+              throw retryError;
+            }
+          }
         }
         failedComments.push(comment);
       }
@@ -18706,6 +18737,18 @@ ${comment.body.substring(0, 200)}...`);
     const maybeError = error2;
     const message = maybeError?.message || String(error2);
     return maybeError?.status === 422 || /unprocessable entity/i.test(message) || /internal error occurred/i.test(message) || /validation failed/i.test(message);
+  }
+  static withoutCommittableSuggestionForInlineRetry(comment) {
+    if (!comment.body.includes("```suggestion")) {
+      return comment;
+    }
+    return {
+      ...comment,
+      body: comment.body.replace(
+        /```suggestion[\s\S]*?```/g,
+        "_Committable suggestion omitted because GitHub rejected this inline suggestion block._"
+      ).trim()
+    };
   }
   async postInlineFallback(prNumber, comments, error2) {
     const { octokit, owner, repo } = this.client;
@@ -29143,7 +29186,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.6",
+  version: "1.0.7",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

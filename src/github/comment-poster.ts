@@ -23,6 +23,15 @@ interface ActiveInlineComments {
   comments: InlineCommentReference[];
 }
 
+interface GitHubInlineCommentPayload {
+  path: string;
+  line: number;
+  side: 'LEFT' | 'RIGHT';
+  body: string;
+  start_line?: number;
+  start_side?: 'LEFT' | 'RIGHT';
+}
+
 export class CommentPoster {
   private static readonly MAX_COMMENT_SIZE = 60_000;
   private static readonly BOT_COMMENT_MARKER = '<!-- review-router-bot -->';
@@ -434,7 +443,7 @@ export class CommentPoster {
         }
         return apiComment;
       })
-    )).filter((c): c is { path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string } => c !== null);
+    )).filter((c): c is GitHubInlineCommentPayload => c !== null);
 
     if (apiComments.length === 0) {
       logger.info('No inline comments with valid diff positions to post');
@@ -481,12 +490,12 @@ export class CommentPoster {
 
   private async postIndividualInlineComments(
     prNumber: number,
-    comments: Array<{ path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }>,
+    comments: GitHubInlineCommentPayload[],
     headSha: string,
     originalError: Error
-  ): Promise<Array<{ path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }>> {
+  ): Promise<GitHubInlineCommentPayload[]> {
     const { octokit, owner, repo } = this.client;
-    const failedComments: Array<{ path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }> = [];
+    const failedComments: GitHubInlineCommentPayload[] = [];
     let postedCount = 0;
 
     for (const comment of comments) {
@@ -500,6 +509,8 @@ export class CommentPoster {
             path: comment.path,
             line: comment.line,
             side: comment.side,
+            ...(comment.start_line !== undefined ? { start_line: comment.start_line } : {}),
+            ...(comment.start_side !== undefined ? { start_side: comment.start_side } : {}),
             body: comment.body,
           }),
           { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
@@ -509,6 +520,36 @@ export class CommentPoster {
         if (!CommentPoster.shouldFallbackInlineReviewError(error)) {
           throw error;
         }
+        const retryComment = CommentPoster.withoutCommittableSuggestionForInlineRetry(comment);
+        if (retryComment.body !== comment.body) {
+          try {
+            await withRetry(
+              () => octokit.rest.pulls.createReviewComment({
+                owner,
+                repo,
+                pull_number: prNumber,
+                commit_id: headSha,
+                path: retryComment.path,
+                line: retryComment.line,
+                side: retryComment.side,
+                ...(retryComment.start_line !== undefined ? { start_line: retryComment.start_line } : {}),
+                ...(retryComment.start_side !== undefined ? { start_side: retryComment.start_side } : {}),
+                body: retryComment.body,
+              }),
+              { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
+            );
+            logger.info(
+              `Posted inline comment at ${comment.path}:${comment.line} after removing committable suggestion block rejected by GitHub`
+            );
+            postedCount++;
+            continue;
+          } catch (retryError) {
+            if (!CommentPoster.shouldFallbackInlineReviewError(retryError)) {
+              throw retryError;
+            }
+          }
+        }
+
         failedComments.push(comment);
       }
     }
@@ -537,9 +578,27 @@ export class CommentPoster {
       || /validation failed/i.test(message);
   }
 
+  private static withoutCommittableSuggestionForInlineRetry(
+    comment: GitHubInlineCommentPayload
+  ): GitHubInlineCommentPayload {
+    if (!comment.body.includes('```suggestion')) {
+      return comment;
+    }
+
+    return {
+      ...comment,
+      body: comment.body
+        .replace(
+          /```suggestion[\s\S]*?```/g,
+          '_Committable suggestion omitted because GitHub rejected this inline suggestion block._'
+        )
+        .trim(),
+    };
+  }
+
   private async postInlineFallback(
     prNumber: number,
-    comments: Array<{ path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }>,
+    comments: GitHubInlineCommentPayload[],
     error: Error
   ): Promise<void> {
     const { octokit, owner, repo } = this.client;
@@ -599,7 +658,7 @@ export class CommentPoster {
   }
 
   private static formatInlineFallbackBody(
-    comments: Array<{ path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }>,
+    comments: GitHubInlineCommentPayload[],
     error: Error
   ): string {
     const errorMessage = (error.message || String(error)).slice(0, 2000);

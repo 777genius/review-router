@@ -500,6 +500,64 @@ describe('CommentPoster', () => {
       expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
     });
 
+    it('retries individual inline comments without committable suggestion before PR-comment fallback', async () => {
+      const batchError = new Error(
+        'Unprocessable Entity: "An internal error occurred, please try again."'
+      ) as Error & { status: number };
+      batchError.status = 422;
+      const suggestionError = new Error('Validation Failed') as Error & { status: number };
+      suggestionError.status = 422;
+      mockOctokit.rest.pulls.createReview.mockRejectedValue(batchError);
+      mockOctokit.rest.pulls.createReviewComment
+        .mockRejectedValueOnce(suggestionError)
+        .mockResolvedValueOnce({});
+
+      const poster = new CommentPoster(mockClient, false);
+      await poster.postInline(
+        123,
+        [
+          {
+            path: 'src/test.txt',
+            line: 10,
+            side: 'RIGHT' as const,
+            body: [
+              '**🔴 Critical - Auth bypass**',
+              '',
+              'The changed lookup ignores the requested email.',
+              '',
+              '<!-- suggestion_start -->',
+              '',
+              '```suggestion',
+              '  return db.users.find((user) => user.email === email) || null;',
+              '```',
+              '',
+              '<!-- suggestion_end -->',
+            ].join('\n'),
+            severity: 'critical',
+          },
+        ],
+        [
+          {
+            filename: 'src/test.txt',
+            status: 'modified',
+            additions: 1,
+            deletions: 1,
+            changes: 2,
+            patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+          },
+        ],
+        'abc123'
+      );
+
+      expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledTimes(2);
+      expect(mockOctokit.rest.pulls.createReviewComment.mock.calls[0][0].body).toContain('```suggestion');
+      expect(mockOctokit.rest.pulls.createReviewComment.mock.calls[1][0].body).not.toContain('```suggestion');
+      expect(mockOctokit.rest.pulls.createReviewComment.mock.calls[1][0].body).toContain(
+        'Committable suggestion omitted because GitHub rejected this inline suggestion block'
+      );
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
     it('falls back only for individual inline comments that GitHub still rejects', async () => {
       const batchError = new Error(
         'Unprocessable Entity: "An internal error occurred, please try again."'
@@ -510,6 +568,8 @@ describe('CommentPoster', () => {
       mockOctokit.rest.pulls.createReview.mockRejectedValue(batchError);
       mockOctokit.rest.pulls.createReviewComment
         .mockResolvedValueOnce({})
+        .mockRejectedValueOnce(lineError)
+        .mockRejectedValueOnce(lineError)
         .mockRejectedValueOnce(lineError);
 
       const poster = new CommentPoster(mockClient, false);

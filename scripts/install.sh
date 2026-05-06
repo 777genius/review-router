@@ -101,6 +101,18 @@ is_true() {
   esac
 }
 
+json_escape() {
+  printf '%s' "$1" | sed \
+    -e 's/\\/\\\\/g' \
+    -e 's/"/\\"/g'
+}
+
+json_pair() {
+  key="$1"
+  value="$2"
+  printf '"%s":"%s"' "$key" "$(json_escape "$value")"
+}
+
 validate_discussion_mode() {
   case "${1:-}" in
     off|suggest) return 0 ;;
@@ -1328,6 +1340,30 @@ write_reusable_workflow() {
     openrouter) runtime_auth_mode="openrouter-api" ;;
     *) runtime_auth_mode="$AUTH_MODE" ;;
   esac
+  static_runtime_env_json="{"
+  static_runtime_env_json="$static_runtime_env_json$(json_pair REVIEW_AUTH_MODE "$runtime_auth_mode")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair INLINE_MAX_COMMENTS "$INLINE_MAX_COMMENTS")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair INLINE_MIN_SEVERITY "$INLINE_MIN_SEVERITY")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair MIN_CONFIDENCE "0.6")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair CONSENSUS_REQUIRED_FOR_CRITICAL "false")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair UPDATE_PR_DESCRIPTION "true")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair FAIL_ON_CRITICAL "$FAIL_ON_CRITICAL")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair FAIL_ON_MAJOR "$FAIL_ON_MAJOR")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair ENABLE_AST_ANALYSIS "$ENABLE_AST_ANALYSIS")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair ENABLE_SECURITY "$ENABLE_SECURITY")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair ENABLE_AI_DETECTION "false")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair LEARNING_ENABLED "false")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair GRAPH_ENABLED "$GRAPH_ENABLED")"
+  if [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "openai" ]; then
+    static_runtime_env_json="$static_runtime_env_json,$(json_pair CODEX_MODEL "$CODEX_MODEL")"
+    static_runtime_env_json="$static_runtime_env_json,$(json_pair CODEX_REASONING_EFFORT "$CODEX_REASONING_EFFORT")"
+    static_runtime_env_json="$static_runtime_env_json,$(json_pair CODEX_HEALTHCHECK_MODE "binary")"
+    static_runtime_env_json="$static_runtime_env_json,$(json_pair CODEX_AGENTIC_CONTEXT "true")"
+  elif [ "$AUTH_MODE" = "openrouter" ]; then
+    static_runtime_env_json="$static_runtime_env_json,$(json_pair REVIEW_PROVIDERS "$OPENROUTER_DEFAULT_PROVIDERS")"
+    static_runtime_env_json="$static_runtime_env_json,$(json_pair SYNTHESIS_MODEL "$OPENROUTER_DEFAULT_SYNTHESIS")"
+  fi
+  static_runtime_env_json="$static_runtime_env_json}"
   mkdir -p "$(dirname "$workflow_file")"
 
   {
@@ -1363,7 +1399,7 @@ YAML
       runtime_ref: $runtime_ref
       runtime_config_mode: static
       static_runtime_env_json: >-
-        {"REVIEW_AUTH_MODE":"$runtime_auth_mode","INLINE_MAX_COMMENTS":"$INLINE_MAX_COMMENTS","INLINE_MIN_SEVERITY":"$INLINE_MIN_SEVERITY","MIN_CONFIDENCE":"0.6","CONSENSUS_REQUIRED_FOR_CRITICAL":"false","UPDATE_PR_DESCRIPTION":"true","FAIL_ON_CRITICAL":"$FAIL_ON_CRITICAL","FAIL_ON_MAJOR":"$FAIL_ON_MAJOR","ENABLE_AST_ANALYSIS":"$ENABLE_AST_ANALYSIS","ENABLE_SECURITY":"$ENABLE_SECURITY","ENABLE_AI_DETECTION":"false","LEARNING_ENABLED":"false","GRAPH_ENABLED":"$GRAPH_ENABLED","CODEX_MODEL":"$CODEX_MODEL","CODEX_REASONING_EFFORT":"$CODEX_REASONING_EFFORT","CODEX_HEALTHCHECK_MODE":"binary","CODEX_AGENTIC_CONTEXT":"true","REVIEW_PROVIDERS":"$OPENROUTER_DEFAULT_PROVIDERS","SYNTHESIS_MODEL":"$OPENROUTER_DEFAULT_SYNTHESIS"}
+        $static_runtime_env_json
       pr_number: \${{ github.event.pull_request.number || inputs.pr_number }}
 YAML
     if [ "$IDENTITY_MODE" = "app" ]; then

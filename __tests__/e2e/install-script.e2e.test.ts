@@ -245,6 +245,34 @@ describe('review-router curl installer e2e', () => {
     );
   });
 
+  it('uses Codex providers in compact reusable caller workflows for Codex OAuth', () => {
+    const codexDir = makeTempDir('airr-reusable-codex-');
+    const authFile = path.join(codexDir, 'auth.json');
+    fs.writeFileSync(
+      authFile,
+      JSON.stringify({
+        auth_mode: 'chatgpt',
+        tokens: { refresh_token: 'refresh-token' },
+      })
+    );
+
+    const result = runInstaller({
+      REVIEW_ROUTER_WORKFLOW_STYLE: 'reusable',
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'codex',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_CODEX_AUTH_FILE: authFile,
+    });
+
+    expect(result.status).toBe(0);
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain('"REVIEW_AUTH_MODE":"codex-oauth"');
+    expect(workflow).toContain('"CODEX_MODEL":"gpt-5.5"');
+    expect(workflow).toContain('"CODEX_REASONING_EFFORT":"medium"');
+    expect(workflow).not.toContain('"REVIEW_PROVIDERS":"openrouter/free"');
+    expect(workflow).not.toContain('"SYNTHESIS_MODEL":"openrouter/');
+  });
+
   it('generates github-actions bot workflow for OpenRouter auth without GitHub App setup', () => {
     const result = runInstaller({
       REVIEW_ROUTER_IDENTITY: 'actions',

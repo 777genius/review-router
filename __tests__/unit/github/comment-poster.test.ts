@@ -591,6 +591,28 @@ describe('CommentPoster', () => {
       });
     });
 
+    it('deletes stale PR-comment fallback when no current inline findings remain', async () => {
+      mockOctokit.rest.issues.listComments.mockResolvedValue({
+        data: [
+          {
+            id: 97,
+            body: '<!-- review-router-inline-fallback -->\n\nold fallback',
+          },
+        ],
+      });
+
+      const poster = new CommentPoster(mockClient, false);
+      await poster.postInline(123, [], []);
+
+      expect(mockOctokit.rest.issues.deleteComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        comment_id: 97,
+      });
+      expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
     it('retries individual inline comments without committable suggestion before PR-comment fallback', async () => {
       const batchError = new Error(
         'Unprocessable Entity: "An internal error occurred, please try again."'

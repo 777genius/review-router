@@ -18528,7 +18528,12 @@ ${content.substring(0, 500)}...`);
     return { valid: true, hasConsensus };
   }
   async postInline(prNumber, comments, files, headSha) {
-    if (comments.length === 0) return;
+    if (comments.length === 0) {
+      if (!this.dryRun) {
+        await this.deleteInlineFallbackComments(prNumber, "no current inline findings remain");
+      }
+      return;
+    }
     const activeInlineComments = this.dryRun ? { keys: /* @__PURE__ */ new Set(), comments: [] } : await this.loadActiveInlineComments(prNumber);
     const filesWithAdditions = files.filter((f) => !isDeletionOnlyFile(f));
     const filesWithAdditionsSet = new Set(filesWithAdditions.map((f) => f.filename));
@@ -18648,7 +18653,7 @@ ${comment.body.substring(0, 200)}...`);
         }),
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
-      await this.deleteInlineFallbackComments(prNumber);
+      await this.deleteInlineFallbackComments(prNumber, "inline comments posted successfully");
     } catch (error2) {
       if (!_CommentPoster.shouldFallbackInlineReviewError(error2)) {
         throw error2;
@@ -18661,7 +18666,7 @@ ${comment.body.substring(0, 200)}...`);
       if (remainingComments.length > 0) {
         await this.postInlineFallback(prNumber, remainingComments, error2);
       } else {
-        await this.deleteInlineFallbackComments(prNumber);
+        await this.deleteInlineFallbackComments(prNumber, "inline comments posted successfully");
       }
     }
   }
@@ -18801,7 +18806,7 @@ ${comment.body.substring(0, 200)}...`);
       return [];
     }
   }
-  async deleteInlineFallbackComments(prNumber) {
+  async deleteInlineFallbackComments(prNumber, reason) {
     const { octokit, owner, repo } = this.client;
     const existingComments = await this.findInlineFallbackComments(prNumber);
     for (const comment of existingComments) {
@@ -18811,7 +18816,7 @@ ${comment.body.substring(0, 200)}...`);
       );
     }
     if (existingComments.length > 0) {
-      logger.info(`Deleted ${existingComments.length} stale inline fallback comment(s) after inline comments posted successfully`);
+      logger.info(`Deleted ${existingComments.length} stale inline fallback comment(s): ${reason}`);
     }
   }
   static formatInlineFallbackBody(comments, error2) {
@@ -29202,7 +29207,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.8",
+  version: "1.0.9",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

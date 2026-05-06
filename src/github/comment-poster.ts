@@ -321,7 +321,12 @@ export class CommentPoster {
   }
 
   async postInline(prNumber: number, comments: InlineComment[], files: FileChange[], headSha?: string): Promise<void> {
-    if (comments.length === 0) return;
+    if (comments.length === 0) {
+      if (!this.dryRun) {
+        await this.deleteInlineFallbackComments(prNumber, 'no current inline findings remain');
+      }
+      return;
+    }
     const activeInlineComments = this.dryRun
       ? { keys: new Set<string>(), comments: [] }
       : await this.loadActiveInlineComments(prNumber);
@@ -470,7 +475,7 @@ export class CommentPoster {
         }),
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
-      await this.deleteInlineFallbackComments(prNumber);
+      await this.deleteInlineFallbackComments(prNumber, 'inline comments posted successfully');
     } catch (error) {
       if (!CommentPoster.shouldFallbackInlineReviewError(error)) {
         throw error;
@@ -486,7 +491,7 @@ export class CommentPoster {
       if (remainingComments.length > 0) {
         await this.postInlineFallback(prNumber, remainingComments, error as Error);
       } else {
-        await this.deleteInlineFallbackComments(prNumber);
+        await this.deleteInlineFallbackComments(prNumber, 'inline comments posted successfully');
       }
     }
   }
@@ -660,7 +665,7 @@ export class CommentPoster {
     }
   }
 
-  private async deleteInlineFallbackComments(prNumber: number): Promise<void> {
+  private async deleteInlineFallbackComments(prNumber: number, reason: string): Promise<void> {
     const { octokit, owner, repo } = this.client;
     const existingComments = await this.findInlineFallbackComments(prNumber);
 
@@ -672,7 +677,7 @@ export class CommentPoster {
     }
 
     if (existingComments.length > 0) {
-      logger.info(`Deleted ${existingComments.length} stale inline fallback comment(s) after inline comments posted successfully`);
+      logger.info(`Deleted ${existingComments.length} stale inline fallback comment(s): ${reason}`);
     }
   }
 

@@ -29,6 +29,7 @@ describe('CommentPoster', () => {
         },
         pulls: {
           createReview: jest.fn().mockResolvedValue({}),
+          createReviewComment: jest.fn().mockResolvedValue({}),
           listReviewComments: jest.fn(),
         },
       },
@@ -449,6 +450,117 @@ describe('CommentPoster', () => {
       expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
           body: expect.stringContaining('Committable suggestion is only available on inline review comments'),
+        })
+      );
+    });
+
+    it('retries individual inline comments before PR-comment fallback when head SHA is available', async () => {
+      const error = new Error(
+        'Unprocessable Entity: "An internal error occurred, please try again."'
+      ) as Error & { status: number };
+      error.status = 422;
+      mockOctokit.rest.pulls.createReview.mockRejectedValue(error);
+
+      const poster = new CommentPoster(mockClient, false);
+      await poster.postInline(
+        123,
+        [
+          {
+            path: 'src/test.ts',
+            line: 10,
+            side: 'RIGHT' as const,
+            body: '**🟡 Major - Test finding**\n\nBody',
+            severity: 'major',
+          },
+        ],
+        [
+          {
+            filename: 'src/test.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+            patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+          },
+        ],
+        'abc123'
+      );
+
+      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        pull_number: 123,
+        commit_id: 'abc123',
+        path: 'src/test.ts',
+        line: 10,
+        side: 'RIGHT',
+        body: expect.stringContaining('Test finding'),
+      });
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
+    it('falls back only for individual inline comments that GitHub still rejects', async () => {
+      const batchError = new Error(
+        'Unprocessable Entity: "An internal error occurred, please try again."'
+      ) as Error & { status: number };
+      batchError.status = 422;
+      const lineError = new Error('Validation Failed') as Error & { status: number };
+      lineError.status = 422;
+      mockOctokit.rest.pulls.createReview.mockRejectedValue(batchError);
+      mockOctokit.rest.pulls.createReviewComment
+        .mockResolvedValueOnce({})
+        .mockRejectedValueOnce(lineError);
+
+      const poster = new CommentPoster(mockClient, false);
+      await poster.postInline(
+        123,
+        [
+          {
+            path: 'src/one.ts',
+            line: 10,
+            side: 'RIGHT' as const,
+            body: '**🟡 Major - First finding**\n\nBody',
+            severity: 'major',
+          },
+          {
+            path: 'src/two.ts',
+            line: 20,
+            side: 'RIGHT' as const,
+            body: '**🟡 Major - Second finding**\n\nBody',
+            severity: 'major',
+          },
+        ],
+        [
+          {
+            filename: 'src/one.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+            patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+          },
+          {
+            filename: 'src/two.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+            patch: '@@ -18,3 +18,4 @@\n line18\n line19\n+line20\n line21',
+          },
+        ],
+        'abc123'
+      );
+
+      expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledTimes(2);
+      expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('src/two.ts:20'),
+        })
+      );
+      expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.not.stringContaining('src/one.ts:10'),
         })
       );
     });

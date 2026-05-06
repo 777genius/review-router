@@ -311,7 +311,7 @@ export class CommentPoster {
     return { valid: true, hasConsensus };
   }
 
-  async postInline(prNumber: number, comments: InlineComment[], files: FileChange[], _headSha?: string): Promise<void> {
+  async postInline(prNumber: number, comments: InlineComment[], files: FileChange[], headSha?: string): Promise<void> {
     if (comments.length === 0) return;
     const activeInlineComments = this.dryRun
       ? { keys: new Set<string>(), comments: [] }
@@ -470,8 +470,62 @@ export class CommentPoster {
         'GitHub inline review API failed; posting inline findings as a PR comment fallback',
         error as Error
       );
-      await this.postInlineFallback(prNumber, apiComments, error as Error);
+      const remainingComments = headSha
+        ? await this.postIndividualInlineComments(prNumber, apiComments, headSha, error as Error)
+        : apiComments;
+      if (remainingComments.length > 0) {
+        await this.postInlineFallback(prNumber, remainingComments, error as Error);
+      }
     }
+  }
+
+  private async postIndividualInlineComments(
+    prNumber: number,
+    comments: Array<{ path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }>,
+    headSha: string,
+    originalError: Error
+  ): Promise<Array<{ path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }>> {
+    const { octokit, owner, repo } = this.client;
+    const failedComments: Array<{ path: string; line: number; side: 'LEFT' | 'RIGHT'; body: string }> = [];
+    let postedCount = 0;
+
+    for (const comment of comments) {
+      try {
+        await withRetry(
+          () => octokit.rest.pulls.createReviewComment({
+            owner,
+            repo,
+            pull_number: prNumber,
+            commit_id: headSha,
+            path: comment.path,
+            line: comment.line,
+            side: comment.side,
+            body: comment.body,
+          }),
+          { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
+        );
+        postedCount++;
+      } catch (error) {
+        if (!CommentPoster.shouldFallbackInlineReviewError(error)) {
+          throw error;
+        }
+        failedComments.push(comment);
+      }
+    }
+
+    if (postedCount > 0) {
+      logger.info(
+        `Posted ${postedCount}/${comments.length} inline comment(s) through individual GitHub review-comment API after batch review failed`
+      );
+    }
+    if (failedComments.length > 0) {
+      logger.warn(
+        `Falling back to PR comment for ${failedComments.length}/${comments.length} inline finding(s) after GitHub rejected batch and individual inline comment APIs`,
+        originalError
+      );
+    }
+
+    return failedComments;
   }
 
   private static shouldFallbackInlineReviewError(error: unknown): boolean {

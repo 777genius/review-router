@@ -18527,7 +18527,7 @@ ${content.substring(0, 500)}...`);
     }
     return { valid: true, hasConsensus };
   }
-  async postInline(prNumber, comments, files, _headSha) {
+  async postInline(prNumber, comments, files, headSha) {
     if (comments.length === 0) return;
     const activeInlineComments = this.dryRun ? { keys: /* @__PURE__ */ new Set(), comments: [] } : await this.loadActiveInlineComments(prNumber);
     const filesWithAdditions = files.filter((f) => !isDeletionOnlyFile(f));
@@ -18656,8 +18656,51 @@ ${comment.body.substring(0, 200)}...`);
         "GitHub inline review API failed; posting inline findings as a PR comment fallback",
         error2
       );
-      await this.postInlineFallback(prNumber, apiComments, error2);
+      const remainingComments = headSha ? await this.postIndividualInlineComments(prNumber, apiComments, headSha, error2) : apiComments;
+      if (remainingComments.length > 0) {
+        await this.postInlineFallback(prNumber, remainingComments, error2);
+      }
     }
+  }
+  async postIndividualInlineComments(prNumber, comments, headSha, originalError) {
+    const { octokit, owner, repo } = this.client;
+    const failedComments = [];
+    let postedCount = 0;
+    for (const comment of comments) {
+      try {
+        await withRetry(
+          () => octokit.rest.pulls.createReviewComment({
+            owner,
+            repo,
+            pull_number: prNumber,
+            commit_id: headSha,
+            path: comment.path,
+            line: comment.line,
+            side: comment.side,
+            body: comment.body
+          }),
+          { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+        );
+        postedCount++;
+      } catch (error2) {
+        if (!_CommentPoster.shouldFallbackInlineReviewError(error2)) {
+          throw error2;
+        }
+        failedComments.push(comment);
+      }
+    }
+    if (postedCount > 0) {
+      logger.info(
+        `Posted ${postedCount}/${comments.length} inline comment(s) through individual GitHub review-comment API after batch review failed`
+      );
+    }
+    if (failedComments.length > 0) {
+      logger.warn(
+        `Falling back to PR comment for ${failedComments.length}/${comments.length} inline finding(s) after GitHub rejected batch and individual inline comment APIs`,
+        originalError
+      );
+    }
+    return failedComments;
   }
   static shouldFallbackInlineReviewError(error2) {
     const maybeError = error2;

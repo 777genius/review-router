@@ -200,6 +200,9 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain(
       'OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}'
     );
+    expect(workflow).toContain(
+      'REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}'
+    );
     expect(workflow).not.toContain('pull_request_target');
     expect(workflow).not.toContain('actions/setup-node@v6');
 

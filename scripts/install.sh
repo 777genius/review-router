@@ -1410,6 +1410,7 @@ YAML
     fi
     cat <<'YAML'
     secrets:
+      REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
 YAML
     if [ "$IDENTITY_MODE" = "app" ]; then
       cat <<'YAML'

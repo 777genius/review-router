@@ -39,6 +39,8 @@ on:
         type: string
         default: ''
     secrets:
+      REVIEW_ROUTER_LEDGER_KEY:
+        required: false
       REVIEW_APP_PRIVATE_KEY:
         required: false
       CODEX_AUTH_JSON:
@@ -248,6 +250,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
           CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}

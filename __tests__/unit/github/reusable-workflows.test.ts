@@ -29,6 +29,7 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('id-token: write');
     expect(workflow).toContain('pull-requests: write');
     expect(workflow).toContain('issues: write');
+    expect(workflow).toContain('REVIEW_ROUTER_LEDGER_KEY');
     expect(workflow).toContain('CODEX_AUTH_JSON');
     expect(workflow).toContain('OPENROUTER_API_KEY');
     expect(workflow).toContain('reseed auth.json');

@@ -1,0 +1,141 @@
+name: ReviewRouter Interaction Reusable
+
+on:
+  workflow_call:
+    inputs:
+      runtime_ref:
+        description: 'ReviewRouter runtime ref: main, v1, v1.x.x, or a 40-char commit SHA'
+        required: false
+        type: string
+        default: v1
+      api_url:
+        description: 'ReviewRouter API URL used for OIDC runtime config and App comment tokens'
+        required: false
+        type: string
+        default: https://api.reviewrouter.site
+      runtime_config_mode:
+        description: 'Runtime config mode: oidc or static'
+        required: false
+        type: string
+        default: oidc
+      review_app_client_id:
+        description: 'Optional user-owned GitHub App client ID for static-mode bot comments'
+        required: false
+        type: string
+        default: ''
+      review_app_repository:
+        description: 'Repository name used when minting a static-mode user-owned GitHub App token'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      REVIEW_APP_PRIVATE_KEY:
+        required: false
+      REVIEW_ROUTER_LEDGER_KEY:
+        required: false
+
+jobs:
+  interaction:
+    name: interaction
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    env:
+      RR_RUNTIME_REF: ${{ inputs.runtime_ref }}
+      REVIEWROUTER_API_URL: ${{ inputs.api_url }}
+      REVIEWROUTER_OIDC_AUDIENCE: reviewrouter
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'true'
+      REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: reviewrouter.yml
+      REVIEW_APP_PRIVATE_KEY_PRESENT: ${{ secrets.REVIEW_APP_PRIVATE_KEY != '' && '1' || '0' }}
+    steps:
+      - name: Prepare ReviewRouter runtime settings
+        id: runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const fail = (message) => {
+            console.error(`::error::${message}`);
+            process.exit(1);
+          };
+          const runtimeRef = (process.env.RR_RUNTIME_REF || '').trim();
+          if (!/^(main|v1|v1\.[0-9]+\.[0-9]+|[a-fA-F0-9]{40})$/.test(runtimeRef)) {
+            fail('Invalid ReviewRouter runtime_ref. Use main, v1, v1.x.x, or a 40-character commit SHA.');
+          }
+          const runtimeConfigMode = (process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE || '').trim();
+          if (!['oidc', 'static'].includes(runtimeConfigMode)) {
+            fail('Invalid ReviewRouter runtime_config_mode. Use oidc or static.');
+          }
+          const githubEnv = process.env.GITHUB_ENV;
+          const githubOutput = process.env.GITHUB_OUTPUT;
+          if (!githubEnv || !githubOutput) {
+            fail('GitHub environment files are unavailable.');
+          }
+          fs.appendFileSync(githubEnv, `REVIEWROUTER_ACTION_VERSION=${runtimeRef}\n`);
+          fs.appendFileSync(
+            githubEnv,
+            `REVIEWROUTER_COMMENT_TOKEN_MODE=${runtimeConfigMode === 'oidc' ? 'app-oidc' : 'github-token'}\n`
+          );
+          fs.appendFileSync(githubOutput, `runtime_ref=${runtimeRef}\n`);
+          fs.appendFileSync(
+            githubOutput,
+            `app_token_needed=${runtimeConfigMode === 'static' && process.env.REVIEW_APP_PRIVATE_KEY_PRESENT === '1' && (process.env.RR_REVIEW_APP_CLIENT_ID || '').trim().length > 0 ? 'true' : 'false'}\n`
+          );
+          NODE
+        env:
+          RR_REVIEW_APP_CLIENT_ID: ${{ inputs.review_app_client_id }}
+
+      - name: Checkout ReviewRouter runtime
+        uses: actions/checkout@v6
+        with:
+          repository: 777genius/review-router
+          ref: ${{ steps.runtime.outputs.runtime_ref }}
+          path: .reviewrouter-runtime
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Create ReviewRouter GitHub App token
+        id: app-token
+        if: ${{ steps.runtime.outputs.app_token_needed == 'true' }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.review_app_client_id }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ inputs.review_app_repository }}
+          permission-actions: write
+          permission-contents: read
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Preflight ReviewRouter interaction
+        id: preflight
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          REVIEW_ROUTER_MODE: interaction-preflight
+          REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
+        run: node .reviewrouter-runtime/dist/index.js
+
+      - name: Run ReviewRouter interaction
+        if: ${{ steps.preflight.outputs.should_run == 'true' }}
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          REVIEW_ROUTER_MODE: interaction
+          REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
+          REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
+          REVIEW_ROUTER_DISCUSSION_MAX_PER_PR: ${{ vars.REVIEW_ROUTER_DISCUSSION_MAX_PER_PR }}
+          REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD: ${{ vars.REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD }}
+          REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS: ${{ vars.REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS }}
+        run: node .reviewrouter-runtime/dist/index.js

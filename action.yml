@@ -22,9 +22,6 @@ inputs:
   REVIEW_ROUTER_LEDGER_KEY:
     description: "HMAC key used to verify the signed override ledger"
     required: false
-  REVIEW_ROUTER_THREAD_RESOLVE_TOKEN:
-    description: "Optional GitHub user/PAT token used only to resolve/unresolve review conversations after /rr skip or /rr unskip. Leave empty for best-effort App/GITHUB_TOKEN resolution."
-    required: false
   REVIEW_ROUTER_ALLOW_AUTHOR_SKIP:
     description: "Allow PR authors to skip blocking findings"
     required: false

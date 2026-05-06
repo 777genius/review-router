@@ -23,6 +23,7 @@ function runInstaller(
       REVIEW_ROUTER_SKIP_GH_CHECK: '1',
       REVIEW_ROUTER_REPO: 'test-owner/test-repo',
       REVIEW_ROUTER_WORKDIR: workdir,
+      REVIEW_ROUTER_WORKFLOW_STYLE: 'explicit',
       REVIEW_ROUTER_APP_PROFILE_DIR: path.join(workdir, '.review-router-apps'),
       ...env,
     },
@@ -178,6 +179,72 @@ function writeFakeMissingInstallationAppDoctorBin(dir: string): string {
 }
 
 describe('review-router curl installer e2e', () => {
+  it('generates compact reusable caller workflows when requested', () => {
+    const result = runInstaller({
+      REVIEW_ROUTER_WORKFLOW_STYLE: 'reusable',
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'minimal',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Workflow style: reusable');
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain(
+      'uses: 777genius/review-router/.github/workflows/reviewrouter-reusable.yml@v1'
+    );
+    expect(workflow).toContain('runtime_config_mode: static');
+    expect(workflow).toContain('"REVIEW_AUTH_MODE":"openrouter-api"');
+    expect(workflow).toContain('"REVIEW_PROVIDERS":"openrouter/free"');
+    expect(workflow).toContain(
+      'OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}'
+    );
+    expect(workflow).not.toContain('pull_request_target');
+    expect(workflow).not.toContain('actions/setup-node@v6');
+
+    const interactionWorkflow = workflowText(result.interactionWorkflowPath);
+    expect(interactionWorkflow).toContain(
+      'uses: 777genius/review-router/.github/workflows/reviewrouter-interaction-reusable.yml@v1'
+    );
+    expect(interactionWorkflow).toContain(
+      'REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}'
+    );
+    expect(interactionWorkflow).not.toContain('pull_request_target');
+  });
+
+  it('keeps GitHub App bot identity in compact reusable caller workflows', () => {
+    const result = runInstaller({
+      REVIEW_ROUTER_WORKFLOW_STYLE: 'reusable',
+      REVIEW_ROUTER_IDENTITY: 'app',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'minimal',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_SKIP_APP_CREATE: '1',
+    });
+
+    expect(result.status).toBe(0);
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain(
+      'uses: 777genius/review-router/.github/workflows/reviewrouter-reusable.yml@v1'
+    );
+    expect(workflow).toContain(
+      'review_app_client_id: ${{ vars.REVIEW_APP_CLIENT_ID }}'
+    );
+    expect(workflow).toContain('review_app_repository: test-repo');
+    expect(workflow).toContain(
+      'REVIEW_APP_PRIVATE_KEY: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}'
+    );
+
+    const interactionWorkflow = workflowText(result.interactionWorkflowPath);
+    expect(interactionWorkflow).toContain(
+      'review_app_client_id: ${{ vars.REVIEW_APP_CLIENT_ID }}'
+    );
+    expect(interactionWorkflow).toContain(
+      'REVIEW_APP_PRIVATE_KEY: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}'
+    );
+  });
+
   it('generates github-actions bot workflow for OpenRouter auth without GitHub App setup', () => {
     const result = runInstaller({
       REVIEW_ROUTER_IDENTITY: 'actions',
@@ -300,6 +367,7 @@ describe('review-router curl installer e2e', () => {
         AI_ROBOT_REVIEW_PRESET: 'minimal',
         AI_ROBOT_REVIEW_OPENROUTER_API_KEY: 'or-test-key',
         AI_ROBOT_REVIEW_ACTION_REF_MODE: 'main',
+        AI_ROBOT_REVIEW_WORKFLOW_STYLE: 'explicit',
       },
       encoding: 'utf-8',
     });
@@ -356,15 +424,11 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain(
       'CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}'
     );
-    expect(workflow).toContain(
-      'REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: secret'
-    );
+    expect(workflow).toContain('REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: secret');
     expect(workflow).toContain(
       'printf \'%s\' "$CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"'
     );
-    expect(workflow).toContain(
-      'ReviewRouter Codex OAuth auth check failed'
-    );
+    expect(workflow).toContain('ReviewRouter Codex OAuth auth check failed');
     expect(workflow).toContain('reseed auth.json');
     expect(workflow).not.toContain('codex-oauth-ok');
     expect(workflow).toContain('CODEX_MODEL: ${{ vars.REVIEW_CODEX_MODEL }}');
@@ -429,9 +493,7 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain(
       'REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE: persistent'
     );
-    expect(workflow).toContain(
-      'Using existing persistent Codex auth.json'
-    );
+    expect(workflow).toContain('Using existing persistent Codex auth.json');
     expect(result.stdout).toContain(
       'Codex auth persistence is set to persistent'
     );

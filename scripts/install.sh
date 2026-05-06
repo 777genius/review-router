@@ -12,6 +12,7 @@ DEFAULT_ACTION_REF_MODE="stable"
 DEFAULT_STABLE_ACTION_REF="777genius/review-router@$LATEST_MAJOR_TAG"
 DEFAULT_RELEASE_ACTION_REF="777genius/review-router@$LATEST_RELEASE_TAG"
 DEFAULT_MAIN_ACTION_REF="777genius/review-router@main"
+DEFAULT_WORKFLOW_STYLE="reusable"
 DEFAULT_BRANCH_NAME="review-router/setup"
 WORKFLOW_PATH=".github/workflows/review-router.yml"
 INTERACTION_WORKFLOW_PATH=".github/workflows/review-router-interaction.yml"
@@ -36,6 +37,7 @@ env_first() {
 ACTION_REF_EXPLICIT="$(env_first REVIEW_ROUTER_ACTION_REF AI_ROBOT_REVIEW_ACTION_REF || true)"
 ACTION_REF_MODE="$(env_first REVIEW_ROUTER_ACTION_REF_MODE AI_ROBOT_REVIEW_ACTION_REF_MODE || true)"
 ACTION_REF=""
+WORKFLOW_STYLE="$(env_first REVIEW_ROUTER_WORKFLOW_STYLE AI_ROBOT_REVIEW_WORKFLOW_STYLE || printf '%s' "$DEFAULT_WORKFLOW_STYLE")"
 INSTALL_BRANCH="$(env_first REVIEW_ROUTER_BRANCH AI_ROBOT_REVIEW_BRANCH || printf '%s' "$DEFAULT_BRANCH_NAME")"
 TARGET_REPO="$(env_first REVIEW_ROUTER_REPO AI_ROBOT_REVIEW_REPO || true)"
 SECRET_SCOPE="$(env_first REVIEW_ROUTER_SECRET_SCOPE AI_ROBOT_REVIEW_SECRET_SCOPE || true)"
@@ -1302,8 +1304,151 @@ preset_values() {
   fi
 }
 
+runtime_ref_from_action_ref() {
+  ref="${ACTION_REF##*@}"
+  repo="${ACTION_REF%@*}"
+  if [ "$repo" != "777genius/review-router" ]; then
+    fatal "Reusable workflow style requires REVIEW_ROUTER_ACTION_REF to use 777genius/review-router."
+  fi
+  if printf '%s' "$ref" | grep -Eq '^(main|v1|v1\.[0-9]+\.[0-9]+|[a-fA-F0-9]{40})$'; then
+    printf '%s' "$ref"
+    return
+  fi
+  fatal "Reusable workflow style requires REVIEW_ROUTER_ACTION_REF to be @main, @v1, @v1.x.x, or @40-char-sha."
+}
+
+write_reusable_workflow() {
+  workflow_file="$1"
+  runtime_ref="$(runtime_ref_from_action_ref)"
+  repo_name_value="$(repo_name "$TARGET_REPO")"
+  preset_values
+  case "$AUTH_MODE" in
+    codex) runtime_auth_mode="codex-oauth" ;;
+    openai) runtime_auth_mode="openai-api" ;;
+    openrouter) runtime_auth_mode="openrouter-api" ;;
+    *) runtime_auth_mode="$AUTH_MODE" ;;
+  esac
+  mkdir -p "$(dirname "$workflow_file")"
+
+  {
+    cat <<'YAML'
+name: ReviewRouter
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: review-router-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+YAML
+    printf '    uses: 777genius/review-router/.github/workflows/reviewrouter-reusable.yml@%s\n' "$runtime_ref"
+    cat <<YAML
+    with:
+      runtime_ref: $runtime_ref
+      runtime_config_mode: static
+      static_runtime_env_json: >-
+        {"REVIEW_AUTH_MODE":"$runtime_auth_mode","INLINE_MAX_COMMENTS":"$INLINE_MAX_COMMENTS","INLINE_MIN_SEVERITY":"$INLINE_MIN_SEVERITY","MIN_CONFIDENCE":"0.6","CONSENSUS_REQUIRED_FOR_CRITICAL":"false","UPDATE_PR_DESCRIPTION":"true","FAIL_ON_CRITICAL":"$FAIL_ON_CRITICAL","FAIL_ON_MAJOR":"$FAIL_ON_MAJOR","ENABLE_AST_ANALYSIS":"$ENABLE_AST_ANALYSIS","ENABLE_SECURITY":"$ENABLE_SECURITY","ENABLE_AI_DETECTION":"false","LEARNING_ENABLED":"false","GRAPH_ENABLED":"$GRAPH_ENABLED","CODEX_MODEL":"$CODEX_MODEL","CODEX_REASONING_EFFORT":"$CODEX_REASONING_EFFORT","CODEX_HEALTHCHECK_MODE":"binary","CODEX_AGENTIC_CONTEXT":"true","REVIEW_PROVIDERS":"$OPENROUTER_DEFAULT_PROVIDERS","SYNTHESIS_MODEL":"$OPENROUTER_DEFAULT_SYNTHESIS"}
+      pr_number: \${{ github.event.pull_request.number || inputs.pr_number }}
+YAML
+    if [ "$IDENTITY_MODE" = "app" ]; then
+      cat <<YAML
+      review_app_client_id: \${{ vars.REVIEW_APP_CLIENT_ID }}
+      review_app_repository: $repo_name_value
+YAML
+    fi
+    cat <<'YAML'
+    secrets:
+YAML
+    if [ "$IDENTITY_MODE" = "app" ]; then
+      cat <<'YAML'
+      REVIEW_APP_PRIVATE_KEY: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+YAML
+    fi
+    cat <<'YAML'
+      CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+      CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+YAML
+  } > "$workflow_file"
+}
+
+write_reusable_interaction_workflow() {
+  workflow_file="$1"
+  runtime_ref="$(runtime_ref_from_action_ref)"
+  repo_name_value="$(repo_name "$TARGET_REPO")"
+  mkdir -p "$(dirname "$workflow_file")"
+
+  {
+    cat <<'YAML'
+name: ReviewRouter Interaction
+
+on:
+  pull_request_review_comment:
+    types: [created, edited]
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: review-router-interaction-${{ github.event.pull_request.number || github.event.comment.id }}
+  cancel-in-progress: false
+
+jobs:
+  interaction:
+YAML
+    printf '    uses: 777genius/review-router/.github/workflows/reviewrouter-interaction-reusable.yml@%s\n' "$runtime_ref"
+    cat <<YAML
+    with:
+      runtime_ref: $runtime_ref
+      runtime_config_mode: static
+YAML
+    if [ "$IDENTITY_MODE" = "app" ]; then
+      cat <<YAML
+      review_app_client_id: \${{ vars.REVIEW_APP_CLIENT_ID }}
+      review_app_repository: $repo_name_value
+YAML
+    fi
+    cat <<'YAML'
+    secrets:
+YAML
+    if [ "$IDENTITY_MODE" = "app" ]; then
+      cat <<'YAML'
+      REVIEW_APP_PRIVATE_KEY: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+YAML
+    fi
+    cat <<'YAML'
+      REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
+YAML
+  } > "$workflow_file"
+}
+
 write_workflow() {
   workflow_file="$1"
+  if [ "$WORKFLOW_STYLE" = "reusable" ]; then
+    write_reusable_workflow "$workflow_file"
+    return
+  fi
   repo_name_value="$(repo_name "$TARGET_REPO")"
   preset_values
   mkdir -p "$(dirname "$workflow_file")"
@@ -1505,6 +1650,10 @@ YAML
 
 write_interaction_workflow() {
   workflow_file="$1"
+  if [ "$WORKFLOW_STYLE" = "reusable" ]; then
+    write_reusable_interaction_workflow "$workflow_file"
+    return
+  fi
   repo_name_value="$(repo_name "$TARGET_REPO")"
   mkdir -p "$(dirname "$workflow_file")"
 
@@ -1875,6 +2024,10 @@ main() {
       "main:Live main branch, gets every update immediately"
   fi
   resolve_action_ref
+  case "$WORKFLOW_STYLE" in
+    reusable|explicit) ;;
+    *) fatal "Unsupported REVIEW_ROUTER_WORKFLOW_STYLE: $WORKFLOW_STYLE. Use reusable or explicit." ;;
+  esac
   choose SECRET_SCOPE "Secrets and variables scope" "repo" \
     "repo:Store secrets and variables on the target repository" \
     "org:Store secrets and variables on the organization, restricted to selected repositories"
@@ -1904,6 +2057,7 @@ main() {
   info "Auth mode: $AUTH_MODE"
   info "Preset: $PRESET"
   info "Action ref: $ACTION_REF"
+  info "Workflow style: $WORKFLOW_STYLE"
 
   run_security_advisory
   setup_identity

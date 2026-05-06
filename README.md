@@ -25,6 +25,7 @@ The installer:
 - lets you choose `github-actions[bot]` or GitHub App bot identity;
 - lets you choose Codex subscription OAuth, Codex CLI with OpenAI API key, or OpenRouter API key;
 - lets you choose stable `v1`, a pinned exact release tag, or live `main` for the generated workflow;
+- writes compact reusable caller workflows by default; set `REVIEW_ROUTER_WORKFLOW_STYLE=explicit` for the full debug workflow;
 - creates `.github/workflows/review-router.yml` on a setup branch;
 - opens a setup PR instead of pushing directly to the default branch.
 
@@ -213,7 +214,6 @@ jobs:
         uses: 777genius/review-router@v1
         env:
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
-          REVIEW_ROUTER_THREAD_RESOLVE_TOKEN: ${{ secrets.REVIEW_ROUTER_THREAD_RESOLVE_TOKEN }}
         with:
           REVIEW_ROUTER_MODE: interaction
           REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
@@ -274,20 +274,20 @@ Required secret:
 
 ## Important Inputs
 
-| Input | Default | Notes |
-|---|---:|---|
-| `CODEX_MODEL` | empty | Codex model id, for example `gpt-5.5`. |
-| `CODEX_REASONING_EFFORT` | empty | Codex effort for review runs, for example `medium`. |
-| `CODEX_AGENTIC_CONTEXT` | `true` | Lets Codex inspect related files in read-only mode. |
-| `INLINE_MAX_COMMENTS` | `5` | Caps inline comment noise. |
-| `INLINE_MIN_SEVERITY` | `major` | Controls which findings become inline comments. |
-| `MIN_CONFIDENCE` | empty | Optional confidence threshold for inline suggestions. |
-| `FAIL_ON_CRITICAL` | `true` | Fails the check on critical findings. |
-| `FAIL_ON_MAJOR` | `false` | Set `true` to block PRs on major findings. |
-| `UPDATE_PR_DESCRIPTION` | `true` | Adds or updates only the generated ReviewRouter block. |
-| `SMART_DIFF_COMPACTION` | `true` | Summarizes oversized/generated diffs before prompt construction. |
-| `GRAPH_ENABLED` | `false` | Optional code graph context. Keep off until validated for your repo. |
-| `LEARNING_ENABLED` | `false` | Experimental feedback-learning path. |
+| Input                    | Default | Notes                                                                |
+| ------------------------ | ------: | -------------------------------------------------------------------- |
+| `CODEX_MODEL`            |   empty | Codex model id, for example `gpt-5.5`.                               |
+| `CODEX_REASONING_EFFORT` |   empty | Codex effort for review runs, for example `medium`.                  |
+| `CODEX_AGENTIC_CONTEXT`  |  `true` | Lets Codex inspect related files in read-only mode.                  |
+| `INLINE_MAX_COMMENTS`    |     `5` | Caps inline comment noise.                                           |
+| `INLINE_MIN_SEVERITY`    | `major` | Controls which findings become inline comments.                      |
+| `MIN_CONFIDENCE`         |   empty | Optional confidence threshold for inline suggestions.                |
+| `FAIL_ON_CRITICAL`       |  `true` | Fails the check on critical findings.                                |
+| `FAIL_ON_MAJOR`          | `false` | Set `true` to block PRs on major findings.                           |
+| `UPDATE_PR_DESCRIPTION`  |  `true` | Adds or updates only the generated ReviewRouter block.               |
+| `SMART_DIFF_COMPACTION`  |  `true` | Summarizes oversized/generated diffs before prompt construction.     |
+| `GRAPH_ENABLED`          | `false` | Optional code graph context. Keep off until validated for your repo. |
+| `LEARNING_ENABLED`       | `false` | Experimental feedback-learning path.                                 |
 
 ## Review Scope And Limits
 

@@ -28136,12 +28136,11 @@ var fs13 = __toESM(require("fs"));
 var DISMISSAL_MARKER_START = "<!-- review-router-dismissal:start -->";
 var DISMISSAL_MARKER_END = "<!-- review-router-dismissal:end -->";
 var ReviewInteractionHandler = class {
-  constructor(client, ledger, discussionHandler, actionsClient = client, threadResolverClient) {
+  constructor(client, ledger, discussionHandler, actionsClient = client) {
     this.client = client;
     this.ledger = ledger;
     this.discussionHandler = discussionHandler;
     this.actionsClient = actionsClient;
-    this.threadResolverClient = threadResolverClient;
   }
   async execute() {
     const payload = readEventPayload();
@@ -28240,11 +28239,6 @@ var ReviewInteractionHandler = class {
       actor,
       reason: command.reason
     });
-    await this.setReviewThreadResolutionState(
-      prNumber,
-      parentId,
-      command.kind === "skip"
-    );
     const rerun = await this.rerunReviewAfterOverride(
       prNumber,
       payload.pull_request?.head?.sha
@@ -28313,122 +28307,6 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
         `Failed to update ReviewRouter inline dismissal state for comment ${commentId}: ${sanitizeNoticeError(error2)}`
       );
     }
-  }
-  async setReviewThreadResolutionState(prNumber, parentCommentId, resolved) {
-    const clients = uniqueClients([
-      this.threadResolverClient,
-      this.client,
-      this.actionsClient
-    ]);
-    for (let index = 0; index < clients.length; index += 1) {
-      const graphClient = clients[index];
-      try {
-        const thread = await this.findReviewThread(
-          graphClient,
-          prNumber,
-          parentCommentId
-        );
-        if (!thread) {
-          logger.warn(
-            `Could not find review thread for comment ${parentCommentId}; leaving GitHub conversation state unchanged`
-          );
-          return;
-        }
-        if (thread.isResolved === resolved) {
-          return;
-        }
-        await this.updateReviewThreadResolution(
-          graphClient,
-          thread.id,
-          resolved
-        );
-        logger.info(
-          `${resolved ? "Resolved" : "Unresolved"} ReviewRouter conversation for comment ${parentCommentId}`
-        );
-        return;
-      } catch (error2) {
-        const reason = sanitizeNoticeError(error2);
-        const hasFallback = index < clients.length - 1;
-        if (hasFallback) {
-          logger.info(
-            `GitHub token could not ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}: ${reason}. Trying fallback token.`
-          );
-          continue;
-        }
-        if (reason.includes("Resource not accessible by integration")) {
-          logger.info(
-            `GitHub token cannot ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}; skip state was still recorded and the review check can rerun`
-          );
-          return;
-        }
-        logger.warn(
-          `Failed to ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}: ${reason}`
-        );
-      }
-    }
-  }
-  async updateReviewThreadResolution(graphClient, threadId, resolved) {
-    const mutation = resolved ? `mutation($threadId: ID!) {
-            resolveReviewThread(input: { threadId: $threadId }) {
-              thread { id isResolved }
-            }
-          }` : `mutation($threadId: ID!) {
-            unresolveReviewThread(input: { threadId: $threadId }) {
-              thread { id isResolved }
-            }
-          }`;
-    await this.graphql(graphClient, mutation, { threadId });
-  }
-  async findReviewThread(graphClient, prNumber, commentId) {
-    const query = `query($owner: String!, $repo: String!, $number: Int!, $after: String) {
-      repository(owner: $owner, name: $repo) {
-        pullRequest(number: $number) {
-          reviewThreads(first: 100, after: $after) {
-            nodes {
-              id
-              isResolved
-              comments(first: 100) {
-                nodes {
-                  databaseId
-                }
-              }
-            }
-            pageInfo {
-              hasNextPage
-              endCursor
-            }
-          }
-        }
-      }
-    }`;
-    let after = null;
-    for (let page = 0; page < 10; page += 1) {
-      const result = await this.graphql(graphClient, query, {
-        owner: this.client.owner,
-        repo: this.client.repo,
-        number: prNumber,
-        after
-      });
-      const threads = result.repository?.pullRequest?.reviewThreads;
-      for (const thread of threads?.nodes || []) {
-        const hasComment = (thread.comments?.nodes || []).some(
-          (comment) => comment.databaseId === commentId
-        );
-        if (hasComment) {
-          return { id: thread.id, isResolved: Boolean(thread.isResolved) };
-        }
-      }
-      if (!threads?.pageInfo?.hasNextPage) break;
-      after = threads.pageInfo.endCursor || null;
-    }
-    return null;
-  }
-  async graphql(graphClient, query, variables) {
-    const graphql = graphClient.octokit.graphql;
-    if (typeof graphql !== "function") {
-      throw new Error("Octokit GraphQL client is not available");
-    }
-    return graphql(query, variables);
   }
   async getRole(username) {
     const { octokit, owner, repo } = this.actionsClient;
@@ -28650,15 +28528,6 @@ function normalizeRole(value) {
     return value;
   }
   return "none";
-}
-function uniqueClients(clients) {
-  const unique = [];
-  for (const client of clients) {
-    if (client && !unique.includes(client)) {
-      unique.push(client);
-    }
-  }
-  return unique;
 }
 function isRoleAllowed(role, severity, actor, prAuthor) {
   if (severity === "critical" || severity === "major") {
@@ -29645,7 +29514,6 @@ function syncEnvFromInputs() {
   const inputKeys = [
     "REVIEW_ROUTER_MODE",
     "REVIEW_ROUTER_LEDGER_KEY",
-    "REVIEW_ROUTER_THREAD_RESOLVE_TOKEN",
     "REVIEW_ROUTER_ALLOW_AUTHOR_SKIP",
     "REVIEW_ROUTER_REVIEW_WORKFLOW_FILE",
     "REVIEW_ROUTER_DISCUSSION_MODE",
@@ -29868,8 +29736,6 @@ function getBlockingFindings(review, threshold) {
 async function runInteraction(token, actionsToken) {
   const githubClient = new GitHubClient(token);
   const actionsClient = actionsToken && actionsToken !== token ? new GitHubClient(actionsToken) : githubClient;
-  const threadResolveToken = process.env.REVIEW_ROUTER_THREAD_RESOLVE_TOKEN || "";
-  const threadResolverClient = threadResolveToken ? new GitHubClient(threadResolveToken) : void 0;
   const ledger = new ReviewLedger(
     githubClient,
     process.env.REVIEW_ROUTER_LEDGER_KEY,
@@ -29880,8 +29746,7 @@ async function runInteraction(token, actionsToken) {
     githubClient,
     ledger,
     discussionHandler,
-    actionsClient,
-    threadResolverClient
+    actionsClient
   );
   await handler.execute();
 }

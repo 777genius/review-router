@@ -28,6 +28,11 @@ on:
         required: false
         type: string
         default: ''
+      review_workflow_file:
+        description: 'Review workflow file name to rerun after an accepted /rr skip'
+        required: false
+        type: string
+        default: reviewrouter.yml
     secrets:
       REVIEW_APP_PRIVATE_KEY:
         required: false
@@ -50,7 +55,7 @@ jobs:
       REVIEWROUTER_OIDC_AUDIENCE: reviewrouter
       REVIEWROUTER_RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
       REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'true'
-      REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: reviewrouter.yml
+      REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}
       REVIEW_APP_PRIVATE_KEY_PRESENT: ${{ secrets.REVIEW_APP_PRIVATE_KEY != '' && '1' || '0' }}
     steps:
       - name: Prepare ReviewRouter runtime settings

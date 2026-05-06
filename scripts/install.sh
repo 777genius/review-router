@@ -1459,6 +1459,7 @@ YAML
     with:
       runtime_ref: $runtime_ref
       runtime_config_mode: static
+      review_workflow_file: review-router.yml
 YAML
     if [ "$IDENTITY_MODE" = "app" ]; then
       cat <<YAML

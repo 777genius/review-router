@@ -210,6 +210,7 @@ describe('review-router curl installer e2e', () => {
     expect(interactionWorkflow).toContain(
       'uses: 777genius/review-router/.github/workflows/reviewrouter-interaction-reusable.yml@v1'
     );
+    expect(interactionWorkflow).toContain('review_workflow_file: review-router.yml');
     expect(interactionWorkflow).toContain(
       'REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}'
     );

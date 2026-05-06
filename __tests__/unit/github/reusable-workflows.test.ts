@@ -54,8 +54,9 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('Preflight ReviewRouter interaction');
     expect(workflow).toContain('REVIEW_ROUTER_MODE: interaction-preflight');
     expect(workflow).toContain('REVIEW_ROUTER_MODE: interaction');
+    expect(workflow).toContain('review_workflow_file:');
     expect(workflow).toContain(
-      'REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: reviewrouter.yml'
+      'REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}'
     );
     expect(workflow).not.toContain('pull_request_target');
     expect(workflow).not.toContain('REVIEW_ROUTER_THREAD_RESOLVE_TOKEN');

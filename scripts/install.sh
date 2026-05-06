@@ -1998,16 +1998,22 @@ commit_and_open_pr() {
     exit "$status"
   }
 
-  if gh pr view "$INSTALL_BRANCH" --repo "$TARGET_REPO" >/dev/null 2>&1; then
-    ok "Setup PR already exists for branch $INSTALL_BRANCH"
+  owner="$(repo_owner "$TARGET_REPO")"
+  pr_body="Adds ReviewRouter pull request automation. Installer mode: identity=$IDENTITY_MODE, auth=$AUTH_MODE, preset=$PRESET, workflow=$WORKFLOW_STYLE."
+  existing_pr_url="$(gh api --method GET "repos/$TARGET_REPO/pulls" \
+    -f state=open \
+    -f "head=$owner:$INSTALL_BRANCH" \
+    --jq '.[0].html_url // empty')"
+  if [ -n "$existing_pr_url" ]; then
+    ok "Setup PR already exists for branch $INSTALL_BRANCH: $existing_pr_url"
   else
-    gh pr create \
-      --repo "$TARGET_REPO" \
-      --base "$default_branch" \
-      --head "$INSTALL_BRANCH" \
-      --title "ci: add review-router" \
-      --body "Adds ReviewRouter pull request automation. Installer mode: identity=$IDENTITY_MODE, auth=$AUTH_MODE, preset=$PRESET." >/dev/null
-    ok "Opened setup PR for $TARGET_REPO"
+    pr_url="$(gh api --method POST "repos/$TARGET_REPO/pulls" \
+      -f title="ci: add review-router" \
+      -f head="$INSTALL_BRANCH" \
+      -f base="$default_branch" \
+      -f body="$pr_body" \
+      --jq '.html_url')"
+    ok "Opened setup PR for $TARGET_REPO: $pr_url"
   fi
 }
 

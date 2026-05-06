@@ -124,6 +124,18 @@ append_json_pair() {
   fi
 }
 
+append_pretty_json_pair() {
+  json_object="$1"
+  key="$2"
+  value="$3"
+  pair="  \"${key}\": \"$(json_escape "$value")\""
+  if [ "$json_object" = "{" ]; then
+    printf '%s\n%s' "$json_object" "$pair"
+  else
+    printf '%s,\n%s' "$json_object" "$pair"
+  fi
+}
+
 validate_discussion_mode() {
   case "${1:-}" in
     off|suggest) return 0 ;;
@@ -1366,38 +1378,39 @@ write_reusable_workflow() {
     *) runtime_auth_mode="$AUTH_MODE" ;;
   esac
   static_runtime_env_json="{"
-  static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" REVIEW_AUTH_MODE "$runtime_auth_mode")"
+  static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" REVIEW_AUTH_MODE "$runtime_auth_mode")"
   # Keep only values that differ from runtime defaults, plus quality gates that
   # intentionally differ from older upstream defaults. This keeps caller YAML
   # readable without changing review behavior.
-  static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" MIN_CONFIDENCE "0.6")"
-  static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" CONSENSUS_REQUIRED_FOR_CRITICAL "false")"
+  static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" MIN_CONFIDENCE "0.6")"
+  static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" CONSENSUS_REQUIRED_FOR_CRITICAL "false")"
   if [ "$INLINE_MAX_COMMENTS" != "5" ]; then
-    static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" INLINE_MAX_COMMENTS "$INLINE_MAX_COMMENTS")"
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" INLINE_MAX_COMMENTS "$INLINE_MAX_COMMENTS")"
   fi
   if [ "$INLINE_MIN_SEVERITY" != "major" ]; then
-    static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" INLINE_MIN_SEVERITY "$INLINE_MIN_SEVERITY")"
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" INLINE_MIN_SEVERITY "$INLINE_MIN_SEVERITY")"
   fi
   if [ "$FAIL_ON_MAJOR" = "true" ]; then
-    static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" FAIL_ON_MAJOR "$FAIL_ON_MAJOR")"
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" FAIL_ON_MAJOR "$FAIL_ON_MAJOR")"
   fi
   if [ "$ENABLE_AST_ANALYSIS" != "true" ]; then
-    static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" ENABLE_AST_ANALYSIS "$ENABLE_AST_ANALYSIS")"
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" ENABLE_AST_ANALYSIS "$ENABLE_AST_ANALYSIS")"
   fi
   if [ "$ENABLE_SECURITY" != "true" ]; then
-    static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" ENABLE_SECURITY "$ENABLE_SECURITY")"
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" ENABLE_SECURITY "$ENABLE_SECURITY")"
   fi
   if [ "$GRAPH_ENABLED" != "false" ]; then
-    static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" GRAPH_ENABLED "$GRAPH_ENABLED")"
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" GRAPH_ENABLED "$GRAPH_ENABLED")"
   fi
   if [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "openai" ]; then
-    static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" CODEX_MODEL "$CODEX_MODEL")"
-    static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" CODEX_REASONING_EFFORT "$CODEX_REASONING_EFFORT")"
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" CODEX_MODEL "$CODEX_MODEL")"
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" CODEX_REASONING_EFFORT "$CODEX_REASONING_EFFORT")"
   elif [ "$AUTH_MODE" = "openrouter" ]; then
-    static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" REVIEW_PROVIDERS "$OPENROUTER_DEFAULT_PROVIDERS")"
-    static_runtime_env_json="$(append_json_pair "$static_runtime_env_json" SYNTHESIS_MODEL "$OPENROUTER_DEFAULT_SYNTHESIS")"
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" REVIEW_PROVIDERS "$OPENROUTER_DEFAULT_PROVIDERS")"
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" SYNTHESIS_MODEL "$OPENROUTER_DEFAULT_SYNTHESIS")"
   fi
-  static_runtime_env_json="$static_runtime_env_json}"
+  static_runtime_env_json="$static_runtime_env_json
+}"
   mkdir -p "$(dirname "$workflow_file")"
 
   {
@@ -1435,7 +1448,7 @@ YAML
       runtime_config_mode: static
       # Non-secret fallback config. Provider credentials stay in GitHub Actions secrets.
       static_runtime_env_json: >-
-        $static_runtime_env_json
+$(printf '%s\n' "$static_runtime_env_json" | sed 's/^/        /')
       pr_number: \${{ github.event.pull_request.number || inputs.pr_number }}
 YAML
     if [ "$IDENTITY_MODE" = "app" ]; then

@@ -45,6 +45,21 @@ function workflowText(workflowPath: string): string {
   return fs.readFileSync(workflowPath, 'utf-8');
 }
 
+function staticRuntimeEnv(workflow: string): Record<string, string> {
+  const marker = 'static_runtime_env_json: >-\n';
+  const start = workflow.indexOf(marker);
+  if (start === -1) {
+    throw new Error('static_runtime_env_json block not found');
+  }
+  const block = workflow
+    .slice(start + marker.length)
+    .split('\n')
+    .filter((line) => line.startsWith('        '))
+    .map((line) => line.slice(8))
+    .join('\n');
+  return JSON.parse(block) as Record<string, string>;
+}
+
 function writePrivateKeyFixture(
   dir: string,
   name = 'app.private-key.pem'
@@ -196,8 +211,9 @@ describe('review-router curl installer e2e', () => {
     );
     expect(workflow).toContain('merge_group:');
     expect(workflow).toContain('runtime_config_mode: static');
-    expect(workflow).toContain('"REVIEW_AUTH_MODE":"openrouter-api"');
-    expect(workflow).toContain('"REVIEW_PROVIDERS":"openrouter/free"');
+    const staticEnv = staticRuntimeEnv(workflow);
+    expect(staticEnv.REVIEW_AUTH_MODE).toBe('openrouter-api');
+    expect(staticEnv.REVIEW_PROVIDERS).toBe('openrouter/free');
     expect(workflow).toContain(
       'OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}'
     );
@@ -271,11 +287,12 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
-    expect(workflow).toContain('"REVIEW_AUTH_MODE":"codex-oauth"');
-    expect(workflow).toContain('"CODEX_MODEL":"gpt-5.5"');
-    expect(workflow).toContain('"CODEX_REASONING_EFFORT":"medium"');
-    expect(workflow).not.toContain('"REVIEW_PROVIDERS":"openrouter/free"');
-    expect(workflow).not.toContain('"SYNTHESIS_MODEL":"openrouter/');
+    const staticEnv = staticRuntimeEnv(workflow);
+    expect(staticEnv.REVIEW_AUTH_MODE).toBe('codex-oauth');
+    expect(staticEnv.CODEX_MODEL).toBe('gpt-5.5');
+    expect(staticEnv.CODEX_REASONING_EFFORT).toBe('medium');
+    expect(staticEnv.REVIEW_PROVIDERS).toBeUndefined();
+    expect(staticEnv.SYNTHESIS_MODEL).toBeUndefined();
   });
 
   it('generates github-actions bot workflow for OpenRouter auth without GitHub App setup', () => {

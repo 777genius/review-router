@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 
 PRODUCT_NAME="review-router"
-LATEST_RELEASE_TAG="v1.0.9"
+LATEST_RELEASE_TAG="v1.0.10"
 LATEST_MAJOR_TAG="v1"
 DEFAULT_ACTION_REF_MODE="stable"
 DEFAULT_STABLE_ACTION_REF="777genius/review-router@$LATEST_MAJOR_TAG"
@@ -1361,6 +1361,7 @@ write_reusable_workflow() {
   static_runtime_env_json="$static_runtime_env_json,$(json_pair MIN_CONFIDENCE "0.6")"
   static_runtime_env_json="$static_runtime_env_json,$(json_pair CONSENSUS_REQUIRED_FOR_CRITICAL "false")"
   static_runtime_env_json="$static_runtime_env_json,$(json_pair UPDATE_PR_DESCRIPTION "true")"
+  static_runtime_env_json="$static_runtime_env_json,$(json_pair FAIL_ON_NO_HEALTHY_PROVIDERS "true")"
   static_runtime_env_json="$static_runtime_env_json,$(json_pair FAIL_ON_CRITICAL "$FAIL_ON_CRITICAL")"
   static_runtime_env_json="$static_runtime_env_json,$(json_pair FAIL_ON_MAJOR "$FAIL_ON_MAJOR")"
   static_runtime_env_json="$static_runtime_env_json,$(json_pair ENABLE_AST_ANALYSIS "$ENABLE_AST_ANALYSIS")"

@@ -130,6 +130,9 @@ jobs:
           if (!staticEnv || typeof staticEnv !== 'object' || Array.isArray(staticEnv)) {
             fail('static_runtime_env_json must be a JSON object.');
           }
+          if (staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS === undefined) {
+            staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';
+          }
           for (const [key, value] of Object.entries(staticEnv)) {
             if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
               fail(`Invalid static runtime env key: ${key}`);

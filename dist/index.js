@@ -28117,7 +28117,12 @@ var ReviewOrchestrator = class {
       success = true;
       return review;
     } catch (error2) {
-      await progressTracker?.updateProgress("synthesis", "failed", error2.message);
+      const normalizedError = normalizeReviewError(error2);
+      await progressTracker?.updateProgress(
+        "synthesis",
+        "failed",
+        `${normalizedError.code}: ${normalizedError.summary}`
+      );
       throw error2;
     } finally {
       if (progressTracker) {
@@ -29455,7 +29460,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.11",
+  version: "1.0.12",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

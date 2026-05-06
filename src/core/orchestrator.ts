@@ -48,7 +48,10 @@ import { BatchOrchestrator } from './batch-orchestrator';
 import { ProgressTracker } from '../github/progress-tracker';
 import { GitHubClient } from '../github/client';
 import { PullRequestDescriptionUpdater } from '../github/pr-description';
-import { sanitizeErrorMessage } from '../errors/review-router-error';
+import {
+  normalizeReviewError,
+  sanitizeErrorMessage,
+} from '../errors/review-router-error';
 import * as fs from 'fs/promises';
 import path from 'path';
 
@@ -783,7 +786,12 @@ export class ReviewOrchestrator {
         success = true;
         return review;
       } catch (error) {
-        await progressTracker?.updateProgress('synthesis', 'failed', (error as Error).message);
+        const normalizedError = normalizeReviewError(error);
+        await progressTracker?.updateProgress(
+          'synthesis',
+          'failed',
+          `${normalizedError.code}: ${normalizedError.summary}`
+        );
         throw error;
       } finally {
         if (progressTracker) {

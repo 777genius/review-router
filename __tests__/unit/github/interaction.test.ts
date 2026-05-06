@@ -289,6 +289,60 @@ describe('ReviewInteractionHandler', () => {
     ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
   });
 
+  it('uses a dedicated thread resolver token before App and workflow tokens', async () => {
+    const { client: commentClient, octokit: commentOctokit } = makeClient();
+    const { client: actionsClient, octokit: actionsOctokit } = makeClient();
+    const { client: resolverClient, octokit: resolverOctokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 11,
+        in_reply_to_id: 10,
+        body: '/rr skip verified',
+        user: { login: 'maintainer' },
+      },
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc', repo: { fork: false } },
+        user: { login: 'author' },
+      },
+    });
+    actionsOctokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+    actionsOctokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
+      data: {
+        workflow_runs: [
+          {
+            id: 456,
+            path: '.github/workflows/review-router.yml',
+            head_sha: 'abc',
+            conclusion: 'failure',
+            pull_requests: [{ number: 123 }],
+          },
+        ],
+      },
+    });
+
+    const ledger = new ReviewLedger(commentClient, 'test-secret');
+    await new ReviewInteractionHandler(
+      commentClient,
+      ledger,
+      undefined,
+      actionsClient,
+      resolverClient
+    ).execute();
+
+    expect(resolverOctokit.graphql).toHaveBeenCalledWith(
+      expect.stringContaining('resolveReviewThread'),
+      { threadId: 'PRRT_thread_1' }
+    );
+    expect(commentOctokit.graphql).not.toHaveBeenCalled();
+    expect(actionsOctokit.graphql).not.toHaveBeenCalled();
+    expect(
+      actionsOctokit.rest.actions.reRunWorkflowFailedJobs
+    ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
+  });
+
   it('records /rr skip even when GitHub refuses to resolve the conversation', async () => {
     const { client: commentClient, octokit: commentOctokit } = makeClient();
     const { client: actionsClient, octokit: actionsOctokit } = makeClient();

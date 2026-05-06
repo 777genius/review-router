@@ -85,7 +85,8 @@ export class ReviewInteractionHandler {
     private readonly client: GitHubClient,
     private readonly ledger: ReviewLedger,
     private readonly discussionHandler?: ReviewDiscussionHandler,
-    private readonly actionsClient: GitHubClient = client
+    private readonly actionsClient: GitHubClient = client,
+    private readonly threadResolverClient?: GitHubClient
   ) {}
 
   async execute(): Promise<void> {
@@ -298,10 +299,11 @@ export class ReviewInteractionHandler {
     parentCommentId: number,
     resolved: boolean
   ): Promise<void> {
-    const clients =
-      this.client === this.actionsClient
-        ? [this.client]
-        : [this.client, this.actionsClient];
+    const clients = uniqueClients([
+      this.threadResolverClient,
+      this.client,
+      this.actionsClient,
+    ]);
 
     for (let index = 0; index < clients.length; index += 1) {
       const graphClient = clients[index];
@@ -738,6 +740,18 @@ function normalizeRole(value: string | undefined): RepoRole {
     return value;
   }
   return 'none';
+}
+
+function uniqueClients(
+  clients: Array<GitHubClient | undefined>
+): GitHubClient[] {
+  const unique: GitHubClient[] = [];
+  for (const client of clients) {
+    if (client && !unique.includes(client)) {
+      unique.push(client);
+    }
+  }
+  return unique;
 }
 
 function isRoleAllowed(

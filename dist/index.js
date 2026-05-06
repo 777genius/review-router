@@ -28136,11 +28136,12 @@ var fs13 = __toESM(require("fs"));
 var DISMISSAL_MARKER_START = "<!-- review-router-dismissal:start -->";
 var DISMISSAL_MARKER_END = "<!-- review-router-dismissal:end -->";
 var ReviewInteractionHandler = class {
-  constructor(client, ledger, discussionHandler, actionsClient = client) {
+  constructor(client, ledger, discussionHandler, actionsClient = client, threadResolverClient) {
     this.client = client;
     this.ledger = ledger;
     this.discussionHandler = discussionHandler;
     this.actionsClient = actionsClient;
+    this.threadResolverClient = threadResolverClient;
   }
   async execute() {
     const payload = readEventPayload();
@@ -28314,7 +28315,11 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     }
   }
   async setReviewThreadResolutionState(prNumber, parentCommentId, resolved) {
-    const clients = this.client === this.actionsClient ? [this.client] : [this.client, this.actionsClient];
+    const clients = uniqueClients([
+      this.threadResolverClient,
+      this.client,
+      this.actionsClient
+    ]);
     for (let index = 0; index < clients.length; index += 1) {
       const graphClient = clients[index];
       try {
@@ -28645,6 +28650,15 @@ function normalizeRole(value) {
     return value;
   }
   return "none";
+}
+function uniqueClients(clients) {
+  const unique = [];
+  for (const client of clients) {
+    if (client && !unique.includes(client)) {
+      unique.push(client);
+    }
+  }
+  return unique;
 }
 function isRoleAllowed(role, severity, actor, prAuthor) {
   if (severity === "critical" || severity === "major") {
@@ -29631,6 +29645,7 @@ function syncEnvFromInputs() {
   const inputKeys = [
     "REVIEW_ROUTER_MODE",
     "REVIEW_ROUTER_LEDGER_KEY",
+    "REVIEW_ROUTER_THREAD_RESOLVE_TOKEN",
     "REVIEW_ROUTER_ALLOW_AUTHOR_SKIP",
     "REVIEW_ROUTER_REVIEW_WORKFLOW_FILE",
     "REVIEW_ROUTER_DISCUSSION_MODE",
@@ -29853,6 +29868,8 @@ function getBlockingFindings(review, threshold) {
 async function runInteraction(token, actionsToken) {
   const githubClient = new GitHubClient(token);
   const actionsClient = actionsToken && actionsToken !== token ? new GitHubClient(actionsToken) : githubClient;
+  const threadResolveToken = process.env.REVIEW_ROUTER_THREAD_RESOLVE_TOKEN || "";
+  const threadResolverClient = threadResolveToken ? new GitHubClient(threadResolveToken) : void 0;
   const ledger = new ReviewLedger(
     githubClient,
     process.env.REVIEW_ROUTER_LEDGER_KEY,
@@ -29863,7 +29880,8 @@ async function runInteraction(token, actionsToken) {
     githubClient,
     ledger,
     discussionHandler,
-    actionsClient
+    actionsClient,
+    threadResolverClient
   );
   await handler.execute();
 }

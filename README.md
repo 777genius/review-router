@@ -213,6 +213,7 @@ jobs:
         uses: 777genius/review-router@v1
         env:
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
+          REVIEW_ROUTER_THREAD_RESOLVE_TOKEN: ${{ secrets.REVIEW_ROUTER_THREAD_RESOLVE_TOKEN }}
         with:
           REVIEW_ROUTER_MODE: interaction
           REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}

@@ -207,11 +207,11 @@ describe('ReviewInteractionHandler', () => {
     expect(
       actionsOctokit.rest.actions.reRunWorkflowFailedJobs
     ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
-    expect(actionsOctokit.graphql).toHaveBeenCalledWith(
+    expect(commentOctokit.graphql).toHaveBeenCalledWith(
       expect.stringContaining('resolveReviewThread'),
       { threadId: 'PRRT_thread_1' }
     );
-    expect(commentOctokit.graphql).not.toHaveBeenCalled();
+    expect(actionsOctokit.graphql).not.toHaveBeenCalled();
     expect(
       commentOctokit.rest.actions.reRunWorkflowFailedJobs
     ).not.toHaveBeenCalled();
@@ -230,6 +230,121 @@ describe('ReviewInteractionHandler', () => {
     expect(
       actionsOctokit.rest.pulls.updateReviewComment
     ).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the workflow token if the comment token cannot resolve the conversation', async () => {
+    const { client: commentClient, octokit: commentOctokit } = makeClient();
+    const { client: actionsClient, octokit: actionsOctokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 11,
+        in_reply_to_id: 10,
+        body: '/rr skip verified',
+        user: { login: 'maintainer' },
+      },
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc', repo: { fork: false } },
+        user: { login: 'author' },
+      },
+    });
+    commentOctokit.graphql.mockRejectedValue(
+      new Error('Resource not accessible by integration')
+    );
+    actionsOctokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+    actionsOctokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
+      data: {
+        workflow_runs: [
+          {
+            id: 456,
+            path: '.github/workflows/review-router.yml',
+            head_sha: 'abc',
+            conclusion: 'failure',
+            pull_requests: [{ number: 123 }],
+          },
+        ],
+      },
+    });
+
+    const ledger = new ReviewLedger(commentClient, 'test-secret');
+    await new ReviewInteractionHandler(
+      commentClient,
+      ledger,
+      undefined,
+      actionsClient
+    ).execute();
+
+    expect(commentOctokit.graphql).toHaveBeenCalledWith(
+      expect.stringContaining('reviewThreads'),
+      expect.objectContaining({ number: 123 })
+    );
+    expect(actionsOctokit.graphql).toHaveBeenCalledWith(
+      expect.stringContaining('resolveReviewThread'),
+      { threadId: 'PRRT_thread_1' }
+    );
+    expect(
+      actionsOctokit.rest.actions.reRunWorkflowFailedJobs
+    ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
+  });
+
+  it('records /rr skip even when GitHub refuses to resolve the conversation', async () => {
+    const { client: commentClient, octokit: commentOctokit } = makeClient();
+    const { client: actionsClient, octokit: actionsOctokit } = makeClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 11,
+        in_reply_to_id: 10,
+        body: '/rr skip verified',
+        user: { login: 'maintainer' },
+      },
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc', repo: { fork: false } },
+        user: { login: 'author' },
+      },
+    });
+    commentOctokit.graphql.mockRejectedValue(
+      new Error('Resource not accessible by integration')
+    );
+    actionsOctokit.graphql.mockRejectedValue(
+      new Error('Resource not accessible by integration')
+    );
+    actionsOctokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+    actionsOctokit.rest.actions.listWorkflowRunsForRepo.mockResolvedValue({
+      data: {
+        workflow_runs: [
+          {
+            id: 456,
+            path: '.github/workflows/review-router.yml',
+            head_sha: 'abc',
+            conclusion: 'failure',
+            pull_requests: [{ number: 123 }],
+          },
+        ],
+      },
+    });
+
+    const ledger = new ReviewLedger(commentClient, 'test-secret');
+    await new ReviewInteractionHandler(
+      commentClient,
+      ledger,
+      undefined,
+      actionsClient
+    ).execute();
+
+    expect(commentOctokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_number: 123,
+        body: expect.stringContaining('reviewrouter-ledger:v1'),
+      })
+    );
+    expect(
+      actionsOctokit.rest.actions.reRunWorkflowFailedJobs
+    ).toHaveBeenCalledWith(expect.objectContaining({ run_id: 456 }));
   });
 
   it('records /rr skip without requiring a reason', async () => {

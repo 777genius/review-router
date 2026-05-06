@@ -28239,7 +28239,7 @@ var ReviewInteractionHandler = class {
       actor,
       reason: command.reason
     });
-    await this.setReviewThreadResolved(
+    await this.setReviewThreadResolutionState(
       prNumber,
       parentId,
       command.kind === "skip"
@@ -28313,19 +28313,57 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
       );
     }
   }
-  async setReviewThreadResolved(prNumber, parentCommentId, resolved) {
-    try {
-      const thread = await this.findReviewThread(prNumber, parentCommentId);
-      if (!thread) {
-        logger.warn(
-          `Could not find review thread for comment ${parentCommentId}; leaving GitHub conversation state unchanged`
+  async setReviewThreadResolutionState(prNumber, parentCommentId, resolved) {
+    const clients = this.client === this.actionsClient ? [this.client] : [this.client, this.actionsClient];
+    for (let index = 0; index < clients.length; index += 1) {
+      const graphClient = clients[index];
+      try {
+        const thread = await this.findReviewThread(
+          graphClient,
+          prNumber,
+          parentCommentId
+        );
+        if (!thread) {
+          logger.warn(
+            `Could not find review thread for comment ${parentCommentId}; leaving GitHub conversation state unchanged`
+          );
+          return;
+        }
+        if (thread.isResolved === resolved) {
+          return;
+        }
+        await this.updateReviewThreadResolution(
+          graphClient,
+          thread.id,
+          resolved
+        );
+        logger.info(
+          `${resolved ? "Resolved" : "Unresolved"} ReviewRouter conversation for comment ${parentCommentId}`
         );
         return;
+      } catch (error2) {
+        const reason = sanitizeNoticeError(error2);
+        const hasFallback = index < clients.length - 1;
+        if (hasFallback) {
+          logger.info(
+            `GitHub token could not ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}: ${reason}. Trying fallback token.`
+          );
+          continue;
+        }
+        if (reason.includes("Resource not accessible by integration")) {
+          logger.info(
+            `GitHub token cannot ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}; skip state was still recorded and the review check can rerun`
+          );
+          return;
+        }
+        logger.warn(
+          `Failed to ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}: ${reason}`
+        );
       }
-      if (thread.isResolved === resolved) {
-        return;
-      }
-      const mutation = resolved ? `mutation($threadId: ID!) {
+    }
+  }
+  async updateReviewThreadResolution(graphClient, threadId, resolved) {
+    const mutation = resolved ? `mutation($threadId: ID!) {
             resolveReviewThread(input: { threadId: $threadId }) {
               thread { id isResolved }
             }
@@ -28334,24 +28372,9 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
               thread { id isResolved }
             }
           }`;
-      await this.graphql(mutation, { threadId: thread.id });
-      logger.info(
-        `${resolved ? "Resolved" : "Unresolved"} ReviewRouter conversation for comment ${parentCommentId}`
-      );
-    } catch (error2) {
-      const reason = sanitizeNoticeError(error2);
-      if (reason.includes("Resource not accessible by integration")) {
-        logger.info(
-          `GitHub token cannot ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}; skip state was still recorded and the review check can rerun`
-        );
-        return;
-      }
-      logger.warn(
-        `Failed to ${resolved ? "resolve" : "unresolve"} ReviewRouter conversation for comment ${parentCommentId}: ${reason}`
-      );
-    }
+    await this.graphql(graphClient, mutation, { threadId });
   }
-  async findReviewThread(prNumber, commentId) {
+  async findReviewThread(graphClient, prNumber, commentId) {
     const query = `query($owner: String!, $repo: String!, $number: Int!, $after: String) {
       repository(owner: $owner, name: $repo) {
         pullRequest(number: $number) {
@@ -28375,7 +28398,7 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     }`;
     let after = null;
     for (let page = 0; page < 10; page += 1) {
-      const result = await this.graphql(query, {
+      const result = await this.graphql(graphClient, query, {
         owner: this.client.owner,
         repo: this.client.repo,
         number: prNumber,
@@ -28395,8 +28418,8 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     }
     return null;
   }
-  async graphql(query, variables) {
-    const graphql = this.actionsClient.octokit.graphql;
+  async graphql(graphClient, query, variables) {
+    const graphql = graphClient.octokit.graphql;
     if (typeof graphql !== "function") {
       throw new Error("Octokit GraphQL client is not available");
     }

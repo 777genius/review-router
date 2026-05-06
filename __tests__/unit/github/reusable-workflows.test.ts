@@ -24,6 +24,7 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('review_app_client_id:');
     expect(workflow).toContain('REVIEW_APP_PRIVATE_KEY:');
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
+    expect(workflow).toContain("const crypto = require('node:crypto');");
     expect(workflow).toContain('npm install -g @openai/codex@0.125.0');
     expect(workflow).toContain('node .reviewrouter-runtime/dist/index.js');
     expect(workflow).toContain('id-token: write');
@@ -55,9 +56,9 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('REVIEW_ROUTER_MODE: interaction-preflight');
     expect(workflow).toContain('REVIEW_ROUTER_MODE: interaction');
     expect(workflow).toContain('review_workflow_file:');
-    expect(workflow).toContain(
-      'REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}'
-    );
+    expect(workflow).toContain('RR_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}');
+    expect(workflow).toContain('Invalid review_workflow_file');
+    expect(workflow).toContain('REVIEW_ROUTER_REVIEW_WORKFLOW_FILE=${reviewWorkflowFile}');
     expect(workflow).not.toContain('pull_request_target');
     expect(workflow).not.toContain('REVIEW_ROUTER_THREAD_RESOLVE_TOKEN');
   });

@@ -55,7 +55,7 @@ jobs:
       REVIEWROUTER_OIDC_AUDIENCE: reviewrouter
       REVIEWROUTER_RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
       REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'true'
-      REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}
+      RR_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}
       REVIEW_APP_PRIVATE_KEY_PRESENT: ${{ secrets.REVIEW_APP_PRIVATE_KEY != '' && '1' || '0' }}
     steps:
       - name: Prepare ReviewRouter runtime settings
@@ -77,12 +77,17 @@ jobs:
           if (!['oidc', 'static'].includes(runtimeConfigMode)) {
             fail('Invalid ReviewRouter runtime_config_mode. Use oidc or static.');
           }
+          const reviewWorkflowFile = (process.env.RR_REVIEW_WORKFLOW_FILE || '').trim();
+          if (!/^(reviewrouter|review-router)\.ya?ml$/.test(reviewWorkflowFile)) {
+            fail('Invalid review_workflow_file. Use reviewrouter.yml or review-router.yml.');
+          }
           const githubEnv = process.env.GITHUB_ENV;
           const githubOutput = process.env.GITHUB_OUTPUT;
           if (!githubEnv || !githubOutput) {
             fail('GitHub environment files are unavailable.');
           }
           fs.appendFileSync(githubEnv, `REVIEWROUTER_ACTION_VERSION=${runtimeRef}\n`);
+          fs.appendFileSync(githubEnv, `REVIEW_ROUTER_REVIEW_WORKFLOW_FILE=${reviewWorkflowFile}\n`);
           fs.appendFileSync(
             githubEnv,
             `REVIEWROUTER_COMMENT_TOKEN_MODE=${runtimeConfigMode === 'oidc' ? 'app-oidc' : 'github-token'}\n`

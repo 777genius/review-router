@@ -79,6 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           node <<'NODE'
+          const crypto = require('node:crypto');
           const fs = require('node:fs');
 
           const fail = (message) => {
@@ -110,7 +111,8 @@ jobs:
             if (text.includes('\0')) {
               fail(`Invalid static runtime env value for ${key}`);
             }
-            fs.appendFileSync(githubEnv, `${key}<<RR_ENV_${key}\n${text}\nRR_ENV_${key}\n`);
+            const delimiter = `RR_ENV_${key}_${crypto.randomUUID().replace(/-/g, '')}`;
+            fs.appendFileSync(githubEnv, `${key}<<${delimiter}\n${text}\n${delimiter}\n`);
           };
 
           appendEnv('REVIEWROUTER_ACTION_VERSION', runtimeRef);

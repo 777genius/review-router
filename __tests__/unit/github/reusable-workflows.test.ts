@@ -17,6 +17,9 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('runtime_ref:');
     expect(workflow).toContain('repository: 777genius/review-router');
     expect(workflow).toContain('ref: ${{ steps.runtime.outputs.runtime_ref }}');
+    expect(workflow).toContain("eventName === 'merge_group'");
+    expect(workflow).toContain("isMergeGroup ? 'merge_group'");
+    expect(workflow).toContain('ReviewRouter merge queue check passed');
     expect(workflow).toContain('path: .reviewrouter-runtime');
     expect(workflow).toContain('persist-credentials: false');
     expect(workflow).toContain('uses: actions/setup-node@v6');

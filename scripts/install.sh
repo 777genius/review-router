@@ -1373,6 +1373,7 @@ name: ReviewRouter
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
   workflow_dispatch:
     inputs:
       pr_number:

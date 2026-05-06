@@ -150,8 +150,14 @@ jobs:
             runtimeConfigMode === 'static' &&
             process.env.REVIEW_APP_PRIVATE_KEY_PRESENT === '1' &&
             (process.env.RR_REVIEW_APP_CLIENT_ID || '').trim().length > 0;
+          const eventName = process.env.GITHUB_EVENT_NAME || '';
+          const isForkPullRequest =
+            eventName === 'pull_request' &&
+            process.env.GITHUB_HEAD_REPO_FULL_NAME !== process.env.GITHUB_REPOSITORY;
+          const isMergeGroup = eventName === 'merge_group';
           fs.appendFileSync(githubOutput, `runtime_ref=${runtimeRef}\n`);
-          fs.appendFileSync(githubOutput, `can_run=${process.env.GITHUB_EVENT_NAME === 'pull_request' && process.env.GITHUB_HEAD_REPO_FULL_NAME !== process.env.GITHUB_REPOSITORY ? 'false' : 'true'}\n`);
+          fs.appendFileSync(githubOutput, `can_run=${!isForkPullRequest && !isMergeGroup ? 'true' : 'false'}\n`);
+          fs.appendFileSync(githubOutput, `skip_reason=${isMergeGroup ? 'merge_group' : isForkPullRequest ? 'fork' : ''}\n`);
           fs.appendFileSync(githubOutput, `codex_cli_needed=${codexCliNeeded ? 'true' : 'false'}\n`);
           fs.appendFileSync(githubOutput, `app_token_needed=${appTokenNeeded ? 'true' : 'false'}\n`);
           NODE
@@ -159,11 +165,15 @@ jobs:
           GITHUB_HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name || '' }}
           RR_REVIEW_APP_CLIENT_ID: ${{ inputs.review_app_client_id }}
 
-      - name: Skip fork pull requests
+      - name: Skip unsupported review context
         if: ${{ steps.runtime.outputs.can_run == 'false' }}
         shell: bash
         run: |
-          echo "ReviewRouter skipped this fork pull request because secret-backed provider execution is disabled by default."
+          if [ "${{ steps.runtime.outputs.skip_reason }}" = "merge_group" ]; then
+            echo "ReviewRouter merge queue check passed. Full review runs on pull_request events where a PR number is available."
+          else
+            echo "ReviewRouter skipped this fork pull request because secret-backed provider execution is disabled by default."
+          fi
 
       - name: Checkout pull request code
         if: ${{ steps.runtime.outputs.can_run == 'true' }}

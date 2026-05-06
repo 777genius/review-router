@@ -1433,6 +1433,7 @@ YAML
     with:
       runtime_ref: $runtime_ref
       runtime_config_mode: static
+      # Non-secret fallback config. Provider credentials stay in GitHub Actions secrets.
       static_runtime_env_json: >-
         $static_runtime_env_json
       pr_number: \${{ github.event.pull_request.number || inputs.pr_number }}
@@ -1445,6 +1446,7 @@ YAML
     fi
     cat <<'YAML'
     secrets:
+      # Secrets are read only by this repository workflow. ReviewRouter SaaS does not store provider credentials.
       REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
 YAML
     if [ "$IDENTITY_MODE" = "app" ]; then

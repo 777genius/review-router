@@ -14,6 +14,10 @@ import {
   clearReviewFailureSummaries,
   postReviewFailureSummary,
 } from './github/failure-summary';
+import {
+  formatActionError,
+  normalizeReviewError,
+} from './errors/review-router-error';
 import { GitHubClient } from './github/client';
 import { ReviewLedger } from './github/ledger';
 import { ReviewInteractionHandler } from './github/interaction';
@@ -231,34 +235,18 @@ async function run(): Promise<void> {
     });
     core.info('Review completed successfully');
   } catch (error) {
-    const err = error as Error;
+    const presentableError =
+      error instanceof ValidationError
+        ? new Error(`Configuration error:\n${formatValidationError(error)}`)
+        : error;
+    const normalizedError = normalizeReviewError(presentableError);
 
-    if (error instanceof ValidationError) {
-      const formatted = formatValidationError(error);
-      core.setFailed(`Configuration error:\n${formatted}`);
-    } else {
-      core.setFailed(`Review failed: ${err.message}`);
+    core.setFailed(formatActionError(normalizedError));
 
-      // Add helpful context for common errors
-      if (err.message.includes('ENOENT')) {
-        core.error('File not found. Check that all file paths are correct.');
-      } else if (err.message.includes('EACCES')) {
-        core.error('Permission denied. Check file permissions.');
-      } else if (err.message.includes('rate limit')) {
-        core.error(
-          'API rate limit exceeded. Consider using caching or reducing provider count.'
-        );
-      } else if (err.message.includes('timeout')) {
-        core.error(
-          'Operation timed out. Consider increasing the timeout value.'
-        );
-      }
-    }
-
-    await postReviewFailureSummary(err, token, prNumber);
+    await postReviewFailureSummary(normalizedError, token, prNumber);
     await reportControlPlaneActionHealth({
       runtimeConfig,
-      error,
+      error: normalizedError,
       startedAt,
       logger: {
         info: core.info,

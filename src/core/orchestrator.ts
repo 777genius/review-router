@@ -48,6 +48,7 @@ import { BatchOrchestrator } from './batch-orchestrator';
 import { ProgressTracker } from '../github/progress-tracker';
 import { GitHubClient } from '../github/client';
 import { PullRequestDescriptionUpdater } from '../github/pr-description';
+import { sanitizeErrorMessage } from '../errors/review-router-error';
 import * as fs from 'fs/promises';
 import path from 'path';
 
@@ -938,14 +939,7 @@ export class ReviewOrchestrator {
   }
 
   private redactProviderFailureReason(reason: string): string {
-    return reason
-      .replace(/sk-[A-Za-z0-9_-]{16,}/g, 'sk-***')
-      .replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, 'gh*-***')
-      .replace(/github_pat_[A-Za-z0-9_]+/g, 'github_pat_***')
-      .replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, '$1***')
-      .replace(/(authorization:\s*bearer\s+)[^\s]+/gi, '$1***')
-      .replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, '$1***')
-      .replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, '$1***');
+    return sanitizeErrorMessage(reason);
   }
 
   /**

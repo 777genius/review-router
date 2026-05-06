@@ -1,4 +1,5 @@
 import { Review } from '../types';
+import { normalizeReviewError } from '../errors/review-router-error';
 import { RuntimeConfigResult } from './runtime-config';
 
 type HealthReportLogger = {
@@ -172,21 +173,22 @@ function classifyMissingProviderSecret(
 }
 
 function classifyErrorCategory(error: unknown): SafeErrorCategory {
-  const message = error instanceof Error ? error.message : String(error);
-  const normalized = message.toLowerCase();
-  if (normalized.includes('rate limit') || normalized.includes('429')) {
-    return 'provider_rate_limited';
+  const normalized = normalizeReviewError(error);
+  switch (normalized.code) {
+    case 'github_rate_limited':
+      return 'provider_rate_limited';
+    case 'codex_oauth_invalid_secret':
+    case 'codex_oauth_stale':
+    case 'codex_api_key_invalid':
+    case 'openrouter_api_key_invalid':
+      return 'provider_auth_invalid';
+    case 'oidc_unavailable':
+      return 'oidc_unavailable';
+    case 'runtime_config_unavailable':
+      return 'config_unavailable';
+    default:
+      return 'runtime_error';
   }
-  if (
-    normalized.includes('auth') ||
-    normalized.includes('unauthorized') ||
-    normalized.includes('401') ||
-    normalized.includes('forbidden') ||
-    normalized.includes('403')
-  ) {
-    return 'provider_auth_invalid';
-  }
-  return 'runtime_error';
 }
 
 function safeErrorSummaryForCategory(
@@ -199,9 +201,11 @@ function safeErrorSummaryForCategory(
       return 'Provider authentication failed or is stale.';
     case 'runtime_error':
       return 'Review failed before completion. See GitHub Actions logs.';
-    case 'none':
     case 'oidc_unavailable':
+      return 'GitHub OIDC was unavailable or rejected.';
     case 'config_unavailable':
+      return 'Runtime config could not be loaded from the control plane.';
+    case 'none':
     case 'provider_auth_missing':
       return undefined;
   }

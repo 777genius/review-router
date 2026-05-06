@@ -27233,6 +27233,351 @@ ${_ProgressTracker.MARKER}`;
   }
 };
 
+// src/errors/review-router-error.ts
+var ReviewRouterError = class extends Error {
+  code;
+  category;
+  safeMessage;
+  rawMessage;
+  summary;
+  whyItMatters;
+  nextSteps;
+  isRetryable;
+  isUserActionable;
+  originalError;
+  constructor(input) {
+    super(input.safeMessage);
+    this.name = "ReviewRouterError";
+    this.code = input.code;
+    this.category = input.category;
+    this.safeMessage = input.safeMessage;
+    this.rawMessage = input.rawMessage;
+    this.summary = input.summary;
+    this.whyItMatters = input.whyItMatters;
+    this.nextSteps = input.nextSteps;
+    this.isRetryable = input.isRetryable;
+    this.isUserActionable = input.isUserActionable;
+    this.originalError = input.originalError;
+    if (input.stack) {
+      this.stack = input.stack;
+    }
+  }
+};
+function normalizeReviewError(error2) {
+  if (error2 instanceof ReviewRouterError) {
+    return error2;
+  }
+  const rawMessage = getErrorMessage(error2);
+  const safeMessage = sanitizeErrorMessage(rawMessage);
+  const descriptor = descriptorFor(rawMessage, error2);
+  return new ReviewRouterError({
+    ...descriptor,
+    safeMessage: safeMessage || descriptor.summary,
+    rawMessage,
+    originalError: error2,
+    stack: error2 instanceof Error && error2.stack ? sanitizeErrorMessage(error2.stack) : void 0
+  });
+}
+function formatActionError(error2) {
+  const normalized = normalizeReviewError(error2);
+  const retryText = normalized.isRetryable ? "yes" : "no";
+  const actionText = normalized.isUserActionable ? "yes" : "no";
+  return [
+    `Review failed [${normalized.code}]: ${normalized.summary}`,
+    "",
+    normalized.whyItMatters,
+    "",
+    "How to fix:",
+    ...normalized.nextSteps.map((step) => `- ${step}`),
+    "",
+    `Retryable: ${retryText}. User action required: ${actionText}.`,
+    `Details: ${normalized.safeMessage}`
+  ].join("\n");
+}
+function sanitizeErrorMessage(message) {
+  const redacted = message.replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "-----BEGIN PRIVATE KEY-----***-----END PRIVATE KEY-----").replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/(?:eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g, "jwt-***").replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(access_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(id_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(client_secret["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(private[-_ ]?key["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(CODEX_AUTH_JSON["'\s:=]+)\{[\s\S]*?\}/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/((?:api[_-]?key|apikey|api[_-]?secret|token|password)["'\s:=]+)[A-Za-z0-9_./+=-]{16,}/gi, "$1***");
+  return redacted.length > 1600 ? `${redacted.slice(0, 1600)}
+... truncated ...` : redacted;
+}
+function descriptorFor(rawMessage, error2) {
+  const message = `${error2 instanceof Error ? error2.name : ""} ${rawMessage}`.toLowerCase();
+  if (message.includes("refresh token has already been used") || message.includes("refresh token has been invalidated") || message.includes("access token could not be refreshed") || message.includes("codex") && message.includes("reseed auth.json") || message.includes("codex") && message.includes("refresh token")) {
+    return descriptors.codex_oauth_stale;
+  }
+  if (message.includes("codex_auth_json") || message.includes("auth.json") || message.includes("refresh_token is missing") || message.includes("auth_mode must be chatgpt") || message.includes("not valid json") || message.includes("tokens.refresh_token")) {
+    return descriptors.codex_oauth_invalid_secret;
+  }
+  if (message.includes("openrouter") && (message.includes("api key") || message.includes("401") || message.includes("unauthorized") || message.includes("403"))) {
+    return descriptors.openrouter_api_key_invalid;
+  }
+  if (message.includes("openai_api_key") || message.includes("openai api key") || message.includes("api key") && !message.includes("openrouter")) {
+    return descriptors.codex_api_key_invalid;
+  }
+  if ((message.includes("401") || message.includes("unauthorized")) && (message.includes("auth") || message.includes("token"))) {
+    return descriptors.codex_api_key_invalid;
+  }
+  if (message.includes("codex cli is not available") || message.includes("codex: command not found") || message.includes("codex-cli") && message.includes("not found") || message.includes("enoent") && message.includes("codex")) {
+    return descriptors.codex_cli_missing;
+  }
+  if (message.includes("resource not accessible by integration") || message.includes("bad credentials") || message.includes("github") && (message.includes("403") || message.includes("forbidden"))) {
+    return descriptors.github_permission_denied;
+  }
+  if (message.includes("unprocessable entity") || message.includes("internal error occurred") && message.includes("pull") || message.includes("inline comment") || message.includes("create-a-review-for-a-pull-request")) {
+    return descriptors.github_inline_comment_failed;
+  }
+  if (message.includes("rate limit") || message.includes("rate-limit") || message.includes("429")) {
+    if (message.includes("github")) {
+      return descriptors.github_rate_limited;
+    }
+    return { ...descriptors.all_providers_failed, isRetryable: true };
+  }
+  if (message.includes("github_oidc_unavailable") || message.includes("oidc")) {
+    return descriptors.oidc_unavailable;
+  }
+  if (message.includes("runtime_config") || message.includes("action_session") || message.includes("control plane") || message.includes("action_version_blocked")) {
+    return descriptors.runtime_config_unavailable;
+  }
+  if (message.includes("configuration error") || message.includes("validationerror") || message.includes("input required and not supplied") || message.includes("invalid workflow") || message.includes("invalid reviewrouter")) {
+    return descriptors.configuration_invalid;
+  }
+  if (message.includes("no healthy providers")) {
+    return descriptors.no_healthy_providers;
+  }
+  if (message.includes("all llm providers failed") || message.includes("all llm batches failed") || message.includes("all batches failed")) {
+    return descriptors.all_providers_failed;
+  }
+  if (message.includes("timeout") || message.includes("timed out") || message.includes("etimedout")) {
+    return descriptors.timeout;
+  }
+  if (message.includes("enoent") || message.includes("eacces") || message.includes("file not found") || message.includes("permission denied")) {
+    return descriptors.filesystem;
+  }
+  return descriptors.unknown;
+}
+function getErrorMessage(error2) {
+  if (error2 instanceof Error) {
+    return error2.message || error2.name;
+  }
+  if (typeof error2 === "string") {
+    return error2;
+  }
+  try {
+    return JSON.stringify(error2);
+  } catch {
+    return String(error2);
+  }
+}
+var descriptors = {
+  configuration_invalid: {
+    code: "configuration_invalid",
+    category: "configuration",
+    summary: "ReviewRouter configuration is invalid.",
+    whyItMatters: "The review cannot start until workflow inputs and required environment values are valid.",
+    nextSteps: [
+      "Check the ReviewRouter workflow inputs and generated static fallback config.",
+      "Verify required values such as `GITHUB_TOKEN`, `PR_NUMBER`, model, and provider mode.",
+      "Re-run setup if the workflow was manually edited."
+    ],
+    isRetryable: false,
+    isUserActionable: true
+  },
+  codex_oauth_stale: {
+    code: "codex_oauth_stale",
+    category: "provider_auth",
+    summary: "Codex OAuth auth is stale or expired.",
+    whyItMatters: "Codex could not create a review because the ChatGPT subscription refresh token no longer works in CI.",
+    nextSteps: [
+      "Run `codex login` on a trusted machine.",
+      "Reseed `CODEX_AUTH_JSON` in the repository or selected organization Actions secrets.",
+      "If you need automatic refresh, use a trusted self-hosted runner with persistent `CODEX_HOME`."
+    ],
+    isRetryable: false,
+    isUserActionable: true
+  },
+  codex_oauth_invalid_secret: {
+    code: "codex_oauth_invalid_secret",
+    category: "provider_auth",
+    summary: "Codex OAuth secret is missing or invalid.",
+    whyItMatters: "The workflow cannot restore a valid Codex ChatGPT subscription session.",
+    nextSteps: [
+      "Verify `CODEX_AUTH_JSON` exists in repository or selected organization Actions secrets.",
+      "Verify it contains `auth_mode=chatgpt` and `tokens.refresh_token`.",
+      "Reseed with the ReviewRouter Codex auth command from the dashboard or installer."
+    ],
+    isRetryable: false,
+    isUserActionable: true
+  },
+  codex_api_key_invalid: {
+    code: "codex_api_key_invalid",
+    category: "provider_auth",
+    summary: "OpenAI API key mode is missing or invalid.",
+    whyItMatters: "ReviewRouter cannot call the configured OpenAI/Codex model.",
+    nextSteps: [
+      "Verify `OPENAI_API_KEY` is available to this workflow.",
+      "Verify the key has access to the configured model.",
+      "If you intended to use ChatGPT subscription OAuth, switch provider auth mode to Codex OAuth."
+    ],
+    isRetryable: false,
+    isUserActionable: true
+  },
+  openrouter_api_key_invalid: {
+    code: "openrouter_api_key_invalid",
+    category: "provider_auth",
+    summary: "OpenRouter API key mode is missing or invalid.",
+    whyItMatters: "ReviewRouter cannot call the configured OpenRouter model.",
+    nextSteps: [
+      "Verify `OPENROUTER_API_KEY` is available to this workflow.",
+      "Verify the key has quota and access to the configured model.",
+      "Re-run the workflow after updating the secret."
+    ],
+    isRetryable: false,
+    isUserActionable: true
+  },
+  codex_cli_missing: {
+    code: "codex_cli_missing",
+    category: "provider_runtime",
+    summary: "Codex CLI is not available in CI.",
+    whyItMatters: "The provider process could not start, so no LLM review can run.",
+    nextSteps: [
+      "Verify the workflow installs `@openai/codex@0.125.0` before ReviewRouter runs.",
+      "Check that Node 24 setup completed successfully.",
+      "Re-run after dependency installation succeeds."
+    ],
+    isRetryable: true,
+    isUserActionable: true
+  },
+  no_healthy_providers: {
+    code: "no_healthy_providers",
+    category: "provider_runtime",
+    summary: "No configured review provider passed health checks.",
+    whyItMatters: "ReviewRouter would otherwise report a misleading clean review without model coverage.",
+    nextSteps: [
+      "Check provider credentials and model names.",
+      "For Codex OAuth, reseed `CODEX_AUTH_JSON` if the token is stale.",
+      "For API-key modes, verify the key secret is available to this repository."
+    ],
+    isRetryable: true,
+    isUserActionable: true
+  },
+  all_providers_failed: {
+    code: "all_providers_failed",
+    category: "provider_runtime",
+    summary: "All configured review providers failed during review.",
+    whyItMatters: "Static checks may still run, but the LLM review did not complete.",
+    nextSteps: [
+      "Open the `Run ReviewRouter` step and check the provider-specific error.",
+      "Fix provider auth, model, quota, or CLI setup.",
+      "Re-run the workflow after the provider is healthy."
+    ],
+    isRetryable: true,
+    isUserActionable: true
+  },
+  github_permission_denied: {
+    code: "github_permission_denied",
+    category: "github",
+    summary: "GitHub denied the token permission needed by ReviewRouter.",
+    whyItMatters: "ReviewRouter cannot post comments, update PR metadata, or rerun workflows without the required permission.",
+    nextSteps: [
+      "Verify workflow permissions include `pull-requests: write` and `issues: write`.",
+      "If using App comments, verify the ReviewRouter App installation has access to this repository.",
+      "For interaction reruns, verify `actions: write` is present."
+    ],
+    isRetryable: false,
+    isUserActionable: true
+  },
+  github_inline_comment_failed: {
+    code: "github_inline_comment_failed",
+    category: "github",
+    summary: "GitHub rejected inline review comments.",
+    whyItMatters: "Findings may need to be posted as a fallback PR comment, or retried without committable suggestions.",
+    nextSteps: [
+      "Re-run the workflow once if GitHub returned an internal 422 error.",
+      "Check whether the finding line is still inside the PR diff.",
+      "If fallback comments were posted, the severity gate still uses those findings."
+    ],
+    isRetryable: true,
+    isUserActionable: false
+  },
+  github_rate_limited: {
+    code: "github_rate_limited",
+    category: "github",
+    summary: "GitHub API rate limit was reached.",
+    whyItMatters: "ReviewRouter could not complete GitHub API operations for this run.",
+    nextSteps: [
+      "Re-run after the GitHub rate limit resets.",
+      "Reduce repeated manual reruns on the same PR.",
+      "Use the GitHub App token path where possible."
+    ],
+    isRetryable: true,
+    isUserActionable: false
+  },
+  runtime_config_unavailable: {
+    code: "runtime_config_unavailable",
+    category: "control_plane",
+    summary: "ReviewRouter runtime config could not be loaded.",
+    whyItMatters: "The action could not fetch dashboard-managed config and may need static fallback.",
+    nextSteps: [
+      "Verify `REVIEWROUTER_API_URL` is reachable.",
+      "Verify this repository is still connected in the dashboard.",
+      "Use static fallback mode only if the SaaS config path is unavailable."
+    ],
+    isRetryable: true,
+    isUserActionable: true
+  },
+  oidc_unavailable: {
+    code: "oidc_unavailable",
+    category: "control_plane",
+    summary: "GitHub OIDC token was unavailable or rejected.",
+    whyItMatters: "The action cannot authenticate to the ReviewRouter control plane for runtime config.",
+    nextSteps: [
+      "Verify workflow permissions include `id-token: write`.",
+      "Verify the workflow path is the expected ReviewRouter caller workflow.",
+      "Use static fallback if OIDC is unavailable."
+    ],
+    isRetryable: true,
+    isUserActionable: true
+  },
+  timeout: {
+    code: "timeout",
+    category: "timeout",
+    summary: "ReviewRouter timed out before completion.",
+    whyItMatters: "The review result may be incomplete.",
+    nextSteps: [
+      "Reduce PR size or keep smart diff compaction enabled.",
+      "Check provider logs for repeated retries.",
+      "Increase `RUN_TIMEOUT_SECONDS` only after confirming provider health."
+    ],
+    isRetryable: true,
+    isUserActionable: true
+  },
+  filesystem: {
+    code: "filesystem",
+    category: "filesystem",
+    summary: "ReviewRouter could not access a required file or directory.",
+    whyItMatters: "The action could not read repository files, config, or generated reports.",
+    nextSteps: [
+      "Verify checkout completed successfully.",
+      "Check file permissions and generated artifact paths.",
+      "Re-run after fixing the missing or inaccessible path."
+    ],
+    isRetryable: true,
+    isUserActionable: true
+  },
+  unknown: {
+    code: "unknown",
+    category: "unknown",
+    summary: "ReviewRouter failed with an unexpected error.",
+    whyItMatters: "The review did not complete and the exact failure class is unknown.",
+    nextSteps: [
+      "Open the failed workflow run and inspect the `Run ReviewRouter` step.",
+      "Verify credentials, model variables, and repository permissions.",
+      "File an issue with the sanitized workflow log if this looks internal."
+    ],
+    isRetryable: true,
+    isUserActionable: true
+  }
+};
+
 // src/core/orchestrator.ts
 var fs12 = __toESM(require("fs/promises"));
 var import_path = __toESM(require("path"));
@@ -27884,7 +28229,7 @@ var ReviewOrchestrator = class {
     return summary.length > 1e3 ? `${summary.slice(0, 1e3)}...` : summary;
   }
   redactProviderFailureReason(reason) {
-    return reason.replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***");
+    return sanitizeErrorMessage(reason);
   }
   /**
    * Run all static analysis operations in parallel
@@ -28145,9 +28490,10 @@ var LEGACY_BOT_MARKERS = [
 ];
 var FAILURE_SUMMARY_TEXT = "Review failed before comments could be completed";
 function formatReviewFailureSummary(error2, prNumber) {
-  const kind = classifyFailure(error2);
-  const safeMessage = sanitizeFailureMessage(error2.message || String(error2));
-  const details = failureDetails(kind);
+  const normalized = normalizeReviewError(error2);
+  const safeDetails = sanitizeErrorMessage(
+    normalized.stack || normalized.safeMessage || normalized.message
+  );
   return [
     "# ReviewRouter",
     "",
@@ -28157,17 +28503,29 @@ function formatReviewFailureSummary(error2, prNumber) {
     "",
     "## What failed",
     "",
-    details.summary,
+    normalized.summary,
     "",
-    "## Error",
+    "## Why it matters",
     "",
-    "```text",
-    safeMessage,
-    "```",
+    normalized.whyItMatters,
     "",
     "## How to fix",
     "",
-    ...details.steps.map((step) => `- ${step}`)
+    ...normalized.nextSteps.map((step) => `- ${step}`),
+    "",
+    "<details>",
+    "<summary>Technical details</summary>",
+    "",
+    "```text",
+    `Code: ${normalized.code}`,
+    `Category: ${normalized.category}`,
+    `Retryable: ${normalized.isRetryable ? "yes" : "no"}`,
+    `User action required: ${normalized.isUserActionable ? "yes" : "no"}`,
+    "",
+    safeDetails,
+    "```",
+    "",
+    "</details>"
   ].filter((line) => line !== void 0).join("\n");
 }
 async function postReviewFailureSummary(error2, token, prNumber) {
@@ -28208,111 +28566,6 @@ async function clearReviewFailureSummariesForClient(client, prNumber) {
     );
   }
 }
-function classifyFailure(error2) {
-  const message = `${error2.name || ""} ${error2.message || ""}`.toLowerCase();
-  if (message.includes("configuration error") || message.includes("validation")) {
-    return "configuration";
-  }
-  if (message.includes("codex") && (message.includes("401") || message.includes("unauthorized") || message.includes("access token") || message.includes("refresh token") || message.includes("reseed auth.json"))) {
-    return "codex-oauth";
-  }
-  if (message.includes("codex_auth_json") || message.includes("auth.json") || message.includes("refresh_token") || message.includes("auth_mode") || message.includes("chatgpt")) {
-    return "codex-oauth";
-  }
-  if (message.includes("openai_api_key") || message.includes("api key")) {
-    return "codex-api";
-  }
-  if (message.includes("no healthy providers")) {
-    return "no-providers";
-  }
-  if (message.includes("codex") || message.includes("enoent") || message.includes("command not found")) {
-    return "codex-cli";
-  }
-  if (message.includes("timeout") || message.includes("timed out")) {
-    return "timeout";
-  }
-  if (message.includes("rate limit") || message.includes("rate-limit")) {
-    return "rate-limit";
-  }
-  return "unknown";
-}
-function failureDetails(kind) {
-  switch (kind) {
-    case "codex-oauth":
-      return {
-        summary: "Codex OAuth authentication is missing, invalid, stale, or expired.",
-        steps: [
-          "Verify `CODEX_AUTH_JSON` exists in repository or selected organization Actions secrets.",
-          "Verify the secret contains `auth_mode=chatgpt` and a refresh token from a trusted local Codex login.",
-          "Reseed `auth.json`: run `codex login` on a trusted machine, then rerun the installer or update `CODEX_AUTH_JSON`.",
-          "For automatic refresh without reseeding, use a trusted self-hosted runner with persistent `CODEX_HOME`; GitHub-hosted runners are ephemeral."
-        ]
-      };
-    case "codex-api":
-      return {
-        summary: "Codex API-key mode is configured, but the OpenAI API key is missing or invalid.",
-        steps: [
-          "Verify `OPENAI_API_KEY` exists in repository or selected organization Actions secrets.",
-          "Verify the key has access to the configured `REVIEW_CODEX_MODEL`.",
-          "If you intended to use ChatGPT subscription OAuth, reinstall with `REVIEW_ROUTER_AUTH=codex`."
-        ]
-      };
-    case "codex-cli":
-      return {
-        summary: "The Codex CLI could not run successfully in CI.",
-        steps: [
-          "Verify the workflow installs `@openai/codex` before running ReviewRouter.",
-          "Check the ReviewRouter run logs for the Codex CLI error. Usage-limit errors usually need a later rerun or a lower-cost model.",
-          "If this is a model issue, verify `REVIEW_CODEX_MODEL` is a current supported Codex model."
-        ]
-      };
-    case "no-providers":
-      return {
-        summary: "No configured review provider passed the health check.",
-        steps: [
-          "Check provider credentials and model variables.",
-          "For Codex OAuth, verify `CODEX_AUTH_JSON` is present and the account has available Codex usage.",
-          "For OpenRouter or OpenAI API mode, verify the API key secret is available to this repository."
-        ]
-      };
-    case "timeout":
-      return {
-        summary: "The review timed out before a complete result was produced.",
-        steps: [
-          "Reduce PR size or keep smart diff compaction enabled.",
-          "Increase `RUN_TIMEOUT_SECONDS` only after confirming the provider is healthy.",
-          "Check whether the provider stderr shows repeated retries or network failures."
-        ]
-      };
-    case "rate-limit":
-      return {
-        summary: "The review hit a provider or GitHub API rate limit.",
-        steps: [
-          "Re-run the workflow after the rate limit resets.",
-          "Reduce provider count or run only one Codex model for this repository.",
-          "For API-key mode, check provider quota and billing limits."
-        ]
-      };
-    case "configuration":
-      return {
-        summary: "ReviewRouter configuration is invalid.",
-        steps: [
-          "Check the workflow inputs in `.github/workflows/review-router.yml`.",
-          "Verify required values such as `GITHUB_TOKEN`, `PR_NUMBER`, model variables, and provider credentials.",
-          "Re-run the installer if the workflow was manually edited."
-        ]
-      };
-    default:
-      return {
-        summary: "The review failed with an unexpected error.",
-        steps: [
-          "Open the failed workflow run and inspect the `Run ReviewRouter` step.",
-          "Verify credentials, model variables, and repository permissions.",
-          "If the error looks internal, file an issue with the sanitized workflow log."
-        ]
-      };
-  }
-}
 async function listIssueComments(client, prNumber) {
   const { octokit, owner, repo } = client;
   const params = {
@@ -28333,11 +28586,6 @@ function isReviewFailureSummary(body) {
 }
 function hasReviewRouterBotMarker(body) {
   return body.includes(REVIEW_ROUTER_BOT_MARKER) || LEGACY_BOT_MARKERS.some((marker) => body.includes(marker));
-}
-function sanitizeFailureMessage(message) {
-  const redacted = message.replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/(access_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***");
-  return redacted.length > 1200 ? `${redacted.slice(0, 1200)}
-... truncated ...` : redacted;
 }
 
 // src/github/interaction.ts
@@ -29686,15 +29934,22 @@ function classifyMissingProviderSecret(env) {
   return void 0;
 }
 function classifyErrorCategory(error2) {
-  const message = error2 instanceof Error ? error2.message : String(error2);
-  const normalized = message.toLowerCase();
-  if (normalized.includes("rate limit") || normalized.includes("429")) {
-    return "provider_rate_limited";
+  const normalized = normalizeReviewError(error2);
+  switch (normalized.code) {
+    case "github_rate_limited":
+      return "provider_rate_limited";
+    case "codex_oauth_invalid_secret":
+    case "codex_oauth_stale":
+    case "codex_api_key_invalid":
+    case "openrouter_api_key_invalid":
+      return "provider_auth_invalid";
+    case "oidc_unavailable":
+      return "oidc_unavailable";
+    case "runtime_config_unavailable":
+      return "config_unavailable";
+    default:
+      return "runtime_error";
   }
-  if (normalized.includes("auth") || normalized.includes("unauthorized") || normalized.includes("401") || normalized.includes("forbidden") || normalized.includes("403")) {
-    return "provider_auth_invalid";
-  }
-  return "runtime_error";
 }
 function safeErrorSummaryForCategory(category) {
   switch (category) {
@@ -29704,9 +29959,11 @@ function safeErrorSummaryForCategory(category) {
       return "Provider authentication failed or is stale.";
     case "runtime_error":
       return "Review failed before completion. See GitHub Actions logs.";
-    case "none":
     case "oidc_unavailable":
+      return "GitHub OIDC was unavailable or rejected.";
     case "config_unavailable":
+      return "Runtime config could not be loaded from the control plane.";
+    case "none":
     case "provider_auth_missing":
       return void 0;
   }
@@ -29899,31 +30156,14 @@ async function run() {
     });
     info("Review completed successfully");
   } catch (error2) {
-    const err = error2;
-    if (error2 instanceof ValidationError) {
-      const formatted = formatValidationError(error2);
-      setFailed(`Configuration error:
-${formatted}`);
-    } else {
-      setFailed(`Review failed: ${err.message}`);
-      if (err.message.includes("ENOENT")) {
-        error("File not found. Check that all file paths are correct.");
-      } else if (err.message.includes("EACCES")) {
-        error("Permission denied. Check file permissions.");
-      } else if (err.message.includes("rate limit")) {
-        error(
-          "API rate limit exceeded. Consider using caching or reducing provider count."
-        );
-      } else if (err.message.includes("timeout")) {
-        error(
-          "Operation timed out. Consider increasing the timeout value."
-        );
-      }
-    }
-    await postReviewFailureSummary(err, token, prNumber);
+    const presentableError = error2 instanceof ValidationError ? new Error(`Configuration error:
+${formatValidationError(error2)}`) : error2;
+    const normalizedError = normalizeReviewError(presentableError);
+    setFailed(formatActionError(normalizedError));
+    await postReviewFailureSummary(normalizedError, token, prNumber);
     await reportControlPlaneActionHealth({
       runtimeConfig,
-      error: error2,
+      error: normalizedError,
       startedAt,
       logger: {
         info,

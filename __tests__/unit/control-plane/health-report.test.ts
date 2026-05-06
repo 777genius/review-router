@@ -119,6 +119,28 @@ describe('classifyOutcome', () => {
       safeErrorSummary: 'Provider authentication failed or is stale.',
     });
   });
+
+  it('classifies OIDC and runtime config errors with safe categories', () => {
+    expect(
+      classifyOutcome({
+        error: new Error('github_oidc_unavailable: id-token permission missing'),
+      })
+    ).toMatchObject({
+      providerHealth: 'failed',
+      safeErrorCategory: 'oidc_unavailable',
+      safeErrorSummary: 'GitHub OIDC was unavailable or rejected.',
+    });
+
+    expect(
+      classifyOutcome({
+        error: new Error('runtime_config_fetch_failed: control plane unavailable'),
+      })
+    ).toMatchObject({
+      providerHealth: 'failed',
+      safeErrorCategory: 'config_unavailable',
+      safeErrorSummary: 'Runtime config could not be loaded from the control plane.',
+    });
+  });
 });
 
 function review(input: {

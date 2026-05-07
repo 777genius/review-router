@@ -13480,8 +13480,9 @@ var CodexProvider = class extends Provider {
       "</deterministic_review_prompt>",
       "",
       "FINAL OUTPUT CONTRACT:",
-      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","line":1,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
       'The "findings" array may be empty. "severity" must be one of "critical", "major", or "minor".',
+      'When the issue covers a changed block, set "startLine" to the first affected RIGHT-side line and "endLine" to the last affected RIGHT-side line; keep "line" equal to "endLine". For single-line findings, set "startLine" and "endLine" to null.',
       'The "suggestion" field is required by schema; use null unless there is an exact safe replacement.',
       "Do not return markdown, prose, or a bare JSON array."
     ].filter((line) => line !== void 0).join("\n");
@@ -13495,8 +13496,9 @@ var CodexProvider = class extends Provider {
       "</deterministic_review_prompt>",
       "",
       "FINAL OUTPUT CONTRACT:",
-      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","line":1,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
       'The "findings" array may be empty. The "suggestion" field is required and may be null.',
+      'When the issue covers a changed block, set "startLine" to the first affected RIGHT-side line and "endLine" to the last affected RIGHT-side line; keep "line" equal to "endLine". For single-line findings, set "startLine" and "endLine" to null.',
       "Do not return markdown, prose, or a bare JSON array."
     ].join("\n");
   }
@@ -13513,7 +13515,9 @@ var CodexProvider = class extends Provider {
             additionalProperties: false,
             required: [
               "file",
+              "startLine",
               "line",
+              "endLine",
               "severity",
               "title",
               "message",
@@ -13521,7 +13525,9 @@ var CodexProvider = class extends Provider {
             ],
             properties: {
               file: { type: "string" },
+              startLine: { type: ["integer", "null"] },
               line: { type: "integer" },
+              endLine: { type: ["integer", "null"] },
               severity: {
                 type: "string",
                 enum: ["critical", "major", "minor"]
@@ -14183,6 +14189,11 @@ var CodexProvider = class extends Provider {
       }
       const raw = item;
       const severity = raw.severity;
+      const rawStartLine = raw.startLine ?? raw.start_line;
+      const rawEndLine = raw.endLine ?? raw.end_line;
+      const startLine = Number.isInteger(rawStartLine) ? rawStartLine : void 0;
+      const endLine = Number.isInteger(rawEndLine) ? rawEndLine : void 0;
+      const anchorLine = endLine ?? raw.line;
       if (typeof raw.file !== "string" || !raw.file || !Number.isInteger(raw.line) || !["critical", "major", "minor"].includes(String(severity)) || typeof raw.title !== "string" || !raw.title || typeof raw.message !== "string" || !raw.message) {
         throw new Error(
           `Codex CLI returned invalid review JSON: findings[${index}] is missing required file, line, severity, title, or message`
@@ -14190,11 +14201,15 @@ var CodexProvider = class extends Provider {
       }
       const finding = {
         file: raw.file,
-        line: raw.line,
+        line: anchorLine,
         severity,
         title: raw.title,
         message: raw.message
       };
+      if (startLine !== void 0 && endLine !== void 0 && startLine < endLine) {
+        finding.startLine = startLine;
+        finding.endLine = endLine;
+      }
       if (typeof raw.suggestion === "string" && raw.suggestion.trim()) {
         finding.suggestion = raw.suggestion;
       }
@@ -15360,10 +15375,15 @@ var PromptBuilder = class {
       );
     }
     if (skipSuggestions) {
-      instructions.push("Return JSON: [{file, line, severity, title, message}]", "");
+      instructions.push(
+        "Return JSON: [{file, startLine, line, endLine, severity, title, message}]",
+        "Use startLine/endLine for a changed block when useful; keep line equal to endLine. Use null for startLine/endLine on single-line findings.",
+        ""
+      );
     } else {
       instructions.push(
-        "Return JSON: [{file, line, severity, title, message, suggestion}]",
+        "Return JSON: [{file, startLine, line, endLine, severity, title, message, suggestion}]",
+        "Use startLine/endLine for a changed block when useful; keep line equal to endLine. Use null for startLine/endLine on single-line findings.",
         "",
         "SUGGESTION FIELD (optional):",
         '  - Only include "suggestion" for FIXABLE issues (not all findings)',
@@ -15371,7 +15391,7 @@ var PromptBuilder = class {
         "  - NOT fixable: architectural issues, design suggestions, unclear requirements",
         '  - "suggestion" must be EXACT replacement code for the problematic line(s)',
         "  - Include ONLY the fixed code, no explanations or comments",
-        '  - Example: {"file": "x.ts", "line": 10, "severity": "major",',
+        '  - Example: {"file": "x.ts", "startLine": null, "line": 10, "endLine": null, "severity": "major",',
         '             "title": "Null reference", "message": "...",',
         '             "suggestion": "const user = users?.find(u => u.id === id) ?? null;"}',
         ""
@@ -16791,7 +16811,9 @@ var SynthesisEngine = class {
     const sorted = findings.filter((f) => compareSeverityDesc(minSeverity, f.severity) >= 0).sort((a, b) => compareSeverityDesc(a.severity, b.severity) || a.file.localeCompare(b.file) || a.line - b.line).slice(0, this.config.inlineMaxComments);
     return sorted.map((f) => ({
       path: f.file,
+      startLine: f.startLine,
       line: f.line,
+      endLine: f.endLine,
       side: "RIGHT",
       body: this.commentBody(f),
       severity: f.severity,
@@ -16857,6 +16879,7 @@ var SynthesisEngine = class {
     ].join("\n");
   }
   agentPromptDetails(finding) {
+    const location = finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `lines ${finding.startLine}-${finding.endLine}` : `line ${finding.line}`;
     return [
       "<details>",
       "<summary>\u{1F916} Prompt for AI Agents</summary>",
@@ -16866,7 +16889,7 @@ var SynthesisEngine = class {
         [
           "Verify this finding against the current code and only fix it if needed.",
           "",
-          `In \`@${finding.file}\` around line ${finding.line}, ${finding.message.trim()}`,
+          `In \`@${finding.file}\` around ${location}, ${finding.message.trim()}`,
           finding.suggestion ? `Apply this candidate fix if it is still correct:
 
 ${finding.suggestion.trim()}` : "If the finding is valid, produce a minimal safe fix and update or add tests when appropriate."
@@ -16884,8 +16907,11 @@ ${content.trimEnd()}
 ${fence}`;
   }
   buildActionItems(findings) {
-    const items = findings.filter((f) => f.severity !== "minor").slice(0, 5).map((f) => `${f.file}:${f.line} - ${f.title}`);
+    const items = findings.filter((f) => f.severity !== "minor").slice(0, 5).map((f) => `${this.findingLocationLabel(f)} - ${f.title}`);
     return Array.from(new Set(items));
+  }
+  findingLocationLabel(finding) {
+    return finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `${finding.file}:${finding.startLine}-${finding.endLine}` : `${finding.file}:${finding.line}`;
   }
 };
 function suggestionToDiff(suggestion) {
@@ -18549,6 +18575,12 @@ ${content.substring(0, 500)}...`);
     const apiComments = (await Promise.all(
       sortedComments.map(async (c) => {
         const file = files.find((f) => f.filename === c.path);
+        const rangedComment = c;
+        const requestedEndLine = _CommentPoster.integerOrUndefined(c.endLine ?? rangedComment.end_line);
+        if (requestedEndLine !== void 0 && requestedEndLine !== c.line) {
+          logger.debug(`Using inline comment end line for ${c.path}: ${c.line} -> ${requestedEndLine}`);
+          c.line = requestedEndLine;
+        }
         const correctedLine = c.side !== "LEFT" ? chooseBestAddedLineForComment(file?.patch, c.line, c.body) : c.line;
         if (correctedLine !== c.line) {
           logger.debug(`Adjusted inline comment line for ${c.path}: ${c.line} -> ${correctedLine}`);
@@ -18560,16 +18592,27 @@ ${content.substring(0, 500)}...`);
           logger.warn(`Cannot find diff position for ${c.path}:${c.line}, skipping inline comment`);
           return null;
         }
+        let startLine = _CommentPoster.integerOrUndefined(c.startLine ?? rangedComment.start_line);
+        if (startLine !== void 0) {
+          if (startLine === c.line) {
+            startLine = void 0;
+          } else {
+            const validation = validateSuggestionRange(startLine, c.line, file?.patch);
+            if (!validation.isValid) {
+              logger.debug(`Inline comment range invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`);
+              startLine = void 0;
+            }
+          }
+        }
         if (c.body.includes("```suggestion")) {
           if (!filesWithAdditionsSet.has(c.path)) {
             logger.debug(`Skipping suggestion for deletion-only file: ${c.path}`);
             c.body = c.body.replace(/```suggestion[\s\S]*?```/g, "_Suggestion not available (file has no additions)_");
           } else if (file?.patch) {
-            const startLine2 = c.start_line;
-            if (startLine2 !== void 0 && startLine2 !== c.line) {
-              const validation = validateSuggestionRange(startLine2, c.line, file.patch);
+            if (startLine !== void 0 && startLine !== c.line) {
+              const validation = validateSuggestionRange(startLine, c.line, file.patch);
               if (!validation.isValid) {
-                logger.debug(`Multi-line suggestion invalid at ${c.path}:${startLine2}-${c.line}: ${validation.reason}`);
+                logger.debug(`Multi-line suggestion invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`);
                 c.body = c.body.replace(/```suggestion[\s\S]*?```/g, `_Suggestion not available: ${validation.reason}_`);
               }
             } else {
@@ -18621,7 +18664,6 @@ ${content.substring(0, 500)}...`);
           line: c.line,
           body: apiComment.body
         });
-        const startLine = c.start_line;
         if (startLine !== void 0 && startLine !== c.line) {
           apiComment.start_line = startLine;
           apiComment.start_side = "RIGHT";
@@ -18758,6 +18800,9 @@ ${comment.body.substring(0, 200)}...`);
       ).trim()
     };
   }
+  static integerOrUndefined(value) {
+    return Number.isInteger(value) ? value : void 0;
+  }
   async postInlineFallback(prNumber, comments, error2) {
     const { octokit, owner, repo } = this.client;
     const body = _CommentPoster.formatInlineFallbackBody(comments, error2);
@@ -18822,7 +18867,7 @@ ${comment.body.substring(0, 200)}...`);
   static formatInlineFallbackBody(comments, error2) {
     const errorMessage = (error2.message || String(error2)).slice(0, 2e3);
     const items = comments.map((comment, index) => [
-      `### ${index + 1}. ${comment.path}:${comment.line}`,
+      `### ${index + 1}. ${_CommentPoster.formatApiCommentLocation(comment)}`,
       "",
       _CommentPoster.stripUnsupportedFallbackText(comment.body)
     ].join("\n")).join("\n\n---\n\n");
@@ -18846,6 +18891,9 @@ ${comment.body.substring(0, 200)}...`);
       "",
       items
     ].join("\n");
+  }
+  static formatApiCommentLocation(comment) {
+    return comment.start_line !== void 0 && comment.start_line < comment.line ? `${comment.path}:${comment.start_line}-${comment.line}` : `${comment.path}:${comment.line}`;
   }
   static stripUnsupportedFallbackText(body) {
     return body.replace(/<sub><!-- review-router-skip-help -->[\s\S]*?<\/sub>/g, "").replace(/```suggestion[\s\S]*?```/g, "_Committable suggestion is only available on inline review comments._").trim();
@@ -29460,7 +29508,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.15",
+  version: "1.0.16",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

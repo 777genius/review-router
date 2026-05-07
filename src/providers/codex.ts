@@ -447,8 +447,9 @@ export class CodexProvider extends Provider {
       '</deterministic_review_prompt>',
       '',
       'FINAL OUTPUT CONTRACT:',
-      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","line":1,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
       'The "findings" array may be empty. "severity" must be one of "critical", "major", or "minor".',
+      'When the issue covers a changed block, set "startLine" to the first affected RIGHT-side line and "endLine" to the last affected RIGHT-side line; keep "line" equal to "endLine". For single-line findings, set "startLine" and "endLine" to null.',
       'The "suggestion" field is required by schema; use null unless there is an exact safe replacement.',
       'Do not return markdown, prose, or a bare JSON array.',
     ]
@@ -465,8 +466,9 @@ export class CodexProvider extends Provider {
       '</deterministic_review_prompt>',
       '',
       'FINAL OUTPUT CONTRACT:',
-      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","line":1,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
       'The "findings" array may be empty. The "suggestion" field is required and may be null.',
+      'When the issue covers a changed block, set "startLine" to the first affected RIGHT-side line and "endLine" to the last affected RIGHT-side line; keep "line" equal to "endLine". For single-line findings, set "startLine" and "endLine" to null.',
       'Do not return markdown, prose, or a bare JSON array.',
     ].join('\n');
   }
@@ -484,7 +486,9 @@ export class CodexProvider extends Provider {
             additionalProperties: false,
             required: [
               'file',
+              'startLine',
               'line',
+              'endLine',
               'severity',
               'title',
               'message',
@@ -492,7 +496,9 @@ export class CodexProvider extends Provider {
             ],
             properties: {
               file: { type: 'string' },
+              startLine: { type: ['integer', 'null'] },
               line: { type: 'integer' },
+              endLine: { type: ['integer', 'null'] },
               severity: {
                 type: 'string',
                 enum: ['critical', 'major', 'minor'],
@@ -1387,6 +1393,13 @@ export class CodexProvider extends Provider {
 
       const raw = item as Record<string, unknown>;
       const severity = raw.severity;
+      const rawStartLine = raw.startLine ?? raw.start_line;
+      const rawEndLine = raw.endLine ?? raw.end_line;
+      const startLine =
+        Number.isInteger(rawStartLine) ? (rawStartLine as number) : undefined;
+      const endLine =
+        Number.isInteger(rawEndLine) ? (rawEndLine as number) : undefined;
+      const anchorLine = endLine ?? (raw.line as number);
 
       if (
         typeof raw.file !== 'string' ||
@@ -1405,11 +1418,20 @@ export class CodexProvider extends Provider {
 
       const finding: Finding = {
         file: raw.file,
-        line: raw.line as number,
+        line: anchorLine,
         severity: severity as Finding['severity'],
         title: raw.title,
         message: raw.message,
       };
+
+      if (
+        startLine !== undefined &&
+        endLine !== undefined &&
+        startLine < endLine
+      ) {
+        finding.startLine = startLine;
+        finding.endLine = endLine;
+      }
 
       if (typeof raw.suggestion === 'string' && raw.suggestion.trim()) {
         finding.suggestion = raw.suggestion;

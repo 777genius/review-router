@@ -133,7 +133,9 @@ export class SynthesisEngine {
 
     return sorted.map(f => ({
       path: f.file,
+      startLine: f.startLine,
       line: f.line,
+      endLine: f.endLine,
       side: 'RIGHT',
       body: this.commentBody(f),
       severity: f.severity,
@@ -204,6 +206,13 @@ export class SynthesisEngine {
   }
 
   private agentPromptDetails(finding: Finding): string {
+    const location =
+      finding.startLine !== undefined &&
+      finding.endLine !== undefined &&
+      finding.startLine < finding.endLine
+        ? `lines ${finding.startLine}-${finding.endLine}`
+        : `line ${finding.line}`;
+
     return [
       '<details>',
       '<summary>🤖 Prompt for AI Agents</summary>',
@@ -213,7 +222,7 @@ export class SynthesisEngine {
         [
           'Verify this finding against the current code and only fix it if needed.',
           '',
-          `In \`@${finding.file}\` around line ${finding.line}, ${finding.message.trim()}`,
+          `In \`@${finding.file}\` around ${location}, ${finding.message.trim()}`,
           finding.suggestion
             ? `Apply this candidate fix if it is still correct:\n\n${finding.suggestion.trim()}`
             : 'If the finding is valid, produce a minimal safe fix and update or add tests when appropriate.',
@@ -234,9 +243,17 @@ export class SynthesisEngine {
     const items = findings
       .filter(f => f.severity !== 'minor')
       .slice(0, 5)
-      .map(f => `${f.file}:${f.line} - ${f.title}`);
+      .map(f => `${this.findingLocationLabel(f)} - ${f.title}`);
 
     return Array.from(new Set(items));
+  }
+
+  private findingLocationLabel(finding: Finding): string {
+    return finding.startLine !== undefined &&
+      finding.endLine !== undefined &&
+      finding.startLine < finding.endLine
+      ? `${finding.file}:${finding.startLine}-${finding.endLine}`
+      : `${finding.file}:${finding.line}`;
   }
 }
 

@@ -203,6 +203,35 @@ describe('CodexProvider', () => {
     expect(findings[0].suggestion).toBeUndefined();
   });
 
+  it('parses strict schema findings with multi-line ranges', () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const findings = (provider as any).extractFindings(
+      JSON.stringify({
+        findings: [
+          {
+            file: 'src/app.ts',
+            startLine: 40,
+            line: 42,
+            endLine: 42,
+            severity: 'major',
+            title: 'Crash',
+            message: 'This changed block can crash.',
+            suggestion: null,
+          },
+        ],
+      })
+    );
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      file: 'src/app.ts',
+      startLine: 40,
+      line: 42,
+      endLine: 42,
+      severity: 'major',
+    });
+  });
+
   it('reads final review content from --output-last-message instead of stdout', async () => {
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('--version')) {

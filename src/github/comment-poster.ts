@@ -32,6 +32,11 @@ interface GitHubInlineCommentPayload {
   start_side?: 'LEFT' | 'RIGHT';
 }
 
+type InlineCommentWithLegacyRange = InlineComment & {
+  start_line?: unknown;
+  end_line?: unknown;
+};
+
 export class CommentPoster {
   private static readonly MAX_COMMENT_SIZE = 60_000;
   private static readonly BOT_COMMENT_MARKER = '<!-- review-router-bot -->';
@@ -352,6 +357,12 @@ export class CommentPoster {
     const apiComments = (await Promise.all(sortedComments
       .map(async c => {
         const file = files.find(f => f.filename === c.path);
+        const rangedComment = c as InlineCommentWithLegacyRange;
+        const requestedEndLine = CommentPoster.integerOrUndefined(c.endLine ?? rangedComment.end_line);
+        if (requestedEndLine !== undefined && requestedEndLine !== c.line) {
+          logger.debug(`Using inline comment end line for ${c.path}: ${c.line} -> ${requestedEndLine}`);
+          c.line = requestedEndLine;
+        }
         const correctedLine = c.side !== 'LEFT'
           ? chooseBestAddedLineForComment(file?.patch, c.line, c.body)
           : c.line;
@@ -367,6 +378,19 @@ export class CommentPoster {
           return null;
         }
 
+        let startLine = CommentPoster.integerOrUndefined(c.startLine ?? rangedComment.start_line);
+        if (startLine !== undefined) {
+          if (startLine === c.line) {
+            startLine = undefined;
+          } else {
+            const validation = validateSuggestionRange(startLine, c.line, file?.patch);
+            if (!validation.isValid) {
+              logger.debug(`Inline comment range invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`);
+              startLine = undefined;
+            }
+          }
+        }
+
         // Validate suggestions can be applied at this line/range
         if (c.body.includes('```suggestion')) {
           // Skip suggestions for deletion-only files
@@ -375,7 +399,6 @@ export class CommentPoster {
             c.body = c.body.replace(/```suggestion[\s\S]*?```/g, '_Suggestion not available (file has no additions)_');
           } else if (file?.patch) {
             // Check if this is a multi-line suggestion (has start_line)
-            const startLine = (c as any).start_line;
             if (startLine !== undefined && startLine !== c.line) {
               // Multi-line suggestion - validate range
               const validation = validateSuggestionRange(startLine, c.line, file.patch);
@@ -401,11 +424,11 @@ export class CommentPoster {
               {
                 ...c,
                 suggestion: suggestionContent,
-                category: (c as any).category,
-                severity: (c as any).severity,
-                provider: (c as any).provider,
-                hasConsensus: (c as any).hasConsensus,
-                confidence: (c as any).confidence
+                category: c.category,
+                severity: c.severity,
+                provider: c.provider,
+                hasConsensus: c.hasConsensus,
+                confidence: c.confidence
               },
               prNumber
             );
@@ -415,13 +438,13 @@ export class CommentPoster {
           }
         }
 
-        const apiComment: any = {
+        const apiComment: GitHubInlineCommentPayload = {
           path: c.path,
           line: c.line,
           side: c.side || 'RIGHT',
           body: CommentPoster.withSkipHelpFooter(
             appendInlineFingerprintMarker(c.body, c.path, c.line),
-            (c as any).severity
+            c.severity
           ),
         };
 
@@ -440,7 +463,6 @@ export class CommentPoster {
           body: apiComment.body,
         });
 
-        const startLine = (c as any).start_line;
         if (startLine !== undefined && startLine !== c.line) {
           // Multi-line: use line-based parameters.
           apiComment.start_line = startLine;
@@ -604,6 +626,10 @@ export class CommentPoster {
     };
   }
 
+  private static integerOrUndefined(value: unknown): number | undefined {
+    return Number.isInteger(value) ? (value as number) : undefined;
+  }
+
   private async postInlineFallback(
     prNumber: number,
     comments: GitHubInlineCommentPayload[],
@@ -687,7 +713,7 @@ export class CommentPoster {
   ): string {
     const errorMessage = (error.message || String(error)).slice(0, 2000);
     const items = comments.map((comment, index) => [
-      `### ${index + 1}. ${comment.path}:${comment.line}`,
+      `### ${index + 1}. ${CommentPoster.formatApiCommentLocation(comment)}`,
       '',
       CommentPoster.stripUnsupportedFallbackText(comment.body),
     ].join('\n')).join('\n\n---\n\n');
@@ -712,6 +738,12 @@ export class CommentPoster {
       '',
       items,
     ].join('\n');
+  }
+
+  private static formatApiCommentLocation(comment: GitHubInlineCommentPayload): string {
+    return comment.start_line !== undefined && comment.start_line < comment.line
+      ? `${comment.path}:${comment.start_line}-${comment.line}`
+      : `${comment.path}:${comment.line}`;
   }
 
   private static stripUnsupportedFallbackText(body: string): string {

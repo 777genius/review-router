@@ -72,6 +72,31 @@ describe('SynthesisEngine', () => {
     expect(review.inlineComments[0].body).not.toContain('```suggestion');
   });
 
+  it('preserves multi-line finding ranges for GitHub review comments', () => {
+    const finding: Finding = {
+      file: 'src/users.js',
+      startLine: 8,
+      line: 10,
+      endLine: 10,
+      severity: 'major',
+      title: 'Email lookup bypass',
+      message: 'The changed block no longer filters by email.',
+    };
+
+    const review = new SynthesisEngine({
+      ...DEFAULT_CONFIG,
+      inlineMinSeverity: 'minor',
+      inlineMaxComments: 5,
+    }).synthesize([finding], pr);
+
+    expect(review.inlineComments[0]).toMatchObject({
+      path: 'src/users.js',
+      startLine: 8,
+      line: 10,
+      endLine: 10,
+    });
+  });
+
   it('sorts inline comments by severity before applying the inline limit', () => {
     const findings: Finding[] = [
       {

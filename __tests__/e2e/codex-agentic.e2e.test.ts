@@ -36,7 +36,9 @@ describe('Codex agentic context e2e', () => {
                 additionalProperties: false,
                 required: [
                   'file',
+                  'startLine',
                   'line',
+                  'endLine',
                   'severity',
                   'title',
                   'message',
@@ -44,7 +46,9 @@ describe('Codex agentic context e2e', () => {
                 ],
                 properties: {
                   file: { type: 'string' },
+                  startLine: { type: ['integer', 'null'] },
                   line: { type: 'integer' },
+                  endLine: { type: ['integer', 'null'] },
                   severity: {
                     type: 'string',
                     enum: ['critical', 'major', 'minor'],

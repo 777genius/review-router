@@ -165,10 +165,15 @@ export class PromptBuilder {
 
     // Conditionally include suggestion field based on context size
     if (skipSuggestions) {
-      instructions.push('Return JSON: [{file, line, severity, title, message}]', '');
+      instructions.push(
+        'Return JSON: [{file, startLine, line, endLine, severity, title, message}]',
+        'Use startLine/endLine for a changed block when useful; keep line equal to endLine. Use null for startLine/endLine on single-line findings.',
+        ''
+      );
     } else {
       instructions.push(
-        'Return JSON: [{file, line, severity, title, message, suggestion}]',
+        'Return JSON: [{file, startLine, line, endLine, severity, title, message, suggestion}]',
+        'Use startLine/endLine for a changed block when useful; keep line equal to endLine. Use null for startLine/endLine on single-line findings.',
         '',
         'SUGGESTION FIELD (optional):',
         '  - Only include "suggestion" for FIXABLE issues (not all findings)',
@@ -176,7 +181,7 @@ export class PromptBuilder {
         '  - NOT fixable: architectural issues, design suggestions, unclear requirements',
         '  - "suggestion" must be EXACT replacement code for the problematic line(s)',
         '  - Include ONLY the fixed code, no explanations or comments',
-        '  - Example: {"file": "x.ts", "line": 10, "severity": "major",',
+        '  - Example: {"file": "x.ts", "startLine": null, "line": 10, "endLine": null, "severity": "major",',
         '             "title": "Null reference", "message": "...",',
         '             "suggestion": "const user = users?.find(u => u.id === id) ?? null;"}',
         ''

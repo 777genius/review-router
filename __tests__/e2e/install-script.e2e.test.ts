@@ -295,6 +295,41 @@ describe('review-router curl installer e2e', () => {
     expect(staticEnv.SYNTHESIS_MODEL).toBeUndefined();
   });
 
+  it('detects active Codex account auth when legacy auth.json is absent', () => {
+    const codexHome = makeTempDir('airr-codex-accounts-');
+    const accountsDir = path.join(codexHome, 'accounts');
+    const activeAccountKey =
+      'user-testActiveAccount::00000000-0000-4000-8000-000000000000';
+    const activeAuthFile = path.join(
+      accountsDir,
+      `${Buffer.from(activeAccountKey).toString('base64url')}.auth.json`
+    );
+    fs.mkdirSync(accountsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(accountsDir, 'registry.json'),
+      JSON.stringify({ active_account_key: activeAccountKey })
+    );
+    fs.writeFileSync(
+      activeAuthFile,
+      JSON.stringify({
+        auth_mode: 'chatgpt',
+        tokens: { refresh_token: 'refresh-token' },
+      })
+    );
+
+    const result = runInstaller({
+      CODEX_HOME: codexHome,
+      REVIEW_ROUTER_WORKFLOW_STYLE: 'reusable',
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'codex',
+      REVIEW_ROUTER_PRESET: 'safe',
+    });
+
+    expect(result.status).toBe(0);
+    const workflow = workflowText(result.workflowPath);
+    expect(staticRuntimeEnv(workflow).REVIEW_AUTH_MODE).toBe('codex-oauth');
+  });
+
   it('generates github-actions bot workflow for OpenRouter auth without GitHub App setup', () => {
     const result = runInstaller({
       REVIEW_ROUTER_IDENTITY: 'actions',

@@ -706,13 +706,62 @@ if not ((data.get('tokens') or {}).get('refresh_token')):
 PY
 }
 
+resolve_codex_auth_file() {
+  explicit_auth_file="$(env_first REVIEW_ROUTER_CODEX_AUTH_FILE AI_ROBOT_REVIEW_CODEX_AUTH_FILE || true)"
+  if [ -n "$explicit_auth_file" ]; then
+    printf '%s\n' "$explicit_auth_file"
+    return
+  fi
+
+  codex_home="${CODEX_HOME:-$HOME/.codex}"
+  legacy_auth_file="$codex_home/auth.json"
+  if [ -f "$legacy_auth_file" ]; then
+    printf '%s\n' "$legacy_auth_file"
+    return
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    active_auth_file="$(
+      python3 - "$codex_home" <<'PY' 2>/dev/null || true
+import base64
+import json
+import os
+import sys
+
+codex_home = sys.argv[1]
+registry_path = os.path.join(codex_home, 'accounts', 'registry.json')
+if not os.path.exists(registry_path):
+    raise SystemExit(0)
+
+with open(registry_path, 'r', encoding='utf-8') as f:
+    registry = json.load(f)
+
+active_key = registry.get('active_account_key')
+if not active_key:
+    raise SystemExit(0)
+
+encoded = base64.urlsafe_b64encode(active_key.encode('utf-8')).decode('ascii').rstrip('=')
+auth_path = os.path.join(codex_home, 'accounts', f'{encoded}.auth.json')
+if os.path.exists(auth_path):
+    print(auth_path)
+PY
+    )"
+    if [ -n "$active_auth_file" ]; then
+      printf '%s\n' "$active_auth_file"
+      return
+    fi
+  fi
+
+  printf '%s\n' "$legacy_auth_file"
+}
+
 setup_auth() {
   preset_values
   case "$AUTH_MODE" in
     codex)
       if [ -z "$DISCUSSION_MODE" ]; then DISCUSSION_MODE="suggest"; fi
       validate_discussion_mode "$DISCUSSION_MODE"
-      auth_file="$(env_first REVIEW_ROUTER_CODEX_AUTH_FILE AI_ROBOT_REVIEW_CODEX_AUTH_FILE || printf '%s' "${CODEX_HOME:-$HOME/.codex}/auth.json")"
+      auth_file="$(resolve_codex_auth_file)"
       config_file="$(env_first REVIEW_ROUTER_CODEX_CONFIG_FILE AI_ROBOT_REVIEW_CODEX_CONFIG_FILE || printf '%s' "${CODEX_HOME:-$HOME/.codex}/config.toml")"
       verify_codex_auth_file "$auth_file"
       set_repo_secret_from_file CODEX_AUTH_JSON "$auth_file"

@@ -20,6 +20,91 @@ NC='\033[0m' # No Color
 echo -e "${BLUE}=== GitHub Actions CLI OAuth Secrets Setup ===${NC}"
 echo ""
 
+find_codex_auth_file() {
+  local codex_home="${CODEX_HOME:-$HOME/.codex}"
+  local legacy_auth_file="$codex_home/auth.json"
+  if [ -f "$legacy_auth_file" ]; then
+    printf '%s\n' "$legacy_auth_file"
+    return 0
+  fi
+
+  if command -v node >/dev/null 2>&1; then
+    node - "$codex_home" <<'NODE' 2>/dev/null || true
+const fs = require('node:fs');
+const path = require('node:path');
+
+const codexHome = process.argv[2];
+const accountsDir = path.join(codexHome, 'accounts');
+const registryPath = path.join(accountsDir, 'registry.json');
+
+function authPathForAccountKey(accountKey) {
+  const encoded = Buffer.from(accountKey, 'utf8').toString('base64url');
+  return path.join(accountsDir, `${encoded}.auth.json`);
+}
+
+try {
+  if (fs.existsSync(registryPath)) {
+    const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    const activeAccountKey = registry.active_account_key;
+    if (typeof activeAccountKey === 'string' && activeAccountKey.length > 0) {
+      const activeAuthPath = authPathForAccountKey(activeAccountKey);
+      if (fs.existsSync(activeAuthPath)) {
+        console.log(activeAuthPath);
+        process.exit(0);
+      }
+    }
+  }
+  if (fs.existsSync(accountsDir)) {
+    const candidates = fs
+      .readdirSync(accountsDir)
+      .filter((entry) => entry.endsWith('.auth.json'))
+      .map((entry) => path.join(accountsDir, entry));
+    if (candidates.length === 1) console.log(candidates[0]);
+  }
+} catch {
+  process.exit(0);
+}
+NODE
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$codex_home" <<'PY' 2>/dev/null || true
+import base64
+import json
+import os
+import sys
+
+codex_home = sys.argv[1]
+accounts_dir = os.path.join(codex_home, 'accounts')
+registry_path = os.path.join(accounts_dir, 'registry.json')
+
+try:
+    if os.path.exists(registry_path):
+        with open(registry_path, 'r', encoding='utf-8') as f:
+            registry = json.load(f)
+        active_account_key = registry.get('active_account_key')
+        if isinstance(active_account_key, str) and active_account_key:
+            encoded = base64.urlsafe_b64encode(active_account_key.encode('utf-8')).decode('ascii').rstrip('=')
+            active_auth_path = os.path.join(accounts_dir, f'{encoded}.auth.json')
+            if os.path.exists(active_auth_path):
+                print(active_auth_path)
+                raise SystemExit(0)
+
+    if os.path.isdir(accounts_dir):
+        candidates = [
+            os.path.join(accounts_dir, entry)
+            for entry in os.listdir(accounts_dir)
+            if entry.endswith('.auth.json')
+        ]
+        if len(candidates) == 1:
+            print(candidates[0])
+except Exception:
+    pass
+PY
+  fi
+}
+
 # Check if secrets exist
 if [ ! -d "$SECRETS_DIR" ] || [ ! -f "$SECRETS_DIR/claude-oauth.json" ]; then
   echo -e "${YELLOW}⚠️  Credential files not found in $SECRETS_DIR${NC}"
@@ -35,8 +120,9 @@ if [ ! -d "$SECRETS_DIR" ] || [ ! -f "$SECRETS_DIR/claude-oauth.json" ]; then
   fi
 
   # Extract Codex credentials
-  if [ -f ~/.codex/auth.json ]; then
-    cp ~/.codex/auth.json "$SECRETS_DIR/codex-auth.json"
+  CODEX_AUTH_SOURCE="$(find_codex_auth_file)"
+  if [ -n "$CODEX_AUTH_SOURCE" ] && [ -f "$CODEX_AUTH_SOURCE" ]; then
+    cp "$CODEX_AUTH_SOURCE" "$SECRETS_DIR/codex-auth.json"
     echo "✅ Codex auth extracted"
   else
     echo "⚠️  Codex auth not found"

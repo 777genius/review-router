@@ -52,7 +52,7 @@ All three providers follow the same pattern as `OpenCodeProvider`:
 #### Codex Provider
 - Binary paths: `codex`, `codex-cli`
 - Command: `codex exec --model <model> --sandbox read-only --ephemeral --ignore-user-config -c approval_policy=never <prompt>`
-- Credentials: `~/.codex/auth.json`, `~/.codex/config.toml`
+- Credentials: legacy `~/.codex/auth.json` or active `~/.codex/accounts/*.auth.json`, plus optional `~/.codex/config.toml`
 
 #### Gemini Provider
 - Binary paths: `gemini`, `npx @google/gemini-cli`
@@ -151,7 +151,9 @@ For each CLI:
    security find-generic-password -s "Claude Code-credentials" -w > claude-oauth.json
 
    # Codex
-   cat ~/.codex/auth.json
+   # Prefer the ReviewRouter seed script, because newer Codex CLI installs may store
+   # the active account under ~/.codex/accounts/*.auth.json instead of ~/.codex/auth.json.
+   bash scripts/seed-codex-auth.sh --dry-run --repo owner/repo
 
    # Gemini
    cat ~/.gemini/oauth_creds.json
@@ -160,7 +162,7 @@ For each CLI:
 2. **Create GitHub Secrets**
    ```bash
    gh secret set CLAUDE_CODE_OAUTH --body "$(cat claude-oauth.json)"
-   gh secret set CODEX_AUTH_JSON --body "$(cat ~/.codex/auth.json)"
+   bash scripts/seed-codex-auth.sh --confirm-write --repo owner/repo
    gh secret set GEMINI_OAUTH_CREDS --body "$(cat ~/.gemini/oauth_creds.json)"
    ```
 

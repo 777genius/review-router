@@ -31,8 +31,7 @@ If you have all three CLIs authenticated locally and `gh` installed, you can set
 security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null | gh secret set CLAUDE_CODE_OAUTH
 
 # Codex CLI
-cat ~/.codex/auth.json | gh secret set CODEX_AUTH_JSON
-cat ~/.codex/config.toml | gh secret set CODEX_CONFIG_TOML
+bash scripts/seed-codex-auth.sh --confirm-write --repo owner/repo
 
 # Gemini CLI
 cat ~/.gemini/oauth_creds.json | gh secret set GEMINI_OAUTH_CREDS
@@ -51,7 +50,7 @@ Add `--repo owner/repo-name` to each command:
 security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null | \
   gh secret set CLAUDE_CODE_OAUTH --repo keithah/my-repo
 
-cat ~/.codex/auth.json | gh secret set CODEX_AUTH_JSON --repo keithah/my-repo
+bash scripts/seed-codex-auth.sh --confirm-write --repo keithah/my-repo
 cat ~/.codex/config.toml | gh secret set CODEX_CONFIG_TOML --repo keithah/my-repo
 cat ~/.gemini/oauth_creds.json | gh secret set GEMINI_OAUTH_CREDS --repo keithah/my-repo
 cat ~/.gemini/settings.json | gh secret set GEMINI_SETTINGS --repo keithah/my-repo
@@ -149,13 +148,24 @@ gh secret set CLAUDE_CODE_OAUTH --body "$(cat ~/.config/claude/credentials.json)
 
 ## Codex CLI
 
-Codex CLI stores credentials in `~/.codex/auth.json` and configuration in `~/.codex/config.toml`.
+Prefer the current ReviewRouter seeding script instead of manually copying files:
+
+```bash
+bash scripts/seed-codex-auth.sh --confirm-write --repo owner/repo
+```
+
+The script detects both supported Codex OAuth layouts:
+
+- legacy `~/.codex/auth.json`
+- active account auth from `~/.codex/accounts/registry.json` plus `~/.codex/accounts/*.auth.json`
+
+Older Codex CLI versions store credentials in `~/.codex/auth.json` and configuration in `~/.codex/config.toml`.
 
 ### 1. Extract Credentials
 
 ```bash
-# View auth credentials (contains OAuth tokens)
-cat ~/.codex/auth.json
+# Validate and locate auth credentials without printing OAuth tokens
+bash scripts/seed-codex-auth.sh --dry-run --repo owner/repo
 
 # View configuration (contains model preferences)
 cat ~/.codex/config.toml
@@ -188,8 +198,8 @@ approval_policy = "never"
 ### 2. Create GitHub Secrets
 
 ```bash
-# Store both auth and config
-gh secret set CODEX_AUTH_JSON --body "$(cat ~/.codex/auth.json)"
+# Store auth through the validated seeding script
+bash scripts/seed-codex-auth.sh --confirm-write --repo owner/repo
 gh secret set CODEX_CONFIG_TOML --body "$(cat ~/.codex/config.toml)"
 ```
 

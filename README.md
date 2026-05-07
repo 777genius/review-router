@@ -39,7 +39,7 @@ This is an actively stabilized fork of `keithah/multi-provider-code-review`.
 
 What has been tested end-to-end:
 
-- Codex CLI OAuth in GitHub Actions using `~/.codex/auth.json` restored from GitHub Secrets.
+- Codex CLI OAuth in GitHub Actions using local Codex auth from `~/.codex/auth.json` or the active `~/.codex/accounts/*.auth.json` account restored from GitHub Secrets.
 - `codex exec` in read-only sandbox mode with strict JSON output for inline review comments.
 - PR summary comment updates.
 - PR description summary block updates without overwriting author text.
@@ -232,7 +232,7 @@ Then make `ReviewRouter / review` a required status check in branch protection.
 If you use the full explicit workflow and want an exact pinned release, use:
 
 ```yaml
-uses: 777genius/review-router@v1.0.14
+uses: 777genius/review-router@v1.0.15
 ```
 
 For live dogfood/dev installs, use:
@@ -249,7 +249,7 @@ Use this when you want Codex through your ChatGPT subscription.
 
 Required secrets or organization selected-repo secrets:
 
-- `CODEX_AUTH_JSON`: contents of `~/.codex/auth.json`
+- `CODEX_AUTH_JSON`: contents of local Codex ChatGPT OAuth auth JSON. The installer detects both legacy `~/.codex/auth.json` and the active account file under `~/.codex/accounts/*.auth.json`.
 - `CODEX_CONFIG_TOML`: optional, usually leave unset unless you intentionally need local Codex config in CI
 
 Recommended variable:

@@ -14,7 +14,7 @@ The generated workflow uses the stable moving major tag by default:
 777genius/review-router@v1
 ```
 
-Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.14`. Use `REVIEW_ROUTER_ACTION_REF_MODE=main` for live dogfood/dev updates. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
+Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.15`. Use `REVIEW_ROUTER_ACTION_REF_MODE=main` for live dogfood/dev updates. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
 
 ## Quick start
 
@@ -273,7 +273,12 @@ The installer prints these links after `create` and `manual` App setup. GitHub d
 
 ### Codex ChatGPT subscription
 
-Uses the local Codex CLI OAuth session from `~/.codex/auth.json` and stores it in the target repo as `CODEX_AUTH_JSON`.
+Uses the local Codex CLI OAuth session and stores it in the target repo as `CODEX_AUTH_JSON`.
+
+ReviewRouter detects both Codex auth layouts:
+
+- legacy `~/.codex/auth.json`
+- active account auth from `~/.codex/accounts/registry.json` plus `~/.codex/accounts/*.auth.json`
 
 By default, the installer does not copy `~/.codex/config.toml`. Local Codex config can contain plugins, hooks, or UI-specific settings that are noisy and expensive in CI. If you intentionally need it, opt in:
 
@@ -301,7 +306,7 @@ ReviewRouter uses a binary-only Codex health check by default. The real review c
 
 Use this only in trusted automation. Do not put personal Codex OAuth credentials into public/open-source repos where untrusted workflow changes can access secrets. GitHub does not expose repository secrets to fork PR workflows by default, and the generated workflow skips fork PRs by default.
 
-Important auth freshness note: on GitHub-hosted runners, the runner filesystem is ephemeral. Codex can refresh `auth.json` during a run, but ReviewRouter cannot safely write the refreshed file back to GitHub Actions secrets automatically. If the stored secret becomes stale or a refresh token is rotated, run `codex login` again on a trusted machine and rerun the installer or update `CODEX_AUTH_JSON`. For fully automatic long-running auth, prefer an OpenAI API key or a trusted self-hosted runner with persistent `CODEX_HOME`.
+Important auth freshness note: on GitHub-hosted runners, the runner filesystem is ephemeral. Codex can refresh the restored auth file during a run, but ReviewRouter cannot safely write the refreshed file back to GitHub Actions secrets automatically. If the stored secret becomes stale or a refresh token is rotated, run `codex login` again on a trusted machine and rerun the installer or update `CODEX_AUTH_JSON`. For fully automatic long-running auth, prefer an OpenAI API key or a trusted self-hosted runner with persistent `CODEX_HOME`.
 
 For trusted self-hosted runners, you can let Codex maintain the refreshed file on disk:
 

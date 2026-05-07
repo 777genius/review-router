@@ -133,11 +133,15 @@ jobs:
           if (staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS === undefined) {
             staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';
           }
+          const staticRuntimeEnvAllowlist = new Set(['TARGET_TOKENS_PER_BATCH']);
+          const isSecretLikeStaticRuntimeEnvKey = (key) =>
+            !staticRuntimeEnvAllowlist.has(key) &&
+            /(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|AUTH_JSON)/.test(key);
           for (const [key, value] of Object.entries(staticEnv)) {
             if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
               fail(`Invalid static runtime env key: ${key}`);
             }
-            if (/(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|AUTH_JSON)/.test(key)) {
+            if (isSecretLikeStaticRuntimeEnvKey(key)) {
               fail(`Static runtime env cannot contain secret-like key: ${key}`);
             }
             if (typeof value !== 'string') {

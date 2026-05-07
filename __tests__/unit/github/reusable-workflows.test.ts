@@ -29,6 +29,9 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
     expect(workflow).toContain("const crypto = require('node:crypto');");
     expect(workflow).toContain("staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';");
+    expect(workflow).toContain('staticRuntimeEnvAllowlist');
+    expect(workflow).toContain("['TARGET_TOKENS_PER_BATCH']");
+    expect(workflow).toContain('isSecretLikeStaticRuntimeEnvKey(key)');
     expect(workflow).toContain('npm install -g @openai/codex@0.125.0');
     expect(workflow).toContain('node .reviewrouter-runtime/dist/index.js');
     expect(workflow).toContain('id-token: write');

@@ -116,6 +116,83 @@ describe('CommentPoster', () => {
       });
     });
 
+    it('posts multi-line inline comments when the range is valid in the diff', async () => {
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'src/test.ts',
+          startLine: 10,
+          line: 12,
+          endLine: 12,
+          side: 'RIGHT' as const,
+          body: 'Changed block is unsafe',
+          severity: 'major',
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'src/test.ts',
+          status: 'modified',
+          additions: 3,
+          deletions: 0,
+          changes: 3,
+          patch: '@@ -8,4 +8,6 @@\n line8\n line9\n+line10\n+line11\n+line12\n line13',
+        },
+      ];
+
+      await poster.postInline(123, comments, files);
+
+      const reviewCall = mockOctokit.rest.pulls.createReview.mock.calls[0][0];
+      expect(reviewCall.comments[0]).toEqual(
+        expect.objectContaining({
+          path: 'src/test.ts',
+          start_line: 10,
+          start_side: 'RIGHT',
+          line: 12,
+          side: 'RIGHT',
+          body: expect.stringContaining('Changed block is unsafe'),
+        })
+      );
+    });
+
+    it('falls back to a single-line inline comment when the range is invalid', async () => {
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'src/test.ts',
+          startLine: 6,
+          line: 10,
+          endLine: 10,
+          side: 'RIGHT' as const,
+          body: 'Changed block is unsafe',
+          severity: 'major',
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'src/test.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+        },
+      ];
+
+      await poster.postInline(123, comments, files);
+
+      const reviewCall = mockOctokit.rest.pulls.createReview.mock.calls[0][0];
+      expect(reviewCall.comments[0]).toEqual(
+        expect.objectContaining({
+          path: 'src/test.ts',
+          line: 10,
+          side: 'RIGHT',
+        })
+      );
+      expect(reviewCall.comments[0]).not.toHaveProperty('start_line');
+      expect(reviewCall.comments[0]).not.toHaveProperty('start_side');
+    });
+
     it('deletes stale PR-comment fallback after batch inline review succeeds', async () => {
       mockOctokit.rest.issues.listComments.mockResolvedValue({
         data: [

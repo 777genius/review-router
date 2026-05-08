@@ -168,7 +168,9 @@ export interface ProviderResult {
 
 export interface Finding {
   file: string;
+  startLine?: number;
   line: number;
+  endLine?: number;
   severity: Severity;
   title: string;
   message: string;
@@ -210,7 +212,9 @@ export interface FileChange {
 
 export interface InlineComment {
   path: string;
+  startLine?: number;
   line: number;
+  endLine?: number;
   side: 'LEFT' | 'RIGHT';
   body: string;
   severity?: Severity;

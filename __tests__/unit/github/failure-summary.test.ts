@@ -35,7 +35,7 @@ describe('formatReviewFailureSummary', () => {
       123
     );
 
-    expect(body).toContain('Codex OAuth auth is stale or expired');
+    expect(body).toContain('Codex OAuth is stale or expired');
     expect(body).toContain('Run `codex login`');
     expect(body).toContain('self-hosted runner with persistent `CODEX_HOME`');
     expect(body).toContain('Code: codex_oauth_stale');

@@ -91,7 +91,7 @@ describe('PromptBuilder Context Window Validation', () => {
       // Simplified prompt is shorter, so need more diff content for high utilization
       const mediumPR: PRContext = {
         ...mockPR,
-        diff: 'a'.repeat(5000), // ~1500 tokens for gpt-3.5-turbo (4k total window - 2k reserved = 2k available)
+        diff: 'a'.repeat(4500), // high utilization while staying under gpt-3.5-turbo's 2k available test budget
       };
 
       const builder = new PromptBuilder(DEFAULT_CONFIG, 'standard');

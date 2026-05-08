@@ -13480,8 +13480,9 @@ var CodexProvider = class extends Provider {
       "</deterministic_review_prompt>",
       "",
       "FINAL OUTPUT CONTRACT:",
-      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","line":1,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
       'The "findings" array may be empty. "severity" must be one of "critical", "major", or "minor".',
+      'When the issue covers a changed block, set "startLine" to the first affected RIGHT-side line and "endLine" to the last affected RIGHT-side line; keep "line" equal to "endLine". For single-line findings, set "startLine" and "endLine" to null.',
       'The "suggestion" field is required by schema; use null unless there is an exact safe replacement.',
       "Do not return markdown, prose, or a bare JSON array."
     ].filter((line) => line !== void 0).join("\n");
@@ -13495,8 +13496,9 @@ var CodexProvider = class extends Provider {
       "</deterministic_review_prompt>",
       "",
       "FINAL OUTPUT CONTRACT:",
-      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","line":1,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
       'The "findings" array may be empty. The "suggestion" field is required and may be null.',
+      'When the issue covers a changed block, set "startLine" to the first affected RIGHT-side line and "endLine" to the last affected RIGHT-side line; keep "line" equal to "endLine". For single-line findings, set "startLine" and "endLine" to null.',
       "Do not return markdown, prose, or a bare JSON array."
     ].join("\n");
   }
@@ -13513,7 +13515,9 @@ var CodexProvider = class extends Provider {
             additionalProperties: false,
             required: [
               "file",
+              "startLine",
               "line",
+              "endLine",
               "severity",
               "title",
               "message",
@@ -13521,7 +13525,9 @@ var CodexProvider = class extends Provider {
             ],
             properties: {
               file: { type: "string" },
+              startLine: { type: ["integer", "null"] },
               line: { type: "integer" },
+              endLine: { type: ["integer", "null"] },
               severity: {
                 type: "string",
                 enum: ["critical", "major", "minor"]
@@ -14183,6 +14189,11 @@ var CodexProvider = class extends Provider {
       }
       const raw = item;
       const severity = raw.severity;
+      const rawStartLine = raw.startLine ?? raw.start_line;
+      const rawEndLine = raw.endLine ?? raw.end_line;
+      const startLine = Number.isInteger(rawStartLine) ? rawStartLine : void 0;
+      const endLine = Number.isInteger(rawEndLine) ? rawEndLine : void 0;
+      const anchorLine = endLine ?? raw.line;
       if (typeof raw.file !== "string" || !raw.file || !Number.isInteger(raw.line) || !["critical", "major", "minor"].includes(String(severity)) || typeof raw.title !== "string" || !raw.title || typeof raw.message !== "string" || !raw.message) {
         throw new Error(
           `Codex CLI returned invalid review JSON: findings[${index}] is missing required file, line, severity, title, or message`
@@ -14190,11 +14201,15 @@ var CodexProvider = class extends Provider {
       }
       const finding = {
         file: raw.file,
-        line: raw.line,
+        line: anchorLine,
         severity,
         title: raw.title,
         message: raw.message
       };
+      if (startLine !== void 0 && endLine !== void 0 && startLine < endLine) {
+        finding.startLine = startLine;
+        finding.endLine = endLine;
+      }
       if (typeof raw.suggestion === "string" && raw.suggestion.trim()) {
         finding.suggestion = raw.suggestion;
       }
@@ -15360,10 +15375,15 @@ var PromptBuilder = class {
       );
     }
     if (skipSuggestions) {
-      instructions.push("Return JSON: [{file, line, severity, title, message}]", "");
+      instructions.push(
+        "Return JSON: [{file, startLine, line, endLine, severity, title, message}]",
+        "Use startLine/endLine for a changed block when useful; keep line equal to endLine. Use null for startLine/endLine on single-line findings.",
+        ""
+      );
     } else {
       instructions.push(
-        "Return JSON: [{file, line, severity, title, message, suggestion}]",
+        "Return JSON: [{file, startLine, line, endLine, severity, title, message, suggestion}]",
+        "Use startLine/endLine for a changed block when useful; keep line equal to endLine. Use null for startLine/endLine on single-line findings.",
         "",
         "SUGGESTION FIELD (optional):",
         '  - Only include "suggestion" for FIXABLE issues (not all findings)',
@@ -15371,7 +15391,7 @@ var PromptBuilder = class {
         "  - NOT fixable: architectural issues, design suggestions, unclear requirements",
         '  - "suggestion" must be EXACT replacement code for the problematic line(s)',
         "  - Include ONLY the fixed code, no explanations or comments",
-        '  - Example: {"file": "x.ts", "line": 10, "severity": "major",',
+        '  - Example: {"file": "x.ts", "startLine": null, "line": 10, "endLine": null, "severity": "major",',
         '             "title": "Null reference", "message": "...",',
         '             "suggestion": "const user = users?.find(u => u.id === id) ?? null;"}',
         ""
@@ -16791,7 +16811,9 @@ var SynthesisEngine = class {
     const sorted = findings.filter((f) => compareSeverityDesc(minSeverity, f.severity) >= 0).sort((a, b) => compareSeverityDesc(a.severity, b.severity) || a.file.localeCompare(b.file) || a.line - b.line).slice(0, this.config.inlineMaxComments);
     return sorted.map((f) => ({
       path: f.file,
+      startLine: f.startLine,
       line: f.line,
+      endLine: f.endLine,
       side: "RIGHT",
       body: this.commentBody(f),
       severity: f.severity,
@@ -16857,6 +16879,7 @@ var SynthesisEngine = class {
     ].join("\n");
   }
   agentPromptDetails(finding) {
+    const location = finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `lines ${finding.startLine}-${finding.endLine}` : `line ${finding.line}`;
     return [
       "<details>",
       "<summary>\u{1F916} Prompt for AI Agents</summary>",
@@ -16866,7 +16889,7 @@ var SynthesisEngine = class {
         [
           "Verify this finding against the current code and only fix it if needed.",
           "",
-          `In \`@${finding.file}\` around line ${finding.line}, ${finding.message.trim()}`,
+          `In \`@${finding.file}\` around ${location}, ${finding.message.trim()}`,
           finding.suggestion ? `Apply this candidate fix if it is still correct:
 
 ${finding.suggestion.trim()}` : "If the finding is valid, produce a minimal safe fix and update or add tests when appropriate."
@@ -16884,8 +16907,11 @@ ${content.trimEnd()}
 ${fence}`;
   }
   buildActionItems(findings) {
-    const items = findings.filter((f) => f.severity !== "minor").slice(0, 5).map((f) => `${f.file}:${f.line} - ${f.title}`);
+    const items = findings.filter((f) => f.severity !== "minor").slice(0, 5).map((f) => `${this.findingLocationLabel(f)} - ${f.title}`);
     return Array.from(new Set(items));
+  }
+  findingLocationLabel(finding) {
+    return finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `${finding.file}:${finding.startLine}-${finding.endLine}` : `${finding.file}:${finding.line}`;
   }
 };
 function suggestionToDiff(suggestion) {
@@ -18549,6 +18575,12 @@ ${content.substring(0, 500)}...`);
     const apiComments = (await Promise.all(
       sortedComments.map(async (c) => {
         const file = files.find((f) => f.filename === c.path);
+        const rangedComment = c;
+        const requestedEndLine = _CommentPoster.integerOrUndefined(c.endLine ?? rangedComment.end_line);
+        if (requestedEndLine !== void 0 && requestedEndLine !== c.line) {
+          logger.debug(`Using inline comment end line for ${c.path}: ${c.line} -> ${requestedEndLine}`);
+          c.line = requestedEndLine;
+        }
         const correctedLine = c.side !== "LEFT" ? chooseBestAddedLineForComment(file?.patch, c.line, c.body) : c.line;
         if (correctedLine !== c.line) {
           logger.debug(`Adjusted inline comment line for ${c.path}: ${c.line} -> ${correctedLine}`);
@@ -18560,16 +18592,27 @@ ${content.substring(0, 500)}...`);
           logger.warn(`Cannot find diff position for ${c.path}:${c.line}, skipping inline comment`);
           return null;
         }
+        let startLine = _CommentPoster.integerOrUndefined(c.startLine ?? rangedComment.start_line);
+        if (startLine !== void 0) {
+          if (startLine === c.line) {
+            startLine = void 0;
+          } else {
+            const validation = validateSuggestionRange(startLine, c.line, file?.patch);
+            if (!validation.isValid) {
+              logger.debug(`Inline comment range invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`);
+              startLine = void 0;
+            }
+          }
+        }
         if (c.body.includes("```suggestion")) {
           if (!filesWithAdditionsSet.has(c.path)) {
             logger.debug(`Skipping suggestion for deletion-only file: ${c.path}`);
             c.body = c.body.replace(/```suggestion[\s\S]*?```/g, "_Suggestion not available (file has no additions)_");
           } else if (file?.patch) {
-            const startLine2 = c.start_line;
-            if (startLine2 !== void 0 && startLine2 !== c.line) {
-              const validation = validateSuggestionRange(startLine2, c.line, file.patch);
+            if (startLine !== void 0 && startLine !== c.line) {
+              const validation = validateSuggestionRange(startLine, c.line, file.patch);
               if (!validation.isValid) {
-                logger.debug(`Multi-line suggestion invalid at ${c.path}:${startLine2}-${c.line}: ${validation.reason}`);
+                logger.debug(`Multi-line suggestion invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`);
                 c.body = c.body.replace(/```suggestion[\s\S]*?```/g, `_Suggestion not available: ${validation.reason}_`);
               }
             } else {
@@ -18621,7 +18664,6 @@ ${content.substring(0, 500)}...`);
           line: c.line,
           body: apiComment.body
         });
-        const startLine = c.start_line;
         if (startLine !== void 0 && startLine !== c.line) {
           apiComment.start_line = startLine;
           apiComment.start_side = "RIGHT";
@@ -18758,6 +18800,9 @@ ${comment.body.substring(0, 200)}...`);
       ).trim()
     };
   }
+  static integerOrUndefined(value) {
+    return Number.isInteger(value) ? value : void 0;
+  }
   async postInlineFallback(prNumber, comments, error2) {
     const { octokit, owner, repo } = this.client;
     const body = _CommentPoster.formatInlineFallbackBody(comments, error2);
@@ -18822,7 +18867,7 @@ ${comment.body.substring(0, 200)}...`);
   static formatInlineFallbackBody(comments, error2) {
     const errorMessage = (error2.message || String(error2)).slice(0, 2e3);
     const items = comments.map((comment, index) => [
-      `### ${index + 1}. ${comment.path}:${comment.line}`,
+      `### ${index + 1}. ${_CommentPoster.formatApiCommentLocation(comment)}`,
       "",
       _CommentPoster.stripUnsupportedFallbackText(comment.body)
     ].join("\n")).join("\n\n---\n\n");
@@ -18846,6 +18891,9 @@ ${comment.body.substring(0, 200)}...`);
       "",
       items
     ].join("\n");
+  }
+  static formatApiCommentLocation(comment) {
+    return comment.start_line !== void 0 && comment.start_line < comment.line ? `${comment.path}:${comment.start_line}-${comment.line}` : `${comment.path}:${comment.line}`;
   }
   static stripUnsupportedFallbackText(body) {
     return body.replace(/<sub><!-- review-router-skip-help -->[\s\S]*?<\/sub>/g, "").replace(/```suggestion[\s\S]*?```/g, "_Committable suggestion is only available on inline review comments._").trim();
@@ -27010,229 +27058,6 @@ function unquoteGitPath2(path14) {
   });
 }
 
-// src/github/progress-tracker.ts
-var ProgressTracker = class _ProgressTracker {
-  constructor(octokit, config) {
-    this.octokit = octokit;
-    this.config = config;
-  }
-  commentId = null;
-  items = /* @__PURE__ */ new Map();
-  startTime = Date.now();
-  totalCost = 0;
-  overrideBody;
-  static MARKER = "<!-- review-router-progress-tracker -->";
-  static LEGACY_MARKERS = [
-    "<!-- ai-robot-review-progress-tracker -->"
-  ];
-  static LEGACY_HEADERS = [
-    "# ReviewRouter",
-    "## \u{1F916} ReviewRouter Progress",
-    "# AI Robot Review",
-    "## \u{1F916} AI Robot Review Progress"
-  ];
-  /**
-   * Initialize progress tracking by creating the initial comment
-   */
-  async initialize() {
-    if (!this.octokit?.rest?.issues?.createComment) {
-      logger.warn("Progress tracker unavailable: octokit.rest.issues.createComment is missing");
-      return;
-    }
-    try {
-      const body = this.formatProgressComment();
-      const existingCommentId = await this.findExistingCommentId();
-      if (existingCommentId) {
-        this.commentId = existingCommentId;
-        await this.updateComment();
-        logger.info("Progress tracker initialized from existing comment", { commentId: this.commentId });
-        return;
-      }
-      const comment = await this.octokit.rest.issues.createComment({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        issue_number: this.config.prNumber,
-        body
-      });
-      this.commentId = comment.data.id;
-      logger.info("Progress tracker initialized", { commentId: this.commentId });
-    } catch (error2) {
-      logger.warn("Failed to initialize progress tracker", error2);
-    }
-  }
-  /**
-   * Add a new progress item to track
-   */
-  addItem(id, label) {
-    this.items.set(id, {
-      id,
-      label,
-      status: "pending",
-      startTime: Date.now()
-    });
-    logger.debug(`Progress item added: ${id}`, { label });
-  }
-  /**
-   * Update progress for a specific item
-   * Only updates comment on milestone events (completed/failed)
-   */
-  async updateProgress(itemId, status, details) {
-    const item = this.items.get(itemId);
-    if (!item) {
-      logger.warn(`Progress item not found: ${itemId}`);
-      return;
-    }
-    item.status = status;
-    item.details = details;
-    if (status === "completed" || status === "failed") {
-      item.endTime = Date.now();
-      await this.updateComment();
-    }
-    logger.debug(`Progress updated: ${itemId}`, { status, details });
-  }
-  /**
-   * Set total cost for metadata display
-   */
-  setTotalCost(cost) {
-    this.totalCost = cost;
-  }
-  /**
-   * Finalize progress tracking with summary
-   */
-  async finalize(success) {
-    const duration = Date.now() - this.startTime;
-    this.items.forEach((item) => {
-      if (item.status === "pending" || item.status === "in_progress") {
-        item.status = success ? "completed" : "failed";
-        item.endTime = Date.now();
-      }
-    });
-    if (!this.overrideBody) {
-      await this.updateComment();
-    }
-    logger.info("Progress tracker finalized", {
-      success,
-      duration,
-      totalCost: this.totalCost
-    });
-  }
-  /**
-   * Format progress comment with checkboxes and status emojis
-   */
-  formatProgressComment() {
-    const lines = [];
-    lines.push("## \u{1F916} ReviewRouter Progress\n");
-    const sortedItems = Array.from(this.items.values()).sort(
-      (a, b) => (a.startTime || 0) - (b.startTime || 0)
-    );
-    for (const item of sortedItems) {
-      const checkbox = item.status === "completed" ? "[x]" : "[ ]";
-      const emoji = this.getStatusEmoji(item.status);
-      lines.push(`${checkbox} ${emoji} ${item.label}`);
-      if (item.details) {
-        lines.push(`   \u2514\u2500 ${item.details}`);
-      }
-    }
-    lines.push(_ProgressTracker.MARKER);
-    return lines.join("\n");
-  }
-  /**
-   * Update the progress comment (GitHub API call)
-   */
-  async updateComment() {
-    if (!this.commentId) {
-      logger.warn("Cannot update progress: comment not initialized");
-      return;
-    }
-    if (!this.octokit?.rest?.issues?.updateComment) {
-      logger.warn("Cannot update progress: octokit.rest.issues.updateComment is missing");
-      return;
-    }
-    try {
-      const body = this.overrideBody ?? this.formatProgressComment();
-      await this.octokit.rest.issues.updateComment({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        comment_id: this.commentId,
-        body
-      });
-      logger.debug("Progress comment updated", { commentId: this.commentId });
-    } catch (error2) {
-      logger.warn("Failed to update progress comment", error2);
-    }
-  }
-  /**
-   * Replace the progress comment with a final body (e.g., combined progress + review)
-   */
-  async replaceWith(body) {
-    if (!this.commentId) {
-      logger.warn("Cannot replace progress: comment not initialized");
-      return false;
-    }
-    if (!this.octokit?.rest?.issues?.updateComment) {
-      logger.warn("Cannot replace progress: octokit.rest.issues.updateComment is missing");
-      return false;
-    }
-    try {
-      this.overrideBody = this.withMarker(body);
-      await this.octokit.rest.issues.updateComment({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        comment_id: this.commentId,
-        body: this.overrideBody
-      });
-      return true;
-    } catch (error2) {
-      logger.warn("Failed to replace progress comment with final summary", error2);
-      return false;
-    }
-  }
-  async findExistingCommentId() {
-    if (!this.octokit?.rest?.issues?.listComments) {
-      return null;
-    }
-    try {
-      const comments = await this.octokit.rest.issues.listComments({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        issue_number: this.config.prNumber,
-        per_page: 100
-      });
-      const matching = comments.data.filter((comment) => this.isReviewComment(comment.body));
-      return matching.length > 0 ? matching[matching.length - 1].id : null;
-    } catch (error2) {
-      logger.warn("Failed to find existing progress comment", error2);
-      return null;
-    }
-  }
-  isReviewComment(body) {
-    if (!body) return false;
-    return body.includes(_ProgressTracker.MARKER) || _ProgressTracker.LEGACY_MARKERS.some((marker) => body.includes(marker)) || _ProgressTracker.LEGACY_HEADERS.some((header) => body.startsWith(header));
-  }
-  withMarker(body) {
-    return body.includes(_ProgressTracker.MARKER) ? body : `${body.trimEnd()}
-
-${_ProgressTracker.MARKER}`;
-  }
-  /**
-   * Get status emoji for visual feedback
-   */
-  getStatusEmoji(status) {
-    switch (status) {
-      case "completed":
-        return "\u2705";
-      case "failed":
-        return "\u274C";
-      case "in_progress":
-        return "\u{1F504}";
-      case "pending":
-        return "\u23F3";
-      default:
-        return "\u2B1C";
-    }
-  }
-};
-
 // src/errors/review-router-error.ts
 var ReviewRouterError = class extends Error {
   code;
@@ -27384,7 +27209,7 @@ var descriptors = {
   codex_oauth_stale: {
     code: "codex_oauth_stale",
     category: "provider_auth",
-    summary: "Codex OAuth auth is stale or expired.",
+    summary: "Codex OAuth is stale or expired.",
     whyItMatters: "Codex could not create a review because the ChatGPT subscription refresh token no longer works in CI.",
     nextSteps: [
       "Run `codex login` on a trusted machine.",
@@ -27575,6 +27400,268 @@ var descriptors = {
     ],
     isRetryable: true,
     isUserActionable: true
+  }
+};
+
+// src/github/progress-tracker.ts
+var ProgressTracker = class _ProgressTracker {
+  constructor(octokit, config) {
+    this.octokit = octokit;
+    this.config = config;
+  }
+  commentId = null;
+  items = /* @__PURE__ */ new Map();
+  startTime = Date.now();
+  totalCost = 0;
+  overrideBody;
+  failure;
+  static MARKER = "<!-- review-router-progress-tracker -->";
+  static LEGACY_MARKERS = [
+    "<!-- ai-robot-review-progress-tracker -->"
+  ];
+  static LEGACY_HEADERS = [
+    "# ReviewRouter",
+    "## \u{1F916} ReviewRouter Progress",
+    "# AI Robot Review",
+    "## \u{1F916} AI Robot Review Progress"
+  ];
+  /**
+   * Initialize progress tracking by creating the initial comment
+   */
+  async initialize() {
+    if (!this.octokit?.rest?.issues?.createComment) {
+      logger.warn("Progress tracker unavailable: octokit.rest.issues.createComment is missing");
+      return;
+    }
+    try {
+      const body = this.formatProgressComment();
+      const existingCommentId = await this.findExistingCommentId();
+      if (existingCommentId) {
+        this.commentId = existingCommentId;
+        await this.updateComment();
+        logger.info("Progress tracker initialized from existing comment", { commentId: this.commentId });
+        return;
+      }
+      const comment = await this.octokit.rest.issues.createComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        issue_number: this.config.prNumber,
+        body
+      });
+      this.commentId = comment.data.id;
+      logger.info("Progress tracker initialized", { commentId: this.commentId });
+    } catch (error2) {
+      logger.warn("Failed to initialize progress tracker", error2);
+    }
+  }
+  /**
+   * Add a new progress item to track
+   */
+  addItem(id, label) {
+    this.items.set(id, {
+      id,
+      label,
+      status: "pending",
+      startTime: Date.now()
+    });
+    logger.debug(`Progress item added: ${id}`, { label });
+  }
+  /**
+   * Update progress for a specific item
+   * Only updates comment on milestone events (completed/failed)
+   */
+  async updateProgress(itemId, status, details) {
+    const item = this.items.get(itemId);
+    if (!item) {
+      logger.warn(`Progress item not found: ${itemId}`);
+      return;
+    }
+    item.status = status;
+    item.details = details;
+    if (status === "completed" || status === "failed") {
+      item.endTime = Date.now();
+      await this.updateComment();
+    }
+    logger.debug(`Progress updated: ${itemId}`, { status, details });
+  }
+  setFailure(error2) {
+    this.failure = normalizeReviewError(error2);
+  }
+  hasFailedItems() {
+    return Array.from(this.items.values()).some((item) => item.status === "failed");
+  }
+  /**
+   * Set total cost for metadata display
+   */
+  setTotalCost(cost) {
+    this.totalCost = cost;
+  }
+  /**
+   * Finalize progress tracking with summary
+   */
+  async finalize(success) {
+    const duration = Date.now() - this.startTime;
+    const hasFailure = this.hasFailedItems();
+    this.items.forEach((item) => {
+      if (item.status === "pending" || item.status === "in_progress") {
+        item.status = success ? "completed" : "skipped";
+        if (!success && !item.details && hasFailure) {
+          item.details = "Skipped after an earlier failure.";
+        }
+        item.endTime = Date.now();
+      }
+    });
+    if (!this.overrideBody) {
+      await this.updateComment();
+    }
+    logger.info("Progress tracker finalized", {
+      success,
+      duration,
+      totalCost: this.totalCost
+    });
+  }
+  /**
+   * Format progress comment as a compact status table.
+   */
+  formatProgressComment() {
+    const lines = [];
+    lines.push("## \u{1F916} ReviewRouter Progress");
+    const sortedItems = Array.from(this.items.values()).sort(
+      (a, b) => (a.startTime || 0) - (b.startTime || 0)
+    );
+    if (sortedItems.length > 0) {
+      lines.push("");
+      lines.push("| Step | Status | Details |");
+      lines.push("| --- | --- | --- |");
+      for (const item of sortedItems) {
+        lines.push([
+          this.escapeTableCell(item.label),
+          this.escapeTableCell(this.getStatusLabel(item.status)),
+          this.escapeTableCell(item.details || "")
+        ].join(" | ").replace(/^/, "| ").replace(/$/, " |"));
+      }
+    }
+    if (this.failure) {
+      lines.push("");
+      lines.push("### Review needs attention");
+      lines.push("");
+      lines.push(`**What failed:** ${this.failure.summary}`);
+      lines.push("");
+      lines.push("**How to fix**");
+      for (const step of this.failure.nextSteps) {
+        lines.push(`- ${step}`);
+      }
+      lines.push("");
+      lines.push("<details>");
+      lines.push("<summary>Technical details</summary>");
+      lines.push("");
+      lines.push(`Error code: \`${this.failure.code}\``);
+      if (this.failure.safeMessage && this.failure.safeMessage !== this.failure.summary) {
+        lines.push("");
+        lines.push(this.failure.safeMessage);
+      }
+      lines.push("");
+      lines.push("</details>");
+    }
+    lines.push(_ProgressTracker.MARKER);
+    return lines.join("\n");
+  }
+  /**
+   * Update the progress comment (GitHub API call)
+   */
+  async updateComment() {
+    if (!this.commentId) {
+      logger.warn("Cannot update progress: comment not initialized");
+      return;
+    }
+    if (!this.octokit?.rest?.issues?.updateComment) {
+      logger.warn("Cannot update progress: octokit.rest.issues.updateComment is missing");
+      return;
+    }
+    try {
+      const body = this.overrideBody ?? this.formatProgressComment();
+      await this.octokit.rest.issues.updateComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        comment_id: this.commentId,
+        body
+      });
+      logger.debug("Progress comment updated", { commentId: this.commentId });
+    } catch (error2) {
+      logger.warn("Failed to update progress comment", error2);
+    }
+  }
+  /**
+   * Replace the progress comment with a final body (e.g., combined progress + review)
+   */
+  async replaceWith(body) {
+    if (!this.commentId) {
+      logger.warn("Cannot replace progress: comment not initialized");
+      return false;
+    }
+    if (!this.octokit?.rest?.issues?.updateComment) {
+      logger.warn("Cannot replace progress: octokit.rest.issues.updateComment is missing");
+      return false;
+    }
+    try {
+      this.overrideBody = this.withMarker(body);
+      await this.octokit.rest.issues.updateComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        comment_id: this.commentId,
+        body: this.overrideBody
+      });
+      return true;
+    } catch (error2) {
+      logger.warn("Failed to replace progress comment with final summary", error2);
+      return false;
+    }
+  }
+  async findExistingCommentId() {
+    if (!this.octokit?.rest?.issues?.listComments) {
+      return null;
+    }
+    try {
+      const comments = await this.octokit.rest.issues.listComments({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        issue_number: this.config.prNumber,
+        per_page: 100
+      });
+      const matching = comments.data.filter((comment) => this.isReviewComment(comment.body));
+      return matching.length > 0 ? matching[matching.length - 1].id : null;
+    } catch (error2) {
+      logger.warn("Failed to find existing progress comment", error2);
+      return null;
+    }
+  }
+  isReviewComment(body) {
+    if (!body) return false;
+    return body.includes(_ProgressTracker.MARKER) || _ProgressTracker.LEGACY_MARKERS.some((marker) => body.includes(marker)) || _ProgressTracker.LEGACY_HEADERS.some((header) => body.startsWith(header));
+  }
+  withMarker(body) {
+    return body.includes(_ProgressTracker.MARKER) ? body : `${body.trimEnd()}
+
+${_ProgressTracker.MARKER}`;
+  }
+  getStatusLabel(status) {
+    switch (status) {
+      case "completed":
+        return "\u2705 Done";
+      case "failed":
+        return "\u274C Failed";
+      case "in_progress":
+        return "\u{1F504} Running";
+      case "pending":
+        return "\u23F3 Waiting";
+      case "skipped":
+        return "\u23ED\uFE0F Not run";
+      default:
+        return "Pending";
+    }
+  }
+  escapeTableCell(value) {
+    return value.replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|").trim();
   }
 };
 
@@ -28118,11 +28205,10 @@ var ReviewOrchestrator = class {
       return review;
     } catch (error2) {
       const normalizedError = normalizeReviewError(error2);
-      await progressTracker?.updateProgress(
-        "synthesis",
-        "failed",
-        `${normalizedError.code}: ${normalizedError.summary}`
-      );
+      progressTracker?.setFailure(normalizedError);
+      if (progressTracker && !progressTracker.hasFailedItems()) {
+        await progressTracker.updateProgress("synthesis", "failed", normalizedError.summary);
+      }
       throw error2;
     } finally {
       if (progressTracker) {
@@ -29460,7 +29546,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.15",
+  version: "1.0.16",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

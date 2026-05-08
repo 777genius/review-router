@@ -32,7 +32,7 @@ describe('PromptBuilder', () => {
       const prompt = await builder.build(mockPR);
 
       expect(prompt).toContain('suggestion');
-      expect(prompt).toContain('Return JSON: [{file, line, severity, title, message, suggestion}]');
+      expect(prompt).toContain('Return JSON: [{file, startLine, line, endLine, severity, title, message, suggestion}]');
     });
 
     it('includes fixable issue type guidance', async () => {
@@ -156,7 +156,7 @@ describe('PromptBuilder', () => {
 
       expect(prompt).not.toContain('SUGGESTION FIELD');
       // Should have original schema without suggestion
-      expect(prompt).toContain('Return JSON: [{file, line, severity, title, message}]');
+      expect(prompt).toContain('Return JSON: [{file, startLine, line, endLine, severity, title, message}]');
     });
   });
 });

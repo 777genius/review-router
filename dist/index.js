@@ -27058,229 +27058,6 @@ function unquoteGitPath2(path14) {
   });
 }
 
-// src/github/progress-tracker.ts
-var ProgressTracker = class _ProgressTracker {
-  constructor(octokit, config) {
-    this.octokit = octokit;
-    this.config = config;
-  }
-  commentId = null;
-  items = /* @__PURE__ */ new Map();
-  startTime = Date.now();
-  totalCost = 0;
-  overrideBody;
-  static MARKER = "<!-- review-router-progress-tracker -->";
-  static LEGACY_MARKERS = [
-    "<!-- ai-robot-review-progress-tracker -->"
-  ];
-  static LEGACY_HEADERS = [
-    "# ReviewRouter",
-    "## \u{1F916} ReviewRouter Progress",
-    "# AI Robot Review",
-    "## \u{1F916} AI Robot Review Progress"
-  ];
-  /**
-   * Initialize progress tracking by creating the initial comment
-   */
-  async initialize() {
-    if (!this.octokit?.rest?.issues?.createComment) {
-      logger.warn("Progress tracker unavailable: octokit.rest.issues.createComment is missing");
-      return;
-    }
-    try {
-      const body = this.formatProgressComment();
-      const existingCommentId = await this.findExistingCommentId();
-      if (existingCommentId) {
-        this.commentId = existingCommentId;
-        await this.updateComment();
-        logger.info("Progress tracker initialized from existing comment", { commentId: this.commentId });
-        return;
-      }
-      const comment = await this.octokit.rest.issues.createComment({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        issue_number: this.config.prNumber,
-        body
-      });
-      this.commentId = comment.data.id;
-      logger.info("Progress tracker initialized", { commentId: this.commentId });
-    } catch (error2) {
-      logger.warn("Failed to initialize progress tracker", error2);
-    }
-  }
-  /**
-   * Add a new progress item to track
-   */
-  addItem(id, label) {
-    this.items.set(id, {
-      id,
-      label,
-      status: "pending",
-      startTime: Date.now()
-    });
-    logger.debug(`Progress item added: ${id}`, { label });
-  }
-  /**
-   * Update progress for a specific item
-   * Only updates comment on milestone events (completed/failed)
-   */
-  async updateProgress(itemId, status, details) {
-    const item = this.items.get(itemId);
-    if (!item) {
-      logger.warn(`Progress item not found: ${itemId}`);
-      return;
-    }
-    item.status = status;
-    item.details = details;
-    if (status === "completed" || status === "failed") {
-      item.endTime = Date.now();
-      await this.updateComment();
-    }
-    logger.debug(`Progress updated: ${itemId}`, { status, details });
-  }
-  /**
-   * Set total cost for metadata display
-   */
-  setTotalCost(cost) {
-    this.totalCost = cost;
-  }
-  /**
-   * Finalize progress tracking with summary
-   */
-  async finalize(success) {
-    const duration = Date.now() - this.startTime;
-    this.items.forEach((item) => {
-      if (item.status === "pending" || item.status === "in_progress") {
-        item.status = success ? "completed" : "failed";
-        item.endTime = Date.now();
-      }
-    });
-    if (!this.overrideBody) {
-      await this.updateComment();
-    }
-    logger.info("Progress tracker finalized", {
-      success,
-      duration,
-      totalCost: this.totalCost
-    });
-  }
-  /**
-   * Format progress comment with checkboxes and status emojis
-   */
-  formatProgressComment() {
-    const lines = [];
-    lines.push("## \u{1F916} ReviewRouter Progress\n");
-    const sortedItems = Array.from(this.items.values()).sort(
-      (a, b) => (a.startTime || 0) - (b.startTime || 0)
-    );
-    for (const item of sortedItems) {
-      const checkbox = item.status === "completed" ? "[x]" : "[ ]";
-      const emoji = this.getStatusEmoji(item.status);
-      lines.push(`${checkbox} ${emoji} ${item.label}`);
-      if (item.details) {
-        lines.push(`   \u2514\u2500 ${item.details}`);
-      }
-    }
-    lines.push(_ProgressTracker.MARKER);
-    return lines.join("\n");
-  }
-  /**
-   * Update the progress comment (GitHub API call)
-   */
-  async updateComment() {
-    if (!this.commentId) {
-      logger.warn("Cannot update progress: comment not initialized");
-      return;
-    }
-    if (!this.octokit?.rest?.issues?.updateComment) {
-      logger.warn("Cannot update progress: octokit.rest.issues.updateComment is missing");
-      return;
-    }
-    try {
-      const body = this.overrideBody ?? this.formatProgressComment();
-      await this.octokit.rest.issues.updateComment({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        comment_id: this.commentId,
-        body
-      });
-      logger.debug("Progress comment updated", { commentId: this.commentId });
-    } catch (error2) {
-      logger.warn("Failed to update progress comment", error2);
-    }
-  }
-  /**
-   * Replace the progress comment with a final body (e.g., combined progress + review)
-   */
-  async replaceWith(body) {
-    if (!this.commentId) {
-      logger.warn("Cannot replace progress: comment not initialized");
-      return false;
-    }
-    if (!this.octokit?.rest?.issues?.updateComment) {
-      logger.warn("Cannot replace progress: octokit.rest.issues.updateComment is missing");
-      return false;
-    }
-    try {
-      this.overrideBody = this.withMarker(body);
-      await this.octokit.rest.issues.updateComment({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        comment_id: this.commentId,
-        body: this.overrideBody
-      });
-      return true;
-    } catch (error2) {
-      logger.warn("Failed to replace progress comment with final summary", error2);
-      return false;
-    }
-  }
-  async findExistingCommentId() {
-    if (!this.octokit?.rest?.issues?.listComments) {
-      return null;
-    }
-    try {
-      const comments = await this.octokit.rest.issues.listComments({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        issue_number: this.config.prNumber,
-        per_page: 100
-      });
-      const matching = comments.data.filter((comment) => this.isReviewComment(comment.body));
-      return matching.length > 0 ? matching[matching.length - 1].id : null;
-    } catch (error2) {
-      logger.warn("Failed to find existing progress comment", error2);
-      return null;
-    }
-  }
-  isReviewComment(body) {
-    if (!body) return false;
-    return body.includes(_ProgressTracker.MARKER) || _ProgressTracker.LEGACY_MARKERS.some((marker) => body.includes(marker)) || _ProgressTracker.LEGACY_HEADERS.some((header) => body.startsWith(header));
-  }
-  withMarker(body) {
-    return body.includes(_ProgressTracker.MARKER) ? body : `${body.trimEnd()}
-
-${_ProgressTracker.MARKER}`;
-  }
-  /**
-   * Get status emoji for visual feedback
-   */
-  getStatusEmoji(status) {
-    switch (status) {
-      case "completed":
-        return "\u2705";
-      case "failed":
-        return "\u274C";
-      case "in_progress":
-        return "\u{1F504}";
-      case "pending":
-        return "\u23F3";
-      default:
-        return "\u2B1C";
-    }
-  }
-};
-
 // src/errors/review-router-error.ts
 var ReviewRouterError = class extends Error {
   code;
@@ -27432,7 +27209,7 @@ var descriptors = {
   codex_oauth_stale: {
     code: "codex_oauth_stale",
     category: "provider_auth",
-    summary: "Codex OAuth auth is stale or expired.",
+    summary: "Codex OAuth is stale or expired.",
     whyItMatters: "Codex could not create a review because the ChatGPT subscription refresh token no longer works in CI.",
     nextSteps: [
       "Run `codex login` on a trusted machine.",
@@ -27623,6 +27400,268 @@ var descriptors = {
     ],
     isRetryable: true,
     isUserActionable: true
+  }
+};
+
+// src/github/progress-tracker.ts
+var ProgressTracker = class _ProgressTracker {
+  constructor(octokit, config) {
+    this.octokit = octokit;
+    this.config = config;
+  }
+  commentId = null;
+  items = /* @__PURE__ */ new Map();
+  startTime = Date.now();
+  totalCost = 0;
+  overrideBody;
+  failure;
+  static MARKER = "<!-- review-router-progress-tracker -->";
+  static LEGACY_MARKERS = [
+    "<!-- ai-robot-review-progress-tracker -->"
+  ];
+  static LEGACY_HEADERS = [
+    "# ReviewRouter",
+    "## \u{1F916} ReviewRouter Progress",
+    "# AI Robot Review",
+    "## \u{1F916} AI Robot Review Progress"
+  ];
+  /**
+   * Initialize progress tracking by creating the initial comment
+   */
+  async initialize() {
+    if (!this.octokit?.rest?.issues?.createComment) {
+      logger.warn("Progress tracker unavailable: octokit.rest.issues.createComment is missing");
+      return;
+    }
+    try {
+      const body = this.formatProgressComment();
+      const existingCommentId = await this.findExistingCommentId();
+      if (existingCommentId) {
+        this.commentId = existingCommentId;
+        await this.updateComment();
+        logger.info("Progress tracker initialized from existing comment", { commentId: this.commentId });
+        return;
+      }
+      const comment = await this.octokit.rest.issues.createComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        issue_number: this.config.prNumber,
+        body
+      });
+      this.commentId = comment.data.id;
+      logger.info("Progress tracker initialized", { commentId: this.commentId });
+    } catch (error2) {
+      logger.warn("Failed to initialize progress tracker", error2);
+    }
+  }
+  /**
+   * Add a new progress item to track
+   */
+  addItem(id, label) {
+    this.items.set(id, {
+      id,
+      label,
+      status: "pending",
+      startTime: Date.now()
+    });
+    logger.debug(`Progress item added: ${id}`, { label });
+  }
+  /**
+   * Update progress for a specific item
+   * Only updates comment on milestone events (completed/failed)
+   */
+  async updateProgress(itemId, status, details) {
+    const item = this.items.get(itemId);
+    if (!item) {
+      logger.warn(`Progress item not found: ${itemId}`);
+      return;
+    }
+    item.status = status;
+    item.details = details;
+    if (status === "completed" || status === "failed") {
+      item.endTime = Date.now();
+      await this.updateComment();
+    }
+    logger.debug(`Progress updated: ${itemId}`, { status, details });
+  }
+  setFailure(error2) {
+    this.failure = normalizeReviewError(error2);
+  }
+  hasFailedItems() {
+    return Array.from(this.items.values()).some((item) => item.status === "failed");
+  }
+  /**
+   * Set total cost for metadata display
+   */
+  setTotalCost(cost) {
+    this.totalCost = cost;
+  }
+  /**
+   * Finalize progress tracking with summary
+   */
+  async finalize(success) {
+    const duration = Date.now() - this.startTime;
+    const hasFailure = this.hasFailedItems();
+    this.items.forEach((item) => {
+      if (item.status === "pending" || item.status === "in_progress") {
+        item.status = success ? "completed" : "skipped";
+        if (!success && !item.details && hasFailure) {
+          item.details = "Skipped after an earlier failure.";
+        }
+        item.endTime = Date.now();
+      }
+    });
+    if (!this.overrideBody) {
+      await this.updateComment();
+    }
+    logger.info("Progress tracker finalized", {
+      success,
+      duration,
+      totalCost: this.totalCost
+    });
+  }
+  /**
+   * Format progress comment as a compact status table.
+   */
+  formatProgressComment() {
+    const lines = [];
+    lines.push("## \u{1F916} ReviewRouter Progress");
+    const sortedItems = Array.from(this.items.values()).sort(
+      (a, b) => (a.startTime || 0) - (b.startTime || 0)
+    );
+    if (sortedItems.length > 0) {
+      lines.push("");
+      lines.push("| Step | Status | Details |");
+      lines.push("| --- | --- | --- |");
+      for (const item of sortedItems) {
+        lines.push([
+          this.escapeTableCell(item.label),
+          this.escapeTableCell(this.getStatusLabel(item.status)),
+          this.escapeTableCell(item.details || "")
+        ].join(" | ").replace(/^/, "| ").replace(/$/, " |"));
+      }
+    }
+    if (this.failure) {
+      lines.push("");
+      lines.push("### Review needs attention");
+      lines.push("");
+      lines.push(`**What failed:** ${this.failure.summary}`);
+      lines.push("");
+      lines.push("**How to fix**");
+      for (const step of this.failure.nextSteps) {
+        lines.push(`- ${step}`);
+      }
+      lines.push("");
+      lines.push("<details>");
+      lines.push("<summary>Technical details</summary>");
+      lines.push("");
+      lines.push(`Error code: \`${this.failure.code}\``);
+      if (this.failure.safeMessage && this.failure.safeMessage !== this.failure.summary) {
+        lines.push("");
+        lines.push(this.failure.safeMessage);
+      }
+      lines.push("");
+      lines.push("</details>");
+    }
+    lines.push(_ProgressTracker.MARKER);
+    return lines.join("\n");
+  }
+  /**
+   * Update the progress comment (GitHub API call)
+   */
+  async updateComment() {
+    if (!this.commentId) {
+      logger.warn("Cannot update progress: comment not initialized");
+      return;
+    }
+    if (!this.octokit?.rest?.issues?.updateComment) {
+      logger.warn("Cannot update progress: octokit.rest.issues.updateComment is missing");
+      return;
+    }
+    try {
+      const body = this.overrideBody ?? this.formatProgressComment();
+      await this.octokit.rest.issues.updateComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        comment_id: this.commentId,
+        body
+      });
+      logger.debug("Progress comment updated", { commentId: this.commentId });
+    } catch (error2) {
+      logger.warn("Failed to update progress comment", error2);
+    }
+  }
+  /**
+   * Replace the progress comment with a final body (e.g., combined progress + review)
+   */
+  async replaceWith(body) {
+    if (!this.commentId) {
+      logger.warn("Cannot replace progress: comment not initialized");
+      return false;
+    }
+    if (!this.octokit?.rest?.issues?.updateComment) {
+      logger.warn("Cannot replace progress: octokit.rest.issues.updateComment is missing");
+      return false;
+    }
+    try {
+      this.overrideBody = this.withMarker(body);
+      await this.octokit.rest.issues.updateComment({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        comment_id: this.commentId,
+        body: this.overrideBody
+      });
+      return true;
+    } catch (error2) {
+      logger.warn("Failed to replace progress comment with final summary", error2);
+      return false;
+    }
+  }
+  async findExistingCommentId() {
+    if (!this.octokit?.rest?.issues?.listComments) {
+      return null;
+    }
+    try {
+      const comments = await this.octokit.rest.issues.listComments({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        issue_number: this.config.prNumber,
+        per_page: 100
+      });
+      const matching = comments.data.filter((comment) => this.isReviewComment(comment.body));
+      return matching.length > 0 ? matching[matching.length - 1].id : null;
+    } catch (error2) {
+      logger.warn("Failed to find existing progress comment", error2);
+      return null;
+    }
+  }
+  isReviewComment(body) {
+    if (!body) return false;
+    return body.includes(_ProgressTracker.MARKER) || _ProgressTracker.LEGACY_MARKERS.some((marker) => body.includes(marker)) || _ProgressTracker.LEGACY_HEADERS.some((header) => body.startsWith(header));
+  }
+  withMarker(body) {
+    return body.includes(_ProgressTracker.MARKER) ? body : `${body.trimEnd()}
+
+${_ProgressTracker.MARKER}`;
+  }
+  getStatusLabel(status) {
+    switch (status) {
+      case "completed":
+        return "\u2705 Done";
+      case "failed":
+        return "\u274C Failed";
+      case "in_progress":
+        return "\u{1F504} Running";
+      case "pending":
+        return "\u23F3 Waiting";
+      case "skipped":
+        return "\u23ED\uFE0F Not run";
+      default:
+        return "Pending";
+    }
+  }
+  escapeTableCell(value) {
+    return value.replace(/\r?\n/g, "<br>").replace(/\|/g, "\\|").trim();
   }
 };
 
@@ -28166,11 +28205,10 @@ var ReviewOrchestrator = class {
       return review;
     } catch (error2) {
       const normalizedError = normalizeReviewError(error2);
-      await progressTracker?.updateProgress(
-        "synthesis",
-        "failed",
-        `${normalizedError.code}: ${normalizedError.summary}`
-      );
+      progressTracker?.setFailure(normalizedError);
+      if (progressTracker && !progressTracker.hasFailedItems()) {
+        await progressTracker.updateProgress("synthesis", "failed", normalizedError.summary);
+      }
       throw error2;
     } finally {
       if (progressTracker) {

@@ -287,7 +287,7 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
   codex_oauth_stale: {
     code: 'codex_oauth_stale',
     category: 'provider_auth',
-    summary: 'Codex OAuth auth is stale or expired.',
+    summary: 'Codex OAuth is stale or expired.',
     whyItMatters: 'Codex could not create a review because the ChatGPT subscription refresh token no longer works in CI.',
     nextSteps: [
       'Run `codex login` on a trusted machine.',

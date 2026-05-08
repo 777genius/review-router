@@ -787,11 +787,10 @@ export class ReviewOrchestrator {
         return review;
       } catch (error) {
         const normalizedError = normalizeReviewError(error);
-        await progressTracker?.updateProgress(
-          'synthesis',
-          'failed',
-          `${normalizedError.code}: ${normalizedError.summary}`
-        );
+        progressTracker?.setFailure(normalizedError);
+        if (progressTracker && !progressTracker.hasFailedItems()) {
+          await progressTracker.updateProgress('synthesis', 'failed', normalizedError.summary);
+        }
         throw error;
       } finally {
         if (progressTracker) {

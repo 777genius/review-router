@@ -1,7 +1,8 @@
 import { Octokit } from '@octokit/rest';
+import { normalizeReviewError, ReviewRouterError } from '../errors/review-router-error';
 import { logger } from '../utils/logger';
 
-export type ProgressStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
+export type ProgressStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
 
 export interface ProgressItem {
   id: string;
@@ -34,6 +35,7 @@ export class ProgressTracker {
   private startTime: number = Date.now();
   private totalCost: number = 0;
   private overrideBody?: string;
+  private failure?: ReviewRouterError;
   private static readonly MARKER = '<!-- review-router-progress-tracker -->';
   private static readonly LEGACY_MARKERS = [
     '<!-- ai-robot-review-progress-tracker -->',
@@ -125,6 +127,14 @@ export class ProgressTracker {
     logger.debug(`Progress updated: ${itemId}`, { status, details });
   }
 
+  setFailure(error: unknown): void {
+    this.failure = normalizeReviewError(error);
+  }
+
+  hasFailedItems(): boolean {
+    return Array.from(this.items.values()).some(item => item.status === 'failed');
+  }
+
   /**
    * Set total cost for metadata display
    */
@@ -139,9 +149,13 @@ export class ProgressTracker {
     const duration = Date.now() - this.startTime;
 
     // Update all pending items to final status
+    const hasFailure = this.hasFailedItems();
     this.items.forEach((item) => {
       if (item.status === 'pending' || item.status === 'in_progress') {
-        item.status = success ? 'completed' : 'failed';
+        item.status = success ? 'completed' : 'skipped';
+        if (!success && !item.details && hasFailure) {
+          item.details = 'Skipped after an earlier failure.';
+        }
         item.endTime = Date.now();
       }
     });
@@ -158,27 +172,52 @@ export class ProgressTracker {
   }
 
   /**
-   * Format progress comment with checkboxes and status emojis
+   * Format progress comment as a compact status table.
    */
   private formatProgressComment(): string {
     const lines: string[] = [];
 
-    // Header
-    lines.push('## 🤖 ReviewRouter Progress\n');
+    lines.push('## 🤖 ReviewRouter Progress');
 
-    // Progress items with checkboxes
     const sortedItems = Array.from(this.items.values()).sort(
       (a, b) => (a.startTime || 0) - (b.startTime || 0)
     );
 
-    for (const item of sortedItems) {
-      const checkbox = item.status === 'completed' ? '[x]' : '[ ]';
-      const emoji = this.getStatusEmoji(item.status);
-      lines.push(`${checkbox} ${emoji} ${item.label}`);
+    if (sortedItems.length > 0) {
+      lines.push('');
+      lines.push('| Step | Status | Details |');
+      lines.push('| --- | --- | --- |');
 
-      if (item.details) {
-        lines.push(`   └─ ${item.details}`);
+      for (const item of sortedItems) {
+        lines.push([
+          this.escapeTableCell(item.label),
+          this.escapeTableCell(this.getStatusLabel(item.status)),
+          this.escapeTableCell(item.details || ''),
+        ].join(' | ').replace(/^/, '| ').replace(/$/, ' |'));
       }
+    }
+
+    if (this.failure) {
+      lines.push('');
+      lines.push('### Review needs attention');
+      lines.push('');
+      lines.push(`**What failed:** ${this.failure.summary}`);
+      lines.push('');
+      lines.push('**How to fix**');
+      for (const step of this.failure.nextSteps) {
+        lines.push(`- ${step}`);
+      }
+      lines.push('');
+      lines.push('<details>');
+      lines.push('<summary>Technical details</summary>');
+      lines.push('');
+      lines.push(`Error code: \`${this.failure.code}\``);
+      if (this.failure.safeMessage && this.failure.safeMessage !== this.failure.summary) {
+        lines.push('');
+        lines.push(this.failure.safeMessage);
+      }
+      lines.push('');
+      lines.push('</details>');
     }
 
     lines.push(ProgressTracker.MARKER);
@@ -278,21 +317,27 @@ export class ProgressTracker {
       : `${body.trimEnd()}\n\n${ProgressTracker.MARKER}`;
   }
 
-  /**
-   * Get status emoji for visual feedback
-   */
-  private getStatusEmoji(status: ProgressStatus): string {
+  private getStatusLabel(status: ProgressStatus): string {
     switch (status) {
       case 'completed':
-        return '✅';
+        return '✅ Done';
       case 'failed':
-        return '❌';
+        return '❌ Failed';
       case 'in_progress':
-        return '🔄';
+        return '🔄 Running';
       case 'pending':
-        return '⏳';
+        return '⏳ Waiting';
+      case 'skipped':
+        return '⏭️ Not run';
       default:
-        return '⬜';
+        return 'Pending';
     }
+  }
+
+  private escapeTableCell(value: string): string {
+    return value
+      .replace(/\r?\n/g, '<br>')
+      .replace(/\|/g, '\\|')
+      .trim();
   }
 }

@@ -144,7 +144,7 @@ describe('ProgressTracker', () => {
       await tracker.initialize();
     });
 
-    it('should format checkboxes correctly', async () => {
+    it('should render a status table without markdown checkboxes', async () => {
       tracker.addItem('item1', 'First Item');
       tracker.addItem('item2', 'Second Item');
 
@@ -154,8 +154,11 @@ describe('ProgressTracker', () => {
       const lastCall = updateCommentMock.mock.calls[0];
       const body = lastCall?.[0]?.body as string;
 
-      expect(body).toContain('[x]'); // Completed item
-      expect(body).toContain('[ ]'); // Pending item
+      expect(body).toContain('| Step | Status | Details |');
+      expect(body).toContain('| First Item | ✅ Done |');
+      expect(body).toContain('| Second Item | ⏳ Waiting |');
+      expect(body).not.toContain('[x]');
+      expect(body).not.toContain('[ ]');
     });
 
     it('should include status emojis', async () => {
@@ -173,6 +176,24 @@ describe('ProgressTracker', () => {
       expect(body).toContain('✅'); // Completed
       expect(body).toContain('❌'); // Failed
       expect(body).toContain('⏳'); // Pending
+    });
+
+    it('should show actionable provider auth failures without marking later steps failed', async () => {
+      tracker.addItem('llm', 'LLM review');
+      tracker.addItem('static', 'Static analysis');
+      tracker.setFailure(new Error('Codex access token could not be refreshed. Please reseed auth.json'));
+
+      await tracker.updateProgress('llm', 'failed', 'All batches failed: codex/gpt-5.5');
+      await tracker.finalize(false);
+
+      const lastCall = updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
+      const body = lastCall?.[0]?.body as string;
+
+      expect(body).toContain('**What failed:** Codex OAuth is stale or expired.');
+      expect(body).toContain('Reseed `CODEX_AUTH_JSON`');
+      expect(body).toContain('| LLM review | ❌ Failed | All batches failed: codex/gpt-5.5 |');
+      expect(body).toContain('| Static analysis | ⏭️ Not run | Skipped after an earlier failure. |');
+      expect(body).not.toContain('[]❌');
     });
 
     it('should keep progress metadata hidden and minimal', async () => {
@@ -210,7 +231,7 @@ describe('ProgressTracker', () => {
       expect(body).not.toContain('❌'); // No failures
     });
 
-    it('should mark all items as failed on failure finalization', async () => {
+    it('should mark untouched items as not run on failure finalization', async () => {
       tracker.addItem('item1', 'Test 1');
       tracker.addItem('item2', 'Test 2');
 
@@ -219,7 +240,8 @@ describe('ProgressTracker', () => {
       const lastCall = updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
       const body = lastCall?.[0]?.body as string;
 
-      expect(body).toContain('❌'); // All items failed
+      expect(body).toContain('⏭️ Not run');
+      expect(body).not.toContain('❌');
     });
 
     it('should preserve the hidden marker when replacing progress with final summary', async () => {

@@ -232,7 +232,7 @@ Then make `ReviewRouter / review` a required status check in branch protection.
 If you use the full explicit workflow and want an exact pinned release, use:
 
 ```yaml
-uses: 777genius/review-router@v1.0.15
+uses: 777genius/review-router@v1.0.17
 ```
 
 For live dogfood/dev installs, use:

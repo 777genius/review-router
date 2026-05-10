@@ -1,0 +1,60 @@
+name: Bug report
+about: Runtime, dashboard, comment, or workflow behavior bug
+title: "Bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep this report metadata-only. Do not paste Codex auth JSON, API keys, GitHub tokens, private source code, full PR diffs, or raw model prompts.
+  - type: input
+    id: repository
+    attributes:
+      label: Repository
+      placeholder: owner/repo
+  - type: input
+    id: pull_request
+    attributes:
+      label: Pull request URL
+      placeholder: https://github.com/owner/repo/pull/123
+  - type: input
+    id: workflow_run
+    attributes:
+      label: Workflow run URL
+      placeholder: https://github.com/owner/repo/actions/runs/123456
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Dashboard
+        - Setup PR
+        - Review workflow
+        - Inline comments
+        - /rr skip interaction
+        - Provider auth
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include safe error category or short redacted message if available.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Install GitHub App on selected repository.
+        2. Create setup PR.
+        3. Merge setup PR.
+        4. Open PR with changed code.

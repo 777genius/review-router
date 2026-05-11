@@ -16156,18 +16156,34 @@ var Deduplicator = class {
         map2.set(key, finding);
       } else {
         const existing = map2.get(key);
-        const providers = new Set([
-          ...existing.providers || [],
-          ...finding.providers || [],
-          existing.provider,
-          finding.provider
-        ].filter(Boolean));
-        map2.set(key, { ...existing, providers: Array.from(providers) });
+        const providers = new Set(
+          [
+            ...existing.providers || [],
+            ...finding.providers || [],
+            existing.provider,
+            finding.provider
+          ].filter(Boolean)
+        );
+        map2.set(key, {
+          ...existing,
+          providers: Array.from(providers),
+          providerModels: mergeProviderModels(
+            existing.providerModels,
+            finding.providerModels
+          )
+        });
       }
     }
     return Array.from(map2.values());
   }
 };
+function mergeProviderModels(left, right) {
+  const merged = /* @__PURE__ */ new Map();
+  for (const item of [...left || [], ...right || []]) {
+    merged.set(item.provider, item);
+  }
+  return Array.from(merged.values());
+}
 
 // src/analysis/ast/parsers.ts
 function detectLanguage(filename) {
@@ -16574,7 +16590,11 @@ var ConsensusEngine = class {
       if (providers.size === 0) providers.add("static");
       const currentSuggestions = [];
       if (finding.suggestion && finding.provider) {
-        currentSuggestions.push({ provider: finding.provider, suggestion: finding.suggestion, file: finding.file });
+        currentSuggestions.push({
+          provider: finding.provider,
+          suggestion: finding.suggestion,
+          file: finding.file
+        });
       }
       if (!existing) {
         grouped.set(key, {
@@ -16592,14 +16612,26 @@ var ConsensusEngine = class {
       ];
       grouped.set(key, {
         ...existing,
-        providers: Array.from(/* @__PURE__ */ new Set([...existing.providers || [], ...providers])),
-        confidence: Math.min(1, (existing.confidence ?? 0) + (finding.confidence ?? 0.5)),
+        providers: Array.from(
+          /* @__PURE__ */ new Set([...existing.providers || [], ...providers])
+        ),
+        providerModels: mergeProviderModels2(
+          existing.providerModels,
+          finding.providerModels
+        ),
+        confidence: Math.min(
+          1,
+          (existing.confidence ?? 0) + (finding.confidence ?? 0.5)
+        ),
         _suggestions: mergedSuggestions
       });
     }
     const filtered = Array.from(grouped.values()).filter((f) => this.meetsAgreement(f.providers || [])).map((f) => {
       if (f._suggestions && f._suggestions.length >= 2) {
-        const consensus = this.checkSuggestionConsensus(f._suggestions, this.options.minAgreement);
+        const consensus = this.checkSuggestionConsensus(
+          f._suggestions,
+          this.options.minAgreement
+        );
         f.hasConsensus = consensus.hasSuggestionConsensus;
         if (consensus.hasSuggestionConsensus && consensus.suggestions.length > 0) {
           f.suggestion = consensus.suggestions[0];
@@ -16608,7 +16640,9 @@ var ConsensusEngine = class {
       delete f._suggestions;
       return f;
     });
-    filtered.sort((a, b) => SEVERITY_ORDER[b.severity] - SEVERITY_ORDER[a.severity]);
+    filtered.sort(
+      (a, b) => SEVERITY_ORDER[b.severity] - SEVERITY_ORDER[a.severity]
+    );
     return filtered;
   }
   meetsSeverity(severity) {
@@ -16626,7 +16660,11 @@ var ConsensusEngine = class {
    */
   checkSuggestionConsensus(suggestions, minAgreement = 2) {
     if (suggestions.length < minAgreement) {
-      return { hasSuggestionConsensus: false, agreementCount: 0, suggestions: [] };
+      return {
+        hasSuggestionConsensus: false,
+        agreementCount: 0,
+        suggestions: []
+      };
     }
     const language = detectLanguage(suggestions[0].file);
     if (language === "unknown") {
@@ -16647,7 +16685,10 @@ var ConsensusEngine = class {
         groups.push([s.suggestion]);
       }
     }
-    const largestGroup = groups.reduce((a, b) => a.length > b.length ? a : b, []);
+    const largestGroup = groups.reduce(
+      (a, b) => a.length > b.length ? a : b,
+      []
+    );
     return {
       hasSuggestionConsensus: largestGroup.length >= minAgreement,
       agreementCount: largestGroup.length,
@@ -16655,14 +16696,20 @@ var ConsensusEngine = class {
     };
   }
   checkStringConsensus(suggestions, minAgreement) {
-    const normalized = suggestions.map((s) => ({ ...s, normalized: s.suggestion.trim().replace(/\s+/g, " ") }));
+    const normalized = suggestions.map((s) => ({
+      ...s,
+      normalized: s.suggestion.trim().replace(/\s+/g, " ")
+    }));
     const counts = /* @__PURE__ */ new Map();
     for (const s of normalized) {
       const arr = counts.get(s.normalized) || [];
       arr.push(s.suggestion);
       counts.set(s.normalized, arr);
     }
-    const largest = Array.from(counts.values()).reduce((a, b) => a.length > b.length ? a : b, []);
+    const largest = Array.from(counts.values()).reduce(
+      (a, b) => a.length > b.length ? a : b,
+      []
+    );
     return {
       hasSuggestionConsensus: largest.length >= minAgreement,
       agreementCount: largest.length,
@@ -16670,6 +16717,13 @@ var ConsensusEngine = class {
     };
   }
 };
+function mergeProviderModels2(left, right) {
+  const merged = /* @__PURE__ */ new Map();
+  for (const item of [...left || [], ...right || []]) {
+    merged.set(item.provider, item);
+  }
+  return Array.from(merged.values());
+}
 
 // src/utils/severity.ts
 var DISPLAYS = {
@@ -16734,7 +16788,15 @@ var SynthesisEngine = class {
   }
   synthesize(findings, pr, testHints, aiAnalysis, providerResults, runDetails, impactAnalysis, mermaidDiagram) {
     const metrics = this.buildMetrics(findings, providerResults, runDetails);
-    const summary = this.buildSummary(pr, findings, metrics, testHints, aiAnalysis, providerResults, impactAnalysis);
+    const summary = this.buildSummary(
+      pr,
+      findings,
+      metrics,
+      testHints,
+      aiAnalysis,
+      providerResults,
+      impactAnalysis
+    );
     const inlineComments = this.buildInlineComments(findings);
     const actionItems = this.buildActionItems(findings);
     return {
@@ -16763,7 +16825,9 @@ var SynthesisEngine = class {
     let durationSeconds = 0;
     if (runDetails) {
       providersUsed = runDetails.providers.length;
-      providersSuccess = runDetails.providers.filter((p) => p.status === "success").length;
+      providersSuccess = runDetails.providers.filter(
+        (p) => p.status === "success"
+      ).length;
       providersFailed = runDetails.providers.filter(
         (p) => p.status === "error" || p.status === "timeout"
       ).length;
@@ -16772,7 +16836,9 @@ var SynthesisEngine = class {
       durationSeconds = runDetails.durationSeconds;
     } else if (providerResults) {
       providersUsed = providerResults.length;
-      providersSuccess = providerResults.filter((p) => p.status === "success").length;
+      providersSuccess = providerResults.filter(
+        (p) => p.status === "success"
+      ).length;
       providersFailed = providerResults.filter(
         (p) => p.status === "error" || p.status === "timeout"
       ).length;
@@ -16780,7 +16846,10 @@ var SynthesisEngine = class {
         return sum + (p.result?.usage?.totalTokens ?? 0);
       }, 0);
       totalCost = 0;
-      durationSeconds = providerResults.reduce((sum, p) => sum + p.durationSeconds, 0);
+      durationSeconds = providerResults.reduce(
+        (sum, p) => sum + p.durationSeconds,
+        0
+      );
     }
     return {
       totalFindings: findings.length,
@@ -16808,7 +16877,9 @@ var SynthesisEngine = class {
   }
   buildInlineComments(findings) {
     const minSeverity = this.config.inlineMinSeverity;
-    const sorted = findings.filter((f) => compareSeverityDesc(minSeverity, f.severity) >= 0).sort((a, b) => compareSeverityDesc(a.severity, b.severity) || a.file.localeCompare(b.file) || a.line - b.line).slice(0, this.config.inlineMaxComments);
+    const sorted = findings.filter((f) => compareSeverityDesc(minSeverity, f.severity) >= 0).sort(
+      (a, b) => compareSeverityDesc(a.severity, b.severity) || a.file.localeCompare(b.file) || a.line - b.line
+    ).slice(0, this.config.inlineMaxComments);
     return sorted.map((f) => ({
       path: f.file,
       startLine: f.startLine,
@@ -16843,10 +16914,46 @@ var SynthesisEngine = class {
       }
     }
     parts.push("", this.agentPromptDetails(finding));
-    if (finding.providers && finding.providers.length > 1) {
-      parts.push("", `Providers: ${finding.providers.join(", ")}`);
+    const attribution = this.modelAttributionFooter(finding);
+    if (attribution) {
+      parts.push("", attribution);
     }
     return parts.join("\n");
+  }
+  modelAttributionFooter(finding) {
+    const attributions = this.normalizeProviderModels(finding);
+    if (attributions.length === 0) {
+      return null;
+    }
+    if (attributions.length === 1) {
+      return `<sub>Model: ${this.formatProviderModel(attributions[0])}</sub>`;
+    }
+    const total = Math.max(
+      finding.providerPoolSize ?? attributions.length,
+      attributions.length
+    );
+    return `<sub>Models: ${attributions.map((item) => this.formatProviderModel(item)).join(", ")} \xB7 agreement ${attributions.length}/${total}</sub>`;
+  }
+  normalizeProviderModels(finding) {
+    const merged = /* @__PURE__ */ new Map();
+    for (const item of finding.providerModels || []) {
+      merged.set(item.provider, item);
+    }
+    for (const provider of finding.providers || []) {
+      if (!merged.has(provider)) {
+        merged.set(provider, { provider });
+      }
+    }
+    if (finding.provider && !merged.has(finding.provider)) {
+      merged.set(finding.provider, {
+        provider: finding.provider,
+        actualModel: finding.actualModel
+      });
+    }
+    return Array.from(merged.values());
+  }
+  formatProviderModel(input) {
+    return input.provider;
   }
   inlineHeader(finding) {
     const display = getSeverityDisplay(finding.severity);
@@ -18935,10 +19042,23 @@ ${comment.body.substring(0, 200)}...`);
       return body;
     }
     const actor = severity === "minor" ? "Someone with write access" : "A maintainer/admin";
-    return [
-      body.trimEnd(),
-      `<sub>${_CommentPoster.INLINE_SKIP_HELP_MARKER}${actor} can reply \`/rr skip\` if this finding is a false positive. ReviewRouter records a signed override and reruns the check.</sub>`
-    ].join("\n\n");
+    const footer = `<sub>${_CommentPoster.INLINE_SKIP_HELP_MARKER}${actor} can reply \`/rr skip\` if this finding is a false positive. ReviewRouter records a signed override and reruns the check.</sub>`;
+    const { visibleBody, markers } = _CommentPoster.splitTrailingInlineMarkers(
+      body.trimEnd()
+    );
+    return [visibleBody, footer, ...markers].join("\n");
+  }
+  static splitTrailingInlineMarkers(body) {
+    const markers = [];
+    let visibleBody = body;
+    const markerPattern = /\n\n(<!--\s*(?:(?:review-router|ai-robot-review)-inline:[a-f0-9]{16}|review-router-finding:[a-f0-9]{24,64})\s*-->)$/i;
+    let match2 = visibleBody.match(markerPattern);
+    while (match2?.[1]) {
+      markers.unshift(match2[1]);
+      visibleBody = visibleBody.slice(0, match2.index).trimEnd();
+      match2 = visibleBody.match(markerPattern);
+    }
+    return { visibleBody, markers };
   }
 };
 
@@ -23761,7 +23881,14 @@ function extractFindings(results) {
         suggestion,
         // Use validated suggestion (or undefined)
         provider: result.name,
-        providers: finding.providers || [result.name]
+        providers: finding.providers || [result.name],
+        actualModel: result.result.actualModel,
+        providerModels: [
+          {
+            provider: result.name,
+            actualModel: result.result.actualModel
+          }
+        ]
       });
     }
   }
@@ -27720,12 +27847,22 @@ var ReviewOrchestrator = class {
           if (codeGraph) {
             const graphTime = Date.now() - graphStart;
             logger.info(`Loaded code graph from cache (${graphTime}ms)`);
-            await progressTracker?.updateProgress("graph", "completed", `Loaded from cache in ${graphTime}ms`);
+            await progressTracker?.updateProgress(
+              "graph",
+              "completed",
+              `Loaded from cache in ${graphTime}ms`
+            );
           } else {
             codeGraph = await this.components.graphBuilder.buildGraph(pr.files);
             const graphTime = Date.now() - graphStart;
-            logger.info(`Code graph built in ${graphTime}ms: ${codeGraph.getStats().definitions} definitions, ${codeGraph.getStats().imports} imports`);
-            await progressTracker?.updateProgress("graph", "completed", `Built in ${graphTime}ms`);
+            logger.info(
+              `Code graph built in ${graphTime}ms: ${codeGraph.getStats().definitions} definitions, ${codeGraph.getStats().imports} imports`
+            );
+            await progressTracker?.updateProgress(
+              "graph",
+              "completed",
+              `Built in ${graphTime}ms`
+            );
             if (this.graphCache) {
               await this.graphCache.set(pr.number, pr.headSha, codeGraph);
             }
@@ -27734,8 +27871,15 @@ var ReviewOrchestrator = class {
             contextRetriever = new ContextRetriever(codeGraph);
           }
         } catch (error2) {
-          logger.warn("Failed to build code graph, falling back to regex-based context", error2);
-          await progressTracker?.updateProgress("graph", "failed", "Graph build failed, using regex context");
+          logger.warn(
+            "Failed to build code graph, falling back to regex-based context",
+            error2
+          );
+          await progressTracker?.updateProgress(
+            "graph",
+            "failed",
+            "Graph build failed, using regex context"
+          );
         }
       }
       let reviewContext = pr;
@@ -27754,7 +27898,11 @@ var ReviewOrchestrator = class {
         const trivialResult = trivialDetector.detect(pr.files);
         if (trivialResult.isTrivial) {
           logger.info(`Skipping review: ${trivialResult.reason}`);
-          const trivialReview = this.createTrivialReview(trivialResult.reason, pr.files.length, start);
+          const trivialReview = this.createTrivialReview(
+            trivialResult.reason,
+            pr.files.length,
+            start
+          );
           trivialReview.coverage = buildReviewCoverage(
             { ...pr, files: [], diff: "" },
             config,
@@ -27765,13 +27913,25 @@ var ReviewOrchestrator = class {
             }
           );
           const markdown2 = this.components.formatter.format(trivialReview);
-          await this.components.commentPoster.postSummary(pr.number, markdown2, false);
+          await this.components.commentPoster.postSummary(
+            pr.number,
+            markdown2,
+            false
+          );
           if (config.analyticsEnabled && this.components.metricsCollector) {
             try {
-              await this.components.metricsCollector.recordReview(trivialReview, pr.number);
-              logger.debug(`Recorded trivial review metrics for PR #${pr.number}`);
+              await this.components.metricsCollector.recordReview(
+                trivialReview,
+                pr.number
+              );
+              logger.debug(
+                `Recorded trivial review metrics for PR #${pr.number}`
+              );
             } catch (error2) {
-              logger.warn("Failed to record trivial review metrics", error2);
+              logger.warn(
+                "Failed to record trivial review metrics",
+                error2
+              );
             }
           }
           review = trivialReview;
@@ -27779,9 +27939,15 @@ var ReviewOrchestrator = class {
           return trivialReview;
         }
         if (trivialResult.trivialFiles.length > 0) {
-          logger.info(`Filtering ${trivialResult.trivialFiles.length} trivial files from review: ${trivialResult.trivialFiles.join(", ")}`);
-          skippedTrivialFiles = pr.files.filter((f) => trivialResult.trivialFiles.includes(f.filename));
-          const nonTrivialFiles = pr.files.filter((f) => trivialResult.nonTrivialFiles.includes(f.filename));
+          logger.info(
+            `Filtering ${trivialResult.trivialFiles.length} trivial files from review: ${trivialResult.trivialFiles.join(", ")}`
+          );
+          skippedTrivialFiles = pr.files.filter(
+            (f) => trivialResult.trivialFiles.includes(f.filename)
+          );
+          const nonTrivialFiles = pr.files.filter(
+            (f) => trivialResult.nonTrivialFiles.includes(f.filename)
+          );
           reviewContext = {
             ...pr,
             files: nonTrivialFiles,
@@ -27796,7 +27962,9 @@ var ReviewOrchestrator = class {
           try {
             const parsed = JSON.parse(config.pathIntensityPatterns);
             if (!Array.isArray(parsed)) {
-              logger.warn("pathIntensityPatterns is not an array, using defaults");
+              logger.warn(
+                "pathIntensityPatterns is not an array, using defaults"
+              );
               patterns = createDefaultPathMatcherConfig().patterns;
             } else {
               const PathPatternSchema = external_exports.object({
@@ -27810,7 +27978,9 @@ var ReviewOrchestrator = class {
                 if (result.success) {
                   validPatterns.push(result.data);
                 } else {
-                  logger.warn(`Invalid path pattern object, skipping: ${JSON.stringify(item)}`);
+                  logger.warn(
+                    `Invalid path pattern object, skipping: ${JSON.stringify(item)}`
+                  );
                 }
               }
               if (validPatterns.length === 0) {
@@ -27821,7 +27991,10 @@ var ReviewOrchestrator = class {
               }
             }
           } catch (error2) {
-            logger.warn("Failed to parse pathIntensityPatterns, using defaults", error2);
+            logger.warn(
+              "Failed to parse pathIntensityPatterns, using defaults",
+              error2
+            );
             patterns = createDefaultPathMatcherConfig().patterns;
           }
         } else {
@@ -27832,49 +28005,83 @@ var ReviewOrchestrator = class {
           defaultIntensity: config.pathDefaultIntensity ?? "standard",
           patterns
         });
-        const intensityResult = pathMatcher.determineIntensity(reviewContext.files);
+        const intensityResult = pathMatcher.determineIntensity(
+          reviewContext.files
+        );
         reviewIntensity = intensityResult.intensity;
-        logger.info(`Review intensity: ${reviewIntensity} - ${intensityResult.reason}`);
+        logger.info(
+          `Review intensity: ${reviewIntensity} - ${intensityResult.reason}`
+        );
         if (intensityResult.matchedPaths.length > 0) {
-          logger.debug(`Matched paths: ${intensityResult.matchedPaths.join(", ")}`);
+          logger.debug(
+            `Matched paths: ${intensityResult.matchedPaths.join(", ")}`
+          );
         }
       }
       const configuredIntensityProviderLimit = config.intensityProviderCounts?.[reviewIntensity] ?? config.providerLimit;
       const intensityProviderLimit = config.providerLimit > 0 ? Math.min(config.providerLimit, configuredIntensityProviderLimit) : configuredIntensityProviderLimit;
       const baseTimeout = config.runTimeoutSeconds * 1e3;
       const configuredIntensityTimeout = config.intensityTimeouts?.[reviewIntensity] ?? baseTimeout;
-      const intensityTimeout = Math.max(configuredIntensityTimeout, baseTimeout);
+      const intensityTimeout = Math.max(
+        configuredIntensityTimeout,
+        baseTimeout
+      );
       logger.info(
         `Intensity settings: ${intensityProviderLimit} providers, ${intensityTimeout}ms timeout (${reviewIntensity} mode)`
       );
-      const useIncremental = await this.components.incrementalReviewer.shouldUseIncremental(reviewContext);
+      const useIncremental = await this.components.incrementalReviewer.shouldUseIncremental(
+        reviewContext
+      );
       let filesToReview = reviewContext.files;
       let lastReviewData = null;
       if (useIncremental) {
-        lastReviewData = await this.components.incrementalReviewer.getLastReview(reviewContext.number);
+        lastReviewData = await this.components.incrementalReviewer.getLastReview(
+          reviewContext.number
+        );
         if (lastReviewData) {
-          filesToReview = await this.components.incrementalReviewer.getChangedFilesSince(reviewContext, lastReviewData.lastReviewedCommit);
-          logger.info(`Incremental review: reviewing ${filesToReview.length} changed files`);
+          filesToReview = await this.components.incrementalReviewer.getChangedFilesSince(
+            reviewContext,
+            lastReviewData.lastReviewedCommit
+          );
+          logger.info(
+            `Incremental review: reviewing ${filesToReview.length} changed files`
+          );
           if (codeGraph && this.components.graphBuilder) {
             try {
-              codeGraph = await this.components.graphBuilder.updateGraph(codeGraph, filesToReview);
+              codeGraph = await this.components.graphBuilder.updateGraph(
+                codeGraph,
+                filesToReview
+              );
               logger.debug("Code graph updated incrementally");
             } catch (error2) {
-              logger.warn("Failed to update code graph incrementally", error2);
+              logger.warn(
+                "Failed to update code graph incrementally",
+                error2
+              );
             }
           }
         }
       }
       const cachedFindings = config.enableCaching ? await this.components.cache.load(reviewContext) : null;
-      const reviewPR = useIncremental ? { ...reviewContext, files: filesToReview, diff: filterDiffByFiles(reviewContext.diff, filesToReview) } : reviewContext;
+      const reviewPR = useIncremental ? {
+        ...reviewContext,
+        files: filesToReview,
+        diff: filterDiffByFiles(reviewContext.diff, filesToReview)
+      } : reviewContext;
       const llmFindings = [];
       let providerResults = [];
       let aiAnalysis;
       let providers = await this.components.providerRegistry.createProviders(config);
       providers = await this.applyReliabilityFilters(providers);
       if (providers.length === 0) {
-        logger.warn("All providers filtered out by circuit breakers/reliability; skipping LLM execution");
-        await progressTracker?.updateProgress("llm", "failed", "No available providers after reliability filtering");
+        logger.warn(
+          "All providers filtered out by circuit breakers/reliability; skipping LLM execution"
+        );
+        await progressTracker?.updateProgress(
+          "llm",
+          "failed",
+          "No available providers after reliability filtering"
+        );
       }
       const batchOrchestrator = this.components.batchOrchestrator || new BatchOrchestrator({
         defaultBatchSize: config.batchMaxFiles || 30,
@@ -27884,7 +28091,9 @@ var ReviewOrchestrator = class {
         maxBatchSize: config.batchMaxFiles
       });
       if (filesToReview.length === 0) {
-        logger.info("No files to review in incremental update, using cached findings only");
+        logger.info(
+          "No files to review in incremental update, using cached findings only"
+        );
       } else {
         await this.ensureBudget(config);
         let allHealthResults = [];
@@ -27900,22 +28109,38 @@ var ReviewOrchestrator = class {
         };
         await runHealthCheck(providers);
         const selectionLimit = Math.max(1, intensityProviderLimit || 8);
-        const desiredOpenRouter = Math.min(4, providers.filter((p) => p.name.startsWith("openrouter/")).length);
-        const desiredOpenCode = Math.min(2, providers.filter((p) => p.name.startsWith("opencode/")).length);
+        const desiredOpenRouter = Math.min(
+          4,
+          providers.filter((p) => p.name.startsWith("openrouter/")).length
+        );
+        const desiredOpenCode = Math.min(
+          2,
+          providers.filter((p) => p.name.startsWith("opencode/")).length
+        );
         const MIN_OPENROUTER_HEALTHY = desiredOpenRouter;
         const MIN_OPENCODE_HEALTHY = desiredOpenCode;
         const singleProviderMode = providers.length === 1 && config.providers.length === 1;
         const defaultMinimumHealthy = singleProviderMode ? 1 : 2;
         const MIN_TOTAL_HEALTHY = Math.min(
           selectionLimit,
-          Math.max(defaultMinimumHealthy, desiredOpenRouter + desiredOpenCode || defaultMinimumHealthy)
+          Math.max(
+            defaultMinimumHealthy,
+            desiredOpenRouter + desiredOpenCode || defaultMinimumHealthy
+          )
         );
-        const MIN_FALLBACK_HEALTHY = Math.min(defaultMinimumHealthy, selectionLimit);
+        const MIN_FALLBACK_HEALTHY = Math.min(
+          defaultMinimumHealthy,
+          selectionLimit
+        );
         const countOpenCode = (list) => list.filter((p) => p.name.startsWith("opencode/")).length;
         const countOpenRouter = (list) => list.filter((p) => p.name.startsWith("openrouter/")).length;
         let attempts = 0;
         const registry = this.components.providerRegistry;
-        const discoverExtras = typeof registry.discoverAdditionalFreeProviders === "function" ? (names) => registry.discoverAdditionalFreeProviders(names, selectionLimit * 2, config) : null;
+        const discoverExtras = typeof registry.discoverAdditionalFreeProviders === "function" ? (names) => registry.discoverAdditionalFreeProviders(
+          names,
+          selectionLimit * 2,
+          config
+        ) : null;
         while (attempts < 6 && discoverExtras && (healthy.length < MIN_TOTAL_HEALTHY || countOpenCode(healthy) < MIN_OPENCODE_HEALTHY || countOpenRouter(healthy) < MIN_OPENROUTER_HEALTHY)) {
           const additional = await discoverExtras(Array.from(triedProviders));
           if (additional.length === 0) break;
@@ -27925,9 +28150,13 @@ var ReviewOrchestrator = class {
         }
         const meetsPrimaryTargets = healthy.length >= MIN_TOTAL_HEALTHY && countOpenCode(healthy) >= MIN_OPENCODE_HEALTHY && countOpenRouter(healthy) >= MIN_OPENROUTER_HEALTHY;
         if (!meetsPrimaryTargets && healthy.length < MIN_FALLBACK_HEALTHY) {
-          logger.warn("Insufficient healthy providers after retries; skipping LLM execution");
+          logger.warn(
+            "Insufficient healthy providers after retries; skipping LLM execution"
+          );
           if (process.env.FAIL_ON_NO_HEALTHY_PROVIDERS === "true" && healthy.length === 0) {
-            throw new Error("No healthy providers available; failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true");
+            throw new Error(
+              "No healthy providers available; failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true"
+            );
           }
           providerResults = allHealthResults;
           await this.recordReliability(providerResults);
@@ -27950,19 +28179,28 @@ var ReviewOrchestrator = class {
           const providerNames = healthy.map((p) => p.name);
           if (config.enableTokenAwareBatching) {
             try {
-              batches = batchOrchestrator.createTokenAwareBatches(filesToReview, providerNames);
+              batches = batchOrchestrator.createTokenAwareBatches(
+                filesToReview,
+                providerNames
+              );
             } catch (error2) {
               logger.warn(
                 `Token-aware batching failed, falling back to fixed-size batching`,
                 error2
               );
               const batchSize = batchOrchestrator.getBatchSize(providerNames);
-              batches = batchOrchestrator.createBatches(filesToReview, batchSize);
+              batches = batchOrchestrator.createBatches(
+                filesToReview,
+                batchSize
+              );
             }
           } else {
             const batchSize = batchOrchestrator.getBatchSize(providerNames);
             try {
-              batches = batchOrchestrator.createBatches(filesToReview, batchSize);
+              batches = batchOrchestrator.createBatches(
+                filesToReview,
+                batchSize
+              );
             } catch (error2) {
               logger.warn(
                 `Invalid batch size computed from providers - falling back to size 1`,
@@ -27971,18 +28209,37 @@ var ReviewOrchestrator = class {
               batches = batchOrchestrator.createBatches(filesToReview, 1);
             }
           }
-          const batchQueue = createQueue(Math.max(1, Number(config.providerMaxParallel) || 1));
+          const batchQueue = createQueue(
+            Math.max(1, Number(config.providerMaxParallel) || 1)
+          );
           logger.info(`Processing ${batches.length} batch(es)`);
           const batchPromises = batches.map(
             (batch) => batchQueue.add(async () => {
               const batchDiff = filterDiffByFiles(reviewContext.diff, batch);
-              const batchContext = { ...reviewContext, files: batch, diff: batchDiff };
-              const promptBuilder = new PromptBuilder(config, reviewIntensity, void 0, codeGraph);
+              const batchContext = {
+                ...reviewContext,
+                files: batch,
+                diff: batchDiff
+              };
+              const promptBuilder = new PromptBuilder(
+                config,
+                reviewIntensity,
+                void 0,
+                codeGraph
+              );
               const prompt = await promptBuilder.build(batchContext);
               try {
-                const results = await this.components.llmExecutor.execute(healthy, prompt, intensityTimeout);
+                const results = await this.components.llmExecutor.execute(
+                  healthy,
+                  prompt,
+                  intensityTimeout
+                );
                 for (const result of results) {
-                  await this.components.costTracker.record(result.name, result.result?.usage, config.budgetMaxUsd);
+                  await this.components.costTracker.record(
+                    result.name,
+                    result.result?.usage,
+                    config.budgetMaxUsd
+                  );
                 }
                 return results;
               } catch (error2) {
@@ -28012,12 +28269,14 @@ var ReviewOrchestrator = class {
               } else {
                 batchFailures += 1;
                 logger.error("Batch promise rejected", result.reason);
-                batchResults.push(...healthy.map((provider) => ({
-                  name: provider.name,
-                  status: "error",
-                  error: result.reason,
-                  durationSeconds: 0
-                })));
+                batchResults.push(
+                  ...healthy.map((provider) => ({
+                    name: provider.name,
+                    status: "error",
+                    error: result.reason,
+                    durationSeconds: 0
+                  }))
+                );
               }
             }
           } finally {
@@ -28031,7 +28290,9 @@ var ReviewOrchestrator = class {
           for (const result of batchResults) {
             mergedMap.set(result.name, result);
           }
-          const mergedResults = Array.from(mergedMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+          const mergedResults = Array.from(mergedMap.values()).sort(
+            (a, b) => a.name.localeCompare(b.name)
+          );
           await this.recordReliability(mergedResults);
           if (batchFailures > 0) {
             if (batchSuccesses === 0) {
@@ -28041,25 +28302,42 @@ var ReviewOrchestrator = class {
               logger.error(
                 `All LLM batches failed (${batchFailures}/${batches.length}): ${failedNames}. ` + (failOnProviderFailure ? "Failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true." : "Continuing with static analysis only.")
               );
-              await progressTracker?.updateProgress("llm", "failed", `All batches failed: ${failedNames}`);
+              await progressTracker?.updateProgress(
+                "llm",
+                "failed",
+                `All batches failed: ${failedNames}`
+              );
               if (failOnProviderFailure) {
                 throw new Error(
                   `All LLM providers failed during review; failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true. ${providerFailureSummary}`
                 );
               }
             } else {
-              logger.warn(`Partial batch failure: ${batchFailures} failed, ${batchSuccesses} succeeded. Using successful results.`);
-              await progressTracker?.updateProgress("llm", "completed", `Batches: ${batchSuccesses}/${batches.length} succeeded`);
+              logger.warn(
+                `Partial batch failure: ${batchFailures} failed, ${batchSuccesses} succeeded. Using successful results.`
+              );
+              await progressTracker?.updateProgress(
+                "llm",
+                "completed",
+                `Batches: ${batchSuccesses}/${batches.length} succeeded`
+              );
             }
           } else {
-            await progressTracker?.updateProgress("llm", "completed", `Processed ${batches.length} batch(es)`);
+            await progressTracker?.updateProgress(
+              "llm",
+              "completed",
+              `Processed ${batches.length} batch(es)`
+            );
           }
           llmFindings.push(...extractFindings(batchResults));
           providerResults = mergedResults;
           aiAnalysis = config.enableAiDetection ? summarizeAIDetection(providerResults) : void 0;
         }
       }
-      const staticAnalysis = await this.runStaticAnalysis(filesToReview, contextRetriever);
+      const staticAnalysis = await this.runStaticAnalysis(
+        filesToReview,
+        contextRetriever
+      );
       const combinedFindings = [
         ...staticAnalysis.astFindings,
         ...staticAnalysis.ruleFindings,
@@ -28071,7 +28349,13 @@ var ReviewOrchestrator = class {
       const consensus = this.components.consensus.filter(deduped);
       const providerCount = providers.length || 1;
       const enriched = consensus.map(
-        (f) => this.enrichFinding(f, pr.files, staticAnalysis.context, providerCount, codeGraph)
+        (f) => this.enrichFinding(
+          f,
+          pr.files,
+          staticAnalysis.context,
+          providerCount,
+          codeGraph
+        )
       );
       const quietFiltered = await this.applyQuietMode(enriched, config);
       const findingFilter = new FindingFilter();
@@ -28084,10 +28368,21 @@ var ReviewOrchestrator = class {
           logger.debug("Filter breakdown:", filterStats.reasons);
         }
       }
-      await progressTracker?.updateProgress("static", "completed", "AST, security, and rules processed");
+      await progressTracker?.updateProgress(
+        "static",
+        "completed",
+        "AST, security, and rules processed"
+      );
       const testHints = config.enableTestHints ? this.components.testCoverage.analyze(pr.files) : void 0;
-      const impactAnalysis = this.components.impactAnalyzer.analyze(pr.files, staticAnalysis.context, finalFiltered.length > 0);
-      const mermaidDiagram = this.components.mermaidGenerator.generateImpactDiagram(pr.files, staticAnalysis.context);
+      const impactAnalysis = this.components.impactAnalyzer.analyze(
+        pr.files,
+        staticAnalysis.context,
+        finalFiltered.length > 0
+      );
+      const mermaidDiagram = this.components.mermaidGenerator.generateImpactDiagram(
+        pr.files,
+        staticAnalysis.context
+      );
       const costSummary = this.components.costTracker.summary();
       const runDetails = {
         providers: providerResults.map((r) => ({
@@ -28134,15 +28429,25 @@ var ReviewOrchestrator = class {
           pr.headSha
         );
         review.metrics.totalFindings = review.findings.length;
-        review.metrics.critical = review.findings.filter((f) => f.severity === "critical").length;
-        review.metrics.major = review.findings.filter((f) => f.severity === "major").length;
-        review.metrics.minor = review.findings.filter((f) => f.severity === "minor").length;
-        logger.info(`Incremental review completed: ${review.findings.length} total findings after merge`);
+        review.metrics.critical = review.findings.filter(
+          (f) => f.severity === "critical"
+        ).length;
+        review.metrics.major = review.findings.filter(
+          (f) => f.severity === "major"
+        ).length;
+        review.metrics.minor = review.findings.filter(
+          (f) => f.severity === "minor"
+        ).length;
+        logger.info(
+          `Incremental review completed: ${review.findings.length} total findings after merge`
+        );
       }
       review.metrics.totalCost = costSummary.totalCost;
       review.metrics.totalTokens = costSummary.totalTokens;
       review.metrics.providersUsed = providers.length;
-      review.metrics.providersSuccess = providerResults.filter((r) => r.status === "success").length;
+      review.metrics.providersSuccess = providerResults.filter(
+        (r) => r.status === "success"
+      ).length;
       review.metrics.providersFailed = providerResults.length - review.metrics.providersSuccess;
       review.metrics.durationSeconds = (Date.now() - start) / 1e3;
       if (review.runDetails) {
@@ -28150,13 +28455,26 @@ var ReviewOrchestrator = class {
       }
       review.metrics.cached = Boolean(cachedFindings);
       if (config.generateFixPrompts && this.components.promptGenerator) {
-        const fixPrompts = this.components.promptGenerator.generateFixPrompts(review.findings);
+        const fixPrompts = this.components.promptGenerator.generateFixPrompts(
+          review.findings
+        );
         if (fixPrompts.length > 0) {
-          const basename2 = this.sanitizeFilename(process.env.REPORT_BASENAME || "review-router");
-          const fixPromptsPath = import_path.default.join(process.cwd(), `${basename2}-fix-prompts.md`);
+          const basename2 = this.sanitizeFilename(
+            process.env.REPORT_BASENAME || "review-router"
+          );
+          const fixPromptsPath = import_path.default.join(
+            process.cwd(),
+            `${basename2}-fix-prompts.md`
+          );
           const format = config.fixPromptFormat || "plain";
-          await this.components.promptGenerator.saveToFile(fixPrompts, fixPromptsPath, format);
-          logger.info(`Generated ${fixPrompts.length} fix prompts: ${fixPromptsPath}`);
+          await this.components.promptGenerator.saveToFile(
+            fixPrompts,
+            fixPromptsPath,
+            format
+          );
+          logger.info(
+            `Generated ${fixPrompts.length} fix prompts: ${fixPromptsPath}`
+          );
         }
       }
       if (config.enableCaching) {
@@ -28167,16 +28485,27 @@ var ReviewOrchestrator = class {
       }
       if (config.analyticsEnabled && this.components.metricsCollector) {
         try {
-          await this.components.metricsCollector.recordReview(review, pr.number);
+          await this.components.metricsCollector.recordReview(
+            review,
+            pr.number
+          );
           logger.debug(`Recorded review metrics for PR #${pr.number}`);
         } catch (error2) {
           logger.warn("Failed to record review metrics", error2);
         }
       }
-      const reviewCommentState = await this.components.feedbackFilter.loadReviewCommentState(pr.number, pr.headSha);
-      const dismissedCount = this.applyCommandDismissals(review, reviewCommentState);
+      const reviewCommentState = await this.components.feedbackFilter.loadReviewCommentState(
+        pr.number,
+        pr.headSha
+      );
+      const dismissedCount = this.applyCommandDismissals(
+        review,
+        reviewCommentState
+      );
       if (dismissedCount > 0) {
-        logger.info(`Applied ${dismissedCount} /rr skip dismissal(s) before publishing review`);
+        logger.info(
+          `Applied ${dismissedCount} /rr skip dismissal(s) before publishing review`
+        );
       }
       const markdown = this.components.formatter.format(review);
       await this.updatePullRequestDescription(pr);
@@ -28193,12 +28522,25 @@ var ReviewOrchestrator = class {
       if (progressTracker) {
         const replaced = await progressTracker.replaceWith(markdown);
         if (!replaced) {
-          await this.components.commentPoster.postSummary(pr.number, markdown, useIncremental);
+          await this.components.commentPoster.postSummary(
+            pr.number,
+            markdown,
+            useIncremental
+          );
         }
       } else {
-        await this.components.commentPoster.postSummary(pr.number, markdown, useIncremental);
+        await this.components.commentPoster.postSummary(
+          pr.number,
+          markdown,
+          useIncremental
+        );
       }
-      await this.components.commentPoster.postInline(pr.number, inlineFiltered, pr.files, pr.headSha);
+      await this.components.commentPoster.postInline(
+        pr.number,
+        inlineFiltered,
+        pr.files,
+        pr.headSha
+      );
       await this.writeReports(review);
       await progressTracker?.updateProgress("synthesis", "completed");
       success = true;
@@ -28207,13 +28549,19 @@ var ReviewOrchestrator = class {
       const normalizedError = normalizeReviewError(error2);
       progressTracker?.setFailure(normalizedError);
       if (progressTracker && !progressTracker.hasFailedItems()) {
-        await progressTracker.updateProgress("synthesis", "failed", normalizedError.summary);
+        await progressTracker.updateProgress(
+          "synthesis",
+          "failed",
+          normalizedError.summary
+        );
       }
       throw error2;
     } finally {
       if (progressTracker) {
         try {
-          progressTracker.setTotalCost(this.components.costTracker.summary().totalCost);
+          progressTracker.setTotalCost(
+            this.components.costTracker.summary().totalCost
+          );
           await progressTracker.finalize(success);
         } catch (err) {
           logger.warn("Failed to finalize progress tracker", err);
@@ -28253,12 +28601,15 @@ var ReviewOrchestrator = class {
       files: (commit.files || []).map((f) => f.filename),
       timestamp: new Date(commit.commit.author?.date || Date.now()).getTime()
     }));
-    const comments = await octokit.paginate(octokit.rest.pulls.listReviewComments, {
-      owner,
-      repo,
-      pull_number: prNumber,
-      per_page: 100
-    });
+    const comments = await octokit.paginate(
+      octokit.rest.pulls.listReviewComments,
+      {
+        owner,
+        repo,
+        pull_number: prNumber,
+        per_page: 100
+      }
+    );
     const commentedFiles = /* @__PURE__ */ new Map();
     const commentReactions = [];
     for (const comment of comments) {
@@ -28286,10 +28637,16 @@ var ReviewOrchestrator = class {
         }))
       });
     }
-    const commitAcceptances = acceptanceDetector.detectFromCommits(commits, commentedFiles);
+    const commitAcceptances = acceptanceDetector.detectFromCommits(
+      commits,
+      commentedFiles
+    );
     const reactionAcceptances = acceptanceDetector.detectFromReactions(commentReactions);
     const allAcceptances = [...commitAcceptances, ...reactionAcceptances];
-    await acceptanceDetector.recordAcceptances(allAcceptances, providerWeightTracker);
+    await acceptanceDetector.recordAcceptances(
+      allAcceptances,
+      providerWeightTracker
+    );
     if (allAcceptances.length > 0) {
       logger.info(
         `Acceptance detection: ${commitAcceptances.length} from commits, ${reactionAcceptances.length} from reactions, ${allAcceptances.length} total`
@@ -28346,7 +28703,8 @@ var ReviewOrchestrator = class {
   shouldSkip(pr) {
     const { config } = this.components;
     if (config.skipDrafts && pr.draft) return "PR is a draft";
-    if (config.skipBots && this.isBot(pr.author)) return `Author ${pr.author} is a bot`;
+    if (config.skipBots && this.isBot(pr.author))
+      return `Author ${pr.author} is a bot`;
     if (config.skipLabels.length > 0) {
       for (const label of pr.labels) {
         if (config.skipLabels.includes(label)) {
@@ -28365,7 +28723,9 @@ var ReviewOrchestrator = class {
   }
   isBot(author) {
     const lower = author.toLowerCase();
-    return ["bot", "dependabot", "renovate", "github-actions", "[bot]"].some((p) => lower.includes(p));
+    return ["bot", "dependabot", "renovate", "github-actions", "[bot]"].some(
+      (p) => lower.includes(p)
+    );
   }
   async applyReliabilityFilters(providers) {
     const tracker = this.components.reliabilityTracker;
@@ -28380,12 +28740,16 @@ var ReviewOrchestrator = class {
       available.push(provider);
     }
     if (available.length === 0) {
-      logger.warn("All providers are currently tripped by circuit breakers; skipping review run");
+      logger.warn(
+        "All providers are currently tripped by circuit breakers; skipping review run"
+      );
       return [];
     }
     const rankings = await tracker.rankProviders(available.map((p) => p.name));
     const scoreMap = new Map(rankings.map((r) => [r.providerId, r.score]));
-    return [...available].sort((a, b) => (scoreMap.get(b.name) ?? 0.5) - (scoreMap.get(a.name) ?? 0.5));
+    return [...available].sort(
+      (a, b) => (scoreMap.get(b.name) ?? 0.5) - (scoreMap.get(a.name) ?? 0.5)
+    );
   }
   async recordReliability(results) {
     if (!this.components.reliabilityTracker) return;
@@ -28399,14 +28763,18 @@ var ReviewOrchestrator = class {
     }
   }
   async initProgressTracker(pr) {
-    if (!this.components.githubClient || this.components.config.dryRun) return void 0;
+    if (!this.components.githubClient || this.components.config.dryRun)
+      return void 0;
     try {
-      const tracker = new ProgressTracker(this.components.githubClient.octokit, {
-        owner: this.components.githubClient.owner,
-        repo: this.components.githubClient.repo,
-        prNumber: pr.number,
-        updateStrategy: "milestone"
-      });
+      const tracker = new ProgressTracker(
+        this.components.githubClient.octokit,
+        {
+          owner: this.components.githubClient.owner,
+          repo: this.components.githubClient.repo,
+          prNumber: pr.number,
+          updateStrategy: "milestone"
+        }
+      );
       await tracker.initialize();
       return tracker;
     } catch (error2) {
@@ -28460,11 +28828,17 @@ ${finding.message}`
     );
     const normalizedFinding = correctedLine !== finding.line ? { ...finding, line: correctedLine } : finding;
     if (correctedLine !== finding.line) {
-      logger.debug(`Adjusted finding line for ${finding.file}: ${finding.line} -> ${correctedLine}`);
+      logger.debug(
+        `Adjusted finding line for ${finding.file}: ${finding.line} -> ${correctedLine}`
+      );
     }
     const changedLines = mapAddedLines(file?.patch);
-    const hasDirectEvidence = changedLines.some((l) => l.line === normalizedFinding.line);
-    const astConfirmed = Boolean(normalizedFinding.providers?.includes("ast") || normalizedFinding.provider === "ast");
+    const hasDirectEvidence = changedLines.some(
+      (l) => l.line === normalizedFinding.line
+    );
+    const astConfirmed = Boolean(
+      normalizedFinding.providers?.includes("ast") || normalizedFinding.provider === "ast"
+    );
     let graphConfirmed = false;
     if (codeGraph) {
       const dependents = codeGraph.getDependents(finding.file);
@@ -28480,6 +28854,7 @@ ${finding.message}`
     );
     return {
       ...normalizedFinding,
+      providerPoolSize: providerCount,
       evidence,
       evidenceDetail: {
         changedLines: changedLines.map((c) => c.line),
@@ -28495,7 +28870,9 @@ ${finding.message}`
     if (this.components.quietModeFilter) {
       const filtered = await this.components.quietModeFilter.filterByConfidence(findings);
       const filterStats = await this.components.quietModeFilter.getFilterStats(findings);
-      logger.info(`Quiet mode: filtered ${filterStats.filtered}/${filterStats.total} findings (${filterStats.filterRate.toFixed(1)}% reduction)`);
+      logger.info(
+        `Quiet mode: filtered ${filterStats.filtered}/${filterStats.total} findings (${filterStats.filterRate.toFixed(1)}% reduction)`
+      );
       return filtered;
     }
     const threshold = config.quietMinConfidence ?? 0.5;
@@ -28506,18 +28883,31 @@ ${finding.message}`
     if (!hasDismissals) return 0;
     const before = review.findings.length;
     review.findings = review.findings.filter(
-      (finding) => !this.components.feedbackFilter.isFindingCommandDismissed(finding, state)
+      (finding) => !this.components.feedbackFilter.isFindingCommandDismissed(
+        finding,
+        state
+      )
     );
     review.inlineComments = review.inlineComments.filter(
       (comment) => !this.components.feedbackFilter.isInlineCommandDismissed(comment, state)
     );
-    review.actionItems = Array.from(new Set(
-      review.findings.filter((finding) => finding.severity !== "minor").slice(0, 5).map((finding) => `${finding.file}:${finding.line} - ${finding.title}`)
-    ));
+    review.actionItems = Array.from(
+      new Set(
+        review.findings.filter((finding) => finding.severity !== "minor").slice(0, 5).map(
+          (finding) => `${finding.file}:${finding.line} - ${finding.title}`
+        )
+      )
+    );
     review.metrics.totalFindings = review.findings.length;
-    review.metrics.critical = review.findings.filter((finding) => finding.severity === "critical").length;
-    review.metrics.major = review.findings.filter((finding) => finding.severity === "major").length;
-    review.metrics.minor = review.findings.filter((finding) => finding.severity === "minor").length;
+    review.metrics.critical = review.findings.filter(
+      (finding) => finding.severity === "critical"
+    ).length;
+    review.metrics.major = review.findings.filter(
+      (finding) => finding.severity === "major"
+    ).length;
+    review.metrics.minor = review.findings.filter(
+      (finding) => finding.severity === "minor"
+    ).length;
     review.metrics.dismissedFindings = (review.metrics.dismissedFindings ?? 0) + (before - review.findings.length);
     return before - review.findings.length;
   }
@@ -28564,10 +28954,16 @@ These types of changes are automatically filtered to save review time and API co
     };
   }
   async writeReports(review) {
-    const base = this.sanitizeFilename(process.env.REPORT_BASENAME || "review-router");
+    const base = this.sanitizeFilename(
+      process.env.REPORT_BASENAME || "review-router"
+    );
     const sarifPath = import_path.default.join(process.cwd(), `${base}.sarif`);
     const jsonPath = import_path.default.join(process.cwd(), `${base}.json`);
-    await fs12.writeFile(sarifPath, JSON.stringify(buildSarif(review.findings), null, 2), "utf8");
+    await fs12.writeFile(
+      sarifPath,
+      JSON.stringify(buildSarif(review.findings), null, 2),
+      "utf8"
+    );
     await fs12.writeFile(jsonPath, buildJson(review), "utf8");
     logger.info(`Wrote reports: ${sarifPath}, ${jsonPath}`);
   }

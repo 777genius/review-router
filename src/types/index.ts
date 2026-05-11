@@ -28,7 +28,7 @@ export interface ReviewConfig {
   providerAllowlist: string[];
   providerBlocklist: string[];
   providerDiscoveryLimit?: number; // Max providers to discover/health-check (default: 8)
-  providerLimit: number;           // Max providers to use for actual review (default: 1)
+  providerLimit: number; // Max providers to use for actual review (default: 1)
   providerRetries: number;
   providerMaxParallel: number;
   openrouterAllowPaid?: boolean;
@@ -107,7 +107,7 @@ export interface ReviewConfig {
 
   // Provider selection strategy
   providerSelectionStrategy?: 'reliability' | 'random' | 'round-robin';
-  providerExplorationRate?: number;  // 0.0-1.0, default 0.3 (30% exploration)
+  providerExplorationRate?: number; // 0.0-1.0, default 0.3 (30% exploration)
 
   // Intensity behavior mappings
   intensityProviderCounts?: {
@@ -155,7 +155,7 @@ export interface ReviewResult {
   findings?: Finding[];
   aiLikelihood?: number;
   aiReasoning?: string;
-  actualModel?: string;  // Actual model used (for routed providers like openrouter/free)
+  actualModel?: string; // Actual model used (for routed providers like openrouter/free)
 }
 
 export interface ProviderResult {
@@ -164,6 +164,11 @@ export interface ProviderResult {
   result?: ReviewResult;
   error?: Error;
   durationSeconds: number;
+}
+
+export interface ProviderModelAttribution {
+  provider: string;
+  actualModel?: string;
 }
 
 export interface Finding {
@@ -177,11 +182,14 @@ export interface Finding {
   suggestion?: string;
   provider?: string;
   providers?: string[];
+  actualModel?: string;
+  providerModels?: ProviderModelAttribution[];
+  providerPoolSize?: number;
   confidence?: number;
   category?: string;
   evidence?: EvidenceScore;
   evidenceDetail?: EvidenceDetail;
-  hasConsensus?: boolean;  // Set during aggregation when multiple providers agree
+  hasConsensus?: boolean; // Set during aggregation when multiple providers agree
 }
 
 export interface PRContext {

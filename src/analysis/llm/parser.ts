@@ -26,9 +26,16 @@ export function extractFindings(results: ProviderResult[]): Finding[] {
 
       findings.push({
         ...finding,
-        suggestion,  // Use validated suggestion (or undefined)
+        suggestion, // Use validated suggestion (or undefined)
         provider: result.name,
         providers: finding.providers || [result.name],
+        actualModel: result.result.actualModel,
+        providerModels: [
+          {
+            provider: result.name,
+            actualModel: result.result.actualModel,
+          },
+        ],
       });
     }
   }

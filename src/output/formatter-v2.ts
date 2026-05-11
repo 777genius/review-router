@@ -181,11 +181,16 @@ export class MarkdownFormatterV2 {
 
     const summary = parts.join(', ');
 
-    // Add context about review scope
+    // Add context about review scope and inline thread collapsing.
     const filesReviewed = new Set(findings.map((f) => f.file)).size;
     const context = `Found across ${filesReviewed} file${filesReviewed > 1 ? 's' : ''}.`;
+    const locationCount = this.countFindingLocations(findings);
+    const inlineContext =
+      locationCount < findings.length
+        ? ` Inline comments collapse same-line findings, so ${findings.length} findings map to ${locationCount} code thread${locationCount === 1 ? '' : 's'}.`
+        : '';
 
-    return `${summary}. ${context}`;
+    return `${summary}. ${context}${inlineContext}`;
   }
 
   private generateAllClearMessage(
@@ -216,10 +221,11 @@ export class MarkdownFormatterV2 {
     if (!coverage) return '';
 
     const lines: string[] = [];
-    const limitedFiles = coverage.files.filter(file =>
-      file.status === 'compacted' ||
-      file.status === 'metadata-only' ||
-      file.status === 'skipped'
+    const limitedFiles = coverage.files.filter(
+      (file) =>
+        file.status === 'compacted' ||
+        file.status === 'metadata-only' ||
+        file.status === 'skipped'
     );
 
     lines.push('<details>');
@@ -228,7 +234,9 @@ export class MarkdownFormatterV2 {
     lines.push('| Scope | Count |');
     lines.push('|-------|------:|');
     lines.push(`| Total PR files | ${coverage.totalFiles} |`);
-    lines.push(`| Files considered by reviewer | ${coverage.filesConsidered} |`);
+    lines.push(
+      `| Files considered by reviewer | ${coverage.filesConsidered} |`
+    );
     lines.push(`| Full diff in prompt | ${coverage.fullDiffFiles} |`);
     lines.push(`| Compacted in prompt | ${coverage.compactedFiles} |`);
     lines.push(`| Metadata-only or trimmed | ${coverage.metadataOnlyFiles} |`);
@@ -242,7 +250,7 @@ export class MarkdownFormatterV2 {
       lines.push('');
       lines.push('Files not shown as full diffs in the primary prompt:');
       lines.push('');
-      limitedFiles.slice(0, 20).forEach(file => {
+      limitedFiles.slice(0, 20).forEach((file) => {
         const reason = file.reason ? ` - ${file.reason}` : '';
         lines.push(`- \`${file.path}\` - ${file.status}${reason}`);
       });
@@ -364,14 +372,65 @@ export class MarkdownFormatterV2 {
       lines.push('');
     }
 
-    // Provider consensus (if multiple providers)
-    if (finding.providers && finding.providers.length > 1) {
-      const providerList = finding.providers.join(', ');
-      lines.push(`<sub>Detected by: ${providerList}</sub>`);
+    const attribution = this.modelAttributionFooter(finding);
+    if (attribution) {
+      lines.push(attribution);
       lines.push('');
     }
 
     return lines.join('\n');
+  }
+
+  private countFindingLocations(findings: Finding[]): number {
+    return new Set(findings.map((f) => `${f.file}:${f.line}`)).size;
+  }
+
+  private modelAttributionFooter(finding: Finding): string | null {
+    const attributions = this.normalizeProviderModels(finding);
+    if (attributions.length === 0) {
+      return null;
+    }
+
+    if (attributions.length === 1) {
+      return `<sub>Model: ${this.formatProviderModel(attributions[0])}</sub>`;
+    }
+
+    const total = Math.max(
+      finding.providerPoolSize ?? attributions.length,
+      attributions.length
+    );
+    return `<sub>Models: ${attributions.map((item) => this.formatProviderModel(item)).join(', ')} · agreement ${attributions.length}/${total}</sub>`;
+  }
+
+  private normalizeProviderModels(
+    finding: Finding
+  ): Array<{ provider: string; actualModel?: string }> {
+    const merged = new Map<
+      string,
+      { provider: string; actualModel?: string }
+    >();
+    for (const item of finding.providerModels || []) {
+      merged.set(item.provider, item);
+    }
+    for (const provider of finding.providers || []) {
+      if (!merged.has(provider)) {
+        merged.set(provider, { provider });
+      }
+    }
+    if (finding.provider && !merged.has(finding.provider)) {
+      merged.set(finding.provider, {
+        provider: finding.provider,
+        actualModel: finding.actualModel,
+      });
+    }
+    return Array.from(merged.values());
+  }
+
+  private formatProviderModel(input: {
+    provider: string;
+    actualModel?: string;
+  }): string {
+    return input.provider;
   }
 
   private formatMetrics(review: Review): string {

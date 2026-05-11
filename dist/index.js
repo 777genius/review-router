@@ -19962,7 +19962,9 @@ var MarkdownFormatterV2 = class {
     const summary = parts.join(", ");
     const filesReviewed = new Set(findings.map((f) => f.file)).size;
     const context = `Found across ${filesReviewed} file${filesReviewed > 1 ? "s" : ""}.`;
-    return `${summary}. ${context}`;
+    const locationCount = this.countFindingLocations(findings);
+    const inlineContext = locationCount < findings.length ? ` Inline comments collapse same-line findings, so ${findings.length} findings map to ${locationCount} code thread${locationCount === 1 ? "" : "s"}.` : "";
+    return `${summary}. ${context}${inlineContext}`;
   }
   generateAllClearMessage(review, options = {}) {
     const { metrics } = review;
@@ -20093,12 +20095,50 @@ var MarkdownFormatterV2 = class {
       }
       lines.push("");
     }
-    if (finding.providers && finding.providers.length > 1) {
-      const providerList = finding.providers.join(", ");
-      lines.push(`<sub>Detected by: ${providerList}</sub>`);
+    const attribution = this.modelAttributionFooter(finding);
+    if (attribution) {
+      lines.push(attribution);
       lines.push("");
     }
     return lines.join("\n");
+  }
+  countFindingLocations(findings) {
+    return new Set(findings.map((f) => `${f.file}:${f.line}`)).size;
+  }
+  modelAttributionFooter(finding) {
+    const attributions = this.normalizeProviderModels(finding);
+    if (attributions.length === 0) {
+      return null;
+    }
+    if (attributions.length === 1) {
+      return `<sub>Model: ${this.formatProviderModel(attributions[0])}</sub>`;
+    }
+    const total = Math.max(
+      finding.providerPoolSize ?? attributions.length,
+      attributions.length
+    );
+    return `<sub>Models: ${attributions.map((item) => this.formatProviderModel(item)).join(", ")} \xB7 agreement ${attributions.length}/${total}</sub>`;
+  }
+  normalizeProviderModels(finding) {
+    const merged = /* @__PURE__ */ new Map();
+    for (const item of finding.providerModels || []) {
+      merged.set(item.provider, item);
+    }
+    for (const provider of finding.providers || []) {
+      if (!merged.has(provider)) {
+        merged.set(provider, { provider });
+      }
+    }
+    if (finding.provider && !merged.has(finding.provider)) {
+      merged.set(finding.provider, {
+        provider: finding.provider,
+        actualModel: finding.actualModel
+      });
+    }
+    return Array.from(merged.values());
+  }
+  formatProviderModel(input) {
+    return input.provider;
   }
   formatMetrics(review) {
     const lines = [];

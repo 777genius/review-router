@@ -111,7 +111,9 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain(
         'No active findings. 1 finding was dismissed by maintainer/admin `/rr skip` override.'
       );
-      expect(output).toContain('1 finding dismissed by maintainer/admin `/rr skip` override');
+      expect(output).toContain(
+        '1 finding dismissed by maintainer/admin `/rr skip` override'
+      );
       expect(output).toContain('| Overrides | 1 dismissed |');
       expect(output).not.toContain('This PR looks great! No issues detected');
     });
@@ -263,9 +265,11 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('Multiple providers agree');
     });
 
-    it('should show provider consensus for multi-provider findings', () => {
+    it('should show provider model attribution for multi-provider findings', () => {
       const finding = createMockFinding({
+        provider: undefined,
         providers: ['provider-1', 'provider-2', 'provider-3'],
+        providerPoolSize: 3,
       });
 
       const review = createMockReview({
@@ -280,7 +284,57 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain(
-        'Detected by: provider-1, provider-2, provider-3'
+        '<sub>Models: provider-1, provider-2, provider-3 · agreement 3/3</sub>'
+      );
+    });
+
+    it('should show provider model attribution for single-provider findings', () => {
+      const finding = createMockFinding({
+        provider: 'codex/gpt-5.5',
+        providers: ['codex/gpt-5.5'],
+      });
+
+      const review = createMockReview({
+        findings: [finding],
+        metrics: {
+          ...createMockReview().metrics,
+          major: 1,
+          totalFindings: 1,
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('<sub>Model: codex/gpt-5.5</sub>');
+    });
+
+    it('explains when multiple findings collapse to one inline code thread', () => {
+      const findings = [
+        createMockFinding({
+          title: 'First billing check issue',
+          file: 'app.js',
+          line: 6,
+        }),
+        createMockFinding({
+          title: 'Second billing check issue',
+          file: 'app.js',
+          line: 6,
+        }),
+      ];
+
+      const review = createMockReview({
+        findings,
+        metrics: {
+          ...createMockReview().metrics,
+          major: 2,
+          totalFindings: 2,
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain(
+        'Inline comments collapse same-line findings, so 2 findings map to 1 code thread.'
       );
     });
 

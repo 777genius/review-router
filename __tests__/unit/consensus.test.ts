@@ -38,7 +38,9 @@ describe('ConsensusEngine', () => {
 
     const result = engine.filter(findings);
 
-    expect(result.map(f => f.title)).toEqual(expect.arrayContaining(['Issue A', 'Issue C']));
+    expect(result.map((f) => f.title)).toEqual(
+      expect.arrayContaining(['Issue A', 'Issue C'])
+    );
   });
 
   it('allows static findings even when agreement threshold is higher', () => {
@@ -65,10 +67,14 @@ describe('ConsensusEngine', () => {
 
   describe('checkSuggestionConsensus', () => {
     it('should detect AST-equivalent suggestions', () => {
-      const engine = new ConsensusEngine({ minAgreement: 2, minSeverity: 'minor', maxComments: 50 });
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 50,
+      });
       const suggestions = [
         { provider: 'claude', suggestion: 'x + 1', file: 'test.ts' },
-        { provider: 'gemini', suggestion: 'x+1', file: 'test.ts' },  // Same AST, different whitespace
+        { provider: 'gemini', suggestion: 'x+1', file: 'test.ts' }, // Same AST, different whitespace
       ];
       const result = engine.checkSuggestionConsensus(suggestions, 2);
       expect(result.hasSuggestionConsensus).toBe(true);
@@ -76,10 +82,14 @@ describe('ConsensusEngine', () => {
     });
 
     it('should detect non-equivalent suggestions', () => {
-      const engine = new ConsensusEngine({ minAgreement: 2, minSeverity: 'minor', maxComments: 50 });
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 50,
+      });
       const suggestions = [
         { provider: 'claude', suggestion: 'x + 1', file: 'test.ts' },
-        { provider: 'gemini', suggestion: 'x - 1', file: 'test.ts' },  // Different AST
+        { provider: 'gemini', suggestion: 'x - 1', file: 'test.ts' }, // Different AST
       ];
       const result = engine.checkSuggestionConsensus(suggestions, 2);
       expect(result.hasSuggestionConsensus).toBe(false);
@@ -87,7 +97,11 @@ describe('ConsensusEngine', () => {
     });
 
     it('should fall back to string comparison for unknown language', () => {
-      const engine = new ConsensusEngine({ minAgreement: 2, minSeverity: 'minor', maxComments: 50 });
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 50,
+      });
       const suggestions = [
         { provider: 'claude', suggestion: 'foo bar', file: 'test.xyz' },
         { provider: 'gemini', suggestion: 'foo bar', file: 'test.xyz' },
@@ -97,7 +111,11 @@ describe('ConsensusEngine', () => {
     });
 
     it('should require minimum agreement count', () => {
-      const engine = new ConsensusEngine({ minAgreement: 2, minSeverity: 'minor', maxComments: 50 });
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 50,
+      });
       const suggestions = [
         { provider: 'claude', suggestion: 'x + 1', file: 'test.ts' },
       ];
@@ -108,10 +126,30 @@ describe('ConsensusEngine', () => {
 
   describe('filter with hasConsensus', () => {
     it('should set hasConsensus when providers agree on suggestion', () => {
-      const engine = new ConsensusEngine({ minAgreement: 2, minSeverity: 'minor', maxComments: 50 });
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 50,
+      });
       const findings: Finding[] = [
-        { file: 'test.ts', line: 10, title: 'Issue', message: 'Fix it', severity: 'minor', provider: 'claude', suggestion: 'x + 1' },
-        { file: 'test.ts', line: 10, title: 'Issue', message: 'Fix it', severity: 'minor', provider: 'gemini', suggestion: 'x+1' },
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'claude',
+          suggestion: 'x + 1',
+        },
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'gemini',
+          suggestion: 'x+1',
+        },
       ];
       const result = engine.filter(findings);
       expect(result.length).toBe(1);
@@ -119,10 +157,30 @@ describe('ConsensusEngine', () => {
     });
 
     it('should not set hasConsensus when providers disagree', () => {
-      const engine = new ConsensusEngine({ minAgreement: 2, minSeverity: 'minor', maxComments: 50 });
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 50,
+      });
       const findings: Finding[] = [
-        { file: 'test.ts', line: 10, title: 'Issue', message: 'Fix it', severity: 'minor', provider: 'claude', suggestion: 'x + 1' },
-        { file: 'test.ts', line: 10, title: 'Issue', message: 'Fix it', severity: 'minor', provider: 'gemini', suggestion: 'x - 1' },
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'claude',
+          suggestion: 'x + 1',
+        },
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'gemini',
+          suggestion: 'x - 1',
+        },
       ];
       const result = engine.filter(findings);
       expect(result.length).toBe(1);
@@ -130,13 +188,66 @@ describe('ConsensusEngine', () => {
     });
 
     it('should not set hasConsensus for single-provider findings', () => {
-      const engine = new ConsensusEngine({ minAgreement: 2, minSeverity: 'minor', maxComments: 50 });
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 50,
+      });
       const findings: Finding[] = [
-        { file: 'test.ts', line: 10, title: 'Issue', message: 'Fix it', severity: 'minor', provider: 'claude', suggestion: 'x + 1' },
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'claude',
+          suggestion: 'x + 1',
+        },
       ];
       const result = engine.filter(findings);
       expect(result.length).toBe(1);
       expect(result[0].hasConsensus).toBeUndefined();
+    });
+
+    it('preserves provider model attribution when grouping providers', () => {
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 50,
+      });
+      const findings: Finding[] = [
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'openrouter/poolside/laguna-m.1:free',
+          providerModels: [
+            {
+              provider: 'openrouter/poolside/laguna-m.1:free',
+              actualModel: 'poolside/laguna-m.1-20260312:free',
+            },
+          ],
+        },
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'codex/gpt-5.5',
+          providerModels: [{ provider: 'codex/gpt-5.5' }],
+        },
+      ];
+
+      expect(engine.filter(findings)[0].providerModels).toMatchObject([
+        {
+          provider: 'openrouter/poolside/laguna-m.1:free',
+          actualModel: 'poolside/laguna-m.1-20260312:free',
+        },
+        { provider: 'codex/gpt-5.5' },
+      ]);
     });
   });
 });

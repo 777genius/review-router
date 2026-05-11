@@ -25,7 +25,8 @@ describe('SynthesisEngine', () => {
       severity: 'critical',
       title: 'SQL injection',
       message: 'Interpolated SQL is unsafe.',
-      suggestion: "const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);",
+      suggestion:
+        "const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);",
     };
 
     const review = new SynthesisEngine({
@@ -40,11 +41,17 @@ describe('SynthesisEngine', () => {
     expect(review.inlineComments[0].body).toContain('_🔴 Critical_');
     expect(review.inlineComments[0].body).toContain('_⚡ Quick win_');
     expect(review.inlineComments[0].body).toContain('**SQL injection**');
-    expect(review.inlineComments[0].body).toContain('<summary>Suggested fix</summary>');
-    expect(review.inlineComments[0].body).toContain('<summary>📝 Committable suggestion</summary>');
+    expect(review.inlineComments[0].body).toContain(
+      '<summary>Suggested fix</summary>'
+    );
+    expect(review.inlineComments[0].body).toContain(
+      '<summary>📝 Committable suggestion</summary>'
+    );
     expect(review.inlineComments[0].body).toContain('```suggestion');
     expect(review.inlineComments[0].body).toContain(finding.suggestion);
-    expect(review.inlineComments[0].body).toContain('<summary>🤖 Prompt for AI Agents</summary>');
+    expect(review.inlineComments[0].body).toContain(
+      '<summary>🤖 Prompt for AI Agents</summary>'
+    );
   });
 
   it('does not render committable suggestions for multi-line suggestions without a range', () => {
@@ -66,9 +73,15 @@ describe('SynthesisEngine', () => {
       inlineMaxComments: 5,
     }).synthesize([finding], pr);
 
-    expect(review.inlineComments[0].body).toContain('<summary>Suggested fix</summary>');
-    expect(review.inlineComments[0].body).toContain('<summary>🤖 Prompt for AI Agents</summary>');
-    expect(review.inlineComments[0].body).not.toContain('<summary>📝 Committable suggestion</summary>');
+    expect(review.inlineComments[0].body).toContain(
+      '<summary>Suggested fix</summary>'
+    );
+    expect(review.inlineComments[0].body).toContain(
+      '<summary>🤖 Prompt for AI Agents</summary>'
+    );
+    expect(review.inlineComments[0].body).not.toContain(
+      '<summary>📝 Committable suggestion</summary>'
+    );
     expect(review.inlineComments[0].body).not.toContain('```suggestion');
   });
 
@@ -128,10 +141,46 @@ describe('SynthesisEngine', () => {
       inlineMaxComments: 2,
     }).synthesize(findings, pr);
 
-    expect(review.inlineComments.map(comment => comment.severity)).toEqual(['critical', 'major']);
+    expect(review.inlineComments.map((comment) => comment.severity)).toEqual([
+      'critical',
+      'major',
+    ]);
     expect(review.inlineComments[0].body).toContain('_🔴 Critical_');
     expect(review.inlineComments[0].body).toContain('**Critical issue**');
     expect(review.inlineComments[1].body).toContain('_🟡 Major_');
     expect(review.inlineComments[1].body).toContain('**Major issue**');
+  });
+
+  it('renders provider model attribution in inline comment footers', () => {
+    const review = new SynthesisEngine({
+      ...DEFAULT_CONFIG,
+      inlineMinSeverity: 'minor',
+      inlineMaxComments: 5,
+    }).synthesize(
+      [
+        {
+          file: 'auth.js',
+          line: 5,
+          severity: 'critical',
+          title: 'Authentication bypass',
+          message: 'Missing email filter.',
+          provider: 'openrouter/poolside/laguna-m.1:free',
+          providers: ['openrouter/poolside/laguna-m.1:free', 'codex/gpt-5.5'],
+          providerModels: [
+            {
+              provider: 'openrouter/poolside/laguna-m.1:free',
+              actualModel: 'poolside/laguna-m.1-20260312:free',
+            },
+            { provider: 'codex/gpt-5.5' },
+          ],
+          providerPoolSize: 2,
+        },
+      ],
+      pr
+    );
+
+    expect(review.inlineComments[0].body).toContain(
+      '<sub>Models: openrouter/poolside/laguna-m.1:free -> poolside/laguna-m.1-20260312:free, codex/gpt-5.5 · agreement 2/2</sub>'
+    );
   });
 });

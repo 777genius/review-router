@@ -1,4 +1,16 @@
-import { Finding, InlineComment, PRContext, Review, ReviewConfig, ReviewMetrics, TestCoverageHint, AIAnalysis, ProviderResult, RunDetails, ImpactAnalysis } from '../types';
+import {
+  Finding,
+  InlineComment,
+  PRContext,
+  Review,
+  ReviewConfig,
+  ReviewMetrics,
+  TestCoverageHint,
+  AIAnalysis,
+  ProviderResult,
+  RunDetails,
+  ImpactAnalysis,
+} from '../types';
 import { compareSeverityDesc, getSeverityDisplay } from '../utils/severity';
 import {
   countMaxConsecutiveBackticks,
@@ -19,7 +31,15 @@ export class SynthesisEngine {
     mermaidDiagram?: string
   ): Review {
     const metrics = this.buildMetrics(findings, providerResults, runDetails);
-    const summary = this.buildSummary(pr, findings, metrics, testHints, aiAnalysis, providerResults, impactAnalysis);
+    const summary = this.buildSummary(
+      pr,
+      findings,
+      metrics,
+      testHints,
+      aiAnalysis,
+      providerResults,
+      impactAnalysis
+    );
     const inlineComments = this.buildInlineComments(findings);
     const actionItems = this.buildActionItems(findings);
 
@@ -43,9 +63,9 @@ export class SynthesisEngine {
     providerResults?: ProviderResult[],
     runDetails?: RunDetails
   ): ReviewMetrics {
-    const critical = findings.filter(f => f.severity === 'critical').length;
-    const major = findings.filter(f => f.severity === 'major').length;
-    const minor = findings.filter(f => f.severity === 'minor').length;
+    const critical = findings.filter((f) => f.severity === 'critical').length;
+    const major = findings.filter((f) => f.severity === 'major').length;
+    const minor = findings.filter((f) => f.severity === 'minor').length;
 
     // Compute provider metrics from runDetails or providerResults
     let providersUsed = 0;
@@ -58,9 +78,11 @@ export class SynthesisEngine {
     if (runDetails) {
       // Prefer runDetails if available as it has aggregated values
       providersUsed = runDetails.providers.length;
-      providersSuccess = runDetails.providers.filter(p => p.status === 'success').length;
+      providersSuccess = runDetails.providers.filter(
+        (p) => p.status === 'success'
+      ).length;
       providersFailed = runDetails.providers.filter(
-        p => p.status === 'error' || p.status === 'timeout'
+        (p) => p.status === 'error' || p.status === 'timeout'
       ).length;
       totalTokens = runDetails.totalTokens;
       totalCost = runDetails.totalCost;
@@ -68,9 +90,11 @@ export class SynthesisEngine {
     } else if (providerResults) {
       // Fallback to calculating from providerResults
       providersUsed = providerResults.length;
-      providersSuccess = providerResults.filter(p => p.status === 'success').length;
+      providersSuccess = providerResults.filter(
+        (p) => p.status === 'success'
+      ).length;
       providersFailed = providerResults.filter(
-        p => p.status === 'error' || p.status === 'timeout'
+        (p) => p.status === 'error' || p.status === 'timeout'
       ).length;
 
       // Sum tokens from successful results
@@ -82,7 +106,10 @@ export class SynthesisEngine {
       totalCost = 0;
 
       // Sum durations
-      durationSeconds = providerResults.reduce((sum, p) => sum + p.durationSeconds, 0);
+      durationSeconds = providerResults.reduce(
+        (sum, p) => sum + p.durationSeconds,
+        0
+      );
     }
 
     return {
@@ -109,10 +136,13 @@ export class SynthesisEngine {
     impactAnalysis?: ImpactAnalysis
   ): string {
     const totalProviders = providerResults?.length ?? 0;
-    const successes = providerResults?.filter(p => p.status === 'success').length ?? 0;
+    const successes =
+      providerResults?.filter((p) => p.status === 'success').length ?? 0;
     const failures = totalProviders - successes;
 
-    const impactText = impactAnalysis ? ` • Impact: ${impactAnalysis.impactLevel}` : '';
+    const impactText = impactAnalysis
+      ? ` • Impact: ${impactAnalysis.impactLevel}`
+      : '';
     const aiText = aiAnalysis
       ? ` • AI-likelihood: ${(aiAnalysis.averageLikelihood * 100).toFixed(1)}%`
       : '';
@@ -127,11 +157,16 @@ export class SynthesisEngine {
     const minSeverity = this.config.inlineMinSeverity;
 
     const sorted = findings
-      .filter(f => compareSeverityDesc(minSeverity, f.severity) >= 0)
-      .sort((a, b) => compareSeverityDesc(a.severity, b.severity) || a.file.localeCompare(b.file) || a.line - b.line)
+      .filter((f) => compareSeverityDesc(minSeverity, f.severity) >= 0)
+      .sort(
+        (a, b) =>
+          compareSeverityDesc(a.severity, b.severity) ||
+          a.file.localeCompare(b.file) ||
+          a.line - b.line
+      )
       .slice(0, this.config.inlineMaxComments);
 
-    return sorted.map(f => ({
+    return sorted.map((f) => ({
       path: f.file,
       startLine: f.startLine,
       line: f.line,
@@ -166,10 +201,65 @@ export class SynthesisEngine {
       }
     }
     parts.push('', this.agentPromptDetails(finding));
-    if (finding.providers && finding.providers.length > 1) {
-      parts.push('', `Providers: ${finding.providers.join(', ')}`);
+    const attribution = this.modelAttributionFooter(finding);
+    if (attribution) {
+      parts.push('', attribution);
     }
     return parts.join('\n');
+  }
+
+  private modelAttributionFooter(finding: Finding): string | null {
+    const attributions = this.normalizeProviderModels(finding);
+    if (attributions.length === 0) {
+      return null;
+    }
+
+    if (attributions.length === 1) {
+      return `<sub>Model: ${this.formatProviderModel(attributions[0])}</sub>`;
+    }
+
+    const total = Math.max(
+      finding.providerPoolSize ?? attributions.length,
+      attributions.length
+    );
+    return `<sub>Models: ${attributions.map((item) => this.formatProviderModel(item)).join(', ')} · agreement ${attributions.length}/${total}</sub>`;
+  }
+
+  private normalizeProviderModels(
+    finding: Finding
+  ): Array<{ provider: string; actualModel?: string }> {
+    const merged = new Map<
+      string,
+      { provider: string; actualModel?: string }
+    >();
+    for (const item of finding.providerModels || []) {
+      merged.set(item.provider, item);
+    }
+    for (const provider of finding.providers || []) {
+      if (!merged.has(provider)) {
+        merged.set(provider, { provider });
+      }
+    }
+    if (finding.provider && !merged.has(finding.provider)) {
+      merged.set(finding.provider, {
+        provider: finding.provider,
+        actualModel: finding.actualModel,
+      });
+    }
+    return Array.from(merged.values());
+  }
+
+  private formatProviderModel(input: {
+    provider: string;
+    actualModel?: string;
+  }): string {
+    if (
+      !input.actualModel ||
+      input.actualModel === providerModelId(input.provider)
+    ) {
+      return input.provider;
+    }
+    return `${input.provider} -> ${input.actualModel}`;
   }
 
   private inlineHeader(finding: Finding): string {
@@ -241,9 +331,9 @@ export class SynthesisEngine {
 
   private buildActionItems(findings: Finding[]): string[] {
     const items = findings
-      .filter(f => f.severity !== 'minor')
+      .filter((f) => f.severity !== 'minor')
       .slice(0, 5)
-      .map(f => `${this.findingLocationLabel(f)} - ${f.title}`);
+      .map((f) => `${this.findingLocationLabel(f)} - ${f.title}`);
 
     return Array.from(new Set(items));
   }
@@ -267,4 +357,8 @@ function suggestionToDiff(suggestion: string): string {
 
 function isSingleLineSuggestion(suggestion: string): boolean {
   return suggestion.trimEnd().split('\n').length === 1;
+}
+
+function providerModelId(provider: string): string {
+  return provider.replace(/^(openrouter|codex|opencode|claude|gemini)\//, '');
 }

@@ -24,7 +24,16 @@ export class ConsensusEngine {
   constructor(private readonly options: ConsensusOptions) {}
 
   filter(findings: Finding[]): Finding[] {
-    const grouped = new Map<string, Finding & { _suggestions?: Array<{ provider: string; suggestion: string; file: string }> }>();
+    const grouped = new Map<
+      string,
+      Finding & {
+        _suggestions?: Array<{
+          provider: string;
+          suggestion: string;
+          file: string;
+        }>;
+      }
+    >();
 
     for (const finding of findings) {
       if (!this.meetsSeverity(finding.severity)) {
@@ -35,14 +44,22 @@ export class ConsensusEngine {
       const existing = grouped.get(key);
 
       const providers = new Set<string>();
-      if (finding.providers) finding.providers.forEach(p => providers.add(p));
+      if (finding.providers) finding.providers.forEach((p) => providers.add(p));
       if (finding.provider) providers.add(finding.provider);
       if (providers.size === 0) providers.add('static');
 
       // Track per-provider suggestions for consensus checking
-      const currentSuggestions: Array<{ provider: string; suggestion: string; file: string }> = [];
+      const currentSuggestions: Array<{
+        provider: string;
+        suggestion: string;
+        file: string;
+      }> = [];
       if (finding.suggestion && finding.provider) {
-        currentSuggestions.push({ provider: finding.provider, suggestion: finding.suggestion, file: finding.file });
+        currentSuggestions.push({
+          provider: finding.provider,
+          suggestion: finding.suggestion,
+          file: finding.file,
+        });
       }
 
       if (!existing) {
@@ -50,7 +67,7 @@ export class ConsensusEngine {
           ...finding,
           providers: Array.from(providers),
           confidence: (finding.confidence ?? 0) || 1,
-          _suggestions: currentSuggestions,  // Temporary for consensus checking
+          _suggestions: currentSuggestions, // Temporary for consensus checking
         });
         continue;
       }
@@ -58,27 +75,42 @@ export class ConsensusEngine {
       // Merge existing with new finding
       const mergedSuggestions = [
         ...(existing._suggestions || []),
-        ...currentSuggestions
+        ...currentSuggestions,
       ];
 
       grouped.set(key, {
         ...existing,
-        providers: Array.from(new Set([...(existing.providers || []), ...providers])),
-        confidence: Math.min(1, (existing.confidence ?? 0) + (finding.confidence ?? 0.5)),
+        providers: Array.from(
+          new Set([...(existing.providers || []), ...providers])
+        ),
+        providerModels: mergeProviderModels(
+          existing.providerModels,
+          finding.providerModels
+        ),
+        confidence: Math.min(
+          1,
+          (existing.confidence ?? 0) + (finding.confidence ?? 0.5)
+        ),
         _suggestions: mergedSuggestions,
       });
     }
 
     // Check suggestion consensus and set hasConsensus on merged findings
     const filtered = Array.from(grouped.values())
-      .filter(f => this.meetsAgreement(f.providers || []))
-      .map(f => {
+      .filter((f) => this.meetsAgreement(f.providers || []))
+      .map((f) => {
         // Check if we have multiple provider suggestions to compare
         if (f._suggestions && f._suggestions.length >= 2) {
-          const consensus = this.checkSuggestionConsensus(f._suggestions, this.options.minAgreement);
+          const consensus = this.checkSuggestionConsensus(
+            f._suggestions,
+            this.options.minAgreement
+          );
           f.hasConsensus = consensus.hasSuggestionConsensus;
           // If consensus, use the agreed-upon suggestion
-          if (consensus.hasSuggestionConsensus && consensus.suggestions.length > 0) {
+          if (
+            consensus.hasSuggestionConsensus &&
+            consensus.suggestions.length > 0
+          ) {
             f.suggestion = consensus.suggestions[0];
           }
         }
@@ -87,7 +119,9 @@ export class ConsensusEngine {
         return f;
       });
 
-    filtered.sort((a, b) => SEVERITY_ORDER[b.severity] - SEVERITY_ORDER[a.severity]);
+    filtered.sort(
+      (a, b) => SEVERITY_ORDER[b.severity] - SEVERITY_ORDER[a.severity]
+    );
     return filtered;
   }
 
@@ -112,7 +146,11 @@ export class ConsensusEngine {
     minAgreement: number = 2
   ): SuggestionConsensus {
     if (suggestions.length < minAgreement) {
-      return { hasSuggestionConsensus: false, agreementCount: 0, suggestions: [] };
+      return {
+        hasSuggestionConsensus: false,
+        agreementCount: 0,
+        suggestions: [],
+      };
     }
 
     const language = detectLanguage(suggestions[0].file);
@@ -139,12 +177,15 @@ export class ConsensusEngine {
     }
 
     // Find largest group
-    const largestGroup = groups.reduce((a, b) => a.length > b.length ? a : b, []);
+    const largestGroup = groups.reduce(
+      (a, b) => (a.length > b.length ? a : b),
+      []
+    );
 
     return {
       hasSuggestionConsensus: largestGroup.length >= minAgreement,
       agreementCount: largestGroup.length,
-      suggestions: largestGroup
+      suggestions: largestGroup,
     };
   }
 
@@ -153,18 +194,38 @@ export class ConsensusEngine {
     minAgreement: number
   ): SuggestionConsensus {
     // Fallback: exact string match (normalized whitespace)
-    const normalized = suggestions.map(s => ({ ...s, normalized: s.suggestion.trim().replace(/\s+/g, ' ') }));
+    const normalized = suggestions.map((s) => ({
+      ...s,
+      normalized: s.suggestion.trim().replace(/\s+/g, ' '),
+    }));
     const counts = new Map<string, string[]>();
     for (const s of normalized) {
       const arr = counts.get(s.normalized) || [];
       arr.push(s.suggestion);
       counts.set(s.normalized, arr);
     }
-    const largest = Array.from(counts.values()).reduce((a, b) => a.length > b.length ? a : b, []);
+    const largest = Array.from(counts.values()).reduce(
+      (a, b) => (a.length > b.length ? a : b),
+      []
+    );
     return {
       hasSuggestionConsensus: largest.length >= minAgreement,
       agreementCount: largest.length,
-      suggestions: largest
+      suggestions: largest,
     };
   }
+}
+
+function mergeProviderModels(
+  left: Finding['providerModels'],
+  right: Finding['providerModels']
+): Finding['providerModels'] {
+  const merged = new Map<
+    string,
+    NonNullable<Finding['providerModels']>[number]
+  >();
+  for (const item of [...(left || []), ...(right || [])]) {
+    merged.set(item.provider, item);
+  }
+  return Array.from(merged.values());
 }

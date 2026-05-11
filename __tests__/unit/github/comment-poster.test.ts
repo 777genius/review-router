@@ -70,7 +70,11 @@ describe('CommentPoster', () => {
           path: 'src/test.ts',
           line: 10,
           side: 'RIGHT' as const,
-          body: 'Test comment',
+          body: [
+            'Test comment',
+            '',
+            '<sub>Model: openrouter/poolside/laguna-m.1:free</sub>',
+          ].join('\n'),
           severity: 'major',
         },
       ];
@@ -96,10 +100,17 @@ describe('CommentPoster', () => {
           body: expect.stringContaining('Test comment'),
         })
       );
-      expect(reviewCall.comments[0].body).toContain('<!-- review-router-inline:');
-      expect(reviewCall.comments[0].body).toContain('<!-- review-router-skip-help -->');
+      expect(reviewCall.comments[0].body).toContain(
+        '<!-- review-router-inline:'
+      );
+      expect(reviewCall.comments[0].body).toContain(
+        '<!-- review-router-skip-help -->'
+      );
       expect(reviewCall.comments[0].body).toContain(
         'A maintainer/admin can reply `/rr skip` if this finding is a false positive'
+      );
+      expect(reviewCall.comments[0].body).toContain(
+        '<sub>Model: openrouter/poolside/laguna-m.1:free</sub>\n<sub><!-- review-router-skip-help -->A maintainer/admin can reply `/rr skip`'
       );
       expect(reviewCall.comments[0]).not.toHaveProperty('position');
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith({
@@ -351,7 +362,8 @@ describe('CommentPoster', () => {
           additions: 1,
           deletions: 0,
           changes: 1,
-          patch: "+  const rows = await db.query(`SELECT * FROM users WHERE email = '${email}' LIMIT 1`);",
+          patch:
+            "+  const rows = await db.query(`SELECT * FROM users WHERE email = '${email}' LIMIT 1`);",
         },
       ];
 
@@ -464,7 +476,7 @@ describe('CommentPoster', () => {
             '@@ -3,8 +3,7 @@ function normalizeEmail(email) {',
             ' }',
             ' async function findUserByEmail(db, email) {',
-            "-  const normalized = normalizeEmail(email);",
+            '-  const normalized = normalizeEmail(email);',
             "-  const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [normalized]);",
             "+  const rows = await db.query(`SELECT * FROM users WHERE email = '${email}' LIMIT 1`);",
             '   return rows[0] || null;',
@@ -552,7 +564,9 @@ describe('CommentPoster', () => {
         },
       ];
 
-      await expect(poster.postInline(123, comments, files)).resolves.toBeUndefined();
+      await expect(
+        poster.postInline(123, comments, files)
+      ).resolves.toBeUndefined();
 
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
       expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith({
@@ -568,7 +582,9 @@ describe('CommentPoster', () => {
       );
       expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('Committable suggestion is only available on inline review comments'),
+          body: expect.stringContaining(
+            'Committable suggestion is only available on inline review comments'
+          ),
         })
       );
     });
@@ -695,7 +711,9 @@ describe('CommentPoster', () => {
         'Unprocessable Entity: "An internal error occurred, please try again."'
       ) as Error & { status: number };
       batchError.status = 422;
-      const suggestionError = new Error('Validation Failed') as Error & { status: number };
+      const suggestionError = new Error('Validation Failed') as Error & {
+        status: number;
+      };
       suggestionError.status = 422;
       mockOctokit.rest.pulls.createReview.mockRejectedValue(batchError);
       mockOctokit.rest.pulls.createReviewComment
@@ -739,10 +757,18 @@ describe('CommentPoster', () => {
         'abc123'
       );
 
-      expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledTimes(2);
-      expect(mockOctokit.rest.pulls.createReviewComment.mock.calls[0][0].body).toContain('```suggestion');
-      expect(mockOctokit.rest.pulls.createReviewComment.mock.calls[1][0].body).not.toContain('```suggestion');
-      expect(mockOctokit.rest.pulls.createReviewComment.mock.calls[1][0].body).toContain(
+      expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledTimes(
+        2
+      );
+      expect(
+        mockOctokit.rest.pulls.createReviewComment.mock.calls[0][0].body
+      ).toContain('```suggestion');
+      expect(
+        mockOctokit.rest.pulls.createReviewComment.mock.calls[1][0].body
+      ).not.toContain('```suggestion');
+      expect(
+        mockOctokit.rest.pulls.createReviewComment.mock.calls[1][0].body
+      ).toContain(
         'Committable suggestion omitted because GitHub rejected this inline suggestion block'
       );
       expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
@@ -753,7 +779,9 @@ describe('CommentPoster', () => {
         'Unprocessable Entity: "An internal error occurred, please try again."'
       ) as Error & { status: number };
       batchError.status = 422;
-      const lineError = new Error('Validation Failed') as Error & { status: number };
+      const lineError = new Error('Validation Failed') as Error & {
+        status: number;
+      };
       lineError.status = 422;
       mockOctokit.rest.pulls.createReview.mockRejectedValue(batchError);
       mockOctokit.rest.pulls.createReviewComment
@@ -802,7 +830,9 @@ describe('CommentPoster', () => {
         'abc123'
       );
 
-      expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledTimes(2);
+      expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledTimes(
+        2
+      );
       expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith(
         expect.objectContaining({
           body: expect.stringContaining('src/two.ts:20'),
@@ -816,7 +846,9 @@ describe('CommentPoster', () => {
     });
 
     it('updates an existing inline fallback comment instead of duplicating it', async () => {
-      const error = new Error('Validation Failed') as Error & { status: number };
+      const error = new Error('Validation Failed') as Error & {
+        status: number;
+      };
       error.status = 422;
       mockOctokit.rest.pulls.createReview.mockRejectedValue(error);
       mockOctokit.rest.issues.listComments.mockResolvedValue({
@@ -862,7 +894,9 @@ describe('CommentPoster', () => {
     });
 
     it('does not fallback for non-review-position permission failures', async () => {
-      const error = new Error('Resource not accessible by integration') as Error & { status: number };
+      const error = new Error(
+        'Resource not accessible by integration'
+      ) as Error & { status: number };
       error.status = 403;
       mockOctokit.rest.pulls.createReview.mockRejectedValue(error);
 
@@ -915,7 +949,9 @@ describe('CommentPoster', () => {
 
       expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('[DRY RUN] Would post 1 summary comment(s) to PR #123')
+        expect.stringContaining(
+          '[DRY RUN] Would post 1 summary comment(s) to PR #123'
+        )
       );
     });
 

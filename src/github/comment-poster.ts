@@ -797,9 +797,29 @@ export class CommentPoster {
       severity === 'minor'
         ? 'Someone with write access'
         : 'A maintainer/admin';
-    return [
-      body.trimEnd(),
-      `<sub>${CommentPoster.INLINE_SKIP_HELP_MARKER}${actor} can reply \`/rr skip\` if this finding is a false positive. ReviewRouter records a signed override and reruns the check.</sub>`,
-    ].join('\n\n');
+    const footer = `<sub>${CommentPoster.INLINE_SKIP_HELP_MARKER}${actor} can reply \`/rr skip\` if this finding is a false positive. ReviewRouter records a signed override and reruns the check.</sub>`;
+    const { visibleBody, markers } = CommentPoster.splitTrailingInlineMarkers(
+      body.trimEnd()
+    );
+    return [visibleBody, footer, ...markers].join('\n');
+  }
+
+  private static splitTrailingInlineMarkers(body: string): {
+    visibleBody: string;
+    markers: string[];
+  } {
+    const markers: string[] = [];
+    let visibleBody = body;
+    const markerPattern =
+      /\n\n(<!--\s*(?:(?:review-router|ai-robot-review)-inline:[a-f0-9]{16}|review-router-finding:[a-f0-9]{24,64})\s*-->)$/i;
+
+    let match = visibleBody.match(markerPattern);
+    while (match?.[1]) {
+      markers.unshift(match[1]);
+      visibleBody = visibleBody.slice(0, match.index).trimEnd();
+      match = visibleBody.match(markerPattern);
+    }
+
+    return { visibleBody, markers };
   }
 }

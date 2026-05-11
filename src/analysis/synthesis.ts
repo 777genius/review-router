@@ -253,13 +253,7 @@ export class SynthesisEngine {
     provider: string;
     actualModel?: string;
   }): string {
-    if (
-      !input.actualModel ||
-      input.actualModel === providerModelId(input.provider)
-    ) {
-      return input.provider;
-    }
-    return `${input.provider} -> ${input.actualModel}`;
+    return input.provider;
   }
 
   private inlineHeader(finding: Finding): string {
@@ -357,8 +351,4 @@ function suggestionToDiff(suggestion: string): string {
 
 function isSingleLineSuggestion(suggestion: string): boolean {
   return suggestion.trimEnd().split('\n').length === 1;
-}
-
-function providerModelId(provider: string): string {
-  return provider.replace(/^(openrouter|codex|opencode|claude|gemini)\//, '');
 }

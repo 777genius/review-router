@@ -180,7 +180,10 @@ describe('SynthesisEngine', () => {
     );
 
     expect(review.inlineComments[0].body).toContain(
-      '<sub>Models: openrouter/poolside/laguna-m.1:free -> poolside/laguna-m.1-20260312:free, codex/gpt-5.5 · agreement 2/2</sub>'
+      '<sub>Models: openrouter/poolside/laguna-m.1:free, codex/gpt-5.5 · agreement 2/2</sub>'
+    );
+    expect(review.inlineComments[0].body).not.toContain(
+      'poolside/laguna-m.1-20260312:free'
     );
   });
 });

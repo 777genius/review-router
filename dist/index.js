@@ -16953,10 +16953,7 @@ var SynthesisEngine = class {
     return Array.from(merged.values());
   }
   formatProviderModel(input) {
-    if (!input.actualModel || input.actualModel === providerModelId(input.provider)) {
-      return input.provider;
-    }
-    return `${input.provider} -> ${input.actualModel}`;
+    return input.provider;
   }
   inlineHeader(finding) {
     const display = getSeverityDisplay(finding.severity);
@@ -17029,9 +17026,6 @@ function suggestionToDiff(suggestion) {
 }
 function isSingleLineSuggestion(suggestion) {
   return suggestion.trimEnd().split("\n").length === 1;
-}
-function providerModelId(provider) {
-  return provider.replace(/^(openrouter|codex|opencode|claude|gemini)\//, "");
 }
 
 // src/analysis/test-coverage.ts
@@ -19048,10 +19042,23 @@ ${comment.body.substring(0, 200)}...`);
       return body;
     }
     const actor = severity === "minor" ? "Someone with write access" : "A maintainer/admin";
-    return [
-      body.trimEnd(),
-      `<sub>${_CommentPoster.INLINE_SKIP_HELP_MARKER}${actor} can reply \`/rr skip\` if this finding is a false positive. ReviewRouter records a signed override and reruns the check.</sub>`
-    ].join("\n\n");
+    const footer = `<sub>${_CommentPoster.INLINE_SKIP_HELP_MARKER}${actor} can reply \`/rr skip\` if this finding is a false positive. ReviewRouter records a signed override and reruns the check.</sub>`;
+    const { visibleBody, markers } = _CommentPoster.splitTrailingInlineMarkers(
+      body.trimEnd()
+    );
+    return [visibleBody, footer, ...markers].join("\n");
+  }
+  static splitTrailingInlineMarkers(body) {
+    const markers = [];
+    let visibleBody = body;
+    const markerPattern = /\n\n(<!--\s*(?:(?:review-router|ai-robot-review)-inline:[a-f0-9]{16}|review-router-finding:[a-f0-9]{24,64})\s*-->)$/i;
+    let match2 = visibleBody.match(markerPattern);
+    while (match2?.[1]) {
+      markers.unshift(match2[1]);
+      visibleBody = visibleBody.slice(0, match2.index).trimEnd();
+      match2 = visibleBody.match(markerPattern);
+    }
+    return { visibleBody, markers };
   }
 };
 

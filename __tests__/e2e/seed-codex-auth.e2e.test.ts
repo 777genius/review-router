@@ -62,6 +62,34 @@ describe('seed-codex-auth.sh', () => {
     expect(result.stdout + result.stderr).not.toContain(fixture.refreshToken);
   });
 
+  it('prefers active Codex account auth over legacy auth.json', async () => {
+    const fixture = await createFixture({ authStorage: 'both' });
+
+    const result = await runSeedScript(fixture, {
+      REVIEW_ROUTER_DRY_RUN: '1',
+      REVIEW_ROUTER_SECRET_SCOPE: 'repo',
+      REVIEW_ROUTER_REPO: '777genius/example',
+    });
+
+    expect(result.stdout).toContain('/accounts/');
+    expect(result.stdout).toContain('.auth.json');
+    expect(result.stdout).not.toContain('/auth.json');
+    expect(result.stdout + result.stderr).not.toContain(fixture.refreshToken);
+  });
+
+  it('allows CODEX_AUTH_FILE to force a specific auth file', async () => {
+    const fixture = await createFixture({ authStorage: 'both' });
+
+    const result = await runSeedScript(fixture, {
+      CODEX_AUTH_FILE: fixture.legacyAuthFile,
+      REVIEW_ROUTER_DRY_RUN: '1',
+      REVIEW_ROUTER_SECRET_SCOPE: 'repo',
+      REVIEW_ROUTER_REPO: '777genius/example',
+    });
+
+    expect(result.stdout).toContain(fixture.legacyAuthFile);
+  });
+
   it('fails before secret writes when auth.json is not ChatGPT OAuth', async () => {
     const fixture = await createFixture({
       authJson: { auth_mode: 'api_key', tokens: { refresh_token: 'bad' } },
@@ -97,12 +125,13 @@ describe('seed-codex-auth.sh', () => {
 
 async function createFixture(input?: {
   readonly authJson?: Record<string, unknown>;
-  readonly authStorage?: 'legacy' | 'active-account';
+  readonly authStorage?: 'legacy' | 'active-account' | 'both';
 }): Promise<{
   readonly root: string;
   readonly codexHome: string;
   readonly binDir: string;
   readonly refreshToken: string;
+  readonly legacyAuthFile: string;
 }> {
   const root = await mkdtemp(path.join(tmpdir(), 'reviewrouter-seed-test-'));
   const codexHome = path.join(root, '.codex');
@@ -115,7 +144,11 @@ async function createFixture(input?: {
     auth_mode: 'chatgpt',
     tokens: { refresh_token: refreshToken },
   };
-  if (input?.authStorage === 'active-account') {
+  const legacyAuthFile = path.join(codexHome, 'auth.json');
+  if (
+    input?.authStorage === 'active-account' ||
+    input?.authStorage === 'both'
+  ) {
     const accountsDir = path.join(codexHome, 'accounts');
     await mkdir(accountsDir, { recursive: true });
     const activeAccountKey =
@@ -129,8 +162,9 @@ async function createFixture(input?: {
       path.join(accountsDir, `${encoded}.auth.json`),
       JSON.stringify(authJson)
     );
-  } else {
-    await writeFile(path.join(codexHome, 'auth.json'), JSON.stringify(authJson));
+  }
+  if (input?.authStorage !== 'active-account') {
+    await writeFile(legacyAuthFile, JSON.stringify(authJson));
   }
 
   const ghPath = path.join(binDir, 'gh');
@@ -147,7 +181,7 @@ async function createFixture(input?: {
   );
   await chmod(ghPath, 0o755);
 
-  return { root, codexHome, binDir, refreshToken };
+  return { root, codexHome, binDir, refreshToken, legacyAuthFile };
 }
 
 async function runSeedScript(

@@ -15,8 +15,8 @@ INCLUDE_CODEX_CONFIG="${REVIEW_ROUTER_INCLUDE_CODEX_CONFIG:-0}"
 DRY_RUN="${REVIEW_ROUTER_DRY_RUN:-0}"
 CONFIRM_WRITE="${REVIEW_ROUTER_CONFIRM_WRITE:-${REVIEW_ROUTER_YES:-0}}"
 CODEX_BASE_HOME="${REVIEW_ROUTER_CODEX_HOME:-${CODEX_HOME:-$HOME/.codex}}"
-CODEX_AUTH_FILE="${REVIEW_ROUTER_CODEX_AUTH_FILE:-}"
-CODEX_AUTH_FILE_EXPLICIT="${REVIEW_ROUTER_CODEX_AUTH_FILE:+1}"
+CODEX_AUTH_FILE="${REVIEW_ROUTER_CODEX_AUTH_FILE:-${CODEX_AUTH_FILE:-}}"
+CODEX_AUTH_FILE_EXPLICIT="${REVIEW_ROUTER_CODEX_AUTH_FILE:+1}${CODEX_AUTH_FILE:+1}"
 CODEX_CONFIG_FILE="${REVIEW_ROUTER_CODEX_CONFIG_FILE:-$CODEX_BASE_HOME/config.toml}"
 CODEX_AUTH_STALE_DAYS="${REVIEW_ROUTER_CODEX_AUTH_STALE_DAYS:-30}"
 
@@ -288,11 +288,6 @@ resolve_codex_auth_file() {
   fi
 
   legacy_auth_file="$CODEX_BASE_HOME/auth.json"
-  if [ -f "$legacy_auth_file" ]; then
-    CODEX_AUTH_FILE="$legacy_auth_file"
-    return
-  fi
-
   active_auth_file=""
   if command -v node >/dev/null 2>&1; then
     active_auth_file="$(
@@ -379,6 +374,8 @@ PY
 
   if [ -n "$active_auth_file" ]; then
     CODEX_AUTH_FILE="$active_auth_file"
+  elif [ -f "$legacy_auth_file" ]; then
+    CODEX_AUTH_FILE="$legacy_auth_file"
   else
     CODEX_AUTH_FILE="$legacy_auth_file"
   fi

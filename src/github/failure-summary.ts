@@ -12,12 +12,14 @@ const LEGACY_BOT_MARKERS = [
   '<!-- multi-provider-code-review-bot -->',
 ];
 const FAILURE_SUMMARY_TEXT = 'Review failed before comments could be completed';
+const CODEX_SEED_SCRIPT_URL = 'https://reviewrouter.site/install/codex';
 
 export function formatReviewFailureSummary(error: Error, prNumber?: number): string {
   const normalized = normalizeReviewError(error);
   const safeDetails = sanitizeErrorMessage(
     normalized.stack || normalized.safeMessage || normalized.message
   );
+  const reseedCommand = codexOAuthReseedCommand(normalized.code);
 
   return [
     '# ReviewRouter',
@@ -37,6 +39,12 @@ export function formatReviewFailureSummary(error: Error, prNumber?: number): str
     '## How to fix',
     '',
     ...normalized.nextSteps.map(step => `- ${step}`),
+    reseedCommand ? '' : undefined,
+    reseedCommand ? 'Run this from a trusted machine after `codex login`:' : undefined,
+    reseedCommand ? '' : undefined,
+    reseedCommand ? '```bash' : undefined,
+    reseedCommand,
+    reseedCommand ? '```' : undefined,
     '',
     '<details>',
     '<summary>Technical details</summary>',
@@ -52,6 +60,33 @@ export function formatReviewFailureSummary(error: Error, prNumber?: number): str
     '',
     '</details>',
   ].filter(line => line !== undefined).join('\n');
+}
+
+function codexOAuthReseedCommand(code: string): string | undefined {
+  if (code !== 'codex_oauth_stale' && code !== 'codex_oauth_invalid_secret') {
+    return undefined;
+  }
+
+  const repository = safeRepositoryFullName(process.env.GITHUB_REPOSITORY)
+    ?? '<owner>/<repo>';
+  return `curl -fsSL ${CODEX_SEED_SCRIPT_URL} | REVIEW_ROUTER_CONFIRM_WRITE=1 REVIEW_ROUTER_SECRET_SCOPE=repo REVIEW_ROUTER_REPO=${shellQuote(repository)} bash`;
+}
+
+function safeRepositoryFullName(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(trimmed)) {
+    return undefined;
+  }
+
+  return trimmed;
+}
+
+function shellQuote(value: string): string {
+  if (/^[a-zA-Z0-9_./:@-]+$/.test(value)) {
+    return value;
+  }
+
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 export async function postReviewFailureSummary(

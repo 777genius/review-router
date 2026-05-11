@@ -11,7 +11,18 @@ jest.mock('../../../src/utils/logger', () => ({
 }));
 
 describe('formatReviewFailureSummary', () => {
+  const originalRepository = process.env.GITHUB_REPOSITORY;
+
+  afterEach(() => {
+    if (originalRepository === undefined) {
+      delete process.env.GITHUB_REPOSITORY;
+    } else {
+      process.env.GITHUB_REPOSITORY = originalRepository;
+    }
+  });
+
   it('formats Codex OAuth failures with actionable checks', () => {
+    process.env.GITHUB_REPOSITORY = '777genius/agent-teams-ai';
     const body = formatReviewFailureSummary(
       new Error('CODEX_AUTH_JSON auth.json refresh_token is missing'),
       123
@@ -25,11 +36,16 @@ describe('formatReviewFailureSummary', () => {
     expect(body).toContain('## What failed');
     expect(body).toContain('## Why it matters');
     expect(body).toContain('## How to fix');
+    expect(body).toContain('Run this from a trusted machine after `codex login`');
+    expect(body).toContain(
+      'curl -fsSL https://reviewrouter.site/install/codex | REVIEW_ROUTER_CONFIRM_WRITE=1 REVIEW_ROUTER_SECRET_SCOPE=repo REVIEW_ROUTER_REPO=777genius/agent-teams-ai bash'
+    );
     expect(body).toContain('<summary>Technical details</summary>');
     expect(body).toContain('Code: codex_oauth_invalid_secret');
   });
 
   it('classifies Codex 401 refresh failures as OAuth reseed failures', () => {
+    process.env.GITHUB_REPOSITORY = '777genius/agent-teams-ai';
     const body = formatReviewFailureSummary(
       new Error('All LLM providers failed during review. codex/gpt-5.5: 401 Unauthorized access token could not be refreshed'),
       123
@@ -37,6 +53,7 @@ describe('formatReviewFailureSummary', () => {
 
     expect(body).toContain('Codex OAuth is stale or expired');
     expect(body).toContain('Run `codex login`');
+    expect(body).toContain('REVIEW_ROUTER_REPO=777genius/agent-teams-ai');
     expect(body).toContain('self-hosted runner with persistent `CODEX_HOME`');
     expect(body).toContain('Code: codex_oauth_stale');
   });
@@ -62,6 +79,7 @@ describe('formatReviewFailureSummary', () => {
 
     expect(body).toContain('No configured review provider passed health checks');
     expect(body).toContain('Check provider credentials and model names');
+    expect(body).not.toContain('reviewrouter.site/install/codex');
     expect(body).toContain('Code: no_healthy_providers');
   });
 

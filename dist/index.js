@@ -19996,7 +19996,9 @@ var MarkdownFormatterV2 = class {
     lines.push("| Scope | Count |");
     lines.push("|-------|------:|");
     lines.push(`| Total PR files | ${coverage.totalFiles} |`);
-    lines.push(`| Files considered by reviewer | ${coverage.filesConsidered} |`);
+    lines.push(
+      `| Files considered by reviewer | ${coverage.filesConsidered} |`
+    );
     lines.push(`| Full diff in prompt | ${coverage.fullDiffFiles} |`);
     lines.push(`| Compacted in prompt | ${coverage.compactedFiles} |`);
     lines.push(`| Metadata-only or trimmed | ${coverage.metadataOnlyFiles} |`);
@@ -29016,11 +29018,13 @@ var LEGACY_BOT_MARKERS = [
   "<!-- multi-provider-code-review-bot -->"
 ];
 var FAILURE_SUMMARY_TEXT = "Review failed before comments could be completed";
+var CODEX_SEED_SCRIPT_URL = "https://reviewrouter.site/install/codex";
 function formatReviewFailureSummary(error2, prNumber) {
   const normalized = normalizeReviewError(error2);
   const safeDetails = sanitizeErrorMessage(
     normalized.stack || normalized.safeMessage || normalized.message
   );
+  const reseedCommand = codexOAuthReseedCommand(normalized.code);
   return [
     "# ReviewRouter",
     "",
@@ -29039,6 +29043,12 @@ function formatReviewFailureSummary(error2, prNumber) {
     "## How to fix",
     "",
     ...normalized.nextSteps.map((step) => `- ${step}`),
+    reseedCommand ? "" : void 0,
+    reseedCommand ? "Run this from a trusted machine after `codex login`:" : void 0,
+    reseedCommand ? "" : void 0,
+    reseedCommand ? "```bash" : void 0,
+    reseedCommand,
+    reseedCommand ? "```" : void 0,
     "",
     "<details>",
     "<summary>Technical details</summary>",
@@ -29054,6 +29064,26 @@ function formatReviewFailureSummary(error2, prNumber) {
     "",
     "</details>"
   ].filter((line) => line !== void 0).join("\n");
+}
+function codexOAuthReseedCommand(code) {
+  if (code !== "codex_oauth_stale" && code !== "codex_oauth_invalid_secret") {
+    return void 0;
+  }
+  const repository = safeRepositoryFullName(process.env.GITHUB_REPOSITORY) ?? "<owner>/<repo>";
+  return `curl -fsSL ${CODEX_SEED_SCRIPT_URL} | REVIEW_ROUTER_CONFIRM_WRITE=1 REVIEW_ROUTER_SECRET_SCOPE=repo REVIEW_ROUTER_REPO=${shellQuote2(repository)} bash`;
+}
+function safeRepositoryFullName(value) {
+  const trimmed = value?.trim();
+  if (!trimmed || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(trimmed)) {
+    return void 0;
+  }
+  return trimmed;
+}
+function shellQuote2(value) {
+  if (/^[a-zA-Z0-9_./:@-]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 async function postReviewFailureSummary(error2, token, prNumber) {
   if (!token || !prNumber || prNumber <= 0) return;

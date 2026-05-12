@@ -18,6 +18,7 @@ WORKFLOW_PATH=".github/workflows/review-router.yml"
 INTERACTION_WORKFLOW_PATH=".github/workflows/review-router-interaction.yml"
 CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
 DEFAULT_CODEX_MODEL="gpt-5.5"
+DEFAULT_CLAUDE_MODEL="sonnet"
 DEFAULT_APP_LOGO_URL="https://i.imgur.com/Yz9XIQM.png"
 OPENROUTER_DEFAULT_PROVIDERS="openrouter/free"
 OPENROUTER_DEFAULT_SYNTHESIS="openrouter/free"
@@ -52,6 +53,7 @@ AUTH_MODE="$(env_first REVIEW_ROUTER_AUTH AI_ROBOT_REVIEW_AUTH || true)"
 DISCUSSION_MODE="$(env_first REVIEW_ROUTER_DISCUSSION_MODE AI_ROBOT_REVIEW_DISCUSSION_MODE || true)"
 PRESET="$(env_first REVIEW_ROUTER_PRESET AI_ROBOT_REVIEW_PRESET || true)"
 CODEX_MODEL="$(env_first REVIEW_ROUTER_CODEX_MODEL AI_ROBOT_REVIEW_CODEX_MODEL || printf '%s' "$DEFAULT_CODEX_MODEL")"
+CLAUDE_MODEL="$(env_first REVIEW_ROUTER_CLAUDE_MODEL AI_ROBOT_REVIEW_CLAUDE_MODEL || printf '%s' "$DEFAULT_CLAUDE_MODEL")"
 CODEX_EFFORT_OVERRIDE="$(env_first REVIEW_ROUTER_CODEX_EFFORT AI_ROBOT_REVIEW_CODEX_EFFORT || true)"
 RUNS_ON="$(env_first REVIEW_ROUTER_RUNS_ON AI_ROBOT_REVIEW_RUNS_ON || printf 'ubuntu-latest')"
 CODEX_AUTH_PERSISTENCE="$(env_first REVIEW_ROUTER_CODEX_AUTH_PERSISTENCE AI_ROBOT_REVIEW_CODEX_AUTH_PERSISTENCE || printf 'secret')"
@@ -650,6 +652,8 @@ run_security_advisory() {
     else
       warn "GitHub-hosted runners are ephemeral. If Codex refreshes auth.json during a run, ReviewRouter cannot persist the refreshed file back to GitHub secrets automatically; reseed auth.json if Codex starts returning 401."
     fi
+  elif [ "$AUTH_MODE" = "claude" ]; then
+    warn "Claude OAuth stores a one-year Claude Code subscription token as an Actions secret. Use it only for trusted private automation; prefer API-key mode for shared public/open-source automation."
   else
     ok "Auth mode does not store Codex OAuth auth.json"
   fi
@@ -664,8 +668,8 @@ run_security_advisory() {
   default_branch="$(gh repo view "$TARGET_REPO" --json defaultBranchRef --jq '.defaultBranchRef.name' 2>/dev/null || true)"
   [ -n "$default_branch" ] || default_branch="main"
 
-  if [ "$AUTH_MODE" = "codex" ] && [ "$repo_visibility" = "PUBLIC" ]; then
-    warn "Target repository is public and auth mode is Codex OAuth. GitHub does not pass Actions secrets to fork PR workflows, but Codex OAuth is still not recommended for public/open-source repos."
+  if { [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "claude" ]; } && [ "$repo_visibility" = "PUBLIC" ]; then
+    warn "Target repository is public and auth mode uses a personal subscription OAuth secret. GitHub does not pass Actions secrets to fork PR workflows, but subscription OAuth is still not recommended for public/open-source repos."
   fi
 
   if gh api "repos/$TARGET_REPO/branches/$default_branch/protection" >/dev/null 2>&1; then
@@ -786,6 +790,20 @@ setup_auth() {
       set_repo_variable REVIEW_AUTH_MODE "openai-api"
       set_repo_variable REVIEW_CODEX_MODEL "$CODEX_MODEL"
       set_repo_variable REVIEW_CODEX_EFFORT "$CODEX_REASONING_EFFORT"
+      set_repo_variable REVIEW_ROUTER_DISCUSSION_MODE "$DISCUSSION_MODE"
+      ;;
+    claude)
+      if [ -z "$DISCUSSION_MODE" ]; then DISCUSSION_MODE="off"; fi
+      validate_discussion_mode "$DISCUSSION_MODE"
+      if [ "$DISCUSSION_MODE" != "off" ]; then
+        warn "AI discussion replies currently require Codex CLI auth. For Claude installs, REVIEW_ROUTER_DISCUSSION_MODE will be set to off."
+        DISCUSSION_MODE="off"
+      fi
+      REVIEW_ROUTER_CLAUDE_CODE_OAUTH_TOKEN="$(env_first REVIEW_ROUTER_CLAUDE_CODE_OAUTH_TOKEN AI_ROBOT_REVIEW_CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN || true)"
+      prompt_secret REVIEW_ROUTER_CLAUDE_CODE_OAUTH_TOKEN "Claude Code OAuth token from claude setup-token"
+      set_repo_secret_value CLAUDE_CODE_OAUTH_TOKEN "$REVIEW_ROUTER_CLAUDE_CODE_OAUTH_TOKEN"
+      set_repo_variable REVIEW_AUTH_MODE "claude-oauth"
+      set_repo_variable REVIEW_CLAUDE_MODEL "$CLAUDE_MODEL"
       set_repo_variable REVIEW_ROUTER_DISCUSSION_MODE "$DISCUSSION_MODE"
       ;;
     openrouter)
@@ -1423,6 +1441,7 @@ write_reusable_workflow() {
   case "$AUTH_MODE" in
     codex) runtime_auth_mode="codex-oauth" ;;
     openai) runtime_auth_mode="openai-api" ;;
+    claude) runtime_auth_mode="claude-oauth" ;;
     openrouter) runtime_auth_mode="openrouter-api" ;;
     *) runtime_auth_mode="$AUTH_MODE" ;;
   esac
@@ -1454,6 +1473,8 @@ write_reusable_workflow() {
   if [ "$AUTH_MODE" = "codex" ] || [ "$AUTH_MODE" = "openai" ]; then
     static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" CODEX_MODEL "$CODEX_MODEL")"
     static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" CODEX_REASONING_EFFORT "$CODEX_REASONING_EFFORT")"
+  elif [ "$AUTH_MODE" = "claude" ]; then
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" CLAUDE_MODEL "$CLAUDE_MODEL")"
   elif [ "$AUTH_MODE" = "openrouter" ]; then
     static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" REVIEW_PROVIDERS "$OPENROUTER_DEFAULT_PROVIDERS")"
     static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" SYNTHESIS_MODEL "$OPENROUTER_DEFAULT_SYNTHESIS")"
@@ -1519,6 +1540,7 @@ YAML
     cat <<'YAML'
       CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
       CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 YAML
@@ -1657,6 +1679,14 @@ YAML
       - name: Install official Codex CLI
         run: npm install -g $CODEX_NPM_PACKAGE
 YAML
+    elif [ "$AUTH_MODE" = "claude" ]; then
+      cat <<'YAML'
+
+      - name: Install official Claude Code CLI
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+YAML
     fi
 
     if [ "$AUTH_MODE" = "codex" ]; then
@@ -1712,6 +1742,15 @@ YAML
         run: |
           test -n "$OPENAI_API_KEY"
 YAML
+    elif [ "$AUTH_MODE" = "claude" ]; then
+      cat <<'YAML'
+
+      - name: Validate Claude Code OAuth token secret
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          test -n "$CLAUDE_CODE_OAUTH_TOKEN"
+YAML
     fi
 
     cat <<'YAML'
@@ -1727,6 +1766,10 @@ YAML
     if [ "$AUTH_MODE" = "openai" ]; then
       cat <<'YAML'
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+YAML
+    elif [ "$AUTH_MODE" = "claude" ]; then
+      cat <<'YAML'
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 YAML
     elif [ "$AUTH_MODE" = "openrouter" ]; then
       cat <<'YAML'
@@ -1775,6 +1818,10 @@ YAML
       cat <<YAML
           CODEX_HEALTHCHECK_MODE: 'binary'
           CODEX_AGENTIC_CONTEXT: 'true'
+YAML
+    elif [ "$AUTH_MODE" = "claude" ]; then
+      cat <<'YAML'
+          CLAUDE_MODEL: ${{ vars.REVIEW_CLAUDE_MODEL }}
 YAML
     elif [ "$AUTH_MODE" = "openrouter" ]; then
       cat <<'YAML'
@@ -1966,6 +2013,7 @@ required_secret_names() {
   printf '%s\n' REVIEW_ROUTER_LEDGER_KEY
   case "$AUTH_MODE" in
     codex) printf '%s\n' CODEX_AUTH_JSON ;;
+    claude) printf '%s\n' CLAUDE_CODE_OAUTH_TOKEN ;;
     openai) printf '%s\n' OPENAI_API_KEY ;;
     openrouter) printf '%s\n' OPENROUTER_API_KEY ;;
   esac
@@ -1978,6 +2026,7 @@ required_variable_names() {
   printf '%s\n' REVIEW_AUTH_MODE REVIEW_ROUTER_DISCUSSION_MODE
   case "$AUTH_MODE" in
     codex|openai) printf '%s\n' REVIEW_CODEX_MODEL REVIEW_CODEX_EFFORT ;;
+    claude) printf '%s\n' REVIEW_CLAUDE_MODEL ;;
     openrouter) printf '%s\n' REVIEW_PROVIDERS REVIEW_SYNTHESIS_MODEL ;;
   esac
   if [ "$IDENTITY_MODE" = "app" ]; then
@@ -2180,6 +2229,7 @@ main() {
     "actions:Default github-actions[bot], fastest setup, no App"
   choose AUTH_MODE "Model authentication" "codex" \
     "codex:Codex CLI with ChatGPT subscription OAuth from local auth.json" \
+    "claude:Claude Code CLI with Claude subscription OAuth from claude setup-token" \
     "openai:Codex CLI with OpenAI API key secret" \
     "openrouter:OpenRouter API key with openrouter/free"
   choose PRESET "Review preset" "safe" \

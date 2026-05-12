@@ -46,8 +46,8 @@ All three providers follow the same pattern as `OpenCodeProvider`:
 
 #### Claude Code Provider
 - Binary paths: `claude`, `/usr/local/bin/claude`, `~/.local/bin/claude`
-- Command: `claude --model <model> --print --no-session-persistence --output-format json <prompt-file>`
-- Credentials: macOS Keychain or `~/.config/claude/credentials.json`
+- Command: `claude --model <model> --print --no-session-persistence --output-format json`
+- Credentials: local login for development, or `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` in CI
 
 #### Codex Provider
 - Binary paths: `codex`, `codex-cli`
@@ -147,8 +147,8 @@ For each CLI:
 
 1. **Extract credentials** (local machine)
    ```bash
-   # Claude Code (macOS)
-   security find-generic-password -s "Claude Code-credentials" -w > claude-oauth.json
+   # Claude Code subscription OAuth
+   claude setup-token
 
    # Codex
    # Prefer the ReviewRouter seed script, because newer Codex CLI installs may store
@@ -161,7 +161,7 @@ For each CLI:
 
 2. **Create GitHub Secrets**
    ```bash
-   gh secret set CLAUDE_CODE_OAUTH --body "$(cat claude-oauth.json)"
+   gh secret set CLAUDE_CODE_OAUTH_TOKEN --body "paste-token-from-setup-token"
    bash scripts/seed-codex-auth.sh --confirm-write --repo owner/repo
    gh secret set GEMINI_OAUTH_CREDS --body "$(cat ~/.gemini/oauth_creds.json)"
    ```
@@ -170,11 +170,11 @@ For each CLI:
    ```yaml
    - name: Setup CLIs
      run: |
-       mkdir -p ~/.config/claude ~/.codex ~/.gemini
-       echo '${{ secrets.CLAUDE_CODE_OAUTH }}' > ~/.config/claude/credentials.json
+       mkdir -p ~/.codex ~/.gemini
+       test -n "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}"
        echo '${{ secrets.CODEX_AUTH_JSON }}' > ~/.codex/auth.json
        echo '${{ secrets.GEMINI_OAUTH_CREDS }}' > ~/.gemini/oauth_creds.json
-       chmod 600 ~/.config/claude/credentials.json ~/.codex/auth.json ~/.gemini/oauth_creds.json
+       chmod 600 ~/.codex/auth.json ~/.gemini/oauth_creds.json
    ```
 
 ## Verification Steps

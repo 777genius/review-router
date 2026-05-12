@@ -10,7 +10,7 @@ jobs:
   test-cli-providers:
     runs-on: ubuntu-latest
     env:
-      CLAUDE_CODE_OAUTH_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH != '' && '1' || '0' }}
+      CLAUDE_CODE_OAUTH_TOKEN_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && '1' || '0' }}
       CODEX_AUTH_JSON_PRESENT: ${{ secrets.CODEX_AUTH_JSON != '' && '1' || '0' }}
       CODEX_CONFIG_TOML_PRESENT: ${{ secrets.CODEX_CONFIG_TOML != '' && '1' || '0' }}
       GEMINI_OAUTH_CREDS_PRESENT: ${{ secrets.GEMINI_OAUTH_CREDS != '' && '1' || '0' }}
@@ -34,18 +34,8 @@ jobs:
 
       - name: Install Claude Code CLI
         run: |
-          # Note: Replace with official installation method when available
-          # For now, this is a placeholder
-          echo "Claude Code CLI installation would go here"
-
-      # Restore OAuth credentials from secrets
-      - name: Setup Claude Code credentials
-        if: env.CLAUDE_CODE_OAUTH_PRESENT == '1'
-        run: |
-          mkdir -p ~/.config/claude
-          echo '${{ secrets.CLAUDE_CODE_OAUTH }}' > ~/.config/claude/credentials.json
-          chmod 600 ~/.config/claude/credentials.json
-          echo "✅ Claude Code credentials configured"
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Setup Codex credentials
         if: env.CODEX_AUTH_JSON_PRESENT == '1'
@@ -73,8 +63,10 @@ jobs:
 
       # Verify CLIs can authenticate
       - name: Verify Claude Code
-        if: env.CLAUDE_CODE_OAUTH_PRESENT == '1'
+        if: env.CLAUDE_CODE_OAUTH_TOKEN_PRESENT == '1'
         continue-on-error: true
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           if command -v claude &> /dev/null; then
             claude --version || echo "⚠️ Claude Code not fully installed"
@@ -118,7 +110,7 @@ jobs:
           echo "## CLI Provider Setup Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Secrets Configured:" >> $GITHUB_STEP_SUMMARY
-          echo "- CLAUDE_CODE_OAUTH: ${CLAUDE_CODE_OAUTH_PRESENT}" >> $GITHUB_STEP_SUMMARY
+          echo "- CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN_PRESENT}" >> $GITHUB_STEP_SUMMARY
           echo "- CODEX_AUTH_JSON: ${CODEX_AUTH_JSON_PRESENT}" >> $GITHUB_STEP_SUMMARY
           echo "- CODEX_CONFIG_TOML: ${CODEX_CONFIG_TOML_PRESENT}" >> $GITHUB_STEP_SUMMARY
           echo "- GEMINI_OAUTH_CREDS: ${GEMINI_OAUTH_CREDS_PRESENT}" >> $GITHUB_STEP_SUMMARY

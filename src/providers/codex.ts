@@ -8,6 +8,11 @@ import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { estimateTokensSimple } from '../utils/token-estimation';
+import { buildCliSafeEnv } from './cli-env';
+import {
+  buildReviewFindingsSchema,
+  parseReviewFindingsStrict,
+} from './review-output';
 
 export interface CodexProviderOptions {
   agenticContext?: boolean;
@@ -474,72 +479,14 @@ export class CodexProvider extends Provider {
   }
 
   private buildFindingsSchema(): unknown {
-    return {
-      type: 'object',
-      additionalProperties: false,
-      required: ['findings'],
-      properties: {
-        findings: {
-          type: 'array',
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: [
-              'file',
-              'startLine',
-              'line',
-              'endLine',
-              'severity',
-              'title',
-              'message',
-              'suggestion',
-            ],
-            properties: {
-              file: { type: 'string' },
-              startLine: { type: ['integer', 'null'] },
-              line: { type: 'integer' },
-              endLine: { type: ['integer', 'null'] },
-              severity: {
-                type: 'string',
-                enum: ['critical', 'major', 'minor'],
-              },
-              title: { type: 'string' },
-              message: { type: 'string' },
-              suggestion: { type: ['string', 'null'] },
-            },
-          },
-        },
-      },
-    };
+    return buildReviewFindingsSchema();
   }
 
   private buildSafeEnv(includeWorkspaceEnv = true): NodeJS.ProcessEnv {
-    const allowed = [
-      'PATH',
-      'HOME',
-      'CODEX_HOME',
-      'TMPDIR',
-      'TEMP',
-      'TMP',
-      'LANG',
-      'LC_ALL',
-      'LC_CTYPE',
-      'CI',
-      'OPENAI_API_KEY',
-    ];
-    if (includeWorkspaceEnv) {
-      allowed.push('GITHUB_WORKSPACE');
-    }
-
-    const env: NodeJS.ProcessEnv = {};
-    for (const key of allowed) {
-      const value = process.env[key];
-      if (value !== undefined) {
-        env[key] = value;
-      }
-    }
-
-    return env;
+    return buildCliSafeEnv({
+      includeWorkspaceEnv,
+      extraAllowedKeys: ['CODEX_HOME', 'OPENAI_API_KEY'],
+    });
   }
 
   private sanitizeReviewContent(content: string): string {
@@ -1373,85 +1320,6 @@ export class CodexProvider extends Provider {
   }
 
   private parseFindingsStrict(content: string): Finding[] {
-    const parsed = this.parseReviewJson(content);
-    const findings = Array.isArray(parsed)
-      ? parsed
-      : (parsed as { findings?: unknown })?.findings;
-
-    if (!Array.isArray(findings)) {
-      throw new Error(
-        'Codex CLI returned invalid review JSON: expected an object with a findings array'
-      );
-    }
-
-    return findings.map((item, index) => {
-      if (!item || typeof item !== 'object') {
-        throw new Error(
-          `Codex CLI returned invalid review JSON: findings[${index}] must be an object`
-        );
-      }
-
-      const raw = item as Record<string, unknown>;
-      const severity = raw.severity;
-      const rawStartLine = raw.startLine ?? raw.start_line;
-      const rawEndLine = raw.endLine ?? raw.end_line;
-      const startLine =
-        Number.isInteger(rawStartLine) ? (rawStartLine as number) : undefined;
-      const endLine =
-        Number.isInteger(rawEndLine) ? (rawEndLine as number) : undefined;
-      const anchorLine = endLine ?? (raw.line as number);
-
-      if (
-        typeof raw.file !== 'string' ||
-        !raw.file ||
-        !Number.isInteger(raw.line) ||
-        !['critical', 'major', 'minor'].includes(String(severity)) ||
-        typeof raw.title !== 'string' ||
-        !raw.title ||
-        typeof raw.message !== 'string' ||
-        !raw.message
-      ) {
-        throw new Error(
-          `Codex CLI returned invalid review JSON: findings[${index}] is missing required file, line, severity, title, or message`
-        );
-      }
-
-      const finding: Finding = {
-        file: raw.file,
-        line: anchorLine,
-        severity: severity as Finding['severity'],
-        title: raw.title,
-        message: raw.message,
-      };
-
-      if (
-        startLine !== undefined &&
-        endLine !== undefined &&
-        startLine < endLine
-      ) {
-        finding.startLine = startLine;
-        finding.endLine = endLine;
-      }
-
-      if (typeof raw.suggestion === 'string' && raw.suggestion.trim()) {
-        finding.suggestion = raw.suggestion;
-      }
-
-      return finding;
-    });
-  }
-
-  private parseReviewJson(content: string): unknown {
-    const trimmed = content.trim();
-    const match = trimmed.match(/```json\s*([\s\S]*?)```/i);
-    const source = match?.[1] ?? trimmed;
-
-    try {
-      return JSON.parse(source);
-    } catch {
-      throw new Error(
-        'Codex CLI returned invalid review JSON: response was not valid JSON'
-      );
-    }
+    return parseReviewFindingsStrict(content, 'Codex CLI');
   }
 }

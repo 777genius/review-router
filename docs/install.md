@@ -88,6 +88,22 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
   bash
 ```
 
+### Claude Code subscription OAuth
+
+```bash
+claude setup-token
+
+curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \
+  REVIEW_ROUTER_REPO=owner/repo \
+  REVIEW_ROUTER_SECRET_SCOPE=repo \
+  REVIEW_ROUTER_IDENTITY=actions \
+  REVIEW_ROUTER_AUTH=claude \
+  REVIEW_ROUTER_CLAUDE_CODE_OAUTH_TOKEN=your-token \
+  REVIEW_ROUTER_CLAUDE_MODEL=sonnet \
+  REVIEW_ROUTER_PRESET=safe \
+  bash
+```
+
 ### Stable or release refs
 
 The compact reusable workflow needs reusable workflow files to exist in the selected ref. Until the next release is cut, keep the default `main` ref. If you choose `REVIEW_ROUTER_ACTION_REF_MODE=stable` or `release` with compact reusable before that release, the installer stops with a clear error instead of creating a broken workflow.
@@ -331,6 +347,34 @@ Codex reasoning effort is stored as `REVIEW_CODEX_EFFORT`. Presets choose a defa
 ### OpenAI API key
 
 Stores `OPENAI_API_KEY` and uses the Codex CLI in API-key mode. This is better for shared/team automation when you do not want to store a personal ChatGPT OAuth session.
+
+### Claude Code subscription OAuth
+
+Stores `CLAUDE_CODE_OAUTH_TOKEN` and uses the official Claude Code CLI with a Claude Pro, Max, Team, or Enterprise subscription.
+
+Generate the token locally from a trusted machine where Claude Code is logged in:
+
+```bash
+claude setup-token
+```
+
+The command prints a one-year OAuth token and does not save it. Give that value to the installer with `REVIEW_ROUTER_CLAUDE_CODE_OAUTH_TOKEN`, or set the GitHub Actions secret manually. The secret value must be only the token, not a copied `gh secret set` command.
+
+```bash
+REVIEW_ROUTER_AUTH=claude \
+REVIEW_ROUTER_CLAUDE_CODE_OAUTH_TOKEN=your-token \
+bash scripts/install.sh
+```
+
+Default Claude model:
+
+```text
+sonnet
+```
+
+Override it with `REVIEW_ROUTER_CLAUDE_MODEL`, for example `REVIEW_ROUTER_CLAUDE_MODEL=claude-sonnet-4-6`.
+
+Implementation note: ReviewRouter uses `claude -p` and intentionally does not use `--bare`, because Claude Code bare mode does not read `CLAUDE_CODE_OAUTH_TOKEN`.
 
 ### OpenRouter API key
 

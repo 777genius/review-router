@@ -28,17 +28,23 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('REVIEW_APP_PRIVATE_KEY:');
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
     expect(workflow).toContain("const crypto = require('node:crypto');");
-    expect(workflow).toContain("staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';");
+    expect(workflow).toContain(
+      "staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';"
+    );
     expect(workflow).toContain('staticRuntimeEnvAllowlist');
     expect(workflow).toContain("['TARGET_TOKENS_PER_BATCH']");
     expect(workflow).toContain('isSecretLikeStaticRuntimeEnvKey(key)');
     expect(workflow).toContain('npm install -g @openai/codex@0.125.0');
+    expect(workflow).toContain(
+      'curl -fsSL https://claude.ai/install.sh | bash'
+    );
     expect(workflow).toContain('node .reviewrouter-runtime/dist/index.js');
     expect(workflow).toContain('id-token: write');
     expect(workflow).toContain('pull-requests: write');
     expect(workflow).toContain('issues: write');
     expect(workflow).toContain('REVIEW_ROUTER_LEDGER_KEY');
     expect(workflow).toContain('CODEX_AUTH_JSON');
+    expect(workflow).toContain('CLAUDE_CODE_OAUTH_TOKEN');
     expect(workflow).toContain('OPENROUTER_API_KEY');
     expect(workflow).toContain('reseed auth.json');
     expect(workflow).toContain('ReviewRouter skipped this fork pull request');
@@ -63,9 +69,13 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('REVIEW_ROUTER_MODE: interaction-preflight');
     expect(workflow).toContain('REVIEW_ROUTER_MODE: interaction');
     expect(workflow).toContain('review_workflow_file:');
-    expect(workflow).toContain('RR_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}');
+    expect(workflow).toContain(
+      'RR_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}'
+    );
     expect(workflow).toContain('Invalid review_workflow_file');
-    expect(workflow).toContain('REVIEW_ROUTER_REVIEW_WORKFLOW_FILE=${reviewWorkflowFile}');
+    expect(workflow).toContain(
+      'REVIEW_ROUTER_REVIEW_WORKFLOW_FILE=${reviewWorkflowFile}'
+    );
     expect(workflow).not.toContain('pull_request_target');
     expect(workflow).not.toContain('REVIEW_ROUTER_THREAD_RESOLVE_TOKEN');
   });

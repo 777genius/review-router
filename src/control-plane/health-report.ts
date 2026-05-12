@@ -163,6 +163,9 @@ function classifyMissingProviderSecret(
   if (authMode === 'codex-oauth' && !env?.CODEX_AUTH_JSON) {
     return 'CODEX_AUTH_JSON GitHub Actions secret is missing.';
   }
+  if (authMode === 'claude-oauth' && !env?.CLAUDE_CODE_OAUTH_TOKEN) {
+    return 'CLAUDE_CODE_OAUTH_TOKEN GitHub Actions secret is missing.';
+  }
   if (authMode === 'openai-api' && !env?.OPENAI_API_KEY) {
     return 'OPENAI_API_KEY GitHub Actions secret is missing.';
   }
@@ -180,6 +183,7 @@ function classifyErrorCategory(error: unknown): SafeErrorCategory {
     case 'codex_oauth_invalid_secret':
     case 'codex_oauth_stale':
     case 'codex_api_key_invalid':
+    case 'claude_oauth_invalid_secret':
     case 'openrouter_api_key_invalid':
       return 'provider_auth_invalid';
     case 'oidc_unavailable':

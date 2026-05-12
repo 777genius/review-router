@@ -50,9 +50,13 @@ export class ConfigLoader {
         return this.normalizeKeys(validated);
       } catch (error) {
         const err = error as Error;
-        logger.warn(`⚠️  Failed to load config from ${relPath}: ${err.message}`);
+        logger.warn(
+          `⚠️  Failed to load config from ${relPath}: ${err.message}`
+        );
         if (err.message.includes('YAMLException')) {
-          logger.warn('💡 Check for YAML syntax errors (indentation, colons, quotes)');
+          logger.warn(
+            '💡 Check for YAML syntax errors (indentation, colons, quotes)'
+          );
         } else if (err.message.includes('parse')) {
           logger.warn('💡 Check that all values match expected types');
         }
@@ -65,16 +69,25 @@ export class ConfigLoader {
   private static loadFromEnv(): Partial<ReviewConfig> {
     const env = process.env;
     const codexProvider = this.codexProviderFromModel(env.CODEX_MODEL);
+    const claudeProvider = this.claudeProviderFromModel(env.CLAUDE_MODEL);
     const explicitProviders = this.parseArray(env.REVIEW_PROVIDERS) || [];
-    const providers = explicitProviders.length > 0
-      ? explicitProviders
-      : codexProvider
-        ? [codexProvider]
-        : undefined;
+    const inferredProvider = this.inferredProviderFromAuthMode(
+      env.REVIEW_AUTH_MODE,
+      claudeProvider,
+      codexProvider
+    );
+    const providers =
+      explicitProviders.length > 0
+        ? explicitProviders
+        : inferredProvider
+          ? [inferredProvider]
+          : undefined;
 
     return {
       providers,
-      synthesisModel: env.SYNTHESIS_MODEL || (explicitProviders.length === 0 ? codexProvider : undefined),
+      synthesisModel:
+        env.SYNTHESIS_MODEL ||
+        (explicitProviders.length === 0 ? inferredProvider : undefined),
       fallbackProviders: this.parseArray(env.FALLBACK_PROVIDERS),
       providerAllowlist: this.parseArray(env.PROVIDER_ALLOWLIST),
       providerBlocklist: this.parseArray(env.PROVIDER_BLOCKLIST),
@@ -87,7 +100,9 @@ export class ConfigLoader {
       quietMinConfidence: this.parseFloat(env.QUIET_MIN_CONFIDENCE),
       quietUseLearning: this.parseBoolean(env.QUIET_USE_LEARNING),
       learningEnabled: this.parseBoolean(env.LEARNING_ENABLED),
-      learningMinFeedbackCount: this.parseNumber(env.LEARNING_MIN_FEEDBACK_COUNT),
+      learningMinFeedbackCount: this.parseNumber(
+        env.LEARNING_MIN_FEEDBACK_COUNT
+      ),
       learningLookbackDays: this.parseNumber(env.LEARNING_LOOKBACK_DAYS),
 
       inlineMaxComments: this.parseNumber(env.INLINE_MAX_COMMENTS),
@@ -119,7 +134,9 @@ export class ConfigLoader {
 
       batchMaxFiles: this.parseNumber(env.BATCH_MAX_FILES),
       providerBatchOverrides: this.parseOverrides(env.PROVIDER_BATCH_OVERRIDES),
-      enableTokenAwareBatching: this.parseBoolean(env.ENABLE_TOKEN_AWARE_BATCHING),
+      enableTokenAwareBatching: this.parseBoolean(
+        env.ENABLE_TOKEN_AWARE_BATCHING
+      ),
       targetTokensPerBatch: this.parseNumber(env.TARGET_TOKENS_PER_BATCH),
       smartDiffCompaction: this.parseBoolean(env.SMART_DIFF_COMPACTION),
       maxFullDiffFileBytes: this.parseNumber(env.MAX_FULL_DIFF_FILE_BYTES),
@@ -138,9 +155,13 @@ export class ConfigLoader {
       pathIntensityPatterns: env.PATH_INTENSITY_PATTERNS,
       pathDefaultIntensity: this.parseIntensity(env.PATH_DEFAULT_INTENSITY),
       minConfidence: this.parseFloat(env.MIN_CONFIDENCE),
-      consensusRequiredForCritical: this.parseBoolean(env.CONSENSUS_REQUIRED_FOR_CRITICAL),
+      consensusRequiredForCritical: this.parseBoolean(
+        env.CONSENSUS_REQUIRED_FOR_CRITICAL
+      ),
       consensusMinAgreement: this.parseNumber(env.CONSENSUS_MIN_AGREEMENT),
-      suggestionSyntaxValidation: this.parseBoolean(env.SUGGESTION_SYNTAX_VALIDATION),
+      suggestionSyntaxValidation: this.parseBoolean(
+        env.SUGGESTION_SYNTAX_VALIDATION
+      ),
       updatePrDescription: this.parseBoolean(env.UPDATE_PR_DESCRIPTION),
       failOnSeverity: this.parseFailOnPolicy(
         env.FAIL_ON_SEVERITY,
@@ -152,7 +173,9 @@ export class ConfigLoader {
     };
   }
 
-  private static normalizeKeys(config: ReviewConfigFile): Partial<ReviewConfig> {
+  private static normalizeKeys(
+    config: ReviewConfigFile
+  ): Partial<ReviewConfig> {
     return {
       providers: config.providers,
       synthesisModel: config.synthesis_model,
@@ -257,7 +280,7 @@ export class ConfigLoader {
     if (!value) return undefined;
     return value
       .split(',')
-      .map(v => v.trim())
+      .map((v) => v.trim())
       .filter(Boolean);
   }
 
@@ -265,6 +288,28 @@ export class ConfigLoader {
     const model = value?.trim();
     if (!model) return undefined;
     return model.startsWith('codex/') ? model : `codex/${model}`;
+  }
+
+  private static claudeProviderFromModel(value?: string): string | undefined {
+    const model = value?.trim();
+    if (!model) return undefined;
+    return model.startsWith('claude/') ? model : `claude/${model}`;
+  }
+
+  private static inferredProviderFromAuthMode(
+    authMode: string | undefined,
+    claudeProvider: string | undefined,
+    codexProvider: string | undefined
+  ): string | undefined {
+    switch ((authMode || '').trim()) {
+      case 'claude-oauth':
+        return claudeProvider || 'claude/sonnet';
+      case 'codex-oauth':
+      case 'openai-api':
+        return codexProvider;
+      default:
+        return claudeProvider || codexProvider;
+    }
   }
 
   private static parseBoolean(value?: string): boolean | undefined {
@@ -284,11 +329,17 @@ export class ConfigLoader {
     return Number.isFinite(num) ? num : undefined;
   }
 
-  private static parseOverrides(value?: string): Record<string, number> | undefined {
+  private static parseOverrides(
+    value?: string
+  ): Record<string, number> | undefined {
     if (!value) return undefined;
     try {
       const parsed = JSON.parse(value);
-      if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+      if (
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed) ||
+        parsed === null
+      ) {
         throw new Error('Overrides must be a JSON object');
       }
       const result: Record<string, number> = {};
@@ -299,12 +350,16 @@ export class ConfigLoader {
         // Enforce integer batch sizes between 1 and 200 (schema constraint)
         const intVal = Math.trunc(num);
         if (intVal < 1) {
-          logger.warn(`Ignoring PROVIDER_BATCH_OVERRIDES entry for "${key}": value ${intVal} is below minimum 1`);
+          logger.warn(
+            `Ignoring PROVIDER_BATCH_OVERRIDES entry for "${key}": value ${intVal} is below minimum 1`
+          );
           continue;
         }
         const clamped = Math.min(intVal, 200);
         if (clamped !== intVal) {
-          logger.warn(`Clamping PROVIDER_BATCH_OVERRIDES entry for "${key}" from ${intVal} to maximum 200`);
+          logger.warn(
+            `Clamping PROVIDER_BATCH_OVERRIDES entry for "${key}" from ${intVal} to maximum 200`
+          );
         }
         result[key] = clamped;
       }
@@ -316,31 +371,53 @@ export class ConfigLoader {
     }
   }
 
-  private static parseSeverity(value?: string): 'critical' | 'major' | 'minor' | undefined {
+  private static parseSeverity(
+    value?: string
+  ): 'critical' | 'major' | 'minor' | undefined {
     if (!value) return undefined;
     const normalized = value.toLowerCase();
-    if (normalized === 'critical' || normalized === 'major' || normalized === 'minor') {
+    if (
+      normalized === 'critical' ||
+      normalized === 'major' ||
+      normalized === 'minor'
+    ) {
       return normalized as 'critical' | 'major' | 'minor';
     }
     return undefined;
   }
 
-  private static parseIntensity(value?: string): 'thorough' | 'standard' | 'light' | undefined {
+  private static parseIntensity(
+    value?: string
+  ): 'thorough' | 'standard' | 'light' | undefined {
     if (!value) return undefined;
     const normalized = value.toLowerCase();
-    if (normalized === 'thorough' || normalized === 'standard' || normalized === 'light') {
+    if (
+      normalized === 'thorough' ||
+      normalized === 'standard' ||
+      normalized === 'light'
+    ) {
       return normalized as 'thorough' | 'standard' | 'light';
     }
     return undefined;
   }
 
-  private static parseFailOnSeverity(value?: string): 'off' | 'critical' | 'major' | 'minor' | undefined {
+  private static parseFailOnSeverity(
+    value?: string
+  ): 'off' | 'critical' | 'major' | 'minor' | undefined {
     if (!value) return undefined;
     const normalized = value.toLowerCase();
-    if (normalized === 'off' || normalized === 'false' || normalized === 'none') {
+    if (
+      normalized === 'off' ||
+      normalized === 'false' ||
+      normalized === 'none'
+    ) {
       return 'off';
     }
-    if (normalized === 'critical' || normalized === 'major' || normalized === 'minor') {
+    if (
+      normalized === 'critical' ||
+      normalized === 'major' ||
+      normalized === 'minor'
+    ) {
       return normalized as 'critical' | 'major' | 'minor';
     }
     return undefined;

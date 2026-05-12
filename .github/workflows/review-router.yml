@@ -132,26 +132,20 @@ jobs:
           npm install -g opencode-ai@1.1.40
           npm install -g @google/gemini-cli
           npm install -g codex-cli
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Setup CLI Configuration Files
-        # Create CLI configuration files with OAuth credentials
-        # These CLIs expect config files, not just environment variables
+        # Create legacy CLI configuration files where required.
+        # Claude Code subscription OAuth is passed as CLAUDE_CODE_OAUTH_TOKEN
+        # and must not be converted into ANTHROPIC_API_KEY or credentials.json.
         id: setup-cli-configs
         run: |
-          # Setup Claude Code credentials
-          if [ -n "${{ secrets.CLAUDE_CODE_OAUTH }}" ]; then
-            mkdir -p ~/.config/claude
-            echo '${{ secrets.CLAUDE_CODE_OAUTH }}' > ~/.config/claude/credentials.json
-            chmod 600 ~/.config/claude/credentials.json
-            # Also set environment variable as fallback
-            CLAUDE_TOKEN=$(echo '${{ secrets.CLAUDE_CODE_OAUTH }}' | jq -r '.claudeAiOauth.accessToken // empty')
-            if [ -n "$CLAUDE_TOKEN" ]; then
-              echo "ANTHROPIC_API_KEY=$CLAUDE_TOKEN" >> $GITHUB_ENV
-              echo "::add-mask::$CLAUDE_TOKEN"
-            fi
-            echo "✅ Claude Code credentials configured"
+          # Validate Claude Code subscription token presence
+          if [ -n "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" ]; then
+            echo "✅ Claude Code OAuth token configured"
           else
-            echo "⚠️  CLAUDE_CODE_OAUTH not set, Claude providers will be skipped"
+            echo "⚠️  CLAUDE_CODE_OAUTH_TOKEN not set, Claude providers will be skipped"
           fi
 
           # Setup Codex credentials
@@ -232,6 +226,6 @@ jobs:
           # See docs/CI_SETUP.md for provider configuration
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ env.GEMINI_API_KEY }}

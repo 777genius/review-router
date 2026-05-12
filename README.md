@@ -264,6 +264,20 @@ Required secret:
 
 - `OPENAI_API_KEY`
 
+### Claude Code OAuth Subscription
+
+Use this when you want Claude Code through a Claude Pro, Max, Team, or Enterprise subscription.
+
+Required secret:
+
+- `CLAUDE_CODE_OAUTH_TOKEN`: one-year token generated locally with `claude setup-token`.
+
+Recommended variable:
+
+- `REVIEW_CLAUDE_MODEL=sonnet`
+
+ReviewRouter passes the token as `CLAUDE_CODE_OAUTH_TOKEN` and runs `claude -p` without `--bare`, because Claude Code bare mode does not read subscription OAuth tokens.
+
 ### OpenRouter API Key
 
 Use this if you want model routing through OpenRouter.
@@ -277,6 +291,7 @@ Required secret:
 | Input                    | Default | Notes                                                                |
 | ------------------------ | ------: | -------------------------------------------------------------------- |
 | `CODEX_MODEL`            |   empty | Codex model id, for example `gpt-5.5`.                               |
+| `CLAUDE_MODEL`           |   empty | Claude Code model alias/id, for example `sonnet`.                    |
 | `CODEX_REASONING_EFFORT` |   empty | Codex effort for review runs, for example `medium`.                  |
 | `CODEX_AGENTIC_CONTEXT`  |  `true` | Lets Codex inspect related files in read-only mode.                  |
 | `INLINE_MAX_COMMENTS`    |     `5` | Caps inline comment noise.                                           |
@@ -333,8 +348,8 @@ With Codex auth modes, the installer sets `REVIEW_ROUTER_DISCUSSION_MODE=suggest
 
 - Do not run secret-backed review on untrusted fork PRs. The installer-generated workflow skips those by default.
 - GitHub Secrets values are hidden in the UI, but anyone who can change workflow files can attempt exfiltration. Protect `.github/workflows/**` with CODEOWNERS and branch protection.
-- For organizations, prefer organization-level selected-repository secrets so the Codex OAuth credential is only available to approved repos.
-- The spawned Codex process receives only allowlisted environment variables such as `PATH`, `HOME`, temp variables, locale variables, `GITHUB_WORKSPACE`, and `OPENAI_API_KEY` when API-key mode is used. It should not receive `GITHUB_TOKEN`, `OPENROUTER_API_KEY`, or arbitrary `INPUT_*` variables.
+- For organizations, prefer organization-level selected-repository secrets so subscription OAuth credentials are only available to approved repos.
+- The spawned Codex and Claude Code processes receive only allowlisted environment variables such as `PATH`, `HOME`, user/temp/locale variables, `GITHUB_WORKSPACE`, and the provider credential needed for that mode. They should not receive `GITHUB_TOKEN`, unrelated provider API keys, or arbitrary `INPUT_*` variables.
 
 ## Development
 

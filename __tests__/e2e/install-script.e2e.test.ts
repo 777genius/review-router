@@ -227,7 +227,9 @@ describe('review-router curl installer e2e', () => {
     expect(interactionWorkflow).toContain(
       'uses: 777genius/review-router/.github/workflows/reviewrouter-interaction-reusable.yml@v1'
     );
-    expect(interactionWorkflow).toContain('review_workflow_file: review-router.yml');
+    expect(interactionWorkflow).toContain(
+      'review_workflow_file: review-router.yml'
+    );
     expect(interactionWorkflow).toContain(
       'REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}'
     );
@@ -598,6 +600,40 @@ describe('review-router curl installer e2e', () => {
     expect(result.stdout).toContain(
       'Codex auth persistence is set to persistent'
     );
+  });
+
+  it('generates Claude Code subscription OAuth workflow', () => {
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'claude',
+      REVIEW_ROUTER_PRESET: 'safe',
+      REVIEW_ROUTER_CLAUDE_CODE_OAUTH_TOKEN: 'claude-oauth-token',
+      REVIEW_ROUTER_CLAUDE_MODEL: 'sonnet',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      'Claude OAuth stores a one-year Claude Code subscription token'
+    );
+    expect(result.stdout).toContain(
+      'gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo test-owner/test-repo'
+    );
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain('Install official Claude Code CLI');
+    expect(workflow).toContain(
+      'curl -fsSL https://claude.ai/install.sh | bash'
+    );
+    expect(workflow).toContain(
+      'CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}'
+    );
+    expect(workflow).toContain('Validate Claude Code OAuth token secret');
+    expect(workflow).toContain('CLAUDE_MODEL: ${{ vars.REVIEW_CLAUDE_MODEL }}');
+    expect(workflow).not.toContain('CODEX_AUTH_JSON');
+    expect(workflow).not.toContain('CODEX_MODEL:');
+    expect(workflow).not.toContain('OPENAI_API_KEY');
+    const interactionWorkflow = workflowText(result.interactionWorkflowPath);
+    expect(interactionWorkflow).not.toContain('Install official Codex CLI');
+    expect(interactionWorkflow).not.toContain('Restore Codex OAuth config');
   });
 
   it('imports existing GitHub App credentials manually and saves a local profile', () => {

@@ -106,20 +106,24 @@ PY
 }
 
 # Check if secrets exist
-if [ ! -d "$SECRETS_DIR" ] || [ ! -f "$SECRETS_DIR/claude-oauth.json" ]; then
-  echo -e "${YELLOW}⚠️  Credential files not found in $SECRETS_DIR${NC}"
-  echo ""
-  echo "Extracting credentials from local CLIs..."
+if [ ! -d "$SECRETS_DIR" ]; then
+  echo -e "${YELLOW}⚠️  Credential directory not found in $SECRETS_DIR${NC}"
   mkdir -p "$SECRETS_DIR"
+fi
 
-  # Extract Claude Code credentials
-  if security find-generic-password -s "Claude Code-credentials" -w > "$SECRETS_DIR/claude-oauth.json" 2>/dev/null; then
-    echo "✅ Claude Code credentials extracted"
-  else
-    echo "⚠️  Claude Code credentials not found in Keychain"
-  fi
+echo "Extracting missing credentials from local CLIs..."
 
-  # Extract Codex credentials
+# Claude Code subscription auth uses a long-lived token from `claude setup-token`.
+if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+  printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" > "$SECRETS_DIR/claude-oauth-token.txt"
+  chmod 600 "$SECRETS_DIR/claude-oauth-token.txt"
+  echo "✅ Claude Code OAuth token staged from CLAUDE_CODE_OAUTH_TOKEN"
+elif [ ! -f "$SECRETS_DIR/claude-oauth-token.txt" ]; then
+  echo "⚠️  Claude Code token not staged. Run claude setup-token and export CLAUDE_CODE_OAUTH_TOKEN to seed it."
+fi
+
+# Extract Codex credentials
+if [ ! -f "$SECRETS_DIR/codex-auth.json" ]; then
   CODEX_AUTH_SOURCE="$(find_codex_auth_file)"
   if [ -n "$CODEX_AUTH_SOURCE" ] && [ -f "$CODEX_AUTH_SOURCE" ]; then
     cp "$CODEX_AUTH_SOURCE" "$SECRETS_DIR/codex-auth.json"
@@ -127,31 +131,37 @@ if [ ! -d "$SECRETS_DIR" ] || [ ! -f "$SECRETS_DIR/claude-oauth.json" ]; then
   else
     echo "⚠️  Codex auth not found"
   fi
+fi
 
+if [ ! -f "$SECRETS_DIR/codex-config.toml" ]; then
   if [ -f ~/.codex/config.toml ]; then
     cp ~/.codex/config.toml "$SECRETS_DIR/codex-config.toml"
     echo "✅ Codex config extracted"
   else
     echo "⚠️  Codex config not found"
   fi
+fi
 
-  # Extract Gemini credentials
+# Extract Gemini credentials
+if [ ! -f "$SECRETS_DIR/gemini-oauth.json" ]; then
   if [ -f ~/.gemini/oauth_creds.json ]; then
     cp ~/.gemini/oauth_creds.json "$SECRETS_DIR/gemini-oauth.json"
     echo "✅ Gemini OAuth credentials extracted"
   else
     echo "⚠️  Gemini OAuth credentials not found"
   fi
+fi
 
+if [ ! -f "$SECRETS_DIR/gemini-settings.json" ]; then
   if [ -f ~/.gemini/settings.json ]; then
     cp ~/.gemini/settings.json "$SECRETS_DIR/gemini-settings.json"
     echo "✅ Gemini settings extracted"
   else
     echo "⚠️  Gemini settings not found"
   fi
-
-  echo ""
 fi
+
+echo ""
 
 # Parse arguments
 TARGET_REPO=""
@@ -175,9 +185,9 @@ set_repo_secrets() {
   local repo=$1
   echo -e "${BLUE}Setting secrets for repository: $repo${NC}"
 
-  if [ -f "$SECRETS_DIR/claude-oauth.json" ]; then
-    gh secret set CLAUDE_CODE_OAUTH --repo "$repo" --body "$(cat $SECRETS_DIR/claude-oauth.json)"
-    echo "  ✅ CLAUDE_CODE_OAUTH"
+  if [ -f "$SECRETS_DIR/claude-oauth-token.txt" ]; then
+    gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo "$repo" --body "$(cat $SECRETS_DIR/claude-oauth-token.txt)"
+    echo "  ✅ CLAUDE_CODE_OAUTH_TOKEN"
   fi
 
   if [ -f "$SECRETS_DIR/codex-auth.json" ]; then
@@ -212,9 +222,9 @@ set_org_secrets() {
   echo "You'll need to set visibility for each secret."
   echo ""
 
-  if [ -f "$SECRETS_DIR/claude-oauth.json" ]; then
-    gh secret set CLAUDE_CODE_OAUTH --org "$org" --visibility all --body "$(cat $SECRETS_DIR/claude-oauth.json)"
-    echo "  ✅ CLAUDE_CODE_OAUTH"
+  if [ -f "$SECRETS_DIR/claude-oauth-token.txt" ]; then
+    gh secret set CLAUDE_CODE_OAUTH_TOKEN --org "$org" --visibility all --body "$(cat $SECRETS_DIR/claude-oauth-token.txt)"
+    echo "  ✅ CLAUDE_CODE_OAUTH_TOKEN"
   fi
 
   if [ -f "$SECRETS_DIR/codex-auth.json" ]; then

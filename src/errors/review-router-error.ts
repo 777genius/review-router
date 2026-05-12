@@ -13,6 +13,7 @@ export type ReviewErrorCode =
   | 'codex_oauth_stale'
   | 'codex_oauth_invalid_secret'
   | 'codex_api_key_invalid'
+  | 'claude_oauth_invalid_secret'
   | 'openrouter_api_key_invalid'
   | 'codex_cli_missing'
   | 'no_healthy_providers'
@@ -48,12 +49,14 @@ export class ReviewRouterError extends Error {
   readonly isUserActionable: boolean;
   readonly originalError?: unknown;
 
-  constructor(input: ReviewErrorDescriptor & {
-    readonly safeMessage: string;
-    readonly rawMessage: string;
-    readonly originalError?: unknown;
-    readonly stack?: string;
-  }) {
+  constructor(
+    input: ReviewErrorDescriptor & {
+      readonly safeMessage: string;
+      readonly rawMessage: string;
+      readonly originalError?: unknown;
+      readonly stack?: string;
+    }
+  ) {
     super(input.safeMessage);
     this.name = 'ReviewRouterError';
     this.code = input.code;
@@ -86,9 +89,10 @@ export function normalizeReviewError(error: unknown): ReviewRouterError {
     safeMessage: safeMessage || descriptor.summary,
     rawMessage,
     originalError: error,
-    stack: error instanceof Error && error.stack
-      ? sanitizeErrorMessage(error.stack)
-      : undefined,
+    stack:
+      error instanceof Error && error.stack
+        ? sanitizeErrorMessage(error.stack)
+        : undefined,
   });
 }
 
@@ -103,7 +107,7 @@ export function formatActionError(error: unknown): string {
     normalized.whyItMatters,
     '',
     'How to fix:',
-    ...normalized.nextSteps.map(step => `- ${step}`),
+    ...normalized.nextSteps.map((step) => `- ${step}`),
     '',
     `Retryable: ${retryText}. User action required: ${actionText}.`,
     `Details: ${normalized.safeMessage}`,
@@ -112,11 +116,17 @@ export function formatActionError(error: unknown): string {
 
 export function sanitizeErrorMessage(message: string): string {
   const redacted = message
-    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '-----BEGIN PRIVATE KEY-----***-----END PRIVATE KEY-----')
+    .replace(
+      /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+      '-----BEGIN PRIVATE KEY-----***-----END PRIVATE KEY-----'
+    )
     .replace(/sk-[A-Za-z0-9_-]{16,}/g, 'sk-***')
     .replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, 'gh*-***')
     .replace(/github_pat_[A-Za-z0-9_]+/g, 'github_pat_***')
-    .replace(/(?:eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g, 'jwt-***')
+    .replace(
+      /(?:eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g,
+      'jwt-***'
+    )
     .replace(/(authorization:\s*bearer\s+)[^\s]+/gi, '$1***')
     .replace(/(access_token["'\s:=]+)[^"',\s}]+/gi, '$1***')
     .replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, '$1***')
@@ -124,15 +134,25 @@ export function sanitizeErrorMessage(message: string): string {
     .replace(/(client_secret["'\s:=]+)[^"',\s}]+/gi, '$1***')
     .replace(/(private[-_ ]?key["'\s:=]+)[^"',\s}]+/gi, '$1***')
     .replace(/(CODEX_AUTH_JSON["'\s:=]+)\{[\s\S]*?\}/gi, '$1***')
+    .replace(/(CLAUDE_CODE_OAUTH_TOKEN["'\s:=]+)[^"',\s}]+/gi, '$1***')
     .replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, '$1***')
     .replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, '$1***')
-    .replace(/((?:api[_-]?key|apikey|api[_-]?secret|token|password)["'\s:=]+)[A-Za-z0-9_./+=-]{16,}/gi, '$1***');
+    .replace(
+      /((?:api[_-]?key|apikey|api[_-]?secret|token|password)["'\s:=]+)[A-Za-z0-9_./+=-]{16,}/gi,
+      '$1***'
+    );
 
-  return redacted.length > 1600 ? `${redacted.slice(0, 1600)}\n... truncated ...` : redacted;
+  return redacted.length > 1600
+    ? `${redacted.slice(0, 1600)}\n... truncated ...`
+    : redacted;
 }
 
-function descriptorFor(rawMessage: string, error: unknown): ReviewErrorDescriptor {
-  const message = `${error instanceof Error ? error.name : ''} ${rawMessage}`.toLowerCase();
+function descriptorFor(
+  rawMessage: string,
+  error: unknown
+): ReviewErrorDescriptor {
+  const message =
+    `${error instanceof Error ? error.name : ''} ${rawMessage}`.toLowerCase();
 
   if (
     message.includes('refresh token has already been used') ||
@@ -157,7 +177,10 @@ function descriptorFor(rawMessage: string, error: unknown): ReviewErrorDescripto
 
   if (
     message.includes('openrouter') &&
-    (message.includes('api key') || message.includes('401') || message.includes('unauthorized') || message.includes('403'))
+    (message.includes('api key') ||
+      message.includes('401') ||
+      message.includes('unauthorized') ||
+      message.includes('403'))
   ) {
     return descriptors.openrouter_api_key_invalid;
   }
@@ -171,6 +194,18 @@ function descriptorFor(rawMessage: string, error: unknown): ReviewErrorDescripto
   }
 
   if (
+    message.includes('claude_code_oauth_token') ||
+    (message.includes('claude') &&
+      (message.includes('not logged in') ||
+        message.includes('oauth') ||
+        message.includes('unauthorized') ||
+        message.includes('401') ||
+        message.includes('403')))
+  ) {
+    return descriptors.claude_oauth_invalid_secret;
+  }
+
+  if (
     (message.includes('401') || message.includes('unauthorized')) &&
     (message.includes('auth') || message.includes('token'))
   ) {
@@ -180,8 +215,8 @@ function descriptorFor(rawMessage: string, error: unknown): ReviewErrorDescripto
   if (
     message.includes('codex cli is not available') ||
     message.includes('codex: command not found') ||
-    message.includes('codex-cli') && message.includes('not found') ||
-    message.includes('enoent') && message.includes('codex')
+    (message.includes('codex-cli') && message.includes('not found')) ||
+    (message.includes('enoent') && message.includes('codex'))
   ) {
     return descriptors.codex_cli_missing;
   }
@@ -189,21 +224,26 @@ function descriptorFor(rawMessage: string, error: unknown): ReviewErrorDescripto
   if (
     message.includes('resource not accessible by integration') ||
     message.includes('bad credentials') ||
-    message.includes('github') && (message.includes('403') || message.includes('forbidden'))
+    (message.includes('github') &&
+      (message.includes('403') || message.includes('forbidden')))
   ) {
     return descriptors.github_permission_denied;
   }
 
   if (
     message.includes('unprocessable entity') ||
-    message.includes('internal error occurred') && message.includes('pull') ||
+    (message.includes('internal error occurred') && message.includes('pull')) ||
     message.includes('inline comment') ||
     message.includes('create-a-review-for-a-pull-request')
   ) {
     return descriptors.github_inline_comment_failed;
   }
 
-  if (message.includes('rate limit') || message.includes('rate-limit') || message.includes('429')) {
+  if (
+    message.includes('rate limit') ||
+    message.includes('rate-limit') ||
+    message.includes('429')
+  ) {
     if (message.includes('github')) {
       return descriptors.github_rate_limited;
     }
@@ -245,11 +285,20 @@ function descriptorFor(rawMessage: string, error: unknown): ReviewErrorDescripto
     return descriptors.all_providers_failed;
   }
 
-  if (message.includes('timeout') || message.includes('timed out') || message.includes('etimedout')) {
+  if (
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('etimedout')
+  ) {
     return descriptors.timeout;
   }
 
-  if (message.includes('enoent') || message.includes('eacces') || message.includes('file not found') || message.includes('permission denied')) {
+  if (
+    message.includes('enoent') ||
+    message.includes('eacces') ||
+    message.includes('file not found') ||
+    message.includes('permission denied')
+  ) {
     return descriptors.filesystem;
   }
 
@@ -275,7 +324,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'configuration_invalid',
     category: 'configuration',
     summary: 'ReviewRouter configuration is invalid.',
-    whyItMatters: 'The review cannot start until workflow inputs and required environment values are valid.',
+    whyItMatters:
+      'The review cannot start until workflow inputs and required environment values are valid.',
     nextSteps: [
       'Check the ReviewRouter workflow inputs and generated static fallback config.',
       'Verify required values such as `GITHUB_TOKEN`, `PR_NUMBER`, model, and provider mode.',
@@ -288,7 +338,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'codex_oauth_stale',
     category: 'provider_auth',
     summary: 'Codex OAuth is stale or expired.',
-    whyItMatters: 'Codex could not create a review because the ChatGPT subscription refresh token no longer works in CI.',
+    whyItMatters:
+      'Codex could not create a review because the ChatGPT subscription refresh token no longer works in CI.',
     nextSteps: [
       'Run `codex login` on a trusted machine.',
       'Reseed `CODEX_AUTH_JSON` in the repository or selected organization Actions secrets.',
@@ -301,7 +352,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'codex_oauth_invalid_secret',
     category: 'provider_auth',
     summary: 'Codex OAuth secret is missing or invalid.',
-    whyItMatters: 'The workflow cannot restore a valid Codex ChatGPT subscription session.',
+    whyItMatters:
+      'The workflow cannot restore a valid Codex ChatGPT subscription session.',
     nextSteps: [
       'Verify `CODEX_AUTH_JSON` exists in repository or selected organization Actions secrets.',
       'Verify it contains `auth_mode=chatgpt` and `tokens.refresh_token`.',
@@ -323,6 +375,21 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     isRetryable: false,
     isUserActionable: true,
   },
+  claude_oauth_invalid_secret: {
+    code: 'claude_oauth_invalid_secret',
+    category: 'provider_auth',
+    summary: 'Claude Code OAuth token is missing or invalid.',
+    whyItMatters:
+      'Claude Code could not create a review because subscription OAuth is unavailable in CI.',
+    nextSteps: [
+      'Run `claude setup-token` on a trusted machine logged in to Claude Code.',
+      'Store the printed token as `CLAUDE_CODE_OAUTH_TOKEN` in repository or selected organization Actions secrets.',
+      'Make sure the secret value is only the token, not a pasted `pbpaste | gh secret set ...` command.',
+      'Verify the workflow does not use Claude Code bare mode, because bare mode does not read subscription OAuth tokens.',
+    ],
+    isRetryable: false,
+    isUserActionable: true,
+  },
   openrouter_api_key_invalid: {
     code: 'openrouter_api_key_invalid',
     category: 'provider_auth',
@@ -340,7 +407,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'codex_cli_missing',
     category: 'provider_runtime',
     summary: 'Codex CLI is not available in CI.',
-    whyItMatters: 'The provider process could not start, so no LLM review can run.',
+    whyItMatters:
+      'The provider process could not start, so no LLM review can run.',
     nextSteps: [
       'Verify the workflow installs `@openai/codex@0.125.0` before ReviewRouter runs.',
       'Check that Node 24 setup completed successfully.',
@@ -353,7 +421,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'no_healthy_providers',
     category: 'provider_runtime',
     summary: 'No configured review provider passed health checks.',
-    whyItMatters: 'ReviewRouter would otherwise report a misleading clean review without model coverage.',
+    whyItMatters:
+      'ReviewRouter would otherwise report a misleading clean review without model coverage.',
     nextSteps: [
       'Check provider credentials and model names.',
       'For Codex OAuth, reseed `CODEX_AUTH_JSON` if the token is stale.',
@@ -366,7 +435,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'all_providers_failed',
     category: 'provider_runtime',
     summary: 'All configured review providers failed during review.',
-    whyItMatters: 'Static checks may still run, but the LLM review did not complete.',
+    whyItMatters:
+      'Static checks may still run, but the LLM review did not complete.',
     nextSteps: [
       'Open the `Run ReviewRouter` step and check the provider-specific error.',
       'Fix provider auth, model, quota, or CLI setup.',
@@ -379,7 +449,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'github_permission_denied',
     category: 'github',
     summary: 'GitHub denied the token permission needed by ReviewRouter.',
-    whyItMatters: 'ReviewRouter cannot post comments, update PR metadata, or rerun workflows without the required permission.',
+    whyItMatters:
+      'ReviewRouter cannot post comments, update PR metadata, or rerun workflows without the required permission.',
     nextSteps: [
       'Verify workflow permissions include `pull-requests: write` and `issues: write`.',
       'If using App comments, verify the ReviewRouter App installation has access to this repository.',
@@ -392,7 +463,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'github_inline_comment_failed',
     category: 'github',
     summary: 'GitHub rejected inline review comments.',
-    whyItMatters: 'Findings may need to be posted as a fallback PR comment, or retried without committable suggestions.',
+    whyItMatters:
+      'Findings may need to be posted as a fallback PR comment, or retried without committable suggestions.',
     nextSteps: [
       'Re-run the workflow once if GitHub returned an internal 422 error.',
       'Check whether the finding line is still inside the PR diff.',
@@ -405,7 +477,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'github_rate_limited',
     category: 'github',
     summary: 'GitHub API rate limit was reached.',
-    whyItMatters: 'ReviewRouter could not complete GitHub API operations for this run.',
+    whyItMatters:
+      'ReviewRouter could not complete GitHub API operations for this run.',
     nextSteps: [
       'Re-run after the GitHub rate limit resets.',
       'Reduce repeated manual reruns on the same PR.',
@@ -418,7 +491,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'runtime_config_unavailable',
     category: 'control_plane',
     summary: 'ReviewRouter runtime config could not be loaded.',
-    whyItMatters: 'The action could not fetch dashboard-managed config and may need static fallback.',
+    whyItMatters:
+      'The action could not fetch dashboard-managed config and may need static fallback.',
     nextSteps: [
       'Verify `REVIEWROUTER_API_URL` is reachable.',
       'Verify this repository is still connected in the dashboard.',
@@ -431,7 +505,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'oidc_unavailable',
     category: 'control_plane',
     summary: 'GitHub OIDC token was unavailable or rejected.',
-    whyItMatters: 'The action cannot authenticate to the ReviewRouter control plane for runtime config.',
+    whyItMatters:
+      'The action cannot authenticate to the ReviewRouter control plane for runtime config.',
     nextSteps: [
       'Verify workflow permissions include `id-token: write`.',
       'Verify the workflow path is the expected ReviewRouter caller workflow.',
@@ -457,7 +532,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'filesystem',
     category: 'filesystem',
     summary: 'ReviewRouter could not access a required file or directory.',
-    whyItMatters: 'The action could not read repository files, config, or generated reports.',
+    whyItMatters:
+      'The action could not read repository files, config, or generated reports.',
     nextSteps: [
       'Verify checkout completed successfully.',
       'Check file permissions and generated artifact paths.',
@@ -470,7 +546,8 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     code: 'unknown',
     category: 'unknown',
     summary: 'ReviewRouter failed with an unexpected error.',
-    whyItMatters: 'The review did not complete and the exact failure class is unknown.',
+    whyItMatters:
+      'The review did not complete and the exact failure class is unknown.',
     nextSteps: [
       'Open the failed workflow run and inspect the `Run ReviewRouter` step.',
       'Verify credentials, model variables, and repository permissions.',

@@ -11668,9 +11668,13 @@ var ConfigLoader = class {
         return this.normalizeKeys(validated);
       } catch (error2) {
         const err = error2;
-        logger.warn(`\u26A0\uFE0F  Failed to load config from ${relPath}: ${err.message}`);
+        logger.warn(
+          `\u26A0\uFE0F  Failed to load config from ${relPath}: ${err.message}`
+        );
         if (err.message.includes("YAMLException")) {
-          logger.warn("\u{1F4A1} Check for YAML syntax errors (indentation, colons, quotes)");
+          logger.warn(
+            "\u{1F4A1} Check for YAML syntax errors (indentation, colons, quotes)"
+          );
         } else if (err.message.includes("parse")) {
           logger.warn("\u{1F4A1} Check that all values match expected types");
         }
@@ -11681,11 +11685,17 @@ var ConfigLoader = class {
   static loadFromEnv() {
     const env = process.env;
     const codexProvider = this.codexProviderFromModel(env.CODEX_MODEL);
+    const claudeProvider = this.claudeProviderFromModel(env.CLAUDE_MODEL);
     const explicitProviders = this.parseArray(env.REVIEW_PROVIDERS) || [];
-    const providers = explicitProviders.length > 0 ? explicitProviders : codexProvider ? [codexProvider] : void 0;
+    const inferredProvider = this.inferredProviderFromAuthMode(
+      env.REVIEW_AUTH_MODE,
+      claudeProvider,
+      codexProvider
+    );
+    const providers = explicitProviders.length > 0 ? explicitProviders : inferredProvider ? [inferredProvider] : void 0;
     return {
       providers,
-      synthesisModel: env.SYNTHESIS_MODEL || (explicitProviders.length === 0 ? codexProvider : void 0),
+      synthesisModel: env.SYNTHESIS_MODEL || (explicitProviders.length === 0 ? inferredProvider : void 0),
       fallbackProviders: this.parseArray(env.FALLBACK_PROVIDERS),
       providerAllowlist: this.parseArray(env.PROVIDER_ALLOWLIST),
       providerBlocklist: this.parseArray(env.PROVIDER_BLOCKLIST),
@@ -11698,7 +11708,9 @@ var ConfigLoader = class {
       quietMinConfidence: this.parseFloat(env.QUIET_MIN_CONFIDENCE),
       quietUseLearning: this.parseBoolean(env.QUIET_USE_LEARNING),
       learningEnabled: this.parseBoolean(env.LEARNING_ENABLED),
-      learningMinFeedbackCount: this.parseNumber(env.LEARNING_MIN_FEEDBACK_COUNT),
+      learningMinFeedbackCount: this.parseNumber(
+        env.LEARNING_MIN_FEEDBACK_COUNT
+      ),
       learningLookbackDays: this.parseNumber(env.LEARNING_LOOKBACK_DAYS),
       inlineMaxComments: this.parseNumber(env.INLINE_MAX_COMMENTS),
       inlineMinSeverity: this.parseSeverity(env.INLINE_MIN_SEVERITY),
@@ -11722,7 +11734,9 @@ var ConfigLoader = class {
       codexEventAudit: this.parseBoolean(env.CODEX_EVENT_AUDIT),
       batchMaxFiles: this.parseNumber(env.BATCH_MAX_FILES),
       providerBatchOverrides: this.parseOverrides(env.PROVIDER_BATCH_OVERRIDES),
-      enableTokenAwareBatching: this.parseBoolean(env.ENABLE_TOKEN_AWARE_BATCHING),
+      enableTokenAwareBatching: this.parseBoolean(
+        env.ENABLE_TOKEN_AWARE_BATCHING
+      ),
       targetTokensPerBatch: this.parseNumber(env.TARGET_TOKENS_PER_BATCH),
       smartDiffCompaction: this.parseBoolean(env.SMART_DIFF_COMPACTION),
       maxFullDiffFileBytes: this.parseNumber(env.MAX_FULL_DIFF_FILE_BYTES),
@@ -11739,9 +11753,13 @@ var ConfigLoader = class {
       pathIntensityPatterns: env.PATH_INTENSITY_PATTERNS,
       pathDefaultIntensity: this.parseIntensity(env.PATH_DEFAULT_INTENSITY),
       minConfidence: this.parseFloat(env.MIN_CONFIDENCE),
-      consensusRequiredForCritical: this.parseBoolean(env.CONSENSUS_REQUIRED_FOR_CRITICAL),
+      consensusRequiredForCritical: this.parseBoolean(
+        env.CONSENSUS_REQUIRED_FOR_CRITICAL
+      ),
       consensusMinAgreement: this.parseNumber(env.CONSENSUS_MIN_AGREEMENT),
-      suggestionSyntaxValidation: this.parseBoolean(env.SUGGESTION_SYNTAX_VALIDATION),
+      suggestionSyntaxValidation: this.parseBoolean(
+        env.SUGGESTION_SYNTAX_VALIDATION
+      ),
       updatePrDescription: this.parseBoolean(env.UPDATE_PR_DESCRIPTION),
       failOnSeverity: this.parseFailOnPolicy(
         env.FAIL_ON_SEVERITY,
@@ -11856,6 +11874,22 @@ var ConfigLoader = class {
     if (!model) return void 0;
     return model.startsWith("codex/") ? model : `codex/${model}`;
   }
+  static claudeProviderFromModel(value) {
+    const model = value?.trim();
+    if (!model) return void 0;
+    return model.startsWith("claude/") ? model : `claude/${model}`;
+  }
+  static inferredProviderFromAuthMode(authMode, claudeProvider, codexProvider) {
+    switch ((authMode || "").trim()) {
+      case "claude-oauth":
+        return claudeProvider || "claude/sonnet";
+      case "codex-oauth":
+      case "openai-api":
+        return codexProvider;
+      default:
+        return claudeProvider || codexProvider;
+    }
+  }
   static parseBoolean(value) {
     if (value === void 0) return void 0;
     return value.toLowerCase() === "true";
@@ -11883,12 +11917,16 @@ var ConfigLoader = class {
         if (!Number.isFinite(num)) continue;
         const intVal = Math.trunc(num);
         if (intVal < 1) {
-          logger.warn(`Ignoring PROVIDER_BATCH_OVERRIDES entry for "${key}": value ${intVal} is below minimum 1`);
+          logger.warn(
+            `Ignoring PROVIDER_BATCH_OVERRIDES entry for "${key}": value ${intVal} is below minimum 1`
+          );
           continue;
         }
         const clamped = Math.min(intVal, 200);
         if (clamped !== intVal) {
-          logger.warn(`Clamping PROVIDER_BATCH_OVERRIDES entry for "${key}" from ${intVal} to maximum 200`);
+          logger.warn(
+            `Clamping PROVIDER_BATCH_OVERRIDES entry for "${key}" from ${intVal} to maximum 200`
+          );
         }
         result[key] = clamped;
       }
@@ -12444,179 +12482,6 @@ var fs4 = __toESM(require("fs/promises"));
 var os2 = __toESM(require("os"));
 var path3 = __toESM(require("path"));
 var crypto2 = __toESM(require("crypto"));
-var ClaudeCodeProvider = class extends Provider {
-  constructor(model) {
-    super(`claude/${model}`);
-    this.model = model;
-  }
-  // Lightweight health check: verify CLI is available
-  async healthCheck(_timeoutMs = 5e3) {
-    const timeoutMs = Math.max(500, _timeoutMs ?? 5e3);
-    let timeoutId;
-    let isTimedOut = false;
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => {
-        isTimedOut = true;
-        reject(new Error(`Claude Code health check timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-    });
-    try {
-      await Promise.race([
-        this.resolveBinary().then(() => {
-          if (isTimedOut) {
-            logger.debug(`Claude Code binary resolved after timeout (${this.name})`);
-          }
-        }),
-        timeoutPromise
-      ]);
-      clearTimeout(timeoutId);
-      return true;
-    } catch (error2) {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      logger.warn(`Claude Code health check failed for ${this.name}: ${error2.message}`);
-      return false;
-    }
-  }
-  async review(prompt, timeoutMs) {
-    const started = Date.now();
-    const binary2 = await this.resolveBinary();
-    const tmpDir = await fs4.mkdtemp(path3.join(os2.tmpdir(), "claude-code-"));
-    await fs4.chmod(tmpDir, 448);
-    const promptFile = path3.join(tmpDir, `prompt-${crypto2.randomBytes(8).toString("hex")}.txt`);
-    await fs4.writeFile(promptFile, prompt, { encoding: "utf8", mode: 384 });
-    const args = [
-      "--model",
-      this.model,
-      "--print",
-      "--no-session-persistence",
-      "--output-format",
-      "json",
-      promptFile
-    ];
-    logger.info(`Running Claude Code CLI: ${binary2} --model ${this.model} --print ...`);
-    try {
-      const { stdout, stderr } = await this.runCli(binary2, args, timeoutMs);
-      const content = stdout.trim();
-      const durationSeconds = (Date.now() - started) / 1e3;
-      logger.info(
-        `Claude Code CLI output for ${this.name}: stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
-      );
-      if (!content) {
-        throw new Error(`Claude Code CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`);
-      }
-      return {
-        content,
-        durationSeconds,
-        findings: this.extractFindings(content)
-      };
-    } catch (error2) {
-      logger.error(`Claude Code provider failed: ${this.name}`, error2);
-      throw error2;
-    } finally {
-      try {
-        await fs4.unlink(promptFile);
-        await fs4.rmdir(tmpDir);
-      } catch {
-      }
-    }
-  }
-  runCli(bin, args, timeoutMs) {
-    return new Promise((resolve3, reject) => {
-      const proc = (0, import_child_process2.spawn)(bin, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: true,
-        env: process.env
-      });
-      if (proc.unref) {
-        proc.unref();
-      }
-      let stdout = "";
-      let stderr = "";
-      let timedOut = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        logger.warn(`Claude Code CLI timeout (${timeoutMs}ms), killing process and all children`);
-        try {
-          if (proc.pid) {
-            process.kill(-proc.pid, "SIGKILL");
-          }
-        } catch {
-          proc.kill("SIGKILL");
-        }
-        reject(new Error(`Claude Code CLI timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-      proc.stdout.on("data", (chunk) => {
-        stdout += chunk.toString();
-      });
-      proc.stderr.on("data", (chunk) => {
-        stderr += chunk.toString();
-      });
-      proc.on("error", (err) => {
-        if (!timedOut) {
-          clearTimeout(timer);
-          reject(err);
-        }
-      });
-      proc.on("close", (code) => {
-        if (!timedOut) {
-          clearTimeout(timer);
-          if (code !== 0) {
-            reject(new Error(`Claude Code CLI exited with code ${code}: ${stderr || stdout || "no output"}`));
-          } else {
-            resolve3({ stdout: stdout.trim(), stderr: stderr.trim() });
-          }
-        }
-      });
-    });
-  }
-  async resolveBinary() {
-    if (await this.canRun("claude", ["--version"])) {
-      return "claude";
-    }
-    if (await this.canRun("/usr/local/bin/claude", ["--version"])) {
-      return "/usr/local/bin/claude";
-    }
-    const homeDir = os2.homedir();
-    const localBin = path3.join(homeDir, ".local", "bin", "claude");
-    if (await this.canRun(localBin, ["--version"])) {
-      return localBin;
-    }
-    throw new Error("Claude Code CLI is not available (tried: claude, /usr/local/bin/claude, ~/.local/bin/claude)");
-  }
-  async canRun(cmd, args) {
-    return new Promise((resolve3) => {
-      const proc = (0, import_child_process2.spawn)(cmd, args, { stdio: "ignore" });
-      proc.on("error", () => resolve3(false));
-      proc.on("close", (code) => resolve3(code === 0));
-    });
-  }
-  extractFindings(content) {
-    try {
-      const match2 = content.match(/```json\s*([\s\S]*?)```/i);
-      if (match2) {
-        const parsed2 = JSON.parse(match2[1]);
-        if (Array.isArray(parsed2)) return parsed2;
-        return parsed2.findings || [];
-      }
-      const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) return parsed;
-      return parsed.findings || [];
-    } catch (error2) {
-      logger.debug("Failed to parse findings from Claude Code response", error2);
-    }
-    return [];
-  }
-};
-
-// src/providers/codex.ts
-var import_child_process3 = require("child_process");
-var fs5 = __toESM(require("fs/promises"));
-var fsSync = __toESM(require("fs"));
-var os3 = __toESM(require("os"));
-var path4 = __toESM(require("path"));
-var crypto3 = __toESM(require("crypto"));
 
 // src/utils/diff.ts
 function trimDiff(diff, maxBytes) {
@@ -13145,7 +13010,441 @@ function calculateOptimalBatchSize(files, targetTokensPerBatch = 5e4, maxFilesPe
   };
 }
 
+// src/providers/cli-env.ts
+var BASE_CLI_ENV_KEYS = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "CI"
+];
+function buildCliSafeEnv(options = {}) {
+  const allowed = new Set(BASE_CLI_ENV_KEYS);
+  if (options.includeWorkspaceEnv !== false) {
+    allowed.add("GITHUB_WORKSPACE");
+  }
+  for (const key of options.extraAllowedKeys ?? []) {
+    allowed.add(key);
+  }
+  const env = {};
+  for (const key of allowed) {
+    const value = process.env[key];
+    if (value !== void 0) {
+      env[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(options.overrides ?? {})) {
+    if (value !== void 0) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
+
+// src/providers/review-output.ts
+function buildReviewFindingsSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["findings"],
+    properties: {
+      findings: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "file",
+            "startLine",
+            "line",
+            "endLine",
+            "severity",
+            "title",
+            "message",
+            "suggestion"
+          ],
+          properties: {
+            file: { type: "string" },
+            startLine: { type: ["integer", "null"] },
+            line: { type: "integer" },
+            endLine: { type: ["integer", "null"] },
+            severity: {
+              type: "string",
+              enum: ["critical", "major", "minor"]
+            },
+            title: { type: "string" },
+            message: { type: "string" },
+            suggestion: { type: ["string", "null"] }
+          }
+        }
+      }
+    }
+  };
+}
+function parseReviewFindingsStrict(content, providerLabel) {
+  const parsed = parseReviewJson(content, providerLabel);
+  const findings = Array.isArray(parsed) ? parsed : parsed?.findings;
+  if (!Array.isArray(findings)) {
+    throw new Error(
+      `${providerLabel} returned invalid review JSON: expected an object with a findings array`
+    );
+  }
+  return findings.map((item, index) => {
+    if (!item || typeof item !== "object") {
+      throw new Error(
+        `${providerLabel} returned invalid review JSON: findings[${index}] must be an object`
+      );
+    }
+    const raw = item;
+    const severity = raw.severity;
+    const rawStartLine = raw.startLine ?? raw.start_line;
+    const rawEndLine = raw.endLine ?? raw.end_line;
+    const startLine = Number.isInteger(rawStartLine) ? rawStartLine : void 0;
+    const endLine = Number.isInteger(rawEndLine) ? rawEndLine : void 0;
+    const anchorLine = endLine ?? raw.line;
+    if (typeof raw.file !== "string" || !raw.file || !Number.isInteger(raw.line) || !["critical", "major", "minor"].includes(String(severity)) || typeof raw.title !== "string" || !raw.title || typeof raw.message !== "string" || !raw.message) {
+      throw new Error(
+        `${providerLabel} returned invalid review JSON: findings[${index}] is missing required file, line, severity, title, or message`
+      );
+    }
+    const finding = {
+      file: raw.file,
+      line: anchorLine,
+      severity,
+      title: raw.title,
+      message: raw.message
+    };
+    if (startLine !== void 0 && endLine !== void 0 && startLine < endLine) {
+      finding.startLine = startLine;
+      finding.endLine = endLine;
+    }
+    if (typeof raw.suggestion === "string" && raw.suggestion.trim()) {
+      finding.suggestion = raw.suggestion;
+    }
+    return finding;
+  });
+}
+function parseReviewJson(content, providerLabel) {
+  const trimmed = content.trim();
+  const match2 = trimmed.match(/```json\s*([\s\S]*?)```/i);
+  const source = match2?.[1] ?? trimmed;
+  try {
+    return JSON.parse(source);
+  } catch {
+    throw new Error(
+      `${providerLabel} returned invalid review JSON: response was not valid JSON`
+    );
+  }
+}
+
+// src/providers/claude-code.ts
+var CLAUDE_STDIN_LIMIT_BYTES = 10 * 1024 * 1024;
+var CLAUDE_CODE_OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN";
+var ClaudeCodeProvider = class extends Provider {
+  constructor(model) {
+    super(`claude/${model}`);
+    this.model = model;
+  }
+  // Lightweight health check: verify CLI is available
+  async healthCheck(_timeoutMs = 5e3) {
+    const timeoutMs = Math.max(500, _timeoutMs ?? 5e3);
+    let timeoutId;
+    let isTimedOut = false;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        isTimedOut = true;
+        reject(
+          new Error(`Claude Code health check timed out after ${timeoutMs}ms`)
+        );
+      }, timeoutMs);
+    });
+    try {
+      await Promise.race([
+        this.resolveBinary().then(() => {
+          if (isTimedOut) {
+            logger.debug(
+              `Claude Code binary resolved after timeout (${this.name})`
+            );
+          }
+        }),
+        timeoutPromise
+      ]);
+      clearTimeout(timeoutId);
+      return true;
+    } catch (error2) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      logger.warn(
+        `Claude Code health check failed for ${this.name}: ${error2.message}`
+      );
+      return false;
+    }
+  }
+  async review(prompt, timeoutMs) {
+    const started = Date.now();
+    this.assertPromptWithinStdinLimit(prompt);
+    const oauthToken = this.readClaudeCodeOAuthToken();
+    const binary2 = await this.resolveBinary();
+    const schema2 = JSON.stringify(buildReviewFindingsSchema());
+    const args = [
+      "--model",
+      this.model,
+      "--print",
+      "--no-session-persistence",
+      "--setting-sources",
+      "user",
+      "--disable-slash-commands",
+      "--no-chrome",
+      "--tools",
+      "",
+      "--output-format",
+      "json",
+      "--json-schema",
+      schema2
+    ];
+    logger.info(
+      `Running Claude Code CLI safely: ${binary2} --model ${this.model} --print --output-format json ...`
+    );
+    try {
+      const { stdout, stderr } = await this.runCliWithStdin(
+        binary2,
+        args,
+        prompt,
+        timeoutMs,
+        oauthToken
+      );
+      const content = this.extractReviewContent(stdout);
+      const durationSeconds = (Date.now() - started) / 1e3;
+      logger.info(
+        `Claude Code CLI output for ${this.name}: final=${content.length} bytes, stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
+      );
+      if (!content) {
+        throw new Error(
+          `Claude Code CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`
+        );
+      }
+      return {
+        content,
+        durationSeconds,
+        usage: this.estimateUsage(prompt, content),
+        findings: this.extractFindingsStrict(content)
+      };
+    } catch (error2) {
+      logger.error(`Claude Code provider failed: ${this.name}`, error2);
+      throw error2;
+    }
+  }
+  estimateUsage(prompt, content) {
+    const promptTokens = estimateTokensSimple(prompt).tokens;
+    const completionTokens = estimateTokensSimple(content).tokens;
+    return {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens
+    };
+  }
+  assertPromptWithinStdinLimit(prompt) {
+    const promptBytes = Buffer.byteLength(prompt, "utf8");
+    if (promptBytes <= CLAUDE_STDIN_LIMIT_BYTES) {
+      return;
+    }
+    throw new Error(
+      `Claude Code CLI stdin input is ${promptBytes} bytes, above the ${CLAUDE_STDIN_LIMIT_BYTES} byte limit. Reduce DIFF_MAX_BYTES or split the review into smaller batches.`
+    );
+  }
+  readClaudeCodeOAuthToken() {
+    const rawToken = process.env[CLAUDE_CODE_OAUTH_TOKEN_ENV];
+    if (rawToken === void 0) {
+      return void 0;
+    }
+    const token = rawToken.trim();
+    if (!token) {
+      throw new Error(
+        `${CLAUDE_CODE_OAUTH_TOKEN_ENV} is set but empty. Run \`claude setup-token\` and store only the printed token as the GitHub Actions secret.`
+      );
+    }
+    if (this.looksLikeShellInputInsteadOfToken(token)) {
+      throw new Error(
+        `${CLAUDE_CODE_OAUTH_TOKEN_ENV} does not look like a Claude setup-token value. It appears to contain whitespace, a pipe, or shell command text. GitHub secrets store stdin exactly, so copy only the token printed by \`claude setup-token\`, not the \`gh secret set\` command.`
+      );
+    }
+    if (!this.hasExpectedClaudeCodeOAuthTokenShape(token)) {
+      throw new Error(
+        `${CLAUDE_CODE_OAUTH_TOKEN_ENV} does not look like a Claude setup-token value. Expected a token starting with \`sk-ant-oat01-\` and containing no quotes or surrounding text.`
+      );
+    }
+    return token;
+  }
+  looksLikeShellInputInsteadOfToken(token) {
+    return /[\s|]/.test(token) || /\b(?:pbpaste|gh\s+secret\s+set|claude\s+setup-token)\b/i.test(token) || token.includes(CLAUDE_CODE_OAUTH_TOKEN_ENV);
+  }
+  hasExpectedClaudeCodeOAuthTokenShape(token) {
+    return /^sk-ant-oat01-[A-Za-z0-9._-]+$/.test(token);
+  }
+  async runCliWithStdin(bin, args, stdin, timeoutMs, oauthToken) {
+    const runId = crypto2.randomBytes(8).toString("hex");
+    const tmpDir = await fs4.mkdtemp(path3.join(os2.tmpdir(), "claude-code-"));
+    await fs4.chmod(tmpDir, 448);
+    const promptFile = path3.join(tmpDir, `prompt-${runId}.txt`);
+    const claudeConfigDir = path3.join(tmpDir, "config");
+    let fd;
+    try {
+      await fs4.mkdir(claudeConfigDir, { mode: 448 });
+      await fs4.writeFile(promptFile, stdin, { encoding: "utf8", mode: 384 });
+      fd = await fs4.open(promptFile, "r");
+      const fdNum = fd.fd;
+      return await new Promise((resolve3, reject) => {
+        const proc = (0, import_child_process2.spawn)(bin, args, {
+          stdio: [fdNum, "pipe", "pipe"],
+          detached: true,
+          env: this.buildSafeEnv({
+            claudeConfigDir: oauthToken ? claudeConfigDir : void 0,
+            oauthToken
+          })
+        });
+        if (proc.unref) {
+          proc.unref();
+        }
+        let stdout = "";
+        let stderr = "";
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          logger.warn(
+            `Claude Code CLI timeout (${timeoutMs}ms), killing process and all children`
+          );
+          try {
+            if (proc.pid) {
+              process.kill(-proc.pid, "SIGKILL");
+            }
+          } catch {
+            proc.kill("SIGKILL");
+          }
+          reject(new Error(`Claude Code CLI timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+        proc.stdout?.on("data", (chunk) => {
+          stdout += chunk.toString();
+        });
+        proc.stderr?.on("data", (chunk) => {
+          stderr += chunk.toString();
+        });
+        proc.on("error", (err) => {
+          if (!timedOut) {
+            clearTimeout(timer);
+            reject(err);
+          }
+        });
+        proc.on("close", (code) => {
+          if (!timedOut) {
+            clearTimeout(timer);
+            if (code !== 0) {
+              reject(
+                new Error(
+                  `Claude Code CLI exited with code ${code}: ${this.formatCliError(stderr, stdout)}`
+                )
+              );
+            } else {
+              resolve3({ stdout: stdout.trim(), stderr: stderr.trim() });
+            }
+          }
+        });
+      });
+    } finally {
+      try {
+        if (fd) {
+          await fd.close();
+        }
+        await fs4.unlink(promptFile);
+        await fs4.rm(tmpDir, { recursive: true, force: true });
+      } catch {
+      }
+    }
+  }
+  buildSafeEnv(options = {}) {
+    const overrides = {};
+    if (options.claudeConfigDir) {
+      overrides.CLAUDE_CONFIG_DIR = options.claudeConfigDir;
+    }
+    if (options.oauthToken) {
+      overrides[CLAUDE_CODE_OAUTH_TOKEN_ENV] = options.oauthToken;
+    }
+    return buildCliSafeEnv({
+      extraAllowedKeys: [CLAUDE_CODE_OAUTH_TOKEN_ENV],
+      overrides
+    });
+  }
+  formatCliError(stderr, stdout) {
+    const text = `${stderr || stdout || "no output"}`.trim();
+    const hint = this.authHintFor(text);
+    const message = hint ? `${text}
+${hint}` : text;
+    return message.length > 1600 ? `${message.slice(0, 1600)}
+... truncated ...` : message;
+  }
+  authHintFor(message) {
+    const lower = message.toLowerCase();
+    if (lower.includes("not logged in") || lower.includes("authentication") || lower.includes("oauth") || lower.includes("unauthorized") || lower.includes("401") || lower.includes("403")) {
+      return "Hint: for Claude subscription OAuth in CI, generate a token with `claude setup-token` and expose it as `CLAUDE_CODE_OAUTH_TOKEN`. Do not pass `--bare`, because bare mode does not read Claude OAuth tokens.";
+    }
+    return "";
+  }
+  extractReviewContent(stdout) {
+    const trimmed = stdout.trim();
+    if (!trimmed) return "";
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.structured_output !== void 0) {
+        return JSON.stringify(parsed.structured_output);
+      }
+      if (typeof parsed.result === "string") {
+        return parsed.result.trim();
+      }
+    } catch {
+    }
+    return trimmed;
+  }
+  async resolveBinary() {
+    if (await this.canRun("claude", ["--version"])) {
+      return "claude";
+    }
+    if (await this.canRun("/usr/local/bin/claude", ["--version"])) {
+      return "/usr/local/bin/claude";
+    }
+    const homeDir = os2.homedir();
+    const localBin = path3.join(homeDir, ".local", "bin", "claude");
+    if (await this.canRun(localBin, ["--version"])) {
+      return localBin;
+    }
+    throw new Error(
+      "Claude Code CLI is not available (tried: claude, /usr/local/bin/claude, ~/.local/bin/claude)"
+    );
+  }
+  async canRun(cmd, args) {
+    return new Promise((resolve3) => {
+      const proc = (0, import_child_process2.spawn)(cmd, args, { stdio: "ignore" });
+      proc.on("error", () => resolve3(false));
+      proc.on("close", (code) => resolve3(code === 0));
+    });
+  }
+  extractFindingsStrict(content) {
+    return parseReviewFindingsStrict(content, "Claude Code CLI");
+  }
+};
+
 // src/providers/codex.ts
+var import_child_process3 = require("child_process");
+var fs5 = __toESM(require("fs/promises"));
+var fsSync = __toESM(require("fs"));
+var os3 = __toESM(require("os"));
+var path4 = __toESM(require("path"));
+var crypto3 = __toESM(require("crypto"));
 var CodexProvider = class extends Provider {
   constructor(model, options = {}) {
     super(`codex/${model}`);
@@ -13503,69 +13802,13 @@ var CodexProvider = class extends Provider {
     ].join("\n");
   }
   buildFindingsSchema() {
-    return {
-      type: "object",
-      additionalProperties: false,
-      required: ["findings"],
-      properties: {
-        findings: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            required: [
-              "file",
-              "startLine",
-              "line",
-              "endLine",
-              "severity",
-              "title",
-              "message",
-              "suggestion"
-            ],
-            properties: {
-              file: { type: "string" },
-              startLine: { type: ["integer", "null"] },
-              line: { type: "integer" },
-              endLine: { type: ["integer", "null"] },
-              severity: {
-                type: "string",
-                enum: ["critical", "major", "minor"]
-              },
-              title: { type: "string" },
-              message: { type: "string" },
-              suggestion: { type: ["string", "null"] }
-            }
-          }
-        }
-      }
-    };
+    return buildReviewFindingsSchema();
   }
   buildSafeEnv(includeWorkspaceEnv = true) {
-    const allowed = [
-      "PATH",
-      "HOME",
-      "CODEX_HOME",
-      "TMPDIR",
-      "TEMP",
-      "TMP",
-      "LANG",
-      "LC_ALL",
-      "LC_CTYPE",
-      "CI",
-      "OPENAI_API_KEY"
-    ];
-    if (includeWorkspaceEnv) {
-      allowed.push("GITHUB_WORKSPACE");
-    }
-    const env = {};
-    for (const key of allowed) {
-      const value = process.env[key];
-      if (value !== void 0) {
-        env[key] = value;
-      }
-    }
-    return env;
+    return buildCliSafeEnv({
+      includeWorkspaceEnv,
+      extraAllowedKeys: ["CODEX_HOME", "OPENAI_API_KEY"]
+    });
   }
   sanitizeReviewContent(content) {
     const cwd = process.cwd().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -14174,59 +14417,7 @@ var CodexProvider = class extends Provider {
     return [];
   }
   parseFindingsStrict(content) {
-    const parsed = this.parseReviewJson(content);
-    const findings = Array.isArray(parsed) ? parsed : parsed?.findings;
-    if (!Array.isArray(findings)) {
-      throw new Error(
-        "Codex CLI returned invalid review JSON: expected an object with a findings array"
-      );
-    }
-    return findings.map((item, index) => {
-      if (!item || typeof item !== "object") {
-        throw new Error(
-          `Codex CLI returned invalid review JSON: findings[${index}] must be an object`
-        );
-      }
-      const raw = item;
-      const severity = raw.severity;
-      const rawStartLine = raw.startLine ?? raw.start_line;
-      const rawEndLine = raw.endLine ?? raw.end_line;
-      const startLine = Number.isInteger(rawStartLine) ? rawStartLine : void 0;
-      const endLine = Number.isInteger(rawEndLine) ? rawEndLine : void 0;
-      const anchorLine = endLine ?? raw.line;
-      if (typeof raw.file !== "string" || !raw.file || !Number.isInteger(raw.line) || !["critical", "major", "minor"].includes(String(severity)) || typeof raw.title !== "string" || !raw.title || typeof raw.message !== "string" || !raw.message) {
-        throw new Error(
-          `Codex CLI returned invalid review JSON: findings[${index}] is missing required file, line, severity, title, or message`
-        );
-      }
-      const finding = {
-        file: raw.file,
-        line: anchorLine,
-        severity,
-        title: raw.title,
-        message: raw.message
-      };
-      if (startLine !== void 0 && endLine !== void 0 && startLine < endLine) {
-        finding.startLine = startLine;
-        finding.endLine = endLine;
-      }
-      if (typeof raw.suggestion === "string" && raw.suggestion.trim()) {
-        finding.suggestion = raw.suggestion;
-      }
-      return finding;
-    });
-  }
-  parseReviewJson(content) {
-    const trimmed = content.trim();
-    const match2 = trimmed.match(/```json\s*([\s\S]*?)```/i);
-    const source = match2?.[1] ?? trimmed;
-    try {
-      return JSON.parse(source);
-    } catch {
-      throw new Error(
-        "Codex CLI returned invalid review JSON: response was not valid JSON"
-      );
-    }
+    return parseReviewFindingsStrict(content, "Codex CLI");
   }
 };
 
@@ -26658,10 +26849,10 @@ var Minimatch = class {
       }
       return filtered.join("/");
     }).join("|");
-    const [open2, close] = set2.length > 1 ? ["(?:", ")"] : ["", ""];
-    re = "^" + open2 + re + close + "$";
+    const [open3, close] = set2.length > 1 ? ["(?:", ")"] : ["", ""];
+    re = "^" + open3 + re + close + "$";
     if (this.partial) {
-      re = "^(?:\\/|" + open2 + re.slice(1, -1) + close + ")$";
+      re = "^(?:\\/|" + open3 + re.slice(1, -1) + close + ")$";
     }
     if (this.negate)
       re = "^(?!" + re + ").+$";
@@ -27289,7 +27480,16 @@ function formatActionError(error2) {
   ].join("\n");
 }
 function sanitizeErrorMessage(message) {
-  const redacted = message.replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "-----BEGIN PRIVATE KEY-----***-----END PRIVATE KEY-----").replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/(?:eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g, "jwt-***").replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(access_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(id_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(client_secret["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(private[-_ ]?key["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(CODEX_AUTH_JSON["'\s:=]+)\{[\s\S]*?\}/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/((?:api[_-]?key|apikey|api[_-]?secret|token|password)["'\s:=]+)[A-Za-z0-9_./+=-]{16,}/gi, "$1***");
+  const redacted = message.replace(
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+    "-----BEGIN PRIVATE KEY-----***-----END PRIVATE KEY-----"
+  ).replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(
+    /(?:eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g,
+    "jwt-***"
+  ).replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(access_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(id_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(client_secret["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(private[-_ ]?key["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(CODEX_AUTH_JSON["'\s:=]+)\{[\s\S]*?\}/gi, "$1***").replace(/(CLAUDE_CODE_OAUTH_TOKEN["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(
+    /((?:api[_-]?key|apikey|api[_-]?secret|token|password)["'\s:=]+)[A-Za-z0-9_./+=-]{16,}/gi,
+    "$1***"
+  );
   return redacted.length > 1600 ? `${redacted.slice(0, 1600)}
 ... truncated ...` : redacted;
 }
@@ -27306,6 +27506,9 @@ function descriptorFor(rawMessage, error2) {
   }
   if (message.includes("openai_api_key") || message.includes("openai api key") || message.includes("api key") && !message.includes("openrouter")) {
     return descriptors.codex_api_key_invalid;
+  }
+  if (message.includes("claude_code_oauth_token") || message.includes("claude") && (message.includes("not logged in") || message.includes("oauth") || message.includes("unauthorized") || message.includes("401") || message.includes("403"))) {
+    return descriptors.claude_oauth_invalid_secret;
   }
   if ((message.includes("401") || message.includes("unauthorized")) && (message.includes("auth") || message.includes("token"))) {
     return descriptors.codex_api_key_invalid;
@@ -27410,6 +27613,20 @@ var descriptors = {
       "Verify `OPENAI_API_KEY` is available to this workflow.",
       "Verify the key has access to the configured model.",
       "If you intended to use ChatGPT subscription OAuth, switch provider auth mode to Codex OAuth."
+    ],
+    isRetryable: false,
+    isUserActionable: true
+  },
+  claude_oauth_invalid_secret: {
+    code: "claude_oauth_invalid_secret",
+    category: "provider_auth",
+    summary: "Claude Code OAuth token is missing or invalid.",
+    whyItMatters: "Claude Code could not create a review because subscription OAuth is unavailable in CI.",
+    nextSteps: [
+      "Run `claude setup-token` on a trusted machine logged in to Claude Code.",
+      "Store the printed token as `CLAUDE_CODE_OAUTH_TOKEN` in repository or selected organization Actions secrets.",
+      "Make sure the secret value is only the token, not a pasted `pbpaste | gh secret set ...` command.",
+      "Verify the workflow does not use Claude Code bare mode, because bare mode does not read subscription OAuth tokens."
     ],
     isRetryable: false,
     isUserActionable: true
@@ -28774,8 +28991,8 @@ var ReviewOrchestrator = class {
     if (!tracker || providers.length === 0) return providers;
     const available = [];
     for (const provider of providers) {
-      const open2 = await tracker.isCircuitOpen(provider.name);
-      if (open2) {
+      const open3 = await tracker.isCircuitOpen(provider.name);
+      if (open3) {
         logger.warn(`Skipping provider ${provider.name} (circuit open)`);
         continue;
       }
@@ -30482,6 +30699,9 @@ function classifyMissingProviderSecret(env) {
   if (authMode === "codex-oauth" && !env?.CODEX_AUTH_JSON) {
     return "CODEX_AUTH_JSON GitHub Actions secret is missing.";
   }
+  if (authMode === "claude-oauth" && !env?.CLAUDE_CODE_OAUTH_TOKEN) {
+    return "CLAUDE_CODE_OAUTH_TOKEN GitHub Actions secret is missing.";
+  }
   if (authMode === "openai-api" && !env?.OPENAI_API_KEY) {
     return "OPENAI_API_KEY GitHub Actions secret is missing.";
   }
@@ -30498,6 +30718,7 @@ function classifyErrorCategory(error2) {
     case "codex_oauth_invalid_secret":
     case "codex_oauth_stale":
     case "codex_api_key_invalid":
+    case "claude_oauth_invalid_secret":
     case "openrouter_api_key_invalid":
       return "provider_auth_invalid";
     case "oidc_unavailable":
@@ -30547,6 +30768,8 @@ function syncEnvFromInputs() {
     "FALLBACK_PROVIDERS",
     "SYNTHESIS_MODEL",
     "CODEX_MODEL",
+    "CLAUDE_MODEL",
+    "CLAUDE_CODE_OAUTH_TOKEN",
     "INLINE_MAX_COMMENTS",
     "INLINE_MIN_SEVERITY",
     "INLINE_MIN_AGREEMENT",

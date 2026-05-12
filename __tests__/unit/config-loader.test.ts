@@ -36,6 +36,24 @@ describe('ConfigLoader', () => {
     expect(config.synthesisModel).toBe('codex/gpt-5.5');
   });
 
+  it('maps CLAUDE_MODEL to a Claude provider when REVIEW_PROVIDERS is not set', () => {
+    process.env.CLAUDE_MODEL = 'sonnet';
+
+    const config = ConfigLoader.load();
+
+    expect(config.providers).toEqual(['claude/sonnet']);
+    expect(config.synthesisModel).toBe('claude/sonnet');
+  });
+
+  it('defaults Claude OAuth auth mode to Claude Sonnet when model is omitted', () => {
+    process.env.REVIEW_AUTH_MODE = 'claude-oauth';
+
+    const config = ConfigLoader.load();
+
+    expect(config.providers).toEqual(['claude/sonnet']);
+    expect(config.synthesisModel).toBe('claude/sonnet');
+  });
+
   it('defaults failure policy to critical-only', () => {
     const config = ConfigLoader.load();
 
@@ -66,6 +84,7 @@ describe('ConfigLoader', () => {
 
   it('keeps explicit REVIEW_PROVIDERS ahead of CODEX_MODEL', () => {
     process.env.CODEX_MODEL = 'gpt-5.5';
+    process.env.CLAUDE_MODEL = 'sonnet';
     process.env.REVIEW_PROVIDERS = 'openrouter/a';
 
     const config = ConfigLoader.load();

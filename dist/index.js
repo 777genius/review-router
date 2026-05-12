@@ -13355,7 +13355,8 @@ var CodexProvider = class extends Provider {
         outputLastMessageFile: outputFile,
         outputSchemaFile: schemaFile,
         eventAudit: options.eventAudit && !options.healthCheck,
-        disableTools: options.disableTools
+        disableTools: options.disableTools,
+        skipGitRepoCheck: options.skipGitRepoCheck
       });
       fd = await fs5.open(tmpFile, "r");
       const fdNum = fd.fd;

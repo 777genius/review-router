@@ -299,6 +299,7 @@ export class CodexProvider extends Provider {
         outputSchemaFile: schemaFile,
         eventAudit: options.eventAudit && !options.healthCheck,
         disableTools: options.disableTools,
+        skipGitRepoCheck: options.skipGitRepoCheck,
       });
 
       // Use stdin redirection via file descriptor instead of shell
@@ -1395,10 +1396,12 @@ export class CodexProvider extends Provider {
       const severity = raw.severity;
       const rawStartLine = raw.startLine ?? raw.start_line;
       const rawEndLine = raw.endLine ?? raw.end_line;
-      const startLine =
-        Number.isInteger(rawStartLine) ? (rawStartLine as number) : undefined;
-      const endLine =
-        Number.isInteger(rawEndLine) ? (rawEndLine as number) : undefined;
+      const startLine = Number.isInteger(rawStartLine)
+        ? (rawStartLine as number)
+        : undefined;
+      const endLine = Number.isInteger(rawEndLine)
+        ? (rawEndLine as number)
+        : undefined;
       const anchorLine = endLine ?? (raw.line as number);
 
       if (

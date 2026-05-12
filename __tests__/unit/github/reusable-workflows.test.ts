@@ -28,7 +28,9 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('REVIEW_APP_PRIVATE_KEY:');
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
     expect(workflow).toContain("const crypto = require('node:crypto');");
-    expect(workflow).toContain("staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';");
+    expect(workflow).toContain(
+      "staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';"
+    );
     expect(workflow).toContain('staticRuntimeEnvAllowlist');
     expect(workflow).toContain("['TARGET_TOKENS_PER_BATCH']");
     expect(workflow).toContain('isSecretLikeStaticRuntimeEnvKey(key)');
@@ -54,18 +56,56 @@ describe('production reusable workflows', () => {
 
     expect(workflow).toContain('workflow_call:');
     expect(workflow).toContain('review_app_client_id:');
+    expect(workflow).toContain('discussion_mode:');
+    expect(workflow).toContain('discussion_model:');
+    expect(workflow).toContain('discussion_reasoning_effort:');
+    expect(workflow).toContain('discussion_max_per_pr:');
+    expect(workflow).toContain('discussion_max_per_thread:');
+    expect(workflow).toContain('discussion_timeout_seconds:');
     expect(workflow).toContain('REVIEW_APP_PRIVATE_KEY:');
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');
     expect(workflow).toContain('REVIEW_ROUTER_LEDGER_KEY');
+    expect(workflow).toContain('CODEX_AUTH_JSON:');
+    expect(workflow).toContain('CODEX_CONFIG_TOML:');
+    expect(workflow).toContain('OPENAI_API_KEY:');
+    expect(workflow).toContain('CODEX_AUTH_JSON_PRESENT');
+    expect(workflow).toContain('OPENAI_API_KEY_PRESENT');
+    expect(workflow).toContain('codex_cli_needed');
+    expect(workflow).toContain(
+      'Install official Codex CLI for discussion replies'
+    );
+    expect(workflow).toContain(
+      'Restore Codex OAuth config for discussion replies'
+    );
+    expect(workflow).toContain('npm install -g @openai/codex@0.125.0');
+    expect(workflow).toContain(
+      'CODEX_AUTH_JSON secret is missing. reseed auth.json'
+    );
     expect(workflow).toContain('actions: write');
     expect(workflow).toContain('id-token: write');
     expect(workflow).toContain('Preflight ReviewRouter interaction');
     expect(workflow).toContain('REVIEW_ROUTER_MODE: interaction-preflight');
     expect(workflow).toContain('REVIEW_ROUTER_MODE: interaction');
+    expect(workflow).toContain(
+      'REVIEW_ROUTER_DISCUSSION_MODE: ${{ inputs.discussion_mode }}'
+    );
+    expect(workflow).toContain(
+      'REVIEW_ROUTER_DISCUSSION_MAX_PER_PR: ${{ inputs.discussion_max_per_pr }}'
+    );
+    expect(workflow).toContain('CODEX_MODEL: ${{ inputs.discussion_model }}');
+    expect(workflow).toContain(
+      'CODEX_REASONING_EFFORT: ${{ inputs.discussion_reasoning_effort }}'
+    );
     expect(workflow).toContain('review_workflow_file:');
-    expect(workflow).toContain('RR_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}');
+    expect(workflow).toContain(
+      'RR_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}'
+    );
     expect(workflow).toContain('Invalid review_workflow_file');
-    expect(workflow).toContain('REVIEW_ROUTER_REVIEW_WORKFLOW_FILE=${reviewWorkflowFile}');
+    expect(workflow).toContain('Invalid discussion_mode');
+    expect(workflow).toContain('Invalid discussion_reasoning_effort');
+    expect(workflow).toContain(
+      'REVIEW_ROUTER_REVIEW_WORKFLOW_FILE=${reviewWorkflowFile}'
+    );
     expect(workflow).not.toContain('pull_request_target');
     expect(workflow).not.toContain('REVIEW_ROUTER_THREAD_RESOLVE_TOKEN');
   });

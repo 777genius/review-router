@@ -33,10 +33,46 @@ on:
         required: false
         type: string
         default: reviewrouter.yml
+      discussion_mode:
+        description: 'AI discussion mode: off or suggest'
+        required: false
+        type: string
+        default: off
+      discussion_model:
+        description: 'Codex model used for AI discussion replies'
+        required: false
+        type: string
+        default: gpt-5.5
+      discussion_reasoning_effort:
+        description: 'Codex reasoning effort for AI discussion replies: low, medium, high, or xhigh'
+        required: false
+        type: string
+        default: medium
+      discussion_max_per_pr:
+        description: 'Maximum AI discussion replies per pull request'
+        required: false
+        type: string
+        default: '20'
+      discussion_max_per_thread:
+        description: 'Maximum AI discussion replies per ReviewRouter finding thread'
+        required: false
+        type: string
+        default: '5'
+      discussion_timeout_seconds:
+        description: 'Timeout for AI discussion replies'
+        required: false
+        type: string
+        default: '60'
     secrets:
       REVIEW_APP_PRIVATE_KEY:
         required: false
       REVIEW_ROUTER_LEDGER_KEY:
+        required: false
+      CODEX_AUTH_JSON:
+        required: false
+      CODEX_CONFIG_TOML:
+        required: false
+      OPENAI_API_KEY:
         required: false
 
 jobs:
@@ -57,6 +93,8 @@ jobs:
       REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'true'
       RR_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}
       REVIEW_APP_PRIVATE_KEY_PRESENT: ${{ secrets.REVIEW_APP_PRIVATE_KEY != '' && '1' || '0' }}
+      CODEX_AUTH_JSON_PRESENT: ${{ secrets.CODEX_AUTH_JSON != '' && '1' || '0' }}
+      OPENAI_API_KEY_PRESENT: ${{ secrets.OPENAI_API_KEY != '' && '1' || '0' }}
     steps:
       - name: Prepare ReviewRouter runtime settings
         id: runtime
@@ -81,6 +119,14 @@ jobs:
           if (!/^(reviewrouter|review-router)\.ya?ml$/.test(reviewWorkflowFile)) {
             fail('Invalid review_workflow_file. Use reviewrouter.yml or review-router.yml.');
           }
+          const discussionMode = (process.env.RR_DISCUSSION_MODE || 'off').trim().toLowerCase();
+          if (!['off', 'suggest', ''].includes(discussionMode)) {
+            fail('Invalid discussion_mode. Use off or suggest.');
+          }
+          const discussionEffort = (process.env.RR_DISCUSSION_REASONING_EFFORT || '').trim().toLowerCase();
+          if (discussionEffort && !['low', 'medium', 'high', 'xhigh'].includes(discussionEffort)) {
+            fail('Invalid discussion_reasoning_effort. Use low, medium, high, or xhigh.');
+          }
           const githubEnv = process.env.GITHUB_ENV;
           const githubOutput = process.env.GITHUB_OUTPUT;
           if (!githubEnv || !githubOutput) {
@@ -97,9 +143,15 @@ jobs:
             githubOutput,
             `app_token_needed=${runtimeConfigMode === 'static' && process.env.REVIEW_APP_PRIVATE_KEY_PRESENT === '1' && (process.env.RR_REVIEW_APP_CLIENT_ID || '').trim().length > 0 ? 'true' : 'false'}\n`
           );
+          const codexCliNeeded =
+            discussionMode === 'suggest' &&
+            (process.env.CODEX_AUTH_JSON_PRESENT === '1' || process.env.OPENAI_API_KEY_PRESENT === '1');
+          fs.appendFileSync(githubOutput, `codex_cli_needed=${codexCliNeeded ? 'true' : 'false'}\n`);
           NODE
         env:
           RR_REVIEW_APP_CLIENT_ID: ${{ inputs.review_app_client_id }}
+          RR_DISCUSSION_MODE: ${{ inputs.discussion_mode }}
+          RR_DISCUSSION_REASONING_EFFORT: ${{ inputs.discussion_reasoning_effort }}
 
       - name: Checkout ReviewRouter runtime
         uses: actions/checkout@v6
@@ -134,8 +186,54 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           REVIEW_ROUTER_MODE: interaction-preflight
-          REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
+          REVIEW_ROUTER_DISCUSSION_MODE: ${{ inputs.discussion_mode }}
         run: node .reviewrouter-runtime/dist/index.js
+
+      - name: Install official Codex CLI for discussion replies
+        if: ${{ steps.preflight.outputs.needs_discussion == 'true' && steps.runtime.outputs.codex_cli_needed == 'true' }}
+        shell: bash
+        run: npm install -g @openai/codex@0.125.0
+
+      - name: Restore Codex OAuth config for discussion replies
+        if: ${{ steps.preflight.outputs.needs_discussion == 'true' && env.CODEX_AUTH_JSON_PRESENT == '1' }}
+        shell: bash
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+          CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CODEX_AUTH_JSON:-}" ]; then
+            echo "::error::CODEX_AUTH_JSON secret is missing. reseed auth.json from a trusted machine or switch this repository to OpenAI API-key mode."
+            exit 1
+          fi
+          node <<'NODE'
+          const payload = process.env.CODEX_AUTH_JSON || '';
+          const fail = (message) => {
+            console.error('::error::' + message);
+            process.exit(1);
+          };
+          let auth;
+          try {
+            auth = JSON.parse(payload);
+          } catch (error) {
+            fail('CODEX_AUTH_JSON is not valid JSON. reseed auth.json from a trusted machine. ' + error.message);
+          }
+          if (auth.auth_mode !== 'chatgpt') {
+            fail('CODEX_AUTH_JSON auth_mode must be chatgpt. reseed auth.json with Codex CLI subscription login or switch this repo to OpenAI API-key mode.');
+          }
+          if (!auth.tokens || typeof auth.tokens.refresh_token !== 'string' || auth.tokens.refresh_token.length === 0) {
+            fail('CODEX_AUTH_JSON tokens.refresh_token is missing. Run codex login on a trusted machine and reseed auth.json.');
+          }
+          NODE
+          export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+          mkdir -p "$CODEX_HOME"
+          chmod 700 "$CODEX_HOME"
+          printf '%s' "$CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"
+          chmod 600 "$CODEX_HOME/auth.json"
+          if [ -n "${CODEX_CONFIG_TOML:-}" ]; then
+            printf '%s' "$CODEX_CONFIG_TOML" > "$CODEX_HOME/config.toml"
+            chmod 600 "$CODEX_HOME/config.toml"
+          fi
 
       - name: Run ReviewRouter interaction
         if: ${{ steps.preflight.outputs.should_run == 'true' }}
@@ -144,8 +242,11 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           REVIEW_ROUTER_MODE: interaction
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
-          REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
-          REVIEW_ROUTER_DISCUSSION_MAX_PER_PR: ${{ vars.REVIEW_ROUTER_DISCUSSION_MAX_PER_PR }}
-          REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD: ${{ vars.REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD }}
-          REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS: ${{ vars.REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS }}
+          REVIEW_ROUTER_DISCUSSION_MODE: ${{ inputs.discussion_mode }}
+          REVIEW_ROUTER_DISCUSSION_MAX_PER_PR: ${{ inputs.discussion_max_per_pr }}
+          REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD: ${{ inputs.discussion_max_per_thread }}
+          REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS: ${{ inputs.discussion_timeout_seconds }}
+          CODEX_MODEL: ${{ inputs.discussion_model }}
+          CODEX_REASONING_EFFORT: ${{ inputs.discussion_reasoning_effort }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node .reviewrouter-runtime/dist/index.js

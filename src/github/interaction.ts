@@ -294,7 +294,7 @@ export class ReviewInteractionHandler {
 
     const { octokit, owner, repo } = this.actionsClient;
     const workflowFile =
-      process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || 'review-router.yml';
+      process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || 'reviewrouter.yml';
 
     try {
       const response = await octokit.rest.actions.listWorkflowRunsForRepo({
@@ -398,7 +398,6 @@ export class ReviewInteractionHandler {
     const path = String(candidate.path || '');
     const knownWorkflowFiles = [
       workflowFile,
-      'review-router.yml',
       'reviewrouter.yml',
       'ai-robot-review.yml',
     ];

@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 
 PRODUCT_NAME="review-router"
-LATEST_RELEASE_TAG="v1.0.19"
+LATEST_RELEASE_TAG="v1.0.20"
 LATEST_MAJOR_TAG="v1"
 DEFAULT_ACTION_REF_MODE="stable"
 DEFAULT_STABLE_ACTION_REF="777genius/review-router@$LATEST_MAJOR_TAG"
@@ -14,8 +14,8 @@ DEFAULT_RELEASE_ACTION_REF="777genius/review-router@$LATEST_RELEASE_TAG"
 DEFAULT_MAIN_ACTION_REF="777genius/review-router@main"
 DEFAULT_WORKFLOW_STYLE="reusable"
 DEFAULT_BRANCH_NAME="review-router/setup"
-WORKFLOW_PATH=".github/workflows/review-router.yml"
-INTERACTION_WORKFLOW_PATH=".github/workflows/review-router-interaction.yml"
+WORKFLOW_PATH=".github/workflows/reviewrouter.yml"
+INTERACTION_WORKFLOW_PATH=".github/workflows/reviewrouter-interaction.yml"
 CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
 DEFAULT_CODEX_MODEL="gpt-5.5"
 DEFAULT_CLAUDE_MODEL="sonnet"
@@ -1580,7 +1580,7 @@ YAML
     with:
       runtime_ref: $runtime_ref
       runtime_config_mode: static
-      review_workflow_file: review-router.yml
+      review_workflow_file: reviewrouter.yml
 YAML
     if [ "$IDENTITY_MODE" = "app" ]; then
       cat <<YAML
@@ -1988,7 +1988,7 @@ YAML
           REVIEW_ROUTER_MODE: interaction
           REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
           REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS: '60'
-          REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: review-router.yml
+          REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: reviewrouter.yml
           REVIEW_ROUTER_ALLOW_AUTHOR_SKIP: 'false'
 YAML
     if [ "$IDENTITY_MODE" = "app" ]; then

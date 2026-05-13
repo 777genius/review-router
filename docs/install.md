@@ -14,7 +14,7 @@ The generated workflow uses the stable moving major tag by default:
 777genius/review-router@v1
 ```
 
-Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.19`. Use `REVIEW_ROUTER_ACTION_REF_MODE=main` for live dogfood/dev updates. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
+Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.20`. Use `REVIEW_ROUTER_ACTION_REF_MODE=main` for live dogfood/dev updates. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
 
 ## Quick start
 
@@ -137,8 +137,8 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
 
 ## What it creates
 
-- `.github/workflows/review-router.yml`
-- `.github/workflows/review-router-interaction.yml`
+- `.github/workflows/reviewrouter.yml`
+- `.github/workflows/reviewrouter-interaction.yml`
 - Repository or organization variables such as `REVIEW_CODEX_MODEL`, `REVIEW_AUTH_MODE`, or OpenRouter provider variables
 - Repository or organization secrets for the selected auth mode
 - Branch `review-router/setup`
@@ -430,7 +430,7 @@ If a blocking inline finding is a verified false positive, reply to that specifi
 /rr skip optional reason
 ```
 
-The reason is optional. The installer generates a second non-required workflow, `.github/workflows/review-router-interaction.yml`, for `/rr ...` replies and optional discussion replies. `/rr skip` does not run Codex, does not checkout pull request code, and does not try to mark the GitHub review conversation as resolved. It only verifies the command, updates the signed PR ledger, marks the inline comment body as dismissed, and reruns the failed `ReviewRouter / review` check when the token has `actions: write`.
+The reason is optional. The installer generates a second non-required workflow, `.github/workflows/reviewrouter-interaction.yml`, for `/rr ...` replies and optional discussion replies. `/rr skip` does not run Codex, does not checkout pull request code, and does not try to mark the GitHub review conversation as resolved. It only verifies the command, updates the signed PR ledger, marks the inline comment body as dismissed, and reruns the failed `ReviewRouter / review` check when the token has `actions: write`.
 
 Permission policy:
 
@@ -529,7 +529,7 @@ REVIEW_ROUTER_OPENROUTER_API_KEY=dummy \
 REVIEW_ROUTER_WORKDIR="$TMP_DIR" \
 bash scripts/install.sh
 
-cat "$TMP_DIR/.github/workflows/review-router.yml"
+cat "$TMP_DIR/.github/workflows/reviewrouter.yml"
 ```
 
 When the installer is run from inside the target repository, the normal GitHub setup path now reuses the current local repository object database through a temporary `git worktree`. It does not switch your current branch or write workflow files into your current checkout, but it avoids a full `gh repo clone`.

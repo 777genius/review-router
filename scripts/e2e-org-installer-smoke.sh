@@ -115,7 +115,7 @@ providers_value="$(printf '%s' "$providers_json" | jq -r .value)"
 
 pr_url="$(gh pr list --repo "$REPO" --head review-router/setup --state open --json url --jq '.[0].url')"
 [ -n "$pr_url" ] || fatal "Setup PR was not opened"
-workflow="$(gh api "repos/$REPO/contents/.github/workflows/review-router.yml?ref=review-router/setup" --jq .content | base64 --decode)"
+workflow="$(gh api "repos/$REPO/contents/.github/workflows/reviewrouter.yml?ref=review-router/setup" --jq .content | base64 --decode)"
 # shellcheck disable=SC2016
 printf '%s' "$workflow" | grep -q 'OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}' || fatal "Workflow does not reference OPENROUTER_API_KEY"
 # shellcheck disable=SC2016

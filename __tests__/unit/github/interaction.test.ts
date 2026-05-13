@@ -94,7 +94,7 @@ describe('ReviewInteractionHandler', () => {
         workflow_runs: [
           {
             id: 456,
-            path: '.github/workflows/review-router.yml',
+            path: '.github/workflows/reviewrouter.yml',
             head_sha: 'abc',
             conclusion: 'failure',
             pull_requests: [{ number: 123 }],
@@ -155,7 +155,7 @@ describe('ReviewInteractionHandler', () => {
         workflow_runs: [
           {
             id: 456,
-            path: '.github/workflows/review-router.yml',
+            path: '.github/workflows/reviewrouter.yml',
             head_sha: 'abc',
             conclusion: 'failure',
             pull_requests: [{ number: 123 }],
@@ -225,7 +225,7 @@ describe('ReviewInteractionHandler', () => {
         workflow_runs: [
           {
             id: 456,
-            path: '.github/workflows/review-router.yml',
+            path: '.github/workflows/reviewrouter.yml',
             head_sha: 'abc',
             conclusion: 'failure',
             pull_requests: [{ number: 123 }],
@@ -326,7 +326,7 @@ describe('ReviewInteractionHandler', () => {
         workflow_runs: [
           {
             id: 456,
-            path: '.github/workflows/review-router.yml',
+            path: '.github/workflows/reviewrouter.yml',
             head_sha: 'abc',
             status: 'in_progress',
             conclusion: null,
@@ -381,7 +381,7 @@ describe('ReviewInteractionHandler', () => {
         workflow_runs: [
           {
             id: 456,
-            path: '.github/workflows/review-router.yml',
+            path: '.github/workflows/reviewrouter.yml',
             head_sha: 'abc',
             conclusion: 'failure',
             pull_requests: [{ number: 123 }],
@@ -458,7 +458,7 @@ describe('ReviewInteractionHandler', () => {
         workflow_runs: [
           {
             id: 456,
-            path: '.github/workflows/review-router.yml',
+            path: '.github/workflows/reviewrouter.yml',
             head_sha: 'abc',
             conclusion: 'failure',
             pull_requests: [{ number: 123 }],

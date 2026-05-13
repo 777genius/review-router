@@ -138,7 +138,7 @@ git fetch origin "$base_branch" --quiet
 git checkout -B "$branch" "origin/$base_branch" --quiet
 
 mkdir -p .github/workflows src
-cat > .github/workflows/review-router.yml <<'YAML'
+cat > .github/workflows/reviewrouter.yml <<'YAML'
 name: ReviewRouter
 
 on:
@@ -203,7 +203,7 @@ export async function findUserByEmail(db, email) {
 }
 JS
 
-git add .github/workflows/review-router.yml src/users.js
+git add .github/workflows/reviewrouter.yml src/users.js
 git commit -m "test: add vulnerable review fixture" --quiet
 git push -u origin "$branch" --quiet
 
@@ -216,7 +216,7 @@ wait_for_latest_run() {
   local label="$1"
   local run_id=""
   for _ in $(seq 1 60); do
-    run_id="$(gh run list --repo "$repo" --workflow review-router.yml --branch "$branch" --limit 1 --json databaseId,status --jq '.[0].databaseId // empty')"
+    run_id="$(gh run list --repo "$repo" --workflow reviewrouter.yml --branch "$branch" --limit 1 --json databaseId,status --jq '.[0].databaseId // empty')"
     if [ -n "$run_id" ]; then
       log "Waiting for $label run $run_id"
       gh run watch "$run_id" --repo "$repo" --exit-status

@@ -231,7 +231,7 @@ gh secret set GEMINI_SETTINGS --body "$(cat ~/.gemini/settings.json)"
 
 ## Complete GitHub Actions Workflow Example
 
-**⚠️ Important:** The workflow in this repository (`.github/workflows/review-router.yml`) has been updated to properly create CLI configuration files from secrets. If you're using an older version of this action, make sure to update to the latest version or copy the credential setup steps shown below.
+**⚠️ Important:** The workflow in this repository (`.github/workflows/reviewrouter.yml`) has been updated to properly create CLI configuration files from secrets. If you're using an older version of this action, make sure to update to the latest version or copy the credential setup steps shown below.
 
 Here's a complete workflow that sets up all three CLIs and runs multi-provider code review:
 

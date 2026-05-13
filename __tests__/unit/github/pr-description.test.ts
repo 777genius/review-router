@@ -17,7 +17,7 @@ function createPR(overrides: Partial<PRContext> = {}): PRContext {
     diff: '',
     files: [
       {
-        filename: '.github/workflows/review-router.yml',
+        filename: '.github/workflows/reviewrouter.yml',
         status: 'modified',
         additions: 18,
         deletions: 4,
@@ -134,7 +134,7 @@ describe('PullRequestDescriptionUpdater', () => {
     const block = updater.buildGeneratedBlock(createPR());
 
     expect(block).toContain('Files selected for processing (2)');
-    expect(block).toContain('`.github/workflows/review-router.yml`');
+    expect(block).toContain('`.github/workflows/reviewrouter.yml`');
     expect(block).toContain('TeamProvisioningService.test.ts');
     expect(block).toContain('CI workflow');
     expect(block).toContain('Tests');

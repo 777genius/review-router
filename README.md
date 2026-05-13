@@ -15,7 +15,7 @@ cd /path/to/your-repo
 curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | bash
 ```
 
-That is the recommended path because the installer can detect the GitHub remote, create a setup branch, write `.github/workflows/review-router.yml`, push the branch, and open a setup PR.
+That is the recommended path because the installer can detect the GitHub remote, create a setup branch, write `.github/workflows/reviewrouter.yml`, push the branch, and open a setup PR.
 
 If you run it outside a git checkout, it can still ask for `owner/repo` and use the GitHub API, but the local-checkout flow is easier to inspect before merging.
 
@@ -26,7 +26,7 @@ The installer:
 - lets you choose Codex subscription OAuth, Codex CLI with OpenAI API key, or OpenRouter API key;
 - lets you choose live `main`, stable `v1`, or a pinned exact release tag for the generated workflow;
 - writes compact reusable caller workflows by default; set `REVIEW_ROUTER_WORKFLOW_STYLE=explicit` for the full debug workflow;
-- creates `.github/workflows/review-router.yml` on a setup branch;
+- creates `.github/workflows/reviewrouter.yml` on a setup branch;
 - opens a setup PR instead of pushing directly to the default branch.
 
 See [docs/install.md](./docs/install.md) for organization-level secrets, selected repositories, GitHub App setup, and security notes.
@@ -217,7 +217,7 @@ jobs:
         with:
           REVIEW_ROUTER_MODE: interaction
           REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
-          REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: review-router.yml
+          REVIEW_ROUTER_REVIEW_WORKFLOW_FILE: reviewrouter.yml
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
@@ -232,7 +232,7 @@ Then make `ReviewRouter / review` a required status check in branch protection.
 If you use the full explicit workflow and want an exact pinned release, use:
 
 ```yaml
-uses: 777genius/review-router@v1.0.19
+uses: 777genius/review-router@v1.0.20
 ```
 
 For live dogfood/dev installs, use:

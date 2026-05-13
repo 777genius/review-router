@@ -29,7 +29,7 @@ inputs:
   REVIEW_ROUTER_REVIEW_WORKFLOW_FILE:
     description: "Review workflow file name used when rerunning failed jobs after /rr commands"
     required: false
-    default: "review-router.yml"
+    default: "reviewrouter.yml"
   REVIEW_ROUTER_DISCUSSION_MODE:
     description: "AI discussion mode for human replies to ReviewRouter inline findings: off or suggest"
     required: false

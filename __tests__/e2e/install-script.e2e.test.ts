@@ -33,10 +33,10 @@ function runInstaller(
   return {
     ...result,
     workdir,
-    workflowPath: path.join(workdir, '.github/workflows/review-router.yml'),
+    workflowPath: path.join(workdir, '.github/workflows/reviewrouter.yml'),
     interactionWorkflowPath: path.join(
       workdir,
-      '.github/workflows/review-router-interaction.yml'
+      '.github/workflows/reviewrouter-interaction.yml'
     ),
   };
 }
@@ -228,7 +228,7 @@ describe('review-router curl installer e2e', () => {
       'uses: 777genius/review-router/.github/workflows/reviewrouter-interaction-reusable.yml@v1'
     );
     expect(interactionWorkflow).toContain(
-      'review_workflow_file: review-router.yml'
+      'review_workflow_file: reviewrouter.yml'
     );
     expect(interactionWorkflow).toContain(
       'REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}'
@@ -432,9 +432,9 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
-    expect(workflow).toContain('uses: 777genius/review-router@v1.0.19');
+    expect(workflow).toContain('uses: 777genius/review-router@v1.0.20');
     expect(result.stdout).toContain(
-      'Action ref: 777genius/review-router@v1.0.19'
+      'Action ref: 777genius/review-router@v1.0.20'
     );
   });
 
@@ -477,7 +477,7 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     const workflow = workflowText(
-      path.join(workdir, '.github/workflows/review-router.yml')
+      path.join(workdir, '.github/workflows/reviewrouter.yml')
     );
     expect(workflow).toContain('uses: 777genius/review-router@main');
     expect(result.stdout).toContain('ReviewRouter setup complete');
@@ -1028,7 +1028,7 @@ describe('review-router curl installer e2e', () => {
     );
     expect(result.stdout).toContain('would clone test-owner/test-repo');
     expect(result.stdout).toContain(
-      'would commit .github/workflows/review-router.yml and .github/workflows/review-router-interaction.yml'
+      'would commit .github/workflows/reviewrouter.yml and .github/workflows/reviewrouter-interaction.yml'
     );
   });
 

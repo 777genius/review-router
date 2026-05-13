@@ -29562,7 +29562,7 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
       return { outcome: "not-started", reason: "missing PR head SHA" };
     }
     const { octokit, owner, repo } = this.actionsClient;
-    const workflowFile = process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || "review-router.yml";
+    const workflowFile = process.env.REVIEW_ROUTER_REVIEW_WORKFLOW_FILE || "reviewrouter.yml";
     try {
       const response = await octokit.rest.actions.listWorkflowRunsForRepo({
         owner,
@@ -29646,7 +29646,6 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     const path14 = String(candidate.path || "");
     const knownWorkflowFiles = [
       workflowFile,
-      "review-router.yml",
       "reviewrouter.yml",
       "ai-robot-review.yml"
     ];
@@ -30229,7 +30228,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.19",
+  version: "1.0.20",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

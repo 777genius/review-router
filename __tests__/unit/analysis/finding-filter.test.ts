@@ -632,14 +632,14 @@ index 51097d9..d0723db 100644
 
       const findings: Finding[] = [
         {
-          file: '.github/workflows/review-router.yml',
+          file: '.github/workflows/reviewrouter.yml',
           line: 97,
           severity: 'critical',
           title: 'Security Risk: Fork PR Secret Exposure',
           message: 'Fork PRs could access secrets',
         },
         {
-          file: '.github/workflows/review-router.yml',
+          file: '.github/workflows/reviewrouter.yml',
           line: 142,
           severity: 'critical',
           title: 'Fork PR Security Risk',

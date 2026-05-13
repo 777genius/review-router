@@ -30229,7 +30229,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.18",
+  version: "1.0.19",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -30399,7 +30399,10 @@ async function exchangeActionSession(input) {
     }
   );
   if (!response.ok) {
-    throw new Error(`action_session_exchange_failed:${response.status}`);
+    const code = await readSafeErrorCode(response);
+    throw new Error(
+      `action_session_exchange_failed:${response.status}${code ? `:${code}` : ""}`
+    );
   }
   const body = await response.json();
   if (typeof body.sessionToken !== "string" || body.sessionToken.length === 0) {
@@ -30422,7 +30425,9 @@ async function fetchRuntimeConfig(input) {
     if (response.status === 426 || code === "action_version_blocked") {
       throw new Error("action_version_blocked");
     }
-    throw new Error(`runtime_config_fetch_failed:${response.status}`);
+    throw new Error(
+      `runtime_config_fetch_failed:${response.status}${code ? `:${code}` : ""}`
+    );
   }
   return parseRuntimeConfig(await response.json());
 }
@@ -30477,10 +30482,10 @@ async function readSafeErrorCode(response) {
   try {
     const body = await response.json();
     if (typeof body.error === "string") {
-      return body.error;
+      return safeReason(body.error);
     }
     if (typeof body.error?.code === "string") {
-      return body.error.code;
+      return safeReason(body.error.code);
     }
   } catch {
     return void 0;
@@ -30501,7 +30506,7 @@ function requireEnv(env, key) {
   return value;
 }
 function safeReason(message) {
-  return message.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, "<redacted>");
+  return message.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, "<redacted>").replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 160);
 }
 
 // src/control-plane/comment-token.ts

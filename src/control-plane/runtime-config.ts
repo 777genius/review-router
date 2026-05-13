@@ -144,7 +144,10 @@ async function exchangeActionSession(input: {
     }
   );
   if (!response.ok) {
-    throw new Error(`action_session_exchange_failed:${response.status}`);
+    const code = await readSafeErrorCode(response);
+    throw new Error(
+      `action_session_exchange_failed:${response.status}${code ? `:${code}` : ''}`
+    );
   }
 
   const body = (await response.json()) as { sessionToken?: unknown };
@@ -174,7 +177,9 @@ async function fetchRuntimeConfig(input: {
     if (response.status === 426 || code === 'action_version_blocked') {
       throw new Error('action_version_blocked');
     }
-    throw new Error(`runtime_config_fetch_failed:${response.status}`);
+    throw new Error(
+      `runtime_config_fetch_failed:${response.status}${code ? `:${code}` : ''}`
+    );
   }
 
   return parseRuntimeConfig(await response.json());
@@ -248,10 +253,10 @@ async function readSafeErrorCode(
       error?: { code?: unknown } | string;
     };
     if (typeof body.error === 'string') {
-      return body.error;
+      return safeReason(body.error);
     }
     if (typeof body.error?.code === 'string') {
-      return body.error.code;
+      return safeReason(body.error.code);
     }
   } catch {
     return undefined;
@@ -276,5 +281,10 @@ function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
 }
 
 function safeReason(message: string): string {
-  return message.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, '<redacted>');
+  return message
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, '<redacted>')
+    .replace(/ghs_[A-Za-z0-9_]+/g, '[redacted-github-token]')
+    .replace(/gh[pousr]_[A-Za-z0-9_]+/g, '[redacted-github-token]')
+    .replace(/github_pat_[A-Za-z0-9_]+/g, '[redacted-github-token]')
+    .slice(0, 160);
 }

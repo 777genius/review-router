@@ -83,6 +83,39 @@ describe('applyControlPlaneRuntimeConfig', () => {
     expect(warnings[0]).toContain('using static workflow config');
   });
 
+  it('includes safe OIDC exchange error codes in fallback warnings', async () => {
+    const env: NodeJS.ProcessEnv = { ...baseEnv };
+    const warnings: string[] = [];
+    const fetchImpl = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockResolvedValueOnce(jsonResponse({ value: 'github-oidc-token' }))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: {
+              code: 'repository_not_selected',
+              message: 'Repository is not selected in ReviewRouter.',
+            },
+          },
+          403
+        )
+      );
+
+    const result = await applyControlPlaneRuntimeConfig({
+      env,
+      fetchImpl,
+      logger: { info: jest.fn(), warn: (message) => warnings.push(message) },
+    });
+
+    expect(result).toEqual({
+      status: 'fallback',
+      reason: 'action_session_exchange_failed:403:repository_not_selected',
+    });
+    expect(warnings[0]).toContain(
+      'action_session_exchange_failed:403:repository_not_selected'
+    );
+  });
+
   it('does not fall back when the installed action version is blocked', async () => {
     const env: NodeJS.ProcessEnv = { ...baseEnv };
     const fetchImpl = jest

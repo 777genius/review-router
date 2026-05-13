@@ -36,6 +36,18 @@ describe('resolveProviderCliPlan', () => {
     expect(plan.claudeCliNeeded).toBe(true);
   });
 
+  it('does not let stale static model env override explicit runtime providers', () => {
+    const plan = resolveProviderCliPlan({
+      REVIEW_AUTH_MODE: 'codex-oauth',
+      REVIEW_PROVIDERS: 'codex/gpt-5.5',
+      SYNTHESIS_MODEL: 'codex/gpt-5.5',
+      CLAUDE_MODEL: 'sonnet',
+    });
+
+    expect(plan.codexCliNeeded).toBe(true);
+    expect(plan.claudeCliNeeded).toBe(false);
+  });
+
   it('does not require CLI tooling for pure OpenRouter config', () => {
     const plan = resolveProviderCliPlan({
       REVIEW_AUTH_MODE: 'openrouter-api',

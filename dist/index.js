@@ -30228,7 +30228,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.21",
+  version: "1.0.22",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -30760,18 +30760,24 @@ function ensureTrailingSlash2(value) {
 // src/control-plane/provider-cli-plan.ts
 function resolveProviderCliPlan(env = process.env) {
   const authMode = (env.REVIEW_AUTH_MODE || "").trim();
+  const explicitProviders = parseProviderList(env.REVIEW_PROVIDERS);
+  const inferredProvider = explicitProviders.length === 0 ? inferredProviderFromEnv(authMode, env) : void 0;
   const providerHints = [
-    env.REVIEW_PROVIDERS,
+    ...explicitProviders,
     env.FALLBACK_PROVIDERS,
     env.SYNTHESIS_MODEL,
-    providerFromModel("codex", env.CODEX_MODEL),
-    providerFromModel("claude", env.CLAUDE_MODEL),
-    inferredProviderFromAuthMode(authMode)
+    inferredProvider
   ].filter((value) => Boolean(value)).join(",");
   return {
     codexCliNeeded: authMode === "codex-oauth" || authMode === "openai-api" || hasProviderPrefix(providerHints, "codex"),
     claudeCliNeeded: authMode === "claude-oauth" || hasProviderPrefix(providerHints, "claude")
   };
+}
+function parseProviderList(value) {
+  if (!value) {
+    return [];
+  }
+  return value.split(",").map((part) => part.trim()).filter(Boolean);
 }
 function providerFromModel(providerPrefix, value) {
   const model = value?.trim();
@@ -30780,15 +30786,17 @@ function providerFromModel(providerPrefix, value) {
   }
   return model.startsWith(`${providerPrefix}/`) ? model : `${providerPrefix}/${model}`;
 }
-function inferredProviderFromAuthMode(authMode) {
+function inferredProviderFromEnv(authMode, env) {
+  const claudeProvider = providerFromModel("claude", env.CLAUDE_MODEL);
+  const codexProvider = providerFromModel("codex", env.CODEX_MODEL);
   switch (authMode) {
     case "claude-oauth":
-      return "claude/sonnet";
+      return claudeProvider || "claude/sonnet";
     case "codex-oauth":
     case "openai-api":
-      return "codex/gpt-5.5";
+      return codexProvider || "codex/gpt-5.5";
     default:
-      return void 0;
+      return claudeProvider || codexProvider;
   }
 }
 function hasProviderPrefix(value, providerPrefix) {

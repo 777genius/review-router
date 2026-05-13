@@ -7,13 +7,16 @@ export function resolveProviderCliPlan(
   env: NodeJS.ProcessEnv = process.env
 ): ProviderCliPlan {
   const authMode = (env.REVIEW_AUTH_MODE || '').trim();
+  const explicitProviders = parseProviderList(env.REVIEW_PROVIDERS);
+  const inferredProvider =
+    explicitProviders.length === 0
+      ? inferredProviderFromEnv(authMode, env)
+      : undefined;
   const providerHints = [
-    env.REVIEW_PROVIDERS,
+    ...explicitProviders,
     env.FALLBACK_PROVIDERS,
     env.SYNTHESIS_MODEL,
-    providerFromModel('codex', env.CODEX_MODEL),
-    providerFromModel('claude', env.CLAUDE_MODEL),
-    inferredProviderFromAuthMode(authMode),
+    inferredProvider,
   ]
     .filter((value): value is string => Boolean(value))
     .join(',');
@@ -26,6 +29,16 @@ export function resolveProviderCliPlan(
     claudeCliNeeded:
       authMode === 'claude-oauth' || hasProviderPrefix(providerHints, 'claude'),
   };
+}
+
+function parseProviderList(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
 }
 
 function providerFromModel(
@@ -41,15 +54,20 @@ function providerFromModel(
     : `${providerPrefix}/${model}`;
 }
 
-function inferredProviderFromAuthMode(authMode: string): string | undefined {
+function inferredProviderFromEnv(
+  authMode: string,
+  env: NodeJS.ProcessEnv
+): string | undefined {
+  const claudeProvider = providerFromModel('claude', env.CLAUDE_MODEL);
+  const codexProvider = providerFromModel('codex', env.CODEX_MODEL);
   switch (authMode) {
     case 'claude-oauth':
-      return 'claude/sonnet';
+      return claudeProvider || 'claude/sonnet';
     case 'codex-oauth':
     case 'openai-api':
-      return 'codex/gpt-5.5';
+      return codexProvider || 'codex/gpt-5.5';
     default:
-      return undefined;
+      return claudeProvider || codexProvider;
   }
 }
 

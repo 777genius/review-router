@@ -153,11 +153,6 @@ jobs:
             appendEnv(key, value);
           }
 
-          const codexCliNeeded =
-            process.env.CODEX_AUTH_JSON_PRESENT === '1' ||
-            process.env.OPENAI_API_KEY_PRESENT === '1';
-          const claudeCliNeeded =
-            process.env.CLAUDE_CODE_OAUTH_TOKEN_PRESENT === '1';
           const appTokenNeeded =
             runtimeConfigMode === 'static' &&
             process.env.REVIEW_APP_PRIVATE_KEY_PRESENT === '1' &&
@@ -170,8 +165,6 @@ jobs:
           fs.appendFileSync(githubOutput, `runtime_ref=${runtimeRef}\n`);
           fs.appendFileSync(githubOutput, `can_run=${!isForkPullRequest && !isMergeGroup ? 'true' : 'false'}\n`);
           fs.appendFileSync(githubOutput, `skip_reason=${isMergeGroup ? 'merge_group' : isForkPullRequest ? 'fork' : ''}\n`);
-          fs.appendFileSync(githubOutput, `codex_cli_needed=${codexCliNeeded ? 'true' : 'false'}\n`);
-          fs.appendFileSync(githubOutput, `claude_cli_needed=${claudeCliNeeded ? 'true' : 'false'}\n`);
           fs.appendFileSync(githubOutput, `app_token_needed=${appTokenNeeded ? 'true' : 'false'}\n`);
           NODE
         env:
@@ -209,6 +202,14 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Resolve ReviewRouter runtime provider tooling
+        id: provider-tooling
+        if: ${{ steps.runtime.outputs.can_run == 'true' }}
+        shell: bash
+        env:
+          REVIEW_ROUTER_MODE: runtime-preflight
+        run: node .reviewrouter-runtime/dist/index.js
+
       - name: Create ReviewRouter GitHub App token
         id: app-token
         if: ${{ steps.runtime.outputs.can_run == 'true' && steps.runtime.outputs.app_token_needed == 'true' }}
@@ -223,19 +224,19 @@ jobs:
           permission-pull-requests: write
 
       - name: Install Codex CLI
-        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.runtime.outputs.codex_cli_needed == 'true' }}
+        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}
         shell: bash
         run: npm install -g @openai/codex@0.125.0
 
       - name: Install Claude Code CLI
-        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.runtime.outputs.claude_cli_needed == 'true' }}
+        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.claude_cli_needed == 'true' }}
         shell: bash
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Restore Codex subscription auth
-        if: ${{ steps.runtime.outputs.can_run == 'true' && env.CODEX_AUTH_JSON_PRESENT == '1' }}
+        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' && env.CODEX_AUTH_JSON_PRESENT == '1' }}
         shell: bash
         env:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}

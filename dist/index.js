@@ -30228,7 +30228,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.20",
+  version: "1.0.21",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -30757,6 +30757,44 @@ function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
+// src/control-plane/provider-cli-plan.ts
+function resolveProviderCliPlan(env = process.env) {
+  const authMode = (env.REVIEW_AUTH_MODE || "").trim();
+  const providerHints = [
+    env.REVIEW_PROVIDERS,
+    env.FALLBACK_PROVIDERS,
+    env.SYNTHESIS_MODEL,
+    providerFromModel("codex", env.CODEX_MODEL),
+    providerFromModel("claude", env.CLAUDE_MODEL),
+    inferredProviderFromAuthMode(authMode)
+  ].filter((value) => Boolean(value)).join(",");
+  return {
+    codexCliNeeded: authMode === "codex-oauth" || authMode === "openai-api" || hasProviderPrefix(providerHints, "codex"),
+    claudeCliNeeded: authMode === "claude-oauth" || hasProviderPrefix(providerHints, "claude")
+  };
+}
+function providerFromModel(providerPrefix, value) {
+  const model = value?.trim();
+  if (!model) {
+    return void 0;
+  }
+  return model.startsWith(`${providerPrefix}/`) ? model : `${providerPrefix}/${model}`;
+}
+function inferredProviderFromAuthMode(authMode) {
+  switch (authMode) {
+    case "claude-oauth":
+      return "claude/sonnet";
+    case "codex-oauth":
+    case "openai-api":
+      return "codex/gpt-5.5";
+    default:
+      return void 0;
+  }
+}
+function hasProviderPrefix(value, providerPrefix) {
+  return value.split(",").map((part) => part.trim().toLowerCase()).some((part) => part.startsWith(`${providerPrefix}/`));
+}
+
 // src/main.ts
 function syncEnvFromInputs() {
   const inputKeys = [
@@ -30856,6 +30894,11 @@ async function run() {
         warn: (message) => warning(message)
       }
     });
+    const mode = process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE");
+    if (mode === "runtime-preflight") {
+      runRuntimePreflight(runtimeConfig);
+      return;
+    }
     token = getInput("GITHUB_TOKEN") || process.env.GITHUB_TOKEN;
     validateRequired(token, "GITHUB_TOKEN");
     const commentToken = await resolveGitHubCommentToken({
@@ -30868,11 +30911,11 @@ async function run() {
     });
     const fallbackToken = token;
     token = commentToken.token;
-    if ((process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE")) === "interaction") {
+    if (mode === "interaction") {
       await runInteraction(token, fallbackToken);
       return;
     }
-    if ((process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE")) === "interaction-preflight") {
+    if (mode === "interaction-preflight") {
       await runInteractionPreflight(token);
       return;
     }
@@ -30955,6 +30998,15 @@ ${formatValidationError(error2)}`) : error2;
       }
     });
   }
+}
+function runRuntimePreflight(runtimeConfig) {
+  const plan = resolveProviderCliPlan(process.env);
+  setOutput("runtime_config_status", runtimeConfig?.status || "unknown");
+  setOutput("codex_cli_needed", plan.codexCliNeeded ? "true" : "false");
+  setOutput("claude_cli_needed", plan.claudeCliNeeded ? "true" : "false");
+  info(
+    `ReviewRouter runtime preflight: status=${runtimeConfig?.status || "unknown"}, codex_cli_needed=${plan.codexCliNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
+  );
 }
 function getBlockingFindings(review, threshold) {
   if (!threshold || threshold === "off") return [];

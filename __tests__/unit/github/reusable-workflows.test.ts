@@ -24,6 +24,14 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('persist-credentials: false');
     expect(workflow).toContain('uses: actions/setup-node@v6');
     expect(workflow).toContain("node-version: '24'");
+    expect(workflow).toContain('Resolve ReviewRouter runtime provider tooling');
+    expect(workflow).toContain('REVIEW_ROUTER_MODE: runtime-preflight');
+    expect(workflow).toContain(
+      "steps.provider-tooling.outputs.codex_cli_needed == 'true'"
+    );
+    expect(workflow).toContain(
+      "steps.provider-tooling.outputs.claude_cli_needed == 'true'"
+    );
     expect(workflow).toContain('review_app_client_id:');
     expect(workflow).toContain('REVIEW_APP_PRIVATE_KEY:');
     expect(workflow).toContain('uses: actions/create-github-app-token@v3');

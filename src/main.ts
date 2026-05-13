@@ -32,6 +32,7 @@ import {
 } from './control-plane/runtime-config';
 import { resolveGitHubCommentToken } from './control-plane/comment-token';
 import { reportControlPlaneActionHealth } from './control-plane/health-report';
+import { resolveProviderCliPlan } from './control-plane/provider-cli-plan';
 
 function syncEnvFromInputs(): void {
   const inputKeys = [
@@ -134,6 +135,14 @@ async function run(): Promise<void> {
         warn: (message) => core.warning(message),
       },
     });
+
+    const mode =
+      process.env.REVIEW_ROUTER_MODE || core.getInput('REVIEW_ROUTER_MODE');
+    if (mode === 'runtime-preflight') {
+      runRuntimePreflight(runtimeConfig);
+      return;
+    }
+
     token = core.getInput('GITHUB_TOKEN') || process.env.GITHUB_TOKEN;
 
     validateRequired(token, 'GITHUB_TOKEN');
@@ -149,16 +158,12 @@ async function run(): Promise<void> {
     token = commentToken.token;
 
     if (
-      (process.env.REVIEW_ROUTER_MODE ||
-        core.getInput('REVIEW_ROUTER_MODE')) === 'interaction'
+      mode === 'interaction'
     ) {
       await runInteraction(token!, fallbackToken);
       return;
     }
-    if (
-      (process.env.REVIEW_ROUTER_MODE ||
-        core.getInput('REVIEW_ROUTER_MODE')) === 'interaction-preflight'
-    ) {
+    if (mode === 'interaction-preflight') {
       await runInteractionPreflight(token!);
       return;
     }
@@ -259,6 +264,18 @@ async function run(): Promise<void> {
     // core.setFailed() sets process.exitCode, so explicit process.exit() is unnecessary
     // Removed process.exit(1) to allow proper cleanup and resource disposal
   }
+}
+
+function runRuntimePreflight(
+  runtimeConfig: RuntimeConfigResult | undefined
+): void {
+  const plan = resolveProviderCliPlan(process.env);
+  core.setOutput('runtime_config_status', runtimeConfig?.status || 'unknown');
+  core.setOutput('codex_cli_needed', plan.codexCliNeeded ? 'true' : 'false');
+  core.setOutput('claude_cli_needed', plan.claudeCliNeeded ? 'true' : 'false');
+  core.info(
+    `ReviewRouter runtime preflight: status=${runtimeConfig?.status || 'unknown'}, codex_cli_needed=${plan.codexCliNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
+  );
 }
 
 function getBlockingFindings(

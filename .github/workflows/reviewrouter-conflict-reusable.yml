@@ -15,7 +15,7 @@ on:
       static_runtime_env_json:
         required: false
         type: string
-        default: "{}"
+        default: '{}'
       pr_number:
         required: true
         type: string
@@ -101,7 +101,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version: '24'
 
       - name: Build conflict runtime
         shell: bash
@@ -110,6 +110,7 @@ jobs:
           set -euo pipefail
           corepack enable
           pnpm install --frozen-lockfile
+          pnpm --filter @reviewrouter/platform-db db:generate
           pnpm --filter @reviewrouter/features-conflict-runtime build
 
       - name: Preflight conflict runtime before PR checkout

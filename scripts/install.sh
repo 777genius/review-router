@@ -1546,6 +1546,7 @@ YAML
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN: ${{ secrets.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN }}
 YAML
   } > "$workflow_file"
 }
@@ -1765,6 +1766,7 @@ YAML
     cat <<'YAML'
         env:
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
+          REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN: ${{ secrets.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN }}
 YAML
     if [ "$AUTH_MODE" = "openai" ]; then
       cat <<'YAML'

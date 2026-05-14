@@ -4436,6 +4436,12 @@ ${delimiter}
   }
   issueCommand("set-output", { name }, output);
 }
+function setSecret(secret) {
+  if (!secret) {
+    return;
+  }
+  issueCommand("add-mask", {}, secret);
+}
 function setFailed(message) {
   error(message);
   process.exitCode = 1;
@@ -25407,7 +25413,7 @@ var ReviewThreadResolver = class {
         throw error2;
       }
       logger.warn(
-        "Primary review thread lifecycle token cannot resolve thread; retrying with fallback GitHub token",
+        "Primary review thread lifecycle token cannot resolve thread; retrying with lifecycle fallback token",
         error2
       );
       await this.resolveThreadWithClient(this.mutationFallbackClient, threadId);
@@ -33001,6 +33007,7 @@ function syncEnvFromInputs() {
     "REVIEW_THREAD_LIFECYCLE",
     "REVIEW_THREAD_LIFECYCLE_MAX_TARGETS",
     "REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE",
+    "REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN",
     "REVIEW_THREAD_LIFECYCLE_TRUSTED_AUTHORS",
     "REVIEW_ROUTER_TRUSTED_BOT_AUTHORS",
     "REVIEW_APP_SLUG",
@@ -33022,6 +33029,9 @@ async function run() {
   const startedAt = /* @__PURE__ */ new Date();
   try {
     syncEnvFromInputs();
+    if (process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN) {
+      setSecret(process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN);
+    }
     runtimeConfig = await applyControlPlaneRuntimeConfig({
       logger: {
         info,
@@ -33045,6 +33055,10 @@ async function run() {
     });
     const fallbackToken = token;
     token = commentToken.token;
+    const lifecycleResolveToken = process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN || fallbackToken;
+    if (lifecycleResolveToken && lifecycleResolveToken !== token && lifecycleResolveToken !== fallbackToken) {
+      setSecret(lifecycleResolveToken);
+    }
     process.env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS = commentToken.status;
     if (mode === "interaction") {
       await runInteraction(token, fallbackToken);
@@ -33056,7 +33070,7 @@ async function run() {
     }
     const config = ConfigLoader.load();
     const components = await createComponents(config, token, {
-      fallbackGithubToken: fallbackToken
+      fallbackGithubToken: lifecycleResolveToken
     });
     const orchestrator = new ReviewOrchestrator(components);
     const prInput = getInput("PR_NUMBER") || process.env.PR_NUMBER;

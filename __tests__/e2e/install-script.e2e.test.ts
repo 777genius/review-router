@@ -222,6 +222,9 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain(
       'REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}'
     );
+    expect(workflow).toContain(
+      'REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN: ${{ secrets.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN }}'
+    );
     expect(workflow).not.toContain('pull_request_target');
     expect(workflow).not.toContain('actions/setup-node@v6');
 

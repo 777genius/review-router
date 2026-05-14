@@ -287,6 +287,18 @@ Required secret:
 
 - `OPENROUTER_API_KEY`
 
+### Optional Review Thread Auto-Close Token
+
+ReviewRouter can close old unresolved ReviewRouter review threads only after
+the normal review providers agree the finding is resolved. If GitHub rejects the
+normal App or workflow token for `resolveReviewThread`, add:
+
+- `REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN`: optional GitHub token used only for
+  that resolve mutation.
+
+This token is not used to post comments. Review comments and summaries still use
+`GITHUB_TOKEN` or the configured ReviewRouter App token.
+
 ## Important Inputs
 
 | Input                    | Default | Notes                                                                |

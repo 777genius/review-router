@@ -264,6 +264,10 @@ inputs:
     description: "JSON object with per-severity confidence thresholds for resolved lifecycle votes"
     required: false
     default: ""
+  REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN:
+    description: "Optional elevated GitHub token used only to resolve old ReviewRouter review threads after lifecycle quorum. Comments still use GITHUB_TOKEN or the App token."
+    required: false
+    default: ""
   REVIEW_APP_SLUG:
     description: "Optional GitHub App slug. Review thread lifecycle trusts this exact '<slug>[bot]' author for ReviewRouter-owned comments."
     required: false

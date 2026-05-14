@@ -108,6 +108,7 @@ Environment variables:
 REVIEW_THREAD_LIFECYCLE: resolve # off, report, or resolve
 REVIEW_THREAD_LIFECYCLE_MAX_TARGETS: 10
 REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE: '{"critical":0.9,"major":0.85,"minor":0.8,"unknown":0.9}'
+REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN: ghp_or_github_pat_optional
 REVIEW_APP_SLUG: review-router-owner # optional, trusts review-router-owner[bot] for lifecycle
 ```
 
@@ -131,6 +132,20 @@ When comments are posted through a user-owned GitHub App, pass the App slug as
 only trusts explicit bot identities; it does not trust every `[bot]` author.
 In `REVIEWROUTER_COMMENT_TOKEN_MODE=app-oidc`, `github-actions[bot]` is trusted
 only when comment posting falls back to `GITHUB_TOKEN`.
+
+`REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN` is optional and scoped to one operation:
+resolving an old review thread after provider quorum and GitHub freshness guards
+already passed. It is not used for posting review comments, summaries, ledger
+updates, PR description edits, or provider execution.
+
+Use it when GitHub refuses `resolveReviewThread` for the normal App or workflow
+token with `Resource not accessible by integration`. In that setup, comments
+still come from the configured ReviewRouter App identity, while the final
+resolve mutation can use a repository-scoped user/OAuth token that GitHub accepts
+for resolving review threads.
+
+If the secret is absent or cannot resolve the thread, lifecycle stays safe: the
+thread remains open and the summary reports `missing permission to resolve`.
 
 ## Non-Goals
 

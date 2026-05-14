@@ -30,6 +30,13 @@ export function setOutput(name: string, value: unknown): void {
   issueCommand('set-output', { name }, output);
 }
 
+export function setSecret(secret: string): void {
+  if (!secret) {
+    return;
+  }
+  issueCommand('add-mask', {}, secret);
+}
+
 export function setFailed(message: string | Error): void {
   error(message);
   process.exitCode = 1;

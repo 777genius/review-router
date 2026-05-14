@@ -51,6 +51,7 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('pull-requests: write');
     expect(workflow).toContain('issues: write');
     expect(workflow).toContain('REVIEW_ROUTER_LEDGER_KEY');
+    expect(workflow).toContain('REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN');
     expect(workflow).toContain('CODEX_AUTH_JSON');
     expect(workflow).toContain('CLAUDE_CODE_OAUTH_TOKEN');
     expect(workflow).toContain('OPENROUTER_API_KEY');

@@ -380,6 +380,23 @@ Implementation note: ReviewRouter uses `claude -p` and intentionally does not us
 
 Stores `OPENROUTER_API_KEY` and configures OpenRouter provider mode.
 
+### Optional lifecycle resolve token
+
+By default, ReviewRouter tries to resolve old ReviewRouter review threads with
+the same token used for comments, then the workflow token. Some GitHub setups
+reject `resolveReviewThread` for integration tokens with `Resource not accessible
+by integration`.
+
+If you want auto-close in that setup, add an optional repository or org secret:
+
+```text
+REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN
+```
+
+The generated workflows pass it only to the review job. ReviewRouter uses it
+only for the final review-thread resolve mutation after provider quorum and
+freshness checks. It is not used for comments, summaries, or provider calls.
+
 ## Review presets
 
 | Preset    | Behavior                                                                                          |

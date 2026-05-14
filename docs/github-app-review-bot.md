@@ -68,6 +68,12 @@ When `REVIEWROUTER_COMMENT_TOKEN_MODE=app-oidc` is active, lifecycle does not
 trust `github-actions[bot]` unless the action explicitly fell back to
 `GITHUB_TOKEN` for comment posting.
 
+If GitHub accepts App-authored comments but rejects `resolveReviewThread` for
+the App installation token, add the optional
+`REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN` secret. ReviewRouter uses that token only
+for the final auto-close mutation after provider quorum; App-authored comments
+and summaries remain App-authored.
+
 ## Manifest Template
 
 ```json

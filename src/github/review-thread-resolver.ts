@@ -372,7 +372,7 @@ export class ReviewThreadResolver {
         throw error;
       }
       logger.warn(
-        'Primary review thread lifecycle token cannot resolve thread; retrying with fallback GitHub token',
+        'Primary review thread lifecycle token cannot resolve thread; retrying with lifecycle fallback token',
         error as Error
       );
       await this.resolveThreadWithClient(this.mutationFallbackClient, threadId);

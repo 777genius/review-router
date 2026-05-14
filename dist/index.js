@@ -20577,8 +20577,6 @@ var ThreadLifecycleAggregator = class {
       if (hasResolvedQuorum) {
         if (input.mode === "report") {
           result.mutationSkipped.push(record(["report_mode"]));
-        } else if (!target.viewerCanResolve) {
-          result.mutationSkipped.push(record(["viewer_cannot_resolve"]));
         } else {
           result.resolvedCandidates.push(record([]));
         }
@@ -24996,7 +24994,6 @@ var ReviewThreadInventoryLoader = class {
     if (!trustedAuthor) reasonCodes.push("untrusted_author");
     if (humanReply) reasonCodes.push("human_reply");
     if (!hasOldFindingDetails) reasonCodes.push("missing_old_finding_details");
-    if (!thread.viewerCanResolve) reasonCodes.push("viewer_cannot_resolve");
     if (commentsTruncated) reasonCodes.push("pagination_incomplete");
     const target = {
       targetId: targetIdFor(thread.id, parent.id, fingerprint),
@@ -25026,7 +25023,7 @@ var ReviewThreadInventoryLoader = class {
         body
       });
     }
-    if (reasonCodes.some((reason) => reason !== "viewer_cannot_resolve")) {
+    if (reasonCodes.length > 0) {
       inventory.manualAttention.push({
         target,
         reasonCodes
@@ -25321,9 +25318,6 @@ var ReviewThreadResolver = class {
         resolvedBy: "external",
         reasonCodes: ["already_resolved"]
       };
-    }
-    if (!thread.viewerCanResolve) {
-      return { kind: "skipped", reasonCodes: ["viewer_cannot_resolve"] };
     }
     const comments = thread.comments?.nodes ?? [];
     if (thread.comments?.pageInfo.hasNextPage) {

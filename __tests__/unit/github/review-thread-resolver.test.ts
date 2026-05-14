@@ -116,6 +116,38 @@ describe('ReviewThreadResolver', () => {
     expect(result.failed).toHaveLength(0);
   });
 
+  it('attempts the mutation even when viewerCanResolve is false', async () => {
+    const graphql = jest
+      .fn()
+      .mockResolvedValueOnce({
+        repository: {
+          pullRequest: {
+            headRefOid: 'head-sha',
+          },
+        },
+      })
+      .mockResolvedValueOnce(threadResponse({ viewerCanResolve: false }))
+      .mockResolvedValueOnce({
+        resolveReviewThread: {
+          thread: {
+            id: 'thread-123',
+            isResolved: true,
+          },
+        },
+      });
+    const resolver = new ReviewThreadResolver({
+      owner: 'owner',
+      repo: 'repo',
+      octokit: { graphql },
+    } as unknown as GitHubClient);
+
+    const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
+
+    expect(result.resolved).toHaveLength(1);
+    expect(result.resolved[0].resolvedBy).toBe('review-router');
+    expect(graphql).toHaveBeenCalledTimes(3);
+  });
+
   it('treats an already resolved thread before mutation as externally resolved', async () => {
     const graphql = jest
       .fn()

@@ -336,13 +336,12 @@ describe('ThreadLifecycleAggregator', () => {
     expect(lifecycle.manualAttention).toHaveLength(0);
   });
 
-  it('skips mutation instead of resolving when quorum exists but viewer cannot resolve the thread', () => {
+  it('keeps viewerCanResolve as advisory and attempts mutation when quorum exists', () => {
     const lifecycle = new ThreadLifecycleAggregator().aggregate({
       mode: 'resolve',
       targets: [
         target({
           viewerCanResolve: false,
-          reasonCodes: ['viewer_cannot_resolve'],
         }),
       ],
       plannedProviders: ['provider-a'],
@@ -350,10 +349,8 @@ describe('ThreadLifecycleAggregator', () => {
       currentFindings: [],
     });
 
-    expect(lifecycle.resolvedCandidates).toHaveLength(0);
-    expect(lifecycle.mutationSkipped[0].reasonCodes).toContain(
-      'viewer_cannot_resolve'
-    );
+    expect(lifecycle.resolvedCandidates).toHaveLength(1);
+    expect(lifecycle.mutationSkipped).toHaveLength(0);
   });
 
   it('closes in three-provider mode when resolved quorum exists and the remaining provider is uncertain', () => {

@@ -210,8 +210,6 @@ export class ThreadLifecycleAggregator {
       if (hasResolvedQuorum) {
         if (input.mode === 'report') {
           result.mutationSkipped.push(record(['report_mode']));
-        } else if (!target.viewerCanResolve) {
-          result.mutationSkipped.push(record(['viewer_cannot_resolve']));
         } else {
           result.resolvedCandidates.push(record([]));
         }

@@ -256,10 +256,6 @@ export class ReviewThreadResolver {
         reasonCodes: ['already_resolved'],
       };
     }
-    if (!thread.viewerCanResolve) {
-      return { kind: 'skipped', reasonCodes: ['viewer_cannot_resolve'] };
-    }
-
     const comments = thread.comments?.nodes ?? [];
     if (thread.comments?.pageInfo.hasNextPage) {
       return { kind: 'skipped', reasonCodes: ['pagination_incomplete'] };

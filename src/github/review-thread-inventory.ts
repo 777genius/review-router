@@ -291,7 +291,6 @@ export class ReviewThreadInventoryLoader {
     if (!trustedAuthor) reasonCodes.push('untrusted_author');
     if (humanReply) reasonCodes.push('human_reply');
     if (!hasOldFindingDetails) reasonCodes.push('missing_old_finding_details');
-    if (!thread.viewerCanResolve) reasonCodes.push('viewer_cannot_resolve');
     if (commentsTruncated) reasonCodes.push('pagination_incomplete');
 
     const target: LifecycleTarget = {
@@ -330,7 +329,7 @@ export class ReviewThreadInventoryLoader {
       });
     }
 
-    if (reasonCodes.some((reason) => reason !== 'viewer_cannot_resolve')) {
+    if (reasonCodes.length > 0) {
       inventory.manualAttention.push({
         target,
         reasonCodes,

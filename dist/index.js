@@ -25184,10 +25184,11 @@ mutation ReviewRouterResolveReviewThread($threadId: ID!) {
   }
 }`;
 var ReviewThreadResolver = class {
-  constructor(client, dryRun = false, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS) {
+  constructor(client, dryRun = false, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS, mutationFallbackClient) {
     this.client = client;
     this.dryRun = dryRun;
     this.trustedAuthors = trustedAuthors;
+    this.mutationFallbackClient = mutationFallbackClient;
   }
   async resolveGuarded(prNumber, reviewedHeadSha, candidates) {
     const result = {
@@ -25399,13 +25400,27 @@ var ReviewThreadResolver = class {
     return response.node ?? null;
   }
   async resolveThread(threadId) {
-    const response = await this.graphql(RESOLVE_MUTATION, { threadId });
+    try {
+      await this.resolveThreadWithClient(this.client, threadId);
+    } catch (error2) {
+      if (!permissionDenied(error2) || !this.mutationFallbackClient) {
+        throw error2;
+      }
+      logger.warn(
+        "Primary review thread lifecycle token cannot resolve thread; retrying with fallback GitHub token",
+        error2
+      );
+      await this.resolveThreadWithClient(this.mutationFallbackClient, threadId);
+    }
+  }
+  async resolveThreadWithClient(client, threadId) {
+    const response = await this.graphql(RESOLVE_MUTATION, { threadId }, client);
     if (!response.resolveReviewThread?.thread?.isResolved) {
       throw new Error("GitHub did not mark review thread resolved");
     }
   }
-  async graphql(query, variables) {
-    const graphql = this.client.octokit.graphql;
+  async graphql(query, variables, client = this.client) {
+    const graphql = client.octokit.graphql;
     if (typeof graphql !== "function") {
       throw new Error("GitHub GraphQL client is unavailable");
     }
@@ -25460,7 +25475,7 @@ async function createComponents(config, githubToken, options = {}) {
   const security = new SecurityScanner();
   const rules = RuleLoader.load();
   const githubClient = new GitHubClient(githubToken);
-  const lifecycleGithubClient = options.lifecycleGithubToken && options.lifecycleGithubToken !== githubToken ? new GitHubClient(options.lifecycleGithubToken) : githubClient;
+  const fallbackGithubClient = options.fallbackGithubToken && options.fallbackGithubToken !== githubToken ? new GitHubClient(options.fallbackGithubToken) : githubClient;
   const prLoader = new PullRequestLoader(githubClient);
   const contextRetriever = new ContextRetriever();
   const impactAnalyzer = new ImpactAnalyzer();
@@ -25506,13 +25521,14 @@ async function createComponents(config, githubToken, options = {}) {
   const formatter = new MarkdownFormatterV2();
   const trustedReviewThreadAuthors = trustedReviewThreadAuthorsFromEnv();
   const reviewThreadInventory = new ReviewThreadInventoryLoader(
-    lifecycleGithubClient,
+    githubClient,
     trustedReviewThreadAuthors
   );
   const reviewThreadResolver = new ReviewThreadResolver(
-    lifecycleGithubClient,
+    githubClient,
     config.dryRun,
-    trustedReviewThreadAuthors
+    trustedReviewThreadAuthors,
+    fallbackGithubClient
   );
   const quietModeFilter = config.quietModeEnabled ? new QuietModeFilter(
     {
@@ -33040,7 +33056,7 @@ async function run() {
     }
     const config = ConfigLoader.load();
     const components = await createComponents(config, token, {
-      lifecycleGithubToken: fallbackToken
+      fallbackGithubToken: fallbackToken
     });
     const orchestrator = new ReviewOrchestrator(components);
     const prInput = getInput("PR_NUMBER") || process.env.PR_NUMBER;

@@ -184,7 +184,7 @@ async function run(): Promise<void> {
 
     const config = ConfigLoader.load();
     const components = await createComponents(config, token!, {
-      lifecycleGithubToken: fallbackToken,
+      fallbackGithubToken: fallbackToken,
     });
     const orchestrator = new ReviewOrchestrator(components);
 

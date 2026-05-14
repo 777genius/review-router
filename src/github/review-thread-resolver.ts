@@ -89,7 +89,8 @@ export class ReviewThreadResolver {
   constructor(
     private readonly client: GitHubClient,
     private readonly dryRun = false,
-    private readonly trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS
+    private readonly trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS,
+    private readonly mutationFallbackClient?: GitHubClient
   ) {}
 
   async resolveGuarded(
@@ -364,6 +365,24 @@ export class ReviewThreadResolver {
   }
 
   private async resolveThread(threadId: string): Promise<void> {
+    try {
+      await this.resolveThreadWithClient(this.client, threadId);
+    } catch (error) {
+      if (!permissionDenied(error) || !this.mutationFallbackClient) {
+        throw error;
+      }
+      logger.warn(
+        'Primary review thread lifecycle token cannot resolve thread; retrying with fallback GitHub token',
+        error as Error
+      );
+      await this.resolveThreadWithClient(this.mutationFallbackClient, threadId);
+    }
+  }
+
+  private async resolveThreadWithClient(
+    client: GitHubClient,
+    threadId: string
+  ): Promise<void> {
     const response = await this.graphql<{
       resolveReviewThread?: {
         thread?: {
@@ -371,7 +390,7 @@ export class ReviewThreadResolver {
           isResolved: boolean;
         } | null;
       } | null;
-    }>(RESOLVE_MUTATION, { threadId });
+    }>(RESOLVE_MUTATION, { threadId }, client);
     if (!response.resolveReviewThread?.thread?.isResolved) {
       throw new Error('GitHub did not mark review thread resolved');
     }
@@ -379,9 +398,10 @@ export class ReviewThreadResolver {
 
   private async graphql<T>(
     query: string,
-    variables: Record<string, unknown>
+    variables: Record<string, unknown>,
+    client: GitHubClient = this.client
   ): Promise<T> {
-    const graphql = (this.client.octokit as unknown as {
+    const graphql = (client.octokit as unknown as {
       graphql?: (query: string, variables: Record<string, unknown>) => Promise<T>;
     }).graphql;
     if (typeof graphql !== 'function') {

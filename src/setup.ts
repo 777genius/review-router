@@ -239,7 +239,7 @@ async function createComponentsForCLI(
 export async function createComponents(
   config: ReviewConfig,
   githubToken: string,
-  options: { lifecycleGithubToken?: string } = {}
+  options: { fallbackGithubToken?: string } = {}
 ): Promise<ReviewComponents> {
   // Initialize plugins if enabled
   const pluginLoader = config.pluginsEnabled
@@ -275,9 +275,9 @@ export async function createComponents(
   const security = new SecurityScanner();
   const rules = RuleLoader.load();
   const githubClient = new GitHubClient(githubToken);
-  const lifecycleGithubClient =
-    options.lifecycleGithubToken && options.lifecycleGithubToken !== githubToken
-      ? new GitHubClient(options.lifecycleGithubToken)
+  const fallbackGithubClient =
+    options.fallbackGithubToken && options.fallbackGithubToken !== githubToken
+      ? new GitHubClient(options.fallbackGithubToken)
       : githubClient;
   const prLoader = new PullRequestLoader(githubClient);
   const contextRetriever = new ContextRetriever();
@@ -328,13 +328,14 @@ export async function createComponents(
   const formatter = new MarkdownFormatterV2();
   const trustedReviewThreadAuthors = trustedReviewThreadAuthorsFromEnv();
   const reviewThreadInventory = new ReviewThreadInventoryLoader(
-    lifecycleGithubClient,
+    githubClient,
     trustedReviewThreadAuthors
   );
   const reviewThreadResolver = new ReviewThreadResolver(
-    lifecycleGithubClient,
+    githubClient,
     config.dryRun,
-    trustedReviewThreadAuthors
+    trustedReviewThreadAuthors,
+    fallbackGithubClient
   );
   const quietModeFilter = config.quietModeEnabled
     ? new QuietModeFilter(

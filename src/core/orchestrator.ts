@@ -274,6 +274,12 @@ export class ReviewOrchestrator {
             pr.files.length,
             start
           );
+          trivialReview.threadLifecycle =
+            await this.buildUnreviewedLifecycleForSkippedReview(
+              pr,
+              configuredLifecycleMode,
+              `trivial review skipped: ${trivialResult.reason}`
+            );
           trivialReview.coverage = buildReviewCoverage(
             { ...pr, files: [], diff: '' },
             config,
@@ -287,7 +293,8 @@ export class ReviewOrchestrator {
           await this.components.commentPoster.postSummary(
             pr.number,
             markdown,
-            false
+            false,
+            summaryMetadata
           );
 
           // Record metrics for trivial review (shows cost/time saved)
@@ -1596,6 +1603,110 @@ export class ReviewOrchestrator {
     lifecycle.resolvedCandidates = lifecycle.resolvedCandidates.filter(
       (record) => !handled.has(record.target.targetId)
     );
+  }
+
+  private async buildUnreviewedLifecycleForSkippedReview(
+    pr: PRContext,
+    configuredLifecycleMode: ReviewThreadLifecycleMode,
+    reason: string
+  ): Promise<ReviewThreadLifecycleResult | undefined> {
+    const lifecycleMode: ReviewThreadLifecycleMode =
+      this.components.reviewThreadInventory && this.components.githubClient
+        ? configuredLifecycleMode
+        : 'off';
+    if (lifecycleMode === 'off' || !this.components.reviewThreadInventory) {
+      return undefined;
+    }
+
+    let reviewCommentState: ReviewCommentState;
+    try {
+      reviewCommentState =
+        await this.components.feedbackFilter.loadReviewCommentState(
+          pr.number,
+          pr.headSha
+        );
+    } catch (error) {
+      logger.warn(
+        'Failed to load review comment state for skipped review lifecycle',
+        error as Error
+      );
+      reviewCommentState = {
+        suppressed: new Set(),
+        alreadyPosted: new Set(),
+        suppressedComments: [],
+        alreadyPostedComments: [],
+      };
+    }
+
+    const inventory = await this.components.reviewThreadInventory.load(
+      pr.number
+    );
+    const warnings = [
+      ...inventory.warnings,
+      `${reason}; old unresolved ReviewRouter threads were not revalidated`,
+    ];
+
+    if (inventory.failed) {
+      warnings.push(
+        'review thread lifecycle inventory was incomplete; no old thread was revalidated or auto-resolved'
+      );
+      return new ThreadLifecycleAggregator().aggregate({
+        mode: lifecycleMode,
+        targets: [],
+        plannedProviders: [],
+        providerResults: [],
+        currentFindings: [],
+        initialManualAttention: [],
+        skipped: [],
+        warnings,
+        inventoryFailed: true,
+        config: this.components.config,
+      });
+    }
+
+    const prepared = this.prepareLifecycleTargets(
+      inventory.candidates,
+      reviewCommentState,
+      this.components.config.reviewThreadLifecycleMaxTargets ?? 10
+    );
+    let targets = prepared.targets;
+    const skipped = prepared.skipped;
+
+    if (inventory.headRefOid && inventory.headRefOid !== pr.headSha) {
+      warnings.push(
+        'review thread lifecycle inventory head SHA did not match loaded PR head SHA'
+      );
+      skipped.push(
+        ...targets.map((target) => ({
+          target,
+          reasonCodes: ['head_sha_changed' as LifecycleReasonCode],
+        }))
+      );
+      targets = [];
+    }
+
+    const manualAttention = this.filterCommandDismissedLifecycleRecords(
+      inventory.manualAttention,
+      reviewCommentState,
+      skipped
+    );
+    targets = this.filterCommandDismissedLifecycleTargets(
+      targets,
+      reviewCommentState,
+      skipped
+    );
+
+    return new ThreadLifecycleAggregator().aggregate({
+      mode: lifecycleMode,
+      targets,
+      plannedProviders: [],
+      providerResults: [],
+      currentFindings: [],
+      initialManualAttention: manualAttention,
+      skipped,
+      warnings,
+      config: this.components.config,
+    });
   }
 
   private failUnconfirmedLifecycleCandidates(

@@ -1,5 +1,10 @@
 import { ReviewOrchestrator, ReviewComponents } from '../../src/core/orchestrator';
-import { PRContext, ReviewConfig, FileChange } from '../../src/types';
+import {
+  FileChange,
+  LifecycleTarget,
+  PRContext,
+  ReviewConfig,
+} from '../../src/types';
 import { setupComponents } from '../../src/setup';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -56,6 +61,27 @@ describe('Trivial Detection Integration', () => {
     deletions: 5,
     changes: 15,
     patch,
+  });
+
+  const createLifecycleTarget = (): LifecycleTarget => ({
+    targetId: 'rrt_trivial_skip',
+    threadId: 'thread-1',
+    threadUrl: 'https://github.com/owner/repo/pull/999#discussion_r1',
+    fingerprint: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+    severity: 'major',
+    title: 'Old major finding',
+    message: 'Old failure mode still needs revalidation.',
+    originalPath: 'src/app.ts',
+    currentPath: 'src/app.ts',
+    originalLine: 10,
+    currentLine: 10,
+    parentCommentId: 'comment-1',
+    parentCommentUpdatedAt: '2026-05-14T00:00:00Z',
+    threadCommentCount: 1,
+    viewerCanResolve: true,
+    hasHumanReply: false,
+    trustedAuthor: true,
+    reasonCodes: [],
   });
 
   describe('fully trivial PRs', () => {
@@ -150,6 +176,65 @@ describe('Trivial Detection Integration', () => {
       expect(review.metrics.durationSeconds).toBeGreaterThan(0);
       expect(review.runDetails).toBeDefined();
       expect(review.runDetails?.durationSeconds).toBeGreaterThan(0);
+    });
+
+    it('keeps old unresolved lifecycle threads visible when a trivial PR skips LLM review', async () => {
+      const postSummary = jest.fn().mockResolvedValue(undefined);
+      const loadInventory = jest.fn().mockResolvedValue({
+        headRefOid: 'def456',
+        candidates: [createLifecycleTarget()],
+        manualAttention: [],
+        dedupeComments: [],
+        warnings: [],
+        failed: false,
+      });
+      const lifecycleComponents: ReviewComponents = {
+        ...components,
+        config: {
+          ...components.config,
+          reviewThreadLifecycle: 'resolve',
+        },
+        githubClient: {
+          owner: 'owner',
+          repo: 'repo',
+        } as any,
+        reviewThreadInventory: {
+          load: loadInventory,
+        } as any,
+        commentPoster: {
+          ...components.commentPoster,
+          postSummary,
+        } as any,
+        feedbackFilter: {
+          ...components.feedbackFilter,
+          loadReviewCommentState: jest.fn().mockResolvedValue({
+            suppressed: new Set(),
+            alreadyPosted: new Set(),
+            suppressedComments: [],
+            alreadyPostedComments: [],
+            commandDismissed: new Set(),
+            commandDismissedLocations: new Set(),
+          }),
+          isInlineCommandDismissed: jest.fn(() => false),
+        } as any,
+      };
+      const lifecycleOrchestrator = new ReviewOrchestrator(
+        lifecycleComponents
+      );
+      const pr = createMockPR([createFile('README.md')]);
+
+      const review = await lifecycleOrchestrator.executeReview(pr);
+
+      expect(loadInventory).toHaveBeenCalledWith(999);
+      expect(review.threadLifecycle?.previousUncertain).toHaveLength(1);
+      expect(review.threadLifecycle?.resolvedByLifecycle).toHaveLength(0);
+      expect(postSummary).toHaveBeenCalledWith(
+        999,
+        expect.stringContaining('Previous Review Threads'),
+        false,
+        expect.objectContaining({ reviewedHeadSha: 'def456' })
+      );
+      expect(postSummary.mock.calls[0][1]).not.toContain('## All Clear!');
     });
   });
 

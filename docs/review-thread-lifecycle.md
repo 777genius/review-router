@@ -95,6 +95,11 @@ Lifecycle output is separate from current provider findings:
   lifecycle inventory failure, and lifecycle cap skips block `All Clear`;
 - report mode shows would-be resolved threads as skipped, not resolved.
 
+When a PR is skipped as fully trivial, ReviewRouter still loads unresolved
+ReviewRouter-owned thread inventory. It does not run provider revalidation or
+auto-resolve in that path, but old unresolved threads remain visible as
+attention/uncertain lifecycle state so the summary does not look falsely clean.
+
 ## Configuration
 
 Environment variables:

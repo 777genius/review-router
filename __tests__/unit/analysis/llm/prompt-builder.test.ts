@@ -202,6 +202,10 @@ describe('PromptBuilder', () => {
         'You MUST return exactly 1 revalidation object(s)'
       );
       expect(prompt).toContain('Do not omit a listed targetId');
+      expect(prompt).toContain('MANDATORY FINAL JSON CHECK');
+      expect(prompt).toContain(
+        '"revalidations" must contain exactly these targetId values: rrt_123'
+      );
       expect(prompt).toContain('"resolved" only when current head code positively fixes');
     });
 

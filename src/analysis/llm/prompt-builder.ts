@@ -299,6 +299,19 @@ export class PromptBuilder {
       diff
     );
 
+    if (lifecycleTargets.length > 0) {
+      instructions.push(
+        '',
+        'MANDATORY FINAL JSON CHECK FOR REVALIDATIONS:',
+        `- "revalidations" must contain exactly these targetId values: ${lifecycleTargets.map((target) => target.targetId).join(', ')}`,
+        '- Every revalidation object must include: targetId, fingerprint, verdict, confidence, evidence, rationale.',
+        '- verdict must be exactly one of: "resolved", "still_valid", "uncertain".',
+        '- confidence must be a number from 0 to 1.',
+        '- evidence must be an array of objects: [{"path":"file","startLine":1,"endLine":2,"reason":"current-code evidence"}].',
+        '- If proof is incomplete, use verdict "uncertain"; do not omit the targetId.'
+      );
+    }
+
     return instructions.join('\n');
   }
 

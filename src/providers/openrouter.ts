@@ -33,9 +33,11 @@ export class OpenRouterProvider extends Provider {
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const started = Date.now();
 
-    // Strip instance suffix (e.g., "free#1" -> "free") for API routing
-    // Multiple instances can route to the same endpoint for diversity
-    const apiModelId = this.modelId.replace(/#\d+$/, '');
+    // Strip instance suffix (e.g., "free#1" -> "free") for API routing.
+    // OpenRouter's free meta-model id is "openrouter/free", while ReviewRouter
+    // provider names already use the "openrouter/" prefix as a provider namespace.
+    const baseModelId = this.modelId.replace(/#\d+$/, '');
+    const apiModelId = baseModelId === 'free' ? 'openrouter/free' : baseModelId;
 
     try {
       const response = await withRetry(

@@ -30,6 +30,8 @@ export type LifecycleReasonCode =
   | 'mutation_permission_denied'
   | 'mutation_rate_limited'
   | 'mutation_failed'
+  | 'resolution_comment_posted'
+  | 'resolution_comment_failed'
   | 'dry_run'
   | 'already_resolved'
   | 'thread_not_found'
@@ -386,6 +388,7 @@ export interface LifecycleTarget {
   currentLine?: number;
   diffHunk?: string;
   parentCommentId: string;
+  parentCommentDatabaseId?: number;
   parentCommentUpdatedAt: string;
   threadCommentCount: number;
   viewerCanResolve: boolean;

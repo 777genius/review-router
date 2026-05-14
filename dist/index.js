@@ -21088,7 +21088,9 @@ var MarkdownFormatterV2 = class {
     lines.push("## Previous Review Threads");
     lines.push("");
     if (hasStillValid) {
-      lines.push("These unresolved findings still look valid and count as active:");
+      lines.push(
+        "These unresolved findings still look valid and count as active:"
+      );
       lines.push("");
       stillValidRecords.forEach((record) => {
         lines.push(this.formatLifecycleRecord(record));
@@ -21108,7 +21110,9 @@ var MarkdownFormatterV2 = class {
       lines.push("<summary>Lifecycle attention required</summary>");
       lines.push("");
       if (lifecycle.inventoryFailed) {
-        lines.push("- Review thread inventory failed; no thread was auto-resolved.");
+        lines.push(
+          "- Review thread inventory failed; no thread was auto-resolved."
+        );
       }
       lifecycle.warnings.forEach((warning2) => {
         lines.push(`- ${warning2}`);
@@ -21143,6 +21147,8 @@ var MarkdownFormatterV2 = class {
       mutation_failed: "GitHub mutation failed",
       mutation_permission_denied: "missing permission to resolve",
       mutation_rate_limited: "GitHub rate limited mutation",
+      resolution_comment_failed: "resolution reply failed",
+      resolution_comment_posted: "resolution reply posted",
       outside_review_scope: "outside reviewed diff scope",
       pagination_incomplete: "thread comments were truncated",
       provider_failed: "provider failed",
@@ -24805,9 +24811,7 @@ var AcceptanceDetector = class {
 
 // src/github/review-thread-inventory.ts
 var import_crypto6 = require("crypto");
-var DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS = [
-  "review-router-ai[bot]"
-];
+var DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS = ["review-router-ai[bot]"];
 var GITHUB_ACTIONS_BOT_AUTHOR = "github-actions[bot]";
 var TRUSTED_AUTHOR_ENV_KEYS = [
   "REVIEW_THREAD_LIFECYCLE_TRUSTED_AUTHORS",
@@ -24848,6 +24852,7 @@ query ReviewRouterThreadInventory(
             pageInfo { hasNextPage endCursor }
             nodes {
               id
+              databaseId
               author { login }
               body
               createdAt
@@ -24862,30 +24867,32 @@ query ReviewRouterThreadInventory(
         }
       }
     }
-	  }
-	}`;
+    }
+  }
+}`;
 var THREAD_COMMENTS_QUERY = `
-	query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
-	  node(id: $threadId) {
-	    ... on PullRequestReviewThread {
-	      comments(first: 100, after: $commentsAfter) {
-	        pageInfo { hasNextPage endCursor }
-	        nodes {
-	          id
-	          author { login }
-	          body
-	          createdAt
-	          updatedAt
-	          path
-	          line
-	          originalLine
-	          diffHunk
-	          url
-	        }
-	      }
-	    }
-	  }
-	}`;
+query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
+  node(id: $threadId) {
+    ... on PullRequestReviewThread {
+      comments(first: 100, after: $commentsAfter) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          databaseId
+          author { login }
+          body
+          createdAt
+          updatedAt
+          path
+          line
+          originalLine
+          diffHunk
+          url
+        }
+      }
+    }
+  }
+}`;
 var ReviewThreadInventoryLoader = class {
   constructor(client, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS) {
     this.client = client;
@@ -25015,6 +25022,7 @@ var ReviewThreadInventoryLoader = class {
       currentLine: parent.line ?? thread.line ?? void 0,
       diffHunk: parent.diffHunk ?? void 0,
       parentCommentId: parent.id,
+      parentCommentDatabaseId: parent.databaseId ?? void 0,
       parentCommentUpdatedAt: parent.updatedAt || parent.createdAt || (/* @__PURE__ */ new Date(0)).toISOString(),
       threadCommentCount: comments.length,
       viewerCanResolve: Boolean(thread.viewerCanResolve),
@@ -25171,6 +25179,7 @@ query ReviewRouterResolveThreadGuard($threadId: ID!) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
+          databaseId
           author { login }
           body
           createdAt
@@ -25189,12 +25198,14 @@ mutation ReviewRouterResolveReviewThread($threadId: ID!) {
     }
   }
 }`;
+var RESOLUTION_REPLY_MARKER = "reviewrouter-lifecycle-resolution:v1";
 var ReviewThreadResolver = class {
-  constructor(client, dryRun = false, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS, mutationFallbackClient) {
+  constructor(client, dryRun = false, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS, mutationFallbackClient, backendResolver) {
     this.client = client;
     this.dryRun = dryRun;
     this.trustedAuthors = trustedAuthors;
     this.mutationFallbackClient = mutationFallbackClient;
+    this.backendResolver = backendResolver;
   }
   async resolveGuarded(prNumber, reviewedHeadSha, candidates) {
     const result = {
@@ -25209,7 +25220,9 @@ var ReviewThreadResolver = class {
     }
     if (this.dryRun) {
       result.skipped.push(
-        ...candidates.map((candidate) => this.withReason(candidate, ["dry_run"]))
+        ...candidates.map(
+          (candidate) => this.withReason(candidate, ["dry_run"])
+        )
       );
       return result;
     }
@@ -25305,9 +25318,66 @@ var ReviewThreadResolver = class {
           );
           return result;
         }
+        if (permissionDenied(error2) && this.backendResolver) {
+          const backendResult = await this.tryBackendResolve(
+            prNumber,
+            reviewedHeadSha,
+            candidate
+          );
+          if (backendResult?.status === "resolved") {
+            result.resolved.push({
+              ...this.withReason(
+                candidate,
+                mapBackendReasonCodes(backendResult.reasonCodes)
+              ),
+              resolvedBy: "review-router"
+            });
+            continue;
+          }
+          if (backendResult?.status === "already_resolved") {
+            result.resolved.push({
+              ...this.withReason(
+                candidate,
+                mapBackendReasonCodes(backendResult.reasonCodes, [
+                  "already_resolved"
+                ])
+              ),
+              resolvedBy: "external"
+            });
+            continue;
+          }
+          if (backendResult?.status === "manual_attention") {
+            result.manualAttention.push(
+              this.withReason(
+                candidate,
+                mapBackendReasonCodes(backendResult.reasonCodes, [
+                  "human_reply"
+                ])
+              )
+            );
+            continue;
+          }
+          if (backendResult?.status === "skipped") {
+            result.skipped.push(
+              this.withReason(
+                candidate,
+                mapBackendReasonCodes(backendResult.reasonCodes, [
+                  "thread_changed_before_mutation"
+                ])
+              )
+            );
+            continue;
+          }
+        }
+        const fallbackCommentPosted = permissionDenied(error2) ? await this.tryPostResolutionFallbackComment(
+          prNumber,
+          candidate,
+          thread
+        ) : false;
         result.failed.push({
           ...this.withReason(candidate, [
-            permissionDenied(error2) ? "mutation_permission_denied" : "mutation_failed"
+            permissionDenied(error2) ? "mutation_permission_denied" : "mutation_failed",
+            ...fallbackCommentPosted ? ["resolution_comment_posted"] : []
           ]),
           errorMessage: errorMessage(error2)
         });
@@ -25425,6 +25495,52 @@ var ReviewThreadResolver = class {
       throw new Error("GitHub did not mark review thread resolved");
     }
   }
+  async tryBackendResolve(prNumber, reviewedHeadSha, candidate) {
+    if (!this.backendResolver) return void 0;
+    try {
+      return await this.backendResolver.resolveReviewThread({
+        prNumber,
+        reviewedHeadSha,
+        candidate
+      });
+    } catch (error2) {
+      logger.warn(
+        "Backend review thread lifecycle resolver could not resolve thread",
+        error2
+      );
+      return void 0;
+    }
+  }
+  async tryPostResolutionFallbackComment(prNumber, candidate, thread) {
+    const parentCommentDatabaseId = candidate.target.parentCommentDatabaseId;
+    if (!parentCommentDatabaseId) {
+      return false;
+    }
+    const comments = thread?.comments?.nodes ?? [];
+    if (comments.some(
+      (comment) => comment.body?.includes(
+        `${RESOLUTION_REPLY_MARKER} target_id=${candidate.target.targetId}`
+      )
+    )) {
+      return true;
+    }
+    try {
+      await this.client.octokit.rest.pulls.createReplyForReviewComment({
+        owner: this.client.owner,
+        repo: this.client.repo,
+        pull_number: prNumber,
+        comment_id: parentCommentDatabaseId,
+        body: renderResolutionFallbackComment(candidate)
+      });
+      return true;
+    } catch (error2) {
+      logger.warn(
+        "Failed to post review thread lifecycle resolution fallback reply",
+        error2
+      );
+      return false;
+    }
+  }
   async graphql(query, variables, client = this.client) {
     const graphql = client.octokit.graphql;
     if (typeof graphql !== "function") {
@@ -25446,8 +25562,115 @@ function permissionDenied(error2) {
 function errorMessage(error2) {
   return error2 instanceof Error ? error2.message : String(error2);
 }
+function renderResolutionFallbackComment(candidate) {
+  return [
+    `<!-- ${RESOLUTION_REPLY_MARKER} target_id=${candidate.target.targetId} fingerprint=${candidate.target.fingerprint} -->`,
+    "",
+    "ReviewRouter rechecked this finding and the provider quorum marked it resolved. GitHub did not allow the app token to close this review thread automatically, so a maintainer can mark the conversation resolved manually."
+  ].join("\n");
+}
+function mapBackendReasonCodes(reasonCodes, fallback2 = []) {
+  const allowed = /* @__PURE__ */ new Set([
+    "already_resolved",
+    "head_sha_changed",
+    "human_reply",
+    "mutation_failed",
+    "mutation_permission_denied",
+    "pagination_incomplete",
+    "thread_changed_before_mutation",
+    "thread_not_found",
+    "untrusted_author",
+    "viewer_cannot_resolve"
+  ]);
+  const mapped = reasonCodes.filter(
+    (reason) => allowed.has(reason)
+  );
+  return mapped.length > 0 ? mapped : fallback2;
+}
 function unique2(values) {
   return Array.from(new Set(values));
+}
+
+// src/control-plane/review-thread-lifecycle.ts
+var ControlPlaneReviewThreadLifecycleResolver = class {
+  constructor(runtimeConfig, fetchImpl = fetch) {
+    this.runtimeConfig = runtimeConfig;
+    this.fetchImpl = fetchImpl;
+  }
+  async resolveReviewThread(input) {
+    if (!this.runtimeConfig || this.runtimeConfig.status !== "applied") {
+      throw new Error("runtime_oidc_session_unavailable");
+    }
+    const response = await this.fetchImpl(
+      joinApiPath(
+        this.runtimeConfig.apiUrl,
+        "/api/action/v1/review-thread-lifecycle/resolve"
+      ),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.runtimeConfig.sessionToken}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          protocolVersion: 1,
+          pullRequestNumber: input.prNumber,
+          reviewedHeadSha: input.reviewedHeadSha,
+          target: {
+            targetId: input.candidate.target.targetId,
+            threadId: input.candidate.target.threadId,
+            fingerprint: input.candidate.target.fingerprint,
+            parentCommentId: input.candidate.target.parentCommentId,
+            parentCommentUpdatedAt: input.candidate.target.parentCommentUpdatedAt,
+            threadCommentCount: input.candidate.target.threadCommentCount
+          }
+        })
+      }
+    );
+    if (!response.ok) {
+      const code = await readSafeErrorCode(response);
+      throw new Error(
+        `review_thread_lifecycle_resolve_failed:${response.status}${code ? `:${code}` : ""}`
+      );
+    }
+    return parseResolveResponse(await response.json());
+  }
+};
+function parseResolveResponse(value) {
+  if (!value || typeof value !== "object") {
+    throw new Error("review_thread_lifecycle_invalid_response");
+  }
+  const input = value;
+  if (input.protocolVersion !== 1 || !isResolveStatus(input.status) || !Array.isArray(input.reasonCodes) || !input.reasonCodes.every((reason) => typeof reason === "string")) {
+    throw new Error("review_thread_lifecycle_invalid_response");
+  }
+  return {
+    protocolVersion: 1,
+    status: input.status,
+    reasonCodes: input.reasonCodes,
+    ...input.resolvedBy === "github_user" || input.resolvedBy === "external" ? { resolvedBy: input.resolvedBy } : {},
+    ...typeof input.errorCode === "string" && input.errorCode ? { errorCode: input.errorCode } : {}
+  };
+}
+function isResolveStatus(value) {
+  return value === "resolved" || value === "already_resolved" || value === "skipped" || value === "manual_attention" || value === "missing_user_authorization" || value === "missing_resolver_permission" || value === "failed";
+}
+async function readSafeErrorCode(response) {
+  try {
+    const body = await response.json();
+    if (typeof body.error === "string") return safeReason(body.error);
+    if (typeof body.error?.code === "string")
+      return safeReason(body.error.code);
+  } catch {
+    return void 0;
+  }
+  return void 0;
+}
+function joinApiPath(apiUrl, path14) {
+  return `${apiUrl.replace(/\/+$/, "")}${path14}`;
+}
+function safeReason(message) {
+  return message.replace(/[^a-zA-Z0-9:_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
 }
 
 // src/setup.ts
@@ -25534,7 +25757,8 @@ async function createComponents(config, githubToken, options = {}) {
     githubClient,
     config.dryRun,
     trustedReviewThreadAuthors,
-    fallbackGithubClient
+    fallbackGithubClient,
+    new ControlPlaneReviewThreadLifecycleResolver(options.runtimeConfig)
   );
   const quietModeFilter = config.quietModeEnabled ? new QuietModeFilter(
     {
@@ -32480,9 +32704,9 @@ async function applyControlPlaneRuntimeConfig(input = {}) {
     }
     if (fallbackEnabled) {
       input.logger?.warn(
-        `ReviewRouter runtime config unavailable; using static workflow config. Reason: ${safeReason(message)}`
+        `ReviewRouter runtime config unavailable; using static workflow config. Reason: ${safeReason2(message)}`
       );
-      return { status: "fallback", reason: safeReason(message) };
+      return { status: "fallback", reason: safeReason2(message) };
     }
     throw error2;
   }
@@ -32510,7 +32734,7 @@ async function requestGitHubOidcToken(input) {
 }
 async function exchangeActionSession(input) {
   const response = await input.fetchImpl(
-    joinApiPath(input.apiUrl, "/api/action/v1/session/exchange"),
+    joinApiPath2(input.apiUrl, "/api/action/v1/session/exchange"),
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -32521,7 +32745,7 @@ async function exchangeActionSession(input) {
     }
   );
   if (!response.ok) {
-    const code = await readSafeErrorCode(response);
+    const code = await readSafeErrorCode2(response);
     throw new Error(
       `action_session_exchange_failed:${response.status}${code ? `:${code}` : ""}`
     );
@@ -32534,7 +32758,7 @@ async function exchangeActionSession(input) {
 }
 async function fetchRuntimeConfig(input) {
   const response = await input.fetchImpl(
-    joinApiPath(input.apiUrl, "/api/action/v1/config"),
+    joinApiPath2(input.apiUrl, "/api/action/v1/config"),
     {
       headers: {
         Authorization: `Bearer ${input.sessionToken}`,
@@ -32543,7 +32767,7 @@ async function fetchRuntimeConfig(input) {
     }
   );
   if (!response.ok) {
-    const code = await readSafeErrorCode(response);
+    const code = await readSafeErrorCode2(response);
     if (response.status === 426 || code === "action_version_blocked") {
       throw new Error("action_version_blocked");
     }
@@ -32600,21 +32824,21 @@ function safeEnvKeyLabel(key) {
   }
   return "<invalid-env-key>";
 }
-async function readSafeErrorCode(response) {
+async function readSafeErrorCode2(response) {
   try {
     const body = await response.json();
     if (typeof body.error === "string") {
-      return safeReason(body.error);
+      return safeReason2(body.error);
     }
     if (typeof body.error?.code === "string") {
-      return safeReason(body.error.code);
+      return safeReason2(body.error.code);
     }
   } catch {
     return void 0;
   }
   return void 0;
 }
-function joinApiPath(apiUrl, path14) {
+function joinApiPath2(apiUrl, path14) {
   return new URL(path14, ensureTrailingSlash(apiUrl)).toString();
 }
 function ensureTrailingSlash(value) {
@@ -32627,7 +32851,7 @@ function requireEnv(env, key) {
   }
   return value;
 }
-function safeReason(message) {
+function safeReason2(message) {
   return message.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, "<redacted>").replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 160);
 }
 
@@ -32661,12 +32885,12 @@ async function resolveGitHubCommentToken(input) {
     };
   } catch (error2) {
     const message = error2 instanceof Error ? error2.message : "unknown_error";
-    return fallback(input, safeReason2(message));
+    return fallback(input, safeReason3(message));
   }
 }
 async function fetchCommentToken(input) {
   const response = await input.fetchImpl(
-    joinApiPath2(input.apiUrl, "/api/action/v1/comment-token"),
+    joinApiPath3(input.apiUrl, "/api/action/v1/comment-token"),
     {
       method: "POST",
       headers: {
@@ -32677,7 +32901,7 @@ async function fetchCommentToken(input) {
     }
   );
   if (!response.ok) {
-    const code = await readSafeErrorCode2(response);
+    const code = await readSafeErrorCode3(response);
     throw new Error(
       `comment_token_fetch_failed:${response.status}${code ? `:${code}` : ""}`
     );
@@ -32705,24 +32929,24 @@ function fallback(input, reason) {
   );
   return { status: "fallback", token: input.fallbackToken, reason };
 }
-function joinApiPath2(apiUrl, path14) {
+function joinApiPath3(apiUrl, path14) {
   return `${apiUrl.replace(/\/+$/, "")}${path14}`;
 }
-async function readSafeErrorCode2(response) {
+async function readSafeErrorCode3(response) {
   try {
     const body = await response.json();
     if (typeof body.error === "string") {
-      return safeReason2(body.error);
+      return safeReason3(body.error);
     }
     if (typeof body.error?.code === "string") {
-      return safeReason2(body.error.code);
+      return safeReason3(body.error.code);
     }
   } catch {
     return void 0;
   }
   return void 0;
 }
-function safeReason2(message) {
+function safeReason3(message) {
   return message.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 120);
 }
 
@@ -32750,7 +32974,7 @@ async function reportControlPlaneActionHealth(input) {
   };
   try {
     const response = await fetchImpl(
-      joinApiPath3(input.runtimeConfig.apiUrl, "/api/action/v1/health-report"),
+      joinApiPath4(input.runtimeConfig.apiUrl, "/api/action/v1/health-report"),
       {
         method: "POST",
         headers: {
@@ -32873,7 +33097,7 @@ function safeErrorSummaryForCategory(category) {
       return void 0;
   }
 }
-function joinApiPath3(apiUrl, path14) {
+function joinApiPath4(apiUrl, path14) {
   return new URL(path14, ensureTrailingSlash2(apiUrl)).toString();
 }
 function ensureTrailingSlash2(value) {
@@ -33070,7 +33294,8 @@ async function run() {
     }
     const config = ConfigLoader.load();
     const components = await createComponents(config, token, {
-      fallbackGithubToken: lifecycleResolveToken
+      fallbackGithubToken: lifecycleResolveToken,
+      runtimeConfig
     });
     const orchestrator = new ReviewOrchestrator(components);
     const prInput = getInput("PR_NUMBER") || process.env.PR_NUMBER;

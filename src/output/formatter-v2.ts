@@ -154,8 +154,7 @@ export class MarkdownFormatterV2 {
   private generatePRSummary(review: Review): string {
     const { metrics, findings } = review;
     const previous = countPreviousStillValidBySeverity(review.threadLifecycle);
-    const previousActive =
-      previous.critical + previous.major + previous.minor;
+    const previousActive = previous.critical + previous.major + previous.minor;
 
     if (findings.length === 0) {
       if (previousActive > 0) {
@@ -443,7 +442,9 @@ export class MarkdownFormatterV2 {
     lines.push('');
 
     if (hasStillValid) {
-      lines.push('These unresolved findings still look valid and count as active:');
+      lines.push(
+        'These unresolved findings still look valid and count as active:'
+      );
       lines.push('');
       stillValidRecords.forEach((record) => {
         lines.push(this.formatLifecycleRecord(record));
@@ -465,7 +466,9 @@ export class MarkdownFormatterV2 {
       lines.push('<summary>Lifecycle attention required</summary>');
       lines.push('');
       if (lifecycle.inventoryFailed) {
-        lines.push('- Review thread inventory failed; no thread was auto-resolved.');
+        lines.push(
+          '- Review thread inventory failed; no thread was auto-resolved.'
+        );
       }
       lifecycle.warnings.forEach((warning) => {
         lines.push(`- ${warning}`);
@@ -511,10 +514,13 @@ export class MarkdownFormatterV2 {
       mutation_failed: 'GitHub mutation failed',
       mutation_permission_denied: 'missing permission to resolve',
       mutation_rate_limited: 'GitHub rate limited mutation',
+      resolution_comment_failed: 'resolution reply failed',
+      resolution_comment_posted: 'resolution reply posted',
       outside_review_scope: 'outside reviewed diff scope',
       pagination_incomplete: 'thread comments were truncated',
       provider_failed: 'provider failed',
-      provider_current_finding_present: 'provider reported same finding in this run',
+      provider_current_finding_present:
+        'provider reported same finding in this run',
       provider_missing_revalidation: 'provider omitted revalidation',
       provider_uncertain: 'provider was uncertain',
       report_mode: 'report mode',

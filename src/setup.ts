@@ -44,6 +44,8 @@ import {
   trustedReviewThreadAuthorsFromEnv,
 } from './github/review-thread-inventory';
 import { ReviewThreadResolver } from './github/review-thread-resolver';
+import { ControlPlaneReviewThreadLifecycleResolver } from './control-plane/review-thread-lifecycle';
+import { RuntimeConfigResult } from './control-plane/runtime-config';
 
 export interface SetupOptions {
   cliMode?: boolean;
@@ -239,7 +241,10 @@ async function createComponentsForCLI(
 export async function createComponents(
   config: ReviewConfig,
   githubToken: string,
-  options: { fallbackGithubToken?: string } = {}
+  options: {
+    fallbackGithubToken?: string;
+    runtimeConfig?: RuntimeConfigResult;
+  } = {}
 ): Promise<ReviewComponents> {
   // Initialize plugins if enabled
   const pluginLoader = config.pluginsEnabled
@@ -335,7 +340,8 @@ export async function createComponents(
     githubClient,
     config.dryRun,
     trustedReviewThreadAuthors,
-    fallbackGithubClient
+    fallbackGithubClient,
+    new ControlPlaneReviewThreadLifecycleResolver(options.runtimeConfig)
   );
   const quietModeFilter = config.quietModeEnabled
     ? new QuietModeFilter(

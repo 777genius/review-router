@@ -15,6 +15,7 @@ const record = (): LifecycleThreadRecord => ({
     originalLine: 10,
     currentLine: 12,
     parentCommentId: 'comment-123',
+    parentCommentDatabaseId: 456,
     parentCommentUpdatedAt: '2026-05-14T00:00:00Z',
     threadCommentCount: 1,
     viewerCanResolve: true,
@@ -34,6 +35,7 @@ const threadResponse = (overrides: Record<string, unknown> = {}) => ({
       nodes: [
         {
           id: 'comment-123',
+          databaseId: 456,
           author: { login: 'review-router-ai[bot]' },
           body: `<!-- review-router-finding:${'a'.repeat(24)} -->`,
           createdAt: '2026-05-14T00:00:00Z',
@@ -193,6 +195,103 @@ describe('ReviewThreadResolver', () => {
     expect(result.failed).toHaveLength(0);
     expect(primaryGraphql).toHaveBeenCalledTimes(3);
     expect(fallbackGraphql).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the backend user resolver when app tokens cannot resolve', async () => {
+    const permissionError = Object.assign(
+      new Error('Resource not accessible by integration'),
+      { status: 403 }
+    );
+    const graphql = jest
+      .fn()
+      .mockResolvedValueOnce({
+        repository: {
+          pullRequest: {
+            headRefOid: 'head-sha',
+          },
+        },
+      })
+      .mockResolvedValueOnce(threadResponse())
+      .mockRejectedValueOnce(permissionError);
+    const backendResolver = {
+      resolveReviewThread: jest.fn().mockResolvedValue({
+        protocolVersion: 1,
+        status: 'resolved',
+        reasonCodes: [],
+        resolvedBy: 'github_user',
+      }),
+    };
+    const resolver = new ReviewThreadResolver(
+      {
+        owner: 'owner',
+        repo: 'repo',
+        octokit: { graphql },
+      } as unknown as GitHubClient,
+      false,
+      undefined,
+      undefined,
+      backendResolver
+    );
+
+    const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
+
+    expect(result.resolved).toHaveLength(1);
+    expect(result.failed).toHaveLength(0);
+    expect(backendResolver.resolveReviewThread).toHaveBeenCalledWith({
+      prNumber: 123,
+      reviewedHeadSha: 'head-sha',
+      candidate: record(),
+    });
+  });
+
+  it('posts one resolution fallback reply when all resolve mutations are denied', async () => {
+    const permissionError = Object.assign(
+      new Error('Resource not accessible by integration'),
+      { status: 403 }
+    );
+    const graphql = jest
+      .fn()
+      .mockResolvedValueOnce({
+        repository: {
+          pullRequest: {
+            headRefOid: 'head-sha',
+          },
+        },
+      })
+      .mockResolvedValueOnce(threadResponse())
+      .mockRejectedValueOnce(permissionError);
+    const createReplyForReviewComment = jest.fn().mockResolvedValue({});
+    const resolver = new ReviewThreadResolver({
+      owner: 'owner',
+      repo: 'repo',
+      octokit: {
+        graphql,
+        rest: {
+          pulls: {
+            createReplyForReviewComment,
+          },
+        },
+      },
+    } as unknown as GitHubClient);
+
+    const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
+
+    expect(result.resolved).toHaveLength(0);
+    expect(result.failed[0].reasonCodes).toEqual([
+      'mutation_permission_denied',
+      'resolution_comment_posted',
+    ]);
+    expect(createReplyForReviewComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: 'owner',
+        repo: 'repo',
+        pull_number: 123,
+        comment_id: 456,
+      })
+    );
+    expect(createReplyForReviewComment.mock.calls[0][0].body).toContain(
+      'reviewrouter-lifecycle-resolution:v1'
+    );
   });
 
   it('treats an already resolved thread before mutation as externally resolved', async () => {

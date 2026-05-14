@@ -14,9 +14,7 @@ import {
 } from './comment-fingerprint';
 import { logger } from '../utils/logger';
 
-export const DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS = [
-  'review-router-ai[bot]',
-];
+export const DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS = ['review-router-ai[bot]'];
 const GITHUB_ACTIONS_BOT_AUTHOR = 'github-actions[bot]';
 
 const TRUSTED_AUTHOR_ENV_KEYS = [
@@ -53,6 +51,7 @@ interface GraphQLPageInfo {
 
 interface GraphQLComment {
   id: string;
+  databaseId?: number | null;
   author?: { login?: string | null } | null;
   body?: string | null;
   createdAt?: string | null;
@@ -111,6 +110,7 @@ query ReviewRouterThreadInventory(
             pageInfo { hasNextPage endCursor }
             nodes {
               id
+              databaseId
               author { login }
               body
               createdAt
@@ -125,31 +125,33 @@ query ReviewRouterThreadInventory(
         }
       }
     }
-	  }
-	}`;
+    }
+  }
+}`;
 
 const THREAD_COMMENTS_QUERY = `
-	query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
-	  node(id: $threadId) {
-	    ... on PullRequestReviewThread {
-	      comments(first: 100, after: $commentsAfter) {
-	        pageInfo { hasNextPage endCursor }
-	        nodes {
-	          id
-	          author { login }
-	          body
-	          createdAt
-	          updatedAt
-	          path
-	          line
-	          originalLine
-	          diffHunk
-	          url
-	        }
-	      }
-	    }
-	  }
-	}`;
+query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
+  node(id: $threadId) {
+    ... on PullRequestReviewThread {
+      comments(first: 100, after: $commentsAfter) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          databaseId
+          author { login }
+          body
+          createdAt
+          updatedAt
+          path
+          line
+          originalLine
+          diffHunk
+          url
+        }
+      }
+    }
+  }
+}`;
 
 export class ReviewThreadInventoryLoader {
   constructor(
@@ -307,6 +309,7 @@ export class ReviewThreadInventoryLoader {
       currentLine: parent.line ?? thread.line ?? undefined,
       diffHunk: parent.diffHunk ?? undefined,
       parentCommentId: parent.id,
+      parentCommentDatabaseId: parent.databaseId ?? undefined,
       parentCommentUpdatedAt:
         parent.updatedAt || parent.createdAt || new Date(0).toISOString(),
       threadCommentCount: comments.length,
@@ -386,9 +389,14 @@ export class ReviewThreadInventoryLoader {
     query: string,
     variables: Record<string, unknown>
   ): Promise<T> {
-    const graphql = (this.client.octokit as unknown as {
-      graphql?: (query: string, variables: Record<string, unknown>) => Promise<T>;
-    }).graphql;
+    const graphql = (
+      this.client.octokit as unknown as {
+        graphql?: (
+          query: string,
+          variables: Record<string, unknown>
+        ) => Promise<T>;
+      }
+    ).graphql;
     if (typeof graphql !== 'function') {
       throw new Error('GitHub GraphQL client is unavailable');
     }
@@ -403,9 +411,9 @@ export function isTrustedReviewThreadAuthor(
   const normalizedLogin = canonicalBotLogin(login);
   return Boolean(
     normalizedLogin &&
-      trustedAuthors.some(
-        (author) => canonicalBotLogin(author) === normalizedLogin
-      )
+    trustedAuthors.some(
+      (author) => canonicalBotLogin(author) === normalizedLogin
+    )
   );
 }
 

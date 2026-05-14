@@ -184,9 +184,7 @@ async function run(): Promise<void> {
     }
     process.env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS = commentToken.status;
 
-    if (
-      mode === 'interaction'
-    ) {
+    if (mode === 'interaction') {
       await runInteraction(token!, fallbackToken);
       return;
     }
@@ -198,6 +196,7 @@ async function run(): Promise<void> {
     const config = ConfigLoader.load();
     const components = await createComponents(config, token!, {
       fallbackGithubToken: lifecycleResolveToken,
+      runtimeConfig,
     });
     const orchestrator = new ReviewOrchestrator(components);
 

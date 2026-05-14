@@ -5,13 +5,15 @@ import {
   LifecycleResolvedThread,
   LifecycleThreadRecord,
 } from '../types';
-import {
-  extractFindingFingerprint,
-} from './comment-fingerprint';
+import { extractFindingFingerprint } from './comment-fingerprint';
 import {
   DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS,
   isTrustedReviewThreadAuthor,
 } from './review-thread-inventory';
+import {
+  BackendReviewThreadLifecycleResolveResponse,
+  ReviewThreadLifecycleBackendResolver,
+} from '../control-plane/review-thread-lifecycle';
 import { logger } from '../utils/logger';
 
 export interface ReviewThreadResolveResult {
@@ -29,6 +31,7 @@ interface GraphQLPageInfo {
 
 interface GraphQLComment {
   id: string;
+  databaseId?: number | null;
   author?: { login?: string | null } | null;
   body?: string | null;
   createdAt?: string | null;
@@ -65,6 +68,7 @@ query ReviewRouterResolveThreadGuard($threadId: ID!) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
+          databaseId
           author { login }
           body
           createdAt
@@ -85,12 +89,15 @@ mutation ReviewRouterResolveReviewThread($threadId: ID!) {
   }
 }`;
 
+const RESOLUTION_REPLY_MARKER = 'reviewrouter-lifecycle-resolution:v1';
+
 export class ReviewThreadResolver {
   constructor(
     private readonly client: GitHubClient,
     private readonly dryRun = false,
     private readonly trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS,
-    private readonly mutationFallbackClient?: GitHubClient
+    private readonly mutationFallbackClient?: GitHubClient,
+    private readonly backendResolver?: ReviewThreadLifecycleBackendResolver
   ) {}
 
   async resolveGuarded(
@@ -112,7 +119,9 @@ export class ReviewThreadResolver {
 
     if (this.dryRun) {
       result.skipped.push(
-        ...candidates.map((candidate) => this.withReason(candidate, ['dry_run']))
+        ...candidates.map((candidate) =>
+          this.withReason(candidate, ['dry_run'])
+        )
       );
       return result;
     }
@@ -217,11 +226,73 @@ export class ReviewThreadResolver {
           );
           return result;
         }
+        if (permissionDenied(error) && this.backendResolver) {
+          const backendResult = await this.tryBackendResolve(
+            prNumber,
+            reviewedHeadSha,
+            candidate
+          );
+          if (backendResult?.status === 'resolved') {
+            result.resolved.push({
+              ...this.withReason(
+                candidate,
+                mapBackendReasonCodes(backendResult.reasonCodes)
+              ),
+              resolvedBy: 'review-router',
+            });
+            continue;
+          }
+          if (backendResult?.status === 'already_resolved') {
+            result.resolved.push({
+              ...this.withReason(
+                candidate,
+                mapBackendReasonCodes(backendResult.reasonCodes, [
+                  'already_resolved',
+                ])
+              ),
+              resolvedBy: 'external',
+            });
+            continue;
+          }
+          if (backendResult?.status === 'manual_attention') {
+            result.manualAttention.push(
+              this.withReason(
+                candidate,
+                mapBackendReasonCodes(backendResult.reasonCodes, [
+                  'human_reply',
+                ])
+              )
+            );
+            continue;
+          }
+          if (backendResult?.status === 'skipped') {
+            result.skipped.push(
+              this.withReason(
+                candidate,
+                mapBackendReasonCodes(backendResult.reasonCodes, [
+                  'thread_changed_before_mutation',
+                ])
+              )
+            );
+            continue;
+          }
+        }
+
+        const fallbackCommentPosted = permissionDenied(error)
+          ? await this.tryPostResolutionFallbackComment(
+              prNumber,
+              candidate,
+              thread
+            )
+          : false;
         result.failed.push({
           ...this.withReason(candidate, [
             permissionDenied(error)
               ? 'mutation_permission_denied'
               : 'mutation_failed',
+            ...(fallbackCommentPosted
+              ? (['resolution_comment_posted'] as LifecycleReasonCode[])
+              : []),
           ]),
           errorMessage: errorMessage(error),
         });
@@ -281,7 +352,8 @@ export class ReviewThreadResolver {
       };
     }
     if (
-      extractFindingFingerprint(parent.body || '') !== candidate.target.fingerprint
+      extractFindingFingerprint(parent.body || '') !==
+      candidate.target.fingerprint
     ) {
       return {
         kind: 'skipped',
@@ -396,14 +468,78 @@ export class ReviewThreadResolver {
     }
   }
 
+  private async tryBackendResolve(
+    prNumber: number,
+    reviewedHeadSha: string,
+    candidate: LifecycleThreadRecord
+  ): Promise<BackendReviewThreadLifecycleResolveResponse | undefined> {
+    if (!this.backendResolver) return undefined;
+    try {
+      return await this.backendResolver.resolveReviewThread({
+        prNumber,
+        reviewedHeadSha,
+        candidate,
+      });
+    } catch (error) {
+      logger.warn(
+        'Backend review thread lifecycle resolver could not resolve thread',
+        error as Error
+      );
+      return undefined;
+    }
+  }
+
+  private async tryPostResolutionFallbackComment(
+    prNumber: number,
+    candidate: LifecycleThreadRecord,
+    thread: GraphQLThread | null
+  ): Promise<boolean> {
+    const parentCommentDatabaseId = candidate.target.parentCommentDatabaseId;
+    if (!parentCommentDatabaseId) {
+      return false;
+    }
+    const comments = thread?.comments?.nodes ?? [];
+    if (
+      comments.some((comment) =>
+        comment.body?.includes(
+          `${RESOLUTION_REPLY_MARKER} target_id=${candidate.target.targetId}`
+        )
+      )
+    ) {
+      return true;
+    }
+
+    try {
+      await this.client.octokit.rest.pulls.createReplyForReviewComment({
+        owner: this.client.owner,
+        repo: this.client.repo,
+        pull_number: prNumber,
+        comment_id: parentCommentDatabaseId,
+        body: renderResolutionFallbackComment(candidate),
+      });
+      return true;
+    } catch (error) {
+      logger.warn(
+        'Failed to post review thread lifecycle resolution fallback reply',
+        error as Error
+      );
+      return false;
+    }
+  }
+
   private async graphql<T>(
     query: string,
     variables: Record<string, unknown>,
     client: GitHubClient = this.client
   ): Promise<T> {
-    const graphql = (client.octokit as unknown as {
-      graphql?: (query: string, variables: Record<string, unknown>) => Promise<T>;
-    }).graphql;
+    const graphql = (
+      client.octokit as unknown as {
+        graphql?: (
+          query: string,
+          variables: Record<string, unknown>
+        ) => Promise<T>;
+      }
+    ).graphql;
     if (typeof graphql !== 'function') {
       throw new Error('GitHub GraphQL client is unavailable');
     }
@@ -424,11 +560,46 @@ function isRateLimitedError(error: unknown): boolean {
 function permissionDenied(error: unknown): boolean {
   const maybe = error as { status?: number; message?: string };
   const message = maybe?.message || String(error);
-  return maybe?.status === 403 || /permission|forbidden|resource not accessible/i.test(message);
+  return (
+    maybe?.status === 403 ||
+    /permission|forbidden|resource not accessible/i.test(message)
+  );
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function renderResolutionFallbackComment(
+  candidate: LifecycleThreadRecord
+): string {
+  return [
+    `<!-- ${RESOLUTION_REPLY_MARKER} target_id=${candidate.target.targetId} fingerprint=${candidate.target.fingerprint} -->`,
+    '',
+    'ReviewRouter rechecked this finding and the provider quorum marked it resolved. GitHub did not allow the app token to close this review thread automatically, so a maintainer can mark the conversation resolved manually.',
+  ].join('\n');
+}
+
+function mapBackendReasonCodes(
+  reasonCodes: readonly string[],
+  fallback: LifecycleReasonCode[] = []
+): LifecycleReasonCode[] {
+  const allowed = new Set<LifecycleReasonCode>([
+    'already_resolved',
+    'head_sha_changed',
+    'human_reply',
+    'mutation_failed',
+    'mutation_permission_denied',
+    'pagination_incomplete',
+    'thread_changed_before_mutation',
+    'thread_not_found',
+    'untrusted_author',
+    'viewer_cannot_resolve',
+  ]);
+  const mapped = reasonCodes.filter((reason): reason is LifecycleReasonCode =>
+    allowed.has(reason as LifecycleReasonCode)
+  );
+  return mapped.length > 0 ? mapped : fallback;
 }
 
 function unique<T>(values: T[]): T[] {

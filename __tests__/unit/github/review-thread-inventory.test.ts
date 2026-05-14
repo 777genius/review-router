@@ -141,6 +141,7 @@ describe('ReviewThreadInventoryLoader', () => {
       hasHumanReply: false,
     });
     expect(inventory.dedupeComments).toHaveLength(1);
+    expectGraphqlBracesBalanced(graphql.mock.calls[0]?.[0] as string);
   });
 
   it('keeps outdated unresolved threads as lifecycle targets but not dedupe refs', async () => {
@@ -802,3 +803,13 @@ describe('ReviewThreadInventoryLoader', () => {
     expect(inventory.dedupeComments).toHaveLength(1);
   });
 });
+
+function expectGraphqlBracesBalanced(query: string): void {
+  let balance = 0;
+  for (const char of query) {
+    if (char === '{') balance += 1;
+    if (char === '}') balance -= 1;
+    expect(balance).toBeGreaterThanOrEqual(0);
+  }
+  expect(balance).toBe(0);
+}

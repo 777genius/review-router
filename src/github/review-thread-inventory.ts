@@ -125,7 +125,6 @@ query ReviewRouterThreadInventory(
         }
       }
     }
-    }
   }
 }`;
 

@@ -10,6 +10,7 @@ import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
 import {
   buildReviewFindingsSchema,
+  parseReviewOutputStrict,
   parseReviewFindingsStrict,
 } from './review-output';
 
@@ -108,11 +109,13 @@ export class ClaudeCodeProvider extends Provider {
           `Claude Code CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
         );
       }
+      const parsed = parseReviewOutputStrict(content, 'Claude Code CLI');
       return {
         content,
         durationSeconds,
         usage: this.estimateUsage(prompt, content),
-        findings: this.extractFindingsStrict(content),
+        findings: parsed.findings,
+        revalidations: parsed.revalidations,
       };
     } catch (error) {
       logger.error(`Claude Code provider failed: ${this.name}`, error as Error);

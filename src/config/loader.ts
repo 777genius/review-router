@@ -168,6 +168,17 @@ export class ConfigLoader {
         env.FAIL_ON_CRITICAL,
         env.FAIL_ON_MAJOR
       ),
+      reviewThreadLifecycle: this.parseLifecycleMode(
+        env.REVIEW_THREAD_LIFECYCLE,
+        'REVIEW_THREAD_LIFECYCLE'
+      ),
+      reviewThreadLifecycleMaxTargets: this.parseLifecycleMaxTargets(
+        env.REVIEW_THREAD_LIFECYCLE_MAX_TARGETS
+      ),
+      reviewThreadLifecycleResolveConfidence:
+        this.parseLifecycleConfidence(
+          env.REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE
+        ),
 
       dryRun: this.parseBoolean(env.DRY_RUN),
     };
@@ -257,6 +268,14 @@ export class ConfigLoader {
       suggestionSyntaxValidation: config.suggestion_syntax_validation,
       updatePrDescription: config.update_pr_description,
       failOnSeverity: config.fail_on_severity,
+      reviewThreadLifecycle: this.parseLifecycleMode(
+        config.review_thread_lifecycle,
+        'review_thread_lifecycle'
+      ),
+      reviewThreadLifecycleMaxTargets:
+        config.review_thread_lifecycle_max_targets,
+      reviewThreadLifecycleResolveConfidence:
+        config.review_thread_lifecycle_resolve_confidence,
       dryRun: config.dry_run,
     };
   }
@@ -449,5 +468,79 @@ export class ConfigLoader {
     }
 
     return 'off';
+  }
+
+  private static parseLifecycleMode(
+    value?: string,
+    source = 'REVIEW_THREAD_LIFECYCLE'
+  ): 'off' | 'report' | 'resolve' | undefined {
+    if (!value) return undefined;
+    const normalized = value.toLowerCase();
+    if (
+      normalized === 'off' ||
+      normalized === 'report' ||
+      normalized === 'resolve'
+    ) {
+      return normalized;
+    }
+    logger.warn(
+      `Disabling review thread lifecycle because ${source}=${value} is invalid; expected off, report, or resolve`
+    );
+    return 'off';
+  }
+
+  private static parseLifecycleMaxTargets(value?: string): number | undefined {
+    const parsed = this.parseNumber(value);
+    if (parsed === undefined) return undefined;
+    if (parsed < 0) {
+      logger.warn(
+        `Ignoring REVIEW_THREAD_LIFECYCLE_MAX_TARGETS=${value}: expected number from 0 to 25`
+      );
+      return undefined;
+    }
+    if (parsed > 25) {
+      logger.warn(
+        `Clamping REVIEW_THREAD_LIFECYCLE_MAX_TARGETS from ${parsed} to maximum 25`
+      );
+      return 25;
+    }
+    return parsed;
+  }
+
+  private static parseLifecycleConfidence(
+    value?: string
+  ):
+    | { critical?: number; major?: number; minor?: number; unknown?: number }
+    | undefined {
+    if (!value) return undefined;
+    try {
+      const parsed = JSON.parse(value) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('expected a JSON object');
+      }
+      const result: {
+        critical?: number;
+        major?: number;
+        minor?: number;
+        unknown?: number;
+      } = {};
+      for (const key of ['critical', 'major', 'minor', 'unknown'] as const) {
+        if (parsed[key] === undefined) continue;
+        const num = Number(parsed[key]);
+        if (!Number.isFinite(num) || num < 0 || num > 1) {
+          logger.warn(
+            `Ignoring REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE.${key}: expected number from 0 to 1`
+          );
+          continue;
+        }
+        result[key] = num;
+      }
+      return result;
+    } catch (error) {
+      logger.warn(
+        `Failed to parse REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE: ${(error as Error).message}`
+      );
+      return undefined;
+    }
   }
 }

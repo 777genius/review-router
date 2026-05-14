@@ -1,4 +1,9 @@
-import { Review, Finding } from '../types';
+import { LifecycleThreadRecord, Review, Finding } from '../types';
+import {
+  countPreviousStillValidBySeverity,
+  hasLifecycleUncertainty,
+  isLinkedCurrentFinding,
+} from '../analysis/thread-lifecycle';
 import { getSeverityDisplay, severityLine } from '../utils/severity';
 
 /**
@@ -45,6 +50,7 @@ export class MarkdownFormatterV2 {
 
     // Findings by severity with visual indicators
     const hasFindings = review.findings.length > 0;
+    const lifecycleSection = this.formatThreadLifecycle(review);
 
     if (hasFindings) {
       lines.push('## Findings');
@@ -67,6 +73,15 @@ export class MarkdownFormatterV2 {
       if (minor.length > 0) {
         lines.push(this.formatSeveritySection('🔵 Minor', minor, 'minor'));
       }
+    }
+
+    if (lifecycleSection) {
+      lines.push(lifecycleSection);
+      lines.push('');
+    }
+
+    if (hasFindings || lifecycleSection) {
+      // Findings or unresolved lifecycle state already explain the status.
     } else if (this.didAllProviderRunsFail(review)) {
       lines.push('## Review Incomplete');
       lines.push('');
@@ -105,9 +120,10 @@ export class MarkdownFormatterV2 {
 
   private formatQuickStats(review: Review): string {
     const { metrics } = review;
-    const criticalCount = metrics.critical;
-    const majorCount = metrics.major;
-    const minorCount = metrics.minor;
+    const previous = countPreviousStillValidBySeverity(review.threadLifecycle);
+    const criticalCount = metrics.critical + previous.critical;
+    const majorCount = metrics.major + previous.major;
+    const minorCount = metrics.minor + previous.minor;
 
     const criticalBadge =
       criticalCount > 0
@@ -137,8 +153,17 @@ export class MarkdownFormatterV2 {
 
   private generatePRSummary(review: Review): string {
     const { metrics, findings } = review;
+    const previous = countPreviousStillValidBySeverity(review.threadLifecycle);
+    const previousActive =
+      previous.critical + previous.major + previous.minor;
 
     if (findings.length === 0) {
+      if (previousActive > 0) {
+        return `No new current findings, but ${previousActive} previous unresolved ReviewRouter finding${previousActive === 1 ? '' : 's'} still appear valid and remain active.`;
+      }
+      if (hasLifecycleUncertainty(review.threadLifecycle)) {
+        return 'No new current findings, but previous unresolved ReviewRouter threads could not be safely reconciled. See Previous Review Threads.';
+      }
       if (this.didAllProviderRunsFail(review)) {
         return 'LLM review did not complete because all configured providers failed. Static checks did not find issues. See Performance Metrics for the provider error.';
       }
@@ -176,6 +201,12 @@ export class MarkdownFormatterV2 {
     if (metrics.minor > 0) {
       parts.push(
         `${metrics.minor} minor improvement${metrics.minor > 1 ? 's' : ''} suggested`
+      );
+    }
+
+    if (previousActive > 0) {
+      parts.push(
+        `${previousActive} previous unresolved finding${previousActive === 1 ? '' : 's'} still valid`
       );
     }
 
@@ -381,6 +412,122 @@ export class MarkdownFormatterV2 {
     return lines.join('\n');
   }
 
+  private formatThreadLifecycle(review: Review): string {
+    const lifecycle = review.threadLifecycle;
+    if (!lifecycle || lifecycle.mode === 'off') return '';
+
+    const stillValidRecords = lifecycle.previousStillValid.filter(
+      (record) => !isLinkedCurrentFinding(record)
+    );
+    const attentionRecords = [
+      ...lifecycle.previousUncertain,
+      ...lifecycle.manualAttention,
+      ...lifecycle.mutationSkipped,
+      ...lifecycle.mutationFailed,
+      ...lifecycle.skipped.filter(
+        (record) =>
+          !record.reasonCodes.every((reason) => reason === 'command_dismissed')
+      ),
+    ];
+    const hasStillValid = stillValidRecords.length > 0;
+    const hasResolved = lifecycle.resolvedByLifecycle.length > 0;
+    const hasAttention =
+      attentionRecords.length > 0 ||
+      lifecycle.inventoryFailed ||
+      lifecycle.warnings.length > 0;
+
+    if (!hasStillValid && !hasResolved && !hasAttention) return '';
+
+    const lines: string[] = [];
+    lines.push('## Previous Review Threads');
+    lines.push('');
+
+    if (hasStillValid) {
+      lines.push('These unresolved findings still look valid and count as active:');
+      lines.push('');
+      stillValidRecords.forEach((record) => {
+        lines.push(this.formatLifecycleRecord(record));
+      });
+      lines.push('');
+    }
+
+    if (hasResolved) {
+      lines.push('Resolved by this run:');
+      lines.push('');
+      lifecycle.resolvedByLifecycle.forEach((record) => {
+        lines.push(this.formatLifecycleRecord(record));
+      });
+      lines.push('');
+    }
+
+    if (hasAttention) {
+      lines.push('<details>');
+      lines.push('<summary>Lifecycle attention required</summary>');
+      lines.push('');
+      if (lifecycle.inventoryFailed) {
+        lines.push('- Review thread inventory failed; no thread was auto-resolved.');
+      }
+      lifecycle.warnings.forEach((warning) => {
+        lines.push(`- ${warning}`);
+      });
+      attentionRecords.forEach((record) => {
+        lines.push(this.formatLifecycleRecord(record));
+      });
+      lines.push('');
+      lines.push('</details>');
+    }
+
+    return lines.join('\n');
+  }
+
+  private formatLifecycleRecord(record: LifecycleThreadRecord): string {
+    const target = record.target;
+    const location = `${target.currentPath || target.originalPath}:${target.currentLine ?? target.originalLine ?? '?'}`;
+    const severity =
+      target.severity === 'critical' ||
+      target.severity === 'major' ||
+      target.severity === 'minor'
+        ? getSeverityDisplay(target.severity).label
+        : 'Unknown';
+    const reasons = record.reasonCodes
+      .map((reason) => this.formatLifecycleReason(reason))
+      .join(', ');
+    const link = target.threadUrl ? ` - [thread](${target.threadUrl})` : '';
+
+    return `- **${severity}** \`${location}\` - ${target.title}${reasons ? ` (${reasons})` : ''}${link}`;
+  }
+
+  private formatLifecycleReason(reason: string): string {
+    const labels: Record<string, string> = {
+      already_resolved: 'already resolved on GitHub',
+      command_dismissed: 'dismissed by /rr skip',
+      current_finding_present: 'same finding reported in this run',
+      dry_run: 'dry run',
+      head_sha_changed: 'PR head changed before mutation',
+      human_reply: 'human reply in thread',
+      insufficient_resolved_quorum: 'resolved quorum not reached',
+      inventory_failed: 'inventory failed',
+      invalid_resolved_evidence: 'resolved evidence was insufficient',
+      mutation_failed: 'GitHub mutation failed',
+      mutation_permission_denied: 'missing permission to resolve',
+      mutation_rate_limited: 'GitHub rate limited mutation',
+      outside_review_scope: 'outside reviewed diff scope',
+      pagination_incomplete: 'thread comments were truncated',
+      provider_failed: 'provider failed',
+      provider_current_finding_present: 'provider reported same finding in this run',
+      provider_missing_revalidation: 'provider omitted revalidation',
+      provider_uncertain: 'provider was uncertain',
+      report_mode: 'report mode',
+      still_valid_vote: 'provider said still valid',
+      target_cap_exceeded: 'target cap exceeded',
+      thread_changed_before_mutation: 'thread changed before mutation',
+      thread_not_found: 'thread no longer found',
+      untrusted_author: 'untrusted author',
+      viewer_cannot_resolve: 'viewer cannot resolve thread',
+    };
+    return labels[reason] || reason.replace(/_/g, ' ');
+  }
+
   private countFindingLocations(findings: Finding[]): number {
     return new Set(findings.map((f) => `${f.file}:${f.line}`)).size;
   }
@@ -460,6 +607,25 @@ export class MarkdownFormatterV2 {
     );
     if (this.hasDismissedFindings(review)) {
       lines.push(`| Overrides | ${metrics.dismissedFindings} dismissed |`);
+    }
+    if (review.threadLifecycle && review.threadLifecycle.mode !== 'off') {
+      const lifecycle = review.threadLifecycle;
+      lines.push(
+        `| Review thread lifecycle | ${lifecycle.mode}, ${lifecycle.quorumMode} |`
+      );
+      if (lifecycle.resolvedByLifecycle.length > 0) {
+        lines.push(
+          `| Previous threads resolved | ${lifecycle.resolvedByLifecycle.length} |`
+        );
+      }
+      const previousStillValidCount = lifecycle.previousStillValid.filter(
+        (record) => !isLinkedCurrentFinding(record)
+      ).length;
+      if (previousStillValidCount > 0) {
+        lines.push(
+          `| Previous findings still valid | ${previousStillValidCount} |`
+        );
+      }
     }
 
     if (runDetails?.cacheHit) {

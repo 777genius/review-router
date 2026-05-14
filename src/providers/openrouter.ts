@@ -3,6 +3,7 @@ import { ReviewResult } from '../types';
 import { RateLimiter } from './rate-limiter';
 import { logger } from '../utils/logger';
 import { withRetry } from '../utils/retry';
+import { parseReviewOutputLenient } from './review-output';
 // Node 18+ provides global fetch; if unavailable, we throw a clear error.
 
 export class OpenRouterProvider extends Provider {
@@ -133,7 +134,8 @@ export class OpenRouterProvider extends Provider {
       const content: string = data.choices?.[0]?.message?.content || '';
       const usage = data.usage;
       const actualModel = data.model;  // Capture which model OpenRouter actually routed to
-      const findings = this.extractFindings(content);
+      const parsedOutput = parseReviewOutputLenient(content);
+      const findings = parsedOutput.findings;
       const aiAnalysis = this.extractAIAnalysis(content);
 
       // Log which model was actually used for dynamic routing transparency
@@ -152,30 +154,13 @@ export class OpenRouterProvider extends Provider {
           : undefined,
         durationSeconds,
         findings,
+        revalidations: parsedOutput.revalidations,
         aiLikelihood: aiAnalysis?.likelihood,
         aiReasoning: aiAnalysis?.reasoning,
         actualModel: actualModel,  // Include actual model in result for analytics
       };
     } finally {
       clearTimeout(timeout);
-    }
-  }
-
-  private extractFindings(content: string): any[] {
-    try {
-      const jsonMatch = content.match(/```json\s*([\s\S]*?)```/i);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[1]);
-        if (Array.isArray(parsed)) return parsed;
-        return parsed.findings || [];
-      }
-
-      const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) return parsed;
-      return parsed.findings || [];
-    } catch (error) {
-      logger.debug('Failed to parse findings from content', error);
-      return [];
     }
   }
 

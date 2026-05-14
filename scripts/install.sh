@@ -1479,6 +1479,9 @@ write_reusable_workflow() {
     static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" REVIEW_PROVIDERS "$OPENROUTER_DEFAULT_PROVIDERS")"
     static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" SYNTHESIS_MODEL "$OPENROUTER_DEFAULT_SYNTHESIS")"
   fi
+  if [ "$IDENTITY_MODE" = "app" ] && [ -n "${APP_SLUG:-}" ]; then
+    static_runtime_env_json="$(append_pretty_json_pair "$static_runtime_env_json" REVIEW_APP_SLUG "$APP_SLUG")"
+  fi
   static_runtime_env_json="$static_runtime_env_json
 }"
   mkdir -p "$(dirname "$workflow_file")"

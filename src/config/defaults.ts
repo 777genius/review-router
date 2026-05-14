@@ -117,6 +117,14 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   dryRun: false,
   updatePrDescription: true,
   failOnSeverity: 'critical',
+  reviewThreadLifecycle: 'resolve',
+  reviewThreadLifecycleMaxTargets: 10,
+  reviewThreadLifecycleResolveConfidence: {
+    critical: 0.9,
+    major: 0.85,
+    minor: 0.8,
+    unknown: 0.9,
+  },
 };
 
 /**

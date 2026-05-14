@@ -16,7 +16,17 @@ import { MarkdownFormatter } from '../output/formatter';
 import { MarkdownFormatterV2 } from '../output/formatter-v2';
 import { MermaidGenerator } from '../output/mermaid';
 import { FeedbackFilter, ReviewCommentState } from '../github/feedback';
+import {
+  extractFindingFingerprint,
+  extractInlineFingerprint,
+  fingerprintFromInlineComment,
+  InlineCommentReference,
+  signatureFromInlineComment,
+} from '../github/comment-fingerprint';
 import { FindingFilter } from '../analysis/finding-filter';
+import {
+  ThreadLifecycleAggregator,
+} from '../analysis/thread-lifecycle';
 import { buildJson } from '../output/json';
 import { buildSarif } from '../output/sarif';
 import { CacheManager } from '../cache/manager';
@@ -55,6 +65,12 @@ import {
   UnchangedContext,
   ProviderResult,
   ReviewIntensity,
+  LifecycleAssignmentRecord,
+  LifecycleReasonCode,
+  LifecycleTarget,
+  LifecycleThreadRecord,
+  ReviewThreadLifecycleMode,
+  ReviewThreadLifecycleResult,
 } from '../types';
 import { logger } from '../utils/logger';
 import {
@@ -66,6 +82,15 @@ import { BatchOrchestrator } from './batch-orchestrator';
 import { ProgressTracker } from '../github/progress-tracker';
 import { GitHubClient } from '../github/client';
 import { PullRequestDescriptionUpdater } from '../github/pr-description';
+import { ReviewThreadInventoryLoader } from '../github/review-thread-inventory';
+import {
+  ReviewThreadResolveResult,
+  ReviewThreadResolver,
+} from '../github/review-thread-resolver';
+import {
+  ReviewSummaryMetadata,
+  buildReviewSummaryMetadata,
+} from '../github/summary-metadata';
 import {
   normalizeReviewError,
   sanitizeErrorMessage,
@@ -107,6 +132,8 @@ export interface ReviewComponents {
   metricsCollector?: MetricsCollector;
   batchOrchestrator?: BatchOrchestrator;
   githubClient?: GitHubClient;
+  reviewThreadInventory?: ReviewThreadInventoryLoader;
+  reviewThreadResolver?: ReviewThreadResolver;
   prDescriptionUpdater?: PullRequestDescriptionUpdater;
   acceptanceDetector?: AcceptanceDetector;
   providerWeightTracker?: ProviderWeightTracker;
@@ -150,8 +177,14 @@ export class ReviewOrchestrator {
     let progressTracker: ProgressTracker | undefined;
     let review: Review | null = null;
     let success = false;
+    const configuredLifecycleMode =
+      config.reviewThreadLifecycle ?? ('off' as ReviewThreadLifecycleMode);
+    const summaryMetadata = buildReviewSummaryMetadata({
+      reviewedHeadSha: pr.headSha,
+      lifecycleMode: configuredLifecycleMode,
+    });
     try {
-      progressTracker = await this.initProgressTracker(pr);
+      progressTracker = await this.initProgressTracker(pr, summaryMetadata);
       progressTracker?.addItem('graph', 'Build code graph');
       progressTracker?.addItem('llm', 'LLM review (batched)');
       progressTracker?.addItem('static', 'Static analysis & rules');
@@ -452,6 +485,64 @@ export class ReviewOrchestrator {
           }
         : reviewContext;
 
+      const lifecycleMode: ReviewThreadLifecycleMode =
+        this.components.reviewThreadInventory && this.components.githubClient
+          ? configuredLifecycleMode
+          : 'off';
+      let lifecycleTargets: LifecycleTarget[] = [];
+      let lifecycleManualAttention: LifecycleThreadRecord[] = [];
+      let lifecycleSkipped: LifecycleThreadRecord[] = [];
+      let lifecycleWarnings: string[] = [];
+      let lifecycleInventoryFailed = false;
+      let lifecycleDedupeComments: InlineCommentReference[] | undefined;
+      let lifecycleAssignmentRecords: LifecycleAssignmentRecord[] = [];
+      let lifecycleProviderResults: ProviderResult[] = [];
+      let lifecyclePlannedProviders: string[] = [];
+      let reviewCommentState: ReviewCommentState | undefined;
+
+      if (lifecycleMode !== 'off' && this.components.reviewThreadInventory) {
+        reviewCommentState =
+          await this.components.feedbackFilter.loadReviewCommentState(
+            pr.number,
+            pr.headSha
+          );
+        const inventory =
+          await this.components.reviewThreadInventory.load(pr.number);
+        lifecycleManualAttention = inventory.manualAttention;
+        lifecycleWarnings = inventory.warnings;
+        lifecycleInventoryFailed = inventory.failed;
+        lifecycleDedupeComments = inventory.failed
+          ? []
+          : inventory.dedupeComments;
+        if (inventory.failed) {
+          lifecycleTargets = [];
+          lifecycleSkipped = [];
+          lifecycleWarnings.push(
+            'review thread lifecycle inventory was incomplete; no old thread was revalidated or auto-resolved'
+          );
+        } else {
+          const prepared = this.prepareLifecycleTargets(
+            inventory.candidates,
+            reviewCommentState,
+            config.reviewThreadLifecycleMaxTargets ?? 10
+          );
+          lifecycleTargets = prepared.targets;
+          lifecycleSkipped = prepared.skipped;
+        }
+        if (inventory.headRefOid && inventory.headRefOid !== pr.headSha) {
+          lifecycleWarnings.push(
+            'review thread lifecycle inventory head SHA did not match loaded PR head SHA'
+          );
+          lifecycleSkipped.push(
+            ...lifecycleTargets.map((target) => ({
+              target,
+              reasonCodes: ['head_sha_changed' as LifecycleReasonCode],
+            }))
+          );
+          lifecycleTargets = [];
+        }
+      }
+
       // Skip LLM execution if no files to review (incremental with no changes)
       const llmFindings: Finding[] = [];
       let providerResults: ProviderResult[] = [];
@@ -613,6 +704,7 @@ export class ReviewOrchestrator {
           // Use token-aware batching if enabled
           let batches: FileChange[][];
           const providerNames = healthy.map((p) => p.name);
+          lifecyclePlannedProviders = providerNames;
 
           if (config.enableTokenAwareBatching) {
             try {
@@ -647,6 +739,25 @@ export class ReviewOrchestrator {
             }
           }
 
+          const lifecycleTargetsByBatch =
+            lifecycleMode === 'off'
+              ? []
+              : batches.map((batch) =>
+                  this.lifecycleTargetsForBatch(lifecycleTargets, batch)
+                );
+          const lifecycleFailedProvidersByTarget = new Map<
+            string,
+            Set<string>
+          >();
+          lifecycleAssignmentRecords =
+            lifecycleMode === 'off'
+              ? []
+              : this.buildLifecycleAssignmentRecords(
+                  lifecycleTargets,
+                  lifecycleTargetsByBatch,
+                  providerNames
+                );
+
           const batchQueue = createQueue(
             Math.max(1, Number(config.providerMaxParallel) || 1)
           );
@@ -656,7 +767,7 @@ export class ReviewOrchestrator {
           // Create batch execution functions and queue them for parallel processing
           // Using Promise.allSettled() enables true parallel execution and partial success handling
           const batchPromises = batches.map(
-            (batch) =>
+            (batch, batchIndex) =>
               batchQueue.add(async () => {
                 const batchDiff = filterDiffByFiles(reviewContext.diff, batch);
                 const batchContext: PRContext = {
@@ -664,13 +775,22 @@ export class ReviewOrchestrator {
                   files: batch,
                   diff: batchDiff,
                 };
+                const lifecycleTargetsForBatch =
+                  lifecycleTargetsByBatch[batchIndex] ?? [];
+                const lifecycleAssignedTargetIds = lifecycleTargetsForBatch.map(
+                  (target) => target.targetId
+                );
                 const promptBuilder = new PromptBuilder(
                   config,
                   reviewIntensity,
                   undefined,
                   codeGraph
                 );
-                const prompt = await promptBuilder.build(batchContext);
+                const prompt = await promptBuilder.build(
+                  batchContext,
+                  undefined,
+                  lifecycleTargetsForBatch
+                );
 
                 try {
                   const results = await this.components.llmExecutor.execute(
@@ -678,8 +798,17 @@ export class ReviewOrchestrator {
                     prompt,
                     intensityTimeout
                   );
+                  const scopedResults = results.map((result) => ({
+                    ...result,
+                    lifecycleAssignedTargetIds,
+                  }));
+                  this.recordLifecycleBatchProviderFailures(
+                    lifecycleTargetsForBatch,
+                    scopedResults,
+                    lifecycleFailedProvidersByTarget
+                  );
 
-                  for (const result of results) {
+                  for (const result of scopedResults) {
                     await this.components.costTracker.record(
                       result.name,
                       result.result?.usage,
@@ -687,15 +816,22 @@ export class ReviewOrchestrator {
                     );
                   }
 
-                  return results;
+                  return scopedResults;
                 } catch (error) {
                   logger.error('Batch execution failed', error as Error);
-                  return healthy.map((provider) => ({
+                  const failedResults = healthy.map((provider) => ({
                     name: provider.name,
                     status: 'error' as const,
                     error: error as Error,
                     durationSeconds: 0,
+                    lifecycleAssignedTargetIds,
                   }));
+                  this.recordLifecycleBatchProviderFailures(
+                    lifecycleTargetsForBatch,
+                    failedResults,
+                    lifecycleFailedProvidersByTarget
+                  );
+                  return failedResults;
                 }
               }) as Promise<ProviderResult[]>
           );
@@ -708,7 +844,7 @@ export class ReviewOrchestrator {
           try {
             const settled = await Promise.allSettled(batchPromises);
 
-            for (const result of settled) {
+            for (const [batchIndex, result] of settled.entries()) {
               if (result.status === 'fulfilled') {
                 batchResults.push(...result.value);
                 if (result.value.some((r) => r.status !== 'success')) {
@@ -720,12 +856,16 @@ export class ReviewOrchestrator {
                 batchFailures += 1;
                 logger.error('Batch promise rejected', result.reason);
                 // Add error results for all providers in this batch
+                const lifecycleAssignedTargetIds = (
+                  lifecycleTargetsByBatch[batchIndex] ?? []
+                ).map((target) => target.targetId);
                 batchResults.push(
                   ...healthy.map((provider) => ({
                     name: provider.name,
                     status: 'error' as const,
                     error: result.reason as Error,
                     durationSeconds: 0,
+                    lifecycleAssignedTargetIds,
                   }))
                 );
               }
@@ -734,6 +874,12 @@ export class ReviewOrchestrator {
             await batchQueue.onIdle();
             this.cleanupQueue(batchQueue);
           }
+
+          this.applyLifecycleBatchProviderFailures(
+            lifecycleAssignmentRecords,
+            lifecycleFailedProvidersByTarget
+          );
+          lifecycleProviderResults = batchResults;
 
           // Merge results deterministically: prefer batch results over health checks, unique per provider
           const mergedMap = new Map<string, ProviderResult>();
@@ -999,11 +1145,17 @@ export class ReviewOrchestrator {
         }
       }
 
-      const reviewCommentState =
+      reviewCommentState =
         await this.components.feedbackFilter.loadReviewCommentState(
           pr.number,
           pr.headSha
         );
+      if (lifecycleMode !== 'off') {
+        this.applyGraphQLDedupeState(
+          reviewCommentState,
+          lifecycleDedupeComments ?? []
+        );
+      }
       const dismissedCount = this.applyCommandDismissals(
         review,
         reviewCommentState
@@ -1013,6 +1165,90 @@ export class ReviewOrchestrator {
           `Applied ${dismissedCount} /rr skip dismissal(s) before publishing review`
         );
       }
+
+      if (lifecycleMode !== 'off') {
+        lifecycleManualAttention =
+          this.filterCommandDismissedLifecycleRecords(
+            lifecycleManualAttention,
+            reviewCommentState,
+            lifecycleSkipped
+          );
+        const activeLifecycleTargets = this.filterCommandDismissedLifecycleTargets(
+          lifecycleTargets,
+          reviewCommentState,
+          lifecycleSkipped
+        );
+        const lifecycle = new ThreadLifecycleAggregator().aggregate({
+          mode: lifecycleMode,
+          targets: activeLifecycleTargets,
+          plannedProviders: lifecyclePlannedProviders,
+          providerResults: lifecycleProviderResults,
+          currentFindings: review.findings,
+          assignmentRecords: lifecycleAssignmentRecords,
+          initialManualAttention: lifecycleManualAttention,
+          skipped: lifecycleSkipped,
+          warnings: lifecycleWarnings,
+          inventoryFailed: lifecycleInventoryFailed,
+          config,
+        });
+
+        if (
+          lifecycleMode === 'resolve' &&
+          lifecycle.resolvedCandidates.length > 0
+        ) {
+          if (this.components.reviewThreadResolver) {
+            const mutationResult =
+              await this.components.reviewThreadResolver.resolveGuarded(
+                pr.number,
+                pr.headSha,
+                lifecycle.resolvedCandidates
+              );
+            this.applyLifecycleMutationResult(lifecycle, mutationResult);
+            lifecycleDedupeComments = this.removeResolvedLifecycleDedupeRefs(
+              lifecycleDedupeComments ?? [],
+              lifecycle.resolvedByLifecycle
+            );
+            this.applyGraphQLDedupeState(
+              reviewCommentState,
+              lifecycleDedupeComments
+            );
+
+            if (this.components.reviewThreadInventory) {
+              const refreshedInventory =
+                await this.components.reviewThreadInventory.load(pr.number);
+              if (!refreshedInventory.failed) {
+                lifecycleDedupeComments = refreshedInventory.dedupeComments;
+                this.applyGraphQLDedupeState(
+                  reviewCommentState,
+                  lifecycleDedupeComments
+                );
+              } else {
+                lifecycle.warnings.push(
+                  'post-mutation review thread lifecycle inventory refresh failed'
+                );
+              }
+            }
+          } else {
+            lifecycle.mutationSkipped.push(
+              ...lifecycle.resolvedCandidates.map((record) => ({
+                ...record,
+                reasonCodes: [
+                  ...record.reasonCodes,
+                  'mutation_failed' as LifecycleReasonCode,
+                ],
+              }))
+            );
+            lifecycle.resolvedCandidates = [];
+            lifecycle.warnings.push(
+              'review thread lifecycle resolver unavailable; no thread was auto-resolved'
+            );
+          }
+        }
+        this.failUnconfirmedLifecycleCandidates(lifecycle);
+
+        review.threadLifecycle = lifecycle;
+      }
+
       const markdown = this.components.formatter.format(review);
       await this.updatePullRequestDescription(pr);
 
@@ -1041,21 +1277,24 @@ export class ReviewOrchestrator {
           await this.components.commentPoster.postSummary(
             pr.number,
             markdown,
-            useIncremental
+            useIncremental,
+            summaryMetadata
           );
         }
       } else {
         await this.components.commentPoster.postSummary(
           pr.number,
           markdown,
-          useIncremental
+          useIncremental,
+          summaryMetadata
         );
       }
       await this.components.commentPoster.postInline(
         pr.number,
         inlineFiltered,
         pr.files,
-        pr.headSha
+        pr.headSha,
+        lifecycleMode !== 'off' ? lifecycleDedupeComments ?? [] : undefined
       );
 
       await this.writeReports(review);
@@ -1099,6 +1338,330 @@ export class ReviewOrchestrator {
     // For in-memory caches, would call cache.clear() here
 
     logger.debug('Orchestrator resources disposed');
+  }
+
+  private prepareLifecycleTargets(
+    candidates: LifecycleTarget[],
+    reviewCommentState: ReviewCommentState,
+    maxTargets: number
+  ): {
+    targets: LifecycleTarget[];
+    skipped: LifecycleThreadRecord[];
+  } {
+    const active: LifecycleTarget[] = [];
+    const skipped: LifecycleThreadRecord[] = [];
+    const cap = Math.min(25, Math.max(0, maxTargets));
+
+    for (const target of candidates) {
+      if (this.isLifecycleTargetCommandDismissed(target, reviewCommentState)) {
+        skipped.push(this.lifecycleRecord(target, ['command_dismissed']));
+        continue;
+      }
+      active.push(target);
+    }
+
+    const prioritized = [...active].sort((left, right) => {
+      const severityDelta =
+        this.lifecycleSeverityPriority(right.severity) -
+        this.lifecycleSeverityPriority(left.severity);
+      if (severityDelta !== 0) return severityDelta;
+      return (
+        (Date.parse(left.parentCommentUpdatedAt || '') || 0) -
+        (Date.parse(right.parentCommentUpdatedAt || '') || 0)
+      );
+    });
+
+    const targets = prioritized.slice(0, cap);
+    for (const target of prioritized.slice(cap)) {
+      skipped.push(this.lifecycleRecord(target, ['target_cap_exceeded']));
+    }
+
+    return { targets, skipped };
+  }
+
+  private filterCommandDismissedLifecycleTargets(
+    targets: LifecycleTarget[],
+    reviewCommentState: ReviewCommentState,
+    skipped: LifecycleThreadRecord[]
+  ): LifecycleTarget[] {
+    const active: LifecycleTarget[] = [];
+    const alreadySkipped = new Set(skipped.map((record) => record.target.targetId));
+
+    for (const target of targets) {
+      if (this.isLifecycleTargetCommandDismissed(target, reviewCommentState)) {
+        if (!alreadySkipped.has(target.targetId)) {
+          skipped.push(this.lifecycleRecord(target, ['command_dismissed']));
+          alreadySkipped.add(target.targetId);
+        }
+        continue;
+      }
+      active.push(target);
+    }
+
+    return active;
+  }
+
+  private filterCommandDismissedLifecycleRecords(
+    records: LifecycleThreadRecord[],
+    reviewCommentState: ReviewCommentState,
+    skipped: LifecycleThreadRecord[]
+  ): LifecycleThreadRecord[] {
+    const active: LifecycleThreadRecord[] = [];
+    const alreadySkipped = new Set(skipped.map((record) => record.target.targetId));
+
+    for (const record of records) {
+      if (this.isLifecycleTargetCommandDismissed(record.target, reviewCommentState)) {
+        if (!alreadySkipped.has(record.target.targetId)) {
+          skipped.push(
+            this.lifecycleRecord(record.target, [
+              ...record.reasonCodes,
+              'command_dismissed',
+            ] as LifecycleReasonCode[])
+          );
+          alreadySkipped.add(record.target.targetId);
+        }
+        continue;
+      }
+      active.push(record);
+    }
+
+    return active;
+  }
+
+  private isLifecycleTargetCommandDismissed(
+    target: LifecycleTarget,
+    reviewCommentState: ReviewCommentState
+  ): boolean {
+    if (reviewCommentState.commandDismissed?.has(target.fingerprint)) {
+      return true;
+    }
+    const path = target.currentPath || target.originalPath;
+    const line = target.currentLine ?? target.originalLine;
+    if (
+      path &&
+      line != null &&
+      reviewCommentState.commandDismissedLocations?.has(
+        `${path.toLowerCase()}:${line}`
+      )
+    ) {
+      return true;
+    }
+    const severity =
+      target.severity === 'critical' ||
+      target.severity === 'major' ||
+      target.severity === 'minor'
+        ? target.severity
+        : 'minor';
+    return this.components.feedbackFilter.isInlineCommandDismissed(
+      {
+        path,
+        line: line ?? 0,
+        side: 'RIGHT',
+        body: target.message,
+        severity,
+        title: target.title,
+      },
+      reviewCommentState
+    );
+  }
+
+  private applyGraphQLDedupeState(
+    reviewCommentState: ReviewCommentState,
+    dedupeComments: InlineCommentReference[]
+  ): void {
+    reviewCommentState.alreadyPosted = new Set<string>();
+    reviewCommentState.alreadyPostedComments = [...dedupeComments];
+
+    for (const comment of dedupeComments) {
+      const body = comment.body || '';
+      reviewCommentState.alreadyPosted.add(
+        signatureFromInlineComment(comment.path, comment.line, body)
+      );
+      reviewCommentState.alreadyPosted.add(
+        fingerprintFromInlineComment(comment.path, comment.line, body)
+      );
+      const marker = extractInlineFingerprint(body);
+      if (marker) reviewCommentState.alreadyPosted.add(marker);
+    }
+  }
+
+  private removeResolvedLifecycleDedupeRefs(
+    dedupeComments: InlineCommentReference[],
+    resolvedRecords: LifecycleThreadRecord[]
+  ): InlineCommentReference[] {
+    const resolvedFingerprints = new Set(
+      resolvedRecords.map((record) => record.target.fingerprint)
+    );
+    if (resolvedFingerprints.size === 0) return dedupeComments;
+
+    return dedupeComments.filter((comment) => {
+      const marker = extractFindingFingerprint(comment.body || '');
+      return !marker || !resolvedFingerprints.has(marker);
+    });
+  }
+
+  private lifecycleTargetsForBatch(
+    targets: LifecycleTarget[],
+    batch: FileChange[]
+  ): LifecycleTarget[] {
+    return targets.filter((target) =>
+      batch.some((file) => this.lifecycleTargetMatchesFile(target, file))
+    );
+  }
+
+  private buildLifecycleAssignmentRecords(
+    targets: LifecycleTarget[],
+    targetsByBatch: LifecycleTarget[][],
+    providerIds: string[]
+  ): LifecycleAssignmentRecord[] {
+    return targets.map((target) => {
+      const assignedBatchIds = targetsByBatch
+        .map((batchTargets, index) =>
+          batchTargets.some((item) => item.targetId === target.targetId)
+            ? `batch-${index + 1}`
+            : ''
+        )
+        .filter(Boolean);
+      const inScope = assignedBatchIds.length > 0;
+
+      return {
+        targetId: target.targetId,
+        fingerprint: target.fingerprint,
+        assignedProviderIds: inScope ? providerIds : [],
+        assignedBatchIds,
+        failedProviderIds: [],
+        unassignedProviderIds: inScope
+          ? []
+          : providerIds.map((providerId) => ({
+              providerId,
+              reason: 'outside_review_scope' as LifecycleReasonCode,
+            })),
+        scopeStatus: inScope ? 'in_scope' : 'out_of_scope',
+      };
+    });
+  }
+
+  private recordLifecycleBatchProviderFailures(
+    targets: LifecycleTarget[],
+    results: ProviderResult[],
+    failuresByTarget: Map<string, Set<string>>
+  ): void {
+    if (targets.length === 0) return;
+    const failedProviderIds = results
+      .filter((result) => result.status !== 'success')
+      .map((result) => result.name);
+    if (failedProviderIds.length === 0) return;
+
+    for (const target of targets) {
+      let failures = failuresByTarget.get(target.targetId);
+      if (!failures) {
+        failures = new Set<string>();
+        failuresByTarget.set(target.targetId, failures);
+      }
+      failedProviderIds.forEach((providerId) => failures!.add(providerId));
+    }
+  }
+
+  private applyLifecycleBatchProviderFailures(
+    records: LifecycleAssignmentRecord[],
+    failuresByTarget: Map<string, Set<string>>
+  ): void {
+    for (const record of records) {
+      const failures = failuresByTarget.get(record.targetId);
+      if (failures && failures.size > 0) {
+        record.failedProviderIds = Array.from(failures);
+      }
+    }
+  }
+
+  private applyLifecycleMutationResult(
+    lifecycle: ReviewThreadLifecycleResult,
+    mutationResult: ReviewThreadResolveResult
+  ): void {
+    const handled = new Set<string>();
+    const mark = (records: LifecycleThreadRecord[]) => {
+      records.forEach((record) => handled.add(record.target.targetId));
+    };
+
+    lifecycle.resolvedByLifecycle.push(...mutationResult.resolved);
+    lifecycle.manualAttention.push(...mutationResult.manualAttention);
+    lifecycle.mutationSkipped.push(...mutationResult.skipped);
+    lifecycle.mutationFailed.push(...mutationResult.failed);
+    lifecycle.warnings.push(...mutationResult.warnings);
+
+    mark(mutationResult.resolved);
+    mark(mutationResult.manualAttention);
+    mark(mutationResult.skipped);
+    mark(mutationResult.failed);
+    lifecycle.resolvedCandidates = lifecycle.resolvedCandidates.filter(
+      (record) => !handled.has(record.target.targetId)
+    );
+  }
+
+  private failUnconfirmedLifecycleCandidates(
+    lifecycle: ReviewThreadLifecycleResult
+  ): void {
+    if (lifecycle.resolvedCandidates.length === 0) return;
+
+    lifecycle.mutationFailed.push(
+      ...lifecycle.resolvedCandidates.map((record) => ({
+        ...record,
+        reasonCodes: Array.from(
+          new Set([
+            ...record.reasonCodes,
+            'mutation_failed' as LifecycleReasonCode,
+          ])
+        ) as LifecycleReasonCode[],
+        errorMessage:
+          'Lifecycle resolver did not confirm a terminal GitHub thread result.',
+      }))
+    );
+    lifecycle.resolvedCandidates = [];
+    lifecycle.warnings.push(
+      'review thread lifecycle had unconfirmed resolved candidates; no unconfirmed thread was reported as resolved'
+    );
+  }
+
+  private lifecycleTargetMatchesFile(
+    target: LifecycleTarget,
+    file: FileChange
+  ): boolean {
+    const targetPaths = new Set(
+      [target.currentPath, target.originalPath].filter(Boolean).map((value) =>
+        value!.toLowerCase()
+      )
+    );
+    return (
+      targetPaths.has(file.filename.toLowerCase()) ||
+      (file.previousFilename
+        ? targetPaths.has(file.previousFilename.toLowerCase())
+        : false)
+    );
+  }
+
+  private lifecycleSeverityPriority(severity: LifecycleTarget['severity']): number {
+    switch (severity) {
+      case 'critical':
+        return 3;
+      case 'major':
+        return 2;
+      case 'minor':
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  private lifecycleRecord(
+    target: LifecycleTarget,
+    reasonCodes: LifecycleReasonCode[]
+  ): LifecycleThreadRecord {
+    return {
+      target,
+      reasonCodes: Array.from(
+        new Set([...(target.reasonCodes ?? []), ...reasonCodes])
+      ) as LifecycleReasonCode[],
+    };
   }
 
   /**
@@ -1374,7 +1937,8 @@ export class ReviewOrchestrator {
   }
 
   private async initProgressTracker(
-    pr: PRContext
+    pr: PRContext,
+    summaryMetadata: ReviewSummaryMetadata
   ): Promise<ProgressTracker | undefined> {
     if (!this.components.githubClient || this.components.config.dryRun)
       return undefined;
@@ -1387,6 +1951,7 @@ export class ReviewOrchestrator {
           repo: this.components.githubClient.repo,
           prNumber: pr.number,
           updateStrategy: 'milestone',
+          summaryMetadata,
         }
       );
       await tracker.initialize();

@@ -6,6 +6,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { parseReviewOutputLenient } from './review-output';
 
 export class OpenCodeProvider extends Provider {
   constructor(private readonly modelId: string) {
@@ -76,10 +77,12 @@ export class OpenCodeProvider extends Provider {
       if (!content) {
         throw new Error(`OpenCode CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`);
       }
+      const parsedOutput = parseReviewOutputLenient(content);
       return {
         content,
         durationSeconds,
-        findings: this.extractFindings(content),
+        findings: parsedOutput.findings,
+        revalidations: parsedOutput.revalidations,
       };
     } catch (error) {
       logger.error(`OpenCode provider failed: ${this.name}`, error as Error);
@@ -174,23 +177,4 @@ export class OpenCodeProvider extends Provider {
     });
   }
 
-  private extractFindings(content: string): any[] {
-    try {
-      // Try markdown code block first
-      const match = content.match(/```json\s*([\s\S]*?)```/i);
-      if (match) {
-        const parsed = JSON.parse(match[1]);
-        if (Array.isArray(parsed)) return parsed;
-        return parsed.findings || [];
-      }
-
-      // Fallback: try parsing as plain JSON
-      const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) return parsed;
-      return parsed.findings || [];
-    } catch (error) {
-      logger.debug('Failed to parse findings from OpenCode response', error as Error);
-    }
-    return [];
-  }
 }

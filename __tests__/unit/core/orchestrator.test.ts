@@ -18,6 +18,42 @@ describe('ReviewOrchestrator', () => {
     expect(orchestrator).toBeInstanceOf(ReviewOrchestrator);
   });
 
+  it('removes resolved lifecycle threads from fallback dedupe refs', () => {
+    const filtered = (
+      orchestrator as unknown as {
+        removeResolvedLifecycleDedupeRefs: (
+          dedupeComments: Array<{ path: string; line: number; body: string }>,
+          resolvedRecords: Array<{
+            target: { fingerprint: string };
+            reasonCodes: string[];
+          }>
+        ) => Array<{ path: string; line: number; body: string }>;
+      }
+    ).removeResolvedLifecycleDedupeRefs(
+      [
+        {
+          path: 'src/app.ts',
+          line: 10,
+          body: '<!-- review-router-finding:aaaaaaaaaaaaaaaaaaaaaaaa -->',
+        },
+        {
+          path: 'src/app.ts',
+          line: 12,
+          body: '<!-- review-router-finding:bbbbbbbbbbbbbbbbbbbbbbbb -->',
+        },
+      ],
+      [
+        {
+          target: { fingerprint: 'aaaaaaaaaaaaaaaaaaaaaaaa' },
+          reasonCodes: [],
+        },
+      ]
+    );
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].body).toContain('bbbbbbbbbbbbbbbbbbbbbbbb');
+  });
+
   // Note: Comprehensive orchestration tests are in integration test suite
   // This unit test suite is minimal as ReviewOrchestrator is primarily
   // an integration/coordination layer tested better with real component interactions

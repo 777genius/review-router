@@ -56,7 +56,17 @@ jobs:
         with:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_APP_SLUG: your-github-app-slug
 ```
+
+`REVIEW_APP_SLUG` lets review thread lifecycle trust comments authored by
+`your-github-app-slug[bot]`. Without it, lifecycle still remains safe, but old
+App-authored ReviewRouter threads are treated as untrusted and will not be
+auto-resolved or used for dedupe.
+
+When `REVIEWROUTER_COMMENT_TOKEN_MODE=app-oidc` is active, lifecycle does not
+trust `github-actions[bot]` unless the action explicitly fell back to
+`GITHUB_TOKEN` for comment posting.
 
 ## Manifest Template
 

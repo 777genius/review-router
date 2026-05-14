@@ -71,6 +71,7 @@ Available but still experimental:
 - **AI discussion replies:** with Codex auth modes, ordinary replies to ReviewRouter findings can get an AI explanation. If the model agrees a finding is likely a false positive, it suggests `/rr skip`; it does not unblock CI by itself.
 - **Large diff compaction:** compact very large, generated, lockfile, and migration diffs so they do not dominate the prompt.
 - **Review scope report:** the summary shows full-diff, compacted, metadata-only, and skipped file counts so large PRs are auditable.
+- **Review thread lifecycle:** old unresolved ReviewRouter threads can be revalidated and auto-resolved only after strict provider quorum and GitHub safety guards. See [docs/review-thread-lifecycle.md](./docs/review-thread-lifecycle.md).
 - **Secret handling:** fork PRs are skipped by default, Codex runs with a sanitized child-process environment, and workflows avoid printing secret values.
 
 ## Security Model

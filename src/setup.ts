@@ -39,6 +39,11 @@ import { SuppressionTracker } from './learning/suppression-tracker';
 import { ProviderWeightTracker } from './learning/provider-weights';
 import { PromptEnricher } from './learning/prompt-enrichment';
 import { AcceptanceDetector } from './learning/acceptance-detector';
+import {
+  ReviewThreadInventoryLoader,
+  trustedReviewThreadAuthorsFromEnv,
+} from './github/review-thread-inventory';
+import { ReviewThreadResolver } from './github/review-thread-resolver';
 
 export interface SetupOptions {
   cliMode?: boolean;
@@ -316,6 +321,16 @@ export async function createComponents(
     config.dryRun
   );
   const formatter = new MarkdownFormatterV2();
+  const trustedReviewThreadAuthors = trustedReviewThreadAuthorsFromEnv();
+  const reviewThreadInventory = new ReviewThreadInventoryLoader(
+    githubClient,
+    trustedReviewThreadAuthors
+  );
+  const reviewThreadResolver = new ReviewThreadResolver(
+    githubClient,
+    config.dryRun,
+    trustedReviewThreadAuthors
+  );
   const quietModeFilter = config.quietModeEnabled
     ? new QuietModeFilter(
         {
@@ -381,6 +396,8 @@ export async function createComponents(
     metricsCollector,
     batchOrchestrator,
     githubClient,
+    reviewThreadInventory,
+    reviewThreadResolver,
     acceptanceDetector,
     providerWeightTracker,
   };

@@ -17,6 +17,11 @@ import {
   isLikelySameInlineFinding,
   signatureFromInlineComment,
 } from './comment-fingerprint';
+import {
+  ReviewSummaryMetadata,
+  appendReviewSummaryMetadata,
+  shouldSkipSummaryWriteForExisting,
+} from './summary-metadata';
 
 interface ActiveInlineComments {
   keys: Set<string>;
@@ -30,6 +35,12 @@ interface GitHubInlineCommentPayload {
   body: string;
   start_line?: number;
   start_side?: 'LEFT' | 'RIGHT';
+}
+
+export interface SummaryPostResult {
+  posted: boolean;
+  skippedStale: boolean;
+  reason?: 'head_sha_changed' | 'newer_summary_exists';
 }
 
 type InlineCommentWithLegacyRange = InlineComment & {
@@ -55,8 +66,23 @@ export class CommentPoster {
     private readonly providerWeightTracker?: ProviderWeightTracker
   ) {}
 
-  async postSummary(prNumber: number, body: string, updateExisting = true): Promise<void> {
-    const chunks = this.chunk(body);
+  async postSummary(
+    prNumber: number,
+    body: string,
+    updateExisting = true,
+    summaryMetadata?: ReviewSummaryMetadata
+  ): Promise<SummaryPostResult> {
+    const guardedBody = appendReviewSummaryMetadata(body, summaryMetadata);
+    const staleHead = await this.shouldSkipForStaleHead(
+      prNumber,
+      summaryMetadata
+    );
+    if (staleHead.skippedStale) {
+      logger.warn('Skipping summary write because the PR head changed');
+      return { posted: false, skippedStale: true, reason: staleHead.reason };
+    }
+
+    const chunks = this.chunk(guardedBody);
 
     if (this.dryRun) {
       logger.info(`[DRY RUN] Would post ${chunks.length} summary comment(s) to PR #${prNumber}`);
@@ -65,7 +91,7 @@ export class CommentPoster {
         const content = header + chunks[i];
         logger.info(`[DRY RUN] Summary comment ${i + 1}:\n${content.substring(0, 500)}...`);
       }
-      return;
+      return { posted: false, skippedStale: false };
     }
 
     const { octokit, owner, repo } = this.client;
@@ -74,6 +100,21 @@ export class CommentPoster {
     if (updateExisting) {
       const existingComments = await this.findBotComments(prNumber);
       if (existingComments.length > 0) {
+        const staleExisting = existingComments.find((comment) =>
+          shouldSkipSummaryWriteForExisting(comment.body, summaryMetadata)
+            .shouldSkip
+        );
+        if (staleExisting) {
+          logger.warn(
+            'Skipping summary write because a newer ReviewRouter summary already exists'
+          );
+          return {
+            posted: false,
+            skippedStale: true,
+            reason: 'newer_summary_exists',
+          };
+        }
+
         logger.info(`Found ${existingComments.length} existing review comment(s), updating in place`);
         const updates = Math.min(existingComments.length, chunks.length);
 
@@ -114,7 +155,7 @@ export class CommentPoster {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        return;
+        return { posted: true, skippedStale: false };
       }
     }
 
@@ -130,6 +171,8 @@ export class CommentPoster {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
+
+    return { posted: true, skippedStale: false };
   }
 
   /**
@@ -141,17 +184,12 @@ export class CommentPoster {
   }
 
   private async findBotComments(prNumber: number): Promise<Array<{ id: number; body: string }>> {
-    const { octokit, owner, repo } = this.client;
-
     try {
-      const comments = await withRetry(
-        () => octokit.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 }),
-        { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
-      );
+      const comments = await this.listIssueComments(prNumber);
 
       // Find comment with our marker
-      return comments.data
-        .filter(comment => CommentPoster.hasBotCommentMarker(comment.body))
+      return comments
+        .filter(comment => CommentPoster.hasBotCommentMarker(comment.body ?? undefined))
         .map(comment => ({ id: comment.id, body: comment.body ?? '' }));
     } catch (error) {
       logger.warn('Failed to find existing bot comment', error as Error);
@@ -159,10 +197,68 @@ export class CommentPoster {
     }
   }
 
+  private async listIssueComments(
+    prNumber: number
+  ): Promise<Array<{ id: number; body?: string | null }>> {
+    const { octokit, owner, repo } = this.client;
+    const comments: Array<{ id: number; body?: string | null }> = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await withRetry(
+        () =>
+          octokit.rest.issues.listComments({
+            owner,
+            repo,
+            issue_number: prNumber,
+            per_page: 100,
+            page,
+          }),
+        { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
+      );
+      comments.push(...response.data);
+      hasMore = response.data.length === 100;
+      page += 1;
+    }
+
+    return comments;
+  }
+
   private static hasBotCommentMarker(body?: string): boolean {
     if (!body) return false;
     return body.includes(CommentPoster.BOT_COMMENT_MARKER)
       || CommentPoster.LEGACY_BOT_COMMENT_MARKERS.some(marker => body.includes(marker));
+  }
+
+  private async shouldSkipForStaleHead(
+    prNumber: number,
+    summaryMetadata?: ReviewSummaryMetadata
+  ): Promise<SummaryPostResult> {
+    if (!summaryMetadata?.reviewedHeadSha || this.dryRun) {
+      return { posted: false, skippedStale: false };
+    }
+    try {
+      const response = await this.client.octokit.rest.pulls.get({
+        owner: this.client.owner,
+        repo: this.client.repo,
+        pull_number: prNumber,
+      });
+      const freshHead = response.data.head?.sha;
+      if (freshHead && freshHead !== summaryMetadata.reviewedHeadSha) {
+        return {
+          posted: false,
+          skippedStale: true,
+          reason: 'head_sha_changed',
+        };
+      }
+    } catch (error) {
+      logger.warn(
+        'Failed to refresh PR head before summary write; continuing with existing summary behavior',
+        error as Error
+      );
+    }
+    return { posted: false, skippedStale: false };
   }
 
   private async loadActiveInlineComments(prNumber: number): Promise<ActiveInlineComments> {
@@ -325,7 +421,13 @@ export class CommentPoster {
     return { valid: true, hasConsensus };
   }
 
-  async postInline(prNumber: number, comments: InlineComment[], files: FileChange[], headSha?: string): Promise<void> {
+  async postInline(
+    prNumber: number,
+    comments: InlineComment[],
+    files: FileChange[],
+    headSha?: string,
+    dedupeComments?: InlineCommentReference[]
+  ): Promise<void> {
     if (comments.length === 0) {
       if (!this.dryRun) {
         await this.deleteInlineFallbackComments(prNumber, 'no current inline findings remain');
@@ -334,7 +436,9 @@ export class CommentPoster {
     }
     const activeInlineComments = this.dryRun
       ? { keys: new Set<string>(), comments: [] }
-      : await this.loadActiveInlineComments(prNumber);
+      : dedupeComments
+        ? CommentPoster.activeInlineCommentsFromReferences(dedupeComments)
+        : await this.loadActiveInlineComments(prNumber);
 
     // Filter out deletion-only files (no suggestions possible)
     const filesWithAdditions = files.filter(f => !isDeletionOnlyFile(f));
@@ -516,6 +620,24 @@ export class CommentPoster {
         await this.deleteInlineFallbackComments(prNumber, 'inline comments posted successfully');
       }
     }
+  }
+
+  private static activeInlineCommentsFromReferences(
+    references: InlineCommentReference[]
+  ): ActiveInlineComments {
+    const keys = new Set<string>();
+    const comments: InlineCommentReference[] = [];
+
+    for (const comment of references) {
+      const body = comment.body || '';
+      comments.push(comment);
+      keys.add(signatureFromInlineComment(comment.path, comment.line, body));
+      keys.add(fingerprintFromInlineComment(comment.path, comment.line, body));
+      const marker = extractInlineFingerprint(body);
+      if (marker) keys.add(marker);
+    }
+
+    return { keys, comments };
   }
 
   private async postIndividualInlineComments(

@@ -2,6 +2,7 @@ import { CommentPoster } from '../../../src/github/comment-poster';
 import { GitHubClient } from '../../../src/github/client';
 import { InlineComment, FileChange } from '../../../src/types';
 import { logger } from '../../../src/utils/logger';
+import { appendReviewSummaryMetadata } from '../../../src/github/summary-metadata';
 
 jest.mock('../../../src/utils/logger', () => ({
   logger: {
@@ -28,6 +29,7 @@ describe('CommentPoster', () => {
           listComments: jest.fn().mockResolvedValue({ data: [] }),
         },
         pulls: {
+          get: jest.fn().mockResolvedValue({ data: { head: { sha: 'head-sha' } } }),
           createReview: jest.fn().mockResolvedValue({}),
           createReviewComment: jest.fn().mockResolvedValue({}),
           listReviewComments: jest.fn(),
@@ -526,6 +528,77 @@ describe('CommentPoster', () => {
       await poster.postInline(123, comments, files);
 
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses lifecycle GraphQL dedupe refs instead of REST comments when refs are provided', async () => {
+      mockOctokit.paginate.mockResolvedValue([
+        {
+          id: 1,
+          path: 'src/test.ts',
+          line: 10,
+          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+        },
+      ]);
+
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'src/test.ts',
+          line: 10,
+          side: 'RIGHT' as const,
+          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+          severity: 'major',
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'src/test.ts',
+          status: 'modified',
+          additions: 5,
+          deletions: 2,
+          changes: 7,
+          patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+        },
+      ];
+
+      await poster.postInline(123, comments, files, 'head-sha', []);
+
+      expect(mockOctokit.paginate).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
+    });
+
+    it('suppresses duplicates from trusted unresolved lifecycle dedupe refs', async () => {
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'src/test.ts',
+          line: 10,
+          side: 'RIGHT' as const,
+          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+          severity: 'major',
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'src/test.ts',
+          status: 'modified',
+          additions: 5,
+          deletions: 2,
+          changes: 7,
+          patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
+        },
+      ];
+
+      await poster.postInline(123, comments, files, 'head-sha', [
+        {
+          path: 'src/test.ts',
+          line: 10,
+          body: '**🟡 Major - SQL injection**\n\nUse parameterized queries.',
+        },
+      ]);
+
+      expect(mockOctokit.paginate).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled();
     });
 
     it('falls back to a PR comment when GitHub rejects inline review creation with 422', async () => {
@@ -1060,6 +1133,112 @@ describe('CommentPoster', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Cannot find diff position')
       );
+      });
+    });
+
+    it('skips summary write when the PR head changed after review', async () => {
+      mockOctokit.rest.pulls.get.mockResolvedValueOnce({
+        data: { head: { sha: 'new-head' } },
+      });
+      const poster = new CommentPoster(mockClient, false);
+
+      const result = await poster.postSummary(
+        123,
+        'stale summary',
+        true,
+        {
+          reviewedHeadSha: 'old-head',
+          workflowRunId: '10',
+          workflowRunAttempt: 1,
+        }
+      );
+
+      expect(result).toMatchObject({
+        posted: false,
+        skippedStale: true,
+        reason: 'head_sha_changed',
+      });
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.issues.updateComment).not.toHaveBeenCalled();
+    });
+
+    it('skips replacing a newer same-head summary', async () => {
+      const newerBody = appendReviewSummaryMetadata(
+        '<!-- review-router-bot -->\n\n# ReviewRouter\nnewer',
+        {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '20',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:02:00Z',
+        }
+      );
+      mockOctokit.rest.issues.listComments.mockResolvedValueOnce({
+        data: [{ id: 99, body: newerBody }],
+      });
+      const poster = new CommentPoster(mockClient, false);
+
+      const result = await poster.postSummary(
+        123,
+        'older summary',
+        true,
+        {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '10',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:01:00Z',
+        }
+      );
+
+      expect(result).toMatchObject({
+        posted: false,
+        skippedStale: true,
+        reason: 'newer_summary_exists',
+      });
+      expect(mockOctokit.rest.issues.updateComment).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
+    it('finds newer same-head summaries beyond the first issue-comment page', async () => {
+      const newerBody = appendReviewSummaryMetadata(
+        '<!-- review-router-bot -->\n\n# ReviewRouter\nnewer',
+        {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '20',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:02:00Z',
+        }
+      );
+      mockOctokit.rest.issues.listComments
+        .mockResolvedValueOnce({
+          data: Array.from({ length: 100 }, (_, index) => ({
+            id: index + 1,
+            body: 'unrelated',
+          })),
+        })
+        .mockResolvedValueOnce({
+          data: [{ id: 101, body: newerBody }],
+        });
+      const poster = new CommentPoster(mockClient, false);
+
+      const result = await poster.postSummary(
+        123,
+        'older summary',
+        true,
+        {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '10',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:01:00Z',
+        }
+      );
+
+      expect(result).toMatchObject({
+        posted: false,
+        skippedStale: true,
+        reason: 'newer_summary_exists',
+      });
+      expect(mockOctokit.rest.issues.listComments).toHaveBeenCalledTimes(2);
+      expect(mockOctokit.rest.issues.updateComment).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
     });
   });
-});

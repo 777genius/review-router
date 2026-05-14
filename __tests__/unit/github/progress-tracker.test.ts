@@ -1,5 +1,6 @@
 import { Octokit } from '@octokit/rest';
 import { ProgressTracker } from '../../../src/github/progress-tracker';
+import { appendReviewSummaryMetadata } from '../../../src/github/summary-metadata';
 
 describe('ProgressTracker', () => {
   let octokit: Octokit;
@@ -26,6 +27,9 @@ describe('ProgressTracker', () => {
           createComment: createCommentMock,
           updateComment: updateCommentMock,
           listComments: listCommentsMock,
+        },
+        pulls: {
+          get: jest.fn().mockResolvedValue({ data: { head: { sha: 'head-sha' } } }),
         },
       },
     } as any;
@@ -90,6 +94,75 @@ describe('ProgressTracker', () => {
 
       // Should not throw
       await expect(tracker.initialize()).resolves.not.toThrow();
+    });
+
+    it('should not reuse or create progress comments when a newer summary exists', async () => {
+      const newerSummary = appendReviewSummaryMetadata(
+        '<!-- review-router-progress-tracker -->\n\n# ReviewRouter\nnewer',
+        {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '20',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:02:00Z',
+        }
+      );
+      tracker = new ProgressTracker(octokit, {
+        ...config,
+        summaryMetadata: {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '10',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:01:00Z',
+        },
+      });
+      listCommentsMock.mockResolvedValue({
+        data: [
+          { id: 111, body: '# ReviewRouter\n\nold summary' },
+          { id: 999, body: newerSummary },
+        ],
+      });
+
+      await tracker.initialize();
+
+      expect(createCommentMock).not.toHaveBeenCalled();
+      expect(updateCommentMock).not.toHaveBeenCalled();
+    });
+
+    it('should find newer summaries beyond the first issue-comment page during initialization', async () => {
+      const newerSummary = appendReviewSummaryMetadata(
+        '<!-- review-router-progress-tracker -->\n\n# ReviewRouter\nnewer',
+        {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '20',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:02:00Z',
+        }
+      );
+      tracker = new ProgressTracker(octokit, {
+        ...config,
+        summaryMetadata: {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '10',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:01:00Z',
+        },
+      });
+      listCommentsMock
+        .mockResolvedValueOnce({
+          data: Array.from({ length: 100 }, (_, index) => ({
+            id: index + 1,
+            body: 'unrelated',
+          })),
+        })
+        .mockResolvedValueOnce({
+          data: [{ id: 101, body: newerSummary }],
+        });
+
+      await tracker.initialize();
+
+      expect(listCommentsMock).toHaveBeenCalledTimes(2);
+      expect(createCommentMock).not.toHaveBeenCalled();
+      expect(updateCommentMock).not.toHaveBeenCalled();
     });
   });
 
@@ -252,6 +325,77 @@ describe('ProgressTracker', () => {
 
       expect(body).toContain('# ReviewRouter');
       expect(body).toContain('<!-- review-router-progress-tracker -->');
+    });
+
+    it('should skip final replacement when a newer summary appears after initialization', async () => {
+      const newerSummary = appendReviewSummaryMetadata(
+        '<!-- review-router-progress-tracker -->\n\n# ReviewRouter\nnewer',
+        {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '20',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:02:00Z',
+        }
+      );
+      tracker = new ProgressTracker(octokit, {
+        ...config,
+        summaryMetadata: {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '10',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:01:00Z',
+        },
+      });
+      createCommentMock.mockResolvedValue({ data: { id: 456 } } as any);
+      listCommentsMock.mockResolvedValueOnce({ data: [] });
+      await tracker.initialize();
+      updateCommentMock.mockClear();
+      listCommentsMock.mockResolvedValueOnce({
+        data: [{ id: 999, body: newerSummary }],
+      });
+
+      await expect(tracker.replaceWith('# ReviewRouter\n\nfinal summary')).resolves.toBe(false);
+
+      expect(updateCommentMock).not.toHaveBeenCalled();
+    });
+
+    it('should skip final replacement when a newer summary appears beyond the first issue-comment page', async () => {
+      const newerSummary = appendReviewSummaryMetadata(
+        '<!-- review-router-progress-tracker -->\n\n# ReviewRouter\nnewer',
+        {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '20',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:02:00Z',
+        }
+      );
+      tracker = new ProgressTracker(octokit, {
+        ...config,
+        summaryMetadata: {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '10',
+          workflowRunAttempt: 1,
+          summaryGeneratedAt: '2026-05-14T00:01:00Z',
+        },
+      });
+      createCommentMock.mockResolvedValue({ data: { id: 456 } } as any);
+      listCommentsMock.mockResolvedValueOnce({ data: [] });
+      await tracker.initialize();
+      updateCommentMock.mockClear();
+      listCommentsMock
+        .mockResolvedValueOnce({
+          data: Array.from({ length: 100 }, (_, index) => ({
+            id: index + 1,
+            body: 'unrelated',
+          })),
+        })
+        .mockResolvedValueOnce({
+          data: [{ id: 101, body: newerSummary }],
+        });
+
+      await expect(tracker.replaceWith('# ReviewRouter\n\nfinal summary')).resolves.toBe(false);
+
+      expect(updateCommentMock).not.toHaveBeenCalled();
     });
   });
 

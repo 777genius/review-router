@@ -252,6 +252,26 @@ inputs:
     description: "Advanced override for failure threshold: off, critical, major, or minor. When set, overrides FAIL_ON_CRITICAL and FAIL_ON_MAJOR"
     required: false
     default: ""
+  REVIEW_THREAD_LIFECYCLE:
+    description: "Review thread lifecycle mode for old ReviewRouter findings: off, report, or resolve"
+    required: false
+    default: ""
+  REVIEW_THREAD_LIFECYCLE_MAX_TARGETS:
+    description: "Maximum old unresolved ReviewRouter threads to revalidate in one review run"
+    required: false
+    default: ""
+  REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE:
+    description: "JSON object with per-severity confidence thresholds for resolved lifecycle votes"
+    required: false
+    default: ""
+  REVIEW_APP_SLUG:
+    description: "Optional GitHub App slug. Review thread lifecycle trusts this exact '<slug>[bot]' author for ReviewRouter-owned comments."
+    required: false
+    default: ""
+  REVIEW_APP_BOT_LOGIN:
+    description: "Optional exact GitHub App bot login to trust for ReviewRouter-owned review thread lifecycle comments."
+    required: false
+    default: ""
   GRAPH_ENABLED:
     description: "Enable code graph for dependency tracking"
     required: false

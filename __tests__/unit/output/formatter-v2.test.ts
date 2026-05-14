@@ -39,6 +39,26 @@ describe('MarkdownFormatterV2', () => {
     ...overrides,
   });
 
+  const createLifecycleTarget = () => ({
+    targetId: 'rrt_123',
+    threadId: 'thread-123',
+    threadUrl: 'https://github.test/thread/123',
+    fingerprint: 'f'.repeat(24),
+    severity: 'major' as const,
+    title: 'Previous Major Bug',
+    message: 'Old bug remains',
+    originalPath: 'src/old.ts',
+    currentPath: 'src/app.ts',
+    originalLine: 5,
+    currentLine: 9,
+    parentCommentId: 'comment-123',
+    parentCommentUpdatedAt: '2026-05-14T00:00:00Z',
+    threadCommentCount: 1,
+    viewerCanResolve: true,
+    hasHumanReply: false,
+    trustedAuthor: true,
+  });
+
   describe('format', () => {
     it('should format review with no findings', () => {
       const review = createMockReview();
@@ -147,6 +167,141 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain(
         '<sub>10.5s • $0.0100 • Powered by ReviewRouter</sub>'
       );
+    });
+
+    it('counts still-valid previous findings in stats and avoids all clear', () => {
+      const review = createMockReview({
+        threadLifecycle: {
+          mode: 'resolve',
+          quorumMode: 'multi-provider',
+          plannedProviders: ['a', 'b'],
+          resolvedCandidates: [],
+          resolvedByLifecycle: [],
+          previousStillValid: [
+            {
+              target: createLifecycleTarget(),
+              reasonCodes: ['still_valid_vote'],
+            },
+          ],
+          previousUncertain: [],
+          manualAttention: [],
+          mutationSkipped: [],
+          mutationFailed: [],
+          skipped: [],
+          warnings: [],
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('🟡 **1 Major**');
+      expect(output).toContain('## Previous Review Threads');
+      expect(output).toContain('Previous Major Bug');
+      expect(output).not.toContain('## All Clear!');
+    });
+
+    it('does not double-count previous thread when the same issue is a current finding', () => {
+      const review = createMockReview({
+        findings: [createMockFinding({ severity: 'major' })],
+        metrics: {
+          totalFindings: 1,
+          critical: 0,
+          major: 1,
+          minor: 0,
+          providersUsed: 2,
+          providersSuccess: 2,
+          providersFailed: 0,
+          totalTokens: 1000,
+          totalCost: 0.005,
+          durationSeconds: 5.5,
+        },
+        threadLifecycle: {
+          mode: 'resolve',
+          quorumMode: 'multi-provider',
+          plannedProviders: ['a', 'b'],
+          resolvedCandidates: [],
+          resolvedByLifecycle: [],
+          previousStillValid: [
+            {
+              target: createLifecycleTarget(),
+              reasonCodes: ['current_finding_present'],
+            },
+          ],
+          previousUncertain: [],
+          manualAttention: [],
+          mutationSkipped: [],
+          mutationFailed: [],
+          skipped: [],
+          warnings: [],
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('🟡 **1 Major**');
+      expect(output).not.toContain('🟡 **2 Major**');
+      expect(output).not.toContain('These unresolved findings still look valid');
+    });
+
+    it('lists previous threads resolved by this run', () => {
+      const review = createMockReview({
+        threadLifecycle: {
+          mode: 'resolve',
+          quorumMode: 'multi-provider',
+          plannedProviders: ['a', 'b'],
+          resolvedCandidates: [],
+          resolvedByLifecycle: [
+            {
+              target: createLifecycleTarget(),
+              reasonCodes: [],
+              resolvedBy: 'review-router',
+            },
+          ],
+          previousStillValid: [],
+          previousUncertain: [],
+          manualAttention: [],
+          mutationSkipped: [],
+          mutationFailed: [],
+          skipped: [],
+          warnings: [],
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('## Previous Review Threads');
+      expect(output).toContain('Resolved by this run:');
+      expect(output).toContain('Previous Major Bug');
+    });
+
+    it('blocks all clear for uncertain previous threads even without current findings', () => {
+      const review = createMockReview({
+        threadLifecycle: {
+          mode: 'resolve',
+          quorumMode: 'multi-provider',
+          plannedProviders: ['a', 'b'],
+          resolvedCandidates: [],
+          resolvedByLifecycle: [],
+          previousStillValid: [],
+          previousUncertain: [
+            {
+              target: createLifecycleTarget(),
+              reasonCodes: ['provider_missing_revalidation'],
+            },
+          ],
+          manualAttention: [],
+          mutationSkipped: [],
+          mutationFailed: [],
+          skipped: [],
+          warnings: [],
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('previous unresolved ReviewRouter threads could not be safely reconciled');
+      expect(output).toContain('Lifecycle attention required');
+      expect(output).not.toContain('## All Clear!');
     });
 
     it('should format critical findings with emoji', () => {

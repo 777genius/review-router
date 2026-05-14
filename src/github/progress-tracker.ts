@@ -1,6 +1,11 @@
 import { Octokit } from '@octokit/rest';
 import { normalizeReviewError, ReviewRouterError } from '../errors/review-router-error';
 import { logger } from '../utils/logger';
+import {
+  ReviewSummaryMetadata,
+  appendReviewSummaryMetadata,
+  shouldSkipSummaryWriteForExisting,
+} from './summary-metadata';
 
 export type ProgressStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
 
@@ -18,6 +23,7 @@ export interface ProgressTrackerConfig {
   repo: string;
   prNumber: number;
   updateStrategy: 'milestone' | 'debounced' | 'realtime';
+  summaryMetadata?: ReviewSummaryMetadata;
 }
 
 /**
@@ -36,6 +42,7 @@ export class ProgressTracker {
   private totalCost: number = 0;
   private overrideBody?: string;
   private failure?: ReviewRouterError;
+  private summaryWriteSuppressed = false;
   private static readonly MARKER = '<!-- review-router-progress-tracker -->';
   private static readonly LEGACY_MARKERS = [
     '<!-- ai-robot-review-progress-tracker -->',
@@ -62,9 +69,16 @@ export class ProgressTracker {
     }
     try {
       const body = this.formatProgressComment();
-      const existingCommentId = await this.findExistingCommentId();
-      if (existingCommentId) {
-        this.commentId = existingCommentId;
+      const existing = await this.findReusableComment();
+      if (existing.blockedByNewerSummary) {
+        this.summaryWriteSuppressed = true;
+        logger.warn(
+          'Skipping progress tracker initialization because a newer ReviewRouter summary already exists'
+        );
+        return;
+      }
+      if (existing.commentId) {
+        this.commentId = existing.commentId;
         await this.updateComment();
         logger.info('Progress tracker initialized from existing comment', { commentId: this.commentId });
         return;
@@ -259,6 +273,10 @@ export class ProgressTracker {
    * Replace the progress comment with a final body (e.g., combined progress + review)
    */
   async replaceWith(body: string): Promise<boolean> {
+    if (this.summaryWriteSuppressed) {
+      logger.warn('Skipping progress replacement because a newer summary already exists');
+      return false;
+    }
     if (!this.commentId) {
       logger.warn('Cannot replace progress: comment not initialized');
       return false;
@@ -269,7 +287,17 @@ export class ProgressTracker {
     }
 
     try {
-      this.overrideBody = this.withMarker(body);
+      if (await this.isCurrentRunStale()) {
+        logger.warn('Skipping progress replacement because the PR head changed');
+        return false;
+      }
+      if (await this.hasNewerReviewSummary()) {
+        logger.warn('Skipping progress replacement because a newer ReviewRouter summary already exists');
+        return false;
+      }
+      this.overrideBody = this.withMarker(
+        appendReviewSummaryMetadata(body, this.config.summaryMetadata)
+      );
       await this.octokit.rest.issues.updateComment({
         owner: this.config.owner,
         repo: this.config.repo,
@@ -283,24 +311,39 @@ export class ProgressTracker {
     }
   }
 
-  private async findExistingCommentId(): Promise<number | null> {
+  private async findReusableComment(): Promise<{
+    commentId: number | null;
+    blockedByNewerSummary: boolean;
+  }> {
     if (!this.octokit?.rest?.issues?.listComments) {
-      return null;
+      return { commentId: null, blockedByNewerSummary: false };
     }
 
     try {
-      const comments = await this.octokit.rest.issues.listComments({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        issue_number: this.config.prNumber,
-        per_page: 100,
-      });
+      const comments = await this.listIssueComments();
 
-      const matching = comments.data.filter(comment => this.isReviewComment(comment.body));
-      return matching.length > 0 ? matching[matching.length - 1].id : null;
+      const reviewComments = comments.filter((comment) =>
+        this.isReviewComment(comment.body)
+      );
+      const hasNewerSummary = reviewComments.some((comment) =>
+        shouldSkipSummaryWriteForExisting(
+          comment.body ?? '',
+          this.config.summaryMetadata
+        ).shouldSkip
+      );
+      if (hasNewerSummary) {
+        return { commentId: null, blockedByNewerSummary: true };
+      }
+      return {
+        commentId:
+          reviewComments.length > 0
+            ? reviewComments[reviewComments.length - 1].id
+            : null,
+        blockedByNewerSummary: false,
+      };
     } catch (error) {
       logger.warn('Failed to find existing progress comment', error as Error);
-      return null;
+      return { commentId: null, blockedByNewerSummary: false };
     }
   }
 
@@ -315,6 +358,74 @@ export class ProgressTracker {
     return body.includes(ProgressTracker.MARKER)
       ? body
       : `${body.trimEnd()}\n\n${ProgressTracker.MARKER}`;
+  }
+
+  private async hasNewerReviewSummary(): Promise<boolean> {
+    if (!this.config.summaryMetadata || !this.octokit?.rest?.issues?.listComments) {
+      return false;
+    }
+    try {
+      const comments = await this.listIssueComments();
+      return comments.some(
+        (comment) =>
+          this.isReviewComment(comment.body) &&
+          shouldSkipSummaryWriteForExisting(
+            comment.body ?? '',
+            this.config.summaryMetadata
+          ).shouldSkip
+      );
+    } catch (error) {
+      logger.warn(
+        'Failed to check existing summaries before progress replacement',
+        error as Error
+      );
+      return false;
+    }
+  }
+
+  private async isCurrentRunStale(): Promise<boolean> {
+    const reviewedHeadSha = this.config.summaryMetadata?.reviewedHeadSha;
+    if (!reviewedHeadSha || !this.octokit?.rest?.pulls?.get) {
+      return false;
+    }
+    try {
+      const response = await this.octokit.rest.pulls.get({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        pull_number: this.config.prNumber,
+      });
+      const freshHeadSha = response.data.head?.sha;
+      return Boolean(freshHeadSha && freshHeadSha !== reviewedHeadSha);
+    } catch (error) {
+      logger.warn(
+        'Failed to refresh PR head before progress summary replacement',
+        error as Error
+      );
+      return false;
+    }
+  }
+
+  private async listIssueComments(): Promise<
+    Array<{ id: number; body?: string | null }>
+  > {
+    const comments: Array<{ id: number; body?: string | null }> = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await this.octokit.rest.issues.listComments({
+        owner: this.config.owner,
+        repo: this.config.repo,
+        issue_number: this.config.prNumber,
+        per_page: 100,
+        page,
+      });
+      comments.push(...response.data);
+      hasMore = response.data.length === 100;
+      page += 1;
+    }
+
+    return comments;
   }
 
   private getStatusLabel(status: ProgressStatus): string {

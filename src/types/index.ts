@@ -4,6 +4,48 @@
 
 export type Severity = 'critical' | 'major' | 'minor';
 export type FailOnSeverity = Severity | 'off';
+export type ReviewThreadLifecycleMode = 'off' | 'report' | 'resolve';
+export type LifecycleSeverity = Severity | 'unknown';
+export type LifecycleQuorumMode = 'single-provider' | 'multi-provider';
+export type LifecycleVerdict = 'resolved' | 'still_valid' | 'uncertain';
+export type LifecycleReasonCode =
+  | 'not_reviewrouter_thread'
+  | 'resolved_thread_ignored'
+  | 'untrusted_author'
+  | 'missing_finding_marker'
+  | 'missing_old_finding_details'
+  | 'human_reply'
+  | 'viewer_cannot_resolve'
+  | 'outside_review_scope'
+  | 'target_cap_exceeded'
+  | 'provider_missing_revalidation'
+  | 'provider_uncertain'
+  | 'provider_parse_error'
+  | 'provider_failed'
+  | 'invalid_resolved_evidence'
+  | 'still_valid_vote'
+  | 'insufficient_resolved_quorum'
+  | 'head_sha_changed'
+  | 'thread_changed_before_mutation'
+  | 'mutation_permission_denied'
+  | 'mutation_rate_limited'
+  | 'mutation_failed'
+  | 'dry_run'
+  | 'already_resolved'
+  | 'thread_not_found'
+  | 'inventory_failed'
+  | 'pagination_incomplete'
+  | 'report_mode'
+  | 'stale_summary_write'
+  | 'unknown_severity'
+  | 'unsafe_prompt_data'
+  | 'line_mapping_insufficient'
+  | 'unknown_target_id'
+  | 'missing_target_id'
+  | 'duplicate_fingerprint_targets'
+  | 'current_finding_present'
+  | 'provider_current_finding_present'
+  | 'command_dismissed';
 
 /**
  * Configuration for multi-provider code review
@@ -138,6 +180,14 @@ export interface ReviewConfig {
   suggestionSyntaxValidation?: boolean;
   updatePrDescription?: boolean;
   failOnSeverity?: FailOnSeverity;
+  reviewThreadLifecycle?: ReviewThreadLifecycleMode;
+  reviewThreadLifecycleMaxTargets?: number;
+  reviewThreadLifecycleResolveConfidence?: {
+    critical?: number;
+    major?: number;
+    minor?: number;
+    unknown?: number;
+  };
 
   dryRun: boolean;
 }
@@ -153,6 +203,7 @@ export interface ReviewResult {
   usage?: TokenUsage;
   durationSeconds?: number;
   findings?: Finding[];
+  revalidations?: ProviderLifecycleRevalidation[];
   aiLikelihood?: number;
   aiReasoning?: string;
   actualModel?: string; // Actual model used (for routed providers like openrouter/free)
@@ -164,6 +215,7 @@ export interface ProviderResult {
   result?: ReviewResult;
   error?: Error;
   durationSeconds: number;
+  lifecycleAssignedTargetIds?: string[];
 }
 
 export interface ProviderModelAttribution {
@@ -301,6 +353,94 @@ export interface Review {
   coverage?: ReviewCoverage;
   impactAnalysis?: ImpactAnalysis;
   mermaidDiagram?: string;
+  threadLifecycle?: ReviewThreadLifecycleResult;
+}
+
+export interface LifecycleEvidence {
+  path: string;
+  startLine?: number;
+  endLine?: number;
+  reason: string;
+}
+
+export interface ProviderLifecycleRevalidation {
+  targetId: string;
+  fingerprint?: string;
+  verdict: LifecycleVerdict;
+  confidence?: number;
+  evidence?: LifecycleEvidence[];
+  rationale?: string;
+}
+
+export interface LifecycleTarget {
+  targetId: string;
+  threadId: string;
+  threadUrl?: string;
+  fingerprint: string;
+  severity: LifecycleSeverity;
+  title: string;
+  message: string;
+  originalPath: string;
+  currentPath?: string;
+  originalLine?: number;
+  currentLine?: number;
+  diffHunk?: string;
+  parentCommentId: string;
+  parentCommentUpdatedAt: string;
+  threadCommentCount: number;
+  viewerCanResolve: boolean;
+  hasHumanReply: boolean;
+  trustedAuthor: boolean;
+  reasonCodes?: LifecycleReasonCode[];
+}
+
+export interface LifecycleAssignmentRecord {
+  targetId: string;
+  fingerprint: string;
+  assignedProviderIds: string[];
+  assignedBatchIds: string[];
+  failedProviderIds?: string[];
+  unassignedProviderIds: Array<{
+    providerId: string;
+    reason: LifecycleReasonCode;
+  }>;
+  scopeStatus: 'in_scope' | 'out_of_scope' | 'capped' | 'unsupported';
+}
+
+export interface ProviderLifecycleVote extends ProviderLifecycleRevalidation {
+  providerId: string;
+  valid: boolean;
+  reasonCodes: LifecycleReasonCode[];
+}
+
+export interface LifecycleThreadRecord {
+  target: LifecycleTarget;
+  reasonCodes: LifecycleReasonCode[];
+  providerVotes?: ProviderLifecycleVote[];
+}
+
+export interface LifecycleResolvedThread extends LifecycleThreadRecord {
+  resolvedBy?: 'review-router' | 'external';
+}
+
+export interface LifecycleMutationFailure extends LifecycleThreadRecord {
+  errorMessage?: string;
+}
+
+export interface ReviewThreadLifecycleResult {
+  mode: ReviewThreadLifecycleMode;
+  quorumMode: LifecycleQuorumMode;
+  plannedProviders: string[];
+  resolvedCandidates: LifecycleThreadRecord[];
+  resolvedByLifecycle: LifecycleResolvedThread[];
+  previousStillValid: LifecycleThreadRecord[];
+  previousUncertain: LifecycleThreadRecord[];
+  manualAttention: LifecycleThreadRecord[];
+  mutationSkipped: LifecycleThreadRecord[];
+  mutationFailed: LifecycleMutationFailure[];
+  skipped: LifecycleThreadRecord[];
+  warnings: string[];
+  inventoryFailed?: boolean;
 }
 
 export interface CostEstimate {

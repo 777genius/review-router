@@ -1,4 +1,4 @@
-import { Finding } from '../types';
+import { Finding, ProviderLifecycleRevalidation } from '../types';
 
 export function buildReviewFindingsSchema(): unknown {
   return {
@@ -36,14 +36,69 @@ export function buildReviewFindingsSchema(): unknown {
           },
         },
       },
+      revalidations: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: [
+            'targetId',
+            'fingerprint',
+            'verdict',
+            'confidence',
+            'evidence',
+            'rationale',
+          ],
+          properties: {
+            targetId: { type: 'string' },
+            fingerprint: { type: ['string', 'null'] },
+            verdict: {
+              type: 'string',
+              enum: ['resolved', 'still_valid', 'uncertain'],
+            },
+            confidence: {
+              type: ['number', 'null'],
+              minimum: 0,
+              maximum: 1,
+            },
+            evidence: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['path', 'startLine', 'endLine', 'reason'],
+                properties: {
+                  path: { type: 'string' },
+                  startLine: { type: ['integer', 'null'] },
+                  endLine: { type: ['integer', 'null'] },
+                  reason: { type: 'string' },
+                },
+              },
+            },
+            rationale: { type: 'string' },
+          },
+        },
+      },
     },
   };
+}
+
+export interface ParsedReviewOutput {
+  findings: Finding[];
+  revalidations: ProviderLifecycleRevalidation[];
 }
 
 export function parseReviewFindingsStrict(
   content: string,
   providerLabel: string
 ): Finding[] {
+  return parseReviewOutputStrict(content, providerLabel).findings;
+}
+
+export function parseReviewOutputStrict(
+  content: string,
+  providerLabel: string
+): ParsedReviewOutput {
   const parsed = parseReviewJson(content, providerLabel);
   const findings = Array.isArray(parsed)
     ? parsed
@@ -55,7 +110,7 @@ export function parseReviewFindingsStrict(
     );
   }
 
-  return findings.map((item, index) => {
+  const parsedFindings = findings.map((item, index) => {
     if (!item || typeof item !== 'object') {
       throw new Error(
         `${providerLabel} returned invalid review JSON: findings[${index}] must be an object`
@@ -112,6 +167,33 @@ export function parseReviewFindingsStrict(
 
     return finding;
   });
+
+  const rawRevalidations = Array.isArray(parsed)
+    ? []
+    : (parsed as { revalidations?: unknown })?.revalidations;
+
+  return {
+    findings: parsedFindings,
+    revalidations: parseRevalidationsLenient(rawRevalidations, providerLabel),
+  };
+}
+
+export function parseReviewOutputLenient(content: string): ParsedReviewOutput {
+  try {
+    const parsed = parseReviewJson(content, 'provider');
+    const findings = Array.isArray(parsed)
+      ? parsed as Finding[]
+      : (((parsed as { findings?: unknown })?.findings || []) as Finding[]);
+    const rawRevalidations = Array.isArray(parsed)
+      ? []
+      : (parsed as { revalidations?: unknown })?.revalidations;
+    return {
+      findings: Array.isArray(findings) ? findings : [],
+      revalidations: parseRevalidationsLenient(rawRevalidations, 'provider'),
+    };
+  } catch {
+    return { findings: [], revalidations: [] };
+  }
 }
 
 function parseReviewJson(content: string, providerLabel: string): unknown {
@@ -126,4 +208,59 @@ function parseReviewJson(content: string, providerLabel: string): unknown {
       `${providerLabel} returned invalid review JSON: response was not valid JSON`
     );
   }
+}
+
+function parseRevalidationsLenient(
+  value: unknown,
+  _providerLabel: string
+): ProviderLifecycleRevalidation[] {
+  if (!Array.isArray(value)) return [];
+  const revalidations: ProviderLifecycleRevalidation[] = [];
+
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const raw = item as Record<string, unknown>;
+    const targetId = typeof raw.targetId === 'string'
+      ? raw.targetId
+      : typeof raw.target_id === 'string'
+        ? raw.target_id
+        : '';
+    const verdict = String(raw.verdict || '');
+    if (
+      verdict !== 'resolved' &&
+      verdict !== 'still_valid' &&
+      verdict !== 'uncertain'
+    ) {
+      continue;
+    }
+    const evidence = Array.isArray(raw.evidence)
+      ? raw.evidence
+          .filter((entry): entry is Record<string, unknown> =>
+            Boolean(entry && typeof entry === 'object')
+          )
+          .map((entry) => ({
+            path: typeof entry.path === 'string' ? entry.path : '',
+            startLine: Number.isInteger(entry.startLine)
+              ? (entry.startLine as number)
+              : undefined,
+            endLine: Number.isInteger(entry.endLine)
+              ? (entry.endLine as number)
+              : undefined,
+            reason: typeof entry.reason === 'string' ? entry.reason : '',
+          }))
+      : [];
+
+    revalidations.push({
+      targetId,
+      fingerprint:
+        typeof raw.fingerprint === 'string' ? raw.fingerprint : undefined,
+      verdict,
+      confidence:
+        typeof raw.confidence === 'number' ? raw.confidence : undefined,
+      evidence,
+      rationale: typeof raw.rationale === 'string' ? raw.rationale : undefined,
+    });
+  }
+
+  return revalidations;
 }

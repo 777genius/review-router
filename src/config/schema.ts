@@ -118,6 +118,14 @@ export const ReviewConfigSchema = z.object({
   suggestion_syntax_validation: z.boolean().optional(),
   update_pr_description: z.boolean().optional(),
   fail_on_severity: z.enum(['off', 'critical', 'major', 'minor']).optional(),
+  review_thread_lifecycle: z.string().optional(),
+  review_thread_lifecycle_max_targets: z.number().int().min(0).max(25).optional(),
+  review_thread_lifecycle_resolve_confidence: z.object({
+    critical: z.number().min(0).max(1).optional(),
+    major: z.number().min(0).max(1).optional(),
+    minor: z.number().min(0).max(1).optional(),
+    unknown: z.number().min(0).max(1).optional(),
+  }).optional(),
 
   dry_run: z.boolean().optional(),
 });

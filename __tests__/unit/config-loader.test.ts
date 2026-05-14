@@ -1,11 +1,16 @@
 import { ConfigLoader } from '../../src/config/loader';
 import { DEFAULT_CONFIG } from '../../src/config/defaults';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 describe('ConfigLoader', () => {
   const originalEnv = { ...process.env };
+  const originalCwd = process.cwd();
 
   afterEach(() => {
     process.env = { ...originalEnv };
+    process.chdir(originalCwd);
   });
 
   it('merges environment overrides into defaults', () => {
@@ -114,6 +119,37 @@ describe('ConfigLoader', () => {
     expect(config.consensusRequiredForCritical).toBe(false);
     expect(config.consensusMinAgreement).toBe(3);
     expect(config.suggestionSyntaxValidation).toBe(false);
+  });
+
+  it('clamps review thread lifecycle target cap from environment', () => {
+    process.env.REVIEW_THREAD_LIFECYCLE_MAX_TARGETS = '500';
+
+    const config = ConfigLoader.load();
+
+    expect(config.reviewThreadLifecycleMaxTargets).toBe(25);
+  });
+
+  it('fails closed when review thread lifecycle mode from environment is invalid', () => {
+    process.env.REVIEW_THREAD_LIFECYCLE = 'maybe';
+
+    const config = ConfigLoader.load();
+
+    expect(config.reviewThreadLifecycle).toBe('off');
+  });
+
+  it('fails closed when review thread lifecycle mode from config file is invalid', () => {
+    const tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'review-router-config-')
+    );
+    fs.writeFileSync(
+      path.join(tempDir, '.multi-review.yml'),
+      'review_thread_lifecycle: maybe\n'
+    );
+    process.chdir(tempDir);
+
+    const config = ConfigLoader.load();
+
+    expect(config.reviewThreadLifecycle).toBe('off');
   });
 
   it('ignores non-numeric or negative provider batch overrides', () => {

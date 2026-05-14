@@ -11,6 +11,7 @@ import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
 import {
   buildReviewFindingsSchema,
+  parseReviewOutputStrict,
   parseReviewFindingsStrict,
 } from './review-output';
 
@@ -140,13 +141,14 @@ export class CodexProvider extends Provider {
           `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
         );
       }
-      const findings = this.parseFindingsStrict(content);
+      const parsed = parseReviewOutputStrict(content, 'Codex CLI');
 
       return {
         content,
         durationSeconds,
         usage: this.estimateUsage(prompt, content),
-        findings,
+        findings: parsed.findings,
+        revalidations: parsed.revalidations,
       };
     } catch (error) {
       const normalized = this.normalizeCodexError(error);
@@ -452,8 +454,9 @@ export class CodexProvider extends Provider {
       '</deterministic_review_prompt>',
       '',
       'FINAL OUTPUT CONTRACT:',
-      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}],"revalidations":[{"targetId":"rrt_example","fingerprint":"abc","verdict":"resolved","confidence":0.9,"evidence":[{"path":"src/file.ts","startLine":1,"endLine":2,"reason":"why current code fixes it"}],"rationale":"short reason"}]}',
       'The "findings" array may be empty. "severity" must be one of "critical", "major", or "minor".',
+      'The "revalidations" array may be empty. Include entries only for targetId values listed in the deterministic prompt.',
       'When the issue covers a changed block, set "startLine" to the first affected RIGHT-side line and "endLine" to the last affected RIGHT-side line; keep "line" equal to "endLine". For single-line findings, set "startLine" and "endLine" to null.',
       'The "suggestion" field is required by schema; use null unless there is an exact safe replacement.',
       'Do not return markdown, prose, or a bare JSON array.',
@@ -471,8 +474,9 @@ export class CodexProvider extends Provider {
       '</deterministic_review_prompt>',
       '',
       'FINAL OUTPUT CONTRACT:',
-      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}]}',
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}],"revalidations":[{"targetId":"rrt_example","fingerprint":"abc","verdict":"resolved","confidence":0.9,"evidence":[{"path":"src/file.ts","startLine":1,"endLine":2,"reason":"why current code fixes it"}],"rationale":"short reason"}]}',
       'The "findings" array may be empty. The "suggestion" field is required and may be null.',
+      'The "revalidations" array may be empty. Include entries only for targetId values listed in the deterministic prompt.',
       'When the issue covers a changed block, set "startLine" to the first affected RIGHT-side line and "endLine" to the last affected RIGHT-side line; keep "line" equal to "endLine". For single-line findings, set "startLine" and "endLine" to null.',
       'Do not return markdown, prose, or a bare JSON array.',
     ].join('\n');

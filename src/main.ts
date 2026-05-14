@@ -33,6 +33,10 @@ import {
 import { resolveGitHubCommentToken } from './control-plane/comment-token';
 import { reportControlPlaneActionHealth } from './control-plane/health-report';
 import { resolveProviderCliPlan } from './control-plane/provider-cli-plan';
+import {
+  countPreviousStillValidBySeverity,
+  isLinkedCurrentFinding,
+} from './analysis/thread-lifecycle';
 
 function syncEnvFromInputs(): void {
   const inputKeys = [
@@ -111,6 +115,15 @@ function syncEnvFromInputs(): void {
     'REPORT_BASENAME',
     'DRY_RUN',
     'REVIEWROUTER_COMMENT_TOKEN_MODE',
+    'REVIEW_THREAD_LIFECYCLE',
+    'REVIEW_THREAD_LIFECYCLE_MAX_TARGETS',
+    'REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE',
+    'REVIEW_THREAD_LIFECYCLE_TRUSTED_AUTHORS',
+    'REVIEW_ROUTER_TRUSTED_BOT_AUTHORS',
+    'REVIEW_APP_SLUG',
+    'REVIEW_APP_BOT_LOGIN',
+    'REVIEW_ROUTER_APP_SLUG',
+    'REVIEW_ROUTER_APP_BOT_LOGIN',
   ];
 
   for (const key of inputKeys) {
@@ -156,6 +169,7 @@ async function run(): Promise<void> {
     });
     const fallbackToken = token;
     token = commentToken.token;
+    process.env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS = commentToken.status;
 
     if (
       mode === 'interaction'
@@ -202,10 +216,21 @@ async function run(): Promise<void> {
 
     await clearReviewFailureSummaries(token, prNumber);
 
-    core.setOutput('findings_count', review.findings.length);
+    const previousStillValidCounts = countPreviousStillValidBySeverity(
+      review.threadLifecycle
+    );
+    const previousStillValidTotal =
+      previousStillValidCounts.critical +
+      previousStillValidCounts.major +
+      previousStillValidCounts.minor;
+    core.setOutput(
+      'findings_count',
+      review.findings.length + previousStillValidTotal
+    );
     core.setOutput(
       'critical_count',
-      review.findings.filter((f) => f.severity === 'critical').length
+      review.findings.filter((f) => f.severity === 'critical').length +
+        previousStillValidCounts.critical
     );
     core.setOutput('cost_usd', review.metrics.totalCost.toFixed(4));
     core.setOutput('total_cost', review.metrics.totalCost.toFixed(4));
@@ -290,7 +315,22 @@ function getBlockingFindings(
     minor: 1,
   };
   const minRank = rank[threshold];
-  return review.findings.filter((finding) => rank[finding.severity] >= minRank);
+  const currentBlocking = review.findings.filter(
+    (finding) => rank[finding.severity] >= minRank
+  );
+  const previousBlocking = (review.threadLifecycle?.previousStillValid ?? [])
+    .filter((record) => !isLinkedCurrentFinding(record))
+    .filter((record) => {
+      const severity = record.target.severity;
+      return (
+        (severity === 'critical' ||
+          severity === 'major' ||
+          severity === 'minor') &&
+        rank[severity] >= minRank
+      );
+    });
+
+  return [...currentBlocking, ...previousBlocking];
 }
 
 async function runInteraction(

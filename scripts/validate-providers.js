@@ -12,11 +12,13 @@
 // - Followed by slash
 // - Model/vendor path with no consecutive slashes or empty segments
 // - Allows alphanumeric, dots, colons, hyphens, and slashes
-const PROVIDER_PATTERN = /^(openrouter|opencode|openai|anthropic|cohere|mistral|groq)\/[A-Za-z0-9._:\-]+(?:\/[A-Za-z0-9._:\-]+)*$/;
+// - Allows a trailing OpenRouter-style instance suffix (#1) used for quorum identities
+const PROVIDER_PATTERN = /^(openrouter|opencode|openai|anthropic|cohere|mistral|groq)\/[A-Za-z0-9._:\-]+(?:\/[A-Za-z0-9._:\-]+)*(?:#[0-9]+)?$/;
 
 const EXAMPLES = [
   'openrouter/google/gemini-2.0-flash-exp:free',
   'openrouter/mistralai/devstral-2512:free',
+  'openrouter/free#1',
   'opencode/gpt-4:free',
   'openai/gpt-4',
   'anthropic/claude-3-5-sonnet',

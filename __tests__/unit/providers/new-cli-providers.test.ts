@@ -26,6 +26,8 @@ describe('New CLI Providers', () => {
 
     it('should still validate existing provider patterns', () => {
       expect(Provider.validate('openrouter/google/gemini-2.0-flash-exp:free')).toBe(true);
+      expect(Provider.validate('openrouter/free#1')).toBe(true);
+      expect(Provider.validate('openrouter/qwen/qwen3-coder:free#2')).toBe(true);
       expect(Provider.validate('opencode/minimax-m2.1-free')).toBe(true);
     });
 
@@ -33,6 +35,8 @@ describe('New CLI Providers', () => {
       expect(Provider.validate('invalid/provider')).toBe(false);
       expect(Provider.validate('/claude')).toBe(false);
       expect(Provider.validate('unknown/test')).toBe(false);
+      expect(Provider.validate('openrouter/free#')).toBe(false);
+      expect(Provider.validate('openrouter/free#one')).toBe(false);
     });
   });
 

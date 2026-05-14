@@ -1,8 +1,10 @@
 import { ReviewConfig } from '../types';
+import { PREFERRED_OPENROUTER_FREE_MODELS } from '../providers/openrouter-models';
 
 export const DEFAULT_CONFIG: ReviewConfig = {
-  // Empty array triggers dynamic model discovery
-  // Will use OpenRouter's "free" meta-model and discover OpenCode CLI models
+  // Empty array triggers dynamic model discovery.
+  // OpenRouter discovery prefers concrete free tool-capable models and can
+  // discover OpenCode CLI models as fallback.
   providers: [],
   synthesisModel: 'openrouter/free',
   fallbackProviders: [],
@@ -132,5 +134,5 @@ export const DEFAULT_CONFIG: ReviewConfig = {
  * (e.g., network issues, API unavailable, CLI not installed)
  */
 export const FALLBACK_STATIC_PROVIDERS = [
-  'openrouter/free',
+  ...PREFERRED_OPENROUTER_FREE_MODELS,
 ];

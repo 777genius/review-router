@@ -111,7 +111,8 @@ providers_repo_count="$(printf '%s' "$providers_json" | jq -r .numSelectedRepos)
 providers_value="$(printf '%s' "$providers_json" | jq -r .value)"
 [ "$providers_visibility" = "selected" ] || fatal "REVIEW_PROVIDERS visibility is $providers_visibility, expected selected"
 [ "$providers_repo_count" = "1" ] || fatal "REVIEW_PROVIDERS selected repo count is $providers_repo_count, expected 1"
-[ "$providers_value" = "openrouter/free" ] || fatal "REVIEW_PROVIDERS value is $providers_value"
+expected_providers="openrouter/inclusionai/ring-2.6-1t:free,openrouter/openai/gpt-oss-120b:free,openrouter/poolside/laguna-m.1:free"
+[ "$providers_value" = "$expected_providers" ] || fatal "REVIEW_PROVIDERS value is $providers_value"
 
 pr_url="$(gh pr list --repo "$REPO" --head review-router/setup --state open --json url --jq '.[0].url')"
 [ -n "$pr_url" ] || fatal "Setup PR was not opened"

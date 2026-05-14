@@ -7066,10 +7066,101 @@ var safeLoad = renamed("safeLoad", "load");
 var safeLoadAll = renamed("safeLoadAll", "loadAll");
 var safeDump = renamed("safeDump", "dump");
 
+// src/utils/logger.ts
+var LEVELS = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40
+};
+var CURRENT_LEVEL = process.env.LOG_LEVEL || "info";
+function shouldLog(level) {
+  return LEVELS[level] >= LEVELS[CURRENT_LEVEL];
+}
+function formatMessage(level, message, metadata) {
+  const timestamp2 = (/* @__PURE__ */ new Date()).toISOString();
+  const levelStr = level.toUpperCase().padEnd(5);
+  if (metadata && Object.keys(metadata).length > 0) {
+    const metaStr = JSON.stringify(metadata);
+    return `[${timestamp2}] ${levelStr} ${message} ${metaStr}`;
+  }
+  return `[${timestamp2}] ${levelStr} ${message}`;
+}
+var logger = {
+  debug(message, ...args) {
+    if (shouldLog("debug")) {
+      const metadata = args.length > 0 && typeof args[0] === "object" && !Array.isArray(args[0]) ? args[0] : void 0;
+      console.debug(formatMessage("debug", message, metadata));
+    }
+  },
+  info(message, ...args) {
+    if (shouldLog("info")) {
+      const metadata = args.length > 0 && typeof args[0] === "object" && !Array.isArray(args[0]) ? args[0] : void 0;
+      console.info(formatMessage("info", message, metadata));
+    }
+  },
+  warn(message, ...args) {
+    if (shouldLog("warn")) {
+      const metadata = args.length > 0 && typeof args[0] === "object" && !Array.isArray(args[0]) ? args[0] : void 0;
+      console.warn(formatMessage("warn", message, metadata));
+    }
+  },
+  error(message, ...args) {
+    if (shouldLog("error")) {
+      let metadata = {};
+      let error2;
+      for (const arg of args) {
+        if (arg instanceof Error) {
+          error2 = arg;
+        } else if (typeof arg === "object" && arg !== null && !Array.isArray(arg)) {
+          metadata = { ...metadata, ...arg };
+        }
+      }
+      if (error2) {
+        metadata.error = error2.message;
+        metadata.stack = error2.stack;
+      }
+      console.error(formatMessage("error", message, Object.keys(metadata).length > 0 ? metadata : void 0));
+    }
+  }
+};
+
+// src/providers/openrouter-models.ts
+var PREFERRED_OPENROUTER_FREE_MODELS = [
+  "openrouter/inclusionai/ring-2.6-1t:free",
+  "openrouter/openai/gpt-oss-120b:free",
+  "openrouter/poolside/laguna-m.1:free"
+];
+async function getBestFreeModels(count = 4, _timeoutMs = 5e3) {
+  logger.debug(`Selecting ${count} preferred OpenRouter free model instances`);
+  const models = [];
+  for (let i = 0; models.length < count; i += 1) {
+    const model = PREFERRED_OPENROUTER_FREE_MODELS[i % PREFERRED_OPENROUTER_FREE_MODELS.length];
+    models.push(`${model}#${i + 1}`);
+  }
+  return models;
+}
+var modelCache = null;
+var CACHE_TTL_MS = 60 * 60 * 1e3;
+async function getBestFreeModelsCached(count = 4, timeoutMs = 5e3) {
+  const now = Date.now();
+  if (modelCache && now - modelCache.timestamp < CACHE_TTL_MS) {
+    logger.debug("Using cached OpenRouter model list");
+    return modelCache.models.slice(0, count);
+  }
+  const models = await getBestFreeModels(count, timeoutMs);
+  modelCache = {
+    models,
+    timestamp: now
+  };
+  return models;
+}
+
 // src/config/defaults.ts
 var DEFAULT_CONFIG = {
-  // Empty array triggers dynamic model discovery
-  // Will use OpenRouter's "free" meta-model and discover OpenCode CLI models
+  // Empty array triggers dynamic model discovery.
+  // OpenRouter discovery prefers concrete free tool-capable models and can
+  // discover OpenCode CLI models as fallback.
   providers: [],
   synthesisModel: "openrouter/free",
   fallbackProviders: [],
@@ -7189,7 +7280,7 @@ var DEFAULT_CONFIG = {
   }
 };
 var FALLBACK_STATIC_PROVIDERS = [
-  "openrouter/free"
+  ...PREFERRED_OPENROUTER_FREE_MODELS
 ];
 
 // node_modules/zod/v3/external.js
@@ -11407,65 +11498,6 @@ var ReviewConfigSchema = external_exports.object({
   dry_run: external_exports.boolean().optional()
 });
 
-// src/utils/logger.ts
-var LEVELS = {
-  debug: 10,
-  info: 20,
-  warn: 30,
-  error: 40
-};
-var CURRENT_LEVEL = process.env.LOG_LEVEL || "info";
-function shouldLog(level) {
-  return LEVELS[level] >= LEVELS[CURRENT_LEVEL];
-}
-function formatMessage(level, message, metadata) {
-  const timestamp2 = (/* @__PURE__ */ new Date()).toISOString();
-  const levelStr = level.toUpperCase().padEnd(5);
-  if (metadata && Object.keys(metadata).length > 0) {
-    const metaStr = JSON.stringify(metadata);
-    return `[${timestamp2}] ${levelStr} ${message} ${metaStr}`;
-  }
-  return `[${timestamp2}] ${levelStr} ${message}`;
-}
-var logger = {
-  debug(message, ...args) {
-    if (shouldLog("debug")) {
-      const metadata = args.length > 0 && typeof args[0] === "object" && !Array.isArray(args[0]) ? args[0] : void 0;
-      console.debug(formatMessage("debug", message, metadata));
-    }
-  },
-  info(message, ...args) {
-    if (shouldLog("info")) {
-      const metadata = args.length > 0 && typeof args[0] === "object" && !Array.isArray(args[0]) ? args[0] : void 0;
-      console.info(formatMessage("info", message, metadata));
-    }
-  },
-  warn(message, ...args) {
-    if (shouldLog("warn")) {
-      const metadata = args.length > 0 && typeof args[0] === "object" && !Array.isArray(args[0]) ? args[0] : void 0;
-      console.warn(formatMessage("warn", message, metadata));
-    }
-  },
-  error(message, ...args) {
-    if (shouldLog("error")) {
-      let metadata = {};
-      let error2;
-      for (const arg of args) {
-        if (arg instanceof Error) {
-          error2 = arg;
-        } else if (typeof arg === "object" && arg !== null && !Array.isArray(arg)) {
-          metadata = { ...metadata, ...arg };
-        }
-      }
-      if (error2) {
-        metadata.error = error2.message;
-        metadata.stack = error2.stack;
-      }
-      console.error(formatMessage("error", message, Object.keys(metadata).length > 0 ? metadata : void 0));
-    }
-  }
-};
-
 // src/utils/validation.ts
 var ValidationError = class extends Error {
   constructor(message, field, hint) {
@@ -12267,7 +12299,7 @@ function buildReviewFindingsSchema() {
   return {
     type: "object",
     additionalProperties: false,
-    required: ["findings"],
+    required: ["findings", "revalidations"],
     properties: {
       findings: {
         type: "array",
@@ -12432,27 +12464,42 @@ function parseRevalidationsLenient(value, _providerLabel) {
     if (verdict !== "resolved" && verdict !== "still_valid" && verdict !== "uncertain") {
       continue;
     }
-    const evidence = Array.isArray(raw.evidence) ? raw.evidence.filter(
-      (entry) => Boolean(entry && typeof entry === "object")
-    ).map((entry) => ({
-      path: typeof entry.path === "string" ? entry.path : "",
-      startLine: Number.isInteger(entry.startLine) ? entry.startLine : void 0,
-      endLine: Number.isInteger(entry.endLine) ? entry.endLine : void 0,
-      reason: typeof entry.reason === "string" ? entry.reason : ""
-    })) : [];
+    const evidence = parseRevalidationEvidence(raw.evidence);
     revalidations.push({
       targetId,
       fingerprint: typeof raw.fingerprint === "string" ? raw.fingerprint : void 0,
       verdict,
-      confidence: typeof raw.confidence === "number" ? raw.confidence : void 0,
+      confidence: typeof raw.confidence === "number" ? raw.confidence : typeof raw.confidence === "string" ? Number(raw.confidence) : void 0,
       evidence,
       rationale: typeof raw.rationale === "string" ? raw.rationale : void 0
     });
   }
   return revalidations;
 }
+function parseRevalidationEvidence(value) {
+  const values = Array.isArray(value) ? value : [value];
+  const evidence = [];
+  for (const entry of values) {
+    if (typeof entry === "string") {
+      evidence.push({ path: "", reason: entry });
+      continue;
+    }
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const raw = entry;
+    evidence.push({
+      path: typeof raw.path === "string" ? raw.path : "",
+      startLine: Number.isInteger(raw.startLine) ? raw.startLine : void 0,
+      endLine: Number.isInteger(raw.endLine) ? raw.endLine : void 0,
+      reason: typeof raw.reason === "string" ? raw.reason : ""
+    });
+  }
+  return evidence;
+}
 
 // src/providers/openrouter.ts
+var REVIEW_TOOL_NAME = "submit_review";
 var OpenRouterProvider = class _OpenRouterProvider extends Provider {
   constructor(modelId, apiKey, rateLimiter) {
     super(`openrouter/${modelId}`);
@@ -12489,7 +12536,20 @@ var OpenRouterProvider = class _OpenRouterProvider extends Provider {
           body: JSON.stringify({
             model: apiModelId,
             messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
+            tools: [
+              {
+                type: "function",
+                function: {
+                  name: REVIEW_TOOL_NAME,
+                  description: "Submit the complete ReviewRouter code review result.",
+                  parameters: buildReviewFindingsSchema()
+                }
+              }
+            ],
+            tool_choice: {
+              type: "function",
+              function: { name: REVIEW_TOOL_NAME }
+            },
             temperature: 0.1,
             max_tokens: 2e3
           }),
@@ -12539,7 +12599,8 @@ var OpenRouterProvider = class _OpenRouterProvider extends Provider {
       }
       const data = await response.json();
       const durationSeconds = (Date.now() - started) / 1e3;
-      const content = data.choices?.[0]?.message?.content || "";
+      const message = data.choices?.[0]?.message;
+      const content = extractReviewContent(message);
       const usage = data.usage;
       const actualModel = data.model;
       const parsedOutput = parseReviewOutputLenient(content);
@@ -12581,6 +12642,19 @@ var OpenRouterProvider = class _OpenRouterProvider extends Provider {
     return void 0;
   }
 };
+function extractReviewContent(message) {
+  const toolCall = message?.tool_calls?.find(
+    (call) => call.function?.name === REVIEW_TOOL_NAME
+  );
+  const args = toolCall?.function?.arguments;
+  if (typeof args === "string" && args.trim()) {
+    return args;
+  }
+  if (args && typeof args === "object") {
+    return JSON.stringify(args);
+  }
+  return message?.content || "";
+}
 
 // src/providers/opencode.ts
 var import_child_process = require("child_process");
@@ -14824,27 +14898,6 @@ var PricingService = class _PricingService {
     }
   }
 };
-
-// src/providers/openrouter-models.ts
-async function getBestFreeModels(count = 4, _timeoutMs = 5e3) {
-  logger.debug(`Creating ${count} OpenRouter free routing instances`);
-  return Array.from({ length: count }, (_, i) => `openrouter/free#${i + 1}`);
-}
-var modelCache = null;
-var CACHE_TTL_MS = 60 * 60 * 1e3;
-async function getBestFreeModelsCached(count = 4, timeoutMs = 5e3) {
-  const now = Date.now();
-  if (modelCache && now - modelCache.timestamp < CACHE_TTL_MS) {
-    logger.debug("Using cached OpenRouter model list");
-    return modelCache.models.slice(0, count);
-  }
-  const models = await getBestFreeModels(count, timeoutMs);
-  modelCache = {
-    models,
-    timestamp: now
-  };
-  return models;
-}
 
 // src/providers/opencode-models.ts
 var import_child_process5 = require("child_process");

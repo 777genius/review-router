@@ -3,8 +3,13 @@ import { ReviewResult } from '../types';
 import { RateLimiter } from './rate-limiter';
 import { logger } from '../utils/logger';
 import { withRetry } from '../utils/retry';
-import { parseReviewOutputLenient } from './review-output';
+import {
+  buildReviewFindingsSchema,
+  parseReviewOutputLenient,
+} from './review-output';
 // Node 18+ provides global fetch; if unavailable, we throw a clear error.
+
+const REVIEW_TOOL_NAME = 'submit_review';
 
 export class OpenRouterProvider extends Provider {
   private static readonly BASE_URL = 'https://openrouter.ai/api/v1';
@@ -53,7 +58,21 @@ export class OpenRouterProvider extends Provider {
             body: JSON.stringify({
               model: apiModelId,
               messages: [{ role: 'user', content: prompt }],
-              response_format: { type: 'json_object' },
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: REVIEW_TOOL_NAME,
+                    description:
+                      'Submit the complete ReviewRouter code review result.',
+                    parameters: buildReviewFindingsSchema(),
+                  },
+                },
+              ],
+              tool_choice: {
+                type: 'function',
+                function: { name: REVIEW_TOOL_NAME },
+              },
               temperature: 0.1,
               max_tokens: 2000,
             }),
@@ -129,12 +148,23 @@ export class OpenRouterProvider extends Provider {
       }
 
       const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+            tool_calls?: Array<{
+              function?: {
+                name?: string;
+                arguments?: string | Record<string, unknown>;
+              };
+            }>;
+          };
+        }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
         model?: string;  // OpenRouter returns the actual model that handled the request
       };
       const durationSeconds = (Date.now() - started) / 1000;
-      const content: string = data.choices?.[0]?.message?.content || '';
+      const message = data.choices?.[0]?.message;
+      const content = extractReviewContent(message);
       const usage = data.usage;
       const actualModel = data.model;  // Capture which model OpenRouter actually routed to
       const parsedOutput = parseReviewOutputLenient(content);
@@ -182,4 +212,26 @@ export class OpenRouterProvider extends Provider {
     }
     return undefined;
   }
+}
+
+function extractReviewContent(message?: {
+  content?: string | null;
+  tool_calls?: Array<{
+    function?: {
+      name?: string;
+      arguments?: string | Record<string, unknown>;
+    };
+  }>;
+}): string {
+  const toolCall = message?.tool_calls?.find(
+    (call) => call.function?.name === REVIEW_TOOL_NAME
+  );
+  const args = toolCall?.function?.arguments;
+  if (typeof args === 'string' && args.trim()) {
+    return args;
+  }
+  if (args && typeof args === 'object') {
+    return JSON.stringify(args);
+  }
+  return message?.content || '';
 }

@@ -18,6 +18,9 @@ const PROVIDER_PATTERN = /^(openrouter|opencode|openai|anthropic|cohere|mistral|
 const EXAMPLES = [
   'openrouter/google/gemini-2.0-flash-exp:free',
   'openrouter/mistralai/devstral-2512:free',
+  'openrouter/inclusionai/ring-2.6-1t:free',
+  'openrouter/openai/gpt-oss-120b:free',
+  'openrouter/poolside/laguna-m.1:free',
   'openrouter/free#1',
   'opencode/gpt-4:free',
   'openai/gpt-4',

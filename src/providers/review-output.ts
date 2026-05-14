@@ -4,7 +4,7 @@ export function buildReviewFindingsSchema(): unknown {
   return {
     type: 'object',
     additionalProperties: false,
-    required: ['findings'],
+    required: ['findings', 'revalidations'],
     properties: {
       findings: {
         type: 'array',
@@ -233,22 +233,7 @@ function parseRevalidationsLenient(
     ) {
       continue;
     }
-    const evidence = Array.isArray(raw.evidence)
-      ? raw.evidence
-          .filter((entry): entry is Record<string, unknown> =>
-            Boolean(entry && typeof entry === 'object')
-          )
-          .map((entry) => ({
-            path: typeof entry.path === 'string' ? entry.path : '',
-            startLine: Number.isInteger(entry.startLine)
-              ? (entry.startLine as number)
-              : undefined,
-            endLine: Number.isInteger(entry.endLine)
-              ? (entry.endLine as number)
-              : undefined,
-            reason: typeof entry.reason === 'string' ? entry.reason : '',
-          }))
-      : [];
+    const evidence = parseRevalidationEvidence(raw.evidence);
 
     revalidations.push({
       targetId,
@@ -256,11 +241,55 @@ function parseRevalidationsLenient(
         typeof raw.fingerprint === 'string' ? raw.fingerprint : undefined,
       verdict,
       confidence:
-        typeof raw.confidence === 'number' ? raw.confidence : undefined,
+        typeof raw.confidence === 'number'
+          ? raw.confidence
+          : typeof raw.confidence === 'string'
+            ? Number(raw.confidence)
+            : undefined,
       evidence,
       rationale: typeof raw.rationale === 'string' ? raw.rationale : undefined,
     });
   }
 
   return revalidations;
+}
+
+function parseRevalidationEvidence(
+  value: unknown
+): Array<{
+  path: string;
+  startLine?: number;
+  endLine?: number;
+  reason: string;
+}> {
+  const values = Array.isArray(value) ? value : [value];
+  const evidence: Array<{
+    path: string;
+    startLine?: number;
+    endLine?: number;
+    reason: string;
+  }> = [];
+
+  for (const entry of values) {
+    if (typeof entry === 'string') {
+      evidence.push({ path: '', reason: entry });
+      continue;
+    }
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const raw = entry as Record<string, unknown>;
+    evidence.push({
+      path: typeof raw.path === 'string' ? raw.path : '',
+      startLine: Number.isInteger(raw.startLine)
+        ? (raw.startLine as number)
+        : undefined,
+      endLine: Number.isInteger(raw.endLine)
+        ? (raw.endLine as number)
+        : undefined,
+      reason: typeof raw.reason === 'string' ? raw.reason : '',
+    });
+  }
+
+  return evidence;
 }

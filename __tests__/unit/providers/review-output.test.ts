@@ -90,4 +90,34 @@ describe('review-output parsing', () => {
       }),
     ]);
   });
+
+  it('normalizes near-miss revalidation evidence without making it automatically valid', () => {
+    const parsed = parseReviewOutputLenient(
+      JSON.stringify({
+        findings: [],
+        revalidations: [
+          {
+            targetId: 'rrt_123',
+            verdict: 'resolved',
+            confidence: '0.91',
+            evidence: 'current code now reads the token from the environment',
+          },
+        ],
+      })
+    );
+
+    expect(parsed.revalidations).toEqual([
+      expect.objectContaining({
+        targetId: 'rrt_123',
+        verdict: 'resolved',
+        confidence: 0.91,
+        evidence: [
+          {
+            path: '',
+            reason: 'current code now reads the token from the environment',
+          },
+        ],
+      }),
+    ]);
+  });
 });

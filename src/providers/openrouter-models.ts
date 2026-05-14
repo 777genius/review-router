@@ -1,32 +1,41 @@
 /**
- * OpenRouter free model configuration
- * Uses OpenRouter's special "free" meta-model that automatically routes to available free models
+ * OpenRouter free model configuration.
+ * Prefer concrete free models that support tool calling so lifecycle
+ * revalidation can use a structured submit_review tool call instead of
+ * relying on loose text JSON from the free meta-router.
  */
 
 import { logger } from '../utils/logger';
 
+export const PREFERRED_OPENROUTER_FREE_MODELS = [
+  'openrouter/inclusionai/ring-2.6-1t:free',
+  'openrouter/openai/gpt-oss-120b:free',
+  'openrouter/poolside/laguna-m.1:free',
+] as const;
+
 /**
- * Get OpenRouter free models
- * Returns multiple instances of openrouter/free for diversity via dynamic routing
- *
- * Each instance gets a unique identifier to avoid deduplication, but all
- * route to the same OpenRouter free endpoint. OpenRouter handles the actual
- * model selection dynamically at request time.
+ * Get preferred OpenRouter free models.
+ * Each model gets a stable instance suffix so the aggregator can treat
+ * providers as distinct quorum voters.
  */
 export async function getBestFreeModels(
   count = 4,
   _timeoutMs = 5000
 ): Promise<string[]> {
-  logger.debug(`Creating ${count} OpenRouter free routing instances`);
+  logger.debug(`Selecting ${count} preferred OpenRouter free model instances`);
 
-  // Return multiple instances with unique IDs for deduplication
-  // All route to same 'free' endpoint, but OpenRouter may route each to different models
-  return Array.from({ length: count }, (_, i) => `openrouter/free#${i + 1}`);
+  const models: string[] = [];
+  for (let i = 0; models.length < count; i += 1) {
+    const model = PREFERRED_OPENROUTER_FREE_MODELS[
+      i % PREFERRED_OPENROUTER_FREE_MODELS.length
+    ];
+    models.push(`${model}#${i + 1}`);
+  }
+  return models;
 }
 
 /**
- * Cache for model list (valid for 1 hour)
- * With openrouter/free, caching is simpler since we don't fetch dynamic lists
+ * Cache for model list (valid for 1 hour).
  */
 let modelCache: { models: string[]; timestamp: number } | null = null;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour

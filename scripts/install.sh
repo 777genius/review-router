@@ -20,7 +20,7 @@ CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
 DEFAULT_CODEX_MODEL="gpt-5.5"
 DEFAULT_CLAUDE_MODEL="sonnet"
 DEFAULT_APP_LOGO_URL="https://i.imgur.com/Yz9XIQM.png"
-OPENROUTER_DEFAULT_PROVIDERS="openrouter/free"
+OPENROUTER_DEFAULT_PROVIDERS="openrouter/inclusionai/ring-2.6-1t:free,openrouter/openai/gpt-oss-120b:free,openrouter/poolside/laguna-m.1:free"
 OPENROUTER_DEFAULT_SYNTHESIS="openrouter/free"
 
 env_first() {
@@ -2234,7 +2234,7 @@ main() {
     "codex:Codex CLI with ChatGPT subscription OAuth from local auth.json" \
     "claude:Claude Code CLI with Claude subscription OAuth from claude setup-token" \
     "openai:Codex CLI with OpenAI API key secret" \
-    "openrouter:OpenRouter API key with openrouter/free"
+    "openrouter:OpenRouter API key with preferred free OpenRouter models"
   choose PRESET "Review preset" "safe" \
     "safe:Balanced defaults, major+ inline comments" \
     "blocking:Safe review depth, but fail CI on major+ findings" \

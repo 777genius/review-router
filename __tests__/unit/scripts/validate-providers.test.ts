@@ -15,6 +15,9 @@ describe('validateProvider', () => {
       'openrouter/vendor/model:tag',
       'openrouter/free#1',
       'openrouter/qwen/qwen3-coder:free#2',
+      'openrouter/inclusionai/ring-2.6-1t:free',
+      'openrouter/openai/gpt-oss-120b:free',
+      'openrouter/poolside/laguna-m.1:free',
       'openrouter/a/b/c/d:e',
     ];
 

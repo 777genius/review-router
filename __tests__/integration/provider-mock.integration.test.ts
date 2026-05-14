@@ -51,10 +51,17 @@ describe('OpenRouterProvider (mocked)', () => {
     await provider.review('prompt', 1000);
 
     const request = (global.fetch as jest.Mock).mock.calls[0][1];
-    expect(JSON.parse(request.body).model).toBe('openrouter/free');
-    expect(JSON.parse(request.body).response_format).toEqual({
-      type: 'json_object',
+    const body = JSON.parse(request.body);
+    expect(body.model).toBe('openrouter/free');
+    expect(body.tool_choice).toEqual({
+      type: 'function',
+      function: { name: 'submit_review' },
     });
+    expect(body.tools[0].function.name).toBe('submit_review');
+    expect(body.tools[0].function.parameters.required).toEqual([
+      'findings',
+      'revalidations',
+    ]);
   });
 
   it('strips alias suffixes from concrete OpenRouter model ids', async () => {
@@ -74,6 +81,59 @@ describe('OpenRouterProvider (mocked)', () => {
 
     const request = (global.fetch as jest.Mock).mock.calls[0][1];
     expect(JSON.parse(request.body).model).toBe('qwen/qwen3-coder:free');
+  });
+
+  it('parses review JSON from forced OpenRouter tool calls', async () => {
+    const provider = new OpenRouterProvider('mistral:test', apiKey, limiter);
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  function: {
+                    name: 'submit_review',
+                    arguments: JSON.stringify({
+                      findings: [],
+                      revalidations: [
+                        {
+                          targetId: 'rrt_123',
+                          fingerprint: 'f'.repeat(24),
+                          verdict: 'resolved',
+                          confidence: 0.95,
+                          evidence: [
+                            {
+                              path: 'src/app.ts',
+                              startLine: 1,
+                              endLine: 3,
+                              reason: 'current code uses env secret',
+                            },
+                          ],
+                          rationale: 'hardcoded secret removed',
+                        },
+                      ],
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      headers: new Map(),
+    } as any);
+
+    const result = await provider.review('prompt', 1000);
+
+    expect(result.findings).toEqual([]);
+    expect(result.revalidations).toHaveLength(1);
+    expect(result.revalidations?.[0].verdict).toBe('resolved');
   });
 
   it('marks rate limited providers', async () => {

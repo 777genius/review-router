@@ -434,9 +434,9 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
-    expect(workflow).toContain('uses: 777genius/review-router@v1.0.22');
+    expect(workflow).toContain('uses: 777genius/review-router@v1.0.23');
     expect(result.stdout).toContain(
-      'Action ref: 777genius/review-router@v1.0.22'
+      'Action ref: 777genius/review-router@v1.0.23'
     );
   });
 

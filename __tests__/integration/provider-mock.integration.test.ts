@@ -52,6 +52,9 @@ describe('OpenRouterProvider (mocked)', () => {
 
     const request = (global.fetch as jest.Mock).mock.calls[0][1];
     expect(JSON.parse(request.body).model).toBe('openrouter/free');
+    expect(JSON.parse(request.body).response_format).toEqual({
+      type: 'json_object',
+    });
   });
 
   it('strips alias suffixes from concrete OpenRouter model ids', async () => {

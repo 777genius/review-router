@@ -198,6 +198,10 @@ describe('PromptBuilder', () => {
       );
       expect(prompt).toContain('targetId: rrt_123');
       expect(prompt).toContain('fingerprint: ffffffffffffffffffffffff');
+      expect(prompt).toContain(
+        'You MUST return exactly 1 revalidation object(s)'
+      );
+      expect(prompt).toContain('Do not omit a listed targetId');
       expect(prompt).toContain('"resolved" only when current head code positively fixes');
     });
 

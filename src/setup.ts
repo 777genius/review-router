@@ -238,7 +238,8 @@ async function createComponentsForCLI(
 
 export async function createComponents(
   config: ReviewConfig,
-  githubToken: string
+  githubToken: string,
+  options: { lifecycleGithubToken?: string } = {}
 ): Promise<ReviewComponents> {
   // Initialize plugins if enabled
   const pluginLoader = config.pluginsEnabled
@@ -274,6 +275,10 @@ export async function createComponents(
   const security = new SecurityScanner();
   const rules = RuleLoader.load();
   const githubClient = new GitHubClient(githubToken);
+  const lifecycleGithubClient =
+    options.lifecycleGithubToken && options.lifecycleGithubToken !== githubToken
+      ? new GitHubClient(options.lifecycleGithubToken)
+      : githubClient;
   const prLoader = new PullRequestLoader(githubClient);
   const contextRetriever = new ContextRetriever();
   const impactAnalyzer = new ImpactAnalyzer();
@@ -323,11 +328,11 @@ export async function createComponents(
   const formatter = new MarkdownFormatterV2();
   const trustedReviewThreadAuthors = trustedReviewThreadAuthorsFromEnv();
   const reviewThreadInventory = new ReviewThreadInventoryLoader(
-    githubClient,
+    lifecycleGithubClient,
     trustedReviewThreadAuthors
   );
   const reviewThreadResolver = new ReviewThreadResolver(
-    githubClient,
+    lifecycleGithubClient,
     config.dryRun,
     trustedReviewThreadAuthors
   );

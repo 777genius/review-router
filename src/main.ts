@@ -183,7 +183,9 @@ async function run(): Promise<void> {
     }
 
     const config = ConfigLoader.load();
-    const components = await createComponents(config, token!);
+    const components = await createComponents(config, token!, {
+      lifecycleGithubToken: fallbackToken,
+    });
     const orchestrator = new ReviewOrchestrator(components);
 
     const prInput = core.getInput('PR_NUMBER') || process.env.PR_NUMBER;

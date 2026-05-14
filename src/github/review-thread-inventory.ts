@@ -401,11 +401,11 @@ export function isTrustedReviewThreadAuthor(
   login?: string | null,
   trustedAuthors: readonly string[] = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS
 ): boolean {
-  const normalizedLogin = normalizeBotLogin(login);
+  const normalizedLogin = canonicalBotLogin(login);
   return Boolean(
     normalizedLogin &&
       trustedAuthors.some(
-        (author) => normalizeBotLogin(author) === normalizedLogin
+        (author) => canonicalBotLogin(author) === normalizedLogin
       )
   );
 }
@@ -495,4 +495,9 @@ function normalizeBotLogin(value?: string | null): string | undefined {
     return undefined;
   }
   return login;
+}
+
+function canonicalBotLogin(value?: string | null): string | undefined {
+  const login = normalizeBotLogin(value);
+  return login?.endsWith('[bot]') ? login.slice(0, -5) : login;
 }

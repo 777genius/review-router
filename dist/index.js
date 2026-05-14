@@ -25077,10 +25077,10 @@ var ReviewThreadInventoryLoader = class {
   }
 };
 function isTrustedReviewThreadAuthor(login, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS) {
-  const normalizedLogin = normalizeBotLogin(login);
+  const normalizedLogin = canonicalBotLogin(login);
   return Boolean(
     normalizedLogin && trustedAuthors.some(
-      (author) => normalizeBotLogin(author) === normalizedLogin
+      (author) => canonicalBotLogin(author) === normalizedLogin
     )
   );
 }
@@ -25142,6 +25142,10 @@ function normalizeBotLogin(value) {
     return void 0;
   }
   return login;
+}
+function canonicalBotLogin(value) {
+  const login = normalizeBotLogin(value);
+  return login?.endsWith("[bot]") ? login.slice(0, -5) : login;
 }
 
 // src/github/review-thread-resolver.ts
@@ -25432,7 +25436,7 @@ function unique2(values) {
 }
 
 // src/setup.ts
-async function createComponents(config, githubToken) {
+async function createComponents(config, githubToken, options = {}) {
   const pluginLoader = config.pluginsEnabled ? new PluginLoader({
     pluginDir: config.pluginDir || "./plugins",
     enabled: config.pluginsEnabled,
@@ -25462,6 +25466,7 @@ async function createComponents(config, githubToken) {
   const security = new SecurityScanner();
   const rules = RuleLoader.load();
   const githubClient = new GitHubClient(githubToken);
+  const lifecycleGithubClient = options.lifecycleGithubToken && options.lifecycleGithubToken !== githubToken ? new GitHubClient(options.lifecycleGithubToken) : githubClient;
   const prLoader = new PullRequestLoader(githubClient);
   const contextRetriever = new ContextRetriever();
   const impactAnalyzer = new ImpactAnalyzer();
@@ -25507,11 +25512,11 @@ async function createComponents(config, githubToken) {
   const formatter = new MarkdownFormatterV2();
   const trustedReviewThreadAuthors = trustedReviewThreadAuthorsFromEnv();
   const reviewThreadInventory = new ReviewThreadInventoryLoader(
-    githubClient,
+    lifecycleGithubClient,
     trustedReviewThreadAuthors
   );
   const reviewThreadResolver = new ReviewThreadResolver(
-    githubClient,
+    lifecycleGithubClient,
     config.dryRun,
     trustedReviewThreadAuthors
   );
@@ -33040,7 +33045,9 @@ async function run() {
       return;
     }
     const config = ConfigLoader.load();
-    const components = await createComponents(config, token);
+    const components = await createComponents(config, token, {
+      lifecycleGithubToken: fallbackToken
+    });
     const orchestrator = new ReviewOrchestrator(components);
     const prInput = getInput("PR_NUMBER") || process.env.PR_NUMBER;
     validateRequired(prInput, "PR_NUMBER");

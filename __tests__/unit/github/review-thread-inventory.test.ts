@@ -33,6 +33,10 @@ describe('ReviewThreadInventoryLoader', () => {
     expect(isTrustedReviewThreadAuthor('Review-Router-Owner[bot]', authors)).toBe(
       true
     );
+    expect(isTrustedReviewThreadAuthor('Review-Router-Owner', authors)).toBe(
+      true
+    );
+    expect(isTrustedReviewThreadAuthor('review-router-ai')).toBe(true);
   });
 
   it('trusts github-actions only when it is the expected or fallback comment identity', () => {

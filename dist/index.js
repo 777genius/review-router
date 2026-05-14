@@ -25559,7 +25559,7 @@ function isRateLimitedError(error2) {
 function permissionDenied(error2) {
   const maybe = error2;
   const message = maybe?.message || String(error2);
-  return maybe?.status === 403 || /permission|forbidden|resource not accessible/i.test(message);
+  return maybe?.status === 401 || maybe?.status === 403 || /permission|forbidden|resource not accessible/i.test(message);
 }
 function errorMessage(error2) {
   return error2 instanceof Error ? error2.message : String(error2);
@@ -32577,7 +32577,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.29",
+  version: "1.0.30",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

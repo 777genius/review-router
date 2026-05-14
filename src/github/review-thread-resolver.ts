@@ -566,6 +566,7 @@ function permissionDenied(error: unknown): boolean {
   const maybe = error as { status?: number; message?: string };
   const message = maybe?.message || String(error);
   return (
+    maybe?.status === 401 ||
     maybe?.status === 403 ||
     /permission|forbidden|resource not accessible/i.test(message)
   );

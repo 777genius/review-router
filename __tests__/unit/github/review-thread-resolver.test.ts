@@ -197,6 +197,51 @@ describe('ReviewThreadResolver', () => {
     expect(fallbackGraphql).toHaveBeenCalledTimes(1);
   });
 
+  it('treats an unauthorized mutation as permission denial and uses the fallback token', async () => {
+    const permissionError = Object.assign(new Error('Bad credentials'), {
+      status: 401,
+    });
+    const primaryGraphql = jest
+      .fn()
+      .mockResolvedValueOnce({
+        repository: {
+          pullRequest: {
+            headRefOid: 'head-sha',
+          },
+        },
+      })
+      .mockResolvedValueOnce(threadResponse())
+      .mockRejectedValueOnce(permissionError);
+    const fallbackGraphql = jest.fn().mockResolvedValueOnce({
+      resolveReviewThread: {
+        thread: {
+          id: 'thread-123',
+          isResolved: true,
+        },
+      },
+    });
+    const resolver = new ReviewThreadResolver(
+      {
+        owner: 'owner',
+        repo: 'repo',
+        octokit: { graphql: primaryGraphql },
+      } as unknown as GitHubClient,
+      false,
+      undefined,
+      {
+        owner: 'owner',
+        repo: 'repo',
+        octokit: { graphql: fallbackGraphql },
+      } as unknown as GitHubClient
+    );
+
+    const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
+
+    expect(result.resolved).toHaveLength(1);
+    expect(result.failed).toHaveLength(0);
+    expect(fallbackGraphql).toHaveBeenCalledTimes(1);
+  });
+
   it('falls back to the backend user resolver when app tokens cannot resolve', async () => {
     const permissionError = Object.assign(
       new Error('Resource not accessible by integration'),

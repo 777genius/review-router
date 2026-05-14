@@ -13,6 +13,8 @@ describe('validateProvider', () => {
       'groq/llama-3.1-70b',
       'openrouter/vendor/model',
       'openrouter/vendor/model:tag',
+      'openrouter/free#1',
+      'openrouter/qwen/qwen3-coder:free#2',
       'openrouter/a/b/c/d:e',
     ];
 
@@ -34,6 +36,8 @@ describe('validateProvider', () => {
       'unknown-provider/model',
       'openrouter/model with spaces',
       'openrouter/model\nwith\nnewlines',
+      'openrouter/free#',
+      'openrouter/free#one',
     ];
 
     test.each(invalidProviders)('should reject %s', (provider) => {

@@ -12099,7 +12099,7 @@ Respond with: {"findings": [{"file": "test.ts", "line": 1, "severity": "minor", 
     }
   }
   static validate(name) {
-    const pattern = /^(opencode\/[\w.:~-]+|openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*|claude\/[\w.:~-]+|codex\/[\w.:~-]+|gemini\/[\w.:~-]+)$/i;
+    const pattern = /^(opencode\/[\w.:~-]+|openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*(?:#\d+)?|claude\/[\w.:~-]+|codex\/[\w.:~-]+|gemini\/[\w.:~-]+)$/i;
     return pattern.test(name);
   }
 };

@@ -35,6 +35,44 @@ describe('OpenRouterProvider (mocked)', () => {
     expect(result.usage?.totalTokens).toBe(15);
   });
 
+  it('routes free aliases to the OpenRouter free meta-model id', async () => {
+    const provider = new OpenRouterProvider('free#1', apiKey, limiter);
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({ findings: [] }) } }],
+      }),
+      headers: new Map(),
+    } as any);
+
+    await provider.review('prompt', 1000);
+
+    const request = (global.fetch as jest.Mock).mock.calls[0][1];
+    expect(JSON.parse(request.body).model).toBe('openrouter/free');
+  });
+
+  it('strips alias suffixes from concrete OpenRouter model ids', async () => {
+    const provider = new OpenRouterProvider('qwen/qwen3-coder:free#2', apiKey, limiter);
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({ findings: [] }) } }],
+      }),
+      headers: new Map(),
+    } as any);
+
+    await provider.review('prompt', 1000);
+
+    const request = (global.fetch as jest.Mock).mock.calls[0][1];
+    expect(JSON.parse(request.body).model).toBe('qwen/qwen3-coder:free');
+  });
+
   it('marks rate limited providers', async () => {
     const provider = new OpenRouterProvider('mistral:test', apiKey, limiter);
 

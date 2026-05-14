@@ -12474,7 +12474,8 @@ var OpenRouterProvider = class _OpenRouterProvider extends Provider {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const started = Date.now();
-    const apiModelId = this.modelId.replace(/#\d+$/, "");
+    const baseModelId = this.modelId.replace(/#\d+$/, "");
+    const apiModelId = baseModelId === "free" ? "openrouter/free" : baseModelId;
     try {
       const response = await withRetry(
         () => fetch(`${_OpenRouterProvider.BASE_URL}/chat/completions`, {

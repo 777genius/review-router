@@ -285,6 +285,8 @@ export class ReviewThreadResolver {
               thread
             )
           : false;
+        const fallbackCommentFailed =
+          permissionDenied(error) && !fallbackCommentPosted;
         result.failed.push({
           ...this.withReason(candidate, [
             permissionDenied(error)
@@ -292,6 +294,9 @@ export class ReviewThreadResolver {
               : 'mutation_failed',
             ...(fallbackCommentPosted
               ? (['resolution_comment_posted'] as LifecycleReasonCode[])
+              : []),
+            ...(fallbackCommentFailed
+              ? (['resolution_comment_failed'] as LifecycleReasonCode[])
               : []),
           ]),
           errorMessage: errorMessage(error),

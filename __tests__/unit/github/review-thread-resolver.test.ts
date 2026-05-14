@@ -294,6 +294,47 @@ describe('ReviewThreadResolver', () => {
     );
   });
 
+  it('reports when the resolution fallback reply could not be posted', async () => {
+    const permissionError = Object.assign(
+      new Error('Resource not accessible by integration'),
+      { status: 403 }
+    );
+    const graphql = jest
+      .fn()
+      .mockResolvedValueOnce({
+        repository: {
+          pullRequest: {
+            headRefOid: 'head-sha',
+          },
+        },
+      })
+      .mockResolvedValueOnce(threadResponse())
+      .mockRejectedValueOnce(permissionError);
+    const createReplyForReviewComment = jest
+      .fn()
+      .mockRejectedValue(new Error('reply denied'));
+    const resolver = new ReviewThreadResolver({
+      owner: 'owner',
+      repo: 'repo',
+      octokit: {
+        graphql,
+        rest: {
+          pulls: {
+            createReplyForReviewComment,
+          },
+        },
+      },
+    } as unknown as GitHubClient);
+
+    const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
+
+    expect(result.resolved).toHaveLength(0);
+    expect(result.failed[0].reasonCodes).toEqual([
+      'mutation_permission_denied',
+      'resolution_comment_failed',
+    ]);
+  });
+
   it('treats an already resolved thread before mutation as externally resolved', async () => {
     const graphql = jest
       .fn()

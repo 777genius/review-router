@@ -25374,10 +25374,12 @@ var ReviewThreadResolver = class {
           candidate,
           thread
         ) : false;
+        const fallbackCommentFailed = permissionDenied(error2) && !fallbackCommentPosted;
         result.failed.push({
           ...this.withReason(candidate, [
             permissionDenied(error2) ? "mutation_permission_denied" : "mutation_failed",
-            ...fallbackCommentPosted ? ["resolution_comment_posted"] : []
+            ...fallbackCommentPosted ? ["resolution_comment_posted"] : [],
+            ...fallbackCommentFailed ? ["resolution_comment_failed"] : []
           ]),
           errorMessage: errorMessage(error2)
         });
@@ -32575,7 +32577,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.28",
+  version: "1.0.29",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

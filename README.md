@@ -377,6 +377,16 @@ git diff --check
 
 The action bundle is committed in `dist/`, so run `npm run build` before committing code changes that affect the action runtime.
 
+## Release Process
+
+Stable installs use the moving major tag `v1`. Do not move it by hand. To publish a release:
+
+1. Update `package.json`, `package-lock.json`, and `scripts/install.sh` to the next exact version.
+2. Commit the release-ready code to `main`.
+3. Run the `Release` workflow with `version=v1.0.x`.
+
+The workflow validates that it is running on `main`, the exact tag does not already exist, the version is newer than the latest `v1.*.*` tag, package metadata matches the requested version, `dist/` is already committed, and all lint/typecheck/test/build checks pass. Only then does it create the exact tag, move `v1`, and create the GitHub Release.
+
 ## Documentation
 
 - [Installer guide](./docs/install.md)

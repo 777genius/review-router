@@ -45,6 +45,15 @@ function workflowText(workflowPath: string): string {
   return fs.readFileSync(workflowPath, 'utf-8');
 }
 
+function installerLatestReleaseTag(): string {
+  const installer = fs.readFileSync(installerPath, 'utf-8');
+  const match = installer.match(/^LATEST_RELEASE_TAG="([^"]+)"$/m);
+  if (!match) {
+    throw new Error('LATEST_RELEASE_TAG not found in installer');
+  }
+  return match[1];
+}
+
 function staticRuntimeEnv(workflow: string): Record<string, string> {
   const marker = 'static_runtime_env_json: >-\n';
   const start = workflow.indexOf(marker);
@@ -437,9 +446,10 @@ describe('review-router curl installer e2e', () => {
 
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
-    expect(workflow).toContain('uses: 777genius/review-router@v1.0.26');
+    const releaseTag = installerLatestReleaseTag();
+    expect(workflow).toContain(`uses: 777genius/review-router@${releaseTag}`);
     expect(result.stdout).toContain(
-      'Action ref: 777genius/review-router@v1.0.26'
+      `Action ref: 777genius/review-router@${releaseTag}`
     );
   });
 

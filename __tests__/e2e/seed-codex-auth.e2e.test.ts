@@ -1,5 +1,5 @@
 import { execFile } from 'child_process';
-import { chmod, mkdir, mkdtemp, writeFile } from 'fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { promisify } from 'util';
@@ -62,7 +62,7 @@ describe('seed-codex-auth.sh', () => {
     expect(result.stdout + result.stderr).not.toContain(fixture.refreshToken);
   });
 
-  it('prefers active Codex account auth over legacy auth.json', async () => {
+  it('prefers legacy auth.json over active account auth when both exist', async () => {
     const fixture = await createFixture({ authStorage: 'both' });
 
     const result = await runSeedScript(fixture, {
@@ -71,9 +71,8 @@ describe('seed-codex-auth.sh', () => {
       REVIEW_ROUTER_REPO: '777genius/example',
     });
 
-    expect(result.stdout).toContain('/accounts/');
-    expect(result.stdout).toContain('.auth.json');
-    expect(result.stdout).not.toContain('/auth.json');
+    expect(result.stdout).toContain(fixture.legacyAuthFile);
+    expect(result.stdout).not.toContain('/accounts/');
     expect(result.stdout + result.stderr).not.toContain(fixture.refreshToken);
   });
 
@@ -88,6 +87,24 @@ describe('seed-codex-auth.sh', () => {
     });
 
     expect(result.stdout).toContain(fixture.legacyAuthFile);
+  });
+
+  it('preflights Codex auth before confirmed secret writes', async () => {
+    const fixture = await createFixture();
+
+    const result = await runSeedScript(fixture, {
+      REVIEW_ROUTER_CONFIRM_WRITE: '1',
+      REVIEW_ROUTER_SECRET_SCOPE: 'repo',
+      REVIEW_ROUTER_REPO: '777genius/example',
+    });
+
+    expect(result.stdout).toContain('Codex auth preflight passed');
+    expect(result.stdout).toContain(
+      'Stored repo secret CODEX_AUTH_JSON for 777genius/example'
+    );
+    await expect(readFile(fixture.codexLog, 'utf8')).resolves.toContain(
+      'exec --model gpt-5.5'
+    );
   });
 
   it('fails before secret writes when auth.json is not ChatGPT OAuth', async () => {
@@ -132,6 +149,7 @@ async function createFixture(input?: {
   readonly binDir: string;
   readonly refreshToken: string;
   readonly legacyAuthFile: string;
+  readonly codexLog: string;
 }> {
   const root = await mkdtemp(path.join(tmpdir(), 'reviewrouter-seed-test-'));
   const codexHome = path.join(root, '.codex');
@@ -145,6 +163,7 @@ async function createFixture(input?: {
     tokens: { refresh_token: refreshToken },
   };
   const legacyAuthFile = path.join(codexHome, 'auth.json');
+  const codexLog = path.join(root, 'codex-calls.log');
   if (
     input?.authStorage === 'active-account' ||
     input?.authStorage === 'both'
@@ -174,6 +193,7 @@ async function createFixture(input?: {
       '#!/usr/bin/env bash',
       'set -euo pipefail',
       'if [ "${1:-}" = "auth" ] && [ "${2:-}" = "status" ]; then exit 0; fi',
+      'if [ "${1:-}" = "secret" ] && [ "${2:-}" = "set" ]; then cat >/dev/null; exit 0; fi',
       'echo "unexpected gh call: $*" >&2',
       'exit 2',
       '',
@@ -181,7 +201,25 @@ async function createFixture(input?: {
   );
   await chmod(ghPath, 0o755);
 
-  return { root, codexHome, binDir, refreshToken, legacyAuthFile };
+  const codexPath = path.join(binDir, 'codex');
+  await writeFile(
+    codexPath,
+    [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      'if [ "${1:-}" = "exec" ]; then',
+      '  if [ -n "${REVIEW_ROUTER_TEST_CODEX_LOG:-}" ]; then echo "$*" >> "$REVIEW_ROUTER_TEST_CODEX_LOG"; fi',
+      '  echo "review-router-codex-auth-ok"',
+      '  exit 0',
+      'fi',
+      'echo "unexpected codex call: $*" >&2',
+      'exit 2',
+      '',
+    ].join('\n')
+  );
+  await chmod(codexPath, 0o755);
+
+  return { root, codexHome, binDir, refreshToken, legacyAuthFile, codexLog };
 }
 
 async function runSeedScript(
@@ -189,6 +227,7 @@ async function runSeedScript(
     readonly root: string;
     readonly codexHome: string;
     readonly binDir: string;
+    readonly codexLog?: string;
   },
   env: Record<string, string>
 ): Promise<{ readonly stdout: string; readonly stderr: string }> {
@@ -199,6 +238,7 @@ async function runSeedScript(
       ...env,
       HOME: fixture.root,
       REVIEW_ROUTER_CODEX_HOME: fixture.codexHome,
+      REVIEW_ROUTER_TEST_CODEX_LOG: fixture.codexLog ?? '',
       PATH: `${fixture.binDir}:${process.env.PATH ?? ''}`,
     },
   });

@@ -19,6 +19,17 @@ CODEX_AUTH_FILE="${REVIEW_ROUTER_CODEX_AUTH_FILE:-${CODEX_AUTH_FILE:-}}"
 CODEX_AUTH_FILE_EXPLICIT="${REVIEW_ROUTER_CODEX_AUTH_FILE:+1}${CODEX_AUTH_FILE:+1}"
 CODEX_CONFIG_FILE="${REVIEW_ROUTER_CODEX_CONFIG_FILE:-$CODEX_BASE_HOME/config.toml}"
 CODEX_AUTH_STALE_DAYS="${REVIEW_ROUTER_CODEX_AUTH_STALE_DAYS:-30}"
+CODEX_AUTH_PREFLIGHT="${REVIEW_ROUTER_CODEX_AUTH_PREFLIGHT:-1}"
+CODEX_PREFLIGHT_MODEL="${REVIEW_ROUTER_CODEX_PREFLIGHT_MODEL:-${CODEX_MODEL:-gpt-5.5}}"
+CODEX_AUTH_FALLBACK_FILE=""
+TEMP_DIRS=""
+
+cleanup_temp_dirs() {
+  for dir in $TEMP_DIRS; do
+    [ -n "$dir" ] && rm -rf "$dir"
+  done
+}
+trap cleanup_temp_dirs EXIT
 
 if [ -t 1 ]; then
   GREEN='\033[0;32m'
@@ -59,6 +70,7 @@ Options:
   --auth-file path          Explicit Codex auth JSON path.
   --config-file path        Explicit Codex config.toml path.
   --stale-days days         Warn when auth.json last_refresh is older than this. Defaults to 30.
+  --no-preflight            Skip the Codex CLI auth preflight before writing secrets.
   -h, --help                Show this help.
 
 Environment variables with the same REVIEW_ROUTER_* names are still supported.
@@ -138,6 +150,9 @@ parse_args() {
         shift
         require_arg "--stale-days" "${1:-}"
         CODEX_AUTH_STALE_DAYS="$1"
+        ;;
+      --no-preflight)
+        CODEX_AUTH_PREFLIGHT="0"
         ;;
       -h|--help)
         usage
@@ -282,16 +297,9 @@ normalize_org_repos() {
   ORG_SELECTED_REPOS="$normalized"
 }
 
-resolve_codex_auth_file() {
-  if [ -n "$CODEX_AUTH_FILE" ]; then
-    return
-  fi
-
-  legacy_auth_file="$CODEX_BASE_HOME/auth.json"
-  active_auth_file=""
+find_active_codex_auth_file() {
   if command -v node >/dev/null 2>&1; then
-    active_auth_file="$(
-      node - "$CODEX_BASE_HOME" <<'NODE' 2>/dev/null || true
+    node - "$CODEX_BASE_HOME" <<'NODE' 2>/dev/null || true
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -330,10 +338,8 @@ try {
   process.exit(0);
 }
 NODE
-    )"
   elif command -v python3 >/dev/null 2>&1; then
-    active_auth_file="$(
-      python3 - "$CODEX_BASE_HOME" <<'PY' 2>/dev/null || true
+    python3 - "$CODEX_BASE_HOME" <<'PY' 2>/dev/null || true
 import base64
 import json
 import os
@@ -369,13 +375,25 @@ try:
 except Exception:
     pass
 PY
-    )"
+  fi
+}
+
+resolve_codex_auth_file() {
+  if [ -n "$CODEX_AUTH_FILE" ]; then
+    return
+  fi
+
+  legacy_auth_file="$CODEX_BASE_HOME/auth.json"
+  active_auth_file="$(find_active_codex_auth_file)"
+
+  if [ -f "$legacy_auth_file" ]; then
+    CODEX_AUTH_FILE="$legacy_auth_file"
+    CODEX_AUTH_FALLBACK_FILE="$active_auth_file"
+    return
   fi
 
   if [ -n "$active_auth_file" ]; then
     CODEX_AUTH_FILE="$active_auth_file"
-  elif [ -f "$legacy_auth_file" ]; then
-    CODEX_AUTH_FILE="$legacy_auth_file"
   else
     CODEX_AUTH_FILE="$legacy_auth_file"
   fi
@@ -459,6 +477,88 @@ PY
   fi
 }
 
+summarize_codex_preflight_log() {
+  log_file="$1"
+  if [ ! -s "$log_file" ]; then
+    warn "Codex auth preflight produced no diagnostic output."
+    return
+  fi
+
+  grep -Ei 'refresh token|token_invalidated|unauthorized|access token|auth|login|error|failed' "$log_file" \
+    | sed -E \
+      -e 's/"(access_token|refresh_token)"[[:space:]]*:[[:space:]]*"[^"]+"/"\1":"[redacted]"/Ig' \
+      -e 's#https?://[^[:space:],)]+#[redacted-url]#g' \
+    | head -12 >&2 || true
+}
+
+run_codex_auth_preflight() {
+  candidate_file="$1"
+  candidate_label="$2"
+  preflight_root="$(mktemp -d)"
+  TEMP_DIRS="$TEMP_DIRS $preflight_root"
+  preflight_home="$preflight_root/home"
+  preflight_codex_home="$preflight_root/codex"
+  preflight_log="$preflight_root/codex-preflight.log"
+  mkdir -p "$preflight_home" "$preflight_codex_home"
+  cp "$candidate_file" "$preflight_codex_home/auth.json"
+  chmod 600 "$preflight_codex_home/auth.json"
+
+  if CODEX_HOME="$preflight_codex_home" HOME="$preflight_home" codex exec \
+    --model "$CODEX_PREFLIGHT_MODEL" \
+    --sandbox read-only \
+    --ephemeral \
+    --ignore-user-config \
+    --ignore-rules \
+    -c approval_policy=never \
+    'Reply with exactly: review-router-codex-auth-ok' >"$preflight_log" 2>&1; then
+    if grep -q 'review-router-codex-auth-ok' "$preflight_log"; then
+      CODEX_AUTH_FILE="$preflight_codex_home/auth.json"
+      return 0
+    fi
+  fi
+
+  warn "Codex auth preflight failed for $candidate_label auth candidate: $candidate_file"
+  summarize_codex_preflight_log "$preflight_log"
+  return 1
+}
+
+preflight_codex_auth_file() {
+  if is_true "$DRY_RUN"; then
+    info "Skipped Codex auth preflight in dry-run mode."
+    return
+  fi
+
+  if ! is_true "$CODEX_AUTH_PREFLIGHT"; then
+    warn "Skipped Codex auth preflight. CI may still fail if this auth JSON is stale."
+    return
+  fi
+
+  require_cmd codex
+  primary_auth_file="$CODEX_AUTH_FILE"
+  if run_codex_auth_preflight "$primary_auth_file" "primary"; then
+    ok "Codex auth preflight passed"
+    return
+  fi
+
+  if [ "${CODEX_AUTH_FILE_EXPLICIT:-0}" = "1" ]; then
+    fatal "Explicit Codex auth file failed preflight. Run codex login, then rerun this command."
+  fi
+
+  if [ -n "$CODEX_AUTH_FALLBACK_FILE" ] && [ "$CODEX_AUTH_FALLBACK_FILE" != "$primary_auth_file" ]; then
+    warn "Trying fallback Codex active-account auth file after primary preflight failure."
+    validate_codex_auth_file_path="$CODEX_AUTH_FILE"
+    CODEX_AUTH_FILE="$CODEX_AUTH_FALLBACK_FILE"
+    validate_codex_auth_file
+    if run_codex_auth_preflight "$CODEX_AUTH_FALLBACK_FILE" "fallback"; then
+      ok "Codex fallback auth preflight passed"
+      return
+    fi
+    CODEX_AUTH_FILE="$validate_codex_auth_file_path"
+  fi
+
+  fatal "Codex auth preflight failed. Run codex login on this trusted machine, then rerun this command."
+}
+
 store_secret_from_file() {
   name="$1"
   file_path="$2"
@@ -505,6 +605,7 @@ main() {
   fi
   info "Codex auth file: $CODEX_AUTH_FILE"
   confirm_secret_write
+  preflight_codex_auth_file
 
   store_secret_from_file CODEX_AUTH_JSON "$CODEX_AUTH_FILE"
 

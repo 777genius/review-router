@@ -33311,6 +33311,7 @@ async function run() {
     const review = await orchestrator.execute(prNumber);
     if (!review) {
       info("Review skipped");
+      await clearReviewFailureSummaries(token, prNumber);
       await reportControlPlaneActionHealth({
         runtimeConfig,
         review,

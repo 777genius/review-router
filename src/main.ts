@@ -216,6 +216,7 @@ async function run(): Promise<void> {
 
     if (!review) {
       core.info('Review skipped');
+      await clearReviewFailureSummaries(token, prNumber);
       await reportControlPlaneActionHealth({
         runtimeConfig,
         review,

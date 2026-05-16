@@ -93,7 +93,7 @@ describe('formatReviewFailureSummary', () => {
     expect(body).toContain('Code: github_permission_denied');
   });
 
-  it('deletes only stale ReviewRouter failure summaries', async () => {
+  it('deletes stale ReviewRouter failure summaries and failed progress comments', async () => {
     const listComments = jest.fn();
     const deleteComment = jest.fn().mockResolvedValue({});
     const mockClient = {
@@ -119,6 +119,14 @@ describe('formatReviewFailureSummary', () => {
             id: 3,
             body: 'Human comment mentioning Review failed before comments could be completed.',
           },
+          {
+            id: 4,
+            body: '## 🤖 ReviewRouter Progress\n\n| Step | Status |\n| --- | --- |\n| LLM review | ❌ Failed |\n\n### Review needs attention',
+          },
+          {
+            id: 5,
+            body: '## 🤖 ReviewRouter Progress\n\n| Step | Status |\n| --- | --- |\n| LLM review | ✅ Completed |',
+          },
         ]),
       },
     } as any;
@@ -134,11 +142,16 @@ describe('formatReviewFailureSummary', () => {
         per_page: 100,
       }
     );
-    expect(deleteComment).toHaveBeenCalledTimes(1);
+    expect(deleteComment).toHaveBeenCalledTimes(2);
     expect(deleteComment).toHaveBeenCalledWith({
       owner: 'owner',
       repo: 'repo',
       comment_id: 1,
+    });
+    expect(deleteComment).toHaveBeenCalledWith({
+      owner: 'owner',
+      repo: 'repo',
+      comment_id: 4,
     });
   });
 });

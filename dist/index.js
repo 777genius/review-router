@@ -32035,6 +32035,15 @@ var LEGACY_BOT_MARKERS = [
   "<!-- multi-provider-code-review-bot -->"
 ];
 var FAILURE_SUMMARY_TEXT = "Review failed before comments could be completed";
+var PROGRESS_COMMENT_HEADERS = [
+  "## \u{1F916} ReviewRouter Progress",
+  "## \u{1F916} AI Robot Review Progress"
+];
+var PROGRESS_TRACKER_MARKERS = [
+  "<!-- review-router-progress-tracker -->",
+  "<!-- ai-robot-review-progress-tracker -->"
+];
+var FAILED_PROGRESS_TEXT = ["\u274C Failed", "### Review needs attention"];
 var CODEX_SEED_SCRIPT_URL = "https://reviewrouter.site/install/codex";
 function formatReviewFailureSummary(error2, prNumber) {
   const normalized = normalizeReviewError(error2);
@@ -32125,7 +32134,7 @@ async function clearReviewFailureSummariesForClient(client, prNumber) {
   const { octokit, owner, repo } = client;
   const comments = await listIssueComments(client, prNumber);
   const staleFailureComments = comments.filter(
-    (comment) => isReviewFailureSummary(comment.body)
+    (comment) => isReviewFailureComment(comment.body)
   );
   for (const comment of staleFailureComments) {
     await octokit.rest.issues.deleteComment({
@@ -32136,7 +32145,7 @@ async function clearReviewFailureSummariesForClient(client, prNumber) {
   }
   if (staleFailureComments.length > 0) {
     logger.info(
-      `Deleted ${staleFailureComments.length} stale ReviewRouter failure summary comment(s)`
+      `Deleted ${staleFailureComments.length} stale ReviewRouter failure comment(s)`
     );
   }
 }
@@ -32157,6 +32166,14 @@ async function listIssueComments(client, prNumber) {
 function isReviewFailureSummary(body) {
   if (!body) return false;
   return hasReviewRouterBotMarker(body) && body.includes(FAILURE_SUMMARY_TEXT);
+}
+function isReviewFailureComment(body) {
+  if (!body) return false;
+  return isReviewFailureSummary(body) || isFailedProgressComment(body);
+}
+function isFailedProgressComment(body) {
+  const isProgressComment = PROGRESS_COMMENT_HEADERS.some((header) => body.startsWith(header)) || PROGRESS_TRACKER_MARKERS.some((marker) => body.includes(marker));
+  return isProgressComment && FAILED_PROGRESS_TEXT.some((text) => body.includes(text));
 }
 function hasReviewRouterBotMarker(body) {
   return body.includes(REVIEW_ROUTER_BOT_MARKER) || LEGACY_BOT_MARKERS.some((marker) => body.includes(marker));
@@ -33028,7 +33045,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.44",
+  version: "1.0.45",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

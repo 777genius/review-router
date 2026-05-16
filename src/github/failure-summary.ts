@@ -12,6 +12,15 @@ const LEGACY_BOT_MARKERS = [
   '<!-- multi-provider-code-review-bot -->',
 ];
 const FAILURE_SUMMARY_TEXT = 'Review failed before comments could be completed';
+const PROGRESS_COMMENT_HEADERS = [
+  '## 🤖 ReviewRouter Progress',
+  '## 🤖 AI Robot Review Progress',
+];
+const PROGRESS_TRACKER_MARKERS = [
+  '<!-- review-router-progress-tracker -->',
+  '<!-- ai-robot-review-progress-tracker -->',
+];
+const FAILED_PROGRESS_TEXT = ['❌ Failed', '### Review needs attention'];
 const CODEX_SEED_SCRIPT_URL = 'https://reviewrouter.site/install/codex';
 
 export function formatReviewFailureSummary(error: Error, prNumber?: number): string {
@@ -126,7 +135,7 @@ export async function clearReviewFailureSummariesForClient(
   const { octokit, owner, repo } = client;
   const comments = await listIssueComments(client, prNumber);
   const staleFailureComments = comments.filter(comment =>
-    isReviewFailureSummary(comment.body)
+    isReviewFailureComment(comment.body)
   );
 
   for (const comment of staleFailureComments) {
@@ -139,7 +148,7 @@ export async function clearReviewFailureSummariesForClient(
 
   if (staleFailureComments.length > 0) {
     logger.info(
-      `Deleted ${staleFailureComments.length} stale ReviewRouter failure summary comment(s)`
+      `Deleted ${staleFailureComments.length} stale ReviewRouter failure comment(s)`
     );
   }
 }
@@ -167,6 +176,21 @@ async function listIssueComments(
 function isReviewFailureSummary(body?: string | null): boolean {
   if (!body) return false;
   return hasReviewRouterBotMarker(body) && body.includes(FAILURE_SUMMARY_TEXT);
+}
+
+function isReviewFailureComment(body?: string | null): boolean {
+  if (!body) return false;
+  return isReviewFailureSummary(body) || isFailedProgressComment(body);
+}
+
+function isFailedProgressComment(body: string): boolean {
+  const isProgressComment =
+    PROGRESS_COMMENT_HEADERS.some(header => body.startsWith(header)) ||
+    PROGRESS_TRACKER_MARKERS.some(marker => body.includes(marker));
+  return (
+    isProgressComment &&
+    FAILED_PROGRESS_TEXT.some(text => body.includes(text))
+  );
 }
 
 function hasReviewRouterBotMarker(body: string): boolean {

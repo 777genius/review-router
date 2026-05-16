@@ -12,14 +12,12 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   providerBlocklist: [],
 
   // COST CONTROLS:
-  // - openrouterAllowPaid: false = Only free models (blocks models with $/token pricing)
   // - providerDiscoveryLimit: 8 = Health-check up to 8 providers for reliability
   // - providerLimit: 1 = Use one provider by default; opt in to consensus/multi-provider mode explicitly
   // - budgetMaxUsd: 0 = No budget allocated for paid APIs
   // Combined these settings ensure zero cost when using default configuration
-  openrouterAllowPaid: false,  // IMPORTANT: Set to true only if you have OpenRouter credits
-  providerDiscoveryLimit: 8,   // Health-check pool size (higher = better reliability)
-  providerLimit: 1,             // Actual execution pool size (lower = lower costs)
+  providerDiscoveryLimit: 8, // Health-check pool size (higher = better reliability)
+  providerLimit: 1, // Actual execution pool size (lower = lower costs)
   providerRetries: 0,
   providerMaxParallel: 1,
   quietModeEnabled: false,
@@ -97,7 +95,7 @@ export const DEFAULT_CONFIG: ReviewConfig = {
 
   // Provider selection strategy
   providerSelectionStrategy: 'reliability',
-  providerExplorationRate: 0.3,  // 70% exploit, 30% explore
+  providerExplorationRate: 0.3, // 70% exploit, 30% explore
 
   // Intensity behavior mappings
   intensityProviderCounts: {
@@ -106,9 +104,9 @@ export const DEFAULT_CONFIG: ReviewConfig = {
     light: 3,
   },
   intensityTimeouts: {
-    thorough: 180000,  // 3 minutes
-    standard: 120000,  // 2 minutes
-    light: 60000,      // 1 minute
+    thorough: 180000, // 3 minutes
+    standard: 120000, // 2 minutes
+    light: 60000, // 1 minute
   },
   intensityPromptDepth: {
     thorough: 'detailed',
@@ -133,6 +131,4 @@ export const DEFAULT_CONFIG: ReviewConfig = {
  * Static fallback providers used only if dynamic discovery fails
  * (e.g., network issues, API unavailable, CLI not installed)
  */
-export const FALLBACK_STATIC_PROVIDERS = [
-  ...PREFERRED_OPENROUTER_FREE_MODELS,
-];
+export const FALLBACK_STATIC_PROVIDERS = [...PREFERRED_OPENROUTER_FREE_MODELS];

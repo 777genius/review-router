@@ -32,13 +32,17 @@ Respond with: {"findings": [{"file": "test.ts", "line": 1, "severity": "minor", 
   }
 
   static validate(name: string): boolean {
-    const pattern = /^(opencode\/[\w.:~-]+|openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*(?:#\d+)?|claude\/[\w.:~-]+|codex\/[\w.:~-]+|gemini\/[\w.:~-]+)$/i;
+    const pattern =
+      /^(opencode\/[\w.:~-]+|openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*(?:#\d+)?|claude\/[\w.:~-]+|codex\/[\w.:~-]+|codex-openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*|gemini\/[\w.:~-]+)$/i;
     return pattern.test(name);
   }
 }
 
 export class RateLimitError extends Error {
-  constructor(message: string, public readonly retryAfterSeconds?: number) {
+  constructor(
+    message: string,
+    public readonly retryAfterSeconds?: number
+  ) {
     super(message);
     this.name = 'RateLimitError';
   }

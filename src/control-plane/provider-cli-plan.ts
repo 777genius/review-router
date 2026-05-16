@@ -25,7 +25,9 @@ export function resolveProviderCliPlan(
     codexCliNeeded:
       authMode === 'codex-oauth' ||
       authMode === 'openai-api' ||
-      hasProviderPrefix(providerHints, 'codex'),
+      authMode === 'openrouter-api' ||
+      hasProviderPrefix(providerHints, 'codex') ||
+      hasProviderPrefix(providerHints, 'openrouter'),
     claudeCliNeeded:
       authMode === 'claude-oauth' || hasProviderPrefix(providerHints, 'claude'),
   };

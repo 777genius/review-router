@@ -1,6 +1,7 @@
 import { Finding, ProviderResult } from '../../types';
 import { validateSuggestionSanity } from '../../utils/suggestion-sanity';
 import { logger } from '../../utils/logger';
+import { normalizeProviderVoteKey } from '../../utils/provider-votes';
 
 export function extractFindings(results: ProviderResult[]): Finding[] {
   const findings: Finding[] = [];
@@ -30,6 +31,10 @@ export function extractFindings(results: ProviderResult[]): Finding[] {
         provider: result.name,
         providers: finding.providers || [result.name],
         actualModel: result.result.actualModel,
+        providerVoteKeys: [
+          normalizeProviderVoteKey(result.name, result.result.actualModel) ||
+            result.name,
+        ],
         providerModels: [
           {
             provider: result.name,

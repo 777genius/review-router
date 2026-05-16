@@ -48,14 +48,14 @@ describe('resolveProviderCliPlan', () => {
     expect(plan.claudeCliNeeded).toBe(false);
   });
 
-  it('does not require CLI tooling for pure OpenRouter config', () => {
+  it('requires Codex CLI for OpenRouter config because OpenRouter runs agentically', () => {
     const plan = resolveProviderCliPlan({
       REVIEW_AUTH_MODE: 'openrouter-api',
       REVIEW_PROVIDERS: 'openrouter/anthropic/claude-sonnet-4.5',
       SYNTHESIS_MODEL: 'openrouter/anthropic/claude-sonnet-4.5',
     });
 
-    expect(plan.codexCliNeeded).toBe(false);
+    expect(plan.codexCliNeeded).toBe(true);
     expect(plan.claudeCliNeeded).toBe(false);
   });
 });

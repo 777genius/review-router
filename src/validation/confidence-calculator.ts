@@ -1,4 +1,5 @@
 import type { Finding } from '../types';
+import { getProviderVoteCount } from '../utils/provider-votes';
 
 /**
  * Confidence calculation constants.
@@ -11,7 +12,7 @@ const CONFIDENCE_MULTIPLIERS = {
   /** Penalty factor when syntax is invalid (10% decrease) */
   SYNTAX_PENALTY: 0.9,
   /** Boost factor when consensus achieved (20% increase) */
-  CONSENSUS_BOOST: 1.2
+  CONSENSUS_BOOST: 1.2,
 } as const;
 
 /**
@@ -23,7 +24,7 @@ const FALLBACK_SCORING = {
   /** Bonus added for valid syntax */
   SYNTAX_BONUS: 0.2,
   /** Bonus added for consensus */
-  CONSENSUS_BONUS: 0.2
+  CONSENSUS_BONUS: 0.2,
 } as const;
 
 /**
@@ -33,7 +34,7 @@ export const DEFAULT_QUALITY_CONFIG = {
   /** Default minimum confidence threshold (70%) */
   MIN_CONFIDENCE: 0.7,
   /** Default minimum providers for consensus */
-  MIN_AGREEMENT: 2
+  MIN_AGREEMENT: 2,
 } as const;
 
 /**
@@ -209,7 +210,10 @@ export function shouldPostSuggestion(
 ): boolean {
   // Get threshold for this severity
   const severityThreshold = config.confidence_threshold?.[finding.severity];
-  const threshold = severityThreshold ?? config.min_confidence ?? DEFAULT_QUALITY_CONFIG.MIN_CONFIDENCE;
+  const threshold =
+    severityThreshold ??
+    config.min_confidence ??
+    DEFAULT_QUALITY_CONFIG.MIN_CONFIDENCE;
 
   // Check confidence threshold
   if (confidence < threshold) {
@@ -217,9 +221,13 @@ export function shouldPostSuggestion(
   }
 
   // Check consensus requirement for critical severity
-  if (finding.severity === 'critical' && config.consensus?.required_for_critical) {
-    const providerCount = finding.providers?.length ?? 0;
-    const minAgreement = config.consensus.min_agreement ?? DEFAULT_QUALITY_CONFIG.MIN_AGREEMENT;
+  if (
+    finding.severity === 'critical' &&
+    config.consensus?.required_for_critical
+  ) {
+    const providerCount = getProviderVoteCount(finding);
+    const minAgreement =
+      config.consensus.min_agreement ?? DEFAULT_QUALITY_CONFIG.MIN_AGREEMENT;
 
     if (providerCount < minAgreement) {
       return false;

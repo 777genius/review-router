@@ -97,6 +97,10 @@ import {
   normalizeReviewError,
   sanitizeErrorMessage,
 } from '../errors/review-router-error';
+import {
+  countProviderVotePool,
+  getProviderVoteCount,
+} from '../utils/provider-votes';
 import * as fs from 'fs/promises';
 import path from 'path';
 
@@ -982,7 +986,7 @@ export class ReviewOrchestrator {
 
       const deduped = this.components.deduplicator.dedupe(combinedFindings);
       const consensus = this.components.consensus.filter(deduped);
-      const providerCount = providers.length || 1;
+      const providerCount = countProviderVotePool(providers) || 1;
       const enriched = consensus.map((f) =>
         this.enrichFinding(
           f,
@@ -1042,7 +1046,7 @@ export class ReviewOrchestrator {
         durationSeconds: 0,
         cacheHit: Boolean(cachedFindings),
         synthesisModel: config.synthesisModel,
-        providerPoolSize: providers.length,
+        providerPoolSize: providerCount,
       };
 
       review = this.components.synthesis.synthesize(
@@ -2356,9 +2360,7 @@ export class ReviewOrchestrator {
         changedLines: changedLines.map((c) => c.line),
         relatedSnippets,
         providerAgreement:
-          providerCount > 0
-            ? (finding.providers?.length || 0) / providerCount
-            : 0,
+          providerCount > 0 ? getProviderVoteCount(finding) / providerCount : 0,
         astConfirmed,
         graphConfirmed,
       },

@@ -1,4 +1,7 @@
-import { validateProvider, validateProviders } from '../../../scripts/validate-providers';
+import {
+  validateProvider,
+  validateProviders,
+} from '../../../scripts/validate-providers';
 
 describe('validateProvider', () => {
   describe('valid providers', () => {
@@ -15,7 +18,6 @@ describe('validateProvider', () => {
       'openrouter/vendor/model:tag',
       'openrouter/free#1',
       'openrouter/qwen/qwen3-coder:free#2',
-      'openrouter/inclusionai/ring-2.6-1t:free',
       'openrouter/openai/gpt-oss-120b:free',
       'openrouter/poolside/laguna-m.1:free',
       'openrouter/a/b/c/d:e',
@@ -69,7 +71,9 @@ describe('validateProviders', () => {
   test('should validate empty string', () => {
     const result = validateProviders('');
     expect(result).toBe(true);
-    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('No providers specified'));
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('No providers specified')
+    );
   });
 
   test('should validate single valid provider', () => {
@@ -79,9 +83,13 @@ describe('validateProviders', () => {
   });
 
   test('should validate multiple valid providers', () => {
-    const result = validateProviders('openai/gpt-4,anthropic/claude-3-5-sonnet');
+    const result = validateProviders(
+      'openai/gpt-4,anthropic/claude-3-5-sonnet'
+    );
     expect(result).toBe(true);
-    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('2 providers validated'));
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('2 providers validated')
+    );
   });
 
   test('should reject invalid provider in list', () => {
@@ -91,7 +99,9 @@ describe('validateProviders', () => {
   });
 
   test('should handle providers with whitespace', () => {
-    const result = validateProviders(' openai/gpt-4 , anthropic/claude-3-5-sonnet ');
+    const result = validateProviders(
+      ' openai/gpt-4 , anthropic/claude-3-5-sonnet '
+    );
     expect(result).toBe(true);
   });
 });

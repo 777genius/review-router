@@ -1,6 +1,10 @@
 import { Finding, Severity } from '../types';
 import { areASTsEquivalent } from '../validation/ast-comparator';
 import { detectLanguage } from './ast/parsers';
+import {
+  getProviderVoteKeys,
+  mergeProviderModels,
+} from '../utils/provider-votes';
 
 export interface ConsensusOptions {
   minAgreement: number;
@@ -29,6 +33,7 @@ export class ConsensusEngine {
       Finding & {
         _suggestions?: Array<{
           provider: string;
+          voteKey: string;
           suggestion: string;
           file: string;
         }>;
@@ -40,23 +45,26 @@ export class ConsensusEngine {
         continue;
       }
 
-      const key = `${finding.file}:${finding.line}:${finding.title}`;
+      const key = `${normalizeFile(finding.file)}:${finding.startLine ?? finding.line}:${finding.endLine ?? finding.line}:${finding.title.toLowerCase().trim()}`;
       const existing = grouped.get(key);
 
       const providers = new Set<string>();
       if (finding.providers) finding.providers.forEach((p) => providers.add(p));
       if (finding.provider) providers.add(finding.provider);
       if (providers.size === 0) providers.add('static');
+      const providerVoteKeys = getProviderVoteKeys(finding);
 
       // Track per-provider suggestions for consensus checking
       const currentSuggestions: Array<{
         provider: string;
+        voteKey: string;
         suggestion: string;
         file: string;
       }> = [];
       if (finding.suggestion && finding.provider) {
         currentSuggestions.push({
           provider: finding.provider,
+          voteKey: providerVoteKeys[0] || finding.provider,
           suggestion: finding.suggestion,
           file: finding.file,
         });
@@ -66,6 +74,7 @@ export class ConsensusEngine {
         grouped.set(key, {
           ...finding,
           providers: Array.from(providers),
+          providerVoteKeys,
           confidence: (finding.confidence ?? 0) || 1,
           _suggestions: currentSuggestions, // Temporary for consensus checking
         });
@@ -87,6 +96,12 @@ export class ConsensusEngine {
           existing.providerModels,
           finding.providerModels
         ),
+        providerVoteKeys: Array.from(
+          new Set([
+            ...(existing.providerVoteKeys || getProviderVoteKeys(existing)),
+            ...providerVoteKeys,
+          ])
+        ),
         confidence: Math.min(
           1,
           (existing.confidence ?? 0) + (finding.confidence ?? 0.5)
@@ -97,12 +112,14 @@ export class ConsensusEngine {
 
     // Check suggestion consensus and set hasConsensus on merged findings
     const filtered = Array.from(grouped.values())
-      .filter((f) => this.meetsAgreement(f.providers || []))
+      .filter((f) =>
+        this.meetsAgreement(f.providerVoteKeys || getProviderVoteKeys(f))
+      )
       .map((f) => {
         // Check if we have multiple provider suggestions to compare
         if (f._suggestions && f._suggestions.length >= 2) {
           const consensus = this.checkSuggestionConsensus(
-            f._suggestions,
+            uniqueSuggestionsByVoteKey(f._suggestions),
             this.options.minAgreement
           );
           f.hasConsensus = consensus.hasSuggestionConsensus;
@@ -116,7 +133,10 @@ export class ConsensusEngine {
         }
         // Clean up temporary field
         delete (f as any)._suggestions;
-        return f;
+        return {
+          ...f,
+          providerVoteKeys: f.providerVoteKeys || getProviderVoteKeys(f),
+        };
       });
 
     filtered.sort(
@@ -216,16 +236,28 @@ export class ConsensusEngine {
   }
 }
 
-function mergeProviderModels(
-  left: Finding['providerModels'],
-  right: Finding['providerModels']
-): Finding['providerModels'] {
-  const merged = new Map<
-    string,
-    NonNullable<Finding['providerModels']>[number]
-  >();
-  for (const item of [...(left || []), ...(right || [])]) {
-    merged.set(item.provider, item);
+function normalizeFile(file: string): string {
+  return file
+    .replace(/\\/g, '/')
+    .replace(/^\.?\//, '')
+    .toLowerCase();
+}
+
+function uniqueSuggestionsByVoteKey(
+  suggestions: Array<{
+    provider: string;
+    voteKey: string;
+    suggestion: string;
+    file: string;
+  }>
+): Array<{ provider: string; suggestion: string; file: string }> {
+  const seen = new Set<string>();
+  const unique: Array<{ provider: string; suggestion: string; file: string }> =
+    [];
+  for (const suggestion of suggestions) {
+    if (seen.has(suggestion.voteKey)) continue;
+    seen.add(suggestion.voteKey);
+    unique.push(suggestion);
   }
-  return Array.from(merged.values());
+  return unique;
 }

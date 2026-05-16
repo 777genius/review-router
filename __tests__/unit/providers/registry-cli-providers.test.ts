@@ -7,9 +7,15 @@ import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 
 describe('ProviderRegistry - New CLI Providers', () => {
   let registry: ProviderRegistry;
+  const originalEnv = process.env;
 
   beforeEach(() => {
+    process.env = { ...originalEnv };
     registry = new ProviderRegistry();
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
   });
 
   describe('Provider Instantiation', () => {
@@ -40,6 +46,33 @@ describe('ProviderRegistry - New CLI Providers', () => {
       expect(providers).toHaveLength(1);
       expect(providers[0]).toBeInstanceOf(CodexProvider);
       expect(providers[0].name).toBe('codex/gpt-5.5');
+    });
+
+    it('should instantiate OpenRouter-backed Codex providers', async () => {
+      const config: ReviewConfig = {
+        ...DEFAULT_CONFIG,
+        providers: ['codex-openrouter/openai/gpt-5.3-codex'],
+      };
+
+      const providers = (registry as any).instantiate(config.providers, config);
+
+      expect(providers).toHaveLength(1);
+      expect(providers[0]).toBeInstanceOf(CodexProvider);
+      expect(providers[0].name).toBe('codex-openrouter/openai/gpt-5.3-codex');
+    });
+
+    it('should instantiate OpenRouter providers through Codex agent runtime', async () => {
+      process.env.OPENROUTER_API_KEY = 'or-key';
+      const config: ReviewConfig = {
+        ...DEFAULT_CONFIG,
+        providers: ['openrouter/openai/gpt-oss-120b:free#8'],
+      };
+
+      const providers = (registry as any).instantiate(config.providers, config);
+
+      expect(providers).toHaveLength(1);
+      expect(providers[0]).toBeInstanceOf(CodexProvider);
+      expect(providers[0].name).toBe('openrouter/openai/gpt-oss-120b:free#8');
     });
 
     it('should instantiate Gemini providers', async () => {

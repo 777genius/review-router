@@ -249,5 +249,80 @@ describe('ConsensusEngine', () => {
         { provider: 'codex/gpt-5.5' },
       ]);
     });
+
+    it('does not treat OpenRouter model clones as independent consensus votes', () => {
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 50,
+      });
+      const findings: Finding[] = [
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'openrouter/openai/gpt-oss-120b:free',
+          providerVoteKeys: ['openrouter/openai/gpt-oss-120b:free'],
+          suggestion: 'x + 1',
+        },
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'openrouter/openai/gpt-oss-120b:free#5',
+          providerVoteKeys: ['openrouter/openai/gpt-oss-120b:free'],
+          suggestion: 'x+1',
+        },
+      ];
+
+      const result = engine.filter(findings);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].providerVoteKeys).toEqual([
+        'openrouter/openai/gpt-oss-120b:free',
+      ]);
+      expect(result[0].hasConsensus).toBe(false);
+    });
+
+    it('counts independent providers as consensus votes', () => {
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 50,
+      });
+      const findings: Finding[] = [
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'openrouter/openai/gpt-oss-120b:free',
+          suggestion: 'x + 1',
+        },
+        {
+          file: 'test.ts',
+          line: 10,
+          title: 'Issue',
+          message: 'Fix it',
+          severity: 'minor',
+          provider: 'codex/gpt-5.5',
+          suggestion: 'x+1',
+        },
+      ];
+
+      const result = engine.filter(findings);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].providerVoteKeys).toEqual([
+        'openrouter/openai/gpt-oss-120b:free',
+        'codex/gpt-5.5',
+      ]);
+      expect(result[0].hasConsensus).toBe(true);
+    });
   });
 });

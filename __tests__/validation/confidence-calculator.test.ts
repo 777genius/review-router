@@ -1,5 +1,11 @@
-import { calculateConfidence, shouldPostSuggestion } from '../../src/validation/confidence-calculator';
-import type { ConfidenceSignals, QualityConfig } from '../../src/validation/confidence-calculator';
+import {
+  calculateConfidence,
+  shouldPostSuggestion,
+} from '../../src/validation/confidence-calculator';
+import type {
+  ConfidenceSignals,
+  QualityConfig,
+} from '../../src/validation/confidence-calculator';
 import type { Finding } from '../../src/types';
 
 describe('calculateConfidence', () => {
@@ -9,7 +15,7 @@ describe('calculateConfidence', () => {
         llmConfidence: 0.8,
         syntaxValid: true,
         hasConsensus: false,
-        providerReliability: 1.0
+        providerReliability: 1.0,
       };
 
       const result = calculateConfidence(signals);
@@ -23,7 +29,7 @@ describe('calculateConfidence', () => {
         llmConfidence: 0.8,
         syntaxValid: true,
         hasConsensus: true,
-        providerReliability: 1.0
+        providerReliability: 1.0,
       };
 
       const result = calculateConfidence(signals);
@@ -37,7 +43,7 @@ describe('calculateConfidence', () => {
         llmConfidence: 0.9,
         syntaxValid: false,
         hasConsensus: false,
-        providerReliability: 1.0
+        providerReliability: 1.0,
       };
 
       const result = calculateConfidence(signals);
@@ -51,7 +57,7 @@ describe('calculateConfidence', () => {
         llmConfidence: 0.8,
         syntaxValid: true,
         hasConsensus: false,
-        providerReliability: 0.9
+        providerReliability: 0.9,
       };
 
       const result = calculateConfidence(signals);
@@ -66,7 +72,7 @@ describe('calculateConfidence', () => {
       const signals: ConfidenceSignals = {
         syntaxValid: true,
         hasConsensus: false,
-        providerReliability: 1.0
+        providerReliability: 1.0,
       };
 
       const result = calculateConfidence(signals);
@@ -79,7 +85,7 @@ describe('calculateConfidence', () => {
       const signals: ConfidenceSignals = {
         syntaxValid: true,
         hasConsensus: true,
-        providerReliability: 1.0
+        providerReliability: 1.0,
       };
 
       const result = calculateConfidence(signals);
@@ -92,7 +98,7 @@ describe('calculateConfidence', () => {
       const signals: ConfidenceSignals = {
         syntaxValid: true,
         hasConsensus: false,
-        providerReliability: 0.9
+        providerReliability: 0.9,
       };
 
       const result = calculateConfidence(signals);
@@ -105,7 +111,7 @@ describe('calculateConfidence', () => {
       const signals: ConfidenceSignals = {
         syntaxValid: false,
         hasConsensus: false,
-        providerReliability: 1.0
+        providerReliability: 1.0,
       };
 
       const result = calculateConfidence(signals);
@@ -121,7 +127,7 @@ describe('calculateConfidence', () => {
         llmConfidence: 0.95,
         syntaxValid: true,
         hasConsensus: true,
-        providerReliability: 1.0
+        providerReliability: 1.0,
       };
 
       const result = calculateConfidence(signals);
@@ -135,7 +141,7 @@ describe('calculateConfidence', () => {
         llmConfidence: 0.8,
         syntaxValid: true,
         hasConsensus: false,
-        providerReliability: 0.0
+        providerReliability: 0.0,
       };
 
       const result = calculateConfidence(signals);
@@ -147,7 +153,7 @@ describe('calculateConfidence', () => {
       const signals: ConfidenceSignals = {
         syntaxValid: false,
         hasConsensus: false,
-        providerReliability: 0.0
+        providerReliability: 0.0,
       };
 
       const result = calculateConfidence(signals);
@@ -165,10 +171,10 @@ describe('shouldPostSuggestion', () => {
         line: 1,
         severity: 'major',
         title: 'Test',
-        message: 'Test finding'
+        message: 'Test finding',
       };
       const config: QualityConfig = {
-        min_confidence: 0.7
+        min_confidence: 0.7,
       };
 
       const result = shouldPostSuggestion(finding, 0.8, config);
@@ -182,10 +188,10 @@ describe('shouldPostSuggestion', () => {
         line: 1,
         severity: 'major',
         title: 'Test',
-        message: 'Test finding'
+        message: 'Test finding',
       };
       const config: QualityConfig = {
-        min_confidence: 0.7
+        min_confidence: 0.7,
       };
 
       const result = shouldPostSuggestion(finding, 0.5, config);
@@ -199,7 +205,7 @@ describe('shouldPostSuggestion', () => {
         line: 1,
         severity: 'major',
         title: 'Test',
-        message: 'Test finding'
+        message: 'Test finding',
       };
       const config: QualityConfig = {};
 
@@ -216,13 +222,13 @@ describe('shouldPostSuggestion', () => {
         line: 1,
         severity: 'critical',
         title: 'Test',
-        message: 'Test finding'
+        message: 'Test finding',
       };
       const config: QualityConfig = {
         min_confidence: 0.7,
         confidence_threshold: {
-          critical: 0.8
-        }
+          critical: 0.8,
+        },
       };
 
       const result = shouldPostSuggestion(finding, 0.75, config);
@@ -236,13 +242,13 @@ describe('shouldPostSuggestion', () => {
         line: 1,
         severity: 'major',
         title: 'Test',
-        message: 'Test finding'
+        message: 'Test finding',
       };
       const config: QualityConfig = {
         min_confidence: 0.7,
         confidence_threshold: {
-          critical: 0.8
-        }
+          critical: 0.8,
+        },
       };
 
       const result = shouldPostSuggestion(finding, 0.75, config);
@@ -256,13 +262,13 @@ describe('shouldPostSuggestion', () => {
         line: 1,
         severity: 'minor',
         title: 'Test',
-        message: 'Test finding'
+        message: 'Test finding',
       };
       const config: QualityConfig = {
         min_confidence: 0.7,
         confidence_threshold: {
-          minor: 0.6
-        }
+          minor: 0.6,
+        },
       };
 
       const result = shouldPostSuggestion(finding, 0.65, config);
@@ -279,14 +285,14 @@ describe('shouldPostSuggestion', () => {
         severity: 'critical',
         title: 'Test',
         message: 'Test finding',
-        providers: ['provider-a']
+        providers: ['provider-a'],
       };
       const config: QualityConfig = {
         min_confidence: 0.7,
         consensus: {
           required_for_critical: true,
-          min_agreement: 2
-        }
+          min_agreement: 2,
+        },
       };
 
       const result = shouldPostSuggestion(finding, 0.9, config);
@@ -301,19 +307,45 @@ describe('shouldPostSuggestion', () => {
         severity: 'critical',
         title: 'Test',
         message: 'Test finding',
-        providers: ['provider-a', 'provider-b']
+        providers: ['provider-a', 'provider-b'],
       };
       const config: QualityConfig = {
         min_confidence: 0.7,
         consensus: {
           required_for_critical: true,
-          min_agreement: 2
-        }
+          min_agreement: 2,
+        },
       };
 
       const result = shouldPostSuggestion(finding, 0.9, config);
 
       expect(result).toBe(true);
+    });
+
+    it('should reject critical findings when agreement only comes from OpenRouter clones', () => {
+      const finding: Finding = {
+        file: 'test.ts',
+        line: 1,
+        severity: 'critical',
+        title: 'Test',
+        message: 'Test finding',
+        providers: [
+          'openrouter/openai/gpt-oss-120b:free',
+          'openrouter/openai/gpt-oss-120b:free#5',
+        ],
+        providerVoteKeys: ['openrouter/openai/gpt-oss-120b:free'],
+      };
+      const config: QualityConfig = {
+        min_confidence: 0.7,
+        consensus: {
+          required_for_critical: true,
+          min_agreement: 2,
+        },
+      };
+
+      const result = shouldPostSuggestion(finding, 0.9, config);
+
+      expect(result).toBe(false);
     });
 
     it('should accept major findings without consensus requirement', () => {
@@ -323,14 +355,14 @@ describe('shouldPostSuggestion', () => {
         severity: 'major',
         title: 'Test',
         message: 'Test finding',
-        providers: ['provider-a']
+        providers: ['provider-a'],
       };
       const config: QualityConfig = {
         min_confidence: 0.7,
         consensus: {
           required_for_critical: true,
-          min_agreement: 2
-        }
+          min_agreement: 2,
+        },
       };
 
       const result = shouldPostSuggestion(finding, 0.8, config);
@@ -345,14 +377,14 @@ describe('shouldPostSuggestion', () => {
         severity: 'critical',
         title: 'Test',
         message: 'Test finding',
-        providers: ['provider-a']
+        providers: ['provider-a'],
       };
       const config: QualityConfig = {
         min_confidence: 0.7,
         consensus: {
           required_for_critical: false,
-          min_agreement: 2
-        }
+          min_agreement: 2,
+        },
       };
 
       const result = shouldPostSuggestion(finding, 0.9, config);
@@ -368,10 +400,10 @@ describe('shouldPostSuggestion', () => {
         line: 1,
         severity: 'major',
         title: 'Test',
-        message: 'Test finding'
+        message: 'Test finding',
       };
       const config: QualityConfig = {
-        min_confidence: 0.7
+        min_confidence: 0.7,
       };
 
       const result = shouldPostSuggestion(finding, 0.7, config);
@@ -385,14 +417,14 @@ describe('shouldPostSuggestion', () => {
         line: 1,
         severity: 'critical',
         title: 'Test',
-        message: 'Test finding'
+        message: 'Test finding',
         // No providers field
       };
       const config: QualityConfig = {
         consensus: {
           required_for_critical: true,
-          min_agreement: 2
-        }
+          min_agreement: 2,
+        },
       };
 
       const result = shouldPostSuggestion(finding, 0.9, config);

@@ -75,7 +75,6 @@ export interface ReviewConfig {
   providerLimit: number; // Max providers to use for actual review (default: 1)
   providerRetries: number;
   providerMaxParallel: number;
-  openrouterAllowPaid?: boolean;
   quietModeEnabled?: boolean;
   quietMinConfidence?: number;
   quietUseLearning?: boolean;
@@ -238,6 +237,7 @@ export interface Finding {
   providers?: string[];
   actualModel?: string;
   providerModels?: ProviderModelAttribution[];
+  providerVoteKeys?: string[];
   providerPoolSize?: number;
   confidence?: number;
   category?: string;

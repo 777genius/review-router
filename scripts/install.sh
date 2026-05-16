@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 
 PRODUCT_NAME="review-router"
-LATEST_RELEASE_TAG="v1.0.41"
+LATEST_RELEASE_TAG="v1.0.42"
 LATEST_MAJOR_TAG="v1"
 DEFAULT_ACTION_REF_MODE="stable"
 DEFAULT_STABLE_ACTION_REF="777genius/review-router@$LATEST_MAJOR_TAG"
@@ -20,7 +20,7 @@ CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
 DEFAULT_CODEX_MODEL="gpt-5.5"
 DEFAULT_CLAUDE_MODEL="sonnet"
 DEFAULT_APP_LOGO_URL="https://i.imgur.com/Yz9XIQM.png"
-OPENROUTER_DEFAULT_PROVIDERS="openrouter/inclusionai/ring-2.6-1t:free,openrouter/openai/gpt-oss-120b:free,openrouter/poolside/laguna-m.1:free"
+OPENROUTER_DEFAULT_PROVIDERS="openrouter/openai/gpt-oss-120b:free,openrouter/poolside/laguna-m.1:free"
 OPENROUTER_DEFAULT_SYNTHESIS="openrouter/free"
 
 env_first() {

@@ -29,4 +29,26 @@ describe('EvidenceScorer', () => {
     expect(result.confidence).toBeLessThan(0.7);
     expect(result.badge).toContain('Low');
   });
+
+  it('does not inflate agreement for OpenRouter model clones', () => {
+    const scorer = new EvidenceScorer();
+
+    const result = scorer.score(
+      {
+        ...baseFinding,
+        providers: [
+          'openrouter/openai/gpt-oss-120b:free',
+          'openrouter/openai/gpt-oss-120b:free#5',
+        ],
+        providerVoteKeys: ['openrouter/openai/gpt-oss-120b:free'],
+      },
+      2,
+      false,
+      false,
+      false
+    );
+
+    expect(result.confidence).toBeCloseTo(0.15);
+    expect(result.reasoning).toContain('50% provider agreement');
+  });
 });

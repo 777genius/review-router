@@ -8,7 +8,6 @@
 import { logger } from '../utils/logger';
 
 export const PREFERRED_OPENROUTER_FREE_MODELS = [
-  'openrouter/inclusionai/ring-2.6-1t:free',
   'openrouter/openai/gpt-oss-120b:free',
   'openrouter/poolside/laguna-m.1:free',
 ] as const;
@@ -26,9 +25,10 @@ export async function getBestFreeModels(
 
   const models: string[] = [];
   for (let i = 0; models.length < count; i += 1) {
-    const model = PREFERRED_OPENROUTER_FREE_MODELS[
-      i % PREFERRED_OPENROUTER_FREE_MODELS.length
-    ];
+    const model =
+      PREFERRED_OPENROUTER_FREE_MODELS[
+        i % PREFERRED_OPENROUTER_FREE_MODELS.length
+      ];
     models.push(`${model}#${i + 1}`);
   }
   return models;

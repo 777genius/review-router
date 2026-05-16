@@ -7,7 +7,6 @@ export const ReviewConfigSchema = z.object({
   fallback_providers: z.array(z.string()).optional(),
   provider_allowlist: z.array(z.string()).optional(),
   provider_blocklist: z.array(z.string()).optional(),
-  openrouter_allow_paid: z.boolean().optional(),
   provider_discovery_limit: z.number().int().min(1).optional(),
   provider_limit: z.number().int().min(0).optional(),
   provider_retries: z.number().int().min(1).optional(),
@@ -44,7 +43,9 @@ export const ReviewConfigSchema = z.object({
   incremental_cache_ttl_days: z.number().int().min(1).max(30).optional(),
 
   batch_max_files: z.number().int().min(1).max(200).optional(),
-  provider_batch_overrides: z.record(z.coerce.number().int().min(1).max(200)).optional(),
+  provider_batch_overrides: z
+    .record(z.coerce.number().int().min(1).max(200))
+    .optional(),
   enable_token_aware_batching: z.boolean().optional(),
   target_tokens_per_batch: z.number().int().min(1000).optional(),
   smart_diff_compaction: z.boolean().optional(),
@@ -79,53 +80,74 @@ export const ReviewConfigSchema = z.object({
   skip_test_fixtures: z.boolean().optional(),
   skip_config_files: z.boolean().optional(),
   skip_build_artifacts: z.boolean().optional(),
-  trivial_patterns: z.array(z.string().refine(
-    (pattern) => isValidRegexPattern(pattern),
-    { message: 'Invalid or unsafe regex pattern (check for ReDoS vulnerabilities)' }
-  )).optional(),
+  trivial_patterns: z
+    .array(
+      z.string().refine((pattern) => isValidRegexPattern(pattern), {
+        message:
+          'Invalid or unsafe regex pattern (check for ReDoS vulnerabilities)',
+      })
+    )
+    .optional(),
 
   path_based_intensity: z.boolean().optional(),
   path_intensity_patterns: z.string().optional(),
   path_default_intensity: z.enum(['thorough', 'standard', 'light']).optional(),
 
-  provider_selection_strategy: z.enum(['reliability', 'random', 'round-robin']).optional(),
+  provider_selection_strategy: z
+    .enum(['reliability', 'random', 'round-robin'])
+    .optional(),
   provider_exploration_rate: z.number().min(0).max(1).optional(),
 
-  intensity_provider_counts: z.object({
-    thorough: z.number().int().min(1),
-    standard: z.number().int().min(1),
-    light: z.number().int().min(1),
-  }).optional(),
-  intensity_timeouts: z.object({
-    thorough: z.number().int().min(1000),
-    standard: z.number().int().min(1000),
-    light: z.number().int().min(1000),
-  }).optional(),
-  intensity_prompt_depth: z.object({
-    thorough: z.enum(['detailed', 'standard', 'brief']),
-    standard: z.enum(['detailed', 'standard', 'brief']),
-    light: z.enum(['detailed', 'standard', 'brief']),
-  }).optional(),
+  intensity_provider_counts: z
+    .object({
+      thorough: z.number().int().min(1),
+      standard: z.number().int().min(1),
+      light: z.number().int().min(1),
+    })
+    .optional(),
+  intensity_timeouts: z
+    .object({
+      thorough: z.number().int().min(1000),
+      standard: z.number().int().min(1000),
+      light: z.number().int().min(1000),
+    })
+    .optional(),
+  intensity_prompt_depth: z
+    .object({
+      thorough: z.enum(['detailed', 'standard', 'brief']),
+      standard: z.enum(['detailed', 'standard', 'brief']),
+      light: z.enum(['detailed', 'standard', 'brief']),
+    })
+    .optional(),
 
   min_confidence: z.number().min(0).max(1).optional(),
-  confidence_threshold: z.object({
-    critical: z.number().min(0).max(1).optional(),
-    major: z.number().min(0).max(1).optional(),
-    minor: z.number().min(0).max(1).optional(),
-  }).optional(),
+  confidence_threshold: z
+    .object({
+      critical: z.number().min(0).max(1).optional(),
+      major: z.number().min(0).max(1).optional(),
+      minor: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
   consensus_required_for_critical: z.boolean().optional(),
   consensus_min_agreement: z.number().int().min(2).optional(),
   suggestion_syntax_validation: z.boolean().optional(),
   update_pr_description: z.boolean().optional(),
   fail_on_severity: z.enum(['off', 'critical', 'major', 'minor']).optional(),
   review_thread_lifecycle: z.string().optional(),
-  review_thread_lifecycle_max_targets: z.number().int().min(0).max(25).optional(),
-  review_thread_lifecycle_resolve_confidence: z.object({
-    critical: z.number().min(0).max(1).optional(),
-    major: z.number().min(0).max(1).optional(),
-    minor: z.number().min(0).max(1).optional(),
-    unknown: z.number().min(0).max(1).optional(),
-  }).optional(),
+  review_thread_lifecycle_max_targets: z
+    .number()
+    .int()
+    .min(0)
+    .max(25)
+    .optional(),
+  review_thread_lifecycle_resolve_confidence: z
+    .object({
+      critical: z.number().min(0).max(1).optional(),
+      major: z.number().min(0).max(1).optional(),
+      minor: z.number().min(0).max(1).optional(),
+      unknown: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
 
   dry_run: z.boolean().optional(),
 });

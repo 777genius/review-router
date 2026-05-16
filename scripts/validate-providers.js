@@ -13,12 +13,12 @@
 // - Model/vendor path with no consecutive slashes or empty segments
 // - Allows alphanumeric, dots, colons, hyphens, and slashes
 // - Allows a trailing OpenRouter-style instance suffix (#1) used for quorum identities
-const PROVIDER_PATTERN = /^(openrouter|opencode|openai|anthropic|cohere|mistral|groq)\/[A-Za-z0-9._:\-]+(?:\/[A-Za-z0-9._:\-]+)*(?:#[0-9]+)?$/;
+const PROVIDER_PATTERN =
+  /^(openrouter|opencode|openai|anthropic|cohere|mistral|groq)\/[A-Za-z0-9._:\-]+(?:\/[A-Za-z0-9._:\-]+)*(?:#[0-9]+)?$/;
 
 const EXAMPLES = [
   'openrouter/google/gemini-2.0-flash-exp:free',
   'openrouter/mistralai/devstral-2512:free',
-  'openrouter/inclusionai/ring-2.6-1t:free',
   'openrouter/openai/gpt-oss-120b:free',
   'openrouter/poolside/laguna-m.1:free',
   'openrouter/free#1',
@@ -36,17 +36,18 @@ function validateProvider(provider) {
   if (trimmed === '') {
     return {
       valid: false,
-      error: 'Provider string is empty'
+      error: 'Provider string is empty',
     };
   }
 
   if (!PROVIDER_PATTERN.test(trimmed)) {
     return {
       valid: false,
-      error: `Invalid provider format: "${trimmed}"\n` +
-             `Expected format: provider/model or provider/vendor/model[:tag]\n` +
-             `Supported providers: openrouter, opencode, openai, anthropic, cohere, mistral, groq\n` +
-             `Examples:\n${EXAMPLES.map(e => `  - ${e}`).join('\n')}`
+      error:
+        `Invalid provider format: "${trimmed}"\n` +
+        `Expected format: provider/model or provider/vendor/model[:tag]\n` +
+        `Supported providers: openrouter, opencode, openai, anthropic, cohere, mistral, groq\n` +
+        `Examples:\n${EXAMPLES.map((e) => `  - ${e}`).join('\n')}`,
     };
   }
 
@@ -83,7 +84,7 @@ function validateProviders(providersString) {
   }
 
   console.log(`✅ All ${providers.length} providers validated successfully`);
-  providers.forEach(p => console.log(`  - ${p.trim()}`));
+  providers.forEach((p) => console.log(`  - ${p.trim()}`));
   return true;
 }
 

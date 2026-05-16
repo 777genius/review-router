@@ -91,7 +91,6 @@ export class ConfigLoader {
       fallbackProviders: this.parseArray(env.FALLBACK_PROVIDERS),
       providerAllowlist: this.parseArray(env.PROVIDER_ALLOWLIST),
       providerBlocklist: this.parseArray(env.PROVIDER_BLOCKLIST),
-      openrouterAllowPaid: this.parseBoolean(env.OPENROUTER_ALLOW_PAID),
       providerDiscoveryLimit: this.parseNumber(env.PROVIDER_DISCOVERY_LIMIT),
       providerLimit: this.parseNumber(env.PROVIDER_LIMIT),
       providerRetries: this.parseNumber(env.PROVIDER_RETRIES),
@@ -175,10 +174,9 @@ export class ConfigLoader {
       reviewThreadLifecycleMaxTargets: this.parseLifecycleMaxTargets(
         env.REVIEW_THREAD_LIFECYCLE_MAX_TARGETS
       ),
-      reviewThreadLifecycleResolveConfidence:
-        this.parseLifecycleConfidence(
-          env.REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE
-        ),
+      reviewThreadLifecycleResolveConfidence: this.parseLifecycleConfidence(
+        env.REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE
+      ),
 
       dryRun: this.parseBoolean(env.DRY_RUN),
     };
@@ -193,7 +191,6 @@ export class ConfigLoader {
       fallbackProviders: config.fallback_providers,
       providerAllowlist: config.provider_allowlist,
       providerBlocklist: config.provider_blocklist,
-      openrouterAllowPaid: config.openrouter_allow_paid,
       providerDiscoveryLimit: config.provider_discovery_limit,
       providerLimit: config.provider_limit,
       providerRetries: config.provider_retries,

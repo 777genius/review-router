@@ -64,6 +64,46 @@ describe('CodexProvider', () => {
     expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
   });
 
+  it('can route Codex CLI through OpenRouter without user config', () => {
+    const provider = new CodexProvider('openai/gpt-5.3-codex', {
+      modelProvider: 'openrouter',
+      providerNamePrefix: 'codex-openrouter',
+    });
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+      outputSchemaFile: '/tmp/codex-schema.json',
+    });
+
+    expect(provider.name).toBe('codex-openrouter/openai/gpt-5.3-codex');
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '-c',
+        'model_provider="openrouter"',
+        'model_providers.openrouter.name="openrouter"',
+        'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
+        'model_providers.openrouter.env_key="OPENROUTER_API_KEY"',
+      ])
+    );
+    expect(args).toContain('--ignore-user-config');
+  });
+
+  it('can keep public OpenRouter provider identity while stripping instance suffix from Codex model', () => {
+    const provider = new CodexProvider('openai/gpt-oss-120b:free', {
+      modelProvider: 'openrouter',
+      providerNamePrefix: 'openrouter',
+      providerNameModel: 'openai/gpt-oss-120b:free#8',
+    });
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+    });
+
+    expect(provider.name).toBe('openrouter/openai/gpt-oss-120b:free#8');
+    expect(args).toContain('openai/gpt-oss-120b:free');
+    expect(args).not.toContain('openai/gpt-oss-120b:free#8');
+  });
+
   it('uses binary-only health checks by default to avoid consuming Codex usage', async () => {
     spawnMock.mockImplementation((_cmd: string, _args: string[]) =>
       createMockProcess()
@@ -148,6 +188,20 @@ describe('CodexProvider', () => {
     expect(env.GITHUB_TOKEN).toBeUndefined();
     expect(env.INPUT_GITHUB_TOKEN).toBeUndefined();
     expect(env.OPENROUTER_API_KEY).toBeUndefined();
+  });
+
+  it('allows OpenRouter API key only for OpenRouter-backed Codex runs', () => {
+    process.env.PATH = '/usr/bin';
+    process.env.HOME = '/home/runner';
+    process.env.OPENROUTER_API_KEY = 'or-key';
+
+    const provider = new CodexProvider('openai/gpt-5.3-codex', {
+      modelProvider: 'openrouter',
+      providerNamePrefix: 'codex-openrouter',
+    });
+    const env = (provider as any).buildSafeEnv();
+
+    expect(env.OPENROUTER_API_KEY).toBe('or-key');
   });
 
   it('allows agentic review findings for concrete user-visible regressions', async () => {

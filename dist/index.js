@@ -29,6 +29,168 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
+// node_modules/eventemitter3/index.js
+var require_eventemitter3 = __commonJS({
+  "node_modules/eventemitter3/index.js"(exports2, module2) {
+    "use strict";
+    var has = Object.prototype.hasOwnProperty;
+    var prefix = "~";
+    function Events() {
+    }
+    if (Object.create) {
+      Events.prototype = /* @__PURE__ */ Object.create(null);
+      if (!new Events().__proto__) prefix = false;
+    }
+    function EE(fn, context, once) {
+      this.fn = fn;
+      this.context = context;
+      this.once = once || false;
+    }
+    function addListener(emitter, event, fn, context, once) {
+      if (typeof fn !== "function") {
+        throw new TypeError("The listener must be a function");
+      }
+      var listener = new EE(fn, context || emitter, once), evt = prefix ? prefix + event : event;
+      if (!emitter._events[evt]) emitter._events[evt] = listener, emitter._eventsCount++;
+      else if (!emitter._events[evt].fn) emitter._events[evt].push(listener);
+      else emitter._events[evt] = [emitter._events[evt], listener];
+      return emitter;
+    }
+    function clearEvent(emitter, evt) {
+      if (--emitter._eventsCount === 0) emitter._events = new Events();
+      else delete emitter._events[evt];
+    }
+    function EventEmitter2() {
+      this._events = new Events();
+      this._eventsCount = 0;
+    }
+    EventEmitter2.prototype.eventNames = function eventNames() {
+      var names = [], events, name;
+      if (this._eventsCount === 0) return names;
+      for (name in events = this._events) {
+        if (has.call(events, name)) names.push(prefix ? name.slice(1) : name);
+      }
+      if (Object.getOwnPropertySymbols) {
+        return names.concat(Object.getOwnPropertySymbols(events));
+      }
+      return names;
+    };
+    EventEmitter2.prototype.listeners = function listeners(event) {
+      var evt = prefix ? prefix + event : event, handlers = this._events[evt];
+      if (!handlers) return [];
+      if (handlers.fn) return [handlers.fn];
+      for (var i = 0, l = handlers.length, ee = new Array(l); i < l; i++) {
+        ee[i] = handlers[i].fn;
+      }
+      return ee;
+    };
+    EventEmitter2.prototype.listenerCount = function listenerCount(event) {
+      var evt = prefix ? prefix + event : event, listeners = this._events[evt];
+      if (!listeners) return 0;
+      if (listeners.fn) return 1;
+      return listeners.length;
+    };
+    EventEmitter2.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
+      var evt = prefix ? prefix + event : event;
+      if (!this._events[evt]) return false;
+      var listeners = this._events[evt], len = arguments.length, args, i;
+      if (listeners.fn) {
+        if (listeners.once) this.removeListener(event, listeners.fn, void 0, true);
+        switch (len) {
+          case 1:
+            return listeners.fn.call(listeners.context), true;
+          case 2:
+            return listeners.fn.call(listeners.context, a1), true;
+          case 3:
+            return listeners.fn.call(listeners.context, a1, a2), true;
+          case 4:
+            return listeners.fn.call(listeners.context, a1, a2, a3), true;
+          case 5:
+            return listeners.fn.call(listeners.context, a1, a2, a3, a4), true;
+          case 6:
+            return listeners.fn.call(listeners.context, a1, a2, a3, a4, a5), true;
+        }
+        for (i = 1, args = new Array(len - 1); i < len; i++) {
+          args[i - 1] = arguments[i];
+        }
+        listeners.fn.apply(listeners.context, args);
+      } else {
+        var length = listeners.length, j;
+        for (i = 0; i < length; i++) {
+          if (listeners[i].once) this.removeListener(event, listeners[i].fn, void 0, true);
+          switch (len) {
+            case 1:
+              listeners[i].fn.call(listeners[i].context);
+              break;
+            case 2:
+              listeners[i].fn.call(listeners[i].context, a1);
+              break;
+            case 3:
+              listeners[i].fn.call(listeners[i].context, a1, a2);
+              break;
+            case 4:
+              listeners[i].fn.call(listeners[i].context, a1, a2, a3);
+              break;
+            default:
+              if (!args) for (j = 1, args = new Array(len - 1); j < len; j++) {
+                args[j - 1] = arguments[j];
+              }
+              listeners[i].fn.apply(listeners[i].context, args);
+          }
+        }
+      }
+      return true;
+    };
+    EventEmitter2.prototype.on = function on(event, fn, context) {
+      return addListener(this, event, fn, context, false);
+    };
+    EventEmitter2.prototype.once = function once(event, fn, context) {
+      return addListener(this, event, fn, context, true);
+    };
+    EventEmitter2.prototype.removeListener = function removeListener(event, fn, context, once) {
+      var evt = prefix ? prefix + event : event;
+      if (!this._events[evt]) return this;
+      if (!fn) {
+        clearEvent(this, evt);
+        return this;
+      }
+      var listeners = this._events[evt];
+      if (listeners.fn) {
+        if (listeners.fn === fn && (!once || listeners.once) && (!context || listeners.context === context)) {
+          clearEvent(this, evt);
+        }
+      } else {
+        for (var i = 0, events = [], length = listeners.length; i < length; i++) {
+          if (listeners[i].fn !== fn || once && !listeners[i].once || context && listeners[i].context !== context) {
+            events.push(listeners[i]);
+          }
+        }
+        if (events.length) this._events[evt] = events.length === 1 ? events[0] : events;
+        else clearEvent(this, evt);
+      }
+      return this;
+    };
+    EventEmitter2.prototype.removeAllListeners = function removeAllListeners(event) {
+      var evt;
+      if (event) {
+        evt = prefix ? prefix + event : event;
+        if (this._events[evt]) clearEvent(this, evt);
+      } else {
+        this._events = new Events();
+        this._eventsCount = 0;
+      }
+      return this;
+    };
+    EventEmitter2.prototype.off = EventEmitter2.prototype.removeListener;
+    EventEmitter2.prototype.addListener = EventEmitter2.prototype.on;
+    EventEmitter2.prefixed = prefix;
+    EventEmitter2.EventEmitter = EventEmitter2;
+    if ("undefined" !== typeof module2) {
+      module2.exports = EventEmitter2;
+    }
+  }
+});
+
 // node_modules/retry/lib/retry_operation.js
 var require_retry_operation = __commonJS({
   "node_modules/retry/lib/retry_operation.js"(exports2, module2) {
@@ -254,168 +416,6 @@ var require_retry = __commonJS({
 var require_retry2 = __commonJS({
   "node_modules/retry/index.js"(exports2, module2) {
     module2.exports = require_retry();
-  }
-});
-
-// node_modules/eventemitter3/index.js
-var require_eventemitter3 = __commonJS({
-  "node_modules/eventemitter3/index.js"(exports2, module2) {
-    "use strict";
-    var has = Object.prototype.hasOwnProperty;
-    var prefix = "~";
-    function Events() {
-    }
-    if (Object.create) {
-      Events.prototype = /* @__PURE__ */ Object.create(null);
-      if (!new Events().__proto__) prefix = false;
-    }
-    function EE(fn, context, once) {
-      this.fn = fn;
-      this.context = context;
-      this.once = once || false;
-    }
-    function addListener(emitter, event, fn, context, once) {
-      if (typeof fn !== "function") {
-        throw new TypeError("The listener must be a function");
-      }
-      var listener = new EE(fn, context || emitter, once), evt = prefix ? prefix + event : event;
-      if (!emitter._events[evt]) emitter._events[evt] = listener, emitter._eventsCount++;
-      else if (!emitter._events[evt].fn) emitter._events[evt].push(listener);
-      else emitter._events[evt] = [emitter._events[evt], listener];
-      return emitter;
-    }
-    function clearEvent(emitter, evt) {
-      if (--emitter._eventsCount === 0) emitter._events = new Events();
-      else delete emitter._events[evt];
-    }
-    function EventEmitter2() {
-      this._events = new Events();
-      this._eventsCount = 0;
-    }
-    EventEmitter2.prototype.eventNames = function eventNames() {
-      var names = [], events, name;
-      if (this._eventsCount === 0) return names;
-      for (name in events = this._events) {
-        if (has.call(events, name)) names.push(prefix ? name.slice(1) : name);
-      }
-      if (Object.getOwnPropertySymbols) {
-        return names.concat(Object.getOwnPropertySymbols(events));
-      }
-      return names;
-    };
-    EventEmitter2.prototype.listeners = function listeners(event) {
-      var evt = prefix ? prefix + event : event, handlers = this._events[evt];
-      if (!handlers) return [];
-      if (handlers.fn) return [handlers.fn];
-      for (var i = 0, l = handlers.length, ee = new Array(l); i < l; i++) {
-        ee[i] = handlers[i].fn;
-      }
-      return ee;
-    };
-    EventEmitter2.prototype.listenerCount = function listenerCount(event) {
-      var evt = prefix ? prefix + event : event, listeners = this._events[evt];
-      if (!listeners) return 0;
-      if (listeners.fn) return 1;
-      return listeners.length;
-    };
-    EventEmitter2.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
-      var evt = prefix ? prefix + event : event;
-      if (!this._events[evt]) return false;
-      var listeners = this._events[evt], len = arguments.length, args, i;
-      if (listeners.fn) {
-        if (listeners.once) this.removeListener(event, listeners.fn, void 0, true);
-        switch (len) {
-          case 1:
-            return listeners.fn.call(listeners.context), true;
-          case 2:
-            return listeners.fn.call(listeners.context, a1), true;
-          case 3:
-            return listeners.fn.call(listeners.context, a1, a2), true;
-          case 4:
-            return listeners.fn.call(listeners.context, a1, a2, a3), true;
-          case 5:
-            return listeners.fn.call(listeners.context, a1, a2, a3, a4), true;
-          case 6:
-            return listeners.fn.call(listeners.context, a1, a2, a3, a4, a5), true;
-        }
-        for (i = 1, args = new Array(len - 1); i < len; i++) {
-          args[i - 1] = arguments[i];
-        }
-        listeners.fn.apply(listeners.context, args);
-      } else {
-        var length = listeners.length, j;
-        for (i = 0; i < length; i++) {
-          if (listeners[i].once) this.removeListener(event, listeners[i].fn, void 0, true);
-          switch (len) {
-            case 1:
-              listeners[i].fn.call(listeners[i].context);
-              break;
-            case 2:
-              listeners[i].fn.call(listeners[i].context, a1);
-              break;
-            case 3:
-              listeners[i].fn.call(listeners[i].context, a1, a2);
-              break;
-            case 4:
-              listeners[i].fn.call(listeners[i].context, a1, a2, a3);
-              break;
-            default:
-              if (!args) for (j = 1, args = new Array(len - 1); j < len; j++) {
-                args[j - 1] = arguments[j];
-              }
-              listeners[i].fn.apply(listeners[i].context, args);
-          }
-        }
-      }
-      return true;
-    };
-    EventEmitter2.prototype.on = function on(event, fn, context) {
-      return addListener(this, event, fn, context, false);
-    };
-    EventEmitter2.prototype.once = function once(event, fn, context) {
-      return addListener(this, event, fn, context, true);
-    };
-    EventEmitter2.prototype.removeListener = function removeListener(event, fn, context, once) {
-      var evt = prefix ? prefix + event : event;
-      if (!this._events[evt]) return this;
-      if (!fn) {
-        clearEvent(this, evt);
-        return this;
-      }
-      var listeners = this._events[evt];
-      if (listeners.fn) {
-        if (listeners.fn === fn && (!once || listeners.once) && (!context || listeners.context === context)) {
-          clearEvent(this, evt);
-        }
-      } else {
-        for (var i = 0, events = [], length = listeners.length; i < length; i++) {
-          if (listeners[i].fn !== fn || once && !listeners[i].once || context && listeners[i].context !== context) {
-            events.push(listeners[i]);
-          }
-        }
-        if (events.length) this._events[evt] = events.length === 1 ? events[0] : events;
-        else clearEvent(this, evt);
-      }
-      return this;
-    };
-    EventEmitter2.prototype.removeAllListeners = function removeAllListeners(event) {
-      var evt;
-      if (event) {
-        evt = prefix ? prefix + event : event;
-        if (this._events[evt]) clearEvent(this, evt);
-      } else {
-        this._events = new Events();
-        this._eventsCount = 0;
-      }
-      return this;
-    };
-    EventEmitter2.prototype.off = EventEmitter2.prototype.removeListener;
-    EventEmitter2.prototype.addListener = EventEmitter2.prototype.on;
-    EventEmitter2.prefixed = prefix;
-    EventEmitter2.EventEmitter = EventEmitter2;
-    if ("undefined" !== typeof module2) {
-      module2.exports = EventEmitter2;
-    }
   }
 });
 
@@ -7133,7 +7133,6 @@ var logger = {
 
 // src/providers/openrouter-models.ts
 var PREFERRED_OPENROUTER_FREE_MODELS = [
-  "openrouter/inclusionai/ring-2.6-1t:free",
   "openrouter/openai/gpt-oss-120b:free",
   "openrouter/poolside/laguna-m.1:free"
 ];
@@ -7173,13 +7172,10 @@ var DEFAULT_CONFIG = {
   providerAllowlist: [],
   providerBlocklist: [],
   // COST CONTROLS:
-  // - openrouterAllowPaid: false = Only free models (blocks models with $/token pricing)
   // - providerDiscoveryLimit: 8 = Health-check up to 8 providers for reliability
   // - providerLimit: 1 = Use one provider by default; opt in to consensus/multi-provider mode explicitly
   // - budgetMaxUsd: 0 = No budget allocated for paid APIs
   // Combined these settings ensure zero cost when using default configuration
-  openrouterAllowPaid: false,
-  // IMPORTANT: Set to true only if you have OpenRouter credits
   providerDiscoveryLimit: 8,
   // Health-check pool size (higher = better reliability)
   providerLimit: 1,
@@ -7285,9 +7281,7 @@ var DEFAULT_CONFIG = {
     unknown: 0.9
   }
 };
-var FALLBACK_STATIC_PROVIDERS = [
-  ...PREFERRED_OPENROUTER_FREE_MODELS
-];
+var FALLBACK_STATIC_PROVIDERS = [...PREFERRED_OPENROUTER_FREE_MODELS];
 
 // node_modules/zod/v3/external.js
 var external_exports = {};
@@ -11399,7 +11393,6 @@ var ReviewConfigSchema = external_exports.object({
   fallback_providers: external_exports.array(external_exports.string()).optional(),
   provider_allowlist: external_exports.array(external_exports.string()).optional(),
   provider_blocklist: external_exports.array(external_exports.string()).optional(),
-  openrouter_allow_paid: external_exports.boolean().optional(),
   provider_discovery_limit: external_exports.number().int().min(1).optional(),
   provider_limit: external_exports.number().int().min(0).optional(),
   provider_retries: external_exports.number().int().min(1).optional(),
@@ -11458,10 +11451,11 @@ var ReviewConfigSchema = external_exports.object({
   skip_test_fixtures: external_exports.boolean().optional(),
   skip_config_files: external_exports.boolean().optional(),
   skip_build_artifacts: external_exports.boolean().optional(),
-  trivial_patterns: external_exports.array(external_exports.string().refine(
-    (pattern) => isValidRegexPattern(pattern),
-    { message: "Invalid or unsafe regex pattern (check for ReDoS vulnerabilities)" }
-  )).optional(),
+  trivial_patterns: external_exports.array(
+    external_exports.string().refine((pattern) => isValidRegexPattern(pattern), {
+      message: "Invalid or unsafe regex pattern (check for ReDoS vulnerabilities)"
+    })
+  ).optional(),
   path_based_intensity: external_exports.boolean().optional(),
   path_intensity_patterns: external_exports.string().optional(),
   path_default_intensity: external_exports.enum(["thorough", "standard", "light"]).optional(),
@@ -11753,7 +11747,6 @@ var ConfigLoader = class {
       fallbackProviders: this.parseArray(env.FALLBACK_PROVIDERS),
       providerAllowlist: this.parseArray(env.PROVIDER_ALLOWLIST),
       providerBlocklist: this.parseArray(env.PROVIDER_BLOCKLIST),
-      openrouterAllowPaid: this.parseBoolean(env.OPENROUTER_ALLOW_PAID),
       providerDiscoveryLimit: this.parseNumber(env.PROVIDER_DISCOVERY_LIMIT),
       providerLimit: this.parseNumber(env.PROVIDER_LIMIT),
       providerRetries: this.parseNumber(env.PROVIDER_RETRIES),
@@ -11840,7 +11833,6 @@ var ConfigLoader = class {
       fallbackProviders: config.fallback_providers,
       providerAllowlist: config.provider_allowlist,
       providerBlocklist: config.provider_blocklist,
-      openrouterAllowPaid: config.openrouter_allow_paid,
       providerDiscoveryLimit: config.provider_discovery_limit,
       providerLimit: config.provider_limit,
       providerRetries: config.provider_retries,
@@ -12137,7 +12129,7 @@ Respond with: {"findings": [{"file": "test.ts", "line": 1, "severity": "minor", 
     }
   }
   static validate(name) {
-    const pattern = /^(opencode\/[\w.:~-]+|openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*(?:#\d+)?|claude\/[\w.:~-]+|codex\/[\w.:~-]+|gemini\/[\w.:~-]+)$/i;
+    const pattern = /^(opencode\/[\w.:~-]+|openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*(?:#\d+)?|claude\/[\w.:~-]+|codex\/[\w.:~-]+|codex-openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*|gemini\/[\w.:~-]+)$/i;
     return pattern.test(name);
   }
 };
@@ -12149,156 +12141,12 @@ var RateLimitError = class extends Error {
   }
 };
 
-// node_modules/p-retry/index.js
-var import_retry = __toESM(require_retry2(), 1);
-
-// node_modules/is-network-error/index.js
-var objectToString = Object.prototype.toString;
-var isError = (value) => objectToString.call(value) === "[object Error]";
-var errorMessages = /* @__PURE__ */ new Set([
-  "network error",
-  // Chrome
-  "Failed to fetch",
-  // Chrome
-  "NetworkError when attempting to fetch resource.",
-  // Firefox
-  "The Internet connection appears to be offline.",
-  // Safari 16
-  "Network request failed",
-  // `cross-fetch`
-  "fetch failed",
-  // Undici (Node.js)
-  "terminated",
-  // Undici (Node.js)
-  " A network error occurred.",
-  // Bun (WebKit)
-  "Network connection lost"
-  // Cloudflare Workers (fetch)
-]);
-function isNetworkError(error2) {
-  const isValid2 = error2 && isError(error2) && error2.name === "TypeError" && typeof error2.message === "string";
-  if (!isValid2) {
-    return false;
-  }
-  const { message, stack } = error2;
-  if (message === "Load failed") {
-    return stack === void 0 || "__sentry_captured__" in error2;
-  }
-  if (message.startsWith("error sending request for url")) {
-    return true;
-  }
-  return errorMessages.has(message);
-}
-
-// node_modules/p-retry/index.js
-var AbortError = class extends Error {
-  constructor(message) {
-    super();
-    if (message instanceof Error) {
-      this.originalError = message;
-      ({ message } = message);
-    } else {
-      this.originalError = new Error(message);
-      this.originalError.stack = this.stack;
-    }
-    this.name = "AbortError";
-    this.message = message;
-  }
-};
-var decorateErrorWithCounts = (error2, attemptNumber, options) => {
-  const retriesLeft = options.retries - (attemptNumber - 1);
-  error2.attemptNumber = attemptNumber;
-  error2.retriesLeft = retriesLeft;
-  return error2;
-};
-async function pRetry(input, options) {
-  return new Promise((resolve3, reject) => {
-    options = { ...options };
-    options.onFailedAttempt ??= () => {
-    };
-    options.shouldRetry ??= () => true;
-    options.retries ??= 10;
-    const operation = import_retry.default.operation(options);
-    const abortHandler = () => {
-      operation.stop();
-      reject(options.signal?.reason);
-    };
-    if (options.signal && !options.signal.aborted) {
-      options.signal.addEventListener("abort", abortHandler, { once: true });
-    }
-    const cleanUp = () => {
-      options.signal?.removeEventListener("abort", abortHandler);
-      operation.stop();
-    };
-    operation.attempt(async (attemptNumber) => {
-      try {
-        const result = await input(attemptNumber);
-        cleanUp();
-        resolve3(result);
-      } catch (error2) {
-        try {
-          if (!(error2 instanceof Error)) {
-            throw new TypeError(`Non-error was thrown: "${error2}". You should only throw errors.`);
-          }
-          if (error2 instanceof AbortError) {
-            throw error2.originalError;
-          }
-          if (error2 instanceof TypeError && !isNetworkError(error2)) {
-            throw error2;
-          }
-          decorateErrorWithCounts(error2, attemptNumber, options);
-          if (!await options.shouldRetry(error2)) {
-            operation.stop();
-            reject(error2);
-          }
-          await options.onFailedAttempt(error2);
-          if (!operation.retry(error2)) {
-            throw operation.mainError();
-          }
-        } catch (finalError) {
-          decorateErrorWithCounts(finalError, attemptNumber, options);
-          cleanUp();
-          reject(finalError);
-        }
-      }
-    });
-  });
-}
-
-// src/utils/retry.ts
-async function withRetry(fn, options) {
-  if (options.retryOn) {
-    const maxAttempts = options.retries + 1;
-    const minTimeout = options.minTimeout ?? 500;
-    const factor = options.factor ?? 2;
-    let delay = minTimeout;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        return await fn();
-      } catch (error2) {
-        const err = error2;
-        if (!options.retryOn(err) || attempt === maxAttempts) {
-          throw err;
-        }
-        logger.warn(`Retryable error: attempt ${attempt} of ${maxAttempts}`, err.message);
-        await new Promise((resolve3) => setTimeout(resolve3, delay));
-        delay = Math.min(delay * factor, options.maxTimeout ?? 4e3);
-      }
-    }
-  }
-  return pRetry(fn, {
-    retries: options.retries,
-    factor: options.factor ?? 2,
-    minTimeout: options.minTimeout ?? 500,
-    maxTimeout: options.maxTimeout ?? 4e3,
-    onFailedAttempt: (error2) => {
-      logger.warn(
-        `Retryable error: attempt ${error2.attemptNumber} of ${options.retries + 1}`,
-        error2.message
-      );
-    }
-  });
-}
+// src/providers/opencode.ts
+var import_child_process = require("child_process");
+var fs3 = __toESM(require("fs/promises"));
+var os = __toESM(require("os"));
+var path2 = __toESM(require("path"));
+var crypto = __toESM(require("crypto"));
 
 // src/providers/review-output.ts
 function buildReviewFindingsSchema() {
@@ -12504,170 +12352,7 @@ function parseRevalidationEvidence(value) {
   return evidence;
 }
 
-// src/providers/openrouter.ts
-var REVIEW_TOOL_NAME = "submit_review";
-var OpenRouterProvider = class _OpenRouterProvider extends Provider {
-  constructor(modelId, apiKey, rateLimiter) {
-    super(`openrouter/${modelId}`);
-    this.modelId = modelId;
-    this.apiKey = apiKey;
-    this.rateLimiter = rateLimiter;
-    if (typeof fetch === "undefined") {
-      throw new Error("fetch is not available. Please use Node.js 18+ or polyfill fetch.");
-    }
-  }
-  static BASE_URL = "https://openrouter.ai/api/v1";
-  async review(prompt, timeoutMs) {
-    if (await this.rateLimiter.isRateLimited(this.name)) {
-      throw new RateLimitError(`${this.name} is currently rate-limited`);
-    }
-    if (typeof fetch !== "function") {
-      throw new Error("Global fetch is not available; please use Node 18+ or provide a fetch polyfill.");
-    }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    const started = Date.now();
-    const baseModelId = this.modelId.replace(/#\d+$/, "");
-    const apiModelId = baseModelId === "free" ? "openrouter/free" : baseModelId;
-    try {
-      const response = await withRetry(
-        () => fetch(`${_OpenRouterProvider.BASE_URL}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.apiKey}`,
-            "HTTP-Referer": "https://github.com/777genius/review-router",
-            "X-Title": "ReviewRouter"
-          },
-          body: JSON.stringify({
-            model: apiModelId,
-            messages: [{ role: "user", content: prompt }],
-            tools: [
-              {
-                type: "function",
-                function: {
-                  name: REVIEW_TOOL_NAME,
-                  description: "Submit the complete ReviewRouter code review result.",
-                  parameters: buildReviewFindingsSchema()
-                }
-              }
-            ],
-            tool_choice: {
-              type: "function",
-              function: { name: REVIEW_TOOL_NAME }
-            },
-            temperature: 0.1,
-            max_tokens: 2e3
-          }),
-          signal: controller.signal
-        }),
-        {
-          retries: 1,
-          retryOn: (error2) => {
-            const err = error2;
-            if (err instanceof RateLimitError) return false;
-            if (err.name === "AbortError") return false;
-            return true;
-          }
-        }
-      );
-      if (!response || !("ok" in response)) {
-        throw new Error("OpenRouter API returned invalid response");
-      }
-      if (!response.ok) {
-        const retryAfter = response.headers.get("retry-after");
-        let seconds = NaN;
-        if (retryAfter) {
-          const parsedSeconds = parseInt(retryAfter, 10);
-          if (!isNaN(parsedSeconds) && parsedSeconds >= 0) {
-            seconds = parsedSeconds;
-          } else {
-            const parsedDate = Date.parse(retryAfter);
-            if (!isNaN(parsedDate) && parsedDate > Date.now()) {
-              seconds = Math.ceil((parsedDate - Date.now()) / 1e3);
-            }
-          }
-        }
-        const minutes = !isNaN(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 60;
-        if (response.status === 429) {
-          await this.rateLimiter.markRateLimited(this.name, minutes, "HTTP 429 from OpenRouter");
-          throw new RateLimitError(`Rate limited: ${this.name}`, minutes * 60);
-        }
-        if (response.status === 402) {
-          const blockMinutes = Math.max(minutes || 0, 60 * 24);
-          logger.warn(
-            `Model ${this.name} returned 402 Payment Required. Blocking for ${blockMinutes} minutes to avoid repeated failures. This usually means the model requires credits or a paid plan.`
-          );
-          await this.rateLimiter.markRateLimited(this.name, blockMinutes, "HTTP 402 Payment Required from OpenRouter");
-          throw new RateLimitError(`Payment required: ${this.name}`, blockMinutes * 60);
-        }
-        throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
-      }
-      const data = await response.json();
-      const durationSeconds = (Date.now() - started) / 1e3;
-      const message = data.choices?.[0]?.message;
-      const content = extractReviewContent(message);
-      const usage = data.usage;
-      const actualModel = data.model;
-      const parsedOutput = parseReviewOutputLenient(content);
-      const findings = parsedOutput.findings;
-      const aiAnalysis = this.extractAIAnalysis(content);
-      if (actualModel && actualModel !== apiModelId) {
-        logger.info(`OpenRouter routed ${this.name} -> ${actualModel}`);
-      }
-      return {
-        content,
-        usage: usage ? {
-          promptTokens: usage.prompt_tokens ?? 0,
-          completionTokens: usage.completion_tokens ?? 0,
-          totalTokens: usage.total_tokens ?? 0
-        } : void 0,
-        durationSeconds,
-        findings,
-        revalidations: parsedOutput.revalidations,
-        aiLikelihood: aiAnalysis?.likelihood,
-        aiReasoning: aiAnalysis?.reasoning,
-        actualModel
-        // Include actual model in result for analytics
-      };
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-  extractAIAnalysis(content) {
-    try {
-      const jsonMatch = content.match(/```json\s*([\s\S]*?)```/i);
-      const raw = jsonMatch ? jsonMatch[1] : content;
-      const parsed = JSON.parse(raw);
-      if (parsed.ai_likelihood !== void 0) {
-        return { likelihood: parsed.ai_likelihood, reasoning: parsed.ai_reasoning };
-      }
-    } catch (error2) {
-      logger.debug("Failed to parse AI analysis from OpenRouter response", error2);
-    }
-    return void 0;
-  }
-};
-function extractReviewContent(message) {
-  const toolCall = message?.tool_calls?.find(
-    (call) => call.function?.name === REVIEW_TOOL_NAME
-  );
-  const args = toolCall?.function?.arguments;
-  if (typeof args === "string" && args.trim()) {
-    return args;
-  }
-  if (args && typeof args === "object") {
-    return JSON.stringify(args);
-  }
-  return message?.content || "";
-}
-
 // src/providers/opencode.ts
-var import_child_process = require("child_process");
-var fs3 = __toESM(require("fs/promises"));
-var os = __toESM(require("os"));
-var path2 = __toESM(require("path"));
-var crypto = __toESM(require("crypto"));
 var OpenCodeProvider = class extends Provider {
   constructor(modelId) {
     super(`opencode/${modelId}`);
@@ -13693,7 +13378,9 @@ var CodexCliExitError = class extends Error {
 };
 var CodexProvider = class extends Provider {
   constructor(model, options = {}) {
-    super(`codex/${model}`);
+    super(
+      `${options.providerNamePrefix || "codex"}/${options.providerNameModel || model}`
+    );
     this.model = model;
     this.options = options;
   }
@@ -13878,6 +13565,18 @@ var CodexProvider = class extends Provider {
       if (/^[a-z]+$/.test(normalized)) {
         args.push("-c", `model_reasoning_effort="${normalized}"`);
       }
+    }
+    if (this.options.modelProvider === "openrouter") {
+      args.push(
+        "-c",
+        'model_provider="openrouter"',
+        "-c",
+        'model_providers.openrouter.name="openrouter"',
+        "-c",
+        'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
+        "-c",
+        'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
+      );
     }
     args.push("-");
     return args;
@@ -14067,7 +13766,11 @@ var CodexProvider = class extends Provider {
   buildSafeEnv(includeWorkspaceEnv = true) {
     return buildCliSafeEnv({
       includeWorkspaceEnv,
-      extraAllowedKeys: ["CODEX_HOME", "OPENAI_API_KEY"]
+      extraAllowedKeys: [
+        "CODEX_HOME",
+        "OPENAI_API_KEY",
+        ...this.options.modelProvider === "openrouter" ? ["OPENROUTER_API_KEY"] : []
+      ]
     });
   }
   sanitizeReviewContent(content) {
@@ -14898,51 +14601,6 @@ var RateLimiter = class {
   }
 };
 
-// src/cost/pricing.ts
-var PricingService = class _PricingService {
-  constructor(apiKey) {
-    this.apiKey = apiKey;
-  }
-  cache = /* @__PURE__ */ new Map();
-  cacheExpiry = 0;
-  static CACHE_TTL = 60 * 60 * 1e3;
-  async getPricing(modelId) {
-    if (modelId.includes(":free")) {
-      return { modelId, promptPrice: 0, completionPrice: 0, isFree: true };
-    }
-    if (Date.now() > this.cacheExpiry) {
-      await this.refresh();
-    }
-    return this.cache.get(modelId) || {
-      modelId,
-      promptPrice: 0,
-      completionPrice: 0,
-      isFree: false
-    };
-  }
-  async refresh() {
-    if (!this.apiKey) return;
-    try {
-      const response = await fetch("https://openrouter.ai/api/v1/models", {
-        headers: { Authorization: `Bearer ${this.apiKey}` }
-      });
-      if (!response.ok) return;
-      const data = await response.json();
-      for (const model of data.data || []) {
-        const pricing = model.pricing || {};
-        this.cache.set(model.id, {
-          modelId: model.id,
-          promptPrice: parseFloat(pricing.prompt || "0") * 1e6,
-          completionPrice: parseFloat(pricing.completion || "0") * 1e6,
-          isFree: model.id.includes(":free")
-        });
-      }
-      this.cacheExpiry = Date.now() + _PricingService.CACHE_TTL;
-    } catch {
-    }
-  }
-};
-
 // src/providers/opencode-models.ts
 var import_child_process5 = require("child_process");
 var import_util4 = require("util");
@@ -15089,22 +14747,27 @@ var ProviderRegistry = class {
   }
   rateLimiter = new RateLimiter();
   rotationIndex = 0;
-  openRouterPricing = new PricingService(process.env.OPENROUTER_API_KEY);
   async createProviders(config) {
     let providers = this.instantiate(config.providers, config);
     const userProvidedList = Boolean(process.env.REVIEW_PROVIDERS);
     const usingDefaults = this.usesDefaultProviders(config.providers);
     if (providers.length === 0 && usingDefaults && !userProvidedList) {
-      logger.info("\u{1F50D} No providers specified, starting dynamic model discovery...");
+      logger.info(
+        "\u{1F50D} No providers specified, starting dynamic model discovery..."
+      );
       const discoveredModels = [];
       if (process.env.OPENROUTER_API_KEY) {
         logger.info("Discovering OpenRouter models...");
         const openRouterModels = await getBestFreeModelsCached(8, 5e3);
         if (openRouterModels.length > 0) {
-          logger.info(`\u2705 Discovered ${openRouterModels.length} OpenRouter models`);
+          logger.info(
+            `\u2705 Discovered ${openRouterModels.length} OpenRouter models`
+          );
           discoveredModels.push(...openRouterModels);
         } else {
-          logger.warn("\u26A0\uFE0F  No OpenRouter models discovered (API may be unavailable)");
+          logger.warn(
+            "\u26A0\uFE0F  No OpenRouter models discovered (API may be unavailable)"
+          );
         }
       } else {
         logger.info("Skipping OpenRouter discovery (no API key)");
@@ -15115,14 +14778,20 @@ var ProviderRegistry = class {
         logger.info(`\u2705 Discovered ${openCodeModels.length} OpenCode models`);
         discoveredModels.push(...openCodeModels);
       } else {
-        logger.info("\u2139\uFE0F  No OpenCode models discovered (CLI may not be installed)");
+        logger.info(
+          "\u2139\uFE0F  No OpenCode models discovered (CLI may not be installed)"
+        );
       }
       if (discoveredModels.length > 0) {
-        logger.info(`\u{1F3AF} Total discovered: ${discoveredModels.length} free models`);
+        logger.info(
+          `\u{1F3AF} Total discovered: ${discoveredModels.length} free models`
+        );
         logger.info(`   Models: ${discoveredModels.join(", ")}`);
         providers.push(...this.instantiate(discoveredModels, config));
       } else {
-        logger.warn("\u26A0\uFE0F  Dynamic discovery found no models, using static fallbacks");
+        logger.warn(
+          "\u26A0\uFE0F  Dynamic discovery found no models, using static fallbacks"
+        );
       }
     }
     if (providers.length === 0) {
@@ -15145,7 +14814,9 @@ var ProviderRegistry = class {
       discoveryLimit = Math.min(discoveryLimit, config.providerLimit);
     }
     const minSelection = Math.min(4, discoveryLimit);
-    logger.info(`Discovery limit: ${discoveryLimit} (for health checks), execution limit: ${config.providerLimit} (for actual review), min: ${minSelection}, fallback count: ${config.fallbackProviders.length}`);
+    logger.info(
+      `Discovery limit: ${discoveryLimit} (for health checks), execution limit: ${config.providerLimit} (for actual review), min: ${minSelection}, fallback count: ${config.fallbackProviders.length}`
+    );
     const MIN_OPENROUTER = 4;
     const MIN_OPENCODE = 2;
     const openrouterProviders = this.filterUniqueFamilies(
@@ -15158,7 +14829,11 @@ var ProviderRegistry = class {
       (p) => !p.name.startsWith("openrouter/") && !p.name.startsWith("opencode/")
     );
     const explorationRate = config.providerExplorationRate ?? 0.3;
-    const concatenated = [...openrouterProviders, ...opencodeProviders, ...otherProviders];
+    const concatenated = [
+      ...openrouterProviders,
+      ...opencodeProviders,
+      ...otherProviders
+    ];
     let allProviders;
     if (strategy === "reliability") {
       allProviders = await this.sortByReliability(concatenated);
@@ -15167,13 +14842,22 @@ var ProviderRegistry = class {
     }
     let selected;
     if (strategy === "reliability") {
-      selected = this.selectWithDiversity(allProviders, discoveryLimit, minSelection, explorationRate);
+      selected = this.selectWithDiversity(
+        allProviders,
+        discoveryLimit,
+        minSelection,
+        explorationRate
+      );
     } else if (strategy === "random") {
       selected = [];
-      selected.push(...this.shuffle(openrouterProviders).slice(0, MIN_OPENROUTER));
+      selected.push(
+        ...this.shuffle(openrouterProviders).slice(0, MIN_OPENROUTER)
+      );
       selected.push(...this.shuffle(opencodeProviders).slice(0, MIN_OPENCODE));
       const selectedNames = new Set(selected.map((s) => s.name));
-      const remainingPool = this.shuffle(allProviders).filter((p) => !selectedNames.has(p.name));
+      const remainingPool = this.shuffle(allProviders).filter(
+        (p) => !selectedNames.has(p.name)
+      );
       while (selected.length < discoveryLimit && remainingPool.length > 0) {
         const next = remainingPool.shift();
         selected.push(next);
@@ -15182,25 +14866,38 @@ var ProviderRegistry = class {
       if (allProviders.length > 0 && discoveryLimit > 0) {
         selected = this.applyRotation(allProviders, discoveryLimit);
       } else {
-        logger.warn(`Cannot apply rotation: allProviders.length=${allProviders.length}, discoveryLimit=${discoveryLimit}`);
+        logger.warn(
+          `Cannot apply rotation: allProviders.length=${allProviders.length}, discoveryLimit=${discoveryLimit}`
+        );
         selected = [];
       }
     }
     providers = selected.length > 0 ? selected : providers;
     if (providers.length < discoveryLimit && config.fallbackProviders.length > 0) {
       const remainingSlots = discoveryLimit - providers.length;
-      logger.info(`Adding fallback providers to fill ${remainingSlots} remaining slots (target: ${discoveryLimit})`);
+      logger.info(
+        `Adding fallback providers to fill ${remainingSlots} remaining slots (target: ${discoveryLimit})`
+      );
       const fallbacks = this.instantiate(config.fallbackProviders, config);
       const filteredFallbacks = await this.filterRateLimited(fallbacks);
-      const dedupedFallbacks = this.dedupeProviders([...providers, ...filteredFallbacks]).filter((p) => !providers.some((existing) => existing.name === p.name));
+      const dedupedFallbacks = this.dedupeProviders([
+        ...providers,
+        ...filteredFallbacks
+      ]).filter((p) => !providers.some((existing) => existing.name === p.name));
       const fallbacksToAdd = dedupedFallbacks.slice(0, remainingSlots);
       providers = [...providers, ...fallbacksToAdd];
-      logger.info(`Added ${fallbacksToAdd.length} fallback providers (filtered ${dedupedFallbacks.length} candidates, total now: ${providers.length})`);
+      logger.info(
+        `Added ${fallbacksToAdd.length} fallback providers (filtered ${dedupedFallbacks.length} candidates, total now: ${providers.length})`
+      );
     } else {
-      logger.info(`Skipping fallback providers: providers.length=${providers.length}, discoveryLimit=${discoveryLimit}, fallbackProviders.length=${config.fallbackProviders.length}`);
+      logger.info(
+        `Skipping fallback providers: providers.length=${providers.length}, discoveryLimit=${discoveryLimit}, fallbackProviders.length=${config.fallbackProviders.length}`
+      );
     }
     if (providers.length > discoveryLimit) {
-      logger.warn(`Provider count ${providers.length} exceeds discovery limit ${discoveryLimit}, trimming`);
+      logger.warn(
+        `Provider count ${providers.length} exceeds discovery limit ${discoveryLimit}, trimming`
+      );
       providers = this.randomSelect(providers, discoveryLimit, minSelection);
     }
     if (providers.length === 0 && config.fallbackProviders.length > 0) {
@@ -15209,7 +14906,9 @@ var ProviderRegistry = class {
       providers = await this.filterRateLimited(providers);
     }
     if (providers.length === 0) {
-      logger.warn("No providers available; falling back to opencode/minimax-m2.1-free");
+      logger.warn(
+        "No providers available; falling back to opencode/minimax-m2.1-free"
+      );
       providers = this.instantiate(["opencode/minimax-m2.1-free"], config);
     }
     return providers;
@@ -15228,7 +14927,9 @@ var ProviderRegistry = class {
     const moreOpenCode = await getBestFreeOpenCodeModelsCached(12, 1e4);
     discovered.push(...moreOpenCode.filter((m) => !existingSet.has(m)));
     if (discovered.length === 0) {
-      discovered.push(...FALLBACK_STATIC_PROVIDERS.filter((m) => !existingSet.has(m)));
+      discovered.push(
+        ...FALLBACK_STATIC_PROVIDERS.filter((m) => !existingSet.has(m))
+      );
     }
     let providers = this.instantiate(this.shuffle(discovered), config);
     providers = this.dedupeProviders(providers);
@@ -15261,18 +14962,23 @@ var ProviderRegistry = class {
       }
       if (name.startsWith("openrouter/")) {
         const model = name.replace("openrouter/", "");
-        const apiKey = process.env.OPENROUTER_API_KEY;
-        if (!apiKey) {
-          logger.warn(`OPENROUTER_API_KEY not set; skipping OpenRouter provider ${name}`);
+        if (!process.env.OPENROUTER_API_KEY) {
+          logger.warn(
+            `OPENROUTER_API_KEY not set; skipping OpenRouter provider ${name}`
+          );
           continue;
         }
         const baseModel = model.replace(/#\d+$/, "");
-        const isFree = baseModel === "free" || baseModel.endsWith(":free");
-        if (!config.openrouterAllowPaid && !isFree) {
-          logger.warn(`Skipping paid OpenRouter model ${name} (set openrouterAllowPaid=true to enable)`);
-          continue;
-        }
-        list.push(new OpenRouterProvider(model, apiKey, this.rateLimiter));
+        const codexModel = baseModel === "free" ? "openrouter/free" : baseModel;
+        list.push(
+          new CodexProvider(codexModel, {
+            agenticContext: config.codexAgenticContext,
+            eventAudit: config.codexEventAudit,
+            modelProvider: "openrouter",
+            providerNamePrefix: "openrouter",
+            providerNameModel: model
+          })
+        );
         continue;
       }
       if (name.startsWith("opencode/")) {
@@ -15287,10 +14993,24 @@ var ProviderRegistry = class {
       }
       if (name.startsWith("codex/")) {
         const model = name.replace("codex/", "");
-        list.push(new CodexProvider(model, {
-          agenticContext: config.codexAgenticContext,
-          eventAudit: config.codexEventAudit
-        }));
+        list.push(
+          new CodexProvider(model, {
+            agenticContext: config.codexAgenticContext,
+            eventAudit: config.codexEventAudit
+          })
+        );
+        continue;
+      }
+      if (name.startsWith("codex-openrouter/")) {
+        const model = name.replace("codex-openrouter/", "");
+        list.push(
+          new CodexProvider(model, {
+            agenticContext: config.codexAgenticContext,
+            eventAudit: config.codexEventAudit,
+            modelProvider: "openrouter",
+            providerNamePrefix: "codex-openrouter"
+          })
+        );
         continue;
       }
       if (name.startsWith("gemini/")) {
@@ -15305,12 +15025,16 @@ var ProviderRegistry = class {
     let filtered = providers;
     if (config.providerAllowlist.length > 0) {
       filtered = filtered.filter(
-        (provider) => config.providerAllowlist.some((pattern) => provider.name.includes(pattern))
+        (provider) => config.providerAllowlist.some(
+          (pattern) => provider.name.includes(pattern)
+        )
       );
     }
     if (config.providerBlocklist.length > 0) {
       filtered = filtered.filter(
-        (provider) => !config.providerBlocklist.some((pattern) => provider.name.includes(pattern))
+        (provider) => !config.providerBlocklist.some(
+          (pattern) => provider.name.includes(pattern)
+        )
       );
     }
     return filtered;
@@ -15379,7 +15103,8 @@ var ProviderRegistry = class {
     return `${vendor}/${base}`;
   }
   usesDefaultProviders(list) {
-    if (!Array.isArray(list) || list.length !== DEFAULT_CONFIG.providers.length) return false;
+    if (!Array.isArray(list) || list.length !== DEFAULT_CONFIG.providers.length)
+      return false;
     return list.every((p) => DEFAULT_CONFIG.providers.includes(p));
   }
   /**
@@ -15392,7 +15117,9 @@ var ProviderRegistry = class {
     }
     const scored = [];
     for (const provider of providers) {
-      const score = await this.reliabilityTracker.getReliabilityScore(provider.name);
+      const score = await this.reliabilityTracker.getReliabilityScore(
+        provider.name
+      );
       scored.push({ provider, score });
     }
     scored.sort((a, b) => b.score - a.score);
@@ -15417,18 +15144,29 @@ var ProviderRegistry = class {
       return providers;
     }
     const selected = [];
-    const deterministicCount = Math.floor(discoveryLimit * (1 - explorationRate));
+    const deterministicCount = Math.floor(
+      discoveryLimit * (1 - explorationRate)
+    );
     selected.push(...providers.slice(0, deterministicCount));
     const explorationCount = discoveryLimit - deterministicCount;
     const explorationPool = providers.slice(deterministicCount);
     const shuffled = this.shuffle(explorationPool);
     selected.push(...shuffled.slice(0, explorationCount));
-    const openrouterCount = selected.filter((p) => p.name.startsWith("openrouter/")).length;
-    const opencodeCount = selected.filter((p) => p.name.startsWith("opencode/")).length;
+    const openrouterCount = selected.filter(
+      (p) => p.name.startsWith("openrouter/")
+    ).length;
+    const opencodeCount = selected.filter(
+      (p) => p.name.startsWith("opencode/")
+    ).length;
     const MIN_OPENROUTER = Math.min(2, discoveryLimit);
     const MIN_OPENCODE = Math.min(1, discoveryLimit);
     if (openrouterCount < MIN_OPENROUTER || opencodeCount < MIN_OPENCODE) {
-      return this.adjustForDiversity(providers, discoveryLimit, MIN_OPENROUTER, MIN_OPENCODE);
+      return this.adjustForDiversity(
+        providers,
+        discoveryLimit,
+        MIN_OPENROUTER,
+        MIN_OPENCODE
+      );
     }
     logger.info(
       `Selected ${selected.length} providers: ${deterministicCount} by reliability + ${explorationCount} exploration`
@@ -15439,7 +15177,9 @@ var ProviderRegistry = class {
    * Adjust selection to meet diversity requirements
    */
   adjustForDiversity(providers, limit, minOpenRouter, minOpenCode) {
-    const openrouter = providers.filter((p) => p.name.startsWith("openrouter/"));
+    const openrouter = providers.filter(
+      (p) => p.name.startsWith("openrouter/")
+    );
     const opencode = providers.filter((p) => p.name.startsWith("opencode/"));
     const others = providers.filter(
       (p) => !p.name.startsWith("openrouter/") && !p.name.startsWith("opencode/")
@@ -16047,14 +15787,14 @@ var TimeoutError = class extends Error {
     this.name = "TimeoutError";
   }
 };
-var AbortError2 = class extends Error {
+var AbortError = class extends Error {
   constructor(message) {
     super();
     this.name = "AbortError";
     this.message = message;
   }
 };
-var getDOMException = (errorMessage2) => globalThis.DOMException === void 0 ? new AbortError2(errorMessage2) : new DOMException(errorMessage2);
+var getDOMException = (errorMessage2) => globalThis.DOMException === void 0 ? new AbortError(errorMessage2) : new DOMException(errorMessage2);
 var getAbortedReason = (signal) => {
   const reason = signal.reason === void 0 ? getDOMException("This operation was aborted.") : signal.reason;
   return reason instanceof Error ? reason : getDOMException(reason);
@@ -16526,6 +16266,157 @@ function createQueue(concurrency) {
   return new PQueue({ concurrency, autoStart: true });
 }
 
+// node_modules/p-retry/index.js
+var import_retry = __toESM(require_retry2(), 1);
+
+// node_modules/is-network-error/index.js
+var objectToString = Object.prototype.toString;
+var isError = (value) => objectToString.call(value) === "[object Error]";
+var errorMessages = /* @__PURE__ */ new Set([
+  "network error",
+  // Chrome
+  "Failed to fetch",
+  // Chrome
+  "NetworkError when attempting to fetch resource.",
+  // Firefox
+  "The Internet connection appears to be offline.",
+  // Safari 16
+  "Network request failed",
+  // `cross-fetch`
+  "fetch failed",
+  // Undici (Node.js)
+  "terminated",
+  // Undici (Node.js)
+  " A network error occurred.",
+  // Bun (WebKit)
+  "Network connection lost"
+  // Cloudflare Workers (fetch)
+]);
+function isNetworkError(error2) {
+  const isValid2 = error2 && isError(error2) && error2.name === "TypeError" && typeof error2.message === "string";
+  if (!isValid2) {
+    return false;
+  }
+  const { message, stack } = error2;
+  if (message === "Load failed") {
+    return stack === void 0 || "__sentry_captured__" in error2;
+  }
+  if (message.startsWith("error sending request for url")) {
+    return true;
+  }
+  return errorMessages.has(message);
+}
+
+// node_modules/p-retry/index.js
+var AbortError2 = class extends Error {
+  constructor(message) {
+    super();
+    if (message instanceof Error) {
+      this.originalError = message;
+      ({ message } = message);
+    } else {
+      this.originalError = new Error(message);
+      this.originalError.stack = this.stack;
+    }
+    this.name = "AbortError";
+    this.message = message;
+  }
+};
+var decorateErrorWithCounts = (error2, attemptNumber, options) => {
+  const retriesLeft = options.retries - (attemptNumber - 1);
+  error2.attemptNumber = attemptNumber;
+  error2.retriesLeft = retriesLeft;
+  return error2;
+};
+async function pRetry(input, options) {
+  return new Promise((resolve3, reject) => {
+    options = { ...options };
+    options.onFailedAttempt ??= () => {
+    };
+    options.shouldRetry ??= () => true;
+    options.retries ??= 10;
+    const operation = import_retry.default.operation(options);
+    const abortHandler = () => {
+      operation.stop();
+      reject(options.signal?.reason);
+    };
+    if (options.signal && !options.signal.aborted) {
+      options.signal.addEventListener("abort", abortHandler, { once: true });
+    }
+    const cleanUp = () => {
+      options.signal?.removeEventListener("abort", abortHandler);
+      operation.stop();
+    };
+    operation.attempt(async (attemptNumber) => {
+      try {
+        const result = await input(attemptNumber);
+        cleanUp();
+        resolve3(result);
+      } catch (error2) {
+        try {
+          if (!(error2 instanceof Error)) {
+            throw new TypeError(`Non-error was thrown: "${error2}". You should only throw errors.`);
+          }
+          if (error2 instanceof AbortError2) {
+            throw error2.originalError;
+          }
+          if (error2 instanceof TypeError && !isNetworkError(error2)) {
+            throw error2;
+          }
+          decorateErrorWithCounts(error2, attemptNumber, options);
+          if (!await options.shouldRetry(error2)) {
+            operation.stop();
+            reject(error2);
+          }
+          await options.onFailedAttempt(error2);
+          if (!operation.retry(error2)) {
+            throw operation.mainError();
+          }
+        } catch (finalError) {
+          decorateErrorWithCounts(finalError, attemptNumber, options);
+          cleanUp();
+          reject(finalError);
+        }
+      }
+    });
+  });
+}
+
+// src/utils/retry.ts
+async function withRetry(fn, options) {
+  if (options.retryOn) {
+    const maxAttempts = options.retries + 1;
+    const minTimeout = options.minTimeout ?? 500;
+    const factor = options.factor ?? 2;
+    let delay = minTimeout;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (error2) {
+        const err = error2;
+        if (!options.retryOn(err) || attempt === maxAttempts) {
+          throw err;
+        }
+        logger.warn(`Retryable error: attempt ${attempt} of ${maxAttempts}`, err.message);
+        await new Promise((resolve3) => setTimeout(resolve3, delay));
+        delay = Math.min(delay * factor, options.maxTimeout ?? 4e3);
+      }
+    }
+  }
+  return pRetry(fn, {
+    retries: options.retries,
+    factor: options.factor ?? 2,
+    minTimeout: options.minTimeout ?? 500,
+    maxTimeout: options.maxTimeout ?? 4e3,
+    onFailedAttempt: (error2) => {
+      logger.warn(
+        `Retryable error: attempt ${error2.attemptNumber} of ${options.retries + 1}`,
+        error2.message
+      );
+    }
+  });
+}
+
 // src/analysis/llm/executor.ts
 var LLMExecutor = class {
   constructor(config) {
@@ -16640,43 +16531,270 @@ var LLMExecutor = class {
   }
 };
 
-// src/analysis/deduplicator.ts
-var Deduplicator = class {
-  dedupe(findings) {
-    const map2 = /* @__PURE__ */ new Map();
-    for (const finding of findings) {
-      const key = `${finding.file}:${finding.line}:${finding.title}`;
-      if (!map2.has(key)) {
-        map2.set(key, finding);
-      } else {
-        const existing = map2.get(key);
-        const providers = new Set(
-          [
-            ...existing.providers || [],
-            ...finding.providers || [],
-            existing.provider,
-            finding.provider
-          ].filter(Boolean)
-        );
-        map2.set(key, {
-          ...existing,
-          providers: Array.from(providers),
-          providerModels: mergeProviderModels(
-            existing.providerModels,
-            finding.providerModels
-          )
-        });
-      }
+// src/utils/provider-votes.ts
+var INSTANCE_SUFFIX = /#\d+$/;
+function stripProviderInstanceSuffix(value) {
+  return value.trim().replace(INSTANCE_SUFFIX, "");
+}
+function normalizeProviderVoteKey(provider, actualModel) {
+  const normalizedProvider = provider ? stripProviderInstanceSuffix(provider) : void 0;
+  if (!normalizedProvider) return null;
+  if (normalizedProvider.startsWith("openrouter/")) {
+    const normalizedActual = actualModel ? stripProviderInstanceSuffix(actualModel) : void 0;
+    if (normalizedActual) {
+      return normalizedActual.startsWith("openrouter/") ? normalizedActual : `openrouter/${normalizedActual}`;
     }
-    return Array.from(map2.values());
+    return normalizedProvider;
   }
-};
+  return normalizedProvider;
+}
+function getProviderVoteKeys(finding) {
+  const keys = /* @__PURE__ */ new Set();
+  for (const key of finding.providerVoteKeys || []) {
+    const normalized = normalizeProviderVoteKey(key);
+    if (normalized) keys.add(normalized);
+  }
+  if (keys.size > 0) return Array.from(keys);
+  const attributedProviders = new Set(
+    (finding.providerModels || []).map((item) => item.provider)
+  );
+  for (const item of finding.providerModels || []) {
+    const key = normalizeProviderVoteKey(item.provider, item.actualModel);
+    if (key) keys.add(key);
+  }
+  for (const provider of finding.providers || []) {
+    if (attributedProviders.has(provider)) continue;
+    const key = normalizeProviderVoteKey(provider);
+    if (key) keys.add(key);
+  }
+  if (!finding.provider || !attributedProviders.has(finding.provider)) {
+    const primaryKey = normalizeProviderVoteKey(
+      finding.provider,
+      finding.actualModel
+    );
+    if (primaryKey) keys.add(primaryKey);
+  }
+  if (keys.size === 0) keys.add("static");
+  return Array.from(keys);
+}
+function getProviderVoteCount(finding) {
+  return getProviderVoteKeys(finding).length;
+}
+function countProviderVotePool(providers) {
+  const keys = /* @__PURE__ */ new Set();
+  for (const provider of providers) {
+    const name = typeof provider === "string" ? provider : provider.name;
+    const key = normalizeProviderVoteKey(name);
+    if (key) keys.add(key);
+  }
+  return keys.size;
+}
 function mergeProviderModels(left, right) {
   const merged = /* @__PURE__ */ new Map();
   for (const item of [...left || [], ...right || []]) {
-    merged.set(item.provider, item);
+    const key = `${item.provider}\0${item.actualModel || ""}`;
+    merged.set(key, item);
   }
   return Array.from(merged.values());
+}
+
+// src/analysis/deduplicator.ts
+var SEVERITY_RANK = {
+  critical: 3,
+  major: 2,
+  minor: 1
+};
+var Deduplicator = class {
+  dedupe(findings) {
+    const deduped = [];
+    for (const finding of findings) {
+      const existingIndex = deduped.findIndex(
+        (existing) => isDuplicateFinding(existing, finding)
+      );
+      if (existingIndex === -1) {
+        deduped.push(withProviderVoteKeys(finding));
+        continue;
+      }
+      deduped[existingIndex] = mergeFindings(deduped[existingIndex], finding);
+    }
+    return deduped;
+  }
+};
+function isDuplicateFinding(left, right) {
+  if (normalizeFile(left.file) !== normalizeFile(right.file)) return false;
+  if (!lineRangesClose(left, right)) return false;
+  const leftClass = classifyIssue(left);
+  const rightClass = classifyIssue(right);
+  const sameClass = leftClass !== "generic" && rightClass !== "generic" && leftClass === rightClass;
+  const titleSimilarity = jaccard(tokenize(left.title), tokenize(right.title));
+  if (titleSimilarity >= 0.5) return true;
+  const textSimilarity = jaccard(
+    tokenize(`${left.title} ${left.message}`),
+    tokenize(`${right.title} ${right.message}`)
+  );
+  const identifiersOverlap = jaccard(
+    extractIdentifiers(`${left.title} ${left.message}`),
+    extractIdentifiers(`${right.title} ${right.message}`)
+  );
+  if (sameClass && lineRangesOverlap(left, right)) return true;
+  if (sameClass && (textSimilarity >= 0.2 || identifiersOverlap >= 0.25)) {
+    return true;
+  }
+  const sameAnchorLine = getAnchorLine(left) === getAnchorLine(right);
+  if (!sameAnchorLine) return false;
+  if (textSimilarity >= 0.35) return true;
+  return identifiersOverlap >= 0.4 && textSimilarity >= 0.2;
+}
+function mergeFindings(existing, incoming) {
+  const providers = new Set(
+    [
+      ...existing.providers || [],
+      ...incoming.providers || [],
+      existing.provider,
+      incoming.provider
+    ].filter(Boolean)
+  );
+  const providerVoteKeys = /* @__PURE__ */ new Set([
+    ...getProviderVoteKeys(existing),
+    ...getProviderVoteKeys(incoming)
+  ]);
+  const betterMessage = chooseBetterText(existing.message, incoming.message);
+  const betterTitle = chooseBetterTitle(existing.title, incoming.title);
+  return {
+    ...existing,
+    startLine: mergeStartLine(existing, incoming),
+    line: Math.max(existing.line, incoming.line),
+    endLine: mergeEndLine(existing, incoming),
+    severity: SEVERITY_RANK[incoming.severity] > SEVERITY_RANK[existing.severity] ? incoming.severity : existing.severity,
+    title: betterTitle,
+    message: betterMessage,
+    suggestion: existing.suggestion || incoming.suggestion,
+    confidence: Math.max(existing.confidence ?? 0, incoming.confidence ?? 0),
+    providers: Array.from(providers),
+    providerModels: mergeProviderModels(
+      existing.providerModels,
+      incoming.providerModels
+    ),
+    providerVoteKeys: Array.from(providerVoteKeys)
+  };
+}
+function withProviderVoteKeys(finding) {
+  return {
+    ...finding,
+    providerVoteKeys: getProviderVoteKeys(finding)
+  };
+}
+function normalizeFile(file) {
+  return file.replace(/\\/g, "/").replace(/^\.?\//, "").toLowerCase();
+}
+function getAnchorLine(finding) {
+  return finding.startLine ?? finding.line;
+}
+function getEndLine(finding) {
+  return finding.endLine ?? finding.line;
+}
+function lineRangesClose(left, right) {
+  if (lineRangesOverlap(left, right)) return true;
+  const leftStart = getAnchorLine(left);
+  const leftEnd = getEndLine(left);
+  const rightStart = getAnchorLine(right);
+  const rightEnd = getEndLine(right);
+  const distance = leftEnd < rightStart ? rightStart - leftEnd : leftStart - rightEnd;
+  return distance <= 2;
+}
+function lineRangesOverlap(left, right) {
+  const leftStart = getAnchorLine(left);
+  const leftEnd = getEndLine(left);
+  const rightStart = getAnchorLine(right);
+  const rightEnd = getEndLine(right);
+  return leftStart <= rightEnd && rightStart <= leftEnd;
+}
+function mergeStartLine(left, right) {
+  if (left.startLine === void 0 && right.startLine === void 0) {
+    return void 0;
+  }
+  return Math.min(left.startLine ?? left.line, right.startLine ?? right.line);
+}
+function mergeEndLine(left, right) {
+  if (left.endLine === void 0 && right.endLine === void 0) {
+    return void 0;
+  }
+  return Math.max(left.endLine ?? left.line, right.endLine ?? right.line);
+}
+function chooseBetterTitle(left, right) {
+  return scoreTitle(right) > scoreTitle(left) ? right : left;
+}
+function scoreTitle(title) {
+  const tokens = tokenize(title);
+  const genericPenalty = /(risk|issue|problem|bug)$/i.test(title.trim()) ? 0.25 : 0;
+  return tokens.size - genericPenalty;
+}
+function chooseBetterText(left, right) {
+  const leftScore = extractIdentifiers(left).size * 3 + Math.min(left.length, 500);
+  const rightScore = extractIdentifiers(right).size * 3 + Math.min(right.length, 500);
+  return rightScore > leftScore ? right : left;
+}
+function classifyIssue(finding) {
+  const text = `${finding.category || ""} ${finding.title} ${finding.message}`.toLowerCase();
+  if (/\b(null|undefined|nil|none)\b/.test(text) && /\b(reference|dereference|guard|check|pointer|value)\b/.test(text)) {
+    return "null_reference";
+  }
+  if (/\b(referenceerror|not defined|undefined identifier|missing import|not imported)\b/.test(
+    text
+  )) {
+    return "undefined_identifier";
+  }
+  if (/\b(path traversal|directory traversal|zip slip)\b/.test(text)) {
+    return "path_traversal";
+  }
+  if (/\b(auth|authorization|authentication|permission|access control)\b/.test(
+    text
+  )) {
+    return "access_control";
+  }
+  if (/\b(race|concurrency|deadlock|lock)\b/.test(text)) {
+    return "concurrency";
+  }
+  if (/\b(cache|stale|invalidate|invalidation)\b/.test(text)) {
+    return "stale_cache";
+  }
+  if (/\b(data loss|corrupt|overwrite|delete|destructive)\b/.test(text)) {
+    return "data_loss";
+  }
+  return "generic";
+}
+function tokenize(value) {
+  const stopWords = /* @__PURE__ */ new Set([
+    "the",
+    "and",
+    "for",
+    "with",
+    "this",
+    "that",
+    "will",
+    "when",
+    "from",
+    "into",
+    "risk",
+    "issue",
+    "bug"
+  ]);
+  return new Set(
+    value.toLowerCase().split(/[^a-z0-9_]+/i).filter((token) => token.length >= 3 && !stopWords.has(token))
+  );
+}
+function extractIdentifiers(value) {
+  return new Set(
+    value.match(/\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\b/g) || []
+  );
+}
+function jaccard(left, right) {
+  if (left.size === 0 || right.size === 0) return 0;
+  let intersection = 0;
+  for (const item of left) {
+    if (right.has(item)) intersection++;
+  }
+  return intersection / (/* @__PURE__ */ new Set([...left, ...right])).size;
 }
 
 // src/analysis/ast/parsers.ts
@@ -17076,16 +17194,18 @@ var ConsensusEngine = class {
       if (!this.meetsSeverity(finding.severity)) {
         continue;
       }
-      const key = `${finding.file}:${finding.line}:${finding.title}`;
+      const key = `${normalizeFile2(finding.file)}:${finding.startLine ?? finding.line}:${finding.endLine ?? finding.line}:${finding.title.toLowerCase().trim()}`;
       const existing = grouped.get(key);
       const providers = /* @__PURE__ */ new Set();
       if (finding.providers) finding.providers.forEach((p) => providers.add(p));
       if (finding.provider) providers.add(finding.provider);
       if (providers.size === 0) providers.add("static");
+      const providerVoteKeys = getProviderVoteKeys(finding);
       const currentSuggestions = [];
       if (finding.suggestion && finding.provider) {
         currentSuggestions.push({
           provider: finding.provider,
+          voteKey: providerVoteKeys[0] || finding.provider,
           suggestion: finding.suggestion,
           file: finding.file
         });
@@ -17094,6 +17214,7 @@ var ConsensusEngine = class {
         grouped.set(key, {
           ...finding,
           providers: Array.from(providers),
+          providerVoteKeys,
           confidence: (finding.confidence ?? 0) || 1,
           _suggestions: currentSuggestions
           // Temporary for consensus checking
@@ -17109,9 +17230,15 @@ var ConsensusEngine = class {
         providers: Array.from(
           /* @__PURE__ */ new Set([...existing.providers || [], ...providers])
         ),
-        providerModels: mergeProviderModels2(
+        providerModels: mergeProviderModels(
           existing.providerModels,
           finding.providerModels
+        ),
+        providerVoteKeys: Array.from(
+          /* @__PURE__ */ new Set([
+            ...existing.providerVoteKeys || getProviderVoteKeys(existing),
+            ...providerVoteKeys
+          ])
         ),
         confidence: Math.min(
           1,
@@ -17120,10 +17247,12 @@ var ConsensusEngine = class {
         _suggestions: mergedSuggestions
       });
     }
-    const filtered = Array.from(grouped.values()).filter((f) => this.meetsAgreement(f.providers || [])).map((f) => {
+    const filtered = Array.from(grouped.values()).filter(
+      (f) => this.meetsAgreement(f.providerVoteKeys || getProviderVoteKeys(f))
+    ).map((f) => {
       if (f._suggestions && f._suggestions.length >= 2) {
         const consensus = this.checkSuggestionConsensus(
-          f._suggestions,
+          uniqueSuggestionsByVoteKey(f._suggestions),
           this.options.minAgreement
         );
         f.hasConsensus = consensus.hasSuggestionConsensus;
@@ -17132,7 +17261,10 @@ var ConsensusEngine = class {
         }
       }
       delete f._suggestions;
-      return f;
+      return {
+        ...f,
+        providerVoteKeys: f.providerVoteKeys || getProviderVoteKeys(f)
+      };
     });
     filtered.sort(
       (a, b) => SEVERITY_ORDER[b.severity] - SEVERITY_ORDER[a.severity]
@@ -17211,12 +17343,18 @@ var ConsensusEngine = class {
     };
   }
 };
-function mergeProviderModels2(left, right) {
-  const merged = /* @__PURE__ */ new Map();
-  for (const item of [...left || [], ...right || []]) {
-    merged.set(item.provider, item);
+function normalizeFile2(file) {
+  return file.replace(/\\/g, "/").replace(/^\.?\//, "").toLowerCase();
+}
+function uniqueSuggestionsByVoteKey(suggestions) {
+  const seen = /* @__PURE__ */ new Set();
+  const unique3 = [];
+  for (const suggestion of suggestions) {
+    if (seen.has(suggestion.voteKey)) continue;
+    seen.add(suggestion.voteKey);
+    unique3.push(suggestion);
   }
-  return Array.from(merged.values());
+  return unique3;
 }
 
 // src/utils/severity.ts
@@ -18139,6 +18277,51 @@ ${previousSummary}
   }
 };
 
+// src/cost/pricing.ts
+var PricingService = class _PricingService {
+  constructor(apiKey) {
+    this.apiKey = apiKey;
+  }
+  cache = /* @__PURE__ */ new Map();
+  cacheExpiry = 0;
+  static CACHE_TTL = 60 * 60 * 1e3;
+  async getPricing(modelId) {
+    if (modelId.includes(":free")) {
+      return { modelId, promptPrice: 0, completionPrice: 0, isFree: true };
+    }
+    if (Date.now() > this.cacheExpiry) {
+      await this.refresh();
+    }
+    return this.cache.get(modelId) || {
+      modelId,
+      promptPrice: 0,
+      completionPrice: 0,
+      isFree: false
+    };
+  }
+  async refresh() {
+    if (!this.apiKey) return;
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/models", {
+        headers: { Authorization: `Bearer ${this.apiKey}` }
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      for (const model of data.data || []) {
+        const pricing = model.pricing || {};
+        this.cache.set(model.id, {
+          modelId: model.id,
+          promptPrice: parseFloat(pricing.prompt || "0") * 1e6,
+          completionPrice: parseFloat(pricing.completion || "0") * 1e6,
+          isFree: model.id.includes(":free")
+        });
+      }
+      this.cacheExpiry = Date.now() + _PricingService.CACHE_TTL;
+    } catch {
+    }
+  }
+};
+
 // src/cost/tracker.ts
 var CostTracker = class {
   constructor(pricing) {
@@ -18690,7 +18873,7 @@ function shouldPostSuggestion(finding, confidence, config) {
     return false;
   }
   if (finding.severity === "critical" && config.consensus?.required_for_critical) {
-    const providerCount = finding.providers?.length ?? 0;
+    const providerCount = getProviderVoteCount(finding);
     const minAgreement = config.consensus.min_agreement ?? DEFAULT_QUALITY_CONFIG.MIN_AGREEMENT;
     if (providerCount < minAgreement) {
       return false;
@@ -18801,14 +18984,14 @@ function isLikelySameInlineFinding(existing, candidate) {
   const candidateLine = candidate.line ?? 0;
   const lineDistance = Math.abs(existingLine - candidateLine);
   const nearbyLine = lineDistance <= MAX_NEARBY_LINE_DISTANCE;
-  const existingTitleTokens = tokenize(extractTitle(existingBody));
-  const candidateTitleTokens = tokenize(extractTitle(candidateBody));
+  const existingTitleTokens = tokenize2(extractTitle(existingBody));
+  const candidateTitleTokens = tokenize2(extractTitle(candidateBody));
   const titleSimilarity = diceSimilarity(
     existingTitleTokens,
     candidateTitleTokens
   );
-  const existingTokens = tokenize(semanticText(existingBody));
-  const candidateTokens = tokenize(semanticText(candidateBody));
+  const existingTokens = tokenize2(semanticText(existingBody));
+  const candidateTokens = tokenize2(semanticText(candidateBody));
   const bodySimilarity = diceSimilarity(existingTokens, candidateTokens);
   const existingCodeTokens = extractCodeTokens(existingBody);
   const candidateCodeTokens = extractCodeTokens(candidateBody);
@@ -18854,7 +19037,7 @@ function stableFindingFingerprint(input) {
 function semanticText(body) {
   return body.replace(/```[\s\S]*?```/g, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/\*\*Severity:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Suggestion:\*\*[\s\S]*?(?:\n\n|$)/gi, " ");
 }
-function tokenize(value) {
+function tokenize2(value) {
   const normalized = splitIdentifiers(value).toLowerCase().replace(/[^a-z0-9_]+/g, " ");
   const tokens = normalized.split(/\s+/).map((token) => token.trim()).filter((token) => token.length >= 3 && !STOPWORDS.has(token));
   return new Set(tokens);
@@ -18862,7 +19045,7 @@ function tokenize(value) {
 function extractCodeTokens(body) {
   const tokens = /* @__PURE__ */ new Set();
   for (const match2 of body.matchAll(/`([^`\n]{2,120})`/g)) {
-    for (const token of tokenize(match2[1])) {
+    for (const token of tokenize2(match2[1])) {
       tokens.add(token);
     }
   }
@@ -21578,10 +21761,11 @@ var ImpactAnalyzer = class {
 // src/analysis/evidence.ts
 var EvidenceScorer = class {
   score(finding, providerCount, astConfirmed, graphConfirmed, hasDirectEvidence) {
-    const agreement = providerCount > 0 ? (finding.providers?.length || 0) / providerCount : 0;
+    const agreement = providerCount > 0 ? getProviderVoteCount(finding) / providerCount : 0;
     const confidence = agreement * 0.3 + (astConfirmed ? 0.25 : 0) + (graphConfirmed ? 0.25 : 0) + (hasDirectEvidence ? 0.2 : 0);
     const reasons = [];
-    if (agreement >= 0.5) reasons.push(`${Math.round(agreement * 100)}% provider agreement`);
+    if (agreement >= 0.5)
+      reasons.push(`${Math.round(agreement * 100)}% provider agreement`);
     if (astConfirmed) reasons.push("confirmed by AST analysis");
     if (graphConfirmed) reasons.push("validated by dependency graph");
     if (hasDirectEvidence) reasons.push("direct evidence in changed code");
@@ -21870,12 +22054,12 @@ function normalizeSeverity(value) {
   return null;
 }
 function tokenSimilarity(a, b) {
-  const left = tokenize2(a);
-  const right = tokenize2(b);
+  const left = tokenize3(a);
+  const right = tokenize3(b);
   if (left.size === 0 || right.size === 0) return 0;
   return 2 * intersectionSize2(left, right) / (left.size + right.size);
 }
-function tokenize2(value) {
+function tokenize3(value) {
   return new Set(
     splitIdentifiers2(value).toLowerCase().replace(/<!--[\s\S]*?-->/g, " ").replace(/```[\s\S]*?```/g, " ").replace(/[^a-z0-9_]+/g, " ").split(/\s+/).map((token) => token.trim()).filter((token) => token.length >= 3 && !TOKEN_STOPWORDS.has(token))
   );
@@ -21883,7 +22067,7 @@ function tokenize2(value) {
 function codeTokens(body) {
   const tokens = /* @__PURE__ */ new Set();
   for (const match2 of body.matchAll(/`([^`\n]{2,120})`/g)) {
-    for (const token of tokenize2(match2[1])) {
+    for (const token of tokenize3(match2[1])) {
       tokens.add(token);
     }
   }
@@ -26005,6 +26189,9 @@ function extractFindings(results) {
         provider: result.name,
         providers: finding.providers || [result.name],
         actualModel: result.result.actualModel,
+        providerVoteKeys: [
+          normalizeProviderVoteKey(result.name, result.result.actualModel) || result.name
+        ],
         providerModels: [
           {
             provider: result.name,
@@ -30715,7 +30902,7 @@ var ReviewOrchestrator = class {
       ];
       const deduped = this.components.deduplicator.dedupe(combinedFindings);
       const consensus = this.components.consensus.filter(deduped);
-      const providerCount = providers.length || 1;
+      const providerCount = countProviderVotePool(providers) || 1;
       const enriched = consensus.map(
         (f) => this.enrichFinding(
           f,
@@ -30766,7 +30953,7 @@ var ReviewOrchestrator = class {
         durationSeconds: 0,
         cacheHit: Boolean(cachedFindings),
         synthesisModel: config.synthesisModel,
-        providerPoolSize: providers.length
+        providerPoolSize: providerCount
       };
       review = this.components.synthesis.synthesize(
         finalFiltered,
@@ -31700,7 +31887,7 @@ ${finding.message}`
       evidenceDetail: {
         changedLines: changedLines.map((c) => c.line),
         relatedSnippets,
-        providerAgreement: providerCount > 0 ? (finding.providers?.length || 0) / providerCount : 0,
+        providerAgreement: providerCount > 0 ? getProviderVoteCount(finding) / providerCount : 0,
         astConfirmed,
         graphConfirmed
       }
@@ -32810,7 +32997,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.41",
+  version: "1.0.42",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -33351,7 +33538,7 @@ function resolveProviderCliPlan(env = process.env) {
     inferredProvider
   ].filter((value) => Boolean(value)).join(",");
   return {
-    codexCliNeeded: authMode === "codex-oauth" || authMode === "openai-api" || hasProviderPrefix(providerHints, "codex"),
+    codexCliNeeded: authMode === "codex-oauth" || authMode === "openai-api" || authMode === "openrouter-api" || hasProviderPrefix(providerHints, "codex") || hasProviderPrefix(providerHints, "openrouter"),
     claudeCliNeeded: authMode === "claude-oauth" || hasProviderPrefix(providerHints, "claude")
   };
 }

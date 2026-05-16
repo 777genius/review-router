@@ -18,6 +18,16 @@ describe('New CLI Providers', () => {
       expect(Provider.validate('codex/')).toBe(false);
     });
 
+    it('should validate codex-openrouter/ provider names with OpenRouter model ids', () => {
+      expect(Provider.validate('codex-openrouter/openai/gpt-5.3-codex')).toBe(
+        true
+      );
+      expect(Provider.validate('codex-openrouter/google/gemini-2.5-pro')).toBe(
+        true
+      );
+      expect(Provider.validate('codex-openrouter/')).toBe(false);
+    });
+
     it('should validate gemini/ provider names', () => {
       expect(Provider.validate('gemini/gemini-2.0-flash')).toBe(true);
       expect(Provider.validate('gemini/gemini-1.5-pro')).toBe(true);
@@ -25,9 +35,13 @@ describe('New CLI Providers', () => {
     });
 
     it('should still validate existing provider patterns', () => {
-      expect(Provider.validate('openrouter/google/gemini-2.0-flash-exp:free')).toBe(true);
+      expect(
+        Provider.validate('openrouter/google/gemini-2.0-flash-exp:free')
+      ).toBe(true);
       expect(Provider.validate('openrouter/free#1')).toBe(true);
-      expect(Provider.validate('openrouter/qwen/qwen3-coder:free#2')).toBe(true);
+      expect(Provider.validate('openrouter/qwen/qwen3-coder:free#2')).toBe(
+        true
+      );
       expect(Provider.validate('opencode/minimax-m2.1-free')).toBe(true);
     });
 
@@ -69,6 +83,25 @@ describe('New CLI Providers', () => {
 
       expect(maxModel.name).toBe('codex/gpt-5.5');
       expect(standardModel.name).toBe('codex/gpt-5.4');
+    });
+
+    it('should create OpenRouter-backed Codex provider names', () => {
+      const provider = new CodexProvider('openai/gpt-5.3-codex', {
+        modelProvider: 'openrouter',
+        providerNamePrefix: 'codex-openrouter',
+      });
+
+      expect(provider.name).toBe('codex-openrouter/openai/gpt-5.3-codex');
+    });
+
+    it('should create public OpenRouter names for OpenRouter-backed Codex provider', () => {
+      const provider = new CodexProvider('openai/gpt-oss-120b:free', {
+        modelProvider: 'openrouter',
+        providerNamePrefix: 'openrouter',
+        providerNameModel: 'openai/gpt-oss-120b:free#2',
+      });
+
+      expect(provider.name).toBe('openrouter/openai/gpt-oss-120b:free#2');
     });
   });
 

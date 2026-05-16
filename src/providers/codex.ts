@@ -18,6 +18,9 @@ import {
 export interface CodexProviderOptions {
   agenticContext?: boolean;
   eventAudit?: boolean;
+  modelProvider?: 'openai' | 'openrouter';
+  providerNamePrefix?: 'codex' | 'codex-openrouter' | 'openrouter';
+  providerNameModel?: string;
 }
 
 type CodexRunOptions = {
@@ -54,7 +57,9 @@ export class CodexProvider extends Provider {
     private readonly model: string,
     private readonly options: CodexProviderOptions = {}
   ) {
-    super(`codex/${model}`);
+    super(
+      `${options.providerNamePrefix || 'codex'}/${options.providerNameModel || model}`
+    );
   }
 
   // Verify the CLI is available. Model/auth failures are surfaced by the real
@@ -283,6 +288,19 @@ export class CodexProvider extends Provider {
       if (/^[a-z]+$/.test(normalized)) {
         args.push('-c', `model_reasoning_effort="${normalized}"`);
       }
+    }
+
+    if (this.options.modelProvider === 'openrouter') {
+      args.push(
+        '-c',
+        'model_provider="openrouter"',
+        '-c',
+        'model_providers.openrouter.name="openrouter"',
+        '-c',
+        'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
+        '-c',
+        'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
+      );
     }
 
     args.push('-');
@@ -518,7 +536,13 @@ export class CodexProvider extends Provider {
   private buildSafeEnv(includeWorkspaceEnv = true): NodeJS.ProcessEnv {
     return buildCliSafeEnv({
       includeWorkspaceEnv,
-      extraAllowedKeys: ['CODEX_HOME', 'OPENAI_API_KEY'],
+      extraAllowedKeys: [
+        'CODEX_HOME',
+        'OPENAI_API_KEY',
+        ...(this.options.modelProvider === 'openrouter'
+          ? ['OPENROUTER_API_KEY']
+          : []),
+      ],
     });
   }
 

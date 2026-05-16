@@ -1,4 +1,5 @@
 import { EvidenceScore, Finding } from '../types';
+import { getProviderVoteCount } from '../utils/provider-votes';
 
 export class EvidenceScorer {
   score(
@@ -8,16 +9,18 @@ export class EvidenceScorer {
     graphConfirmed: boolean,
     hasDirectEvidence: boolean
   ): EvidenceScore {
-    const agreement = providerCount > 0 ? (finding.providers?.length || 0) / providerCount : 0;
+    const agreement =
+      providerCount > 0 ? getProviderVoteCount(finding) / providerCount : 0;
 
     const confidence =
-      (agreement * 0.3) +
+      agreement * 0.3 +
       (astConfirmed ? 0.25 : 0) +
       (graphConfirmed ? 0.25 : 0) +
       (hasDirectEvidence ? 0.2 : 0);
 
     const reasons: string[] = [];
-    if (agreement >= 0.5) reasons.push(`${Math.round(agreement * 100)}% provider agreement`);
+    if (agreement >= 0.5)
+      reasons.push(`${Math.round(agreement * 100)}% provider agreement`);
     if (astConfirmed) reasons.push('confirmed by AST analysis');
     if (graphConfirmed) reasons.push('validated by dependency graph');
     if (hasDirectEvidence) reasons.push('direct evidence in changed code');

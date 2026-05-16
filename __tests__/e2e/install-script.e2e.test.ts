@@ -223,7 +223,7 @@ describe('review-router curl installer e2e', () => {
     const staticEnv = staticRuntimeEnv(workflow);
     expect(staticEnv.REVIEW_AUTH_MODE).toBe('openrouter-api');
     expect(staticEnv.REVIEW_PROVIDERS).toBe(
-      'openrouter/inclusionai/ring-2.6-1t:free,openrouter/openai/gpt-oss-120b:free,openrouter/poolside/laguna-m.1:free'
+      'openrouter/openai/gpt-oss-120b:free,openrouter/poolside/laguna-m.1:free'
     );
     expect(workflow).toContain(
       'OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}'

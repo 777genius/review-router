@@ -12144,7 +12144,6 @@ var RateLimitError = class extends Error {
 // src/providers/opencode.ts
 var import_child_process = require("child_process");
 var fs3 = __toESM(require("fs/promises"));
-var os = __toESM(require("os"));
 var path2 = __toESM(require("path"));
 var crypto = __toESM(require("crypto"));
 
@@ -12366,14 +12365,18 @@ var OpenCodeProvider = class extends Provider {
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => {
         isTimedOut = true;
-        reject(new Error(`OpenCode health check timed out after ${timeoutMs}ms`));
+        reject(
+          new Error(`OpenCode health check timed out after ${timeoutMs}ms`)
+        );
       }, timeoutMs);
     });
     try {
       await Promise.race([
         this.resolveBinary().then(() => {
           if (isTimedOut) {
-            logger.debug(`OpenCode binary resolved after timeout (${this.name})`);
+            logger.debug(
+              `OpenCode binary resolved after timeout (${this.name})`
+            );
           }
         }),
         timeoutPromise
@@ -12384,7 +12387,9 @@ var OpenCodeProvider = class extends Provider {
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
-      logger.warn(`OpenCode health check failed for ${this.name}: ${error2.message}`);
+      logger.warn(
+        `OpenCode health check failed for ${this.name}: ${error2.message}`
+      );
       return false;
     }
   }
@@ -12392,11 +12397,26 @@ var OpenCodeProvider = class extends Provider {
     const started = Date.now();
     const { bin, args: baseArgs } = await this.resolveBinary();
     const cliModel = this.modelId.startsWith("opencode/") ? this.modelId : `opencode/${this.modelId}`;
-    const tmpDir = await fs3.mkdtemp(path2.join(os.tmpdir(), "opencode-"));
+    const tmpRoot = path2.join(process.cwd(), ".reviewrouter-opencode");
+    await fs3.mkdir(tmpRoot, { recursive: true, mode: 448 });
+    await fs3.chmod(tmpRoot, 448).catch(() => void 0);
+    const tmpDir = await fs3.mkdtemp(path2.join(tmpRoot, "opencode-"));
     await fs3.chmod(tmpDir, 448);
-    const promptFile = path2.join(tmpDir, `prompt-${crypto.randomBytes(8).toString("hex")}.txt`);
+    const promptFile = path2.join(
+      tmpDir,
+      `prompt-${crypto.randomBytes(8).toString("hex")}.txt`
+    );
     await fs3.writeFile(promptFile, prompt, { encoding: "utf8", mode: 384 });
-    const args = [...baseArgs, "run", "-m", cliModel, "--file", promptFile, "--", "Review the attached PR context and provide structured findings."];
+    const args = [
+      ...baseArgs,
+      "run",
+      "-m",
+      cliModel,
+      "--file",
+      promptFile,
+      "--",
+      "Review the attached PR context and provide structured findings."
+    ];
     logger.info(`Running OpenCode CLI: ${bin} ${args.slice(0, 3).join(" ")} \u2026`);
     try {
       const { stdout, stderr } = await this.runCli(bin, args, timeoutMs);
@@ -12406,7 +12426,9 @@ var OpenCodeProvider = class extends Provider {
         `OpenCode CLI output for ${this.name}: stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
       );
       if (!content) {
-        throw new Error(`OpenCode CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`);
+        throw new Error(
+          `OpenCode CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`
+        );
       }
       const parsedOutput = parseReviewOutputLenient(content);
       return {
@@ -12422,6 +12444,7 @@ var OpenCodeProvider = class extends Provider {
       try {
         await fs3.unlink(promptFile);
         await fs3.rmdir(tmpDir);
+        await fs3.rmdir(tmpRoot);
       } catch {
       }
     }
@@ -12440,7 +12463,9 @@ var OpenCodeProvider = class extends Provider {
       let timedOut = false;
       const timer = setTimeout(() => {
         timedOut = true;
-        logger.warn(`OpenCode CLI timeout (${timeoutMs}ms), killing process and all children`);
+        logger.warn(
+          `OpenCode CLI timeout (${timeoutMs}ms), killing process and all children`
+        );
         try {
           if (proc.pid) {
             process.kill(-proc.pid, "SIGKILL");
@@ -12466,7 +12491,11 @@ var OpenCodeProvider = class extends Provider {
         if (!timedOut) {
           clearTimeout(timer);
           if (code !== 0) {
-            reject(new Error(`OpenCode CLI exited with code ${code}: ${stderr || stdout || "no output"}`));
+            reject(
+              new Error(
+                `OpenCode CLI exited with code ${code}: ${stderr || stdout || "no output"}`
+              )
+            );
           } else {
             resolve3({ stdout: stdout.trim(), stderr: stderr.trim() });
           }
@@ -12481,7 +12510,9 @@ var OpenCodeProvider = class extends Provider {
     if (await this.canRun("npx", ["--yes", "opencode-ai", "--version"])) {
       return { bin: "npx", args: ["--yes", "opencode-ai"] };
     }
-    throw new Error("OpenCode CLI is not available (opencode or npx opencode-ai)");
+    throw new Error(
+      "OpenCode CLI is not available (opencode or npx opencode-ai)"
+    );
   }
   async canRun(cmd, args) {
     return new Promise((resolve3) => {
@@ -12495,7 +12526,7 @@ var OpenCodeProvider = class extends Provider {
 // src/providers/claude-code.ts
 var import_child_process2 = require("child_process");
 var fs4 = __toESM(require("fs/promises"));
-var os2 = __toESM(require("os"));
+var os = __toESM(require("os"));
 var path3 = __toESM(require("path"));
 var crypto2 = __toESM(require("crypto"));
 
@@ -13212,7 +13243,7 @@ var ClaudeCodeProvider = class extends Provider {
   }
   async runCliWithStdin(bin, args, stdin, timeoutMs, oauthToken) {
     const runId = crypto2.randomBytes(8).toString("hex");
-    const tmpDir = await fs4.mkdtemp(path3.join(os2.tmpdir(), "claude-code-"));
+    const tmpDir = await fs4.mkdtemp(path3.join(os.tmpdir(), "claude-code-"));
     await fs4.chmod(tmpDir, 448);
     const promptFile = path3.join(tmpDir, `prompt-${runId}.txt`);
     const claudeConfigDir = path3.join(tmpDir, "config");
@@ -13339,7 +13370,7 @@ ${hint}` : text;
     if (await this.canRun("/usr/local/bin/claude", ["--version"])) {
       return "/usr/local/bin/claude";
     }
-    const homeDir = os2.homedir();
+    const homeDir = os.homedir();
     const localBin = path3.join(homeDir, ".local", "bin", "claude");
     if (await this.canRun(localBin, ["--version"])) {
       return localBin;
@@ -13364,7 +13395,7 @@ ${hint}` : text;
 var import_child_process3 = require("child_process");
 var fs5 = __toESM(require("fs/promises"));
 var fsSync = __toESM(require("fs"));
-var os3 = __toESM(require("os"));
+var os2 = __toESM(require("os"));
 var path4 = __toESM(require("path"));
 var crypto3 = __toESM(require("crypto"));
 var CodexCliExitError = class extends Error {
@@ -13583,9 +13614,9 @@ var CodexProvider = class extends Provider {
   }
   async runCliWithStdin(bin, stdin, timeoutMs, options) {
     const runId = crypto3.randomBytes(8).toString("hex");
-    const tmpFile = path4.join(os3.tmpdir(), `codex-prompt-${runId}.txt`);
-    const outputFile = path4.join(os3.tmpdir(), `codex-output-${runId}.txt`);
-    const schemaFile = options.outputSchema ? path4.join(os3.tmpdir(), `codex-schema-${runId}.json`) : void 0;
+    const tmpFile = path4.join(os2.tmpdir(), `codex-prompt-${runId}.txt`);
+    const outputFile = path4.join(os2.tmpdir(), `codex-output-${runId}.txt`);
+    const schemaFile = options.outputSchema ? path4.join(os2.tmpdir(), `codex-schema-${runId}.json`) : void 0;
     let fd;
     try {
       await fs5.writeFile(tmpFile, stdin, { encoding: "utf8", mode: 384 });
@@ -14050,7 +14081,7 @@ var CodexProvider = class extends Provider {
         PATH: process.env.PATH || "",
         LANG: process.env.LANG || "C",
         LC_ALL: process.env.LC_ALL || "C",
-        HOME: path4.join(os3.tmpdir(), "review-router-git-home"),
+        HOME: path4.join(os2.tmpdir(), "review-router-git-home"),
         GIT_TERMINAL_PROMPT: "0",
         GIT_CONFIG_NOSYSTEM: "1"
       }
@@ -14405,7 +14436,7 @@ var CodexProvider = class extends Provider {
 // src/providers/gemini.ts
 var import_child_process4 = require("child_process");
 var fs6 = __toESM(require("fs/promises"));
-var os4 = __toESM(require("os"));
+var os3 = __toESM(require("os"));
 var path5 = __toESM(require("path"));
 var crypto4 = __toESM(require("crypto"));
 var GeminiProvider = class extends Provider {
@@ -14446,7 +14477,7 @@ var GeminiProvider = class extends Provider {
   async review(prompt, timeoutMs) {
     const started = Date.now();
     const { bin, args: baseArgs } = await this.resolveBinary();
-    const tmpDir = await fs6.mkdtemp(path5.join(os4.tmpdir(), "gemini-"));
+    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "gemini-"));
     await fs6.chmod(tmpDir, 448);
     const promptFile = path5.join(tmpDir, `prompt-${crypto4.randomBytes(8).toString("hex")}.txt`);
     await fs6.writeFile(promptFile, prompt, { encoding: "utf8", mode: 384 });
@@ -14560,9 +14591,9 @@ var GeminiProvider = class extends Provider {
 // src/providers/rate-limiter.ts
 var fs7 = __toESM(require("fs/promises"));
 var path6 = __toESM(require("path"));
-var os5 = __toESM(require("os"));
+var os4 = __toESM(require("os"));
 var RateLimiter = class {
-  lockDir = path6.join(os5.tmpdir(), "mpr-ratelimits");
+  lockDir = path6.join(os4.tmpdir(), "mpr-ratelimits");
   constructor() {
     fs7.mkdir(this.lockDir, { recursive: true }).catch(() => void 0);
   }
@@ -32818,7 +32849,7 @@ function sanitizeError(error2) {
 
 // src/discussion/codex-responder.ts
 var fs14 = __toESM(require("fs/promises"));
-var os6 = __toESM(require("os"));
+var os5 = __toESM(require("os"));
 var path13 = __toESM(require("path"));
 var import_child_process7 = require("child_process");
 var import_util5 = require("util");
@@ -32845,7 +32876,7 @@ var CodexDiscussionResponder = class {
       agenticContext: false,
       eventAudit: false
     });
-    const cwd = await fs14.mkdtemp(path13.join(os6.tmpdir(), "review-router-chat-"));
+    const cwd = await fs14.mkdtemp(path13.join(os5.tmpdir(), "review-router-chat-"));
     try {
       await initializeEmptyGitRepository(cwd);
       const content = await provider.runStructuredPrompt(
@@ -32997,7 +33028,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.42",
+  version: "1.0.43",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

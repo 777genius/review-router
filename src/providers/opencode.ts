@@ -3,7 +3,6 @@ import { ReviewResult } from '../types';
 import { logger } from '../utils/logger';
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
-import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { parseReviewOutputLenient } from './review-output';
@@ -24,7 +23,9 @@ export class OpenCodeProvider extends Provider {
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
         isTimedOut = true;
-        reject(new Error(`OpenCode health check timed out after ${timeoutMs}ms`));
+        reject(
+          new Error(`OpenCode health check timed out after ${timeoutMs}ms`)
+        );
       }, timeoutMs);
     });
 
@@ -33,10 +34,12 @@ export class OpenCodeProvider extends Provider {
         this.resolveBinary().then(() => {
           // If timeout already fired, we still succeeded - log for debugging
           if (isTimedOut) {
-            logger.debug(`OpenCode binary resolved after timeout (${this.name})`);
+            logger.debug(
+              `OpenCode binary resolved after timeout (${this.name})`
+            );
           }
         }),
-        timeoutPromise
+        timeoutPromise,
       ]);
       clearTimeout(timeoutId!);
       return true;
@@ -44,7 +47,9 @@ export class OpenCodeProvider extends Provider {
       if (timeoutId!) {
         clearTimeout(timeoutId);
       }
-      logger.warn(`OpenCode health check failed for ${this.name}: ${(error as Error).message}`);
+      logger.warn(
+        `OpenCode health check failed for ${this.name}: ${(error as Error).message}`
+      );
       return false;
     }
   }
@@ -58,12 +63,27 @@ export class OpenCodeProvider extends Provider {
       : `opencode/${this.modelId}`;
 
     // Write prompt to temp file to avoid command line length limits
-    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'opencode-'));
+    const tmpRoot = path.join(process.cwd(), '.reviewrouter-opencode');
+    await fs.mkdir(tmpRoot, { recursive: true, mode: 0o700 });
+    await fs.chmod(tmpRoot, 0o700).catch(() => undefined);
+    const tmpDir = await fs.mkdtemp(path.join(tmpRoot, 'opencode-'));
     await fs.chmod(tmpDir, 0o700);
-    const promptFile = path.join(tmpDir, `prompt-${crypto.randomBytes(8).toString('hex')}.txt`);
+    const promptFile = path.join(
+      tmpDir,
+      `prompt-${crypto.randomBytes(8).toString('hex')}.txt`
+    );
     await fs.writeFile(promptFile, prompt, { encoding: 'utf8', mode: 0o600 });
 
-    const args = [...baseArgs, 'run', '-m', cliModel, '--file', promptFile, '--', 'Review the attached PR context and provide structured findings.'];
+    const args = [
+      ...baseArgs,
+      'run',
+      '-m',
+      cliModel,
+      '--file',
+      promptFile,
+      '--',
+      'Review the attached PR context and provide structured findings.',
+    ];
 
     logger.info(`Running OpenCode CLI: ${bin} ${args.slice(0, 3).join(' ')} …`);
 
@@ -75,7 +95,9 @@ export class OpenCodeProvider extends Provider {
         `OpenCode CLI output for ${this.name}: stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
       );
       if (!content) {
-        throw new Error(`OpenCode CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`);
+        throw new Error(
+          `OpenCode CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
+        );
       }
       const parsedOutput = parseReviewOutputLenient(content);
       return {
@@ -92,13 +114,18 @@ export class OpenCodeProvider extends Provider {
       try {
         await fs.unlink(promptFile);
         await fs.rmdir(tmpDir);
+        await fs.rmdir(tmpRoot);
       } catch {
         // Ignore cleanup errors
       }
     }
   }
 
-  private runCli(bin: string, args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+  private runCli(
+    bin: string,
+    args: string[],
+    timeoutMs: number
+  ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       // Use detached: true to create a new process group
       // This allows killing the entire process tree when needed
@@ -118,7 +145,9 @@ export class OpenCodeProvider extends Provider {
 
       const timer = setTimeout(() => {
         timedOut = true;
-        logger.warn(`OpenCode CLI timeout (${timeoutMs}ms), killing process and all children`);
+        logger.warn(
+          `OpenCode CLI timeout (${timeoutMs}ms), killing process and all children`
+        );
 
         // Kill the entire process group to ensure child processes are terminated
         // On Unix: negative PID kills the process group
@@ -134,23 +163,27 @@ export class OpenCodeProvider extends Provider {
         reject(new Error(`OpenCode CLI timed out after ${timeoutMs}ms`));
       }, timeoutMs);
 
-      proc.stdout.on('data', chunk => {
+      proc.stdout.on('data', (chunk) => {
         stdout += chunk.toString();
       });
-      proc.stderr.on('data', chunk => {
+      proc.stderr.on('data', (chunk) => {
         stderr += chunk.toString();
       });
-      proc.on('error', err => {
+      proc.on('error', (err) => {
         if (!timedOut) {
           clearTimeout(timer);
           reject(err);
         }
       });
-      proc.on('close', code => {
+      proc.on('close', (code) => {
         if (!timedOut) {
           clearTimeout(timer);
           if (code !== 0) {
-            reject(new Error(`OpenCode CLI exited with code ${code}: ${stderr || stdout || 'no output'}`));
+            reject(
+              new Error(
+                `OpenCode CLI exited with code ${code}: ${stderr || stdout || 'no output'}`
+              )
+            );
           } else {
             resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
           }
@@ -166,15 +199,16 @@ export class OpenCodeProvider extends Provider {
     if (await this.canRun('npx', ['--yes', 'opencode-ai', '--version'])) {
       return { bin: 'npx', args: ['--yes', 'opencode-ai'] };
     }
-    throw new Error('OpenCode CLI is not available (opencode or npx opencode-ai)');
+    throw new Error(
+      'OpenCode CLI is not available (opencode or npx opencode-ai)'
+    );
   }
 
   private async canRun(cmd: string, args: string[]): Promise<boolean> {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       const proc = spawn(cmd, args, { stdio: 'ignore' });
       proc.on('error', () => resolve(false));
-      proc.on('close', code => resolve(code === 0));
+      proc.on('close', (code) => resolve(code === 0));
     });
   }
-
 }

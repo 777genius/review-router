@@ -1,6 +1,7 @@
 import { OpenCodeProvider } from '../../src/providers/opencode';
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
+import * as path from 'path';
 
 jest.mock('child_process');
 
@@ -15,7 +16,12 @@ describe('OpenCodeProvider Integration', () => {
     jest.useRealTimers();
   });
 
-  function createMockProcess(stdout: string, stderr: string = '', exitCode: number = 0, delay: number = 0) {
+  function createMockProcess(
+    stdout: string,
+    stderr: string = '',
+    exitCode: number = 0,
+    delay: number = 0
+  ) {
     const mockProcess = new EventEmitter() as any;
     mockProcess.stdout = new EventEmitter();
     mockProcess.stderr = new EventEmitter();
@@ -37,7 +43,12 @@ describe('OpenCodeProvider Integration', () => {
 
   // Helper to setup spawn mock for review tests
   // First spawn call is for binary check, second is the actual review
-  function setupSpawnMock(stdout: string, stderr: string = '', exitCode: number = 0, delay: number = 0) {
+  function setupSpawnMock(
+    stdout: string,
+    stderr: string = '',
+    exitCode: number = 0,
+    delay: number = 0
+  ) {
     let spawnCount = 0;
     mockedSpawn.mockImplementation(() => {
       spawnCount++;
@@ -61,9 +72,21 @@ describe('OpenCodeProvider Integration', () => {
 
       const response = JSON.stringify({
         findings: [
-          { file: 'src/test.ts', line: 10, severity: 'critical', title: 'Issue', message: 'Fix this' },
-          { file: 'src/test.ts', line: 20, severity: 'major', title: 'Warning', message: 'Check this' }
-        ]
+          {
+            file: 'src/test.ts',
+            line: 10,
+            severity: 'critical',
+            title: 'Issue',
+            message: 'Fix this',
+          },
+          {
+            file: 'src/test.ts',
+            line: 20,
+            severity: 'major',
+            title: 'Warning',
+            message: 'Check this',
+          },
+        ],
       });
 
       setupSpawnMock(response);
@@ -80,7 +103,13 @@ describe('OpenCodeProvider Integration', () => {
       const provider = new OpenCodeProvider('test-model');
 
       const response = JSON.stringify([
-        { file: 'app.ts', line: 5, severity: 'minor', title: 'Style', message: 'Use const' }
+        {
+          file: 'app.ts',
+          line: 5,
+          severity: 'minor',
+          title: 'Style',
+          message: 'Use const',
+        },
       ]);
 
       setupSpawnMock(response);
@@ -94,7 +123,8 @@ describe('OpenCodeProvider Integration', () => {
     it('should parse findings from markdown code block', async () => {
       const provider = new OpenCodeProvider('test-model');
 
-      const response = '```json\n[{"file": "test.ts", "line": 1, "severity": "major", "title": "Test", "message": "Msg"}]\n```';
+      const response =
+        '```json\n[{"file": "test.ts", "line": 1, "severity": "major", "title": "Test", "message": "Msg"}]\n```';
 
       setupSpawnMock(response);
 
@@ -142,13 +172,18 @@ describe('OpenCodeProvider Integration', () => {
       expect(args).toContain('--file');
       const fileIndex = args.indexOf('--file');
       const promptFile = args[fileIndex + 1];
+      expect(promptFile).toContain(
+        path.join(process.cwd(), '.reviewrouter-opencode')
+      );
       expect(promptFile).toMatch(/opencode-.*\/prompt-.*\.txt/);
     });
 
     it('should log stdout and stderr lengths', async () => {
       const provider = new OpenCodeProvider('test-model');
 
-      const response = JSON.stringify([{ file: 'a.ts', line: 1, severity: 'major', title: 'T', message: 'M' }]);
+      const response = JSON.stringify([
+        { file: 'a.ts', line: 1, severity: 'major', title: 'T', message: 'M' },
+      ]);
       const stderr = 'Some debug output';
 
       setupSpawnMock(response, stderr);
@@ -166,7 +201,9 @@ describe('OpenCodeProvider Integration', () => {
 
       setupSpawnMock('', 'some error');
 
-      await expect(provider.review('test', 5000)).rejects.toThrow('OpenCode CLI returned no output');
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        'OpenCode CLI returned no output'
+      );
     });
 
     it('should throw on whitespace-only stdout', async () => {
@@ -174,7 +211,9 @@ describe('OpenCodeProvider Integration', () => {
 
       setupSpawnMock('   \n  \t  ', '');
 
-      await expect(provider.review('test', 5000)).rejects.toThrow('OpenCode CLI returned no output');
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        'OpenCode CLI returned no output'
+      );
     });
 
     it('should include stderr in error message when stdout is empty', async () => {
@@ -182,7 +221,9 @@ describe('OpenCodeProvider Integration', () => {
 
       setupSpawnMock('', 'Command failed: model not found');
 
-      await expect(provider.review('test', 5000)).rejects.toThrow('stderr: Command failed: model not found');
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        'stderr: Command failed: model not found'
+      );
     });
 
     it('should handle non-zero exit code', async () => {
@@ -190,7 +231,9 @@ describe('OpenCodeProvider Integration', () => {
 
       setupSpawnMock('', '', 1);
 
-      await expect(provider.review('test', 5000)).rejects.toThrow('OpenCode CLI exited with code 1');
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        'OpenCode CLI exited with code 1'
+      );
     });
 
     it('should handle timeout', async () => {
@@ -213,7 +256,10 @@ describe('OpenCodeProvider Integration', () => {
         reviewMockProcess.stdout = new EventEmitter();
         reviewMockProcess.stderr = new EventEmitter();
         // Fail-safe: auto-close after 500ms even if kill isn't called
-        const failSafe = setTimeout(() => reviewMockProcess.emit('close', 0), 500);
+        const failSafe = setTimeout(
+          () => reviewMockProcess.emit('close', 0),
+          500
+        );
         reviewMockProcess.kill = jest.fn(() => {
           clearTimeout(failSafe);
           setTimeout(() => reviewMockProcess.emit('close', 0), 0);
@@ -223,11 +269,15 @@ describe('OpenCodeProvider Integration', () => {
       });
 
       // Mock process.kill to prevent actual kill attempt
-      const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => true as any);
+      const killSpy = jest
+        .spyOn(process, 'kill')
+        .mockImplementation(() => true as any);
 
       try {
         // Set very short timeout
-        await expect(provider.review('test', 100)).rejects.toThrow('timed out after 100ms');
+        await expect(provider.review('test', 100)).rejects.toThrow(
+          'timed out after 100ms'
+        );
 
         // Verify that either process group kill or regular kill was attempted
         expect(killSpy).toHaveBeenCalled();
@@ -263,7 +313,9 @@ describe('OpenCodeProvider Integration', () => {
         return mockProcess;
       });
 
-      await expect(provider.review('test', 5000)).rejects.toThrow('spawn ENOENT');
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        'spawn ENOENT'
+      );
     });
 
     it('should handle invalid JSON in response', async () => {

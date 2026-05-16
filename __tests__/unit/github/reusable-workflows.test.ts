@@ -58,6 +58,8 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('CODEX_AUTH_JSON');
     expect(workflow).toContain('CLAUDE_CODE_OAUTH_TOKEN');
     expect(workflow).toContain('OPENROUTER_API_KEY');
+    expect(workflow).toContain('REVIEW_ROUTER_MEMORY_ENABLED');
+    expect(workflow).toContain('REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT');
     expect(workflow).toContain('reseed auth.json');
     expect(workflow).toContain('ReviewRouter skipped this fork pull request');
     expect(workflow).not.toContain('pull_request_target');
@@ -80,6 +82,13 @@ describe('production reusable workflows', () => {
     expect(workflow).toContain('Preflight ReviewRouter interaction');
     expect(workflow).toContain('REVIEW_ROUTER_MODE: interaction-preflight');
     expect(workflow).toContain('REVIEW_ROUTER_MODE: interaction');
+    expect(workflow).toContain('discussion_mode:');
+    expect(workflow).toContain('CODEX_AUTH_JSON:');
+    expect(workflow).toContain('OPENAI_API_KEY:');
+    expect(workflow).toContain('Install Codex CLI for discussion replies');
+    expect(workflow).toContain('REVIEW_ROUTER_MEMORY_ENABLED');
+    expect(workflow).toContain('REVIEW_ROUTER_MEMORY_CANDIDATE_ENDPOINT');
+    expect(workflow).toContain('REVIEW_ROUTER_MEMORY_COMMAND_ENDPOINT');
     expect(workflow).toContain('review_workflow_file:');
     expect(workflow).toContain(
       'RR_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}'

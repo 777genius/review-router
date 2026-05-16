@@ -437,6 +437,15 @@ describe('ReviewOrchestrator health check guard rails', () => {
         body: expect.stringContaining('Build code graph'),
       })
     );
+    expect(updateComment).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        comment_id: 456,
+        body: expect.stringContaining('## All Clear!'),
+      })
+    );
+    expect(updateComment.mock.calls.at(-1)?.[0].body).not.toContain(
+      '<!-- review-router-progress-tracker -->'
+    );
   });
 
   it('skips default progress when the PR already has ReviewRouter activity', async () => {
@@ -524,6 +533,103 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(listIssueComments).toHaveBeenCalled();
     expect(listReviewComments).not.toHaveBeenCalled();
     expect(createComment).not.toHaveBeenCalled();
+  });
+
+  it('reuses progress-only comments instead of treating them as completed activity', async () => {
+    delete process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
+    const provider = {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const createComment = jest.fn();
+    const updateComment = jest.fn().mockResolvedValue({});
+    const listIssueComments = jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: 99,
+          body: '## 🤖 ReviewRouter Progress\n\n<!-- review-router-progress-tracker -->',
+        },
+      ],
+    });
+    const listReviewComments = jest.fn().mockResolvedValue({ data: [] });
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: false,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: ['p1'],
+        fallbackProviders: [],
+        providerLimit: 1,
+      },
+      githubClient: {
+        owner: 'owner',
+        repo: 'repo',
+        octokit: {
+          rest: {
+            issues: {
+              listComments: listIssueComments,
+              createComment,
+              updateComment,
+            },
+            pulls: {
+              listReviewComments,
+            },
+          },
+        },
+      } as any,
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute: jest.fn().mockResolvedValue([
+          {
+            name: 'p1',
+            status: 'success',
+            result: {
+              content: '{"findings":[]}',
+              findings: [],
+              usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+            },
+            durationSeconds: 0,
+          } as ProviderResult,
+        ]),
+      } as any,
+      formatter: { format: jest.fn().mockReturnValue('## All Clear!') } as any,
+    });
+
+    await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(listIssueComments).toHaveBeenCalled();
+    expect(listReviewComments).toHaveBeenCalled();
+    expect(createComment).not.toHaveBeenCalled();
+    expect(updateComment).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        comment_id: 99,
+        body: expect.stringContaining('## All Clear!'),
+      })
+    );
+    expect(updateComment.mock.calls.at(-1)?.[0].body).not.toContain(
+      '<!-- review-router-progress-tracker -->'
+    );
   });
 
   it('does not create progress comments when explicitly disabled', async () => {

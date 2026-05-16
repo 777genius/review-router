@@ -4,6 +4,12 @@ import path from 'path';
 import { GitHubClient } from '../../../src/github/client';
 import { ReviewLedger } from '../../../src/github/ledger';
 import { ReviewInteractionHandler } from '../../../src/github/interaction';
+import {
+  ActionMemoryCandidateRequest,
+  ActionMemoryCommand,
+  ActionMemoryInteractionPort,
+  ActionMemoryMutationResponse,
+} from '../../../src/control-plane/memory';
 
 function writeEvent(payload: unknown): string {
   const file = path.join(
@@ -17,13 +23,20 @@ function writeEvent(payload: unknown): string {
 function makeClient(options: { parentBody?: string } = {}) {
   const listReviewComments = jest.fn();
   const updateReviewComment = jest.fn().mockResolvedValue({});
+  const getPull = jest.fn().mockResolvedValue({
+    data: {
+      number: 123,
+      head: { sha: 'abc', repo: { fork: false } },
+      user: { login: 'author' },
+    },
+  });
   const listComments = jest.fn();
   const parentBody =
     options.parentBody ||
     '**🟡 Major - SQL injection**\n\nUse parameterized queries.';
   const octokit = {
     rest: {
-      pulls: { listReviewComments, updateReviewComment },
+      pulls: { listReviewComments, updateReviewComment, get: getPull },
       issues: {
         listComments,
         createComment: jest.fn().mockResolvedValue({}),
@@ -62,6 +75,47 @@ function makeClient(options: { parentBody?: string } = {}) {
     repo: 'test-repo',
   } as unknown as GitHubClient;
   return { client, octokit };
+}
+
+class CapturingMemoryClient implements ActionMemoryInteractionPort {
+  public readonly candidates: ActionMemoryCandidateRequest[] = [];
+  public readonly commands: ActionMemoryCommand[][] = [];
+
+  constructor(
+    private readonly options: {
+      readonly available?: boolean;
+      readonly candidateResponse?: ActionMemoryMutationResponse;
+      readonly commandResponses?: readonly ActionMemoryMutationResponse[];
+    } = {}
+  ) {}
+
+  isAvailable(): boolean {
+    return this.options.available ?? true;
+  }
+
+  async submitCandidate(
+    input: ActionMemoryCandidateRequest
+  ): Promise<ActionMemoryMutationResponse> {
+    this.candidates.push(input);
+    return (
+      this.options.candidateResponse ?? {
+        status: 'created',
+        id: 'mem_direct',
+        version: 1,
+      }
+    );
+  }
+
+  async submitCommands(
+    commands: readonly ActionMemoryCommand[]
+  ): Promise<readonly ActionMemoryMutationResponse[]> {
+    this.commands.push([...commands]);
+    return (
+      this.options.commandResponses ?? [
+        { status: 'updated', id: 'mem_confirmed', version: 2 },
+      ]
+    );
+  }
 }
 
 describe('ReviewInteractionHandler', () => {
@@ -508,6 +562,206 @@ describe('ReviewInteractionHandler', () => {
       expect.objectContaining({
         issue_number: 123,
         body: expect.stringContaining('Could not record `/rr skip`'),
+      })
+    );
+  });
+
+  it('submits direct repository memory commands from PR issue comments', async () => {
+    const { client, octokit } = makeClient();
+    const memoryClient = new CapturingMemoryClient({
+      candidateResponse: { status: 'created', id: 'mem_direct', version: 1 },
+    });
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 77,
+        body: '/rr remember repo Use Playwright screenshots for memory dashboard QA.',
+        user: { login: 'maintainer', type: 'User' },
+      },
+      issue: { number: 123, pull_request: {} },
+      repository: { full_name: 'test-owner/test-repo' },
+    });
+
+    const ledger = new ReviewLedger(client, 'test-secret');
+    await new ReviewInteractionHandler(
+      client,
+      ledger,
+      undefined,
+      client,
+      memoryClient
+    ).execute();
+
+    expect(octokit.rest.pulls.get).toHaveBeenCalledWith(
+      expect.objectContaining({ pull_number: 123 })
+    );
+    expect(memoryClient.candidates).toHaveLength(1);
+    expect(memoryClient.candidates[0]).toMatchObject({
+      protocolVersion: 1,
+      intent: 'explicit_command',
+      requestedScope: 'repository',
+      candidateBody: 'Use Playwright screenshots for memory dashboard QA.',
+      extractionMethod: 'explicit_command',
+      source: {
+        sourceId: 'github-comment:77',
+        githubCommentId: '77',
+        githubPullRequestNumber: 123,
+        url: 'https://github.com/test-owner/test-repo/pull/123#issuecomment-77',
+        redactedExcerpt: 'Use Playwright screenshots for memory dashboard QA.',
+        sourceVisibility: 'private',
+      },
+    });
+    expect(memoryClient.candidates[0].sourceTextHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_number: 123,
+        body: expect.stringContaining('Saved repository memory `mem_direct`'),
+      })
+    );
+  });
+
+  it('turns natural-language memory requests into pending suggestions', async () => {
+    const { client, octokit } = makeClient();
+    const memoryClient = new CapturingMemoryClient({
+      candidateResponse: {
+        status: 'created',
+        id: 'mem_suggestion_natural',
+        version: 1,
+      },
+    });
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 78,
+        body: 'Remember for this repository: prefer compact badges over button-like badges.',
+        user: { login: 'maintainer', type: 'User' },
+      },
+      issue: { number: 123, pull_request: {} },
+      repository: { full_name: 'test-owner/test-repo' },
+    });
+
+    const ledger = new ReviewLedger(client, 'test-secret');
+    await new ReviewInteractionHandler(
+      client,
+      ledger,
+      undefined,
+      client,
+      memoryClient
+    ).execute();
+
+    expect(memoryClient.candidates).toHaveLength(1);
+    expect(memoryClient.candidates[0]).toMatchObject({
+      intent: 'explicit_natural_language',
+      requestedScope: 'repository',
+      candidateBody: 'prefer compact badges over button-like badges.',
+      extractionMethod: 'explicit_natural_language',
+    });
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining(
+          'Confirm with `/rr remember mem_suggestion_natural`'
+        ),
+      })
+    );
+  });
+
+  it('submits memory confirmation commands without treating them as skip commands', async () => {
+    const { client, octokit } = makeClient();
+    const memoryClient = new CapturingMemoryClient({
+      commandResponses: [
+        { status: 'created', id: 'mem_confirmed', version: 1 },
+      ],
+    });
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 79,
+        body: '/rr remember mem_suggestion_natural',
+        user: { login: 'maintainer', type: 'User' },
+      },
+      issue: { number: 123, pull_request: {} },
+      repository: { full_name: 'test-owner/test-repo' },
+    });
+
+    const ledger = new ReviewLedger(client, 'test-secret');
+    await new ReviewInteractionHandler(
+      client,
+      ledger,
+      undefined,
+      client,
+      memoryClient
+    ).execute();
+
+    expect(memoryClient.candidates).toHaveLength(0);
+    expect(memoryClient.commands).toEqual([
+      [{ kind: 'confirm_suggestion', suggestionId: 'mem_suggestion_natural' }],
+    ]);
+    expect(octokit.rest.actions.reRunWorkflowFailedJobs).not.toHaveBeenCalled();
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining(
+          'Confirmed memory suggestion `mem_suggestion_natural` as `mem_confirmed`'
+        ),
+      })
+    );
+  });
+
+  it('ignores bot memory comments to prevent loops', async () => {
+    const { client, octokit } = makeClient();
+    const memoryClient = new CapturingMemoryClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 80,
+        body: '/rr remember repo bot generated memory',
+        user: { login: 'github-actions[bot]', type: 'Bot' },
+      },
+      issue: { number: 123, pull_request: {} },
+      repository: { full_name: 'test-owner/test-repo' },
+    });
+
+    const ledger = new ReviewLedger(client, 'test-secret');
+    await new ReviewInteractionHandler(
+      client,
+      ledger,
+      undefined,
+      client,
+      memoryClient
+    ).execute();
+
+    expect(memoryClient.candidates).toHaveLength(0);
+    expect(memoryClient.commands).toHaveLength(0);
+    expect(octokit.rest.issues.createComment).not.toHaveBeenCalled();
+  });
+
+  it('does not submit memory from fork pull requests', async () => {
+    const { client, octokit } = makeClient();
+    octokit.rest.pulls.get.mockResolvedValueOnce({
+      data: {
+        number: 123,
+        head: { sha: 'abc', repo: { fork: true } },
+        user: { login: 'author' },
+      },
+    });
+    const memoryClient = new CapturingMemoryClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 81,
+        body: '/rr remember repo fork memory',
+        user: { login: 'maintainer', type: 'User' },
+      },
+      issue: { number: 123, pull_request: {} },
+      repository: { full_name: 'test-owner/test-repo' },
+    });
+
+    const ledger = new ReviewLedger(client, 'test-secret');
+    await new ReviewInteractionHandler(
+      client,
+      ledger,
+      undefined,
+      client,
+      memoryClient
+    ).execute();
+
+    expect(memoryClient.candidates).toHaveLength(0);
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining('fork pull requests'),
       })
     );
   });

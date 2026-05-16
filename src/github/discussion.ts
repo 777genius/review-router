@@ -28,6 +28,10 @@ export interface ReviewCommentEventPayload {
       type?: string | null;
     } | null;
   };
+  issue?: {
+    number?: number;
+    pull_request?: unknown;
+  };
   pull_request?: {
     number?: number;
     head?: {

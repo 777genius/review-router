@@ -46,6 +46,26 @@ inputs:
     description: "Timeout for AI discussion replies"
     required: false
     default: "60"
+  REVIEW_ROUTER_MEMORY_ENABLED:
+    description: "Enable ReviewRouter SaaS memory retrieval and interaction commands"
+    required: false
+    default: "false"
+  REVIEW_ROUTER_MEMORY_PROTOCOL_VERSION:
+    description: "ReviewRouter memory runtime protocol version"
+    required: false
+    default: "1"
+  REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT:
+    description: "Action API path used to fetch scoped memory bundles"
+    required: false
+    default: "/api/action/v1/memory"
+  REVIEW_ROUTER_MEMORY_CANDIDATE_ENDPOINT:
+    description: "Action API path used to submit distilled memory candidates"
+    required: false
+    default: "/api/action/v1/memory-candidates"
+  REVIEW_ROUTER_MEMORY_COMMAND_ENDPOINT:
+    description: "Action API path used to submit normalized memory commands"
+    required: false
+    default: "/api/action/v1/memory-commands"
   REVIEW_PROVIDERS:
     description: |
       Comma-separated provider list (e.g., "openrouter/model1,opencode/model2").
@@ -241,7 +261,7 @@ inputs:
     required: false
     default: "true"
   REVIEW_ROUTER_PROGRESS_COMMENTS:
-    description: "Progress comment mode: first shows a live progress comment only before the PR has ReviewRouter activity; true shows progress every run; false disables it"
+    description: "Progress mode: first runs until a ReviewRouter result exists; true always runs; false disables it"
     required: false
     default: "first"
   FAIL_ON_CRITICAL:
@@ -337,7 +357,7 @@ inputs:
     required: false
     default: "false"
   PATH_INTENSITY_PATTERNS:
-    description: "JSON array of path patterns with intensities (e.g., [{\"pattern\":\"src/auth/**\",\"intensity\":\"thorough\"}])"
+    description: 'JSON array of path patterns with intensities (e.g., [{"pattern":"src/auth/**","intensity":"thorough"}])'
     required: false
     default: ""
   PATH_DEFAULT_INTENSITY:

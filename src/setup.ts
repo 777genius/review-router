@@ -46,6 +46,7 @@ import {
 import { ReviewThreadResolver } from './github/review-thread-resolver';
 import { ControlPlaneReviewThreadLifecycleResolver } from './control-plane/review-thread-lifecycle';
 import { RuntimeConfigResult } from './control-plane/runtime-config';
+import { ControlPlaneMemoryClient } from './control-plane/memory';
 
 export interface SetupOptions {
   cliMode?: boolean;
@@ -343,6 +344,9 @@ export async function createComponents(
     fallbackGithubClient,
     new ControlPlaneReviewThreadLifecycleResolver(options.runtimeConfig)
   );
+  const memoryBundleProvider = new ControlPlaneMemoryClient(
+    options.runtimeConfig
+  );
   const quietModeFilter = config.quietModeEnabled
     ? new QuietModeFilter(
         {
@@ -412,5 +416,6 @@ export async function createComponents(
     reviewThreadResolver,
     acceptanceDetector,
     providerWeightTracker,
+    memoryBundleProvider,
   };
 }

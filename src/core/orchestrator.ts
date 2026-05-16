@@ -103,6 +103,10 @@ import {
 } from '../utils/provider-votes';
 import * as fs from 'fs/promises';
 import path from 'path';
+import {
+  ActionMemoryBundleProvider,
+  formatActionMemoryBundleForPrompt,
+} from '../control-plane/memory';
 
 // Configuration constants
 const HEALTH_CHECK_TIMEOUT_MS = 30_000; // 30 seconds
@@ -143,6 +147,7 @@ export interface ReviewComponents {
   prDescriptionUpdater?: PullRequestDescriptionUpdater;
   acceptanceDetector?: AcceptanceDetector;
   providerWeightTracker?: ProviderWeightTracker;
+  memoryBundleProvider?: ActionMemoryBundleProvider;
 }
 
 export class ReviewOrchestrator {
@@ -503,6 +508,21 @@ export class ReviewOrchestrator {
             diff: filterDiffByFiles(reviewContext.diff, filesToReview),
           }
         : reviewContext;
+      let memoryPromptContext: string | undefined;
+      if (this.components.memoryBundleProvider) {
+        try {
+          memoryPromptContext = formatActionMemoryBundleForPrompt(
+            await this.components.memoryBundleProvider.fetchBundleForPullRequest(
+              reviewPR
+            )
+          );
+        } catch (error) {
+          logger.warn(
+            'ReviewRouter memory bundle retrieval failed; continuing without memory context',
+            error as Error
+          );
+        }
+      }
 
       const lifecycleMode: ReviewThreadLifecycleMode =
         this.components.reviewThreadInventory && this.components.githubClient
@@ -804,7 +824,8 @@ export class ReviewOrchestrator {
                   config,
                   reviewIntensity,
                   undefined,
-                  codeGraph
+                  codeGraph,
+                  memoryPromptContext
                 );
                 const prompt = await promptBuilder.build(
                   batchContext,
@@ -1290,6 +1311,7 @@ export class ReviewOrchestrator {
         this.components.feedbackFilter.shouldPost(c, reviewCommentState)
       );
 
+      let shouldReplaceProgressWithCleanSummary = false;
       if (this.shouldPostReviewOutput(review, inlineFiltered)) {
         await this.components.commentPoster.postSummary(
           pr.number,
@@ -1319,10 +1341,19 @@ export class ReviewOrchestrator {
           pr.files,
           pr.headSha
         );
+        shouldReplaceProgressWithCleanSummary = true;
       }
 
       await this.writeReports(review);
       await progressTracker?.updateProgress('synthesis', 'completed');
+      if (shouldReplaceProgressWithCleanSummary && progressTracker) {
+        const replaced = await progressTracker.replaceWith(markdown);
+        if (replaced) {
+          logger.info(
+            'Replaced ReviewRouter progress comment with final no-findings summary'
+          );
+        }
+      }
       success = true;
       return review;
     } catch (error) {
@@ -2155,8 +2186,10 @@ export class ReviewOrchestrator {
         per_page: 100,
       });
       if (
-        issueComments.some((comment) =>
-          this.isReviewRouterIssueComment(comment.body)
+        issueComments.some(
+          (comment) =>
+            this.isReviewRouterIssueComment(comment.body) &&
+            !this.isReviewRouterProgressIssueComment(comment.body)
         )
       ) {
         return true;
@@ -2215,6 +2248,16 @@ export class ReviewOrchestrator {
       body.startsWith('## 🤖 AI Robot Review Progress') ||
       body.startsWith('# ReviewRouter') ||
       body.startsWith('# AI Robot Review')
+    );
+  }
+
+  private isReviewRouterProgressIssueComment(body?: string | null): boolean {
+    if (!body) return false;
+    return (
+      body.includes('<!-- review-router-progress-tracker -->') ||
+      body.includes('<!-- ai-robot-review-progress-tracker -->') ||
+      body.startsWith('## 🤖 ReviewRouter Progress') ||
+      body.startsWith('## 🤖 AI Robot Review Progress')
     );
   }
 

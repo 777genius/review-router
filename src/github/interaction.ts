@@ -16,6 +16,20 @@ import {
   ReviewCommentEventPayload,
   ReviewDiscussionHandler,
 } from './discussion';
+import {
+  ActionMemoryCandidateRequest,
+  ActionMemoryCommand,
+  ActionMemoryInteractionPort,
+  ActionMemoryMutationResponse,
+  memorySourceHash,
+} from '../control-plane/memory';
+import {
+  memoryCommandLabel,
+  memoryScopeLabel,
+  parseMemoryInteraction,
+  ParsedMemoryInteraction,
+  ParsedMemoryInstruction,
+} from './memory-interaction';
 
 type CommandKind = 'skip' | 'unskip' | 'status';
 
@@ -33,6 +47,28 @@ interface ReviewCommentApiItem {
   user?: {
     login?: string | null;
   } | null;
+}
+
+interface PullRequestApiItem {
+  number?: number;
+  head?: {
+    sha?: string | null;
+    repo?: {
+      fork?: boolean | null;
+      full_name?: string | null;
+    } | null;
+  } | null;
+  user?: {
+    login?: string | null;
+  } | null;
+}
+
+interface InteractionPullRequestContext {
+  prNumber: number;
+  headSha?: string;
+  isFork: boolean;
+  verified: boolean;
+  prAuthor: string;
 }
 
 const DISMISSAL_MARKER_START = '<!-- review-router-dismissal:start -->';
@@ -58,17 +94,45 @@ interface WorkflowRunSummary {
   pull_requests?: Array<{ number?: number | null }> | null;
 }
 
+type MemoryNoticeResult =
+  | {
+      readonly status: 'result';
+      readonly label: string;
+      readonly response: ActionMemoryMutationResponse | undefined;
+      readonly command?: ActionMemoryCommand;
+      readonly candidateBody?: string;
+      readonly requestedScope?: 'repository' | 'workspace';
+    }
+  | {
+      readonly status: 'error';
+      readonly label: string;
+      readonly reason: string;
+    };
+
 export class ReviewInteractionHandler {
   constructor(
     private readonly client: GitHubClient,
     private readonly ledger: ReviewLedger,
     private readonly discussionHandler?: ReviewDiscussionHandler,
-    private readonly actionsClient: GitHubClient = client
+    private readonly actionsClient: GitHubClient = client,
+    private readonly memoryClient?: ActionMemoryInteractionPort
   ) {}
 
   async execute(): Promise<void> {
     const payload = readEventPayload();
-    const command = parseCommand(payload.comment?.body || '');
+    const body = payload.comment?.body || '';
+    if (isBotCommentUser(payload.comment?.user)) {
+      logger.info('Ignoring review interaction from a bot user.');
+      return;
+    }
+
+    const command = parseCommand(body);
+    const memoryInteraction = parseMemoryInteraction(body);
+    if (!command && isMemoryInteraction(memoryInteraction)) {
+      await this.handleMemoryInteraction(payload, memoryInteraction);
+      return;
+    }
+
     if (!command) {
       if (this.discussionHandler) {
         await this.discussionHandler.execute(payload);
@@ -78,27 +142,169 @@ export class ReviewInteractionHandler {
       return;
     }
 
-    const prNumber = payload.pull_request?.number;
-    if (!prNumber) {
+    const prContext = await this.resolvePullRequestContext(payload);
+    if (!prContext) {
       throw new Error(
-        'pull_request_review_comment payload is missing pull_request.number'
+        'review interaction payload is missing a pull request number'
       );
     }
 
-    if (payload.pull_request?.head?.repo?.fork) {
+    if (!prContext.verified) {
       await this.postNotice(
-        prNumber,
+        prContext.prNumber,
+        'ReviewRouter ignored this command because it could not verify the pull request context.'
+      );
+      return;
+    }
+
+    if (prContext.isFork) {
+      await this.postNotice(
+        prContext.prNumber,
         'ReviewRouter ignored this command because fork pull requests do not receive secret-backed review automation by default.'
       );
       return;
     }
 
     if (command.kind === 'status') {
-      await this.postStatus(prNumber, payload.pull_request?.head?.sha);
+      await this.postStatus(prContext.prNumber, prContext.headSha);
       return;
     }
 
-    await this.handleSkipCommand(payload, command, prNumber);
+    await this.handleSkipCommand(payload, command, prContext.prNumber);
+  }
+
+  private async handleMemoryInteraction(
+    payload: ReviewCommentEventPayload,
+    interaction: ParsedMemoryInteraction
+  ): Promise<void> {
+    const prContext = await this.resolvePullRequestContext(payload);
+    const comment = payload.comment;
+    if (!prContext || !comment?.id || !comment.body?.trim()) {
+      return;
+    }
+    if (!prContext.verified) {
+      await this.postNotice(
+        prContext.prNumber,
+        'ReviewRouter memory was ignored because the pull request context could not be verified.'
+      );
+      return;
+    }
+    if (prContext.isFork) {
+      await this.postNotice(
+        prContext.prNumber,
+        'ReviewRouter memory was ignored because fork pull requests do not receive secret-backed memory automation by default.'
+      );
+      return;
+    }
+    if (interaction.invalidReason) {
+      await this.postNotice(
+        prContext.prNumber,
+        `ReviewRouter memory request was ignored: ${interaction.invalidReason}.`
+      );
+      return;
+    }
+    if (!this.memoryClient?.isAvailable()) {
+      await this.postNotice(
+        prContext.prNumber,
+        'ReviewRouter memory is not available for this run.'
+      );
+      return;
+    }
+
+    const results: MemoryNoticeResult[] = [];
+    for (const instruction of interaction.instructions.slice(0, 5)) {
+      try {
+        results.push(
+          await this.executeMemoryInstruction(payload, prContext, instruction)
+        );
+      } catch (error) {
+        results.push({
+          label: describeMemoryInstruction(instruction),
+          status: 'error',
+          reason: sanitizeNoticeError(error),
+        });
+      }
+    }
+
+    await this.postNotice(prContext.prNumber, renderMemoryNotice(results));
+  }
+
+  private async executeMemoryInstruction(
+    payload: ReviewCommentEventPayload,
+    prContext: InteractionPullRequestContext,
+    instruction: ParsedMemoryInstruction
+  ): Promise<MemoryNoticeResult> {
+    if (instruction.type === 'command') {
+      const [response] = await this.memoryClient!.submitCommands([
+        instruction.command,
+      ]);
+      return {
+        label: memoryCommandLabel(instruction.command),
+        status: 'result',
+        command: instruction.command,
+        response,
+      };
+    }
+
+    const request = buildMemoryCandidateRequest({
+      payload,
+      prContext,
+      instruction,
+      owner: this.client.owner,
+      repo: this.client.repo,
+    });
+    const response = await this.memoryClient!.submitCandidate(request);
+    return {
+      label: `${memoryScopeLabel(instruction.requestedScope)} memory`,
+      status: 'result',
+      candidateBody: instruction.candidateBody,
+      requestedScope: instruction.requestedScope,
+      response,
+    };
+  }
+
+  private async resolvePullRequestContext(
+    payload: ReviewCommentEventPayload
+  ): Promise<InteractionPullRequestContext | null> {
+    const prNumber = payload.pull_request?.number ?? payload.issue?.number;
+    if (!prNumber) {
+      return null;
+    }
+    if (payload.pull_request) {
+      return {
+        prNumber,
+        headSha: payload.pull_request.head?.sha,
+        isFork: payload.pull_request.head?.repo?.fork === true,
+        verified: true,
+        prAuthor: payload.pull_request.user?.login || '',
+      };
+    }
+
+    try {
+      const response = await this.actionsClient.octokit.rest.pulls.get({
+        owner: this.actionsClient.owner,
+        repo: this.actionsClient.repo,
+        pull_number: prNumber,
+      });
+      const data = response.data as PullRequestApiItem;
+      return {
+        prNumber,
+        headSha: data.head?.sha || undefined,
+        isFork: data.head?.repo?.fork === true,
+        verified: true,
+        prAuthor: data.user?.login || '',
+      };
+    } catch (error) {
+      logger.warn(
+        `Failed to verify pull request context for interaction PR #${prNumber}: ${sanitizeNoticeError(error)}`
+      );
+      return {
+        prNumber,
+        isFork: false,
+        verified: false,
+        prAuthor: '',
+      };
+    }
   }
 
   private async handleSkipCommand(
@@ -450,6 +656,170 @@ export class ReviewInteractionHandler {
       body,
     });
   }
+}
+
+function isMemoryInteraction(interaction: ParsedMemoryInteraction): boolean {
+  return interaction.instructions.length > 0 || !!interaction.invalidReason;
+}
+
+function isBotCommentUser(
+  user:
+    | {
+        readonly login?: string | null;
+        readonly type?: string | null;
+      }
+    | null
+    | undefined
+): boolean {
+  const login =
+    user && typeof user === 'object' && 'login' in user
+      ? String(user.login || '')
+      : '';
+  const type =
+    user && typeof user === 'object' && 'type' in user
+      ? String(user.type || '')
+      : '';
+  return type === 'Bot' || login.endsWith('[bot]');
+}
+
+function buildMemoryCandidateRequest(input: {
+  readonly payload: ReviewCommentEventPayload;
+  readonly prContext: InteractionPullRequestContext;
+  readonly instruction: Extract<ParsedMemoryInstruction, { type: 'candidate' }>;
+  readonly owner: string;
+  readonly repo: string;
+}): ActionMemoryCandidateRequest {
+  const comment = input.payload.comment;
+  if (!comment?.id || !comment.body) {
+    throw new Error('memory_comment_unavailable');
+  }
+  const sourceHash = memorySourceHash(comment.body);
+  return {
+    protocolVersion: 1,
+    intent: input.instruction.intent,
+    requestedScope: input.instruction.requestedScope,
+    candidateBody: input.instruction.candidateBody,
+    sourceTextHash: sourceHash,
+    extractionMethod: input.instruction.extractionMethod,
+    extractionVersion: 1,
+    source: {
+      sourceId: `github-comment:${comment.id}`,
+      githubCommentId: String(comment.id),
+      githubPullRequestNumber: input.prContext.prNumber,
+      url: buildMemoryCommentUrl(input),
+      redactedExcerpt: redactedMemoryExcerpt(input.instruction.candidateBody),
+      sourceHash,
+      sourceVisibility: 'private',
+    },
+  };
+}
+
+function buildMemoryCommentUrl(input: {
+  readonly payload: ReviewCommentEventPayload;
+  readonly prContext: InteractionPullRequestContext;
+  readonly owner: string;
+  readonly repo: string;
+}): string {
+  const repository =
+    input.payload.repository?.full_name || `${input.owner}/${input.repo}`;
+  const commentId = input.payload.comment?.id;
+  const anchor = input.payload.comment?.in_reply_to_id
+    ? `discussion_r${commentId}`
+    : `issuecomment-${commentId}`;
+  return `https://github.com/${repository}/pull/${input.prContext.prNumber}#${anchor}`;
+}
+
+function renderMemoryNotice(results: readonly MemoryNoticeResult[]): string {
+  const lines = ['ReviewRouter memory update:'];
+  for (const result of results) {
+    lines.push(`- ${renderMemoryNoticeLine(result)}`);
+  }
+  return lines.join('\n');
+}
+
+function renderMemoryNoticeLine(result: MemoryNoticeResult): string {
+  if (result.status === 'error') {
+    return `${result.label}: failed (${result.reason}).`;
+  }
+  const response = result.response;
+  if (!response) {
+    return `${result.label}: no response from memory service.`;
+  }
+  if (result.command) {
+    return renderMemoryCommandResult(result.command, response);
+  }
+  return renderMemoryCandidateResult(result, response);
+}
+
+function renderMemoryCandidateResult(
+  result: Extract<MemoryNoticeResult, { status: 'result' }>,
+  response: ActionMemoryMutationResponse
+): string {
+  const body = result.candidateBody
+    ? `: ${redactedMemoryExcerpt(result.candidateBody)}`
+    : '.';
+  if (response.status === 'created' || response.status === 'updated') {
+    if (response.id?.startsWith('mem_suggestion_')) {
+      return `Created pending ${result.requestedScope} memory suggestion \`${response.id}\`${body} Confirm with \`/rr remember ${response.id}\`.`;
+    }
+    return `Saved ${result.requestedScope} memory \`${response.id || 'mem'}\`${body}`;
+  }
+  if (response.status === 'noop') {
+    return `No memory change for ${result.label}${response.id ? ` \`${response.id}\`` : ''}: ${safeNoticeText(response.reason || 'noop')}.`;
+  }
+  return `Memory request rejected for ${result.label}: ${safeNoticeText(response.reason || 'rejected')}.`;
+}
+
+function renderMemoryCommandResult(
+  command: ActionMemoryCommand,
+  response: ActionMemoryMutationResponse
+): string {
+  if (command.kind === 'confirm_suggestion') {
+    if (response.status === 'created' || response.status === 'updated') {
+      return `Confirmed memory suggestion \`${command.suggestionId}\` as \`${response.id || 'memory'}\`.`;
+    }
+    return `Could not confirm memory suggestion \`${command.suggestionId}\`: ${safeNoticeText(response.reason || response.status)}.`;
+  }
+  if (command.kind === 'reject_suggestion') {
+    return response.status === 'updated'
+      ? `Rejected memory suggestion \`${command.suggestionId}\`.`
+      : `Could not reject memory suggestion \`${command.suggestionId}\`: ${safeNoticeText(response.reason || response.status)}.`;
+  }
+  if (command.kind === 'disable_memory') {
+    return response.status === 'updated'
+      ? `Disabled memory \`${command.memoryItemId}\`.`
+      : `Could not disable memory \`${command.memoryItemId}\`: ${safeNoticeText(response.reason || response.status)}.`;
+  }
+  if (command.kind === 'forget_memory') {
+    return response.status === 'updated'
+      ? `Deleted memory \`${command.memoryItemId}\`.`
+      : `Could not delete memory \`${command.memoryItemId}\`: ${safeNoticeText(response.reason || response.status)}.`;
+  }
+  return `No memory change for ${memoryCommandLabel(command)}: ${safeNoticeText(response.reason || response.status)}.`;
+}
+
+function describeMemoryInstruction(
+  instruction: ParsedMemoryInstruction
+): string {
+  if (instruction.type === 'command') {
+    return memoryCommandLabel(instruction.command);
+  }
+  return `${memoryScopeLabel(instruction.requestedScope)} memory`;
+}
+
+function redactedMemoryExcerpt(value: string): string {
+  return safeNoticeText(value).slice(0, 240);
+}
+
+function safeNoticeText(value: string): string {
+  return value
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, 'gh*-***')
+    .replace(/github_pat_[A-Za-z0-9_]+/g, 'github_pat_***')
+    .replace(/sk-[A-Za-z0-9_-]{16,}/g, 'sk-***')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300);
 }
 
 function isFailedWorkflowConclusion(conclusion?: string | null): boolean {

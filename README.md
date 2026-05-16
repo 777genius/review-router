@@ -64,8 +64,8 @@ Available but still experimental:
 - **Read-only agentic context:** Codex starts from the PR diff, then may inspect related repository files in a read-only sandbox.
 - **Strict JSON findings:** provider output is parsed into `{file,line,severity,title,message,suggestion}` before posting.
 - **Inline comments:** posts only valid comments on changed lines, with severity labels in the comment body.
-- **Progress comment:** shows a live progress comment only for the first ReviewRouter run on a PR by default.
-- **PR summary:** posts a fresh summary only when there are findings or lifecycle attention; clean reruns stay quiet.
+- **Progress comment:** shows live progress until the PR has a ReviewRouter result; clean first runs become an all-clear summary.
+- **PR summary:** posts a fresh summary only when there are findings or lifecycle attention; clean reruns stay quiet after a result exists.
 - **PR description summary:** adds a generated `Summary`, selected files list, and walkthrough block while preserving author text above it.
 - **Merge gating:** fail the check for critical or major findings when configured.
 - **Human override:** reply `/rr skip` to a ReviewRouter inline comment to dismiss that finding after a maintainer confirms it is not actionable.
@@ -302,22 +302,22 @@ This token is not used to post comments. Review comments and summaries still use
 
 ## Important Inputs
 
-| Input                             | Default | Notes                                                                                                                |
-| --------------------------------- | ------: | -------------------------------------------------------------------------------------------------------------------- |
-| `CODEX_MODEL`                     |   empty | Codex model id, for example `gpt-5.5`.                                                                               |
-| `CLAUDE_MODEL`                    |   empty | Claude Code model alias/id, for example `sonnet`.                                                                    |
-| `CODEX_REASONING_EFFORT`          |   empty | Codex effort for review runs, for example `medium`.                                                                  |
-| `CODEX_AGENTIC_CONTEXT`           |  `true` | Lets Codex inspect related files in read-only mode.                                                                  |
-| `INLINE_MAX_COMMENTS`             |     `5` | Caps inline comment noise.                                                                                           |
-| `INLINE_MIN_SEVERITY`             | `major` | Controls which findings become inline comments.                                                                      |
-| `MIN_CONFIDENCE`                  |   empty | Optional confidence threshold for inline suggestions.                                                                |
-| `FAIL_ON_CRITICAL`                |  `true` | Fails the check on critical findings.                                                                                |
-| `FAIL_ON_MAJOR`                   | `false` | Set `true` to block PRs on major findings.                                                                           |
-| `UPDATE_PR_DESCRIPTION`           |  `true` | Adds or updates only the generated ReviewRouter block.                                                               |
-| `REVIEW_ROUTER_PROGRESS_COMMENTS` | `first` | `first` shows progress only before the PR has ReviewRouter activity; use `true` for every run or `false` to disable. |
-| `SMART_DIFF_COMPACTION`           |  `true` | Summarizes oversized/generated diffs before prompt construction.                                                     |
-| `GRAPH_ENABLED`                   | `false` | Optional code graph context. Keep off until validated for your repo.                                                 |
-| `LEARNING_ENABLED`                | `false` | Experimental feedback-learning path.                                                                                 |
+| Input                             | Default | Notes                                                                                                      |
+| --------------------------------- | ------: | ---------------------------------------------------------------------------------------------------------- |
+| `CODEX_MODEL`                     |   empty | Codex model id, for example `gpt-5.5`.                                                                     |
+| `CLAUDE_MODEL`                    |   empty | Claude Code model alias/id, for example `sonnet`.                                                          |
+| `CODEX_REASONING_EFFORT`          |   empty | Codex effort for review runs, for example `medium`.                                                        |
+| `CODEX_AGENTIC_CONTEXT`           |  `true` | Lets Codex inspect related files in read-only mode.                                                        |
+| `INLINE_MAX_COMMENTS`             |     `5` | Caps inline comment noise.                                                                                 |
+| `INLINE_MIN_SEVERITY`             | `major` | Controls which findings become inline comments.                                                            |
+| `MIN_CONFIDENCE`                  |   empty | Optional confidence threshold for inline suggestions.                                                      |
+| `FAIL_ON_CRITICAL`                |  `true` | Fails the check on critical findings.                                                                      |
+| `FAIL_ON_MAJOR`                   | `false` | Set `true` to block PRs on major findings.                                                                 |
+| `UPDATE_PR_DESCRIPTION`           |  `true` | Adds or updates only the generated ReviewRouter block.                                                     |
+| `REVIEW_ROUTER_PROGRESS_COMMENTS` | `first` | `first` shows progress until a ReviewRouter result exists; use `true` for every run or `false` to disable. |
+| `SMART_DIFF_COMPACTION`           |  `true` | Summarizes oversized/generated diffs before prompt construction.                                           |
+| `GRAPH_ENABLED`                   | `false` | Optional code graph context. Keep off until validated for your repo.                                       |
+| `LEARNING_ENABLED`                | `false` | Experimental feedback-learning path.                                                                       |
 
 ## Review Scope And Limits
 

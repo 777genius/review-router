@@ -5,7 +5,11 @@ import {
   ReviewIntensity,
 } from '../../types';
 import { compactDiffForPrompt, trimDiff } from '../../utils/diff';
-import { checkContextWindowFit, ContextFitCheck, estimateTokensConservative } from '../../utils/token-estimation';
+import {
+  checkContextWindowFit,
+  ContextFitCheck,
+  estimateTokensConservative,
+} from '../../utils/token-estimation';
 import { logger } from '../../utils/logger';
 import { ValidationDetector } from '../context/validation-detector';
 import { PromptEnricher } from '../../learning/prompt-enrichment';
@@ -18,12 +22,19 @@ export class PromptBuilder {
     private readonly config: ReviewConfig,
     private readonly intensity: ReviewIntensity = 'standard',
     private readonly promptEnricher?: PromptEnricher,
-    private readonly codeGraph?: CodeGraph
+    private readonly codeGraph?: CodeGraph,
+    private readonly memoryPromptContext?: string
   ) {
     // Validate intensity parameter
-    const validIntensities: ReviewIntensity[] = ['light', 'standard', 'thorough'];
+    const validIntensities: ReviewIntensity[] = [
+      'light',
+      'standard',
+      'thorough',
+    ];
     if (!validIntensities.includes(intensity)) {
-      throw new Error(`Invalid intensity: ${intensity}. Must be one of: ${validIntensities.join(', ')}`);
+      throw new Error(
+        `Invalid intensity: ${intensity}. Must be one of: ${validIntensities.join(', ')}`
+      );
     }
     this.validationDetector = new ValidationDetector();
   }
@@ -63,13 +74,19 @@ export class PromptBuilder {
       }
 
       const context: string[] = [];
-      context.push(`CALL CONTEXT for ${nearbySymbol.name} (${nearbySymbol.type}):`);
+      context.push(
+        `CALL CONTEXT for ${nearbySymbol.name} (${nearbySymbol.type}):`
+      );
 
       if (callers.length > 0) {
-        context.push(`  Called by: ${callers.slice(0, 5).join(', ')}${callers.length > 5 ? ` (+${callers.length - 5} more)` : ''}`);
+        context.push(
+          `  Called by: ${callers.slice(0, 5).join(', ')}${callers.length > 5 ? ` (+${callers.length - 5} more)` : ''}`
+        );
       }
       if (callees.length > 0) {
-        context.push(`  Calls: ${callees.slice(0, 5).join(', ')}${callees.length > 5 ? ` (+${callees.length - 5} more)` : ''}`);
+        context.push(
+          `  Calls: ${callees.slice(0, 5).join(', ')}${callees.length > 5 ? ` (+${callees.length - 5} more)` : ''}`
+        );
       }
 
       return context.join('\n');
@@ -88,8 +105,14 @@ export class PromptBuilder {
     if (!pr || typeof pr !== 'object') {
       throw new Error('Invalid PR context: must be a valid PRContext object');
     }
-    if (pr.diff === undefined || pr.diff === null || typeof pr.diff !== 'string') {
-      throw new Error('Invalid PR context: diff must be a string (can be empty)');
+    if (
+      pr.diff === undefined ||
+      pr.diff === null ||
+      typeof pr.diff !== 'string'
+    ) {
+      throw new Error(
+        'Invalid PR context: diff must be a string (can be empty)'
+      );
     }
     if (!Array.isArray(pr.files)) {
       throw new Error('Invalid PR context: files must be an array');
@@ -102,10 +125,11 @@ export class PromptBuilder {
     });
     const diff = trimDiff(compacted.diff, this.config.diffMaxBytes);
     const summaryOnlyFiles = new Map(
-      compacted.summaryOnlyFiles.map(file => [file.filename, file])
+      compacted.summaryOnlyFiles.map((file) => [file.filename, file])
     );
     const skipSuggestions =
-      compacted.summaryOnlyFiles.length > 0 || this.shouldSkipSuggestions(pr.diff);
+      compacted.summaryOnlyFiles.length > 0 ||
+      this.shouldSkipSuggestions(pr.diff);
 
     // Extract which files are actually in the trimmed diff to avoid false positives
     const filesInDiff = new Set<string>();
@@ -116,11 +140,11 @@ export class PromptBuilder {
     }
 
     // Filter file list to only show files that are in the diff
-    const includedFiles = pr.files.filter(f => filesInDiff.has(f.filename));
+    const includedFiles = pr.files.filter((f) => filesInDiff.has(f.filename));
     const excludedCount = pr.files.length - includedFiles.length;
 
     const fileList = [
-      ...includedFiles.map(f => {
+      ...includedFiles.map((f) => {
         const summaryOnly = summaryOnlyFiles.get(f.filename);
         const suffix = summaryOnly
           ? `, summary-only in prompt: ${summaryOnly.reason}`
@@ -133,7 +157,8 @@ export class PromptBuilder {
       fileList.push(`  (${excludedCount} additional file(s) truncated)`);
     }
 
-    const _depth = this.config.intensityPromptDepth?.[this.intensity] ?? 'standard';
+    const _depth =
+      this.config.intensityPromptDepth?.[this.intensity] ?? 'standard';
 
     const instructions = [
       `You are a code reviewer. ONLY report actual bugs - code that will crash, lose data, create security vulnerabilities, or cause clear user-visible functional regressions.`,
@@ -207,13 +232,19 @@ export class PromptBuilder {
       ''
     );
 
+    if (this.memoryPromptContext) {
+      instructions.push(this.memoryPromptContext, '');
+    }
+
     // Auto-detect and inject defensive programming context
     // Skip for very large diffs to avoid performance impact (>50KB)
     const MAX_DIFF_SIZE_FOR_ANALYSIS = 50000;
     if (diff.length < MAX_DIFF_SIZE_FOR_ANALYSIS) {
       try {
-        const defensiveContext = this.validationDetector.analyzeDefensivePatterns(diff);
-        const contextText = this.validationDetector.generatePromptContext(defensiveContext);
+        const defensiveContext =
+          this.validationDetector.analyzeDefensivePatterns(diff);
+        const contextText =
+          this.validationDetector.generatePromptContext(defensiveContext);
         if (contextText) {
           instructions.push(contextText, '');
         }
@@ -226,7 +257,8 @@ export class PromptBuilder {
     // Get learned preferences if enricher available
     if (this.promptEnricher && prNumber) {
       try {
-        const learnedPreferences = await this.promptEnricher.getPromptText(prNumber);
+        const learnedPreferences =
+          await this.promptEnricher.getPromptText(prNumber);
         if (learnedPreferences) {
           instructions.push(learnedPreferences, '');
         }
@@ -250,7 +282,7 @@ export class PromptBuilder {
         }
       }
 
-    if (callContexts.length > 0) {
+      if (callContexts.length > 0) {
         instructions.push(
           'CODE GRAPH CONTEXT (use this to understand call relationships):',
           ...callContexts,
@@ -294,10 +326,7 @@ export class PromptBuilder {
       }
     }
 
-    instructions.push(
-      'Diff:',
-      diff
-    );
+    instructions.push('Diff:', diff);
 
     if (lifecycleTargets.length > 0) {
       instructions.push(
@@ -334,7 +363,7 @@ export class PromptBuilder {
     if (!fitCheck.fits) {
       logger.warn(
         `Prompt for ${modelId} exceeds context window: ${fitCheck.promptTokens} tokens > ${fitCheck.availableTokens} available. ` +
-        `${fitCheck.recommendation}`
+          `${fitCheck.recommendation}`
       );
     }
 
@@ -350,7 +379,11 @@ export class PromptBuilder {
    * @param prNumber - Optional PR number for learned preferences
    * @returns Optimized prompt that fits in context window
    */
-  async buildOptimized(pr: PRContext, modelId: string, prNumber?: number): Promise<string> {
+  async buildOptimized(
+    pr: PRContext,
+    modelId: string,
+    prNumber?: number
+  ): Promise<string> {
     let prompt = await this.build(pr, prNumber);
     let fitCheck = checkContextWindowFit(prompt, modelId);
 
@@ -360,8 +393,8 @@ export class PromptBuilder {
 
     logger.warn(
       `Prompt exceeds context window for ${modelId}. ` +
-      `${fitCheck.promptTokens} tokens > ${fitCheck.availableTokens} available. ` +
-      `Trimming diff content...`
+        `${fitCheck.promptTokens} tokens > ${fitCheck.availableTokens} available. ` +
+        `Trimming diff content...`
     );
 
     // Strategy: Progressively trim diff until it fits
@@ -391,11 +424,13 @@ export class PromptBuilder {
     if (!fitCheck.fits) {
       logger.warn(
         `Prompt still exceeds context window after trimming. ` +
-        `${fitCheck.promptTokens} tokens > ${fitCheck.availableTokens} available. ` +
-        `Provider may fail or truncate.`
+          `${fitCheck.promptTokens} tokens > ${fitCheck.availableTokens} available. ` +
+          `Provider may fail or truncate.`
       );
     } else {
-      logger.info(`Trimmed prompt now fits: ${fitCheck.promptTokens} tokens (${fitCheck.utilizationPercent.toFixed(0)}% utilization)`);
+      logger.info(
+        `Trimmed prompt now fits: ${fitCheck.promptTokens} tokens (${fitCheck.utilizationPercent.toFixed(0)}% utilization)`
+      );
     }
 
     return prompt;
@@ -455,7 +490,10 @@ function truncatePromptField(value: string, maxLength: number): string {
   return `${value.slice(0, maxLength)}\n[truncated]`;
 }
 
-function sanitizeLifecyclePromptField(value: string, maxLength: number): string {
+function sanitizeLifecyclePromptField(
+  value: string,
+  maxLength: number
+): string {
   return truncatePromptField(value, maxLength).replace(
     /<\/?old_finding_data>/gi,
     '[old_finding_data tag removed]'

@@ -32,7 +32,9 @@ import {
 } from './control-plane/runtime-config';
 import { resolveGitHubCommentToken } from './control-plane/comment-token';
 import { reportControlPlaneActionHealth } from './control-plane/health-report';
+import { ControlPlaneMemoryClient } from './control-plane/memory';
 import { resolveProviderCliPlan } from './control-plane/provider-cli-plan';
+import { parseMemoryInteraction } from './github/memory-interaction';
 import {
   countPreviousStillValidBySeverity,
   isLinkedCurrentFinding,
@@ -48,6 +50,11 @@ function syncEnvFromInputs(): void {
     'REVIEW_ROUTER_DISCUSSION_MAX_PER_PR',
     'REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD',
     'REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS',
+    'REVIEW_ROUTER_MEMORY_ENABLED',
+    'REVIEW_ROUTER_MEMORY_PROTOCOL_VERSION',
+    'REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT',
+    'REVIEW_ROUTER_MEMORY_CANDIDATE_ENDPOINT',
+    'REVIEW_ROUTER_MEMORY_COMMAND_ENDPOINT',
     'REVIEW_PROVIDERS',
     'FALLBACK_PROVIDERS',
     'SYNTHESIS_MODEL',
@@ -186,7 +193,7 @@ async function run(): Promise<void> {
     process.env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS = commentToken.status;
 
     if (mode === 'interaction') {
-      await runInteraction(token!, fallbackToken);
+      await runInteraction(token!, fallbackToken, runtimeConfig);
       return;
     }
     if (mode === 'interaction-preflight') {
@@ -355,7 +362,8 @@ function getBlockingFindings(
 
 async function runInteraction(
   token: string,
-  actionsToken?: string
+  actionsToken?: string,
+  runtimeConfig?: RuntimeConfigResult
 ): Promise<void> {
   const githubClient = new GitHubClient(token);
   const actionsClient =
@@ -368,11 +376,13 @@ async function runInteraction(
     /^true$/i.test(process.env.DRY_RUN || '')
   );
   const discussionHandler = createDiscussionHandler(githubClient);
+  const memoryClient = new ControlPlaneMemoryClient(runtimeConfig);
   const handler = new ReviewInteractionHandler(
     githubClient,
     ledger,
     discussionHandler,
-    actionsClient
+    actionsClient,
+    memoryClient
   );
   await handler.execute();
 }
@@ -383,16 +393,34 @@ async function runInteractionPreflight(token: string): Promise<void> {
   const payload = JSON.parse(
     fs.readFileSync(process.env.GITHUB_EVENT_PATH || '', 'utf8')
   );
-  const command = String(payload?.comment?.body || '')
-    .trim()
-    .startsWith('/rr ');
-  const result = command
+  const body = String(payload?.comment?.body || '');
+  const botComment =
+    payload?.comment?.user?.type === 'Bot' ||
+    String(payload?.comment?.user?.login || '').endsWith('[bot]');
+  const command = body.trim().startsWith('/rr ');
+  const memoryInteraction = parseMemoryInteraction(body);
+  const memoryRequest =
+    memoryInteraction.instructions.length > 0 ||
+    Boolean(memoryInteraction.invalidReason);
+  const result = botComment
     ? {
-        shouldRun: true,
+        shouldRun: false,
         needsDiscussion: false,
-        reason: 'ReviewRouter command',
+        reason: 'bot comment',
       }
-    : await discussionHandler.preflight(payload);
+    : command
+      ? {
+          shouldRun: true,
+          needsDiscussion: false,
+          reason: 'ReviewRouter command',
+        }
+      : memoryRequest
+        ? {
+            shouldRun: true,
+            needsDiscussion: false,
+            reason: 'ReviewRouter memory request',
+          }
+        : await discussionHandler.preflight(payload);
 
   core.setOutput('should_run', result.shouldRun ? 'true' : 'false');
   core.setOutput('needs_discussion', result.needsDiscussion ? 'true' : 'false');

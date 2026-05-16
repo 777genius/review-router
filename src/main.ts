@@ -313,9 +313,13 @@ function runRuntimePreflight(
   const plan = resolveProviderCliPlan(process.env);
   core.setOutput('runtime_config_status', runtimeConfig?.status || 'unknown');
   core.setOutput('codex_cli_needed', plan.codexCliNeeded ? 'true' : 'false');
+  core.setOutput(
+    'codex_oauth_needed',
+    plan.codexOauthNeeded ? 'true' : 'false'
+  );
   core.setOutput('claude_cli_needed', plan.claudeCliNeeded ? 'true' : 'false');
   core.info(
-    `ReviewRouter runtime preflight: status=${runtimeConfig?.status || 'unknown'}, codex_cli_needed=${plan.codexCliNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
+    `ReviewRouter runtime preflight: status=${runtimeConfig?.status || 'unknown'}, codex_cli_needed=${plan.codexCliNeeded}, codex_oauth_needed=${plan.codexOauthNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
   );
 }
 

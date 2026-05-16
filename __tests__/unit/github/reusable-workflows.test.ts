@@ -30,6 +30,9 @@ describe('production reusable workflows', () => {
       "steps.provider-tooling.outputs.codex_cli_needed == 'true'"
     );
     expect(workflow).toContain(
+      "steps.provider-tooling.outputs.codex_oauth_needed == 'true'"
+    );
+    expect(workflow).toContain(
       "steps.provider-tooling.outputs.claude_cli_needed == 'true'"
     );
     expect(workflow).toContain('review_app_client_id:');

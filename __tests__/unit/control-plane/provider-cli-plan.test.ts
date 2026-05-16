@@ -2,19 +2,21 @@ import { resolveProviderCliPlan } from '../../../src/control-plane/provider-cli-
 
 describe('resolveProviderCliPlan', () => {
   it('requires Codex CLI for Codex OAuth runtime config', () => {
-    expect(
-      resolveProviderCliPlan({
-        REVIEW_AUTH_MODE: 'codex-oauth',
-      }).codexCliNeeded
-    ).toBe(true);
+    const plan = resolveProviderCliPlan({
+      REVIEW_AUTH_MODE: 'codex-oauth',
+    });
+
+    expect(plan.codexCliNeeded).toBe(true);
+    expect(plan.codexOauthNeeded).toBe(true);
   });
 
   it('requires Codex CLI for OpenAI API-key runtime config', () => {
-    expect(
-      resolveProviderCliPlan({
-        REVIEW_AUTH_MODE: 'openai-api',
-      }).codexCliNeeded
-    ).toBe(true);
+    const plan = resolveProviderCliPlan({
+      REVIEW_AUTH_MODE: 'openai-api',
+    });
+
+    expect(plan.codexCliNeeded).toBe(true);
+    expect(plan.codexOauthNeeded).toBe(false);
   });
 
   it('requires Claude CLI for Claude OAuth runtime config', () => {
@@ -24,6 +26,7 @@ describe('resolveProviderCliPlan', () => {
 
     expect(plan.claudeCliNeeded).toBe(true);
     expect(plan.codexCliNeeded).toBe(false);
+    expect(plan.codexOauthNeeded).toBe(false);
   });
 
   it('detects explicit provider lists and synthesis models', () => {
@@ -33,6 +36,7 @@ describe('resolveProviderCliPlan', () => {
     });
 
     expect(plan.codexCliNeeded).toBe(true);
+    expect(plan.codexOauthNeeded).toBe(false);
     expect(plan.claudeCliNeeded).toBe(true);
   });
 
@@ -45,10 +49,11 @@ describe('resolveProviderCliPlan', () => {
     });
 
     expect(plan.codexCliNeeded).toBe(true);
+    expect(plan.codexOauthNeeded).toBe(true);
     expect(plan.claudeCliNeeded).toBe(false);
   });
 
-  it('requires Codex CLI for OpenRouter config because OpenRouter runs agentically', () => {
+  it('requires Codex CLI but not Codex OAuth for OpenRouter config', () => {
     const plan = resolveProviderCliPlan({
       REVIEW_AUTH_MODE: 'openrouter-api',
       REVIEW_PROVIDERS: 'openrouter/anthropic/claude-sonnet-4.5',
@@ -56,6 +61,7 @@ describe('resolveProviderCliPlan', () => {
     });
 
     expect(plan.codexCliNeeded).toBe(true);
+    expect(plan.codexOauthNeeded).toBe(false);
     expect(plan.claudeCliNeeded).toBe(false);
   });
 });

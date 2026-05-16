@@ -33028,7 +33028,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.43",
+  version: "1.0.44",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -33568,8 +33568,14 @@ function resolveProviderCliPlan(env = process.env) {
     env.SYNTHESIS_MODEL,
     inferredProvider
   ].filter((value) => Boolean(value)).join(",");
+  const codexProviderRequested = hasProviderPrefix(providerHints, "codex");
+  const openRouterProviderRequested = hasProviderPrefix(
+    providerHints,
+    "openrouter"
+  );
   return {
-    codexCliNeeded: authMode === "codex-oauth" || authMode === "openai-api" || authMode === "openrouter-api" || hasProviderPrefix(providerHints, "codex") || hasProviderPrefix(providerHints, "openrouter"),
+    codexCliNeeded: authMode === "codex-oauth" || authMode === "openai-api" || authMode === "openrouter-api" || codexProviderRequested || openRouterProviderRequested,
+    codexOauthNeeded: authMode === "codex-oauth",
     claudeCliNeeded: authMode === "claude-oauth" || hasProviderPrefix(providerHints, "claude")
   };
 }
@@ -33841,9 +33847,13 @@ function runRuntimePreflight(runtimeConfig) {
   const plan = resolveProviderCliPlan(process.env);
   setOutput("runtime_config_status", runtimeConfig?.status || "unknown");
   setOutput("codex_cli_needed", plan.codexCliNeeded ? "true" : "false");
+  setOutput(
+    "codex_oauth_needed",
+    plan.codexOauthNeeded ? "true" : "false"
+  );
   setOutput("claude_cli_needed", plan.claudeCliNeeded ? "true" : "false");
   info(
-    `ReviewRouter runtime preflight: status=${runtimeConfig?.status || "unknown"}, codex_cli_needed=${plan.codexCliNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
+    `ReviewRouter runtime preflight: status=${runtimeConfig?.status || "unknown"}, codex_cli_needed=${plan.codexCliNeeded}, codex_oauth_needed=${plan.codexOauthNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
   );
 }
 function getBlockingFindings(review, threshold) {

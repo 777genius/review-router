@@ -1,5 +1,6 @@
 export type ProviderCliPlan = {
   readonly codexCliNeeded: boolean;
+  readonly codexOauthNeeded: boolean;
   readonly claudeCliNeeded: boolean;
 };
 
@@ -21,13 +22,20 @@ export function resolveProviderCliPlan(
     .filter((value): value is string => Boolean(value))
     .join(',');
 
+  const codexProviderRequested = hasProviderPrefix(providerHints, 'codex');
+  const openRouterProviderRequested = hasProviderPrefix(
+    providerHints,
+    'openrouter'
+  );
+
   return {
     codexCliNeeded:
       authMode === 'codex-oauth' ||
       authMode === 'openai-api' ||
       authMode === 'openrouter-api' ||
-      hasProviderPrefix(providerHints, 'codex') ||
-      hasProviderPrefix(providerHints, 'openrouter'),
+      codexProviderRequested ||
+      openRouterProviderRequested,
+    codexOauthNeeded: authMode === 'codex-oauth',
     claudeCliNeeded:
       authMode === 'claude-oauth' || hasProviderPrefix(providerHints, 'claude'),
   };

@@ -28,6 +28,7 @@ type CodexRunOptions = {
   includeWorkspaceEnv?: boolean;
   disableTools?: boolean;
   skipGitRepoCheck?: boolean;
+  acceptReviewOutputOnNonZero?: boolean;
 };
 
 type CodexRunResult = {
@@ -35,6 +36,18 @@ type CodexRunResult = {
   stderr: string;
   lastMessage: string;
 };
+
+class CodexCliExitError extends Error {
+  constructor(
+    readonly code: number | null,
+    readonly stdout: string,
+    readonly stderr: string,
+    message: string
+  ) {
+    super(message);
+    this.name = 'CodexCliExitError';
+  }
+}
 
 export class CodexProvider extends Provider {
   constructor(
@@ -127,6 +140,7 @@ export class CodexProvider extends Provider {
           healthCheck: false,
           outputSchema: this.buildFindingsSchema(),
           eventAudit: this.shouldUseEventAudit(),
+          acceptReviewOutputOnNonZero: true,
         }
       );
       const content = this.sanitizeReviewContent(
@@ -361,16 +375,31 @@ export class CodexProvider extends Provider {
           if (!timedOut) {
             clearTimeout(timer);
             if (code !== 0) {
-              reject(
-                new Error(
-                  `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr, stdout)}`
-                )
-              );
+              const message = `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr, stdout)}`;
+              reject(new CodexCliExitError(code, stdout, stderr, message));
             } else {
               resolve({ stdout, stderr });
             }
           }
         });
+      }).catch(async (error) => {
+        const lastMessage = await this.readOptionalFile(outputFile);
+        if (
+          options.acceptReviewOutputOnNonZero &&
+          this.isUsableReviewOutput(lastMessage)
+        ) {
+          const exitError =
+            error instanceof CodexCliExitError ? error : undefined;
+          logger.warn(
+            `Codex CLI exited non-zero for ${this.name} but produced valid review JSON; using --output-last-message`
+          );
+          return {
+            stdout: exitError?.stdout || '',
+            stderr: exitError?.stderr || '',
+          };
+        }
+
+        throw error;
       });
 
       const lastMessage = await this.readOptionalFile(outputFile);
@@ -1116,6 +1145,31 @@ export class CodexProvider extends Provider {
     }
 
     return null;
+  }
+
+  private isUsableReviewOutput(content: string): boolean {
+    const trimmed = content.trim();
+    if (!trimmed) return false;
+
+    try {
+      const parsed = parseReviewOutputStrict(
+        this.sanitizeReviewContent(trimmed),
+        'Codex CLI'
+      );
+      return !parsed.findings.some((finding) =>
+        this.isPlaceholderFinding(finding)
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  private isPlaceholderFinding(finding: Finding): boolean {
+    return (
+      finding.file === 'path' ||
+      finding.title === 'short' ||
+      finding.message.trim().toLowerCase() === 'specific evidence'
+    );
   }
 
   private formatContextSnippet(

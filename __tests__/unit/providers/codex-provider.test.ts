@@ -263,6 +263,30 @@ describe('CodexProvider', () => {
     );
   });
 
+  it('uses valid review JSON from --output-last-message when Codex exits non-zero', async () => {
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess((proc) => {
+        const outputIndex = args.indexOf('--output-last-message');
+        const outputFile = args[outputIndex + 1];
+        fs.writeFileSync(outputFile, '{"findings":[],"revalidations":[]}');
+        proc.stderr.emit('data', 'tool command failed after final output');
+      }, 1);
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: false,
+    });
+
+    const result = await provider.review('review prompt', 1000);
+
+    expect(result.content).toBe('{"findings":[],"revalidations":[]}');
+    expect(result.findings).toEqual([]);
+  });
+
   it('fails review when Codex returns invalid JSON instead of silently passing', async () => {
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('--version')) {

@@ -13682,6 +13682,15 @@ var fsSync = __toESM(require("fs"));
 var os3 = __toESM(require("os"));
 var path4 = __toESM(require("path"));
 var crypto3 = __toESM(require("crypto"));
+var CodexCliExitError = class extends Error {
+  constructor(code, stdout, stderr, message) {
+    super(message);
+    this.code = code;
+    this.stdout = stdout;
+    this.stderr = stderr;
+    this.name = "CodexCliExitError";
+  }
+};
 var CodexProvider = class extends Provider {
   constructor(model, options = {}) {
     super(`codex/${model}`);
@@ -13756,7 +13765,8 @@ var CodexProvider = class extends Provider {
         {
           healthCheck: false,
           outputSchema: this.buildFindingsSchema(),
-          eventAudit: this.shouldUseEventAudit()
+          eventAudit: this.shouldUseEventAudit(),
+          acceptReviewOutputOnNonZero: true
         }
       );
       const content = this.sanitizeReviewContent(
@@ -13936,16 +13946,26 @@ var CodexProvider = class extends Provider {
           if (!timedOut) {
             clearTimeout(timer);
             if (code !== 0) {
-              reject(
-                new Error(
-                  `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr2, stdout2)}`
-                )
-              );
+              const message = `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr2, stdout2)}`;
+              reject(new CodexCliExitError(code, stdout2, stderr2, message));
             } else {
               resolve3({ stdout: stdout2, stderr: stderr2 });
             }
           }
         });
+      }).catch(async (error2) => {
+        const lastMessage2 = await this.readOptionalFile(outputFile);
+        if (options.acceptReviewOutputOnNonZero && this.isUsableReviewOutput(lastMessage2)) {
+          const exitError = error2 instanceof CodexCliExitError ? error2 : void 0;
+          logger.warn(
+            `Codex CLI exited non-zero for ${this.name} but produced valid review JSON; using --output-last-message`
+          );
+          return {
+            stdout: exitError?.stdout || "",
+            stderr: exitError?.stderr || ""
+          };
+        }
+        throw error2;
       });
       const lastMessage = await this.readOptionalFile(outputFile);
       if (options.eventAudit && !options.healthCheck) {
@@ -14513,6 +14533,24 @@ var CodexProvider = class extends Provider {
       }
     }
     return null;
+  }
+  isUsableReviewOutput(content) {
+    const trimmed = content.trim();
+    if (!trimmed) return false;
+    try {
+      const parsed = parseReviewOutputStrict(
+        this.sanitizeReviewContent(trimmed),
+        "Codex CLI"
+      );
+      return !parsed.findings.some(
+        (finding) => this.isPlaceholderFinding(finding)
+      );
+    } catch {
+      return false;
+    }
+  }
+  isPlaceholderFinding(finding) {
+    return finding.file === "path" || finding.title === "short" || finding.message.trim().toLowerCase() === "specific evidence";
   }
   formatContextSnippet(file, role, content) {
     return [
@@ -32772,7 +32810,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.40",
+  version: "1.0.41",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

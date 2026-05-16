@@ -29,7 +29,9 @@ describe('ProgressTracker', () => {
           listComments: listCommentsMock,
         },
         pulls: {
-          get: jest.fn().mockResolvedValue({ data: { head: { sha: 'head-sha' } } }),
+          get: jest
+            .fn()
+            .mockResolvedValue({ data: { head: { sha: 'head-sha' } } }),
         },
       },
     } as any;
@@ -52,7 +54,9 @@ describe('ProgressTracker', () => {
       });
     });
 
-    it('should reuse an existing ReviewRouter comment', async () => {
+    it('should not reuse an existing finalized ReviewRouter summary', async () => {
+      const mockComment = { data: { id: 456 } };
+      createCommentMock.mockResolvedValue(mockComment as any);
       listCommentsMock.mockResolvedValue({
         data: [
           { id: 111, body: 'unrelated comment' },
@@ -62,19 +66,24 @@ describe('ProgressTracker', () => {
 
       await tracker.initialize();
 
-      expect(createCommentMock).not.toHaveBeenCalled();
-      expect(updateCommentMock).toHaveBeenCalledWith({
+      expect(createCommentMock).toHaveBeenCalledWith({
         owner: 'test-owner',
         repo: 'test-repo',
-        comment_id: 999,
-        body: expect.stringContaining('<!-- review-router-progress-tracker -->'),
+        issue_number: 123,
+        body: expect.stringContaining(
+          '<!-- review-router-progress-tracker -->'
+        ),
       });
+      expect(updateCommentMock).not.toHaveBeenCalled();
     });
 
     it('should reuse a legacy AI Robot Review progress comment', async () => {
       listCommentsMock.mockResolvedValue({
         data: [
-          { id: 999, body: '## 🤖 AI Robot Review Progress\n\n<!-- ai-robot-review-progress-tracker -->' },
+          {
+            id: 999,
+            body: '## 🤖 AI Robot Review Progress\n\n<!-- ai-robot-review-progress-tracker -->',
+          },
         ],
       });
 
@@ -85,7 +94,9 @@ describe('ProgressTracker', () => {
         owner: 'test-owner',
         repo: 'test-repo',
         comment_id: 999,
-        body: expect.stringContaining('<!-- review-router-progress-tracker -->'),
+        body: expect.stringContaining(
+          '<!-- review-router-progress-tracker -->'
+        ),
       });
     });
 
@@ -176,7 +187,9 @@ describe('ProgressTracker', () => {
       tracker.addItem('test-item', 'Test Item Label');
 
       // Items are private, but we can verify through update behavior
-      expect(() => tracker.addItem('test-item', 'Test Item Label')).not.toThrow();
+      expect(() =>
+        tracker.addItem('test-item', 'Test Item Label')
+      ).not.toThrow();
     });
 
     it('should update progress with milestone strategy', async () => {
@@ -193,7 +206,11 @@ describe('ProgressTracker', () => {
     it('should include details in progress update', async () => {
       tracker.addItem('test-item', 'Test Item');
 
-      await tracker.updateProgress('test-item', 'completed', 'Found 5 findings');
+      await tracker.updateProgress(
+        'test-item',
+        'completed',
+        'Found 5 findings'
+      );
 
       expect(updateCommentMock).toHaveBeenCalledWith({
         owner: 'test-owner',
@@ -243,7 +260,8 @@ describe('ProgressTracker', () => {
       await tracker.updateProgress('completed-item', 'completed');
       await tracker.updateProgress('failed-item', 'failed');
 
-      const lastCall = updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
+      const lastCall =
+        updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
       const body = lastCall?.[0]?.body as string;
 
       expect(body).toContain('✅'); // Completed
@@ -254,18 +272,33 @@ describe('ProgressTracker', () => {
     it('should show actionable provider auth failures without marking later steps failed', async () => {
       tracker.addItem('llm', 'LLM review');
       tracker.addItem('static', 'Static analysis');
-      tracker.setFailure(new Error('Codex access token could not be refreshed. Please reseed auth.json'));
+      tracker.setFailure(
+        new Error(
+          'Codex access token could not be refreshed. Please reseed auth.json'
+        )
+      );
 
-      await tracker.updateProgress('llm', 'failed', 'All batches failed: codex/gpt-5.5');
+      await tracker.updateProgress(
+        'llm',
+        'failed',
+        'All batches failed: codex/gpt-5.5'
+      );
       await tracker.finalize(false);
 
-      const lastCall = updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
+      const lastCall =
+        updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
       const body = lastCall?.[0]?.body as string;
 
-      expect(body).toContain('**What failed:** Codex OAuth is stale or expired.');
+      expect(body).toContain(
+        '**What failed:** Codex OAuth is stale or expired.'
+      );
       expect(body).toContain('Reseed `CODEX_AUTH_JSON`');
-      expect(body).toContain('| LLM review | ❌ Failed | All batches failed: codex/gpt-5.5 |');
-      expect(body).toContain('| Static analysis | ⏭️ Not run | Skipped after an earlier failure. |');
+      expect(body).toContain(
+        '| LLM review | ❌ Failed | All batches failed: codex/gpt-5.5 |'
+      );
+      expect(body).toContain(
+        '| Static analysis | ⏭️ Not run | Skipped after an earlier failure. |'
+      );
       expect(body).not.toContain('[]❌');
     });
 
@@ -297,7 +330,8 @@ describe('ProgressTracker', () => {
 
       await tracker.finalize(true);
 
-      const lastCall = updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
+      const lastCall =
+        updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
       const body = lastCall?.[0]?.body as string;
 
       expect(body).toContain('✅'); // All items marked as completed on successful finalization
@@ -310,21 +344,25 @@ describe('ProgressTracker', () => {
 
       await tracker.finalize(false);
 
-      const lastCall = updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
+      const lastCall =
+        updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
       const body = lastCall?.[0]?.body as string;
 
       expect(body).toContain('⏭️ Not run');
       expect(body).not.toContain('❌');
     });
 
-    it('should preserve the hidden marker when replacing progress with final summary', async () => {
-      await expect(tracker.replaceWith('# ReviewRouter\n\nfinal summary')).resolves.toBe(true);
+    it('should remove the progress marker when replacing progress with final summary', async () => {
+      await expect(
+        tracker.replaceWith('# ReviewRouter\n\nfinal summary')
+      ).resolves.toBe(true);
 
-      const lastCall = updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
+      const lastCall =
+        updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
       const body = lastCall?.[0]?.body as string;
 
       expect(body).toContain('# ReviewRouter');
-      expect(body).toContain('<!-- review-router-progress-tracker -->');
+      expect(body).not.toContain('<!-- review-router-progress-tracker -->');
     });
 
     it('should skip final replacement when a newer summary appears after initialization', async () => {
@@ -354,7 +392,9 @@ describe('ProgressTracker', () => {
         data: [{ id: 999, body: newerSummary }],
       });
 
-      await expect(tracker.replaceWith('# ReviewRouter\n\nfinal summary')).resolves.toBe(false);
+      await expect(
+        tracker.replaceWith('# ReviewRouter\n\nfinal summary')
+      ).resolves.toBe(false);
 
       expect(updateCommentMock).not.toHaveBeenCalled();
     });
@@ -393,7 +433,9 @@ describe('ProgressTracker', () => {
           data: [{ id: 101, body: newerSummary }],
         });
 
-      await expect(tracker.replaceWith('# ReviewRouter\n\nfinal summary')).resolves.toBe(false);
+      await expect(
+        tracker.replaceWith('# ReviewRouter\n\nfinal summary')
+      ).resolves.toBe(false);
 
       expect(updateCommentMock).not.toHaveBeenCalled();
     });
@@ -411,7 +453,9 @@ describe('ProgressTracker', () => {
       tracker.addItem('item1', 'Test');
 
       // Should not throw even if update fails
-      await expect(tracker.updateProgress('item1', 'completed')).resolves.not.toThrow();
+      await expect(
+        tracker.updateProgress('item1', 'completed')
+      ).resolves.not.toThrow();
     });
 
     it('should handle finalize failures gracefully', async () => {
@@ -426,7 +470,9 @@ describe('ProgressTracker', () => {
     it('should report replace failures without throwing', async () => {
       updateCommentMock.mockRejectedValue(new Error('API Error'));
 
-      await expect(tracker.replaceWith('# ReviewRouter\n\nfinal summary')).resolves.toBe(false);
+      await expect(
+        tracker.replaceWith('# ReviewRouter\n\nfinal summary')
+      ).resolves.toBe(false);
     });
   });
 });

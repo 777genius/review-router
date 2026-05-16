@@ -240,6 +240,10 @@ inputs:
     description: "Append/update a ReviewRouter summary block in the pull request description without overwriting author text"
     required: false
     default: "true"
+  REVIEW_ROUTER_PROGRESS_COMMENTS:
+    description: "Progress comment mode: first shows a live progress comment only before the PR has ReviewRouter activity; true shows progress every run; false disables it"
+    required: false
+    default: "first"
   FAIL_ON_CRITICAL:
     description: "Fail the check when critical findings exist"
     required: false

@@ -1,5 +1,8 @@
 import { Octokit } from '@octokit/rest';
-import { normalizeReviewError, ReviewRouterError } from '../errors/review-router-error';
+import {
+  normalizeReviewError,
+  ReviewRouterError,
+} from '../errors/review-router-error';
 import { logger } from '../utils/logger';
 import {
   ReviewSummaryMetadata,
@@ -7,7 +10,12 @@ import {
   shouldSkipSummaryWriteForExisting,
 } from './summary-metadata';
 
-export type ProgressStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+export type ProgressStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'skipped';
 
 export interface ProgressItem {
   id: string;
@@ -64,7 +72,9 @@ export class ProgressTracker {
    */
   async initialize(): Promise<void> {
     if (!this.octokit?.rest?.issues?.createComment) {
-      logger.warn('Progress tracker unavailable: octokit.rest.issues.createComment is missing');
+      logger.warn(
+        'Progress tracker unavailable: octokit.rest.issues.createComment is missing'
+      );
       return;
     }
     try {
@@ -80,7 +90,9 @@ export class ProgressTracker {
       if (existing.commentId) {
         this.commentId = existing.commentId;
         await this.updateComment();
-        logger.info('Progress tracker initialized from existing comment', { commentId: this.commentId });
+        logger.info('Progress tracker initialized from existing comment', {
+          commentId: this.commentId,
+        });
         return;
       }
 
@@ -92,7 +104,9 @@ export class ProgressTracker {
       });
 
       this.commentId = comment.data.id;
-      logger.info('Progress tracker initialized', { commentId: this.commentId });
+      logger.info('Progress tracker initialized', {
+        commentId: this.commentId,
+      });
     } catch (error) {
       logger.warn('Failed to initialize progress tracker', error as Error);
       // Continue without progress tracking rather than failing the review
@@ -146,7 +160,9 @@ export class ProgressTracker {
   }
 
   hasFailedItems(): boolean {
-    return Array.from(this.items.values()).some(item => item.status === 'failed');
+    return Array.from(this.items.values()).some(
+      (item) => item.status === 'failed'
+    );
   }
 
   /**
@@ -203,11 +219,16 @@ export class ProgressTracker {
       lines.push('| --- | --- | --- |');
 
       for (const item of sortedItems) {
-        lines.push([
-          this.escapeTableCell(item.label),
-          this.escapeTableCell(this.getStatusLabel(item.status)),
-          this.escapeTableCell(item.details || ''),
-        ].join(' | ').replace(/^/, '| ').replace(/$/, ' |'));
+        lines.push(
+          [
+            this.escapeTableCell(item.label),
+            this.escapeTableCell(this.getStatusLabel(item.status)),
+            this.escapeTableCell(item.details || ''),
+          ]
+            .join(' | ')
+            .replace(/^/, '| ')
+            .replace(/$/, ' |')
+        );
       }
     }
 
@@ -226,7 +247,10 @@ export class ProgressTracker {
       lines.push('<summary>Technical details</summary>');
       lines.push('');
       lines.push(`Error code: \`${this.failure.code}\``);
-      if (this.failure.safeMessage && this.failure.safeMessage !== this.failure.summary) {
+      if (
+        this.failure.safeMessage &&
+        this.failure.safeMessage !== this.failure.summary
+      ) {
         lines.push('');
         lines.push(this.failure.safeMessage);
       }
@@ -248,7 +272,9 @@ export class ProgressTracker {
       return;
     }
     if (!this.octokit?.rest?.issues?.updateComment) {
-      logger.warn('Cannot update progress: octokit.rest.issues.updateComment is missing');
+      logger.warn(
+        'Cannot update progress: octokit.rest.issues.updateComment is missing'
+      );
       return;
     }
 
@@ -274,7 +300,9 @@ export class ProgressTracker {
    */
   async replaceWith(body: string): Promise<boolean> {
     if (this.summaryWriteSuppressed) {
-      logger.warn('Skipping progress replacement because a newer summary already exists');
+      logger.warn(
+        'Skipping progress replacement because a newer summary already exists'
+      );
       return false;
     }
     if (!this.commentId) {
@@ -282,21 +310,28 @@ export class ProgressTracker {
       return false;
     }
     if (!this.octokit?.rest?.issues?.updateComment) {
-      logger.warn('Cannot replace progress: octokit.rest.issues.updateComment is missing');
+      logger.warn(
+        'Cannot replace progress: octokit.rest.issues.updateComment is missing'
+      );
       return false;
     }
 
     try {
       if (await this.isCurrentRunStale()) {
-        logger.warn('Skipping progress replacement because the PR head changed');
+        logger.warn(
+          'Skipping progress replacement because the PR head changed'
+        );
         return false;
       }
       if (await this.hasNewerReviewSummary()) {
-        logger.warn('Skipping progress replacement because a newer ReviewRouter summary already exists');
+        logger.warn(
+          'Skipping progress replacement because a newer ReviewRouter summary already exists'
+        );
         return false;
       }
-      this.overrideBody = this.withMarker(
-        appendReviewSummaryMetadata(body, this.config.summaryMetadata)
+      this.overrideBody = appendReviewSummaryMetadata(
+        body,
+        this.config.summaryMetadata
       );
       await this.octokit.rest.issues.updateComment({
         owner: this.config.owner,
@@ -306,7 +341,10 @@ export class ProgressTracker {
       });
       return true;
     } catch (error) {
-      logger.warn('Failed to replace progress comment with final summary', error as Error);
+      logger.warn(
+        'Failed to replace progress comment with final summary',
+        error as Error
+      );
       return false;
     }
   }
@@ -322,22 +360,23 @@ export class ProgressTracker {
     try {
       const comments = await this.listIssueComments();
 
-      const reviewComments = comments.filter((comment) =>
-        this.isReviewComment(comment.body)
-      );
-      const hasNewerSummary = reviewComments.some((comment) =>
-        shouldSkipSummaryWriteForExisting(
-          comment.body ?? '',
-          this.config.summaryMetadata
-        ).shouldSkip
+      const hasNewerSummary = comments.some(
+        (comment) =>
+          shouldSkipSummaryWriteForExisting(
+            comment.body ?? '',
+            this.config.summaryMetadata
+          ).shouldSkip
       );
       if (hasNewerSummary) {
         return { commentId: null, blockedByNewerSummary: true };
       }
+      const progressComments = comments.filter((comment) =>
+        this.isProgressComment(comment.body)
+      );
       return {
         commentId:
-          reviewComments.length > 0
-            ? reviewComments[reviewComments.length - 1].id
+          progressComments.length > 0
+            ? progressComments[progressComments.length - 1].id
             : null,
         blockedByNewerSummary: false,
       };
@@ -347,28 +386,28 @@ export class ProgressTracker {
     }
   }
 
-  private isReviewComment(body?: string | null): boolean {
+  private isProgressComment(body?: string | null): boolean {
     if (!body) return false;
-    return body.includes(ProgressTracker.MARKER)
-      || ProgressTracker.LEGACY_MARKERS.some(marker => body.includes(marker))
-      || ProgressTracker.LEGACY_HEADERS.some(header => body.startsWith(header));
-  }
-
-  private withMarker(body: string): string {
-    return body.includes(ProgressTracker.MARKER)
-      ? body
-      : `${body.trimEnd()}\n\n${ProgressTracker.MARKER}`;
+    return (
+      body.startsWith('## 🤖 ReviewRouter Progress') ||
+      ProgressTracker.LEGACY_MARKERS.some((marker) => body.includes(marker)) ||
+      ProgressTracker.LEGACY_HEADERS.filter((header) =>
+        header.includes('Progress')
+      ).some((header) => body.startsWith(header))
+    );
   }
 
   private async hasNewerReviewSummary(): Promise<boolean> {
-    if (!this.config.summaryMetadata || !this.octokit?.rest?.issues?.listComments) {
+    if (
+      !this.config.summaryMetadata ||
+      !this.octokit?.rest?.issues?.listComments
+    ) {
       return false;
     }
     try {
       const comments = await this.listIssueComments();
       return comments.some(
         (comment) =>
-          this.isReviewComment(comment.body) &&
           shouldSkipSummaryWriteForExisting(
             comment.body ?? '',
             this.config.summaryMetadata
@@ -446,9 +485,6 @@ export class ProgressTracker {
   }
 
   private escapeTableCell(value: string): string {
-    return value
-      .replace(/\r?\n/g, '<br>')
-      .replace(/\|/g, '\\|')
-      .trim();
+    return value.replace(/\r?\n/g, '<br>').replace(/\|/g, '\\|').trim();
   }
 }

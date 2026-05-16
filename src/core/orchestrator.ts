@@ -25,6 +25,7 @@ import {
 } from '../github/comment-fingerprint';
 import { FindingFilter } from '../analysis/finding-filter';
 import {
+  isLinkedCurrentFinding,
   ThreadLifecycleAggregator,
 } from '../analysis/thread-lifecycle';
 import { buildJson } from '../output/json';
@@ -69,6 +70,7 @@ import {
   LifecycleReasonCode,
   LifecycleTarget,
   LifecycleThreadRecord,
+  InlineComment,
   ReviewThreadLifecycleMode,
   ReviewThreadLifecycleResult,
 } from '../types';
@@ -289,13 +291,19 @@ export class ReviewOrchestrator {
               mode: 'full',
             }
           );
-          const markdown = this.components.formatter.format(trivialReview);
-          await this.components.commentPoster.postSummary(
-            pr.number,
-            markdown,
-            false,
-            summaryMetadata
-          );
+          if (this.shouldPostReviewOutput(trivialReview, [])) {
+            const markdown = this.components.formatter.format(trivialReview);
+            await this.components.commentPoster.postSummary(
+              pr.number,
+              markdown,
+              false,
+              summaryMetadata
+            );
+          } else {
+            logger.info(
+              'Skipping ReviewRouter summary comment because no reportable findings were found'
+            );
+          }
 
           // Record metrics for trivial review (shows cost/time saved)
           if (config.analyticsEnabled && this.components.metricsCollector) {
@@ -513,8 +521,9 @@ export class ReviewOrchestrator {
             pr.number,
             pr.headSha
           );
-        const inventory =
-          await this.components.reviewThreadInventory.load(pr.number);
+        const inventory = await this.components.reviewThreadInventory.load(
+          pr.number
+        );
         lifecycleManualAttention = inventory.manualAttention;
         lifecycleWarnings = inventory.warnings;
         lifecycleInventoryFailed = inventory.failed;
@@ -1174,17 +1183,17 @@ export class ReviewOrchestrator {
       }
 
       if (lifecycleMode !== 'off') {
-        lifecycleManualAttention =
-          this.filterCommandDismissedLifecycleRecords(
-            lifecycleManualAttention,
-            reviewCommentState,
-            lifecycleSkipped
-          );
-        const activeLifecycleTargets = this.filterCommandDismissedLifecycleTargets(
-          lifecycleTargets,
+        lifecycleManualAttention = this.filterCommandDismissedLifecycleRecords(
+          lifecycleManualAttention,
           reviewCommentState,
           lifecycleSkipped
         );
+        const activeLifecycleTargets =
+          this.filterCommandDismissedLifecycleTargets(
+            lifecycleTargets,
+            reviewCommentState,
+            lifecycleSkipped
+          );
         const lifecycle = new ThreadLifecycleAggregator().aggregate({
           mode: lifecycleMode,
           targets: activeLifecycleTargets,
@@ -1277,32 +1286,25 @@ export class ReviewOrchestrator {
         this.components.feedbackFilter.shouldPost(c, reviewCommentState)
       );
 
-      // If replacing the progress comment fails transiently, still publish the final summary.
-      if (progressTracker) {
-        const replaced = await progressTracker.replaceWith(markdown);
-        if (!replaced) {
-          await this.components.commentPoster.postSummary(
-            pr.number,
-            markdown,
-            useIncremental,
-            summaryMetadata
-          );
-        }
-      } else {
+      if (this.shouldPostReviewOutput(review, inlineFiltered)) {
         await this.components.commentPoster.postSummary(
           pr.number,
           markdown,
-          useIncremental,
+          false,
           summaryMetadata
         );
+        await this.components.commentPoster.postInline(
+          pr.number,
+          inlineFiltered,
+          pr.files,
+          pr.headSha,
+          lifecycleMode !== 'off' ? (lifecycleDedupeComments ?? []) : undefined
+        );
+      } else {
+        logger.info(
+          'Skipping ReviewRouter GitHub comments because no reportable findings were found'
+        );
       }
-      await this.components.commentPoster.postInline(
-        pr.number,
-        inlineFiltered,
-        pr.files,
-        pr.headSha,
-        lifecycleMode !== 'off' ? lifecycleDedupeComments ?? [] : undefined
-      );
 
       await this.writeReports(review);
       await progressTracker?.updateProgress('synthesis', 'completed');
@@ -1392,7 +1394,9 @@ export class ReviewOrchestrator {
     skipped: LifecycleThreadRecord[]
   ): LifecycleTarget[] {
     const active: LifecycleTarget[] = [];
-    const alreadySkipped = new Set(skipped.map((record) => record.target.targetId));
+    const alreadySkipped = new Set(
+      skipped.map((record) => record.target.targetId)
+    );
 
     for (const target of targets) {
       if (this.isLifecycleTargetCommandDismissed(target, reviewCommentState)) {
@@ -1414,10 +1418,17 @@ export class ReviewOrchestrator {
     skipped: LifecycleThreadRecord[]
   ): LifecycleThreadRecord[] {
     const active: LifecycleThreadRecord[] = [];
-    const alreadySkipped = new Set(skipped.map((record) => record.target.targetId));
+    const alreadySkipped = new Set(
+      skipped.map((record) => record.target.targetId)
+    );
 
     for (const record of records) {
-      if (this.isLifecycleTargetCommandDismissed(record.target, reviewCommentState)) {
+      if (
+        this.isLifecycleTargetCommandDismissed(
+          record.target,
+          reviewCommentState
+        )
+      ) {
         if (!alreadySkipped.has(record.target.targetId)) {
           skipped.push(
             this.lifecycleRecord(record.target, [
@@ -1738,9 +1749,9 @@ export class ReviewOrchestrator {
     file: FileChange
   ): boolean {
     const targetPaths = new Set(
-      [target.currentPath, target.originalPath].filter(Boolean).map((value) =>
-        value!.toLowerCase()
-      )
+      [target.currentPath, target.originalPath]
+        .filter(Boolean)
+        .map((value) => value!.toLowerCase())
     );
     return (
       targetPaths.has(file.filename.toLowerCase()) ||
@@ -1750,7 +1761,9 @@ export class ReviewOrchestrator {
     );
   }
 
-  private lifecycleSeverityPriority(severity: LifecycleTarget['severity']): number {
+  private lifecycleSeverityPriority(
+    severity: LifecycleTarget['severity']
+  ): number {
     switch (severity) {
       case 'critical':
         return 3;
@@ -2055,6 +2068,18 @@ export class ReviewOrchestrator {
       return undefined;
 
     try {
+      const mode = this.progressCommentMode();
+      if (mode === 'never') return undefined;
+      if (
+        mode === 'first' &&
+        (await this.hasExistingReviewRouterActivity(pr.number))
+      ) {
+        logger.info(
+          'Skipping ReviewRouter progress comment because this PR already has ReviewRouter activity'
+        );
+        return undefined;
+      }
+
       const tracker = new ProgressTracker(
         this.components.githubClient.octokit,
         {
@@ -2071,6 +2096,149 @@ export class ReviewOrchestrator {
       logger.warn('Failed to initialize progress tracker', error as Error);
       return undefined;
     }
+  }
+
+  private progressCommentMode(): 'always' | 'first' | 'never' {
+    const raw =
+      process.env.REVIEW_ROUTER_PROGRESS_COMMENTS?.trim().toLowerCase();
+    if (!raw) return 'first';
+    if (['1', 'true', 'yes', 'on', 'always'].includes(raw)) return 'always';
+    if (['0', 'false', 'no', 'off', 'never'].includes(raw)) return 'never';
+    if (
+      [
+        'first',
+        'first-review',
+        'first_review',
+        'auto',
+        'auto-first',
+        'auto_first',
+      ].includes(raw)
+    ) {
+      return 'first';
+    }
+
+    logger.warn(
+      `Ignoring REVIEW_ROUTER_PROGRESS_COMMENTS=${raw}; expected true, false, or first`
+    );
+    return 'first';
+  }
+
+  private async hasExistingReviewRouterActivity(
+    prNumber: number
+  ): Promise<boolean> {
+    const client = this.components.githubClient;
+    if (!client) return true;
+
+    try {
+      const { octokit, owner, repo } = client;
+      const issueComments = await this.paginateGitHub<{
+        body?: string | null;
+      }>(octokit, octokit.rest.issues.listComments, {
+        owner,
+        repo,
+        issue_number: prNumber,
+        per_page: 100,
+      });
+      if (
+        issueComments.some((comment) =>
+          this.isReviewRouterIssueComment(comment.body)
+        )
+      ) {
+        return true;
+      }
+
+      const reviewComments = await this.paginateGitHub<{
+        body?: string | null;
+      }>(octokit, octokit.rest.pulls.listReviewComments, {
+        owner,
+        repo,
+        pull_number: prNumber,
+        per_page: 100,
+      });
+      return reviewComments.some((comment) =>
+        this.isReviewRouterReviewComment(comment.body)
+      );
+    } catch (error) {
+      logger.warn(
+        'Failed to detect existing ReviewRouter activity; skipping first-review progress comment',
+        error as Error
+      );
+      return true;
+    }
+  }
+
+  private async paginateGitHub<T>(
+    octokit: {
+      paginate?: (
+        method: unknown,
+        params: Record<string, unknown>
+      ) => Promise<T[]>;
+    },
+    method: unknown,
+    params: Record<string, unknown>
+  ): Promise<T[]> {
+    if (typeof octokit.paginate === 'function') {
+      return octokit.paginate(method, params);
+    }
+
+    const response = await (
+      method as (input: Record<string, unknown>) => Promise<{ data: T[] }>
+    )(params);
+    return response.data;
+  }
+
+  private isReviewRouterIssueComment(body?: string | null): boolean {
+    if (!body) return false;
+    return (
+      body.includes('<!-- review-router-bot -->') ||
+      body.includes('<!-- review-router-progress-tracker -->') ||
+      body.includes('<!-- review-router-inline-fallback -->') ||
+      body.includes('<!-- ai-robot-review-bot -->') ||
+      body.includes('<!-- ai-robot-review-progress-tracker -->') ||
+      body.includes('<!-- multi-provider-code-review-bot -->') ||
+      body.startsWith('## 🤖 ReviewRouter Progress') ||
+      body.startsWith('## 🤖 AI Robot Review Progress') ||
+      body.startsWith('# ReviewRouter') ||
+      body.startsWith('# AI Robot Review')
+    );
+  }
+
+  private isReviewRouterReviewComment(body?: string | null): boolean {
+    if (!body) return false;
+    return (
+      body.includes('<!-- review-router-inline:') ||
+      body.includes('<!-- review-router-skip-help -->') ||
+      body.includes('<!-- ai-robot-review-inline:')
+    );
+  }
+
+  private shouldPostReviewOutput(
+    review: Review,
+    inlineComments: InlineComment[]
+  ): boolean {
+    if (
+      review.findings.length > 0 ||
+      inlineComments.length > 0 ||
+      review.actionItems.length > 0
+    ) {
+      return true;
+    }
+
+    const lifecycle = review.threadLifecycle;
+    if (!lifecycle) return false;
+
+    return (
+      lifecycle.inventoryFailed === true ||
+      lifecycle.previousStillValid.some(
+        (record) => !isLinkedCurrentFinding(record)
+      ) ||
+      lifecycle.previousUncertain.length > 0 ||
+      lifecycle.manualAttention.length > 0 ||
+      lifecycle.mutationSkipped.length > 0 ||
+      lifecycle.mutationFailed.length > 0 ||
+      lifecycle.skipped.length > 0 ||
+      lifecycle.warnings.length > 0
+    );
   }
 
   private async ensureBudget(config: ReviewConfig): Promise<void> {

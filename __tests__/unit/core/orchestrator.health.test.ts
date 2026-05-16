@@ -1,5 +1,14 @@
-import { ReviewOrchestrator, ReviewComponents } from '../../../src/core/orchestrator';
-import { ReviewConfig, PRContext, Finding, FileChange, ProviderResult } from '../../../src/types';
+import {
+  ReviewOrchestrator,
+  ReviewComponents,
+} from '../../../src/core/orchestrator';
+import {
+  ReviewConfig,
+  PRContext,
+  Finding,
+  FileChange,
+  ProviderResult,
+} from '../../../src/types';
 import { Provider } from '../../../src/providers/base';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 
@@ -32,12 +41,16 @@ const emptyReview: any = {
   },
 };
 
-function makeOrchestrator(overrides: Partial<ReviewComponents & { config: ReviewConfig }>) {
-  const providers: Provider[] = [{
-    name: 'p1',
-    review: jest.fn(),
-    healthCheck: jest.fn(),
-  } as unknown as Provider];
+function makeOrchestrator(
+  overrides: Partial<ReviewComponents & { config: ReviewConfig }>
+) {
+  const providers: Provider[] = [
+    {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider,
+  ];
 
   const config: ReviewConfig = {
     ...DEFAULT_CONFIG,
@@ -59,7 +72,11 @@ function makeOrchestrator(overrides: Partial<ReviewComponents & { config: Review
     promptBuilder: { build: jest.fn().mockReturnValue('prompt') } as any,
     llmExecutor: {
       filterHealthyProviders: jest.fn(),
-      execute: jest.fn(() => { throw new Error('execute should not be called when no healthy providers'); }),
+      execute: jest.fn(() => {
+        throw new Error(
+          'execute should not be called when no healthy providers'
+        );
+      }),
     } as any,
     deduplicator: { dedupe: (f: Finding[]) => f } as any,
     consensus: { filter: (f: Finding[]) => f } as any,
@@ -75,16 +92,28 @@ function makeOrchestrator(overrides: Partial<ReviewComponents & { config: Review
       saveReview: jest.fn(),
       getChangedFilesSince: jest.fn(),
     } as any,
-    costTracker: { record: jest.fn(), summary: jest.fn().mockReturnValue({ totalCost: 0, totalTokens: 0, breakdown: {} }), reset: jest.fn() } as any,
+    costTracker: {
+      record: jest.fn(),
+      summary: jest
+        .fn()
+        .mockReturnValue({ totalCost: 0, totalTokens: 0, breakdown: {} }),
+      reset: jest.fn(),
+    } as any,
     security: { scan: jest.fn().mockReturnValue([]) } as any,
     rules: { run: jest.fn().mockReturnValue([]) } as any,
     prLoader: { load: jest.fn() } as any,
     commentPoster: { postSummary: jest.fn(), postInline: jest.fn() } as any,
     formatter: { format: jest.fn().mockReturnValue('') } as any,
-    contextRetriever: { findRelatedContext: jest.fn().mockReturnValue([]) } as any,
+    contextRetriever: {
+      findRelatedContext: jest.fn().mockReturnValue([]),
+    } as any,
     impactAnalyzer: { analyze: jest.fn().mockReturnValue([]) } as any,
-    evidenceScorer: { score: jest.fn().mockReturnValue({ confidence: 1 }) } as any,
-    mermaidGenerator: { generateImpactDiagram: jest.fn().mockReturnValue('') } as any,
+    evidenceScorer: {
+      score: jest.fn().mockReturnValue({ confidence: 1 }),
+    } as any,
+    mermaidGenerator: {
+      generateImpactDiagram: jest.fn().mockReturnValue(''),
+    } as any,
     feedbackFilter: {
       loadSuppressed: jest.fn().mockResolvedValue([]),
       loadReviewCommentState: jest.fn().mockResolvedValue({
@@ -98,7 +127,10 @@ function makeOrchestrator(overrides: Partial<ReviewComponents & { config: Review
       rankProviders: jest.fn().mockResolvedValue([]),
       recordResult: jest.fn(),
     } as any,
-    promptGenerator: { generateFixPrompts: jest.fn().mockReturnValue([]), saveToFile: jest.fn() } as any,
+    promptGenerator: {
+      generateFixPrompts: jest.fn().mockReturnValue([]),
+      saveToFile: jest.fn(),
+    } as any,
     quietModeFilter: undefined,
     graphBuilder: undefined,
     feedbackTracker: undefined,
@@ -129,23 +161,50 @@ function makePR(files: FileChange[]): PRContext {
 }
 
 describe('ReviewOrchestrator health check guard rails', () => {
+  const originalProgressComments = process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
+
+  afterEach(() => {
+    if (originalProgressComments === undefined) {
+      delete process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
+    } else {
+      process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = originalProgressComments;
+    }
+  });
+
   it('short-circuits LLM execution when no healthy providers and records reliability', async () => {
-    const healthResults: ProviderResult[] = [{ name: 'p1', status: 'timeout', durationSeconds: 0 } as any];
+    const healthResults: ProviderResult[] = [
+      { name: 'p1', status: 'timeout', durationSeconds: 0 } as any,
+    ];
 
     const orchestrator = makeOrchestrator({
       llmExecutor: {
-        filterHealthyProviders: jest.fn().mockResolvedValue({ healthy: [], healthCheckResults: healthResults }),
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [],
+          healthCheckResults: healthResults,
+        }),
         execute: jest.fn(),
       } as any,
     });
 
-    const pr = makePR([{ filename: 'a.ts', status: 'modified', additions: 1, deletions: 0, changes: 1 }]);
+    const pr = makePR([
+      {
+        filename: 'a.ts',
+        status: 'modified',
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+      },
+    ]);
 
     const review = await orchestrator.executeReview(pr);
 
     expect(review).toBeTruthy();
-    expect((orchestrator as any).components.llmExecutor.execute).not.toHaveBeenCalled();
-    expect((orchestrator as any).components.reliabilityTracker.recordResult).toHaveBeenCalledWith('p1', false, 0, undefined);
+    expect(
+      (orchestrator as any).components.llmExecutor.execute
+    ).not.toHaveBeenCalled();
+    expect(
+      (orchestrator as any).components.reliabilityTracker.recordResult
+    ).toHaveBeenCalledWith('p1', false, 0, undefined);
   });
 
   it('executes LLM review with one explicit healthy provider', async () => {
@@ -191,12 +250,344 @@ describe('ReviewOrchestrator health check guard rails', () => {
       } as any,
     });
 
-    const pr = makePR([{ filename: 'a.ts', status: 'modified', additions: 1, deletions: 0, changes: 1 }]);
+    const pr = makePR([
+      {
+        filename: 'a.ts',
+        status: 'modified',
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+      },
+    ]);
 
     const review = await orchestrator.executeReview(pr);
 
     expect(review).toBeTruthy();
-    expect(execute).toHaveBeenCalledWith([provider], expect.any(String), expect.any(Number));
+    expect(execute).toHaveBeenCalledWith(
+      [provider],
+      expect.any(String),
+      expect.any(Number)
+    );
+  });
+
+  it('does not post GitHub comments for a clean review', async () => {
+    const provider = {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const postSummary = jest.fn();
+    const postInline = jest.fn();
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: false,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: ['p1'],
+        fallbackProviders: [],
+        providerLimit: 1,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute: jest.fn().mockResolvedValue([
+          {
+            name: 'p1',
+            status: 'success',
+            result: {
+              content: '{"findings":[]}',
+              findings: [],
+              usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+            },
+            durationSeconds: 0,
+          } as ProviderResult,
+        ]),
+      } as any,
+      commentPoster: { postSummary, postInline } as any,
+      formatter: { format: jest.fn().mockReturnValue('## All Clear!') } as any,
+    });
+
+    const pr = makePR([
+      {
+        filename: 'a.ts',
+        status: 'modified',
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+      },
+    ]);
+
+    const review = await orchestrator.executeReview(pr);
+
+    expect(review.findings).toHaveLength(0);
+    expect(postSummary).not.toHaveBeenCalled();
+    expect(postInline).not.toHaveBeenCalled();
+  });
+
+  it('creates a progress comment by default for the first GitHub review', async () => {
+    delete process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
+    const provider = {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const createComment = jest.fn().mockResolvedValue({ data: { id: 456 } });
+    const updateComment = jest.fn().mockResolvedValue({});
+    const listIssueComments = jest.fn().mockResolvedValue({ data: [] });
+    const listReviewComments = jest.fn().mockResolvedValue({ data: [] });
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: false,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: ['p1'],
+        fallbackProviders: [],
+        providerLimit: 1,
+      },
+      githubClient: {
+        owner: 'owner',
+        repo: 'repo',
+        octokit: {
+          rest: {
+            issues: {
+              listComments: listIssueComments,
+              createComment,
+              updateComment,
+            },
+            pulls: {
+              listReviewComments,
+            },
+          },
+        },
+      } as any,
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute: jest.fn().mockResolvedValue([
+          {
+            name: 'p1',
+            status: 'success',
+            result: {
+              content: '{"findings":[]}',
+              findings: [],
+              usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+            },
+            durationSeconds: 0,
+          } as ProviderResult,
+        ]),
+      } as any,
+      formatter: { format: jest.fn().mockReturnValue('## All Clear!') } as any,
+    });
+
+    await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(listIssueComments).toHaveBeenCalled();
+    expect(listReviewComments).toHaveBeenCalled();
+    expect(createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_number: 1,
+        body: expect.stringContaining('## 🤖 ReviewRouter Progress'),
+      })
+    );
+    expect(updateComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comment_id: 456,
+        body: expect.stringContaining('Build code graph'),
+      })
+    );
+  });
+
+  it('skips default progress when the PR already has ReviewRouter activity', async () => {
+    delete process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
+    const provider = {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const createComment = jest.fn();
+    const listIssueComments = jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: 99,
+          body: '<!-- review-router-bot -->\n\n# ReviewRouter\nold summary',
+        },
+      ],
+    });
+    const listReviewComments = jest.fn().mockResolvedValue({ data: [] });
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: false,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: ['p1'],
+        fallbackProviders: [],
+        providerLimit: 1,
+      },
+      githubClient: {
+        owner: 'owner',
+        repo: 'repo',
+        octokit: {
+          rest: {
+            issues: {
+              listComments: listIssueComments,
+              createComment,
+              updateComment: jest.fn(),
+            },
+            pulls: {
+              listReviewComments,
+            },
+          },
+        },
+      } as any,
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute: jest.fn().mockResolvedValue([
+          {
+            name: 'p1',
+            status: 'success',
+            result: {
+              content: '{"findings":[]}',
+              findings: [],
+              usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+            },
+            durationSeconds: 0,
+          } as ProviderResult,
+        ]),
+      } as any,
+      formatter: { format: jest.fn().mockReturnValue('## All Clear!') } as any,
+    });
+
+    await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(listIssueComments).toHaveBeenCalled();
+    expect(listReviewComments).not.toHaveBeenCalled();
+    expect(createComment).not.toHaveBeenCalled();
+  });
+
+  it('does not create progress comments when explicitly disabled', async () => {
+    process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = 'false';
+    const provider = {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const createComment = jest.fn();
+    const listIssueComments = jest.fn().mockResolvedValue({ data: [] });
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: false,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: ['p1'],
+        fallbackProviders: [],
+        providerLimit: 1,
+      },
+      githubClient: {
+        owner: 'owner',
+        repo: 'repo',
+        octokit: {
+          rest: {
+            issues: {
+              listComments: listIssueComments,
+              createComment,
+              updateComment: jest.fn(),
+            },
+            pulls: {
+              listReviewComments: jest.fn(),
+            },
+          },
+        },
+      } as any,
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute: jest.fn().mockResolvedValue([
+          {
+            name: 'p1',
+            status: 'success',
+            result: {
+              content: '{"findings":[]}',
+              findings: [],
+              usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+            },
+            durationSeconds: 0,
+          } as ProviderResult,
+        ]),
+      } as any,
+      formatter: { format: jest.fn().mockReturnValue('## All Clear!') } as any,
+    });
+
+    await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(listIssueComments).not.toHaveBeenCalled();
+    expect(createComment).not.toHaveBeenCalled();
   });
 
   it('fails when every LLM provider fails and provider failure is configured as blocking', async () => {
@@ -212,7 +603,9 @@ describe('ReviewOrchestrator health check guard rails', () => {
       {
         name: 'codex/gpt-5.5',
         status: 'error',
-        error: new Error('Codex CLI failed: OPENAI_API_KEY=sk-1234567890abcdef refresh_token=secret-value'),
+        error: new Error(
+          'Codex CLI failed: OPENAI_API_KEY=sk-1234567890abcdef refresh_token=secret-value'
+        ),
         durationSeconds: 0,
       } as ProviderResult,
     ]);
@@ -242,7 +635,15 @@ describe('ReviewOrchestrator health check guard rails', () => {
         } as any,
       });
 
-      const pr = makePR([{ filename: 'a.ts', status: 'modified', additions: 1, deletions: 0, changes: 1 }]);
+      const pr = makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ]);
 
       let thrown: Error | undefined;
       try {

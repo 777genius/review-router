@@ -18975,10 +18975,6 @@ var CommentPoster = class _CommentPoster {
   static BOT_COMMENT_MARKER = "<!-- review-router-bot -->";
   static INLINE_FALLBACK_MARKER = "<!-- review-router-inline-fallback -->";
   static INLINE_SKIP_HELP_MARKER = "<!-- review-router-skip-help -->";
-  static LEGACY_BOT_COMMENT_MARKERS = [
-    "<!-- ai-robot-review-bot -->",
-    "<!-- multi-provider-code-review-bot -->"
-  ];
   async postSummary(prNumber, body, updateExisting = true, summaryMetadata) {
     const guardedBody = appendReviewSummaryMetadata(body, summaryMetadata);
     const staleHead = await this.shouldSkipForStaleHead(
@@ -18991,73 +18987,40 @@ var CommentPoster = class _CommentPoster {
     }
     const chunks = this.chunk(guardedBody);
     if (this.dryRun) {
-      logger.info(`[DRY RUN] Would post ${chunks.length} summary comment(s) to PR #${prNumber}`);
+      logger.info(
+        `[DRY RUN] Would post ${chunks.length} summary comment(s) to PR #${prNumber}`
+      );
       for (let i = 0; i < chunks.length; i++) {
         const header = chunks.length > 1 ? `## Review Summary (Part ${i + 1}/${chunks.length})
 
 ` : "";
         const content = header + chunks[i];
-        logger.info(`[DRY RUN] Summary comment ${i + 1}:
-${content.substring(0, 500)}...`);
+        logger.info(
+          `[DRY RUN] Summary comment ${i + 1}:
+${content.substring(0, 500)}...`
+        );
       }
       return { posted: false, skippedStale: false };
     }
     const { octokit, owner, repo } = this.client;
+    const newerSummary = await this.findNewerSummaryComment(
+      prNumber,
+      summaryMetadata
+    );
+    if (newerSummary) {
+      logger.warn(
+        "Skipping summary write because a newer ReviewRouter summary already exists"
+      );
+      return {
+        posted: false,
+        skippedStale: true,
+        reason: "newer_summary_exists"
+      };
+    }
     if (updateExisting) {
-      const existingComments = await this.findBotComments(prNumber);
-      if (existingComments.length > 0) {
-        const staleExisting = existingComments.find(
-          (comment) => shouldSkipSummaryWriteForExisting(comment.body, summaryMetadata).shouldSkip
-        );
-        if (staleExisting) {
-          logger.warn(
-            "Skipping summary write because a newer ReviewRouter summary already exists"
-          );
-          return {
-            posted: false,
-            skippedStale: true,
-            reason: "newer_summary_exists"
-          };
-        }
-        logger.info(`Found ${existingComments.length} existing review comment(s), updating in place`);
-        const updates = Math.min(existingComments.length, chunks.length);
-        for (let i = 0; i < updates; i++) {
-          const header = chunks.length > 1 ? `## Review Summary (Part ${i + 1}/${chunks.length})
-
-` : "";
-          const markedBody = _CommentPoster.BOT_COMMENT_MARKER + "\n\n" + header + chunks[i];
-          await withRetry(
-            () => octokit.rest.issues.updateComment({
-              owner,
-              repo,
-              comment_id: existingComments[i].id,
-              body: markedBody
-            }),
-            { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
-          );
-        }
-        if (existingComments.length > chunks.length) {
-          const stale = existingComments.slice(chunks.length);
-          for (const comment of stale) {
-            await withRetry(
-              () => octokit.rest.issues.deleteComment({ owner, repo, comment_id: comment.id }),
-              { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
-            );
-          }
-        }
-        for (let i = existingComments.length; i < chunks.length; i++) {
-          const header = chunks.length > 1 ? `## Review Summary (Part ${i + 1}/${chunks.length})
-
-` : "";
-          const markedBody = _CommentPoster.BOT_COMMENT_MARKER + "\n\n" + header + chunks[i];
-          await withRetry(
-            () => octokit.rest.issues.createComment({ owner, repo, issue_number: prNumber, body: markedBody }),
-            { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
-          );
-          await new Promise((resolve3) => setTimeout(resolve3, 1e3));
-        }
-        return { posted: true, skippedStale: false };
-      }
+      logger.info(
+        "Creating a new ReviewRouter summary comment; existing summaries are kept as history"
+      );
     }
     for (let i = 0; i < chunks.length; i++) {
       const header = chunks.length > 1 ? `## Review Summary (Part ${i + 1}/${chunks.length})
@@ -19065,7 +19028,12 @@ ${content.substring(0, 500)}...`);
 ` : "";
       const markedBody = _CommentPoster.BOT_COMMENT_MARKER + "\n\n" + header + chunks[i];
       await withRetry(
-        () => octokit.rest.issues.createComment({ owner, repo, issue_number: prNumber, body: markedBody }),
+        () => octokit.rest.issues.createComment({
+          owner,
+          repo,
+          issue_number: prNumber,
+          body: markedBody
+        }),
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
       if (i < chunks.length - 1) {
@@ -19074,20 +19042,17 @@ ${content.substring(0, 500)}...`);
     }
     return { posted: true, skippedStale: false };
   }
-  /**
-   * Find the bot's review comment on a PR
-   */
-  async findBotComment(prNumber) {
-    const comments = await this.findBotComments(prNumber);
-    return comments[0] || null;
-  }
-  async findBotComments(prNumber) {
+  async findNewerSummaryComment(prNumber, summaryMetadata) {
+    if (!summaryMetadata) return null;
     try {
       const comments = await this.listIssueComments(prNumber);
-      return comments.filter((comment) => _CommentPoster.hasBotCommentMarker(comment.body ?? void 0)).map((comment) => ({ id: comment.id, body: comment.body ?? "" }));
+      const newer = comments.find(
+        (comment) => shouldSkipSummaryWriteForExisting(comment.body ?? "", summaryMetadata).shouldSkip
+      );
+      return newer ? { id: newer.id, body: newer.body ?? "" } : null;
     } catch (error2) {
-      logger.warn("Failed to find existing bot comment", error2);
-      return [];
+      logger.warn("Failed to find newer ReviewRouter summary", error2);
+      return null;
     }
   }
   async listIssueComments(prNumber) {
@@ -19111,10 +19076,6 @@ ${content.substring(0, 500)}...`);
       page += 1;
     }
     return comments;
-  }
-  static hasBotCommentMarker(body) {
-    if (!body) return false;
-    return body.includes(_CommentPoster.BOT_COMMENT_MARKER) || _CommentPoster.LEGACY_BOT_COMMENT_MARKERS.some((marker) => body.includes(marker));
   }
   async shouldSkipForStaleHead(prNumber, summaryMetadata) {
     if (!summaryMetadata?.reviewedHeadSha || this.dryRun) {
@@ -19171,7 +19132,10 @@ ${content.substring(0, 500)}...`);
         if (marker) keys.add(marker);
       }
     } catch (error2) {
-      logger.warn("Failed to load existing inline comments for deduplication", error2);
+      logger.warn(
+        "Failed to load existing inline comments for deduplication",
+        error2
+      );
     }
     return { keys, comments: activeComments };
   }
@@ -19191,11 +19155,17 @@ ${content.substring(0, 500)}...`);
     }
     if (this.suppressionTracker) {
       const suppressed = await this.suppressionTracker.shouldSuppress(
-        { category: comment.category || "unknown", file: comment.path, line: comment.line },
+        {
+          category: comment.category || "unknown",
+          file: comment.path,
+          line: comment.line
+        },
         prNumber
       );
       if (suppressed) {
-        logger.debug(`Suggestion suppressed for ${comment.path}:${comment.line} (similar suggestion dismissed)`);
+        logger.debug(
+          `Suggestion suppressed for ${comment.path}:${comment.line} (similar suggestion dismissed)`
+        );
         return { valid: false, reason: "Similar suggestion was dismissed" };
       }
     }
@@ -19205,22 +19175,32 @@ ${content.substring(0, 500)}...`);
       if (language !== "unknown") {
         const syntaxResult = validateSyntax(comment.suggestion, language);
         if (!syntaxResult.isValid && !syntaxResult.skipped) {
-          logger.debug(`Suggestion syntax invalid for ${comment.path}:${comment.line}: ${syntaxResult.errors.length} error(s)`);
+          logger.debug(
+            `Suggestion syntax invalid for ${comment.path}:${comment.line}: ${syntaxResult.errors.length} error(s)`
+          );
           syntaxValid = false;
         }
       }
     }
     const hasConsensus = comment.hasConsensus ?? false;
     if (hasConsensus) {
-      logger.debug(`Consensus detected for ${comment.path}:${comment.line} (providers agreed during aggregation)`);
+      logger.debug(
+        `Consensus detected for ${comment.path}:${comment.line} (providers agreed during aggregation)`
+      );
     }
     if (!syntaxValid && !hasConsensus) {
-      return { valid: false, reason: "Syntax validation failed", hasConsensus: false };
+      return {
+        valid: false,
+        reason: "Syntax validation failed",
+        hasConsensus: false
+      };
     }
     if (comment.severity && this.config) {
       let providerReliability = 1;
       if (this.providerWeightTracker && comment.provider) {
-        providerReliability = await this.providerWeightTracker.getWeight(comment.provider);
+        providerReliability = await this.providerWeightTracker.getWeight(
+          comment.provider
+        );
       }
       const signals = {
         llmConfidence: comment.confidence,
@@ -19238,20 +19218,22 @@ ${content.substring(0, 500)}...`);
         providers: comment.provider ? [comment.provider] : [],
         hasConsensus
       };
-      if (!shouldPostSuggestion(
-        minimalFinding,
-        confidence,
-        {
-          min_confidence: this.config.minConfidence,
-          confidence_threshold: this.config.confidenceThreshold,
-          consensus: {
-            required_for_critical: this.config.consensusRequiredForCritical ?? true,
-            min_agreement: this.config.consensusMinAgreement ?? 2
-          }
+      if (!shouldPostSuggestion(minimalFinding, confidence, {
+        min_confidence: this.config.minConfidence,
+        confidence_threshold: this.config.confidenceThreshold,
+        consensus: {
+          required_for_critical: this.config.consensusRequiredForCritical ?? true,
+          min_agreement: this.config.consensusMinAgreement ?? 2
         }
-      )) {
-        logger.debug(`Suggestion below confidence threshold for ${comment.path}:${comment.line} (confidence: ${confidence.toFixed(2)})`);
-        return { valid: false, reason: "Below confidence threshold", hasConsensus };
+      })) {
+        logger.debug(
+          `Suggestion below confidence threshold for ${comment.path}:${comment.line} (confidence: ${confidence.toFixed(2)})`
+        );
+        return {
+          valid: false,
+          reason: "Below confidence threshold",
+          hasConsensus
+        };
       }
     }
     return { valid: true, hasConsensus };
@@ -19259,13 +19241,18 @@ ${content.substring(0, 500)}...`);
   async postInline(prNumber, comments, files, headSha, dedupeComments) {
     if (comments.length === 0) {
       if (!this.dryRun) {
-        await this.deleteInlineFallbackComments(prNumber, "no current inline findings remain");
+        await this.deleteInlineFallbackComments(
+          prNumber,
+          "no current inline findings remain"
+        );
       }
       return;
     }
     const activeInlineComments = this.dryRun ? { keys: /* @__PURE__ */ new Set(), comments: [] } : dedupeComments ? _CommentPoster.activeInlineCommentsFromReferences(dedupeComments) : await this.loadActiveInlineComments(prNumber);
     const filesWithAdditions = files.filter((f) => !isDeletionOnlyFile(f));
-    const filesWithAdditionsSet = new Set(filesWithAdditions.map((f) => f.filename));
+    const filesWithAdditionsSet = new Set(
+      filesWithAdditions.map((f) => f.filename)
+    );
     const positionMaps = /* @__PURE__ */ new Map();
     for (const file of files) {
       positionMaps.set(file.filename, mapLinesToPositions(file.patch));
@@ -19279,53 +19266,90 @@ ${content.substring(0, 500)}...`);
       sortedComments.map(async (c) => {
         const file = files.find((f) => f.filename === c.path);
         const rangedComment = c;
-        const requestedEndLine = _CommentPoster.integerOrUndefined(c.endLine ?? rangedComment.end_line);
+        const requestedEndLine = _CommentPoster.integerOrUndefined(
+          c.endLine ?? rangedComment.end_line
+        );
         if (requestedEndLine !== void 0 && requestedEndLine !== c.line) {
-          logger.debug(`Using inline comment end line for ${c.path}: ${c.line} -> ${requestedEndLine}`);
+          logger.debug(
+            `Using inline comment end line for ${c.path}: ${c.line} -> ${requestedEndLine}`
+          );
           c.line = requestedEndLine;
         }
         const correctedLine = c.side !== "LEFT" ? chooseBestAddedLineForComment(file?.patch, c.line, c.body) : c.line;
         if (correctedLine !== c.line) {
-          logger.debug(`Adjusted inline comment line for ${c.path}: ${c.line} -> ${correctedLine}`);
+          logger.debug(
+            `Adjusted inline comment line for ${c.path}: ${c.line} -> ${correctedLine}`
+          );
           c.line = correctedLine;
         }
         const posMap = positionMaps.get(c.path);
         const position = posMap?.get(c.line);
         if (!position) {
-          logger.warn(`Cannot find diff position for ${c.path}:${c.line}, skipping inline comment`);
+          logger.warn(
+            `Cannot find diff position for ${c.path}:${c.line}, skipping inline comment`
+          );
           return null;
         }
-        let startLine = _CommentPoster.integerOrUndefined(c.startLine ?? rangedComment.start_line);
+        let startLine = _CommentPoster.integerOrUndefined(
+          c.startLine ?? rangedComment.start_line
+        );
         if (startLine !== void 0) {
           if (startLine === c.line) {
             startLine = void 0;
           } else {
-            const validation = validateSuggestionRange(startLine, c.line, file?.patch);
+            const validation = validateSuggestionRange(
+              startLine,
+              c.line,
+              file?.patch
+            );
             if (!validation.isValid) {
-              logger.debug(`Inline comment range invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`);
+              logger.debug(
+                `Inline comment range invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`
+              );
               startLine = void 0;
             }
           }
         }
         if (c.body.includes("```suggestion")) {
           if (!filesWithAdditionsSet.has(c.path)) {
-            logger.debug(`Skipping suggestion for deletion-only file: ${c.path}`);
-            c.body = c.body.replace(/```suggestion[\s\S]*?```/g, "_Suggestion not available (file has no additions)_");
+            logger.debug(
+              `Skipping suggestion for deletion-only file: ${c.path}`
+            );
+            c.body = c.body.replace(
+              /```suggestion[\s\S]*?```/g,
+              "_Suggestion not available (file has no additions)_"
+            );
           } else if (file?.patch) {
             if (startLine !== void 0 && startLine !== c.line) {
-              const validation = validateSuggestionRange(startLine, c.line, file.patch);
+              const validation = validateSuggestionRange(
+                startLine,
+                c.line,
+                file.patch
+              );
               if (!validation.isValid) {
-                logger.debug(`Multi-line suggestion invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`);
-                c.body = c.body.replace(/```suggestion[\s\S]*?```/g, `_Suggestion not available: ${validation.reason}_`);
+                logger.debug(
+                  `Multi-line suggestion invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`
+                );
+                c.body = c.body.replace(
+                  /```suggestion[\s\S]*?```/g,
+                  `_Suggestion not available: ${validation.reason}_`
+                );
               }
             } else {
               if (!isSuggestionLineValid(c.line, file.patch)) {
-                logger.debug(`Suggestion line ${c.path}:${c.line} not valid in diff, posting without suggestion block`);
-                c.body = c.body.replace(/```suggestion[\s\S]*?```/g, "_Suggestion not available for this line_");
+                logger.debug(
+                  `Suggestion line ${c.path}:${c.line} not valid in diff, posting without suggestion block`
+                );
+                c.body = c.body.replace(
+                  /```suggestion[\s\S]*?```/g,
+                  "_Suggestion not available for this line_"
+                );
               }
             }
           }
-          const suggestionMatch = c.body.match(/```suggestion\n([\s\S]*?)```/);
+          const suggestionMatch = c.body.match(
+            /```suggestion\n([\s\S]*?)```/
+          );
           if (suggestionMatch && !c.body.includes("_Suggestion not available")) {
             const suggestionContent = suggestionMatch[1];
             const qualityValidation = await this.validateAndFilterSuggestion(
@@ -19341,7 +19365,10 @@ ${content.substring(0, 500)}...`);
               prNumber
             );
             if (!qualityValidation.valid) {
-              c.body = c.body.replace(/```suggestion[\s\S]*?```/g, `_Suggestion not available: ${qualityValidation.reason}_`);
+              c.body = c.body.replace(
+                /```suggestion[\s\S]*?```/g,
+                `_Suggestion not available: ${qualityValidation.reason}_`
+              );
             }
           }
         }
@@ -19354,12 +19381,23 @@ ${content.substring(0, 500)}...`);
             c.severity
           )
         };
-        if (this.hasInlineDuplicate(activeInlineComments, c.path, c.line, apiComment.body)) {
-          logger.info(`Skipping duplicate active inline comment at ${c.path}:${c.line}`);
+        if (this.hasInlineDuplicate(
+          activeInlineComments,
+          c.path,
+          c.line,
+          apiComment.body
+        )) {
+          logger.info(
+            `Skipping duplicate active inline comment at ${c.path}:${c.line}`
+          );
           return null;
         }
-        activeInlineComments.keys.add(signatureFromInlineComment(c.path, c.line, apiComment.body));
-        activeInlineComments.keys.add(fingerprintFromInlineComment(c.path, c.line, apiComment.body));
+        activeInlineComments.keys.add(
+          signatureFromInlineComment(c.path, c.line, apiComment.body)
+        );
+        activeInlineComments.keys.add(
+          fingerprintFromInlineComment(c.path, c.line, apiComment.body)
+        );
         const marker = extractInlineFingerprint(apiComment.body);
         if (marker) activeInlineComments.keys.add(marker);
         activeInlineComments.comments.push({
@@ -19379,10 +19417,14 @@ ${content.substring(0, 500)}...`);
       return;
     }
     if (this.dryRun) {
-      logger.info(`[DRY RUN] Would post ${apiComments.length} inline comment(s) to PR #${prNumber}`);
+      logger.info(
+        `[DRY RUN] Would post ${apiComments.length} inline comment(s) to PR #${prNumber}`
+      );
       for (const comment of apiComments) {
-        logger.info(`[DRY RUN] Inline comment at ${comment.path}:${comment.line}:
-${comment.body.substring(0, 200)}...`);
+        logger.info(
+          `[DRY RUN] Inline comment at ${comment.path}:${comment.line}:
+${comment.body.substring(0, 200)}...`
+        );
       }
       return;
     }
@@ -19398,7 +19440,10 @@ ${comment.body.substring(0, 200)}...`);
         }),
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
-      await this.deleteInlineFallbackComments(prNumber, "inline comments posted successfully");
+      await this.deleteInlineFallbackComments(
+        prNumber,
+        "inline comments posted successfully"
+      );
     } catch (error2) {
       if (!_CommentPoster.shouldFallbackInlineReviewError(error2)) {
         throw error2;
@@ -19407,11 +19452,23 @@ ${comment.body.substring(0, 200)}...`);
         "GitHub inline review API failed; posting inline findings as a PR comment fallback",
         error2
       );
-      const remainingComments = headSha ? await this.postIndividualInlineComments(prNumber, apiComments, headSha, error2) : apiComments;
+      const remainingComments = headSha ? await this.postIndividualInlineComments(
+        prNumber,
+        apiComments,
+        headSha,
+        error2
+      ) : apiComments;
       if (remainingComments.length > 0) {
-        await this.postInlineFallback(prNumber, remainingComments, error2);
+        await this.postInlineFallback(
+          prNumber,
+          remainingComments,
+          error2
+        );
       } else {
-        await this.deleteInlineFallbackComments(prNumber, "inline comments posted successfully");
+        await this.deleteInlineFallbackComments(
+          prNumber,
+          "inline comments posted successfully"
+        );
       }
     }
   }
@@ -19549,7 +19606,11 @@ ${comment.body.substring(0, 200)}...`);
     }
     for (const stale of existingComments.slice(chunks.length)) {
       await withRetry(
-        () => octokit.rest.issues.deleteComment({ owner, repo, comment_id: stale.id }),
+        () => octokit.rest.issues.deleteComment({
+          owner,
+          repo,
+          comment_id: stale.id
+        }),
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
     }
@@ -19558,12 +19619,22 @@ ${comment.body.substring(0, 200)}...`);
     const { octokit, owner, repo } = this.client;
     try {
       const comments = await withRetry(
-        () => octokit.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 }),
+        () => octokit.rest.issues.listComments({
+          owner,
+          repo,
+          issue_number: prNumber,
+          per_page: 100
+        }),
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
-      return comments.data.filter((comment) => (comment.body || "").includes(_CommentPoster.INLINE_FALLBACK_MARKER)).map((comment) => ({ id: comment.id, body: comment.body ?? "" }));
+      return comments.data.filter(
+        (comment) => (comment.body || "").includes(_CommentPoster.INLINE_FALLBACK_MARKER)
+      ).map((comment) => ({ id: comment.id, body: comment.body ?? "" }));
     } catch (error2) {
-      logger.warn("Failed to find existing inline fallback comment", error2);
+      logger.warn(
+        "Failed to find existing inline fallback comment",
+        error2
+      );
       return [];
     }
   }
@@ -19572,21 +19643,29 @@ ${comment.body.substring(0, 200)}...`);
     const existingComments = await this.findInlineFallbackComments(prNumber);
     for (const comment of existingComments) {
       await withRetry(
-        () => octokit.rest.issues.deleteComment({ owner, repo, comment_id: comment.id }),
+        () => octokit.rest.issues.deleteComment({
+          owner,
+          repo,
+          comment_id: comment.id
+        }),
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
     }
     if (existingComments.length > 0) {
-      logger.info(`Deleted ${existingComments.length} stale inline fallback comment(s): ${reason}`);
+      logger.info(
+        `Deleted ${existingComments.length} stale inline fallback comment(s): ${reason}`
+      );
     }
   }
   static formatInlineFallbackBody(comments, error2) {
     const errorMessage2 = (error2.message || String(error2)).slice(0, 2e3);
-    const items = comments.map((comment, index) => [
-      `### ${index + 1}. ${_CommentPoster.formatApiCommentLocation(comment)}`,
-      "",
-      _CommentPoster.stripUnsupportedFallbackText(comment.body)
-    ].join("\n")).join("\n\n---\n\n");
+    const items = comments.map(
+      (comment, index) => [
+        `### ${index + 1}. ${_CommentPoster.formatApiCommentLocation(comment)}`,
+        "",
+        _CommentPoster.stripUnsupportedFallbackText(comment.body)
+      ].join("\n")
+    ).join("\n\n---\n\n");
     return [
       _CommentPoster.INLINE_FALLBACK_MARKER,
       "",
@@ -19612,7 +19691,10 @@ ${comment.body.substring(0, 200)}...`);
     return comment.start_line !== void 0 && comment.start_line < comment.line ? `${comment.path}:${comment.start_line}-${comment.line}` : `${comment.path}:${comment.line}`;
   }
   static stripUnsupportedFallbackText(body) {
-    return body.replace(/<sub><!-- review-router-skip-help -->[\s\S]*?<\/sub>/g, "").replace(/```suggestion[\s\S]*?```/g, "_Committable suggestion is only available on inline review comments._").trim();
+    return body.replace(/<sub><!-- review-router-skip-help -->[\s\S]*?<\/sub>/g, "").replace(
+      /```suggestion[\s\S]*?```/g,
+      "_Committable suggestion is only available on inline review comments._"
+    ).trim();
   }
   chunk(content) {
     const paragraphs = content.split("\n\n");
@@ -29586,7 +29668,9 @@ var ProgressTracker = class _ProgressTracker {
    */
   async initialize() {
     if (!this.octokit?.rest?.issues?.createComment) {
-      logger.warn("Progress tracker unavailable: octokit.rest.issues.createComment is missing");
+      logger.warn(
+        "Progress tracker unavailable: octokit.rest.issues.createComment is missing"
+      );
       return;
     }
     try {
@@ -29602,7 +29686,9 @@ var ProgressTracker = class _ProgressTracker {
       if (existing.commentId) {
         this.commentId = existing.commentId;
         await this.updateComment();
-        logger.info("Progress tracker initialized from existing comment", { commentId: this.commentId });
+        logger.info("Progress tracker initialized from existing comment", {
+          commentId: this.commentId
+        });
         return;
       }
       const comment = await this.octokit.rest.issues.createComment({
@@ -29612,7 +29698,9 @@ var ProgressTracker = class _ProgressTracker {
         body
       });
       this.commentId = comment.data.id;
-      logger.info("Progress tracker initialized", { commentId: this.commentId });
+      logger.info("Progress tracker initialized", {
+        commentId: this.commentId
+      });
     } catch (error2) {
       logger.warn("Failed to initialize progress tracker", error2);
     }
@@ -29651,7 +29739,9 @@ var ProgressTracker = class _ProgressTracker {
     this.failure = normalizeReviewError(error2);
   }
   hasFailedItems() {
-    return Array.from(this.items.values()).some((item) => item.status === "failed");
+    return Array.from(this.items.values()).some(
+      (item) => item.status === "failed"
+    );
   }
   /**
    * Set total cost for metadata display
@@ -29697,11 +29787,13 @@ var ProgressTracker = class _ProgressTracker {
       lines.push("| Step | Status | Details |");
       lines.push("| --- | --- | --- |");
       for (const item of sortedItems) {
-        lines.push([
-          this.escapeTableCell(item.label),
-          this.escapeTableCell(this.getStatusLabel(item.status)),
-          this.escapeTableCell(item.details || "")
-        ].join(" | ").replace(/^/, "| ").replace(/$/, " |"));
+        lines.push(
+          [
+            this.escapeTableCell(item.label),
+            this.escapeTableCell(this.getStatusLabel(item.status)),
+            this.escapeTableCell(item.details || "")
+          ].join(" | ").replace(/^/, "| ").replace(/$/, " |")
+        );
       }
     }
     if (this.failure) {
@@ -29738,7 +29830,9 @@ var ProgressTracker = class _ProgressTracker {
       return;
     }
     if (!this.octokit?.rest?.issues?.updateComment) {
-      logger.warn("Cannot update progress: octokit.rest.issues.updateComment is missing");
+      logger.warn(
+        "Cannot update progress: octokit.rest.issues.updateComment is missing"
+      );
       return;
     }
     try {
@@ -29759,7 +29853,9 @@ var ProgressTracker = class _ProgressTracker {
    */
   async replaceWith(body) {
     if (this.summaryWriteSuppressed) {
-      logger.warn("Skipping progress replacement because a newer summary already exists");
+      logger.warn(
+        "Skipping progress replacement because a newer summary already exists"
+      );
       return false;
     }
     if (!this.commentId) {
@@ -29767,20 +29863,27 @@ var ProgressTracker = class _ProgressTracker {
       return false;
     }
     if (!this.octokit?.rest?.issues?.updateComment) {
-      logger.warn("Cannot replace progress: octokit.rest.issues.updateComment is missing");
+      logger.warn(
+        "Cannot replace progress: octokit.rest.issues.updateComment is missing"
+      );
       return false;
     }
     try {
       if (await this.isCurrentRunStale()) {
-        logger.warn("Skipping progress replacement because the PR head changed");
+        logger.warn(
+          "Skipping progress replacement because the PR head changed"
+        );
         return false;
       }
       if (await this.hasNewerReviewSummary()) {
-        logger.warn("Skipping progress replacement because a newer ReviewRouter summary already exists");
+        logger.warn(
+          "Skipping progress replacement because a newer ReviewRouter summary already exists"
+        );
         return false;
       }
-      this.overrideBody = this.withMarker(
-        appendReviewSummaryMetadata(body, this.config.summaryMetadata)
+      this.overrideBody = appendReviewSummaryMetadata(
+        body,
+        this.config.summaryMetadata
       );
       await this.octokit.rest.issues.updateComment({
         owner: this.config.owner,
@@ -29790,7 +29893,10 @@ var ProgressTracker = class _ProgressTracker {
       });
       return true;
     } catch (error2) {
-      logger.warn("Failed to replace progress comment with final summary", error2);
+      logger.warn(
+        "Failed to replace progress comment with final summary",
+        error2
+      );
       return false;
     }
   }
@@ -29800,10 +29906,7 @@ var ProgressTracker = class _ProgressTracker {
     }
     try {
       const comments = await this.listIssueComments();
-      const reviewComments = comments.filter(
-        (comment) => this.isReviewComment(comment.body)
-      );
-      const hasNewerSummary = reviewComments.some(
+      const hasNewerSummary = comments.some(
         (comment) => shouldSkipSummaryWriteForExisting(
           comment.body ?? "",
           this.config.summaryMetadata
@@ -29812,8 +29915,11 @@ var ProgressTracker = class _ProgressTracker {
       if (hasNewerSummary) {
         return { commentId: null, blockedByNewerSummary: true };
       }
+      const progressComments = comments.filter(
+        (comment) => this.isProgressComment(comment.body)
+      );
       return {
-        commentId: reviewComments.length > 0 ? reviewComments[reviewComments.length - 1].id : null,
+        commentId: progressComments.length > 0 ? progressComments[progressComments.length - 1].id : null,
         blockedByNewerSummary: false
       };
     } catch (error2) {
@@ -29821,14 +29927,11 @@ var ProgressTracker = class _ProgressTracker {
       return { commentId: null, blockedByNewerSummary: false };
     }
   }
-  isReviewComment(body) {
+  isProgressComment(body) {
     if (!body) return false;
-    return body.includes(_ProgressTracker.MARKER) || _ProgressTracker.LEGACY_MARKERS.some((marker) => body.includes(marker)) || _ProgressTracker.LEGACY_HEADERS.some((header) => body.startsWith(header));
-  }
-  withMarker(body) {
-    return body.includes(_ProgressTracker.MARKER) ? body : `${body.trimEnd()}
-
-${_ProgressTracker.MARKER}`;
+    return body.startsWith("## \u{1F916} ReviewRouter Progress") || _ProgressTracker.LEGACY_MARKERS.some((marker) => body.includes(marker)) || _ProgressTracker.LEGACY_HEADERS.filter(
+      (header) => header.includes("Progress")
+    ).some((header) => body.startsWith(header));
   }
   async hasNewerReviewSummary() {
     if (!this.config.summaryMetadata || !this.octokit?.rest?.issues?.listComments) {
@@ -29837,7 +29940,7 @@ ${_ProgressTracker.MARKER}`;
     try {
       const comments = await this.listIssueComments();
       return comments.some(
-        (comment) => this.isReviewComment(comment.body) && shouldSkipSummaryWriteForExisting(
+        (comment) => shouldSkipSummaryWriteForExisting(
           comment.body ?? "",
           this.config.summaryMetadata
         ).shouldSkip
@@ -30040,13 +30143,19 @@ var ReviewOrchestrator = class {
               mode: "full"
             }
           );
-          const markdown2 = this.components.formatter.format(trivialReview);
-          await this.components.commentPoster.postSummary(
-            pr.number,
-            markdown2,
-            false,
-            summaryMetadata
-          );
+          if (this.shouldPostReviewOutput(trivialReview, [])) {
+            const markdown2 = this.components.formatter.format(trivialReview);
+            await this.components.commentPoster.postSummary(
+              pr.number,
+              markdown2,
+              false,
+              summaryMetadata
+            );
+          } else {
+            logger.info(
+              "Skipping ReviewRouter summary comment because no reportable findings were found"
+            );
+          }
           if (config.analyticsEnabled && this.components.metricsCollector) {
             try {
               await this.components.metricsCollector.recordReview(
@@ -30213,7 +30322,9 @@ var ReviewOrchestrator = class {
           pr.number,
           pr.headSha
         );
-        const inventory = await this.components.reviewThreadInventory.load(pr.number);
+        const inventory = await this.components.reviewThreadInventory.load(
+          pr.number
+        );
         lifecycleManualAttention = inventory.manualAttention;
         lifecycleWarnings = inventory.warnings;
         lifecycleInventoryFailed = inventory.failed;
@@ -30817,31 +30928,25 @@ var ReviewOrchestrator = class {
       const inlineFiltered = review.inlineComments.filter(
         (c) => this.components.feedbackFilter.shouldPost(c, reviewCommentState)
       );
-      if (progressTracker) {
-        const replaced = await progressTracker.replaceWith(markdown);
-        if (!replaced) {
-          await this.components.commentPoster.postSummary(
-            pr.number,
-            markdown,
-            useIncremental,
-            summaryMetadata
-          );
-        }
-      } else {
+      if (this.shouldPostReviewOutput(review, inlineFiltered)) {
         await this.components.commentPoster.postSummary(
           pr.number,
           markdown,
-          useIncremental,
+          false,
           summaryMetadata
         );
+        await this.components.commentPoster.postInline(
+          pr.number,
+          inlineFiltered,
+          pr.files,
+          pr.headSha,
+          lifecycleMode !== "off" ? lifecycleDedupeComments ?? [] : void 0
+        );
+      } else {
+        logger.info(
+          "Skipping ReviewRouter GitHub comments because no reportable findings were found"
+        );
       }
-      await this.components.commentPoster.postInline(
-        pr.number,
-        inlineFiltered,
-        pr.files,
-        pr.headSha,
-        lifecycleMode !== "off" ? lifecycleDedupeComments ?? [] : void 0
-      );
       await this.writeReports(review);
       await progressTracker?.updateProgress("synthesis", "completed");
       success = true;
@@ -30901,7 +31006,9 @@ var ReviewOrchestrator = class {
   }
   filterCommandDismissedLifecycleTargets(targets, reviewCommentState, skipped) {
     const active = [];
-    const alreadySkipped = new Set(skipped.map((record) => record.target.targetId));
+    const alreadySkipped = new Set(
+      skipped.map((record) => record.target.targetId)
+    );
     for (const target of targets) {
       if (this.isLifecycleTargetCommandDismissed(target, reviewCommentState)) {
         if (!alreadySkipped.has(target.targetId)) {
@@ -30916,9 +31023,14 @@ var ReviewOrchestrator = class {
   }
   filterCommandDismissedLifecycleRecords(records, reviewCommentState, skipped) {
     const active = [];
-    const alreadySkipped = new Set(skipped.map((record) => record.target.targetId));
+    const alreadySkipped = new Set(
+      skipped.map((record) => record.target.targetId)
+    );
     for (const record of records) {
-      if (this.isLifecycleTargetCommandDismissed(record.target, reviewCommentState)) {
+      if (this.isLifecycleTargetCommandDismissed(
+        record.target,
+        reviewCommentState
+      )) {
         if (!alreadySkipped.has(record.target.targetId)) {
           skipped.push(
             this.lifecycleRecord(record.target, [
@@ -31156,9 +31268,7 @@ var ReviewOrchestrator = class {
   }
   lifecycleTargetMatchesFile(target, file) {
     const targetPaths = new Set(
-      [target.currentPath, target.originalPath].filter(Boolean).map(
-        (value) => value.toLowerCase()
-      )
+      [target.currentPath, target.originalPath].filter(Boolean).map((value) => value.toLowerCase())
     );
     return targetPaths.has(file.filename.toLowerCase()) || (file.previousFilename ? targetPaths.has(file.previousFilename.toLowerCase()) : false);
   }
@@ -31372,6 +31482,14 @@ var ReviewOrchestrator = class {
     if (!this.components.githubClient || this.components.config.dryRun)
       return void 0;
     try {
+      const mode = this.progressCommentMode();
+      if (mode === "never") return void 0;
+      if (mode === "first" && await this.hasExistingReviewRouterActivity(pr.number)) {
+        logger.info(
+          "Skipping ReviewRouter progress comment because this PR already has ReviewRouter activity"
+        );
+        return void 0;
+      }
       const tracker = new ProgressTracker(
         this.components.githubClient.octokit,
         {
@@ -31388,6 +31506,84 @@ var ReviewOrchestrator = class {
       logger.warn("Failed to initialize progress tracker", error2);
       return void 0;
     }
+  }
+  progressCommentMode() {
+    const raw = process.env.REVIEW_ROUTER_PROGRESS_COMMENTS?.trim().toLowerCase();
+    if (!raw) return "first";
+    if (["1", "true", "yes", "on", "always"].includes(raw)) return "always";
+    if (["0", "false", "no", "off", "never"].includes(raw)) return "never";
+    if ([
+      "first",
+      "first-review",
+      "first_review",
+      "auto",
+      "auto-first",
+      "auto_first"
+    ].includes(raw)) {
+      return "first";
+    }
+    logger.warn(
+      `Ignoring REVIEW_ROUTER_PROGRESS_COMMENTS=${raw}; expected true, false, or first`
+    );
+    return "first";
+  }
+  async hasExistingReviewRouterActivity(prNumber) {
+    const client = this.components.githubClient;
+    if (!client) return true;
+    try {
+      const { octokit, owner, repo } = client;
+      const issueComments = await this.paginateGitHub(octokit, octokit.rest.issues.listComments, {
+        owner,
+        repo,
+        issue_number: prNumber,
+        per_page: 100
+      });
+      if (issueComments.some(
+        (comment) => this.isReviewRouterIssueComment(comment.body)
+      )) {
+        return true;
+      }
+      const reviewComments = await this.paginateGitHub(octokit, octokit.rest.pulls.listReviewComments, {
+        owner,
+        repo,
+        pull_number: prNumber,
+        per_page: 100
+      });
+      return reviewComments.some(
+        (comment) => this.isReviewRouterReviewComment(comment.body)
+      );
+    } catch (error2) {
+      logger.warn(
+        "Failed to detect existing ReviewRouter activity; skipping first-review progress comment",
+        error2
+      );
+      return true;
+    }
+  }
+  async paginateGitHub(octokit, method, params) {
+    if (typeof octokit.paginate === "function") {
+      return octokit.paginate(method, params);
+    }
+    const response = await method(params);
+    return response.data;
+  }
+  isReviewRouterIssueComment(body) {
+    if (!body) return false;
+    return body.includes("<!-- review-router-bot -->") || body.includes("<!-- review-router-progress-tracker -->") || body.includes("<!-- review-router-inline-fallback -->") || body.includes("<!-- ai-robot-review-bot -->") || body.includes("<!-- ai-robot-review-progress-tracker -->") || body.includes("<!-- multi-provider-code-review-bot -->") || body.startsWith("## \u{1F916} ReviewRouter Progress") || body.startsWith("## \u{1F916} AI Robot Review Progress") || body.startsWith("# ReviewRouter") || body.startsWith("# AI Robot Review");
+  }
+  isReviewRouterReviewComment(body) {
+    if (!body) return false;
+    return body.includes("<!-- review-router-inline:") || body.includes("<!-- review-router-skip-help -->") || body.includes("<!-- ai-robot-review-inline:");
+  }
+  shouldPostReviewOutput(review, inlineComments) {
+    if (review.findings.length > 0 || inlineComments.length > 0 || review.actionItems.length > 0) {
+      return true;
+    }
+    const lifecycle = review.threadLifecycle;
+    if (!lifecycle) return false;
+    return lifecycle.inventoryFailed === true || lifecycle.previousStillValid.some(
+      (record) => !isLinkedCurrentFinding(record)
+    ) || lifecycle.previousUncertain.length > 0 || lifecycle.manualAttention.length > 0 || lifecycle.mutationSkipped.length > 0 || lifecycle.mutationFailed.length > 0 || lifecycle.skipped.length > 0 || lifecycle.warnings.length > 0;
   }
   async ensureBudget(config) {
     if (config.budgetMaxUsd <= 0) return;
@@ -33223,6 +33419,7 @@ function syncEnvFromInputs() {
     "CONSENSUS_MIN_AGREEMENT",
     "SUGGESTION_SYNTAX_VALIDATION",
     "UPDATE_PR_DESCRIPTION",
+    "REVIEW_ROUTER_PROGRESS_COMMENTS",
     "FAIL_ON_CRITICAL",
     "FAIL_ON_MAJOR",
     "FAIL_ON_SEVERITY",

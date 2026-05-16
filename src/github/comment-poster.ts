@@ -1,10 +1,22 @@
 import { InlineComment, FileChange, Severity, ReviewConfig } from '../types';
 import { GitHubClient } from './client';
 import { logger } from '../utils/logger';
-import { chooseBestAddedLineForComment, mapLinesToPositions } from '../utils/diff';
+import {
+  chooseBestAddedLineForComment,
+  mapLinesToPositions,
+} from '../utils/diff';
 import { withRetry } from '../utils/retry';
-import { isSuggestionLineValid, validateSuggestionRange, isDeletionOnlyFile } from '../utils/suggestion-validator';
-import { validateSyntax, shouldPostSuggestion, calculateConfidence, ConfidenceSignals } from '../validation';
+import {
+  isSuggestionLineValid,
+  validateSuggestionRange,
+  isDeletionOnlyFile,
+} from '../utils/suggestion-validator';
+import {
+  validateSyntax,
+  shouldPostSuggestion,
+  calculateConfidence,
+  ConfidenceSignals,
+} from '../validation';
 import { SuppressionTracker } from '../learning/suppression-tracker';
 import { ProviderWeightTracker } from '../learning/provider-weights';
 import { detectLanguage } from '../analysis/ast/parsers';
@@ -51,12 +63,10 @@ type InlineCommentWithLegacyRange = InlineComment & {
 export class CommentPoster {
   private static readonly MAX_COMMENT_SIZE = 60_000;
   private static readonly BOT_COMMENT_MARKER = '<!-- review-router-bot -->';
-  private static readonly INLINE_FALLBACK_MARKER = '<!-- review-router-inline-fallback -->';
-  private static readonly INLINE_SKIP_HELP_MARKER = '<!-- review-router-skip-help -->';
-  private static readonly LEGACY_BOT_COMMENT_MARKERS = [
-    '<!-- ai-robot-review-bot -->',
-    '<!-- multi-provider-code-review-bot -->',
-  ];
+  private static readonly INLINE_FALLBACK_MARKER =
+    '<!-- review-router-inline-fallback -->';
+  private static readonly INLINE_SKIP_HELP_MARKER =
+    '<!-- review-router-skip-help -->';
 
   constructor(
     private readonly client: GitHubClient,
@@ -85,115 +95,87 @@ export class CommentPoster {
     const chunks = this.chunk(guardedBody);
 
     if (this.dryRun) {
-      logger.info(`[DRY RUN] Would post ${chunks.length} summary comment(s) to PR #${prNumber}`);
+      logger.info(
+        `[DRY RUN] Would post ${chunks.length} summary comment(s) to PR #${prNumber}`
+      );
       for (let i = 0; i < chunks.length; i++) {
-        const header = chunks.length > 1 ? `## Review Summary (Part ${i + 1}/${chunks.length})\n\n` : '';
+        const header =
+          chunks.length > 1
+            ? `## Review Summary (Part ${i + 1}/${chunks.length})\n\n`
+            : '';
         const content = header + chunks[i];
-        logger.info(`[DRY RUN] Summary comment ${i + 1}:\n${content.substring(0, 500)}...`);
+        logger.info(
+          `[DRY RUN] Summary comment ${i + 1}:\n${content.substring(0, 500)}...`
+        );
       }
       return { posted: false, skippedStale: false };
     }
 
     const { octokit, owner, repo } = this.client;
 
-    // Try to find and update existing comments if incremental review
+    const newerSummary = await this.findNewerSummaryComment(
+      prNumber,
+      summaryMetadata
+    );
+    if (newerSummary) {
+      logger.warn(
+        'Skipping summary write because a newer ReviewRouter summary already exists'
+      );
+      return {
+        posted: false,
+        skippedStale: true,
+        reason: 'newer_summary_exists',
+      };
+    }
+
     if (updateExisting) {
-      const existingComments = await this.findBotComments(prNumber);
-      if (existingComments.length > 0) {
-        const staleExisting = existingComments.find((comment) =>
-          shouldSkipSummaryWriteForExisting(comment.body, summaryMetadata)
-            .shouldSkip
-        );
-        if (staleExisting) {
-          logger.warn(
-            'Skipping summary write because a newer ReviewRouter summary already exists'
-          );
-          return {
-            posted: false,
-            skippedStale: true,
-            reason: 'newer_summary_exists',
-          };
-        }
-
-        logger.info(`Found ${existingComments.length} existing review comment(s), updating in place`);
-        const updates = Math.min(existingComments.length, chunks.length);
-
-        // Update comments that already exist
-        for (let i = 0; i < updates; i++) {
-          const header = chunks.length > 1 ? `## Review Summary (Part ${i + 1}/${chunks.length})\n\n` : '';
-          const markedBody = CommentPoster.BOT_COMMENT_MARKER + '\n\n' + header + chunks[i];
-          await withRetry(
-            () => octokit.rest.issues.updateComment({
-              owner,
-              repo,
-              comment_id: existingComments[i].id,
-              body: markedBody,
-            }),
-            { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
-          );
-        }
-
-        // Delete extra stale comments if we reduced chunk count
-        if (existingComments.length > chunks.length) {
-          const stale = existingComments.slice(chunks.length);
-          for (const comment of stale) {
-            await withRetry(
-              () => octokit.rest.issues.deleteComment({ owner, repo, comment_id: comment.id }),
-              { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
-            );
-          }
-        }
-
-        // Add new comments if chunk count grew
-        for (let i = existingComments.length; i < chunks.length; i++) {
-          const header = chunks.length > 1 ? `## Review Summary (Part ${i + 1}/${chunks.length})\n\n` : '';
-          const markedBody = CommentPoster.BOT_COMMENT_MARKER + '\n\n' + header + chunks[i];
-          await withRetry(
-            () => octokit.rest.issues.createComment({ owner, repo, issue_number: prNumber, body: markedBody }),
-            { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
-          );
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-
-        return { posted: true, skippedStale: false };
-      }
+      logger.info(
+        'Creating a new ReviewRouter summary comment; existing summaries are kept as history'
+      );
     }
 
     // Create new comment(s)
     for (let i = 0; i < chunks.length; i++) {
-      const header = chunks.length > 1 ? `## Review Summary (Part ${i + 1}/${chunks.length})\n\n` : '';
-      const markedBody = CommentPoster.BOT_COMMENT_MARKER + '\n\n' + header + chunks[i];
+      const header =
+        chunks.length > 1
+          ? `## Review Summary (Part ${i + 1}/${chunks.length})\n\n`
+          : '';
+      const markedBody =
+        CommentPoster.BOT_COMMENT_MARKER + '\n\n' + header + chunks[i];
       await withRetry(
-        () => octokit.rest.issues.createComment({ owner, repo, issue_number: prNumber, body: markedBody }),
+        () =>
+          octokit.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: prNumber,
+            body: markedBody,
+          }),
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
       if (i < chunks.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
 
     return { posted: true, skippedStale: false };
   }
 
-  /**
-   * Find the bot's review comment on a PR
-   */
-  private async findBotComment(prNumber: number): Promise<{ id: number; body: string } | null> {
-    const comments = await this.findBotComments(prNumber);
-    return comments[0] || null;
-  }
-
-  private async findBotComments(prNumber: number): Promise<Array<{ id: number; body: string }>> {
+  private async findNewerSummaryComment(
+    prNumber: number,
+    summaryMetadata?: ReviewSummaryMetadata
+  ): Promise<{ id: number; body: string } | null> {
+    if (!summaryMetadata) return null;
     try {
       const comments = await this.listIssueComments(prNumber);
-
-      // Find comment with our marker
-      return comments
-        .filter(comment => CommentPoster.hasBotCommentMarker(comment.body ?? undefined))
-        .map(comment => ({ id: comment.id, body: comment.body ?? '' }));
+      const newer = comments.find(
+        (comment) =>
+          shouldSkipSummaryWriteForExisting(comment.body ?? '', summaryMetadata)
+            .shouldSkip
+      );
+      return newer ? { id: newer.id, body: newer.body ?? '' } : null;
     } catch (error) {
-      logger.warn('Failed to find existing bot comment', error as Error);
-      return [];
+      logger.warn('Failed to find newer ReviewRouter summary', error as Error);
+      return null;
     }
   }
 
@@ -223,12 +205,6 @@ export class CommentPoster {
     }
 
     return comments;
-  }
-
-  private static hasBotCommentMarker(body?: string): boolean {
-    if (!body) return false;
-    return body.includes(CommentPoster.BOT_COMMENT_MARKER)
-      || CommentPoster.LEGACY_BOT_COMMENT_MARKERS.some(marker => body.includes(marker));
   }
 
   private async shouldSkipForStaleHead(
@@ -261,7 +237,9 @@ export class CommentPoster {
     return { posted: false, skippedStale: false };
   }
 
-  private async loadActiveInlineComments(prNumber: number): Promise<ActiveInlineComments> {
+  private async loadActiveInlineComments(
+    prNumber: number
+  ): Promise<ActiveInlineComments> {
     const keys = new Set<string>();
     const activeComments: InlineCommentReference[] = [];
     const { octokit, owner, repo } = this.client;
@@ -294,7 +272,10 @@ export class CommentPoster {
         if (marker) keys.add(marker);
       }
     } catch (error) {
-      logger.warn('Failed to load existing inline comments for deduplication', error as Error);
+      logger.warn(
+        'Failed to load existing inline comments for deduplication',
+        error as Error
+      );
     }
 
     return { keys, comments: activeComments };
@@ -311,7 +292,7 @@ export class CommentPoster {
       activeComments.keys.has(signatureFromInlineComment(path, line, body)) ||
       activeComments.keys.has(fingerprintFromInlineComment(path, line, body)) ||
       (marker ? activeComments.keys.has(marker) : false) ||
-      activeComments.comments.some(comment =>
+      activeComments.comments.some((comment) =>
         isLikelySameInlineFinding(comment, { path, line, body })
       )
     );
@@ -327,7 +308,7 @@ export class CommentPoster {
       category?: string;
       severity?: Severity;
       provider?: string;
-      hasConsensus?: boolean;  // Pre-computed during aggregation
+      hasConsensus?: boolean; // Pre-computed during aggregation
       confidence?: number;
     },
     prNumber: number
@@ -339,11 +320,17 @@ export class CommentPoster {
     // Check suppression first (fast path)
     if (this.suppressionTracker) {
       const suppressed = await this.suppressionTracker.shouldSuppress(
-        { category: comment.category || 'unknown', file: comment.path, line: comment.line },
+        {
+          category: comment.category || 'unknown',
+          file: comment.path,
+          line: comment.line,
+        },
         prNumber
       );
       if (suppressed) {
-        logger.debug(`Suggestion suppressed for ${comment.path}:${comment.line} (similar suggestion dismissed)`);
+        logger.debug(
+          `Suggestion suppressed for ${comment.path}:${comment.line} (similar suggestion dismissed)`
+        );
         return { valid: false, reason: 'Similar suggestion was dismissed' };
       }
     }
@@ -355,7 +342,9 @@ export class CommentPoster {
       if (language !== 'unknown') {
         const syntaxResult = validateSyntax(comment.suggestion, language);
         if (!syntaxResult.isValid && !syntaxResult.skipped) {
-          logger.debug(`Suggestion syntax invalid for ${comment.path}:${comment.line}: ${syntaxResult.errors.length} error(s)`);
+          logger.debug(
+            `Suggestion syntax invalid for ${comment.path}:${comment.line}: ${syntaxResult.errors.length} error(s)`
+          );
           syntaxValid = false;
           // Don't return early - check consensus which might override
         }
@@ -366,12 +355,18 @@ export class CommentPoster {
     // Consensus checking requires per-provider suggestions which aren't available at comment-posting time
     const hasConsensus = comment.hasConsensus ?? false;
     if (hasConsensus) {
-      logger.debug(`Consensus detected for ${comment.path}:${comment.line} (providers agreed during aggregation)`);
+      logger.debug(
+        `Consensus detected for ${comment.path}:${comment.line} (providers agreed during aggregation)`
+      );
     }
 
     // If syntax invalid and no consensus to override, reject
     if (!syntaxValid && !hasConsensus) {
-      return { valid: false, reason: 'Syntax validation failed', hasConsensus: false };
+      return {
+        valid: false,
+        reason: 'Syntax validation failed',
+        hasConsensus: false,
+      };
     }
 
     // Confidence threshold check
@@ -379,14 +374,16 @@ export class CommentPoster {
       // Get provider weight for reliability signal
       let providerReliability = 1.0;
       if (this.providerWeightTracker && comment.provider) {
-        providerReliability = await this.providerWeightTracker.getWeight(comment.provider);
+        providerReliability = await this.providerWeightTracker.getWeight(
+          comment.provider
+        );
       }
 
       const signals: ConfidenceSignals = {
         llmConfidence: comment.confidence,
         syntaxValid,
         hasConsensus,
-        providerReliability
+        providerReliability,
       };
       const confidence = calculateConfidence(signals);
 
@@ -398,23 +395,28 @@ export class CommentPoster {
         title: '',
         message: '',
         providers: comment.provider ? [comment.provider] : [],
-        hasConsensus
+        hasConsensus,
       };
 
-      if (!shouldPostSuggestion(
-        minimalFinding,
-        confidence,
-        {
+      if (
+        !shouldPostSuggestion(minimalFinding, confidence, {
           min_confidence: this.config.minConfidence,
           confidence_threshold: this.config.confidenceThreshold,
           consensus: {
-            required_for_critical: this.config.consensusRequiredForCritical ?? true,
-            min_agreement: this.config.consensusMinAgreement ?? 2
-          }
-        }
-      )) {
-        logger.debug(`Suggestion below confidence threshold for ${comment.path}:${comment.line} (confidence: ${confidence.toFixed(2)})`);
-        return { valid: false, reason: 'Below confidence threshold', hasConsensus };
+            required_for_critical:
+              this.config.consensusRequiredForCritical ?? true,
+            min_agreement: this.config.consensusMinAgreement ?? 2,
+          },
+        })
+      ) {
+        logger.debug(
+          `Suggestion below confidence threshold for ${comment.path}:${comment.line} (confidence: ${confidence.toFixed(2)})`
+        );
+        return {
+          valid: false,
+          reason: 'Below confidence threshold',
+          hasConsensus,
+        };
       }
     }
 
@@ -430,7 +432,10 @@ export class CommentPoster {
   ): Promise<void> {
     if (comments.length === 0) {
       if (!this.dryRun) {
-        await this.deleteInlineFallbackComments(prNumber, 'no current inline findings remain');
+        await this.deleteInlineFallbackComments(
+          prNumber,
+          'no current inline findings remain'
+        );
       }
       return;
     }
@@ -441,8 +446,10 @@ export class CommentPoster {
         : await this.loadActiveInlineComments(prNumber);
 
     // Filter out deletion-only files (no suggestions possible)
-    const filesWithAdditions = files.filter(f => !isDeletionOnlyFile(f));
-    const filesWithAdditionsSet = new Set(filesWithAdditions.map(f => f.filename));
+    const filesWithAdditions = files.filter((f) => !isDeletionOnlyFile(f));
+    const filesWithAdditionsSet = new Set(
+      filesWithAdditions.map((f) => f.filename)
+    );
 
     // Build a map from file path to line->position mapping
     const positionMaps = new Map<string, Map<number, number>>();
@@ -458,123 +465,182 @@ export class CommentPoster {
     });
 
     // Convert comments to GitHub API format, filtering out those without valid positions
-    const apiComments = (await Promise.all(sortedComments
-      .map(async c => {
-        const file = files.find(f => f.filename === c.path);
-        const rangedComment = c as InlineCommentWithLegacyRange;
-        const requestedEndLine = CommentPoster.integerOrUndefined(c.endLine ?? rangedComment.end_line);
-        if (requestedEndLine !== undefined && requestedEndLine !== c.line) {
-          logger.debug(`Using inline comment end line for ${c.path}: ${c.line} -> ${requestedEndLine}`);
-          c.line = requestedEndLine;
-        }
-        const correctedLine = c.side !== 'LEFT'
-          ? chooseBestAddedLineForComment(file?.patch, c.line, c.body)
-          : c.line;
-        if (correctedLine !== c.line) {
-          logger.debug(`Adjusted inline comment line for ${c.path}: ${c.line} -> ${correctedLine}`);
-          c.line = correctedLine;
-        }
-
-        const posMap = positionMaps.get(c.path);
-        const position = posMap?.get(c.line);
-        if (!position) {
-          logger.warn(`Cannot find diff position for ${c.path}:${c.line}, skipping inline comment`);
-          return null;
-        }
-
-        let startLine = CommentPoster.integerOrUndefined(c.startLine ?? rangedComment.start_line);
-        if (startLine !== undefined) {
-          if (startLine === c.line) {
-            startLine = undefined;
-          } else {
-            const validation = validateSuggestionRange(startLine, c.line, file?.patch);
-            if (!validation.isValid) {
-              logger.debug(`Inline comment range invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`);
-              startLine = undefined;
-            }
-          }
-        }
-
-        // Validate suggestions can be applied at this line/range
-        if (c.body.includes('```suggestion')) {
-          // Skip suggestions for deletion-only files
-          if (!filesWithAdditionsSet.has(c.path)) {
-            logger.debug(`Skipping suggestion for deletion-only file: ${c.path}`);
-            c.body = c.body.replace(/```suggestion[\s\S]*?```/g, '_Suggestion not available (file has no additions)_');
-          } else if (file?.patch) {
-            // Check if this is a multi-line suggestion (has start_line)
-            if (startLine !== undefined && startLine !== c.line) {
-              // Multi-line suggestion - validate range
-              const validation = validateSuggestionRange(startLine, c.line, file.patch);
-              if (!validation.isValid) {
-                logger.debug(`Multi-line suggestion invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`);
-                c.body = c.body.replace(/```suggestion[\s\S]*?```/g, `_Suggestion not available: ${validation.reason}_`);
-              }
-            } else {
-              // Single-line suggestion - use existing validation
-              if (!isSuggestionLineValid(c.line, file.patch)) {
-                logger.debug(`Suggestion line ${c.path}:${c.line} not valid in diff, posting without suggestion block`);
-                c.body = c.body.replace(/```suggestion[\s\S]*?```/g, '_Suggestion not available for this line_');
-              }
-            }
-          }
-
-          // Quality gate validation (syntax, suppression, confidence)
-          // Extract suggestion content for validation
-          const suggestionMatch = c.body.match(/```suggestion\n([\s\S]*?)```/);
-          if (suggestionMatch && !c.body.includes('_Suggestion not available')) {
-            const suggestionContent = suggestionMatch[1];
-            const qualityValidation = await this.validateAndFilterSuggestion(
-              {
-                ...c,
-                suggestion: suggestionContent,
-                category: c.category,
-                severity: c.severity,
-                provider: c.provider,
-                hasConsensus: c.hasConsensus,
-                confidence: c.confidence
-              },
-              prNumber
+    const apiComments = (
+      await Promise.all(
+        sortedComments.map(async (c) => {
+          const file = files.find((f) => f.filename === c.path);
+          const rangedComment = c as InlineCommentWithLegacyRange;
+          const requestedEndLine = CommentPoster.integerOrUndefined(
+            c.endLine ?? rangedComment.end_line
+          );
+          if (requestedEndLine !== undefined && requestedEndLine !== c.line) {
+            logger.debug(
+              `Using inline comment end line for ${c.path}: ${c.line} -> ${requestedEndLine}`
             );
-            if (!qualityValidation.valid) {
-              c.body = c.body.replace(/```suggestion[\s\S]*?```/g, `_Suggestion not available: ${qualityValidation.reason}_`);
+            c.line = requestedEndLine;
+          }
+          const correctedLine =
+            c.side !== 'LEFT'
+              ? chooseBestAddedLineForComment(file?.patch, c.line, c.body)
+              : c.line;
+          if (correctedLine !== c.line) {
+            logger.debug(
+              `Adjusted inline comment line for ${c.path}: ${c.line} -> ${correctedLine}`
+            );
+            c.line = correctedLine;
+          }
+
+          const posMap = positionMaps.get(c.path);
+          const position = posMap?.get(c.line);
+          if (!position) {
+            logger.warn(
+              `Cannot find diff position for ${c.path}:${c.line}, skipping inline comment`
+            );
+            return null;
+          }
+
+          let startLine = CommentPoster.integerOrUndefined(
+            c.startLine ?? rangedComment.start_line
+          );
+          if (startLine !== undefined) {
+            if (startLine === c.line) {
+              startLine = undefined;
+            } else {
+              const validation = validateSuggestionRange(
+                startLine,
+                c.line,
+                file?.patch
+              );
+              if (!validation.isValid) {
+                logger.debug(
+                  `Inline comment range invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`
+                );
+                startLine = undefined;
+              }
             }
           }
-        }
 
-        const apiComment: GitHubInlineCommentPayload = {
-          path: c.path,
-          line: c.line,
-          side: c.side || 'RIGHT',
-          body: CommentPoster.withSkipHelpFooter(
-            appendInlineFingerprintMarker(c.body, c.path, c.line),
-            c.severity
-          ),
-        };
+          // Validate suggestions can be applied at this line/range
+          if (c.body.includes('```suggestion')) {
+            // Skip suggestions for deletion-only files
+            if (!filesWithAdditionsSet.has(c.path)) {
+              logger.debug(
+                `Skipping suggestion for deletion-only file: ${c.path}`
+              );
+              c.body = c.body.replace(
+                /```suggestion[\s\S]*?```/g,
+                '_Suggestion not available (file has no additions)_'
+              );
+            } else if (file?.patch) {
+              // Check if this is a multi-line suggestion (has start_line)
+              if (startLine !== undefined && startLine !== c.line) {
+                // Multi-line suggestion - validate range
+                const validation = validateSuggestionRange(
+                  startLine,
+                  c.line,
+                  file.patch
+                );
+                if (!validation.isValid) {
+                  logger.debug(
+                    `Multi-line suggestion invalid at ${c.path}:${startLine}-${c.line}: ${validation.reason}`
+                  );
+                  c.body = c.body.replace(
+                    /```suggestion[\s\S]*?```/g,
+                    `_Suggestion not available: ${validation.reason}_`
+                  );
+                }
+              } else {
+                // Single-line suggestion - use existing validation
+                if (!isSuggestionLineValid(c.line, file.patch)) {
+                  logger.debug(
+                    `Suggestion line ${c.path}:${c.line} not valid in diff, posting without suggestion block`
+                  );
+                  c.body = c.body.replace(
+                    /```suggestion[\s\S]*?```/g,
+                    '_Suggestion not available for this line_'
+                  );
+                }
+              }
+            }
 
-        if (this.hasInlineDuplicate(activeInlineComments, c.path, c.line, apiComment.body)) {
-          logger.info(`Skipping duplicate active inline comment at ${c.path}:${c.line}`);
-          return null;
-        }
+            // Quality gate validation (syntax, suppression, confidence)
+            // Extract suggestion content for validation
+            const suggestionMatch = c.body.match(
+              /```suggestion\n([\s\S]*?)```/
+            );
+            if (
+              suggestionMatch &&
+              !c.body.includes('_Suggestion not available')
+            ) {
+              const suggestionContent = suggestionMatch[1];
+              const qualityValidation = await this.validateAndFilterSuggestion(
+                {
+                  ...c,
+                  suggestion: suggestionContent,
+                  category: c.category,
+                  severity: c.severity,
+                  provider: c.provider,
+                  hasConsensus: c.hasConsensus,
+                  confidence: c.confidence,
+                },
+                prNumber
+              );
+              if (!qualityValidation.valid) {
+                c.body = c.body.replace(
+                  /```suggestion[\s\S]*?```/g,
+                  `_Suggestion not available: ${qualityValidation.reason}_`
+                );
+              }
+            }
+          }
 
-        activeInlineComments.keys.add(signatureFromInlineComment(c.path, c.line, apiComment.body));
-        activeInlineComments.keys.add(fingerprintFromInlineComment(c.path, c.line, apiComment.body));
-        const marker = extractInlineFingerprint(apiComment.body);
-        if (marker) activeInlineComments.keys.add(marker);
-        activeInlineComments.comments.push({
-          path: c.path,
-          line: c.line,
-          body: apiComment.body,
-        });
+          const apiComment: GitHubInlineCommentPayload = {
+            path: c.path,
+            line: c.line,
+            side: c.side || 'RIGHT',
+            body: CommentPoster.withSkipHelpFooter(
+              appendInlineFingerprintMarker(c.body, c.path, c.line),
+              c.severity
+            ),
+          };
 
-        if (startLine !== undefined && startLine !== c.line) {
-          // Multi-line: use line-based parameters.
-          apiComment.start_line = startLine;
-          apiComment.start_side = 'RIGHT';
-        }
-        return apiComment;
-      })
-    )).filter((c): c is GitHubInlineCommentPayload => c !== null);
+          if (
+            this.hasInlineDuplicate(
+              activeInlineComments,
+              c.path,
+              c.line,
+              apiComment.body
+            )
+          ) {
+            logger.info(
+              `Skipping duplicate active inline comment at ${c.path}:${c.line}`
+            );
+            return null;
+          }
+
+          activeInlineComments.keys.add(
+            signatureFromInlineComment(c.path, c.line, apiComment.body)
+          );
+          activeInlineComments.keys.add(
+            fingerprintFromInlineComment(c.path, c.line, apiComment.body)
+          );
+          const marker = extractInlineFingerprint(apiComment.body);
+          if (marker) activeInlineComments.keys.add(marker);
+          activeInlineComments.comments.push({
+            path: c.path,
+            line: c.line,
+            body: apiComment.body,
+          });
+
+          if (startLine !== undefined && startLine !== c.line) {
+            // Multi-line: use line-based parameters.
+            apiComment.start_line = startLine;
+            apiComment.start_side = 'RIGHT';
+          }
+          return apiComment;
+        })
+      )
+    ).filter((c): c is GitHubInlineCommentPayload => c !== null);
 
     if (apiComments.length === 0) {
       logger.info('No inline comments with valid diff positions to post');
@@ -582,9 +648,13 @@ export class CommentPoster {
     }
 
     if (this.dryRun) {
-      logger.info(`[DRY RUN] Would post ${apiComments.length} inline comment(s) to PR #${prNumber}`);
+      logger.info(
+        `[DRY RUN] Would post ${apiComments.length} inline comment(s) to PR #${prNumber}`
+      );
       for (const comment of apiComments) {
-        logger.info(`[DRY RUN] Inline comment at ${comment.path}:${comment.line}:\n${comment.body.substring(0, 200)}...`);
+        logger.info(
+          `[DRY RUN] Inline comment at ${comment.path}:${comment.line}:\n${comment.body.substring(0, 200)}...`
+        );
       }
       return;
     }
@@ -592,16 +662,20 @@ export class CommentPoster {
     const { octokit, owner, repo } = this.client;
     try {
       await withRetry(
-        () => octokit.rest.pulls.createReview({
-          owner,
-          repo,
-          pull_number: prNumber,
-          event: 'COMMENT',
-          comments: apiComments,
-        }),
+        () =>
+          octokit.rest.pulls.createReview({
+            owner,
+            repo,
+            pull_number: prNumber,
+            event: 'COMMENT',
+            comments: apiComments,
+          }),
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
-      await this.deleteInlineFallbackComments(prNumber, 'inline comments posted successfully');
+      await this.deleteInlineFallbackComments(
+        prNumber,
+        'inline comments posted successfully'
+      );
     } catch (error) {
       if (!CommentPoster.shouldFallbackInlineReviewError(error)) {
         throw error;
@@ -612,12 +686,24 @@ export class CommentPoster {
         error as Error
       );
       const remainingComments = headSha
-        ? await this.postIndividualInlineComments(prNumber, apiComments, headSha, error as Error)
+        ? await this.postIndividualInlineComments(
+            prNumber,
+            apiComments,
+            headSha,
+            error as Error
+          )
         : apiComments;
       if (remainingComments.length > 0) {
-        await this.postInlineFallback(prNumber, remainingComments, error as Error);
+        await this.postInlineFallback(
+          prNumber,
+          remainingComments,
+          error as Error
+        );
       } else {
-        await this.deleteInlineFallbackComments(prNumber, 'inline comments posted successfully');
+        await this.deleteInlineFallbackComments(
+          prNumber,
+          'inline comments posted successfully'
+        );
       }
     }
   }
@@ -653,18 +739,23 @@ export class CommentPoster {
     for (const comment of comments) {
       try {
         await withRetry(
-          () => octokit.rest.pulls.createReviewComment({
-            owner,
-            repo,
-            pull_number: prNumber,
-            commit_id: headSha,
-            path: comment.path,
-            line: comment.line,
-            side: comment.side,
-            ...(comment.start_line !== undefined ? { start_line: comment.start_line } : {}),
-            ...(comment.start_side !== undefined ? { start_side: comment.start_side } : {}),
-            body: comment.body,
-          }),
+          () =>
+            octokit.rest.pulls.createReviewComment({
+              owner,
+              repo,
+              pull_number: prNumber,
+              commit_id: headSha,
+              path: comment.path,
+              line: comment.line,
+              side: comment.side,
+              ...(comment.start_line !== undefined
+                ? { start_line: comment.start_line }
+                : {}),
+              ...(comment.start_side !== undefined
+                ? { start_side: comment.start_side }
+                : {}),
+              body: comment.body,
+            }),
           { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
         );
         postedCount++;
@@ -672,22 +763,28 @@ export class CommentPoster {
         if (!CommentPoster.shouldFallbackInlineReviewError(error)) {
           throw error;
         }
-        const retryComment = CommentPoster.withoutCommittableSuggestionForInlineRetry(comment);
+        const retryComment =
+          CommentPoster.withoutCommittableSuggestionForInlineRetry(comment);
         if (retryComment.body !== comment.body) {
           try {
             await withRetry(
-              () => octokit.rest.pulls.createReviewComment({
-                owner,
-                repo,
-                pull_number: prNumber,
-                commit_id: headSha,
-                path: retryComment.path,
-                line: retryComment.line,
-                side: retryComment.side,
-                ...(retryComment.start_line !== undefined ? { start_line: retryComment.start_line } : {}),
-                ...(retryComment.start_side !== undefined ? { start_side: retryComment.start_side } : {}),
-                body: retryComment.body,
-              }),
+              () =>
+                octokit.rest.pulls.createReviewComment({
+                  owner,
+                  repo,
+                  pull_number: prNumber,
+                  commit_id: headSha,
+                  path: retryComment.path,
+                  line: retryComment.line,
+                  side: retryComment.side,
+                  ...(retryComment.start_line !== undefined
+                    ? { start_line: retryComment.start_line }
+                    : {}),
+                  ...(retryComment.start_side !== undefined
+                    ? { start_side: retryComment.start_side }
+                    : {}),
+                  body: retryComment.body,
+                }),
               { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
             );
             logger.info(
@@ -724,10 +821,12 @@ export class CommentPoster {
   private static shouldFallbackInlineReviewError(error: unknown): boolean {
     const maybeError = error as { status?: number; message?: string };
     const message = maybeError?.message || String(error);
-    return maybeError?.status === 422
-      || /unprocessable entity/i.test(message)
-      || /internal error occurred/i.test(message)
-      || /validation failed/i.test(message);
+    return (
+      maybeError?.status === 422 ||
+      /unprocessable entity/i.test(message) ||
+      /internal error occurred/i.test(message) ||
+      /validation failed/i.test(message)
+    );
   }
 
   private static withoutCommittableSuggestionForInlineRetry(
@@ -765,67 +864,97 @@ export class CommentPoster {
     const updates = Math.min(existingComments.length, chunks.length);
     for (let i = 0; i < updates; i++) {
       await withRetry(
-        () => octokit.rest.issues.updateComment({
-          owner,
-          repo,
-          comment_id: existingComments[i].id,
-          body: chunks[i],
-        }),
+        () =>
+          octokit.rest.issues.updateComment({
+            owner,
+            repo,
+            comment_id: existingComments[i].id,
+            body: chunks[i],
+          }),
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
     }
 
     for (let i = existingComments.length; i < chunks.length; i++) {
       await withRetry(
-        () => octokit.rest.issues.createComment({
-          owner,
-          repo,
-          issue_number: prNumber,
-          body: chunks[i],
-        }),
+        () =>
+          octokit.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: prNumber,
+            body: chunks[i],
+          }),
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
     }
 
     for (const stale of existingComments.slice(chunks.length)) {
       await withRetry(
-        () => octokit.rest.issues.deleteComment({ owner, repo, comment_id: stale.id }),
+        () =>
+          octokit.rest.issues.deleteComment({
+            owner,
+            repo,
+            comment_id: stale.id,
+          }),
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
     }
   }
 
-  private async findInlineFallbackComments(prNumber: number): Promise<Array<{ id: number; body: string }>> {
+  private async findInlineFallbackComments(
+    prNumber: number
+  ): Promise<Array<{ id: number; body: string }>> {
     const { octokit, owner, repo } = this.client;
 
     try {
       const comments = await withRetry(
-        () => octokit.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 }),
+        () =>
+          octokit.rest.issues.listComments({
+            owner,
+            repo,
+            issue_number: prNumber,
+            per_page: 100,
+          }),
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
 
       return comments.data
-        .filter(comment => (comment.body || '').includes(CommentPoster.INLINE_FALLBACK_MARKER))
-        .map(comment => ({ id: comment.id, body: comment.body ?? '' }));
+        .filter((comment) =>
+          (comment.body || '').includes(CommentPoster.INLINE_FALLBACK_MARKER)
+        )
+        .map((comment) => ({ id: comment.id, body: comment.body ?? '' }));
     } catch (error) {
-      logger.warn('Failed to find existing inline fallback comment', error as Error);
+      logger.warn(
+        'Failed to find existing inline fallback comment',
+        error as Error
+      );
       return [];
     }
   }
 
-  private async deleteInlineFallbackComments(prNumber: number, reason: string): Promise<void> {
+  private async deleteInlineFallbackComments(
+    prNumber: number,
+    reason: string
+  ): Promise<void> {
     const { octokit, owner, repo } = this.client;
     const existingComments = await this.findInlineFallbackComments(prNumber);
 
     for (const comment of existingComments) {
       await withRetry(
-        () => octokit.rest.issues.deleteComment({ owner, repo, comment_id: comment.id }),
+        () =>
+          octokit.rest.issues.deleteComment({
+            owner,
+            repo,
+            comment_id: comment.id,
+          }),
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
     }
 
     if (existingComments.length > 0) {
-      logger.info(`Deleted ${existingComments.length} stale inline fallback comment(s): ${reason}`);
+      logger.info(
+        `Deleted ${existingComments.length} stale inline fallback comment(s): ${reason}`
+      );
     }
   }
 
@@ -834,11 +963,15 @@ export class CommentPoster {
     error: Error
   ): string {
     const errorMessage = (error.message || String(error)).slice(0, 2000);
-    const items = comments.map((comment, index) => [
-      `### ${index + 1}. ${CommentPoster.formatApiCommentLocation(comment)}`,
-      '',
-      CommentPoster.stripUnsupportedFallbackText(comment.body),
-    ].join('\n')).join('\n\n---\n\n');
+    const items = comments
+      .map((comment, index) =>
+        [
+          `### ${index + 1}. ${CommentPoster.formatApiCommentLocation(comment)}`,
+          '',
+          CommentPoster.stripUnsupportedFallbackText(comment.body),
+        ].join('\n')
+      )
+      .join('\n\n---\n\n');
 
     return [
       CommentPoster.INLINE_FALLBACK_MARKER,
@@ -862,7 +995,9 @@ export class CommentPoster {
     ].join('\n');
   }
 
-  private static formatApiCommentLocation(comment: GitHubInlineCommentPayload): string {
+  private static formatApiCommentLocation(
+    comment: GitHubInlineCommentPayload
+  ): string {
     return comment.start_line !== undefined && comment.start_line < comment.line
       ? `${comment.path}:${comment.start_line}-${comment.line}`
       : `${comment.path}:${comment.line}`;
@@ -871,7 +1006,10 @@ export class CommentPoster {
   private static stripUnsupportedFallbackText(body: string): string {
     return body
       .replace(/<sub><!-- review-router-skip-help -->[\s\S]*?<\/sub>/g, '')
-      .replace(/```suggestion[\s\S]*?```/g, '_Committable suggestion is only available on inline review comments._')
+      .replace(
+        /```suggestion[\s\S]*?```/g,
+        '_Committable suggestion is only available on inline review comments._'
+      )
       .trim();
   }
 
@@ -881,7 +1019,10 @@ export class CommentPoster {
     let current = '';
 
     for (const para of paragraphs) {
-      if (Buffer.byteLength(current + para, 'utf8') > CommentPoster.MAX_COMMENT_SIZE) {
+      if (
+        Buffer.byteLength(current + para, 'utf8') >
+        CommentPoster.MAX_COMMENT_SIZE
+      ) {
         if (current) {
           chunks.push(current.trim());
           current = '';
@@ -890,7 +1031,10 @@ export class CommentPoster {
           const lines = para.split('\n');
           let lineChunk = '';
           for (const line of lines) {
-            if (Buffer.byteLength(lineChunk + line + '\n', 'utf8') > CommentPoster.MAX_COMMENT_SIZE) {
+            if (
+              Buffer.byteLength(lineChunk + line + '\n', 'utf8') >
+              CommentPoster.MAX_COMMENT_SIZE
+            ) {
               chunks.push(lineChunk.trim());
               lineChunk = '';
             }
@@ -916,9 +1060,7 @@ export class CommentPoster {
     }
 
     const actor =
-      severity === 'minor'
-        ? 'Someone with write access'
-        : 'A maintainer/admin';
+      severity === 'minor' ? 'Someone with write access' : 'A maintainer/admin';
     const footer = `<sub>${CommentPoster.INLINE_SKIP_HELP_MARKER}${actor} can reply \`/rr skip\` if this finding is a false positive. ReviewRouter records a signed override and reruns the check.</sub>`;
     const { visibleBody, markers } = CommentPoster.splitTrailingInlineMarkers(
       body.trimEnd()

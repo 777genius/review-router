@@ -102,7 +102,11 @@ function makeOrchestrator(
     security: { scan: jest.fn().mockReturnValue([]) } as any,
     rules: { run: jest.fn().mockReturnValue([]) } as any,
     prLoader: { load: jest.fn() } as any,
-    commentPoster: { postSummary: jest.fn(), postInline: jest.fn() } as any,
+    commentPoster: {
+      postSummary: jest.fn(),
+      postInline: jest.fn(),
+      deleteSummaryComments: jest.fn(),
+    } as any,
     formatter: { format: jest.fn().mockReturnValue('') } as any,
     contextRetriever: {
       findRelatedContext: jest.fn().mockReturnValue([]),
@@ -278,6 +282,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
     } as unknown as Provider;
     const postSummary = jest.fn();
     const postInline = jest.fn();
+    const deleteSummaryComments = jest.fn();
 
     const orchestrator = makeOrchestrator({
       config: {
@@ -312,7 +317,11 @@ describe('ReviewOrchestrator health check guard rails', () => {
           } as ProviderResult,
         ]),
       } as any,
-      commentPoster: { postSummary, postInline } as any,
+      commentPoster: {
+        postSummary,
+        postInline,
+        deleteSummaryComments,
+      } as any,
       formatter: { format: jest.fn().mockReturnValue('## All Clear!') } as any,
     });
 
@@ -330,7 +339,12 @@ describe('ReviewOrchestrator health check guard rails', () => {
 
     expect(review.findings).toHaveLength(0);
     expect(postSummary).not.toHaveBeenCalled();
-    expect(postInline).not.toHaveBeenCalled();
+    expect(deleteSummaryComments).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ reviewedHeadSha: 'h' }),
+      'no reportable findings were found'
+    );
+    expect(postInline).toHaveBeenCalledWith(1, [], pr.files, 'h');
   });
 
   it('creates a progress comment by default for the first GitHub review', async () => {

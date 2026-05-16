@@ -90,6 +90,47 @@ describe('CommentPoster', () => {
       });
     });
 
+    it('deletes stale summary comments after an all-clear rerun', async () => {
+      const oldBody = appendReviewSummaryMetadata(
+        '<!-- review-router-bot -->\n\n# ReviewRouter\nold finding',
+        {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '10',
+          workflowRunAttempt: 1,
+        }
+      );
+      const newerBody = appendReviewSummaryMetadata(
+        '<!-- review-router-bot -->\n\n# ReviewRouter\nnewer finding',
+        {
+          reviewedHeadSha: 'head-sha',
+          workflowRunId: '30',
+          workflowRunAttempt: 1,
+        }
+      );
+      mockOctokit.rest.issues.listComments.mockResolvedValueOnce({
+        data: [
+          { id: 11, body: oldBody },
+          { id: 12, body: newerBody },
+          { id: 13, body: '<!-- review-router-inline-fallback -->\n# fallback' },
+          { id: 14, body: 'human comment' },
+        ],
+      });
+      const poster = new CommentPoster(mockClient, false);
+
+      await poster.deleteSummaryComments(123, {
+        reviewedHeadSha: 'head-sha',
+        workflowRunId: '20',
+        workflowRunAttempt: 1,
+      });
+
+      expect(mockOctokit.rest.issues.deleteComment).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.issues.deleteComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        comment_id: 11,
+      });
+    });
+
     it('posts inline comments', async () => {
       const poster = new CommentPoster(mockClient, false);
       const comments: InlineComment[] = [

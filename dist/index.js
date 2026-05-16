@@ -19294,6 +19294,40 @@ ${content.substring(0, 500)}...`
     }
     return { posted: true, skippedStale: false };
   }
+  async deleteSummaryComments(prNumber, summaryMetadata, reason = "no current summary findings remain") {
+    if (this.dryRun) return;
+    const staleHead = await this.shouldSkipForStaleHead(
+      prNumber,
+      summaryMetadata
+    );
+    if (staleHead.skippedStale) {
+      logger.warn(
+        "Skipping summary cleanup because the PR head changed"
+      );
+      return;
+    }
+    const { octokit, owner, repo } = this.client;
+    const comments = await this.listIssueComments(prNumber);
+    const staleSummaries = comments.filter((comment) => {
+      const body = comment.body ?? "";
+      return _CommentPoster.isSummaryComment(body) && !shouldSkipSummaryWriteForExisting(body, summaryMetadata).shouldSkip;
+    });
+    for (const stale of staleSummaries) {
+      await withRetry(
+        () => octokit.rest.issues.deleteComment({
+          owner,
+          repo,
+          comment_id: stale.id
+        }),
+        { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+      );
+    }
+    if (staleSummaries.length > 0) {
+      logger.info(
+        `Deleted ${staleSummaries.length} stale ReviewRouter summary comment(s): ${reason}`
+      );
+    }
+  }
   async findNewerSummaryComment(prNumber, summaryMetadata) {
     if (!summaryMetadata) return null;
     try {
@@ -19354,6 +19388,10 @@ ${content.substring(0, 500)}...`
       );
     }
     return { posted: false, skippedStale: false };
+  }
+  static isSummaryComment(body) {
+    if (!body) return false;
+    return body.includes(_CommentPoster.BOT_COMMENT_MARKER) && body.includes("# ReviewRouter") && !body.includes(_CommentPoster.INLINE_FALLBACK_MARKER) && !body.includes(_CommentPoster.INLINE_SKIP_HELP_MARKER);
   }
   async loadActiveInlineComments(prNumber) {
     const keys = /* @__PURE__ */ new Set();
@@ -31202,6 +31240,17 @@ var ReviewOrchestrator = class {
         logger.info(
           "Skipping ReviewRouter GitHub comments because no reportable findings were found"
         );
+        await this.components.commentPoster.deleteSummaryComments(
+          pr.number,
+          summaryMetadata,
+          "no reportable findings were found"
+        );
+        await this.components.commentPoster.postInline(
+          pr.number,
+          [],
+          pr.files,
+          pr.headSha
+        );
       }
       await this.writeReports(review);
       await progressTracker?.updateProgress("synthesis", "completed");
@@ -33045,7 +33094,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.45",
+  version: "1.0.46",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

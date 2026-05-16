@@ -1308,6 +1308,17 @@ export class ReviewOrchestrator {
         logger.info(
           'Skipping ReviewRouter GitHub comments because no reportable findings were found'
         );
+        await this.components.commentPoster.deleteSummaryComments(
+          pr.number,
+          summaryMetadata,
+          'no reportable findings were found'
+        );
+        await this.components.commentPoster.postInline(
+          pr.number,
+          [],
+          pr.files,
+          pr.headSha
+        );
       }
 
       await this.writeReports(review);

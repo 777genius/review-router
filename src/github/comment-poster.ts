@@ -160,6 +160,53 @@ export class CommentPoster {
     return { posted: true, skippedStale: false };
   }
 
+  async deleteSummaryComments(
+    prNumber: number,
+    summaryMetadata?: ReviewSummaryMetadata,
+    reason = 'no current summary findings remain'
+  ): Promise<void> {
+    if (this.dryRun) return;
+
+    const staleHead = await this.shouldSkipForStaleHead(
+      prNumber,
+      summaryMetadata
+    );
+    if (staleHead.skippedStale) {
+      logger.warn(
+        'Skipping summary cleanup because the PR head changed'
+      );
+      return;
+    }
+
+    const { octokit, owner, repo } = this.client;
+    const comments = await this.listIssueComments(prNumber);
+    const staleSummaries = comments.filter((comment) => {
+      const body = comment.body ?? '';
+      return (
+        CommentPoster.isSummaryComment(body) &&
+        !shouldSkipSummaryWriteForExisting(body, summaryMetadata).shouldSkip
+      );
+    });
+
+    for (const stale of staleSummaries) {
+      await withRetry(
+        () =>
+          octokit.rest.issues.deleteComment({
+            owner,
+            repo,
+            comment_id: stale.id,
+          }),
+        { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
+      );
+    }
+
+    if (staleSummaries.length > 0) {
+      logger.info(
+        `Deleted ${staleSummaries.length} stale ReviewRouter summary comment(s): ${reason}`
+      );
+    }
+  }
+
   private async findNewerSummaryComment(
     prNumber: number,
     summaryMetadata?: ReviewSummaryMetadata
@@ -235,6 +282,16 @@ export class CommentPoster {
       );
     }
     return { posted: false, skippedStale: false };
+  }
+
+  private static isSummaryComment(body?: string | null): boolean {
+    if (!body) return false;
+    return (
+      body.includes(CommentPoster.BOT_COMMENT_MARKER) &&
+      body.includes('# ReviewRouter') &&
+      !body.includes(CommentPoster.INLINE_FALLBACK_MARKER) &&
+      !body.includes(CommentPoster.INLINE_SKIP_HELP_MARKER)
+    );
   }
 
   private async loadActiveInlineComments(

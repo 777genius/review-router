@@ -523,7 +523,11 @@ describe('GitHub integration mock (no network)', () => {
     expect(review?.findings).toHaveLength(0);
     expect(fakeOctokit.issues.createComment).not.toHaveBeenCalled();
     expect(fakeOctokit.issues.updateComment).not.toHaveBeenCalled();
-    expect(fakeOctokit.issues.deleteComment).not.toHaveBeenCalled();
+    expect(fakeOctokit.issues.deleteComment).toHaveBeenCalledWith({
+      owner: 'owner',
+      repo: 'repo',
+      comment_id: 99,
+    });
     expect(fakeOctokit.pulls.createReview).not.toHaveBeenCalled();
   });
 });

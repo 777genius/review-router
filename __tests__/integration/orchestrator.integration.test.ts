@@ -97,6 +97,7 @@ class StubPRLoader {
 class StubCommentPoster {
   postedSummary: string | null = null;
   postedInline: any[] = [];
+  clearedSummaries = false;
   async postSummary(_pr: number, body: string): Promise<void> {
     void _pr;
     this.postedSummary = body;
@@ -104,6 +105,9 @@ class StubCommentPoster {
   async postInline(_pr: number, comments: any[]): Promise<void> {
     void _pr;
     this.postedInline = comments;
+  }
+  async deleteSummaryComments(): Promise<void> {
+    this.clearedSummaries = true;
   }
 }
 

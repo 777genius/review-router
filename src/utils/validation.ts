@@ -366,6 +366,20 @@ export function validateConfig(config: Record<string, unknown>): void {
     });
   }
 
+  if (config.requiredHealthyProviders) {
+    const requiredHealthyProviders = validateArray(
+      config.requiredHealthyProviders,
+      'requiredHealthyProviders'
+    );
+    validateStringArray(requiredHealthyProviders, 'requiredHealthyProviders');
+
+    requiredHealthyProviders.forEach((p: unknown) => {
+      if (typeof p === 'string') {
+        validateModelId(p);
+      }
+    });
+  }
+
   // Validate numeric bounds
   if (config.providerLimit !== undefined && config.providerLimit !== null) {
     const limit = validateNonNegativeNumber(config.providerLimit, 'providerLimit');

@@ -62,6 +62,13 @@ describe('normalizeReviewError', () => {
     expect(
       normalizeReviewError(new Error('All LLM providers failed during review')).code
     ).toBe('all_providers_failed');
+    expect(
+      normalizeReviewError(
+        new Error(
+          'Required healthy provider codex/gpt-5.5 was not available during provider selection.'
+        )
+      ).code
+    ).toBe('required_provider_unhealthy');
   });
 
   it('wraps unknown errors while preserving stack and sanitized details', () => {

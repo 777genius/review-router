@@ -122,6 +122,31 @@ describe('ProviderRegistry Reliability-Based Selection', () => {
       expect(mockReliabilityTracker.getReliabilityScore).toHaveBeenCalled();
     });
 
+    it('pins required healthy providers even when provider limit would exclude them', async () => {
+      mockReliabilityTracker.getReliabilityScore.mockImplementation(async (name: string) => {
+        const scores: Record<string, number> = {
+          'opencode/high': 0.99,
+          'opencode/medium': 0.8,
+          'opencode/required-low': 0.1,
+        };
+        return scores[name] ?? 0.5;
+      });
+
+      const config = createTestConfig({
+        providers: ['opencode/high', 'opencode/medium', 'opencode/required-low'],
+        providerSelectionStrategy: 'reliability',
+        providerLimit: 1,
+        requiredHealthyProviders: ['opencode/required-low'],
+      });
+
+      const registry = new ProviderRegistry(undefined, mockReliabilityTracker);
+      const providers = await registry.createProviders(config);
+
+      expect(providers.map((provider) => provider.name)).toContain(
+        'opencode/required-low'
+      );
+    });
+
     it('should handle providers without reliability data gracefully', async () => {
       // All providers return default score (0.5)
       mockReliabilityTracker.getReliabilityScore.mockResolvedValue(0.5);

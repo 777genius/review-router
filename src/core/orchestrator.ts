@@ -593,9 +593,16 @@ export class ReviewOrchestrator {
       const llmFindings: Finding[] = [];
       let providerResults: ProviderResult[] = [];
       let aiAnalysis: ReturnType<typeof summarizeAIDetection> | undefined;
+      const requiredHealthyProviders =
+        this.requiredHealthyProviderNames(config);
       let providers =
         await this.components.providerRegistry.createProviders(config);
       providers = await this.applyReliabilityFilters(providers);
+      this.assertRequiredProvidersAvailable(
+        requiredHealthyProviders,
+        providers,
+        'provider selection'
+      );
       if (providers.length === 0) {
         logger.warn(
           'All providers filtered out by circuit breakers/reliability; skipping LLM execution'
@@ -640,6 +647,11 @@ export class ReviewOrchestrator {
         };
 
         await runHealthCheck(providers);
+        this.assertRequiredProvidersHealthy(
+          requiredHealthyProviders,
+          healthy,
+          allHealthResults
+        );
 
         // Dynamic minima: prefer 4 OpenRouter + 2 OpenCode when limit allows
         const selectionLimit = Math.max(1, intensityProviderLimit || 8);
@@ -737,15 +749,26 @@ export class ReviewOrchestrator {
         } else {
           // Limit healthy providers to providerLimit for actual execution
           // (we may have checked more providers for reliability)
-          const executionLimit = intensityProviderLimit || config.providerLimit;
+          const executionLimit = Math.max(
+            intensityProviderLimit || config.providerLimit,
+            requiredHealthyProviders.size
+          );
           if (healthy.length > executionLimit) {
             logger.info(
               `Limiting execution to ${executionLimit} providers (checked ${healthy.length} for health). ` +
                 `Using top providers by reliability.`
             );
-            // Keep the first executionLimit providers (already sorted by reliability from discovery)
-            healthy = healthy.slice(0, executionLimit);
+            healthy = this.selectExecutionProviders(
+              healthy,
+              requiredHealthyProviders,
+              executionLimit
+            );
           }
+          this.assertRequiredProvidersAvailable(
+            requiredHealthyProviders,
+            healthy,
+            'provider execution'
+          );
 
           // Use token-aware batching if enabled
           let batches: FileChange[][];
@@ -888,12 +911,21 @@ export class ReviewOrchestrator {
           const batchResults: ProviderResult[] = [];
           let batchFailures = 0;
           let batchSuccesses = 0;
+          const requiredProviderFailures: Error[] = [];
           try {
             const settled = await Promise.allSettled(batchPromises);
 
             for (const [batchIndex, result] of settled.entries()) {
               if (result.status === 'fulfilled') {
                 batchResults.push(...result.value);
+                const requiredFailure =
+                  this.findRequiredProviderExecutionFailure(
+                    requiredHealthyProviders,
+                    result.value
+                  );
+                if (requiredFailure) {
+                  requiredProviderFailures.push(requiredFailure);
+                }
                 const successfulProviders = result.value.filter(
                   (r) => r.status === 'success'
                 );
@@ -910,6 +942,14 @@ export class ReviewOrchestrator {
                     const reason = this.redactProviderFailureReason(
                       degraded.error?.message || degraded.status
                     );
+                    if (requiredHealthyProviders.has(degraded.name)) {
+                      logger.warn(
+                        structuredOutputFailure
+                          ? `Required provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); review will fail after batch completion. ${reason}`
+                          : `Required provider ${degraded.name} failed; review will fail after batch completion. ${reason}`
+                      );
+                      continue;
+                    }
                     logger.warn(
                       structuredOutputFailure
                         ? `Provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); continuing with successful providers. ${reason}`
@@ -926,15 +966,22 @@ export class ReviewOrchestrator {
                 const lifecycleAssignedTargetIds = (
                   lifecycleTargetsByBatch[batchIndex] ?? []
                 ).map((target) => target.targetId);
-                batchResults.push(
-                  ...healthy.map((provider) => ({
-                    name: provider.name,
-                    status: 'error' as const,
-                    error: result.reason as Error,
-                    durationSeconds: 0,
-                    lifecycleAssignedTargetIds,
-                  }))
-                );
+                const failedBatchResults = healthy.map((provider) => ({
+                  name: provider.name,
+                  status: 'error' as const,
+                  error: result.reason as Error,
+                  durationSeconds: 0,
+                  lifecycleAssignedTargetIds,
+                }));
+                batchResults.push(...failedBatchResults);
+                const requiredFailure =
+                  this.findRequiredProviderExecutionFailure(
+                    requiredHealthyProviders,
+                    failedBatchResults
+                  );
+                if (requiredFailure) {
+                  requiredProviderFailures.push(requiredFailure);
+                }
               }
             }
           } finally {
@@ -962,6 +1009,10 @@ export class ReviewOrchestrator {
 
           // Record reliability for all results (both successes and failures)
           await this.recordReliability(mergedResults);
+
+          if (requiredProviderFailures.length > 0) {
+            throw requiredProviderFailures[0];
+          }
 
           // Use partial success: proceed if at least some batches succeeded
           // Even if ALL batches failed, continue with AST/security analysis
@@ -1084,6 +1135,7 @@ export class ReviewOrchestrator {
           name: r.name,
           status: r.status,
           durationSeconds: r.durationSeconds,
+          requiredHealthy: requiredHealthyProviders.has(r.name),
           tokens: r.result?.usage?.totalTokens,
           cost: costSummary.breakdown[r.name],
           errorMessage: r.error?.message,
@@ -2003,6 +2055,103 @@ export class ReviewOrchestrator {
 
     const summary = failures.join('; ');
     return summary.length > 1000 ? `${summary.slice(0, 1000)}...` : summary;
+  }
+
+  private requiredHealthyProviderNames(config: ReviewConfig): Set<string> {
+    return new Set(
+      (config.requiredHealthyProviders || [])
+        .map((name) => name.trim())
+        .filter(Boolean)
+    );
+  }
+
+  private assertRequiredProvidersAvailable(
+    requiredProviders: Set<string>,
+    providers: Provider[],
+    stage: string
+  ): void {
+    if (requiredProviders.size === 0) return;
+
+    const available = new Set(providers.map((provider) => provider.name));
+    for (const required of requiredProviders) {
+      if (!available.has(required)) {
+        throw new Error(
+          `Required healthy provider ${required} was not available during ${stage}.`
+        );
+      }
+    }
+  }
+
+  private assertRequiredProvidersHealthy(
+    requiredProviders: Set<string>,
+    healthy: Provider[],
+    healthResults: ProviderResult[]
+  ): void {
+    if (requiredProviders.size === 0) return;
+
+    const healthyNames = new Set(healthy.map((provider) => provider.name));
+    const healthByName = new Map(
+      healthResults.map((result) => [result.name, result])
+    );
+
+    for (const required of requiredProviders) {
+      if (healthyNames.has(required)) continue;
+
+      const result = healthByName.get(required);
+      const reason = this.redactProviderFailureReason(
+        result?.error?.message || result?.status || 'provider did not pass health check'
+      );
+      throw new Error(
+        `Required healthy provider ${required} failed health check: ${reason}`
+      );
+    }
+  }
+
+  private findRequiredProviderExecutionFailure(
+    requiredProviders: Set<string>,
+    results: ProviderResult[]
+  ): Error | undefined {
+    if (requiredProviders.size === 0) return undefined;
+
+    const resultByName = new Map(results.map((result) => [result.name, result]));
+    for (const required of requiredProviders) {
+      const result = resultByName.get(required);
+      if (!result) {
+        return new Error(
+          `Required healthy provider ${required} did not return a result.`
+        );
+      }
+      if (result.status !== 'success') {
+        const reason = this.redactProviderFailureReason(
+          result.error?.message || result.status
+        );
+        return new Error(
+          `Required healthy provider ${required} failed during review: ${reason}`
+        );
+      }
+    }
+
+    return undefined;
+  }
+
+  private selectExecutionProviders(
+    providers: Provider[],
+    requiredProviders: Set<string>,
+    limit: number
+  ): Provider[] {
+    if (requiredProviders.size === 0 || providers.length <= limit) {
+      return providers.slice(0, limit);
+    }
+
+    const required = providers.filter((provider) =>
+      requiredProviders.has(provider.name)
+    );
+    const requiredNames = new Set(required.map((provider) => provider.name));
+    const optional = providers.filter(
+      (provider) => !requiredNames.has(provider.name)
+    );
+    const effectiveLimit = Math.max(limit, required.length);
+    return [...required, ...optional].slice(0, effectiveLimit);
   }
 
   private redactProviderFailureReason(reason: string): string {

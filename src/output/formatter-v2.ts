@@ -660,9 +660,12 @@ export class MarkdownFormatterV2 {
             ? `, $${p.cost.toFixed(4)}`
             : '';
         const tokensStr = p.tokens ? `, ${p.tokens} tokens` : '';
+        const providerName = p.requiredHealthy
+          ? `${p.name} (required)`
+          : p.name;
 
         lines.push(
-          `- ${statusEmoji} **${p.name}** (${p.durationSeconds.toFixed(2)}s${costStr}${tokensStr})`
+          `- ${statusEmoji} **${providerName}** (${p.durationSeconds.toFixed(2)}s${costStr}${tokensStr})`
         );
 
         if (p.errorMessage) {

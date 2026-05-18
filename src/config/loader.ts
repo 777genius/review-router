@@ -93,6 +93,9 @@ export class ConfigLoader {
       providerBlocklist: this.parseArray(env.PROVIDER_BLOCKLIST),
       providerDiscoveryLimit: this.parseNumber(env.PROVIDER_DISCOVERY_LIMIT),
       providerLimit: this.parseNumber(env.PROVIDER_LIMIT),
+      requiredHealthyProviders: this.parseArray(
+        env.REQUIRED_HEALTHY_PROVIDERS
+      ),
       providerRetries: this.parseNumber(env.PROVIDER_RETRIES),
       providerMaxParallel: this.parseNumber(env.PROVIDER_MAX_PARALLEL),
       quietModeEnabled: this.parseBoolean(env.QUIET_MODE_ENABLED),
@@ -194,6 +197,7 @@ export class ConfigLoader {
       providerBlocklist: config.provider_blocklist,
       providerDiscoveryLimit: config.provider_discovery_limit,
       providerLimit: config.provider_limit,
+      requiredHealthyProviders: config.required_healthy_providers,
       providerRetries: config.provider_retries,
       providerMaxParallel: config.provider_max_parallel,
       quietModeEnabled: config.quiet_mode_enabled,

@@ -27,4 +27,8 @@ describe('DEFAULT_CONFIG', () => {
   it('defaults provider retries to three total attempts', () => {
     expect(DEFAULT_CONFIG.providerRetries).toBe(3);
   });
+
+  it('keeps required healthy providers opt-in for raw action usage', () => {
+    expect(DEFAULT_CONFIG.requiredHealthyProviders).toEqual([]);
+  });
 });

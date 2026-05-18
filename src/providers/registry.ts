@@ -91,6 +91,7 @@ export class ProviderRegistry {
     logger.info(`After allowBlock: ${providers.length} providers`);
     providers = await this.filterRateLimited(providers);
     logger.info(`After filterRateLimited: ${providers.length} providers`);
+    const requiredHealthyProviders = this.requiredHealthyProviderSet(config);
 
     // Sort by reliability if using reliability-based selection
     const strategy = config.providerSelectionStrategy ?? 'reliability';
@@ -113,8 +114,12 @@ export class ProviderRegistry {
 
     // Respect providerLimit as an upper bound even during discovery
     if (config.providerLimit > 0) {
-      discoveryLimit = Math.min(discoveryLimit, config.providerLimit);
+      discoveryLimit = Math.max(
+        requiredHealthyProviders.size,
+        Math.min(discoveryLimit, config.providerLimit)
+      );
     }
+    discoveryLimit = Math.max(discoveryLimit, requiredHealthyProviders.size);
 
     const minSelection = Math.min(4, discoveryLimit);
     logger.info(
@@ -194,6 +199,13 @@ export class ProviderRegistry {
       }
     }
 
+    selected = this.pinRequiredHealthyProviders(
+      selected,
+      allProviders,
+      requiredHealthyProviders,
+      discoveryLimit
+    );
+
     providers = selected.length > 0 ? selected : providers;
 
     // Add fallback providers if we haven't reached the selection limit
@@ -235,7 +247,12 @@ export class ProviderRegistry {
       logger.warn(
         `Provider count ${providers.length} exceeds discovery limit ${discoveryLimit}, trimming`
       );
-      providers = this.randomSelect(providers, discoveryLimit, minSelection);
+      providers = this.pinRequiredHealthyProviders(
+        this.randomSelect(providers, discoveryLimit, minSelection),
+        providers,
+        requiredHealthyProviders,
+        discoveryLimit
+      );
     }
 
     if (providers.length === 0 && config.fallbackProviders.length > 0) {
@@ -461,6 +478,40 @@ export class ProviderRegistry {
       [copy[i], copy[j]] = [copy[j], copy[i]];
     }
     return copy;
+  }
+
+  private requiredHealthyProviderSet(config: ReviewConfig): Set<string> {
+    return new Set(
+      (config.requiredHealthyProviders || [])
+        .map((name) => name.trim())
+        .filter(Boolean)
+    );
+  }
+
+  private pinRequiredHealthyProviders(
+    selected: Provider[],
+    candidates: Provider[],
+    requiredNames: Set<string>,
+    limit: number
+  ): Provider[] {
+    if (requiredNames.size === 0 || candidates.length === 0) {
+      return selected;
+    }
+
+    const required = candidates.filter((provider) =>
+      requiredNames.has(provider.name)
+    );
+    if (required.length === 0) {
+      return selected;
+    }
+
+    const pinnedNames = new Set(required.map((provider) => provider.name));
+    const merged = [
+      ...required,
+      ...selected.filter((provider) => !pinnedNames.has(provider.name)),
+    ];
+    const effectiveLimit = Math.max(limit, required.length);
+    return merged.slice(0, effectiveLimit);
   }
 
   private dedupeProviders(providers: Provider[]): Provider[] {

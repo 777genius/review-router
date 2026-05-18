@@ -7180,6 +7180,7 @@ var DEFAULT_CONFIG = {
   // Health-check pool size (higher = better reliability)
   providerLimit: 1,
   // Actual execution pool size (lower = lower costs)
+  requiredHealthyProviders: [],
   providerRetries: 3,
   providerMaxParallel: 1,
   quietModeEnabled: false,
@@ -11396,6 +11397,7 @@ var ReviewConfigSchema = external_exports.object({
   provider_blocklist: external_exports.array(external_exports.string()).optional(),
   provider_discovery_limit: external_exports.number().int().min(1).optional(),
   provider_limit: external_exports.number().int().min(0).optional(),
+  required_healthy_providers: external_exports.array(external_exports.string()).optional(),
   provider_retries: external_exports.number().int().min(1).optional(),
   provider_max_parallel: external_exports.number().int().min(1).optional(),
   quiet_mode_enabled: external_exports.boolean().optional(),
@@ -11650,6 +11652,18 @@ function validateConfig(config) {
       }
     });
   }
+  if (config.requiredHealthyProviders) {
+    const requiredHealthyProviders = validateArray(
+      config.requiredHealthyProviders,
+      "requiredHealthyProviders"
+    );
+    validateStringArray(requiredHealthyProviders, "requiredHealthyProviders");
+    requiredHealthyProviders.forEach((p) => {
+      if (typeof p === "string") {
+        validateModelId(p);
+      }
+    });
+  }
   if (config.providerLimit !== void 0 && config.providerLimit !== null) {
     const limit = validateNonNegativeNumber(config.providerLimit, "providerLimit");
     if (limit > 0) {
@@ -11751,6 +11765,9 @@ var ConfigLoader = class {
       providerBlocklist: this.parseArray(env.PROVIDER_BLOCKLIST),
       providerDiscoveryLimit: this.parseNumber(env.PROVIDER_DISCOVERY_LIMIT),
       providerLimit: this.parseNumber(env.PROVIDER_LIMIT),
+      requiredHealthyProviders: this.parseArray(
+        env.REQUIRED_HEALTHY_PROVIDERS
+      ),
       providerRetries: this.parseNumber(env.PROVIDER_RETRIES),
       providerMaxParallel: this.parseNumber(env.PROVIDER_MAX_PARALLEL),
       quietModeEnabled: this.parseBoolean(env.QUIET_MODE_ENABLED),
@@ -11838,6 +11855,7 @@ var ConfigLoader = class {
       providerBlocklist: config.provider_blocklist,
       providerDiscoveryLimit: config.provider_discovery_limit,
       providerLimit: config.provider_limit,
+      requiredHealthyProviders: config.required_healthy_providers,
       providerRetries: config.provider_retries,
       providerMaxParallel: config.provider_max_parallel,
       quietModeEnabled: config.quiet_mode_enabled,
@@ -14831,6 +14849,7 @@ var ProviderRegistry = class {
     logger.info(`After allowBlock: ${providers.length} providers`);
     providers = await this.filterRateLimited(providers);
     logger.info(`After filterRateLimited: ${providers.length} providers`);
+    const requiredHealthyProviders = this.requiredHealthyProviderSet(config);
     const strategy = config.providerSelectionStrategy ?? "reliability";
     if (strategy === "reliability") {
       providers = await this.sortByReliability(providers);
@@ -14839,8 +14858,12 @@ var ProviderRegistry = class {
     }
     let discoveryLimit = (config.providerDiscoveryLimit ?? 0) > 0 ? config.providerDiscoveryLimit : config.providerLimit > 0 ? config.providerLimit : 8;
     if (config.providerLimit > 0) {
-      discoveryLimit = Math.min(discoveryLimit, config.providerLimit);
+      discoveryLimit = Math.max(
+        requiredHealthyProviders.size,
+        Math.min(discoveryLimit, config.providerLimit)
+      );
     }
+    discoveryLimit = Math.max(discoveryLimit, requiredHealthyProviders.size);
     const minSelection = Math.min(4, discoveryLimit);
     logger.info(
       `Discovery limit: ${discoveryLimit} (for health checks), execution limit: ${config.providerLimit} (for actual review), min: ${minSelection}, fallback count: ${config.fallbackProviders.length}`
@@ -14900,6 +14923,12 @@ var ProviderRegistry = class {
         selected = [];
       }
     }
+    selected = this.pinRequiredHealthyProviders(
+      selected,
+      allProviders,
+      requiredHealthyProviders,
+      discoveryLimit
+    );
     providers = selected.length > 0 ? selected : providers;
     if (providers.length < discoveryLimit && config.fallbackProviders.length > 0) {
       const remainingSlots = discoveryLimit - providers.length;
@@ -14926,7 +14955,12 @@ var ProviderRegistry = class {
       logger.warn(
         `Provider count ${providers.length} exceeds discovery limit ${discoveryLimit}, trimming`
       );
-      providers = this.randomSelect(providers, discoveryLimit, minSelection);
+      providers = this.pinRequiredHealthyProviders(
+        this.randomSelect(providers, discoveryLimit, minSelection),
+        providers,
+        requiredHealthyProviders,
+        discoveryLimit
+      );
     }
     if (providers.length === 0 && config.fallbackProviders.length > 0) {
       logger.warn("Primary providers unavailable, using fallbacks");
@@ -15096,6 +15130,29 @@ var ProviderRegistry = class {
       [copy[i], copy[j]] = [copy[j], copy[i]];
     }
     return copy;
+  }
+  requiredHealthyProviderSet(config) {
+    return new Set(
+      (config.requiredHealthyProviders || []).map((name) => name.trim()).filter(Boolean)
+    );
+  }
+  pinRequiredHealthyProviders(selected, candidates, requiredNames, limit) {
+    if (requiredNames.size === 0 || candidates.length === 0) {
+      return selected;
+    }
+    const required = candidates.filter(
+      (provider) => requiredNames.has(provider.name)
+    );
+    if (required.length === 0) {
+      return selected;
+    }
+    const pinnedNames = new Set(required.map((provider) => provider.name));
+    const merged = [
+      ...required,
+      ...selected.filter((provider) => !pinnedNames.has(provider.name))
+    ];
+    const effectiveLimit = Math.max(limit, required.length);
+    return merged.slice(0, effectiveLimit);
   }
   dedupeProviders(providers) {
     const seen = /* @__PURE__ */ new Set();
@@ -21758,8 +21815,9 @@ var MarkdownFormatterV2 = class {
         const statusEmoji = p.status === "success" ? "\u2705" : p.status === "timeout" ? "\u23F1\uFE0F" : p.status === "rate-limited" ? "\u23F8\uFE0F" : "\u274C";
         const costStr = !hideApiBilling && p.cost !== void 0 ? `, $${p.cost.toFixed(4)}` : "";
         const tokensStr = p.tokens ? `, ${p.tokens} tokens` : "";
+        const providerName = p.requiredHealthy ? `${p.name} (required)` : p.name;
         lines.push(
-          `- ${statusEmoji} **${p.name}** (${p.durationSeconds.toFixed(2)}s${costStr}${tokensStr})`
+          `- ${statusEmoji} **${providerName}** (${p.durationSeconds.toFixed(2)}s${costStr}${tokensStr})`
         );
         if (p.errorMessage) {
           lines.push(`  <sub>${p.errorMessage}</sub>`);
@@ -30052,6 +30110,9 @@ function descriptorFor(rawMessage, error2) {
   if (message.includes("no healthy providers")) {
     return descriptors.no_healthy_providers;
   }
+  if (message.includes("required healthy provider")) {
+    return descriptors.required_provider_unhealthy;
+  }
   if (message.includes("all llm providers failed") || message.includes("all llm batches failed") || message.includes("all batches failed")) {
     return descriptors.all_providers_failed;
   }
@@ -30165,6 +30226,19 @@ var descriptors = {
       "Verify the workflow installs `@openai/codex@0.125.0` before ReviewRouter runs.",
       "Check that Node 24 setup completed successfully.",
       "Re-run after dependency installation succeeds."
+    ],
+    isRetryable: true,
+    isUserActionable: true
+  },
+  required_provider_unhealthy: {
+    code: "required_provider_unhealthy",
+    category: "provider_runtime",
+    summary: "A required review provider was unavailable or unhealthy.",
+    whyItMatters: "This provider is marked as required, so ReviewRouter must fail rather than silently relying on optional provider output.",
+    nextSteps: [
+      "Verify `REQUIRED_HEALTHY_PROVIDERS` only lists providers that are selected for this workflow.",
+      "Check the required provider credentials, CLI setup, model name, and quota.",
+      "If this provider should be best-effort only, remove it from the required healthy provider list."
     ],
     isRetryable: true,
     isUserActionable: true
@@ -31040,8 +31114,14 @@ var ReviewOrchestrator = class {
       const llmFindings = [];
       let providerResults = [];
       let aiAnalysis;
+      const requiredHealthyProviders = this.requiredHealthyProviderNames(config);
       let providers = await this.components.providerRegistry.createProviders(config);
       providers = await this.applyReliabilityFilters(providers);
+      this.assertRequiredProvidersAvailable(
+        requiredHealthyProviders,
+        providers,
+        "provider selection"
+      );
       if (providers.length === 0) {
         logger.warn(
           "All providers filtered out by circuit breakers/reliability; skipping LLM execution"
@@ -31077,6 +31157,11 @@ var ReviewOrchestrator = class {
           allHealthResults = allHealthResults.concat(healthCheckResults);
         };
         await runHealthCheck(providers);
+        this.assertRequiredProvidersHealthy(
+          requiredHealthyProviders,
+          healthy,
+          allHealthResults
+        );
         const selectionLimit = Math.max(1, intensityProviderLimit || 8);
         const desiredOpenRouter = Math.min(
           4,
@@ -31137,13 +31222,25 @@ var ReviewOrchestrator = class {
             )}, opencode=${countOpenCode(healthy)})`
           );
         } else {
-          const executionLimit = intensityProviderLimit || config.providerLimit;
+          const executionLimit = Math.max(
+            intensityProviderLimit || config.providerLimit,
+            requiredHealthyProviders.size
+          );
           if (healthy.length > executionLimit) {
             logger.info(
               `Limiting execution to ${executionLimit} providers (checked ${healthy.length} for health). Using top providers by reliability.`
             );
-            healthy = healthy.slice(0, executionLimit);
+            healthy = this.selectExecutionProviders(
+              healthy,
+              requiredHealthyProviders,
+              executionLimit
+            );
           }
+          this.assertRequiredProvidersAvailable(
+            requiredHealthyProviders,
+            healthy,
+            "provider execution"
+          );
           let batches;
           const providerNames = healthy.map((p) => p.name);
           lifecyclePlannedProviders = providerNames;
@@ -31260,11 +31357,19 @@ var ReviewOrchestrator = class {
           const batchResults = [];
           let batchFailures = 0;
           let batchSuccesses = 0;
+          const requiredProviderFailures = [];
           try {
             const settled = await Promise.allSettled(batchPromises);
             for (const [batchIndex, result] of settled.entries()) {
               if (result.status === "fulfilled") {
                 batchResults.push(...result.value);
+                const requiredFailure = this.findRequiredProviderExecutionFailure(
+                  requiredHealthyProviders,
+                  result.value
+                );
+                if (requiredFailure) {
+                  requiredProviderFailures.push(requiredFailure);
+                }
                 const successfulProviders = result.value.filter(
                   (r) => r.status === "success"
                 );
@@ -31278,6 +31383,12 @@ var ReviewOrchestrator = class {
                     const reason = this.redactProviderFailureReason(
                       degraded.error?.message || degraded.status
                     );
+                    if (requiredHealthyProviders.has(degraded.name)) {
+                      logger.warn(
+                        structuredOutputFailure ? `Required provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); review will fail after batch completion. ${reason}` : `Required provider ${degraded.name} failed; review will fail after batch completion. ${reason}`
+                      );
+                      continue;
+                    }
                     logger.warn(
                       structuredOutputFailure ? `Provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); continuing with successful providers. ${reason}` : `Provider ${degraded.name} degraded; continuing with successful providers. ${reason}`
                     );
@@ -31289,15 +31400,21 @@ var ReviewOrchestrator = class {
                 batchFailures += 1;
                 logger.error("Batch promise rejected", result.reason);
                 const lifecycleAssignedTargetIds = (lifecycleTargetsByBatch[batchIndex] ?? []).map((target) => target.targetId);
-                batchResults.push(
-                  ...healthy.map((provider) => ({
-                    name: provider.name,
-                    status: "error",
-                    error: result.reason,
-                    durationSeconds: 0,
-                    lifecycleAssignedTargetIds
-                  }))
+                const failedBatchResults = healthy.map((provider) => ({
+                  name: provider.name,
+                  status: "error",
+                  error: result.reason,
+                  durationSeconds: 0,
+                  lifecycleAssignedTargetIds
+                }));
+                batchResults.push(...failedBatchResults);
+                const requiredFailure = this.findRequiredProviderExecutionFailure(
+                  requiredHealthyProviders,
+                  failedBatchResults
                 );
+                if (requiredFailure) {
+                  requiredProviderFailures.push(requiredFailure);
+                }
               }
             }
           } finally {
@@ -31320,6 +31437,9 @@ var ReviewOrchestrator = class {
             (a, b) => a.name.localeCompare(b.name)
           );
           await this.recordReliability(mergedResults);
+          if (requiredProviderFailures.length > 0) {
+            throw requiredProviderFailures[0];
+          }
           if (batchFailures > 0) {
             if (batchSuccesses === 0) {
               const failedNames = mergedResults.filter((r) => r.status !== "success").map((r) => r.name).join(", ");
@@ -31415,6 +31535,7 @@ var ReviewOrchestrator = class {
           name: r.name,
           status: r.status,
           durationSeconds: r.durationSeconds,
+          requiredHealthy: requiredHealthyProviders.has(r.name),
           tokens: r.result?.usage?.totalTokens,
           cost: costSummary.breakdown[r.name],
           errorMessage: r.error?.message
@@ -32108,6 +32229,74 @@ var ReviewOrchestrator = class {
     }
     const summary = failures.join("; ");
     return summary.length > 1e3 ? `${summary.slice(0, 1e3)}...` : summary;
+  }
+  requiredHealthyProviderNames(config) {
+    return new Set(
+      (config.requiredHealthyProviders || []).map((name) => name.trim()).filter(Boolean)
+    );
+  }
+  assertRequiredProvidersAvailable(requiredProviders, providers, stage) {
+    if (requiredProviders.size === 0) return;
+    const available = new Set(providers.map((provider) => provider.name));
+    for (const required of requiredProviders) {
+      if (!available.has(required)) {
+        throw new Error(
+          `Required healthy provider ${required} was not available during ${stage}.`
+        );
+      }
+    }
+  }
+  assertRequiredProvidersHealthy(requiredProviders, healthy, healthResults) {
+    if (requiredProviders.size === 0) return;
+    const healthyNames = new Set(healthy.map((provider) => provider.name));
+    const healthByName = new Map(
+      healthResults.map((result) => [result.name, result])
+    );
+    for (const required of requiredProviders) {
+      if (healthyNames.has(required)) continue;
+      const result = healthByName.get(required);
+      const reason = this.redactProviderFailureReason(
+        result?.error?.message || result?.status || "provider did not pass health check"
+      );
+      throw new Error(
+        `Required healthy provider ${required} failed health check: ${reason}`
+      );
+    }
+  }
+  findRequiredProviderExecutionFailure(requiredProviders, results) {
+    if (requiredProviders.size === 0) return void 0;
+    const resultByName = new Map(results.map((result) => [result.name, result]));
+    for (const required of requiredProviders) {
+      const result = resultByName.get(required);
+      if (!result) {
+        return new Error(
+          `Required healthy provider ${required} did not return a result.`
+        );
+      }
+      if (result.status !== "success") {
+        const reason = this.redactProviderFailureReason(
+          result.error?.message || result.status
+        );
+        return new Error(
+          `Required healthy provider ${required} failed during review: ${reason}`
+        );
+      }
+    }
+    return void 0;
+  }
+  selectExecutionProviders(providers, requiredProviders, limit) {
+    if (requiredProviders.size === 0 || providers.length <= limit) {
+      return providers.slice(0, limit);
+    }
+    const required = providers.filter(
+      (provider) => requiredProviders.has(provider.name)
+    );
+    const requiredNames = new Set(required.map((provider) => provider.name));
+    const optional = providers.filter(
+      (provider) => !requiredNames.has(provider.name)
+    );
+    const effectiveLimit = Math.max(limit, required.length);
+    return [...required, ...optional].slice(0, effectiveLimit);
   }
   redactProviderFailureReason(reason) {
     return sanitizeErrorMessage(reason);
@@ -33907,7 +34096,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.50",
+  version: "1.0.51",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -34517,6 +34706,7 @@ function syncEnvFromInputs() {
     "MAX_CHANGED_FILES",
     "SKIP_LABELS",
     "PROVIDER_LIMIT",
+    "REQUIRED_HEALTHY_PROVIDERS",
     "PROVIDER_RETRIES",
     "PROVIDER_MAX_PARALLEL",
     "CODEX_HEALTHCHECK_MODE",

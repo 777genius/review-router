@@ -132,6 +132,10 @@ inputs:
     description: "Limit number of providers to rotate"
     required: false
     default: "1"
+  REQUIRED_HEALTHY_PROVIDERS:
+    description: "Comma-separated provider ids that must pass health checks and return valid review output"
+    required: false
+    default: ""
   PROVIDER_RETRIES:
     description: "Total attempts per provider for retryable structured-output failures"
     required: false

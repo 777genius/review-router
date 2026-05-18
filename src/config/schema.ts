@@ -9,6 +9,7 @@ export const ReviewConfigSchema = z.object({
   provider_blocklist: z.array(z.string()).optional(),
   provider_discovery_limit: z.number().int().min(1).optional(),
   provider_limit: z.number().int().min(0).optional(),
+  required_healthy_providers: z.array(z.string()).optional(),
   provider_retries: z.number().int().min(1).optional(),
   provider_max_parallel: z.number().int().min(1).optional(),
   quiet_mode_enabled: z.boolean().optional(),

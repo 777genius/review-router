@@ -48,12 +48,15 @@ export class MarkdownFormatter {
     );
     if (review.runDetails) {
       review.runDetails.providers.forEach((p) => {
+        const providerName = p.requiredHealthy
+          ? `${p.name} (required)`
+          : p.name;
         const costStr =
           !hideApiBilling && p.cost !== undefined
             ? `, $${p.cost.toFixed(4)}`
             : '';
         lines.push(
-          `  - ${p.name}: ${p.status} (${p.durationSeconds.toFixed(1)}s${costStr}${p.tokens ? `, tokens ${p.tokens}` : ''}${p.errorMessage ? `, error: ${p.errorMessage}` : ''})`
+          `  - ${providerName}: ${p.status} (${p.durationSeconds.toFixed(1)}s${costStr}${p.tokens ? `, tokens ${p.tokens}` : ''}${p.errorMessage ? `, error: ${p.errorMessage}` : ''})`
         );
       });
 

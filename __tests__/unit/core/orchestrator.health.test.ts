@@ -846,6 +846,415 @@ describe('ReviewOrchestrator health check guard rails', () => {
     }
   });
 
+  it('fails when a required healthy provider fails health checks', async () => {
+    const providers = ['codex/gpt-5.5', 'openrouter/free'].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: providers.map((provider) => provider.name),
+        requiredHealthyProviders: ['codex/gpt-5.5'],
+        fallbackProviders: [],
+        providerLimit: 2,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue(providers),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [providers[1]],
+          healthCheckResults: [
+            {
+              name: 'codex/gpt-5.5',
+              status: 'timeout',
+              error: new Error('health check timed out'),
+              durationSeconds: 30,
+            } as ProviderResult,
+            {
+              name: 'openrouter/free',
+              status: 'success',
+              durationSeconds: 0.1,
+            } as ProviderResult,
+          ],
+        }),
+        execute: jest.fn(),
+      } as any,
+    });
+
+    await expect(
+      orchestrator.executeReview(
+        makePR([
+          {
+            filename: 'a.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+          },
+        ])
+      )
+    ).rejects.toThrow(
+      /Required healthy provider codex\/gpt-5\.5 failed health check/
+    );
+  });
+
+  it('fails when a required healthy provider fails execution while another provider succeeds', async () => {
+    const providers = ['codex/gpt-5.5', 'openrouter/free'].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: providers.map((provider) => provider.name),
+        requiredHealthyProviders: ['codex/gpt-5.5'],
+        fallbackProviders: [],
+        providerLimit: 2,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue(providers),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: providers,
+          healthCheckResults: [],
+        }),
+        execute: jest.fn().mockResolvedValue([
+          {
+            name: 'codex/gpt-5.5',
+            status: 'timeout',
+            error: new Error('Codex CLI timed out after 600000ms'),
+            durationSeconds: 600,
+          } as ProviderResult,
+          {
+            name: 'openrouter/free',
+            status: 'success',
+            result: {
+              content: '{"findings":[],"revalidations":[]}',
+              findings: [],
+              revalidations: [],
+            },
+            durationSeconds: 1,
+          } as ProviderResult,
+        ]),
+      } as any,
+    });
+
+    await expect(
+      orchestrator.executeReview(
+        makePR([
+          {
+            filename: 'a.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+          },
+        ])
+      )
+    ).rejects.toThrow(
+      /Required healthy provider codex\/gpt-5\.5 failed during review/
+    );
+  });
+
+  it('fails when a required healthy provider succeeds in one batch but fails in another', async () => {
+    const providers = ['codex/gpt-5.5', 'openrouter/free'].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+    const execute = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          name: 'codex/gpt-5.5',
+          status: 'success',
+          result: {
+            content: '{"findings":[],"revalidations":[]}',
+            findings: [],
+            revalidations: [],
+          },
+          durationSeconds: 1,
+        } as ProviderResult,
+        {
+          name: 'openrouter/free',
+          status: 'success',
+          result: {
+            content: '{"findings":[],"revalidations":[]}',
+            findings: [],
+            revalidations: [],
+          },
+          durationSeconds: 1,
+        } as ProviderResult,
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: 'codex/gpt-5.5',
+          status: 'error',
+          error: new Error('returned invalid review JSON after retries'),
+          durationSeconds: 3,
+        } as ProviderResult,
+        {
+          name: 'openrouter/free',
+          status: 'success',
+          result: {
+            content: '{"findings":[],"revalidations":[]}',
+            findings: [],
+            revalidations: [],
+          },
+          durationSeconds: 1,
+        } as ProviderResult,
+      ]);
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: providers.map((provider) => provider.name),
+        requiredHealthyProviders: ['codex/gpt-5.5'],
+        fallbackProviders: [],
+        providerLimit: 2,
+        batchMaxFiles: 1,
+        enableTokenAwareBatching: false,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue(providers),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: providers,
+          healthCheckResults: [],
+        }),
+        execute,
+      } as any,
+    });
+
+    await expect(
+      orchestrator.executeReview(
+        makePR([
+          {
+            filename: 'a.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+          },
+          {
+            filename: 'b.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+          },
+        ])
+      )
+    ).rejects.toThrow(
+      /Required healthy provider codex\/gpt-5\.5 failed during review/
+    );
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('pins required healthy providers during execution limiting', async () => {
+    const providers = ['opencode/high', 'opencode/required-low'].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+    const execute = jest.fn().mockResolvedValue([
+      {
+        name: 'opencode/required-low',
+        status: 'success',
+        result: {
+          content: '{"findings":[],"revalidations":[]}',
+          findings: [],
+          revalidations: [],
+        },
+        durationSeconds: 1,
+      } as ProviderResult,
+    ]);
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: providers.map((provider) => provider.name),
+        requiredHealthyProviders: ['opencode/required-low'],
+        fallbackProviders: [],
+        providerLimit: 1,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue(providers),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: providers,
+          healthCheckResults: [],
+        }),
+        execute,
+      } as any,
+    });
+
+    await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(execute).toHaveBeenCalledWith(
+      [expect.objectContaining({ name: 'opencode/required-low' })],
+      expect.any(String),
+      expect.any(Number)
+    );
+  });
+
+  it('keeps non-required provider findings eligible for severity blocking', async () => {
+    const providers = ['codex/gpt-5.5', 'openrouter/free'].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+    const finding: Finding = {
+      file: 'a.ts',
+      line: 1,
+      severity: 'major',
+      title: 'OpenRouter finding',
+      message: 'The changed line can throw at runtime.',
+      provider: 'openrouter/free',
+    };
+    const synthesize = jest.fn((findings: Finding[], ...rest: any[]) => ({
+      ...emptyReview,
+      findings,
+      metrics: {
+        ...emptyReview.metrics,
+        totalFindings: findings.length,
+        major: findings.length,
+      },
+      runDetails: rest[4],
+    }));
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: providers.map((provider) => provider.name),
+        requiredHealthyProviders: ['codex/gpt-5.5'],
+        fallbackProviders: [],
+        providerLimit: 2,
+        inlineMinSeverity: 'minor',
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue(providers),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: providers,
+          healthCheckResults: [],
+        }),
+        execute: jest.fn().mockResolvedValue([
+          {
+            name: 'codex/gpt-5.5',
+            status: 'success',
+            result: {
+              content: '{"findings":[],"revalidations":[]}',
+              findings: [],
+              revalidations: [],
+            },
+            durationSeconds: 1,
+          } as ProviderResult,
+          {
+            name: 'openrouter/free',
+            status: 'success',
+            result: {
+              content:
+                '{"findings":[{"file":"a.ts","line":1,"severity":"major","title":"OpenRouter finding","message":"runtime crash"}],"revalidations":[]}',
+              findings: [finding],
+              revalidations: [],
+            },
+            durationSeconds: 1,
+          } as ProviderResult,
+        ]),
+      } as any,
+      synthesis: { synthesize } as any,
+    });
+
+    const pr = makePR([
+      {
+        filename: 'a.ts',
+        status: 'modified',
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+        patch: '@@ -0,0 +1 @@\n+dangerousCall()\n',
+      },
+    ]);
+    pr.diff = 'diff --git a/a.ts b/a.ts\n@@ -0,0 +1 @@\n+dangerousCall()\n';
+
+    const review = await orchestrator.executeReview(pr);
+
+    expect(review.findings).toContainEqual(expect.objectContaining(finding));
+    expect(review.runDetails?.providers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'codex/gpt-5.5',
+          requiredHealthy: true,
+        }),
+        expect.objectContaining({
+          name: 'openrouter/free',
+          requiredHealthy: false,
+        }),
+      ])
+    );
+  });
+
   it('fails when all selected providers fail and provider failure is blocking', async () => {
     const previousFailOnNoHealthy = process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
     process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';

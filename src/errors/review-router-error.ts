@@ -16,6 +16,7 @@ export type ReviewErrorCode =
   | 'claude_oauth_invalid_secret'
   | 'openrouter_api_key_invalid'
   | 'codex_cli_missing'
+  | 'required_provider_unhealthy'
   | 'no_healthy_providers'
   | 'all_providers_failed'
   | 'github_permission_denied'
@@ -277,6 +278,10 @@ function descriptorFor(
     return descriptors.no_healthy_providers;
   }
 
+  if (message.includes('required healthy provider')) {
+    return descriptors.required_provider_unhealthy;
+  }
+
   if (
     message.includes('all llm providers failed') ||
     message.includes('all llm batches failed') ||
@@ -413,6 +418,20 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
       'Verify the workflow installs `@openai/codex@0.125.0` before ReviewRouter runs.',
       'Check that Node 24 setup completed successfully.',
       'Re-run after dependency installation succeeds.',
+    ],
+    isRetryable: true,
+    isUserActionable: true,
+  },
+  required_provider_unhealthy: {
+    code: 'required_provider_unhealthy',
+    category: 'provider_runtime',
+    summary: 'A required review provider was unavailable or unhealthy.',
+    whyItMatters:
+      'This provider is marked as required, so ReviewRouter must fail rather than silently relying on optional provider output.',
+    nextSteps: [
+      'Verify `REQUIRED_HEALTHY_PROVIDERS` only lists providers that are selected for this workflow.',
+      'Check the required provider credentials, CLI setup, model name, and quota.',
+      'If this provider should be best-effort only, remove it from the required healthy provider list.',
     ],
     isRetryable: true,
     isUserActionable: true,

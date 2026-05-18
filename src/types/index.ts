@@ -73,6 +73,7 @@ export interface ReviewConfig {
   providerBlocklist: string[];
   providerDiscoveryLimit?: number; // Max providers to discover/health-check (default: 8)
   providerLimit: number; // Max providers to use for actual review (default: 1)
+  requiredHealthyProviders?: string[];
   providerRetries: number;
   providerMaxParallel: number;
   quietModeEnabled?: boolean;
@@ -463,6 +464,7 @@ export interface ProviderRunInfo {
   name: string;
   status: ProviderResult['status'];
   durationSeconds: number;
+  requiredHealthy?: boolean;
   cost?: number;
   tokens?: number;
   errorMessage?: string;

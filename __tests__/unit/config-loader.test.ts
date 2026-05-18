@@ -18,6 +18,7 @@ describe('ConfigLoader', () => {
     process.env.INLINE_MAX_COMMENTS = '7';
     process.env.BUDGET_MAX_USD = '1.5';
     process.env.OPENROUTER_TIMEOUT_SECONDS = '240';
+    process.env.REQUIRED_HEALTHY_PROVIDERS = 'codex/gpt-5.5,openrouter/a';
     process.env.ENABLE_AST_ANALYSIS = 'false';
     process.env.UPDATE_PR_DESCRIPTION = 'false';
     process.env.FAIL_ON_SEVERITY = 'critical';
@@ -28,6 +29,10 @@ describe('ConfigLoader', () => {
     expect(config.inlineMaxComments).toBe(7);
     expect(config.budgetMaxUsd).toBe(1.5);
     expect(config.openrouterTimeoutSeconds).toBe(240);
+    expect(config.requiredHealthyProviders).toEqual([
+      'codex/gpt-5.5',
+      'openrouter/a',
+    ]);
     expect(config.enableAstAnalysis).toBe(false);
     expect(config.updatePrDescription).toBe(false);
     expect(config.failOnSeverity).toBe('critical');
@@ -107,6 +112,27 @@ describe('ConfigLoader', () => {
 
     expect(config.providerBatchOverrides?.openrouter).toBe(200); // clamped to max 200
     expect(config.providerBatchOverrides?.opencode).toBe(2); // string numeric accepted
+  });
+
+  it('loads required healthy providers from config file', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-config-'));
+    process.chdir(tmp);
+    fs.mkdirSync(path.join(tmp, '.github'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmp, '.github', 'multi-review.yml'),
+      [
+        'providers:',
+        '  - codex/gpt-5.5',
+        '  - openrouter/openai/gpt-oss-120b:free',
+        'required_healthy_providers:',
+        '  - codex/gpt-5.5',
+        '',
+      ].join('\n')
+    );
+
+    const config = ConfigLoader.load();
+
+    expect(config.requiredHealthyProviders).toEqual(['codex/gpt-5.5']);
   });
 
   it('parses suggestion quality overrides from environment', () => {

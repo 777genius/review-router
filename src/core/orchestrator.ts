@@ -450,10 +450,15 @@ export class ReviewOrchestrator {
         configuredIntensityTimeout,
         baseTimeout
       );
+      const openrouterTimeout = Math.min(
+        intensityTimeout,
+        config.openrouterTimeoutSeconds * 1000
+      );
 
       logger.info(
         `Intensity settings: ${intensityProviderLimit} providers, ` +
-          `${intensityTimeout}ms timeout (${reviewIntensity} mode)`
+          `${intensityTimeout}ms timeout, ` +
+          `${openrouterTimeout}ms OpenRouter timeout (${reviewIntensity} mode)`
       );
 
       // Check for incremental review (use reviewContext which may have filtered trivial files)

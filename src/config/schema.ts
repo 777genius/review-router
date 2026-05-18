@@ -30,6 +30,7 @@ export const ReviewConfigSchema = z.object({
 
   diff_max_bytes: z.number().int().min(0).optional(),
   run_timeout_seconds: z.number().int().min(1).optional(),
+  openrouter_timeout_seconds: z.number().int().min(1).optional(),
 
   budget_max_usd: z.number().min(0).optional(),
 

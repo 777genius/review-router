@@ -54,6 +54,19 @@ class SequenceProvider extends Provider {
   }
 }
 
+class TimeoutCaptureProvider extends Provider {
+  timeoutMs?: number;
+
+  async review(_prompt: string, timeoutMs: number): Promise<ReviewResult> {
+    this.timeoutMs = timeoutMs;
+    return {
+      content: '{"findings":[]}',
+      findings: [],
+      durationSeconds: 0.01,
+    };
+  }
+}
+
 describe('LLMExecutor', () => {
   it('waits for queued health checks before returning', async () => {
     const provider = new DelayedProvider('codex/gpt-5.5');
@@ -168,5 +181,33 @@ describe('LLMExecutor', () => {
 
     expect(provider.prompts).toHaveLength(1);
     expect(results[0].status).toBe('error');
+  });
+
+  it('caps OpenRouter provider timeout without changing Codex timeout', async () => {
+    const openrouter = new TimeoutCaptureProvider('openrouter/free');
+    const codex = new TimeoutCaptureProvider('codex/gpt-5.5');
+    const executor = new LLMExecutor({
+      ...DEFAULT_CONFIG,
+      runTimeoutSeconds: 600,
+      openrouterTimeoutSeconds: 300,
+    });
+
+    const results = await executor.execute([openrouter, codex], 'prompt');
+
+    expect(results).toHaveLength(2);
+    expect(openrouter.timeoutMs).toBe(300000);
+    expect(codex.timeoutMs).toBe(600000);
+  });
+
+  it('keeps lower explicit timeout for OpenRouter providers', async () => {
+    const openrouter = new TimeoutCaptureProvider('openrouter/free');
+    const executor = new LLMExecutor({
+      ...DEFAULT_CONFIG,
+      openrouterTimeoutSeconds: 300,
+    });
+
+    await executor.execute([openrouter], 'prompt', 120000);
+
+    expect(openrouter.timeoutMs).toBe(120000);
   });
 });

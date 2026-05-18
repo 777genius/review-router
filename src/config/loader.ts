@@ -116,6 +116,7 @@ export class ConfigLoader {
 
       diffMaxBytes: this.parseNumber(env.DIFF_MAX_BYTES),
       runTimeoutSeconds: this.parseNumber(env.RUN_TIMEOUT_SECONDS),
+      openrouterTimeoutSeconds: this.parseNumber(env.OPENROUTER_TIMEOUT_SECONDS),
 
       budgetMaxUsd: this.parseFloat(env.BUDGET_MAX_USD),
 
@@ -211,6 +212,7 @@ export class ConfigLoader {
       maxChangedFiles: config.max_changed_files,
       diffMaxBytes: config.diff_max_bytes,
       runTimeoutSeconds: config.run_timeout_seconds,
+      openrouterTimeoutSeconds: config.openrouter_timeout_seconds,
       budgetMaxUsd: config.budget_max_usd,
       enableAstAnalysis: config.enable_ast_analysis,
       enableSecurity: config.enable_security,

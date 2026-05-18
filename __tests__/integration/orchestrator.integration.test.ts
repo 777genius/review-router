@@ -156,6 +156,7 @@ describe('ReviewOrchestrator integration (offline)', () => {
     maxChangedFiles: 0,
     diffMaxBytes: 50000,
     runTimeoutSeconds: 5,
+    openrouterTimeoutSeconds: 5,
     budgetMaxUsd: 1,
     enableAstAnalysis: true,
     enableSecurity: true,

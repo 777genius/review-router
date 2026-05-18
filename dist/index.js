@@ -7198,6 +7198,7 @@ var DEFAULT_CONFIG = {
   maxChangedFiles: 0,
   diffMaxBytes: 12e4,
   runTimeoutSeconds: 600,
+  openrouterTimeoutSeconds: 300,
   budgetMaxUsd: 0,
   enableAstAnalysis: true,
   enableSecurity: true,
@@ -11413,6 +11414,7 @@ var ReviewConfigSchema = external_exports.object({
   max_changed_files: external_exports.number().int().min(0).optional(),
   diff_max_bytes: external_exports.number().int().min(0).optional(),
   run_timeout_seconds: external_exports.number().int().min(1).optional(),
+  openrouter_timeout_seconds: external_exports.number().int().min(1).optional(),
   budget_max_usd: external_exports.number().min(0).optional(),
   enable_ast_analysis: external_exports.boolean().optional(),
   enable_security: external_exports.boolean().optional(),
@@ -11769,6 +11771,7 @@ var ConfigLoader = class {
       maxChangedFiles: this.parseNumber(env.MAX_CHANGED_FILES),
       diffMaxBytes: this.parseNumber(env.DIFF_MAX_BYTES),
       runTimeoutSeconds: this.parseNumber(env.RUN_TIMEOUT_SECONDS),
+      openrouterTimeoutSeconds: this.parseNumber(env.OPENROUTER_TIMEOUT_SECONDS),
       budgetMaxUsd: this.parseFloat(env.BUDGET_MAX_USD),
       enableAstAnalysis: this.parseBoolean(env.ENABLE_AST_ANALYSIS),
       enableSecurity: this.parseBoolean(env.ENABLE_SECURITY),
@@ -11853,6 +11856,7 @@ var ConfigLoader = class {
       maxChangedFiles: config.max_changed_files,
       diffMaxBytes: config.diff_max_bytes,
       runTimeoutSeconds: config.run_timeout_seconds,
+      openrouterTimeoutSeconds: config.openrouter_timeout_seconds,
       budgetMaxUsd: config.budget_max_usd,
       enableAstAnalysis: config.enable_ast_analysis,
       enableSecurity: config.enable_security,
@@ -16548,6 +16552,16 @@ var LLMExecutor = class {
   constructor(config) {
     this.config = config;
   }
+  resolveProviderTimeoutMs(provider, timeoutMs) {
+    const baseTimeoutMs = timeoutMs ?? this.config.runTimeoutSeconds * 1e3;
+    if (provider.name.startsWith("openrouter/") || provider.name.startsWith("codex-openrouter/")) {
+      return Math.min(
+        baseTimeoutMs,
+        this.config.openrouterTimeoutSeconds * 1e3
+      );
+    }
+    return baseTimeoutMs;
+  }
   /**
    * Filter providers by running health checks to identify responsive providers
    * Providers that don't respond within healthCheckTimeoutMs are filtered out
@@ -16616,7 +16630,7 @@ var LLMExecutor = class {
     for (const provider of providers) {
       tasks.push(queue.add(async () => {
         const started = Date.now();
-        const actualTimeoutMs = timeoutMs ?? this.config.runTimeoutSeconds * 1e3;
+        const actualTimeoutMs = this.resolveProviderTimeoutMs(provider, timeoutMs);
         const totalAttempts = getProviderReviewTotalAttempts(this.config.providerRetries);
         let attempt = 0;
         let previousError;
@@ -30911,8 +30925,12 @@ var ReviewOrchestrator = class {
         configuredIntensityTimeout,
         baseTimeout
       );
+      const openrouterTimeout = Math.min(
+        intensityTimeout,
+        config.openrouterTimeoutSeconds * 1e3
+      );
       logger.info(
-        `Intensity settings: ${intensityProviderLimit} providers, ${intensityTimeout}ms timeout (${reviewIntensity} mode)`
+        `Intensity settings: ${intensityProviderLimit} providers, ${intensityTimeout}ms timeout, ${openrouterTimeout}ms OpenRouter timeout (${reviewIntensity} mode)`
       );
       const useIncremental = await this.components.incrementalReviewer.shouldUseIncremental(
         reviewContext
@@ -33889,7 +33907,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.49",
+  version: "1.0.50",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -34519,6 +34537,7 @@ function syncEnvFromInputs() {
     "ENABLE_TOKEN_AWARE_BATCHING",
     "TARGET_TOKENS_PER_BATCH",
     "RUN_TIMEOUT_SECONDS",
+    "OPENROUTER_TIMEOUT_SECONDS",
     "BUDGET_MAX_USD",
     "ENABLE_AST_ANALYSIS",
     "ENABLE_SECURITY",

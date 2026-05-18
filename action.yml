@@ -192,6 +192,10 @@ inputs:
     description: "Timeout per provider run"
     required: false
     default: "600"
+  OPENROUTER_TIMEOUT_SECONDS:
+    description: "Timeout per OpenRouter provider run"
+    required: false
+    default: "300"
   BUDGET_MAX_USD:
     description: "Budget guard in USD"
     required: false

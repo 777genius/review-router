@@ -17,6 +17,10 @@ describe('DEFAULT_CONFIG', () => {
 
   it('should have reasonable timeout and budget limits', () => {
     expect(DEFAULT_CONFIG.runTimeoutSeconds).toBeGreaterThan(0);
+    expect(DEFAULT_CONFIG.openrouterTimeoutSeconds).toBe(300);
+    expect(DEFAULT_CONFIG.openrouterTimeoutSeconds).toBeLessThan(
+      DEFAULT_CONFIG.runTimeoutSeconds
+    );
     expect(DEFAULT_CONFIG.budgetMaxUsd).toBeGreaterThanOrEqual(0);
   });
 

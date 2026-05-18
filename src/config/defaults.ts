@@ -39,6 +39,7 @@ export const DEFAULT_CONFIG: ReviewConfig = {
 
   diffMaxBytes: 120_000,
   runTimeoutSeconds: 600,
+  openrouterTimeoutSeconds: 300,
 
   budgetMaxUsd: 0,
 

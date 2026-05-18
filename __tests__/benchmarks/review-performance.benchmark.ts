@@ -255,6 +255,7 @@ async function runBenchmark(
     maxChangedFiles: 0,
     diffMaxBytes: 500000,
     runTimeoutSeconds: 60,
+    openrouterTimeoutSeconds: 60,
     budgetMaxUsd: 10,
     enableAstAnalysis: true,
     enableSecurity: true,

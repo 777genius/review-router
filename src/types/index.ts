@@ -94,6 +94,7 @@ export interface ReviewConfig {
 
   diffMaxBytes: number;
   runTimeoutSeconds: number;
+  openrouterTimeoutSeconds: number;
 
   budgetMaxUsd: number;
 

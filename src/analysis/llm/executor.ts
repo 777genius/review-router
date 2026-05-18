@@ -15,6 +15,20 @@ type ErrorWithCode = Error & { code?: string };
 export class LLMExecutor {
   constructor(private readonly config: ReviewConfig) {}
 
+  private resolveProviderTimeoutMs(provider: Provider, timeoutMs?: number): number {
+    const baseTimeoutMs = timeoutMs ?? (this.config.runTimeoutSeconds * 1000);
+    if (
+      provider.name.startsWith('openrouter/') ||
+      provider.name.startsWith('codex-openrouter/')
+    ) {
+      return Math.min(
+        baseTimeoutMs,
+        this.config.openrouterTimeoutSeconds * 1000
+      );
+    }
+    return baseTimeoutMs;
+  }
+
   /**
    * Filter providers by running health checks to identify responsive providers
    * Providers that don't respond within healthCheckTimeoutMs are filtered out
@@ -102,7 +116,7 @@ export class LLMExecutor {
     for (const provider of providers) {
       tasks.push(queue.add(async () => {
         const started = Date.now();
-        const actualTimeoutMs = timeoutMs ?? (this.config.runTimeoutSeconds * 1000);
+        const actualTimeoutMs = this.resolveProviderTimeoutMs(provider, timeoutMs);
 
         const totalAttempts = getProviderReviewTotalAttempts(this.config.providerRetries);
         let attempt = 0;

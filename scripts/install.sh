@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 
 PRODUCT_NAME="review-router"
-LATEST_RELEASE_TAG="v1.0.48"
+LATEST_RELEASE_TAG="v1.0.49"
 LATEST_MAJOR_TAG="v1"
 DEFAULT_ACTION_REF_MODE="stable"
 DEFAULT_STABLE_ACTION_REF="777genius/review-router@$LATEST_MAJOR_TAG"
@@ -1518,7 +1518,7 @@ YAML
     cat <<YAML
     with:
       runtime_ref: $runtime_ref
-      runtime_config_mode: static
+      runtime_config_mode: oidc
       # Non-secret fallback config. Provider credentials stay in GitHub Actions secrets.
       static_runtime_env_json: >-
 $(printf '%s\n' "$static_runtime_env_json" | sed 's/^/        /')
@@ -1583,7 +1583,7 @@ YAML
     cat <<YAML
     with:
       runtime_ref: $runtime_ref
-      runtime_config_mode: static
+      runtime_config_mode: oidc
       review_workflow_file: reviewrouter.yml
 YAML
     if [ "$IDENTITY_MODE" = "app" ]; then

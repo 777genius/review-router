@@ -219,7 +219,7 @@ describe('review-router curl installer e2e', () => {
       'uses: 777genius/review-router/.github/workflows/reviewrouter-reusable.yml@v1'
     );
     expect(workflow).toContain('merge_group:');
-    expect(workflow).toContain('runtime_config_mode: static');
+    expect(workflow).toContain('runtime_config_mode: oidc');
     const staticEnv = staticRuntimeEnv(workflow);
     expect(staticEnv.REVIEW_AUTH_MODE).toBe('openrouter-api');
     expect(staticEnv.REVIEW_PROVIDERS).toBe(

@@ -32,12 +32,12 @@ const result = await withRetry(
 
 **When retries are used:**
 - GitHub API calls (posting comments, fetching PR data)
-- LLM provider API calls
+- LLM provider structured-output failures, such as invalid review JSON
 - File system operations (cache reads/writes)
 
 **Retry configuration:**
 ```yaml
-- PROVIDER_RETRIES: 3  # Number of retry attempts per provider
+- PROVIDER_RETRIES: 3  # Total attempts per provider for invalid review JSON
 ```
 
 ### 2. Graceful Degradation
@@ -227,7 +227,7 @@ logger.error('Provider execution failed', {
 
 3. **Retry configuration:**
    ```yaml
-   - PROVIDER_RETRIES: 5  # More retries for flaky networks
+   - PROVIDER_RETRIES: 3  # Total attempts for structured-output failures
    ```
 
 ### Cache Corruption

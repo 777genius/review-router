@@ -323,11 +323,9 @@ describe('OpenCodeProvider Integration', () => {
 
       setupSpawnMock('not valid json');
 
-      const result = await provider.review('test', 5000);
-
-      // Should return empty findings on parse error
-      expect(result.findings).toEqual([]);
-      expect(result.content).toBe('not valid json');
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        'OpenCode CLI returned invalid review JSON: response was not valid JSON'
+      );
     });
   });
 

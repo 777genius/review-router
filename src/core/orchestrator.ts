@@ -1,6 +1,7 @@
 import { Deduplicator } from '../analysis/deduplicator';
 import { ConsensusEngine } from '../analysis/consensus';
 import { LLMExecutor } from '../analysis/llm/executor';
+import { shouldRetryProviderReviewError } from '../analysis/llm/retry-policy';
 import { AcceptanceDetector } from '../learning/acceptance-detector';
 import { ProviderWeightTracker } from '../learning/provider-weights';
 import { extractFindings } from '../analysis/llm/parser';
@@ -888,10 +889,30 @@ export class ReviewOrchestrator {
             for (const [batchIndex, result] of settled.entries()) {
               if (result.status === 'fulfilled') {
                 batchResults.push(...result.value);
-                if (result.value.some((r) => r.status !== 'success')) {
-                  batchFailures += 1;
-                } else {
+                const successfulProviders = result.value.filter(
+                  (r) => r.status === 'success'
+                );
+                const degradedProviders = result.value.filter(
+                  (r) => r.status !== 'success'
+                );
+
+                if (successfulProviders.length > 0) {
                   batchSuccesses += 1;
+                  for (const degraded of degradedProviders) {
+                    const structuredOutputFailure =
+                      degraded.error &&
+                      shouldRetryProviderReviewError(degraded.error);
+                    const reason = this.redactProviderFailureReason(
+                      degraded.error?.message || degraded.status
+                    );
+                    logger.warn(
+                      structuredOutputFailure
+                        ? `Provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); continuing with successful providers. ${reason}`
+                        : `Provider ${degraded.name} degraded; continuing with successful providers. ${reason}`
+                    );
+                  }
+                } else {
+                  batchFailures += 1;
                 }
               } else {
                 batchFailures += 1;

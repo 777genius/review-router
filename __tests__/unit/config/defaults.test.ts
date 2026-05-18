@@ -19,4 +19,8 @@ describe('DEFAULT_CONFIG', () => {
     expect(DEFAULT_CONFIG.runTimeoutSeconds).toBeGreaterThan(0);
     expect(DEFAULT_CONFIG.budgetMaxUsd).toBeGreaterThanOrEqual(0);
   });
+
+  it('defaults provider retries to three total attempts', () => {
+    expect(DEFAULT_CONFIG.providerRetries).toBe(3);
+  });
 });

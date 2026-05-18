@@ -116,9 +116,9 @@ status: 'rate-limited'
    PROVIDER_LIMIT: '3'  # Use fewer providers per review
    ```
 
-4. **Add delays between retries:**
+4. **Reduce structured-output retry attempts:**
    ```yaml
-   PROVIDER_RETRIES: '1'  # Reduce retries
+   PROVIDER_RETRIES: '1'  # One total attempt, no JSON retry
    ```
 
 ---

@@ -130,6 +130,11 @@ export class PromptBuilder {
     const skipSuggestions =
       compacted.summaryOnlyFiles.length > 0 ||
       this.shouldSkipSuggestions(pr.diff);
+    const jsonOnlyOutputRules = [
+      'Return ONLY one valid JSON object.',
+      'No markdown, no prose, no code fences, comments, trailing commas, or text before/after the JSON.',
+      'If no findings, return exactly {"findings":[],"revalidations":[]}.',
+    ];
 
     // Extract which files are actually in the trimmed diff to avoid false positives
     const filesInDiff = new Set<string>();
@@ -201,6 +206,7 @@ export class PromptBuilder {
     if (skipSuggestions) {
       instructions.push(
         'Return JSON object: {"findings":[{file, startLine, line, endLine, severity, title, message}],"revalidations":[{targetId, fingerprint, verdict, confidence, evidence, rationale}]}',
+        ...jsonOnlyOutputRules,
         'Use startLine/endLine for a changed block when useful; keep line equal to endLine. Use null for startLine/endLine on single-line findings.',
         'If no existing findings are provided for revalidation, return "revalidations": [].',
         ''
@@ -208,6 +214,7 @@ export class PromptBuilder {
     } else {
       instructions.push(
         'Return JSON object: {"findings":[{file, startLine, line, endLine, severity, title, message, suggestion}],"revalidations":[{targetId, fingerprint, verdict, confidence, evidence, rationale}]}',
+        ...jsonOnlyOutputRules,
         'Use startLine/endLine for a changed block when useful; keep line equal to endLine. Use null for startLine/endLine on single-line findings.',
         'If no existing findings are provided for revalidation, return "revalidations": [].',
         '',

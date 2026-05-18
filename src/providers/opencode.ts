@@ -5,7 +5,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { parseReviewOutputLenient } from './review-output';
+import { parseReviewOutputStrict } from './review-output';
 
 export class OpenCodeProvider extends Provider {
   constructor(private readonly modelId: string) {
@@ -99,7 +99,7 @@ export class OpenCodeProvider extends Provider {
           `OpenCode CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
         );
       }
-      const parsedOutput = parseReviewOutputLenient(content);
+      const parsedOutput = parseReviewOutputStrict(content, 'OpenCode CLI');
       return {
         content,
         durationSeconds,

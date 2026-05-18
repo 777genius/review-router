@@ -710,6 +710,325 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(createComment).not.toHaveBeenCalled();
   });
 
+  it('continues when one provider succeeds and other providers degrade', async () => {
+    const previousFailOnNoHealthy = process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
+    process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';
+
+    const providers = ['p1', 'p2', 'p3', 'p4'].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+    const finding: Finding = {
+      file: 'a.ts',
+      line: 1,
+      severity: 'major',
+      title: 'Runtime exception',
+      message:
+        'The changed line dereferences config.value after config is assigned null, so this path will throw at runtime.',
+    };
+    const synthesize = jest.fn(
+      (
+        findings: Finding[],
+        _reviewPR: PRContext,
+        _testHints: unknown,
+        _aiAnalysis: unknown,
+        _providerResults: ProviderResult[],
+        runDetails: unknown
+      ) => ({
+        ...emptyReview,
+        summary: 'summary',
+        findings,
+        metrics: {
+          ...emptyReview.metrics,
+          totalFindings: findings.length,
+          major: findings.length,
+        },
+        runDetails,
+      })
+    );
+
+    try {
+      const orchestrator = makeOrchestrator({
+        config: {
+          ...DEFAULT_CONFIG,
+          dryRun: true,
+          enableCaching: false,
+          analyticsEnabled: false,
+          graphEnabled: false,
+          providers: providers.map((provider) => provider.name),
+          fallbackProviders: [],
+          providerLimit: 4,
+          inlineMinSeverity: 'minor',
+        },
+        providerRegistry: {
+          createProviders: jest.fn().mockResolvedValue(providers),
+          discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+        } as any,
+        llmExecutor: {
+          filterHealthyProviders: jest.fn().mockResolvedValue({
+            healthy: providers,
+            healthCheckResults: [],
+          }),
+          execute: jest.fn().mockResolvedValue([
+            {
+              name: 'p1',
+              status: 'success',
+              result: {
+                content:
+                  '{"findings":[{"file":"a.ts","line":1,"severity":"major","title":"Runtime exception","message":"runtime crash"}]}',
+                findings: [finding],
+              },
+              durationSeconds: 1,
+            } as ProviderResult,
+            {
+              name: 'p2',
+              status: 'error',
+              error: new Error(
+                'OpenRouter returned invalid review JSON: response was not valid JSON'
+              ),
+              durationSeconds: 1,
+            } as ProviderResult,
+            {
+              name: 'p3',
+              status: 'timeout',
+              error: new Error('Provider timed out after 600000ms'),
+              durationSeconds: 600,
+            } as ProviderResult,
+            {
+              name: 'p4',
+              status: 'error',
+              error: new Error(
+                'OpenRouter returned invalid review JSON: expected an object with a findings array'
+              ),
+              durationSeconds: 1,
+            } as ProviderResult,
+          ]),
+        } as any,
+        synthesis: { synthesize } as any,
+      });
+
+      const diff = 'diff --git a/a.ts b/a.ts\n@@ -0,0 +1 @@\n+config.value\n';
+      const pr = makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -0,0 +1 @@\n+config.value\n',
+        },
+      ]);
+      pr.diff = diff;
+
+      const review = await orchestrator.executeReview(pr);
+
+      expect(review.findings).toContainEqual(expect.objectContaining(finding));
+      expect(review.metrics.providersSuccess).toBe(1);
+      expect(review.metrics.providersFailed).toBe(3);
+      expect(review.runDetails?.providers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'p1', status: 'success' }),
+          expect.objectContaining({ name: 'p2', status: 'error' }),
+          expect.objectContaining({ name: 'p3', status: 'timeout' }),
+          expect.objectContaining({ name: 'p4', status: 'error' }),
+        ])
+      );
+    } finally {
+      if (previousFailOnNoHealthy === undefined) {
+        delete process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
+      } else {
+        process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = previousFailOnNoHealthy;
+      }
+    }
+  });
+
+  it('fails when all selected providers fail and provider failure is blocking', async () => {
+    const previousFailOnNoHealthy = process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
+    process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';
+
+    const providers = ['p1', 'p2', 'p3', 'p4'].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+
+    try {
+      const orchestrator = makeOrchestrator({
+        config: {
+          ...DEFAULT_CONFIG,
+          dryRun: true,
+          enableCaching: false,
+          analyticsEnabled: false,
+          graphEnabled: false,
+          providers: providers.map((provider) => provider.name),
+          fallbackProviders: [],
+          providerLimit: 4,
+        },
+        providerRegistry: {
+          createProviders: jest.fn().mockResolvedValue(providers),
+          discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+        } as any,
+        llmExecutor: {
+          filterHealthyProviders: jest.fn().mockResolvedValue({
+            healthy: providers,
+            healthCheckResults: [],
+          }),
+          execute: jest.fn().mockResolvedValue([
+            {
+              name: 'p1',
+              status: 'error',
+              error: new Error(
+                'OpenRouter returned invalid review JSON: response was not valid JSON'
+              ),
+              durationSeconds: 1,
+            },
+            {
+              name: 'p2',
+              status: 'timeout',
+              error: new Error('Provider timed out after 600000ms'),
+              durationSeconds: 600,
+            },
+            {
+              name: 'p3',
+              status: 'error',
+              error: new Error(
+                'OpenRouter returned invalid review JSON: expected an object with a findings array'
+              ),
+              durationSeconds: 1,
+            },
+            {
+              name: 'p4',
+              status: 'error',
+              error: new Error(
+                'OpenRouter returned invalid review JSON: missing required file, line, severity, title, or message'
+              ),
+              durationSeconds: 1,
+            },
+          ] as ProviderResult[]),
+        } as any,
+      });
+
+      await expect(
+        orchestrator.executeReview(
+          makePR([
+            {
+              filename: 'a.ts',
+              status: 'modified',
+              additions: 1,
+              deletions: 0,
+              changes: 1,
+            },
+          ])
+        )
+      ).rejects.toThrow(/All LLM providers failed during review/);
+    } finally {
+      if (previousFailOnNoHealthy === undefined) {
+        delete process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
+      } else {
+        process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = previousFailOnNoHealthy;
+      }
+    }
+  });
+
+  it('succeeds across multiple batches when each batch has one successful provider', async () => {
+    const previousFailOnNoHealthy = process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
+    process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';
+
+    const providers = ['p1', 'p2'].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+    const execute = jest.fn().mockResolvedValue([
+      {
+        name: 'p1',
+        status: 'success',
+        result: {
+          content: '{"findings":[],"revalidations":[]}',
+          findings: [],
+          revalidations: [],
+        },
+        durationSeconds: 1,
+      } as ProviderResult,
+      {
+        name: 'p2',
+        status: 'error',
+        error: new Error(
+          'OpenRouter returned invalid review JSON: response was not valid JSON'
+        ),
+        durationSeconds: 1,
+      } as ProviderResult,
+    ]);
+
+    try {
+      const orchestrator = makeOrchestrator({
+        config: {
+          ...DEFAULT_CONFIG,
+          dryRun: true,
+          enableCaching: false,
+          analyticsEnabled: false,
+          graphEnabled: false,
+          providers: providers.map((provider) => provider.name),
+          fallbackProviders: [],
+          providerLimit: 2,
+          batchMaxFiles: 1,
+          enableTokenAwareBatching: false,
+        },
+        providerRegistry: {
+          createProviders: jest.fn().mockResolvedValue(providers),
+          discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+        } as any,
+        llmExecutor: {
+          filterHealthyProviders: jest.fn().mockResolvedValue({
+            healthy: providers,
+            healthCheckResults: [],
+          }),
+          execute,
+        } as any,
+      });
+
+      const review = await orchestrator.executeReview(
+        makePR([
+          {
+            filename: 'a.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+          },
+          {
+            filename: 'b.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+          },
+        ])
+      );
+
+      expect(review).toBeTruthy();
+      expect(execute).toHaveBeenCalledTimes(2);
+      expect(review.metrics.providersSuccess).toBe(1);
+      expect(review.metrics.providersFailed).toBe(1);
+    } finally {
+      if (previousFailOnNoHealthy === undefined) {
+        delete process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
+      } else {
+        process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = previousFailOnNoHealthy;
+      }
+    }
+  });
+
   it('fails when every LLM provider fails and provider failure is configured as blocking', async () => {
     const previousFailOnNoHealthy = process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
     process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';

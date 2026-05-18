@@ -26,19 +26,37 @@ describe('OpenRouterProvider Integration', () => {
         status: 200,
         statusText: 'OK',
         json: async () => ({
-          choices: [{
-            message: {
-              content: JSON.stringify({
-                findings: [
-                  { file: 'src/app.ts', line: 10, severity: 'critical', title: 'Security Issue', message: 'SQL injection risk' },
-                  { file: 'src/app.ts', line: 20, severity: 'major', title: 'Performance', message: 'Inefficient loop' }
-                ]
-              })
-            }
-          }],
-          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 }
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  findings: [
+                    {
+                      file: 'src/app.ts',
+                      line: 10,
+                      severity: 'critical',
+                      title: 'Security Issue',
+                      message: 'SQL injection risk',
+                    },
+                    {
+                      file: 'src/app.ts',
+                      line: 20,
+                      severity: 'major',
+                      title: 'Performance',
+                      message: 'Inefficient loop',
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+          },
         }),
-        headers: new Map()
+        headers: new Map(),
       } as any);
 
       const result = await provider.review('test prompt', 5000);
@@ -58,16 +76,24 @@ describe('OpenRouterProvider Integration', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          choices: [{
-            message: {
-              content: JSON.stringify([
-                { file: 'test.ts', line: 5, severity: 'minor', title: 'Style', message: 'Use const' }
-              ])
-            }
-          }],
-          usage: { total_tokens: 75 }
+          choices: [
+            {
+              message: {
+                content: JSON.stringify([
+                  {
+                    file: 'test.ts',
+                    line: 5,
+                    severity: 'minor',
+                    title: 'Style',
+                    message: 'Use const',
+                  },
+                ]),
+              },
+            },
+          ],
+          usage: { total_tokens: 75 },
         }),
-        headers: new Map()
+        headers: new Map(),
       } as any);
 
       const result = await provider.review('test', 5000);
@@ -83,14 +109,17 @@ describe('OpenRouterProvider Integration', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          choices: [{
-            message: {
-              content: '```json\n{"findings": [{"file": "a.ts", "line": 1, "severity": "major", "title": "Test", "message": "Fix this"}]}\n```'
-            }
-          }],
-          usage: { total_tokens: 50 }
+          choices: [
+            {
+              message: {
+                content:
+                  '```json\n{"findings": [{"file": "a.ts", "line": 1, "severity": "major", "title": "Test", "message": "Fix this"}]}\n```',
+              },
+            },
+          ],
+          usage: { total_tokens: 50 },
         }),
-        headers: new Map()
+        headers: new Map(),
       } as any);
 
       const result = await provider.review('test', 5000);
@@ -105,40 +134,45 @@ describe('OpenRouterProvider Integration', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          choices: [{
-            message: {
-              content: JSON.stringify({
-                findings: [],
-                ai_likelihood: 0.85,
-                ai_reasoning: 'Code appears to be AI-generated based on patterns'
-              })
-            }
-          }],
-          usage: { total_tokens: 100 }
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  findings: [],
+                  ai_likelihood: 0.85,
+                  ai_reasoning:
+                    'Code appears to be AI-generated based on patterns',
+                }),
+              },
+            },
+          ],
+          usage: { total_tokens: 100 },
         }),
-        headers: new Map()
+        headers: new Map(),
       } as any);
 
       const result = await provider.review('test', 5000);
 
       expect(result.aiLikelihood).toBe(0.85);
-      expect(result.aiReasoning).toBe('Code appears to be AI-generated based on patterns');
+      expect(result.aiReasoning).toBe(
+        'Code appears to be AI-generated based on patterns'
+      );
     });
 
     it('should track duration correctly', async () => {
       const provider = new OpenRouterProvider('test-model', apiKey, limiter);
 
       global.fetch = jest.fn().mockImplementation(() => {
-        return new Promise(resolve => {
+        return new Promise((resolve) => {
           setTimeout(() => {
             resolve({
               ok: true,
               status: 200,
               json: async () => ({
                 choices: [{ message: { content: '[]' } }],
-                usage: { total_tokens: 10 }
+                usage: { total_tokens: 10 },
               }),
-              headers: new Map()
+              headers: new Map(),
             });
           }, 100);
         });
@@ -161,11 +195,13 @@ describe('OpenRouterProvider Integration', () => {
         status: 429,
         statusText: 'Too Many Requests',
         headers: {
-          get: (name: string) => name === 'retry-after' ? '120' : null
-        }
+          get: (name: string) => (name === 'retry-after' ? '120' : null),
+        },
       } as any);
 
-      await expect(provider.review('test', 5000)).rejects.toThrow(RateLimitError);
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        RateLimitError
+      );
     });
 
     it('should respect rate limit before making request', async () => {
@@ -177,7 +213,9 @@ describe('OpenRouterProvider Integration', () => {
       await limiter.markRateLimited('openrouter/test-model', 1, 'Test');
 
       // Should throw immediately without calling fetch
-      await expect(provider.review('test', 5000)).rejects.toThrow(RateLimitError);
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        RateLimitError
+      );
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
@@ -188,8 +226,8 @@ describe('OpenRouterProvider Integration', () => {
         ok: false,
         status: 429,
         headers: {
-          get: (name: string) => name === 'retry-after' ? '300' : null
-        }
+          get: (name: string) => (name === 'retry-after' ? '300' : null),
+        },
       } as any);
 
       try {
@@ -210,8 +248,8 @@ describe('OpenRouterProvider Integration', () => {
         ok: false,
         status: 429,
         headers: {
-          get: () => null
-        }
+          get: () => null,
+        },
       } as any);
 
       try {
@@ -232,10 +270,12 @@ describe('OpenRouterProvider Integration', () => {
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
-        headers: new Map()
+        headers: new Map(),
       } as any);
 
-      await expect(provider.review('test', 5000)).rejects.toThrow('OpenRouter API error: 500');
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        'OpenRouter API error: 500'
+      );
     });
 
     it('should handle invalid JSON response', async () => {
@@ -244,14 +284,15 @@ describe('OpenRouterProvider Integration', () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({ choices: [{ message: { content: 'not valid json' } }] }),
-        headers: new Map()
+        json: async () => ({
+          choices: [{ message: { content: 'not valid json' } }],
+        }),
+        headers: new Map(),
       } as any);
 
-      const result = await provider.review('test', 5000);
-
-      // Should return empty findings array on parse error
-      expect(result.findings).toEqual([]);
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        'OpenRouter returned invalid review JSON: response was not valid JSON'
+      );
     });
 
     it('should handle missing choices in response', async () => {
@@ -261,13 +302,12 @@ describe('OpenRouterProvider Integration', () => {
         ok: true,
         status: 200,
         json: async () => ({}),
-        headers: new Map()
+        headers: new Map(),
       } as any);
 
-      const result = await provider.review('test', 5000);
-
-      expect(result.content).toBe('');
-      expect(result.findings).toEqual([]);
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        'OpenRouter returned invalid review JSON: response was not valid JSON'
+      );
     });
 
     it('should handle timeout with AbortController', async () => {
@@ -285,8 +325,10 @@ describe('OpenRouterProvider Integration', () => {
             } else {
               resolve({
                 ok: true,
-                json: async () => ({ choices: [{ message: { content: '[]' } }] }),
-                headers: new Map()
+                json: async () => ({
+                  choices: [{ message: { content: '[]' } }],
+                }),
+                headers: new Map(),
               });
             }
           }, 200);
@@ -313,7 +355,9 @@ describe('OpenRouterProvider Integration', () => {
 
       global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
 
-      await expect(provider.review('test', 5000)).rejects.toThrow('Network error');
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        'Network error'
+      );
     });
   });
 
@@ -329,18 +373,22 @@ describe('OpenRouterProvider Integration', () => {
           status: 200,
           json: async () => ({
             choices: [{ message: { content: '[]' } }],
-            usage: { total_tokens: 10 }
+            usage: { total_tokens: 10 },
           }),
-          headers: new Map()
+          headers: new Map(),
         });
       });
 
       await provider.review('test prompt', 5000);
 
       expect(capturedRequest.method).toBe('POST');
-      expect(capturedRequest.headers['Authorization']).toBe('Bearer test-api-key');
+      expect(capturedRequest.headers['Authorization']).toBe(
+        'Bearer test-api-key'
+      );
       expect(capturedRequest.headers['Content-Type']).toBe('application/json');
-      expect(capturedRequest.headers['HTTP-Referer']).toContain('review-router');
+      expect(capturedRequest.headers['HTTP-Referer']).toContain(
+        'review-router'
+      );
 
       const body = JSON.parse(capturedRequest.body);
       expect(body.model).toBe('test-model');
@@ -365,9 +413,9 @@ describe('OpenRouterProvider Integration', () => {
           status: 200,
           json: async () => ({
             choices: [{ message: { content: '[]' } }],
-            usage: { total_tokens: 10 }
+            usage: { total_tokens: 10 },
           }),
-          headers: new Map()
+          headers: new Map(),
         });
       });
 
@@ -386,11 +434,13 @@ describe('OpenRouterProvider Integration', () => {
         return Promise.resolve({
           ok: false,
           status: 429,
-          headers: { get: () => '60' }
+          headers: { get: () => '60' },
         });
       });
 
-      await expect(provider.review('test', 5000)).rejects.toThrow(RateLimitError);
+      await expect(provider.review('test', 5000)).rejects.toThrow(
+        RateLimitError
+      );
 
       // Should only call once (no retry on rate limit)
       expect(callCount).toBe(1);

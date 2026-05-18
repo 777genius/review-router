@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import { withRetry } from '../utils/retry';
 import {
   buildReviewFindingsSchema,
-  parseReviewOutputLenient,
+  parseReviewOutputStrict,
 } from './review-output';
 // Node 18+ provides global fetch; if unavailable, we throw a clear error.
 
@@ -167,7 +167,7 @@ export class OpenRouterProvider extends Provider {
       const content = extractReviewContent(message);
       const usage = data.usage;
       const actualModel = data.model;  // Capture which model OpenRouter actually routed to
-      const parsedOutput = parseReviewOutputLenient(content);
+      const parsedOutput = parseReviewOutputStrict(content, 'OpenRouter');
       const findings = parsedOutput.findings;
       const aiAnalysis = this.extractAIAnalysis(content);
 

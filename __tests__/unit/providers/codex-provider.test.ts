@@ -231,6 +231,30 @@ describe('CodexProvider', () => {
     );
   });
 
+  it('adds a strict JSON-only output contract to agentic prompts', async () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const prompt = await (provider as any).wrapAgenticReviewPrompt(
+      'review prompt'
+    );
+
+    expect(prompt).toContain('Return ONLY one valid JSON object');
+    expect(prompt).toContain('No markdown, no prose, no code fences');
+    expect(prompt).toContain('comments, trailing commas');
+    expect(prompt).toContain('{"findings":[],"revalidations":[]}');
+  });
+
+  it('adds a strict JSON-only output contract to prompt-only prompts', () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const prompt = (provider as any).wrapPromptOnlyReviewPrompt(
+      'review prompt'
+    );
+
+    expect(prompt).toContain('Return ONLY one valid JSON object');
+    expect(prompt).toContain('No markdown, no prose, no code fences');
+    expect(prompt).toContain('comments, trailing commas');
+    expect(prompt).toContain('{"findings":[],"revalidations":[]}');
+  });
+
   it('parses strict schema findings with nullable suggestion', () => {
     const provider = new CodexProvider('gpt-5.4-mini');
     const findings = (provider as any).extractFindings(

@@ -138,7 +138,7 @@ if (response.status === 429) {
 
 **Configuration:**
 ```yaml
-- PROVIDER_RETRIES: 3           # Max retry attempts
+- PROVIDER_RETRIES: 3           # Total attempts for structured-output retries
 - PROVIDER_MAX_PARALLEL: 5      # Concurrent provider calls
 ```
 

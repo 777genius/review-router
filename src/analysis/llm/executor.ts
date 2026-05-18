@@ -4,6 +4,11 @@ import { ReviewConfig, ProviderResult } from '../../types';
 import { createQueue } from '../../utils/parallel';
 import { withRetry } from '../../utils/retry';
 import { logger } from '../../utils/logger';
+import {
+  buildProviderReviewPromptForAttempt,
+  getProviderReviewTotalAttempts,
+  shouldRetryProviderReviewError,
+} from './retry-policy';
 
 type ErrorWithCode = Error & { code?: string };
 
@@ -99,15 +104,25 @@ export class LLMExecutor {
         const started = Date.now();
         const actualTimeoutMs = timeoutMs ?? (this.config.runTimeoutSeconds * 1000);
 
-        const runner = async () => provider.review(prompt, actualTimeoutMs);
+        const totalAttempts = getProviderReviewTotalAttempts(this.config.providerRetries);
+        let attempt = 0;
+        let previousError: Error | undefined;
+        const runner = async () => {
+          attempt += 1;
+          return provider.review(
+            buildProviderReviewPromptForAttempt(prompt, attempt, previousError),
+            actualTimeoutMs
+          );
+        };
 
         try {
           const result = await withRetry(runner, {
-            retries: Math.max(0, this.config.providerRetries - 1),
+            retries: totalAttempts - 1,
+            minTimeout: 0,
+            maxTimeout: 0,
             retryOn: error => {
-              if (error instanceof RateLimitError) return false;
-              if (error.message.includes('timed out after')) return false;
-              return true;
+              previousError = error;
+              return shouldRetryProviderReviewError(error);
             },
           });
           results.push({
@@ -124,7 +139,14 @@ export class LLMExecutor {
           } else if (err.name === 'TimeoutError' || err.message.toLowerCase().includes('timed out') || err.code === 'ETIMEDOUT') {
             status = 'timeout';
           }
-          logger.warn(`Provider ${provider.name} failed: ${err.message}`);
+          const structuredFailure = shouldRetryProviderReviewError(err);
+          if (structuredFailure) {
+            logger.warn(
+              `Provider ${provider.name} failed structured output after ${totalAttempts} attempt(s): ${err.message}`
+            );
+          } else {
+            logger.warn(`Provider ${provider.name} failed: ${err.message}`);
+          }
           results.push({
             name: provider.name,
             status,

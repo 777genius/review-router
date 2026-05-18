@@ -133,9 +133,9 @@ inputs:
     required: false
     default: "1"
   PROVIDER_RETRIES:
-    description: "Retries per provider"
+    description: "Total attempts per provider for retryable structured-output failures"
     required: false
-    default: "0"
+    default: "3"
   PROVIDER_MAX_PARALLEL:
     description: "Maximum providers to run in parallel"
     required: false
@@ -161,7 +161,7 @@ inputs:
     required: false
     default: "false"
   FAIL_ON_NO_HEALTHY_PROVIDERS:
-    description: "Fail the action if no provider passes health checks"
+    description: "Fail the action if no provider produces usable review output"
     required: false
     default: "true"
   DIFF_MAX_BYTES:

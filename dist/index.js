@@ -7180,7 +7180,7 @@ var DEFAULT_CONFIG = {
   // Health-check pool size (higher = better reliability)
   providerLimit: 1,
   // Actual execution pool size (lower = lower costs)
-  providerRetries: 0,
+  providerRetries: 3,
   providerMaxParallel: 1,
   quietModeEnabled: false,
   quietMinConfidence: 0.5,
@@ -12281,19 +12281,6 @@ function parseReviewOutputStrict(content, providerLabel) {
     revalidations: parseRevalidationsLenient(rawRevalidations, providerLabel)
   };
 }
-function parseReviewOutputLenient(content) {
-  try {
-    const parsed = parseReviewJson(content, "provider");
-    const findings = Array.isArray(parsed) ? parsed : parsed?.findings || [];
-    const rawRevalidations = Array.isArray(parsed) ? [] : parsed?.revalidations;
-    return {
-      findings: Array.isArray(findings) ? findings : [],
-      revalidations: parseRevalidationsLenient(rawRevalidations, "provider")
-    };
-  } catch {
-    return { findings: [], revalidations: [] };
-  }
-}
 function parseReviewJson(content, providerLabel) {
   const trimmed = content.trim();
   const match2 = trimmed.match(/```json\s*([\s\S]*?)```/i);
@@ -12430,7 +12417,7 @@ var OpenCodeProvider = class extends Provider {
           `OpenCode CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`
         );
       }
-      const parsedOutput = parseReviewOutputLenient(content);
+      const parsedOutput = parseReviewOutputStrict(content, "OpenCode CLI");
       return {
         content,
         durationSeconds,
@@ -13768,6 +13755,9 @@ var CodexProvider = class extends Provider {
       "",
       "FINAL OUTPUT CONTRACT:",
       'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}],"revalidations":[{"targetId":"rrt_example","fingerprint":"abc","verdict":"resolved","confidence":0.9,"evidence":[{"path":"src/file.ts","startLine":1,"endLine":2,"reason":"why current code fixes it"}],"rationale":"short reason"}]}',
+      "Return ONLY one valid JSON object.",
+      "No markdown, no prose, no code fences, comments, trailing commas, or text before/after the JSON.",
+      'If no findings, return exactly {"findings":[],"revalidations":[]}.',
       'The "findings" array may be empty. "severity" must be one of "critical", "major", or "minor".',
       'The "revalidations" array may be empty. Include entries only for targetId values listed in the deterministic prompt.',
       'When the issue covers a changed block, set "startLine" to the first affected RIGHT-side line and "endLine" to the last affected RIGHT-side line; keep "line" equal to "endLine". For single-line findings, set "startLine" and "endLine" to null.',
@@ -13785,6 +13775,9 @@ var CodexProvider = class extends Provider {
       "",
       "FINAL OUTPUT CONTRACT:",
       'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}],"revalidations":[{"targetId":"rrt_example","fingerprint":"abc","verdict":"resolved","confidence":0.9,"evidence":[{"path":"src/file.ts","startLine":1,"endLine":2,"reason":"why current code fixes it"}],"rationale":"short reason"}]}',
+      "Return ONLY one valid JSON object.",
+      "No markdown, no prose, no code fences, comments, trailing commas, or text before/after the JSON.",
+      'If no findings, return exactly {"findings":[],"revalidations":[]}.',
       'The "findings" array may be empty. The "suggestion" field is required and may be null.',
       'The "revalidations" array may be empty. Include entries only for targetId values listed in the deterministic prompt.',
       'When the issue covers a changed block, set "startLine" to the first affected RIGHT-side line and "endLine" to the last affected RIGHT-side line; keep "line" equal to "endLine". For single-line findings, set "startLine" and "endLine" to null.',
@@ -14503,7 +14496,7 @@ var GeminiProvider = class extends Provider {
       if (!content) {
         throw new Error(`Gemini CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`);
       }
-      const parsedOutput = parseReviewOutputLenient(content);
+      const parsedOutput = parseReviewOutputStrict(content, "Gemini CLI");
       return {
         content,
         durationSeconds,
@@ -15540,6 +15533,11 @@ var PromptBuilder = class {
       compacted.summaryOnlyFiles.map((file) => [file.filename, file])
     );
     const skipSuggestions = compacted.summaryOnlyFiles.length > 0 || this.shouldSkipSuggestions(pr.diff);
+    const jsonOnlyOutputRules = [
+      "Return ONLY one valid JSON object.",
+      "No markdown, no prose, no code fences, comments, trailing commas, or text before/after the JSON.",
+      'If no findings, return exactly {"findings":[],"revalidations":[]}.'
+    ];
     const filesInDiff = /* @__PURE__ */ new Set();
     const diffGitPattern = /^diff --git a\/(.+?) b\/(.+?)$/gm;
     let match2;
@@ -15597,6 +15595,7 @@ var PromptBuilder = class {
     if (skipSuggestions) {
       instructions.push(
         'Return JSON object: {"findings":[{file, startLine, line, endLine, severity, title, message}],"revalidations":[{targetId, fingerprint, verdict, confidence, evidence, rationale}]}',
+        ...jsonOnlyOutputRules,
         "Use startLine/endLine for a changed block when useful; keep line equal to endLine. Use null for startLine/endLine on single-line findings.",
         'If no existing findings are provided for revalidation, return "revalidations": [].',
         ""
@@ -15604,6 +15603,7 @@ var PromptBuilder = class {
     } else {
       instructions.push(
         'Return JSON object: {"findings":[{file, startLine, line, endLine, severity, title, message, suggestion}],"revalidations":[{targetId, fingerprint, verdict, confidence, evidence, rationale}]}',
+        ...jsonOnlyOutputRules,
         "Use startLine/endLine for a changed block when useful; keep line equal to endLine. Use null for startLine/endLine on single-line findings.",
         'If no existing findings are provided for revalidation, return "revalidations": [].',
         "",
@@ -16465,6 +16465,84 @@ async function withRetry(fn, options) {
   });
 }
 
+// src/analysis/llm/retry-policy.ts
+var STRUCTURED_OUTPUT_RETRY_PATTERNS = [
+  "returned invalid review json",
+  "response was not valid json",
+  "expected an object with a findings array",
+  "missing required file, line, severity, title, or message"
+];
+var NON_RETRY_PATTERNS = [
+  "timed out",
+  "timeout",
+  "ratelimiterror",
+  "rate limit",
+  "rate_limit",
+  "rate-limited",
+  "rate limited",
+  "401",
+  "402",
+  "403",
+  "429",
+  "unauthorized",
+  "forbidden",
+  "authentication",
+  "auth error",
+  "oauth",
+  "api key",
+  "invalid secret",
+  "quota",
+  "quota_exceeded",
+  "insufficient_quota",
+  "payment required",
+  "model unavailable",
+  "model not available",
+  "model_not_found",
+  "not found",
+  "does not exist",
+  "unsupported model"
+];
+function getProviderReviewTotalAttempts(configuredAttempts) {
+  if (!Number.isFinite(configuredAttempts)) {
+    return 1;
+  }
+  return Math.max(1, Math.floor(configuredAttempts ?? 1));
+}
+function shouldRetryProviderReviewError(error2) {
+  if (error2 instanceof RateLimitError || error2.name === "RateLimitError") {
+    return false;
+  }
+  const text = formatErrorForClassification(error2).toLowerCase();
+  if (NON_RETRY_PATTERNS.some((pattern) => text.includes(pattern))) {
+    return false;
+  }
+  return STRUCTURED_OUTPUT_RETRY_PATTERNS.some(
+    (pattern) => text.includes(pattern)
+  );
+}
+function buildProviderReviewPromptForAttempt(basePrompt, attempt, previousError) {
+  if (attempt <= 1) {
+    return basePrompt;
+  }
+  const reason = previousError ? ` Reason: ${sanitizeRetryReason(previousError.message)}` : "";
+  return [
+    basePrompt,
+    "",
+    "JSON OUTPUT RETRY NOTICE:",
+    `Attempt ${attempt}: the previous response was rejected because it did not produce valid ReviewRouter JSON.${reason}`,
+    "Return ONLY one valid JSON object matching the required schema.",
+    "No markdown, no prose, no code fences, comments, trailing commas, or text before/after the JSON.",
+    'If no findings, return exactly {"findings":[],"revalidations":[]}.'
+  ].join("\n");
+}
+function formatErrorForClassification(error2) {
+  const errorWithCode = error2;
+  return [error2.name, errorWithCode.code, error2.message].filter(Boolean).join(" ");
+}
+function sanitizeRetryReason(message) {
+  return message.replace(/sk-[A-Za-z0-9_-]+/g, "sk-[redacted]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "gh[redacted]").replace(/refresh[_-]?token[=:]\S+/gi, "refresh_token=[redacted]").slice(0, 240);
+}
+
 // src/analysis/llm/executor.ts
 var LLMExecutor = class {
   constructor(config) {
@@ -16539,14 +16617,24 @@ var LLMExecutor = class {
       tasks.push(queue.add(async () => {
         const started = Date.now();
         const actualTimeoutMs = timeoutMs ?? this.config.runTimeoutSeconds * 1e3;
-        const runner = async () => provider.review(prompt, actualTimeoutMs);
+        const totalAttempts = getProviderReviewTotalAttempts(this.config.providerRetries);
+        let attempt = 0;
+        let previousError;
+        const runner = async () => {
+          attempt += 1;
+          return provider.review(
+            buildProviderReviewPromptForAttempt(prompt, attempt, previousError),
+            actualTimeoutMs
+          );
+        };
         try {
           const result = await withRetry(runner, {
-            retries: Math.max(0, this.config.providerRetries - 1),
+            retries: totalAttempts - 1,
+            minTimeout: 0,
+            maxTimeout: 0,
             retryOn: (error2) => {
-              if (error2 instanceof RateLimitError) return false;
-              if (error2.message.includes("timed out after")) return false;
-              return true;
+              previousError = error2;
+              return shouldRetryProviderReviewError(error2);
             }
           });
           results.push({
@@ -16563,7 +16651,14 @@ var LLMExecutor = class {
           } else if (err.name === "TimeoutError" || err.message.toLowerCase().includes("timed out") || err.code === "ETIMEDOUT") {
             status = "timeout";
           }
-          logger.warn(`Provider ${provider.name} failed: ${err.message}`);
+          const structuredFailure = shouldRetryProviderReviewError(err);
+          if (structuredFailure) {
+            logger.warn(
+              `Provider ${provider.name} failed structured output after ${totalAttempts} attempt(s): ${err.message}`
+            );
+          } else {
+            logger.warn(`Provider ${provider.name} failed: ${err.message}`);
+          }
           results.push({
             name: provider.name,
             status,
@@ -31152,10 +31247,25 @@ var ReviewOrchestrator = class {
             for (const [batchIndex, result] of settled.entries()) {
               if (result.status === "fulfilled") {
                 batchResults.push(...result.value);
-                if (result.value.some((r) => r.status !== "success")) {
-                  batchFailures += 1;
-                } else {
+                const successfulProviders = result.value.filter(
+                  (r) => r.status === "success"
+                );
+                const degradedProviders = result.value.filter(
+                  (r) => r.status !== "success"
+                );
+                if (successfulProviders.length > 0) {
                   batchSuccesses += 1;
+                  for (const degraded of degradedProviders) {
+                    const structuredOutputFailure = degraded.error && shouldRetryProviderReviewError(degraded.error);
+                    const reason = this.redactProviderFailureReason(
+                      degraded.error?.message || degraded.status
+                    );
+                    logger.warn(
+                      structuredOutputFailure ? `Provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); continuing with successful providers. ${reason}` : `Provider ${degraded.name} degraded; continuing with successful providers. ${reason}`
+                    );
+                  }
+                } else {
+                  batchFailures += 1;
                 }
               } else {
                 batchFailures += 1;
@@ -33779,7 +33889,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.47",
+  version: "1.0.48",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

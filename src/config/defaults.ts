@@ -18,7 +18,7 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   // Combined these settings ensure zero cost when using default configuration
   providerDiscoveryLimit: 8, // Health-check pool size (higher = better reliability)
   providerLimit: 1, // Actual execution pool size (lower = lower costs)
-  providerRetries: 0,
+  providerRetries: 3,
   providerMaxParallel: 1,
   quietModeEnabled: false,
   quietMinConfidence: 0.5,

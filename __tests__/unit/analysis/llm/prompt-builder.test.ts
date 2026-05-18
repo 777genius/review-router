@@ -37,6 +37,16 @@ describe('PromptBuilder', () => {
       );
     });
 
+    it('includes strict JSON-only output instructions', async () => {
+      const builder = new PromptBuilder(DEFAULT_CONFIG);
+      const prompt = await builder.build(mockPR);
+
+      expect(prompt).toContain('Return ONLY one valid JSON object');
+      expect(prompt).toContain('No markdown, no prose, no code fences');
+      expect(prompt).toContain('comments, trailing commas');
+      expect(prompt).toContain('{"findings":[],"revalidations":[]}');
+    });
+
     it('includes fixable issue type guidance', async () => {
       const builder = new PromptBuilder(DEFAULT_CONFIG);
       const prompt = await builder.build(mockPR);

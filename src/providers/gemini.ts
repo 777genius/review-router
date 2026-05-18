@@ -6,7 +6,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { parseReviewOutputLenient } from './review-output';
+import { parseReviewOutputStrict } from './review-output';
 
 export class GeminiProvider extends Provider {
   constructor(private readonly model: string) {
@@ -80,7 +80,7 @@ export class GeminiProvider extends Provider {
       if (!content) {
         throw new Error(`Gemini CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`);
       }
-      const parsedOutput = parseReviewOutputLenient(content);
+      const parsedOutput = parseReviewOutputStrict(content, 'Gemini CLI');
       return {
         content,
         durationSeconds,

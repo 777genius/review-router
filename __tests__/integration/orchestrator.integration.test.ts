@@ -1,5 +1,13 @@
-import { ReviewOrchestrator, ReviewComponents } from '../../src/core/orchestrator';
-import { ReviewConfig, PRContext, Finding, ProviderResult } from '../../src/types';
+import {
+  ReviewOrchestrator,
+  ReviewComponents,
+} from '../../src/core/orchestrator';
+import {
+  ReviewConfig,
+  PRContext,
+  Finding,
+  ProviderResult,
+} from '../../src/types';
 import { ConsensusEngine } from '../../src/analysis/consensus';
 import { Deduplicator } from '../../src/analysis/deduplicator';
 import { SynthesisEngine } from '../../src/analysis/synthesis';
@@ -31,7 +39,13 @@ class FakeProvider extends Provider {
     return {
       content: 'ok',
       findings: [
-        { file: 'src/index.ts', line: 15, severity: 'major', title: 'LLM issue', message: 'From LLM' },
+        {
+          file: 'src/index.ts',
+          line: 15,
+          severity: 'major',
+          title: 'LLM issue',
+          message: 'From LLM',
+        },
       ],
     };
   }
@@ -40,12 +54,18 @@ class FakeProvider extends Provider {
 class StubLLMExecutor {
   lastTimeoutMs: number | undefined;
 
-  async filterHealthyProviders(providers: Provider[]): Promise<{ healthy: Provider[]; healthCheckResults: ProviderResult[] }> {
+  async filterHealthyProviders(
+    providers: Provider[]
+  ): Promise<{ healthy: Provider[]; healthCheckResults: ProviderResult[] }> {
     // In tests, assume all providers are healthy
     return { healthy: providers, healthCheckResults: [] };
   }
 
-  async execute(_providers?: Provider[], _prompt?: string, timeoutMs?: number): Promise<ProviderResult[]> {
+  async execute(
+    _providers?: Provider[],
+    _prompt?: string,
+    timeoutMs?: number
+  ): Promise<ProviderResult[]> {
     this.lastTimeoutMs = timeoutMs;
     const provider = new FakeProvider();
     const result = await provider.review('', 1000);
@@ -124,7 +144,10 @@ class StubFeedbackFilter {
   async loadSuppressed(): Promise<Set<string>> {
     return new Set();
   }
-  async loadReviewCommentState(): Promise<{ suppressed: Set<string>; alreadyPosted: Set<string> }> {
+  async loadReviewCommentState(): Promise<{
+    suppressed: Set<string>;
+    alreadyPosted: Set<string>;
+  }> {
     return {
       suppressed: new Set(),
       alreadyPosted: new Set(),
@@ -176,7 +199,11 @@ describe('ReviewOrchestrator integration (offline)', () => {
       promptBuilder: new PromptBuilder(config),
       llmExecutor: llmExecutor as any,
       deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
       synthesis: new SynthesisEngine(config),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
@@ -189,7 +216,14 @@ describe('ReviewOrchestrator integration (offline)', () => {
         mergeFindings: (prev: any, curr: any) => curr,
         generateIncrementalSummary: () => '',
       } as any,
-      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
       security: new SecurityScanner(),
       rules: new RulesEngine([]),
       prLoader: new StubPRLoader() as unknown as PullRequestLoader,
@@ -208,7 +242,102 @@ describe('ReviewOrchestrator integration (offline)', () => {
     expect(review).toBeTruthy();
     expect(review?.findings.length).toBeGreaterThanOrEqual(1); // At least one finding from AST or LLM
     expect(review?.inlineComments.length).toBe(1);
-    expect((components.commentPoster as unknown as StubCommentPoster).postedSummary).toBeTruthy();
+    expect(
+      (components.commentPoster as unknown as StubCommentPoster).postedSummary
+    ).toBeTruthy();
+  });
+
+  it('replaces the progress comment with the final summary when findings are posted', async () => {
+    const createComment = jest.fn().mockResolvedValue({ data: { id: 456 } });
+    const updateComment = jest.fn().mockResolvedValue({ data: {} });
+    const listComments = jest.fn().mockResolvedValue({ data: [] });
+    const listReviewComments = jest.fn().mockResolvedValue({ data: [] });
+    const getPullRequest = jest
+      .fn()
+      .mockResolvedValue({ data: { head: { sha: 'head' } } });
+    const githubClient = {
+      owner: 'test-owner',
+      repo: 'test-repo',
+      octokit: {
+        rest: {
+          issues: {
+            createComment,
+            updateComment,
+            listComments,
+          },
+          pulls: {
+            get: getPullRequest,
+            listReviewComments,
+          },
+        },
+      },
+    };
+    const commentPoster = new StubCommentPoster();
+    const components: ReviewComponents = {
+      config,
+      providerRegistry: new StubProviderRegistry() as any,
+      promptBuilder: new PromptBuilder(config),
+      llmExecutor: new StubLLMExecutor() as any,
+      deduplicator: new Deduplicator(),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
+      synthesis: new SynthesisEngine(config),
+      testCoverage: new TestCoverageAnalyzer(),
+      astAnalyzer: new ASTAnalyzer(),
+      cache: new NoopCache(),
+      incrementalReviewer: {
+        shouldUseIncremental: async () => false,
+        getLastReview: async () => null,
+        saveReview: async () => {},
+        getChangedFilesSince: async () => [],
+        mergeFindings: (prev: any, curr: any) => curr,
+        generateIncrementalSummary: () => '',
+      } as any,
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
+      security: new SecurityScanner(),
+      rules: new RulesEngine([]),
+      prLoader: new StubPRLoader() as unknown as PullRequestLoader,
+      commentPoster: commentPoster as unknown as CommentPoster,
+      formatter: new MarkdownFormatter(),
+      contextRetriever: new ContextRetriever(),
+      impactAnalyzer: new ImpactAnalyzer(),
+      evidenceScorer: new EvidenceScorer(),
+      mermaidGenerator: new MermaidGenerator(),
+      feedbackFilter: new StubFeedbackFilter() as unknown as FeedbackFilter,
+      githubClient: githubClient as any,
+    };
+
+    const review = await new ReviewOrchestrator(components).execute(1);
+
+    expect(review?.findings.length).toBeGreaterThan(0);
+    expect(commentPoster.postedSummary).toBeNull();
+    expect(commentPoster.postedInline.length).toBeGreaterThan(0);
+
+    const lastUpdate =
+      updateComment.mock.calls[updateComment.mock.calls.length - 1]?.[0];
+    expect(lastUpdate).toEqual(
+      expect.objectContaining({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        comment_id: 456,
+      })
+    );
+    expect(lastUpdate.body).toContain('<!-- review-router-bot -->');
+    expect(lastUpdate.body).toContain('# ReviewRouter');
+    expect(lastUpdate.body).toContain('<!-- review-router-summary:');
+    expect(lastUpdate.body).not.toContain(
+      '<!-- review-router-progress-tracker -->'
+    );
   });
 
   it('uses RUN_TIMEOUT_SECONDS as a floor for intensity timeout', async () => {
@@ -228,7 +357,11 @@ describe('ReviewOrchestrator integration (offline)', () => {
       promptBuilder: new PromptBuilder(config),
       llmExecutor: llmExecutor as any,
       deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
       synthesis: new SynthesisEngine(config),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
@@ -241,7 +374,14 @@ describe('ReviewOrchestrator integration (offline)', () => {
         mergeFindings: (prev: any, curr: any) => curr,
         generateIncrementalSummary: () => '',
       } as any,
-      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
       security: new SecurityScanner(),
       rules: new RulesEngine([]),
       prLoader: new StubPRLoader() as unknown as PullRequestLoader,
@@ -262,7 +402,10 @@ describe('ReviewOrchestrator integration (offline)', () => {
 
   it('filters duplicate inline comments before posting', async () => {
     class BlockingFeedbackFilter extends StubFeedbackFilter {
-      async loadReviewCommentState(): Promise<{ suppressed: Set<string>; alreadyPosted: Set<string> }> {
+      async loadReviewCommentState(): Promise<{
+        suppressed: Set<string>;
+        alreadyPosted: Set<string>;
+      }> {
         return {
           suppressed: new Set(),
           alreadyPosted: new Set(['existing-finding']),
@@ -281,7 +424,11 @@ describe('ReviewOrchestrator integration (offline)', () => {
       promptBuilder: new PromptBuilder(config),
       llmExecutor: new StubLLMExecutor() as any,
       deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
       synthesis: new SynthesisEngine(config),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
@@ -294,7 +441,14 @@ describe('ReviewOrchestrator integration (offline)', () => {
         mergeFindings: (prev: any, curr: any) => curr,
         generateIncrementalSummary: () => '',
       } as any,
-      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
       security: new SecurityScanner(),
       rules: new RulesEngine([]),
       prLoader: new StubPRLoader() as unknown as PullRequestLoader,
@@ -316,7 +470,10 @@ describe('ReviewOrchestrator integration (offline)', () => {
 
   it('normalizes model-reported finding lines before rendering the summary', async () => {
     class LineMismatchLLMExecutor {
-      async filterHealthyProviders(providers: Provider[]): Promise<{ healthy: Provider[]; healthCheckResults: ProviderResult[] }> {
+      async filterHealthyProviders(providers: Provider[]): Promise<{
+        healthy: Provider[];
+        healthCheckResults: ProviderResult[];
+      }> {
         return { healthy: providers, healthCheckResults: [] };
       }
 
@@ -333,7 +490,8 @@ describe('ReviewOrchestrator integration (offline)', () => {
                   line: 8,
                   severity: 'critical',
                   title: 'Interpolated billing query allows SQL injection',
-                  message: 'The changed line builds SQL with normalizedEmail inside the query string.',
+                  message:
+                    'The changed line builds SQL with normalizedEmail inside the query string.',
                 },
               ],
             },
@@ -396,7 +554,11 @@ describe('ReviewOrchestrator integration (offline)', () => {
       promptBuilder: new PromptBuilder(lineConfig),
       llmExecutor: new LineMismatchLLMExecutor() as any,
       deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
       synthesis: new SynthesisEngine(lineConfig),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
@@ -409,7 +571,14 @@ describe('ReviewOrchestrator integration (offline)', () => {
         mergeFindings: (prev: any, curr: any) => curr,
         generateIncrementalSummary: () => '',
       } as any,
-      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
       security: new SecurityScanner(),
       rules: new RulesEngine([]),
       prLoader: new BillingPRLoader() as unknown as PullRequestLoader,
@@ -423,7 +592,9 @@ describe('ReviewOrchestrator integration (offline)', () => {
     };
 
     const review = await new ReviewOrchestrator(components).execute(4);
-    const finding = review?.findings.find(f => f.title.includes('Interpolated billing query'));
+    const finding = review?.findings.find((f) =>
+      f.title.includes('Interpolated billing query')
+    );
 
     expect(finding?.line).toBe(7);
     expect(review?.inlineComments[0].line).toBe(7);
@@ -435,11 +606,17 @@ describe('ReviewOrchestrator integration (offline)', () => {
     class CapturingLLMExecutor {
       prompts: string[] = [];
 
-      async filterHealthyProviders(providers: Provider[]): Promise<{ healthy: Provider[]; healthCheckResults: ProviderResult[] }> {
+      async filterHealthyProviders(providers: Provider[]): Promise<{
+        healthy: Provider[];
+        healthCheckResults: ProviderResult[];
+      }> {
         return { healthy: providers, healthCheckResults: [] };
       }
 
-      async execute(_providers: Provider[], prompt: string): Promise<ProviderResult[]> {
+      async execute(
+        _providers: Provider[],
+        prompt: string
+      ): Promise<ProviderResult[]> {
         this.prompts.push(prompt);
         return [];
       }
@@ -479,7 +656,11 @@ describe('ReviewOrchestrator integration (offline)', () => {
       promptBuilder: new PromptBuilder(graphConfig),
       llmExecutor: llmExecutor as any,
       deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
       synthesis: new SynthesisEngine(graphConfig),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
@@ -492,7 +673,14 @@ describe('ReviewOrchestrator integration (offline)', () => {
         mergeFindings: (prev: any, curr: any) => curr,
         generateIncrementalSummary: () => '',
       } as any,
-      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
       security: new SecurityScanner(),
       rules: new RulesEngine([]),
       prLoader: new StubPRLoader() as unknown as PullRequestLoader,
@@ -515,7 +703,10 @@ describe('ReviewOrchestrator integration (offline)', () => {
 
   it('handles provider failures gracefully', async () => {
     class FailingLLMExecutor {
-      async filterHealthyProviders(providers: Provider[]): Promise<{ healthy: Provider[]; healthCheckResults: ProviderResult[] }> {
+      async filterHealthyProviders(providers: Provider[]): Promise<{
+        healthy: Provider[];
+        healthCheckResults: ProviderResult[];
+      }> {
         // Return providers unchanged to test failure handling
         return { healthy: providers, healthCheckResults: [] };
       }
@@ -538,7 +729,11 @@ describe('ReviewOrchestrator integration (offline)', () => {
       promptBuilder: new PromptBuilder(config),
       llmExecutor: new FailingLLMExecutor() as any,
       deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
       synthesis: new SynthesisEngine(config),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
@@ -551,7 +746,14 @@ describe('ReviewOrchestrator integration (offline)', () => {
         mergeFindings: (prev: any, curr: any) => curr,
         generateIncrementalSummary: () => '',
       } as any,
-      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
       security: new SecurityScanner(),
       rules: new RulesEngine([]),
       prLoader: new StubPRLoader() as unknown as PullRequestLoader,
@@ -599,7 +801,11 @@ describe('ReviewOrchestrator integration (offline)', () => {
       promptBuilder: new PromptBuilder(config),
       llmExecutor: new StubLLMExecutor() as any,
       deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
       synthesis: new SynthesisEngine(config),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
@@ -612,7 +818,14 @@ describe('ReviewOrchestrator integration (offline)', () => {
         mergeFindings: (prev: any, curr: any) => curr,
         generateIncrementalSummary: () => '',
       } as any,
-      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
       security: new SecurityScanner(),
       rules: new RulesEngine([]),
       prLoader: new StubPRLoader() as unknown as PullRequestLoader,
@@ -629,7 +842,7 @@ describe('ReviewOrchestrator integration (offline)', () => {
     const review = await orchestrator.execute(1);
 
     expect(review).toBeTruthy();
-    expect(review?.findings.some(f => f.file === 'src/cached.ts')).toBe(true);
+    expect(review?.findings.some((f) => f.file === 'src/cached.ts')).toBe(true);
   });
 
   it('skips draft PRs when configured', async () => {
@@ -663,7 +876,11 @@ describe('ReviewOrchestrator integration (offline)', () => {
       promptBuilder: new PromptBuilder(draftConfig),
       llmExecutor: new StubLLMExecutor() as any,
       deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
       synthesis: new SynthesisEngine(draftConfig),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
@@ -676,7 +893,14 @@ describe('ReviewOrchestrator integration (offline)', () => {
         mergeFindings: (prev: any, curr: any) => curr,
         generateIncrementalSummary: () => '',
       } as any,
-      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
       security: new SecurityScanner(),
       rules: new RulesEngine([]),
       prLoader: new DraftPRLoader() as unknown as PullRequestLoader,
@@ -697,7 +921,10 @@ describe('ReviewOrchestrator integration (offline)', () => {
 
   it('applies consensus filtering with multiple providers', async () => {
     class MultiProviderLLMExecutor {
-      async filterHealthyProviders(providers: Provider[]): Promise<{ healthy: Provider[]; healthCheckResults: ProviderResult[] }> {
+      async filterHealthyProviders(providers: Provider[]): Promise<{
+        healthy: Provider[];
+        healthCheckResults: ProviderResult[];
+      }> {
         return { healthy: providers, healthCheckResults: [] };
       }
 
@@ -709,7 +936,13 @@ describe('ReviewOrchestrator integration (offline)', () => {
             result: {
               content: 'ok',
               findings: [
-                { file: 'src/index.ts', line: 15, severity: 'major', title: 'Issue', message: 'Agreed' },
+                {
+                  file: 'src/index.ts',
+                  line: 15,
+                  severity: 'major',
+                  title: 'Issue',
+                  message: 'Agreed',
+                },
               ],
             },
             durationSeconds: 0.1,
@@ -720,8 +953,20 @@ describe('ReviewOrchestrator integration (offline)', () => {
             result: {
               content: 'ok',
               findings: [
-                { file: 'src/index.ts', line: 15, severity: 'major', title: 'Issue', message: 'Agreed' },
-                { file: 'src/index.ts', line: 20, severity: 'minor', title: 'Noise', message: 'Only one provider' },
+                {
+                  file: 'src/index.ts',
+                  line: 15,
+                  severity: 'major',
+                  title: 'Issue',
+                  message: 'Agreed',
+                },
+                {
+                  file: 'src/index.ts',
+                  line: 20,
+                  severity: 'minor',
+                  title: 'Noise',
+                  message: 'Only one provider',
+                },
               ],
             },
             durationSeconds: 0.1,
@@ -741,7 +986,11 @@ describe('ReviewOrchestrator integration (offline)', () => {
       promptBuilder: new PromptBuilder(consensusConfig),
       llmExecutor: new MultiProviderLLMExecutor() as any,
       deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({ minAgreement: 2, minSeverity: 'minor', maxComments: 100 }),
+      consensus: new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
       synthesis: new SynthesisEngine(consensusConfig),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
@@ -754,7 +1003,14 @@ describe('ReviewOrchestrator integration (offline)', () => {
         mergeFindings: (prev: any, curr: any) => curr,
         generateIncrementalSummary: () => '',
       } as any,
-      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
       security: new SecurityScanner(),
       rules: new RulesEngine([]),
       prLoader: new StubPRLoader() as unknown as PullRequestLoader,
@@ -784,7 +1040,11 @@ describe('ReviewOrchestrator integration (offline)', () => {
       promptBuilder: new PromptBuilder(config),
       llmExecutor: new StubLLMExecutor() as any,
       deduplicator: new Deduplicator(),
-      consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
       synthesis: new SynthesisEngine(config),
       testCoverage: new TestCoverageAnalyzer(),
       astAnalyzer: new ASTAnalyzer(),
@@ -797,7 +1057,14 @@ describe('ReviewOrchestrator integration (offline)', () => {
         mergeFindings: (prev: any, curr: any) => curr,
         generateIncrementalSummary: () => '',
       } as any,
-      costTracker: new CostTracker({ getPricing: async () => ({ modelId: 'fake', promptPrice: 0, completionPrice: 0, isFree: true }) } as any),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
       security: new SecurityScanner(),
       rules: new RulesEngine([]),
       prLoader: new StubPRLoader() as unknown as PullRequestLoader,

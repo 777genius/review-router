@@ -31980,12 +31980,25 @@ var ReviewOrchestrator = class {
       );
       let shouldReplaceProgressWithCleanSummary = false;
       if (this.shouldPostReviewOutput(review, inlineFiltered)) {
-        await this.components.commentPoster.postSummary(
-          pr.number,
-          markdown,
-          false,
-          summaryMetadata
-        );
+        let summaryPostedViaProgress = false;
+        if (progressTracker) {
+          summaryPostedViaProgress = await progressTracker.replaceWith(
+            this.markReviewRouterSummary(markdown)
+          );
+          if (summaryPostedViaProgress) {
+            logger.info(
+              "Replaced ReviewRouter progress comment with final review summary"
+            );
+          }
+        }
+        if (!summaryPostedViaProgress) {
+          await this.components.commentPoster.postSummary(
+            pr.number,
+            markdown,
+            false,
+            summaryMetadata
+          );
+        }
         await this.components.commentPoster.postInline(
           pr.number,
           inlineFiltered,
@@ -32013,7 +32026,9 @@ var ReviewOrchestrator = class {
       await this.writeReports(review);
       await progressTracker?.updateProgress("synthesis", "completed");
       if (shouldReplaceProgressWithCleanSummary && progressTracker) {
-        const replaced = await progressTracker.replaceWith(markdown);
+        const replaced = await progressTracker.replaceWith(
+          this.markReviewRouterSummary(markdown)
+        );
         if (replaced) {
           logger.info(
             "Replaced ReviewRouter progress comment with final no-findings summary"
@@ -32498,7 +32513,9 @@ var ReviewOrchestrator = class {
   }
   findRequiredProviderExecutionFailure(requiredProviders, results) {
     if (requiredProviders.size === 0) return void 0;
-    const resultByName = new Map(results.map((result) => [result.name, result]));
+    const resultByName = new Map(
+      results.map((result) => [result.name, result])
+    );
     for (const required of requiredProviders) {
       const result = resultByName.get(required);
       if (!result) {
@@ -32670,6 +32687,11 @@ var ReviewOrchestrator = class {
       `Ignoring REVIEW_ROUTER_PROGRESS_COMMENTS=${raw}; expected true, false, or first`
     );
     return "first";
+  }
+  markReviewRouterSummary(markdown) {
+    return markdown.includes("<!-- review-router-bot -->") ? markdown : `<!-- review-router-bot -->
+
+${markdown}`;
   }
   async hasExistingReviewRouterActivity(prNumber) {
     const client = this.components.githubClient;

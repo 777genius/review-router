@@ -128,6 +128,16 @@ export class FindingFilter {
       return 'filter';
     }
 
+    // Filter invalid anchors before semantic keep rules. Otherwise a concrete
+    // finding can still fail later when GitHub rejects the review comment line.
+    if (this.hasInvalidLineNumber(finding)) {
+      return 'filter';
+    }
+
+    if (this.isLineNumberIssue(finding, diffContent)) {
+      return 'filter';
+    }
+
     if (this.isConcreteRuntimeRegression(finding)) {
       return 'keep';
     }
@@ -152,11 +162,6 @@ export class FindingFilter {
       return 'filter';
     }
 
-    // Filter: Invalid or suspicious line numbers (check before downgrade logic)
-    if (this.hasInvalidLineNumber(finding)) {
-      return 'filter';
-    }
-
     // COMPLETELY filter code quality issues - prompt explicitly says not to report these
     if (this.isCodeQualityIssue(finding)) {
       return 'filter';
@@ -174,11 +179,6 @@ export class FindingFilter {
 
     // Filter: Workflow security checks that are already implemented
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
-      return 'filter';
-    }
-
-    // Filter: Line number issues (flagging blank lines, closing braces)
-    if (this.isLineNumberIssue(finding, diffContent)) {
       return 'filter';
     }
 
@@ -201,6 +201,12 @@ export class FindingFilter {
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
       return 'workflow security already handled/config issue';
     }
+    if (this.hasInvalidLineNumber(finding)) {
+      return 'invalid/suspicious line number';
+    }
+    if (this.isLineNumberIssue(finding, diffContent)) {
+      return 'line number points to blank/brace/comment';
+    }
     if (this.isSuggestionOrOptimization(finding)) {
       return 'suggestion/optimization (not a bug)';
     }
@@ -212,12 +218,6 @@ export class FindingFilter {
     }
     if (this.isMissingMethodFalsePositive(finding, diffContent)) {
       return 'method exists in code';
-    }
-    if (this.hasInvalidLineNumber(finding)) {
-      return 'invalid/suspicious line number';
-    }
-    if (this.isLineNumberIssue(finding, diffContent)) {
-      return 'line number points to blank/brace/comment';
     }
     if (this.isCodeQualityIssue(finding)) {
       return 'code quality (not a concrete bug)';

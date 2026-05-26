@@ -217,6 +217,54 @@ index 51097d9..d0723db 100644
       expect(stats.filtered).toBe(0);
     });
 
+    test('still filters runtime findings with invalid line anchors', () => {
+      const findings: Finding[] = [
+        {
+          file: 'src/runtime/status.ts',
+          line: 0,
+          severity: 'major',
+          title: 'Runtime status reports failures as healthy',
+          message:
+            'The runtime status branch reports an error diagnostic as healthy.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered).toHaveLength(0);
+      expect(stats.filtered).toBe(1);
+      expect(stats.reasons['invalid/suspicious line number']).toBe(1);
+    });
+
+    test('still filters runtime findings that point to blank diff lines', () => {
+      const diff = [
+        'diff --git a/src/runtime/status.ts b/src/runtime/status.ts',
+        '--- a/src/runtime/status.ts',
+        '+++ b/src/runtime/status.ts',
+        '@@ -1,4 +1,4 @@',
+        ' export function status() {',
+        '+  return "healthy";',
+        ' ',
+        ' }',
+      ].join('\n');
+      const findings: Finding[] = [
+        {
+          file: 'src/runtime/status.ts',
+          line: 3,
+          severity: 'major',
+          title: 'Runtime status hides failure diagnostics',
+          message:
+            'The runtime status branch reports an error diagnostic as healthy.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, diff);
+
+      expect(filtered).toHaveLength(0);
+      expect(stats.filtered).toBe(1);
+      expect(stats.reasons['line number points to blank/brace/comment']).toBe(1);
+    });
+
     test('still filters generic validation suggestions with cautious wording', () => {
       const findings: Finding[] = [
         {

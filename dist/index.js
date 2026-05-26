@@ -27023,6 +27023,12 @@ var FindingFilter = class {
     if (this.isFilterInfrastructure(finding.file)) {
       return "filter";
     }
+    if (this.hasInvalidLineNumber(finding)) {
+      return "filter";
+    }
+    if (this.isLineNumberIssue(finding, diffContent)) {
+      return "filter";
+    }
     if (this.isConcreteRuntimeRegression(finding)) {
       return "keep";
     }
@@ -27035,9 +27041,6 @@ var FindingFilter = class {
     if (this.isSubjectiveCodeOpinion(finding)) {
       return "filter";
     }
-    if (this.hasInvalidLineNumber(finding)) {
-      return "filter";
-    }
     if (this.isCodeQualityIssue(finding)) {
       return "filter";
     }
@@ -27048,9 +27051,6 @@ var FindingFilter = class {
       return "filter";
     }
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
-      return "filter";
-    }
-    if (this.isLineNumberIssue(finding, diffContent)) {
       return "filter";
     }
     return "keep";
@@ -27071,6 +27071,12 @@ var FindingFilter = class {
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
       return "workflow security already handled/config issue";
     }
+    if (this.hasInvalidLineNumber(finding)) {
+      return "invalid/suspicious line number";
+    }
+    if (this.isLineNumberIssue(finding, diffContent)) {
+      return "line number points to blank/brace/comment";
+    }
     if (this.isSuggestionOrOptimization(finding)) {
       return "suggestion/optimization (not a bug)";
     }
@@ -27082,12 +27088,6 @@ var FindingFilter = class {
     }
     if (this.isMissingMethodFalsePositive(finding, diffContent)) {
       return "method exists in code";
-    }
-    if (this.hasInvalidLineNumber(finding)) {
-      return "invalid/suspicious line number";
-    }
-    if (this.isLineNumberIssue(finding, diffContent)) {
-      return "line number points to blank/brace/comment";
     }
     if (this.isCodeQualityIssue(finding)) {
       return "code quality (not a concrete bug)";

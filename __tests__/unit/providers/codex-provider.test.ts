@@ -427,6 +427,152 @@ describe('CodexProvider', () => {
     expect(result.findings?.[0]?.title).toBe('Ignore patterns are inverted');
   });
 
+  it('reruns agentic review when non-empty findings have no recorded exploration', async () => {
+    let execCount = 0;
+    const firstFinding = {
+      findings: [
+        {
+          file: 'src/renderer/utils/memberHelpers.ts',
+          startLine: null,
+          line: 1353,
+          endLine: null,
+          severity: 'major',
+          title: 'Spawn diagnostic errors are hidden',
+          message:
+            'The helper marks errored bootstrap-confirmed spawn entries as healthy.',
+          suggestion: null,
+        },
+      ],
+      revalidations: [],
+    };
+    const exploredFinding = {
+      findings: [
+        {
+          file: 'src/renderer/utils/memberHelpers.ts',
+          startLine: null,
+          line: 1353,
+          endLine: null,
+          severity: 'major',
+          title: 'Spawn diagnostic errors are hidden after caller inspection',
+          message:
+            'After checking MemberList and teamRuntimeDisplayRows, the helper still renders spawn-level error diagnostics as healthy.',
+          suggestion: null,
+        },
+      ],
+      revalidations: [],
+    };
+
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      execCount += 1;
+      return createMockProcess((proc) => {
+        const outputIndex = args.indexOf('--output-last-message');
+        const outputFile = args[outputIndex + 1];
+        if (execCount === 1) {
+          fs.writeFileSync(outputFile, JSON.stringify(firstFinding));
+          return;
+        }
+
+        proc.stdout.emit(
+          'data',
+          `${JSON.stringify({
+            item: {
+              type: 'command_execution',
+              command: 'rg -n "runtimeDiagnosticSeverity" src/renderer',
+            },
+          })}\n`
+        );
+        fs.writeFileSync(outputFile, JSON.stringify(exploredFinding));
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: true,
+    });
+    const result = await provider.review(
+      [
+        'Files changed:',
+        '- src/renderer/utils/memberHelpers.ts (modified, +4/-1)',
+        '',
+        'Diff:',
+        'diff --git a/src/renderer/utils/memberHelpers.ts b/src/renderer/utils/memberHelpers.ts',
+      ].join('\n'),
+      1000
+    );
+    const execCalls = spawnMock.mock.calls.filter(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+
+    expect(execCalls).toHaveLength(2);
+    expect(result.findings?.[0]?.title).toBe(
+      'Spawn diagnostic errors are hidden after caller inspection'
+    );
+  });
+
+  it('preserves first-pass findings when audit retry still lacks exploration and returns fewer findings', async () => {
+    let execCount = 0;
+    const firstFinding = {
+      findings: [
+        {
+          file: 'src/features/team-runtime-lanes/core/domain/buildMixedPersistedLaunchSnapshot.ts',
+          startLine: 236,
+          line: 240,
+          endLine: 240,
+          severity: 'major',
+          title: 'Runtime diagnostic errors are rewritten as healthy',
+          message:
+            'The launch snapshot rewrites an errored runtime diagnostic as confirmed_alive.',
+          suggestion: null,
+        },
+      ],
+      revalidations: [],
+    };
+
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      execCount += 1;
+      return createMockProcess(() => {
+        const outputIndex = args.indexOf('--output-last-message');
+        const outputFile = args[outputIndex + 1];
+        fs.writeFileSync(
+          outputFile,
+          execCount === 1
+            ? JSON.stringify(firstFinding)
+            : '{"findings":[],"revalidations":[]}'
+        );
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: true,
+    });
+    const result = await provider.review(
+      [
+        'Files changed:',
+        '- src/features/team-runtime-lanes/core/domain/buildMixedPersistedLaunchSnapshot.ts (modified, +8/-2)',
+        '',
+        'Diff:',
+        'diff --git a/src/features/team-runtime-lanes/core/domain/buildMixedPersistedLaunchSnapshot.ts b/src/features/team-runtime-lanes/core/domain/buildMixedPersistedLaunchSnapshot.ts',
+      ].join('\n'),
+      1000
+    );
+    const execCalls = spawnMock.mock.calls.filter(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+
+    expect(execCalls).toHaveLength(2);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings?.[0]?.title).toBe(
+      'Runtime diagnostic errors are rewritten as healthy'
+    );
+  });
+
   it('does not rerun empty agentic review when a read-only exploration command is recorded', async () => {
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('--version')) {
@@ -484,6 +630,59 @@ describe('CodexProvider', () => {
         fs.writeFileSync(
           args[outputIndex + 1],
           '{"findings":[],"revalidations":[]}'
+        );
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: true,
+    });
+    await expect(
+      provider.review(
+        [
+          'Files changed:',
+          '- src/app.ts (modified, +1/-1)',
+          '',
+          'Diff:',
+          'diff --git a/src/app.ts b/src/app.ts',
+        ].join('\n'),
+        1000
+      )
+    ).rejects.toThrow('without recorded read-only repository exploration');
+
+    const execCalls = spawnMock.mock.calls.filter(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+    expect(execCalls).toHaveLength(2);
+  });
+
+  it('strict agentic audit fails non-empty findings when retry still lacks exploration', async () => {
+    process.env.CODEX_AGENTIC_AUDIT = 'strict';
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess(() => {
+        const outputIndex = args.indexOf('--output-last-message');
+        fs.writeFileSync(
+          args[outputIndex + 1],
+          JSON.stringify({
+            findings: [
+              {
+                file: 'src/app.ts',
+                startLine: null,
+                line: 7,
+                endLine: null,
+                severity: 'major',
+                title: 'State is reported as healthy',
+                message:
+                  'The changed branch reports a failed runtime status as healthy.',
+                suggestion: null,
+              },
+            ],
+            revalidations: [],
+          })
         );
       });
     });

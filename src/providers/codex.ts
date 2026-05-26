@@ -179,8 +179,11 @@ export class CodexProvider extends Provider {
         )
       ) {
         logger.warn(
-          `Codex agentic review returned no findings without read-only exploration; retrying once for ${this.name}`
+          `Codex agentic review completed without read-only exploration; retrying once for ${this.name}`
         );
+        const firstContent = content;
+        const firstParsed = parsed;
+        const firstRunResult = runResult;
         runResult = await this.runCliWithStdin(
           binary,
           this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
@@ -200,6 +203,17 @@ export class CodexProvider extends Provider {
           this.logAgenticAudit(runResult.audit, true);
         }
         parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
+        if (
+          this.isMissingAgenticExploration(parsed, runResult.audit, prompt) &&
+          firstParsed.findings.length > parsed.findings.length
+        ) {
+          logger.warn(
+            `Codex agentic retry still lacked read-only exploration and returned fewer findings; preserving first-pass findings for ${this.name}`
+          );
+          content = firstContent;
+          parsed = firstParsed;
+          runResult = firstRunResult;
+        }
       }
 
       if (
@@ -207,7 +221,7 @@ export class CodexProvider extends Provider {
         this.isMissingAgenticExploration(parsed, runResult.audit, prompt)
       ) {
         throw new Error(
-          'Codex agentic review returned no findings without recorded read-only repository exploration'
+          'Codex agentic review completed without recorded read-only repository exploration'
         );
       }
 
@@ -571,7 +585,6 @@ export class CodexProvider extends Provider {
     audit: CodexAgenticAudit | undefined,
     prompt: string
   ): boolean {
-    if (parsed.findings.length > 0) return false;
     if (!this.looksLikePullRequestReviewPrompt(prompt)) return false;
     return !audit || audit.readOnlyExplorationCommands === 0;
   }
@@ -594,7 +607,7 @@ export class CodexProvider extends Provider {
         : 'none recorded';
 
     return [
-      'Your previous Codex review pass returned no findings without enough recorded read-only repository exploration.',
+      'Your previous Codex review pass completed without enough recorded read-only repository exploration.',
       `Recorded commands: ${commands}`,
       '',
       'Rerun the review from scratch.',

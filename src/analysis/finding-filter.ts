@@ -19,6 +19,7 @@ export interface FilterStats {
   downgraded: number;
   kept: number;
   reasons: Record<string, number>;
+  filteredExamples: string[];
 }
 
 export class FindingFilter {
@@ -32,6 +33,7 @@ export class FindingFilter {
       downgraded: 0,
       kept: 0,
       reasons: {},
+      filteredExamples: [],
     };
 
     const filtered: Finding[] = [];
@@ -43,6 +45,11 @@ export class FindingFilter {
         stats.filtered++;
         const reason = this.getFilterReason(finding, diffContent);
         stats.reasons[reason] = (stats.reasons[reason] || 0) + 1;
+        if (stats.filteredExamples.length < 5) {
+          stats.filteredExamples.push(
+            this.formatFilteredFindingExample(finding, reason)
+          );
+        }
         logger.debug(`Filtered finding: ${finding.title} (${reason})`);
         continue;
       }
@@ -77,6 +84,11 @@ export class FindingFilter {
       logger.info(
         `Finding filter: ${stats.filtered} filtered, ${stats.downgraded} downgraded, ${stats.kept} kept (from ${stats.total} total)${reasonSummary}`
       );
+      if (stats.filteredExamples.length > 0) {
+        logger.info(
+          `Filtered finding examples: ${stats.filteredExamples.join(' | ')}`
+        );
+      }
     }
 
     return { findings: deduplicated, stats };
@@ -114,6 +126,10 @@ export class FindingFilter {
     // The filter can't meaningfully review its own filtering logic
     if (this.isFilterInfrastructure(finding.file)) {
       return 'filter';
+    }
+
+    if (this.isConcreteRuntimeRegression(finding)) {
+      return 'keep';
     }
 
     // Filter: Suggestions/optimizations should never be reported as issues.
@@ -202,6 +218,12 @@ export class FindingFilter {
     }
     if (this.isLineNumberIssue(finding, diffContent)) {
       return 'line number points to blank/brace/comment';
+    }
+    if (this.isCodeQualityIssue(finding)) {
+      return 'code quality (not a concrete bug)';
+    }
+    if (this.isLintOrStyleIssue(finding)) {
+      return 'lint/style (not a concrete bug)';
     }
     return 'other';
   }
@@ -434,6 +456,12 @@ export class FindingFilter {
     }
 
     return `; reasons: ${entries.join(', ')}`;
+  }
+
+  private formatFilteredFindingExample(finding: Finding, reason: string): string {
+    const location = `${finding.file}:${finding.line}`;
+    const title = finding.title.replace(/\s+/g, ' ').trim().slice(0, 120);
+    return `${location} "${title}" (${reason})`;
   }
 
   private isTestCodeQualityIssue(finding: Finding): boolean {
@@ -701,12 +729,16 @@ export class FindingFilter {
     }
 
     const text = (finding.title + ' ' + finding.message).toLowerCase();
+    if (this.isRuntimeStateOrDiagnosticRegression(text)) {
+      return true;
+    }
+
     const hasConcreteImpact =
-      /\b(will|now|always|never|no longer|cannot|can't|fails?|breaks?|drops?|discards?|loses?|lose|removes?|throws?|skips?|ignores?|returns?|receives?|rethrows?|falls? through|misclassif(?:y|ies)|false positive|false negative|data loss|stale|dead-end)\b/.test(
+      /\b(will|now|always|never|no longer|cannot|can't|fails?|breaks?|drops?|discards?|loses?|lose|removes?|throws?|skips?|ignores?|returns?|receives?|rethrows?|falls? through|misclassif(?:y|ies)|hides?|hidden|masks?|suppresses?|overrides?|forces?|promotes?|clears?|rewrites?|labels?|reports?|treats?|marks?|shows?|surfaces?|false positive|false negative|data loss|stale|dead-end)\b/.test(
         text
       );
     const hasRegressionSurface =
-      /\b(regression|inverted|contract|caller|helper|filters?|filtered|filtering|ignore|draft|recovery|delete|deletion|enoent|cache|stale|auth|permission|workflow|config|configuration|persistence|route|ipc|mcp|api|ui|editor|token|secret|repository|classification)\b/.test(
+      /\b(regression|inverted|contract|caller|helper|filters?|filtered|filtering|ignore|draft|recovery|delete|deletion|enoent|cache|stale|auth|permission|workflow|config|configuration|persistence|route|ipc|mcp|api|ui|editor|token|secret|repository|classification|runtime|diagnostic|diagnostics|liveness|launch|state|status|summary|projection|progress|prompt|error|failure|outage|crash|healthy|health|stopped|degraded)\b/.test(
         text
       );
 
@@ -719,6 +751,44 @@ export class FindingFilter {
       /\b(condition|comparison|predicate|boolean|check|guard|branch|semantics)\b/.test(
         text
       )
+    );
+  }
+
+  private isRuntimeStateOrDiagnosticRegression(text: string): boolean {
+    const hasRuntimeStateSurface =
+      /\b(runtime|diagnostic|diagnostics|runtimeDiagnosticSeverity|liveness|launch|state|status|summary|projection|progress|prompt|health|healthy|stopped|degraded|outage|failure|error|crash)\b/i.test(
+        text
+      );
+    if (!hasRuntimeStateSurface) {
+      return false;
+    }
+
+    const hidesOrMisreportsFailure =
+      /\b(hides?|hidden|masks?|suppresses?|overrides?|forces?|promotes?|clears?|rewrites?|labels?|reports?|treats?|marks?|shows?)\b/.test(
+        text
+      ) &&
+      /\b(error|failure|failed|stopped|degraded|outage|crash|diagnostic|unhealthy|not alive)\b/.test(
+        text
+      );
+    const contradictoryHealthyState =
+      /\b(healthy|success|confirmed_alive|running|bootstrap confirmed|online)\b/.test(
+        text
+      ) &&
+      /\b(error|failure|failed|stopped|degraded|outage|crash|not alive|runtimeDiagnosticSeverity)\b/i.test(
+        text
+      );
+    const missingRuntimeGuard =
+      /\b(without checking|without preserving|does not gate|not gate|before checking|ignores?|skips?)\b/.test(
+        text
+      ) &&
+      /\b(runtime|diagnostic|diagnostics|liveness|error|failure|stopped)\b/.test(
+        text
+      );
+
+    return (
+      hidesOrMisreportsFailure ||
+      contradictoryHealthyState ||
+      missingRuntimeGuard
     );
   }
 

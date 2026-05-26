@@ -13513,8 +13513,11 @@ var CodexProvider = class extends Provider {
         auditMode
       )) {
         logger.warn(
-          `Codex agentic review returned no findings without read-only exploration; retrying once for ${this.name}`
+          `Codex agentic review completed without read-only exploration; retrying once for ${this.name}`
         );
+        const firstContent = content;
+        const firstParsed = parsed;
+        const firstRunResult = runResult;
         runResult = await this.runCliWithStdin(
           binary2,
           this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
@@ -13534,10 +13537,18 @@ var CodexProvider = class extends Provider {
           this.logAgenticAudit(runResult.audit, true);
         }
         parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
+        if (this.isMissingAgenticExploration(parsed, runResult.audit, prompt) && firstParsed.findings.length > parsed.findings.length) {
+          logger.warn(
+            `Codex agentic retry still lacked read-only exploration and returned fewer findings; preserving first-pass findings for ${this.name}`
+          );
+          content = firstContent;
+          parsed = firstParsed;
+          runResult = firstRunResult;
+        }
       }
       if (auditMode === "strict" && this.isMissingAgenticExploration(parsed, runResult.audit, prompt)) {
         throw new Error(
-          "Codex agentic review returned no findings without recorded read-only repository exploration"
+          "Codex agentic review completed without recorded read-only repository exploration"
         );
       }
       const durationSeconds = (Date.now() - started) / 1e3;
@@ -13810,7 +13821,6 @@ var CodexProvider = class extends Provider {
     return (mode === "rerun" || mode === "strict") && this.isMissingAgenticExploration(parsed, audit, prompt);
   }
   isMissingAgenticExploration(parsed, audit, prompt) {
-    if (parsed.findings.length > 0) return false;
     if (!this.looksLikePullRequestReviewPrompt(prompt)) return false;
     return !audit || audit.readOnlyExplorationCommands === 0;
   }
@@ -13820,7 +13830,7 @@ var CodexProvider = class extends Provider {
   buildAgenticRetryPrompt(prompt, audit) {
     const commands = audit && audit.commands.length > 0 ? audit.commands.slice(0, 5).join(" | ") : "none recorded";
     return [
-      "Your previous Codex review pass returned no findings without enough recorded read-only repository exploration.",
+      "Your previous Codex review pass completed without enough recorded read-only repository exploration.",
       `Recorded commands: ${commands}`,
       "",
       "Rerun the review from scratch.",
@@ -26941,7 +26951,8 @@ var FindingFilter = class {
       filtered: 0,
       downgraded: 0,
       kept: 0,
-      reasons: {}
+      reasons: {},
+      filteredExamples: []
     };
     const filtered = [];
     for (const finding of findings) {
@@ -26950,6 +26961,11 @@ var FindingFilter = class {
         stats.filtered++;
         const reason = this.getFilterReason(finding, diffContent);
         stats.reasons[reason] = (stats.reasons[reason] || 0) + 1;
+        if (stats.filteredExamples.length < 5) {
+          stats.filteredExamples.push(
+            this.formatFilteredFindingExample(finding, reason)
+          );
+        }
         logger.debug(`Filtered finding: ${finding.title} (${reason})`);
         continue;
       }
@@ -26978,6 +26994,11 @@ var FindingFilter = class {
       logger.info(
         `Finding filter: ${stats.filtered} filtered, ${stats.downgraded} downgraded, ${stats.kept} kept (from ${stats.total} total)${reasonSummary}`
       );
+      if (stats.filteredExamples.length > 0) {
+        logger.info(
+          `Filtered finding examples: ${stats.filteredExamples.join(" | ")}`
+        );
+      }
     }
     return { findings: deduplicated, stats };
   }
@@ -27001,6 +27022,9 @@ var FindingFilter = class {
     }
     if (this.isFilterInfrastructure(finding.file)) {
       return "filter";
+    }
+    if (this.isConcreteRuntimeRegression(finding)) {
+      return "keep";
     }
     if (!this.isConcreteRuntimeRegression(finding) && this.isSuggestionOrOptimization(finding)) {
       return "filter";
@@ -27065,6 +27089,12 @@ var FindingFilter = class {
     if (this.isLineNumberIssue(finding, diffContent)) {
       return "line number points to blank/brace/comment";
     }
+    if (this.isCodeQualityIssue(finding)) {
+      return "code quality (not a concrete bug)";
+    }
+    if (this.isLintOrStyleIssue(finding)) {
+      return "lint/style (not a concrete bug)";
+    }
     return "other";
   }
   isDocumentationFile(file) {
@@ -27121,6 +27151,11 @@ var FindingFilter = class {
       return "";
     }
     return `; reasons: ${entries.join(", ")}`;
+  }
+  formatFilteredFindingExample(finding, reason) {
+    const location = `${finding.file}:${finding.line}`;
+    const title = finding.title.replace(/\s+/g, " ").trim().slice(0, 120);
+    return `${location} "${title}" (${reason})`;
   }
   isTestCodeQualityIssue(finding) {
     const text = (finding.title + " " + finding.message).toLowerCase();
@@ -27194,10 +27229,13 @@ var FindingFilter = class {
       return false;
     }
     const text = (finding.title + " " + finding.message).toLowerCase();
-    const hasConcreteImpact = /\b(will|now|always|never|no longer|cannot|can't|fails?|breaks?|drops?|discards?|loses?|lose|removes?|throws?|skips?|ignores?|returns?|receives?|rethrows?|falls? through|misclassif(?:y|ies)|false positive|false negative|data loss|stale|dead-end)\b/.test(
+    if (this.isRuntimeStateOrDiagnosticRegression(text)) {
+      return true;
+    }
+    const hasConcreteImpact = /\b(will|now|always|never|no longer|cannot|can't|fails?|breaks?|drops?|discards?|loses?|lose|removes?|throws?|skips?|ignores?|returns?|receives?|rethrows?|falls? through|misclassif(?:y|ies)|hides?|hidden|masks?|suppresses?|overrides?|forces?|promotes?|clears?|rewrites?|labels?|reports?|treats?|marks?|shows?|surfaces?|false positive|false negative|data loss|stale|dead-end)\b/.test(
       text
     );
-    const hasRegressionSurface = /\b(regression|inverted|contract|caller|helper|filters?|filtered|filtering|ignore|draft|recovery|delete|deletion|enoent|cache|stale|auth|permission|workflow|config|configuration|persistence|route|ipc|mcp|api|ui|editor|token|secret|repository|classification)\b/.test(
+    const hasRegressionSurface = /\b(regression|inverted|contract|caller|helper|filters?|filtered|filtering|ignore|draft|recovery|delete|deletion|enoent|cache|stale|auth|permission|workflow|config|configuration|persistence|route|ipc|mcp|api|ui|editor|token|secret|repository|classification|runtime|diagnostic|diagnostics|liveness|launch|state|status|summary|projection|progress|prompt|error|failure|outage|crash|healthy|health|stopped|degraded)\b/.test(
       text
     );
     if (hasConcreteImpact && hasRegressionSurface) {
@@ -27206,6 +27244,30 @@ var FindingFilter = class {
     return /\b(inverted|reversed|flipped)\b/.test(text) && /\b(condition|comparison|predicate|boolean|check|guard|branch|semantics)\b/.test(
       text
     );
+  }
+  isRuntimeStateOrDiagnosticRegression(text) {
+    const hasRuntimeStateSurface = /\b(runtime|diagnostic|diagnostics|runtimeDiagnosticSeverity|liveness|launch|state|status|summary|projection|progress|prompt|health|healthy|stopped|degraded|outage|failure|error|crash)\b/i.test(
+      text
+    );
+    if (!hasRuntimeStateSurface) {
+      return false;
+    }
+    const hidesOrMisreportsFailure = /\b(hides?|hidden|masks?|suppresses?|overrides?|forces?|promotes?|clears?|rewrites?|labels?|reports?|treats?|marks?|shows?)\b/.test(
+      text
+    ) && /\b(error|failure|failed|stopped|degraded|outage|crash|diagnostic|unhealthy|not alive)\b/.test(
+      text
+    );
+    const contradictoryHealthyState = /\b(healthy|success|confirmed_alive|running|bootstrap confirmed|online)\b/.test(
+      text
+    ) && /\b(error|failure|failed|stopped|degraded|outage|crash|not alive|runtimeDiagnosticSeverity)\b/i.test(
+      text
+    );
+    const missingRuntimeGuard = /\b(without checking|without preserving|does not gate|not gate|before checking|ignores?|skips?)\b/.test(
+      text
+    ) && /\b(runtime|diagnostic|diagnostics|liveness|error|failure|stopped)\b/.test(
+      text
+    );
+    return hidesOrMisreportsFailure || contradictoryHealthyState || missingRuntimeGuard;
   }
   isWorkflowSecurityFalsePositive(finding, diffContent) {
     if (!finding.file.includes(".github/workflows/")) {

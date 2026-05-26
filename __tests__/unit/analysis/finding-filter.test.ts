@@ -154,6 +154,69 @@ index 51097d9..d0723db 100644
       expect(stats.filtered).toBe(0);
     });
 
+    test('keeps runtime diagnostic state regressions from PR review output', () => {
+      const findings: Finding[] = [
+        {
+          file: 'src/features/team-runtime-lanes/core/domain/buildMixedPersistedLaunchSnapshot.ts',
+          startLine: 236,
+          line: 240,
+          endLine: 240,
+          severity: 'major',
+          title: 'Block healed launch state when runtime diagnostics report errors',
+          message:
+            "`createPrimaryLaneMemberState` promotes any `isBootstrapConfirmedProvisionedButNotAliveFailure(...)` entry to `launchState: 'confirmed_alive'` and clears failure semantics without checking for contradictory runtime evidence like `runtimeDiagnosticSeverity: 'error'` or stopped liveness kinds. If a teammate has the provisioned-but-not-alive reason plus a real runtime crash diagnostic, the persisted snapshot is rewritten as healthy, which then drives downstream launch summaries/progress to show success and hides an actionable outage when live runtime polling is unavailable.",
+        },
+        {
+          file: 'src/main/services/team/provisioning/TeamProvisioningPromptBuilders.ts',
+          startLine: 1042,
+          line: 1044,
+          endLine: 1044,
+          severity: 'major',
+          title: 'Preserve failed label for errored provisioned-but-not-alive members',
+          message:
+            "In the Gemini post-launch hydration prompt, this branch labels provisioned-but-not-alive entries as `bootstrap confirmed` before checking `failed_to_start`, and it does not gate on runtime diagnostic severity. For entries that still carry `runtimeDiagnosticSeverity: 'error'` or failure text, the prompt now reports success instead of failure, which can mislead remediation workflows that depend on this status snapshot.",
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered.map((finding) => finding.title)).toEqual([
+        'Block healed launch state when runtime diagnostics report errors',
+        'Preserve failed label for errored provisioned-but-not-alive members',
+      ]);
+      expect(stats.kept).toBe(2);
+      expect(stats.filtered).toBe(0);
+    });
+
+    test('keeps UI runtime row findings that hide spawn diagnostics', () => {
+      const findings: Finding[] = [
+        {
+          file: 'src/renderer/components/team/teamRuntimeDisplayRows.ts',
+          startLine: 147,
+          line: 156,
+          endLine: 156,
+          severity: 'major',
+          title: 'Do not override to running when spawn degradation is error-backed',
+          message:
+            "The state calculation currently forces `running` whenever `useBootstrapConfirmedState` is true even if `getSpawnDegradation(spawn)` reports an error, so runtime rows can hide real error diagnostics behind a healthy state.",
+        },
+        {
+          file: 'src/renderer/utils/memberHelpers.ts',
+          line: 1353,
+          severity: 'major',
+          title: 'Spawn diagnostic errors are hidden for healed members',
+          message:
+            "This promotion only checks `runtimeEntry.runtimeDiagnosticSeverity` before forcing bootstrap-confirmed provisioned-but-not-alive entries back to an online/confirmed visual state. Member cards will incorrectly render a spawn-level error diagnostic as healthy.",
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered).toHaveLength(2);
+      expect(stats.kept).toBe(2);
+      expect(stats.filtered).toBe(0);
+    });
+
     test('still filters generic validation suggestions with cautious wording', () => {
       const findings: Finding[] = [
         {
@@ -170,6 +233,9 @@ index 51097d9..d0723db 100644
       expect(filtered).toHaveLength(0);
       expect(stats.filtered).toBe(1);
       expect(stats.reasons['suggestion/optimization (not a bug)']).toBe(1);
+      expect(stats.filteredExamples[0]).toContain(
+        'Potential validation improvement'
+      );
     });
 
     test('filters documentation formatting issues', () => {

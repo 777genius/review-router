@@ -27003,6 +27003,12 @@ var FindingFilter = class {
     return { findings: deduplicated, stats };
   }
   shouldFilter(finding, diffContent) {
+    if (this.hasInvalidLineNumber(finding)) {
+      return "filter";
+    }
+    if (this.isLineNumberIssue(finding, diffContent)) {
+      return "filter";
+    }
     if (this.isDocumentationFile(finding.file)) {
       if (this.isStyleOrFormattingIssue(finding)) {
         return "filter";
@@ -27021,12 +27027,6 @@ var FindingFilter = class {
       return "filter";
     }
     if (this.isFilterInfrastructure(finding.file)) {
-      return "filter";
-    }
-    if (this.hasInvalidLineNumber(finding)) {
-      return "filter";
-    }
-    if (this.isLineNumberIssue(finding, diffContent)) {
       return "filter";
     }
     if (this.isConcreteRuntimeRegression(finding)) {
@@ -27056,6 +27056,12 @@ var FindingFilter = class {
     return "keep";
   }
   getFilterReason(finding, diffContent) {
+    if (this.hasInvalidLineNumber(finding)) {
+      return "invalid/suspicious line number";
+    }
+    if (this.isLineNumberIssue(finding, diffContent)) {
+      return "line number points to blank/brace/comment";
+    }
     if (this.isDocumentationFile(finding.file) && this.isStyleOrFormattingIssue(finding)) {
       return "documentation formatting";
     }
@@ -27070,12 +27076,6 @@ var FindingFilter = class {
     }
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
       return "workflow security already handled/config issue";
-    }
-    if (this.hasInvalidLineNumber(finding)) {
-      return "invalid/suspicious line number";
-    }
-    if (this.isLineNumberIssue(finding, diffContent)) {
-      return "line number points to blank/brace/comment";
     }
     if (this.isSuggestionOrOptimization(finding)) {
       return "suggestion/optimization (not a bug)";

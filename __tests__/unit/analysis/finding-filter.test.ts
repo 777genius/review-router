@@ -236,6 +236,50 @@ index 51097d9..d0723db 100644
       expect(stats.reasons['invalid/suspicious line number']).toBe(1);
     });
 
+    test('filters invalid anchors before doc downgrades and test security keeps', () => {
+      const findings: Finding[] = [
+        {
+          file: 'docs/runtime.md',
+          line: 0,
+          severity: 'major',
+          title: 'Runtime docs report errors as healthy',
+          message:
+            'The documentation now reports an error diagnostic as healthy.',
+        },
+        {
+          file: 'README.md',
+          line: 0,
+          severity: 'minor',
+          title: 'Markdown formatting issue',
+          message: 'The heading spacing is inconsistent.',
+        },
+        {
+          file: 'src/runtime/status.test.ts',
+          line: 0,
+          severity: 'critical',
+          title: 'SQL injection in test helper',
+          message:
+            'User input is directly concatenated into a SQL query in this test helper.',
+        },
+        {
+          file: 'src/runtime/status.spec.ts',
+          line: 0,
+          severity: 'minor',
+          title: 'Test mock expectations are brittle',
+          message: 'The mock data in this test is inconsistent.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered).toHaveLength(0);
+      expect(stats.filtered).toBe(4);
+      expect(stats.downgraded).toBe(0);
+      expect(stats.reasons['invalid/suspicious line number']).toBe(4);
+      expect(stats.reasons['documentation formatting']).toBeUndefined();
+      expect(stats.reasons['test code quality (not production issue)']).toBeUndefined();
+    });
+
     test('still filters runtime findings that point to blank diff lines', () => {
       const diff = [
         'diff --git a/src/runtime/status.ts b/src/runtime/status.ts',

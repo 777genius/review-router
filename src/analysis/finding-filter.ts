@@ -95,6 +95,16 @@ export class FindingFilter {
   }
 
   private shouldFilter(finding: Finding, diffContent: string): 'filter' | 'downgrade' | 'keep' {
+    // Filter invalid anchors before any keep/downgrade rule. Otherwise a
+    // finding can still fail later when GitHub rejects the review comment line.
+    if (this.hasInvalidLineNumber(finding)) {
+      return 'filter';
+    }
+
+    if (this.isLineNumberIssue(finding, diffContent)) {
+      return 'filter';
+    }
+
     // Filter: Documentation/markdown files should only flag broken links or security
     if (this.isDocumentationFile(finding.file)) {
       if (this.isStyleOrFormattingIssue(finding)) {
@@ -125,16 +135,6 @@ export class FindingFilter {
     // COMPLETELY filter the finding-filter itself - avoid self-reference paradox
     // The filter can't meaningfully review its own filtering logic
     if (this.isFilterInfrastructure(finding.file)) {
-      return 'filter';
-    }
-
-    // Filter invalid anchors before semantic keep rules. Otherwise a concrete
-    // finding can still fail later when GitHub rejects the review comment line.
-    if (this.hasInvalidLineNumber(finding)) {
-      return 'filter';
-    }
-
-    if (this.isLineNumberIssue(finding, diffContent)) {
       return 'filter';
     }
 
@@ -186,6 +186,12 @@ export class FindingFilter {
   }
 
   private getFilterReason(finding: Finding, diffContent: string): string {
+    if (this.hasInvalidLineNumber(finding)) {
+      return 'invalid/suspicious line number';
+    }
+    if (this.isLineNumberIssue(finding, diffContent)) {
+      return 'line number points to blank/brace/comment';
+    }
     if (this.isDocumentationFile(finding.file) && this.isStyleOrFormattingIssue(finding)) {
       return 'documentation formatting';
     }
@@ -200,12 +206,6 @@ export class FindingFilter {
     }
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
       return 'workflow security already handled/config issue';
-    }
-    if (this.hasInvalidLineNumber(finding)) {
-      return 'invalid/suspicious line number';
-    }
-    if (this.isLineNumberIssue(finding, diffContent)) {
-      return 'line number points to blank/brace/comment';
     }
     if (this.isSuggestionOrOptimization(finding)) {
       return 'suggestion/optimization (not a bug)';

@@ -2129,6 +2129,11 @@ export class ReviewOrchestrator {
           `Required healthy provider ${required} failed during review: ${reason}`
         );
       }
+      if (!result.result) {
+        return new Error(
+          `Required healthy provider ${required} did not return a review result.`
+        );
+      }
     }
 
     return undefined;

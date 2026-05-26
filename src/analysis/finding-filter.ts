@@ -116,8 +116,13 @@ export class FindingFilter {
       return 'filter';
     }
 
-    // Filter: Suggestions/optimizations should never be reported as issues (check early!)
-    if (this.isSuggestionOrOptimization(finding)) {
+    // Filter: Suggestions/optimizations should never be reported as issues.
+    // Keep concrete runtime regressions first; LLMs often explain them with
+    // "should/could" wording even when the changed line clearly breaks behavior.
+    if (
+      !this.isConcreteRuntimeRegression(finding) &&
+      this.isSuggestionOrOptimization(finding)
+    ) {
       return 'filter';
     }
 
@@ -687,6 +692,33 @@ export class FindingFilter {
       text.includes('using a more') ||
       // Documentation suggestions
       text.includes('document') && !text.includes('undocumented vulnerability')
+    );
+  }
+
+  private isConcreteRuntimeRegression(finding: Finding): boolean {
+    if (this.isStyleOrFormattingIssue(finding) || this.isLintOrStyleIssue(finding)) {
+      return false;
+    }
+
+    const text = (finding.title + ' ' + finding.message).toLowerCase();
+    const hasConcreteImpact =
+      /\b(will|now|always|never|no longer|cannot|can't|fails?|breaks?|drops?|discards?|loses?|lose|removes?|throws?|skips?|ignores?|returns?|receives?|rethrows?|falls? through|misclassif(?:y|ies)|false positive|false negative|data loss|stale|dead-end)\b/.test(
+        text
+      );
+    const hasRegressionSurface =
+      /\b(regression|inverted|contract|caller|helper|filters?|filtered|filtering|ignore|draft|recovery|delete|deletion|enoent|cache|stale|auth|permission|workflow|config|configuration|persistence|route|ipc|mcp|api|ui|editor|token|secret|repository|classification)\b/.test(
+        text
+      );
+
+    if (hasConcreteImpact && hasRegressionSurface) {
+      return true;
+    }
+
+    return (
+      /\b(inverted|reversed|flipped)\b/.test(text) &&
+      /\b(condition|comparison|predicate|boolean|check|guard|branch|semantics)\b/.test(
+        text
+      )
     );
   }
 

@@ -124,6 +124,36 @@ index 51097d9..d0723db 100644
       expect(stats.filtered).toBe(0);
     });
 
+    test('keeps concrete helper contract regressions even with should/could wording', () => {
+      const findings: Finding[] = [
+        {
+          file: 'src/main/services/error/TriggerMatcher.ts',
+          line: 82,
+          severity: 'major',
+          title: 'Ignore pattern helper now returns the inverse result',
+          message:
+            'matchesIgnorePatterns should return true when a cached regex matches, but this inverted branch now returns false and falls through to true when nothing matches. Callers will stop ignoring configured content and can ignore unrelated messages instead.',
+        },
+        {
+          file: 'mcp-server/src/utils/format.ts',
+          line: 66,
+          severity: 'major',
+          title: 'Task list slimming now keeps only heavy fields',
+          message:
+            'slimTaskForList now copies fields only when HEAVY_TASK_FIELDS has the key, so callers lose normal list fields and receive the expensive payload that should have been filtered out.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered).toHaveLength(2);
+      expect(filtered.map((finding) => finding.title)).toEqual([
+        'Ignore pattern helper now returns the inverse result',
+        'Task list slimming now keeps only heavy fields',
+      ]);
+      expect(stats.filtered).toBe(0);
+    });
+
     test('still filters generic validation suggestions with cautious wording', () => {
       const findings: Finding[] = [
         {

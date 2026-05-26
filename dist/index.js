@@ -27002,7 +27002,7 @@ var FindingFilter = class {
     if (this.isFilterInfrastructure(finding.file)) {
       return "filter";
     }
-    if (this.isSuggestionOrOptimization(finding)) {
+    if (!this.isConcreteRuntimeRegression(finding) && this.isSuggestionOrOptimization(finding)) {
       return "filter";
     }
     if (this.isAboutAddedFileFalsePositive(finding)) {
@@ -27187,6 +27187,24 @@ var FindingFilter = class {
       text.includes("more efficient") || text.includes("could be more") || text.includes("more concise") || text.includes("inefficient") && !text.includes("exponential") || text.includes("potentially inefficient") || text.includes("time-consuming") && !text.includes("will hang") || // Implementation suggestions
       text.includes("explore using") || text.includes("alternatively") || text.includes("using a different approach") || text.includes("using a more") || // Documentation suggestions
       text.includes("document") && !text.includes("undocumented vulnerability")
+    );
+  }
+  isConcreteRuntimeRegression(finding) {
+    if (this.isStyleOrFormattingIssue(finding) || this.isLintOrStyleIssue(finding)) {
+      return false;
+    }
+    const text = (finding.title + " " + finding.message).toLowerCase();
+    const hasConcreteImpact = /\b(will|now|always|never|no longer|cannot|can't|fails?|breaks?|drops?|discards?|loses?|lose|removes?|throws?|skips?|ignores?|returns?|receives?|rethrows?|falls? through|misclassif(?:y|ies)|false positive|false negative|data loss|stale|dead-end)\b/.test(
+      text
+    );
+    const hasRegressionSurface = /\b(regression|inverted|contract|caller|helper|filters?|filtered|filtering|ignore|draft|recovery|delete|deletion|enoent|cache|stale|auth|permission|workflow|config|configuration|persistence|route|ipc|mcp|api|ui|editor|token|secret|repository|classification)\b/.test(
+      text
+    );
+    if (hasConcreteImpact && hasRegressionSurface) {
+      return true;
+    }
+    return /\b(inverted|reversed|flipped)\b/.test(text) && /\b(condition|comparison|predicate|boolean|check|guard|branch|semantics)\b/.test(
+      text
     );
   }
   isWorkflowSecurityFalsePositive(finding, diffContent) {
@@ -32491,6 +32509,11 @@ var ReviewOrchestrator = class {
         );
         return new Error(
           `Required healthy provider ${required} failed during review: ${reason}`
+        );
+      }
+      if (!result.result) {
+        return new Error(
+          `Required healthy provider ${required} did not return a review result.`
         );
       }
     }

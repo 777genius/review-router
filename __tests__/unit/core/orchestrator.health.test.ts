@@ -979,6 +979,70 @@ describe('ReviewOrchestrator health check guard rails', () => {
     );
   });
 
+  it('fails when a required healthy provider only returns a health-check-shaped success', async () => {
+    const providers = ['codex/gpt-5.5'].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: providers.map((provider) => provider.name),
+        requiredHealthyProviders: ['codex/gpt-5.5'],
+        fallbackProviders: [],
+        providerLimit: 1,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue(providers),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: providers,
+          healthCheckResults: [
+            {
+              name: 'codex/gpt-5.5',
+              status: 'success',
+              durationSeconds: 0.01,
+            } as ProviderResult,
+          ],
+        }),
+        execute: jest.fn().mockResolvedValue([
+          {
+            name: 'codex/gpt-5.5',
+            status: 'success',
+            durationSeconds: 0.01,
+          } as ProviderResult,
+        ]),
+      } as any,
+    });
+
+    await expect(
+      orchestrator.executeReview(
+        makePR([
+          {
+            filename: 'a.ts',
+            status: 'modified',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+          },
+        ])
+      )
+    ).rejects.toThrow(
+      /Required healthy provider codex\/gpt-5\.5 did not return a review result/
+    );
+  });
+
   it('fails when a required healthy provider succeeds in one batch but fails in another', async () => {
     const providers = ['codex/gpt-5.5', 'openrouter/free'].map(
       (name) =>

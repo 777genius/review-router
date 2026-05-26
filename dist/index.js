@@ -13481,34 +13481,69 @@ var CodexProvider = class extends Provider {
     const binary2 = await this.resolveBinary();
     const agenticContext = this.shouldUseAgenticContext();
     const promptForCodex = agenticContext ? await this.wrapAgenticReviewPrompt(prompt) : this.wrapPromptOnlyReviewPrompt(prompt);
+    const auditMode = agenticContext ? this.agenticAuditMode() : "off";
+    const eventAudit = this.shouldUseEventAudit();
     logger.info(
       `Running Codex CLI safely: codex exec --model ${this.model} --sandbox read-only --ephemeral ...`
     );
     try {
-      const { stdout, stderr, lastMessage } = await this.runCliWithStdin(
+      let runResult = await this.runCliWithStdin(
         binary2,
         promptForCodex,
         timeoutMs,
         {
           healthCheck: false,
           outputSchema: this.buildFindingsSchema(),
-          eventAudit: this.shouldUseEventAudit(),
+          eventAudit,
+          jsonEvents: auditMode !== "off",
           acceptReviewOutputOnNonZero: true
         }
       );
-      const content = this.sanitizeReviewContent(
-        (lastMessage || stdout).trim()
+      let content = this.sanitizeReviewContent(
+        (runResult.lastMessage || runResult.stdout).trim()
       );
-      const durationSeconds = (Date.now() - started) / 1e3;
-      logger.info(
-        `Codex CLI output for ${this.name}: final=${content.length} bytes, stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
-      );
-      if (!content) {
+      if (runResult.audit) {
+        this.logAgenticAudit(runResult.audit, false);
+      }
+      let parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
+      if (this.shouldRetryForMissingAgenticExploration(
+        parsed,
+        runResult.audit,
+        prompt,
+        auditMode
+      )) {
+        logger.warn(
+          `Codex agentic review returned no findings without read-only exploration; retrying once for ${this.name}`
+        );
+        runResult = await this.runCliWithStdin(
+          binary2,
+          this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
+          timeoutMs,
+          {
+            healthCheck: false,
+            outputSchema: this.buildFindingsSchema(),
+            eventAudit,
+            jsonEvents: true,
+            acceptReviewOutputOnNonZero: true
+          }
+        );
+        content = this.sanitizeReviewContent(
+          (runResult.lastMessage || runResult.stdout).trim()
+        );
+        if (runResult.audit) {
+          this.logAgenticAudit(runResult.audit, true);
+        }
+        parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
+      }
+      if (auditMode === "strict" && this.isMissingAgenticExploration(parsed, runResult.audit, prompt)) {
         throw new Error(
-          `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`
+          "Codex agentic review returned no findings without recorded read-only repository exploration"
         );
       }
-      const parsed = parseReviewOutputStrict(content, "Codex CLI");
+      const durationSeconds = (Date.now() - started) / 1e3;
+      logger.info(
+        `Codex CLI output for ${this.name}: final=${content.length} bytes, stdout=${runResult.stdout.length} bytes, stderr=${runResult.stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
+      );
       return {
         content,
         durationSeconds,
@@ -13596,7 +13631,7 @@ var CodexProvider = class extends Provider {
     if (options.outputSchemaFile) {
       args.push("--output-schema", options.outputSchemaFile);
     }
-    if (options.eventAudit) {
+    if (options.eventAudit || options.jsonEvents) {
       args.push("--json");
     }
     const effort = options.healthCheck ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || "low" : process.env.CODEX_REASONING_EFFORT;
@@ -13641,7 +13676,9 @@ var CodexProvider = class extends Provider {
         outputLastMessageFile: outputFile,
         outputSchemaFile: schemaFile,
         eventAudit: options.eventAudit && !options.healthCheck,
-        disableTools: options.disableTools
+        jsonEvents: options.jsonEvents && !options.healthCheck,
+        disableTools: options.disableTools,
+        skipGitRepoCheck: options.skipGitRepoCheck
       });
       fd = await fs5.open(tmpFile, "r");
       const fdNum = fd.fd;
@@ -13710,7 +13747,12 @@ var CodexProvider = class extends Provider {
       if (options.eventAudit && !options.healthCheck) {
         this.logEventAudit(stdout);
       }
-      return { stdout, stderr, lastMessage };
+      return {
+        stdout,
+        stderr,
+        lastMessage,
+        audit: !options.healthCheck && (options.jsonEvents || options.eventAudit) ? this.buildAgenticAudit(stdout) : void 0
+      };
     } finally {
       try {
         if (fd) {
@@ -13736,6 +13778,59 @@ var CodexProvider = class extends Provider {
       return this.options.eventAudit;
     }
     return this.parseBooleanEnv(process.env.CODEX_EVENT_AUDIT, false);
+  }
+  agenticAuditMode() {
+    const raw = process.env.CODEX_AGENTIC_AUDIT?.trim().toLowerCase();
+    if (!raw) {
+      return "rerun";
+    }
+    if (["0", "false", "no", "off"].includes(raw)) {
+      return "off";
+    }
+    if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") {
+      return "rerun";
+    }
+    if (raw === "rerun" || raw === "strict") {
+      return raw;
+    }
+    logger.warn(
+      `Unknown CODEX_AGENTIC_AUDIT value "${raw}", falling back to rerun`
+    );
+    return "rerun";
+  }
+  parseNonEmptyReviewContent(content, stderr) {
+    if (!content) {
+      throw new Error(
+        `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ""}`
+      );
+    }
+    return parseReviewOutputStrict(content, "Codex CLI");
+  }
+  shouldRetryForMissingAgenticExploration(parsed, audit, prompt, mode) {
+    return (mode === "rerun" || mode === "strict") && this.isMissingAgenticExploration(parsed, audit, prompt);
+  }
+  isMissingAgenticExploration(parsed, audit, prompt) {
+    if (parsed.findings.length > 0) return false;
+    if (!this.looksLikePullRequestReviewPrompt(prompt)) return false;
+    return !audit || audit.readOnlyExplorationCommands === 0;
+  }
+  looksLikePullRequestReviewPrompt(prompt) {
+    return prompt.includes("Files changed:") || prompt.includes("Diff:") || /^diff --git a\//m.test(prompt);
+  }
+  buildAgenticRetryPrompt(prompt, audit) {
+    const commands = audit && audit.commands.length > 0 ? audit.commands.slice(0, 5).join(" | ") : "none recorded";
+    return [
+      "Your previous Codex review pass returned no findings without enough recorded read-only repository exploration.",
+      `Recorded commands: ${commands}`,
+      "",
+      "Rerun the review from scratch.",
+      "Before final JSON, inspect changed hunks and at least one related caller, test, schema, config, or helper file when available using read-only commands such as git diff, git show, rg, git grep, sed, cat, ls, find, pwd, nl, head, or tail.",
+      "Changed helper/API contract regressions are reportable bugs when callers will behave incorrectly, even if the broken behavior is indirect.",
+      "Specifically check for inverted boolean/filter/ignore semantics, dropped structured fields, broken draft/recovery/delete flows, stale cache/list summaries, workflow routing regressions, auth/config mistakes, and persistence side effects.",
+      'If exploration proves there is no concrete bug, return exactly {"findings":[],"revalidations":[]}.',
+      "",
+      prompt
+    ].join("\n");
   }
   parseBooleanEnv(value, defaultValue) {
     if (value === void 0 || value === "") return defaultValue;
@@ -13768,7 +13863,10 @@ var CodexProvider = class extends Provider {
       "Use repository-relative paths only. Do not include absolute local filesystem paths in findings.",
       "Do not read environment variables, secret files, ~/.codex, git credentials, or GitHub token files.",
       "Do not run package installation, tests, builds, formatters, network commands, or commands that write files.",
-      "Only report real bugs on changed lines from the diff: crashes, data loss, security vulnerabilities, or clear user-visible functional regressions such as permanent loading, stale UI state, dead-end navigation, hidden required content, or wrong access control state.",
+      "Do not return empty findings until you inspected the changed hunks and at least one related caller, test, schema, config, or helper file when available.",
+      "Only report real bugs on changed lines from the diff: crashes, data loss, security vulnerabilities, clear user-visible functional regressions such as permanent loading, stale UI state, dead-end navigation, hidden required content, or wrong access control state, or changed helper/API contract regressions that will break callers, tests, workflows, persistence, auth, configuration, MCP tools, or public/internal APIs.",
+      "Changed helper contracts and semantic inversions are reportable even when the failure is indirect, if callers will behave incorrectly.",
+      "Specifically check for inverted boolean/filter/ignore semantics, dropped non-string structured fields, broken draft/recovery/delete flows, stale cache/list summaries, workflow routing regressions, auth/config mistakes, and persistence side effects.",
       "A repeated local repository pattern, adjacent implementation, generated protocol/schema file, or direct dependency source counts as concrete evidence. If there is still no concrete evidence after exploration, return no finding rather than guessing.",
       "",
       "<deterministic_review_prompt>",
@@ -14325,6 +14423,112 @@ var CodexProvider = class extends Provider {
     const files = audit.fileCount > 0 ? `, files=${audit.fileCount}` : "";
     logger.info(
       `Codex event audit: commands=${audit.commandCount}, commandNames=${commands}${files}`
+    );
+  }
+  logAgenticAudit(audit, retry2) {
+    const suffix = retry2 ? " after retry" : "";
+    const preview = audit.commands.length > 0 ? `, commands=${audit.commands.slice(0, 3).join(", ")}` : "";
+    logger.info(
+      `Codex agentic audit${suffix}: commandExecutions=${audit.commandExecutions}, readOnlyExplorationCommands=${audit.readOnlyExplorationCommands}${preview}`
+    );
+  }
+  buildAgenticAudit(stdout) {
+    const commands = [];
+    let commandExecutions = 0;
+    let readOnlyExplorationCommands = 0;
+    for (const line of stdout.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line);
+        const command = this.extractCommandFromCodexEvent(event);
+        if (!command) continue;
+        commandExecutions += 1;
+        if (commands.length < 20) {
+          commands.push(command);
+        }
+        if (this.isReadOnlyExplorationCommand(command)) {
+          readOnlyExplorationCommands += 1;
+        }
+      } catch {
+      }
+    }
+    return {
+      commandExecutions,
+      readOnlyExplorationCommands,
+      commands
+    };
+  }
+  extractCommandFromCodexEvent(value) {
+    return this.extractCommandFromCodexEventInner(value, 0);
+  }
+  extractCommandFromCodexEventInner(value, depth) {
+    if (!value || typeof value !== "object" || depth > 4) {
+      return null;
+    }
+    const event = value;
+    const command = typeof event.command === "string" ? event.command : typeof event.cmd === "string" ? event.cmd : void 0;
+    const type2 = String(event.type || event.event || event.kind || "");
+    if (command && /(command|shell|exec|unified).*?(execution|call|tool)|tool.*?(command|shell|exec)/i.test(
+      type2
+    )) {
+      return command;
+    }
+    for (const key of [
+      "item",
+      "message",
+      "payload",
+      "data",
+      "event",
+      "tool_call",
+      "call",
+      "arguments"
+    ]) {
+      const nested = this.extractCommandFromCodexEventInner(
+        event[key],
+        depth + 1
+      );
+      if (nested) return nested;
+    }
+    return null;
+  }
+  isReadOnlyExplorationCommand(command) {
+    const commandName = this.extractCommandName(command);
+    if (!commandName) return false;
+    const base = path4.basename(commandName).toLowerCase();
+    if ([
+      "rg",
+      "grep",
+      "git",
+      "sed",
+      "cat",
+      "ls",
+      "find",
+      "pwd",
+      "nl",
+      "head",
+      "tail",
+      "wc",
+      "awk",
+      "jq",
+      "sort",
+      "uniq"
+    ].includes(base)) {
+      if (base === "git") {
+        return this.isReadOnlyGitCommand(command);
+      }
+      return !this.commandContainsWriteRedirection(command);
+    }
+    return false;
+  }
+  isReadOnlyGitCommand(command) {
+    const normalized = command.replace(/\s+/g, " ").trim();
+    return /(?:^|\s)git\s+(?:diff|show|grep|log|status|ls-files|ls-tree|cat-file|rev-parse|merge-base|branch|describe|name-rev)\b/.test(
+      normalized
+    );
+  }
+  commandContainsWriteRedirection(command) {
+    return /(^|[^<])>{1,2}|\b(?:tee|xargs|rm|mv|cp|touch|mkdir|chmod|chown|npm|pnpm|yarn|bun|pip|go|cargo|flutter|dart|make)\b/.test(
+      command
     );
   }
   extractEventAudit(stdout) {
@@ -15619,7 +15823,7 @@ var PromptBuilder = class {
     }
     const _depth = this.config.intensityPromptDepth?.[this.intensity] ?? "standard";
     const instructions = [
-      `You are a code reviewer. ONLY report actual bugs - code that will crash, lose data, create security vulnerabilities, or cause clear user-visible functional regressions.`,
+      `You are a code reviewer. ONLY report actual bugs and regressions with concrete evidence - code that will crash, lose data, create security vulnerabilities, cause clear user-visible functional regressions, or break changed-line contracts that callers, tests, workflows, persistence, auth, configuration, MCP tools, or public/internal APIs rely on.`,
       "",
       "CRITICAL RULES (READ CAREFULLY):",
       "",
@@ -15633,7 +15837,7 @@ var PromptBuilder = class {
       "2. NEVER report these (they are NOT bugs):",
       '   \u2022 Suggestions ("Consider", "Add", "Should", "Could", "Ensure that", "Validate")',
       '   \u2022 Code style ("complex", "magic strings", "readability")',
-      "   \u2022 Missing validation (TypeScript types handle this)",
+      "   \u2022 Missing validation without a concrete reachable failure",
       "   \u2022 Incomplete/potential issues (unless code WILL crash)",
       "   \u2022 Performance opinions (unless exponential complexity)",
       "   \u2022 Product preference disagreements without concrete broken behavior",
@@ -15643,6 +15847,14 @@ var PromptBuilder = class {
       "   \u2022 Lose or corrupt data",
       "   \u2022 Have SQL injection, XSS, command injection, or RCE vulnerability",
       "   \u2022 Break a reachable user flow, such as permanent loading, dead-end navigation, hidden required content, or wrong access control state",
+      "   \u2022 Break a changed helper/API contract that callers rely on, including inverted boolean/filter/ignore semantics",
+      "   \u2022 Drop or corrupt structured data used by downstream matching, serialization, cache, UI state, or workflow routing",
+      "   \u2022 Break create/update/delete side effects, draft/recovery flows, auth/config behavior, or persisted state",
+      "",
+      "4. CONTEXT CHECKLIST for changed helpers/contracts:",
+      "   \u2022 Inspect function names, comments, nearby tests, direct callers, and sibling implementations before deciding findings are empty",
+      "   \u2022 Treat helpers named matches*, is*, has*, assert*, parse*, extract*, slim*, delete*, recover*, load*, save*, route*, or configure* as contract-bearing until callers prove otherwise",
+      "   \u2022 Semantic inversions and dropped structured fields are bugs when existing callers depend on the previous meaning, even if the changed line is not directly user-facing",
       ""
     ];
     if (compacted.summaryOnlyFiles.length > 0) {
@@ -20690,8 +20902,8 @@ ${deleted}`;
     return "source file";
   }
   basenameWithoutExtension(filename) {
-    const basename2 = filename.split("/").pop() || filename;
-    return basename2.replace(/\.[^.]+$/, "");
+    const basename3 = filename.split("/").pop() || filename;
+    return basename3.replace(/\.[^.]+$/, "");
   }
   truncate(value, maxLength) {
     return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
@@ -27441,8 +27653,8 @@ var TrivialDetector = class {
    * Check if file is a dependency lock file
    */
   isDependencyLockFile(filename) {
-    const basename2 = filename.split("/").pop() || "";
-    return this.DEPENDENCY_FILES.includes(basename2);
+    const basename3 = filename.split("/").pop() || "";
+    return this.DEPENDENCY_FILES.includes(basename3);
   }
   /**
    * Check if file is documentation
@@ -31606,12 +31818,12 @@ var ReviewOrchestrator = class {
           review.findings
         );
         if (fixPrompts.length > 0) {
-          const basename2 = this.sanitizeFilename(
+          const basename3 = this.sanitizeFilename(
             process.env.REPORT_BASENAME || "review-router"
           );
           const fixPromptsPath = import_path.default.join(
             process.cwd(),
-            `${basename2}-fix-prompts.md`
+            `${basename3}-fix-prompts.md`
           );
           const format = config.fixPromptFormat || "plain";
           await this.components.promptGenerator.saveToFile(

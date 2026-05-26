@@ -11,6 +11,7 @@ import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
 import {
   buildReviewFindingsSchema,
+  type ParsedReviewOutput,
   parseReviewOutputStrict,
   parseReviewFindingsStrict,
 } from './review-output';
@@ -27,6 +28,7 @@ type CodexRunOptions = {
   healthCheck: boolean;
   outputSchema?: unknown;
   eventAudit?: boolean;
+  jsonEvents?: boolean;
   cwd?: string;
   includeWorkspaceEnv?: boolean;
   disableTools?: boolean;
@@ -38,6 +40,15 @@ type CodexRunResult = {
   stdout: string;
   stderr: string;
   lastMessage: string;
+  audit?: CodexAgenticAudit;
+};
+
+type CodexAgenticAuditMode = 'off' | 'rerun' | 'strict';
+
+type CodexAgenticAudit = {
+  commandExecutions: number;
+  readOnlyExplorationCommands: number;
+  commands: string[];
 };
 
 class CodexCliExitError extends Error {
@@ -131,36 +142,79 @@ export class CodexProvider extends Provider {
     const promptForCodex = agenticContext
       ? await this.wrapAgenticReviewPrompt(prompt)
       : this.wrapPromptOnlyReviewPrompt(prompt);
+    const auditMode = agenticContext ? this.agenticAuditMode() : 'off';
+    const eventAudit = this.shouldUseEventAudit();
 
     logger.info(
       `Running Codex CLI safely: codex exec --model ${this.model} --sandbox read-only --ephemeral ...`
     );
 
     try {
-      const { stdout, stderr, lastMessage } = await this.runCliWithStdin(
+      let runResult = await this.runCliWithStdin(
         binary,
         promptForCodex,
         timeoutMs,
         {
           healthCheck: false,
           outputSchema: this.buildFindingsSchema(),
-          eventAudit: this.shouldUseEventAudit(),
+          eventAudit,
+          jsonEvents: auditMode !== 'off',
           acceptReviewOutputOnNonZero: true,
         }
       );
-      const content = this.sanitizeReviewContent(
-        (lastMessage || stdout).trim()
+      let content = this.sanitizeReviewContent(
+        (runResult.lastMessage || runResult.stdout).trim()
       );
-      const durationSeconds = (Date.now() - started) / 1000;
-      logger.info(
-        `Codex CLI output for ${this.name}: final=${content.length} bytes, stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
-      );
-      if (!content) {
+      if (runResult.audit) {
+        this.logAgenticAudit(runResult.audit, false);
+      }
+      let parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
+
+      if (
+        this.shouldRetryForMissingAgenticExploration(
+          parsed,
+          runResult.audit,
+          prompt,
+          auditMode
+        )
+      ) {
+        logger.warn(
+          `Codex agentic review returned no findings without read-only exploration; retrying once for ${this.name}`
+        );
+        runResult = await this.runCliWithStdin(
+          binary,
+          this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
+          timeoutMs,
+          {
+            healthCheck: false,
+            outputSchema: this.buildFindingsSchema(),
+            eventAudit,
+            jsonEvents: true,
+            acceptReviewOutputOnNonZero: true,
+          }
+        );
+        content = this.sanitizeReviewContent(
+          (runResult.lastMessage || runResult.stdout).trim()
+        );
+        if (runResult.audit) {
+          this.logAgenticAudit(runResult.audit, true);
+        }
+        parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
+      }
+
+      if (
+        auditMode === 'strict' &&
+        this.isMissingAgenticExploration(parsed, runResult.audit, prompt)
+      ) {
         throw new Error(
-          `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
+          'Codex agentic review returned no findings without recorded read-only repository exploration'
         );
       }
-      const parsed = parseReviewOutputStrict(content, 'Codex CLI');
+
+      const durationSeconds = (Date.now() - started) / 1000;
+      logger.info(
+        `Codex CLI output for ${this.name}: final=${content.length} bytes, stdout=${runResult.stdout.length} bytes, stderr=${runResult.stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
+      );
 
       return {
         content,
@@ -227,6 +281,7 @@ export class CodexProvider extends Provider {
     outputLastMessageFile: string;
     outputSchemaFile?: string;
     eventAudit?: boolean;
+    jsonEvents?: boolean;
     disableTools?: boolean;
     skipGitRepoCheck?: boolean;
   }): string[] {
@@ -275,7 +330,7 @@ export class CodexProvider extends Provider {
       args.push('--output-schema', options.outputSchemaFile);
     }
 
-    if (options.eventAudit) {
+    if (options.eventAudit || options.jsonEvents) {
       args.push('--json');
     }
 
@@ -337,7 +392,9 @@ export class CodexProvider extends Provider {
         outputLastMessageFile: outputFile,
         outputSchemaFile: schemaFile,
         eventAudit: options.eventAudit && !options.healthCheck,
+        jsonEvents: options.jsonEvents && !options.healthCheck,
         disableTools: options.disableTools,
+        skipGitRepoCheck: options.skipGitRepoCheck,
       });
 
       // Use stdin redirection via file descriptor instead of shell
@@ -425,7 +482,15 @@ export class CodexProvider extends Provider {
         this.logEventAudit(stdout);
       }
 
-      return { stdout, stderr, lastMessage };
+      return {
+        stdout,
+        stderr,
+        lastMessage,
+        audit:
+          !options.healthCheck && (options.jsonEvents || options.eventAudit)
+            ? this.buildAgenticAudit(stdout)
+            : undefined,
+      };
     } finally {
       // Clean up temp file and file descriptor
       try {
@@ -455,6 +520,91 @@ export class CodexProvider extends Provider {
       return this.options.eventAudit;
     }
     return this.parseBooleanEnv(process.env.CODEX_EVENT_AUDIT, false);
+  }
+
+  private agenticAuditMode(): CodexAgenticAuditMode {
+    const raw = process.env.CODEX_AGENTIC_AUDIT?.trim().toLowerCase();
+    if (!raw) {
+      return 'rerun';
+    }
+    if (['0', 'false', 'no', 'off'].includes(raw)) {
+      return 'off';
+    }
+    if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') {
+      return 'rerun';
+    }
+    if (raw === 'rerun' || raw === 'strict') {
+      return raw;
+    }
+    logger.warn(
+      `Unknown CODEX_AGENTIC_AUDIT value "${raw}", falling back to rerun`
+    );
+    return 'rerun';
+  }
+
+  private parseNonEmptyReviewContent(
+    content: string,
+    stderr: string
+  ): ParsedReviewOutput {
+    if (!content) {
+      throw new Error(
+        `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
+      );
+    }
+    return parseReviewOutputStrict(content, 'Codex CLI');
+  }
+
+  private shouldRetryForMissingAgenticExploration(
+    parsed: ParsedReviewOutput,
+    audit: CodexAgenticAudit | undefined,
+    prompt: string,
+    mode: CodexAgenticAuditMode
+  ): boolean {
+    return (
+      (mode === 'rerun' || mode === 'strict') &&
+      this.isMissingAgenticExploration(parsed, audit, prompt)
+    );
+  }
+
+  private isMissingAgenticExploration(
+    parsed: ParsedReviewOutput,
+    audit: CodexAgenticAudit | undefined,
+    prompt: string
+  ): boolean {
+    if (parsed.findings.length > 0) return false;
+    if (!this.looksLikePullRequestReviewPrompt(prompt)) return false;
+    return !audit || audit.readOnlyExplorationCommands === 0;
+  }
+
+  private looksLikePullRequestReviewPrompt(prompt: string): boolean {
+    return (
+      prompt.includes('Files changed:') ||
+      prompt.includes('Diff:') ||
+      /^diff --git a\//m.test(prompt)
+    );
+  }
+
+  private buildAgenticRetryPrompt(
+    prompt: string,
+    audit?: CodexAgenticAudit
+  ): string {
+    const commands =
+      audit && audit.commands.length > 0
+        ? audit.commands.slice(0, 5).join(' | ')
+        : 'none recorded';
+
+    return [
+      'Your previous Codex review pass returned no findings without enough recorded read-only repository exploration.',
+      `Recorded commands: ${commands}`,
+      '',
+      'Rerun the review from scratch.',
+      'Before final JSON, inspect changed hunks and at least one related caller, test, schema, config, or helper file when available using read-only commands such as git diff, git show, rg, git grep, sed, cat, ls, find, pwd, nl, head, or tail.',
+      'Changed helper/API contract regressions are reportable bugs when callers will behave incorrectly, even if the broken behavior is indirect.',
+      'Specifically check for inverted boolean/filter/ignore semantics, dropped structured fields, broken draft/recovery/delete flows, stale cache/list summaries, workflow routing regressions, auth/config mistakes, and persistence side effects.',
+      'If exploration proves there is no concrete bug, return exactly {"findings":[],"revalidations":[]}.',
+      '',
+      prompt,
+    ].join('\n');
   }
 
   private parseBooleanEnv(
@@ -493,7 +643,10 @@ export class CodexProvider extends Provider {
       'Use repository-relative paths only. Do not include absolute local filesystem paths in findings.',
       'Do not read environment variables, secret files, ~/.codex, git credentials, or GitHub token files.',
       'Do not run package installation, tests, builds, formatters, network commands, or commands that write files.',
-      'Only report real bugs on changed lines from the diff: crashes, data loss, security vulnerabilities, or clear user-visible functional regressions such as permanent loading, stale UI state, dead-end navigation, hidden required content, or wrong access control state.',
+      'Do not return empty findings until you inspected the changed hunks and at least one related caller, test, schema, config, or helper file when available.',
+      'Only report real bugs on changed lines from the diff: crashes, data loss, security vulnerabilities, clear user-visible functional regressions such as permanent loading, stale UI state, dead-end navigation, hidden required content, or wrong access control state, or changed helper/API contract regressions that will break callers, tests, workflows, persistence, auth, configuration, MCP tools, or public/internal APIs.',
+      'Changed helper contracts and semantic inversions are reportable even when the failure is indirect, if callers will behave incorrectly.',
+      'Specifically check for inverted boolean/filter/ignore semantics, dropped non-string structured fields, broken draft/recovery/delete flows, stale cache/list summaries, workflow routing regressions, auth/config mistakes, and persistence side effects.',
       'A repeated local repository pattern, adjacent implementation, generated protocol/schema file, or direct dependency source counts as concrete evidence. If there is still no concrete evidence after exploration, return no finding rather than guessing.',
       '',
       '<deterministic_review_prompt>',
@@ -1234,6 +1387,145 @@ export class CodexProvider extends Provider {
     const files = audit.fileCount > 0 ? `, files=${audit.fileCount}` : '';
     logger.info(
       `Codex event audit: commands=${audit.commandCount}, commandNames=${commands}${files}`
+    );
+  }
+
+  private logAgenticAudit(audit: CodexAgenticAudit, retry: boolean): void {
+    const suffix = retry ? ' after retry' : '';
+    const preview =
+      audit.commands.length > 0
+        ? `, commands=${audit.commands.slice(0, 3).join(', ')}`
+        : '';
+    logger.info(
+      `Codex agentic audit${suffix}: commandExecutions=${audit.commandExecutions}, readOnlyExplorationCommands=${audit.readOnlyExplorationCommands}${preview}`
+    );
+  }
+
+  private buildAgenticAudit(stdout: string): CodexAgenticAudit {
+    const commands: string[] = [];
+    let commandExecutions = 0;
+    let readOnlyExplorationCommands = 0;
+
+    for (const line of stdout.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+
+      try {
+        const event = JSON.parse(line);
+        const command = this.extractCommandFromCodexEvent(event);
+        if (!command) continue;
+
+        commandExecutions += 1;
+        if (commands.length < 20) {
+          commands.push(command);
+        }
+        if (this.isReadOnlyExplorationCommand(command)) {
+          readOnlyExplorationCommands += 1;
+        }
+      } catch {
+        // Ignore non-JSON progress lines.
+      }
+    }
+
+    return {
+      commandExecutions,
+      readOnlyExplorationCommands,
+      commands,
+    };
+  }
+
+  private extractCommandFromCodexEvent(value: unknown): string | null {
+    return this.extractCommandFromCodexEventInner(value, 0);
+  }
+
+  private extractCommandFromCodexEventInner(
+    value: unknown,
+    depth: number
+  ): string | null {
+    if (!value || typeof value !== 'object' || depth > 4) {
+      return null;
+    }
+
+    const event = value as Record<string, unknown>;
+    const command =
+      typeof event.command === 'string'
+        ? event.command
+        : typeof event.cmd === 'string'
+          ? event.cmd
+          : undefined;
+    const type = String(event.type || event.event || event.kind || '');
+    if (
+      command &&
+      /(command|shell|exec|unified).*?(execution|call|tool)|tool.*?(command|shell|exec)/i.test(
+        type
+      )
+    ) {
+      return command;
+    }
+
+    for (const key of [
+      'item',
+      'message',
+      'payload',
+      'data',
+      'event',
+      'tool_call',
+      'call',
+      'arguments',
+    ]) {
+      const nested = this.extractCommandFromCodexEventInner(
+        event[key],
+        depth + 1
+      );
+      if (nested) return nested;
+    }
+
+    return null;
+  }
+
+  private isReadOnlyExplorationCommand(command: string): boolean {
+    const commandName = this.extractCommandName(command);
+    if (!commandName) return false;
+
+    const base = path.basename(commandName).toLowerCase();
+    if (
+      [
+        'rg',
+        'grep',
+        'git',
+        'sed',
+        'cat',
+        'ls',
+        'find',
+        'pwd',
+        'nl',
+        'head',
+        'tail',
+        'wc',
+        'awk',
+        'jq',
+        'sort',
+        'uniq',
+      ].includes(base)
+    ) {
+      if (base === 'git') {
+        return this.isReadOnlyGitCommand(command);
+      }
+      return !this.commandContainsWriteRedirection(command);
+    }
+
+    return false;
+  }
+
+  private isReadOnlyGitCommand(command: string): boolean {
+    const normalized = command.replace(/\s+/g, ' ').trim();
+    return /(?:^|\s)git\s+(?:diff|show|grep|log|status|ls-files|ls-tree|cat-file|rev-parse|merge-base|branch|describe|name-rev)\b/.test(
+      normalized
+    );
+  }
+
+  private commandContainsWriteRedirection(command: string): boolean {
+    return /(^|[^<])>{1,2}|\b(?:tee|xargs|rm|mv|cp|touch|mkdir|chmod|chown|npm|pnpm|yarn|bun|pip|go|cargo|flutter|dart|make)\b/.test(
+      command
     );
   }
 

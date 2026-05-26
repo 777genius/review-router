@@ -84,6 +84,20 @@ describe('PromptBuilder', () => {
       expect(prompt).toContain('wrong access control state');
     });
 
+    it('treats changed helper contracts and semantic inversions as reportable bugs', async () => {
+      const builder = new PromptBuilder(DEFAULT_CONFIG);
+      const prompt = await builder.build(mockPR);
+
+      expect(prompt).toContain('break changed-line contracts');
+      expect(prompt).toContain('inverted boolean/filter/ignore semantics');
+      expect(prompt).toContain('Drop or corrupt structured data');
+      expect(prompt).toContain('draft/recovery flows');
+      expect(prompt).toContain('CONTEXT CHECKLIST');
+      expect(prompt).toContain(
+        'matches*, is*, has*, assert*, parse*, extract*'
+      );
+    });
+
     it('specifies non-fixable issue types', async () => {
       const builder = new PromptBuilder(DEFAULT_CONFIG);
       const prompt = await builder.build(mockPR);

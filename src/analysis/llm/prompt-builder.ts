@@ -166,7 +166,7 @@ export class PromptBuilder {
       this.config.intensityPromptDepth?.[this.intensity] ?? 'standard';
 
     const instructions = [
-      `You are a code reviewer. ONLY report actual bugs - code that will crash, lose data, create security vulnerabilities, or cause clear user-visible functional regressions.`,
+      `You are a code reviewer. ONLY report actual bugs and regressions with concrete evidence - code that will crash, lose data, create security vulnerabilities, cause clear user-visible functional regressions, or break changed-line contracts that callers, tests, workflows, persistence, auth, configuration, MCP tools, or public/internal APIs rely on.`,
       '',
       'CRITICAL RULES (READ CAREFULLY):',
       '',
@@ -180,7 +180,7 @@ export class PromptBuilder {
       '2. NEVER report these (they are NOT bugs):',
       '   • Suggestions ("Consider", "Add", "Should", "Could", "Ensure that", "Validate")',
       '   • Code style ("complex", "magic strings", "readability")',
-      '   • Missing validation (TypeScript types handle this)',
+      '   • Missing validation without a concrete reachable failure',
       '   • Incomplete/potential issues (unless code WILL crash)',
       '   • Performance opinions (unless exponential complexity)',
       '   • Product preference disagreements without concrete broken behavior',
@@ -190,6 +190,14 @@ export class PromptBuilder {
       '   • Lose or corrupt data',
       '   • Have SQL injection, XSS, command injection, or RCE vulnerability',
       '   • Break a reachable user flow, such as permanent loading, dead-end navigation, hidden required content, or wrong access control state',
+      '   • Break a changed helper/API contract that callers rely on, including inverted boolean/filter/ignore semantics',
+      '   • Drop or corrupt structured data used by downstream matching, serialization, cache, UI state, or workflow routing',
+      '   • Break create/update/delete side effects, draft/recovery flows, auth/config behavior, or persisted state',
+      '',
+      '4. CONTEXT CHECKLIST for changed helpers/contracts:',
+      '   • Inspect function names, comments, nearby tests, direct callers, and sibling implementations before deciding findings are empty',
+      '   • Treat helpers named matches*, is*, has*, assert*, parse*, extract*, slim*, delete*, recover*, load*, save*, route*, or configure* as contract-bearing until callers prove otherwise',
+      '   • Semantic inversions and dropped structured fields are bugs when existing callers depend on the previous meaning, even if the changed line is not directly user-facing',
       '',
     ];
 

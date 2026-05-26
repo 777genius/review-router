@@ -64,6 +64,18 @@ describe('CodexProvider', () => {
     expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
   });
 
+  it('can request JSON events for agentic audit without enabling verbose event audit', () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+      jsonEvents: true,
+      eventAudit: false,
+    });
+
+    expect(args).toContain('--json');
+  });
+
   it('can route Codex CLI through OpenRouter without user config', () => {
     const provider = new CodexProvider('openai/gpt-5.3-codex', {
       modelProvider: 'openrouter',
@@ -216,6 +228,10 @@ describe('CodexProvider', () => {
     expect(prompt).toContain('create/update/delete side effects');
     expect(prompt).toContain('dead-end navigation');
     expect(prompt).toContain('wrong access control state');
+    expect(prompt).toContain('changed helper/API contract regressions');
+    expect(prompt).toContain('inverted boolean/filter/ignore semantics');
+    expect(prompt).toContain('dropped non-string structured fields');
+    expect(prompt).toContain('broken draft/recovery/delete flows');
     expect(prompt).toContain('Universal context discovery checklist');
     expect(prompt).toContain('package.json');
     expect(prompt).toContain('pubspec.lock');
@@ -339,6 +355,196 @@ describe('CodexProvider', () => {
     expect(execCall?.[1]).not.toContain(
       '--dangerously-bypass-approvals-and-sandbox'
     );
+  });
+
+  it('reruns agentic review once when empty findings have no recorded exploration', async () => {
+    let execCount = 0;
+    const finding = {
+      findings: [
+        {
+          file: 'src/main/services/error/TriggerMatcher.ts',
+          startLine: null,
+          line: 83,
+          endLine: null,
+          severity: 'major',
+          title: 'Ignore patterns are inverted',
+          message:
+            'The changed matchesIgnorePatterns helper now returns true when no ignore patterns match, so callers skip errors that should be reported.',
+          suggestion: null,
+        },
+      ],
+      revalidations: [],
+    };
+
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      execCount += 1;
+      return createMockProcess((proc) => {
+        const outputIndex = args.indexOf('--output-last-message');
+        const outputFile = args[outputIndex + 1];
+        if (execCount === 1) {
+          fs.writeFileSync(outputFile, '{"findings":[],"revalidations":[]}');
+          return;
+        }
+
+        proc.stdout.emit(
+          'data',
+          `${JSON.stringify({
+            item: {
+              type: 'command_execution',
+              command:
+                'sed -n "70,95p" src/main/services/error/TriggerMatcher.ts',
+            },
+          })}\n`
+        );
+        fs.writeFileSync(outputFile, JSON.stringify(finding));
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: true,
+    });
+    const result = await provider.review(
+      [
+        'Files changed:',
+        '- src/main/services/error/TriggerMatcher.ts (modified, +1/-1)',
+        '',
+        'Diff:',
+        'diff --git a/src/main/services/error/TriggerMatcher.ts b/src/main/services/error/TriggerMatcher.ts',
+      ].join('\n'),
+      1000
+    );
+    const execCalls = spawnMock.mock.calls.filter(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+
+    expect(execCalls).toHaveLength(2);
+    expect(execCalls[0][1]).toContain('--json');
+    expect(result.findings ?? []).toHaveLength(1);
+    expect(result.findings?.[0]?.title).toBe('Ignore patterns are inverted');
+  });
+
+  it('does not rerun empty agentic review when a read-only exploration command is recorded', async () => {
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess((proc) => {
+        const outputIndex = args.indexOf('--output-last-message');
+        proc.stdout.emit(
+          'data',
+          `${JSON.stringify({
+            item: {
+              type: 'command_execution',
+              command: 'git diff -- src/main/services/error/TriggerMatcher.ts',
+            },
+          })}\n`
+        );
+        fs.writeFileSync(
+          args[outputIndex + 1],
+          '{"findings":[],"revalidations":[]}'
+        );
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: true,
+    });
+    const result = await provider.review(
+      [
+        'Files changed:',
+        '- src/main/services/error/TriggerMatcher.ts (modified, +1/-1)',
+        '',
+        'Diff:',
+        'diff --git a/src/main/services/error/TriggerMatcher.ts b/src/main/services/error/TriggerMatcher.ts',
+      ].join('\n'),
+      1000
+    );
+    const execCalls = spawnMock.mock.calls.filter(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+
+    expect(execCalls).toHaveLength(1);
+    expect(result.findings).toEqual([]);
+  });
+
+  it('strict agentic audit reruns once, then fails if exploration is still missing', async () => {
+    process.env.CODEX_AGENTIC_AUDIT = 'strict';
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess(() => {
+        const outputIndex = args.indexOf('--output-last-message');
+        fs.writeFileSync(
+          args[outputIndex + 1],
+          '{"findings":[],"revalidations":[]}'
+        );
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: true,
+    });
+    await expect(
+      provider.review(
+        [
+          'Files changed:',
+          '- src/app.ts (modified, +1/-1)',
+          '',
+          'Diff:',
+          'diff --git a/src/app.ts b/src/app.ts',
+        ].join('\n'),
+        1000
+      )
+    ).rejects.toThrow('without recorded read-only repository exploration');
+
+    const execCalls = spawnMock.mock.calls.filter(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+    expect(execCalls).toHaveLength(2);
+  });
+
+  it('does not force JSON events or rerun when Codex agentic audit is disabled', async () => {
+    process.env.CODEX_AGENTIC_AUDIT = 'off';
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess(() => {
+        const outputIndex = args.indexOf('--output-last-message');
+        fs.writeFileSync(
+          args[outputIndex + 1],
+          '{"findings":[],"revalidations":[]}'
+        );
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: true,
+    });
+    await provider.review(
+      [
+        'Files changed:',
+        '- src/app.ts (modified, +1/-1)',
+        '',
+        'Diff:',
+        'diff --git a/src/app.ts b/src/app.ts',
+      ].join('\n'),
+      1000
+    );
+    const execCalls = spawnMock.mock.calls.filter(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+
+    expect(execCalls).toHaveLength(1);
+    expect(execCalls[0][1]).not.toContain('--json');
   });
 
   it('uses valid review JSON from --output-last-message when Codex exits non-zero', async () => {

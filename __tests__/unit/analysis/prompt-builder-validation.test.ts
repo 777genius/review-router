@@ -30,7 +30,10 @@ describe('PromptBuilder Context Window Validation', () => {
   describe('buildWithValidation', () => {
     it('should build prompt and check if it fits in context window', async () => {
       const builder = new PromptBuilder(DEFAULT_CONFIG, 'standard');
-      const { prompt, fitCheck } = await builder.buildWithValidation(mockPR, 'gpt-4-turbo');
+      const { prompt, fitCheck } = await builder.buildWithValidation(
+        mockPR,
+        'gpt-4-turbo'
+      );
 
       expect(prompt).toBeTruthy();
       expect(prompt.length).toBeGreaterThan(0);
@@ -48,17 +51,22 @@ describe('PromptBuilder Context Window Validation', () => {
       const largePR: PRContext = {
         ...mockPR,
         diff: 'a'.repeat(50000), // ~13k tokens - exceeds gpt-3.5-turbo (4k total, ~2k available after reserved)
-        files: Array(100).fill(null).map((_, i) => ({
-          filename: `file${i}.ts`,
-          status: 'modified' as const,
-          additions: 100,
-          deletions: 50,
-          changes: 150,
-        })),
+        files: Array(100)
+          .fill(null)
+          .map((_, i) => ({
+            filename: `file${i}.ts`,
+            status: 'modified' as const,
+            additions: 100,
+            deletions: 50,
+            changes: 150,
+          })),
       };
 
       const builder = new PromptBuilder(DEFAULT_CONFIG, 'standard');
-      const { prompt, fitCheck } = await builder.buildWithValidation(largePR, 'gpt-3.5-turbo');
+      const { prompt, fitCheck } = await builder.buildWithValidation(
+        largePR,
+        'gpt-3.5-turbo'
+      );
 
       expect(prompt).toBeTruthy();
       expect(fitCheck.fits).toBe(false);
@@ -77,7 +85,10 @@ describe('PromptBuilder Context Window Validation', () => {
       ];
 
       for (const model of models) {
-        const { prompt, fitCheck } = await builder.buildWithValidation(mockPR, model);
+        const { prompt, fitCheck } = await builder.buildWithValidation(
+          mockPR,
+          model
+        );
 
         expect(prompt).toBeTruthy();
         expect(fitCheck).toBeDefined();
@@ -91,11 +102,14 @@ describe('PromptBuilder Context Window Validation', () => {
       // Simplified prompt is shorter, so need more diff content for high utilization
       const mediumPR: PRContext = {
         ...mockPR,
-        diff: 'a'.repeat(4500), // high utilization while staying under gpt-3.5-turbo's 2k available test budget
+        diff: 'a'.repeat(3000), // high utilization while staying under gpt-3.5-turbo's 2k available test budget
       };
 
       const builder = new PromptBuilder(DEFAULT_CONFIG, 'standard');
-      const { fitCheck } = await builder.buildWithValidation(mediumPR, 'gpt-3.5-turbo');
+      const { fitCheck } = await builder.buildWithValidation(
+        mediumPR,
+        'gpt-3.5-turbo'
+      );
 
       expect(fitCheck.fits).toBe(true);
       expect(fitCheck.utilizationPercent).toBeGreaterThan(25);
@@ -106,7 +120,10 @@ describe('PromptBuilder Context Window Validation', () => {
     it('should return original prompt if it fits', async () => {
       const builder = new PromptBuilder(DEFAULT_CONFIG, 'standard');
       const originalPrompt = await builder.build(mockPR);
-      const optimizedPrompt = await builder.buildOptimized(mockPR, 'gpt-4-turbo');
+      const optimizedPrompt = await builder.buildOptimized(
+        mockPR,
+        'gpt-4-turbo'
+      );
 
       expect(optimizedPrompt).toBe(originalPrompt);
     });
@@ -122,7 +139,10 @@ describe('PromptBuilder Context Window Validation', () => {
       const builder = new PromptBuilder(DEFAULT_CONFIG, 'standard');
 
       // buildOptimized should handle oversized prompts gracefully
-      const optimizedPrompt = await builder.buildOptimized(largePR, 'gpt-3.5-turbo');
+      const optimizedPrompt = await builder.buildOptimized(
+        largePR,
+        'gpt-3.5-turbo'
+      );
 
       // Should return a valid prompt
       expect(optimizedPrompt).toBeTruthy();
@@ -140,7 +160,10 @@ describe('PromptBuilder Context Window Validation', () => {
       };
 
       const builder = new PromptBuilder(DEFAULT_CONFIG, 'standard');
-      const optimizedPrompt = await builder.buildOptimized(largePR, 'gpt-3.5-turbo');
+      const optimizedPrompt = await builder.buildOptimized(
+        largePR,
+        'gpt-3.5-turbo'
+      );
 
       // Should still contain key prompt components
       expect(optimizedPrompt).toContain('PR #');
@@ -159,7 +182,10 @@ describe('PromptBuilder Context Window Validation', () => {
 
       for (const intensity of intensities) {
         const builder = new PromptBuilder(DEFAULT_CONFIG, intensity);
-        const optimizedPrompt = await builder.buildOptimized(largePR, 'gpt-3.5-turbo');
+        const optimizedPrompt = await builder.buildOptimized(
+          largePR,
+          'gpt-3.5-turbo'
+        );
 
         expect(optimizedPrompt).toBeTruthy();
         expect(optimizedPrompt.length).toBeGreaterThan(0);
@@ -176,17 +202,22 @@ describe('PromptBuilder Context Window Validation', () => {
         title: 'x'.repeat(1000),
         body: 'y'.repeat(5000),
         diff: 'a'.repeat(50000),
-        files: Array(500).fill(null).map((_, i) => ({
-          filename: `file${i}.ts`,
-          status: 'modified' as const,
-          additions: 100,
-          deletions: 50,
-          changes: 150,
-        })),
+        files: Array(500)
+          .fill(null)
+          .map((_, i) => ({
+            filename: `file${i}.ts`,
+            status: 'modified' as const,
+            additions: 100,
+            deletions: 50,
+            changes: 150,
+          })),
       };
 
       const builder = new PromptBuilder(DEFAULT_CONFIG, 'standard');
-      const optimizedPrompt = await builder.buildOptimized(hugePR, 'gpt-3.5-turbo');
+      const optimizedPrompt = await builder.buildOptimized(
+        hugePR,
+        'gpt-3.5-turbo'
+      );
 
       // Should still return a prompt (even if it doesn't fit)
       expect(optimizedPrompt).toBeTruthy();
@@ -225,13 +256,15 @@ describe('PromptBuilder Context Window Validation', () => {
 
       const manyFiles: PRContext = {
         ...mockPR,
-        files: Array(50).fill(null).map((_, i) => ({
-          filename: `file${i}.ts`,
-          status: 'modified' as const,
-          additions: 10,
-          deletions: 5,
-          changes: 15,
-        })),
+        files: Array(50)
+          .fill(null)
+          .map((_, i) => ({
+            filename: `file${i}.ts`,
+            status: 'modified' as const,
+            additions: 10,
+            deletions: 5,
+            changes: 15,
+          })),
       };
 
       const fewEstimate = builder.estimateTokens(fewFiles);
@@ -246,13 +279,15 @@ describe('PromptBuilder Context Window Validation', () => {
       const largePR: PRContext = {
         ...mockPR,
         diff: 'a'.repeat(100000),
-        files: Array(100).fill(null).map((_, i) => ({
-          filename: `file${i}.ts`,
-          status: 'modified' as const,
-          additions: 100,
-          deletions: 50,
-          changes: 150,
-        })),
+        files: Array(100)
+          .fill(null)
+          .map((_, i) => ({
+            filename: `file${i}.ts`,
+            status: 'modified' as const,
+            additions: 100,
+            deletions: 50,
+            changes: 150,
+          })),
       };
 
       const startEstimate = Date.now();
@@ -294,7 +329,10 @@ describe('PromptBuilder Context Window Validation', () => {
 
       for (const intensity of intensities) {
         const builder = new PromptBuilder(DEFAULT_CONFIG, intensity);
-        const { prompt, fitCheck } = await builder.buildWithValidation(mockPR, 'gpt-4-turbo');
+        const { prompt, fitCheck } = await builder.buildWithValidation(
+          mockPR,
+          'gpt-4-turbo'
+        );
 
         // Simplified prompt no longer varies by intensity
         expect(prompt).toContain('ONLY report actual bugs');

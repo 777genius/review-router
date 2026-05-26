@@ -31433,7 +31433,10 @@ var ReviewOrchestrator = class {
           attempts += 1;
         }
         const meetsPrimaryTargets = healthy.length >= MIN_TOTAL_HEALTHY && countOpenCode(healthy) >= MIN_OPENCODE_HEALTHY && countOpenRouter(healthy) >= MIN_OPENROUTER_HEALTHY;
-        if (!meetsPrimaryTargets && healthy.length < MIN_FALLBACK_HEALTHY) {
+        const requiredHealthySatisfied = requiredHealthyProviders.size > 0 && Array.from(requiredHealthyProviders).every(
+          (name) => healthy.some((provider) => provider.name === name)
+        );
+        if (!meetsPrimaryTargets && !requiredHealthySatisfied && healthy.length < MIN_FALLBACK_HEALTHY) {
           logger.warn(
             "Insufficient healthy providers after retries; skipping LLM execution"
           );

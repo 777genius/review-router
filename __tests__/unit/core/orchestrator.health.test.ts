@@ -1213,6 +1213,90 @@ describe('ReviewOrchestrator health check guard rails', () => {
     );
   });
 
+  it('executes a required healthy provider even when optional provider discovery is below the multi-provider minimum', async () => {
+    const providers = [
+      'codex/gpt-5.5',
+      'openrouter/free-a',
+      'openrouter/free-b',
+      'opencode/free',
+    ].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+    const codexProvider = providers[0];
+    const execute = jest.fn().mockResolvedValue([
+      {
+        name: 'codex/gpt-5.5',
+        status: 'success',
+        result: {
+          content: '{"findings":[],"revalidations":[]}',
+          findings: [],
+          revalidations: [],
+        },
+        durationSeconds: 1,
+      } as ProviderResult,
+    ]);
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: providers.map((provider) => provider.name),
+        requiredHealthyProviders: ['codex/gpt-5.5'],
+        fallbackProviders: [],
+        providerLimit: 4,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue(providers),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [codexProvider],
+          healthCheckResults: [
+            {
+              name: 'codex/gpt-5.5',
+              status: 'success',
+              durationSeconds: 0.01,
+            } as ProviderResult,
+            {
+              name: 'openrouter/free-a',
+              status: 'error',
+              error: new Error('OPENROUTER_API_KEY not set'),
+              durationSeconds: 0.01,
+            } as ProviderResult,
+          ],
+        }),
+        execute,
+      } as any,
+    });
+
+    await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(execute).toHaveBeenCalledWith(
+      [codexProvider],
+      expect.any(String),
+      expect.any(Number)
+    );
+  });
+
   it('keeps non-required provider findings eligible for severity blocking', async () => {
     const providers = ['codex/gpt-5.5', 'openrouter/free'].map(
       (name) =>

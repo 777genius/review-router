@@ -205,10 +205,10 @@ export class CodexProvider extends Provider {
         parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
         if (
           this.isMissingAgenticExploration(parsed, runResult.audit, prompt) &&
-          firstParsed.findings.length > parsed.findings.length
+          firstParsed.findings.length >= parsed.findings.length
         ) {
           logger.warn(
-            `Codex agentic retry still lacked read-only exploration and returned fewer findings; preserving first-pass findings for ${this.name}`
+            `Codex agentic retry still lacked read-only exploration and did not add findings; preserving first-pass findings for ${this.name}`
           );
           content = firstContent;
           parsed = firstParsed;

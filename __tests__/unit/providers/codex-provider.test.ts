@@ -573,6 +573,81 @@ describe('CodexProvider', () => {
     );
   });
 
+  it('preserves first-pass findings when audit retry still lacks exploration and returns the same count', async () => {
+    let execCount = 0;
+    const firstFinding = {
+      findings: [
+        {
+          file: 'src/features/team-runtime-lanes/core/domain/buildMixedPersistedLaunchSnapshot.ts',
+          startLine: 236,
+          line: 240,
+          endLine: 240,
+          severity: 'major',
+          title: 'Runtime diagnostic errors are rewritten as healthy',
+          message:
+            'The launch snapshot rewrites an errored runtime diagnostic as confirmed_alive.',
+          suggestion: null,
+        },
+      ],
+      revalidations: [],
+    };
+    const retryFinding = {
+      findings: [
+        {
+          file: 'src/features/team-runtime-lanes/core/domain/buildMixedPersistedLaunchSnapshot.ts',
+          startLine: 236,
+          line: 240,
+          endLine: 240,
+          severity: 'major',
+          title: 'Retry result without exploration should not replace first pass',
+          message:
+            'This retry still did not inspect repository context, so it should not replace the first finding.',
+          suggestion: null,
+        },
+      ],
+      revalidations: [],
+    };
+
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      execCount += 1;
+      return createMockProcess(() => {
+        const outputIndex = args.indexOf('--output-last-message');
+        const outputFile = args[outputIndex + 1];
+        fs.writeFileSync(
+          outputFile,
+          JSON.stringify(execCount === 1 ? firstFinding : retryFinding)
+        );
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: true,
+    });
+    const result = await provider.review(
+      [
+        'Files changed:',
+        '- src/features/team-runtime-lanes/core/domain/buildMixedPersistedLaunchSnapshot.ts (modified, +8/-2)',
+        '',
+        'Diff:',
+        'diff --git a/src/features/team-runtime-lanes/core/domain/buildMixedPersistedLaunchSnapshot.ts b/src/features/team-runtime-lanes/core/domain/buildMixedPersistedLaunchSnapshot.ts',
+      ].join('\n'),
+      1000
+    );
+    const execCalls = spawnMock.mock.calls.filter(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+
+    expect(execCalls).toHaveLength(2);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings?.[0]?.title).toBe(
+      'Runtime diagnostic errors are rewritten as healthy'
+    );
+  });
+
   it('does not rerun empty agentic review when a read-only exploration command is recorded', async () => {
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('--version')) {

@@ -8,13 +8,13 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
 
 The installer supports macOS and Linux shells first. It requires `gh`, `git`, and `curl`. GitHub App manifest setup uses `python3` when available; without `python3`, the installer prints manual App setup instructions.
 
-The generated workflow uses the stable moving major tag by default:
+The generated workflow uses the live main branch by default:
 
 ```text
-777genius/review-router@v1
+777genius/review-router@main
 ```
 
-Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.26`. Use `REVIEW_ROUTER_ACTION_REF_MODE=main` for live dogfood/dev updates. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
+Use `REVIEW_ROUTER_ACTION_REF_MODE=stable` if you want the moving major tag `777genius/review-router@v1`. Use `REVIEW_ROUTER_ACTION_REF_MODE=release` if you want the exact latest release tag pinned at install time, currently `777genius/review-router@v1.0.51`. Use `REVIEW_ROUTER_ACTION_REF=owner/repo@ref` for a custom fork or exact commit SHA.
 
 ## Quick start
 
@@ -106,7 +106,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
 
 ### Stable or release refs
 
-The compact reusable workflow needs reusable workflow files to exist in the selected ref. Until the next release is cut, keep the default `main` ref. If you choose `REVIEW_ROUTER_ACTION_REF_MODE=stable` or `release` with compact reusable before that release, the installer stops with a clear error instead of creating a broken workflow.
+The compact reusable workflow needs reusable workflow files to exist in the selected ref. The default `main` ref is the recommended install path because it receives reviewer fixes immediately. If you choose `REVIEW_ROUTER_ACTION_REF_MODE=stable` or `release` with compact reusable before that release has reusable workflow files, the installer stops with a clear error instead of creating a broken workflow.
 
 Use this only when you deliberately want to pin the full explicit workflow to the latest release:
 
@@ -122,7 +122,7 @@ curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/script
   bash
 ```
 
-Use this when you deliberately want every workflow run to pull the newest reviewer code from `main`:
+This is the default and keeps every workflow run on the newest reviewer code from `main`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/777genius/review-router/main/scripts/install.sh | env \

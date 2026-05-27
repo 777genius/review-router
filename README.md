@@ -24,14 +24,15 @@ The installer:
 - detects or asks for the target `owner/repo`;
 - lets you choose `github-actions[bot]` or GitHub App bot identity;
 - lets you choose Codex subscription OAuth, Codex CLI with OpenAI API key, or OpenRouter API key;
-- lets you choose live `main`, stable `v1`, or a pinned exact release tag for the generated workflow;
+- uses live `main` by default so new installs receive the newest ReviewRouter code on every run;
+- lets you opt into stable `v1` or a pinned exact release tag when reproducibility matters more than freshness;
 - writes compact reusable caller workflows by default; set `REVIEW_ROUTER_WORKFLOW_STYLE=explicit` for the full debug workflow;
 - creates `.github/workflows/reviewrouter.yml` on a setup branch;
 - opens a setup PR instead of pushing directly to the default branch.
 
 See [docs/install.md](./docs/install.md) for organization-level secrets, selected repositories, GitHub App setup, and security notes.
 
-By default, the generated workflow uses the stable moving major tag `777genius/review-router@v1`. Choose `REVIEW_ROUTER_ACTION_REF_MODE=release` for an exact pinned tag, or `REVIEW_ROUTER_ACTION_REF_MODE=main` for live dogfood/dev updates.
+By default, the generated workflow uses `777genius/review-router@main`, so new installs always run the latest ReviewRouter code. Choose `REVIEW_ROUTER_ACTION_REF_MODE=stable` for the moving major tag `v1`, or `REVIEW_ROUTER_ACTION_REF_MODE=release` for an exact pinned tag.
 
 ## Status
 
@@ -155,7 +156,7 @@ jobs:
           fi
 
       - name: Run ReviewRouter
-        uses: 777genius/review-router@v1
+        uses: 777genius/review-router@main
         env:
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
         with:
@@ -202,7 +203,7 @@ jobs:
     steps:
       - name: Preflight ReviewRouter interaction
         id: preflight
-        uses: 777genius/review-router@v1
+        uses: 777genius/review-router@main
         with:
           REVIEW_ROUTER_MODE: interaction-preflight
           REVIEW_ROUTER_DISCUSSION_MODE: ${{ vars.REVIEW_ROUTER_DISCUSSION_MODE }}
@@ -213,7 +214,7 @@ jobs:
 
       - name: Handle ReviewRouter interaction
         if: steps.preflight.outputs.should_run == 'true'
-        uses: 777genius/review-router@v1
+        uses: 777genius/review-router@main
         env:
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
         with:
@@ -234,10 +235,10 @@ Then make `ReviewRouter / review` a required status check in branch protection.
 If you use the full explicit workflow and want an exact pinned release, use:
 
 ```yaml
-uses: 777genius/review-router@v1.0.26
+uses: 777genius/review-router@v1.0.51
 ```
 
-For live dogfood/dev installs, use:
+For the default live install, use:
 
 ```yaml
 uses: 777genius/review-router@main

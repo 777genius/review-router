@@ -8,7 +8,7 @@ set -Eeuo pipefail
 PRODUCT_NAME="review-router"
 LATEST_RELEASE_TAG="v1.0.51"
 LATEST_MAJOR_TAG="v1"
-DEFAULT_ACTION_REF_MODE="stable"
+DEFAULT_ACTION_REF_MODE="main"
 DEFAULT_STABLE_ACTION_REF="777genius/review-router@$LATEST_MAJOR_TAG"
 DEFAULT_RELEASE_ACTION_REF="777genius/review-router@$LATEST_RELEASE_TAG"
 DEFAULT_MAIN_ACTION_REF="777genius/review-router@main"
@@ -408,7 +408,7 @@ resolve_action_ref() {
   fi
 
   case "$ACTION_REF_MODE" in
-    stable|major|v1|latest)
+    stable|major|v1)
       ACTION_REF_MODE="stable"
       ACTION_REF="$DEFAULT_STABLE_ACTION_REF"
       ;;
@@ -416,12 +416,12 @@ resolve_action_ref() {
       ACTION_REF_MODE="release"
       ACTION_REF="$DEFAULT_RELEASE_ACTION_REF"
       ;;
-    main|live|dev)
+    main|live|dev|latest)
       ACTION_REF_MODE="main"
       ACTION_REF="$DEFAULT_MAIN_ACTION_REF"
       ;;
     *)
-      fatal "Unsupported REVIEW_ROUTER_ACTION_REF_MODE: $ACTION_REF_MODE. Use stable, release, main, or REVIEW_ROUTER_ACTION_REF=owner/repo@ref."
+      fatal "Unsupported REVIEW_ROUTER_ACTION_REF_MODE: $ACTION_REF_MODE. Use main, stable, release, or REVIEW_ROUTER_ACTION_REF=owner/repo@ref."
       ;;
   esac
 }
@@ -2216,9 +2216,9 @@ main() {
   normalize_secret_scope_env
   if [ -z "$ACTION_REF_EXPLICIT" ] && [ -z "$ACTION_REF_MODE" ]; then
     choose ACTION_REF_MODE "Action version" "$DEFAULT_ACTION_REF_MODE" \
-      "stable:Stable major tag ($LATEST_MAJOR_TAG), recommended for most repositories" \
-      "release:Pinned exact release tag ($LATEST_RELEASE_TAG), maximum reproducibility" \
-      "main:Live main branch, gets every update immediately"
+      "main:Live main branch, gets every update immediately" \
+      "stable:Stable major tag ($LATEST_MAJOR_TAG), updated only when the moving tag is advanced" \
+      "release:Pinned exact release tag ($LATEST_RELEASE_TAG), maximum reproducibility"
   fi
   resolve_action_ref
   case "$WORKFLOW_STYLE" in

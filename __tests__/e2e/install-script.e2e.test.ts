@@ -216,7 +216,7 @@ describe('review-router curl installer e2e', () => {
     expect(result.stdout).toContain('Workflow style: reusable');
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain(
-      'uses: 777genius/review-router/.github/workflows/reviewrouter-reusable.yml@v1'
+      'uses: 777genius/review-router/.github/workflows/reviewrouter-reusable.yml@main'
     );
     expect(workflow).toContain('merge_group:');
     expect(workflow).toContain('runtime_config_mode: oidc');
@@ -239,7 +239,7 @@ describe('review-router curl installer e2e', () => {
 
     const interactionWorkflow = workflowText(result.interactionWorkflowPath);
     expect(interactionWorkflow).toContain(
-      'uses: 777genius/review-router/.github/workflows/reviewrouter-interaction-reusable.yml@v1'
+      'uses: 777genius/review-router/.github/workflows/reviewrouter-interaction-reusable.yml@main'
     );
     expect(interactionWorkflow).toContain(
       'review_workflow_file: reviewrouter.yml'
@@ -263,7 +263,7 @@ describe('review-router curl installer e2e', () => {
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain(
-      'uses: 777genius/review-router/.github/workflows/reviewrouter-reusable.yml@v1'
+      'uses: 777genius/review-router/.github/workflows/reviewrouter-reusable.yml@main'
     );
     expect(workflow).toContain(
       'review_app_client_id: ${{ vars.REVIEW_APP_CLIENT_ID }}'
@@ -372,8 +372,10 @@ describe('review-router curl installer e2e', () => {
 
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('name: ReviewRouter');
-    expect(workflow).toContain('uses: 777genius/review-router@v1');
-    expect(result.stdout).toContain('Action ref: 777genius/review-router@v1');
+    expect(workflow).toContain('uses: 777genius/review-router@main');
+    expect(result.stdout).toContain(
+      'Action ref: 777genius/review-router@main'
+    );
     expect(workflow).toContain('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain(
       'OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}'
@@ -420,19 +422,36 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).not.toContain('\\${{');
   });
 
-  it('can generate a live main-branch workflow when requested', () => {
+  it('can generate a stable major workflow when requested', () => {
     const result = runInstaller({
       REVIEW_ROUTER_IDENTITY: 'actions',
       REVIEW_ROUTER_AUTH: 'openrouter',
       REVIEW_ROUTER_PRESET: 'minimal',
       REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
-      REVIEW_ROUTER_ACTION_REF_MODE: 'main',
+      REVIEW_ROUTER_ACTION_REF_MODE: 'stable',
+    });
+
+    expect(result.status).toBe(0);
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain('uses: 777genius/review-router@v1');
+    expect(result.stdout).toContain('Action ref: 777genius/review-router@v1');
+  });
+
+  it('treats latest action ref mode as live main', () => {
+    const result = runInstaller({
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'minimal',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_ACTION_REF_MODE: 'latest',
     });
 
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('uses: 777genius/review-router@main');
-    expect(result.stdout).toContain('Action ref: 777genius/review-router@main');
+    expect(result.stdout).toContain(
+      'Action ref: 777genius/review-router@main'
+    );
   });
 
   it('can generate an exact pinned release workflow when requested', () => {

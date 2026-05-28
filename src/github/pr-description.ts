@@ -5,7 +5,10 @@ import { logger } from '../utils/logger';
 const START_MARKER = '<!-- review-router-summary:start -->';
 const END_MARKER = '<!-- review-router-summary:end -->';
 const LEGACY_MARKER_PAIRS = [
-  ['<!-- ai-robot-review-summary:start -->', '<!-- ai-robot-review-summary:end -->'],
+  [
+    '<!-- ai-robot-review-summary:start -->',
+    '<!-- ai-robot-review-summary:end -->',
+  ],
 ] as const;
 
 type FileCohort = {
@@ -102,7 +105,10 @@ export class PullRequestDescriptionUpdater {
   }
 
   private removeExistingBlock(body: string): string {
-    const markerPairs = [[START_MARKER, END_MARKER] as const, ...LEGACY_MARKER_PAIRS];
+    const markerPairs = [
+      [START_MARKER, END_MARKER] as const,
+      ...LEGACY_MARKER_PAIRS,
+    ];
 
     for (const [startMarker, endMarker] of markerPairs) {
       const start = body.indexOf(startMarker);
@@ -138,7 +144,10 @@ export class PullRequestDescriptionUpdater {
     return bullets.slice(0, 6);
   }
 
-  private buildNarrativeBullets(pr: PRContext, cohorts: FileCohort[]): string[] {
+  private buildNarrativeBullets(
+    pr: PRContext,
+    cohorts: FileCohort[]
+  ): string[] {
     const bullets: string[] = [];
     const feature = this.inferPrimaryFeature(pr);
     const allFiles = cohorts.flatMap((cohort) => cohort.files);
@@ -152,11 +161,10 @@ export class PullRequestDescriptionUpdater {
           pattern.test(file.filename.toLowerCase())
       );
 
-    if (
-      hasPath(/user[_-]?profile|protocol|models?\/user/) &&
-      feature
-    ) {
-      bullets.push(`add ${feature} support to user profile models and protocol types`);
+    if (hasPath(/user[_-]?profile|protocol|models?\/user/) && feature) {
+      bullets.push(
+        `add ${feature} support to user profile models and protocol types`
+      );
     }
 
     if (hasSourcePath(/admin\/users|user_full_info|admin/)) {
@@ -189,7 +197,9 @@ export class PullRequestDescriptionUpdater {
 
     const tests = cohorts.find((cohort) => cohort.key === 'tests');
     if (tests && tests.files.length > 0) {
-      bullets.push(`update ${tests.files.length} test file${tests.files.length === 1 ? '' : 's'}`);
+      bullets.push(
+        `update ${tests.files.length} test file${tests.files.length === 1 ? '' : 's'}`
+      );
     }
 
     if (bullets.length < 2) {
@@ -450,10 +460,7 @@ export class PullRequestDescriptionUpdater {
     const context: string[] = [];
 
     for (const line of patch.split('\n')) {
-      if (
-        line.startsWith('+++') ||
-        line.startsWith('---')
-      ) {
+      if (line.startsWith('+++') || line.startsWith('---')) {
         continue;
       }
       if (line.startsWith('@@')) {
@@ -477,11 +484,21 @@ export class PullRequestDescriptionUpdater {
     const primary: string[] = [];
     const secondary: string[] = [];
     const patterns = [
-      { pattern: /\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/, primary: true },
+      {
+        pattern: /\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/,
+        primary: true,
+      },
       { pattern: /\b(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/, primary: true },
       { pattern: /\b(?:describe|it|test)\(['"`]([^'"`]+)['"`]/, primary: true },
-      { pattern: /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/, primary: false },
-      { pattern: /\b(?:final|var|late|static|const|bool\??|int\??|double\??|num\??|String\??|DateTime\??)\s+([A-Za-z_$][\w$]*)\b/, primary: false },
+      {
+        pattern: /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/,
+        primary: false,
+      },
+      {
+        pattern:
+          /\b(?:final|var|late|static|const|bool\??|int\??|double\??|num\??|String\??|DateTime\??)\s+([A-Za-z_$][\w$]*)\b/,
+        primary: false,
+      },
     ];
 
     for (const line of lines) {
@@ -508,7 +525,9 @@ export class PullRequestDescriptionUpdater {
     const combined = `${added}\n${deleted}`;
     const topics: string[] = [];
 
-    if (/\bdb\.query\b|\bselect\b|\binsert\b|\bupdate\b|\bdelete\b/.test(combined)) {
+    if (
+      /\bdb\.query\b|\bselect\b|\binsert\b|\bupdate\b|\bdelete\b/.test(combined)
+    ) {
       topics.push('database query construction');
     }
 
@@ -521,8 +540,10 @@ export class PullRequestDescriptionUpdater {
       topics.push('fallback/null handling');
     }
 
-    if (patch.additions.some((line) => line.startsWith('return ')) ||
-        patch.deletions.some((line) => line.startsWith('return '))) {
+    if (
+      patch.additions.some((line) => line.startsWith('return ')) ||
+      patch.deletions.some((line) => line.startsWith('return '))
+    ) {
       topics.push('return value handling');
     }
 
@@ -560,7 +581,10 @@ export class PullRequestDescriptionUpdater {
         words: this.humanizeIdentifier(candidate),
         score: this.featureScore(candidate),
       }))
-      .filter((candidate) => candidate.score > 0 && candidate.words.split(' ').length >= 2)
+      .filter(
+        (candidate) =>
+          candidate.score > 0 && candidate.words.split(' ').length >= 2
+      )
       .sort((a, b) => b.score - a.score || b.raw.length - a.raw.length);
 
     return ranked[0]?.words || null;
@@ -570,11 +594,23 @@ export class PullRequestDescriptionUpdater {
     const lower = value.toLowerCase();
     let score = 0;
     if (/hide|hidden|show|visible|visibility/.test(lower)) score += 4;
-    if (/paid|premium|feature|access|moderation|profile|course|chat/.test(lower)) score += 3;
+    if (
+      /paid|premium|feature|access|moderation|profile|course|chat/.test(lower)
+    )
+      score += 3;
     if (/info|setting|flag|mode/.test(lower)) score += 2;
-    if (/[A-Z]/.test(value) || value.includes('_') || value.includes('-')) score += 2;
-    if (/checkbox|button|widget|row|dialog|header|page|screen|sliver/.test(lower)) score -= 5;
-    if (/^(id|name|type|data|value|status|created|updated|deleted|module|table|serverpod)$/.test(lower)) score -= 4;
+    if (/[A-Z]/.test(value) || value.includes('_') || value.includes('-'))
+      score += 2;
+    if (
+      /checkbox|button|widget|row|dialog|header|page|screen|sliver/.test(lower)
+    )
+      score -= 5;
+    if (
+      /^(id|name|type|data|value|status|created|updated|deleted|module|table|serverpod)$/.test(
+        lower
+      )
+    )
+      score -= 4;
     if (/^\d+$/.test(lower)) score -= 10;
     return score;
   }

@@ -11,7 +11,10 @@ type SyntaxNode = TreeSitter.SyntaxNode;
  * Normalize a module specifier to a canonical file path
  * Resolves relative imports (./foo, ../bar) relative to the importer
  */
-function resolveImportPath(importerFile: string, moduleSpecifier: string): string {
+function resolveImportPath(
+  importerFile: string,
+  moduleSpecifier: string
+): string {
   // If it's a relative import (starts with . or ..)
   if (moduleSpecifier.startsWith('.')) {
     const importerDir = path.dirname(importerFile);
@@ -165,7 +168,7 @@ export class CodeGraph {
         for (const callee of callees) {
           const callerList = this.callers.get(callee);
           if (callerList) {
-            const filtered = callerList.filter(c => !symbolsToRemove.has(c));
+            const filtered = callerList.filter((c) => !symbolsToRemove.has(c));
             if (filtered.length > 0) {
               this.callers.set(callee, filtered);
             } else {
@@ -182,7 +185,7 @@ export class CodeGraph {
         for (const caller of callersToThis) {
           const calleeList = this.calls.get(caller);
           if (calleeList) {
-            const filtered = calleeList.filter(c => !symbolsToRemove.has(c));
+            const filtered = calleeList.filter((c) => !symbolsToRemove.has(c));
             if (filtered.length > 0) {
               this.calls.set(caller, filtered);
             } else {
@@ -219,7 +222,9 @@ export class CodeGraph {
     // Use file-qualified keys to avoid symbol collisions across files
     const qualifiedCaller = `${callerFile}:${caller}`;
     // Qualify callee with caller file when we cannot resolve the target file to avoid collisions across files
-    const qualifiedCallee = callee.includes(':') ? callee : `${callerFile}:${callee}`;
+    const qualifiedCallee = callee.includes(':')
+      ? callee
+      : `${callerFile}:${callee}`;
 
     // Track caller → callee
     const called = this.calls.get(qualifiedCaller) || [];
@@ -243,9 +248,13 @@ export class CodeGraph {
     // Support both qualified (file:symbol) and unqualified symbol lookups
     const candidateKeys = symbol.includes(':')
       ? [symbol]
-      : Array.from(this.callers.keys()).filter(key => key.endsWith(`:${symbol}`));
+      : Array.from(this.callers.keys()).filter((key) =>
+          key.endsWith(`:${symbol}`)
+        );
 
-    const callerList = candidateKeys.flatMap(key => this.callers.get(key) || []);
+    const callerList = candidateKeys.flatMap(
+      (key) => this.callers.get(key) || []
+    );
     const snippets: GraphCodeSnippet[] = [];
 
     for (const qualifiedCaller of callerList) {
@@ -285,7 +294,7 @@ export class CodeGraph {
 
     for (const [fromFile, toFiles] of this.imports) {
       // Check if any imported path matches (could be relative or absolute)
-      const hasMatch = toFiles.some(importedPath => {
+      const hasMatch = toFiles.some((importedPath) => {
         const normalizedImport = this.normalizePathForComparison(importedPath);
         // Direct match with normalized path
         if (normalizedImport === normalizedFile) return true;
@@ -361,7 +370,7 @@ export class CodeGraph {
 
     for (const [fromFile, toFiles] of this.imports) {
       // Check if any imported path matches (could be relative or absolute)
-      const hasMatch = toFiles.some(importedPath => {
+      const hasMatch = toFiles.some((importedPath) => {
         const normalizedImport = this.normalizePathForComparison(importedPath);
         // Direct match with normalized path
         if (normalizedImport === normalizedFile) return true;
@@ -454,7 +463,8 @@ export class CodeGraph {
       consumers: [],
       derived: [],
       impactLevel: 'low',
-      summary: 'Impact analysis not yet implemented - file relationships are tracked but impact radius calculation is pending',
+      summary:
+        'Impact analysis not yet implemented - file relationships are tracked but impact radius calculation is pending',
     };
   }
 
@@ -536,7 +546,10 @@ export class CodeGraph {
       exports: Array.from(this.exports.entries()).map(([k, v]) => [k, [...v]]),
       calls: Array.from(this.calls.entries()).map(([k, v]) => [k, [...v]]),
       callers: Array.from(this.callers.entries()).map(([k, v]) => [k, [...v]]),
-      fileSymbols: Array.from(this.fileSymbols.entries()).map(([k, v]) => [k, [...v]]),
+      fileSymbols: Array.from(this.fileSymbols.entries()).map(([k, v]) => [
+        k,
+        [...v],
+      ]),
     };
   }
 
@@ -557,7 +570,14 @@ export class CodeGraph {
     }
 
     // Validate all map fields are arrays
-    const mapFields: Array<keyof SerializedGraph> = ['definitions', 'imports', 'exports', 'calls', 'callers', 'fileSymbols'];
+    const mapFields: Array<keyof SerializedGraph> = [
+      'definitions',
+      'imports',
+      'exports',
+      'calls',
+      'callers',
+      'fileSymbols',
+    ];
     for (const field of mapFields) {
       if (!Array.isArray(data[field])) {
         throw new Error(`Invalid graph data: ${field} must be an array`);
@@ -575,20 +595,30 @@ export class CodeGraph {
       }
       // SECURITY: Validate name is non-empty to prevent injection attacks or graph corruption
       if (typeof def.name !== 'string' || !def.name) {
-        throw new Error(`Invalid definition for key ${key}: name must be a non-empty string`);
+        throw new Error(
+          `Invalid definition for key ${key}: name must be a non-empty string`
+        );
       }
       if (typeof def.file !== 'string' || !def.file) {
-        throw new Error(`Invalid definition for key ${key}: file must be a non-empty string`);
+        throw new Error(
+          `Invalid definition for key ${key}: file must be a non-empty string`
+        );
       }
       if (typeof def.line !== 'number' || def.line < 1) {
-        throw new Error(`Invalid definition for key ${key}: line must be a positive number (>= 1)`);
+        throw new Error(
+          `Invalid definition for key ${key}: line must be a positive number (>= 1)`
+        );
       }
       const validTypes = ['function', 'class', 'variable', 'type', 'interface'];
       if (!validTypes.includes(def.type)) {
-        throw new Error(`Invalid definition for key ${key}: type must be one of ${validTypes.join(', ')}`);
+        throw new Error(
+          `Invalid definition for key ${key}: type must be one of ${validTypes.join(', ')}`
+        );
       }
       if (typeof def.exported !== 'boolean') {
-        throw new Error(`Invalid definition for key ${key}: exported must be a boolean`);
+        throw new Error(
+          `Invalid definition for key ${key}: exported must be a boolean`
+        );
       }
     }
 
@@ -644,7 +674,10 @@ export class CodeGraphBuilder {
       this.pyParser.setLanguage(PythonParser.default);
       this.parsersInitialized = true;
     } catch (error) {
-      logger.warn('Failed to initialize parsers - AST analysis disabled', error as Error);
+      logger.warn(
+        'Failed to initialize parsers - AST analysis disabled',
+        error as Error
+      );
       this.parsersInitialized = true; // Mark as initialized even if failed to avoid retrying
     }
   }
@@ -667,7 +700,9 @@ export class CodeGraphBuilder {
 
       // Check timeout
       if (Date.now() - startTime > this.timeoutMs) {
-        logger.warn(`Graph build timeout after ${this.timeoutMs}ms, stopping early`);
+        logger.warn(
+          `Graph build timeout after ${this.timeoutMs}ms, stopping early`
+        );
         break;
       }
     }
@@ -681,7 +716,9 @@ export class CodeGraphBuilder {
     // Copy graph data using type-safe method
     finalGraph.copyFrom(graph);
 
-    logger.info(`Code graph built in ${buildTime}ms: ${graph.getStats().definitions} definitions, ${graph.getStats().imports} imports`);
+    logger.info(
+      `Code graph built in ${buildTime}ms: ${graph.getStats().definitions} definitions, ${graph.getStats().imports} imports`
+    );
 
     return finalGraph;
   }
@@ -689,10 +726,15 @@ export class CodeGraphBuilder {
   /**
    * Update an existing graph with changed files
    */
-  async updateGraph(graph: CodeGraph, changedFiles: FileChange[]): Promise<CodeGraph> {
+  async updateGraph(
+    graph: CodeGraph,
+    changedFiles: FileChange[]
+  ): Promise<CodeGraph> {
     const startTime = Date.now();
 
-    logger.info(`Updating code graph with ${changedFiles.length} changed files`);
+    logger.info(
+      `Updating code graph with ${changedFiles.length} changed files`
+    );
 
     // Remove stale data and re-analyze changed files
     for (const file of changedFiles) {
@@ -757,12 +799,16 @@ export class CodeGraphBuilder {
     // relationships. LLMs still receive the full diff context in the prompt.
     //
     // Tracked in issue #TODO
-    logger.warn(`Analyzing patch-only for ${file.filename} - AST may be incomplete/invalid`);
+    logger.warn(
+      `Analyzing patch-only for ${file.filename} - AST may be incomplete/invalid`
+    );
 
     // Try to extract added lines from patch for partial analysis
     const addedLines = this.extractAddedLines(file.patch);
     if (addedLines.length === 0) {
-      logger.debug(`No added lines found in patch for ${file.filename}, skipping AST analysis`);
+      logger.debug(
+        `No added lines found in patch for ${file.filename}, skipping AST analysis`
+      );
       return;
     }
 
@@ -771,7 +817,9 @@ export class CodeGraphBuilder {
 
     // Fail-fast: Skip AST analysis if code looks like a fragment
     if (this.looksLikeFragment(codeToAnalyze)) {
-      logger.warn(`Skipping AST analysis for ${file.filename}: code appears to be a fragment (unbalanced braces or no top-level declarations)`);
+      logger.warn(
+        `Skipping AST analysis for ${file.filename}: code appears to be a fragment (unbalanced braces or no top-level declarations)`
+      );
       return;
     }
 
@@ -791,7 +839,11 @@ export class CodeGraphBuilder {
   /**
    * Extract symbol definitions from AST
    */
-  private extractDefinitions(node: SyntaxNode, file: string, graph: CodeGraph): void {
+  private extractDefinitions(
+    node: SyntaxNode,
+    file: string,
+    graph: CodeGraph
+  ): void {
     // Function declarations
     if (node.type === 'function_declaration' || node.type === 'function') {
       const nameNode = node.childForFieldName('name');
@@ -829,7 +881,11 @@ export class CodeGraphBuilder {
   /**
    * Extract import statements from AST
    */
-  private extractImports(node: SyntaxNode, file: string, graph: CodeGraph): void {
+  private extractImports(
+    node: SyntaxNode,
+    file: string,
+    graph: CodeGraph
+  ): void {
     // ES6 imports: import { foo } from './bar'
     if (node.type === 'import_statement') {
       const sourceNode = node.childForFieldName('source');
@@ -905,7 +961,10 @@ export class CodeGraphBuilder {
 
     while (current) {
       // Check for function declaration
-      if (current.type === 'function_declaration' || current.type === 'function') {
+      if (
+        current.type === 'function_declaration' ||
+        current.type === 'function'
+      ) {
         const nameNode = current.childForFieldName('name');
         if (nameNode) {
           return nameNode.text;
@@ -921,7 +980,10 @@ export class CodeGraphBuilder {
       }
 
       // Check for arrow function assigned to variable
-      if (current.type === 'lexical_declaration' || current.type === 'variable_declaration') {
+      if (
+        current.type === 'lexical_declaration' ||
+        current.type === 'variable_declaration'
+      ) {
         const declarator = current.childForFieldName('declarator');
         if (declarator) {
           const nameNode = declarator.childForFieldName('name');
@@ -1004,7 +1066,10 @@ export class CodeGraphBuilder {
     // Check for presence of top-level declarations
     // JS/TS: function/class/const/let/var/type/interface/export
     // Python: def/class/import/from
-    const hasTopLevelDeclaration = /^\s*(export\s+)?(function|class|const|let|var|type|interface|async\s+function|def|async\s+def|import|from)\s+/m.test(code);
+    const hasTopLevelDeclaration =
+      /^\s*(export\s+)?(function|class|const|let|var|type|interface|async\s+function|def|async\s+def|import|from)\s+/m.test(
+        code
+      );
 
     return !hasTopLevelDeclaration;
   }

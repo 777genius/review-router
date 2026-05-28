@@ -51,7 +51,11 @@ export class TestCoverageAnalyzer {
         const content = await fs.readFile(testFile, 'utf-8');
 
         // Extract tested source file from imports
-        const sourceFiles = this.extractSourceFileReferences(content, testFile, projectRoot);
+        const sourceFiles = this.extractSourceFileReferences(
+          content,
+          testFile,
+          projectRoot
+        );
         for (const sourceFile of sourceFiles) {
           const existing = testFileMapping.get(sourceFile) || [];
           existing.push(testFile);
@@ -61,7 +65,7 @@ export class TestCoverageAnalyzer {
 
         // Extract tested functions from test descriptions
         const functions = this.extractTestedFunctions(content);
-        functions.forEach(f => testedFunctions.add(f));
+        functions.forEach((f) => testedFunctions.add(f));
 
         // Detect edge case tests
         if (/null|undefined/i.test(content)) {
@@ -99,7 +103,9 @@ export class TestCoverageAnalyzer {
       try {
         await fs.access(testDir);
         const files = await this.walkDirectory(testDir);
-        testFiles.push(...files.filter(f => /\.(test|spec)\.(ts|js|tsx|jsx)$/.test(f)));
+        testFiles.push(
+          ...files.filter((f) => /\.(test|spec)\.(ts|js|tsx|jsx)$/.test(f))
+        );
       } catch {
         // Directory doesn't exist, skip
       }
@@ -126,7 +132,11 @@ export class TestCoverageAnalyzer {
     return files;
   }
 
-  private extractSourceFileReferences(content: string, testFile: string, _projectRoot: string): string[] {
+  private extractSourceFileReferences(
+    content: string,
+    testFile: string,
+    _projectRoot: string
+  ): string[] {
     const sourceFiles: string[] = [];
 
     // Match import/require statements
@@ -137,7 +147,11 @@ export class TestCoverageAnalyzer {
       const importPath = match[1];
 
       // Skip node_modules and test utilities
-      if (importPath.startsWith('.') && !importPath.includes('test') && !importPath.includes('mock')) {
+      if (
+        importPath.startsWith('.') &&
+        !importPath.includes('test') &&
+        !importPath.includes('mock')
+      ) {
         // Resolve relative import to absolute path
         const testDir = path.dirname(testFile);
         const resolved = path.resolve(testDir, importPath);
@@ -176,12 +190,17 @@ export class TestCoverageAnalyzer {
   /**
    * Generate prompt context about test coverage
    */
-  generatePromptContext(coverage: TestCoverageInfo, fileUnderReview: string): string {
+  generatePromptContext(
+    coverage: TestCoverageInfo,
+    fileUnderReview: string
+  ): string {
     const testFiles = coverage.testFileMapping.get(fileUnderReview) || [];
 
     if (testFiles.length === 0) {
-      return '\n## Test Coverage: No automated tests found for this file\n' +
-             '**Reviewer Note**: Higher scrutiny recommended for untested code.\n';
+      return (
+        '\n## Test Coverage: No automated tests found for this file\n' +
+        '**Reviewer Note**: Higher scrutiny recommended for untested code.\n'
+      );
     }
 
     const parts: string[] = [
@@ -195,16 +214,24 @@ export class TestCoverageAnalyzer {
     }
 
     const edgeCaseCoverage: string[] = [];
-    if (testFiles.some(f => coverage.edgeCaseTests.nullHandling.includes(f))) {
+    if (
+      testFiles.some((f) => coverage.edgeCaseTests.nullHandling.includes(f))
+    ) {
       edgeCaseCoverage.push('null/undefined handling');
     }
-    if (testFiles.some(f => coverage.edgeCaseTests.errorHandling.includes(f))) {
+    if (
+      testFiles.some((f) => coverage.edgeCaseTests.errorHandling.includes(f))
+    ) {
       edgeCaseCoverage.push('error cases');
     }
-    if (testFiles.some(f => coverage.edgeCaseTests.boundaryConditions.includes(f))) {
+    if (
+      testFiles.some((f) =>
+        coverage.edgeCaseTests.boundaryConditions.includes(f)
+      )
+    ) {
       edgeCaseCoverage.push('boundary conditions');
     }
-    if (testFiles.some(f => coverage.edgeCaseTests.concurrency.includes(f))) {
+    if (testFiles.some((f) => coverage.edgeCaseTests.concurrency.includes(f))) {
       edgeCaseCoverage.push('concurrency scenarios');
     }
 
@@ -222,7 +249,10 @@ export class TestCoverageAnalyzer {
   /**
    * Check if a function has test coverage
    */
-  hasFunctionCoverage(coverage: TestCoverageInfo, functionName: string): boolean {
+  hasFunctionCoverage(
+    coverage: TestCoverageInfo,
+    functionName: string
+  ): boolean {
     return coverage.testedFunctions.has(functionName);
   }
 
@@ -230,6 +260,9 @@ export class TestCoverageAnalyzer {
    * Check if a file has test coverage
    */
   hasFileCoverage(coverage: TestCoverageInfo, filePath: string): boolean {
-    return coverage.testedFiles.has(filePath) || coverage.testFileMapping.has(filePath);
+    return (
+      coverage.testedFiles.has(filePath) ||
+      coverage.testFileMapping.has(filePath)
+    );
   }
 }

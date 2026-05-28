@@ -17,12 +17,10 @@ interface AnalyticsOptions {
   days?: number;
 }
 
-async function generateAnalytics(options: AnalyticsOptions = {}): Promise<void> {
-  const {
-    output = './reports',
-    format = 'html',
-    days = 30,
-  } = options;
+async function generateAnalytics(
+  options: AnalyticsOptions = {}
+): Promise<void> {
+  const { output = './reports', format = 'html', days = 30 } = options;
 
   try {
     logger.info('Generating analytics dashboard...');
@@ -78,17 +76,29 @@ async function printSummary(days: number = 30): Promise<void> {
 
     console.log('\n=== Analytics Summary ===\n');
     console.log(`Total Reviews: ${metrics.length}`);
-    console.log(`Total Cost: $${costTrends.reduce((sum, day) => sum + day.cost, 0).toFixed(2)}`);
-    console.log(`Average Cost per Review: $${metrics.length > 0 ? (costTrends.reduce((sum, day) => sum + day.cost, 0) / metrics.length).toFixed(4) : '0.0000'}`);
-    console.log(`Total Findings: ${metrics.reduce((sum, m) => sum + m.findingsCount, 0)}`);
-    console.log(`Cache Hit Rate: ${(metrics.filter(m => m.cacheHit).length / Math.max(metrics.length, 1) * 100).toFixed(1)}%`);
+    console.log(
+      `Total Cost: $${costTrends.reduce((sum, day) => sum + day.cost, 0).toFixed(2)}`
+    );
+    console.log(
+      `Average Cost per Review: $${metrics.length > 0 ? (costTrends.reduce((sum, day) => sum + day.cost, 0) / metrics.length).toFixed(4) : '0.0000'}`
+    );
+    console.log(
+      `Total Findings: ${metrics.reduce((sum, m) => sum + m.findingsCount, 0)}`
+    );
+    console.log(
+      `Cache Hit Rate: ${((metrics.filter((m) => m.cacheHit).length / Math.max(metrics.length, 1)) * 100).toFixed(1)}%`
+    );
     console.log(`\nROI:`);
     console.log(`  Total Cost: $${roi.totalCost.toFixed(2)}`);
-    console.log(`  Estimated Time Saved: ${roi.estimatedTimeSaved.toFixed(0)} minutes (${(roi.estimatedTimeSaved / 60).toFixed(1)} hours)`);
+    console.log(
+      `  Estimated Time Saved: ${roi.estimatedTimeSaved.toFixed(0)} minutes (${(roi.estimatedTimeSaved / 60).toFixed(1)} hours)`
+    );
     console.log(`  ROI: ${roi.roi.toFixed(0)}%`);
     console.log(`\nTop Providers:`);
     providerStats.slice(0, 5).forEach((p, i) => {
-      console.log(`  ${i + 1}. ${p.provider}: ${p.totalReviews} reviews, ${(p.successRate * 100).toFixed(1)}% success`);
+      console.log(
+        `  ${i + 1}. ${p.provider}: ${p.totalReviews} reviews, ${(p.successRate * 100).toFixed(1)}% success`
+      );
     });
     console.log('');
   } catch (error) {
@@ -101,7 +111,10 @@ async function printSummary(days: number = 30): Promise<void> {
  * Safely parse and validate days value
  * Returns a valid positive integer or the default value
  */
-function parseDays(value: string | undefined, defaultDays: number = 30): number {
+function parseDays(
+  value: string | undefined,
+  defaultDays: number = 30
+): number {
   if (!value) {
     return defaultDays;
   }
@@ -110,14 +123,18 @@ function parseDays(value: string | undefined, defaultDays: number = 30): number 
 
   // Check for NaN, negative, or zero
   if (isNaN(parsed) || parsed <= 0) {
-    logger.warn(`Invalid days value: "${value}". Using default: ${defaultDays}`);
+    logger.warn(
+      `Invalid days value: "${value}". Using default: ${defaultDays}`
+    );
     return defaultDays;
   }
 
   // Reasonable maximum to prevent excessive data processing
   const MAX_DAYS = 365;
   if (parsed > MAX_DAYS) {
-    logger.warn(`Days value ${parsed} exceeds maximum ${MAX_DAYS}. Using maximum.`);
+    logger.warn(
+      `Days value ${parsed} exceeds maximum ${MAX_DAYS}. Using maximum.`
+    );
     return MAX_DAYS;
   }
 
@@ -158,7 +175,9 @@ async function main() {
         }
         const format = args[++i];
         if (format !== 'html' && format !== 'csv' && format !== 'json') {
-          logger.error(`Invalid format "${format}". Must be one of: html, csv, json`);
+          logger.error(
+            `Invalid format "${format}". Must be one of: html, csv, json`
+          );
           process.exit(1);
         }
         options.format = format as 'html' | 'csv' | 'json';
@@ -198,7 +217,7 @@ Examples:
 }
 
 if (require.main === module) {
-  main().catch(error => {
+  main().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);
   });

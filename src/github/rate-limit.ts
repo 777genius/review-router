@@ -35,8 +35,10 @@ export class GitHubRateLimitTracker {
 
       logger.debug(
         `GitHub rate limit: ${this.status.remaining}/${this.status.limit} remaining ` +
-        `(resets at ${this.status.resetTime || new Date(this.status.reset * 1000).toISOString()})` +
-        (this.status.tokenExpiration ? ` [token expires: ${this.status.tokenExpiration}]` : '')
+          `(resets at ${this.status.resetTime || new Date(this.status.reset * 1000).toISOString()})` +
+          (this.status.tokenExpiration
+            ? ` [token expires: ${this.status.tokenExpiration}]`
+            : '')
       );
 
       if (this.status.remaining < 100) {
@@ -47,10 +49,12 @@ export class GitHubRateLimitTracker {
 
       if (this.status.remaining === 0) {
         const resetTime = new Date(this.status.reset * 1000);
-        const waitSeconds = Math.ceil((this.status.reset * 1000 - Date.now()) / 1000);
+        const waitSeconds = Math.ceil(
+          (this.status.reset * 1000 - Date.now()) / 1000
+        );
         logger.error(
           `GitHub API rate limit exceeded. Resets at ${resetTime.toISOString()} ` +
-          `(in ${waitSeconds} seconds)`
+            `(in ${waitSeconds} seconds)`
         );
       }
     }
@@ -99,7 +103,9 @@ export class GitHubRateLimitTracker {
     const waitMs = this.getWaitTimeMs();
     if (waitMs === 0) return;
 
-    logger.info(`Waiting ${Math.ceil(waitMs / 1000)} seconds for GitHub rate limit to reset...`);
-    await new Promise(resolve => setTimeout(resolve, waitMs + 1000)); // Add 1s buffer
+    logger.info(
+      `Waiting ${Math.ceil(waitMs / 1000)} seconds for GitHub rate limit to reset...`
+    );
+    await new Promise((resolve) => setTimeout(resolve, waitMs + 1000)); // Add 1s buffer
   }
 }

@@ -18,6 +18,21 @@ import { getSeverityDisplay, severityLine } from '../utils/severity';
  */
 export class MarkdownFormatterV2 {
   format(review: Review): string {
+    const hasFindings = review.findings.length > 0;
+    const lifecycleSection = this.formatThreadLifecycle(review);
+    const releaseNotes = this.generateReleaseNotes(review).trim();
+
+    if (
+      !hasFindings &&
+      !lifecycleSection &&
+      !releaseNotes &&
+      review.metrics.providersSuccess > 0 &&
+      !this.didAllProviderRunsFail(review) &&
+      !this.hasDismissedFindings(review)
+    ) {
+      return this.formatCompactAllClear(review);
+    }
+
     const lines: string[] = [];
 
     // Header with branding
@@ -40,7 +55,6 @@ export class MarkdownFormatterV2 {
       lines.push('');
     }
 
-    const releaseNotes = this.generateReleaseNotes(review).trim();
     if (releaseNotes) {
       lines.push('## Release Notes');
       lines.push('');
@@ -49,9 +63,6 @@ export class MarkdownFormatterV2 {
     }
 
     // Findings by severity with visual indicators
-    const hasFindings = review.findings.length > 0;
-    const lifecycleSection = this.formatThreadLifecycle(review);
-
     if (hasFindings) {
       lines.push('## Findings');
       lines.push('');
@@ -116,6 +127,68 @@ export class MarkdownFormatterV2 {
     lines.push(this.formatFooter(review));
 
     return lines.join('\n');
+  }
+
+  private formatCompactAllClear(review: Review): string {
+    const lines: string[] = [];
+
+    lines.push('# ReviewRouter');
+    lines.push('');
+    lines.push(
+      `✅ **${this.formatCompactAllClearStatus(review)}** · ${this.formatPlainStats(review)}`
+    );
+    lines.push(`<sub>${this.formatCompactRunSummary(review)}</sub>`);
+    lines.push('');
+
+    const reviewScope = this.formatReviewScope(review);
+    if (reviewScope) {
+      lines.push(reviewScope);
+      lines.push('');
+    }
+
+    lines.push(this.formatMetrics(review));
+
+    const advancedSections = this.formatAdvancedSections(review).trim();
+    if (advancedSections) {
+      lines.push('');
+      lines.push(advancedSections);
+    }
+
+    return lines.join('\n');
+  }
+
+  private formatCompactAllClearStatus(review: Review): string {
+    return this.hasScopeLimitations(review)
+      ? 'No reportable findings in reviewed files'
+      : 'No reportable findings';
+  }
+
+  private formatPlainStats(review: Review): string {
+    const { metrics } = review;
+    const previous = countPreviousStillValidBySeverity(review.threadLifecycle);
+    const criticalCount = metrics.critical + previous.critical;
+    const majorCount = metrics.major + previous.major;
+    const minorCount = metrics.minor + previous.minor;
+
+    return `${criticalCount} Critical · ${majorCount} Major · ${minorCount} Minor`;
+  }
+
+  private formatCompactRunSummary(review: Review): string {
+    const { coverage, metrics } = review;
+    const parts: string[] = [];
+
+    if (coverage) {
+      const files =
+        coverage.filesConsidered === 1 ? 'file reviewed' : 'files reviewed';
+      parts.push(`${coverage.filesConsidered} ${files}`);
+    }
+
+    parts.push(
+      `${metrics.providersSuccess}/${metrics.providersUsed} provider${metrics.providersUsed === 1 ? '' : 's'}`
+    );
+    parts.push(this.formatRunSummary(review));
+
+    return parts.join(' · ');
   }
 
   private formatQuickStats(review: Review): string {

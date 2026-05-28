@@ -24,7 +24,23 @@ describe('OpenRouterProvider (mocked)', () => {
       status: 200,
       statusText: 'OK',
       json: async () => ({
-        choices: [{ message: { content: JSON.stringify({ findings: [{ file: 'a.ts', line: 1, severity: 'major', title: 'X', message: 'Y' }] }) } }],
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                findings: [
+                  {
+                    file: 'a.ts',
+                    line: 1,
+                    severity: 'major',
+                    title: 'X',
+                    message: 'Y',
+                  },
+                ],
+              }),
+            },
+          },
+        ],
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       }),
       headers: new Map(),
@@ -65,7 +81,11 @@ describe('OpenRouterProvider (mocked)', () => {
   });
 
   it('strips alias suffixes from concrete OpenRouter model ids', async () => {
-    const provider = new OpenRouterProvider('qwen/qwen3-coder:free#2', apiKey, limiter);
+    const provider = new OpenRouterProvider(
+      'qwen/qwen3-coder:free#2',
+      apiKey,
+      limiter
+    );
 
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,

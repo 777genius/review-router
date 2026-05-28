@@ -30,9 +30,9 @@ describe('ReviewThreadInventoryLoader', () => {
       ])
     );
     expect(authors).not.toContain('invalid login!');
-    expect(isTrustedReviewThreadAuthor('Review-Router-Owner[bot]', authors)).toBe(
-      true
-    );
+    expect(
+      isTrustedReviewThreadAuthor('Review-Router-Owner[bot]', authors)
+    ).toBe(true);
     expect(isTrustedReviewThreadAuthor('Review-Router-Owner', authors)).toBe(
       true
     );
@@ -599,7 +599,10 @@ describe('ReviewThreadInventoryLoader', () => {
                   path: 'src/app.ts',
                   line: 12,
                   comments: {
-                    pageInfo: { hasNextPage: true, endCursor: 'comments-page-1' },
+                    pageInfo: {
+                      hasNextPage: true,
+                      endCursor: 'comments-page-1',
+                    },
                     nodes: [
                       {
                         id: 'comment-1',
@@ -667,7 +670,10 @@ describe('ReviewThreadInventoryLoader', () => {
                   path: 'src/app.ts',
                   line: 12,
                   comments: {
-                    pageInfo: { hasNextPage: true, endCursor: 'comments-page-1' },
+                    pageInfo: {
+                      hasNextPage: true,
+                      endCursor: 'comments-page-1',
+                    },
                     nodes: [
                       {
                         id: 'comment-1',
@@ -699,7 +705,9 @@ describe('ReviewThreadInventoryLoader', () => {
     expect(inventory.manualAttention[0].reasonCodes).toContain(
       'pagination_incomplete'
     );
-    expect(inventory.warnings[0]).toContain('pagination could not be completed');
+    expect(inventory.warnings[0]).toContain(
+      'pagination could not be completed'
+    );
   });
 
   it('does not let untrusted marker comments suppress new current findings', async () => {

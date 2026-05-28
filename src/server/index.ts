@@ -19,7 +19,9 @@ interface ServerConfig {
 /**
  * Create and start webhook server
  */
-export async function startWebhookServer(config: ServerConfig): Promise<http.Server> {
+export async function startWebhookServer(
+  config: ServerConfig
+): Promise<http.Server> {
   logger.info(`Starting webhook server on ${config.host}:${config.port}`);
 
   // Initialize review components
@@ -51,7 +53,7 @@ export async function startWebhookServer(config: ServerConfig): Promise<http.Ser
     if (req.url === '/webhook' && req.method === 'POST') {
       let body = '';
 
-      req.on('data', chunk => {
+      req.on('data', (chunk) => {
         body += chunk.toString();
       });
 
@@ -79,7 +81,7 @@ export async function startWebhookServer(config: ServerConfig): Promise<http.Ser
           const payload = WebhookHandler.parsePayload(body);
 
           // Handle event (async, don't block response)
-          webhookHandler.handleEvent(event, payload).catch(error => {
+          webhookHandler.handleEvent(event, payload).catch((error) => {
             logger.error('Error handling webhook event', error as Error);
           });
 
@@ -102,14 +104,16 @@ export async function startWebhookServer(config: ServerConfig): Promise<http.Ser
   });
 
   // Error handling
-  server.on('error', error => {
+  server.on('error', (error) => {
     logger.error('Server error', error);
   });
 
   // Start listening
   await new Promise<void>((resolve, reject) => {
     server.listen(config.port, config.host, () => {
-      logger.info(`Webhook server listening on http://${config.host}:${config.port}`);
+      logger.info(
+        `Webhook server listening on http://${config.host}:${config.port}`
+      );
       resolve();
     });
 
@@ -167,7 +171,7 @@ async function main() {
 
 // Run if called directly
 if (require.main === module) {
-  main().catch(error => {
+  main().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);
   });

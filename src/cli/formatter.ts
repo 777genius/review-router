@@ -50,20 +50,27 @@ export class TerminalFormatter {
 
     lines.push(colors.bold('Summary:'));
 
-    const criticalCount = metrics.critical > 0
-      ? colors.bold(colors.red(String(metrics.critical)))
-      : colors.gray(String(metrics.critical));
-    const majorCount = metrics.major > 0
-      ? colors.bold(colors.yellow(String(metrics.major)))
-      : colors.gray(String(metrics.major));
-    const minorCount = metrics.minor > 0
-      ? colors.blue(String(metrics.minor))
-      : colors.gray(String(metrics.minor));
+    const criticalCount =
+      metrics.critical > 0
+        ? colors.bold(colors.red(String(metrics.critical)))
+        : colors.gray(String(metrics.critical));
+    const majorCount =
+      metrics.major > 0
+        ? colors.bold(colors.yellow(String(metrics.major)))
+        : colors.gray(String(metrics.major));
+    const minorCount =
+      metrics.minor > 0
+        ? colors.blue(String(metrics.minor))
+        : colors.gray(String(metrics.minor));
 
-    lines.push(`  ${this.getSeverityIcon('critical')} Critical: ${criticalCount}`);
+    lines.push(
+      `  ${this.getSeverityIcon('critical')} Critical: ${criticalCount}`
+    );
     lines.push(`  ${this.getSeverityIcon('major')} Major:    ${majorCount}`);
     lines.push(`  ${this.getSeverityIcon('minor')} Minor:    ${minorCount}`);
-    lines.push(`  ${colors.dim('Total:')}    ${colors.bold(String(metrics.totalFindings))}`);
+    lines.push(
+      `  ${colors.dim('Total:')}    ${colors.bold(String(metrics.totalFindings))}`
+    );
 
     return lines.join('\n');
   }
@@ -75,9 +82,9 @@ export class TerminalFormatter {
     const lines: string[] = [];
 
     // Group by severity
-    const critical = findings.filter(f => f.severity === 'critical');
-    const major = findings.filter(f => f.severity === 'major');
-    const minor = findings.filter(f => f.severity === 'minor');
+    const critical = findings.filter((f) => f.severity === 'critical');
+    const major = findings.filter((f) => f.severity === 'major');
+    const minor = findings.filter((f) => f.severity === 'minor');
 
     // Critical findings
     if (critical.length > 0) {
@@ -132,7 +139,9 @@ export class TerminalFormatter {
 
     // Suggestion (if present)
     if (finding.suggestion) {
-      lines.push(`     ${colors.green('💡 Suggestion:')} ${finding.suggestion}`);
+      lines.push(
+        `     ${colors.green('💡 Suggestion:')} ${finding.suggestion}`
+      );
     }
 
     return lines.join('\n');
@@ -147,12 +156,20 @@ export class TerminalFormatter {
     const lines: string[] = [];
 
     lines.push(colors.bold('Performance:'));
-    lines.push(`  Duration:  ${colors.cyan(`${metrics.durationSeconds.toFixed(2)}s`)}`);
-    lines.push(`  Cost:      ${colors.cyan(`$${metrics.totalCost.toFixed(4)}`)}`);
-    lines.push(`  Providers: ${colors.cyan(`${metrics.providersSuccess}/${metrics.providersUsed}`)} successful`);
+    lines.push(
+      `  Duration:  ${colors.cyan(`${metrics.durationSeconds.toFixed(2)}s`)}`
+    );
+    lines.push(
+      `  Cost:      ${colors.cyan(`$${metrics.totalCost.toFixed(4)}`)}`
+    );
+    lines.push(
+      `  Providers: ${colors.cyan(`${metrics.providersSuccess}/${metrics.providersUsed}`)} successful`
+    );
 
     if (metrics.providersFailed > 0) {
-      lines.push(`  ${colors.warn('⚠')} ${metrics.providersFailed} provider(s) failed`);
+      lines.push(
+        `  ${colors.warn('⚠')} ${metrics.providersFailed} provider(s) failed`
+      );
     }
 
     return lines.join('\n');
@@ -193,7 +210,10 @@ export class TerminalFormatter {
   /**
    * Format a simple message (for errors, info)
    */
-  formatMessage(message: string, type: 'error' | 'warning' | 'info' | 'success' = 'info'): string {
+  formatMessage(
+    message: string,
+    type: 'error' | 'warning' | 'info' | 'success' = 'info'
+  ): string {
     const icon = this.getMessageIcon(type);
     const coloredMessage = this.colorMessage(message, type);
     return `${icon} ${coloredMessage}`;

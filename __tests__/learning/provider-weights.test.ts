@@ -218,12 +218,12 @@ describe('ProviderWeightTracker', () => {
   describe('weight calculation formula', () => {
     it('should follow formula: weight = 0.3 + (0.7 * positiveRate)', async () => {
       const testCases = [
-        { positive: 5, negative: 0, expectedWeight: 1.0 },   // 100%
-        { positive: 4, negative: 1, expectedWeight: 0.86 },  // 80%
-        { positive: 3, negative: 2, expectedWeight: 0.72 },  // 60%
-        { positive: 2, negative: 3, expectedWeight: 0.58 },  // 40%
-        { positive: 1, negative: 4, expectedWeight: 0.44 },  // 20%
-        { positive: 0, negative: 5, expectedWeight: 0.3 },   // 0% (minimum)
+        { positive: 5, negative: 0, expectedWeight: 1.0 }, // 100%
+        { positive: 4, negative: 1, expectedWeight: 0.86 }, // 80%
+        { positive: 3, negative: 2, expectedWeight: 0.72 }, // 60%
+        { positive: 2, negative: 3, expectedWeight: 0.58 }, // 40%
+        { positive: 1, negative: 4, expectedWeight: 0.44 }, // 20%
+        { positive: 0, negative: 5, expectedWeight: 0.3 }, // 0% (minimum)
       ];
 
       for (const testCase of testCases) {

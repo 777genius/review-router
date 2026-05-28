@@ -8,7 +8,8 @@ import { logger } from '../utils/logger';
  */
 export class GitReader {
   // Git's empty tree SHA for repos with no commits
-  private static readonly EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+  private static readonly EMPTY_TREE_SHA =
+    '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
   private static readonly MAX_BUFFER = 10 * 1024 * 1024; // 10MB
 
   /**
@@ -16,7 +17,9 @@ export class GitReader {
    */
   getCurrentBranch(): string {
     try {
-      return execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).trim();
+      return execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+        encoding: 'utf8',
+      }).trim();
     } catch (error) {
       throw new Error(`Failed to get current branch: ${error}`);
     }
@@ -27,7 +30,9 @@ export class GitReader {
    */
   getCurrentCommit(): string | null {
     try {
-      return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+      return execFileSync('git', ['rev-parse', 'HEAD'], {
+        encoding: 'utf8',
+      }).trim();
     } catch {
       // HEAD doesn't exist in brand-new repos with no commits
       return null;
@@ -41,12 +46,16 @@ export class GitReader {
     try {
       if (target) {
         // If target specified (e.g., HEAD~1, main), resolve it
-        return execFileSync('git', ['rev-parse', target], { encoding: 'utf8' }).trim();
+        return execFileSync('git', ['rev-parse', target], {
+          encoding: 'utf8',
+        }).trim();
       }
 
       // Default: compare against main/master branch
       const defaultBranch = this.getDefaultBranch();
-      return execFileSync('git', ['rev-parse', defaultBranch], { encoding: 'utf8' }).trim();
+      return execFileSync('git', ['rev-parse', defaultBranch], {
+        encoding: 'utf8',
+      }).trim();
     } catch (error) {
       throw new Error(`Failed to get base commit: ${error}`);
     }
@@ -59,22 +68,34 @@ export class GitReader {
   private getDefaultBranch(): string {
     try {
       // Try to get remote default branch
-      const result = execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], { encoding: 'utf8' }).trim();
+      const result = execFileSync(
+        'git',
+        ['symbolic-ref', 'refs/remotes/origin/HEAD'],
+        { encoding: 'utf8' }
+      ).trim();
       return result.replace('refs/remotes/origin/', '');
     } catch {
       // Fallback 1: check if main exists
       try {
-        execFileSync('git', ['rev-parse', '--verify', 'main'], { encoding: 'utf8' });
+        execFileSync('git', ['rev-parse', '--verify', 'main'], {
+          encoding: 'utf8',
+        });
         return 'main';
       } catch {
         // Fallback 2: check if master exists
         try {
-          execFileSync('git', ['rev-parse', '--verify', 'master'], { encoding: 'utf8' });
+          execFileSync('git', ['rev-parse', '--verify', 'master'], {
+            encoding: 'utf8',
+          });
           return 'master';
         } catch {
           // Fallback 3: use current branch if not detached HEAD
           try {
-            const currentBranch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).trim();
+            const currentBranch = execFileSync(
+              'git',
+              ['rev-parse', '--abbrev-ref', 'HEAD'],
+              { encoding: 'utf8' }
+            ).trim();
             if (currentBranch !== 'HEAD') {
               logger.debug(`Using current branch as default: ${currentBranch}`);
               return currentBranch;
@@ -108,7 +129,9 @@ export class GitReader {
     const files = this.parseDiff(diff);
 
     // Generate stable ID from branch + base commit for incremental cache
-    const contextId = this.generateContextId(`uncommitted:${currentBranch}:${baseSha}`);
+    const contextId = this.generateContextId(
+      `uncommitted:${currentBranch}:${baseSha}`
+    );
 
     return {
       number: contextId,
@@ -132,14 +155,18 @@ export class GitReader {
   async getCommitChanges(commitRef: string): Promise<PRContext> {
     logger.info(`Reading changes for commit ${commitRef}`);
 
-    const commitSha = execFileSync('git', ['rev-parse', commitRef], { encoding: 'utf8' }).trim();
+    const commitSha = execFileSync('git', ['rev-parse', commitRef], {
+      encoding: 'utf8',
+    }).trim();
 
     // Try to get parent commit - initial commits have no parent
     let parentSha: string;
     let isInitialCommit = false;
 
     try {
-      parentSha = execFileSync('git', ['rev-parse', `${commitRef}^`], { encoding: 'utf8' }).trim();
+      parentSha = execFileSync('git', ['rev-parse', `${commitRef}^`], {
+        encoding: 'utf8',
+      }).trim();
     } catch {
       // No parent - this is the initial commit
       parentSha = GitReader.EMPTY_TREE_SHA;
@@ -153,7 +180,11 @@ export class GitReader {
     const files = this.parseDiff(diff);
 
     // Get commit message
-    const message = execFileSync('git', ['log', '-1', '--pretty=%B', commitSha], { encoding: 'utf8' }).trim();
+    const message = execFileSync(
+      'git',
+      ['log', '-1', '--pretty=%B', commitSha],
+      { encoding: 'utf8' }
+    ).trim();
 
     // Generate stable ID from commit SHA for incremental cache
     const contextId = this.generateContextId(`commit:${commitSha}`);
@@ -183,7 +214,9 @@ export class GitReader {
       ? execFileSync('git', ['rev-parse', head], { encoding: 'utf8' }).trim()
       : this.getCurrentCommit() || GitReader.EMPTY_TREE_SHA;
 
-    logger.info(`Reading changes from ${baseSha.substring(0, 7)} to ${headSha.substring(0, 7)}`);
+    logger.info(
+      `Reading changes from ${baseSha.substring(0, 7)} to ${headSha.substring(0, 7)}`
+    );
 
     // Get diff between commits
     const diff = this.executeGitDiff(['diff', baseSha, headSha]);
@@ -222,7 +255,7 @@ export class GitReader {
         const sizeInMB = Math.round(GitReader.MAX_BUFFER / 1024 / 1024);
         throw new Error(
           `Diff exceeds maximum size of ${sizeInMB}MB. ` +
-          `Consider reviewing smaller changes or increasing MAX_BUFFER.`
+            `Consider reviewing smaller changes or increasing MAX_BUFFER.`
         );
       }
       throw error;
@@ -237,7 +270,9 @@ export class GitReader {
     // Limit diff size to prevent ReDoS attacks
     const MAX_DIFF_SIZE = 10 * 1024 * 1024; // 10MB
     if (diff.length > MAX_DIFF_SIZE) {
-      logger.warn(`Diff size ${diff.length} exceeds max ${MAX_DIFF_SIZE}, truncating`);
+      logger.warn(
+        `Diff size ${diff.length} exceeds max ${MAX_DIFF_SIZE}, truncating`
+      );
       diff = diff.substring(0, MAX_DIFF_SIZE);
     }
 
@@ -284,7 +319,9 @@ export class GitReader {
     }
 
     if (fileCount >= MAX_FILES) {
-      logger.warn(`Reached maximum file limit (${MAX_FILES}), some files may be skipped`);
+      logger.warn(
+        `Reached maximum file limit (${MAX_FILES}), some files may be skipped`
+      );
     }
 
     return files;
@@ -342,7 +379,9 @@ export class GitReader {
    */
   private getGitUser(): string {
     try {
-      return execFileSync('git', ['config', 'user.name'], { encoding: 'utf8' }).trim();
+      return execFileSync('git', ['config', 'user.name'], {
+        encoding: 'utf8',
+      }).trim();
     } catch {
       return 'unknown';
     }
@@ -353,7 +392,9 @@ export class GitReader {
    */
   private getRepoRoot(): string {
     try {
-      return execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
+      return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+        encoding: 'utf8',
+      }).trim();
     } catch {
       return process.cwd();
     }

@@ -48,7 +48,10 @@ export class PromptGenerator {
   /**
    * Format prompts for a specific IDE
    */
-  formatForIDE(prompts: FixPrompt[], format: FixPromptFormat = this.defaultFormat): string {
+  formatForIDE(
+    prompts: FixPrompt[],
+    format: FixPromptFormat = this.defaultFormat
+  ): string {
     logger.debug(`Formatting ${prompts.length} prompts for ${format}`);
 
     switch (format) {
@@ -105,7 +108,9 @@ export class PromptGenerator {
     const parts: string[] = [];
 
     // Add context
-    parts.push(`Fix the following ${finding.severity} issue in ${finding.file}:${finding.line}`);
+    parts.push(
+      `Fix the following ${finding.severity} issue in ${finding.file}:${finding.line}`
+    );
     parts.push('');
 
     // Add issue description
@@ -136,7 +141,9 @@ export class PromptGenerator {
 
     lines.push('# AI Fix Prompts for Cursor');
     lines.push('');
-    lines.push(`Generated ${prompts.length} fix prompts. Use Cursor AI to apply these fixes.`);
+    lines.push(
+      `Generated ${prompts.length} fix prompts. Use Cursor AI to apply these fixes.`
+    );
     lines.push('');
 
     for (let i = 0; i < prompts.length; i++) {
@@ -152,7 +159,9 @@ export class PromptGenerator {
       lines.push('');
 
       // Add instruction for Cursor
-      lines.push('**To apply:** Open file in Cursor, position cursor at the line, and use Cmd+K with the prompt above.');
+      lines.push(
+        '**To apply:** Open file in Cursor, position cursor at the line, and use Cmd+K with the prompt above.'
+      );
       lines.push('');
       lines.push('---');
       lines.push('');
@@ -169,7 +178,9 @@ export class PromptGenerator {
 
     lines.push('# AI Fix Suggestions for GitHub Copilot');
     lines.push('');
-    lines.push(`${prompts.length} fixes available. Use Copilot to apply these suggestions.`);
+    lines.push(
+      `${prompts.length} fixes available. Use Copilot to apply these suggestions.`
+    );
     lines.push('');
 
     for (const prompt of prompts) {
@@ -226,7 +237,11 @@ export class PromptGenerator {
   /**
    * Save prompts to a file (for CLI usage)
    */
-  async saveToFile(prompts: FixPrompt[], filepath: string, format: FixPromptFormat = this.defaultFormat): Promise<void> {
+  async saveToFile(
+    prompts: FixPrompt[],
+    filepath: string,
+    format: FixPromptFormat = this.defaultFormat
+  ): Promise<void> {
     const fs = await import('fs/promises');
     const content = this.formatForIDE(prompts, format);
     await fs.writeFile(filepath, content, 'utf8');

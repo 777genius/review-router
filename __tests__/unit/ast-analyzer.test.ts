@@ -16,8 +16,8 @@ describe('ASTAnalyzer', () => {
     ];
 
     const findings = analyzer.analyze(files);
-    const consoleFinding = findings.find(f => f.title.includes('Console'));
-    const debuggerFinding = findings.find(f => f.title.includes('Debugger'));
+    const consoleFinding = findings.find((f) => f.title.includes('Console'));
+    const debuggerFinding = findings.find((f) => f.title.includes('Debugger'));
 
     expect(consoleFinding?.line).toBe(11);
     expect(debuggerFinding?.line).toBe(12);
@@ -38,8 +38,8 @@ describe('ASTAnalyzer', () => {
     ];
 
     const findings = analyzer.analyze(files);
-    const anyFinding = findings.find(f => f.title.includes('Unsafe any'));
-    const catchFinding = findings.find(f => f.title.includes('Empty catch'));
+    const anyFinding = findings.find((f) => f.title.includes('Unsafe any'));
+    const catchFinding = findings.find((f) => f.title.includes('Empty catch'));
 
     expect(anyFinding?.line).toBe(1);
     expect(catchFinding?.line).toBe(3);

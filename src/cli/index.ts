@@ -30,7 +30,9 @@ export class CLI {
 
       // Check we're in a git repo
       if (!this.gitReader.isGitRepo()) {
-        console.error(this.formatter.formatMessage('Not in a git repository', 'error'));
+        console.error(
+          this.formatter.formatMessage('Not in a git repository', 'error')
+        );
         return 1;
       }
 
@@ -55,7 +57,9 @@ export class CLI {
           return 0;
 
         default:
-          console.error(this.formatter.formatMessage(`Unknown command: ${command}`, 'error'));
+          console.error(
+            this.formatter.formatMessage(`Unknown command: ${command}`, 'error')
+          );
           this.showHelp();
           return 1;
       }
@@ -68,11 +72,16 @@ export class CLI {
   /**
    * Run code review
    */
-  private async runReview(target?: string, options: Record<string, unknown> = {}): Promise<number> {
+  private async runReview(
+    target?: string,
+    options: Record<string, unknown> = {}
+  ): Promise<number> {
     let components: any = null;
 
     try {
-      console.log(this.formatter.formatMessage('Starting code review...', 'info'));
+      console.log(
+        this.formatter.formatMessage('Starting code review...', 'info')
+      );
       console.log('');
 
       // Get changes based on target
@@ -81,31 +90,47 @@ export class CLI {
       if (!target) {
         // No target: review uncommitted changes
         pr = await this.gitReader.getUncommittedChanges();
-        console.log(this.formatter.formatMessage('Reviewing uncommitted changes', 'info'));
+        console.log(
+          this.formatter.formatMessage('Reviewing uncommitted changes', 'info')
+        );
       } else if (target.includes('..')) {
         // Range: review between commits/branches
         const [base, head] = target.split('..');
         pr = await this.gitReader.getBranchChanges(base, head);
-        console.log(this.formatter.formatMessage(`Reviewing changes from ${base} to ${head || 'HEAD'}`, 'info'));
+        console.log(
+          this.formatter.formatMessage(
+            `Reviewing changes from ${base} to ${head || 'HEAD'}`,
+            'info'
+          )
+        );
       } else {
         // Single commit
         pr = await this.gitReader.getCommitChanges(target);
-        console.log(this.formatter.formatMessage(`Reviewing commit ${target}`, 'info'));
+        console.log(
+          this.formatter.formatMessage(`Reviewing commit ${target}`, 'info')
+        );
       }
 
       // Check if there are changes
       if (pr.files.length === 0) {
-        console.log(this.formatter.formatMessage('No changes to review', 'success'));
+        console.log(
+          this.formatter.formatMessage('No changes to review', 'success')
+        );
         return 0;
       }
 
-      console.log(this.formatter.formatMessage(`Found ${pr.files.length} changed file(s)`, 'info'));
+      console.log(
+        this.formatter.formatMessage(
+          `Found ${pr.files.length} changed file(s)`,
+          'info'
+        )
+      );
       console.log('');
 
       // Setup components (CLI mode)
       components = await setupComponents({
         cliMode: true,
-        dryRun: options.dryRun as boolean || false,
+        dryRun: (options.dryRun as boolean) || false,
       });
 
       // Create CLI reviewer
@@ -134,7 +159,10 @@ export class CLI {
   /**
    * Run analytics command
    */
-  private async runAnalytics(subcommand?: string, options: Record<string, unknown> = {}): Promise<number> {
+  private async runAnalytics(
+    subcommand?: string,
+    options: Record<string, unknown> = {}
+  ): Promise<number> {
     try {
       if (subcommand === 'summary' || !subcommand) {
         // Show summary
@@ -150,7 +178,12 @@ export class CLI {
         });
         return 0;
       } else {
-        console.error(this.formatter.formatMessage(`Unknown analytics subcommand: ${subcommand}`, 'error'));
+        console.error(
+          this.formatter.formatMessage(
+            `Unknown analytics subcommand: ${subcommand}`,
+            'error'
+          )
+        );
         this.showAnalyticsHelp();
         return 1;
       }
@@ -281,10 +314,13 @@ if (require.main === module) {
   const cli = new CLI();
   const args = process.argv.slice(2);
 
-  cli.run(args).then(exitCode => {
-    process.exit(exitCode);
-  }).catch(error => {
-    console.error('Fatal error:', error);
-    process.exit(1);
-  });
+  cli
+    .run(args)
+    .then((exitCode) => {
+      process.exit(exitCode);
+    })
+    .catch((error) => {
+      console.error('Fatal error:', error);
+      process.exit(1);
+    });
 }

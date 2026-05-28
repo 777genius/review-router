@@ -14,8 +14,22 @@ describe('QuietModeFilter', () => {
 
   it('should filter findings below confidence threshold', async () => {
     const findings: Finding[] = [
-      { file: 'a.ts', line: 1, severity: 'major', title: 'High conf', message: 'Test', confidence: 0.9 },
-      { file: 'b.ts', line: 2, severity: 'major', title: 'Low conf', message: 'Test', confidence: 0.3 },
+      {
+        file: 'a.ts',
+        line: 1,
+        severity: 'major',
+        title: 'High conf',
+        message: 'Test',
+        confidence: 0.9,
+      },
+      {
+        file: 'b.ts',
+        line: 2,
+        severity: 'major',
+        title: 'Low conf',
+        message: 'Test',
+        confidence: 0.3,
+      },
     ];
 
     const filtered = await filter.filterByConfidence(findings);
@@ -32,7 +46,14 @@ describe('QuietModeFilter', () => {
     });
 
     const findings: Finding[] = [
-      { file: 'a.ts', line: 1, severity: 'major', title: 'Test', message: 'Test', confidence: 0.3 },
+      {
+        file: 'a.ts',
+        line: 1,
+        severity: 'major',
+        title: 'Test',
+        message: 'Test',
+        confidence: 0.3,
+      },
     ];
 
     const filtered = await disabledFilter.filterByConfidence(findings);

@@ -88,20 +88,20 @@ describe('DashboardGenerator', () => {
         reviews: [sampleMetric],
         suggestionQuality: [],
         totalReviews: 10,
-        totalCost: 0.50,
+        totalCost: 0.5,
         totalFindings: 100,
         avgReviewTime: 45,
         cacheHitRate: 0.6,
         lastUpdated: Date.now(),
       });
       mockCollector.calculateROI.mockResolvedValue({
-        totalCost: 0.50,
+        totalCost: 0.5,
         estimatedTimeSaved: 5,
         estimatedTimeSavedValue: 500,
         roi: 1000,
       });
       mockCollector.getCostTrends.mockResolvedValue([
-        { date: '2024-01-01', cost: 0.10, reviews: 2 },
+        { date: '2024-01-01', cost: 0.1, reviews: 2 },
       ]);
       mockCollector.getPerformanceTrends.mockResolvedValue([
         { date: '2024-01-01', avgDuration: 45 },

@@ -1,4 +1,7 @@
-import { ReviewOrchestrator, ReviewComponents } from '../../src/core/orchestrator';
+import {
+  ReviewOrchestrator,
+  ReviewComponents,
+} from '../../src/core/orchestrator';
 import {
   FileChange,
   LifecycleTarget,
@@ -12,14 +15,19 @@ import * as path from 'path';
 describe('Trivial Detection Integration', () => {
   let components: ReviewComponents;
   let orchestrator: ReviewOrchestrator;
-  const originalFailOnNoHealthyProviders = process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
+  const originalFailOnNoHealthyProviders =
+    process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
 
   beforeAll(async () => {
     process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = 'false';
     // Setup components in CLI mode (no GitHub API)
     components = await setupComponents({ cliMode: true, dryRun: true });
-    jest.spyOn(components.providerRegistry, 'createProviders').mockResolvedValue([]);
-    jest.spyOn(components.providerRegistry, 'discoverAdditionalFreeProviders').mockResolvedValue([]);
+    jest
+      .spyOn(components.providerRegistry, 'createProviders')
+      .mockResolvedValue([]);
+    jest
+      .spyOn(components.providerRegistry, 'discoverAdditionalFreeProviders')
+      .mockResolvedValue([]);
     orchestrator = new ReviewOrchestrator(components);
   });
 
@@ -35,7 +43,8 @@ describe('Trivial Detection Integration', () => {
     if (originalFailOnNoHealthyProviders === undefined) {
       delete process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
     } else {
-      process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = originalFailOnNoHealthyProviders;
+      process.env.FAIL_ON_NO_HEALTHY_PROVIDERS =
+        originalFailOnNoHealthyProviders;
     }
   });
 
@@ -47,7 +56,7 @@ describe('Trivial Detection Integration', () => {
     draft: false,
     labels: [],
     files,
-    diff: files.map(f => f.patch || '').join('\n'),
+    diff: files.map((f) => f.patch || '').join('\n'),
     additions: files.reduce((sum, f) => sum + f.additions, 0),
     deletions: files.reduce((sum, f) => sum + f.deletions, 0),
     baseSha: 'abc123',
@@ -218,9 +227,7 @@ describe('Trivial Detection Integration', () => {
           isInlineCommandDismissed: jest.fn(() => false),
         } as any,
       };
-      const lifecycleOrchestrator = new ReviewOrchestrator(
-        lifecycleComponents
-      );
+      const lifecycleOrchestrator = new ReviewOrchestrator(lifecycleComponents);
       const pr = createMockPR([createFile('README.md')]);
 
       const review = await lifecycleOrchestrator.executeReview(pr);
@@ -241,7 +248,10 @@ describe('Trivial Detection Integration', () => {
   describe('partially trivial PRs', () => {
     it('should filter trivial files and review non-trivial files', async () => {
       const pr = createMockPR([
-        createFile('src/app.ts', '@@ -1,1 +1,1 @@\n-const x = 1;\n+const x = 2;'),
+        createFile(
+          'src/app.ts',
+          '@@ -1,1 +1,1 @@\n-const x = 1;\n+const x = 2;'
+        ),
         createFile('package-lock.json'),
         createFile('README.md'),
         createFile('dist/bundle.js'),

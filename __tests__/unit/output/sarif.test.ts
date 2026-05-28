@@ -126,7 +126,9 @@ describe('buildSarif', () => {
     expect(result.ruleId).toBe('RULE-1');
     expect(result.message.text).toBe('Potential memory leak detected');
     expect(result.locations).toHaveLength(1);
-    expect(result.locations[0].physicalLocation.artifactLocation.uri).toBe('src/utils.ts');
+    expect(result.locations[0].physicalLocation.artifactLocation.uri).toBe(
+      'src/utils.ts'
+    );
     expect(result.locations[0].physicalLocation.region.startLine).toBe(42);
   });
 

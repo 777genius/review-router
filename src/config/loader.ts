@@ -93,9 +93,7 @@ export class ConfigLoader {
       providerBlocklist: this.parseArray(env.PROVIDER_BLOCKLIST),
       providerDiscoveryLimit: this.parseNumber(env.PROVIDER_DISCOVERY_LIMIT),
       providerLimit: this.parseNumber(env.PROVIDER_LIMIT),
-      requiredHealthyProviders: this.parseArray(
-        env.REQUIRED_HEALTHY_PROVIDERS
-      ),
+      requiredHealthyProviders: this.parseArray(env.REQUIRED_HEALTHY_PROVIDERS),
       providerRetries: this.parseNumber(env.PROVIDER_RETRIES),
       providerMaxParallel: this.parseNumber(env.PROVIDER_MAX_PARALLEL),
       quietModeEnabled: this.parseBoolean(env.QUIET_MODE_ENABLED),
@@ -119,7 +117,9 @@ export class ConfigLoader {
 
       diffMaxBytes: this.parseNumber(env.DIFF_MAX_BYTES),
       runTimeoutSeconds: this.parseNumber(env.RUN_TIMEOUT_SECONDS),
-      openrouterTimeoutSeconds: this.parseNumber(env.OPENROUTER_TIMEOUT_SECONDS),
+      openrouterTimeoutSeconds: this.parseNumber(
+        env.OPENROUTER_TIMEOUT_SECONDS
+      ),
 
       budgetMaxUsd: this.parseFloat(env.BUDGET_MAX_USD),
 
@@ -133,6 +133,7 @@ export class ConfigLoader {
       incrementalCacheTtlDays: this.parseNumber(env.INCREMENTAL_CACHE_TTL_DAYS),
 
       codexAgenticContext: this.parseBoolean(env.CODEX_AGENTIC_CONTEXT),
+      claudeAgenticContext: this.parseBoolean(env.CLAUDE_AGENTIC_CONTEXT),
       codexEventAudit: this.parseBoolean(env.CODEX_EVENT_AUDIT),
 
       batchMaxFiles: this.parseNumber(env.BATCH_MAX_FILES),
@@ -237,6 +238,7 @@ export class ConfigLoader {
       graphMaxDepth: config.graph_max_depth,
       graphTimeoutSeconds: config.graph_timeout_seconds,
       codexAgenticContext: config.codex_agentic_context,
+      claudeAgenticContext: config.claude_agentic_context,
       codexEventAudit: config.codex_event_audit,
       generateFixPrompts: config.generate_fix_prompts,
       fixPromptFormat: config.fix_prompt_format,

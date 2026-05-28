@@ -27,14 +27,18 @@ export function trimDiff(diff: string, maxBytes: number): string {
   // Keep as many complete files as possible within the limit
   const includedChunks: string[] = [];
   let currentBytes = 0;
-  const truncationMarker = '\n\n...remaining files truncated to stay within size limit...\n';
+  const truncationMarker =
+    '\n\n...remaining files truncated to stay within size limit...\n';
   const markerBytes = Buffer.byteLength(truncationMarker, 'utf8');
 
   for (const chunk of fileChunks) {
     const chunkBytes = Buffer.byteLength(chunk, 'utf8');
 
     // Check if adding this chunk would exceed limit (accounting for marker)
-    if (currentBytes + chunkBytes + markerBytes > maxBytes && includedChunks.length > 0) {
+    if (
+      currentBytes + chunkBytes + markerBytes > maxBytes &&
+      includedChunks.length > 0
+    ) {
       break;
     }
 
@@ -45,7 +49,10 @@ export function trimDiff(diff: string, maxBytes: number): string {
   // If we truncated any files, add marker
   if (includedChunks.length < fileChunks.length) {
     const truncatedCount = fileChunks.length - includedChunks.length;
-    return includedChunks.join('\n') + `\n\n...${truncatedCount} file(s) truncated to stay within size limit...\n`;
+    return (
+      includedChunks.join('\n') +
+      `\n\n...${truncatedCount} file(s) truncated to stay within size limit...\n`
+    );
   }
 
   return includedChunks.join('\n');
@@ -103,7 +110,9 @@ export function mapAddedLines(patch: string | undefined): AddedLine[] {
  * Map absolute line numbers to diff positions for GitHub PR review comments.
  * Position is the line number within the diff (1-indexed).
  */
-export function mapLinesToPositions(patch: string | undefined): Map<number, number> {
+export function mapLinesToPositions(
+  patch: string | undefined
+): Map<number, number> {
   const map = new Map<number, number>();
   if (!patch) return map;
 
@@ -156,7 +165,9 @@ export function chooseBestAddedLineForComment(
   const added = mapAddedLines(patch);
   if (added.length === 0) return reportedLine;
 
-  const nearby = added.filter(line => Math.abs(line.line - reportedLine) <= searchRadius);
+  const nearby = added.filter(
+    (line) => Math.abs(line.line - reportedLine) <= searchRadius
+  );
   if (nearby.length === 0) return reportedLine;
 
   const bodyTokens = tokenizeForLineScoring(commentBody);
@@ -166,19 +177,43 @@ export function chooseBestAddedLineForComment(
     const content = candidate.content;
     const lower = content.toLowerCase();
     const codeTokens = tokenizeForLineScoring(content);
-    const overlap = Array.from(codeTokens).filter(token => bodyTokens.has(token)).length;
-    const proximity = Math.max(0, searchRadius + 1 - Math.abs(candidate.line - reportedLine));
-    const riskScore = riskTerms.reduce((sum, term) => sum + (term.test(lower) ? 3 : 0), 0);
+    const overlap = Array.from(codeTokens).filter((token) =>
+      bodyTokens.has(token)
+    ).length;
+    const proximity = Math.max(
+      0,
+      searchRadius + 1 - Math.abs(candidate.line - reportedLine)
+    );
+    const riskScore = riskTerms.reduce(
+      (sum, term) => sum + (term.test(lower) ? 3 : 0),
+      0
+    );
     const interpolationScore = /\$\{.+?\}/.test(content) ? 2 : 0;
     const callScore = /\b[a-zA-Z_$][\w$]*\s*\(/.test(content) ? 1 : 0;
-    const declarationPenalty = /^\s*(export\s+)?(async\s+)?(function|class|interface|type)\b/.test(content) ? -2 : 0;
+    const declarationPenalty =
+      /^\s*(export\s+)?(async\s+)?(function|class|interface|type)\b/.test(
+        content
+      )
+        ? -2
+        : 0;
 
-    return proximity + overlap + riskScore + interpolationScore + callScore + declarationPenalty;
+    return (
+      proximity +
+      overlap +
+      riskScore +
+      interpolationScore +
+      callScore +
+      declarationPenalty
+    );
   };
 
-  const current = nearby.find(line => line.line === reportedLine);
+  const current = nearby.find((line) => line.line === reportedLine);
   const currentScore = current ? score(current) : Number.NEGATIVE_INFINITY;
-  const best = [...nearby].sort((a, b) => score(b) - score(a) || Math.abs(a.line - reportedLine) - Math.abs(b.line - reportedLine))[0];
+  const best = [...nearby].sort(
+    (a, b) =>
+      score(b) - score(a) ||
+      Math.abs(a.line - reportedLine) - Math.abs(b.line - reportedLine)
+  )[0];
   const bestScore = score(best);
 
   return bestScore > currentScore + 1 ? best.line : reportedLine;
@@ -186,8 +221,22 @@ export function chooseBestAddedLineForComment(
 
 function tokenizeForLineScoring(text: string): Set<string> {
   const stopWords = new Set([
-    'the', 'and', 'for', 'with', 'this', 'that', 'from', 'into', 'value',
-    'line', 'risk', 'issue', 'critical', 'major', 'minor', 'severity',
+    'the',
+    'and',
+    'for',
+    'with',
+    'this',
+    'that',
+    'from',
+    'into',
+    'value',
+    'line',
+    'risk',
+    'issue',
+    'critical',
+    'major',
+    'minor',
+    'severity',
   ]);
 
   return new Set(
@@ -195,7 +244,7 @@ function tokenizeForLineScoring(text: string): Set<string> {
       .toLowerCase()
       .replace(/[^a-z0-9_$]+/g, ' ')
       .split(/\s+/)
-      .filter(token => token.length >= 3 && !stopWords.has(token))
+      .filter((token) => token.length >= 3 && !stopWords.has(token))
   );
 }
 
@@ -204,10 +253,15 @@ function getRiskTerms(commentBody: string): RegExp[] {
   const terms: RegExp[] = [];
 
   if (/\bsql\b|injection|query|database/.test(body)) {
-    terms.push(/\b(query|execute|exec|select|insert|update|delete|where)\b/, /`.*\$\{.*\}/);
+    terms.push(
+      /\b(query|execute|exec|select|insert|update|delete|where)\b/,
+      /`.*\$\{.*\}/
+    );
   }
   if (/xss|html|script|sanitize/.test(body)) {
-    terms.push(/innerhtml|dangerouslysetinnerhtml|document\.write|sanitize|escape/);
+    terms.push(
+      /innerhtml|dangerouslysetinnerhtml|document\.write|sanitize|escape/
+    );
   }
   if (/command|shell|rce|exec|spawn/.test(body)) {
     terms.push(/\b(exec|spawn|execfile|system|shell_exec|popen)\b/);
@@ -284,11 +338,14 @@ export function isRangeWithinSingleHunk(
  * Filter a full diff to only include chunks for the given files.
  * Uses lightweight line scanning with a minimal regex for headers.
  */
-export function filterDiffByFiles(diff: string, files: { filename: string }[]): string {
+export function filterDiffByFiles(
+  diff: string,
+  files: { filename: string }[]
+): string {
   if (files.length === 0) return '';
   if (!diff || diff.trim().length === 0) return '';
 
-  const target = new Set(files.map(f => f.filename));
+  const target = new Set(files.map((f) => f.filename));
   const lines = diff.split('\n');
   const chunks: string[] = [];
   let currentChunk: string[] = [];
@@ -378,7 +435,7 @@ export function compactDiffForPrompt(
 
   const maxFullFileBytes = options.maxFullFileBytes ?? 40_000;
   const maxFullFileChanges = options.maxFullFileChanges ?? 800;
-  const fileByName = new Map(files.map(file => [file.filename, file]));
+  const fileByName = new Map(files.map((file) => [file.filename, file]));
   const chunks = splitDiffIntoChunks(diff);
   const output: string[] = [];
   const summaryOnlyFiles: CompactedDiffFile[] = [];
@@ -429,7 +486,11 @@ function splitDiffIntoChunks(diff: string): DiffChunk[] {
 
   const push = () => {
     if (current.length > 0) {
-      chunks.push({ aPath: currentA, bPath: currentB, text: current.join('\n') });
+      chunks.push({
+        aPath: currentA,
+        bPath: currentB,
+        text: current.join('\n'),
+      });
     }
     current = [];
     currentA = '';
@@ -464,14 +525,18 @@ export function getSummaryOnlyDiffReason(
   if (isDependencyLockPath(lower)) return 'dependency lock file';
   if (isGeneratedPath(lower)) return 'generated file';
   if (isMigrationArtifactPath(lower)) return 'migration artifact';
-  if (bytes > maxFullFileBytes) return `large diff over ${maxFullFileBytes} bytes`;
-  if (changes > maxFullFileChanges) return `large diff over ${maxFullFileChanges} changed lines`;
+  if (bytes > maxFullFileBytes)
+    return `large diff over ${maxFullFileBytes} bytes`;
+  if (changes > maxFullFileChanges)
+    return `large diff over ${maxFullFileChanges} changed lines`;
 
   return null;
 }
 
 function isDependencyLockPath(lower: string): boolean {
-  return /(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|pubspec\.lock|gemfile\.lock|cargo\.lock|poetry\.lock|go\.sum|composer\.lock|pdm\.lock|pipfile\.lock)$/.test(lower);
+  return /(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|pubspec\.lock|gemfile\.lock|cargo\.lock|poetry\.lock|go\.sum|composer\.lock|pdm\.lock|pipfile\.lock)$/.test(
+    lower
+  );
 }
 
 function isGeneratedPath(lower: string): boolean {
@@ -493,7 +558,10 @@ function isMigrationArtifactPath(lower: string): boolean {
   );
 }
 
-function formatSummaryOnlyChunk(chunk: DiffChunk, file: CompactedDiffFile): string {
+function formatSummaryOnlyChunk(
+  chunk: DiffChunk,
+  file: CompactedDiffFile
+): string {
   return [
     `diff --git a/${chunk.aPath} b/${chunk.bPath}`,
     `# ReviewRouter: full diff omitted from primary prompt (${file.reason}).`,

@@ -1,4 +1,9 @@
-import { PathMatcher, PathPattern, createDefaultPathMatcherConfig, MAX_PATTERN_LENGTH } from '../../../src/analysis/path-matcher';
+import {
+  PathMatcher,
+  PathPattern,
+  createDefaultPathMatcherConfig,
+  MAX_PATTERN_LENGTH,
+} from '../../../src/analysis/path-matcher';
 import { FileChange } from '../../../src/types';
 
 /**
@@ -171,10 +176,7 @@ describe('PathMatcher', () => {
         patterns,
       });
 
-      const files = [
-        createFile('src/app.ts'),
-        createFile('src/utils.ts'),
-      ];
+      const files = [createFile('src/app.ts'), createFile('src/utils.ts')];
 
       const result = matcher.determineIntensity(files);
 
@@ -291,25 +293,35 @@ describe('PathMatcher', () => {
     it('should include critical security paths', () => {
       const config = createDefaultPathMatcherConfig();
 
-      expect(config.patterns.some(p => p.pattern.includes('auth'))).toBe(true);
-      expect(config.patterns.some(p => p.pattern.includes('payment'))).toBe(true);
-      expect(config.patterns.some(p => p.pattern.includes('security'))).toBe(true);
+      expect(config.patterns.some((p) => p.pattern.includes('auth'))).toBe(
+        true
+      );
+      expect(config.patterns.some((p) => p.pattern.includes('payment'))).toBe(
+        true
+      );
+      expect(config.patterns.some((p) => p.pattern.includes('security'))).toBe(
+        true
+      );
     });
 
     it('should mark auth paths as thorough', () => {
       const config = createDefaultPathMatcherConfig();
-      const authPatterns = config.patterns.filter(p => p.pattern.includes('auth'));
+      const authPatterns = config.patterns.filter((p) =>
+        p.pattern.includes('auth')
+      );
 
-      authPatterns.forEach(pattern => {
+      authPatterns.forEach((pattern) => {
         expect(pattern.intensity).toBe('thorough');
       });
     });
 
     it('should mark test paths as light', () => {
       const config = createDefaultPathMatcherConfig();
-      const testPatterns = config.patterns.filter(p => p.pattern.includes('test'));
+      const testPatterns = config.patterns.filter((p) =>
+        p.pattern.includes('test')
+      );
 
-      testPatterns.forEach(pattern => {
+      testPatterns.forEach((pattern) => {
         expect(pattern.intensity).toBe('light');
       });
     });
@@ -317,9 +329,13 @@ describe('PathMatcher', () => {
     it('should include infrastructure paths', () => {
       const config = createDefaultPathMatcherConfig();
 
-      expect(config.patterns.some(p => p.pattern.includes('terraform'))).toBe(true);
-      expect(config.patterns.some(p => p.pattern.includes('k8s'))).toBe(true);
-      expect(config.patterns.some(p => p.pattern.includes('Dockerfile'))).toBe(true);
+      expect(config.patterns.some((p) => p.pattern.includes('terraform'))).toBe(
+        true
+      );
+      expect(config.patterns.some((p) => p.pattern.includes('k8s'))).toBe(true);
+      expect(
+        config.patterns.some((p) => p.pattern.includes('Dockerfile'))
+      ).toBe(true);
     });
   });
 
@@ -394,7 +410,8 @@ describe('PathMatcher', () => {
     it('should reject patterns that are too complex', () => {
       // Pattern with excessive wildcards and braces (score > MAX_COMPLEXITY_SCORE)
       // 30 wildcards * 2 + 5 braces * 3 = 75 (exceeds limit of 50)
-      const complexPattern = '**/*/**/*/**/*/**/*/**/*/**/*/**/*/**/*/**/*/{a,b,c}/{d,e,f}/{g,h,i}/{j,k}/**/*';
+      const complexPattern =
+        '**/*/**/*/**/*/**/*/**/*/**/*/**/*/**/*/**/*/{a,b,c}/{d,e,f}/{g,h,i}/{j,k}/**/*';
 
       expect(() => {
         new PathMatcher({
@@ -522,7 +539,8 @@ describe('PathMatcher', () => {
     it('should handle boundary complexity score (exactly MAX_COMPLEXITY_SCORE)', () => {
       // 25 wildcards * 2 = 50 (exactly at MAX_COMPLEXITY_SCORE)
       // Pattern: a*b*c*d*e*f*g*h*i*j*k*l*m*n*o*p*q*r*s*t*u*v*w*x*y*
-      const boundaryPattern = 'a*b*c*d*e*f*g*h*i*j*k*l*m*n*o*p*q*r*s*t*u*v*w*x*y*';
+      const boundaryPattern =
+        'a*b*c*d*e*f*g*h*i*j*k*l*m*n*o*p*q*r*s*t*u*v*w*x*y*';
 
       expect(() => {
         new PathMatcher({
@@ -535,7 +553,8 @@ describe('PathMatcher', () => {
 
     it('should reject pattern exceeding MAX_COMPLEXITY_SCORE', () => {
       // 26 wildcards * 2 = 52 (exceeds MAX_COMPLEXITY_SCORE of 50)
-      const overLimitPattern = 'a*b*c*d*e*f*g*h*i*j*k*l*m*n*o*p*q*r*s*t*u*v*w*x*y*z*';
+      const overLimitPattern =
+        'a*b*c*d*e*f*g*h*i*j*k*l*m*n*o*p*q*r*s*t*u*v*w*x*y*z*';
 
       expect(() => {
         new PathMatcher({

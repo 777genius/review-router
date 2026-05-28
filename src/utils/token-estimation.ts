@@ -84,11 +84,11 @@ export function getContextWindowSize(modelId: string): number {
   // Known context windows (update as models evolve)
   const CONTEXT_WINDOWS: Record<string, number> = {
     // OpenRouter models (common ones)
-    'openrouter/free': 128000,                               // Conservative default for auto-routing
-    'openrouter/google/gemini-2.0-flash-exp:free': 1000000,  // 1M tokens
-    'openrouter/mistralai/devstral-2512:free': 256000,       // 256k tokens
-    'openrouter/xiaomi/mimo-v2-flash:free': 128000,          // 128k tokens
-    'openrouter/microsoft/phi-4:free': 16000,                // 16k tokens
+    'openrouter/free': 128000, // Conservative default for auto-routing
+    'openrouter/google/gemini-2.0-flash-exp:free': 1000000, // 1M tokens
+    'openrouter/mistralai/devstral-2512:free': 256000, // 256k tokens
+    'openrouter/xiaomi/mimo-v2-flash:free': 128000, // 128k tokens
+    'openrouter/microsoft/phi-4:free': 16000, // 16k tokens
 
     // Generic patterns
     'gemini-2.0': 1000000,
@@ -103,7 +103,7 @@ export function getContextWindowSize(modelId: string): number {
     'gpt-4-turbo': 128000,
     'gpt-4o': 128000,
     'gpt-3.5-turbo': 4000,
-    'o1': 200000,
+    o1: 200000,
     'o1-mini': 128000,
   };
 
@@ -150,16 +150,20 @@ export function checkContextWindowFit(
 
   if (!fits) {
     const overage = estimate.tokens - availableTokens;
-    recommendation = `Prompt exceeds context window by ${overage} tokens. ` +
+    recommendation =
+      `Prompt exceeds context window by ${overage} tokens. ` +
       `Reduce batch size or trim diff content.`;
   } else if (utilization > 90) {
-    recommendation = `High utilization (${utilization.toFixed(0)}%). ` +
+    recommendation =
+      `High utilization (${utilization.toFixed(0)}%). ` +
       `Consider reducing batch size for better response quality.`;
   } else if (utilization > 75) {
-    recommendation = `Moderate utilization (${utilization.toFixed(0)}%). ` +
+    recommendation =
+      `Moderate utilization (${utilization.toFixed(0)}%). ` +
       `Acceptable but monitor response quality.`;
   } else {
-    recommendation = `Good utilization (${utilization.toFixed(0)}%). ` +
+    recommendation =
+      `Good utilization (${utilization.toFixed(0)}%). ` +
       `Context window has sufficient headroom.`;
   }
 
@@ -178,7 +182,11 @@ export function checkContextWindowFit(
  */
 export function estimateTokensForFile(file: FileChange): number {
   const patchBytes = file.patch ? Buffer.byteLength(file.patch, 'utf8') : 0;
-  const summaryOnlyReason = getSummaryOnlyDiffReason(file.filename, patchBytes, file.changes);
+  const summaryOnlyReason = getSummaryOnlyDiffReason(
+    file.filename,
+    patchBytes,
+    file.changes
+  );
   const lowSignalSummary =
     summaryOnlyReason &&
     /dependency lock|generated file|migration artifact/.test(summaryOnlyReason);
@@ -217,7 +225,7 @@ export interface BatchSizeRecommendation {
 
 export function calculateOptimalBatchSize(
   files: FileChange[],
-  targetTokensPerBatch: number = 50000,  // ~50k tokens per batch (fits most models well)
+  targetTokensPerBatch: number = 50000, // ~50k tokens per batch (fits most models well)
   maxFilesPerBatch: number = 200
 ): BatchSizeRecommendation {
   if (files.length === 0) {
@@ -230,7 +238,7 @@ export function calculateOptimalBatchSize(
   }
 
   // Estimate token size for each file
-  const filesWithSizes = files.map(file => ({
+  const filesWithSizes = files.map((file) => ({
     file,
     tokens: estimateTokensForFile(file),
   }));
@@ -246,7 +254,10 @@ export function calculateOptimalBatchSize(
   for (const { file, tokens } of filesWithSizes) {
     // If adding this file would exceed target and we already have files,
     // start a new batch
-    if (currentBatchTokens + tokens > targetTokensPerBatch && currentBatch.length > 0) {
+    if (
+      currentBatchTokens + tokens > targetTokensPerBatch &&
+      currentBatch.length > 0
+    ) {
       batches.push(currentBatch);
       currentBatch = [];
       currentBatchTokens = 0;
@@ -270,12 +281,15 @@ export function calculateOptimalBatchSize(
   }
 
   // Calculate average batch size
-  const avgBatchSize = batches.length > 0 ? Math.ceil(files.length / batches.length) : 0;
+  const avgBatchSize =
+    batches.length > 0 ? Math.ceil(files.length / batches.length) : 0;
 
   // Calculate average tokens per batch
-  const avgTokensPerBatch = batches.length > 0
-    ? batches.reduce((sum, batch) => sum + estimateTokensForFiles(batch), 0) / batches.length
-    : 0;
+  const avgTokensPerBatch =
+    batches.length > 0
+      ? batches.reduce((sum, batch) => sum + estimateTokensForFiles(batch), 0) /
+        batches.length
+      : 0;
 
   let reason: string;
   if (batches.length === 1) {

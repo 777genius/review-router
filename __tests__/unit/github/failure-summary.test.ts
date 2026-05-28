@@ -36,7 +36,9 @@ describe('formatReviewFailureSummary', () => {
     expect(body).toContain('## What failed');
     expect(body).toContain('## Why it matters');
     expect(body).toContain('## How to fix');
-    expect(body).toContain('Run this from a trusted machine after `codex login`');
+    expect(body).toContain(
+      'Run this from a trusted machine after `codex login`'
+    );
     expect(body).toContain(
       'curl -fsSL https://reviewrouter.site/install/codex | REVIEW_ROUTER_CONFIRM_WRITE=1 REVIEW_ROUTER_SECRET_SCOPE=repo REVIEW_ROUTER_REPO=777genius/agent-teams-ai bash'
     );
@@ -47,7 +49,9 @@ describe('formatReviewFailureSummary', () => {
   it('classifies Codex 401 refresh failures as OAuth reseed failures', () => {
     process.env.GITHUB_REPOSITORY = '777genius/agent-teams-ai';
     const body = formatReviewFailureSummary(
-      new Error('All LLM providers failed during review. codex/gpt-5.5: 401 Unauthorized access token could not be refreshed'),
+      new Error(
+        'All LLM providers failed during review. codex/gpt-5.5: 401 Unauthorized access token could not be refreshed'
+      ),
       123
     );
 
@@ -60,7 +64,9 @@ describe('formatReviewFailureSummary', () => {
 
   it('redacts obvious secrets from failure comments', () => {
     const body = formatReviewFailureSummary(
-      new Error('failed with OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz and refresh_token: secret-refresh and access_token: access-secret'),
+      new Error(
+        'failed with OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz and refresh_token: secret-refresh and access_token: access-secret'
+      ),
       123
     );
 
@@ -74,10 +80,14 @@ describe('formatReviewFailureSummary', () => {
 
   it('formats no-provider failures', () => {
     const body = formatReviewFailureSummary(
-      new Error('No healthy providers available; failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true')
+      new Error(
+        'No healthy providers available; failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true'
+      )
     );
 
-    expect(body).toContain('No configured review provider passed health checks');
+    expect(body).toContain(
+      'No configured review provider passed health checks'
+    );
     expect(body).toContain('Check provider credentials and model names');
     expect(body).not.toContain('reviewrouter.site/install/codex');
     expect(body).toContain('Code: no_healthy_providers');
@@ -133,15 +143,12 @@ describe('formatReviewFailureSummary', () => {
 
     await clearReviewFailureSummariesForClient(mockClient, 123);
 
-    expect(mockClient.octokit.paginate).toHaveBeenCalledWith(
-      listComments,
-      {
-        owner: 'owner',
-        repo: 'repo',
-        issue_number: 123,
-        per_page: 100,
-      }
-    );
+    expect(mockClient.octokit.paginate).toHaveBeenCalledWith(listComments, {
+      owner: 'owner',
+      repo: 'repo',
+      issue_number: 123,
+      per_page: 100,
+    });
     expect(deleteComment).toHaveBeenCalledTimes(2);
     expect(deleteComment).toHaveBeenCalledWith({
       owner: 'owner',

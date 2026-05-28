@@ -112,14 +112,24 @@ ${'+ line\n'.repeat(1000)}`;
 
   describe('getContextWindowSize', () => {
     it('should return known context window sizes for exact matches', () => {
-      expect(getContextWindowSize('openrouter/google/gemini-2.0-flash-exp:free')).toBe(1000000);
-      expect(getContextWindowSize('openrouter/mistralai/devstral-2512:free')).toBe(256000);
-      expect(getContextWindowSize('openrouter/xiaomi/mimo-v2-flash:free')).toBe(128000);
-      expect(getContextWindowSize('openrouter/microsoft/phi-4:free')).toBe(16000);
+      expect(
+        getContextWindowSize('openrouter/google/gemini-2.0-flash-exp:free')
+      ).toBe(1000000);
+      expect(
+        getContextWindowSize('openrouter/mistralai/devstral-2512:free')
+      ).toBe(256000);
+      expect(getContextWindowSize('openrouter/xiaomi/mimo-v2-flash:free')).toBe(
+        128000
+      );
+      expect(getContextWindowSize('openrouter/microsoft/phi-4:free')).toBe(
+        16000
+      );
     });
 
     it('should match patterns for generic model names', () => {
-      expect(getContextWindowSize('openrouter/google/gemini-2.0-flash')).toBe(1000000);
+      expect(getContextWindowSize('openrouter/google/gemini-2.0-flash')).toBe(
+        1000000
+      );
       expect(getContextWindowSize('claude-3-opus')).toBe(200000);
       expect(getContextWindowSize('claude-3-sonnet')).toBe(200000);
       expect(getContextWindowSize('claude-3-haiku')).toBe(200000);
@@ -134,13 +144,19 @@ ${'+ line\n'.repeat(1000)}`;
     });
 
     it('should handle partial matches', () => {
-      expect(getContextWindowSize('openrouter/google/gemini-2.0-flash-001')).toBe(1000000);
-      expect(getContextWindowSize('anthropic/claude-3-opus-20240229')).toBe(200000);
+      expect(
+        getContextWindowSize('openrouter/google/gemini-2.0-flash-001')
+      ).toBe(1000000);
+      expect(getContextWindowSize('anthropic/claude-3-opus-20240229')).toBe(
+        200000
+      );
     });
 
     it('should prioritize exact matches over pattern matches', () => {
       // If there's an exact match, it should be used
-      expect(getContextWindowSize('openrouter/google/gemini-2.0-flash-exp:free')).toBe(1000000);
+      expect(
+        getContextWindowSize('openrouter/google/gemini-2.0-flash-exp:free')
+      ).toBe(1000000);
     });
   });
 
@@ -207,7 +223,10 @@ ${'+ line\n'.repeat(1000)}`;
 
     it('should handle very large context windows', () => {
       const prompt = 'a'.repeat(100000); // ~27.5k tokens (conservative)
-      const result = checkContextWindowFit(prompt, 'openrouter/google/gemini-2.0-flash-exp:free'); // 1M window
+      const result = checkContextWindowFit(
+        prompt,
+        'openrouter/google/gemini-2.0-flash-exp:free'
+      ); // 1M window
 
       expect(result.fits).toBe(true);
       expect(result.contextWindow).toBe(1000000);

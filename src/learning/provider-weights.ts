@@ -42,10 +42,7 @@ export class ProviderWeightTracker {
    * @param provider - Provider name (e.g., 'claude', 'gemini')
    * @param reaction - User reaction: '👍' (good) or '👎' (bad)
    */
-  async recordFeedback(
-    provider: string,
-    reaction: '👍' | '👎'
-  ): Promise<void> {
+  async recordFeedback(provider: string, reaction: '👍' | '👎'): Promise<void> {
     const data = await this.loadData();
 
     // Get or create provider weight record
@@ -69,8 +66,10 @@ export class ProviderWeightTracker {
     } else {
       providerWeight.negativeCount++;
     }
-    providerWeight.totalCount = providerWeight.positiveCount + providerWeight.negativeCount;
-    providerWeight.positiveRate = providerWeight.positiveCount / providerWeight.totalCount;
+    providerWeight.totalCount =
+      providerWeight.positiveCount + providerWeight.negativeCount;
+    providerWeight.positiveRate =
+      providerWeight.positiveCount / providerWeight.totalCount;
     providerWeight.lastUpdated = Date.now();
 
     // Recalculate weight
@@ -83,7 +82,7 @@ export class ProviderWeightTracker {
 
     logger.debug(
       `Recorded ${reaction} feedback for ${provider} ` +
-      `(${providerWeight.positiveCount}👍 ${providerWeight.negativeCount}👎, weight: ${providerWeight.weight.toFixed(2)})`
+        `(${providerWeight.positiveCount}👍 ${providerWeight.negativeCount}👎, weight: ${providerWeight.weight.toFixed(2)})`
     );
   }
 
@@ -154,8 +153,10 @@ export class ProviderWeightTracker {
     }
 
     // Calculate weight: 0.3 + (0.7 * positiveRate)
-    return ProviderWeightTracker.MIN_WEIGHT +
-           (ProviderWeightTracker.VARIABLE_WEIGHT * positiveRate);
+    return (
+      ProviderWeightTracker.MIN_WEIGHT +
+      ProviderWeightTracker.VARIABLE_WEIGHT * positiveRate
+    );
   }
 
   /**
@@ -174,7 +175,10 @@ export class ProviderWeightTracker {
     try {
       return JSON.parse(raw) as ProviderWeightData;
     } catch (error) {
-      logger.warn('Failed to parse provider weight data, starting fresh', error as Error);
+      logger.warn(
+        'Failed to parse provider weight data, starting fresh',
+        error as Error
+      );
       return {
         weights: {},
         lastAggregation: Date.now(),
@@ -186,6 +190,9 @@ export class ProviderWeightTracker {
    * Save provider weight data to cache
    */
   private async saveData(data: ProviderWeightData): Promise<void> {
-    await this.storage.write(ProviderWeightTracker.CACHE_KEY, JSON.stringify(data));
+    await this.storage.write(
+      ProviderWeightTracker.CACHE_KEY,
+      JSON.stringify(data)
+    );
   }
 }

@@ -14,13 +14,14 @@ describe('AcceptanceDetector', () => {
 
   describe('detectFromCommits', () => {
     const commentedFiles = new Map([
-      ['src/auth.ts', [
-        { line: 10, provider: 'claude' },
-        { line: 20, provider: 'gemini' },
-      ]],
-      ['src/user.ts', [
-        { line: 5, provider: 'claude' },
-      ]],
+      [
+        'src/auth.ts',
+        [
+          { line: 10, provider: 'claude' },
+          { line: 20, provider: 'gemini' },
+        ],
+      ],
+      ['src/user.ts', [{ line: 5, provider: 'claude' }]],
     ]);
 
     it('detects acceptance from "Apply suggestions from code review" commit', () => {
@@ -146,7 +147,7 @@ describe('AcceptanceDetector', () => {
       const acceptances = detector.detectFromCommits(commits, commentedFiles);
 
       expect(acceptances).toHaveLength(3); // 2 from auth.ts + 1 from user.ts
-      expect(acceptances.map(a => a.file)).toEqual([
+      expect(acceptances.map((a) => a.file)).toEqual([
         'src/auth.ts',
         'src/auth.ts',
         'src/user.ts',
@@ -154,9 +155,7 @@ describe('AcceptanceDetector', () => {
     });
 
     it('uses "unknown" provider when provider is missing', () => {
-      const filesWithoutProvider = new Map([
-        ['src/test.ts', [{ line: 1 }]],
-      ]);
+      const filesWithoutProvider = new Map([['src/test.ts', [{ line: 1 }]]]);
 
       const commits = [
         {
@@ -167,7 +166,10 @@ describe('AcceptanceDetector', () => {
         },
       ];
 
-      const acceptances = detector.detectFromCommits(commits, filesWithoutProvider as any);
+      const acceptances = detector.detectFromCommits(
+        commits,
+        filesWithoutProvider as any
+      );
 
       expect(acceptances).toHaveLength(1);
       expect(acceptances[0].provider).toBe('unknown');
@@ -197,9 +199,7 @@ describe('AcceptanceDetector', () => {
           file: 'src/auth.ts',
           line: 10,
           provider: 'claude',
-          reactions: [
-            { user: 'developer', content: '+1' },
-          ],
+          reactions: [{ user: 'developer', content: '+1' }],
         },
       ];
 
@@ -335,8 +335,14 @@ describe('AcceptanceDetector', () => {
       await detector.recordAcceptances(acceptances, mockWeightTracker);
 
       expect(mockWeightTracker.recordFeedback).toHaveBeenCalledTimes(2);
-      expect(mockWeightTracker.recordFeedback).toHaveBeenCalledWith('claude', '👍');
-      expect(mockWeightTracker.recordFeedback).toHaveBeenCalledWith('gemini', '👍');
+      expect(mockWeightTracker.recordFeedback).toHaveBeenCalledWith(
+        'claude',
+        '👍'
+      );
+      expect(mockWeightTracker.recordFeedback).toHaveBeenCalledWith(
+        'gemini',
+        '👍'
+      );
     });
 
     it('skips recording for unknown providers', async () => {
@@ -398,8 +404,16 @@ describe('AcceptanceDetector', () => {
 
       // Should record twice for same provider (two separate acceptances)
       expect(mockWeightTracker.recordFeedback).toHaveBeenCalledTimes(2);
-      expect(mockWeightTracker.recordFeedback).toHaveBeenNthCalledWith(1, 'claude', '👍');
-      expect(mockWeightTracker.recordFeedback).toHaveBeenNthCalledWith(2, 'claude', '👍');
+      expect(mockWeightTracker.recordFeedback).toHaveBeenNthCalledWith(
+        1,
+        'claude',
+        '👍'
+      );
+      expect(mockWeightTracker.recordFeedback).toHaveBeenNthCalledWith(
+        2,
+        'claude',
+        '👍'
+      );
     });
   });
 });

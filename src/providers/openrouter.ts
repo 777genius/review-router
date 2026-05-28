@@ -21,7 +21,9 @@ export class OpenRouterProvider extends Provider {
   ) {
     super(`openrouter/${modelId}`);
     if (typeof fetch === 'undefined') {
-      throw new Error('fetch is not available. Please use Node.js 18+ or polyfill fetch.');
+      throw new Error(
+        'fetch is not available. Please use Node.js 18+ or polyfill fetch.'
+      );
     }
   }
 
@@ -31,7 +33,9 @@ export class OpenRouterProvider extends Provider {
     }
 
     if (typeof fetch !== 'function') {
-      throw new Error('Global fetch is not available; please use Node 18+ or provide a fetch polyfill.');
+      throw new Error(
+        'Global fetch is not available; please use Node 18+ or provide a fetch polyfill.'
+      );
     }
 
     const controller = new AbortController();
@@ -80,7 +84,7 @@ export class OpenRouterProvider extends Provider {
           }),
         {
           retries: 1,
-          retryOn: error => {
+          retryOn: (error) => {
             const err = error as Error;
             if (err instanceof RateLimitError) return false;
             if (err.name === 'AbortError') return false;
@@ -113,10 +117,15 @@ export class OpenRouterProvider extends Provider {
           }
         }
 
-        const minutes = !isNaN(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 60;
+        const minutes =
+          !isNaN(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 60;
 
         if (response.status === 429) {
-          await this.rateLimiter.markRateLimited(this.name, minutes, 'HTTP 429 from OpenRouter');
+          await this.rateLimiter.markRateLimited(
+            this.name,
+            minutes,
+            'HTTP 429 from OpenRouter'
+          );
           throw new RateLimitError(`Rate limited: ${this.name}`, minutes * 60);
         }
 
@@ -137,14 +146,23 @@ export class OpenRouterProvider extends Provider {
           const blockMinutes = Math.max(minutes || 0, 60 * 24);
           logger.warn(
             `Model ${this.name} returned 402 Payment Required. ` +
-            `Blocking for ${blockMinutes} minutes to avoid repeated failures. ` +
-            `This usually means the model requires credits or a paid plan.`
+              `Blocking for ${blockMinutes} minutes to avoid repeated failures. ` +
+              `This usually means the model requires credits or a paid plan.`
           );
-          await this.rateLimiter.markRateLimited(this.name, blockMinutes, 'HTTP 402 Payment Required from OpenRouter');
-          throw new RateLimitError(`Payment required: ${this.name}`, blockMinutes * 60);
+          await this.rateLimiter.markRateLimited(
+            this.name,
+            blockMinutes,
+            'HTTP 402 Payment Required from OpenRouter'
+          );
+          throw new RateLimitError(
+            `Payment required: ${this.name}`,
+            blockMinutes * 60
+          );
         }
 
-        throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `OpenRouter API error: ${response.status} ${response.statusText}`
+        );
       }
 
       const data = (await response.json()) as {
@@ -159,14 +177,18 @@ export class OpenRouterProvider extends Provider {
             }>;
           };
         }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-        model?: string;  // OpenRouter returns the actual model that handled the request
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+        };
+        model?: string; // OpenRouter returns the actual model that handled the request
       };
       const durationSeconds = (Date.now() - started) / 1000;
       const message = data.choices?.[0]?.message;
       const content = extractReviewContent(message);
       const usage = data.usage;
-      const actualModel = data.model;  // Capture which model OpenRouter actually routed to
+      const actualModel = data.model; // Capture which model OpenRouter actually routed to
       const parsedOutput = parseReviewOutputStrict(content, 'OpenRouter');
       const findings = parsedOutput.findings;
       const aiAnalysis = this.extractAIAnalysis(content);
@@ -190,7 +212,7 @@ export class OpenRouterProvider extends Provider {
         revalidations: parsedOutput.revalidations,
         aiLikelihood: aiAnalysis?.likelihood,
         aiReasoning: aiAnalysis?.reasoning,
-        actualModel: actualModel,  // Include actual model in result for analytics
+        actualModel: actualModel, // Include actual model in result for analytics
       };
     } finally {
       clearTimeout(timeout);
@@ -205,10 +227,16 @@ export class OpenRouterProvider extends Provider {
       const raw = jsonMatch ? jsonMatch[1] : content;
       const parsed = JSON.parse(raw);
       if (parsed.ai_likelihood !== undefined) {
-        return { likelihood: parsed.ai_likelihood, reasoning: parsed.ai_reasoning };
+        return {
+          likelihood: parsed.ai_likelihood,
+          reasoning: parsed.ai_reasoning,
+        };
       }
     } catch (error) {
-      logger.debug('Failed to parse AI analysis from OpenRouter response', error as Error);
+      logger.debug(
+        'Failed to parse AI analysis from OpenRouter response',
+        error as Error
+      );
     }
     return undefined;
   }

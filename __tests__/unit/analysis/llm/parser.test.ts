@@ -11,14 +11,18 @@ describe('extractFindings', () => {
   });
 
   it('extracts valid suggestion from finding', () => {
-    const results = [createProviderResult([{
-      file: 'test.ts',
-      line: 10,
-      severity: 'major',
-      title: 'Bug',
-      message: 'Issue',
-      suggestion: 'const x = 1;',
-    }])];
+    const results = [
+      createProviderResult([
+        {
+          file: 'test.ts',
+          line: 10,
+          severity: 'major',
+          title: 'Bug',
+          message: 'Issue',
+          suggestion: 'const x = 1;',
+        },
+      ]),
+    ];
 
     const findings = extractFindings(results);
 
@@ -27,14 +31,18 @@ describe('extractFindings', () => {
   });
 
   it('filters out invalid suggestion (no code syntax)', () => {
-    const results = [createProviderResult([{
-      file: 'test.ts',
-      line: 10,
-      severity: 'major',
-      title: 'Bug',
-      message: 'Issue',
-      suggestion: 'You should fix this issue',
-    }])];
+    const results = [
+      createProviderResult([
+        {
+          file: 'test.ts',
+          line: 10,
+          severity: 'major',
+          title: 'Bug',
+          message: 'Issue',
+          suggestion: 'You should fix this issue',
+        },
+      ]),
+    ];
 
     const findings = extractFindings(results);
 
@@ -43,13 +51,17 @@ describe('extractFindings', () => {
   });
 
   it('preserves finding without suggestion', () => {
-    const results = [createProviderResult([{
-      file: 'test.ts',
-      line: 10,
-      severity: 'major',
-      title: 'Bug',
-      message: 'Issue',
-    }])];
+    const results = [
+      createProviderResult([
+        {
+          file: 'test.ts',
+          line: 10,
+          severity: 'major',
+          title: 'Bug',
+          message: 'Issue',
+        },
+      ]),
+    ];
 
     const findings = extractFindings(results);
 
@@ -59,14 +71,18 @@ describe('extractFindings', () => {
   });
 
   it('trims valid suggestion', () => {
-    const results = [createProviderResult([{
-      file: 'test.ts',
-      line: 10,
-      severity: 'major',
-      title: 'Bug',
-      message: 'Issue',
-      suggestion: '  const x = 1;  ',
-    }])];
+    const results = [
+      createProviderResult([
+        {
+          file: 'test.ts',
+          line: 10,
+          severity: 'major',
+          title: 'Bug',
+          message: 'Issue',
+          suggestion: '  const x = 1;  ',
+        },
+      ]),
+    ];
 
     const findings = extractFindings(results);
 
@@ -74,14 +90,18 @@ describe('extractFindings', () => {
   });
 
   it('handles empty suggestion string', () => {
-    const results = [createProviderResult([{
-      file: 'test.ts',
-      line: 10,
-      severity: 'major',
-      title: 'Bug',
-      message: 'Issue',
-      suggestion: '',
-    }])];
+    const results = [
+      createProviderResult([
+        {
+          file: 'test.ts',
+          line: 10,
+          severity: 'major',
+          title: 'Bug',
+          message: 'Issue',
+          suggestion: '',
+        },
+      ]),
+    ];
 
     const findings = extractFindings(results);
 

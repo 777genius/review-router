@@ -1,4 +1,7 @@
-import { SuppressionTracker, SuppressionPattern } from '../../src/learning/suppression-tracker';
+import {
+  SuppressionTracker,
+  SuppressionPattern,
+} from '../../src/learning/suppression-tracker';
 import { CacheStorage } from '../../src/cache/storage';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -184,7 +187,10 @@ describe('SuppressionTracker', () => {
       expect(shouldSuppressSamePR).toBe(true);
 
       // Should NOT suppress in PR 200
-      const shouldSuppressDifferentPR = await tracker.shouldSuppress(finding, 200);
+      const shouldSuppressDifferentPR = await tracker.shouldSuppress(
+        finding,
+        200
+      );
       expect(shouldSuppressDifferentPR).toBe(false);
     });
 
@@ -207,10 +213,13 @@ describe('SuppressionTracker', () => {
       };
 
       // Write directly to storage
-      await storage.write(`suppression-${repoKey}`, JSON.stringify({
-        patterns: [expiredPattern],
-        lastCleanup: Date.now(),
-      }));
+      await storage.write(
+        `suppression-${repoKey}`,
+        JSON.stringify({
+          patterns: [expiredPattern],
+          lastCleanup: Date.now(),
+        })
+      );
 
       const shouldSuppress = await tracker.shouldSuppress(finding, 123);
       expect(shouldSuppress).toBe(false);
@@ -253,10 +262,13 @@ describe('SuppressionTracker', () => {
         },
       ];
 
-      await storage.write(`suppression-${repoKey}`, JSON.stringify({
-        patterns,
-        lastCleanup: now,
-      }));
+      await storage.write(
+        `suppression-${repoKey}`,
+        JSON.stringify({
+          patterns,
+          lastCleanup: now,
+        })
+      );
 
       const clearedCount = await tracker.clearExpired();
       expect(clearedCount).toBe(2); // Two expired patterns
@@ -283,10 +295,13 @@ describe('SuppressionTracker', () => {
         },
       ];
 
-      await storage.write(`suppression-${repoKey}`, JSON.stringify({
-        patterns,
-        lastCleanup: now,
-      }));
+      await storage.write(
+        `suppression-${repoKey}`,
+        JSON.stringify({
+          patterns,
+          lastCleanup: now,
+        })
+      );
 
       const clearedCount = await tracker.clearExpired();
       expect(clearedCount).toBe(0);

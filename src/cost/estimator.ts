@@ -13,7 +13,8 @@ export class CostEstimator {
     const totalTokens = promptTokens + completionTokens;
 
     const promptCost = (pricing.promptPrice / 1_000_000) * promptTokens;
-    const completionCost = (pricing.completionPrice / 1_000_000) * completionTokens;
+    const completionCost =
+      (pricing.completionPrice / 1_000_000) * completionTokens;
     const totalCost = promptCost + completionCost;
 
     return {

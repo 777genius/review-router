@@ -109,10 +109,11 @@ export class MarkdownFormatter {
     const coverage = review.coverage;
     if (!coverage) return '';
 
-    const limitedFiles = coverage.files.filter(file =>
-      file.status === 'compacted' ||
-      file.status === 'metadata-only' ||
-      file.status === 'skipped'
+    const limitedFiles = coverage.files.filter(
+      (file) =>
+        file.status === 'compacted' ||
+        file.status === 'metadata-only' ||
+        file.status === 'skipped'
     );
     const lines = [
       '<details><summary>Review Scope</summary>',
@@ -129,7 +130,7 @@ export class MarkdownFormatter {
 
     if (limitedFiles.length > 0) {
       lines.push('', 'Files not shown as full diffs in the primary prompt:');
-      limitedFiles.slice(0, 20).forEach(file => {
+      limitedFiles.slice(0, 20).forEach((file) => {
         const reason = file.reason ? ` - ${file.reason}` : '';
         lines.push(`- \`${file.path}\` - ${file.status}${reason}`);
       });

@@ -112,12 +112,12 @@ export class TrivialDetector {
     /^out\//,
     /^\.next\//,
     /^\.nuxt\//,
-    /^target\//,  // Rust/Java
+    /^target\//, // Rust/Java
     /^bin\//,
     /^obj\//,
     /\.min\.js$/,
     /\.min\.css$/,
-    /\.map$/,     // Source maps
+    /\.map$/, // Source maps
   ];
 
   constructor(config: TrivialDetectorConfig) {
@@ -132,7 +132,7 @@ export class TrivialDetector {
       return {
         isTrivial: false,
         trivialFiles: [],
-        nonTrivialFiles: files.map(f => this.normalizePath(f.filename)),
+        nonTrivialFiles: files.map((f) => this.normalizePath(f.filename)),
       };
     }
 
@@ -162,10 +162,13 @@ export class TrivialDetector {
 
     // Log partial trivial detection
     if (trivialFiles.length > 0) {
-      logger.info(`${trivialFiles.length} trivial file(s) will be excluded from review`, {
-        trivial: trivialFiles,
-        reviewing: nonTrivialFiles.length,
-      });
+      logger.info(
+        `${trivialFiles.length} trivial file(s) will be excluded from review`,
+        {
+          trivial: trivialFiles,
+          reviewing: nonTrivialFiles.length,
+        }
+      );
     }
 
     return { isTrivial: false, trivialFiles, nonTrivialFiles };
@@ -178,8 +181,7 @@ export class TrivialDetector {
     const normalized = this.normalizePath(file.filename);
 
     return (
-      this.isFileTrivialByType(normalized) ||
-      this.isFileTrivialByContent(file)
+      this.isFileTrivialByType(normalized) || this.isFileTrivialByContent(file)
     );
   }
 
@@ -188,11 +190,26 @@ export class TrivialDetector {
    */
   private isFileTrivialByType(filename: string): boolean {
     const checks = [
-      { enabled: this.config.skipDependencyUpdates, check: () => this.isDependencyLockFile(filename) },
-      { enabled: this.config.skipDocumentationOnly, check: () => this.isDocumentationFile(filename) },
-      { enabled: this.config.skipTestFixtures, check: () => this.isTestFixture(filename) },
-      { enabled: this.config.skipConfigFiles, check: () => this.isConfigFile(filename) },
-      { enabled: this.config.skipBuildArtifacts, check: () => this.isBuildArtifact(filename) },
+      {
+        enabled: this.config.skipDependencyUpdates,
+        check: () => this.isDependencyLockFile(filename),
+      },
+      {
+        enabled: this.config.skipDocumentationOnly,
+        check: () => this.isDocumentationFile(filename),
+      },
+      {
+        enabled: this.config.skipTestFixtures,
+        check: () => this.isTestFixture(filename),
+      },
+      {
+        enabled: this.config.skipConfigFiles,
+        check: () => this.isConfigFile(filename),
+      },
+      {
+        enabled: this.config.skipBuildArtifacts,
+        check: () => this.isBuildArtifact(filename),
+      },
       { enabled: true, check: () => this.matchesCustomPattern(filename) },
     ];
 
@@ -222,39 +239,45 @@ export class TrivialDetector {
    * Check if file is documentation
    */
   private isDocumentationFile(filename: string): boolean {
-    return this.DOCUMENTATION_PATTERNS.some(pattern => pattern.test(filename));
+    return this.DOCUMENTATION_PATTERNS.some((pattern) =>
+      pattern.test(filename)
+    );
   }
 
   /**
    * Check if file is a test fixture
    */
   private isTestFixture(filename: string): boolean {
-    return this.TEST_FIXTURE_PATTERNS.some(pattern => pattern.test(filename));
+    return this.TEST_FIXTURE_PATTERNS.some((pattern) => pattern.test(filename));
   }
 
   /**
    * Check if file is a config file
    */
   private isConfigFile(filename: string): boolean {
-    return this.CONFIG_FILE_PATTERNS.some(pattern => pattern.test(filename));
+    return this.CONFIG_FILE_PATTERNS.some((pattern) => pattern.test(filename));
   }
 
   /**
    * Check if file is a build artifact
    */
   private isBuildArtifact(filename: string): boolean {
-    return this.BUILD_ARTIFACT_PATTERNS.some(pattern => pattern.test(filename));
+    return this.BUILD_ARTIFACT_PATTERNS.some((pattern) =>
+      pattern.test(filename)
+    );
   }
 
   /**
    * Check if file matches custom trivial patterns
    */
   private matchesCustomPattern(filename: string): boolean {
-    return this.config.customTrivialPatterns.some(pattern => {
+    return this.config.customTrivialPatterns.some((pattern) => {
       try {
         // Validate pattern to prevent regex injection and ReDoS
         if (!isValidRegexPattern(pattern)) {
-          logger.warn(`Invalid trivial pattern "${pattern}": treating as literal string`);
+          logger.warn(
+            `Invalid trivial pattern "${pattern}": treating as literal string`
+          );
           return filename.includes(pattern);
         }
 
@@ -262,7 +285,9 @@ export class TrivialDetector {
         return regex.test(filename);
       } catch (error) {
         // Invalid regex, treat as literal string match
-        logger.warn(`Failed to compile regex pattern "${pattern}": ${(error as Error).message}`);
+        logger.warn(
+          `Failed to compile regex pattern "${pattern}": ${(error as Error).message}`
+        );
         return filename.includes(pattern);
       }
     });
@@ -304,18 +329,23 @@ export class TrivialDetector {
   /**
    * Extract actual code changes from patch, filtering out diff metadata
    */
-  private extractChangesFromPatch(patch: string): { additions: string[]; deletions: string[] } {
+  private extractChangesFromPatch(patch: string): {
+    additions: string[];
+    deletions: string[];
+  } {
     const lines = patch.split('\n');
-    const changes = lines.filter(line => line.startsWith('+') || line.startsWith('-'));
+    const changes = lines.filter(
+      (line) => line.startsWith('+') || line.startsWith('-')
+    );
 
-    const actualChanges = changes.filter(line => !this.isDiffMetadata(line));
+    const actualChanges = changes.filter((line) => !this.isDiffMetadata(line));
 
     const additions = actualChanges
-      .filter(line => line.startsWith('+'))
-      .map(line => line.substring(1));
+      .filter((line) => line.startsWith('+'))
+      .map((line) => line.substring(1));
     const deletions = actualChanges
-      .filter(line => line.startsWith('-'))
-      .map(line => line.substring(1));
+      .filter((line) => line.startsWith('-'))
+      .map((line) => line.substring(1));
 
     return { additions, deletions };
   }
@@ -334,7 +364,10 @@ export class TrivialDetector {
   /**
    * Check if all line pairs differ only in formatting
    */
-  private allLinesAreFormattingChanges(additions: string[], deletions: string[]): boolean {
+  private allLinesAreFormattingChanges(
+    additions: string[],
+    deletions: string[]
+  ): boolean {
     for (let i = 0; i < additions.length; i++) {
       if (!this.isFormattingChange(additions[i], deletions[i])) {
         return false;
@@ -405,7 +438,10 @@ export class TrivialDetector {
     // Check for import/export changes
     if (this.isImportOrExport(trimmed1) || this.isImportOrExport(trimmed2)) {
       // For imports/exports, require exact match (after normalization)
-      return this.normalizeWhitespace(trimmed1) === this.normalizeWhitespace(trimmed2);
+      return (
+        this.normalizeWhitespace(trimmed1) ===
+        this.normalizeWhitespace(trimmed2)
+      );
     }
 
     return true;
@@ -442,10 +478,12 @@ export class TrivialDetector {
    */
   private isImportOrExport(line: string): boolean {
     const trimmed = line.trim();
-    return trimmed.startsWith('import ') ||
-           trimmed.startsWith('export ') ||
-           trimmed.startsWith('from ') ||
-           trimmed.includes('require(');
+    return (
+      trimmed.startsWith('import ') ||
+      trimmed.startsWith('export ') ||
+      trimmed.startsWith('from ') ||
+      trimmed.includes('require(')
+    );
   }
 
   /**
@@ -482,15 +520,30 @@ export class TrivialDetector {
    */
   private getSingleTypeReason(files: FileChange[]): string | null {
     const checks = [
-      { check: (f: string) => this.isDependencyLockFile(f), reason: 'dependency lock file updates only' },
-      { check: (f: string) => this.isDocumentationFile(f), reason: 'documentation changes only' },
-      { check: (f: string) => this.isTestFixture(f), reason: 'test fixture updates only' },
-      { check: (f: string) => this.isConfigFile(f), reason: 'configuration file changes only' },
-      { check: (f: string) => this.isBuildArtifact(f), reason: 'build artifact updates only' },
+      {
+        check: (f: string) => this.isDependencyLockFile(f),
+        reason: 'dependency lock file updates only',
+      },
+      {
+        check: (f: string) => this.isDocumentationFile(f),
+        reason: 'documentation changes only',
+      },
+      {
+        check: (f: string) => this.isTestFixture(f),
+        reason: 'test fixture updates only',
+      },
+      {
+        check: (f: string) => this.isConfigFile(f),
+        reason: 'configuration file changes only',
+      },
+      {
+        check: (f: string) => this.isBuildArtifact(f),
+        reason: 'build artifact updates only',
+      },
     ];
 
     for (const { check, reason } of checks) {
-      if (files.every(f => check(f.filename))) {
+      if (files.every((f) => check(f.filename))) {
         return reason;
       }
     }
@@ -503,11 +556,20 @@ export class TrivialDetector {
    */
   private getMixedTypeReason(files: FileChange[]): string {
     const typeChecks = [
-      { check: (f: string) => this.isDependencyLockFile(f), name: 'dependency locks' },
-      { check: (f: string) => this.isDocumentationFile(f), name: 'documentation' },
+      {
+        check: (f: string) => this.isDependencyLockFile(f),
+        name: 'dependency locks',
+      },
+      {
+        check: (f: string) => this.isDocumentationFile(f),
+        name: 'documentation',
+      },
       { check: (f: string) => this.isTestFixture(f), name: 'test fixtures' },
       { check: (f: string) => this.isConfigFile(f), name: 'config files' },
-      { check: (f: string) => this.isBuildArtifact(f), name: 'build artifacts' },
+      {
+        check: (f: string) => this.isBuildArtifact(f),
+        name: 'build artifacts',
+      },
     ];
 
     const types = new Set<string>();
@@ -531,7 +593,7 @@ export class TrivialDetector {
    */
   filterNonTrivial(files: FileChange[]): FileChange[] {
     const result = this.detect(files);
-    return files.filter(f => result.nonTrivialFiles.includes(f.filename));
+    return files.filter((f) => result.nonTrivialFiles.includes(f.filename));
   }
 }
 

@@ -87,7 +87,9 @@ export class FeedbackTracker {
 
     await this.saveData(data);
 
-    logger.info(`Recorded ${reaction} feedback for finding ${findingId} (category: ${category})`);
+    logger.info(
+      `Recorded ${reaction} feedback for finding ${findingId} (category: ${category})`
+    );
   }
 
   /**
@@ -153,8 +155,12 @@ export class FeedbackTracker {
     lastAggregation: number;
   }> {
     const data = await this.loadData();
-    const totalPositive = data.records.filter((r) => r.reaction === '👍').length;
-    const totalNegative = data.records.filter((r) => r.reaction === '👎').length;
+    const totalPositive = data.records.filter(
+      (r) => r.reaction === '👍'
+    ).length;
+    const totalNegative = data.records.filter(
+      (r) => r.reaction === '👎'
+    ).length;
     const total = totalPositive + totalNegative;
 
     return {
@@ -181,7 +187,10 @@ export class FeedbackTracker {
     try {
       return JSON.parse(raw) as FeedbackData;
     } catch (error) {
-      logger.warn('Failed to parse feedback data, starting fresh', error as Error);
+      logger.warn(
+        'Failed to parse feedback data, starting fresh',
+        error as Error
+      );
       return {
         records: [],
         categoryStats: {},
@@ -224,7 +233,8 @@ export class FeedbackTracker {
 
       const positiveRate = positiveCount / totalCount;
       const currentStats = data.categoryStats[category];
-      const currentThreshold = currentStats?.confidenceThreshold || FeedbackTracker.DEFAULT_THRESHOLD;
+      const currentThreshold =
+        currentStats?.confidenceThreshold || FeedbackTracker.DEFAULT_THRESHOLD;
 
       // Adjust threshold based on positive rate
       let newThreshold = currentThreshold;

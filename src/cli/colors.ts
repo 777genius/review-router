@@ -155,7 +155,11 @@ export class Spinner {
 /**
  * Create a progress bar
  */
-export function progressBar(current: number, total: number, width: number = 40): string {
+export function progressBar(
+  current: number,
+  total: number,
+  width: number = 40
+): string {
   if (COLORS_DISABLED) {
     return `[${current}/${total}]`;
   }
@@ -180,8 +184,8 @@ export function table(headers: string[], rows: string[][]): string {
 
   // Calculate column widths
   const columnWidths = headers.map((header, i) => {
-    const values = [header, ...rows.map(row => row[i] || '')];
-    return Math.max(...values.map(v => v.length));
+    const values = [header, ...rows.map((row) => row[i] || '')];
+    return Math.max(...values.map((v) => v.length));
   });
 
   // Format header
@@ -189,18 +193,14 @@ export function table(headers: string[], rows: string[][]): string {
     .map((header, i) => colors.bold(header.padEnd(columnWidths[i])))
     .join('  ');
 
-  const separator = columnWidths.map(w => '─'.repeat(w)).join('  ');
+  const separator = columnWidths.map((w) => '─'.repeat(w)).join('  ');
 
   // Format rows
-  const dataRows = rows.map(row =>
+  const dataRows = rows.map((row) =>
     row.map((cell, i) => cell.padEnd(columnWidths[i])).join('  ')
   );
 
-  return [
-    headerRow,
-    colors.gray(separator),
-    ...dataRows,
-  ].join('\n');
+  return [headerRow, colors.gray(separator), ...dataRows].join('\n');
 }
 
 /**
@@ -225,14 +225,14 @@ export const box = {
  */
 export function boxed(message: string, title?: string): string {
   const lines = message.split('\n');
-  const maxWidth = Math.max(...lines.map(l => l.length), title?.length || 0);
+  const maxWidth = Math.max(...lines.map((l) => l.length), title?.length || 0);
 
   const topBorder = title
     ? `${box.topLeft}${box.horizontal} ${title} ${box.horizontal.repeat(maxWidth - title.length - 1)}${box.topRight}`
     : `${box.topLeft}${box.horizontal.repeat(maxWidth + 2)}${box.topRight}`;
 
-  const content = lines.map(line =>
-    `${box.vertical} ${line.padEnd(maxWidth)} ${box.vertical}`
+  const content = lines.map(
+    (line) => `${box.vertical} ${line.padEnd(maxWidth)} ${box.vertical}`
   );
 
   const bottomBorder = `${box.bottomLeft}${box.horizontal.repeat(maxWidth + 2)}${box.bottomRight}`;
@@ -241,11 +241,9 @@ export function boxed(message: string, title?: string): string {
     return [topBorder, ...content, bottomBorder].join('\n');
   }
 
-  return [
-    colors.gray(topBorder),
-    ...content,
-    colors.gray(bottomBorder),
-  ].join('\n');
+  return [colors.gray(topBorder), ...content, colors.gray(bottomBorder)].join(
+    '\n'
+  );
 }
 
 /**

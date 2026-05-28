@@ -88,10 +88,7 @@ export function versionCache<T>(data: T): VersionedCache<T> {
  * - Type assertion is defensive (runtime validation via checks)
  * - No external dependencies
  */
-export function unversionCache<T>(
-  cached: string,
-  maxAge?: number
-): T | null {
+export function unversionCache<T>(cached: string, maxAge?: number): T | null {
   try {
     const parsed: VersionedCache<T> = JSON.parse(cached);
 
@@ -99,7 +96,10 @@ export function unversionCache<T>(
     if (typeof parsed !== 'object' || parsed === null) {
       return null;
     }
-    if (typeof parsed.version !== 'number' || typeof parsed.timestamp !== 'number') {
+    if (
+      typeof parsed.version !== 'number' ||
+      typeof parsed.timestamp !== 'number'
+    ) {
       return null;
     }
 

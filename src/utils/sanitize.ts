@@ -16,9 +16,15 @@ export function encodeURIComponentSafe(value: string): string {
     .replace(/%/g, '_')
     .replace(/[<>:"|?*]/g, '_');
   const MAX_PREFIX = 120;
-  const prefix = normalized.length > MAX_PREFIX ? normalized.slice(0, MAX_PREFIX) : normalized;
+  const prefix =
+    normalized.length > MAX_PREFIX
+      ? normalized.slice(0, MAX_PREFIX)
+      : normalized;
 
   // Collision-resistant hash (SHA-256) over the original value
-  const hashSuffix = createHash('sha256').update(value).digest('hex').slice(0, 16);
+  const hashSuffix = createHash('sha256')
+    .update(value)
+    .digest('hex')
+    .slice(0, 16);
   return `${prefix}-${hashSuffix}`;
 }

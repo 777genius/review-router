@@ -1,4 +1,8 @@
-import { MetricsCollector, MetricsData, ReviewMetric } from './metrics-collector';
+import {
+  MetricsCollector,
+  MetricsData,
+  ReviewMetric,
+} from './metrics-collector';
 import { logger } from '../utils/logger';
 import * as fs from 'fs/promises';
 
@@ -97,8 +101,8 @@ export class DashboardGenerator {
 
     // Escape and join CSV rows
     const csv = [
-      headers.map(h => this.escapeCSVField(h)).join(','),
-      ...rows.map((r) => r.map(f => this.escapeCSVField(f)).join(','))
+      headers.map((h) => this.escapeCSVField(h)).join(','),
+      ...rows.map((r) => r.map((f) => this.escapeCSVField(f)).join(',')),
     ].join('\n');
 
     return csv;
@@ -109,7 +113,12 @@ export class DashboardGenerator {
    */
   private escapeCSVField(value: string): string {
     // If the value contains comma, quote, or newline, wrap in quotes and escape internal quotes
-    if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+    if (
+      value.includes(',') ||
+      value.includes('"') ||
+      value.includes('\n') ||
+      value.includes('\r')
+    ) {
       return `"${value.replace(/"/g, '""')}"`;
     }
     return value;
@@ -127,7 +136,12 @@ export class DashboardGenerator {
   /**
    * Build complete HTML document
    */
-  private buildHTML(stats: MetricsData, costTrends: CostTrend[], perfTrends: PerformanceTrend[], roi: ROIData): string {
+  private buildHTML(
+    stats: MetricsData,
+    costTrends: CostTrend[],
+    perfTrends: PerformanceTrend[],
+    roi: ROIData
+  ): string {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -412,7 +426,11 @@ export class DashboardGenerator {
    * Get Chart.js JavaScript
    * Note: JSON.stringify() provides XSS protection by properly escaping strings for JavaScript context
    */
-  private getChartJS(costTrends: CostTrend[], perfTrends: PerformanceTrend[], stats: MetricsData): string {
+  private getChartJS(
+    costTrends: CostTrend[],
+    perfTrends: PerformanceTrend[],
+    stats: MetricsData
+  ): string {
     const recent = stats.reviews.slice(-100);
     // Placeholder values - severity breakdown not currently tracked in ReviewMetric
     const critical = 0;
@@ -420,7 +438,10 @@ export class DashboardGenerator {
     const minor = 0;
 
     // Placeholder values - provider success/failure not currently tracked per review
-    const totalSuccess = recent.reduce((sum: number, r: ReviewMetric) => sum + r.providersUsed, 0);
+    const totalSuccess = recent.reduce(
+      (sum: number, r: ReviewMetric) => sum + r.providersUsed,
+      0
+    );
     const totalFailed = 0;
 
     return `

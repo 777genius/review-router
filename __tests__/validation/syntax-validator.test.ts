@@ -1,4 +1,7 @@
-import { validateSyntax, SyntaxValidationResult } from '../../src/validation/syntax-validator';
+import {
+  validateSyntax,
+  SyntaxValidationResult,
+} from '../../src/validation/syntax-validator';
 
 describe('validateSyntax', () => {
   describe('valid code', () => {
@@ -53,7 +56,9 @@ describe('validateSyntax', () => {
       const result = validateSyntax(code, 'javascript');
 
       expect(result.isValid).toBe(false);
-      expect(result.errors.some(e => e.type === 'ERROR' || e.type === 'MISSING')).toBe(true);
+      expect(
+        result.errors.some((e) => e.type === 'ERROR' || e.type === 'MISSING')
+      ).toBe(true);
     });
 
     it('detects ERROR node in Python (invalid syntax)', () => {
@@ -80,7 +85,7 @@ describe('validateSyntax', () => {
       const result = validateSyntax(code, 'typescript');
 
       expect(result.isValid).toBe(false);
-      expect(result.errors.some(e => e.type === 'MISSING')).toBe(true);
+      expect(result.errors.some((e) => e.type === 'MISSING')).toBe(true);
     });
 
     it('detects MISSING node (unclosed parenthesis)', () => {
@@ -133,7 +138,7 @@ describe('validateSyntax', () => {
         isValid: true,
         skipped: true,
         reason: 'Parser not available',
-        errors: []
+        errors: [],
       };
 
       expect(mockResult.isValid).toBe(true);

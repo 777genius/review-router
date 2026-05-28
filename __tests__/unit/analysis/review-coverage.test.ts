@@ -101,9 +101,13 @@ describe('buildReviewCoverage', () => {
   });
 
   it('marks files trimmed by the prompt byte budget as metadata-only', () => {
-    const coverage = buildReviewCoverage(pr(), { ...config, diffMaxBytes: 120 }, {
-      totalFiles: 3,
-    });
+    const coverage = buildReviewCoverage(
+      pr(),
+      { ...config, diffMaxBytes: 120 },
+      {
+        totalFiles: 3,
+      }
+    );
 
     expect(coverage.metadataOnlyFiles).toBeGreaterThan(0);
     expect(coverage.files).toEqual(

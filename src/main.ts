@@ -9,7 +9,6 @@ import {
   ValidationError,
   formatValidationError,
 } from './utils/validation';
-import { Severity, Review } from './types';
 import {
   clearReviewFailureSummaries,
   postReviewFailureSummary,
@@ -35,10 +34,12 @@ import { reportControlPlaneActionHealth } from './control-plane/health-report';
 import { ControlPlaneMemoryClient } from './control-plane/memory';
 import { resolveProviderCliPlan } from './control-plane/provider-cli-plan';
 import { parseMemoryInteraction } from './github/memory-interaction';
+import { countPreviousStillValidBySeverity } from './analysis/thread-lifecycle';
+import { formatBlockingFindingFailure } from './output/severity-gate';
 import {
-  countPreviousStillValidBySeverity,
-  isLinkedCurrentFinding,
-} from './analysis/thread-lifecycle';
+  CODEX_OAUTH_ROTATING_MODE,
+  runCodexOAuthRotatingAction,
+} from './codex-oauth/action';
 
 function syncEnvFromInputs(): void {
   const inputKeys = [
@@ -153,6 +154,14 @@ async function run(): Promise<void> {
 
   try {
     syncEnvFromInputs();
+    const requestedMode =
+      core.getInput('mode') ||
+      process.env.REVIEW_ROUTER_MODE ||
+      core.getInput('REVIEW_ROUTER_MODE');
+    if (requestedMode === CODEX_OAUTH_ROTATING_MODE) {
+      await runCodexOAuthRotatingAction();
+      return;
+    }
     if (process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN) {
       core.setSecret(process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN);
     }
@@ -163,8 +172,7 @@ async function run(): Promise<void> {
       },
     });
 
-    const mode =
-      process.env.REVIEW_ROUTER_MODE || core.getInput('REVIEW_ROUTER_MODE');
+    const mode = requestedMode;
     if (mode === 'runtime-preflight') {
       runRuntimePreflight(runtimeConfig);
       return;
@@ -263,8 +271,11 @@ async function run(): Promise<void> {
       core.setOutput('ai_likelihood', review.aiAnalysis.averageLikelihood);
     }
 
-    const blockingFindings = getBlockingFindings(review, config.failOnSeverity);
-    if (blockingFindings.length > 0) {
+    const blockingFailure = formatBlockingFindingFailure(
+      review,
+      config.failOnSeverity
+    );
+    if (blockingFailure) {
       await reportControlPlaneActionHealth({
         runtimeConfig,
         review,
@@ -274,10 +285,7 @@ async function run(): Promise<void> {
           warn: (message) => core.warning(message),
         },
       });
-      core.setFailed(
-        `ReviewRouter found ${blockingFindings.length} ${config.failOnSeverity}+ finding(s). ` +
-          'Review comments were posted before failing this check.'
-      );
+      core.setFailed(blockingFailure);
       return;
     }
 
@@ -330,36 +338,6 @@ function runRuntimePreflight(
   core.info(
     `ReviewRouter runtime preflight: status=${runtimeConfig?.status || 'unknown'}, codex_cli_needed=${plan.codexCliNeeded}, codex_oauth_needed=${plan.codexOauthNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
   );
-}
-
-function getBlockingFindings(
-  review: Review,
-  threshold: Severity | 'off' | undefined
-) {
-  if (!threshold || threshold === 'off') return [];
-
-  const rank: Record<Severity, number> = {
-    critical: 3,
-    major: 2,
-    minor: 1,
-  };
-  const minRank = rank[threshold];
-  const currentBlocking = review.findings.filter(
-    (finding) => rank[finding.severity] >= minRank
-  );
-  const previousBlocking = (review.threadLifecycle?.previousStillValid ?? [])
-    .filter((record) => !isLinkedCurrentFinding(record))
-    .filter((record) => {
-      const severity = record.target.severity;
-      return (
-        (severity === 'critical' ||
-          severity === 'major' ||
-          severity === 'minor') &&
-        rank[severity] >= minRank
-      );
-    });
-
-  return [...currentBlocking, ...previousBlocking];
 }
 
 async function runInteraction(

@@ -162,7 +162,8 @@ index 51097d9..d0723db 100644
           line: 240,
           endLine: 240,
           severity: 'major',
-          title: 'Block healed launch state when runtime diagnostics report errors',
+          title:
+            'Block healed launch state when runtime diagnostics report errors',
           message:
             "`createPrimaryLaneMemberState` promotes any `isBootstrapConfirmedProvisionedButNotAliveFailure(...)` entry to `launchState: 'confirmed_alive'` and clears failure semantics without checking for contradictory runtime evidence like `runtimeDiagnosticSeverity: 'error'` or stopped liveness kinds. If a teammate has the provisioned-but-not-alive reason plus a real runtime crash diagnostic, the persisted snapshot is rewritten as healthy, which then drives downstream launch summaries/progress to show success and hides an actionable outage when live runtime polling is unavailable.",
         },
@@ -172,7 +173,8 @@ index 51097d9..d0723db 100644
           line: 1044,
           endLine: 1044,
           severity: 'major',
-          title: 'Preserve failed label for errored provisioned-but-not-alive members',
+          title:
+            'Preserve failed label for errored provisioned-but-not-alive members',
           message:
             "In the Gemini post-launch hydration prompt, this branch labels provisioned-but-not-alive entries as `bootstrap confirmed` before checking `failed_to_start`, and it does not gate on runtime diagnostic severity. For entries that still carry `runtimeDiagnosticSeverity: 'error'` or failure text, the prompt now reports success instead of failure, which can mislead remediation workflows that depend on this status snapshot.",
         },
@@ -196,9 +198,10 @@ index 51097d9..d0723db 100644
           line: 156,
           endLine: 156,
           severity: 'major',
-          title: 'Do not override to running when spawn degradation is error-backed',
+          title:
+            'Do not override to running when spawn degradation is error-backed',
           message:
-            "The state calculation currently forces `running` whenever `useBootstrapConfirmedState` is true even if `getSpawnDegradation(spawn)` reports an error, so runtime rows can hide real error diagnostics behind a healthy state.",
+            'The state calculation currently forces `running` whenever `useBootstrapConfirmedState` is true even if `getSpawnDegradation(spawn)` reports an error, so runtime rows can hide real error diagnostics behind a healthy state.',
         },
         {
           file: 'src/renderer/utils/memberHelpers.ts',
@@ -206,7 +209,7 @@ index 51097d9..d0723db 100644
           severity: 'major',
           title: 'Spawn diagnostic errors are hidden for healed members',
           message:
-            "This promotion only checks `runtimeEntry.runtimeDiagnosticSeverity` before forcing bootstrap-confirmed provisioned-but-not-alive entries back to an online/confirmed visual state. Member cards will incorrectly render a spawn-level error diagnostic as healthy.",
+            'This promotion only checks `runtimeEntry.runtimeDiagnosticSeverity` before forcing bootstrap-confirmed provisioned-but-not-alive entries back to an online/confirmed visual state. Member cards will incorrectly render a spawn-level error diagnostic as healthy.',
         },
       ];
 
@@ -277,7 +280,9 @@ index 51097d9..d0723db 100644
       expect(stats.downgraded).toBe(0);
       expect(stats.reasons['invalid/suspicious line number']).toBe(4);
       expect(stats.reasons['documentation formatting']).toBeUndefined();
-      expect(stats.reasons['test code quality (not production issue)']).toBeUndefined();
+      expect(
+        stats.reasons['test code quality (not production issue)']
+      ).toBeUndefined();
     });
 
     test('still filters runtime findings that point to blank diff lines', () => {
@@ -306,7 +311,9 @@ index 51097d9..d0723db 100644
 
       expect(filtered).toHaveLength(0);
       expect(stats.filtered).toBe(1);
-      expect(stats.reasons['line number points to blank/brace/comment']).toBe(1);
+      expect(stats.reasons['line number points to blank/brace/comment']).toBe(
+        1
+      );
     });
 
     test('still filters generic validation suggestions with cautious wording', () => {
@@ -316,7 +323,8 @@ index 51097d9..d0723db 100644
           line: 12,
           severity: 'major',
           title: 'Potential validation improvement',
-          message: 'This could be more robust if runtime validation were added.',
+          message:
+            'This could be more robust if runtime validation were added.',
         },
       ];
 
@@ -500,7 +508,9 @@ index 51097d9..d0723db 100644
 
       expect(filtered).toHaveLength(0);
       expect(stats.filtered).toBe(1);
-      expect(stats.reasons['line number points to blank/brace/comment']).toBe(1);
+      expect(stats.reasons['line number points to blank/brace/comment']).toBe(
+        1
+      );
     });
 
     test('filters line number issues (closing braces)', () => {
@@ -524,7 +534,9 @@ index 51097d9..d0723db 100644
 
       expect(filtered).toHaveLength(0);
       expect(stats.filtered).toBe(1);
-      expect(stats.reasons['line number points to blank/brace/comment']).toBe(1);
+      expect(stats.reasons['line number points to blank/brace/comment']).toBe(
+        1
+      );
     });
 
     test('handles multiple findings with mixed actions', () => {
@@ -633,13 +645,35 @@ index 51097d9..d0723db 100644
   describe('file type detection', () => {
     test('identifies markdown files', () => {
       const findings: Finding[] = [
-        { file: 'README.md', line: 1, severity: 'major', title: 'Heading', message: 'Issue' },
-        { file: 'docs/guide.MD', line: 1, severity: 'major', title: 'Heading', message: 'Issue' },
-        { file: 'CHANGELOG.txt', line: 1, severity: 'major', title: 'Heading', message: 'Issue' },
+        {
+          file: 'README.md',
+          line: 1,
+          severity: 'major',
+          title: 'Heading',
+          message: 'Issue',
+        },
+        {
+          file: 'docs/guide.MD',
+          line: 1,
+          severity: 'major',
+          title: 'Heading',
+          message: 'Issue',
+        },
+        {
+          file: 'CHANGELOG.txt',
+          line: 1,
+          severity: 'major',
+          title: 'Heading',
+          message: 'Issue',
+        },
       ];
 
       const { findings: filtered } = filter.filter(
-        findings.map(f => ({ ...f, title: 'Markdown formatting', message: 'Code block issue' })),
+        findings.map((f) => ({
+          ...f,
+          title: 'Markdown formatting',
+          message: 'Code block issue',
+        })),
         ''
       );
 
@@ -649,13 +683,34 @@ index 51097d9..d0723db 100644
 
     test('identifies test files', () => {
       const findings: Finding[] = [
-        { file: 'src/app.test.ts', line: 1, severity: 'major', title: 'Test', message: 'Inconsistent mock' },
-        { file: 'src/utils.spec.js', line: 1, severity: 'major', title: 'Test', message: 'Inconsistent mock' },
-        { file: 'src/__tests__/foo.ts', line: 1, severity: 'major', title: 'Test', message: 'Inconsistent mock' },
+        {
+          file: 'src/app.test.ts',
+          line: 1,
+          severity: 'major',
+          title: 'Test',
+          message: 'Inconsistent mock',
+        },
+        {
+          file: 'src/utils.spec.js',
+          line: 1,
+          severity: 'major',
+          title: 'Test',
+          message: 'Inconsistent mock',
+        },
+        {
+          file: 'src/__tests__/foo.ts',
+          line: 1,
+          severity: 'major',
+          title: 'Test',
+          message: 'Inconsistent mock',
+        },
       ];
 
       const { findings: filtered } = filter.filter(
-        findings.map(f => ({ ...f, message: 'Test intentional inconsistent data' })),
+        findings.map((f) => ({
+          ...f,
+          message: 'Test intentional inconsistent data',
+        })),
         ''
       );
 
@@ -753,7 +808,7 @@ index 51097d9..d0723db 100644
           line: 10,
           severity: 'major',
           title: 'Missing Edge Case Handling',
-          message: 'Test cases don\'t cover edge scenarios',
+          message: "Test cases don't cover edge scenarios",
         },
         {
           file: 'src/utils.spec.ts',
@@ -842,7 +897,8 @@ index 51097d9..d0723db 100644
       // Can be either reason string depending on which filter catches it first
       const totalWorkflowFiltered =
         (stats.reasons['workflow security already handled/config issue'] || 0) +
-        (stats.reasons['workflow/CI configuration (not application code)'] || 0);
+        (stats.reasons['workflow/CI configuration (not application code)'] ||
+          0);
       expect(totalWorkflowFiltered).toBe(2);
     });
 
@@ -921,7 +977,9 @@ index 51097d9..d0723db 100644
       // Should filter both
       expect(filtered).toHaveLength(0);
       expect(stats.filtered).toBe(2);
-      expect(stats.reasons['workflow/CI configuration (not application code)']).toBe(2);
+      expect(
+        stats.reasons['workflow/CI configuration (not application code)']
+      ).toBe(2);
     });
 
     test('filters general workflow security config warnings', () => {
@@ -938,7 +996,8 @@ index 51097d9..d0723db 100644
           line: 40,
           severity: 'critical',
           title: 'Fork PR security',
-          message: 'Disable "Send secrets to workflows from pull requests" in repository settings',
+          message:
+            'Disable "Send secrets to workflows from pull requests" in repository settings',
         },
       ];
 
@@ -1084,7 +1143,7 @@ index 51097d9..d0723db 100644
       expect(filtered.length).toBeLessThanOrEqual(2);
       expect(stats.filtered).toBeGreaterThanOrEqual(1);
       // All remaining should be minor severity
-      expect(filtered.every(f => f.severity === 'minor')).toBe(true);
+      expect(filtered.every((f) => f.severity === 'minor')).toBe(true);
     });
 
     test('keeps valid line:1 findings on source files', () => {
@@ -1134,7 +1193,8 @@ index 51097d9..d0723db 100644
           title: 'Email is interpolated into SQL',
           message:
             'The user-controlled email is directly interpolated into the SQL query, so a crafted value can alter the WHERE clause. Keep using a parameterized query.',
-          suggestion: "const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);",
+          suggestion:
+            "const rows = await db.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);",
         },
       ];
 
@@ -1172,14 +1232,16 @@ index 51097d9..d0723db 100644
           line: 10,
           severity: 'major',
           title: 'Complexity and Readability',
-          message: 'The method is complex and difficult to read. Consider breaking it down.',
+          message:
+            'The method is complex and difficult to read. Consider breaking it down.',
         },
         {
           file: 'src/app.ts',
           line: 20,
           severity: 'major',
           title: 'Code structure',
-          message: 'Should be split into smaller functions and use constants for magic strings',
+          message:
+            'Should be split into smaller functions and use constants for magic strings',
         },
       ];
 
@@ -1248,7 +1310,9 @@ index 51097d9..d0723db 100644
 
       expect(filtered).toHaveLength(0);
       expect(stats.filtered).toBe(2);
-      expect(stats.reasons['workflow/CI configuration (not application code)']).toBe(2);
+      expect(
+        stats.reasons['workflow/CI configuration (not application code)']
+      ).toBe(2);
     });
 
     test('filters or downgrades insecure pattern validation complaints', () => {
@@ -1299,7 +1363,9 @@ index 51097d9..d0723db 100644
 
       expect(filtered).toHaveLength(0);
       expect(stats.filtered).toBe(2);
-      expect(stats.reasons['workflow/CI configuration (not application code)']).toBe(2);
+      expect(
+        stats.reasons['workflow/CI configuration (not application code)']
+      ).toBe(2);
     });
 
     test('filters or downgrades path normalization suggestions', () => {

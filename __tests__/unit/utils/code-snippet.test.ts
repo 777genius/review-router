@@ -134,7 +134,11 @@ describe('code-snippet', () => {
         highlightLine: 1,
       };
 
-      const enhanced = createEnhancedCommentBody(originalBody, snippet, 'file.ts');
+      const enhanced = createEnhancedCommentBody(
+        originalBody,
+        snippet,
+        'file.ts'
+      );
 
       expect(enhanced).toContain('This is a finding');
       expect(enhanced).toContain('**Code Context:**');

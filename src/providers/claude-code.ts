@@ -17,8 +17,15 @@ import {
 const CLAUDE_STDIN_LIMIT_BYTES = 10 * 1024 * 1024;
 const CLAUDE_CODE_OAUTH_TOKEN_ENV = 'CLAUDE_CODE_OAUTH_TOKEN';
 
+type ClaudeCodeProviderOptions = {
+  readonly agenticContext?: boolean;
+};
+
 export class ClaudeCodeProvider extends Provider {
-  constructor(private readonly model: string) {
+  constructor(
+    private readonly model: string,
+    private readonly options: ClaudeCodeProviderOptions = {}
+  ) {
     super(`claude/${model}`);
   }
 
@@ -64,8 +71,11 @@ export class ClaudeCodeProvider extends Provider {
 
   async review(prompt: string, timeoutMs: number): Promise<ReviewResult> {
     const started = Date.now();
-
-    this.assertPromptWithinStdinLimit(prompt);
+    const agenticContext = this.options.agenticContext === true;
+    const reviewPrompt = agenticContext
+      ? this.wrapReadOnlyAgenticPrompt(prompt)
+      : prompt;
+    this.assertPromptWithinStdinLimit(reviewPrompt);
     const oauthToken = this.readClaudeCodeOAuthToken();
 
     const binary = await this.resolveBinary();
@@ -79,8 +89,7 @@ export class ClaudeCodeProvider extends Provider {
       'user',
       '--disable-slash-commands',
       '--no-chrome',
-      '--tools',
-      '',
+      ...this.buildToolArgs(agenticContext),
       '--output-format',
       'json',
       '--json-schema',
@@ -95,7 +104,7 @@ export class ClaudeCodeProvider extends Provider {
       const { stdout, stderr } = await this.runCliWithStdin(
         binary,
         args,
-        prompt,
+        reviewPrompt,
         timeoutMs,
         oauthToken
       );
@@ -143,6 +152,33 @@ export class ClaudeCodeProvider extends Provider {
     throw new Error(
       `Claude Code CLI stdin input is ${promptBytes} bytes, above the ${CLAUDE_STDIN_LIMIT_BYTES} byte limit. Reduce DIFF_MAX_BYTES or split the review into smaller batches.`
     );
+  }
+
+  private buildToolArgs(agenticContext: boolean): string[] {
+    if (!agenticContext) {
+      return ['--tools', ''];
+    }
+
+    return [
+      '--tools',
+      'Read,Grep,Glob',
+      '--allowedTools',
+      'Read,Grep,Glob',
+      '--max-turns',
+      '4',
+    ];
+  }
+
+  private wrapReadOnlyAgenticPrompt(prompt: string): string {
+    return [
+      'You are running inside ReviewRouter Claude read-only context mode.',
+      'You may inspect repository files only with Read, Grep, and Glob.',
+      'Do not use Bash, shell commands, MCP tools, Edit, Write, or any mutation-capable tool.',
+      'Do not modify files, create files, update git state, install packages, or persist a session.',
+      'Report findings only for changed lines that are supported by the supplied PR diff and any read-only file inspection.',
+      '',
+      prompt,
+    ].join('\n');
   }
 
   private readClaudeCodeOAuthToken(): string | undefined {

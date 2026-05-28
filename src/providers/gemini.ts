@@ -34,7 +34,7 @@ export class GeminiProvider extends Provider {
             logger.debug(`Gemini binary resolved after timeout (${this.name})`);
           }
         }),
-        timeoutPromise
+        timeoutPromise,
       ]);
       clearTimeout(timeoutId!);
       return true;
@@ -42,7 +42,9 @@ export class GeminiProvider extends Provider {
       if (timeoutId!) {
         clearTimeout(timeoutId);
       }
-      logger.warn(`Gemini health check failed for ${this.name}: ${(error as Error).message}`);
+      logger.warn(
+        `Gemini health check failed for ${this.name}: ${(error as Error).message}`
+      );
       return false;
     }
   }
@@ -55,20 +57,29 @@ export class GeminiProvider extends Provider {
     // Write prompt to temp file to avoid command line length limits
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gemini-'));
     await fs.chmod(tmpDir, 0o700);
-    const promptFile = path.join(tmpDir, `prompt-${crypto.randomBytes(8).toString('hex')}.txt`);
+    const promptFile = path.join(
+      tmpDir,
+      `prompt-${crypto.randomBytes(8).toString('hex')}.txt`
+    );
     await fs.writeFile(promptFile, prompt, { encoding: 'utf8', mode: 0o600 });
 
     // Gemini CLI command:
     // gemini --model <model> --prompt <prompt-file> --output-format json --approval-mode yolo
     const args = [
       ...baseArgs,
-      '--model', this.model,
-      '--prompt', promptFile,
-      '--output-format', 'json',
-      '--approval-mode', 'yolo'
+      '--model',
+      this.model,
+      '--prompt',
+      promptFile,
+      '--output-format',
+      'json',
+      '--approval-mode',
+      'yolo',
     ];
 
-    logger.info(`Running Gemini CLI: ${bin} --model ${this.model} --output-format json --approval-mode yolo ...`);
+    logger.info(
+      `Running Gemini CLI: ${bin} --model ${this.model} --output-format json --approval-mode yolo ...`
+    );
 
     try {
       const { stdout, stderr } = await this.runCli(bin, args, timeoutMs);
@@ -78,7 +89,9 @@ export class GeminiProvider extends Provider {
         `Gemini CLI output for ${this.name}: stdout=${stdout.length} bytes, stderr=${stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
       );
       if (!content) {
-        throw new Error(`Gemini CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`);
+        throw new Error(
+          `Gemini CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
+        );
       }
       const parsedOutput = parseReviewOutputStrict(content, 'Gemini CLI');
       return {
@@ -101,7 +114,11 @@ export class GeminiProvider extends Provider {
     }
   }
 
-  private runCli(bin: string, args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+  private runCli(
+    bin: string,
+    args: string[],
+    timeoutMs: number
+  ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       // Use detached: true to create a new process group
       // This allows killing the entire process tree when needed
@@ -122,7 +139,9 @@ export class GeminiProvider extends Provider {
 
       const timer = setTimeout(() => {
         timedOut = true;
-        logger.warn(`Gemini CLI timeout (${timeoutMs}ms), killing process and all children`);
+        logger.warn(
+          `Gemini CLI timeout (${timeoutMs}ms), killing process and all children`
+        );
 
         // Kill the entire process group to ensure child processes are terminated
         // On Unix: negative PID kills the process group
@@ -138,23 +157,27 @@ export class GeminiProvider extends Provider {
         reject(new Error(`Gemini CLI timed out after ${timeoutMs}ms`));
       }, timeoutMs);
 
-      proc.stdout.on('data', chunk => {
+      proc.stdout.on('data', (chunk) => {
         stdout += chunk.toString();
       });
-      proc.stderr.on('data', chunk => {
+      proc.stderr.on('data', (chunk) => {
         stderr += chunk.toString();
       });
-      proc.on('error', err => {
+      proc.on('error', (err) => {
         if (!timedOut) {
           clearTimeout(timer);
           reject(err);
         }
       });
-      proc.on('close', code => {
+      proc.on('close', (code) => {
         if (!timedOut) {
           clearTimeout(timer);
           if (code !== 0) {
-            reject(new Error(`Gemini CLI exited with code ${code}: ${stderr || stdout || 'no output'}`));
+            reject(
+              new Error(
+                `Gemini CLI exited with code ${code}: ${stderr || stdout || 'no output'}`
+              )
+            );
           } else {
             resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
           }
@@ -169,18 +192,21 @@ export class GeminiProvider extends Provider {
       return { bin: 'gemini', args: [] };
     }
     // Try npx @google/gemini-cli
-    if (await this.canRun('npx', ['--yes', '@google/gemini-cli', '--version'])) {
+    if (
+      await this.canRun('npx', ['--yes', '@google/gemini-cli', '--version'])
+    ) {
       return { bin: 'npx', args: ['--yes', '@google/gemini-cli'] };
     }
-    throw new Error('Gemini CLI is not available (tried: gemini, npx @google/gemini-cli)');
+    throw new Error(
+      'Gemini CLI is not available (tried: gemini, npx @google/gemini-cli)'
+    );
   }
 
   private async canRun(cmd: string, args: string[]): Promise<boolean> {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       const proc = spawn(cmd, args, { stdio: 'ignore' });
       proc.on('error', () => resolve(false));
-      proc.on('close', code => resolve(code === 0));
+      proc.on('close', (code) => resolve(code === 0));
     });
   }
-
 }

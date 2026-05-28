@@ -378,7 +378,11 @@ export class ProviderRegistry {
 
       if (name.startsWith('claude/')) {
         const model = name.replace('claude/', '');
-        list.push(new ClaudeCodeProvider(model));
+        list.push(
+          new ClaudeCodeProvider(model, {
+            agenticContext: config.claudeAgenticContext,
+          })
+        );
         continue;
       }
 

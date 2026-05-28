@@ -109,6 +109,47 @@ describe('ClaudeCodeProvider', () => {
     expect(runCall?.[2]?.env.ANTHROPIC_API_KEY).toBeUndefined();
   });
 
+  it('enables only read-only Claude tools when agentic context is enabled', async () => {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-oauth-secret';
+
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess((proc) => {
+        proc.stdout.emit(
+          'data',
+          JSON.stringify({
+            structured_output: { findings: [] },
+          })
+        );
+      });
+    });
+
+    const provider = new ClaudeCodeProvider('sonnet', {
+      agenticContext: true,
+    });
+    await provider.review('review prompt', 1000);
+
+    const runCall = spawnMock.mock.calls.find(
+      (call) => Array.isArray(call[1]) && call[1].includes('--json-schema')
+    );
+    const args = runCall?.[1] as string[];
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '--tools',
+        'Read,Grep,Glob',
+        '--allowedTools',
+        'Read,Grep,Glob',
+        '--max-turns',
+        '4',
+        '--no-session-persistence',
+      ])
+    );
+    expect(args.join(' ')).not.toMatch(/\b(Bash|Edit|Write)\b/);
+  });
+
   it('trims surrounding whitespace from Claude OAuth tokens before spawning', async () => {
     process.env.CLAUDE_CODE_OAUTH_TOKEN = '  sk-ant-oat01-oauth-secret\n';
 

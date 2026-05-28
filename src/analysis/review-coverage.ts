@@ -27,10 +27,10 @@ export function buildReviewCoverage(
   const pathsBeforeTrim = extractDiffDestinationPaths(compacted.diff);
   const pathsAfterTrim = extractDiffDestinationPaths(trimmedDiff);
   const compactedByFile = new Map(
-    compacted.summaryOnlyFiles.map(file => [file.filename, file])
+    compacted.summaryOnlyFiles.map((file) => [file.filename, file])
   );
 
-  const reviewedFiles: ReviewCoverageFile[] = pr.files.map(file => {
+  const reviewedFiles: ReviewCoverageFile[] = pr.files.map((file) => {
     const compactedFile = compactedByFile.get(file.filename);
     const wasInPromptBeforeTrim = pathsBeforeTrim.has(file.filename);
     const isInPrompt = pathsAfterTrim.has(file.filename);
@@ -64,7 +64,7 @@ export function buildReviewCoverage(
     };
   });
 
-  const skippedFiles = (options.skippedFiles ?? []).map(file => ({
+  const skippedFiles = (options.skippedFiles ?? []).map((file) => ({
     path: file.filename,
     status: 'skipped' as const,
     reason: 'trivial or low-signal file excluded before LLM review',
@@ -91,7 +91,7 @@ function countByStatus(
   files: ReviewCoverageFile[],
   status: ReviewCoverageFile['status']
 ): number {
-  return files.filter(file => file.status === status).length;
+  return files.filter((file) => file.status === status).length;
 }
 
 function extractDiffDestinationPaths(diff: string): Set<string> {

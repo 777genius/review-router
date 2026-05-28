@@ -65,8 +65,13 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('# ReviewRouter');
-      expect(output).toContain('## All Clear!');
-      expect(output).toContain('No issues found. Great job!');
+      expect(output).toContain(
+        '✅ **No reportable findings** · 0 Critical · 0 Major · 0 Minor'
+      );
+      expect(output).toContain('<sub>2/2 providers · 5.5s • $0.0050</sub>');
+      expect(output).not.toContain('## Summary');
+      expect(output).not.toContain('## All Clear!');
+      expect(output).not.toContain('Great job');
       expect(output).toContain('Performance Metrics');
     });
 
@@ -104,8 +109,8 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('No issues detected in reviewed files');
-      expect(output).toContain('## All Clear!');
+      expect(output).toContain('No reportable findings in reviewed files');
+      expect(output).not.toContain('## All Clear!');
       expect(output).toContain('Review Scope');
       expect(output).toContain('| Full diff in prompt | 1 |');
       expect(output).toContain('| Compacted in prompt | 1 |');
@@ -240,7 +245,9 @@ describe('MarkdownFormatterV2', () => {
 
       expect(output).toContain('🟡 **1 Major**');
       expect(output).not.toContain('🟡 **2 Major**');
-      expect(output).not.toContain('These unresolved findings still look valid');
+      expect(output).not.toContain(
+        'These unresolved findings still look valid'
+      );
     });
 
     it('lists previous threads resolved by this run', () => {
@@ -299,7 +306,9 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('previous unresolved ReviewRouter threads could not be safely reconciled');
+      expect(output).toContain(
+        'previous unresolved ReviewRouter threads could not be safely reconciled'
+      );
       expect(output).toContain('Lifecycle attention required');
       expect(output).not.toContain('## All Clear!');
     });
@@ -572,7 +581,7 @@ describe('MarkdownFormatterV2', () => {
 
       expect(output).toContain('OAuth subscription');
       expect(output).toContain(
-        '<sub>5.5s • OAuth subscription • Powered by ReviewRouter</sub>'
+        '<sub>1/1 provider · 5.5s • OAuth subscription</sub>'
       );
       expect(output).not.toContain('$0.0000');
       expect(output).not.toContain('| Cost |');
@@ -873,7 +882,14 @@ describe('MarkdownFormatterV2', () => {
     });
 
     it('should include footer with branding', () => {
-      const review = createMockReview();
+      const review = createMockReview({
+        findings: [createMockFinding({ severity: 'major' })],
+        metrics: {
+          ...createMockReview().metrics,
+          totalFindings: 1,
+          major: 1,
+        },
+      });
       const output = formatter.format(review);
 
       expect(output).toContain('Powered by ReviewRouter');
@@ -885,6 +901,12 @@ describe('MarkdownFormatterV2', () => {
 
     it('should not mention thumbs-down suppression in the footer', () => {
       const review = createMockReview({
+        findings: [createMockFinding({ severity: 'major' })],
+        metrics: {
+          ...createMockReview().metrics,
+          totalFindings: 1,
+          major: 1,
+        },
         inlineComments: [
           {
             path: 'src/test.ts',

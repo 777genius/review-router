@@ -111,7 +111,9 @@ export class PathMatcher {
    */
   private checkPatternLength(pattern: string): void {
     if (pattern.length > MAX_PATTERN_LENGTH) {
-      throw new Error(`Pattern too long (${pattern.length} chars, max ${MAX_PATTERN_LENGTH}): ${pattern}`);
+      throw new Error(
+        `Pattern too long (${pattern.length} chars, max ${MAX_PATTERN_LENGTH}): ${pattern}`
+      );
     }
   }
 
@@ -126,7 +128,9 @@ export class PathMatcher {
     const complexityScore = wildcardCount * 2 + braceCount * 3;
 
     if (complexityScore > MAX_COMPLEXITY_SCORE) {
-      throw new Error(`Pattern too complex (score ${complexityScore}, max ${MAX_COMPLEXITY_SCORE}): ${pattern}`);
+      throw new Error(
+        `Pattern too complex (score ${complexityScore}, max ${MAX_COMPLEXITY_SCORE}): ${pattern}`
+      );
     }
   }
 
@@ -135,7 +139,7 @@ export class PathMatcher {
    */
   private checkControlCharacters(pattern: string): void {
     for (let i = 0; i < pattern.length; i++) {
-      if (pattern.charCodeAt(i) <= 0x1F) {
+      if (pattern.charCodeAt(i) <= 0x1f) {
         throw new Error(`Pattern contains control characters: ${pattern}`);
       }
     }
@@ -189,7 +193,7 @@ export class PathMatcher {
       const found = pattern.match(dangerousChars);
       throw new Error(
         `Pattern contains dangerous character: ${found?.[0] ? JSON.stringify(found[0]) : 'DEL'}. ` +
-        `Backslashes, backticks, pipes, semicolons, quotes, and $ are not allowed.`
+          `Backslashes, backticks, pipes, semicolons, quotes, and $ are not allowed.`
       );
     }
 
@@ -198,7 +202,7 @@ export class PathMatcher {
     if (!/^[\x20-\x7E]+$/.test(pattern)) {
       throw new Error(
         `Pattern contains non-ASCII characters. ` +
-        `Only printable ASCII characters (0x20-0x7E) are allowed for cross-platform compatibility.`
+          `Only printable ASCII characters (0x20-0x7E) are allowed for cross-platform compatibility.`
       );
     }
 
@@ -216,8 +220,8 @@ export class PathMatcher {
     if (!allowed.test(pattern)) {
       throw new Error(
         `Pattern contains unsupported characters: ${pattern}. ` +
-        `Only alphanumerics (A-Z, a-z, 0-9), glob wildcards (*, ?, {}, []), ` +
-        `path separators (/), and safe punctuation (.@+^!_-,()~# space) are allowed.`
+          `Only alphanumerics (A-Z, a-z, 0-9), glob wildcards (*, ?, {}, []), ` +
+          `path separators (/), and safe punctuation (.@+^!_-,()~# space) are allowed.`
       );
     }
 
@@ -228,7 +232,7 @@ export class PathMatcher {
     if (openBraces !== closeBraces) {
       throw new Error(
         `Pattern has unbalanced braces: ${openBraces} open, ${closeBraces} close. ` +
-        `Each '{' must have a matching '}'.`
+          `Each '{' must have a matching '}'.`
       );
     }
 
@@ -237,7 +241,7 @@ export class PathMatcher {
     if (openBrackets !== closeBrackets) {
       throw new Error(
         `Pattern has unbalanced brackets: ${openBrackets} open, ${closeBrackets} close. ` +
-        `Each '[' must have a matching ']'.`
+          `Each '[' must have a matching ']'.`
       );
     }
   }
@@ -248,7 +252,9 @@ export class PathMatcher {
   private checkTraversal(pattern: string): void {
     const traversalSegment = /(^|[\\/])\.\.(?:[\\/]|$)/;
     if (traversalSegment.test(pattern)) {
-      throw new Error(`Pattern contains path traversal ('..') which is not allowed: ${pattern}`);
+      throw new Error(
+        `Pattern contains path traversal ('..') which is not allowed: ${pattern}`
+      );
     }
   }
 
@@ -258,12 +264,18 @@ export class PathMatcher {
    */
   private checkMinimatchSyntax(pattern: string): void {
     try {
-      const re = minimatch.makeRe(pattern, { nonegate: true, nocomment: true, allowWindowsEscape: false });
+      const re = minimatch.makeRe(pattern, {
+        nonegate: true,
+        nocomment: true,
+        allowWindowsEscape: false,
+      });
       if (!re) {
         throw new Error('Pattern did not compile');
       }
     } catch (err) {
-      throw new Error(`Invalid glob syntax for pattern "${pattern}": ${(err as Error).message}`);
+      throw new Error(
+        `Invalid glob syntax for pattern "${pattern}": ${(err as Error).message}`
+      );
     }
   }
 
@@ -276,11 +288,20 @@ export class PathMatcher {
     }
 
     const matches = this.findMatchingPatterns(files);
-    const finalIntensity = matches.highestIntensity ?? this.config.defaultIntensity;
+    const finalIntensity =
+      matches.highestIntensity ?? this.config.defaultIntensity;
     const uniqueMatchedPaths = [...new Set(matches.matchedPaths)];
-    const reason = this.buildReason(finalIntensity, matches.matchedPatterns, uniqueMatchedPaths);
+    const reason = this.buildReason(
+      finalIntensity,
+      matches.matchedPatterns,
+      uniqueMatchedPaths
+    );
 
-    this.logIntensityDecision(finalIntensity, uniqueMatchedPaths, matches.matchedPatterns);
+    this.logIntensityDecision(
+      finalIntensity,
+      uniqueMatchedPaths,
+      matches.matchedPatterns
+    );
 
     return {
       intensity: finalIntensity,
@@ -331,7 +352,10 @@ export class PathMatcher {
   /**
    * Check if intensity A is higher than intensity B
    */
-  private isHigherIntensity(a: ReviewIntensity, b: ReviewIntensity | null): boolean {
+  private isHigherIntensity(
+    a: ReviewIntensity,
+    b: ReviewIntensity | null
+  ): boolean {
     return b === null || this.compareIntensity(a, b) > 0;
   }
 
@@ -345,7 +369,7 @@ export class PathMatcher {
   ): void {
     logger.info(`Path-based intensity: ${intensity}`, {
       matchedPaths: matchedPaths.length,
-      patterns: matchedPatterns.map(p => p.pattern),
+      patterns: matchedPatterns.map((p) => p.pattern),
     });
   }
 
@@ -372,11 +396,11 @@ export class PathMatcher {
     try {
       // Use minimatch with safe options
       const result = minimatch(filePath, pattern, {
-        dot: true,           // Match dotfiles
-        matchBase: false,    // Don't match basenames only
-        nocase: false,       // Case-sensitive matching
-        nonegate: true,      // Disable negation patterns (security)
-        nocomment: true,     // Disable comment patterns (security)
+        dot: true, // Match dotfiles
+        matchBase: false, // Don't match basenames only
+        nocase: false, // Case-sensitive matching
+        nonegate: true, // Disable negation patterns (security)
+        nocomment: true, // Disable comment patterns (security)
       });
 
       // Cache the result
@@ -384,7 +408,9 @@ export class PathMatcher {
       return result;
     } catch (error) {
       // Log error and return false for invalid patterns
-      logger.warn(`Invalid glob pattern "${pattern}": ${(error as Error).message}`);
+      logger.warn(
+        `Invalid glob pattern "${pattern}": ${(error as Error).message}`
+      );
 
       // Cache negative result to avoid repeated errors
       this.matchCache.set(cacheKey, false);
@@ -418,10 +444,10 @@ export class PathMatcher {
       return `Using ${intensity} review intensity (default)`;
     }
 
-    const uniquePatterns = [...new Set(matchedPatterns.map(p => p.pattern))];
+    const uniquePatterns = [...new Set(matchedPatterns.map((p) => p.pattern))];
     const descriptions = matchedPatterns
-      .filter(p => p.description)
-      .map(p => p.description)
+      .filter((p) => p.description)
+      .map((p) => p.description)
       .filter((v, i, a) => a.indexOf(v) === i); // Unique descriptions
 
     let reason = `Using ${intensity} review intensity: matched ${matchedPaths.length} file(s) against patterns: ${uniquePatterns.join(', ')}`;

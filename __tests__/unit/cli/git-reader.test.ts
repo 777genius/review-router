@@ -27,7 +27,9 @@ describe('GitReader', () => {
 
   describe('getCurrentBranch', () => {
     it('returns current branch name', () => {
-      (childProcess.execFileSync as jest.Mock).mockReturnValue('feature-branch\n');
+      (childProcess.execFileSync as jest.Mock).mockReturnValue(
+        'feature-branch\n'
+      );
       expect(reader.getCurrentBranch()).toBe('feature-branch');
     });
 
@@ -35,19 +37,23 @@ describe('GitReader', () => {
       (childProcess.execFileSync as jest.Mock).mockImplementation(() => {
         throw new Error('git error');
       });
-      expect(() => reader.getCurrentBranch()).toThrow('Failed to get current branch');
+      expect(() => reader.getCurrentBranch()).toThrow(
+        'Failed to get current branch'
+      );
     });
   });
 
   describe('getCurrentCommit', () => {
     it('returns current commit SHA', () => {
-      (childProcess.execFileSync as jest.Mock).mockReturnValue('abc123def456\n');
+      (childProcess.execFileSync as jest.Mock).mockReturnValue(
+        'abc123def456\n'
+      );
       expect(reader.getCurrentCommit()).toBe('abc123def456');
     });
 
     it('returns null for repo with no commits', () => {
       (childProcess.execFileSync as jest.Mock).mockImplementation(() => {
-        throw new Error('fatal: ambiguous argument \'HEAD\'');
+        throw new Error("fatal: ambiguous argument 'HEAD'");
       });
       expect(reader.getCurrentCommit()).toBe(null);
     });
@@ -143,7 +149,8 @@ index ghi789..jkl012 100644
       (childProcess.execFileSync as jest.Mock)
         .mockReturnValueOnce('feature-branch\n') // getCurrentBranch
         .mockReturnValueOnce('abc123\n') // getCurrentCommit
-        .mockReturnValueOnce(`diff --git a/src/test.ts b/src/test.ts
+        .mockReturnValueOnce(
+          `diff --git a/src/test.ts b/src/test.ts
 index abc123..def456 100644
 --- a/src/test.ts
 +++ b/src/test.ts
@@ -151,7 +158,8 @@ index abc123..def456 100644
  const x = 1;
 +const y = 2;
  console.log(x);
-`) // git diff HEAD
+`
+        ) // git diff HEAD
         .mockReturnValueOnce('Test User\n'); // git user.name
 
       const pr = await reader.getUncommittedChanges();
@@ -170,16 +178,18 @@ index abc123..def456 100644
       (childProcess.execFileSync as jest.Mock)
         .mockReturnValueOnce('main\n') // getCurrentBranch
         .mockImplementationOnce(() => {
-          throw new Error('fatal: ambiguous argument \'HEAD\'');
+          throw new Error("fatal: ambiguous argument 'HEAD'");
         }) // getCurrentCommit throws
-        .mockReturnValueOnce(`diff --git a/src/new.ts b/src/new.ts
+        .mockReturnValueOnce(
+          `diff --git a/src/new.ts b/src/new.ts
 new file mode 100644
 index 0000000..abc123
 --- /dev/null
 +++ b/src/new.ts
 @@ -0,0 +1,1 @@
 +const x = 1;
-`) // git diff empty-tree
+`
+        ) // git diff empty-tree
         .mockReturnValueOnce('Test User\n'); // git user.name
 
       const pr = await reader.getUncommittedChanges();
@@ -196,7 +206,8 @@ index 0000000..abc123
       (childProcess.execFileSync as jest.Mock)
         .mockReturnValueOnce('abc123def456\n') // resolve commit
         .mockReturnValueOnce('parent123\n') // resolve parent
-        .mockReturnValueOnce(`diff --git a/src/test.ts b/src/test.ts
+        .mockReturnValueOnce(
+          `diff --git a/src/test.ts b/src/test.ts
 index abc123..def456 100644
 --- a/src/test.ts
 +++ b/src/test.ts
@@ -204,7 +215,8 @@ index abc123..def456 100644
  const x = 1;
 +const y = 2;
  console.log(x);
-`) // git diff
+`
+        ) // git diff
         .mockReturnValueOnce('Fix bug\n\nDetailed message\n') // git log
         .mockReturnValueOnce('Test User\n'); // git user.name
 
@@ -224,7 +236,8 @@ index abc123..def456 100644
       (childProcess.execFileSync as jest.Mock)
         .mockReturnValueOnce('main-sha\n') // resolve base
         .mockReturnValueOnce('head-sha\n') // resolve head
-        .mockReturnValueOnce(`diff --git a/src/test.ts b/src/test.ts
+        .mockReturnValueOnce(
+          `diff --git a/src/test.ts b/src/test.ts
 index abc123..def456 100644
 --- a/src/test.ts
 +++ b/src/test.ts
@@ -232,7 +245,8 @@ index abc123..def456 100644
  const x = 1;
 +const y = 2;
  console.log(x);
-`) // git diff
+`
+        ) // git diff
         .mockReturnValueOnce('Test User\n'); // git user.name
 
       const pr = await reader.getBranchChanges('main', 'feature');

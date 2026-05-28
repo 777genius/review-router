@@ -1,4 +1,7 @@
-import { TrivialDetector, createDefaultTrivialConfig } from '../../../src/analysis/trivial-detector';
+import {
+  TrivialDetector,
+  createDefaultTrivialConfig,
+} from '../../../src/analysis/trivial-detector';
 import { FileChange } from '../../../src/types';
 
 /**
@@ -109,10 +112,7 @@ describe('TrivialDetector', () => {
 
     it('should detect docs/ directory files as trivial', () => {
       const detector = new TrivialDetector(createDefaultTrivialConfig());
-      const files = [
-        createFile('docs/guide.md'),
-        createFile('docs/api.md'),
-      ];
+      const files = [createFile('docs/guide.md'), createFile('docs/api.md')];
 
       const result = detector.detect(files);
 
@@ -218,7 +218,10 @@ describe('TrivialDetector', () => {
   describe('build artifacts', () => {
     it('should detect dist/ files as trivial', () => {
       const detector = new TrivialDetector(createDefaultTrivialConfig());
-      const files = [createFile('dist/index.js'), createFile('dist/bundle.css')];
+      const files = [
+        createFile('dist/index.js'),
+        createFile('dist/bundle.css'),
+      ];
 
       const result = detector.detect(files);
 
@@ -269,10 +272,7 @@ describe('TrivialDetector', () => {
   describe('mixed changes', () => {
     it('should not be trivial if source code is included', () => {
       const detector = new TrivialDetector(createDefaultTrivialConfig());
-      const files = [
-        createFile('package-lock.json'),
-        createFile('src/app.ts'),
-      ];
+      const files = [createFile('package-lock.json'), createFile('src/app.ts')];
 
       const result = detector.detect(files);
 
@@ -293,7 +293,10 @@ describe('TrivialDetector', () => {
       const filtered = detector.filterNonTrivial(files);
 
       expect(filtered).toHaveLength(2);
-      expect(filtered.map(f => f.filename)).toEqual(['src/app.ts', 'src/utils.ts']);
+      expect(filtered.map((f) => f.filename)).toEqual([
+        'src/app.ts',
+        'src/utils.ts',
+      ]);
     });
 
     it('should combine multiple trivial types in reason', () => {
@@ -387,10 +390,7 @@ describe('TrivialDetector', () => {
       config.enabled = false;
 
       const detector = new TrivialDetector(config);
-      const files = [
-        createFile('package-lock.json'),
-        createFile('README.md'),
-      ];
+      const files = [createFile('package-lock.json'), createFile('README.md')];
 
       const result = detector.detect(files);
 
@@ -420,10 +420,7 @@ describe('TrivialDetector', () => {
 
     it('should be case-insensitive for documentation patterns', () => {
       const detector = new TrivialDetector(createDefaultTrivialConfig());
-      const files = [
-        createFile('readme.MD'),
-        createFile('DOCS/guide.md'),
-      ];
+      const files = [createFile('readme.MD'), createFile('DOCS/guide.md')];
 
       const result = detector.detect(files);
 
@@ -528,7 +525,9 @@ describe('TrivialDetector', () => {
       const result = detector.detect(files);
 
       expect(result.isTrivial).toBe(false);
-      expect(result.nonTrivialFiles).toContain('__tests__/__snapshots__/test.snap');
+      expect(result.nonTrivialFiles).toContain(
+        '__tests__/__snapshots__/test.snap'
+      );
     });
 
     it('should respect skipConfigFiles=false', () => {
@@ -604,15 +603,18 @@ describe('TrivialDetector', () => {
       const detector = new TrivialDetector(config);
       const files = [
         createFile('package-lock.json'), // Trivial
-        createFile('README.md'),           // Non-trivial
-        createFile('.eslintrc.json'),      // Trivial
+        createFile('README.md'), // Non-trivial
+        createFile('.eslintrc.json'), // Trivial
       ];
 
       const result = detector.detect(files);
 
       expect(result.isTrivial).toBe(false);
       expect(result.nonTrivialFiles).toEqual(['README.md']);
-      expect(result.trivialFiles).toEqual(['package-lock.json', '.eslintrc.json']);
+      expect(result.trivialFiles).toEqual([
+        'package-lock.json',
+        '.eslintrc.json',
+      ]);
     });
 
     it('should respect custom trivial patterns', () => {
@@ -635,14 +637,17 @@ describe('TrivialDetector', () => {
       const detector = new TrivialDetector(config);
       const files = [
         createFile('src/api.generated.ts'), // Custom pattern
-        createFile('package-lock.json'),     // Built-in pattern
-        createFile('src/app.ts'),            // Neither
+        createFile('package-lock.json'), // Built-in pattern
+        createFile('src/app.ts'), // Neither
       ];
 
       const result = detector.detect(files);
 
       expect(result.isTrivial).toBe(false);
-      expect(result.trivialFiles).toEqual(['src/api.generated.ts', 'package-lock.json']);
+      expect(result.trivialFiles).toEqual([
+        'src/api.generated.ts',
+        'package-lock.json',
+      ]);
       expect(result.nonTrivialFiles).toEqual(['src/app.ts']);
     });
   });
@@ -661,10 +666,7 @@ describe('TrivialDetector', () => {
 
     it('normalizes Windows paths to forward slashes for cross-platform consistency', () => {
       const detector = new TrivialDetector(createDefaultTrivialConfig());
-      const files = [
-        createFile('src\\app.ts'),
-        createFile('docs\\README.md'),
-      ];
+      const files = [createFile('src\\app.ts'), createFile('docs\\README.md')];
 
       const result = detector.detect(files);
 

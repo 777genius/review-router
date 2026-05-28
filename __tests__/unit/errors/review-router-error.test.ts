@@ -8,7 +8,9 @@ import {
 describe('normalizeReviewError', () => {
   it('classifies reused Codex refresh tokens as stale OAuth', () => {
     const error = normalizeReviewError(
-      new Error('codex failed: refresh token has already been used; reseed auth.json')
+      new Error(
+        'codex failed: refresh token has already been used; reseed auth.json'
+      )
     );
 
     expect(error.code).toBe('codex_oauth_stale');
@@ -34,21 +36,26 @@ describe('normalizeReviewError', () => {
   });
 
   it('classifies OpenAI and OpenRouter API key failures separately', () => {
-    expect(normalizeReviewError(new Error('OPENAI_API_KEY is missing')).code).toBe(
-      'codex_api_key_invalid'
-    );
     expect(
-      normalizeReviewError(new Error('OpenRouter API error: 401 unauthorized API key')).code
+      normalizeReviewError(new Error('OPENAI_API_KEY is missing')).code
+    ).toBe('codex_api_key_invalid');
+    expect(
+      normalizeReviewError(
+        new Error('OpenRouter API error: 401 unauthorized API key')
+      ).code
     ).toBe('openrouter_api_key_invalid');
   });
 
   it('classifies GitHub permission and inline comment failures', () => {
     expect(
-      normalizeReviewError(new Error('Resource not accessible by integration')).code
+      normalizeReviewError(new Error('Resource not accessible by integration'))
+        .code
     ).toBe('github_permission_denied');
     expect(
       normalizeReviewError(
-        new Error('Validation Failed: Unprocessable Entity when creating inline comment')
+        new Error(
+          'Validation Failed: Unprocessable Entity when creating inline comment'
+        )
       ).code
     ).toBe('github_inline_comment_failed');
   });
@@ -56,11 +63,14 @@ describe('normalizeReviewError', () => {
   it('classifies provider health failures', () => {
     expect(
       normalizeReviewError(
-        new Error('No healthy providers available; failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true')
+        new Error(
+          'No healthy providers available; failing because FAIL_ON_NO_HEALTHY_PROVIDERS=true'
+        )
       ).code
     ).toBe('no_healthy_providers');
     expect(
-      normalizeReviewError(new Error('All LLM providers failed during review')).code
+      normalizeReviewError(new Error('All LLM providers failed during review'))
+        .code
     ).toBe('all_providers_failed');
     expect(
       normalizeReviewError(
@@ -72,8 +82,11 @@ describe('normalizeReviewError', () => {
   });
 
   it('wraps unknown errors while preserving stack and sanitized details', () => {
-    const source = new Error('boom OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz');
-    source.stack = 'Error: boom OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz\n    at test';
+    const source = new Error(
+      'boom OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz'
+    );
+    source.stack =
+      'Error: boom OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz\n    at test';
 
     const error = normalizeReviewError(source);
 
@@ -103,7 +116,9 @@ describe('sanitizeErrorMessage', () => {
     expect(sanitized).toContain('refresh_token: ***');
     expect(sanitized).toContain('access_token: ***');
     expect(sanitized).toContain('Authorization: Bearer ***');
-    expect(sanitized).toContain('-----BEGIN PRIVATE KEY-----***-----END PRIVATE KEY-----');
+    expect(sanitized).toContain(
+      '-----BEGIN PRIVATE KEY-----***-----END PRIVATE KEY-----'
+    );
     expect(sanitized).not.toContain('secret-refresh-token-value');
     expect(sanitized).not.toContain('sk-abcdefghijklmnopqrstuvwxyz');
   });

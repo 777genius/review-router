@@ -8,7 +8,11 @@ export class PullRequestLoader {
   async load(prNumber: number): Promise<PRContext> {
     const { octokit, owner, repo } = this.client;
 
-    const prResponse = await octokit.rest.pulls.get({ owner, repo, pull_number: prNumber });
+    const prResponse = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber,
+    });
     const pr = prResponse.data;
 
     const files: FileChange[] = [];
@@ -17,9 +21,15 @@ export class PullRequestLoader {
     let hasMore = true;
 
     while (hasMore) {
-      const res = await octokit.rest.pulls.listFiles({ owner, repo, pull_number: prNumber, page, per_page });
+      const res = await octokit.rest.pulls.listFiles({
+        owner,
+        repo,
+        pull_number: prNumber,
+        page,
+        per_page,
+      });
       files.push(
-        ...res.data.map(file => ({
+        ...res.data.map((file) => ({
           filename: file.filename,
           status: (file.status as FileChange['status']) || 'modified',
           additions: file.additions,
@@ -32,7 +42,9 @@ export class PullRequestLoader {
       hasMore = res.data.length === per_page;
       page += 1;
       if (files.length > 500) {
-        logger.warn(`PR #${prNumber} has more than 500 files; further file fetching skipped for safety.`);
+        logger.warn(
+          `PR #${prNumber} has more than 500 files; further file fetching skipped for safety.`
+        );
         break;
       }
     }
@@ -45,7 +57,9 @@ export class PullRequestLoader {
       body: pr.body || '',
       author: pr.user?.login || 'unknown',
       draft: Boolean(pr.draft),
-      labels: (pr.labels || []).map(label => (typeof label === 'string' ? label : label.name || '')),
+      labels: (pr.labels || []).map((label) =>
+        typeof label === 'string' ? label : label.name || ''
+      ),
       files,
       diff,
       additions: pr.additions || 0,
@@ -55,14 +69,21 @@ export class PullRequestLoader {
     };
   }
 
-  private async fetchDiff(owner: string, repo: string, prNumber: number): Promise<string> {
+  private async fetchDiff(
+    owner: string,
+    repo: string,
+    prNumber: number
+  ): Promise<string> {
     const { octokit } = this.client;
-    const res = await octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
-      owner,
-      repo,
-      pull_number: prNumber,
-      headers: { accept: 'application/vnd.github.v3.diff' },
-    });
+    const res = await octokit.request(
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}',
+      {
+        owner,
+        repo,
+        pull_number: prNumber,
+        headers: { accept: 'application/vnd.github.v3.diff' },
+      }
+    );
     return typeof res.data === 'string' ? res.data : '';
   }
 }

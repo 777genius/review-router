@@ -123,7 +123,9 @@ describe('classifyOutcome', () => {
   it('classifies OIDC and runtime config errors with safe categories', () => {
     expect(
       classifyOutcome({
-        error: new Error('github_oidc_unavailable: id-token permission missing'),
+        error: new Error(
+          'github_oidc_unavailable: id-token permission missing'
+        ),
       })
     ).toMatchObject({
       providerHealth: 'failed',
@@ -133,12 +135,15 @@ describe('classifyOutcome', () => {
 
     expect(
       classifyOutcome({
-        error: new Error('runtime_config_fetch_failed: control plane unavailable'),
+        error: new Error(
+          'runtime_config_fetch_failed: control plane unavailable'
+        ),
       })
     ).toMatchObject({
       providerHealth: 'failed',
       safeErrorCategory: 'config_unavailable',
-      safeErrorSummary: 'Runtime config could not be loaded from the control plane.',
+      safeErrorSummary:
+        'Runtime config could not be loaded from the control plane.',
     });
   });
 });

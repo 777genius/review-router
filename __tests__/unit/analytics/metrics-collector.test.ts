@@ -73,7 +73,7 @@ describe('MetricsCollector', () => {
           providersUsed: 0,
           providersSuccess: 0,
           providersFailed: 0,
-        }
+        },
       } as any;
 
       // Record more than max
@@ -83,7 +83,7 @@ describe('MetricsCollector', () => {
 
       const metrics = await collector.getMetrics();
       expect(metrics).toHaveLength(3);
-      expect(metrics.map(metric => metric.prNumber)).toEqual([2, 3, 4]);
+      expect(metrics.map((metric) => metric.prNumber)).toEqual([2, 3, 4]);
     });
   });
 
@@ -107,7 +107,7 @@ describe('MetricsCollector', () => {
           providersUsed: 0,
           providersSuccess: 0,
           providersFailed: 0,
-        }
+        },
       } as any;
 
       await collector.recordReview(review, 1);

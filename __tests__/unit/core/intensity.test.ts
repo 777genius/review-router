@@ -14,9 +14,9 @@ describe('Path-Based Intensity Feature', () => {
 
     it('should use default intensity timeouts', async () => {
       expect(DEFAULT_CONFIG.intensityTimeouts).toEqual({
-        thorough: 180000,  // 3 minutes
-        standard: 120000,  // 2 minutes
-        light: 60000,      // 1 minute
+        thorough: 180000, // 3 minutes
+        standard: 120000, // 2 minutes
+        light: 60000, // 1 minute
       });
     });
 
@@ -108,9 +108,9 @@ describe('Path-Based Intensity Feature', () => {
       const customConfig: ReviewConfig = {
         ...DEFAULT_CONFIG,
         intensityPromptDepth: {
-          thorough: 'standard',  // Override to use standard depth for thorough
-          standard: 'brief',     // Override to use brief depth for standard
-          light: 'detailed',     // Override to use detailed depth for light
+          thorough: 'standard', // Override to use standard depth for thorough
+          standard: 'brief', // Override to use brief depth for standard
+          light: 'detailed', // Override to use detailed depth for light
         },
       };
 
@@ -121,7 +121,15 @@ describe('Path-Based Intensity Feature', () => {
         author: 'test',
         draft: false,
         labels: [],
-        files: [{ filename: 'test.ts', status: 'modified' as const, additions: 1, deletions: 1, changes: 2 }],
+        files: [
+          {
+            filename: 'test.ts',
+            status: 'modified' as const,
+            additions: 1,
+            deletions: 1,
+            changes: 2,
+          },
+        ],
         diff: 'diff',
         additions: 1,
         deletions: 1,
@@ -181,7 +189,7 @@ describe('Path-Based Intensity Feature', () => {
     it('should apply intensity settings for provider counts', async () => {
       const config: ReviewConfig = {
         ...DEFAULT_CONFIG,
-        providerLimit: 10,  // Base limit
+        providerLimit: 10, // Base limit
         intensityProviderCounts: {
           thorough: 8,
           standard: 5,
@@ -205,11 +213,11 @@ describe('Path-Based Intensity Feature', () => {
     it('should apply intensity settings for timeouts', async () => {
       const config: ReviewConfig = {
         ...DEFAULT_CONFIG,
-        runTimeoutSeconds: 600,  // Base timeout (10 minutes)
+        runTimeoutSeconds: 600, // Base timeout (10 minutes)
         intensityTimeouts: {
-          thorough: 180000,  // 3 minutes
-          standard: 120000,  // 2 minutes
-          light: 60000,      // 1 minute
+          thorough: 180000, // 3 minutes
+          standard: 120000, // 2 minutes
+          light: 60000, // 1 minute
         },
       };
 

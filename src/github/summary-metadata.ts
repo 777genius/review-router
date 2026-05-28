@@ -1,6 +1,7 @@
 import { ReviewThreadLifecycleMode } from '../types';
 
-export const REVIEW_THREAD_LIFECYCLE_SCHEMA_VERSION = 'review-thread-lifecycle-v1';
+export const REVIEW_THREAD_LIFECYCLE_SCHEMA_VERSION =
+  'review-thread-lifecycle-v1';
 
 const SUMMARY_METADATA_RE =
   /<!--\s*review-router-summary:([A-Za-z0-9+/=]+)\s*-->/;
@@ -39,7 +40,9 @@ export function appendReviewSummaryMetadata(
   metadata?: ReviewSummaryMetadata
 ): string {
   if (!metadata) return body;
-  const encoded = Buffer.from(JSON.stringify(metadata), 'utf8').toString('base64');
+  const encoded = Buffer.from(JSON.stringify(metadata), 'utf8').toString(
+    'base64'
+  );
   const cleanBody = body.replace(SUMMARY_METADATA_RE, '').trimEnd();
   return `${cleanBody}\n\n<!-- review-router-summary:${encoded} -->`;
 }

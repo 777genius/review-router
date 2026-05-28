@@ -126,11 +126,13 @@ export class AcceptanceDetector {
    * @param commentReactions - List of comments with their reactions
    * @returns List of detected acceptances
    */
-  detectFromReactions(commentReactions: CommentReaction[]): SuggestionAcceptance[] {
+  detectFromReactions(
+    commentReactions: CommentReaction[]
+  ): SuggestionAcceptance[] {
     const acceptances: SuggestionAcceptance[] = [];
 
     for (const comment of commentReactions) {
-      const hasThumbsUp = comment.reactions.some(r => r.content === '+1');
+      const hasThumbsUp = comment.reactions.some((r) => r.content === '+1');
       if (!hasThumbsUp) continue;
 
       acceptances.push({
@@ -173,6 +175,8 @@ export class AcceptanceDetector {
    * @returns True if message matches a suggestion pattern
    */
   private isSuggestionCommit(message: string): boolean {
-    return this.SUGGESTION_COMMIT_PATTERNS.some(pattern => pattern.test(message));
+    return this.SUGGESTION_COMMIT_PATTERNS.some((pattern) =>
+      pattern.test(message)
+    );
   }
 }

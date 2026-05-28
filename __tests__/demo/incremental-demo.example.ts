@@ -66,7 +66,9 @@ describe('Incremental Review System - Interactive Demo', () => {
     mockStorage.read.mockResolvedValue(null); // No previous review
     const canUseIncremental1 = await reviewer.shouldUseIncremental(pr);
 
-    console.log(`   Result: ${canUseIncremental1 ? '✅ Use incremental' : '❌ Use full review'}`);
+    console.log(
+      `   Result: ${canUseIncremental1 ? '✅ Use incremental' : '❌ Use full review'}`
+    );
     console.log('   Reason: No previous review found\n');
 
     expect(canUseIncremental1).toBe(false);
@@ -78,9 +80,27 @@ describe('Incremental Review System - Interactive Demo', () => {
     const firstReview: Review = {
       summary: 'Found 15 issues across authentication files',
       findings: [
-        { file: 'src/auth/login.ts', line: 10, severity: 'critical', title: 'SQL Injection', message: 'Vulnerable query' },
-        { file: 'src/auth/jwt.ts', line: 45, severity: 'major', title: 'Weak Secret', message: 'Use stronger secret' },
-        { file: 'src/middleware/auth.ts', line: 20, severity: 'minor', title: 'Missing Validation', message: 'Add validation' },
+        {
+          file: 'src/auth/login.ts',
+          line: 10,
+          severity: 'critical',
+          title: 'SQL Injection',
+          message: 'Vulnerable query',
+        },
+        {
+          file: 'src/auth/jwt.ts',
+          line: 45,
+          severity: 'major',
+          title: 'Weak Secret',
+          message: 'Use stronger secret',
+        },
+        {
+          file: 'src/middleware/auth.ts',
+          line: 20,
+          severity: 'minor',
+          title: 'Missing Validation',
+          message: 'Add validation',
+        },
         ...createManyFindings(12), // 12 more findings
       ],
       inlineComments: [],
@@ -157,7 +177,9 @@ describe('Incremental Review System - Interactive Demo', () => {
 
     const canUseIncremental2 = await reviewer.shouldUseIncremental(updatedPR);
 
-    console.log(`   Result: ${canUseIncremental2 ? '✅ Use incremental!' : '❌ Use full review'}`);
+    console.log(
+      `   Result: ${canUseIncremental2 ? '✅ Use incremental!' : '❌ Use full review'}`
+    );
     console.log('   Reason: Previous review found, commit changed\n');
 
     expect(canUseIncremental2).toBe(true);
@@ -170,7 +192,10 @@ describe('Incremental Review System - Interactive Demo', () => {
     );
 
     const lastReview = await reviewer.getLastReview(123);
-    const changedFiles = await reviewer.getChangedFilesSince(updatedPR, lastReview!.lastReviewedCommit);
+    const changedFiles = await reviewer.getChangedFilesSince(
+      updatedPR,
+      lastReview!.lastReviewedCommit
+    );
 
     console.log(`   ✅ Found ${changedFiles.length} changed files:`);
     changedFiles.forEach((f, i) => {
@@ -186,8 +211,20 @@ describe('Incremental Review System - Interactive Demo', () => {
 
     // New findings from reviewing the 3 changed files
     const newFindings: Finding[] = [
-      { file: 'src/auth/login.ts', line: 10, severity: 'minor', title: 'Code Style', message: 'Minor style issue' },
-      { file: 'tests/auth.test.ts', line: 5, severity: 'minor', title: 'Test Coverage', message: 'Add edge case test' },
+      {
+        file: 'src/auth/login.ts',
+        line: 10,
+        severity: 'minor',
+        title: 'Code Style',
+        message: 'Minor style issue',
+      },
+      {
+        file: 'tests/auth.test.ts',
+        line: 5,
+        severity: 'minor',
+        title: 'Test Coverage',
+        message: 'Add edge case test',
+      },
     ];
 
     console.log('   📊 New findings: 2');
@@ -213,7 +250,7 @@ describe('Incremental Review System - Interactive Demo', () => {
 
     // Original 15 findings - 1 from changed file (SQL injection in login.ts) + 2 new = 16
     const keptCount = firstReview.findings.filter(
-      f => !changedFiles.find(cf => cf.filename === f.file)
+      (f) => !changedFiles.find((cf) => cf.filename === f.file)
     ).length;
     console.log(`      - ${keptCount} kept from unchanged files`);
     console.log(`      - ${newFindings.length} new from review`);
@@ -275,12 +312,12 @@ describe('Incremental Review System - Interactive Demo', () => {
   it('DEMO: Cache expiration scenario', async () => {
     console.log('\n=== CACHE EXPIRATION DEMO ===\n');
 
-    console.log('📝 Scenario: PR hasn\'t been updated in 8 days\n');
+    console.log("📝 Scenario: PR hasn't been updated in 8 days\n");
 
     const pr: PRContext = createMockPR();
 
     // Mock review from 8 days ago (> 7 day TTL)
-    const eightDaysAgo = Date.now() - (8 * 24 * 60 * 60 * 1000);
+    const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
     mockStorage.read.mockResolvedValue(
       JSON.stringify({
         prNumber: 1,
@@ -294,7 +331,9 @@ describe('Incremental Review System - Interactive Demo', () => {
     console.log('🔍 Checking if incremental review is possible...');
     const canUse = await reviewer.shouldUseIncremental(pr);
 
-    console.log(`Result: ${canUse ? '✅ Use incremental' : '❌ Use full review'}`);
+    console.log(
+      `Result: ${canUse ? '✅ Use incremental' : '❌ Use full review'}`
+    );
     console.log('Reason: Cache expired (8 days > 7 day TTL)\n');
 
     console.log('💡 Solution: Run reviews more frequently or increase TTL\n');
@@ -370,7 +409,9 @@ function createMockFile(overrides: Partial<FileChange> = {}): FileChange {
 }
 
 function createManyFiles(count: number): FileChange[] {
-  return Array.from({ length: count }, (_, i) => createMockFile({ filename: `src/file${i + 1}.ts` }));
+  return Array.from({ length: count }, (_, i) =>
+    createMockFile({ filename: `src/file${i + 1}.ts` })
+  );
 }
 
 function createManyFindings(count: number): Finding[] {

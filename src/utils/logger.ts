@@ -17,7 +17,11 @@ function shouldLog(level: LogLevel): boolean {
   return LEVELS[level] >= LEVELS[CURRENT_LEVEL];
 }
 
-function formatMessage(level: LogLevel, message: string, metadata?: LogMetadata): string {
+function formatMessage(
+  level: LogLevel,
+  message: string,
+  metadata?: LogMetadata
+): string {
   const timestamp = new Date().toISOString();
   const levelStr = level.toUpperCase().padEnd(5);
 
@@ -32,25 +36,34 @@ function formatMessage(level: LogLevel, message: string, metadata?: LogMetadata)
 export const logger = {
   debug(message: string, ...args: unknown[]): void {
     if (shouldLog('debug')) {
-      const metadata = args.length > 0 && typeof args[0] === 'object' && !Array.isArray(args[0])
-        ? args[0] as LogMetadata
-        : undefined;
+      const metadata =
+        args.length > 0 &&
+        typeof args[0] === 'object' &&
+        !Array.isArray(args[0])
+          ? (args[0] as LogMetadata)
+          : undefined;
       console.debug(formatMessage('debug', message, metadata));
     }
   },
   info(message: string, ...args: unknown[]): void {
     if (shouldLog('info')) {
-      const metadata = args.length > 0 && typeof args[0] === 'object' && !Array.isArray(args[0])
-        ? args[0] as LogMetadata
-        : undefined;
+      const metadata =
+        args.length > 0 &&
+        typeof args[0] === 'object' &&
+        !Array.isArray(args[0])
+          ? (args[0] as LogMetadata)
+          : undefined;
       console.info(formatMessage('info', message, metadata));
     }
   },
   warn(message: string, ...args: unknown[]): void {
     if (shouldLog('warn')) {
-      const metadata = args.length > 0 && typeof args[0] === 'object' && !Array.isArray(args[0])
-        ? args[0] as LogMetadata
-        : undefined;
+      const metadata =
+        args.length > 0 &&
+        typeof args[0] === 'object' &&
+        !Array.isArray(args[0])
+          ? (args[0] as LogMetadata)
+          : undefined;
       console.warn(formatMessage('warn', message, metadata));
     }
   },
@@ -63,7 +76,11 @@ export const logger = {
       for (const arg of args) {
         if (arg instanceof Error) {
           error = arg;
-        } else if (typeof arg === 'object' && arg !== null && !Array.isArray(arg)) {
+        } else if (
+          typeof arg === 'object' &&
+          arg !== null &&
+          !Array.isArray(arg)
+        ) {
           metadata = { ...metadata, ...(arg as LogMetadata) };
         }
       }
@@ -73,7 +90,13 @@ export const logger = {
         metadata.stack = error.stack;
       }
 
-      console.error(formatMessage('error', message, Object.keys(metadata).length > 0 ? metadata : undefined));
+      console.error(
+        formatMessage(
+          'error',
+          message,
+          Object.keys(metadata).length > 0 ? metadata : undefined
+        )
+      );
     }
   },
 };

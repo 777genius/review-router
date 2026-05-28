@@ -1,4 +1,7 @@
-import { ReviewOrchestrator, ReviewComponents } from '../../../src/core/orchestrator';
+import {
+  ReviewOrchestrator,
+  ReviewComponents,
+} from '../../../src/core/orchestrator';
 
 describe('ReviewOrchestrator', () => {
   let orchestrator: ReviewOrchestrator;

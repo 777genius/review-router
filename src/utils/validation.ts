@@ -56,7 +56,10 @@ export function validatePositiveInteger(value: unknown, field: string): number {
   return num;
 }
 
-export function validateNonNegativeNumber(value: unknown, field: string): number {
+export function validateNonNegativeNumber(
+  value: unknown,
+  field: string
+): number {
   const num = Number(value);
 
   if (isNaN(num)) {
@@ -129,7 +132,10 @@ export function validateArray(value: unknown, field: string): unknown[] {
   return value;
 }
 
-export function validateNonEmptyArray(value: unknown, field: string): unknown[] {
+export function validateNonEmptyArray(
+  value: unknown,
+  field: string
+): unknown[] {
   const arr = validateArray(value, field);
 
   if (arr.length === 0) {
@@ -170,12 +176,14 @@ export function validateModelId(modelId: string): void {
 
   // Check for common provider prefixes
   const validPrefixes = ['openrouter/', 'opencode/', 'anthropic/', 'openai/'];
-  const hasValidPrefix = validPrefixes.some(prefix => modelId.startsWith(prefix));
+  const hasValidPrefix = validPrefixes.some((prefix) =>
+    modelId.startsWith(prefix)
+  );
 
   if (!hasValidPrefix && !modelId.includes('/')) {
     logger.warn(
       `Model ID "${modelId}" doesn't have a recognized provider prefix. ` +
-      `Consider using: ${validPrefixes.map(p => p + 'model-name').join(', ')}`
+        `Consider using: ${validPrefixes.map((p) => p + 'model-name').join(', ')}`
     );
   }
 }
@@ -230,7 +238,7 @@ export function validateTimeout(timeoutMs: number): void {
   if (timeoutMs > 600000) {
     logger.warn(
       `Timeout of ${timeoutMs}ms (${Math.round(timeoutMs / 1000)}s) is very long. ` +
-      'Consider using a shorter timeout to avoid blocking.'
+        'Consider using a shorter timeout to avoid blocking.'
     );
   }
 }
@@ -264,10 +272,7 @@ export function validateFilePath(filePath: unknown, baseDir?: string): string {
   }
 
   if (filePath.trim() === '') {
-    throw new ValidationError(
-      'File path cannot be empty',
-      'filePath'
-    );
+    throw new ValidationError('File path cannot be empty', 'filePath');
   }
 
   // Basic security check for directory traversal attempts
@@ -293,14 +298,14 @@ export function validateFilePath(filePath: unknown, baseDir?: string): string {
         'File path escapes base directory',
         'filePath',
         `Resolved path "${resolvedPath}" is outside base directory "${basePath}". ` +
-        `This may be a directory traversal attack.`
+          `This may be a directory traversal attack.`
       );
     }
 
     // Additional checks for suspicious patterns
     const suspiciousPatterns = [
-      /\/?\.\//,        // Current directory reference (with or without leading slash)
-      /\/\//,           // Double slashes
+      /\/?\.\//, // Current directory reference (with or without leading slash)
+      /\/\//, // Double slashes
     ];
 
     for (const pattern of suspiciousPatterns) {
@@ -382,38 +387,47 @@ export function validateConfig(config: Record<string, unknown>): void {
 
   // Validate numeric bounds
   if (config.providerLimit !== undefined && config.providerLimit !== null) {
-    const limit = validateNonNegativeNumber(config.providerLimit, 'providerLimit');
+    const limit = validateNonNegativeNumber(
+      config.providerLimit,
+      'providerLimit'
+    );
     if (limit > 0) {
       validateInRange(limit, 'providerLimit', 1, 100);
     }
   }
 
   if (config.inlineMaxComments !== undefined) {
-    const maxComments = validateNonNegativeNumber(config.inlineMaxComments, 'inlineMaxComments');
+    const maxComments = validateNonNegativeNumber(
+      config.inlineMaxComments,
+      'inlineMaxComments'
+    );
     if (maxComments > 100) {
       logger.warn(
         `inlineMaxComments is set to ${maxComments}. ` +
-        'Very high values may cause rate limiting on GitHub API.'
+          'Very high values may cause rate limiting on GitHub API.'
       );
     }
   }
 
   if (config.budgetMaxUsd !== undefined) {
-    const budget = validateNonNegativeNumber(config.budgetMaxUsd, 'budgetMaxUsd');
+    const budget = validateNonNegativeNumber(
+      config.budgetMaxUsd,
+      'budgetMaxUsd'
+    );
     if (budget > 100) {
       logger.warn(
         `budgetMaxUsd is set to $${budget}. ` +
-        'This is unusually high. Make sure this is intentional.'
+          'This is unusually high. Make sure this is intentional.'
       );
     }
   }
 
   // Validate severity
   if (config.inlineMinSeverity) {
-    validateEnum(
-      config.inlineMinSeverity,
-      'inlineMinSeverity',
-      ['critical', 'major', 'minor'] as const
-    );
+    validateEnum(config.inlineMinSeverity, 'inlineMinSeverity', [
+      'critical',
+      'major',
+      'minor',
+    ] as const);
   }
 }

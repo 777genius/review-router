@@ -17,7 +17,9 @@ export class ASTAnalyzer {
       findings.push(...detectPatternFindings(file.filename, addedLines));
 
       if (language !== 'unknown') {
-        findings.push(...this.runLanguageChecks(file.filename, language, addedLines));
+        findings.push(
+          ...this.runLanguageChecks(file.filename, language, addedLines)
+        );
       }
 
       findings.push(...this.runHeuristics(file.filename, addedLines));
@@ -33,7 +35,7 @@ export class ASTAnalyzer {
   ): Finding[] {
     const findings: Finding[] = [];
 
-    const code = addedLines.map(l => l.content).join('\n');
+    const code = addedLines.map((l) => l.content).join('\n');
     if (!code.trim()) return findings;
 
     const parser = getParser(language);
@@ -42,7 +44,7 @@ export class ASTAnalyzer {
     }
 
     const tree = parser.parse(code);
-    const lineLookup = addedLines.map(l => l.line);
+    const lineLookup = addedLines.map((l) => l.line);
 
     const stack = [tree.rootNode];
     while (stack.length > 0) {
@@ -81,7 +83,11 @@ export class ASTAnalyzer {
           });
         }
 
-        if (language === 'typescript' && node.type === 'predefined_type' && node.text === 'any') {
+        if (
+          language === 'typescript' &&
+          node.type === 'predefined_type' &&
+          node.text === 'any'
+        ) {
           const row = node.startPosition.row;
           const line = lineLookup[row] ?? row + 1;
           findings.push({
@@ -137,7 +143,14 @@ export class ASTAnalyzer {
 
   private isTestFile(filename: string): boolean {
     const lower = filename.toLowerCase();
-    return lower.includes('__tests__') || lower.includes('/tests/') || lower.endsWith('.test.ts') || lower.endsWith('.test.js') || lower.endsWith('.spec.ts') || lower.endsWith('.spec.js');
+    return (
+      lower.includes('__tests__') ||
+      lower.includes('/tests/') ||
+      lower.endsWith('.test.ts') ||
+      lower.endsWith('.test.js') ||
+      lower.endsWith('.spec.ts') ||
+      lower.endsWith('.spec.js')
+    );
   }
 
   private runHeuristics(
@@ -147,7 +160,11 @@ export class ASTAnalyzer {
     const findings: Finding[] = [];
 
     for (const { line, content } of addedLines) {
-      if ((content.includes('Promise<any>') && !content.includes('/Promise<any>/')) || (/:\\s*any\\b/.test(content) && !content.includes('/:\\s*any\\b/'))) {
+      if (
+        (content.includes('Promise<any>') &&
+          !content.includes('/Promise<any>/')) ||
+        (/:\\s*any\\b/.test(content) && !content.includes('/:\\s*any\\b/'))
+      ) {
         findings.push({
           file: filename,
           line,

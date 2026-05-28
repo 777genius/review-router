@@ -1,4 +1,9 @@
-import { validateSuggestionLine, isSuggestionLineValid, validateSuggestionRange, isDeletionOnlyFile } from '../../../src/utils/suggestion-validator';
+import {
+  validateSuggestionLine,
+  isSuggestionLineValid,
+  validateSuggestionRange,
+  isDeletionOnlyFile,
+} from '../../../src/utils/suggestion-validator';
 
 const samplePatch = `@@ -1,3 +1,4 @@
  context line
@@ -113,7 +118,9 @@ describe('isDeletionOnlyFile', () => {
   });
 
   it('returns false for files with additions', () => {
-    expect(isDeletionOnlyFile({ status: 'modified', additions: 5 })).toBe(false);
+    expect(isDeletionOnlyFile({ status: 'modified', additions: 5 })).toBe(
+      false
+    );
   });
 
   it('returns true when additions is undefined (treated as 0)', () => {

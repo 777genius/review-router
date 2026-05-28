@@ -23,7 +23,10 @@ export class IncrementalReviewer {
 
   constructor(
     private readonly storage = new CacheStorage(),
-    private readonly config: IncrementalConfig = { enabled: true, cacheTtlDays: 7 }
+    private readonly config: IncrementalConfig = {
+      enabled: true,
+      cacheTtlDays: 7,
+    }
   ) {}
 
   /**
@@ -46,7 +49,9 @@ export class IncrementalReviewer {
     const ttlMs = this.config.cacheTtlDays * IncrementalReviewer.MS_PER_DAY;
     if (ageMs > ttlMs) {
       const ageMinutes = Math.round(ageMs / 1000 / 60);
-      logger.debug(`Cache expired (age: ${ageMinutes} minutes, TTL: ${this.config.cacheTtlDays} days)`);
+      logger.debug(
+        `Cache expired (age: ${ageMinutes} minutes, TTL: ${this.config.cacheTtlDays} days)`
+      );
       return false;
     }
 
@@ -56,7 +61,9 @@ export class IncrementalReviewer {
       return false; // No changes, skip review entirely
     }
 
-    logger.info(`Incremental review available from ${lastReview.lastReviewedCommit.substring(0, 7)} to ${pr.headSha.substring(0, 7)}`);
+    logger.info(
+      `Incremental review available from ${lastReview.lastReviewedCommit.substring(0, 7)} to ${pr.headSha.substring(0, 7)}`
+    );
     return true;
   }
 
@@ -91,7 +98,9 @@ export class IncrementalReviewer {
     };
 
     await this.storage.write(key, JSON.stringify(data));
-    logger.info(`Saved incremental review data for PR #${pr.number} at commit ${pr.headSha.substring(0, 7)}`);
+    logger.info(
+      `Saved incremental review data for PR #${pr.number} at commit ${pr.headSha.substring(0, 7)}`
+    );
   }
 
   /**
@@ -105,7 +114,10 @@ export class IncrementalReviewer {
   /**
    * Get list of files changed since the last review
    */
-  async getChangedFilesSince(pr: PRContext, lastCommit: string): Promise<FileChange[]> {
+  async getChangedFilesSince(
+    pr: PRContext,
+    lastCommit: string
+  ): Promise<FileChange[]> {
     try {
       // Validate SHAs to prevent command injection
       if (!this.isValidSha(lastCommit)) {
@@ -116,17 +128,25 @@ export class IncrementalReviewer {
       }
 
       // Get the diff between last reviewed commit and current HEAD
-      logger.debug(`Running git diff --name-status ${lastCommit.substring(0, 7)}...${pr.headSha.substring(0, 7)}`);
+      logger.debug(
+        `Running git diff --name-status ${lastCommit.substring(0, 7)}...${pr.headSha.substring(0, 7)}`
+      );
 
       let output: string;
       try {
-        output = execFileSync('git', ['diff', '--name-status', `${lastCommit}...${pr.headSha}`], {
-          encoding: 'utf8',
-          cwd: process.cwd(),
-          timeout: 10000, // 10 second timeout
-        });
+        output = execFileSync(
+          'git',
+          ['diff', '--name-status', `${lastCommit}...${pr.headSha}`],
+          {
+            encoding: 'utf8',
+            cwd: process.cwd(),
+            timeout: 10000, // 10 second timeout
+          }
+        );
       } catch (error) {
-        logger.warn(`Failed to get git diff: ${error instanceof Error ? error.message : String(error)}`);
+        logger.warn(
+          `Failed to get git diff: ${error instanceof Error ? error.message : String(error)}`
+        );
         // If git diff fails, fall back to reviewing all files
         return pr.files;
       }
@@ -140,7 +160,7 @@ export class IncrementalReviewer {
         const filename = pathParts.join('\t'); // Handle filenames with tabs
 
         // Find this file in the PR files list to get full details
-        const prFile = pr.files.find(f => f.filename === filename);
+        const prFile = pr.files.find((f) => f.filename === filename);
         if (prFile) {
           changedFiles.push(prFile);
         } else {
@@ -149,11 +169,15 @@ export class IncrementalReviewer {
         }
       }
 
-      logger.info(`Found ${changedFiles.length} changed files since ${lastCommit.substring(0, 7)}`);
+      logger.info(
+        `Found ${changedFiles.length} changed files since ${lastCommit.substring(0, 7)}`
+      );
       return changedFiles;
     } catch (error) {
       logger.error('Failed to get changed files from git diff', error as Error);
-      logger.warn(`Falling back to full review (${pr.files.length} files) due to git diff failure`);
+      logger.warn(
+        `Falling back to full review (${pr.files.length} files) due to git diff failure`
+      );
       // On error, return all PR files (fallback to full review)
       return pr.files;
     }
@@ -172,17 +196,19 @@ export class IncrementalReviewer {
     newFindings: Finding[],
     changedFiles: FileChange[]
   ): Finding[] {
-    const changedFilenames = new Set(changedFiles.map(f => f.filename));
+    const changedFilenames = new Set(changedFiles.map((f) => f.filename));
 
     // Keep findings from unchanged files
-    const keptFindings = previousFindings.filter(f => !changedFilenames.has(f.file));
+    const keptFindings = previousFindings.filter(
+      (f) => !changedFilenames.has(f.file)
+    );
 
     // Add new findings
     const merged = [...keptFindings, ...newFindings];
 
     logger.info(
       `Merged findings: ${keptFindings.length} kept from unchanged files, ` +
-      `${newFindings.length} new from review, total ${merged.length}`
+        `${newFindings.length} new from review, total ${merged.length}`
     );
 
     return merged;
@@ -204,7 +230,7 @@ export class IncrementalReviewer {
 This is an incremental review covering changes from \`${lastCommit.substring(0, 7)}\` to \`${currentCommit.substring(0, 7)}\`.
 
 **Files reviewed in this update:** ${changedFiles.length}
-${changedFiles.map(f => `- ${f.filename}`).join('\n')}
+${changedFiles.map((f) => `- ${f.filename}`).join('\n')}
 
 ---
 

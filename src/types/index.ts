@@ -122,6 +122,7 @@ export interface ReviewConfig {
   graphTimeoutSeconds?: number;
 
   codexAgenticContext?: boolean;
+  claudeAgenticContext?: boolean;
   codexEventAudit?: boolean;
 
   generateFixPrompts?: boolean;

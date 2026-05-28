@@ -23,7 +23,9 @@ export class RateLimiter {
       const raw = await fs.readFile(lockFile, 'utf8');
       const info: RateLimitInfo = JSON.parse(raw);
       if (Date.now() < info.limitedUntil) {
-        logger.warn(`Provider ${provider} rate-limited until ${new Date(info.limitedUntil).toISOString()}`);
+        logger.warn(
+          `Provider ${provider} rate-limited until ${new Date(info.limitedUntil).toISOString()}`
+        );
         return true;
       }
 
@@ -34,7 +36,11 @@ export class RateLimiter {
     }
   }
 
-  async markRateLimited(provider: string, durationMinutes: number, reason: string): Promise<void> {
+  async markRateLimited(
+    provider: string,
+    durationMinutes: number,
+    reason: string
+  ): Promise<void> {
     const lockFile = this.getLockFile(provider);
     const info: RateLimitInfo = {
       provider,
@@ -43,7 +49,9 @@ export class RateLimiter {
     };
 
     await fs.writeFile(lockFile, JSON.stringify(info), 'utf8');
-    logger.warn(`Marked ${provider} as rate-limited for ${durationMinutes} minutes: ${reason}`);
+    logger.warn(
+      `Marked ${provider} as rate-limited for ${durationMinutes} minutes: ${reason}`
+    );
   }
 
   async clear(provider: string): Promise<void> {

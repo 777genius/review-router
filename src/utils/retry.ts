@@ -27,8 +27,11 @@ export async function withRetry<T>(
         if (!options.retryOn(err) || attempt === maxAttempts) {
           throw err;
         }
-        logger.warn(`Retryable error: attempt ${attempt} of ${maxAttempts}`, err.message);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        logger.warn(
+          `Retryable error: attempt ${attempt} of ${maxAttempts}`,
+          err.message
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
         delay = Math.min(delay * factor, options.maxTimeout ?? 4000);
       }
     }

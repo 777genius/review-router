@@ -10,8 +10,19 @@
  * - Provider execution time
  */
 
-import { ReviewOrchestrator, ReviewComponents } from '../../src/core/orchestrator';
-import { ReviewConfig, PRContext, Finding, ProviderResult, FileChange, ReviewResult, Review } from '../../src/types';
+import {
+  ReviewOrchestrator,
+  ReviewComponents,
+} from '../../src/core/orchestrator';
+import {
+  ReviewConfig,
+  PRContext,
+  Finding,
+  ProviderResult,
+  FileChange,
+  ReviewResult,
+  Review,
+} from '../../src/types';
 import { ConsensusEngine } from '../../src/analysis/consensus';
 import { Deduplicator } from '../../src/analysis/deduplicator';
 import { SynthesisEngine } from '../../src/analysis/synthesis';
@@ -52,7 +63,12 @@ class BenchmarkPricingService extends PricingService {
 
   async getPricing(_modelId: string) {
     // Return fixed pricing for consistent benchmark results
-    return { modelId: 'mock', promptPrice: 0.001, completionPrice: 0.002, isFree: false };
+    return {
+      modelId: 'mock',
+      promptPrice: 0.001,
+      completionPrice: 0.002,
+      isFree: false,
+    };
   }
 }
 
@@ -79,18 +95,24 @@ class MockIncrementalReviewer {
     // No-op for benchmarks
   }
 
-  async getChangedFilesSince(_pr: PRContext, _lastCommit: string): Promise<FileChange[]> {
+  async getChangedFilesSince(
+    _pr: PRContext,
+    _lastCommit: string
+  ): Promise<FileChange[]> {
     return [];
   }
 }
 
 class MockProvider extends Provider {
-  constructor(name: string, private readonly latencyMs: number) {
+  constructor(
+    name: string,
+    private readonly latencyMs: number
+  ) {
     super(name);
   }
 
   async review(_prompt: string, _timeoutMs: number): Promise<ReviewResult> {
-    await new Promise(resolve => setTimeout(resolve, this.latencyMs));
+    await new Promise((resolve) => setTimeout(resolve, this.latencyMs));
     return {
       content: 'Review complete',
       findings: [
@@ -178,7 +200,10 @@ class NoopFeedbackFilter {
   async loadSuppressed(): Promise<Set<string>> {
     return new Set();
   }
-  async loadReviewCommentState(): Promise<{ suppressed: Set<string>; alreadyPosted: Set<string> }> {
+  async loadReviewCommentState(): Promise<{
+    suppressed: Set<string>;
+    alreadyPosted: Set<string>;
+  }> {
     return {
       suppressed: new Set(),
       alreadyPosted: new Set(),
@@ -237,7 +262,7 @@ async function runBenchmark(
   cache?: CacheManager
 ): Promise<BenchmarkResult> {
   const config: ReviewConfig = {
-    providers: providers.map(p => p.name),
+    providers: providers.map((p) => p.name),
     synthesisModel: 'mock/model',
     fallbackProviders: [],
     providerAllowlist: [],
@@ -269,11 +294,19 @@ async function runBenchmark(
 
   const components: ReviewComponents = {
     config,
-    providerRegistry: new BenchmarkProviderRegistry(providers) as unknown as ReviewComponents['providerRegistry'],
+    providerRegistry: new BenchmarkProviderRegistry(
+      providers
+    ) as unknown as ReviewComponents['providerRegistry'],
     promptBuilder: new PromptBuilder(config),
-    llmExecutor: new BenchmarkLLMExecutor(providers) as unknown as ReviewComponents['llmExecutor'],
+    llmExecutor: new BenchmarkLLMExecutor(
+      providers
+    ) as unknown as ReviewComponents['llmExecutor'],
     deduplicator: new Deduplicator(),
-    consensus: new ConsensusEngine({ minAgreement: 1, minSeverity: 'minor', maxComments: 100 }),
+    consensus: new ConsensusEngine({
+      minAgreement: 1,
+      minSeverity: 'minor',
+      maxComments: 100,
+    }),
     synthesis: new SynthesisEngine(config),
     testCoverage: new TestCoverageAnalyzer(),
     astAnalyzer: new ASTAnalyzer(),
@@ -281,15 +314,20 @@ async function runBenchmark(
     costTracker: new CostTracker(new BenchmarkPricingService()),
     security: new SecurityScanner(),
     rules: new RulesEngine([]),
-    prLoader: new BenchmarkPRLoader(prContext) as unknown as ReviewComponents['prLoader'],
-    commentPoster: new NoopCommentPoster() as unknown as ReviewComponents['commentPoster'],
+    prLoader: new BenchmarkPRLoader(
+      prContext
+    ) as unknown as ReviewComponents['prLoader'],
+    commentPoster:
+      new NoopCommentPoster() as unknown as ReviewComponents['commentPoster'],
     formatter: new MarkdownFormatter(),
     contextRetriever: new ContextRetriever(),
     impactAnalyzer: new ImpactAnalyzer(),
     evidenceScorer: new EvidenceScorer(),
     mermaidGenerator: new MermaidGenerator(),
-    feedbackFilter: new NoopFeedbackFilter() as unknown as ReviewComponents['feedbackFilter'],
-    incrementalReviewer: new MockIncrementalReviewer() as unknown as ReviewComponents['incrementalReviewer'],
+    feedbackFilter:
+      new NoopFeedbackFilter() as unknown as ReviewComponents['feedbackFilter'],
+    incrementalReviewer:
+      new MockIncrementalReviewer() as unknown as ReviewComponents['incrementalReviewer'],
   };
 
   const orchestrator = new ReviewOrchestrator(components);
@@ -339,7 +377,11 @@ describe('Performance Benchmarks', () => {
     const providers = [new MockProvider('fast-provider', 50)];
     const pr = createMockPR(5, 20); // 5 files, 20 lines each = 100 total
 
-    const result = await runBenchmark('Small PR (5 files, 100 lines)', providers, pr);
+    const result = await runBenchmark(
+      'Small PR (5 files, 100 lines)',
+      providers,
+      pr
+    );
 
     expect(result.durationMs).toBeLessThan(10000); // Should complete in <10s
     expect(result.findingsCount).toBeGreaterThan(0);
@@ -351,7 +393,11 @@ describe('Performance Benchmarks', () => {
     const providers = [new MockProvider('fast-provider', 50)];
     const pr = createMockPR(20, 25); // 20 files, 25 lines each = 500 total
 
-    const result = await runBenchmark('Medium PR (20 files, 500 lines)', providers, pr);
+    const result = await runBenchmark(
+      'Medium PR (20 files, 500 lines)',
+      providers,
+      pr
+    );
 
     expect(result.durationMs).toBeLessThan(30000); // Should complete in <30s
     expect(result.findingsCount).toBeGreaterThan(0);
@@ -363,7 +409,11 @@ describe('Performance Benchmarks', () => {
     const providers = [new MockProvider('fast-provider', 50)];
     const pr = createMockPR(100, 20); // 100 files, 20 lines each = 2000 total
 
-    const result = await runBenchmark('Large PR (100 files, 2000 lines)', providers, pr);
+    const result = await runBenchmark(
+      'Large PR (100 files, 2000 lines)',
+      providers,
+      pr
+    );
 
     expect(result.durationMs).toBeLessThan(90000); // Should complete in <90s
     expect(result.findingsCount).toBeGreaterThan(0);
@@ -379,7 +429,11 @@ describe('Performance Benchmarks', () => {
     ];
     const pr = createMockPR(10, 10); // 10 files, 100 lines
 
-    const result = await runBenchmark('Parallel Providers (3 providers)', providers, pr);
+    const result = await runBenchmark(
+      'Parallel Providers (3 providers)',
+      providers,
+      pr
+    );
 
     // With parallel execution, should be closer to 100ms than 300ms
     expect(result.durationMs).toBeLessThan(5000);
@@ -392,19 +446,38 @@ describe('Performance Benchmarks', () => {
     const pr = createMockPR(20, 25); // 20 files, 500 lines
 
     // Run without cache
-    const noCacheResult = await runBenchmark('No Cache (20 files)', providers, pr);
+    const noCacheResult = await runBenchmark(
+      'No Cache (20 files)',
+      providers,
+      pr
+    );
 
     // Run with cache hit
     const cachedFindings: Finding[] = [
-      { file: 'src/cached.ts', line: 1, severity: 'major', title: 'Cached', message: 'From cache' },
+      {
+        file: 'src/cached.ts',
+        line: 1,
+        severity: 'major',
+        title: 'Cached',
+        message: 'From cache',
+      },
     ];
     const cache = new CacheWithHit(cachedFindings);
-    const cacheResult = await runBenchmark('With Cache (20 files)', providers, pr, cache);
+    const cacheResult = await runBenchmark(
+      'With Cache (20 files)',
+      providers,
+      pr,
+      cache
+    );
 
     expect(cacheResult.cacheHit).toBe(true);
     expect(cacheResult.durationMs).toBeLessThan(noCacheResult.durationMs);
 
-    const speedup = ((noCacheResult.durationMs - cacheResult.durationMs) / noCacheResult.durationMs * 100).toFixed(1);
+    const speedup = (
+      ((noCacheResult.durationMs - cacheResult.durationMs) /
+        noCacheResult.durationMs) *
+      100
+    ).toFixed(1);
 
     console.log(formatResults([noCacheResult, cacheResult]));
     console.log(`Cache speedup: ${speedup}%\n`);

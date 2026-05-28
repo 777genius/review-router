@@ -120,7 +120,7 @@ function compareNodes(
     return {
       equivalent: false,
       reason: `Maximum comparison depth exceeded (${MAX_COMPARISON_DEPTH})`,
-      maxDepth
+      maxDepth,
     };
   }
 
@@ -135,7 +135,7 @@ function compareNodes(
       return {
         equivalent: false,
         reason: `Node type mismatch at depth ${depth}: ${node1.type} vs ${node2.type}`,
-        maxDepth
+        maxDepth,
       };
     }
   }
@@ -146,7 +146,7 @@ function compareNodes(
     return {
       equivalent: false,
       reason: `Child count mismatch at depth ${depth}: ${node1.childCount} vs ${node2.childCount} children (node type: ${node1.type})`,
-      maxDepth
+      maxDepth,
     };
   }
 
@@ -168,7 +168,7 @@ function compareNodes(
       return {
         equivalent: false,
         reason: `Missing child at index ${i}, depth ${depth}`,
-        maxDepth: deepestDepth
+        maxDepth: deepestDepth,
       };
     }
 
@@ -179,7 +179,7 @@ function compareNodes(
       return {
         equivalent: false,
         reason: childResult.reason,
-        maxDepth: deepestDepth
+        maxDepth: deepestDepth,
       };
     }
   }
@@ -216,17 +216,19 @@ export function areASTsEquivalent(
   if (language === 'unknown') {
     return {
       equivalent: false,
-      reason: 'Unsupported language: unknown'
+      reason: 'Unsupported language: unknown',
     };
   }
 
   const parser1 = getParser(language);
   const parser2 = getParser(language);
   if (!parser1 || !parser2) {
-    return compareWithTokenFallback(code1, code2, language) || {
-      equivalent: false,
-      reason: `Unsupported language: ${language}`
-    };
+    return (
+      compareWithTokenFallback(code1, code2, language) || {
+        equivalent: false,
+        reason: `Unsupported language: ${language}`,
+      }
+    );
   }
 
   // Parse both code snippets
@@ -238,7 +240,7 @@ export function areASTsEquivalent(
   } catch (error) {
     return {
       equivalent: false,
-      reason: `Parser failed: ${(error as Error).message}`
+      reason: `Parser failed: ${(error as Error).message}`,
     };
   }
 
@@ -252,14 +254,14 @@ export function areASTsEquivalent(
     if (code1HasObviousSyntaxError) {
       return {
         equivalent: false,
-        reason: 'Parse error in code1'
+        reason: 'Parse error in code1',
       };
     }
 
     if (code2HasObviousSyntaxError) {
       return {
         equivalent: false,
-        reason: 'Parse error in code2'
+        reason: 'Parse error in code2',
       };
     }
 
@@ -276,7 +278,7 @@ export function areASTsEquivalent(
     } else {
       return {
         equivalent: false,
-        reason: 'Parse error in code1'
+        reason: 'Parse error in code1',
       };
     }
   }
@@ -289,7 +291,7 @@ export function areASTsEquivalent(
     } else {
       return {
         equivalent: false,
-        reason: 'Parse error in code2'
+        reason: 'Parse error in code2',
       };
     }
   }
@@ -300,7 +302,7 @@ export function areASTsEquivalent(
   if (!root1 || !root2) {
     return {
       equivalent: false,
-      reason: 'Parser returned no root node'
+      reason: 'Parser returned no root node',
     };
   }
 
@@ -309,11 +311,14 @@ export function areASTsEquivalent(
   return {
     equivalent: result.equivalent,
     reason: result.reason,
-    comparisonDepth: result.maxDepth
+    comparisonDepth: result.maxDepth,
   };
 }
 
-function parseWithFreshParser(code: string, language: Language): Parser.Tree | null {
+function parseWithFreshParser(
+  code: string,
+  language: Language
+): Parser.Tree | null {
   const parser = getParser(language);
   if (!parser) {
     return null;
@@ -331,7 +336,10 @@ function compareWithTokenFallback(
   code2: string,
   language: Language
 ): ASTComparisonResult | null {
-  if (hasObviousSyntaxError(code1, language) || hasObviousSyntaxError(code2, language)) {
+  if (
+    hasObviousSyntaxError(code1, language) ||
+    hasObviousSyntaxError(code2, language)
+  ) {
     return null;
   }
 
@@ -344,7 +352,7 @@ function compareWithTokenFallback(
   if (tokens1.join('\u0000') === tokens2.join('\u0000')) {
     return {
       equivalent: true,
-      comparisonDepth: Math.max(1, tokens1.length)
+      comparisonDepth: Math.max(1, tokens1.length),
     };
   }
 
@@ -352,29 +360,34 @@ function compareWithTokenFallback(
     return {
       equivalent: false,
       reason: `Child count mismatch in token fallback: ${tokens1.length} vs ${tokens2.length}`,
-      comparisonDepth: Math.max(tokens1.length, tokens2.length)
+      comparisonDepth: Math.max(tokens1.length, tokens2.length),
     };
   }
 
   return {
     equivalent: false,
     reason: 'Node type mismatch in token fallback',
-    comparisonDepth: tokens1.length
+    comparisonDepth: tokens1.length,
   };
 }
 
 function normalizeStructuralTokens(code: string): string[] {
-  return code
-    .replace(/\/\/.*$/gm, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .match(/[A-Za-z_$][\w$]*|\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|==={0,1}|!==?|=>|[{}()[\].,;:+\-*/%=<>]/g)
-    ?.map(token => {
-      if (/^["']/.test(token)) return 'STRING';
-      if (/^\d/.test(token)) return 'NUMBER';
-      if (token === 'true' || token === 'false') return 'BOOLEAN';
-      if (/^[A-Za-z_$]/.test(token) && !isStructuralKeyword(token)) return 'IDENTIFIER';
-      return token;
-    }) || [];
+  return (
+    code
+      .replace(/\/\/.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .match(
+        /[A-Za-z_$][\w$]*|\d+(?:\.\d+)?|"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|==={0,1}|!==?|=>|[{}()[\].,;:+\-*/%=<>]/g
+      )
+      ?.map((token) => {
+        if (/^["']/.test(token)) return 'STRING';
+        if (/^\d/.test(token)) return 'NUMBER';
+        if (token === 'true' || token === 'false') return 'BOOLEAN';
+        if (/^[A-Za-z_$]/.test(token) && !isStructuralKeyword(token))
+          return 'IDENTIFIER';
+        return token;
+      }) || []
+  );
 }
 
 function isStructuralKeyword(token: string): boolean {
@@ -419,7 +432,9 @@ function hasObviousSyntaxError(code: string, language: Language): boolean {
 
 function hasIncompleteTrailingCharacter(value: string): boolean {
   const lastCharacter = value[value.length - 1];
-  return ['=', '+', '-', '*', '/', '%', ',', '(', '{', '['].includes(lastCharacter);
+  return ['=', '+', '-', '*', '/', '%', ',', '(', '{', '['].includes(
+    lastCharacter
+  );
 }
 
 function hasUnbalancedDelimiters(code: string): boolean {

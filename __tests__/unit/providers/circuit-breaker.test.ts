@@ -7,7 +7,10 @@ describe('CircuitBreaker', () => {
 
   it('opens after threshold failures and resets after cooldown', async () => {
     const storage = new MemoryStorage();
-    const breaker = new CircuitBreaker(storage as any, { failureThreshold: 2, openDurationMs: 1000 });
+    const breaker = new CircuitBreaker(storage as any, {
+      failureThreshold: 2,
+      openDurationMs: 1000,
+    });
     const id = 'openrouter/test';
 
     await breaker.recordFailure(id);
@@ -26,7 +29,10 @@ describe('CircuitBreaker', () => {
 
   it('resets failures on success', async () => {
     const storage = new MemoryStorage();
-    const breaker = new CircuitBreaker(storage as any, { failureThreshold: 3, openDurationMs: 1000 });
+    const breaker = new CircuitBreaker(storage as any, {
+      failureThreshold: 3,
+      openDurationMs: 1000,
+    });
     const id = 'opencode/model';
 
     await breaker.recordFailure(id);
@@ -40,7 +46,10 @@ describe('CircuitBreaker', () => {
 
   it('re-opens immediately on failure while half-open', async () => {
     const storage = new MemoryStorage();
-    const breaker = new CircuitBreaker(storage as any, { failureThreshold: 2, openDurationMs: 1000 });
+    const breaker = new CircuitBreaker(storage as any, {
+      failureThreshold: 2,
+      openDurationMs: 1000,
+    });
     const id = 'openrouter/test';
 
     await breaker.recordFailure(id);
@@ -56,7 +65,10 @@ describe('CircuitBreaker', () => {
 
   it('allows only a single probe in half-open state', async () => {
     const storage = new MemoryStorage();
-    const breaker = new CircuitBreaker(storage as any, { failureThreshold: 1, openDurationMs: 1 });
+    const breaker = new CircuitBreaker(storage as any, {
+      failureThreshold: 1,
+      openDurationMs: 1,
+    });
     const id = 'probe/provider';
 
     // Trip the circuit immediately
@@ -77,18 +89,24 @@ describe('CircuitBreaker', () => {
 
   it('serializes concurrent updates without losing failures', async () => {
     const storage = new MemoryStorage();
-    const breaker = new CircuitBreaker(storage as any, { failureThreshold: 10 });
+    const breaker = new CircuitBreaker(storage as any, {
+      failureThreshold: 10,
+    });
     const id = 'race/provider';
     const key = `circuit-breaker-${encodeURIComponentSafe(id)}`;
 
-    await Promise.all(Array.from({ length: 5 }).map(() => breaker.recordFailure(id)));
+    await Promise.all(
+      Array.from({ length: 5 }).map(() => breaker.recordFailure(id))
+    );
     const state = JSON.parse((await storage.read(key)) as string);
     expect(state.failures).toBe(5);
   });
 
   it('handles high concurrency without leaking locks', async () => {
     const storage = new MemoryStorage();
-    const breaker = new CircuitBreaker(storage as any, { failureThreshold: 50 });
+    const breaker = new CircuitBreaker(storage as any, {
+      failureThreshold: 50,
+    });
     const id = 'concurrent/provider';
 
     const tasks = Array.from({ length: 40 }, (_, i) =>

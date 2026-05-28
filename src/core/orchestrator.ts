@@ -1112,7 +1112,7 @@ export class ReviewOrchestrator {
 
       if (filterStats.filtered > 0 || filterStats.downgraded > 0) {
         logger.info(
-          `Post-processing filter: ${filterStats.filtered} filtered, ${filterStats.downgraded} downgraded, ${filterStats.kept} kept (from ${filterStats.total} total)`
+          `Post-processing filter (new current findings only): ${filterStats.filtered} filtered, ${filterStats.downgraded} downgraded, ${filterStats.kept} kept (from ${filterStats.total} total)`
         );
         if (Object.keys(filterStats.reasons).length > 0) {
           logger.debug('Filter breakdown:', filterStats.reasons);

@@ -49,9 +49,12 @@ export function createMockOctokit(options: MockOctokitOptions = {}): any {
   return {
     request: jest.fn().mockImplementation((url: string, options?: any) => {
       // Handle diff requests with special accept header
-      if (url.includes('/pulls/') && options?.headers?.accept?.includes('diff')) {
+      if (
+        url.includes('/pulls/') &&
+        options?.headers?.accept?.includes('diff')
+      ) {
         return Promise.resolve({
-          data: files.map(f => f.patch || '').join('\n'),
+          data: files.map((f) => f.patch || '').join('\n'),
         });
       }
       // Default: return empty string
@@ -65,7 +68,7 @@ export function createMockOctokit(options: MockOctokitOptions = {}): any {
             title: pr.title,
             body: pr.body,
             draft: pr.draft,
-            labels: pr.labels?.map(name => ({ name })) ?? [],
+            labels: pr.labels?.map((name) => ({ name })) ?? [],
             additions: pr.additions,
             deletions: pr.deletions,
             base: { sha: pr.baseSha },
@@ -123,7 +126,9 @@ export function createMockOctokit(options: MockOctokitOptions = {}): any {
 /**
  * Creates a mock PR context for testing
  */
-export function createMockPRContext(overrides: Partial<PRContext> = {}): PRContext {
+export function createMockPRContext(
+  overrides: Partial<PRContext> = {}
+): PRContext {
   return {
     number: 1,
     title: 'Test PR',
@@ -161,7 +166,9 @@ index abc123..def456 100644
 /**
  * Creates a mock file change for testing
  */
-export function createMockFileChange(overrides: Partial<FileChange> = {}): FileChange {
+export function createMockFileChange(
+  overrides: Partial<FileChange> = {}
+): FileChange {
   return {
     filename: 'src/test.ts',
     status: 'modified',
@@ -196,7 +203,10 @@ export function createRateLimitedOctokit(): any {
 /**
  * Simulates GitHub API errors
  */
-export function createErrorOctokit(statusCode: number = 500, message: string = 'Internal Server Error'): any {
+export function createErrorOctokit(
+  statusCode: number = 500,
+  message: string = 'Internal Server Error'
+): any {
   const mock = createMockOctokit();
 
   const error = Object.assign(new Error(message), {

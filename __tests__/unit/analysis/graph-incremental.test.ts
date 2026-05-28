@@ -1,4 +1,8 @@
-import { CodeGraph, CodeGraphBuilder, Definition } from '../../../src/analysis/context/graph-builder';
+import {
+  CodeGraph,
+  CodeGraphBuilder,
+  Definition,
+} from '../../../src/analysis/context/graph-builder';
 import { FileChange } from '../../../src/types';
 
 describe('Incremental Graph Updates', () => {
@@ -58,8 +62,8 @@ describe('Incremental Graph Updates', () => {
 
       const symbols = cloned.getFileSymbols('file1.ts');
       expect(symbols).toHaveLength(2);
-      expect(symbols.map(s => s.name)).toContain('foo');
-      expect(symbols.map(s => s.name)).toContain('bar');
+      expect(symbols.map((s) => s.name)).toContain('foo');
+      expect(symbols.map((s) => s.name)).toContain('bar');
     });
 
     it('should create completely independent deep copies with no shared mutable state', () => {
@@ -244,8 +248,20 @@ describe('Incremental Graph Updates', () => {
       graph.addImport('file2.ts', './file1');
 
       // Create actual circular call references (mutual calls)
-      graph.addDefinition({ name: 'foo', file: 'file1.ts', line: 1, type: 'function', exported: true });
-      graph.addDefinition({ name: 'bar', file: 'file2.ts', line: 1, type: 'function', exported: true });
+      graph.addDefinition({
+        name: 'foo',
+        file: 'file1.ts',
+        line: 1,
+        type: 'function',
+        exported: true,
+      });
+      graph.addDefinition({
+        name: 'bar',
+        file: 'file2.ts',
+        line: 1,
+        type: 'function',
+        exported: true,
+      });
       graph.addCall('file1.ts', 'foo', 'bar');
       graph.addCall('file2.ts', 'bar', 'foo');
 
@@ -276,7 +292,13 @@ describe('Incremental Graph Updates', () => {
 
     it('should produce independent copies when cloning', () => {
       const graph = new CodeGraph(['file.ts'], 100);
-      graph.addDefinition({ name: 'fn', file: 'file.ts', line: 1, type: 'function', exported: true });
+      graph.addDefinition({
+        name: 'fn',
+        file: 'file.ts',
+        line: 1,
+        type: 'function',
+        exported: true,
+      });
       graph.addImport('file.ts', './other');
 
       // Clone the graph
@@ -284,11 +306,19 @@ describe('Incremental Graph Updates', () => {
 
       // Verify clone has same data
       expect(cloned.files).toEqual(graph.files);
-      expect(cloned.getDependencies('file.ts')).toEqual(graph.getDependencies('file.ts'));
+      expect(cloned.getDependencies('file.ts')).toEqual(
+        graph.getDependencies('file.ts')
+      );
 
       // Mutate the clone by adding new data
       cloned.addImport('file.ts', './newFile');
-      cloned.addDefinition({ name: 'newFn', file: 'file.ts', line: 2, type: 'function', exported: false });
+      cloned.addDefinition({
+        name: 'newFn',
+        file: 'file.ts',
+        line: 2,
+        type: 'function',
+        exported: false,
+      });
 
       // Original should be unaffected
       expect(graph.getDependencies('file.ts')).not.toContain('./newFile');
@@ -578,17 +608,27 @@ describe('Incremental Graph Updates', () => {
 
     describe('Invalid input handling', () => {
       it('should throw TypeError when deserializing null', () => {
-        expect(() => CodeGraph.deserialize(null as any)).toThrow('Invalid graph data: expected object');
+        expect(() => CodeGraph.deserialize(null as any)).toThrow(
+          'Invalid graph data: expected object'
+        );
       });
 
       it('should throw TypeError when deserializing undefined', () => {
-        expect(() => CodeGraph.deserialize(undefined as any)).toThrow('Invalid graph data: expected object');
+        expect(() => CodeGraph.deserialize(undefined as any)).toThrow(
+          'Invalid graph data: expected object'
+        );
       });
 
       it('should throw TypeError when deserializing primitive', () => {
-        expect(() => CodeGraph.deserialize('string' as any)).toThrow('Invalid graph data: expected object');
-        expect(() => CodeGraph.deserialize(123 as any)).toThrow('Invalid graph data: expected object');
-        expect(() => CodeGraph.deserialize(true as any)).toThrow('Invalid graph data: expected object');
+        expect(() => CodeGraph.deserialize('string' as any)).toThrow(
+          'Invalid graph data: expected object'
+        );
+        expect(() => CodeGraph.deserialize(123 as any)).toThrow(
+          'Invalid graph data: expected object'
+        );
+        expect(() => CodeGraph.deserialize(true as any)).toThrow(
+          'Invalid graph data: expected object'
+        );
       });
 
       it('should throw TypeError when files is not an array', () => {
@@ -603,7 +643,9 @@ describe('Incremental Graph Updates', () => {
           fileSymbols: [],
         };
 
-        expect(() => CodeGraph.deserialize(invalidData as any)).toThrow('Invalid graph data: files must be an array');
+        expect(() => CodeGraph.deserialize(invalidData as any)).toThrow(
+          'Invalid graph data: files must be an array'
+        );
       });
 
       it('should throw TypeError when buildTime is not a number', () => {
@@ -618,17 +660,37 @@ describe('Incremental Graph Updates', () => {
           fileSymbols: [],
         };
 
-        expect(() => CodeGraph.deserialize(invalidData as any)).toThrow('Invalid graph data: buildTime must be a number');
+        expect(() => CodeGraph.deserialize(invalidData as any)).toThrow(
+          'Invalid graph data: buildTime must be a number'
+        );
       });
 
       it('should throw TypeError when map fields are not arrays', () => {
         const testCases = [
-          { field: 'definitions', message: 'Invalid graph data: definitions must be an array' },
-          { field: 'imports', message: 'Invalid graph data: imports must be an array' },
-          { field: 'exports', message: 'Invalid graph data: exports must be an array' },
-          { field: 'calls', message: 'Invalid graph data: calls must be an array' },
-          { field: 'callers', message: 'Invalid graph data: callers must be an array' },
-          { field: 'fileSymbols', message: 'Invalid graph data: fileSymbols must be an array' },
+          {
+            field: 'definitions',
+            message: 'Invalid graph data: definitions must be an array',
+          },
+          {
+            field: 'imports',
+            message: 'Invalid graph data: imports must be an array',
+          },
+          {
+            field: 'exports',
+            message: 'Invalid graph data: exports must be an array',
+          },
+          {
+            field: 'calls',
+            message: 'Invalid graph data: calls must be an array',
+          },
+          {
+            field: 'callers',
+            message: 'Invalid graph data: callers must be an array',
+          },
+          {
+            field: 'fileSymbols',
+            message: 'Invalid graph data: fileSymbols must be an array',
+          },
         ];
 
         for (const { field, message } of testCases) {
@@ -644,7 +706,9 @@ describe('Incremental Graph Updates', () => {
           };
           (invalidData as any)[field] = 'not-an-array';
 
-          expect(() => CodeGraph.deserialize(invalidData as any)).toThrow(message);
+          expect(() => CodeGraph.deserialize(invalidData as any)).toThrow(
+            message
+          );
         }
       });
 
@@ -655,7 +719,9 @@ describe('Incremental Graph Updates', () => {
           // Missing map fields
         };
 
-        expect(() => CodeGraph.deserialize(incompleteData as any)).toThrow('Invalid graph data');
+        expect(() => CodeGraph.deserialize(incompleteData as any)).toThrow(
+          'Invalid graph data'
+        );
       });
     });
   });

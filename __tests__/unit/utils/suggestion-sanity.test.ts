@@ -5,9 +5,7 @@
  * to catch obvious red flags before they enter the pipeline.
  */
 
-import {
-  validateSuggestionSanity,
-} from '../../../src/utils/suggestion-sanity';
+import { validateSuggestionSanity } from '../../../src/utils/suggestion-sanity';
 
 describe('validateSuggestionSanity', () => {
   describe('null and undefined handling', () => {
@@ -58,9 +56,7 @@ describe('validateSuggestionSanity', () => {
 
   describe('line count validation', () => {
     it('should reject suggestions with more than 50 lines', () => {
-      const longSuggestion = Array(51)
-        .fill('const x = 1;')
-        .join('\n');
+      const longSuggestion = Array(51).fill('const x = 1;').join('\n');
       const result = validateSuggestionSanity(longSuggestion);
       expect(result.isValid).toBe(false);
       expect(result.reason).toBe('Suggestion too long (>50 lines)');
@@ -68,9 +64,7 @@ describe('validateSuggestionSanity', () => {
     });
 
     it('should accept suggestions with exactly 50 lines', () => {
-      const fiftyLines = Array(50)
-        .fill('const x = 1;')
-        .join('\n');
+      const fiftyLines = Array(50).fill('const x = 1;').join('\n');
       const result = validateSuggestionSanity(fiftyLines);
       expect(result.isValid).toBe(true);
       expect(result.reason).toBeUndefined();
@@ -88,21 +82,27 @@ describe('validateSuggestionSanity', () => {
 
   describe('code syntax detection', () => {
     it('should reject plain English without code syntax', () => {
-      const result = validateSuggestionSanity('You should consider refactoring this code');
+      const result = validateSuggestionSanity(
+        'You should consider refactoring this code'
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toBe('Suggestion lacks code syntax');
       expect(result.suggestion).toBeUndefined();
     });
 
     it('should reject suggestions with only words', () => {
-      const result = validateSuggestionSanity('This is a description of what to do');
+      const result = validateSuggestionSanity(
+        'This is a description of what to do'
+      );
       expect(result.isValid).toBe(false);
       expect(result.reason).toBe('Suggestion lacks code syntax');
       expect(result.suggestion).toBeUndefined();
     });
 
     it('should accept code with curly braces', () => {
-      const result = validateSuggestionSanity('if (user) { return user.name; }');
+      const result = validateSuggestionSanity(
+        'if (user) { return user.name; }'
+      );
       expect(result.isValid).toBe(true);
       expect(result.suggestion).toBe('if (user) { return user.name; }');
     });
@@ -138,7 +138,9 @@ describe('validateSuggestionSanity', () => {
     });
 
     it('should accept code with colons (type annotations, object literals)', () => {
-      const result = validateSuggestionSanity('const obj: Record<string, number>');
+      const result = validateSuggestionSanity(
+        'const obj: Record<string, number>'
+      );
       expect(result.isValid).toBe(true);
       expect(result.suggestion).toBe('const obj: Record<string, number>');
     });
@@ -193,7 +195,8 @@ describe('validateSuggestionSanity', () => {
     });
 
     it('should accept class definition', () => {
-      const code = 'class User {\n  constructor(name: string) {\n    this.name = name;\n  }\n}';
+      const code =
+        'class User {\n  constructor(name: string) {\n    this.name = name;\n  }\n}';
       const result = validateSuggestionSanity(code);
       expect(result.isValid).toBe(true);
       expect(result.suggestion).toBe(code);

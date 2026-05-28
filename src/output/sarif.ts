@@ -41,7 +41,9 @@ export function buildSarif(findings: Finding[]): SARIFReport {
   };
 }
 
-function severityToLevel(severity: Finding['severity']): 'error' | 'warning' | 'note' {
+function severityToLevel(
+  severity: Finding['severity']
+): 'error' | 'warning' | 'note' {
   if (severity === 'critical') return 'error';
   if (severity === 'major') return 'warning';
   return 'note';

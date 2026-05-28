@@ -41,7 +41,12 @@ export class PricingService {
 
       if (!response.ok) return;
 
-      const data = (await response.json()) as { data?: Array<{ id: string; pricing?: { prompt?: string; completion?: string } }> };
+      const data = (await response.json()) as {
+        data?: Array<{
+          id: string;
+          pricing?: { prompt?: string; completion?: string };
+        }>;
+      };
       for (const model of data.data || []) {
         const pricing = model.pricing || {};
         this.cache.set(model.id, {

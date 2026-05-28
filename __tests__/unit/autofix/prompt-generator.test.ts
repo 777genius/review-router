@@ -49,14 +49,16 @@ describe('PromptGenerator', () => {
     });
 
     it('should format prompts for Cursor IDE', () => {
-      const findings: Finding[] = [{
-        file: 'test.ts',
-        line: 1,
-        severity: 'major',
-        title: 'Test',
-        message: 'Test',
-        suggestion: 'Fix it',
-      }];
+      const findings: Finding[] = [
+        {
+          file: 'test.ts',
+          line: 1,
+          severity: 'major',
+          title: 'Test',
+          message: 'Test',
+          suggestion: 'Fix it',
+        },
+      ];
       const result = generator.generate(findings, 'cursor');
 
       expect(result).toBeDefined();
@@ -64,14 +66,16 @@ describe('PromptGenerator', () => {
     });
 
     it('should format prompts for Copilot', () => {
-      const findings: Finding[] = [{
-        file: 'test.ts',
-        line: 1,
-        severity: 'major',
-        title: 'Test',
-        message: 'Test',
-        suggestion: 'Fix it',
-      }];
+      const findings: Finding[] = [
+        {
+          file: 'test.ts',
+          line: 1,
+          severity: 'major',
+          title: 'Test',
+          message: 'Test',
+          suggestion: 'Fix it',
+        },
+      ];
       const result = generator.generate(findings, 'copilot');
 
       expect(result).toBeDefined();

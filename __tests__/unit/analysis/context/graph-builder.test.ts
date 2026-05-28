@@ -1,4 +1,7 @@
-import { CodeGraphBuilder, CodeGraph } from '../../../../src/analysis/context/graph-builder';
+import {
+  CodeGraphBuilder,
+  CodeGraph,
+} from '../../../../src/analysis/context/graph-builder';
 import { FileChange } from '../../../../src/types';
 
 describe('CodeGraphBuilder', () => {
@@ -41,10 +44,12 @@ describe('CodeGraphBuilder', () => {
       const graph = new CodeGraph();
       const spy = jest.spyOn(graph, 'removeFile');
 
-      await builder.updateGraph(graph, [{
-        filename: 'test.ts',
-        patch: '+const x = 1;',
-      } as any]);
+      await builder.updateGraph(graph, [
+        {
+          filename: 'test.ts',
+          patch: '+const x = 1;',
+        } as any,
+      ]);
 
       expect(spy).toHaveBeenCalledWith('test.ts');
     });
@@ -71,8 +76,20 @@ describe('CodeGraphBuilder', () => {
       const graph = new CodeGraph();
       graph.addImport('a.ts', './b.ts');
       // Add definitions for the functions first
-      graph.addDefinition({ name: 'foo', file: 'a.ts', line: 1, type: 'function', exported: false });
-      graph.addDefinition({ name: 'bar', file: 'b.ts', line: 1, type: 'function', exported: false });
+      graph.addDefinition({
+        name: 'foo',
+        file: 'a.ts',
+        line: 1,
+        type: 'function',
+        exported: false,
+      });
+      graph.addDefinition({
+        name: 'bar',
+        file: 'b.ts',
+        line: 1,
+        type: 'function',
+        exported: false,
+      });
       // Now add the call relationship
       graph.addCall('a.ts', 'foo', 'bar');
 

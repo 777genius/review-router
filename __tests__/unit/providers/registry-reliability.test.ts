@@ -48,16 +48,18 @@ describe('ProviderRegistry Reliability-Based Selection', () => {
       //
       // Use mockImplementation (not chained mockResolvedValue) for deterministic,
       // name-based score lookups that work across multiple sort passes
-      mockReliabilityTracker.getReliabilityScore.mockImplementation(async (name: string) => {
-        const scores: Record<string, number> = {
-          'opencode/high-reliability': 0.9,
-          'opencode/very-good-reliability': 0.8,
-          'opencode/medium-reliability': 0.5,
-          'opencode/low-reliability': 0.3,
-          'opencode/poor-reliability': 0.2,
-        };
-        return scores[name] ?? 0.5; // default for unknown providers
-      });
+      mockReliabilityTracker.getReliabilityScore.mockImplementation(
+        async (name: string) => {
+          const scores: Record<string, number> = {
+            'opencode/high-reliability': 0.9,
+            'opencode/very-good-reliability': 0.8,
+            'opencode/medium-reliability': 0.5,
+            'opencode/low-reliability': 0.3,
+            'opencode/poor-reliability': 0.2,
+          };
+          return scores[name] ?? 0.5; // default for unknown providers
+        }
+      );
 
       const config = createTestConfig({
         providers: [
@@ -81,7 +83,7 @@ describe('ProviderRegistry Reliability-Based Selection', () => {
       expect(providers.length).toBeGreaterThan(0);
 
       // Verify provider order matches expected reliability scores (highest first)
-      const providerNames = providers.map(p => p.name);
+      const providerNames = providers.map((p) => p.name);
 
       // The first provider should be the one with highest reliability
       expect(providerNames[0]).toBe('opencode/high-reliability');
@@ -123,17 +125,23 @@ describe('ProviderRegistry Reliability-Based Selection', () => {
     });
 
     it('pins required healthy providers even when provider limit would exclude them', async () => {
-      mockReliabilityTracker.getReliabilityScore.mockImplementation(async (name: string) => {
-        const scores: Record<string, number> = {
-          'opencode/high': 0.99,
-          'opencode/medium': 0.8,
-          'opencode/required-low': 0.1,
-        };
-        return scores[name] ?? 0.5;
-      });
+      mockReliabilityTracker.getReliabilityScore.mockImplementation(
+        async (name: string) => {
+          const scores: Record<string, number> = {
+            'opencode/high': 0.99,
+            'opencode/medium': 0.8,
+            'opencode/required-low': 0.1,
+          };
+          return scores[name] ?? 0.5;
+        }
+      );
 
       const config = createTestConfig({
-        providers: ['opencode/high', 'opencode/medium', 'opencode/required-low'],
+        providers: [
+          'opencode/high',
+          'opencode/medium',
+          'opencode/required-low',
+        ],
         providerSelectionStrategy: 'reliability',
         providerLimit: 1,
         requiredHealthyProviders: ['opencode/required-low'],
@@ -213,7 +221,7 @@ describe('ProviderRegistry Reliability-Based Selection', () => {
   describe('Exploration Rate Configuration', () => {
     it('should use 70/30 exploit-explore by default', async () => {
       mockReliabilityTracker.getReliabilityScore
-        .mockResolvedValueOnce(0.9)  // Best
+        .mockResolvedValueOnce(0.9) // Best
         .mockResolvedValueOnce(0.8)
         .mockResolvedValueOnce(0.7)
         .mockResolvedValueOnce(0.6)
@@ -330,10 +338,10 @@ describe('ProviderRegistry Reliability-Based Selection', () => {
   describe('Diversity Requirements', () => {
     it('should maintain OpenRouter/OpenCode diversity', async () => {
       mockReliabilityTracker.getReliabilityScore
-        .mockResolvedValueOnce(0.9)  // openrouter/best
-        .mockResolvedValueOnce(0.8)  // openrouter/good
-        .mockResolvedValueOnce(0.7)  // openrouter/okay
-        .mockResolvedValueOnce(0.6)  // openrouter/decent
+        .mockResolvedValueOnce(0.9) // openrouter/best
+        .mockResolvedValueOnce(0.8) // openrouter/good
+        .mockResolvedValueOnce(0.7) // openrouter/okay
+        .mockResolvedValueOnce(0.6) // openrouter/decent
         .mockResolvedValueOnce(0.5); // opencode/only-one
 
       const config: ReviewConfig = {
@@ -357,8 +365,7 @@ describe('ProviderRegistry Reliability-Based Selection', () => {
     });
 
     it('should handle case with no OpenCode providers', async () => {
-      mockReliabilityTracker.getReliabilityScore
-        .mockResolvedValue(0.7);
+      mockReliabilityTracker.getReliabilityScore.mockResolvedValue(0.7);
 
       const config: ReviewConfig = {
         ...DEFAULT_CONFIG,
@@ -423,10 +430,7 @@ describe('ProviderRegistry Reliability-Based Selection', () => {
 
       const config: ReviewConfig = {
         ...DEFAULT_CONFIG,
-        providers: [
-          'openrouter/provider-1',
-          'opencode/provider-2',
-        ],
+        providers: ['openrouter/provider-1', 'opencode/provider-2'],
         providerSelectionStrategy: 'reliability',
         providerLimit: 10, // More than available
       };
@@ -467,10 +471,7 @@ describe('ProviderRegistry Reliability-Based Selection', () => {
 
       const config: ReviewConfig = {
         ...DEFAULT_CONFIG,
-        providers: [
-          'openrouter/provider-1',
-          'opencode/provider-2',
-        ],
+        providers: ['openrouter/provider-1', 'opencode/provider-2'],
         // providerSelectionStrategy not specified
         providerLimit: 2,
       };

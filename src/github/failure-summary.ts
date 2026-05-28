@@ -23,7 +23,10 @@ const PROGRESS_TRACKER_MARKERS = [
 const FAILED_PROGRESS_TEXT = ['❌ Failed', '### Review needs attention'];
 const CODEX_SEED_SCRIPT_URL = 'https://reviewrouter.site/install/codex';
 
-export function formatReviewFailureSummary(error: Error, prNumber?: number): string {
+export function formatReviewFailureSummary(
+  error: Error,
+  prNumber?: number
+): string {
   const normalized = normalizeReviewError(error);
   const safeDetails = sanitizeErrorMessage(
     normalized.stack || normalized.safeMessage || normalized.message
@@ -47,9 +50,11 @@ export function formatReviewFailureSummary(error: Error, prNumber?: number): str
     '',
     '## How to fix',
     '',
-    ...normalized.nextSteps.map(step => `- ${step}`),
+    ...normalized.nextSteps.map((step) => `- ${step}`),
     reseedCommand ? '' : undefined,
-    reseedCommand ? 'Run this from a trusted machine after `codex login`:' : undefined,
+    reseedCommand
+      ? 'Run this from a trusted machine after `codex login`:'
+      : undefined,
     reseedCommand ? '' : undefined,
     reseedCommand ? '```bash' : undefined,
     reseedCommand,
@@ -68,7 +73,9 @@ export function formatReviewFailureSummary(error: Error, prNumber?: number): str
     '```',
     '',
     '</details>',
-  ].filter(line => line !== undefined).join('\n');
+  ]
+    .filter((line) => line !== undefined)
+    .join('\n');
 }
 
 function codexOAuthReseedCommand(code: string): string | undefined {
@@ -76,8 +83,8 @@ function codexOAuthReseedCommand(code: string): string | undefined {
     return undefined;
   }
 
-  const repository = safeRepositoryFullName(process.env.GITHUB_REPOSITORY)
-    ?? '<owner>/<repo>';
+  const repository =
+    safeRepositoryFullName(process.env.GITHUB_REPOSITORY) ?? '<owner>/<repo>';
   return `curl -fsSL ${CODEX_SEED_SCRIPT_URL} | REVIEW_ROUTER_CONFIRM_WRITE=1 REVIEW_ROUTER_SECRET_SCOPE=repo REVIEW_ROUTER_REPO=${shellQuote(repository)} bash`;
 }
 
@@ -108,7 +115,11 @@ export async function postReviewFailureSummary(
   try {
     const client = new GitHubClient(token);
     const poster = new CommentPoster(client, false);
-    await poster.postSummary(prNumber, formatReviewFailureSummary(error, prNumber), true);
+    await poster.postSummary(
+      prNumber,
+      formatReviewFailureSummary(error, prNumber),
+      true
+    );
   } catch (postError) {
     logger.warn('Failed to post review failure summary', postError as Error);
   }
@@ -124,7 +135,10 @@ export async function clearReviewFailureSummaries(
     const client = new GitHubClient(token);
     await clearReviewFailureSummariesForClient(client, prNumber);
   } catch (clearError) {
-    logger.warn('Failed to clear stale review failure summaries', clearError as Error);
+    logger.warn(
+      'Failed to clear stale review failure summaries',
+      clearError as Error
+    );
   }
 }
 
@@ -134,7 +148,7 @@ export async function clearReviewFailureSummariesForClient(
 ): Promise<void> {
   const { octokit, owner, repo } = client;
   const comments = await listIssueComments(client, prNumber);
-  const staleFailureComments = comments.filter(comment =>
+  const staleFailureComments = comments.filter((comment) =>
     isReviewFailureComment(comment.body)
   );
 
@@ -185,15 +199,17 @@ function isReviewFailureComment(body?: string | null): boolean {
 
 function isFailedProgressComment(body: string): boolean {
   const isProgressComment =
-    PROGRESS_COMMENT_HEADERS.some(header => body.startsWith(header)) ||
-    PROGRESS_TRACKER_MARKERS.some(marker => body.includes(marker));
+    PROGRESS_COMMENT_HEADERS.some((header) => body.startsWith(header)) ||
+    PROGRESS_TRACKER_MARKERS.some((marker) => body.includes(marker));
   return (
     isProgressComment &&
-    FAILED_PROGRESS_TEXT.some(text => body.includes(text))
+    FAILED_PROGRESS_TEXT.some((text) => body.includes(text))
   );
 }
 
 function hasReviewRouterBotMarker(body: string): boolean {
-  return body.includes(REVIEW_ROUTER_BOT_MARKER)
-    || LEGACY_BOT_MARKERS.some(marker => body.includes(marker));
+  return (
+    body.includes(REVIEW_ROUTER_BOT_MARKER) ||
+    LEGACY_BOT_MARKERS.some((marker) => body.includes(marker))
+  );
 }

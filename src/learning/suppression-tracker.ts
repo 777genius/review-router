@@ -55,7 +55,10 @@ export class SuppressionTracker {
   ): Promise<void> {
     const data = await this.loadData();
 
-    const ttl = scope === 'pr' ? SuppressionTracker.PR_TTL_MS : SuppressionTracker.REPO_TTL_MS;
+    const ttl =
+      scope === 'pr'
+        ? SuppressionTracker.PR_TTL_MS
+        : SuppressionTracker.REPO_TTL_MS;
     const timestamp = Date.now();
 
     const pattern: SuppressionPattern = {
@@ -74,7 +77,7 @@ export class SuppressionTracker {
 
     logger.debug(
       `Recorded ${scope}-scoped suppression: ${finding.category} at ${finding.file}:${finding.line}` +
-      (scope === 'pr' ? ` (PR #${prNumber})` : '')
+        (scope === 'pr' ? ` (PR #${prNumber})` : '')
     );
   }
 
@@ -132,7 +135,7 @@ export class SuppressionTracker {
       // All checks passed - suppress this finding
       logger.debug(
         `Suppressing finding: ${finding.category} at ${finding.file}:${finding.line} ` +
-        `(matches pattern ${pattern.id})`
+          `(matches pattern ${pattern.id})`
       );
       return true;
     }
@@ -152,13 +155,14 @@ export class SuppressionTracker {
     const now = Date.now();
 
     // Filter to non-expired patterns matching this PR or repo-wide
-    const activePatterns = data.patterns.filter(p =>
-      p.expiresAt > now &&
-      (p.scope === 'repo' || (p.scope === 'pr' && p.prNumber === prNumber))
+    const activePatterns = data.patterns.filter(
+      (p) =>
+        p.expiresAt > now &&
+        (p.scope === 'repo' || (p.scope === 'pr' && p.prNumber === prNumber))
     );
 
     // Get unique categories
-    const categorySet = new Set(activePatterns.map(p => p.category));
+    const categorySet = new Set(activePatterns.map((p) => p.category));
     const categories = Array.from(categorySet);
 
     return categories;
@@ -174,7 +178,7 @@ export class SuppressionTracker {
     const now = Date.now();
 
     const beforeCount = data.patterns.length;
-    data.patterns = data.patterns.filter(pattern => pattern.expiresAt >= now);
+    data.patterns = data.patterns.filter((pattern) => pattern.expiresAt >= now);
     const clearedCount = beforeCount - data.patterns.length;
 
     if (clearedCount > 0) {
@@ -209,7 +213,10 @@ export class SuppressionTracker {
     try {
       return JSON.parse(raw) as SuppressionData;
     } catch (error) {
-      logger.warn('Failed to parse suppression data, starting fresh', error as Error);
+      logger.warn(
+        'Failed to parse suppression data, starting fresh',
+        error as Error
+      );
       return {
         patterns: [],
         lastCleanup: Date.now(),

@@ -11,7 +11,8 @@ describe('ContextRetriever', () => {
         additions: 2,
         deletions: 0,
         changes: 2,
-        patch: '@@ -1,1 +1,3 @@\n+import api from "./api"\n+export const x = 1;\n',
+        patch:
+          '@@ -1,1 +1,3 @@\n+import api from "./api"\n+export const x = 1;\n',
       },
     ];
 

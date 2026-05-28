@@ -8,19 +8,13 @@
  * - Threshold-based filtering for suggestion posting
  */
 
-export {
-  validateSyntax,
-  SyntaxValidationResult
-} from './syntax-validator';
+export { validateSyntax, SyntaxValidationResult } from './syntax-validator';
 
-export {
-  areASTsEquivalent,
-  ASTComparisonResult
-} from './ast-comparator';
+export { areASTsEquivalent, ASTComparisonResult } from './ast-comparator';
 
 export {
   calculateConfidence,
   shouldPostSuggestion,
   ConfidenceSignals,
-  QualityConfig
+  QualityConfig,
 } from './confidence-calculator';

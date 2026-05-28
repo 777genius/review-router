@@ -31,7 +31,9 @@ export class QuietModeFilter {
       return findings;
     }
 
-    logger.info(`Quiet mode enabled (min confidence: ${this.config.minConfidence}), filtering findings`);
+    logger.info(
+      `Quiet mode enabled (min confidence: ${this.config.minConfidence}), filtering findings`
+    );
 
     const filtered: Finding[] = [];
     const rejected: Finding[] = [];
@@ -50,7 +52,8 @@ export class QuietModeFilter {
       }
     }
 
-    const filterRate = findings.length > 0 ? (rejected.length / findings.length) * 100 : 0;
+    const filterRate =
+      findings.length > 0 ? (rejected.length / findings.length) * 100 : 0;
 
     logger.info(
       `Quiet mode filtered ${rejected.length}/${findings.length} findings (${filterRate.toFixed(1)}% reduction)`
@@ -67,7 +70,10 @@ export class QuietModeFilter {
     filtered: number;
     kept: number;
     filterRate: number;
-    byCategory: Record<string, { total: number; filtered: number; kept: number }>;
+    byCategory: Record<
+      string,
+      { total: number; filtered: number; kept: number }
+    >;
   }> {
     if (!this.config.enabled) {
       return {
@@ -79,7 +85,10 @@ export class QuietModeFilter {
       };
     }
 
-    const byCategory: Record<string, { total: number; filtered: number; kept: number }> = {};
+    const byCategory: Record<
+      string,
+      { total: number; filtered: number; kept: number }
+    > = {};
     let totalFiltered = 0;
 
     for (const finding of findings) {
@@ -105,7 +114,8 @@ export class QuietModeFilter {
       total: findings.length,
       filtered: totalFiltered,
       kept: findings.length - totalFiltered,
-      filterRate: findings.length > 0 ? (totalFiltered / findings.length) * 100 : 0,
+      filterRate:
+        findings.length > 0 ? (totalFiltered / findings.length) * 100 : 0,
       byCategory,
     };
   }
@@ -120,7 +130,8 @@ export class QuietModeFilter {
     }
 
     const category = finding.category || 'unknown';
-    const learnedThreshold = await this.feedbackTracker.getConfidenceThreshold(category);
+    const learnedThreshold =
+      await this.feedbackTracker.getConfidenceThreshold(category);
 
     // Use the higher of learned threshold or configured minimum
     return Math.max(learnedThreshold, this.config.minConfidence);

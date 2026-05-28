@@ -27,11 +27,17 @@ describe('CLI Analytics', () => {
           cacheHit: true,
         },
       ]),
-      getCostTrends: jest.fn().mockResolvedValue([
-        { date: '2024-01-01', cost: 0.05, reviews: 1 },
-      ]),
+      getCostTrends: jest
+        .fn()
+        .mockResolvedValue([{ date: '2024-01-01', cost: 0.05, reviews: 1 }]),
       getProviderStats: jest.fn().mockResolvedValue([
-        { provider: 'test-provider', totalReviews: 10, successRate: 0.95, avgCost: 0.01, avgDuration: 25 },
+        {
+          provider: 'test-provider',
+          totalReviews: 10,
+          successRate: 0.95,
+          avgCost: 0.01,
+          avgDuration: 25,
+        },
       ]),
       calculateROI: jest.fn().mockResolvedValue({
         totalCost: 0.05,
@@ -46,22 +52,30 @@ describe('CLI Analytics', () => {
       saveCSV: jest.fn().mockResolvedValue(undefined),
     } as any;
 
-    (MetricsCollector as jest.MockedClass<typeof MetricsCollector>).mockImplementation(() => mockCollector);
-    (DashboardGenerator as jest.MockedClass<typeof DashboardGenerator>).mockImplementation(() => mockGenerator);
+    (
+      MetricsCollector as jest.MockedClass<typeof MetricsCollector>
+    ).mockImplementation(() => mockCollector);
+    (
+      DashboardGenerator as jest.MockedClass<typeof DashboardGenerator>
+    ).mockImplementation(() => mockGenerator);
   });
 
   describe('generateAnalytics', () => {
     it('should generate HTML dashboard by default', async () => {
       await generateAnalytics();
 
-      expect(mockGenerator.saveDashboard).toHaveBeenCalledWith(expect.stringContaining('analytics-dashboard.html'));
+      expect(mockGenerator.saveDashboard).toHaveBeenCalledWith(
+        expect.stringContaining('analytics-dashboard.html')
+      );
       expect(mockGenerator.saveCSV).not.toHaveBeenCalled();
     });
 
     it('should generate CSV when format is csv', async () => {
       await generateAnalytics({ format: 'csv' });
 
-      expect(mockGenerator.saveCSV).toHaveBeenCalledWith(expect.stringContaining('analytics-export.csv'));
+      expect(mockGenerator.saveCSV).toHaveBeenCalledWith(
+        expect.stringContaining('analytics-export.csv')
+      );
       expect(mockGenerator.saveDashboard).not.toHaveBeenCalled();
     });
 
@@ -81,12 +95,16 @@ describe('CLI Analytics', () => {
     it('should use custom output directory', async () => {
       await generateAnalytics({ output: './custom-reports' });
 
-      expect(mockGenerator.saveDashboard).toHaveBeenCalledWith(expect.stringContaining('custom-reports'));
+      expect(mockGenerator.saveDashboard).toHaveBeenCalledWith(
+        expect.stringContaining('custom-reports')
+      );
     });
 
     it('should handle errors gracefully', async () => {
       mockGenerator.saveDashboard.mockRejectedValue(new Error('Write failed'));
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      const exitSpy = jest
+        .spyOn(process, 'exit')
+        .mockImplementation(() => undefined as never);
 
       await generateAnalytics();
 
@@ -113,8 +131,12 @@ describe('CLI Analytics', () => {
       expect(mockCollector.getCostTrends).toHaveBeenCalledWith(30);
       expect(mockCollector.getProviderStats).toHaveBeenCalled();
       expect(mockCollector.calculateROI).toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Analytics Summary'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Total Reviews'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Analytics Summary')
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Total Reviews')
+      );
     });
 
     it('should handle custom days parameter', async () => {
@@ -125,7 +147,9 @@ describe('CLI Analytics', () => {
 
     it('should handle errors gracefully', async () => {
       mockCollector.getMetrics.mockRejectedValue(new Error('Cache error'));
-      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      const exitSpy = jest
+        .spyOn(process, 'exit')
+        .mockImplementation(() => undefined as never);
 
       await printSummary();
 

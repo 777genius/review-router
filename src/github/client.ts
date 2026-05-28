@@ -13,7 +13,8 @@ export class GitHubClient {
     this.octokit = new Octokit({ auth: token });
 
     // Prefer the explicit Actions env var, then fall back to the event payload.
-    const repoEnv = process.env.GITHUB_REPOSITORY || getRepositoryFromEventPayload() || '/';
+    const repoEnv =
+      process.env.GITHUB_REPOSITORY || getRepositoryFromEventPayload() || '/';
 
     const [owner, repo] = repoEnv.split('/');
     this.owner = owner || '';
@@ -82,7 +83,7 @@ export class GitHubClient {
       core.debug(
         `Throttling GitHub API request (${delay}ms delay, ${status?.remaining} requests remaining)`
       );
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
@@ -118,7 +119,11 @@ export class GitHubClient {
 
       // Update rate limit tracker from response headers
       // Validate headers structure before passing to rate limit tracker
-      if (response.headers && typeof response.headers === 'object' && !Array.isArray(response.headers)) {
+      if (
+        response.headers &&
+        typeof response.headers === 'object' &&
+        !Array.isArray(response.headers)
+      ) {
         // Convert headers to Record<string, string | undefined> for type safety
         // Octokit headers are typed as { [header: string]: string | number | undefined }
         const headers: Record<string, string | undefined> = {};
@@ -131,7 +136,11 @@ export class GitHubClient {
       // Check if the response is a file (not a directory)
       if ('content' in response.data && !Array.isArray(response.data)) {
         // Handle empty content or encoding "none" for large files
-        if (!response.data.content || response.data.content === '' || response.data.encoding === 'none') {
+        if (
+          !response.data.content ||
+          response.data.content === '' ||
+          response.data.encoding === 'none'
+        ) {
           // File is empty or too large
           core.debug(`File content empty or encoding 'none': ${filePath}`);
           return '';
@@ -149,7 +158,9 @@ export class GitHubClient {
         return null;
       }
       // Log other errors but don't throw - gracefully degrade
-      core.warning(`Failed to fetch file content for ${filePath}: ${(error as Error).message}`);
+      core.warning(
+        `Failed to fetch file content for ${filePath}: ${(error as Error).message}`
+      );
       return null;
     }
   }
@@ -180,7 +191,10 @@ function getRepositoryFromEventPayload(): string | undefined {
       return payload.repository.full_name;
     }
 
-    const owner = payload.repository?.owner?.login || payload.repository?.owner?.name || payload.organization?.login;
+    const owner =
+      payload.repository?.owner?.login ||
+      payload.repository?.owner?.name ||
+      payload.organization?.login;
     if (owner && payload.repository?.name) {
       return `${owner}/${payload.repository.name}`;
     }

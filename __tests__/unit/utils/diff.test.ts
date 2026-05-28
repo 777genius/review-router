@@ -48,7 +48,9 @@ describe('filterDiffByFiles', () => {
   });
 
   it('includes deletion hunks when the deleted file is requested', () => {
-    const result = filterDiffByFiles(sampleDiff, [{ filename: 'src/remove.ts' }]);
+    const result = filterDiffByFiles(sampleDiff, [
+      { filename: 'src/remove.ts' },
+    ]);
     expect(result).toContain('deleted file mode');
     expect(result).toContain('diff --git a/src/remove.ts b/src/remove.ts');
   });

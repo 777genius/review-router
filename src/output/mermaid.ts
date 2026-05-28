@@ -1,7 +1,10 @@
 import { FileChange, UnchangedContext } from '../types';
 
 export class MermaidGenerator {
-  generateImpactDiagram(files: FileChange[], context: UnchangedContext[]): string {
+  generateImpactDiagram(
+    files: FileChange[],
+    context: UnchangedContext[]
+  ): string {
     if (files.length > 30) return '';
     const lines: string[] = ['graph TD'];
     const fileNodes = new Set<string>();

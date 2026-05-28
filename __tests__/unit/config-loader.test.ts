@@ -20,6 +20,7 @@ describe('ConfigLoader', () => {
     process.env.OPENROUTER_TIMEOUT_SECONDS = '240';
     process.env.REQUIRED_HEALTHY_PROVIDERS = 'codex/gpt-5.5,openrouter/a';
     process.env.ENABLE_AST_ANALYSIS = 'false';
+    process.env.CLAUDE_AGENTIC_CONTEXT = 'true';
     process.env.UPDATE_PR_DESCRIPTION = 'false';
     process.env.FAIL_ON_SEVERITY = 'critical';
 
@@ -34,6 +35,7 @@ describe('ConfigLoader', () => {
       'openrouter/a',
     ]);
     expect(config.enableAstAnalysis).toBe(false);
+    expect(config.claudeAgenticContext).toBe(true);
     expect(config.updatePrDescription).toBe(false);
     expect(config.failOnSeverity).toBe('critical');
     expect(config.inlineMinSeverity).toBe(DEFAULT_CONFIG.inlineMinSeverity);

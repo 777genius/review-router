@@ -1,8 +1,16 @@
-export type Language = 'typescript' | 'javascript' | 'python' | 'go' | 'rust' | 'unknown';
+export type Language =
+  | 'typescript'
+  | 'javascript'
+  | 'python'
+  | 'go'
+  | 'rust'
+  | 'unknown';
 
 export function detectLanguage(filename: string): Language {
-  if (filename.endsWith('.ts') || filename.endsWith('.tsx')) return 'typescript';
-  if (filename.endsWith('.js') || filename.endsWith('.jsx')) return 'javascript';
+  if (filename.endsWith('.ts') || filename.endsWith('.tsx'))
+    return 'typescript';
+  if (filename.endsWith('.js') || filename.endsWith('.jsx'))
+    return 'javascript';
   if (filename.endsWith('.py')) return 'python';
   if (filename.endsWith('.go')) return 'go';
   if (filename.endsWith('.rs')) return 'rust';
@@ -20,9 +28,14 @@ export function getParser(language: Language): any | null {
   try {
     if (language === 'typescript' || language === 'javascript') {
       const ts = loadModule('tree-sitter-typescript');
-      const grammar = language === 'javascript' ? (ts?.javascript ?? ts?.typescript) : ts?.typescript;
+      const grammar =
+        language === 'javascript'
+          ? (ts?.javascript ?? ts?.typescript)
+          : ts?.typescript;
       if (!grammar) {
-        debugParser(`tree-sitter-typescript grammar unavailable for ${language}; keys=${ts ? Object.keys(ts).join(',') : 'null'}`);
+        debugParser(
+          `tree-sitter-typescript grammar unavailable for ${language}; keys=${ts ? Object.keys(ts).join(',') : 'null'}`
+        );
         return null;
       }
       parser.setLanguage(grammar);
@@ -50,7 +63,9 @@ export function getParser(language: Language): any | null {
       return parser;
     }
   } catch (error) {
-    debugParser(`setLanguage failed for ${language}: ${(error as Error).message}`);
+    debugParser(
+      `setLanguage failed for ${language}: ${(error as Error).message}`
+    );
     return null;
   }
 

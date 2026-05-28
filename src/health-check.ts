@@ -56,7 +56,8 @@ async function healthCheck(): Promise<void> {
     // All checks passed
     process.exit(0);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
     console.error(`Health check failed: ${errorMessage}`);
     process.exit(1);
   }

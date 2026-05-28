@@ -67,6 +67,7 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   graphTimeoutSeconds: 10,
 
   codexAgenticContext: true,
+  claudeAgenticContext: false,
   codexEventAudit: false,
 
   generateFixPrompts: false,

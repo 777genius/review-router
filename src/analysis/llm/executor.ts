@@ -15,8 +15,11 @@ type ErrorWithCode = Error & { code?: string };
 export class LLMExecutor {
   constructor(private readonly config: ReviewConfig) {}
 
-  private resolveProviderTimeoutMs(provider: Provider, timeoutMs?: number): number {
-    const baseTimeoutMs = timeoutMs ?? (this.config.runTimeoutSeconds * 1000);
+  private resolveProviderTimeoutMs(
+    provider: Provider,
+    timeoutMs?: number
+  ): number {
+    const baseTimeoutMs = timeoutMs ?? this.config.runTimeoutSeconds * 1000;
     if (
       provider.name.startsWith('openrouter/') ||
       provider.name.startsWith('codex-openrouter/')
@@ -42,7 +45,9 @@ export class LLMExecutor {
   ): Promise<{ healthy: Provider[]; healthCheckResults: ProviderResult[] }> {
     if (providers.length === 0) return { healthy: [], healthCheckResults: [] };
 
-    logger.info(`Running health checks on ${providers.length} provider(s) with ${healthCheckTimeoutMs}ms timeout...`);
+    logger.info(
+      `Running health checks on ${providers.length} provider(s) with ${healthCheckTimeoutMs}ms timeout...`
+    );
 
     const queue = createQueue(this.config.providerMaxParallel);
     const healthyProviders: Provider[] = [];
@@ -50,125 +55,158 @@ export class LLMExecutor {
     const tasks: Array<Promise<void>> = [];
 
     for (const provider of providers) {
-      tasks.push(queue.add(async () => {
-        const started = Date.now();
-        try {
-          const isHealthy = await provider.healthCheck(healthCheckTimeoutMs);
-          // Duration is measured immediately after health check completes
-          const duration = Date.now() - started;
+      tasks.push(
+        queue.add(async () => {
+          const started = Date.now();
+          try {
+            const isHealthy = await provider.healthCheck(healthCheckTimeoutMs);
+            // Duration is measured immediately after health check completes
+            const duration = Date.now() - started;
 
-          if (isHealthy) {
-            healthyProviders.push(provider);
-            healthCheckResults.push({
-              name: provider.name,
-              status: 'success',
-              durationSeconds: duration / 1000,
-            });
-            logger.info(`✓ Provider ${provider.name} health check passed (${duration}ms)`);
-          } else {
-            // Health check returned false - likely timed out
+            if (isHealthy) {
+              healthyProviders.push(provider);
+              healthCheckResults.push({
+                name: provider.name,
+                status: 'success',
+                durationSeconds: duration / 1000,
+              });
+              logger.info(
+                `✓ Provider ${provider.name} health check passed (${duration}ms)`
+              );
+            } else {
+              // Health check returned false - likely timed out
+              const result: ProviderResult = {
+                name: provider.name,
+                status: 'timeout',
+                error: new Error(
+                  `Health check timed out after ${duration}ms - provider did not respond within timeout`
+                ),
+                durationSeconds: duration / 1000,
+              };
+              healthCheckResults.push(result);
+              logger.warn(
+                `✗ Provider ${provider.name} health check timed out (${duration}ms)`
+              );
+            }
+          } catch (error) {
+            const duration = Date.now() - started;
+            const err = error as ErrorWithCode;
+
+            // Determine if this is a timeout error
+            let status: ProviderResult['status'] = 'error';
+            if (
+              err.message.toLowerCase().includes('timed out') ||
+              err.message.toLowerCase().includes('timeout') ||
+              err.code === 'ETIMEDOUT'
+            ) {
+              status = 'timeout';
+            }
+
             const result: ProviderResult = {
               name: provider.name,
-              status: 'timeout',
-              error: new Error(`Health check timed out after ${duration}ms - provider did not respond within timeout`),
+              status,
+              error: err,
               durationSeconds: duration / 1000,
             };
             healthCheckResults.push(result);
-            logger.warn(`✗ Provider ${provider.name} health check timed out (${duration}ms)`);
+            logger.warn(
+              `✗ Provider ${provider.name} health check error (${duration}ms): ${err.message}`
+            );
           }
-        } catch (error) {
-          const duration = Date.now() - started;
-          const err = error as ErrorWithCode;
-
-          // Determine if this is a timeout error
-          let status: ProviderResult['status'] = 'error';
-          if (err.message.toLowerCase().includes('timed out') ||
-              err.message.toLowerCase().includes('timeout') ||
-              err.code === 'ETIMEDOUT') {
-            status = 'timeout';
-          }
-
-          const result: ProviderResult = {
-            name: provider.name,
-            status,
-            error: err,
-            durationSeconds: duration / 1000,
-          };
-          healthCheckResults.push(result);
-          logger.warn(`✗ Provider ${provider.name} health check error (${duration}ms): ${err.message}`);
-        }
-      }) as Promise<void>);
+        }) as Promise<void>
+      );
     }
 
     await Promise.all(tasks);
     await queue.onIdle();
 
-    logger.info(`Health checks complete: ${healthyProviders.length}/${providers.length} provider(s) are responsive`);
+    logger.info(
+      `Health checks complete: ${healthyProviders.length}/${providers.length} provider(s) are responsive`
+    );
 
     return { healthy: healthyProviders, healthCheckResults };
   }
 
-  async execute(providers: Provider[], prompt: string, timeoutMs?: number): Promise<ProviderResult[]> {
+  async execute(
+    providers: Provider[],
+    prompt: string,
+    timeoutMs?: number
+  ): Promise<ProviderResult[]> {
     const queue = createQueue(this.config.providerMaxParallel);
     const results: ProviderResult[] = [];
     const tasks: Array<Promise<void>> = [];
 
     for (const provider of providers) {
-      tasks.push(queue.add(async () => {
-        const started = Date.now();
-        const actualTimeoutMs = this.resolveProviderTimeoutMs(provider, timeoutMs);
-
-        const totalAttempts = getProviderReviewTotalAttempts(this.config.providerRetries);
-        let attempt = 0;
-        let previousError: Error | undefined;
-        const runner = async () => {
-          attempt += 1;
-          return provider.review(
-            buildProviderReviewPromptForAttempt(prompt, attempt, previousError),
-            actualTimeoutMs
+      tasks.push(
+        queue.add(async () => {
+          const started = Date.now();
+          const actualTimeoutMs = this.resolveProviderTimeoutMs(
+            provider,
+            timeoutMs
           );
-        };
 
-        try {
-          const result = await withRetry(runner, {
-            retries: totalAttempts - 1,
-            minTimeout: 0,
-            maxTimeout: 0,
-            retryOn: error => {
-              previousError = error;
-              return shouldRetryProviderReviewError(error);
-            },
-          });
-          results.push({
-            name: provider.name,
-            status: 'success',
-            result,
-            durationSeconds: (Date.now() - started) / 1000,
-          });
-        } catch (error) {
-          const err = error as ErrorWithCode;
-          let status: ProviderResult['status'] = 'error';
-          if (err instanceof RateLimitError) {
-            status = 'rate-limited';
-          } else if (err.name === 'TimeoutError' || err.message.toLowerCase().includes('timed out') || err.code === 'ETIMEDOUT') {
-            status = 'timeout';
-          }
-          const structuredFailure = shouldRetryProviderReviewError(err);
-          if (structuredFailure) {
-            logger.warn(
-              `Provider ${provider.name} failed structured output after ${totalAttempts} attempt(s): ${err.message}`
+          const totalAttempts = getProviderReviewTotalAttempts(
+            this.config.providerRetries
+          );
+          let attempt = 0;
+          let previousError: Error | undefined;
+          const runner = async () => {
+            attempt += 1;
+            return provider.review(
+              buildProviderReviewPromptForAttempt(
+                prompt,
+                attempt,
+                previousError
+              ),
+              actualTimeoutMs
             );
-          } else {
-            logger.warn(`Provider ${provider.name} failed: ${err.message}`);
+          };
+
+          try {
+            const result = await withRetry(runner, {
+              retries: totalAttempts - 1,
+              minTimeout: 0,
+              maxTimeout: 0,
+              retryOn: (error) => {
+                previousError = error;
+                return shouldRetryProviderReviewError(error);
+              },
+            });
+            results.push({
+              name: provider.name,
+              status: 'success',
+              result,
+              durationSeconds: (Date.now() - started) / 1000,
+            });
+          } catch (error) {
+            const err = error as ErrorWithCode;
+            let status: ProviderResult['status'] = 'error';
+            if (err instanceof RateLimitError) {
+              status = 'rate-limited';
+            } else if (
+              err.name === 'TimeoutError' ||
+              err.message.toLowerCase().includes('timed out') ||
+              err.code === 'ETIMEDOUT'
+            ) {
+              status = 'timeout';
+            }
+            const structuredFailure = shouldRetryProviderReviewError(err);
+            if (structuredFailure) {
+              logger.warn(
+                `Provider ${provider.name} failed structured output after ${totalAttempts} attempt(s): ${err.message}`
+              );
+            } else {
+              logger.warn(`Provider ${provider.name} failed: ${err.message}`);
+            }
+            results.push({
+              name: provider.name,
+              status,
+              error: err,
+              durationSeconds: (Date.now() - started) / 1000,
+            });
           }
-          results.push({
-            name: provider.name,
-            status,
-            error: err,
-            durationSeconds: (Date.now() - started) / 1000,
-          });
-        }
-      }) as Promise<void>);
+        }) as Promise<void>
+      );
     }
 
     await Promise.all(tasks);

@@ -27,7 +27,9 @@ export class GraphCache {
 
       // Check version for schema compatibility
       if (data.version !== GRAPH_CACHE_VERSION) {
-        logger.debug(`Graph cache version mismatch for PR #${prNumber} (cached: ${data.version}, current: ${GRAPH_CACHE_VERSION})`);
+        logger.debug(
+          `Graph cache version mismatch for PR #${prNumber} (cached: ${data.version}, current: ${GRAPH_CACHE_VERSION})`
+        );
         return null;
       }
 
@@ -39,11 +41,16 @@ export class GraphCache {
 
       // Deserialize graph
       const graph = CodeGraph.deserialize(data.graph);
-      logger.debug(`Graph cache hit for PR #${prNumber} (${headSha.slice(0, 7)})`);
+      logger.debug(
+        `Graph cache hit for PR #${prNumber} (${headSha.slice(0, 7)})`
+      );
 
       return graph;
     } catch (error) {
-      logger.warn(`Failed to deserialize cached graph for PR #${prNumber}`, error as Error);
+      logger.warn(
+        `Failed to deserialize cached graph for PR #${prNumber}`,
+        error as Error
+      );
       return null;
     }
   }
@@ -51,7 +58,11 @@ export class GraphCache {
   /**
    * Save graph to cache
    */
-  async set(prNumber: number, headSha: string, graph: CodeGraph): Promise<void> {
+  async set(
+    prNumber: number,
+    headSha: string,
+    graph: CodeGraph
+  ): Promise<void> {
     const key = this.key(prNumber, headSha);
 
     const data = {

@@ -10,7 +10,9 @@ interface Lock {
 export class CacheStorage {
   private readonly locks = new Map<string, Lock>();
 
-  constructor(private readonly baseDir = path.join(process.cwd(), '.mpr-cache')) {}
+  constructor(
+    private readonly baseDir = path.join(process.cwd(), '.mpr-cache')
+  ) {}
 
   async read(key: string): Promise<string | null> {
     const file = path.join(this.baseDir, `${key}.json`);
@@ -44,17 +46,19 @@ export class CacheStorage {
     try {
       await fs.mkdir(this.baseDir, { recursive: true });
     } catch (error) {
-      logger.error(`Failed to create cache directory ${this.baseDir}`, error as Error);
+      logger.error(
+        `Failed to create cache directory ${this.baseDir}`,
+        error as Error
+      );
       return 0;
     }
 
     try {
-
       // Read all files in cache directory
       const files = await fs.readdir(this.baseDir);
 
       // Filter files matching the prefix pattern
-      const matchingFiles = files.filter(file => {
+      const matchingFiles = files.filter((file) => {
         // Remove .json extension and check if it starts with prefix
         const key = file.replace(/\.json$/, '');
         return key.startsWith(prefix);
@@ -72,12 +76,17 @@ export class CacheStorage {
       }
 
       if (deletedCount > 0) {
-        logger.info(`Deleted ${deletedCount} cache entries with prefix: ${prefix}`);
+        logger.info(
+          `Deleted ${deletedCount} cache entries with prefix: ${prefix}`
+        );
       }
 
       return deletedCount;
     } catch (error) {
-      logger.warn(`Failed to delete cache entries by prefix ${prefix}`, error as Error);
+      logger.warn(
+        `Failed to delete cache entries by prefix ${prefix}`,
+        error as Error
+      );
       return 0;
     }
   }
@@ -91,7 +100,7 @@ export class CacheStorage {
 
     // Create a new lock with both promise and resolver
     let resolver!: () => void;
-    const lockPromise = new Promise<void>(resolve => {
+    const lockPromise = new Promise<void>((resolve) => {
       resolver = resolve;
     });
 

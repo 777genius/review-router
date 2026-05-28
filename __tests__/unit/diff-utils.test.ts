@@ -1,4 +1,8 @@
-import { chooseBestAddedLineForComment, mapAddedLines, trimDiff } from '../../src/utils/diff';
+import {
+  chooseBestAddedLineForComment,
+  mapAddedLines,
+  trimDiff,
+} from '../../src/utils/diff';
 
 describe('mapAddedLines', () => {
   it('maps added lines to absolute new-file line numbers', () => {
@@ -58,9 +62,12 @@ describe('trimDiff', () => {
   });
 
   it('keeps complete files and truncates remaining files', () => {
-    const file1 = 'diff --git a/file1.ts b/file1.ts\nindex abc..def\n--- a/file1.ts\n+++ b/file1.ts\n@@ -1,1 +1,2 @@\n line1\n+added1';
-    const file2 = 'diff --git a/file2.ts b/file2.ts\nindex ghi..jkl\n--- a/file2.ts\n+++ b/file2.ts\n@@ -1,1 +1,2 @@\n line2\n+added2';
-    const file3 = 'diff --git a/file3.ts b/file3.ts\nindex mno..pqr\n--- a/file3.ts\n+++ b/file3.ts\n@@ -1,1 +1,2 @@\n line3\n+added3';
+    const file1 =
+      'diff --git a/file1.ts b/file1.ts\nindex abc..def\n--- a/file1.ts\n+++ b/file1.ts\n@@ -1,1 +1,2 @@\n line1\n+added1';
+    const file2 =
+      'diff --git a/file2.ts b/file2.ts\nindex ghi..jkl\n--- a/file2.ts\n+++ b/file2.ts\n@@ -1,1 +1,2 @@\n line2\n+added2';
+    const file3 =
+      'diff --git a/file3.ts b/file3.ts\nindex mno..pqr\n--- a/file3.ts\n+++ b/file3.ts\n@@ -1,1 +1,2 @@\n line3\n+added3';
 
     const diff = [file1, file2, file3].join('\n');
     const maxBytes = Buffer.byteLength(file1 + '\n' + file2, 'utf8') + 100; // Fit 2 files

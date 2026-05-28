@@ -24,7 +24,7 @@ export interface SuggestionQualityMetric {
   hasConsensus: boolean;
   confidenceScore: number;
   posted: boolean;
-  reason?: string;  // Why not posted (if !posted)
+  reason?: string; // Why not posted (if !posted)
 }
 
 export interface CategoryMetric {
@@ -60,13 +60,13 @@ export interface ProviderMetric {
  */
 export interface MetricsData {
   reviews: ReviewMetric[];
-  suggestionQuality: SuggestionQualityMetric[];  // NEW: quality metrics for suggestions
-  totalReviews: number;        // Count of reviews in sliding window
-  totalCost: number;            // Sum of costs in sliding window
-  totalFindings: number;        // Sum of findings in sliding window
-  avgReviewTime: number;        // Average duration across window
-  cacheHitRate: number;         // % of cached reviews in window
-  lastUpdated: number;          // Timestamp of last update
+  suggestionQuality: SuggestionQualityMetric[]; // NEW: quality metrics for suggestions
+  totalReviews: number; // Count of reviews in sliding window
+  totalCost: number; // Sum of costs in sliding window
+  totalFindings: number; // Sum of findings in sliding window
+  avgReviewTime: number; // Average duration across window
+  cacheHitRate: number; // % of cached reviews in window
+  lastUpdated: number; // Timestamp of last update
 }
 
 /**
@@ -87,12 +87,13 @@ export class MetricsCollector {
     const data = await this.loadData();
 
     // Calculate files reviewed from findings
-    const filesReviewed = new Set(review.findings.map(f => f.file)).size;
+    const filesReviewed = new Set(review.findings.map((f) => f.file)).size;
 
     // Extract provider names from results
-    const providers = review.providerResults
-      ?.filter(pr => pr.status === 'success')
-      .map(pr => pr.name) || [];
+    const providers =
+      review.providerResults
+        ?.filter((pr) => pr.status === 'success')
+        .map((pr) => pr.name) || [];
 
     const metric: ReviewMetric = {
       timestamp: Date.now(),
@@ -125,13 +126,15 @@ export class MetricsCollector {
   /**
    * Record suggestion quality metrics for analytics
    */
-  async recordSuggestionQuality(metric: Omit<SuggestionQualityMetric, 'timestamp'>): Promise<void> {
+  async recordSuggestionQuality(
+    metric: Omit<SuggestionQualityMetric, 'timestamp'>
+  ): Promise<void> {
     const data = await this.loadData();
 
     data.suggestionQuality = data.suggestionQuality || [];
     data.suggestionQuality.push({
       ...metric,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     // Keep only last N suggestion metrics
@@ -141,7 +144,9 @@ export class MetricsCollector {
     }
 
     await this.saveData(data);
-    logger.debug(`Recorded suggestion quality metric for ${metric.file}:${metric.line}`);
+    logger.debug(
+      `Recorded suggestion quality metric for ${metric.file}:${metric.line}`
+    );
   }
 
   /**
@@ -165,15 +170,18 @@ export class MetricsCollector {
         suppressionRate: 0,
         consensusRate: 0,
         avgConfidence: 0,
-        postRate: 0
+        postRate: 0,
       };
     }
 
-    const syntaxValid = suggestions.filter(s => s.syntaxValid).length;
-    const suppressed = suggestions.filter(s => s.suppressed).length;
-    const hasConsensus = suggestions.filter(s => s.hasConsensus).length;
-    const posted = suggestions.filter(s => s.posted).length;
-    const totalConfidence = suggestions.reduce((sum, s) => sum + s.confidenceScore, 0);
+    const syntaxValid = suggestions.filter((s) => s.syntaxValid).length;
+    const suppressed = suggestions.filter((s) => s.suppressed).length;
+    const hasConsensus = suggestions.filter((s) => s.hasConsensus).length;
+    const posted = suggestions.filter((s) => s.posted).length;
+    const totalConfidence = suggestions.reduce(
+      (sum, s) => sum + s.confidenceScore,
+      0
+    );
 
     return {
       totalSuggestions: suggestions.length,
@@ -181,14 +189,17 @@ export class MetricsCollector {
       suppressionRate: suppressed / suggestions.length,
       consensusRate: hasConsensus / suggestions.length,
       avgConfidence: totalConfidence / suggestions.length,
-      postRate: posted / suggestions.length
+      postRate: posted / suggestions.length,
     };
   }
 
   /**
    * Get metrics for a specific time period
    */
-  async getMetrics(fromTimestamp?: number, toTimestamp?: number): Promise<ReviewMetric[]> {
+  async getMetrics(
+    fromTimestamp?: number,
+    toTimestamp?: number
+  ): Promise<ReviewMetric[]> {
     const data = await this.loadData();
 
     let filtered = data.reviews;
@@ -214,7 +225,9 @@ export class MetricsCollector {
   /**
    * Get cost trends over time (grouped by day)
    */
-  async getCostTrends(days: number = 30): Promise<Array<{ date: string; cost: number; reviews: number }>> {
+  async getCostTrends(
+    days: number = 30
+  ): Promise<Array<{ date: string; cost: number; reviews: number }>> {
     const data = await this.loadData();
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
 
@@ -246,11 +259,14 @@ export class MetricsCollector {
     const data = await this.loadData();
 
     // Aggregate metrics per provider
-    const providerMap = new Map<string, {
-      totalReviews: number;
-      totalCost: number;
-      totalDuration: number;
-    }>();
+    const providerMap = new Map<
+      string,
+      {
+        totalReviews: number;
+        totalCost: number;
+        totalDuration: number;
+      }
+    >();
 
     for (const review of data.reviews) {
       for (const providerName of review.providers) {
@@ -276,7 +292,8 @@ export class MetricsCollector {
         totalReviews: data.totalReviews,
         successRate: 1.0, // We only track successful reviews
         avgCost: data.totalReviews > 0 ? data.totalCost / data.totalReviews : 0,
-        avgDuration: data.totalReviews > 0 ? data.totalDuration / data.totalReviews : 0,
+        avgDuration:
+          data.totalReviews > 0 ? data.totalDuration / data.totalReviews : 0,
       }))
       .sort((a, b) => b.totalReviews - a.totalReviews); // Sort by most used
 
@@ -311,9 +328,13 @@ export class MetricsCollector {
     const totalCost = data.totalCost;
 
     const estimatedTimeSaved = totalReviews * avgManualReviewMinutes; // minutes
-    const estimatedTimeSavedValue = (estimatedTimeSaved / 60) * developerHourlyRate; // USD
+    const estimatedTimeSavedValue =
+      (estimatedTimeSaved / 60) * developerHourlyRate; // USD
 
-    const roi = totalCost > 0 ? ((estimatedTimeSavedValue - totalCost) / totalCost) * 100 : 0;
+    const roi =
+      totalCost > 0
+        ? ((estimatedTimeSavedValue - totalCost) / totalCost) * 100
+        : 0;
 
     return {
       totalCost,
@@ -326,7 +347,9 @@ export class MetricsCollector {
   /**
    * Get performance over time (review speed trends)
    */
-  async getPerformanceTrends(days: number = 30): Promise<Array<{ date: string; avgDuration: number }>> {
+  async getPerformanceTrends(
+    days: number = 30
+  ): Promise<Array<{ date: string; avgDuration: number }>> {
     const data = await this.loadData();
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
 
@@ -379,13 +402,21 @@ export class MetricsCollector {
   private updateAggregatedStats(data: MetricsData): void {
     data.totalReviews = data.reviews.length;
     data.totalCost = data.reviews.reduce((sum, r) => sum + r.costUsd, 0);
-    data.totalFindings = data.reviews.reduce((sum, r) => sum + r.findingsCount, 0);
+    data.totalFindings = data.reviews.reduce(
+      (sum, r) => sum + r.findingsCount,
+      0
+    );
 
-    const totalDuration = data.reviews.reduce((sum, r) => sum + r.durationSeconds, 0);
-    data.avgReviewTime = data.totalReviews > 0 ? totalDuration / data.totalReviews : 0;
+    const totalDuration = data.reviews.reduce(
+      (sum, r) => sum + r.durationSeconds,
+      0
+    );
+    data.avgReviewTime =
+      data.totalReviews > 0 ? totalDuration / data.totalReviews : 0;
 
     const cacheHits = data.reviews.filter((r) => r.cacheHit).length;
-    data.cacheHitRate = data.totalReviews > 0 ? (cacheHits / data.totalReviews) * 100 : 0;
+    data.cacheHitRate =
+      data.totalReviews > 0 ? (cacheHits / data.totalReviews) * 100 : 0;
 
     data.lastUpdated = Date.now();
   }
@@ -412,7 +443,7 @@ export class MetricsCollector {
       const data = JSON.parse(raw) as MetricsData;
 
       // Ensure backward compatibility: add empty providers array if missing
-      data.reviews = data.reviews.map(review => ({
+      data.reviews = data.reviews.map((review) => ({
         ...review,
         providers: review.providers || [],
       }));
@@ -422,7 +453,10 @@ export class MetricsCollector {
 
       return data;
     } catch (error) {
-      logger.warn('Failed to parse metrics data, starting fresh', error as Error);
+      logger.warn(
+        'Failed to parse metrics data, starting fresh',
+        error as Error
+      );
       return {
         reviews: [],
         suggestionQuality: [],

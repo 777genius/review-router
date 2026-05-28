@@ -12,19 +12,22 @@ const DISPLAYS: Record<Severity, SeverityDisplay> = {
     emoji: '🔴',
     label: 'Critical',
     rank: 3,
-    description: 'blocks merge; security, data loss, or production breakage risk',
+    description:
+      'blocks merge; security, data loss, or production breakage risk',
   },
   major: {
     emoji: '🟡',
     label: 'Major',
     rank: 2,
-    description: 'should fix before merge; correctness, reliability, or maintainability risk',
+    description:
+      'should fix before merge; correctness, reliability, or maintainability risk',
   },
   minor: {
     emoji: '🔵',
     label: 'Minor',
     rank: 1,
-    description: 'non-blocking improvement; cleanup, clarity, or small maintainability issue',
+    description:
+      'non-blocking improvement; cleanup, clarity, or small maintainability issue',
   },
 };
 

@@ -1,6 +1,9 @@
 import { PromptEnricher } from '../../src/learning/prompt-enrichment';
 import { SuppressionTracker } from '../../src/learning/suppression-tracker';
-import { FeedbackTracker, CategoryStats } from '../../src/learning/feedback-tracker';
+import {
+  FeedbackTracker,
+  CategoryStats,
+} from '../../src/learning/feedback-tracker';
 
 describe('PromptEnricher', () => {
   describe('empty enrichment when no trackers provided', () => {
@@ -25,25 +28,38 @@ describe('PromptEnricher', () => {
   describe('suppressed categories', () => {
     it('should include suppressed categories in context', async () => {
       const mockTracker = {
-        getActiveCategories: jest.fn().mockResolvedValue(['null-check', 'type-safety'])
+        getActiveCategories: jest
+          .fn()
+          .mockResolvedValue(['null-check', 'type-safety']),
       } as unknown as SuppressionTracker;
 
       const enricher = new PromptEnricher(mockTracker);
       const context = await enricher.getEnrichmentContext(123);
 
-      expect(context.suppressedCategories).toEqual(['null-check', 'type-safety']);
+      expect(context.suppressedCategories).toEqual([
+        'null-check',
+        'type-safety',
+      ]);
       expect(mockTracker.getActiveCategories).toHaveBeenCalledWith(123);
     });
 
     it('should respect max categories limit', async () => {
       const mockTracker = {
-        getActiveCategories: jest.fn().mockResolvedValue([
-          'cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6', 'cat7'
-        ])
+        getActiveCategories: jest
+          .fn()
+          .mockResolvedValue([
+            'cat1',
+            'cat2',
+            'cat3',
+            'cat4',
+            'cat5',
+            'cat6',
+            'cat7',
+          ]),
       } as unknown as SuppressionTracker;
 
       const enricher = new PromptEnricher(mockTracker, undefined, {
-        maxSuppressionCategories: 3
+        maxSuppressionCategories: 3,
       });
       const context = await enricher.getEnrichmentContext(123);
 
@@ -52,7 +68,9 @@ describe('PromptEnricher', () => {
 
     it('should handle errors from suppression tracker gracefully', async () => {
       const mockTracker = {
-        getActiveCategories: jest.fn().mockRejectedValue(new Error('Storage error'))
+        getActiveCategories: jest
+          .fn()
+          .mockRejectedValue(new Error('Storage error')),
       } as unknown as SuppressionTracker;
 
       const enricher = new PromptEnricher(mockTracker);
@@ -72,7 +90,7 @@ describe('PromptEnricher', () => {
           negativeCount: 2,
           positiveRate: 0.8,
           confidenceThreshold: 0.5,
-          lastUpdated: Date.now()
+          lastUpdated: Date.now(),
         },
         'bad-category': {
           category: 'bad-category',
@@ -81,12 +99,12 @@ describe('PromptEnricher', () => {
           negativeCount: 7,
           positiveRate: 0.3,
           confidenceThreshold: 0.7,
-          lastUpdated: Date.now()
-        }
+          lastUpdated: Date.now(),
+        },
       };
 
       const mockFeedbackTracker = {
-        getCategoryStats: jest.fn().mockResolvedValue(mockStats)
+        getCategoryStats: jest.fn().mockResolvedValue(mockStats),
       } as unknown as FeedbackTracker;
 
       const enricher = new PromptEnricher(undefined, mockFeedbackTracker);
@@ -104,12 +122,12 @@ describe('PromptEnricher', () => {
           negativeCount: 3,
           positiveRate: 0.0,
           confidenceThreshold: 0.5,
-          lastUpdated: Date.now()
-        }
+          lastUpdated: Date.now(),
+        },
       };
 
       const mockFeedbackTracker = {
-        getCategoryStats: jest.fn().mockResolvedValue(mockStats)
+        getCategoryStats: jest.fn().mockResolvedValue(mockStats),
       } as unknown as FeedbackTracker;
 
       const enricher = new PromptEnricher(undefined, mockFeedbackTracker);
@@ -128,16 +146,16 @@ describe('PromptEnricher', () => {
           negativeCount: 4,
           positiveRate: 0.6,
           confidenceThreshold: 0.5,
-          lastUpdated: Date.now()
-        }
+          lastUpdated: Date.now(),
+        },
       };
 
       const mockFeedbackTracker = {
-        getCategoryStats: jest.fn().mockResolvedValue(mockStats)
+        getCategoryStats: jest.fn().mockResolvedValue(mockStats),
       } as unknown as FeedbackTracker;
 
       const enricher = new PromptEnricher(undefined, mockFeedbackTracker, {
-        lowQualityThreshold: 0.7  // Category with 0.6 rate should now be flagged
+        lowQualityThreshold: 0.7, // Category with 0.6 rate should now be flagged
       });
       const context = await enricher.getEnrichmentContext(123);
 
@@ -148,14 +166,18 @@ describe('PromptEnricher', () => {
   describe('prompt text generation', () => {
     it('should generate prompt text with suppressed categories', async () => {
       const mockTracker = {
-        getActiveCategories: jest.fn().mockResolvedValue(['null-check', 'type-safety'])
+        getActiveCategories: jest
+          .fn()
+          .mockResolvedValue(['null-check', 'type-safety']),
       } as unknown as SuppressionTracker;
 
       const enricher = new PromptEnricher(mockTracker);
       const promptText = await enricher.getPromptText(123);
 
       expect(promptText).toContain('LEARNED PREFERENCES');
-      expect(promptText).toContain('AVOID suggesting fixes in these categories');
+      expect(promptText).toContain(
+        'AVOID suggesting fixes in these categories'
+      );
       expect(promptText).toContain('null-check, type-safety');
     });
 
@@ -168,12 +190,12 @@ describe('PromptEnricher', () => {
           negativeCount: 7,
           positiveRate: 0.3,
           confidenceThreshold: 0.7,
-          lastUpdated: Date.now()
-        }
+          lastUpdated: Date.now(),
+        },
       };
 
       const mockFeedbackTracker = {
-        getCategoryStats: jest.fn().mockResolvedValue(mockStats)
+        getCategoryStats: jest.fn().mockResolvedValue(mockStats),
       } as unknown as FeedbackTracker;
 
       const enricher = new PromptEnricher(undefined, mockFeedbackTracker);
@@ -186,7 +208,7 @@ describe('PromptEnricher', () => {
 
     it('should combine both suppressed and low-quality categories', async () => {
       const mockTracker = {
-        getActiveCategories: jest.fn().mockResolvedValue(['null-check'])
+        getActiveCategories: jest.fn().mockResolvedValue(['null-check']),
       } as unknown as SuppressionTracker;
 
       const mockStats: Record<string, CategoryStats> = {
@@ -197,12 +219,12 @@ describe('PromptEnricher', () => {
           negativeCount: 7,
           positiveRate: 0.3,
           confidenceThreshold: 0.7,
-          lastUpdated: Date.now()
-        }
+          lastUpdated: Date.now(),
+        },
       };
 
       const mockFeedbackTracker = {
-        getCategoryStats: jest.fn().mockResolvedValue(mockStats)
+        getCategoryStats: jest.fn().mockResolvedValue(mockStats),
       } as unknown as FeedbackTracker;
 
       const enricher = new PromptEnricher(mockTracker, mockFeedbackTracker);
@@ -216,11 +238,11 @@ describe('PromptEnricher', () => {
 
     it('should return empty string when no enrichment available', async () => {
       const mockTracker = {
-        getActiveCategories: jest.fn().mockResolvedValue([])
+        getActiveCategories: jest.fn().mockResolvedValue([]),
       } as unknown as SuppressionTracker;
 
       const mockFeedbackTracker = {
-        getCategoryStats: jest.fn().mockResolvedValue({})
+        getCategoryStats: jest.fn().mockResolvedValue({}),
       } as unknown as FeedbackTracker;
 
       const enricher = new PromptEnricher(mockTracker, mockFeedbackTracker);
@@ -233,7 +255,7 @@ describe('PromptEnricher', () => {
   describe('repo preferences', () => {
     it('should generate human-readable preference descriptions', async () => {
       const mockTracker = {
-        getActiveCategories: jest.fn().mockResolvedValue(['null-check'])
+        getActiveCategories: jest.fn().mockResolvedValue(['null-check']),
       } as unknown as SuppressionTracker;
 
       const mockStats: Record<string, CategoryStats> = {
@@ -244,12 +266,12 @@ describe('PromptEnricher', () => {
           negativeCount: 7,
           positiveRate: 0.3,
           confidenceThreshold: 0.7,
-          lastUpdated: Date.now()
-        }
+          lastUpdated: Date.now(),
+        },
       };
 
       const mockFeedbackTracker = {
-        getCategoryStats: jest.fn().mockResolvedValue(mockStats)
+        getCategoryStats: jest.fn().mockResolvedValue(mockStats),
       } as unknown as FeedbackTracker;
 
       const enricher = new PromptEnricher(mockTracker, mockFeedbackTracker);

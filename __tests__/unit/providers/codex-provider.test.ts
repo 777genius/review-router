@@ -599,7 +599,8 @@ describe('CodexProvider', () => {
           line: 240,
           endLine: 240,
           severity: 'major',
-          title: 'Retry result without exploration should not replace first pass',
+          title:
+            'Retry result without exploration should not replace first pass',
           message:
             'This retry still did not inspect repository context, so it should not replace the first finding.',
           suggestion: null,

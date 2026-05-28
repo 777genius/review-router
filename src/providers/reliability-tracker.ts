@@ -68,9 +68,9 @@ export class ReliabilityTracker {
   // Reliability score weights (must sum to 1.0)
   // These weights determine the relative importance of each factor in the overall score
   private static readonly WEIGHTS = {
-    successRate: 0.5,         // 50% - Most critical: did the provider complete successfully?
-    falsePositiveRate: 0.3,   // 30% - Very important: does it produce accurate results?
-    responseTime: 0.2,        // 20% - Nice to have: is it fast?
+    successRate: 0.5, // 50% - Most critical: did the provider complete successfully?
+    falsePositiveRate: 0.3, // 30% - Very important: does it produce accurate results?
+    responseTime: 0.2, // 20% - Nice to have: is it fast?
   };
 
   constructor(
@@ -91,7 +91,8 @@ export class ReliabilityTracker {
     const data = await this.loadData();
 
     // Normalize duration to a finite, non-negative number to avoid NaN skew in averages
-    const safeDurationMs = Number.isFinite(durationMs) && durationMs! >= 0 ? durationMs : undefined;
+    const safeDurationMs =
+      Number.isFinite(durationMs) && durationMs! >= 0 ? durationMs : undefined;
 
     const result: ProviderResult = {
       providerId,
@@ -106,9 +107,12 @@ export class ReliabilityTracker {
     // Trim old results to prevent unbounded growth
     // Keep most recent results up to MAX_RESULTS_HISTORY
     if (data.results.length > ReliabilityTracker.MAX_RESULTS_HISTORY) {
-      const excess = data.results.length - ReliabilityTracker.MAX_RESULTS_HISTORY;
+      const excess =
+        data.results.length - ReliabilityTracker.MAX_RESULTS_HISTORY;
       data.results.splice(0, excess);
-      logger.debug(`Trimmed ${excess} old reliability results to prevent unbounded growth`);
+      logger.debug(
+        `Trimmed ${excess} old reliability results to prevent unbounded growth`
+      );
     }
 
     // Circuit breaker bookkeeping (if available)
@@ -136,7 +140,11 @@ export class ReliabilityTracker {
   /**
    * Record a false positive finding from a provider
    */
-  async recordFalsePositive(providerId: string, findingId: string, category?: string): Promise<void> {
+  async recordFalsePositive(
+    providerId: string,
+    findingId: string,
+    category?: string
+  ): Promise<void> {
     const data = await this.loadData();
 
     const report: FalsePositiveReport = {
@@ -149,15 +157,21 @@ export class ReliabilityTracker {
     data.falsePositives.push(report);
 
     // Trim old false positive reports to prevent unbounded growth
-    if (data.falsePositives.length > ReliabilityTracker.MAX_FALSE_POSITIVE_HISTORY) {
-      const excess = data.falsePositives.length - ReliabilityTracker.MAX_FALSE_POSITIVE_HISTORY;
+    if (
+      data.falsePositives.length > ReliabilityTracker.MAX_FALSE_POSITIVE_HISTORY
+    ) {
+      const excess =
+        data.falsePositives.length -
+        ReliabilityTracker.MAX_FALSE_POSITIVE_HISTORY;
       data.falsePositives.splice(0, excess);
       logger.debug(`Trimmed ${excess} old false positive reports`);
     }
 
     await this.saveData(data);
 
-    logger.info(`Recorded false positive from provider ${providerId} (finding: ${findingId})`);
+    logger.info(
+      `Recorded false positive from provider ${providerId} (finding: ${findingId})`
+    );
   }
 
   /**
@@ -198,7 +212,9 @@ export class ReliabilityTracker {
   /**
    * Rank providers by reliability score (best first)
    */
-  async rankProviders(providerIds: string[]): Promise<Array<{ providerId: string; score: number }>> {
+  async rankProviders(
+    providerIds: string[]
+  ): Promise<Array<{ providerId: string; score: number }>> {
     const ranked: Array<{ providerId: string; score: number }> = [];
 
     for (const providerId of providerIds) {
@@ -224,7 +240,10 @@ export class ReliabilityTracker {
     const recommended: string[] = [];
 
     for (const [providerId, stats] of Object.entries(data.stats)) {
-      if (stats.reliabilityScore >= minScore && stats.totalAttempts >= this.minAttempts) {
+      if (
+        stats.reliabilityScore >= minScore &&
+        stats.totalAttempts >= this.minAttempts
+      ) {
         recommended.push(providerId);
       }
     }
@@ -236,7 +255,9 @@ export class ReliabilityTracker {
       return scoreB - scoreA;
     });
 
-    logger.info(`Found ${recommended.length} recommended providers with score >= ${minScore}`);
+    logger.info(
+      `Found ${recommended.length} recommended providers with score >= ${minScore}`
+    );
 
     return recommended;
   }
@@ -277,7 +298,11 @@ export class ReliabilityTracker {
 
     // Calculate stats for each provider
     for (const [providerId, results] of providerGroups) {
-      const stats = this.calculateStats(providerId, results, fpGroups.get(providerId) || []);
+      const stats = this.calculateStats(
+        providerId,
+        results,
+        fpGroups.get(providerId) || []
+      );
       reliabilityData.stats[providerId] = stats;
 
       logger.debug(
@@ -309,20 +334,24 @@ export class ReliabilityTracker {
     const successRate = totalAttempts > 0 ? successCount / totalAttempts : 0;
 
     // Average duration
-    const durationsWithValues = results.filter((r) => Number.isFinite(r.durationMs));
+    const durationsWithValues = results.filter((r) =>
+      Number.isFinite(r.durationMs)
+    );
     const averageDurationMs =
       durationsWithValues.length > 0
-        ? durationsWithValues.reduce((sum, r) => sum + r.durationMs!, 0) / durationsWithValues.length
+        ? durationsWithValues.reduce((sum, r) => sum + r.durationMs!, 0) /
+          durationsWithValues.length
         : 0;
 
     // False positive rate (0-1, inverted for scoring)
     const falsePositiveCount = falsePositives.length;
-    const falsePositiveRate = totalAttempts > 0 ? falsePositiveCount / totalAttempts : 0;
+    const falsePositiveRate =
+      totalAttempts > 0 ? falsePositiveCount / totalAttempts : 0;
 
     // Response time score (0-1, faster is better)
     // Response time thresholds for scoring
-    const EXCELLENT_RESPONSE_MS = 500;  // <= 500ms is considered excellent
-    const POOR_RESPONSE_MS = 5000;       // >= 5000ms is considered poor
+    const EXCELLENT_RESPONSE_MS = 500; // <= 500ms is considered excellent
+    const POOR_RESPONSE_MS = 5000; // >= 5000ms is considered poor
     const responseTimeRange = POOR_RESPONSE_MS - EXCELLENT_RESPONSE_MS;
 
     // Calculate response time score with explicit boundary handling
@@ -333,7 +362,8 @@ export class ReliabilityTracker {
       responseTimeScore = 0; // Zero score for poor response times
     } else {
       // Linear interpolation between excellent and poor
-      responseTimeScore = 1 - (averageDurationMs - EXCELLENT_RESPONSE_MS) / responseTimeRange;
+      responseTimeScore =
+        1 - (averageDurationMs - EXCELLENT_RESPONSE_MS) / responseTimeRange;
     }
 
     // Calculate weighted reliability score (0-1)
@@ -393,9 +423,12 @@ export class ReliabilityTracker {
     }
 
     const totalAttempts = stats.reduce((sum, s) => sum + s.totalAttempts, 0);
-    const averageReliability = stats.reduce((sum, s) => sum + s.reliabilityScore, 0) / stats.length;
+    const averageReliability =
+      stats.reduce((sum, s) => sum + s.reliabilityScore, 0) / stats.length;
 
-    const sorted = [...stats].sort((a, b) => b.reliabilityScore - a.reliabilityScore);
+    const sorted = [...stats].sort(
+      (a, b) => b.reliabilityScore - a.reliabilityScore
+    );
     const topProvider = sorted[0]?.providerId || null;
     const worstProvider = sorted[sorted.length - 1]?.providerId || null;
 
@@ -425,7 +458,10 @@ export class ReliabilityTracker {
     try {
       return JSON.parse(raw) as ReliabilityData;
     } catch (error) {
-      logger.warn('Failed to parse reliability data, starting fresh', error as Error);
+      logger.warn(
+        'Failed to parse reliability data, starting fresh',
+        error as Error
+      );
       return {
         results: [],
         falsePositives: [],
@@ -439,6 +475,9 @@ export class ReliabilityTracker {
    * Save reliability data to cache
    */
   private async saveData(data: ReliabilityData): Promise<void> {
-    await this.storage.write(ReliabilityTracker.CACHE_KEY, JSON.stringify(data));
+    await this.storage.write(
+      ReliabilityTracker.CACHE_KEY,
+      JSON.stringify(data)
+    );
   }
 }

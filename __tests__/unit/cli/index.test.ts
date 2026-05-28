@@ -29,7 +29,9 @@ describe('CLI', () => {
     } as any;
 
     (GitReader as unknown as jest.Mock).mockImplementation(() => mockGitReader);
-    (TerminalFormatter as unknown as jest.Mock).mockImplementation(() => mockFormatter);
+    (TerminalFormatter as unknown as jest.Mock).mockImplementation(
+      () => mockFormatter
+    );
 
     cli = new CLI();
   });
@@ -144,9 +146,15 @@ describe('CLI', () => {
 
       (cli as any).showHelp();
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('ReviewRouter CLI'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Usage:'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('review-router review'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('ReviewRouter CLI')
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:')
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('review-router review')
+      );
 
       consoleSpy.mockRestore();
     });
@@ -158,8 +166,12 @@ describe('CLI', () => {
 
       (cli as any).showVersion();
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('review-router'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining(pkg.version));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('review-router')
+      );
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining(pkg.version)
+      );
 
       consoleSpy.mockRestore();
     });

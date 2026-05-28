@@ -373,9 +373,7 @@ describe('review-router curl installer e2e', () => {
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('name: ReviewRouter');
     expect(workflow).toContain('uses: 777genius/review-router@main');
-    expect(result.stdout).toContain(
-      'Action ref: 777genius/review-router@main'
-    );
+    expect(result.stdout).toContain('Action ref: 777genius/review-router@main');
     expect(workflow).toContain('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain(
       'OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}'
@@ -449,9 +447,7 @@ describe('review-router curl installer e2e', () => {
     expect(result.status).toBe(0);
     const workflow = workflowText(result.workflowPath);
     expect(workflow).toContain('uses: 777genius/review-router@main');
-    expect(result.stdout).toContain(
-      'Action ref: 777genius/review-router@main'
-    );
+    expect(result.stdout).toContain('Action ref: 777genius/review-router@main');
   });
 
   it('can generate an exact pinned release workflow when requested', () => {

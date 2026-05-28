@@ -34,8 +34,12 @@ describe('Validation Utilities', () => {
     });
 
     it('throws for undefined', () => {
-      expect(() => validateRequired(undefined, 'field')).toThrow(ValidationError);
-      expect(() => validateRequired(undefined, 'field')).toThrow('field is required');
+      expect(() => validateRequired(undefined, 'field')).toThrow(
+        ValidationError
+      );
+      expect(() => validateRequired(undefined, 'field')).toThrow(
+        'field is required'
+      );
     });
 
     it('throws for null', () => {
@@ -62,19 +66,27 @@ describe('Validation Utilities', () => {
     });
 
     it('throws for non-number', () => {
-      expect(() => validatePositiveInteger('abc', 'field')).toThrow('field must be a number');
+      expect(() => validatePositiveInteger('abc', 'field')).toThrow(
+        'field must be a number'
+      );
     });
 
     it('throws for decimal', () => {
-      expect(() => validatePositiveInteger(5.5, 'field')).toThrow('field must be an integer');
+      expect(() => validatePositiveInteger(5.5, 'field')).toThrow(
+        'field must be an integer'
+      );
     });
 
     it('throws for zero', () => {
-      expect(() => validatePositiveInteger(0, 'field')).toThrow('field must be positive');
+      expect(() => validatePositiveInteger(0, 'field')).toThrow(
+        'field must be positive'
+      );
     });
 
     it('throws for negative', () => {
-      expect(() => validatePositiveInteger(-5, 'field')).toThrow('field must be positive');
+      expect(() => validatePositiveInteger(-5, 'field')).toThrow(
+        'field must be positive'
+      );
     });
   });
 
@@ -85,11 +97,15 @@ describe('Validation Utilities', () => {
     });
 
     it('throws for negative', () => {
-      expect(() => validateNonNegativeNumber(-1, 'field')).toThrow('field cannot be negative');
+      expect(() => validateNonNegativeNumber(-1, 'field')).toThrow(
+        'field cannot be negative'
+      );
     });
 
     it('throws for NaN', () => {
-      expect(() => validateNonNegativeNumber(NaN, 'field')).toThrow('field must be a number');
+      expect(() => validateNonNegativeNumber(NaN, 'field')).toThrow(
+        'field must be a number'
+      );
     });
   });
 
@@ -101,11 +117,15 @@ describe('Validation Utilities', () => {
     });
 
     it('throws for value below range', () => {
-      expect(() => validateInRange(0, 'field', 1, 10)).toThrow('field must be between 1 and 10');
+      expect(() => validateInRange(0, 'field', 1, 10)).toThrow(
+        'field must be between 1 and 10'
+      );
     });
 
     it('throws for value above range', () => {
-      expect(() => validateInRange(11, 'field', 1, 10)).toThrow('field must be between 1 and 10');
+      expect(() => validateInRange(11, 'field', 1, 10)).toThrow(
+        'field must be between 1 and 10'
+      );
     });
   });
 
@@ -118,11 +138,15 @@ describe('Validation Utilities', () => {
     });
 
     it('throws for invalid value', () => {
-      expect(() => validateEnum('d', 'field', options)).toThrow('field has invalid value');
+      expect(() => validateEnum('d', 'field', options)).toThrow(
+        'field has invalid value'
+      );
     });
 
     it('throws for non-string', () => {
-      expect(() => validateEnum(123, 'field', options)).toThrow('field must be a string');
+      expect(() => validateEnum(123, 'field', options)).toThrow(
+        'field must be a string'
+      );
     });
   });
 
@@ -133,8 +157,12 @@ describe('Validation Utilities', () => {
     });
 
     it('throws for non-array', () => {
-      expect(() => validateArray('string', 'field')).toThrow('field must be an array');
-      expect(() => validateArray({}, 'field')).toThrow('field must be an array');
+      expect(() => validateArray('string', 'field')).toThrow(
+        'field must be an array'
+      );
+      expect(() => validateArray({}, 'field')).toThrow(
+        'field must be an array'
+      );
     });
   });
 
@@ -145,7 +173,9 @@ describe('Validation Utilities', () => {
     });
 
     it('throws for empty array', () => {
-      expect(() => validateNonEmptyArray([], 'field')).toThrow('field cannot be empty');
+      expect(() => validateNonEmptyArray([], 'field')).toThrow(
+        'field cannot be empty'
+      );
     });
   });
 
@@ -156,7 +186,9 @@ describe('Validation Utilities', () => {
     });
 
     it('throws for array with non-string', () => {
-      expect(() => validateStringArray(['a', 123], 'field')).toThrow('field[1] must be a string');
+      expect(() => validateStringArray(['a', 123], 'field')).toThrow(
+        'field[1] must be a string'
+      );
     });
   });
 
@@ -181,19 +213,27 @@ describe('Validation Utilities', () => {
 
   describe('validateApiKey', () => {
     it('returns valid API key', () => {
-      expect(validateApiKey('sk-1234567890abcdef', 'provider')).toBe('sk-1234567890abcdef');
+      expect(validateApiKey('sk-1234567890abcdef', 'provider')).toBe(
+        'sk-1234567890abcdef'
+      );
     });
 
     it('throws for empty API key', () => {
-      expect(() => validateApiKey('', 'provider')).toThrow('API key for provider is required');
+      expect(() => validateApiKey('', 'provider')).toThrow(
+        'API key for provider is required'
+      );
     });
 
     it('throws for short API key', () => {
-      expect(() => validateApiKey('short', 'provider')).toThrow('API key for provider appears invalid');
+      expect(() => validateApiKey('short', 'provider')).toThrow(
+        'API key for provider appears invalid'
+      );
     });
 
     it('throws for non-string', () => {
-      expect(() => validateApiKey(123, 'provider')).toThrow('API key for provider is required');
+      expect(() => validateApiKey(123, 'provider')).toThrow(
+        'API key for provider is required'
+      );
     });
   });
 
@@ -233,7 +273,9 @@ describe('Validation Utilities', () => {
     });
 
     it('throws for directory traversal', () => {
-      expect(() => validateFilePath('../../../etc/passwd')).toThrow('directory traversal');
+      expect(() => validateFilePath('../../../etc/passwd')).toThrow(
+        'directory traversal'
+      );
     });
   });
 

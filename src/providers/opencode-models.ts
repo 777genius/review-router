@@ -39,7 +39,11 @@ function parseOpenCodeModels(output: string): OpenCodeModel[] {
           const parsed = JSON.parse(jsonStr);
           // Only include models from opencode provider with cost.input === 0
           const provider = currentModel.split('/')[0];
-          if (provider === 'opencode' && parsed.cost && parsed.cost.input === 0) {
+          if (
+            provider === 'opencode' &&
+            parsed.cost &&
+            parsed.cost.input === 0
+          ) {
             models.push({
               id: currentModel,
               provider,
@@ -85,7 +89,9 @@ function parseOpenCodeModels(output: string): OpenCodeModel[] {
 /**
  * Fetch available models from OpenCode CLI
  */
-export async function fetchOpenCodeModels(timeoutMs = 10000): Promise<OpenCodeModel[]> {
+export async function fetchOpenCodeModels(
+  timeoutMs = 10000
+): Promise<OpenCodeModel[]> {
   logger.info('Attempting to fetch OpenCode models via CLI with --verbose...');
 
   try {
@@ -99,17 +105,26 @@ export async function fetchOpenCodeModels(timeoutMs = 10000): Promise<OpenCodeMo
     }
 
     const models = parseOpenCodeModels(stdout);
-    logger.info(`Discovered ${models.length} free OpenCode models from CLI (cost.input === 0)`);
+    logger.info(
+      `Discovered ${models.length} free OpenCode models from CLI (cost.input === 0)`
+    );
 
     if (models.length > 0) {
-      logger.debug(`OpenCode free models: ${models.map(m => m.id).join(', ')}`);
+      logger.debug(
+        `OpenCode free models: ${models.map((m) => m.id).join(', ')}`
+      );
     }
 
     return models;
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message.includes('ENOENT') || error.message.includes('command not found')) {
-        logger.info('OpenCode CLI not installed, skipping OpenCode model discovery');
+      if (
+        error.message.includes('ENOENT') ||
+        error.message.includes('command not found')
+      ) {
+        logger.info(
+          'OpenCode CLI not installed, skipping OpenCode model discovery'
+        );
       } else if (error.message.includes('timeout')) {
         logger.warn(`OpenCode CLI timeout after ${timeoutMs}ms`);
       } else {
@@ -164,7 +179,9 @@ export async function getBestFreeOpenCodeModels(
   const models = await fetchOpenCodeModels(timeoutMs);
 
   if (models.length === 0) {
-    logger.info('No free OpenCode models available - CLI may not be installed or accessible');
+    logger.info(
+      'No free OpenCode models available - CLI may not be installed or accessible'
+    );
     return [];
   }
 
@@ -172,14 +189,14 @@ export async function getBestFreeOpenCodeModels(
   logger.info(`Found ${models.length} free OpenCode models (cost.input === 0)`);
 
   // Rank and sort
-  const ranked = models.map(model => ({
+  const ranked = models.map((model) => ({
     modelId: model.id,
     score: rankOpenCodeModel(model),
   }));
 
   ranked.sort((a, b) => b.score - a.score);
 
-  const selected = ranked.slice(0, count).map(r => r.modelId);
+  const selected = ranked.slice(0, count).map((r) => r.modelId);
 
   logger.info(
     `Selected ${selected.length}/${count} best free OpenCode models: ${selected.join(', ')}`

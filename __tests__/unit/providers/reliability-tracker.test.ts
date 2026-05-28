@@ -5,7 +5,10 @@ import { MemoryStorage } from '../../helpers/memory-storage';
 describe('ReliabilityTracker with CircuitBreaker', () => {
   it('opens circuit after consecutive failures', async () => {
     const storage = new MemoryStorage();
-    const circuit = new CircuitBreaker(storage as any, { failureThreshold: 2, openDurationMs: 1000 });
+    const circuit = new CircuitBreaker(storage as any, {
+      failureThreshold: 2,
+      openDurationMs: 1000,
+    });
     const tracker = new ReliabilityTracker(storage as any, 1, circuit);
     const id = 'openrouter/model';
 
@@ -17,7 +20,10 @@ describe('ReliabilityTracker with CircuitBreaker', () => {
 
   it('closes circuit after a subsequent success', async () => {
     const storage = new MemoryStorage();
-    const circuit = new CircuitBreaker(storage as any, { failureThreshold: 2, openDurationMs: 1000 });
+    const circuit = new CircuitBreaker(storage as any, {
+      failureThreshold: 2,
+      openDurationMs: 1000,
+    });
     const tracker = new ReliabilityTracker(storage as any, 1, circuit);
     const id = 'opencode/fast';
 

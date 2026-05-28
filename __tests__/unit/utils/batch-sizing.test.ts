@@ -6,7 +6,11 @@ import {
 import { FileChange } from '../../../src/types';
 
 describe('Dynamic Batch Sizing', () => {
-  const createMockFile = (filename: string, additions: number, deletions: number): FileChange => ({
+  const createMockFile = (
+    filename: string,
+    additions: number,
+    deletions: number
+  ): FileChange => ({
     filename,
     status: 'modified',
     additions,
@@ -14,7 +18,10 @@ describe('Dynamic Batch Sizing', () => {
     changes: additions + deletions,
   });
 
-  const createMockFileWithPatch = (filename: string, patch: string): FileChange => ({
+  const createMockFileWithPatch = (
+    filename: string,
+    patch: string
+  ): FileChange => ({
     filename,
     status: 'modified',
     additions: 10,
@@ -25,7 +32,12 @@ describe('Dynamic Batch Sizing', () => {
 
   describe('estimateTokensForFile', () => {
     it('should use patch content when available', () => {
-      const file = createMockFileWithPatch('test.ts', 'diff --git a/test.ts b/test.ts\n@@ -1,5 +1,5 @@\n' + '-old\n'.repeat(50) + '+new\n'.repeat(50));
+      const file = createMockFileWithPatch(
+        'test.ts',
+        'diff --git a/test.ts b/test.ts\n@@ -1,5 +1,5 @@\n' +
+          '-old\n'.repeat(50) +
+          '+new\n'.repeat(50)
+      );
       const tokens = estimateTokensForFile(file);
 
       expect(tokens).toBeGreaterThan(0);
@@ -63,9 +75,9 @@ describe('Dynamic Batch Sizing', () => {
   describe('estimateTokensForFiles', () => {
     it('should sum tokens for all files', () => {
       const files = [
-        createMockFile('file1.ts', 10, 5),   // 300 tokens
-        createMockFile('file2.ts', 20, 10),  // 600 tokens
-        createMockFile('file3.ts', 30, 15),  // 900 tokens
+        createMockFile('file1.ts', 10, 5), // 300 tokens
+        createMockFile('file2.ts', 20, 10), // 600 tokens
+        createMockFile('file3.ts', 30, 15), // 900 tokens
       ];
 
       const total = estimateTokensForFiles(files);
@@ -80,7 +92,10 @@ describe('Dynamic Batch Sizing', () => {
 
     it('should handle mix of files with and without patches', () => {
       const files = [
-        createMockFileWithPatch('file1.ts', 'diff --git a/file1.ts b/file1.ts\n@@ -1 +1 @@\n-old\n+new\n'),
+        createMockFileWithPatch(
+          'file1.ts',
+          'diff --git a/file1.ts b/file1.ts\n@@ -1 +1 @@\n-old\n+new\n'
+        ),
         createMockFile('file2.ts', 10, 5),
       ];
 
@@ -107,9 +122,9 @@ describe('Dynamic Batch Sizing', () => {
     it('should split large files into multiple batches', () => {
       // Create files that exceed target token budget
       const files = [
-        createMockFile('huge1.ts', 5000, 0),  // 100k tokens
-        createMockFile('huge2.ts', 5000, 0),  // 100k tokens
-        createMockFile('huge3.ts', 5000, 0),  // 100k tokens
+        createMockFile('huge1.ts', 5000, 0), // 100k tokens
+        createMockFile('huge2.ts', 5000, 0), // 100k tokens
+        createMockFile('huge3.ts', 5000, 0), // 100k tokens
       ];
 
       const result = calculateOptimalBatchSize(files, 50000, 200);
@@ -121,9 +136,11 @@ describe('Dynamic Batch Sizing', () => {
 
     it('should pack small files efficiently', () => {
       // Create many small files
-      const files = Array(100).fill(null).map((_, i) =>
-        createMockFile(`file${i}.ts`, 10, 5)  // 300 tokens each
-      );
+      const files = Array(100)
+        .fill(null)
+        .map(
+          (_, i) => createMockFile(`file${i}.ts`, 10, 5) // 300 tokens each
+        );
 
       const result = calculateOptimalBatchSize(files, 50000, 200);
 
@@ -136,9 +153,11 @@ describe('Dynamic Batch Sizing', () => {
 
     it('should respect max files per batch', () => {
       // Create more small files than max allows
-      const files = Array(300).fill(null).map((_, i) =>
-        createMockFile(`file${i}.ts`, 1, 0)  // 20 tokens each
-      );
+      const files = Array(300)
+        .fill(null)
+        .map(
+          (_, i) => createMockFile(`file${i}.ts`, 1, 0) // 20 tokens each
+        );
 
       const result = calculateOptimalBatchSize(files, 100000, 100); // Max 100 files
 
@@ -151,12 +170,12 @@ describe('Dynamic Batch Sizing', () => {
 
     it('should use greedy bin packing for mixed file sizes', () => {
       const files = [
-        createMockFile('large1.ts', 1000, 0),  // 20k tokens
-        createMockFile('large2.ts', 1000, 0),  // 20k tokens
-        createMockFile('medium1.ts', 500, 0),  // 10k tokens
-        createMockFile('medium2.ts', 500, 0),  // 10k tokens
-        createMockFile('small1.ts', 10, 0),    // 200 tokens
-        createMockFile('small2.ts', 10, 0),    // 200 tokens
+        createMockFile('large1.ts', 1000, 0), // 20k tokens
+        createMockFile('large2.ts', 1000, 0), // 20k tokens
+        createMockFile('medium1.ts', 500, 0), // 10k tokens
+        createMockFile('medium2.ts', 500, 0), // 10k tokens
+        createMockFile('small1.ts', 10, 0), // 200 tokens
+        createMockFile('small2.ts', 10, 0), // 200 tokens
       ];
 
       const result = calculateOptimalBatchSize(files, 30000, 200);
@@ -186,11 +205,19 @@ describe('Dynamic Batch Sizing', () => {
 
     it('should provide meaningful reasons', () => {
       // Test different scenarios produce different reasons
-      const smallFiles = Array(10).fill(null).map((_, i) => createMockFile(`file${i}.ts`, 1, 0));
-      const largeFiles = Array(3).fill(null).map((_, i) => createMockFile(`file${i}.ts`, 5000, 0));
+      const smallFiles = Array(10)
+        .fill(null)
+        .map((_, i) => createMockFile(`file${i}.ts`, 1, 0));
+      const largeFiles = Array(3)
+        .fill(null)
+        .map((_, i) => createMockFile(`file${i}.ts`, 5000, 0));
       const mixedFiles = [
-        ...Array(50).fill(null).map((_, i) => createMockFile(`small${i}.ts`, 10, 0)),
-        ...Array(2).fill(null).map((_, i) => createMockFile(`large${i}.ts`, 1000, 0)),
+        ...Array(50)
+          .fill(null)
+          .map((_, i) => createMockFile(`small${i}.ts`, 10, 0)),
+        ...Array(2)
+          .fill(null)
+          .map((_, i) => createMockFile(`large${i}.ts`, 1000, 0)),
       ];
 
       const smallResult = calculateOptimalBatchSize(smallFiles, 50000, 200);
@@ -205,9 +232,11 @@ describe('Dynamic Batch Sizing', () => {
     });
 
     it('should calculate average tokens per batch', () => {
-      const files = Array(100).fill(null).map((_, i) =>
-        createMockFile(`file${i}.ts`, 50, 50)  // 2000 tokens each
-      );
+      const files = Array(100)
+        .fill(null)
+        .map(
+          (_, i) => createMockFile(`file${i}.ts`, 50, 50) // 2000 tokens each
+        );
 
       const result = calculateOptimalBatchSize(files, 50000, 200);
 
@@ -218,24 +247,28 @@ describe('Dynamic Batch Sizing', () => {
     });
 
     it('should handle custom target token budget', () => {
-      const files = Array(100).fill(null).map((_, i) =>
-        createMockFile(`file${i}.ts`, 50, 50)  // 2000 tokens each
-      );
+      const files = Array(100)
+        .fill(null)
+        .map(
+          (_, i) => createMockFile(`file${i}.ts`, 50, 50) // 2000 tokens each
+        );
 
       const smallTarget = calculateOptimalBatchSize(files, 10000, 200);
       const largeTarget = calculateOptimalBatchSize(files, 100000, 200);
 
       // Smaller target should create more batches
-      expect(smallTarget.batches.length).toBeGreaterThan(largeTarget.batches.length);
+      expect(smallTarget.batches.length).toBeGreaterThan(
+        largeTarget.batches.length
+      );
     });
 
     it('should sort files by size for optimal packing', () => {
       // Create files with very different sizes
       const files = [
-        createMockFile('tiny.ts', 1, 0),       // 20 tokens
-        createMockFile('huge.ts', 5000, 0),    // 100k tokens
-        createMockFile('small.ts', 10, 0),     // 200 tokens
-        createMockFile('large.ts', 1000, 0),   // 20k tokens
+        createMockFile('tiny.ts', 1, 0), // 20 tokens
+        createMockFile('huge.ts', 5000, 0), // 100k tokens
+        createMockFile('small.ts', 10, 0), // 200 tokens
+        createMockFile('large.ts', 1000, 0), // 20k tokens
       ];
 
       const result = calculateOptimalBatchSize(files, 50000, 200);
@@ -255,9 +288,9 @@ describe('Dynamic Batch Sizing', () => {
     });
 
     it('should handle very large target token budget', () => {
-      const files = Array(10).fill(null).map((_, i) =>
-        createMockFile(`file${i}.ts`, 100, 100)
-      );
+      const files = Array(10)
+        .fill(null)
+        .map((_, i) => createMockFile(`file${i}.ts`, 100, 100));
 
       const result = calculateOptimalBatchSize(files, 1000000, 200);
 
@@ -266,9 +299,11 @@ describe('Dynamic Batch Sizing', () => {
     });
 
     it('should handle very small target token budget', () => {
-      const files = Array(10).fill(null).map((_, i) =>
-        createMockFile(`file${i}.ts`, 100, 100)  // 4000 tokens each
-      );
+      const files = Array(10)
+        .fill(null)
+        .map(
+          (_, i) => createMockFile(`file${i}.ts`, 100, 100) // 4000 tokens each
+        );
 
       const result = calculateOptimalBatchSize(files, 100, 200);
 
@@ -277,15 +312,15 @@ describe('Dynamic Batch Sizing', () => {
     });
 
     it('should handle max files of 1', () => {
-      const files = Array(5).fill(null).map((_, i) =>
-        createMockFile(`file${i}.ts`, 10, 10)
-      );
+      const files = Array(5)
+        .fill(null)
+        .map((_, i) => createMockFile(`file${i}.ts`, 10, 10));
 
       const result = calculateOptimalBatchSize(files, 50000, 1);
 
       // Each batch can only have 1 file
       expect(result.batches.length).toBe(5);
-      expect(result.batches.every(b => b.length === 1)).toBe(true);
+      expect(result.batches.every((b) => b.length === 1)).toBe(true);
     });
   });
 });

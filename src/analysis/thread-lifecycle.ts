@@ -31,10 +31,7 @@ export interface ThreadLifecycleAggregationInput {
   skipped?: LifecycleThreadRecord[];
   warnings?: string[];
   inventoryFailed?: boolean;
-  config?: Pick<
-    ReviewConfig,
-    'reviewThreadLifecycleResolveConfidence'
-  >;
+  config?: Pick<ReviewConfig, 'reviewThreadLifecycleResolveConfidence'>;
 }
 
 const DEFAULT_RESOLVE_CONFIDENCE: Record<LifecycleSeverity, number> = {
@@ -45,7 +42,9 @@ const DEFAULT_RESOLVE_CONFIDENCE: Record<LifecycleSeverity, number> = {
 };
 
 export class ThreadLifecycleAggregator {
-  aggregate(input: ThreadLifecycleAggregationInput): ReviewThreadLifecycleResult {
+  aggregate(
+    input: ThreadLifecycleAggregationInput
+  ): ReviewThreadLifecycleResult {
     const plannedProviders = unique(input.plannedProviders);
     const quorumMode: LifecycleQuorumMode =
       plannedProviders.length >= 2 ? 'multi-provider' : 'single-provider';
@@ -106,7 +105,9 @@ export class ThreadLifecycleAggregator {
       const targetVotes = Array.from(
         votes.get(target.targetId)?.values() ?? []
       );
-      const record = (reasonCodes: LifecycleReasonCode[]): LifecycleThreadRecord => ({
+      const record = (
+        reasonCodes: LifecycleReasonCode[]
+      ): LifecycleThreadRecord => ({
         target,
         reasonCodes: unique([
           ...(target.reasonCodes ?? []),
@@ -151,7 +152,8 @@ export class ThreadLifecycleAggregator {
         .map(() => 'outside_review_scope' as LifecycleReasonCode);
       if (
         assignment &&
-        (assignment.scopeStatus !== 'in_scope' || assignedProviders.length === 0)
+        (assignment.scopeStatus !== 'in_scope' ||
+          assignedProviders.length === 0)
       ) {
         result.previousUncertain.push(
           record(
@@ -326,7 +328,11 @@ export class ThreadLifecycleAggregator {
       }
     }
 
-    if (verdict === 'still_valid' && !rationale.trim() && !hasConcreteEvidence(evidence)) {
+    if (
+      verdict === 'still_valid' &&
+      !rationale.trim() &&
+      !hasConcreteEvidence(evidence)
+    ) {
       reasonCodes.push('invalid_resolved_evidence');
     }
 
@@ -343,8 +349,12 @@ export class ThreadLifecycleAggregator {
     };
   }
 
-  private validVerdict(value: string): value is ProviderLifecycleRevalidation['verdict'] {
-    return value === 'resolved' || value === 'still_valid' || value === 'uncertain';
+  private validVerdict(
+    value: string
+  ): value is ProviderLifecycleRevalidation['verdict'] {
+    return (
+      value === 'resolved' || value === 'still_valid' || value === 'uncertain'
+    );
   }
 
   private providerFailures(results: ProviderResult[]): Set<string> {
@@ -367,7 +377,11 @@ export function countPreviousStillValidBySeverity(
   for (const record of lifecycle?.previousStillValid ?? []) {
     if (isLinkedCurrentFinding(record)) continue;
     const severity = record.target.severity;
-    if (severity === 'critical' || severity === 'major' || severity === 'minor') {
+    if (
+      severity === 'critical' ||
+      severity === 'major' ||
+      severity === 'minor'
+    ) {
       counts[severity] += 1;
     }
   }
@@ -384,15 +398,15 @@ export function hasLifecycleUncertainty(
   if (!lifecycle || lifecycle.mode === 'off') return false;
   return Boolean(
     lifecycle.inventoryFailed ||
-      lifecycle.warnings.length > 0 ||
-      lifecycle.previousUncertain.length > 0 ||
-      lifecycle.manualAttention.length > 0 ||
-      lifecycle.mutationSkipped.length > 0 ||
-      lifecycle.mutationFailed.length > 0 ||
-      lifecycle.skipped.some(
-        (record) =>
-          !record.reasonCodes.every((reason) => reason === 'command_dismissed')
-      )
+    lifecycle.warnings.length > 0 ||
+    lifecycle.previousUncertain.length > 0 ||
+    lifecycle.manualAttention.length > 0 ||
+    lifecycle.mutationSkipped.length > 0 ||
+    lifecycle.mutationFailed.length > 0 ||
+    lifecycle.skipped.some(
+      (record) =>
+        !record.reasonCodes.every((reason) => reason === 'command_dismissed')
+    )
   );
 }
 

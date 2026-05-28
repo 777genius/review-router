@@ -128,7 +128,6 @@ describe('PullRequestDescriptionUpdater', () => {
     expect(merged.match(/review-router-summary:start/g)).toHaveLength(1);
   });
 
-
   it('generates file list and walkthrough cohorts', () => {
     const updater = new PullRequestDescriptionUpdater(client, false);
     const block = updater.buildGeneratedBlock(createPR());
@@ -159,7 +158,8 @@ describe('PullRequestDescriptionUpdater', () => {
         deletions: 86,
         files: [
           {
-            filename: 'tvolkova_client/lib/src/protocol/user_profile/user_profile.dart',
+            filename:
+              'tvolkova_client/lib/src/protocol/user_profile/user_profile.dart',
             status: 'modified',
             additions: 12,
             deletions: 0,
@@ -167,7 +167,8 @@ describe('PullRequestDescriptionUpdater', () => {
             patch: '+  bool? hidePaidFeaturesInfo;',
           },
           {
-            filename: 'tvolkova_flutter/lib/admin/users/user_full_info/widgets/hide_paid_features_checkbox.dart',
+            filename:
+              'tvolkova_flutter/lib/admin/users/user_full_info/widgets/hide_paid_features_checkbox.dart',
             status: 'added',
             additions: 36,
             deletions: 0,
@@ -175,15 +176,18 @@ describe('PullRequestDescriptionUpdater', () => {
             patch: '+class HidePaidFeaturesCheckbox extends StatelessWidget {}',
           },
           {
-            filename: 'tvolkova_flutter/lib/app/learning/course_locked_stub.dart',
+            filename:
+              'tvolkova_flutter/lib/app/learning/course_locked_stub.dart',
             status: 'modified',
             additions: 8,
             deletions: 3,
             changes: 11,
-            patch: '+if (profile.hidePaidFeaturesInfo == true) return const SizedBox();',
+            patch:
+              '+if (profile.hidePaidFeaturesInfo == true) return const SizedBox();',
           },
           {
-            filename: 'tvolkova_server/migrations/20260430152122670/definition.json',
+            filename:
+              'tvolkova_server/migrations/20260430152122670/definition.json',
             status: 'added',
             additions: 4214,
             deletions: 0,
@@ -198,7 +202,9 @@ describe('PullRequestDescriptionUpdater', () => {
     expect(block).toContain(
       '- add hide paid features info support to user profile models and protocol types'
     );
-    expect(block).toContain('- add admin user controls for hide paid features info');
+    expect(block).toContain(
+      '- add admin user controls for hide paid features info'
+    );
     expect(block).toContain(
       '- update learning and course screens to respect hide paid features info'
     );

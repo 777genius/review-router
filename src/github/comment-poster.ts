@@ -172,9 +172,7 @@ export class CommentPoster {
       summaryMetadata
     );
     if (staleHead.skippedStale) {
-      logger.warn(
-        'Skipping summary cleanup because the PR head changed'
-      );
+      logger.warn('Skipping summary cleanup because the PR head changed');
       return;
     }
 

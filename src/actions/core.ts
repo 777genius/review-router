@@ -23,7 +23,11 @@ export function setOutput(name: string, value: unknown): void {
 
   if (outputPath) {
     const delimiter = `mpr_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    fs.appendFileSync(outputPath, `${name}<<${delimiter}\n${output}\n${delimiter}\n`, 'utf8');
+    fs.appendFileSync(
+      outputPath,
+      `${name}<<${delimiter}\n${output}\n${delimiter}\n`,
+      'utf8'
+    );
     return;
   }
 
@@ -58,13 +62,19 @@ export function error(message: string | Error): void {
   issueCommand('error', {}, message);
 }
 
-function issueCommand(command: string, properties: CommandProperties, message: string | Error): void {
+function issueCommand(
+  command: string,
+  properties: CommandProperties,
+  message: string | Error
+): void {
   const propertyText = Object.entries(properties)
     .map(([key, value]) => `${key}=${escapeProperty(String(value))}`)
     .join(',');
   const separator = propertyText ? ` ${propertyText}` : '';
 
-  console.log(`::${command}${separator}::${escapeData(toCommandValue(message))}`);
+  console.log(
+    `::${command}${separator}::${escapeData(toCommandValue(message))}`
+  );
 }
 
 function toCommandValue(value: unknown): string {
@@ -80,14 +90,9 @@ function toCommandValue(value: unknown): string {
 }
 
 function escapeData(value: string): string {
-  return value
-    .replace(/%/g, '%25')
-    .replace(/\r/g, '%0D')
-    .replace(/\n/g, '%0A');
+  return value.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
 }
 
 function escapeProperty(value: string): string {
-  return escapeData(value)
-    .replace(/:/g, '%3A')
-    .replace(/,/g, '%2C');
+  return escapeData(value).replace(/:/g, '%3A').replace(/,/g, '%2C');
 }

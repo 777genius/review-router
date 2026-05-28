@@ -54,10 +54,16 @@ export class ValidationDetector {
    * Analyze a code snippet for defensive programming patterns
    * Returns context that can be added to LLM prompts to reduce false positives
    */
-  analyzeDefensivePatterns(code: string, startLine: number = 1): DefensiveProgrammingContext {
+  analyzeDefensivePatterns(
+    code: string,
+    startLine: number = 1
+  ): DefensiveProgrammingContext {
     const lines = code.split('\n');
     const validations: ValidationPattern[] = [];
-    const variables = new Map<string, { initialized: boolean; checkedBeforeUse: boolean; lines: number[] }>();
+    const variables = new Map<
+      string,
+      { initialized: boolean; checkedBeforeUse: boolean; lines: number[] }
+    >();
 
     let hasTryCatch = false;
     let hasErrorReturn = false;
@@ -79,7 +85,9 @@ export class ValidationDetector {
       const trimmed = line.trim();
 
       // Detect typeof checks
-      const typeofMatch = trimmed.match(/typeof\s+(\w+)\s*(!==?|===?)\s*['"](\w+)['"]/);
+      const typeofMatch = trimmed.match(
+        /typeof\s+(\w+)\s*(!==?|===?)\s*['"](\w+)['"]/
+      );
       if (typeofMatch) {
         const [, variable, operator, type] = typeofMatch;
         validations.push({
@@ -98,7 +106,9 @@ export class ValidationDetector {
         /if\s*\(\s*!\s*\w+\s*\)/.test(trimmed) ||
         /\w+\s*==\s*null/.test(trimmed)
       ) {
-        const varMatch = trimmed.match(/(\w+)\s*(!==?|===?)\s*(null|undefined)/);
+        const varMatch = trimmed.match(
+          /(\w+)\s*(!==?|===?)\s*(null|undefined)/
+        );
         validations.push({
           type: 'null_check',
           line: lineNum,
@@ -126,7 +136,9 @@ export class ValidationDetector {
       }
 
       // Detect error returns
-      if (/return\s+(null|undefined|false|'invalid'|"invalid"|-1)/.test(trimmed)) {
+      if (
+        /return\s+(null|undefined|false|'invalid'|"invalid"|-1)/.test(trimmed)
+      ) {
         hasErrorReturn = true;
         validations.push({
           type: 'error_return',
@@ -149,16 +161,15 @@ export class ValidationDetector {
       }
 
       // Detect graceful degradation patterns (line-level)
-      if (
-        /\|\|/.test(trimmed) ||
-        /\?\?/.test(trimmed)
-      ) {
+      if (/\|\|/.test(trimmed) || /\?\?/.test(trimmed)) {
         hasGracefulDegradation = true;
       }
 
       // Detect locking mechanisms (Promise-based locks, mutexes)
       if (
-        /await\s+.*\.acquire|lockPromise|acquireLock|releaseLock|mutex/.test(trimmed) ||
+        /await\s+.*\.acquire|lockPromise|acquireLock|releaseLock|mutex/.test(
+          trimmed
+        ) ||
         /locks\.get|locks\.set|locks\.delete/.test(trimmed)
       ) {
         validations.push({
@@ -169,7 +180,10 @@ export class ValidationDetector {
       }
 
       // Detect timeout enforcement (Promise.race with timeout)
-      if (/Promise\.race\s*\(/.test(trimmed) && /timeout|setTimeout/i.test(code.slice(i * 100, (i + 10) * 100))) {
+      if (
+        /Promise\.race\s*\(/.test(trimmed) &&
+        /timeout|setTimeout/i.test(code.slice(i * 100, (i + 10) * 100))
+      ) {
         validations.push({
           type: 'timeout_enforcement',
           line: lineNum,
@@ -179,7 +193,9 @@ export class ValidationDetector {
 
       // Detect parameter validation at function entry
       // Check for validation patterns: if (condition) throw Error
-      const nextFewLines = lines.slice(i, Math.min(i + 4, lines.length)).join('\n');
+      const nextFewLines = lines
+        .slice(i, Math.min(i + 4, lines.length))
+        .join('\n');
       if (
         /if\s*\([^)]*[<>!=]/.test(trimmed) &&
         /throw\s+(new\s+)?Error/.test(nextFewLines)
@@ -204,7 +220,9 @@ export class ValidationDetector {
 
       // Detect sanitization/encoding functions
       if (
-        /encodeURI|encodeURIComponent|escape|sanitize|normalize/.test(trimmed) ||
+        /encodeURI|encodeURIComponent|escape|sanitize|normalize/.test(
+          trimmed
+        ) ||
         /\.replace\(\/.*\/g,/.test(trimmed) // String replacement for sanitization
       ) {
         validations.push({
@@ -217,8 +235,13 @@ export class ValidationDetector {
       // Detect regex with try-catch protection (ReDoS protection)
       if (/new\s+RegExp\(/.test(trimmed)) {
         // Check if this is inside a try-catch block
-        const surroundingLines = lines.slice(Math.max(0, i - 5), Math.min(lines.length, i + 5)).join('\n');
-        if (/try\s*{/.test(surroundingLines) && /catch/.test(surroundingLines)) {
+        const surroundingLines = lines
+          .slice(Math.max(0, i - 5), Math.min(lines.length, i + 5))
+          .join('\n');
+        if (
+          /try\s*{/.test(surroundingLines) &&
+          /catch/.test(surroundingLines)
+        ) {
           validations.push({
             type: 'regex_try_catch',
             line: lineNum,
@@ -237,12 +260,16 @@ export class ValidationDetector {
         validations.push({
           type: 'test_intentional_inconsistency',
           line: lineNum,
-          description: 'Test file: may intentionally use inconsistent data to test error paths',
+          description:
+            'Test file: may intentionally use inconsistent data to test error paths',
         });
       }
 
       // Detect lint auto-fixable issues (like unused variables that follow conventions)
-      if (/^\/\/\s*eslint-disable/.test(trimmed) || /^\/\/\s*@ts-ignore/.test(trimmed)) {
+      if (
+        /^\/\/\s*eslint-disable/.test(trimmed) ||
+        /^\/\/\s*@ts-ignore/.test(trimmed)
+      ) {
         validations.push({
           type: 'lint_auto_fixable',
           line: lineNum,
@@ -273,7 +300,10 @@ export class ValidationDetector {
   }
 
   private trackVariable(
-    variables: Map<string, { initialized: boolean; checkedBeforeUse: boolean; lines: number[] }>,
+    variables: Map<
+      string,
+      { initialized: boolean; checkedBeforeUse: boolean; lines: number[] }
+    >,
     varName: string,
     line: number,
     checked: boolean
@@ -313,31 +343,39 @@ export class ValidationDetector {
 
     for (const [type, patterns] of byType) {
       const typeName = type.replace(/_/g, ' ');
-      parts.push(`\n**${typeName.charAt(0).toUpperCase() + typeName.slice(1)}** (${patterns.length}):`);
+      parts.push(
+        `\n**${typeName.charAt(0).toUpperCase() + typeName.slice(1)}** (${patterns.length}):`
+      );
       for (const pattern of patterns) {
         parts.push(`- Line ${pattern.line}: ${pattern.description}`);
       }
     }
 
     if (context.errorHandling.hasTryCatch) {
-      parts.push('\n**Error Handling**: Code uses try-catch for exception handling');
+      parts.push(
+        '\n**Error Handling**: Code uses try-catch for exception handling'
+      );
     }
 
     if (context.errorHandling.hasGracefulDegradation) {
-      parts.push('**Graceful Degradation**: Code has fallback logic for error cases');
+      parts.push(
+        '**Graceful Degradation**: Code has fallback logic for error cases'
+      );
     }
 
     if (context.dataFlow.length > 0) {
       parts.push('\n**Data Flow Tracking**:');
       for (const flow of context.dataFlow) {
         if (flow.checkedBeforeUse) {
-          parts.push(`- ${flow.variable}: Validated before use (lines ${flow.lines.join(', ')})`);
+          parts.push(
+            `- ${flow.variable}: Validated before use (lines ${flow.lines.join(', ')})`
+          );
         }
       }
     }
 
     parts.push(
-      '\n**Reviewer Note**: When flagging issues, verify these defensive patterns don\'t already address the concern.'
+      "\n**Reviewer Note**: When flagging issues, verify these defensive patterns don't already address the concern."
     );
 
     return parts.join('\n');
@@ -354,7 +392,9 @@ export class ValidationDetector {
   ): boolean {
     // Check if there's validation near the target line
     const nearbyValidations = context.validations.filter(
-      v => Math.abs(v.line - targetLine) <= 5 && (!variable || v.variable === variable)
+      (v) =>
+        Math.abs(v.line - targetLine) <= 5 &&
+        (!variable || v.variable === variable)
     );
 
     return nearbyValidations.length > 0;

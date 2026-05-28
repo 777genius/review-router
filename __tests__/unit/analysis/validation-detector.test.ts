@@ -21,7 +21,7 @@ describe('ValidationDetector', () => {
         type: 'type_check',
         line: 2,
         variable: 'value',
-        description: "Validates value is not a string",
+        description: 'Validates value is not a string',
       });
     });
 
@@ -34,7 +34,9 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v => v.type === 'null_check')).toBe(true);
+      expect(result.validations.some((v) => v.type === 'null_check')).toBe(
+        true
+      );
     });
 
     test('detects error returns', () => {
@@ -49,7 +51,9 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v => v.type === 'error_return')).toBe(true);
+      expect(result.validations.some((v) => v.type === 'error_return')).toBe(
+        true
+      );
       expect(result.errorHandling.hasErrorReturn).toBe(true);
     });
 
@@ -75,7 +79,9 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v => v.type === 'existence_check')).toBe(true);
+      expect(result.validations.some((v) => v.type === 'existence_check')).toBe(
+        true
+      );
     });
 
     test('detects graceful degradation', () => {
@@ -102,7 +108,9 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v => v.type === 'range_check')).toBe(true);
+      expect(result.validations.some((v) => v.type === 'range_check')).toBe(
+        true
+      );
     });
 
     test('detects locking mechanisms', () => {
@@ -117,7 +125,7 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v => v.type === 'locking')).toBe(true);
+      expect(result.validations.some((v) => v.type === 'locking')).toBe(true);
     });
 
     test('detects timeout enforcement with Promise.race', () => {
@@ -130,7 +138,9 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v => v.type === 'timeout_enforcement')).toBe(true);
+      expect(
+        result.validations.some((v) => v.type === 'timeout_enforcement')
+      ).toBe(true);
     });
 
     test('detects parameter validation', () => {
@@ -142,7 +152,9 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v => v.type === 'param_validation')).toBe(true);
+      expect(
+        result.validations.some((v) => v.type === 'param_validation')
+      ).toBe(true);
     });
 
     test('detects intentionally unused parameters', () => {
@@ -154,9 +166,12 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v =>
-        v.type === 'intentionally_unused' && v.variable === '_timeoutMs'
-      )).toBe(true);
+      expect(
+        result.validations.some(
+          (v) =>
+            v.type === 'intentionally_unused' && v.variable === '_timeoutMs'
+        )
+      ).toBe(true);
     });
 
     test('detects sanitization functions', () => {
@@ -168,7 +183,10 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.filter(v => v.type === 'sanitization_function').length).toBeGreaterThanOrEqual(2);
+      expect(
+        result.validations.filter((v) => v.type === 'sanitization_function')
+          .length
+      ).toBeGreaterThanOrEqual(2);
     });
 
     test('detects regex with try-catch protection', () => {
@@ -183,7 +201,9 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v => v.type === 'regex_try_catch')).toBe(true);
+      expect(result.validations.some((v) => v.type === 'regex_try_catch')).toBe(
+        true
+      );
     });
 
     test('detects test file patterns', () => {
@@ -196,7 +216,11 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v => v.type === 'test_intentional_inconsistency')).toBe(true);
+      expect(
+        result.validations.some(
+          (v) => v.type === 'test_intentional_inconsistency'
+        )
+      ).toBe(true);
     });
 
     test('detects lint disable comments', () => {
@@ -207,7 +231,9 @@ describe('ValidationDetector', () => {
 
       const result = detector.analyzeDefensivePatterns(code, 1);
 
-      expect(result.validations.some(v => v.type === 'lint_auto_fixable')).toBe(true);
+      expect(
+        result.validations.some((v) => v.type === 'lint_auto_fixable')
+      ).toBe(true);
     });
   });
 
@@ -291,9 +317,11 @@ describe('ValidationDetector', () => {
       const context = detector.analyzeDefensivePatterns(code, 1);
 
       // Should detect typeof check at line 3
-      expect(context.validations.some(v =>
-        v.type === 'type_check' && v.variable === 'value'
-      )).toBe(true);
+      expect(
+        context.validations.some(
+          (v) => v.type === 'type_check' && v.variable === 'value'
+        )
+      ).toBe(true);
 
       // Should detect error return
       expect(context.errorHandling.hasErrorReturn).toBe(true);
@@ -323,7 +351,9 @@ describe('ValidationDetector', () => {
       expect(context.errorHandling.hasTryCatch).toBe(true);
 
       // Should detect existence check (mkdir)
-      expect(context.validations.some(v => v.type === 'existence_check')).toBe(true);
+      expect(
+        context.validations.some((v) => v.type === 'existence_check')
+      ).toBe(true);
 
       // Should detect error return
       expect(context.errorHandling.hasErrorReturn).toBe(true);

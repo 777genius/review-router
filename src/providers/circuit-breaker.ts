@@ -80,8 +80,10 @@ export class CircuitBreaker {
     private readonly storage = new CacheStorage(),
     options: CircuitBreakerOptions = {}
   ) {
-    this.failureThreshold = options.failureThreshold ?? CircuitBreaker.DEFAULT_FAILURE_THRESHOLD;
-    this.openDurationMs = options.openDurationMs ?? CircuitBreaker.DEFAULT_OPEN_DURATION_MS;
+    this.failureThreshold =
+      options.failureThreshold ?? CircuitBreaker.DEFAULT_FAILURE_THRESHOLD;
+    this.openDurationMs =
+      options.openDurationMs ?? CircuitBreaker.DEFAULT_OPEN_DURATION_MS;
   }
 
   /**
@@ -109,12 +111,15 @@ export class CircuitBreaker {
       let state = await this.load(providerId);
 
       if (state.state === 'open') {
-        const expired = state.openedAt && Date.now() - state.openedAt > this.openDurationMs;
+        const expired =
+          state.openedAt && Date.now() - state.openedAt > this.openDurationMs;
         if (expired) {
           // Cooldown expired: transition to half-open for testing
           state = { state: 'half_open', failures: 0, probeInFlight: false };
           await this.setState(providerId, state);
-          logger.debug(`Circuit transitioned to half-open for ${providerId} after cooldown`);
+          logger.debug(
+            `Circuit transitioned to half-open for ${providerId} after cooldown`
+          );
           // fall through to half_open handling below to reserve the probe
         }
         if (state.state === 'open') {
@@ -160,7 +165,9 @@ export class CircuitBreaker {
       });
 
       if (state.state !== 'closed') {
-        logger.info(`Circuit closed for ${providerId} after successful recovery (was ${state.state})`);
+        logger.info(
+          `Circuit closed for ${providerId} after successful recovery (was ${state.state})`
+        );
       }
     });
   }
@@ -191,21 +198,30 @@ export class CircuitBreaker {
           openedAt: Date.now(),
           probeInFlight: false,
         });
-        logger.warn(`Circuit re-opened for ${providerId} after half-open probe failed (${failures} total failures)`);
+        logger.warn(
+          `Circuit re-opened for ${providerId} after half-open probe failed (${failures} total failures)`
+        );
         return;
       }
 
       if (failures >= this.failureThreshold) {
         // Threshold reached: open circuit to start cooldown
-        await this.setState(providerId, { state: 'open', failures, openedAt: Date.now(), probeInFlight: false });
+        await this.setState(providerId, {
+          state: 'open',
+          failures,
+          openedAt: Date.now(),
+          probeInFlight: false,
+        });
         logger.warn(
           `Circuit opened for ${providerId} after ${failures} consecutive failures ` +
-          `(threshold: ${this.failureThreshold}, cooldown: ${this.openDurationMs}ms)`
+            `(threshold: ${this.failureThreshold}, cooldown: ${this.openDurationMs}ms)`
         );
       } else {
         // Still under threshold: stay closed but increment counter
         await this.setState(providerId, { state: 'closed', failures });
-        logger.debug(`Circuit failure recorded for ${providerId}: ${failures}/${this.failureThreshold}`);
+        logger.debug(
+          `Circuit failure recorded for ${providerId}: ${failures}/${this.failureThreshold}`
+        );
       }
     });
   }
@@ -215,7 +231,9 @@ export class CircuitBreaker {
 
     // Try in-memory first if storage is known to be unavailable
     if (!this.storageAvailable && this.inMemoryState.has(key)) {
-      logger.debug(`Using in-memory state for ${providerId} (storage unavailable)`);
+      logger.debug(
+        `Using in-memory state for ${providerId} (storage unavailable)`
+      );
       return this.inMemoryState.get(key)!;
     }
 
@@ -236,7 +254,10 @@ export class CircuitBreaker {
         this.storageAvailable = true; // Storage is healthy
         return parsed;
       } catch (parseError) {
-        logger.warn(`Failed to parse circuit state for ${providerId}`, parseError as Error);
+        logger.warn(
+          `Failed to parse circuit state for ${providerId}`,
+          parseError as Error
+        );
         // Try in-memory fallback
         if (this.inMemoryState.has(key)) {
           return this.inMemoryState.get(key)!;
@@ -246,7 +267,10 @@ export class CircuitBreaker {
     } catch (storageError) {
       // Storage read failure - mark as unavailable and use in-memory fallback
       this.storageAvailable = false;
-      logger.warn(`Storage read failed for circuit ${providerId}, using in-memory fallback`, storageError as Error);
+      logger.warn(
+        `Storage read failed for circuit ${providerId}, using in-memory fallback`,
+        storageError as Error
+      );
 
       if (this.inMemoryState.has(key)) {
         return this.inMemoryState.get(key)!;
@@ -255,7 +279,10 @@ export class CircuitBreaker {
     }
   }
 
-  private async setState(providerId: string, state: CircuitData): Promise<void> {
+  private async setState(
+    providerId: string,
+    state: CircuitData
+  ): Promise<void> {
     const key = this.key(providerId);
 
     // Always update in-memory state first (ensures immediate consistency)
@@ -289,10 +316,11 @@ export class CircuitBreaker {
    */
   private withLock<T>(providerId: string, fn: () => Promise<T>): Promise<T> {
     const lockKey = this.key(providerId);
-    const previous = this.locks.get(lockKey)?.catch(() => undefined) ?? Promise.resolve();
+    const previous =
+      this.locks.get(lockKey)?.catch(() => undefined) ?? Promise.resolve();
 
     let release!: () => void;
-    const current = new Promise<void>(resolve => (release = resolve));
+    const current = new Promise<void>((resolve) => (release = resolve));
     const tail = previous.then(() => current);
     this.locks.set(lockKey, tail);
 

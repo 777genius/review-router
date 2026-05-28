@@ -74,7 +74,10 @@ export function isSuggestionLineValid(
  * @param file - FileChange object with status and additions count
  * @returns true if file has no added lines (suggestions impossible)
  */
-export function isDeletionOnlyFile(file: { status?: string; additions?: number }): boolean {
+export function isDeletionOnlyFile(file: {
+  status?: string;
+  additions?: number;
+}): boolean {
   return file.status === 'removed' || (file.additions ?? 0) === 0;
 }
 
@@ -120,7 +123,10 @@ export function validateSuggestionRange(
   // Check range length (inclusive: endLine - startLine + 1)
   const rangeLength = endLine - startLine + 1;
   if (rangeLength > 50) {
-    return { isValid: false, reason: `Range too long: ${rangeLength} lines (max 50)` };
+    return {
+      isValid: false,
+      reason: `Range too long: ${rangeLength} lines (max 50)`,
+    };
   }
 
   // Get line-to-position mapping
@@ -145,7 +151,10 @@ export function validateSuggestionRange(
   // Verify positions are consecutive
   for (let i = 1; i < positions.length; i++) {
     if (positions[i] !== positions[i - 1] + 1) {
-      return { isValid: false, reason: 'Range contains gaps (non-consecutive lines)' };
+      return {
+        isValid: false,
+        reason: 'Range contains gaps (non-consecutive lines)',
+      };
     }
   }
 
@@ -161,6 +170,6 @@ export function validateSuggestionRange(
   return {
     isValid: true,
     startPosition,
-    endPosition
+    endPosition,
   };
 }

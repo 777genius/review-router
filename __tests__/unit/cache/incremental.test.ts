@@ -47,14 +47,16 @@ describe('IncrementalReviewer', () => {
     });
 
     it('returns false when cache is expired', async () => {
-      const oldTimestamp = Date.now() - (8 * 24 * 60 * 60 * 1000); // 8 days ago
-      mockStorage.read.mockResolvedValue(JSON.stringify({
-        prNumber: 1,
-        lastReviewedCommit: 'old-sha',
-        timestamp: oldTimestamp,
-        findings: [],
-        reviewSummary: 'Old review',
-      }));
+      const oldTimestamp = Date.now() - 8 * 24 * 60 * 60 * 1000; // 8 days ago
+      mockStorage.read.mockResolvedValue(
+        JSON.stringify({
+          prNumber: 1,
+          lastReviewedCommit: 'old-sha',
+          timestamp: oldTimestamp,
+          findings: [],
+          reviewSummary: 'Old review',
+        })
+      );
 
       const pr: PRContext = createMockPR();
       const result = await reviewer.shouldUseIncremental(pr);
@@ -63,13 +65,15 @@ describe('IncrementalReviewer', () => {
     });
 
     it('returns false when PR head SHA unchanged', async () => {
-      mockStorage.read.mockResolvedValue(JSON.stringify({
-        prNumber: 1,
-        lastReviewedCommit: 'current-head-sha',
-        timestamp: Date.now(),
-        findings: [],
-        reviewSummary: 'Previous review',
-      }));
+      mockStorage.read.mockResolvedValue(
+        JSON.stringify({
+          prNumber: 1,
+          lastReviewedCommit: 'current-head-sha',
+          timestamp: Date.now(),
+          findings: [],
+          reviewSummary: 'Previous review',
+        })
+      );
 
       const pr: PRContext = createMockPR({ headSha: 'current-head-sha' });
       const result = await reviewer.shouldUseIncremental(pr);
@@ -78,13 +82,15 @@ describe('IncrementalReviewer', () => {
     });
 
     it('returns true when incremental review is possible', async () => {
-      mockStorage.read.mockResolvedValue(JSON.stringify({
-        prNumber: 1,
-        lastReviewedCommit: 'old-sha',
-        timestamp: Date.now(),
-        findings: [],
-        reviewSummary: 'Previous review',
-      }));
+      mockStorage.read.mockResolvedValue(
+        JSON.stringify({
+          prNumber: 1,
+          lastReviewedCommit: 'old-sha',
+          timestamp: Date.now(),
+          findings: [],
+          reviewSummary: 'Previous review',
+        })
+      );
 
       const pr: PRContext = createMockPR({ headSha: 'new-sha' });
       const result = await reviewer.shouldUseIncremental(pr);
@@ -201,12 +207,16 @@ describe('IncrementalReviewer', () => {
         createMockFile({ filename: 'changed.ts' }),
       ];
 
-      const result = reviewer.mergeFindings(previousFindings, newFindings, changedFiles);
+      const result = reviewer.mergeFindings(
+        previousFindings,
+        newFindings,
+        changedFiles
+      );
 
       expect(result).toHaveLength(2);
-      expect(result.find(f => f.file === 'unchanged.ts')).toBeDefined();
-      expect(result.find(f => f.title === 'New Issue')).toBeDefined();
-      expect(result.find(f => f.title === 'Issue 2')).toBeUndefined();
+      expect(result.find((f) => f.file === 'unchanged.ts')).toBeDefined();
+      expect(result.find((f) => f.title === 'New Issue')).toBeDefined();
+      expect(result.find((f) => f.title === 'Issue 2')).toBeUndefined();
     });
 
     it('replaces findings for changed files', () => {
@@ -220,7 +230,11 @@ describe('IncrementalReviewer', () => {
         createMockFile({ filename: 'file.ts' }),
       ];
 
-      const result = reviewer.mergeFindings(previousFindings, newFindings, changedFiles);
+      const result = reviewer.mergeFindings(
+        previousFindings,
+        newFindings,
+        changedFiles
+      );
 
       expect(result).toHaveLength(1);
       expect(result[0].title).toBe('New Finding');
@@ -228,14 +242,16 @@ describe('IncrementalReviewer', () => {
 
     it('handles empty previous findings', () => {
       const previousFindings: Finding[] = [];
-      const newFindings: Finding[] = [
-        createMockFinding({ file: 'file.ts' }),
-      ];
+      const newFindings: Finding[] = [createMockFinding({ file: 'file.ts' })];
       const changedFiles: FileChange[] = [
         createMockFile({ filename: 'file.ts' }),
       ];
 
-      const result = reviewer.mergeFindings(previousFindings, newFindings, changedFiles);
+      const result = reviewer.mergeFindings(
+        previousFindings,
+        newFindings,
+        changedFiles
+      );
 
       expect(result).toEqual(newFindings);
     });
@@ -250,7 +266,11 @@ describe('IncrementalReviewer', () => {
         createMockFile({ filename: 'changed.ts' }),
       ];
 
-      const result = reviewer.mergeFindings(previousFindings, newFindings, changedFiles);
+      const result = reviewer.mergeFindings(
+        previousFindings,
+        newFindings,
+        changedFiles
+      );
 
       expect(result).toHaveLength(1);
       expect(result[0].file).toBe('unchanged.ts');
@@ -262,7 +282,10 @@ describe('IncrementalReviewer', () => {
       const result = reviewer.generateIncrementalSummary(
         'Previous summary',
         'New summary',
-        [createMockFile({ filename: 'file1.ts' }), createMockFile({ filename: 'file2.ts' })],
+        [
+          createMockFile({ filename: 'file1.ts' }),
+          createMockFile({ filename: 'file2.ts' }),
+        ],
         'abc1234567890',
         'def9876543210'
       );

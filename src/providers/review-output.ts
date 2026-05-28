@@ -182,7 +182,7 @@ export function parseReviewOutputLenient(content: string): ParsedReviewOutput {
   try {
     const parsed = parseReviewJson(content, 'provider');
     const findings = Array.isArray(parsed)
-      ? parsed as Finding[]
+      ? (parsed as Finding[])
       : (((parsed as { findings?: unknown })?.findings || []) as Finding[]);
     const rawRevalidations = Array.isArray(parsed)
       ? []
@@ -220,11 +220,12 @@ function parseRevalidationsLenient(
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
     const raw = item as Record<string, unknown>;
-    const targetId = typeof raw.targetId === 'string'
-      ? raw.targetId
-      : typeof raw.target_id === 'string'
-        ? raw.target_id
-        : '';
+    const targetId =
+      typeof raw.targetId === 'string'
+        ? raw.targetId
+        : typeof raw.target_id === 'string'
+          ? raw.target_id
+          : '';
     const verdict = String(raw.verdict || '');
     if (
       verdict !== 'resolved' &&
@@ -254,9 +255,7 @@ function parseRevalidationsLenient(
   return revalidations;
 }
 
-function parseRevalidationEvidence(
-  value: unknown
-): Array<{
+function parseRevalidationEvidence(value: unknown): Array<{
   path: string;
   startLine?: number;
   endLine?: number;

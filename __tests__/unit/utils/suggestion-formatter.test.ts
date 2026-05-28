@@ -69,13 +69,17 @@ describe('formatSuggestionBlock', () => {
   it('handles multi-line content', () => {
     const content = 'function test() {\n  return true;\n}';
     const result = formatSuggestionBlock(content);
-    expect(result).toBe('```suggestion\nfunction test() {\n  return true;\n}\n```');
+    expect(result).toBe(
+      '```suggestion\nfunction test() {\n  return true;\n}\n```'
+    );
   });
 
   it('handles content with mixed backtick sequences', () => {
     const content = 'const a = `x`;\nconst b = ```y```;';
     const result = formatSuggestionBlock(content);
     // Max backticks is 3, so needs 4
-    expect(result).toBe('````suggestion\nconst a = `x`;\nconst b = ```y```;\n````');
+    expect(result).toBe(
+      '````suggestion\nconst a = `x`;\nconst b = ```y```;\n````'
+    );
   });
 });

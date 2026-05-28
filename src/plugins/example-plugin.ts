@@ -32,13 +32,18 @@ const metadata: PluginMetadata = {
 class CustomProvider extends Provider {
   model: string;
 
-  constructor(model: string, private readonly apiKey: string) {
+  constructor(
+    model: string,
+    private readonly apiKey: string
+  ) {
     super(model); // Call parent constructor with provider name
     this.model = model;
   }
 
   async review(prompt: string, timeoutMs: number): Promise<ReviewResult> {
-    logger.info(`Custom provider ${this.model} reviewing code (timeout: ${timeoutMs}ms)`);
+    logger.info(
+      `Custom provider ${this.model} reviewing code (timeout: ${timeoutMs}ms)`
+    );
 
     try {
       // TODO: Implement your custom LLM API call here

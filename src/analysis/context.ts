@@ -19,7 +19,8 @@ export class ContextRetriever {
 
       contexts.push({
         file: file.filename,
-        relationship: downstreamConsumers.length > 0 ? 'dependency' : 'consumer',
+        relationship:
+          downstreamConsumers.length > 0 ? 'dependency' : 'consumer',
         affectedCode: snippets,
         impactLevel: 'medium',
         downstreamConsumers,
@@ -33,7 +34,7 @@ export class ContextRetriever {
     const added = mapAddedLines(file.patch);
     if (added.length === 0) return [];
 
-    return added.map(line => ({
+    return added.map((line) => ({
       filename: file.filename,
       startLine: line.line,
       endLine: line.line,
@@ -44,7 +45,10 @@ export class ContextRetriever {
   private extractImports(patch?: string): string[] {
     if (!patch) return [];
     const imports: string[] = [];
-    const regexes = [/import .*?from ['"](.+?)['"]/, /require\\(['"](.+?)['"]\\)/];
+    const regexes = [
+      /import .*?from ['"](.+?)['"]/,
+      /require\\(['"](.+?)['"]\\)/,
+    ];
 
     for (const raw of patch.split('\n')) {
       if (!raw.startsWith('+')) continue;
@@ -69,7 +73,9 @@ export class ContextRetriever {
     }
 
     const dependencies = this.graph.getDependencies(filename);
-    logger.debug(`Graph-based import extraction for ${filename}: ${dependencies.length} imports`);
+    logger.debug(
+      `Graph-based import extraction for ${filename}: ${dependencies.length} imports`
+    );
     return dependencies;
   }
 

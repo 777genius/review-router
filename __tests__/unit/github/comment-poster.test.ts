@@ -111,7 +111,10 @@ describe('CommentPoster', () => {
         data: [
           { id: 11, body: oldBody },
           { id: 12, body: newerBody },
-          { id: 13, body: '<!-- review-router-inline-fallback -->\n# fallback' },
+          {
+            id: 13,
+            body: '<!-- review-router-inline-fallback -->\n# fallback',
+          },
           { id: 14, body: 'human comment' },
         ],
       });

@@ -29,14 +29,17 @@ function getRootNode(tree: Parser.Tree): Parser.SyntaxNode | null {
  * @param language - The language to parse (typescript, javascript, python, go)
  * @returns Validation result with error details or skip status
  */
-export function validateSyntax(code: string, language: Language): SyntaxValidationResult {
+export function validateSyntax(
+  code: string,
+  language: Language
+): SyntaxValidationResult {
   // Handle unsupported languages
   if (language === 'unknown' || language === 'rust') {
     return {
       isValid: true,
       skipped: true,
       reason: 'Unsupported language',
-      errors: []
+      errors: [],
     };
   }
 
@@ -44,12 +47,14 @@ export function validateSyntax(code: string, language: Language): SyntaxValidati
   const parser = getParser(language);
   if (!parser) {
     debugSyntax(`parser unavailable for ${language}`);
-    return validateSyntaxFallback(code, language) || {
-      isValid: true,
-      skipped: true,
-      reason: 'Parser not available',
-      errors: []
-    };
+    return (
+      validateSyntaxFallback(code, language) || {
+        isValid: true,
+        skipped: true,
+        reason: 'Parser not available',
+        errors: [],
+      }
+    );
   }
 
   let tree: Parser.Tree;
@@ -57,23 +62,27 @@ export function validateSyntax(code: string, language: Language): SyntaxValidati
     tree = parser.parse(code);
   } catch (error) {
     debugSyntax(`parser failed for ${language}: ${(error as Error).message}`);
-    return validateSyntaxFallback(code, language) || {
-      isValid: true,
-      skipped: true,
-      reason: `Parser failed: ${(error as Error).message}`,
-      errors: []
-    };
+    return (
+      validateSyntaxFallback(code, language) || {
+        isValid: true,
+        skipped: true,
+        reason: `Parser failed: ${(error as Error).message}`,
+        errors: [],
+      }
+    );
   }
 
   const rootNode = getRootNode(tree);
   if (!rootNode) {
     debugSyntax(`parser returned no root node for ${language}`);
-    return validateSyntaxFallback(code, language) || {
-      isValid: true,
-      skipped: true,
-      reason: 'Parser returned no root node',
-      errors: []
-    };
+    return (
+      validateSyntaxFallback(code, language) || {
+        isValid: true,
+        skipped: true,
+        reason: 'Parser returned no root node',
+        errors: [],
+      }
+    );
   }
 
   const errors: Array<{
@@ -90,7 +99,7 @@ export function validateSyntax(code: string, language: Language): SyntaxValidati
         type: 'ERROR',
         line: node.startPosition.row + 1, // 1-indexed
         column: node.startPosition.column + 1, // 1-indexed
-        text: node.text || undefined
+        text: node.text || undefined,
       });
     }
 
@@ -100,7 +109,7 @@ export function validateSyntax(code: string, language: Language): SyntaxValidati
         type: 'MISSING',
         line: node.startPosition.row + 1,
         column: node.startPosition.column + 1,
-        text: node.text || undefined
+        text: node.text || undefined,
       });
     }
 
@@ -117,7 +126,7 @@ export function validateSyntax(code: string, language: Language): SyntaxValidati
 
   return {
     isValid: errors.length === 0,
-    errors
+    errors,
   };
 }
 
@@ -128,7 +137,10 @@ function debugSyntax(message: string): void {
   }
 }
 
-function validateSyntaxFallback(code: string, language: Language): SyntaxValidationResult | null {
+function validateSyntaxFallback(
+  code: string,
+  language: Language
+): SyntaxValidationResult | null {
   if (language === 'unknown' || language === 'rust') {
     return null;
   }
@@ -146,27 +158,38 @@ function validateSyntaxFallback(code: string, language: Language): SyntaxValidat
 
   return {
     isValid: errors.length === 0,
-    errors
+    errors,
   };
 }
 
-function findIncompleteExpression(code: string, language: Language): SyntaxValidationResult['errors'][number] | null {
+function findIncompleteExpression(
+  code: string,
+  language: Language
+): SyntaxValidationResult['errors'][number] | null {
   const trimmed = code.trimEnd();
   if (!trimmed) {
     return null;
   }
 
   if (hasIncompleteTrailingCharacter(trimmed)) {
-    return makeError(code, Math.max(0, trimmed.length - 1), trimmed.endsWith('{') || trimmed.endsWith('(') ? 'MISSING' : 'ERROR');
+    return makeError(
+      code,
+      Math.max(0, trimmed.length - 1),
+      trimmed.endsWith('{') || trimmed.endsWith('(') ? 'MISSING' : 'ERROR'
+    );
   }
 
   if (language === 'typescript' || language === 'javascript') {
-    const duplicateDeclaration = code.match(/\b(?:const|let|var)\b[^;\n]*\s+\b(?:const|let|var)\b/);
+    const duplicateDeclaration = code.match(
+      /\b(?:const|let|var)\b[^;\n]*\s+\b(?:const|let|var)\b/
+    );
     if (duplicateDeclaration?.index !== undefined) {
       return makeError(code, duplicateDeclaration.index, 'ERROR');
     }
 
-    const assignmentBeforeStatement = code.match(/=\s*\n\s*(?:return|const|let|var|})/);
+    const assignmentBeforeStatement = code.match(
+      /=\s*\n\s*(?:return|const|let|var|})/
+    );
     if (assignmentBeforeStatement?.index !== undefined) {
       return makeError(code, assignmentBeforeStatement.index, 'ERROR');
     }
@@ -177,10 +200,14 @@ function findIncompleteExpression(code: string, language: Language): SyntaxValid
 
 function hasIncompleteTrailingCharacter(value: string): boolean {
   const lastCharacter = value[value.length - 1];
-  return ['=', '+', '-', '*', '/', '%', ',', '(', '{', '['].includes(lastCharacter);
+  return ['=', '+', '-', '*', '/', '%', ',', '(', '{', '['].includes(
+    lastCharacter
+  );
 }
 
-function findDelimiterError(code: string): SyntaxValidationResult['errors'][number] | null {
+function findDelimiterError(
+  code: string
+): SyntaxValidationResult['errors'][number] | null {
   const stack: Array<{ char: string; index: number }> = [];
   const pairs: Record<string, string> = { ')': '(', '}': '{', ']': '[' };
   let quote: string | null = null;
@@ -239,6 +266,6 @@ function makeError(
     type,
     line: lines.length,
     column: lines[lines.length - 1].length + 1,
-    text: code.trim() || undefined
+    text: code.trim() || undefined,
   };
 }

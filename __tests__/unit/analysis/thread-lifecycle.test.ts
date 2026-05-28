@@ -520,10 +520,12 @@ describe('ThreadLifecycleAggregator', () => {
       currentFindings: [],
     });
 
-    expect(lifecycle.resolvedCandidates.map((record) => record.target.targetId))
-      .toEqual(['rrt_target_1']);
-    expect(lifecycle.previousUncertain.map((record) => record.target.targetId))
-      .toEqual(['rrt_target_2']);
+    expect(
+      lifecycle.resolvedCandidates.map((record) => record.target.targetId)
+    ).toEqual(['rrt_target_1']);
+    expect(
+      lifecycle.previousUncertain.map((record) => record.target.targetId)
+    ).toEqual(['rrt_target_2']);
   });
 
   it('ignores a resolved vote whose fingerprint does not match the target', () => {

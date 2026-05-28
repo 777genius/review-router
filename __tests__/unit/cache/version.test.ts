@@ -126,7 +126,10 @@ describe('Cache Versioning', () => {
         data,
       };
 
-      const result = unversionCache<typeof data>(JSON.stringify(cached), maxAge);
+      const result = unversionCache<typeof data>(
+        JSON.stringify(cached),
+        maxAge
+      );
 
       expect(result).toBeNull();
     });

@@ -80,27 +80,32 @@ export class PluginLoader {
 
     // Fail fast with explicit validation - must be exactly 'true' (case-sensitive)
     if (securityAcknowledged !== 'true') {
-      const actualValue = securityAcknowledged === undefined ? 'undefined' :
-                         securityAcknowledged === '' ? 'empty string' :
-                         `"${securityAcknowledged}"`;
+      const actualValue =
+        securityAcknowledged === undefined
+          ? 'undefined'
+          : securityAcknowledged === ''
+            ? 'empty string'
+            : `"${securityAcknowledged}"`;
 
       logger.error(
         'Plugin loading BLOCKED - Security acknowledgment required. ' +
-        'Plugins execute arbitrary code with full system access and no sandboxing. ' +
-        `Current PLUGIN_SECURITY_ACKNOWLEDGED value: ${actualValue}. ` +
-        'Set PLUGIN_SECURITY_ACKNOWLEDGED=true environment variable ONLY if you: ' +
-        '1. Understand the security risks, ' +
-        '2. Have reviewed all plugin code, ' +
-        '3. Are running in a trusted, private environment.'
+          'Plugins execute arbitrary code with full system access and no sandboxing. ' +
+          `Current PLUGIN_SECURITY_ACKNOWLEDGED value: ${actualValue}. ` +
+          'Set PLUGIN_SECURITY_ACKNOWLEDGED=true environment variable ONLY if you: ' +
+          '1. Understand the security risks, ' +
+          '2. Have reviewed all plugin code, ' +
+          '3. Are running in a trusted, private environment.'
       );
       throw new Error(
         `Plugin security not acknowledged (value: ${actualValue}). ` +
-        'Set PLUGIN_SECURITY_ACKNOWLEDGED=true to enable plugins. ' +
-        'Only use plugins in trusted, private environments where you control all code.'
+          'Set PLUGIN_SECURITY_ACKNOWLEDGED=true to enable plugins. ' +
+          'Only use plugins in trusted, private environments where you control all code.'
       );
     }
 
-    logger.info('✓ Plugin security acknowledged - loading plugins with full system access');
+    logger.info(
+      '✓ Plugin security acknowledged - loading plugins with full system access'
+    );
 
     try {
       const pluginDir = path.resolve(this.config.pluginDir);
@@ -160,37 +165,63 @@ export class PluginLoader {
 
       // Validate that createProvider is actually a function
       if (typeof plugin.createProvider !== 'function') {
-        logger.warn(`Invalid plugin at ${pluginPath}: createProvider must be a function`);
+        logger.warn(
+          `Invalid plugin at ${pluginPath}: createProvider must be a function`
+        );
         return;
       }
 
       // Validate that initialize, if present, is a function
-      if (plugin.initialize !== undefined && typeof plugin.initialize !== 'function') {
-        logger.warn(`Invalid plugin at ${pluginPath}: initialize must be a function if provided`);
+      if (
+        plugin.initialize !== undefined &&
+        typeof plugin.initialize !== 'function'
+      ) {
+        logger.warn(
+          `Invalid plugin at ${pluginPath}: initialize must be a function if provided`
+        );
         return;
       }
 
       // Validate metadata structure
       const metadata = plugin.metadata;
-      if (!metadata.name || typeof metadata.name !== 'string' || metadata.name.trim() === '') {
-        logger.warn(`Invalid plugin at ${pluginPath}: metadata.name must be a non-empty string`);
+      if (
+        !metadata.name ||
+        typeof metadata.name !== 'string' ||
+        metadata.name.trim() === ''
+      ) {
+        logger.warn(
+          `Invalid plugin at ${pluginPath}: metadata.name must be a non-empty string`
+        );
         return;
       }
 
-      if (!metadata.version || typeof metadata.version !== 'string' || metadata.version.trim() === '') {
-        logger.warn(`Invalid plugin at ${pluginPath}: metadata.version must be a non-empty string`);
+      if (
+        !metadata.version ||
+        typeof metadata.version !== 'string' ||
+        metadata.version.trim() === ''
+      ) {
+        logger.warn(
+          `Invalid plugin at ${pluginPath}: metadata.version must be a non-empty string`
+        );
         return;
       }
 
-      if (!Array.isArray(metadata.providers) || metadata.providers.length === 0) {
-        logger.warn(`Invalid plugin at ${pluginPath}: metadata.providers must be a non-empty array`);
+      if (
+        !Array.isArray(metadata.providers) ||
+        metadata.providers.length === 0
+      ) {
+        logger.warn(
+          `Invalid plugin at ${pluginPath}: metadata.providers must be a non-empty array`
+        );
         return;
       }
 
       // Validate all provider names are non-empty strings
       for (const provider of metadata.providers) {
         if (typeof provider !== 'string' || provider.trim() === '') {
-          logger.warn(`Invalid plugin at ${pluginPath}: all provider names must be non-empty strings`);
+          logger.warn(
+            `Invalid plugin at ${pluginPath}: all provider names must be non-empty strings`
+          );
           return;
         }
       }
@@ -205,7 +236,7 @@ export class PluginLoader {
       if (this.plugins.has(plugin.metadata.name)) {
         logger.error(
           `Plugin name collision detected: "${plugin.metadata.name}" is already registered. ` +
-          `Cannot load duplicate plugin from ${pluginPath}.`
+            `Cannot load duplicate plugin from ${pluginPath}.`
         );
         throw new Error(
           `Plugin name collision: "${plugin.metadata.name}" already registered`
@@ -218,7 +249,7 @@ export class PluginLoader {
         if (existingPlugin) {
           logger.error(
             `Provider name collision detected: "${providerName}" is already registered by plugin "${existingPlugin}". ` +
-            `Plugin "${plugin.metadata.name}" cannot register the same provider name.`
+              `Plugin "${plugin.metadata.name}" cannot register the same provider name.`
           );
           throw new Error(
             `Provider name collision: "${providerName}" already registered by plugin "${existingPlugin}"`
@@ -241,7 +272,7 @@ export class PluginLoader {
 
       logger.info(
         `Loaded plugin: ${plugin.metadata.name} v${plugin.metadata.version} ` +
-        `(${plugin.metadata.providers.length} providers)`
+          `(${plugin.metadata.providers.length} providers)`
       );
     } catch (error) {
       logger.error(`Failed to load plugin at ${pluginPath}`, error as Error);
@@ -256,14 +287,19 @@ export class PluginLoader {
    *   "created": "ISO timestamp"
    * }
    */
-  private async verifyPluginIntegrity(pluginPath: string, indexPath: string): Promise<void> {
+  private async verifyPluginIntegrity(
+    pluginPath: string,
+    indexPath: string
+  ): Promise<void> {
     const manifestPath = path.join(pluginPath, 'plugin-manifest.json');
 
     try {
       await fs.access(manifestPath);
     } catch {
       // Manifest is optional - if it doesn't exist, skip verification
-      logger.debug(`No manifest found for plugin at ${pluginPath}, skipping integrity check`);
+      logger.debug(
+        `No manifest found for plugin at ${pluginPath}, skipping integrity check`
+      );
       return;
     }
 
@@ -286,15 +322,20 @@ export class PluginLoader {
       if (actualChecksum !== manifest.sha256) {
         throw new Error(
           `Plugin integrity verification failed! ` +
-          `Expected: ${manifest.sha256}, Got: ${actualChecksum}. ` +
-          `Plugin code may have been tampered with.`
+            `Expected: ${manifest.sha256}, Got: ${actualChecksum}. ` +
+            `Plugin code may have been tampered with.`
         );
       }
 
       logger.info(`Plugin integrity verified: ${pluginPath}`);
     } catch (error) {
-      logger.error(`Plugin integrity verification failed for ${pluginPath}`, error as Error);
-      throw new Error(`Plugin integrity check failed: ${(error as Error).message}`);
+      logger.error(
+        `Plugin integrity verification failed for ${pluginPath}`,
+        error as Error
+      );
+      throw new Error(
+        `Plugin integrity check failed: ${(error as Error).message}`
+      );
     }
   }
 
@@ -348,7 +389,10 @@ export class PluginLoader {
     try {
       return plugin.createProvider(providerName, apiKey);
     } catch (error) {
-      logger.error(`Failed to create provider ${providerName} from plugin ${pluginName}`, error as Error);
+      logger.error(
+        `Failed to create provider ${providerName} from plugin ${pluginName}`,
+        error as Error
+      );
       return null;
     }
   }
@@ -357,7 +401,7 @@ export class PluginLoader {
    * Get all loaded plugins
    */
   getLoadedPlugins(): PluginMetadata[] {
-    return Array.from(this.plugins.values()).map(p => p.metadata);
+    return Array.from(this.plugins.values()).map((p) => p.metadata);
   }
 
   /**

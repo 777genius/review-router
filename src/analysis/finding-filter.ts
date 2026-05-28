@@ -26,7 +26,10 @@ export class FindingFilter {
   /**
    * Filter and adjust findings to reduce false positives
    */
-  filter(findings: Finding[], diffContent: string): { findings: Finding[]; stats: FilterStats } {
+  filter(
+    findings: Finding[],
+    diffContent: string
+  ): { findings: Finding[]; stats: FilterStats } {
     const stats: FilterStats = {
       total: findings.length,
       filtered: 0,
@@ -75,7 +78,8 @@ export class FindingFilter {
     if (duplicatesRemoved > 0) {
       stats.filtered += duplicatesRemoved;
       stats.kept -= duplicatesRemoved;
-      stats.reasons['duplicate finding'] = (stats.reasons['duplicate finding'] || 0) + duplicatesRemoved;
+      stats.reasons['duplicate finding'] =
+        (stats.reasons['duplicate finding'] || 0) + duplicatesRemoved;
       logger.debug(`Removed ${duplicatesRemoved} duplicate findings`);
     }
 
@@ -94,7 +98,10 @@ export class FindingFilter {
     return { findings: deduplicated, stats };
   }
 
-  private shouldFilter(finding: Finding, diffContent: string): 'filter' | 'downgrade' | 'keep' {
+  private shouldFilter(
+    finding: Finding,
+    diffContent: string
+  ): 'filter' | 'downgrade' | 'keep' {
     // Filter invalid anchors before any keep/downgrade rule. Otherwise a
     // finding can still fail later when GitHub rejects the review comment line.
     if (this.hasInvalidLineNumber(finding)) {
@@ -116,7 +123,10 @@ export class FindingFilter {
     }
 
     // COMPLETELY filter test files - prompt explicitly says "DO NOT review test files"
-    if (this.isTestFile(finding.file) || this.isTestInfrastructure(finding.file)) {
+    if (
+      this.isTestFile(finding.file) ||
+      this.isTestInfrastructure(finding.file)
+    ) {
       // Only keep true security vulnerabilities (SQL injection, XSS, RCE)
       if (this.isTrueSecurityIssue(finding)) {
         return 'keep';
@@ -192,16 +202,29 @@ export class FindingFilter {
     if (this.isLineNumberIssue(finding, diffContent)) {
       return 'line number points to blank/brace/comment';
     }
-    if (this.isDocumentationFile(finding.file) && this.isStyleOrFormattingIssue(finding)) {
+    if (
+      this.isDocumentationFile(finding.file) &&
+      this.isStyleOrFormattingIssue(finding)
+    ) {
       return 'documentation formatting';
     }
-    if ((this.isTestFile(finding.file) || this.isTestInfrastructure(finding.file)) && this.isTestCodeQualityIssue(finding)) {
+    if (
+      (this.isTestFile(finding.file) ||
+        this.isTestInfrastructure(finding.file)) &&
+      this.isTestCodeQualityIssue(finding)
+    ) {
       return 'test code quality (not production issue)';
     }
-    if (this.isTestFile(finding.file) && this.isIntentionalTestPattern(finding)) {
+    if (
+      this.isTestFile(finding.file) &&
+      this.isIntentionalTestPattern(finding)
+    ) {
       return 'intentional test pattern';
     }
-    if (this.isWorkflowOrCIFile(finding.file) && this.isWorkflowConfigurationIssue(finding)) {
+    if (
+      this.isWorkflowOrCIFile(finding.file) &&
+      this.isWorkflowConfigurationIssue(finding)
+    ) {
       return 'workflow/CI configuration (not application code)';
     }
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
@@ -266,8 +289,8 @@ export class FindingFilter {
       normalized.includes('.travis.yml') ||
       normalized.includes('azure-pipelines') ||
       normalized.includes('gitlab-ci.yml') ||
-      normalized.includes('.yml') && normalized.includes('.github') ||
-      normalized.includes('.yaml') && normalized.includes('.github') ||
+      (normalized.includes('.yml') && normalized.includes('.github')) ||
+      (normalized.includes('.yaml') && normalized.includes('.github')) ||
       file === 'Jenkinsfile'
     );
   }
@@ -281,22 +304,20 @@ export class FindingFilter {
     return (
       // The finding filter and its tests
       file.includes('finding-filter') ||
-
       // All analysis infrastructure (review engine)
       normalized.startsWith('src/analysis/') ||
       normalized.includes('/analysis/') ||
-
       // Config and setup (review configuration)
-      file.includes('config/') && (file.includes('defaults') || file.includes('schema') || file.includes('loader')) ||
+      (file.includes('config/') &&
+        (file.includes('defaults') ||
+          file.includes('schema') ||
+          file.includes('loader'))) ||
       file.includes('setup.ts') ||
-
       // Cache infrastructure (review optimization)
       file.includes('cache/') ||
-
       // Core orchestration (review engine)
       file.includes('core/orchestrator') ||
       file.includes('core/batch-orchestrator') ||
-
       // Provider infrastructure (review execution)
       file.includes('providers/circuit-breaker') ||
       file.includes('providers/reliability-tracker')
@@ -308,7 +329,11 @@ export class FindingFilter {
 
     return (
       // Fork PR / secrets issues (very common false positives)
-      (text.includes('fork') && (text.includes('secret') || text.includes('pr') || text.includes('pull request') || text.includes('security'))) ||
+      (text.includes('fork') &&
+        (text.includes('secret') ||
+          text.includes('pr') ||
+          text.includes('pull request') ||
+          text.includes('security'))) ||
       (text.includes('pull request') && text.includes('secret')) ||
       text.includes('repository setting') ||
       text.includes('send secrets to workflows') ||
@@ -319,25 +344,38 @@ export class FindingFilter {
       text.includes('security gating') ||
       text.includes('security guardrails') ||
       text.includes('security assumption') ||
-      text.includes('fork pr') && (text.includes('access') || text.includes('gating') || text.includes('condition') || text.includes('handling') || text.includes('risk')) ||
-      text.includes('security risk') && text.includes('fork') ||
-      text.includes('security vulnerability') && text.includes('fork') ||
+      (text.includes('fork pr') &&
+        (text.includes('access') ||
+          text.includes('gating') ||
+          text.includes('condition') ||
+          text.includes('handling') ||
+          text.includes('risk'))) ||
+      (text.includes('security risk') && text.includes('fork')) ||
+      (text.includes('security vulnerability') && text.includes('fork')) ||
       text.includes('security: fork prs') ||
       // Workflow event/condition configuration
       text.includes('workflow relies on') ||
-      text.includes('timeout') && (text.includes('workflow') || text.includes('test') || text.includes('ci')) ||
+      (text.includes('timeout') &&
+        (text.includes('workflow') ||
+          text.includes('test') ||
+          text.includes('ci'))) ||
       text.includes('testtimeout') ||
       text.includes('runner configuration') ||
-      text.includes('concurrency') && (text.includes('group') || text.includes('grouping') || text.includes('issue') || text.includes('strategy')) ||
+      (text.includes('concurrency') &&
+        (text.includes('group') ||
+          text.includes('grouping') ||
+          text.includes('issue') ||
+          text.includes('strategy'))) ||
       text.includes('fork pr detection') ||
       text.includes('fork pr handling') ||
-      text.includes('conditional logic') && text.includes('workflow') ||
+      (text.includes('conditional logic') && text.includes('workflow')) ||
       text.includes('job condition') ||
-      text.includes('workflow') && text.includes('logic') ||
-      text.includes('condition') && (text.includes('fork') || text.includes('event')) ||
-      text.includes('doesn\'t account for') && text.includes('event') ||
+      (text.includes('workflow') && text.includes('logic')) ||
+      (text.includes('condition') &&
+        (text.includes('fork') || text.includes('event'))) ||
+      (text.includes("doesn't account for") && text.includes('event')) ||
       text.includes('modify condition to') ||
-      text.includes('event type') && text.includes('check') ||
+      (text.includes('event type') && text.includes('check')) ||
       text.includes('simplify the logic to') ||
       text.includes('fail the workflow') ||
       // CI-specific issues
@@ -348,16 +386,19 @@ export class FindingFilter {
       text.includes('test execution control') ||
       text.includes('test execution flags') ||
       text.includes('--forceexit') ||
-      text.includes('test execution') && text.includes('improved')
+      (text.includes('test execution') && text.includes('improved'))
     );
   }
 
   private isTrueSecurityIssue(finding: Finding): boolean {
     const text = (finding.title + ' ' + finding.message).toLowerCase();
     const file = finding.file.toLowerCase();
-    const mentionsSqlSink = /\b(sql|query|database)\b/.test(text) || text.includes('db.query');
+    const mentionsSqlSink =
+      /\b(sql|query|database)\b/.test(text) || text.includes('db.query');
     const mentionsUntrustedInput =
-      /\b(user input|untrusted|attacker|crafted|request|email|parameter|input)\b/.test(text);
+      /\b(user input|untrusted|attacker|crafted|request|email|parameter|input)\b/.test(
+        text
+      );
     const mentionsUnsafeSqlConstruction =
       text.includes('interpolat') ||
       text.includes('concatenat') ||
@@ -370,11 +411,16 @@ export class FindingFilter {
       text.includes('parameterized query') ||
       text.includes('${');
     const mentionsAuthBoundary =
-      /\b(auth|authenticate|authentication|authorization|login|signin|sign-in|session|credential|permission|privilege)\b/.test(text) ||
+      /\b(auth|authenticate|authentication|authorization|login|signin|sign-in|session|credential|permission|privilege)\b/.test(
+        text
+      ) ||
       text.includes('access control') ||
       text.includes('canlogin') ||
       text.includes('finduserbyemail');
-    const authRelatedFile = /(^|\/)(auth|authentication|login|session|user|users)\.[jt]sx?$/.test(file);
+    const authRelatedFile =
+      /(^|\/)(auth|authentication|login|session|user|users)\.[jt]sx?$/.test(
+        file
+      );
     const mentionsAuthBypass =
       text.includes('bypass') ||
       text.includes('unauthorized') ||
@@ -409,7 +455,9 @@ export class FindingFilter {
         text.includes('hardcoded') ||
         text.includes('first row') ||
         text.includes('fabricated')) &&
-      (text.includes('user') || text.includes('row') || text.includes('record'));
+      (text.includes('user') ||
+        text.includes('row') ||
+        text.includes('record'));
     const mentionsNoQueryArguments =
       text.includes('no arguments') ||
       text.includes('without arguments') ||
@@ -423,12 +471,16 @@ export class FindingFilter {
     return (
       text.includes('sql injection') ||
       (mentionsSqlSink && text.includes('injection')) ||
-      (mentionsSqlSink && mentionsUntrustedInput && mentionsUnsafeSqlConstruction) ||
+      (mentionsSqlSink &&
+        mentionsUntrustedInput &&
+        mentionsUnsafeSqlConstruction) ||
       text.includes('login bypass') ||
       text.includes('authentication bypass') ||
       (mentionsAuthBoundary && mentionsAuthBypass) ||
       (authRelatedFile && mentionsSqlSink && mentionsAuthBypass) ||
-      (mentionsSqlSink && mentionsPrivilegedDefaultUser && mentionsNoQueryArguments) ||
+      (mentionsSqlSink &&
+        mentionsPrivilegedDefaultUser &&
+        mentionsNoQueryArguments) ||
       (authRelatedFile && mentionsPrivilegedDefaultUser) ||
       text.includes('xss') ||
       text.includes('cross-site scripting') ||
@@ -440,15 +492,25 @@ export class FindingFilter {
       text.includes('wrong throttle') ||
       text.includes('wrong throttling') ||
       text.includes('rate limit bypass') ||
-      (text.includes('password reset') && (text.includes('rate limit') || text.includes('throttl') || text.includes('lockout'))) ||
-      ((text.includes('authorization') || text.includes('permission') || text.includes('privilege') || text.includes('access control')) &&
-        (text.includes('bypass') || text.includes('unauthorized') || text.includes('allows')))
+      (text.includes('password reset') &&
+        (text.includes('rate limit') ||
+          text.includes('throttl') ||
+          text.includes('lockout'))) ||
+      ((text.includes('authorization') ||
+        text.includes('permission') ||
+        text.includes('privilege') ||
+        text.includes('access control')) &&
+        (text.includes('bypass') ||
+          text.includes('unauthorized') ||
+          text.includes('allows')))
     );
   }
 
   private formatReasonSummary(reasons: Record<string, number>): string {
     const entries = Object.entries(reasons)
-      .sort(([leftReason], [rightReason]) => leftReason.localeCompare(rightReason))
+      .sort(([leftReason], [rightReason]) =>
+        leftReason.localeCompare(rightReason)
+      )
       .map(([reason, count]) => `${reason}=${count}`);
 
     if (entries.length === 0) {
@@ -458,7 +520,10 @@ export class FindingFilter {
     return `; reasons: ${entries.join(', ')}`;
   }
 
-  private formatFilteredFindingExample(finding: Finding, reason: string): string {
+  private formatFilteredFindingExample(
+    finding: Finding,
+    reason: string
+  ): string {
     const location = `${finding.file}:${finding.line}`;
     const title = finding.title.replace(/\s+/g, ' ').trim().slice(0, 120);
     return `${location} "${title}" (${reason})`;
@@ -474,7 +539,7 @@ export class FindingFilter {
       text.includes('test coverage') ||
       text.includes('not tested') ||
       text.includes('add tests') ||
-      text.includes('add targeted') && text.includes('test') ||
+      (text.includes('add targeted') && text.includes('test')) ||
       text.includes('tests rely') ||
       text.includes('test reliance') ||
       // Test structure and organization
@@ -486,7 +551,7 @@ export class FindingFilter {
       text.includes('stub') ||
       text.includes('fixture') ||
       text.includes('test data') ||
-      text.includes('inconsistent') && text.includes('test') ||
+      (text.includes('inconsistent') && text.includes('test')) ||
       text.includes('mismatch') ||
       // Test assertions
       text.includes('assertion') ||
@@ -497,13 +562,13 @@ export class FindingFilter {
       // Test isolation and shared state
       text.includes('test isolation') ||
       text.includes('shared mock') ||
-      text.includes('mock') && text.includes('across tests') ||
+      (text.includes('mock') && text.includes('across tests')) ||
       // Test implementation details
-      text.includes('hard-coded') && text.includes('test') ||
+      (text.includes('hard-coded') && text.includes('test')) ||
       text.includes('stat-key brittleness') ||
-      text.includes('brittleness') && text.includes('test') ||
+      (text.includes('brittleness') && text.includes('test')) ||
       text.includes('brittle test') ||
-      text.includes('tightly coupled') && text.includes('test') ||
+      (text.includes('tightly coupled') && text.includes('test')) ||
       text.includes('test expectations') ||
       text.includes('deduplication heuristic') ||
       text.includes('reason keys') ||
@@ -513,10 +578,14 @@ export class FindingFilter {
       text.includes('reduce brittleness') ||
       // Test validation suggestions
       text.includes('validate mocks') ||
-      text.includes('validate') && text.includes('test') && text.includes('reflect') ||
-      text.includes('concurrency scenarios') && text.includes('test') ||
-      text.includes('comprehensive') && text.includes('test') ||
-      text.includes('serialization') && text.includes('circular') && text.includes('graph') ||
+      (text.includes('validate') &&
+        text.includes('test') &&
+        text.includes('reflect')) ||
+      (text.includes('concurrency scenarios') && text.includes('test')) ||
+      (text.includes('comprehensive') && text.includes('test')) ||
+      (text.includes('serialization') &&
+        text.includes('circular') &&
+        text.includes('graph')) ||
       // Test-related suggestions
       text.includes('without explicit type contracts') ||
       text.includes('api docs and unit tests')
@@ -560,10 +629,11 @@ export class FindingFilter {
       text.includes('lint') ||
       text.includes('unsafe type assertion') ||
       text.includes('unsafe non-null assertion') ||
-      text.includes('type assertion') && !this.isTrueSecurityIssue(finding) ||
-      text.includes('non-null assertion') && !this.isTrueSecurityIssue(finding) ||
+      (text.includes('type assertion') && !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('non-null assertion') &&
+        !this.isTrueSecurityIssue(finding)) ||
       text.includes('bypasses type checking') ||
-      text.includes('casting') && text.includes('any')
+      (text.includes('casting') && text.includes('any'))
     );
   }
 
@@ -579,16 +649,25 @@ export class FindingFilter {
     );
   }
 
-  private isMissingMethodFalsePositive(finding: Finding, diffContent: string): boolean {
+  private isMissingMethodFalsePositive(
+    finding: Finding,
+    diffContent: string
+  ): boolean {
     const text = (finding.title + ' ' + finding.message).toLowerCase();
 
     // Check if finding claims something is "missing"
-    if (!text.includes('missing') && !text.includes('lacks') && !text.includes('no ')) {
+    if (
+      !text.includes('missing') &&
+      !text.includes('lacks') &&
+      !text.includes('no ')
+    ) {
       return false;
     }
 
     // Extract method/function name from the finding (text is already lowercased)
-    const methodMatch = text.match(/\b(serialize|deserialize|clone|copyfrom|remove|add|get|set)\w*\b/);
+    const methodMatch = text.match(
+      /\b(serialize|deserialize|clone|copyfrom|remove|add|get|set)\w*\b/
+    );
     if (!methodMatch) {
       return false;
     }
@@ -596,9 +675,14 @@ export class FindingFilter {
     const methodName = methodMatch[0];
 
     // Check if the method actually exists in the diff (case-insensitive search)
-    const methodRegex = new RegExp(`(function\\s+${methodName}|${methodName}\\s*\\(|${methodName}:\\s*function)`, 'i');
+    const methodRegex = new RegExp(
+      `(function\\s+${methodName}|${methodName}\\s*\\(|${methodName}:\\s*function)`,
+      'i'
+    );
     if (methodRegex.test(diffContent)) {
-      logger.debug(`Method ${methodName} exists in diff, filtering "missing ${methodName}" finding`);
+      logger.debug(
+        `Method ${methodName} exists in diff, filtering "missing ${methodName}" finding`
+      );
       return true;
     }
 
@@ -632,43 +716,54 @@ export class FindingFilter {
       text.includes('less aggressive') ||
       // Imperatives that are suggestions, not bugs
       text.includes('ensure that') ||
-      text.includes('ensure') && (text.includes('consistent') || text.includes('handle') || text.includes('uniqueness') || text.includes('comprehensive') || text.includes('proper') || text.includes('correct')) ||
+      (text.includes('ensure') &&
+        (text.includes('consistent') ||
+          text.includes('handle') ||
+          text.includes('uniqueness') ||
+          text.includes('comprehensive') ||
+          text.includes('proper') ||
+          text.includes('correct'))) ||
       text.includes('verify that') ||
-      text.includes('validate') && !text.includes('unvalidated') ||
+      (text.includes('validate') && !text.includes('unvalidated')) ||
       text.includes('establish') ||
       text.includes('monitor') ||
-      text.includes('integrate') && (text.includes('into') || text.includes('the')) ||
-      text.includes('add') && (
-        text.includes('check') ||
-        text.includes('validation') ||
-        text.includes('logging') ||
-        text.includes('documentation') ||
-        text.includes('test') ||
-        text.includes('explicit') ||
-        text.includes('specific') ||
-        text.includes('handling') ||
-        text.includes('support') ||
-        text.includes('targeted') ||
-        text.includes('regression') ||
-        text.includes('metrics') ||
-        text.includes('warning') ||
-        text.includes('prominent') ||
-        text.includes('additional') ||
-        text.includes('more tests') ||
-        text.includes('security')
-      ) ||
+      (text.includes('integrate') &&
+        (text.includes('into') || text.includes('the'))) ||
+      (text.includes('add') &&
+        (text.includes('check') ||
+          text.includes('validation') ||
+          text.includes('logging') ||
+          text.includes('documentation') ||
+          text.includes('test') ||
+          text.includes('explicit') ||
+          text.includes('specific') ||
+          text.includes('handling') ||
+          text.includes('support') ||
+          text.includes('targeted') ||
+          text.includes('regression') ||
+          text.includes('metrics') ||
+          text.includes('warning') ||
+          text.includes('prominent') ||
+          text.includes('additional') ||
+          text.includes('more tests') ||
+          text.includes('security'))) ||
       // Configuration suggestions
       text.includes('adjust') ||
       text.includes('configure') ||
-      text.includes('making') && text.includes('configurable') ||
+      (text.includes('making') && text.includes('configurable')) ||
       // Refactoring suggestions
       text.includes('refactor') ||
-      text.includes('introduce') && (text.includes('enum') || text.includes('constant')) ||
-      text.includes('extract') && (text.includes('method') || text.includes('class') || text.includes('separate')) ||
+      (text.includes('introduce') &&
+        (text.includes('enum') || text.includes('constant'))) ||
+      (text.includes('extract') &&
+        (text.includes('method') ||
+          text.includes('class') ||
+          text.includes('separate'))) ||
       text.includes('use a more') ||
       text.includes('using a more') ||
-      text.includes('implement') && (text.includes('iterative') || text.includes('approach')) ||
-      text.includes('recursive approach') && text.includes('performance') ||
+      (text.includes('implement') &&
+        (text.includes('iterative') || text.includes('approach'))) ||
+      (text.includes('recursive approach') && text.includes('performance')) ||
       // Opinion-based characterizations
       text.includes('overly permissive') ||
       text.includes('overly restrictive') ||
@@ -678,16 +773,22 @@ export class FindingFilter {
       // Completeness/quality suggestions (not bugs)
       text.includes('incomplete') ||
       text.includes('lacks sufficient') ||
-      text.includes('lacks') && text.includes('validation') ||
+      (text.includes('lacks') && text.includes('validation')) ||
       text.includes('does not adequately') ||
       text.includes('not adequately') ||
-      text.includes('missing') && text.includes('validation') && !this.isTrueSecurityIssue(finding) ||
-      text.includes('missing') && text.includes('timeout') && text.includes('validation') ||
-      text.includes('inconsistent') && !this.isTrueSecurityIssue(finding) ||
-      text.includes('incorrect handling') && !text.includes('crash') ||
+      (text.includes('missing') &&
+        text.includes('validation') &&
+        !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('missing') &&
+        text.includes('timeout') &&
+        text.includes('validation')) ||
+      (text.includes('inconsistent') && !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('incorrect handling') && !text.includes('crash')) ||
       text.includes('incomplete validation') ||
       // Potential issues (not actual bugs)
-      text.includes('potential') && !text.includes('sql injection') && !text.includes('rce') ||
+      (text.includes('potential') &&
+        !text.includes('sql injection') &&
+        !text.includes('rce')) ||
       text.includes('brittleness') ||
       text.includes('brittle') ||
       text.includes('tightly coupled') ||
@@ -698,10 +799,11 @@ export class FindingFilter {
       text.includes('may lead to') ||
       text.includes('could lead to') ||
       // Review/analysis suggestions
-      text.includes('review') && !text.includes('code review tool') ||
+      (text.includes('review') && !text.includes('code review tool')) ||
       text.includes('audit') ||
       text.includes('substantial diff') ||
-      text.includes('comprehensive') && (text.includes('test') || text.includes('testing')) ||
+      (text.includes('comprehensive') &&
+        (text.includes('test') || text.includes('testing'))) ||
       text.includes('investigate') ||
       text.includes('profile') ||
       text.includes('thorough') ||
@@ -710,21 +812,25 @@ export class FindingFilter {
       text.includes('more efficient') ||
       text.includes('could be more') ||
       text.includes('more concise') ||
-      text.includes('inefficient') && !text.includes('exponential') ||
+      (text.includes('inefficient') && !text.includes('exponential')) ||
       text.includes('potentially inefficient') ||
-      text.includes('time-consuming') && !text.includes('will hang') ||
+      (text.includes('time-consuming') && !text.includes('will hang')) ||
       // Implementation suggestions
       text.includes('explore using') ||
       text.includes('alternatively') ||
       text.includes('using a different approach') ||
       text.includes('using a more') ||
       // Documentation suggestions
-      text.includes('document') && !text.includes('undocumented vulnerability')
+      (text.includes('document') &&
+        !text.includes('undocumented vulnerability'))
     );
   }
 
   private isConcreteRuntimeRegression(finding: Finding): boolean {
-    if (this.isStyleOrFormattingIssue(finding) || this.isLintOrStyleIssue(finding)) {
+    if (
+      this.isStyleOrFormattingIssue(finding) ||
+      this.isLintOrStyleIssue(finding)
+    ) {
       return false;
     }
 
@@ -792,7 +898,10 @@ export class FindingFilter {
     );
   }
 
-  private isWorkflowSecurityFalsePositive(finding: Finding, diffContent: string): boolean {
+  private isWorkflowSecurityFalsePositive(
+    finding: Finding,
+    diffContent: string
+  ): boolean {
     // Only apply to workflow files
     if (!finding.file.includes('.github/workflows/')) {
       return false;
@@ -801,22 +910,21 @@ export class FindingFilter {
     const text = (finding.title + ' ' + finding.message).toLowerCase();
 
     // Check if it's about fork PR security/secrets
-    const isForkSecurityFinding = (
-      (text.includes('fork') && (text.includes('secret') || text.includes('pr'))) ||
-      text.includes('pull request') && text.includes('secret')
-    );
+    const isForkSecurityFinding =
+      (text.includes('fork') &&
+        (text.includes('secret') || text.includes('pr'))) ||
+      (text.includes('pull request') && text.includes('secret'));
 
     if (isForkSecurityFinding) {
       // Check if the diff or file shows security checks are already in place
       // Even if not in diff, if finding is about general workflow security (not a new change),
       // it's likely a false positive since workflows are reviewed separately
-      const hasForkSecurityCheck = (
+      const hasForkSecurityCheck =
         diffContent.includes('SECURITY VIOLATION') ||
         diffContent.includes('Fork PR has access to secrets') ||
         diffContent.includes('if [ -n "$OPENROUTER_API_KEY" ]') ||
         diffContent.includes('fork_pr_has_secrets') ||
-        diffContent.includes('github.event.pull_request.head.repo.fork')
-      );
+        diffContent.includes('github.event.pull_request.head.repo.fork');
 
       if (hasForkSecurityCheck) {
         logger.debug(`Workflow security already implemented: ${finding.title}`);
@@ -825,15 +933,16 @@ export class FindingFilter {
 
       // If finding is about general workflow configuration (not specific code change),
       // and the workflow file wasn't completely rewritten, it's likely a false positive
-      const isGeneralConfigFinding = (
+      const isGeneralConfigFinding =
         text.includes('repository setting') ||
         text.includes('settings -> actions') ||
         text.includes('workflow relies on') ||
-        text.includes('disable \'send secrets')
-      );
+        text.includes("disable 'send secrets");
 
       if (isGeneralConfigFinding) {
-        logger.debug(`General workflow config finding, not specific to diff: ${finding.title}`);
+        logger.debug(
+          `General workflow config finding, not specific to diff: ${finding.title}`
+        );
         return true;
       }
     }
@@ -852,8 +961,13 @@ export class FindingFilter {
       return false;
     }
 
-    const patchLike = diffContent.includes('@@') || diffContent.includes('diff --git ');
-    const mappedLine = this.findNewFileLineInDiff(finding.file, finding.line, diffContent);
+    const patchLike =
+      diffContent.includes('@@') || diffContent.includes('diff --git ');
+    const mappedLine = this.findNewFileLineInDiff(
+      finding.file,
+      finding.line,
+      diffContent
+    );
 
     if (patchLike && mappedLine === null) {
       return false; // Cannot prove the line is wrong from this patch.
@@ -868,7 +982,10 @@ export class FindingFilter {
         return false; // Line number out of bounds
       }
 
-      return this.isBlankBraceOrCommentLine(lines[lineIndex].trim(), finding.line);
+      return this.isBlankBraceOrCommentLine(
+        lines[lineIndex].trim(),
+        finding.line
+      );
     }
 
     if (mappedLine === null) {
@@ -890,14 +1007,20 @@ export class FindingFilter {
       line.startsWith('/*') ||
       line.startsWith('*')
     ) {
-      logger.debug(`Line ${lineNumber} is blank/brace/comment, likely incorrect line number`);
+      logger.debug(
+        `Line ${lineNumber} is blank/brace/comment, likely incorrect line number`
+      );
       return true;
     }
 
     return false;
   }
 
-  private findNewFileLineInDiff(file: string, lineNumber: number, diffContent: string): string | null {
+  private findNewFileLineInDiff(
+    file: string,
+    lineNumber: number,
+    diffContent: string
+  ): string | null {
     let currentFile: string | null = null;
     let newLine: number | null = null;
 
@@ -956,7 +1079,9 @@ export class FindingFilter {
 
     // Line 0 or negative is always invalid
     if (finding.line <= 0) {
-      logger.debug(`Invalid line number ${finding.line} for ${finding.file}, filtering`);
+      logger.debug(
+        `Invalid line number ${finding.line} for ${finding.file}, filtering`
+      );
       return true;
     }
 
@@ -964,26 +1089,28 @@ export class FindingFilter {
     // These often indicate the LLM couldn't determine the actual line
     if (finding.line === 1) {
       const text = (finding.title + ' ' + finding.message).toLowerCase();
-      const isVeryGenericFinding = (
+      const isVeryGenericFinding =
         text.includes('entire file') ||
         text.includes('file lacks') ||
-        (text.includes('class lacks') && !this.isTrueSecurityIssue(finding))
-      );
+        (text.includes('class lacks') && !this.isTrueSecurityIssue(finding));
 
       if (isVeryGenericFinding) {
-        logger.debug(`Very generic line:1 finding for ${finding.file}, likely invalid, filtering`);
+        logger.debug(
+          `Very generic line:1 finding for ${finding.file}, likely invalid, filtering`
+        );
         return true;
       }
 
       // Line 1 on generated/built files is suspicious
-      const isGeneratedFile = (
+      const isGeneratedFile =
         finding.file.includes('dist/') ||
         finding.file.includes('build/') ||
-        finding.file.includes('.min.')
-      );
+        finding.file.includes('.min.');
 
       if (isGeneratedFile) {
-        logger.debug(`Line:1 on generated file ${finding.file}, likely invalid, filtering`);
+        logger.debug(
+          `Line:1 on generated file ${finding.file}, likely invalid, filtering`
+        );
         return true;
       }
     }
@@ -1042,13 +1169,20 @@ export class FindingFilter {
     const keywords: string[] = [];
 
     // Security patterns
-    if (text.includes('fork') && (text.includes('pr') || text.includes('pull request')) && text.includes('secret')) {
+    if (
+      text.includes('fork') &&
+      (text.includes('pr') || text.includes('pull request')) &&
+      text.includes('secret')
+    ) {
       keywords.push('fork_pr_secret');
     }
     if (text.includes('sql') && text.includes('injection')) {
       keywords.push('sql_injection');
     }
-    if (text.includes('xss') || (text.includes('cross') && text.includes('site'))) {
+    if (
+      text.includes('xss') ||
+      (text.includes('cross') && text.includes('site'))
+    ) {
       keywords.push('xss');
     }
 
@@ -1056,7 +1190,11 @@ export class FindingFilter {
     if (text.includes('missing') && text.includes('validation')) {
       keywords.push('missing_validation');
     }
-    if (text.includes('missing') && text.includes('error') && text.includes('handling')) {
+    if (
+      text.includes('missing') &&
+      text.includes('error') &&
+      text.includes('handling')
+    ) {
       keywords.push('missing_error_handling');
     }
 
@@ -1096,7 +1234,9 @@ export class FindingFilter {
     return (
       // Complexity/readability complaints (subjective)
       (text.includes('complex') && text.includes('difficult to read')) ||
-      (text.includes('complexity') && !text.includes('exponential') && !text.includes('o(n')) ||
+      (text.includes('complexity') &&
+        !text.includes('exponential') &&
+        !text.includes('o(n')) ||
       text.includes('readability') ||
       // Code structure opinions
       text.includes('should be broken down') ||
@@ -1104,19 +1244,21 @@ export class FindingFilter {
       text.includes('consider using an enum') ||
       text.includes('consider using constants') ||
       text.includes('magic strings') ||
-      text.includes('refactor') && !text.includes('refactor to fix') ||
+      (text.includes('refactor') && !text.includes('refactor to fix')) ||
       text.includes('substantial diff') ||
       text.includes('significant logic changes') ||
-      text.includes('review') && text.includes('algorithm changes') ||
-      text.includes('review') && text.includes('implications') ||
+      (text.includes('review') && text.includes('algorithm changes')) ||
+      (text.includes('review') && text.includes('implications')) ||
       // Path normalization suggestions (not bugs)
       (text.includes('path normalization') && !text.includes('security')) ||
-      (text.includes('inconsistent') && text.includes('path') && !text.includes('vulnerability')) ||
+      (text.includes('inconsistent') &&
+        text.includes('path') &&
+        !text.includes('vulnerability')) ||
       // Documentation/commenting suggestions
       (text.includes('add tests') && !text.includes('untested')) ||
       text.includes('add unit test') ||
       text.includes('add regression test') ||
-      text.includes('document') && text.includes('policy')
+      (text.includes('document') && text.includes('policy'))
     );
   }
 
@@ -1125,14 +1267,24 @@ export class FindingFilter {
 
     return (
       // Input validation (unless security-related)
-      (text.includes('missing') && text.includes('validation') && !this.isTrueSecurityIssue(finding)) ||
-      (text.includes('missing') && text.includes('input validation') && !this.isTrueSecurityIssue(finding)) ||
-      (text.includes('missing') && text.includes('error handling') && !text.includes('crash')) ||
-      (text.includes('missing') && text.includes('type safety') && !this.isTrueSecurityIssue(finding)) ||
-      (text.includes('missing') && text.includes('runtime') && !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('missing') &&
+        text.includes('validation') &&
+        !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('missing') &&
+        text.includes('input validation') &&
+        !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('missing') &&
+        text.includes('error handling') &&
+        !text.includes('crash')) ||
+      (text.includes('missing') &&
+        text.includes('type safety') &&
+        !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('missing') &&
+        text.includes('runtime') &&
+        !this.isTrueSecurityIssue(finding)) ||
       (text.includes('lacks') && text.includes('validation')) ||
-      text.includes('inconsistent') && text.includes('error handling') ||
-      text.includes('inconsistency') && !this.isTrueSecurityIssue(finding) ||
+      (text.includes('inconsistent') && text.includes('error handling')) ||
+      (text.includes('inconsistency') && !this.isTrueSecurityIssue(finding)) ||
       // Hard-coded values
       (text.includes('hard-coded') && !this.isTrueSecurityIssue(finding)) ||
       (text.includes('hardcoded') && !this.isTrueSecurityIssue(finding)) ||
@@ -1152,8 +1304,11 @@ export class FindingFilter {
       text.includes('conditional statements') ||
       text.includes('conditional logic') ||
       text.includes('flaky test') ||
-      text.includes('race condition') && !text.includes('crash') && !this.isTrueSecurityIssue(finding) ||
-      text.includes('timing') && (text.includes('assumption') || text.includes('dependent')) ||
+      (text.includes('race condition') &&
+        !text.includes('crash') &&
+        !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('timing') &&
+        (text.includes('assumption') || text.includes('dependent'))) ||
       // Comments
       text.includes('comment') ||
       text.includes('documentation') ||
@@ -1162,34 +1317,44 @@ export class FindingFilter {
       (text.includes('pattern') && text.includes('not properly validate')) ||
       (text.includes('unsafe') && text.includes('glob pattern')) ||
       // Path handling (unless security)
-      (text.includes('path normalization') && !text.includes('vulnerability')) ||
-      (text.includes('path') && text.includes('consistency') && !text.includes('vulnerability')) ||
+      (text.includes('path normalization') &&
+        !text.includes('vulnerability')) ||
+      (text.includes('path') &&
+        text.includes('consistency') &&
+        !text.includes('vulnerability')) ||
       (text.includes('path quoting') && !text.includes('vulnerability')) ||
       (text.includes('quoting') && text.includes('not fully handled')) ||
       // Serialization/deserialization implementation
-      text.includes('circular reference') && text.includes('serialization') ||
-      text.includes('deep clone') && text.includes('independence') ||
+      (text.includes('circular reference') && text.includes('serialization')) ||
+      (text.includes('deep clone') && text.includes('independence')) ||
       // Rate limiting / error handling implementation details
-      text.includes('rate limit handling') && !text.includes('bypass') ||
-      text.includes('health check implementation') && !text.includes('fail') ||
+      (text.includes('rate limit handling') && !text.includes('bypass')) ||
+      (text.includes('health check implementation') &&
+        !text.includes('fail')) ||
       text.includes('handling 402') || // Payment errors are expected
       text.includes('payment required not handled') ||
       text.includes('lightweight healthcheck') ||
       text.includes('introduce lightweight') ||
       // Concurrency/synchronization (unless actual crash)
-      text.includes('concurrency') && !text.includes('crash') ||
-      text.includes('synchronization') && !text.includes('crash') ||
+      (text.includes('concurrency') && !text.includes('crash')) ||
+      (text.includes('synchronization') && !text.includes('crash')) ||
       text.includes('atomic operation') ||
       text.includes('mutex') ||
-      text.includes('cleanup') && text.includes('timeout') && !text.includes('memory leak') ||
-      text.includes('cancellation') && !text.includes('crash') ||
+      (text.includes('cleanup') &&
+        text.includes('timeout') &&
+        !text.includes('memory leak')) ||
+      (text.includes('cancellation') && !text.includes('crash')) ||
       // Timeout/cleanup implementation details
-      text.includes('timeout') && text.includes('validation') && text.includes('missing') ||
-      text.includes('timeout') && text.includes('configurable') ||
+      (text.includes('timeout') &&
+        text.includes('validation') &&
+        text.includes('missing')) ||
+      (text.includes('timeout') && text.includes('configurable')) ||
       text.includes('timeout handling') ||
       text.includes('timeout value') ||
-      text.includes('promise') && text.includes('leak') && text.includes('potential') ||
-      text.includes('doesn\'t clean up properly') ||
+      (text.includes('promise') &&
+        text.includes('leak') &&
+        text.includes('potential')) ||
+      text.includes("doesn't clean up properly") ||
       // Batch validation (implementation detail)
       text.includes('batch size validation') ||
       text.includes('token-aware batching') ||
@@ -1200,11 +1365,12 @@ export class FindingFilter {
       text.includes('model ranking') ||
       text.includes('model selection') ||
       // Completeness suggestions (not bugs)
-      text.includes('incomplete') && !this.isTrueSecurityIssue(finding) ||
-      text.includes('not handled') && !this.isTrueSecurityIssue(finding) ||
-      text.includes('lacks sufficient validation') && !this.isTrueSecurityIssue(finding) ||
+      (text.includes('incomplete') && !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('not handled') && !this.isTrueSecurityIssue(finding)) ||
+      (text.includes('lacks sufficient validation') &&
+        !this.isTrueSecurityIssue(finding)) ||
       text.includes('could be more efficient') ||
-      text.includes('more efficient') && !text.includes('must') ||
+      (text.includes('more efficient') && !text.includes('must')) ||
       // Implementation changes (not bugs)
       text.includes('api change') ||
       text.includes('graph builder changes') ||

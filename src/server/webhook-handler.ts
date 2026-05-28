@@ -48,7 +48,10 @@ export class WebhookHandler {
   ) {
     this.validateConfig();
     // Clean up old rate limit entries every 5 minutes
-    this.rateLimitCleanupIntervalId = setInterval(() => this.cleanupRateLimits(), 5 * 60 * 1000);
+    this.rateLimitCleanupIntervalId = setInterval(
+      () => this.cleanupRateLimits(),
+      5 * 60 * 1000
+    );
   }
 
   /**
@@ -70,8 +73,8 @@ export class WebhookHandler {
     if (this.config.secret.length < WebhookHandler.MIN_SECRET_LENGTH) {
       throw new Error(
         `Webhook secret must be at least ${WebhookHandler.MIN_SECRET_LENGTH} characters. ` +
-        `Current length: ${this.config.secret.length}. ` +
-        `Generate a secure secret with: openssl rand -hex 32`
+          `Current length: ${this.config.secret.length}. ` +
+          `Generate a secure secret with: openssl rand -hex 32`
       );
     }
 
@@ -89,9 +92,9 @@ export class WebhookHandler {
       if (pattern.test(this.config.secret)) {
         throw new Error(
           `Webhook secret appears to be a placeholder value matching forbidden pattern. ` +
-          `This is not allowed in production. ` +
-          `The secret matched pattern: ${pattern.source}. ` +
-          `Generate a secure random secret with: openssl rand -hex 32`
+            `This is not allowed in production. ` +
+            `The secret matched pattern: ${pattern.source}. ` +
+            `Generate a secure random secret with: openssl rand -hex 32`
         );
       }
     }
@@ -180,7 +183,9 @@ export class WebhookHandler {
 
     try {
       // Trigger review using orchestrator
-      const review = await this.orchestrator.execute(payload.pull_request.number);
+      const review = await this.orchestrator.execute(
+        payload.pull_request.number
+      );
 
       if (!review) {
         logger.info(`Review skipped for PR #${payload.pull_request.number}`);
@@ -189,7 +194,7 @@ export class WebhookHandler {
 
       logger.info(
         `Review completed for PR #${payload.pull_request.number}: ` +
-        `${review.findings.length} findings, cost $${review.metrics.totalCost.toFixed(4)}`
+          `${review.findings.length} findings, cost $${review.metrics.totalCost.toFixed(4)}`
       );
       return true;
     } catch (error) {

@@ -1,6 +1,9 @@
 import { PullRequestLoader } from '../../../src/github/pr-loader';
 import { GitHubClient } from '../../../src/github/client';
-import { createMockOctokit, createErrorOctokit } from '../../helpers/github-mock';
+import {
+  createMockOctokit,
+  createErrorOctokit,
+} from '../../helpers/github-mock';
 
 function createMockClient(octokit: any): jest.Mocked<GitHubClient> {
   return {
@@ -11,7 +14,6 @@ function createMockClient(octokit: any): jest.Mocked<GitHubClient> {
 }
 
 describe('PullRequestLoader', () => {
-
   describe('load', () => {
     it('loads PR context successfully', async () => {
       const mockClient = createMockClient(createMockOctokit());

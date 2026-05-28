@@ -13641,6 +13641,9 @@ var CodexProvider = class _CodexProvider extends Provider {
   async healthCheck(_timeoutMs = 5e3) {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5e3);
     const mode = (process.env.CODEX_HEALTHCHECK_MODE || "binary").toLowerCase();
+    if (mode === "none" || mode === "binary") {
+      return true;
+    }
     let timeoutId;
     let isTimedOut = false;
     const timeoutPromise = new Promise((_2, reject) => {
@@ -13660,9 +13663,6 @@ var CodexProvider = class _CodexProvider extends Provider {
         timeoutPromise
       ]);
       clearTimeout(timeoutId);
-      if (mode === "none" || mode === "binary") {
-        return true;
-      }
       const result = await this.runCliWithStdin(
         binary2,
         "Respond with exactly: codex-health-ok",
@@ -35233,7 +35233,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.63",
+  version: "1.0.64",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

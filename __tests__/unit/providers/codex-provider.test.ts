@@ -116,7 +116,7 @@ describe('CodexProvider', () => {
     expect(args).not.toContain('openai/gpt-oss-120b:free#8');
   });
 
-  it('uses binary-only health checks by default to avoid consuming Codex usage', async () => {
+  it('uses lightweight health checks by default to avoid consuming Codex usage', async () => {
     spawnMock.mockImplementation((_cmd: string, _args: string[]) =>
       createMockProcess()
     );
@@ -124,14 +124,7 @@ describe('CodexProvider', () => {
     const provider = new CodexProvider('gpt-5.4-mini');
     await expect(provider.healthCheck(1000)).resolves.toBe(true);
 
-    expect(spawnMock).toHaveBeenCalledTimes(1);
-    expect(spawnMock.mock.calls[0][0]).toBe('codex');
-    expect(spawnMock.mock.calls[0][1]).toEqual(['--version']);
-    expect(
-      spawnMock.mock.calls.some(
-        (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
-      )
-    ).toBe(false);
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 
   it('supports explicit exec health checks when requested', async () => {
@@ -236,6 +229,16 @@ describe('CodexProvider', () => {
         stdio: 'ignore',
       })
     );
+  });
+
+  it('treats binary health check mode as a lightweight readiness check', async () => {
+    process.env.CODEX_HEALTHCHECK_MODE = 'binary';
+
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const healthy = await provider.healthCheck(30_000);
+
+    expect(healthy).toBe(true);
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 
   it('falls back to the prepared rotating Codex CLI install root', async () => {

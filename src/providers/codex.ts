@@ -83,6 +83,10 @@ export class CodexProvider extends Provider {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5000);
     const mode = (process.env.CODEX_HEALTHCHECK_MODE || 'binary').toLowerCase();
 
+    if (mode === 'none' || mode === 'binary') {
+      return true;
+    }
+
     let timeoutId: NodeJS.Timeout;
     let isTimedOut = false;
 
@@ -104,10 +108,6 @@ export class CodexProvider extends Provider {
         timeoutPromise,
       ]);
       clearTimeout(timeoutId!);
-
-      if (mode === 'none' || mode === 'binary') {
-        return true;
-      }
 
       const result = await this.runCliWithStdin(
         binary,

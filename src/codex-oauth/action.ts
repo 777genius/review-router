@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import * as core from '../actions/core';
 import { ReviewOrchestrator } from '../core/orchestrator';
 import { ConfigLoader } from '../config/loader';
@@ -79,6 +80,7 @@ export async function runCodexOAuthRotatingAction(
           audience: inputs.audience,
           checkoutToken: input.checkoutToken,
           codexHome: input.codexHome,
+          codexBinaryPath: input.codexBinaryPath,
           fetchImpl: options.fetchImpl,
           providerSecrets: inputs.providerSecrets,
         }),
@@ -139,13 +141,21 @@ async function runReviewComputation(input: {
   audience: string;
   checkoutToken: string;
   codexHome: string;
+  codexBinaryPath?: string;
   fetchImpl?: FetchLike;
   providerSecrets: CodexRotatingProviderSecretInputs;
 }) {
   const previousCodexHome = process.env.CODEX_HOME;
+  const previousPath = process.env.PATH;
   const previousProgress = process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
   try {
     process.env.CODEX_HOME = input.codexHome;
+    if (input.codexBinaryPath) {
+      const codexBinDir = path.dirname(input.codexBinaryPath);
+      process.env.PATH = previousPath
+        ? `${codexBinDir}${path.delimiter}${previousPath}`
+        : codexBinDir;
+    }
     process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = 'never';
 
     await applyCodexRotatingReviewRuntimeConfig({
@@ -198,6 +208,11 @@ async function runReviewComputation(input: {
       delete process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
     } else {
       process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = previousProgress;
+    }
+    if (previousPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = previousPath;
     }
     clearCodexRotatingProviderSecretEnv();
   }

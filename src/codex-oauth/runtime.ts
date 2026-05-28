@@ -95,6 +95,7 @@ export type CodexOAuthRuntimePorts = {
     run(input: {
       checkoutToken: string;
       codexHome: string;
+      codexBinaryPath?: string;
     }): Promise<CodexOAuthReviewResult>;
   };
   comments: {
@@ -252,6 +253,9 @@ export async function runCodexOAuthRotatingRuntime(
     const review = await ports.review.run({
       checkoutToken: checkoutToken.token,
       codexHome: refreshed.codexHome,
+      ...(preparedCodexCli
+        ? { codexBinaryPath: preparedCodexCli.binaryPath }
+        : {}),
     });
 
     await clearAuth();

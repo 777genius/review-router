@@ -230,8 +230,9 @@ describe('Codex OAuth rotating runtime', () => {
         }),
       },
       review: {
-        run: jest.fn(async () => {
+        run: jest.fn(async (input) => {
           events.push('review');
+          expect(input.codexBinaryPath).toBe('/tmp/codex-bin');
           expect(process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBe(
             'oidc-request-token'
           );

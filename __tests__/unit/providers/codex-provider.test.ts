@@ -264,6 +264,23 @@ describe('CodexProvider', () => {
     }
   });
 
+  it('trusts the pinned Codex CLI prepared by the bootstrap resolver', async () => {
+    (CodexProvider as any).preparedBinaryPath = undefined;
+    const failedCommands = new Set(['codex', 'codex-cli']);
+    spawnMock.mockImplementation((cmd: string) => {
+      if (failedCommands.has(cmd)) {
+        return createMockProcess(undefined, 1);
+      }
+      return createMockProcess();
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const binary = await (provider as any).resolveBinary();
+
+    expect(binary).toContain('reviewrouter-codex-cli-');
+    expect(binary).toContain(path.join('node_modules', '.bin', 'codex'));
+  });
+
   it('allows agentic review findings for concrete user-visible regressions', async () => {
     const provider = new CodexProvider('gpt-5.4-mini');
     const prompt = await (provider as any).wrapAgenticReviewPrompt(

@@ -1713,11 +1713,8 @@ export class CodexProvider extends Provider {
       return preparedBinary;
     }
     const installedBinary = await this.installPinnedCodexCli();
-    if (await this.canRun(installedBinary, ['--version'])) {
-      CodexProvider.preparedBinaryPath = installedBinary;
-      return installedBinary;
-    }
-    throw new Error('Codex CLI is not available (tried: codex, codex-cli)');
+    CodexProvider.preparedBinaryPath = installedBinary;
+    return installedBinary;
   }
 
   private async findPreparedRotatingCodexBinary(): Promise<string | undefined> {

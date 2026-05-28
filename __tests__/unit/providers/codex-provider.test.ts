@@ -231,6 +231,32 @@ describe('CodexProvider', () => {
     );
   });
 
+  it('falls back to the prepared rotating Codex CLI install root', async () => {
+    const installRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'reviewrouter-codex-cli-')
+    );
+    const binDir = path.join(installRoot, 'node_modules', '.bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    const codexBinary = path.join(binDir, 'codex');
+    fs.writeFileSync(codexBinary, '#!/usr/bin/env node\n');
+    fs.chmodSync(codexBinary, 0o755);
+    spawnMock.mockImplementation((cmd: string) => {
+      if (cmd === 'codex' || cmd === 'codex-cli') {
+        return createMockProcess(undefined, 1);
+      }
+      return createMockProcess();
+    });
+
+    try {
+      const provider = new CodexProvider('gpt-5.4-mini');
+      const binary = await (provider as any).resolveBinary();
+
+      expect(binary).toBe(codexBinary);
+    } finally {
+      fs.rmSync(installRoot, { recursive: true, force: true });
+    }
+  });
+
   it('allows agentic review findings for concrete user-visible regressions', async () => {
     const provider = new CodexProvider('gpt-5.4-mini');
     const prompt = await (provider as any).wrapAgenticReviewPrompt(

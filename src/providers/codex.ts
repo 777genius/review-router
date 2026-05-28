@@ -1698,7 +1698,45 @@ export class CodexProvider extends Provider {
     if (await this.canRun('codex-cli', ['--version'])) {
       return 'codex-cli';
     }
+    const preparedBinary = await this.findPreparedRotatingCodexBinary();
+    if (preparedBinary && (await this.canRun(preparedBinary, ['--version']))) {
+      return preparedBinary;
+    }
     throw new Error('Codex CLI is not available (tried: codex, codex-cli)');
+  }
+
+  private async findPreparedRotatingCodexBinary(): Promise<string | undefined> {
+    try {
+      const entries = await fs.readdir(os.tmpdir(), { withFileTypes: true });
+      const candidates: Array<{ path: string; mtimeMs: number }> = [];
+      for (const entry of entries) {
+        if (
+          !entry.isDirectory() ||
+          !entry.name.startsWith('reviewrouter-codex-cli-')
+        ) {
+          continue;
+        }
+        const candidate = path.join(
+          os.tmpdir(),
+          entry.name,
+          'node_modules',
+          '.bin',
+          'codex'
+        );
+        try {
+          const stat = await fs.stat(candidate);
+          if (stat.isFile() || stat.isSymbolicLink()) {
+            candidates.push({ path: candidate, mtimeMs: stat.mtimeMs });
+          }
+        } catch {
+          // Ignore incomplete or already-cleaned install roots.
+        }
+      }
+      candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+      return candidates[0]?.path;
+    } catch {
+      return undefined;
+    }
   }
 
   private async canRun(cmd: string, args: string[]): Promise<boolean> {

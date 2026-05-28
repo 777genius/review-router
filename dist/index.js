@@ -14730,7 +14730,40 @@ var CodexProvider = class extends Provider {
     if (await this.canRun("codex-cli", ["--version"])) {
       return "codex-cli";
     }
+    const preparedBinary = await this.findPreparedRotatingCodexBinary();
+    if (preparedBinary && await this.canRun(preparedBinary, ["--version"])) {
+      return preparedBinary;
+    }
     throw new Error("Codex CLI is not available (tried: codex, codex-cli)");
+  }
+  async findPreparedRotatingCodexBinary() {
+    try {
+      const entries = await fs5.readdir(os2.tmpdir(), { withFileTypes: true });
+      const candidates = [];
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !entry.name.startsWith("reviewrouter-codex-cli-")) {
+          continue;
+        }
+        const candidate = path4.join(
+          os2.tmpdir(),
+          entry.name,
+          "node_modules",
+          ".bin",
+          "codex"
+        );
+        try {
+          const stat2 = await fs5.stat(candidate);
+          if (stat2.isFile() || stat2.isSymbolicLink()) {
+            candidates.push({ path: candidate, mtimeMs: stat2.mtimeMs });
+          }
+        } catch {
+        }
+      }
+      candidates.sort((a2, b2) => b2.mtimeMs - a2.mtimeMs);
+      return candidates[0]?.path;
+    } catch {
+      return void 0;
+    }
   }
   async canRun(cmd, args) {
     return new Promise((resolve3) => {
@@ -35049,7 +35082,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.59",
+  version: "1.0.60",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

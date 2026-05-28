@@ -35040,7 +35040,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.55",
+  version: "1.0.56",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -35861,7 +35861,6 @@ async function refreshCodexAuthWithOfficialCli(input) {
   input.logger?.info("Refreshing Codex auth through the official Codex CLI.");
   await runCodexBootstrapCommand({
     binary: binary2,
-    model: input.model || process.env.CODEX_MODEL,
     timeoutMs: input.timeoutMs ?? 12e4,
     home,
     codexHome,
@@ -35884,33 +35883,7 @@ async function ensureCodexOAuthRuntimeParent(env = process.env) {
   return parent;
 }
 async function runCodexBootstrapCommand(input) {
-  const args = [
-    "exec",
-    ...input.model ? ["--model", input.model] : [],
-    "--skip-git-repo-check",
-    "--sandbox",
-    "read-only",
-    "--ephemeral",
-    "--ignore-user-config",
-    "--ignore-rules",
-    "-c",
-    "approval_policy=never",
-    "--disable",
-    "shell_tool",
-    "--disable",
-    "unified_exec",
-    "--disable",
-    "browser_use",
-    "--disable",
-    "computer_use",
-    "--disable",
-    "js_repl",
-    "--disable",
-    "tool_search",
-    "--disable",
-    "web_search_request",
-    "Reply with exactly: review-router-codex-auth-ok"
-  ];
+  const args = ["login", "status"];
   await new Promise((resolve3, reject) => {
     const child = (0, import_child_process8.spawn)(input.binary, args, {
       cwd: input.cwd,

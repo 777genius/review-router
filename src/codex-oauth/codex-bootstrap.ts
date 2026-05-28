@@ -45,7 +45,6 @@ export async function refreshCodexAuthWithOfficialCli(input: {
   input.logger?.info('Refreshing Codex auth through the official Codex CLI.');
   await runCodexBootstrapCommand({
     binary,
-    model: input.model || process.env.CODEX_MODEL,
     timeoutMs: input.timeoutMs ?? 120_000,
     home,
     codexHome,
@@ -77,39 +76,12 @@ export async function ensureCodexOAuthRuntimeParent(
 
 async function runCodexBootstrapCommand(input: {
   binary: string;
-  model?: string;
   timeoutMs: number;
   home: string;
   codexHome: string;
   cwd: string;
 }): Promise<void> {
-  const args = [
-    'exec',
-    ...(input.model ? ['--model', input.model] : []),
-    '--skip-git-repo-check',
-    '--sandbox',
-    'read-only',
-    '--ephemeral',
-    '--ignore-user-config',
-    '--ignore-rules',
-    '-c',
-    'approval_policy=never',
-    '--disable',
-    'shell_tool',
-    '--disable',
-    'unified_exec',
-    '--disable',
-    'browser_use',
-    '--disable',
-    'computer_use',
-    '--disable',
-    'js_repl',
-    '--disable',
-    'tool_search',
-    '--disable',
-    'web_search_request',
-    'Reply with exactly: review-router-codex-auth-ok',
-  ];
+  const args = ['login', 'status'];
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(input.binary, args, {

@@ -35040,7 +35040,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.54",
+  version: "1.0.55",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -35839,9 +35839,8 @@ var fs15 = __toESM(require("fs/promises"));
 var os6 = __toESM(require("os"));
 var path14 = __toESM(require("path"));
 async function refreshCodexAuthWithOfficialCli(input) {
-  const root = await fs15.mkdtemp(
-    path14.join(os6.tmpdir(), "reviewrouter-codex-oauth-")
-  );
+  const parent = await ensureCodexOAuthRuntimeParent();
+  const root = await fs15.mkdtemp(path14.join(parent, "reviewrouter-codex-oauth-"));
   const home = path14.join(root, "home");
   const codexHome = path14.join(root, "codex");
   const emptyCwd = path14.join(root, "empty");
@@ -35876,6 +35875,13 @@ async function refreshCodexAuthWithOfficialCli(input) {
       await fs15.rm(root, { recursive: true, force: true });
     }
   };
+}
+async function ensureCodexOAuthRuntimeParent(env = process.env) {
+  const home = env.HOME?.trim() || os6.homedir();
+  const parent = home && path14.isAbsolute(home) ? path14.join(home, ".reviewrouter", "runtime") : path14.join(os6.tmpdir(), "reviewrouter-runtime");
+  await fs15.mkdir(parent, { recursive: true, mode: 448 });
+  await fs15.chmod(parent, 448).catch(() => void 0);
+  return parent;
 }
 async function runCodexBootstrapCommand(input) {
   const args = [

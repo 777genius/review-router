@@ -21,9 +21,8 @@ export async function refreshCodexAuthWithOfficialCli(input: {
   timeoutMs?: number;
   logger?: BootstrapLogger;
 }): Promise<CodexRefreshBootstrapResult> {
-  const root = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'reviewrouter-codex-oauth-')
-  );
+  const parent = await ensureCodexOAuthRuntimeParent();
+  const root = await fs.mkdtemp(path.join(parent, 'reviewrouter-codex-oauth-'));
   const home = path.join(root, 'home');
   const codexHome = path.join(root, 'codex');
   const emptyCwd = path.join(root, 'empty');
@@ -61,6 +60,19 @@ export async function refreshCodexAuthWithOfficialCli(input: {
       await fs.rm(root, { recursive: true, force: true });
     },
   };
+}
+
+export async function ensureCodexOAuthRuntimeParent(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<string> {
+  const home = env.HOME?.trim() || os.homedir();
+  const parent =
+    home && path.isAbsolute(home)
+      ? path.join(home, '.reviewrouter', 'runtime')
+      : path.join(os.tmpdir(), 'reviewrouter-runtime');
+  await fs.mkdir(parent, { recursive: true, mode: 0o700 });
+  await fs.chmod(parent, 0o700).catch(() => undefined);
+  return parent;
 }
 
 async function runCodexBootstrapCommand(input: {

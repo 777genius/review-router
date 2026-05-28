@@ -1681,6 +1681,15 @@ export class CodexProvider extends Provider {
   }
 
   private async resolveBinary(): Promise<string> {
+    const explicitBinary = process.env.REVIEWROUTER_CODEX_BINARY?.trim();
+    if (explicitBinary) {
+      if (await this.canRun(explicitBinary, ['--version'])) {
+        return explicitBinary;
+      }
+      throw new Error(
+        'Codex CLI is not available at REVIEWROUTER_CODEX_BINARY'
+      );
+    }
     // Try codex command directly
     if (await this.canRun('codex', ['--version'])) {
       return 'codex';

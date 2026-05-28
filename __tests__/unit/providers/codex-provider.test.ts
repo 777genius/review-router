@@ -216,6 +216,21 @@ describe('CodexProvider', () => {
     expect(env.OPENROUTER_API_KEY).toBe('or-key');
   });
 
+  it('uses REVIEWROUTER_CODEX_BINARY when provided', async () => {
+    process.env.REVIEWROUTER_CODEX_BINARY = '/tmp/reviewrouter-codex';
+    spawnMock.mockReturnValue(createMockProcess());
+
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const binary = await (provider as any).resolveBinary();
+
+    expect(binary).toBe('/tmp/reviewrouter-codex');
+    expect(spawnMock).toHaveBeenCalledWith(
+      '/tmp/reviewrouter-codex',
+      ['--version'],
+      { stdio: 'ignore' }
+    );
+  });
+
   it('allows agentic review findings for concrete user-visible regressions', async () => {
     const provider = new CodexProvider('gpt-5.4-mini');
     const prompt = await (provider as any).wrapAgenticReviewPrompt(

@@ -14715,6 +14715,15 @@ var CodexProvider = class extends Provider {
     return message.includes("reseed auth.json") ? message : this.truncateCliError(`${message} ${hint}`);
   }
   async resolveBinary() {
+    const explicitBinary = process.env.REVIEWROUTER_CODEX_BINARY?.trim();
+    if (explicitBinary) {
+      if (await this.canRun(explicitBinary, ["--version"])) {
+        return explicitBinary;
+      }
+      throw new Error(
+        "Codex CLI is not available at REVIEWROUTER_CODEX_BINARY"
+      );
+    }
     if (await this.canRun("codex", ["--version"])) {
       return "codex";
     }
@@ -35040,7 +35049,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.57",
+  version: "1.0.58",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -40159,11 +40168,13 @@ function readCodexOAuthActionInputs() {
 }
 async function runReviewComputation(input) {
   const previousCodexHome = process.env.CODEX_HOME;
+  const previousCodexBinary = process.env.REVIEWROUTER_CODEX_BINARY;
   const previousPath = process.env.PATH;
   const previousProgress = process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
   try {
     process.env.CODEX_HOME = input.codexHome;
     if (input.codexBinaryPath) {
+      process.env.REVIEWROUTER_CODEX_BINARY = input.codexBinaryPath;
       const codexBinDir = path17.dirname(input.codexBinaryPath);
       process.env.PATH = previousPath ? `${codexBinDir}${path17.delimiter}${previousPath}` : codexBinDir;
     }
@@ -40217,6 +40228,11 @@ async function runReviewComputation(input) {
       delete process.env.PATH;
     } else {
       process.env.PATH = previousPath;
+    }
+    if (previousCodexBinary === void 0) {
+      delete process.env.REVIEWROUTER_CODEX_BINARY;
+    } else {
+      process.env.REVIEWROUTER_CODEX_BINARY = previousCodexBinary;
     }
     clearCodexRotatingProviderSecretEnv();
   }

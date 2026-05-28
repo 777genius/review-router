@@ -146,11 +146,13 @@ async function runReviewComputation(input: {
   providerSecrets: CodexRotatingProviderSecretInputs;
 }) {
   const previousCodexHome = process.env.CODEX_HOME;
+  const previousCodexBinary = process.env.REVIEWROUTER_CODEX_BINARY;
   const previousPath = process.env.PATH;
   const previousProgress = process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
   try {
     process.env.CODEX_HOME = input.codexHome;
     if (input.codexBinaryPath) {
+      process.env.REVIEWROUTER_CODEX_BINARY = input.codexBinaryPath;
       const codexBinDir = path.dirname(input.codexBinaryPath);
       process.env.PATH = previousPath
         ? `${codexBinDir}${path.delimiter}${previousPath}`
@@ -213,6 +215,11 @@ async function runReviewComputation(input: {
       delete process.env.PATH;
     } else {
       process.env.PATH = previousPath;
+    }
+    if (previousCodexBinary === undefined) {
+      delete process.env.REVIEWROUTER_CODEX_BINARY;
+    } else {
+      process.env.REVIEWROUTER_CODEX_BINARY = previousCodexBinary;
     }
     clearCodexRotatingProviderSecretEnv();
   }

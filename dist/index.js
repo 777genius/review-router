@@ -35040,7 +35040,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.53",
+  version: "1.0.54",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -36100,6 +36100,13 @@ var CODEX_ROTATING_AUTH_INPUT_ENV_NAMES = [
   "INPUT_AUTH-JSON",
   "INPUT_AUTH_JSON"
 ];
+var CODEX_ROTATING_PROVIDER_SECRET_INPUT_ENV_NAMES = {
+  claudeCodeOAuthToken: [
+    "INPUT_CLAUDE-CODE-OAUTH-TOKEN",
+    "INPUT_CLAUDE_CODE_OAUTH_TOKEN"
+  ],
+  openRouterApiKey: ["INPUT_OPENROUTER-API-KEY", "INPUT_OPENROUTER_API_KEY"]
+};
 function readCodexRotatingAuthInput(env = process.env) {
   const authJsonBytes = CODEX_ROTATING_AUTH_INPUT_ENV_NAMES.map(
     (name) => env[name]
@@ -36117,6 +36124,43 @@ function clearCodexRotatingAuthInput(env = process.env) {
     delete env[name];
   }
 }
+function readCodexRotatingProviderSecretInputs(env = process.env) {
+  const claudeCodeOAuthToken = readOptionalSecretInput(
+    CODEX_ROTATING_PROVIDER_SECRET_INPUT_ENV_NAMES.claudeCodeOAuthToken,
+    env
+  );
+  const openRouterApiKey = readOptionalSecretInput(
+    CODEX_ROTATING_PROVIDER_SECRET_INPUT_ENV_NAMES.openRouterApiKey,
+    env
+  );
+  clearCodexRotatingProviderSecretInputs(env);
+  return {
+    ...claudeCodeOAuthToken ? { claudeCodeOAuthToken } : {},
+    ...openRouterApiKey ? { openRouterApiKey } : {}
+  };
+}
+function applyCodexRotatingProviderSecretInputs(input, env = process.env) {
+  clearCodexRotatingProviderSecretEnv(env);
+  if (input.claudeCodeOAuthToken) {
+    env.CLAUDE_CODE_OAUTH_TOKEN = input.claudeCodeOAuthToken;
+  }
+  if (input.openRouterApiKey) {
+    env.OPENROUTER_API_KEY = input.openRouterApiKey;
+  }
+}
+function clearCodexRotatingProviderSecretInputs(env = process.env) {
+  for (const names of Object.values(
+    CODEX_ROTATING_PROVIDER_SECRET_INPUT_ENV_NAMES
+  )) {
+    for (const name of names) {
+      delete env[name];
+    }
+  }
+}
+function clearCodexRotatingProviderSecretEnv(env = process.env) {
+  delete env.CLAUDE_CODE_OAUTH_TOKEN;
+  delete env.OPENROUTER_API_KEY;
+}
 function clearCodexRotatingOidcRequestEnv(env = process.env) {
   delete env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
   delete env.ACTIONS_ID_TOKEN_REQUEST_URL;
@@ -36127,6 +36171,8 @@ function clearCodexRotatingProcessAuthEnv(env = process.env) {
   delete env.OPENAI_API_KEY;
   delete env.CODEX_HOME;
   clearCodexRotatingAuthInput(env);
+  clearCodexRotatingProviderSecretInputs(env);
+  clearCodexRotatingProviderSecretEnv(env);
 }
 function maskCodexAuthJson(authJsonBytes) {
   setSecret(authJsonBytes);
@@ -36140,6 +36186,13 @@ function maskCodexAuthJson(authJsonBytes) {
     }
   } catch {
   }
+}
+function readOptionalSecretInput(envNames, env) {
+  const value = envNames.map((name) => env[name]?.trim()).find((raw) => Boolean(raw));
+  if (value) {
+    setSecret(value);
+  }
+  return value;
 }
 
 // src/codex-oauth/github-secrets.ts
@@ -40030,6 +40083,7 @@ function safeGitError(value) {
 var CODEX_OAUTH_ROTATING_MODE = "codex-oauth-rotating";
 async function runCodexOAuthRotatingAction(options = {}) {
   const inputs = readCodexOAuthActionInputs();
+  clearCodexRotatingProviderSecretEnv();
   const controlPlane = new CodexOAuthControlPlaneClient({
     apiUrl: inputs.apiUrl,
     fetchImpl: options.fetchImpl
@@ -40066,8 +40120,12 @@ async function runCodexOAuthRotatingAction(options = {}) {
     },
     review: {
       run: (input) => runReviewComputation({
+        apiUrl: inputs.apiUrl,
+        audience: inputs.audience,
         checkoutToken: input.checkoutToken,
-        codexHome: input.codexHome
+        codexHome: input.codexHome,
+        fetchImpl: options.fetchImpl,
+        providerSecrets: inputs.providerSecrets
       })
     },
     comments: {
@@ -40111,6 +40169,7 @@ function readCodexOAuthActionInputs() {
     audience,
     providerInstanceId,
     workflowSchemaVersion,
+    providerSecrets: readCodexRotatingProviderSecretInputs(),
     repository: event.repository,
     headSha: event.headSha,
     workspacePath: process.env.GITHUB_WORKSPACE || process.cwd()
@@ -40122,6 +40181,12 @@ async function runReviewComputation(input) {
   try {
     process.env.CODEX_HOME = input.codexHome;
     process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = "never";
+    await applyCodexRotatingReviewRuntimeConfig({
+      apiUrl: input.apiUrl,
+      audience: input.audience,
+      fetchImpl: input.fetchImpl
+    });
+    applyCodexRotatingProviderSecretInputs(input.providerSecrets);
     const config = ConfigLoader.load();
     const userDryRun = config.dryRun;
     config.dryRun = true;
@@ -40161,7 +40226,21 @@ async function runReviewComputation(input) {
     } else {
       process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = previousProgress;
     }
+    clearCodexRotatingProviderSecretEnv();
   }
+}
+async function applyCodexRotatingReviewRuntimeConfig(input) {
+  process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = "oidc";
+  process.env.REVIEWROUTER_API_URL = input.apiUrl;
+  process.env.REVIEWROUTER_OIDC_AUDIENCE = input.audience;
+  process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK = "false";
+  await applyControlPlaneRuntimeConfig({
+    fetchImpl: input.fetchImpl,
+    logger: {
+      info,
+      warn: (message) => warning(message)
+    }
+  });
 }
 async function postReviewAfterAuthClear(input) {
   if (input.review.skipped || input.review.userDryRun || !input.review.markdown) {

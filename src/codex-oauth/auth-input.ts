@@ -5,6 +5,19 @@ export const CODEX_ROTATING_AUTH_INPUT_ENV_NAMES = [
   'INPUT_AUTH_JSON',
 ] as const;
 
+const CODEX_ROTATING_PROVIDER_SECRET_INPUT_ENV_NAMES = {
+  claudeCodeOAuthToken: [
+    'INPUT_CLAUDE-CODE-OAUTH-TOKEN',
+    'INPUT_CLAUDE_CODE_OAUTH_TOKEN',
+  ],
+  openRouterApiKey: ['INPUT_OPENROUTER-API-KEY', 'INPUT_OPENROUTER_API_KEY'],
+} as const;
+
+export type CodexRotatingProviderSecretInputs = {
+  claudeCodeOAuthToken?: string;
+  openRouterApiKey?: string;
+};
+
 export type CodexRotatingAuthInput = {
   authJsonBytes: string;
 };
@@ -34,6 +47,57 @@ export function clearCodexRotatingAuthInput(
   }
 }
 
+export function readCodexRotatingProviderSecretInputs(
+  env: NodeJS.ProcessEnv = process.env
+): CodexRotatingProviderSecretInputs {
+  const claudeCodeOAuthToken = readOptionalSecretInput(
+    CODEX_ROTATING_PROVIDER_SECRET_INPUT_ENV_NAMES.claudeCodeOAuthToken,
+    env
+  );
+  const openRouterApiKey = readOptionalSecretInput(
+    CODEX_ROTATING_PROVIDER_SECRET_INPUT_ENV_NAMES.openRouterApiKey,
+    env
+  );
+
+  clearCodexRotatingProviderSecretInputs(env);
+  return {
+    ...(claudeCodeOAuthToken ? { claudeCodeOAuthToken } : {}),
+    ...(openRouterApiKey ? { openRouterApiKey } : {}),
+  };
+}
+
+export function applyCodexRotatingProviderSecretInputs(
+  input: CodexRotatingProviderSecretInputs,
+  env: NodeJS.ProcessEnv = process.env
+): void {
+  clearCodexRotatingProviderSecretEnv(env);
+  if (input.claudeCodeOAuthToken) {
+    env.CLAUDE_CODE_OAUTH_TOKEN = input.claudeCodeOAuthToken;
+  }
+  if (input.openRouterApiKey) {
+    env.OPENROUTER_API_KEY = input.openRouterApiKey;
+  }
+}
+
+export function clearCodexRotatingProviderSecretInputs(
+  env: NodeJS.ProcessEnv = process.env
+): void {
+  for (const names of Object.values(
+    CODEX_ROTATING_PROVIDER_SECRET_INPUT_ENV_NAMES
+  )) {
+    for (const name of names) {
+      delete env[name];
+    }
+  }
+}
+
+export function clearCodexRotatingProviderSecretEnv(
+  env: NodeJS.ProcessEnv = process.env
+): void {
+  delete env.CLAUDE_CODE_OAUTH_TOKEN;
+  delete env.OPENROUTER_API_KEY;
+}
+
 export function clearCodexRotatingOidcRequestEnv(
   env: NodeJS.ProcessEnv = process.env
 ): void {
@@ -49,6 +113,8 @@ export function clearCodexRotatingProcessAuthEnv(
   delete env.OPENAI_API_KEY;
   delete env.CODEX_HOME;
   clearCodexRotatingAuthInput(env);
+  clearCodexRotatingProviderSecretInputs(env);
+  clearCodexRotatingProviderSecretEnv(env);
 }
 
 function maskCodexAuthJson(authJsonBytes: string): void {
@@ -66,4 +132,17 @@ function maskCodexAuthJson(authJsonBytes: string): void {
   } catch {
     // The validator reports invalid JSON later. The raw bytes are already masked.
   }
+}
+
+function readOptionalSecretInput(
+  envNames: readonly string[],
+  env: NodeJS.ProcessEnv
+): string | undefined {
+  const value = envNames
+    .map((name) => env[name]?.trim())
+    .find((raw): raw is string => Boolean(raw));
+  if (value) {
+    core.setSecret(value);
+  }
+  return value;
 }

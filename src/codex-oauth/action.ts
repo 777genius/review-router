@@ -6,12 +6,17 @@ import { createComponents } from '../setup';
 import { GitHubClient } from '../github/client';
 import { CommentPoster } from '../github/comment-poster';
 import { formatBlockingFindingFailure } from '../output/severity-gate';
+import { applyControlPlaneRuntimeConfig } from '../control-plane/runtime-config';
 import { CodexOAuthControlPlaneClient, FetchLike } from './control-plane';
 import { refreshCodexAuthWithOfficialCli } from './codex-bootstrap';
 import { prepareCodexCliBeforeAuthRead } from './codex-cli';
 import {
+  applyCodexRotatingProviderSecretInputs,
   clearCodexRotatingOidcRequestEnv,
+  clearCodexRotatingProviderSecretEnv,
   clearCodexRotatingProcessAuthEnv,
+  readCodexRotatingProviderSecretInputs,
+  type CodexRotatingProviderSecretInputs,
 } from './auth-input';
 import { fetchGitHubRepositoryPublicKey } from './github-secrets';
 import { GitHubActionsOidcTokenProvider } from './github-actions-oidc';
@@ -29,6 +34,7 @@ export async function runCodexOAuthRotatingAction(
   } = {}
 ): Promise<void> {
   const inputs = readCodexOAuthActionInputs();
+  clearCodexRotatingProviderSecretEnv();
   const controlPlane = new CodexOAuthControlPlaneClient({
     apiUrl: inputs.apiUrl,
     fetchImpl: options.fetchImpl,
@@ -69,8 +75,12 @@ export async function runCodexOAuthRotatingAction(
     review: {
       run: (input) =>
         runReviewComputation({
+          apiUrl: inputs.apiUrl,
+          audience: inputs.audience,
           checkoutToken: input.checkoutToken,
           codexHome: input.codexHome,
+          fetchImpl: options.fetchImpl,
+          providerSecrets: inputs.providerSecrets,
         }),
     },
     comments: {
@@ -117,6 +127,7 @@ function readCodexOAuthActionInputs() {
     audience,
     providerInstanceId,
     workflowSchemaVersion,
+    providerSecrets: readCodexRotatingProviderSecretInputs(),
     repository: event.repository,
     headSha: event.headSha,
     workspacePath: process.env.GITHUB_WORKSPACE || process.cwd(),
@@ -124,14 +135,25 @@ function readCodexOAuthActionInputs() {
 }
 
 async function runReviewComputation(input: {
+  apiUrl: string;
+  audience: string;
   checkoutToken: string;
   codexHome: string;
+  fetchImpl?: FetchLike;
+  providerSecrets: CodexRotatingProviderSecretInputs;
 }) {
   const previousCodexHome = process.env.CODEX_HOME;
   const previousProgress = process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
   try {
     process.env.CODEX_HOME = input.codexHome;
     process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = 'never';
+
+    await applyCodexRotatingReviewRuntimeConfig({
+      apiUrl: input.apiUrl,
+      audience: input.audience,
+      fetchImpl: input.fetchImpl,
+    });
+    applyCodexRotatingProviderSecretInputs(input.providerSecrets);
 
     const config = ConfigLoader.load();
     const userDryRun = config.dryRun;
@@ -177,7 +199,27 @@ async function runReviewComputation(input: {
     } else {
       process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = previousProgress;
     }
+    clearCodexRotatingProviderSecretEnv();
   }
+}
+
+export async function applyCodexRotatingReviewRuntimeConfig(input: {
+  apiUrl: string;
+  audience: string;
+  fetchImpl?: FetchLike;
+}): Promise<void> {
+  process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = 'oidc';
+  process.env.REVIEWROUTER_API_URL = input.apiUrl;
+  process.env.REVIEWROUTER_OIDC_AUDIENCE = input.audience;
+  process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK = 'false';
+
+  await applyControlPlaneRuntimeConfig({
+    fetchImpl: input.fetchImpl,
+    logger: {
+      info: core.info,
+      warn: (message) => core.warning(message),
+    },
+  });
 }
 
 async function postReviewAfterAuthClear(input: {

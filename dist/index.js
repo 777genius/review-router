@@ -13485,12 +13485,138 @@ ${hint}` : text;
 };
 
 // src/providers/codex.ts
+var import_child_process4 = require("child_process");
+var fs6 = __toESM(require("fs/promises"));
+var fsSync = __toESM(require("fs"));
+var os3 = __toESM(require("os"));
+var path5 = __toESM(require("path"));
+var crypto3 = __toESM(require("crypto"));
+
+// src/codex-oauth/codex-cli.ts
 var import_child_process3 = require("child_process");
 var fs5 = __toESM(require("fs/promises"));
-var fsSync = __toESM(require("fs"));
 var os2 = __toESM(require("os"));
 var path4 = __toESM(require("path"));
-var crypto3 = __toESM(require("crypto"));
+var CODEX_OAUTH_PINNED_CODEX_PACKAGE = "@openai/codex@0.133.0";
+async function prepareCodexCliBeforeAuthRead(input = {}) {
+  const explicit = process.env.REVIEWROUTER_CODEX_BINARY?.trim();
+  if (explicit) {
+    await assertCodexBinaryWorks(explicit, input.timeoutMs ?? 1e4);
+    return { binaryPath: explicit };
+  }
+  if (await canRunCodexBinary("codex", input.timeoutMs ?? 1e4)) {
+    return { binaryPath: "codex" };
+  }
+  input.logger?.info(
+    `Codex CLI not found on PATH; installing ${CODEX_OAUTH_PINNED_CODEX_PACKAGE} before auth materialization.`
+  );
+  const installRoot = await fs5.mkdtemp(
+    path4.join(os2.tmpdir(), "reviewrouter-codex-cli-")
+  );
+  await runNpmInstall({
+    installRoot,
+    timeoutMs: input.timeoutMs ?? 12e4
+  });
+  const binaryPath = path4.join(installRoot, "node_modules", ".bin", "codex");
+  await assertCodexBinaryWorks(binaryPath, input.timeoutMs ?? 1e4);
+  return {
+    binaryPath,
+    async clear() {
+      await fs5.rm(installRoot, { recursive: true, force: true });
+    }
+  };
+}
+async function assertCodexBinaryWorks(binaryPath, timeoutMs) {
+  if (!await canRunCodexBinary(binaryPath, timeoutMs)) {
+    throw new Error("codex_oauth_codex_cli_unavailable");
+  }
+}
+async function canRunCodexBinary(binaryPath, timeoutMs) {
+  try {
+    await runCommand(binaryPath, ["--version"], {
+      timeoutMs,
+      cwd: os2.tmpdir(),
+      env: safePreAuthEnv()
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function runNpmInstall(input) {
+  await runCommand(
+    "npm",
+    [
+      "install",
+      "--prefix",
+      input.installRoot,
+      "--omit=dev",
+      "--no-audit",
+      "--no-fund",
+      CODEX_OAUTH_PINNED_CODEX_PACKAGE
+    ],
+    {
+      timeoutMs: input.timeoutMs,
+      cwd: input.installRoot,
+      env: safePreAuthEnv()
+    }
+  );
+}
+function runCommand(command, args, options) {
+  return new Promise((resolve3, reject) => {
+    const child = (0, import_child_process3.spawn)(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", "ignore", "pipe"]
+    });
+    let stderr = "";
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+      reject(new Error("codex_oauth_codex_cli_prepare_timeout"));
+    }, options.timeoutMs);
+    child.stderr?.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", (error2) => {
+      if (timedOut) return;
+      clearTimeout(timer);
+      reject(
+        new Error(
+          `codex_oauth_codex_cli_prepare_failed:${safeOutput(String(error2))}`
+        )
+      );
+    });
+    child.on("close", (code) => {
+      if (timedOut) return;
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve3();
+        return;
+      }
+      reject(
+        new Error(
+          `codex_oauth_codex_cli_prepare_failed:${code ?? "signal"}:${safeOutput(
+            stderr
+          )}`
+        )
+      );
+    });
+  });
+}
+function safePreAuthEnv() {
+  return {
+    PATH: process.env.PATH || "",
+    HOME: process.env.HOME || os2.tmpdir(),
+    npm_config_loglevel: "error"
+  };
+}
+function safeOutput(value) {
+  return value.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 200);
+}
+
+// src/providers/codex.ts
 var CodexCliExitError = class extends Error {
   constructor(code, stdout, stderr, message) {
     super(message);
@@ -13754,15 +13880,15 @@ var CodexProvider = class _CodexProvider extends Provider {
   }
   async runCliWithStdin(bin, stdin, timeoutMs, options) {
     const runId = crypto3.randomBytes(8).toString("hex");
-    const tmpFile = path4.join(os2.tmpdir(), `codex-prompt-${runId}.txt`);
-    const outputFile = path4.join(os2.tmpdir(), `codex-output-${runId}.txt`);
-    const schemaFile = options.outputSchema ? path4.join(os2.tmpdir(), `codex-schema-${runId}.json`) : void 0;
+    const tmpFile = path5.join(os3.tmpdir(), `codex-prompt-${runId}.txt`);
+    const outputFile = path5.join(os3.tmpdir(), `codex-output-${runId}.txt`);
+    const schemaFile = options.outputSchema ? path5.join(os3.tmpdir(), `codex-schema-${runId}.json`) : void 0;
     let fd;
     try {
-      await fs5.writeFile(tmpFile, stdin, { encoding: "utf8", mode: 384 });
-      await fs5.writeFile(outputFile, "", { encoding: "utf8", mode: 384 });
+      await fs6.writeFile(tmpFile, stdin, { encoding: "utf8", mode: 384 });
+      await fs6.writeFile(outputFile, "", { encoding: "utf8", mode: 384 });
       if (schemaFile) {
-        await fs5.writeFile(schemaFile, JSON.stringify(options.outputSchema), {
+        await fs6.writeFile(schemaFile, JSON.stringify(options.outputSchema), {
           encoding: "utf8",
           mode: 384
         });
@@ -13776,10 +13902,10 @@ var CodexProvider = class _CodexProvider extends Provider {
         disableTools: options.disableTools,
         skipGitRepoCheck: options.skipGitRepoCheck
       });
-      fd = await fs5.open(tmpFile, "r");
+      fd = await fs6.open(tmpFile, "r");
       const fdNum = fd.fd;
       const { stdout, stderr } = await new Promise((resolve3, reject) => {
-        const proc = (0, import_child_process3.spawn)(bin, args, {
+        const proc = (0, import_child_process4.spawn)(bin, args, {
           stdio: [fdNum, "pipe", "pipe"],
           detached: true,
           cwd: options.cwd || process.cwd(),
@@ -13854,10 +13980,10 @@ var CodexProvider = class _CodexProvider extends Provider {
         if (fd) {
           await fd.close();
         }
-        await fs5.unlink(tmpFile);
-        await fs5.unlink(outputFile);
+        await fs6.unlink(tmpFile);
+        await fs6.unlink(outputFile);
         if (schemaFile) {
-          await fs5.unlink(schemaFile);
+          await fs6.unlink(schemaFile);
         }
       } catch {
       }
@@ -14079,10 +14205,10 @@ var CodexProvider = class _CodexProvider extends Provider {
     );
   }
   normalizeRepoPath(file) {
-    if (!file || file.includes("\0") || path4.isAbsolute(file)) {
+    if (!file || file.includes("\0") || path5.isAbsolute(file)) {
       return null;
     }
-    const normalized = path4.normalize(file).replace(/\\/g, "/");
+    const normalized = path5.normalize(file).replace(/\\/g, "/");
     if (normalized === "." || normalized.startsWith("../") || normalized === "..") {
       return null;
     }
@@ -14092,16 +14218,16 @@ var CodexProvider = class _CodexProvider extends Provider {
     const normalized = this.normalizeRepoPath(file);
     if (!normalized) return "";
     const repoRoot = process.cwd();
-    const fullPath = path4.resolve(repoRoot, normalized);
-    if (!fullPath.startsWith(repoRoot + path4.sep)) {
+    const fullPath = path5.resolve(repoRoot, normalized);
+    if (!fullPath.startsWith(repoRoot + path5.sep)) {
       return "";
     }
     try {
-      const stat2 = await fs5.stat(fullPath);
+      const stat2 = await fs6.stat(fullPath);
       if (!stat2.isFile() || stat2.size > 2e5) {
         return "";
       }
-      const content = await fs5.readFile(fullPath, "utf8");
+      const content = await fs6.readFile(fullPath, "utf8");
       return content.split(/\r?\n/).slice(0, 220).join("\n").slice(0, 16e3);
     } catch {
       return "";
@@ -14119,8 +14245,8 @@ var CodexProvider = class _CodexProvider extends Provider {
     return [...imports];
   }
   resolveRelativeImport(fromFile, specifier) {
-    const base = path4.dirname(fromFile);
-    const raw = this.normalizeRepoPath(path4.join(base, specifier));
+    const base = path5.dirname(fromFile);
+    const raw = this.normalizeRepoPath(path5.join(base, specifier));
     if (!raw) return null;
     const candidates = [
       raw,
@@ -14128,15 +14254,15 @@ var CodexProvider = class _CodexProvider extends Provider {
         (ext2) => `${raw}${ext2}`
       ),
       ...[".ts", ".tsx", ".js", ".jsx", ".json"].map(
-        (ext2) => path4.posix.join(raw, `index${ext2}`)
+        (ext2) => path5.posix.join(raw, `index${ext2}`)
       )
     ];
     for (const candidate of candidates) {
       const normalized = this.normalizeRepoPath(candidate);
       if (!normalized || !this.isContextReadableFile(normalized)) continue;
       try {
-        const fullPath = path4.resolve(process.cwd(), normalized);
-        if (fullPath.startsWith(process.cwd() + path4.sep)) {
+        const fullPath = path5.resolve(process.cwd(), normalized);
+        if (fullPath.startsWith(process.cwd() + path5.sep)) {
           const stat2 = fsSync.statSync(fullPath);
           if (stat2.isFile()) return normalized;
         }
@@ -14152,7 +14278,7 @@ var CodexProvider = class _CodexProvider extends Provider {
     const roots = this.getWorkspacePackageRoots();
     const root = roots.get(packageName) || this.getDependencyPackageRoot(packageName);
     if (!root) return null;
-    return this.resolveImportCandidate(path4.posix.join(root, packagePath));
+    return this.resolveImportCandidate(path5.posix.join(root, packagePath));
   }
   getDependencyPackageRoot(packageName) {
     if (!this.parseBooleanEnv(process.env.CODEX_DEPENDENCY_CONTEXT, true)) {
@@ -14162,17 +14288,17 @@ var CodexProvider = class _CodexProvider extends Provider {
     if (!dependency) return null;
     const safePackage = packageName.replace(/[^a-zA-Z0-9_.-]/g, "_");
     const cacheKey = crypto3.createHash("sha1").update(`${dependency.url}:${dependency.ref}:${dependency.path}`).digest("hex").slice(0, 10);
-    const checkoutDir = path4.join(
+    const checkoutDir = path5.join(
       process.cwd(),
       ".review-router-deps",
       `${safePackage}-${cacheKey}`
     );
-    const root = path4.posix.join(
+    const root = path5.posix.join(
       ".review-router-deps",
       `${safePackage}-${cacheKey}`,
       dependency.path
     );
-    if (fsSync.existsSync(path4.join(checkoutDir, dependency.path))) {
+    if (fsSync.existsSync(path5.join(checkoutDir, dependency.path))) {
       return root;
     }
     if (!this.isSafeDependencyGitUrl(dependency.url)) {
@@ -14182,7 +14308,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       return null;
     }
     try {
-      fsSync.mkdirSync(path4.dirname(checkoutDir), { recursive: true });
+      fsSync.mkdirSync(path5.dirname(checkoutDir), { recursive: true });
       fsSync.rmSync(checkoutDir, { recursive: true, force: true });
       fsSync.mkdirSync(checkoutDir, { recursive: true });
       this.runGitForDependency(["init", "--quiet"], checkoutDir);
@@ -14198,7 +14324,7 @@ var CodexProvider = class _CodexProvider extends Provider {
         ["checkout", "--quiet", "FETCH_HEAD"],
         checkoutDir
       );
-      if (fsSync.existsSync(path4.join(checkoutDir, dependency.path))) {
+      if (fsSync.existsSync(path5.join(checkoutDir, dependency.path))) {
         logger.info(
           `Loaded dependency context for ${packageName} from ${dependency.url}@${dependency.ref}`
         );
@@ -14233,12 +14359,12 @@ var CodexProvider = class _CodexProvider extends Provider {
         return;
       }
       if (entries.some((entry) => entry.isFile() && entry.name === "pubspec.lock")) {
-        found.push(path4.join(dir, "pubspec.lock"));
+        found.push(path5.join(dir, "pubspec.lock"));
       }
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         if (this.shouldSkipContextDirectory(entry.name)) continue;
-        walk(path4.join(dir, entry.name), depth + 1);
+        walk(path5.join(dir, entry.name), depth + 1);
       }
     };
     walk(root, 0);
@@ -14281,7 +14407,7 @@ var CodexProvider = class _CodexProvider extends Provider {
     );
   }
   runGitForDependency(args, cwd) {
-    const result = (0, import_child_process3.spawnSync)("git", args, {
+    const result = (0, import_child_process4.spawnSync)("git", args, {
       cwd,
       encoding: "utf8",
       timeout: 2e4,
@@ -14289,7 +14415,7 @@ var CodexProvider = class _CodexProvider extends Provider {
         PATH: process.env.PATH || "",
         LANG: process.env.LANG || "C",
         LC_ALL: process.env.LC_ALL || "C",
-        HOME: path4.join(os2.tmpdir(), "review-router-git-home"),
+        HOME: path5.join(os3.tmpdir(), "review-router-git-home"),
         GIT_TERMINAL_PROMPT: "0",
         GIT_CONFIG_NOSYSTEM: "1"
       }
@@ -14307,8 +14433,8 @@ var CodexProvider = class _CodexProvider extends Provider {
         const content = fsSync.readFileSync(pubspec, "utf8");
         const name = /^name:\s*['"]?([^'"\s#]+)['"]?/m.exec(content)?.[1];
         if (!name) continue;
-        const packageDir = path4.relative(process.cwd(), path4.dirname(pubspec)).replace(/\\/g, "/");
-        const libDir = packageDir === "" ? "lib" : path4.posix.join(packageDir, "lib");
+        const packageDir = path5.relative(process.cwd(), path5.dirname(pubspec)).replace(/\\/g, "/");
+        const libDir = packageDir === "" ? "lib" : path5.posix.join(packageDir, "lib");
         roots.set(name, libDir);
       } catch {
       }
@@ -14326,12 +14452,12 @@ var CodexProvider = class _CodexProvider extends Provider {
         return;
       }
       if (entries.some((entry) => entry.isFile() && entry.name === "pubspec.yaml")) {
-        found.push(path4.join(dir, "pubspec.yaml"));
+        found.push(path5.join(dir, "pubspec.yaml"));
       }
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         if (this.shouldSkipContextDirectory(entry.name)) continue;
-        walk(path4.join(dir, entry.name), depth + 1);
+        walk(path5.join(dir, entry.name), depth + 1);
       }
     };
     walk(root, 0);
@@ -14405,7 +14531,7 @@ var CodexProvider = class _CodexProvider extends Provider {
         return;
       }
       for (const entry of entries) {
-        const fullPath = path4.join(dir, entry.name);
+        const fullPath = path5.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (!this.shouldSkipContextDirectory(entry.name)) {
             walk(fullPath, depth + 1);
@@ -14413,7 +14539,7 @@ var CodexProvider = class _CodexProvider extends Provider {
           continue;
         }
         if (!entry.isFile()) continue;
-        const relative2 = path4.relative(root, fullPath).replace(/\\/g, "/");
+        const relative2 = path5.relative(root, fullPath).replace(/\\/g, "/");
         if (!this.isContextReadableFile(relative2)) continue;
         try {
           const stat2 = fsSync.statSync(fullPath);
@@ -14442,8 +14568,8 @@ var CodexProvider = class _CodexProvider extends Provider {
     const normalized = this.normalizeRepoPath(file);
     if (!normalized) return "";
     const repoRoot = process.cwd();
-    const fullPath = path4.resolve(repoRoot, normalized);
-    if (!fullPath.startsWith(repoRoot + path4.sep)) return "";
+    const fullPath = path5.resolve(repoRoot, normalized);
+    if (!fullPath.startsWith(repoRoot + path5.sep)) return "";
     try {
       const stat2 = fsSync.statSync(fullPath);
       if (!stat2.isFile() || stat2.size > 2e5) return "";
@@ -14459,15 +14585,15 @@ var CodexProvider = class _CodexProvider extends Provider {
         (ext2) => `${raw}${ext2}`
       ),
       ...[".dart", ".ts", ".tsx", ".js", ".jsx", ".json"].map(
-        (ext2) => path4.posix.join(raw, `index${ext2}`)
+        (ext2) => path5.posix.join(raw, `index${ext2}`)
       )
     ];
     for (const candidate of candidates) {
       const normalized = this.normalizeRepoPath(candidate);
       if (!normalized || !this.isContextReadableFile(normalized)) continue;
       try {
-        const fullPath = path4.resolve(process.cwd(), normalized);
-        if (fullPath.startsWith(process.cwd() + path4.sep)) {
+        const fullPath = path5.resolve(process.cwd(), normalized);
+        if (fullPath.startsWith(process.cwd() + path5.sep)) {
           const stat2 = fsSync.statSync(fullPath);
           if (stat2.isFile()) return normalized;
         }
@@ -14503,7 +14629,7 @@ var CodexProvider = class _CodexProvider extends Provider {
   }
   async readOptionalFile(file) {
     try {
-      return await fs5.readFile(file, "utf8");
+      return await fs6.readFile(file, "utf8");
     } catch {
       return "";
     }
@@ -14589,7 +14715,7 @@ var CodexProvider = class _CodexProvider extends Provider {
   isReadOnlyExplorationCommand(command) {
     const commandName = this.extractCommandName(command);
     if (!commandName) return false;
-    const base = path4.basename(commandName).toLowerCase();
+    const base = path5.basename(commandName).toLowerCase();
     if ([
       "rg",
       "grep",
@@ -14748,21 +14874,21 @@ var CodexProvider = class _CodexProvider extends Provider {
   }
   async findPreparedRotatingCodexBinary() {
     try {
-      const entries = await fs5.readdir(os2.tmpdir(), { withFileTypes: true });
+      const entries = await fs6.readdir(os3.tmpdir(), { withFileTypes: true });
       const candidates = [];
       for (const entry of entries) {
         if (!entry.isDirectory() || !entry.name.startsWith("reviewrouter-codex-cli-")) {
           continue;
         }
-        const candidate = path4.join(
-          os2.tmpdir(),
+        const candidate = path5.join(
+          os3.tmpdir(),
           entry.name,
           "node_modules",
           ".bin",
           "codex"
         );
         try {
-          const stat2 = await fs5.stat(candidate);
+          const stat2 = await fs6.stat(candidate);
           if (stat2.isFile() || stat2.isSymbolicLink()) {
             candidates.push({ path: candidate, mtimeMs: stat2.mtimeMs });
           }
@@ -14777,45 +14903,28 @@ var CodexProvider = class _CodexProvider extends Provider {
   }
   async canRun(cmd, args) {
     return new Promise((resolve3) => {
-      const proc = (0, import_child_process3.spawn)(cmd, args, { stdio: "ignore" });
+      const proc = (0, import_child_process4.spawn)(cmd, args, {
+        cwd: os3.tmpdir(),
+        env: {
+          PATH: process.env.PATH || "",
+          HOME: process.env.HOME || os3.tmpdir(),
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null"
+        },
+        stdio: "ignore"
+      });
       proc.on("error", () => resolve3(false));
       proc.on("close", (code) => resolve3(code === 0));
     });
   }
   async installPinnedCodexCli() {
-    const installRoot = await fs5.mkdtemp(
-      path4.join(os2.tmpdir(), "reviewrouter-codex-provider-cli-")
-    );
-    await this.runInstallCommand("npm", [
-      "install",
-      "--prefix",
-      installRoot,
-      "--omit=dev",
-      "--no-audit",
-      "--no-fund",
-      "@openai/codex@0.133.0"
-    ]);
-    return path4.join(installRoot, "node_modules", ".bin", "codex");
-  }
-  async runInstallCommand(command, args) {
-    await new Promise((resolve3, reject) => {
-      const proc = (0, import_child_process3.spawn)(command, [...args], {
-        env: {
-          PATH: process.env.PATH || "",
-          HOME: process.env.HOME || os2.tmpdir(),
-          npm_config_loglevel: "error"
-        },
-        stdio: "ignore"
-      });
-      proc.on("error", (error2) => reject(error2));
-      proc.on("close", (code) => {
-        if (code === 0) {
-          resolve3();
-          return;
-        }
-        reject(new Error(`codex_cli_install_failed:${code ?? "signal"}`));
-      });
+    const prepared = await prepareCodexCliBeforeAuthRead({
+      logger: {
+        info: (message) => logger.info(message),
+        warn: (message) => logger.warn(message)
+      }
     });
+    return prepared.binaryPath;
   }
   extractFindings(content) {
     try {
@@ -14834,10 +14943,10 @@ var CodexProvider = class _CodexProvider extends Provider {
 };
 
 // src/providers/gemini.ts
-var import_child_process4 = require("child_process");
-var fs6 = __toESM(require("fs/promises"));
-var os3 = __toESM(require("os"));
-var path5 = __toESM(require("path"));
+var import_child_process5 = require("child_process");
+var fs7 = __toESM(require("fs/promises"));
+var os4 = __toESM(require("os"));
+var path6 = __toESM(require("path"));
 var crypto4 = __toESM(require("crypto"));
 var GeminiProvider = class extends Provider {
   constructor(model) {
@@ -14879,13 +14988,13 @@ var GeminiProvider = class extends Provider {
   async review(prompt, timeoutMs) {
     const started = Date.now();
     const { bin, args: baseArgs } = await this.resolveBinary();
-    const tmpDir = await fs6.mkdtemp(path5.join(os3.tmpdir(), "gemini-"));
-    await fs6.chmod(tmpDir, 448);
-    const promptFile = path5.join(
+    const tmpDir = await fs7.mkdtemp(path6.join(os4.tmpdir(), "gemini-"));
+    await fs7.chmod(tmpDir, 448);
+    const promptFile = path6.join(
       tmpDir,
       `prompt-${crypto4.randomBytes(8).toString("hex")}.txt`
     );
-    await fs6.writeFile(promptFile, prompt, { encoding: "utf8", mode: 384 });
+    await fs7.writeFile(promptFile, prompt, { encoding: "utf8", mode: 384 });
     const args = [
       ...baseArgs,
       "--model",
@@ -14924,15 +15033,15 @@ var GeminiProvider = class extends Provider {
       throw error2;
     } finally {
       try {
-        await fs6.unlink(promptFile);
-        await fs6.rmdir(tmpDir);
+        await fs7.unlink(promptFile);
+        await fs7.rmdir(tmpDir);
       } catch {
       }
     }
   }
   runCli(bin, args, timeoutMs) {
     return new Promise((resolve3, reject) => {
-      const proc = (0, import_child_process4.spawn)(bin, args, {
+      const proc = (0, import_child_process5.spawn)(bin, args, {
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
         env: process.env
@@ -14998,7 +15107,7 @@ var GeminiProvider = class extends Provider {
   }
   async canRun(cmd, args) {
     return new Promise((resolve3) => {
-      const proc = (0, import_child_process4.spawn)(cmd, args, { stdio: "ignore" });
+      const proc = (0, import_child_process5.spawn)(cmd, args, { stdio: "ignore" });
       proc.on("error", () => resolve3(false));
       proc.on("close", (code) => resolve3(code === 0));
     });
@@ -15006,18 +15115,18 @@ var GeminiProvider = class extends Provider {
 };
 
 // src/providers/rate-limiter.ts
-var fs7 = __toESM(require("fs/promises"));
-var path6 = __toESM(require("path"));
-var os4 = __toESM(require("os"));
+var fs8 = __toESM(require("fs/promises"));
+var path7 = __toESM(require("path"));
+var os5 = __toESM(require("os"));
 var RateLimiter = class {
-  lockDir = path6.join(os4.tmpdir(), "mpr-ratelimits");
+  lockDir = path7.join(os5.tmpdir(), "mpr-ratelimits");
   constructor() {
-    fs7.mkdir(this.lockDir, { recursive: true }).catch(() => void 0);
+    fs8.mkdir(this.lockDir, { recursive: true }).catch(() => void 0);
   }
   async isRateLimited(provider) {
     const lockFile = this.getLockFile(provider);
     try {
-      const raw = await fs7.readFile(lockFile, "utf8");
+      const raw = await fs8.readFile(lockFile, "utf8");
       const info2 = JSON.parse(raw);
       if (Date.now() < info2.limitedUntil) {
         logger.warn(
@@ -15025,7 +15134,7 @@ var RateLimiter = class {
         );
         return true;
       }
-      await fs7.unlink(lockFile).catch(() => void 0);
+      await fs8.unlink(lockFile).catch(() => void 0);
       return false;
     } catch {
       return false;
@@ -15038,25 +15147,25 @@ var RateLimiter = class {
       limitedUntil: Date.now() + durationMinutes * 60 * 1e3,
       reason
     };
-    await fs7.writeFile(lockFile, JSON.stringify(info2), "utf8");
+    await fs8.writeFile(lockFile, JSON.stringify(info2), "utf8");
     logger.warn(
       `Marked ${provider} as rate-limited for ${durationMinutes} minutes: ${reason}`
     );
   }
   async clear(provider) {
     const lockFile = this.getLockFile(provider);
-    await fs7.unlink(lockFile).catch(() => void 0);
+    await fs8.unlink(lockFile).catch(() => void 0);
   }
   getLockFile(provider) {
     const safe = provider.replace(/[^a-z0-9]/gi, "_");
-    return path6.join(this.lockDir, `${safe}.json`);
+    return path7.join(this.lockDir, `${safe}.json`);
   }
 };
 
 // src/providers/opencode-models.ts
-var import_child_process5 = require("child_process");
+var import_child_process6 = require("child_process");
 var import_util4 = require("util");
-var execAsync = (0, import_util4.promisify)(import_child_process5.exec);
+var execAsync = (0, import_util4.promisify)(import_child_process6.exec);
 function parseOpenCodeModels(output) {
   const models = [];
   const lines = output.split("\n");
@@ -18356,8 +18465,8 @@ function isSingleLineSuggestion(suggestion) {
 }
 
 // src/analysis/test-coverage.ts
-var fs8 = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
+var fs9 = __toESM(require("fs"));
+var path8 = __toESM(require("path"));
 var TestCoverageAnalyzer = class _TestCoverageAnalyzer {
   static MAX_HINTS = 20;
   analyze(files) {
@@ -18394,33 +18503,33 @@ var TestCoverageAnalyzer = class _TestCoverageAnalyzer {
     return patterns.some((pattern) => filename.includes(pattern));
   }
   findTestFile(filename) {
-    const dir = path7.dirname(filename);
-    const base = path7.basename(filename, path7.extname(filename));
-    const ext2 = path7.extname(filename);
+    const dir = path8.dirname(filename);
+    const base = path8.basename(filename, path8.extname(filename));
+    const ext2 = path8.extname(filename);
     const candidates = [
       `${base}.test${ext2}`,
       `${base}.spec${ext2}`,
       `${base}_test${ext2}`,
       `test_${base}${ext2}`,
-      path7.join("__tests__", `${base}.test${ext2}`)
+      path8.join("__tests__", `${base}.test${ext2}`)
     ];
     for (const candidate of candidates) {
-      const full = path7.join(dir, candidate);
-      if (fs8.existsSync(full)) return full;
+      const full = path8.join(dir, candidate);
+      if (fs9.existsSync(full)) return full;
     }
     return null;
   }
   suggestTestFile(filename) {
-    const dir = path7.dirname(filename);
-    const base = path7.basename(filename, path7.extname(filename));
-    const ext2 = path7.extname(filename);
+    const dir = path8.dirname(filename);
+    const base = path8.basename(filename, path8.extname(filename));
+    const ext2 = path8.extname(filename);
     if (ext2 === ".ts" || ext2 === ".tsx")
-      return path7.join(dir, `${base}.test.ts`);
-    if (ext2 === ".py") return path7.join(dir, `test_${base}.py`);
-    return path7.join(dir, `${base}.test${ext2}`);
+      return path8.join(dir, `${base}.test.ts`);
+    if (ext2 === ".py") return path8.join(dir, `test_${base}.py`);
+    return path8.join(dir, `${base}.test${ext2}`);
   }
   getPattern(filename) {
-    const ext2 = path7.extname(filename);
+    const ext2 = path8.extname(filename);
     if (ext2 === ".ts" || ext2 === ".tsx")
       return "Jest: *.test.ts or __tests__/*.ts";
     if (ext2 === ".py") return "pytest: test_*.py or *_test.py";
@@ -18619,17 +18728,17 @@ var ASTAnalyzer = class {
 };
 
 // src/cache/storage.ts
-var fs9 = __toESM(require("fs/promises"));
-var path8 = __toESM(require("path"));
+var fs10 = __toESM(require("fs/promises"));
+var path9 = __toESM(require("path"));
 var CacheStorage = class {
-  constructor(baseDir = path8.join(process.cwd(), ".mpr-cache")) {
+  constructor(baseDir = path9.join(process.cwd(), ".mpr-cache")) {
     this.baseDir = baseDir;
   }
   locks = /* @__PURE__ */ new Map();
   async read(key) {
-    const file = path8.join(this.baseDir, `${key}.json`);
+    const file = path9.join(this.baseDir, `${key}.json`);
     try {
-      return await fs9.readFile(file, "utf8");
+      return await fs10.readFile(file, "utf8");
     } catch {
       return null;
     }
@@ -18637,9 +18746,9 @@ var CacheStorage = class {
   async write(key, value) {
     await this.acquireLock(key);
     try {
-      const file = path8.join(this.baseDir, `${key}.json`);
-      await fs9.mkdir(this.baseDir, { recursive: true });
-      await fs9.writeFile(file, value, "utf8");
+      const file = path9.join(this.baseDir, `${key}.json`);
+      await fs10.mkdir(this.baseDir, { recursive: true });
+      await fs10.writeFile(file, value, "utf8");
       logger.info(`Cached results at ${file}`);
     } finally {
       this.releaseLock(key);
@@ -18651,7 +18760,7 @@ var CacheStorage = class {
    */
   async deleteByPrefix(prefix) {
     try {
-      await fs9.mkdir(this.baseDir, { recursive: true });
+      await fs10.mkdir(this.baseDir, { recursive: true });
     } catch (error2) {
       logger.error(
         `Failed to create cache directory ${this.baseDir}`,
@@ -18660,7 +18769,7 @@ var CacheStorage = class {
       return 0;
     }
     try {
-      const files = await fs9.readdir(this.baseDir);
+      const files = await fs10.readdir(this.baseDir);
       const matchingFiles = files.filter((file) => {
         const key = file.replace(/\.json$/, "");
         return key.startsWith(prefix);
@@ -18668,7 +18777,7 @@ var CacheStorage = class {
       let deletedCount = 0;
       for (const file of matchingFiles) {
         try {
-          await fs9.unlink(path8.join(this.baseDir, file));
+          await fs10.unlink(path9.join(this.baseDir, file));
           deletedCount++;
         } catch (error2) {
           logger.warn(`Failed to delete cache file ${file}`, error2);
@@ -18829,7 +18938,7 @@ var CacheManager = class {
 };
 
 // src/cache/incremental.ts
-var import_child_process6 = require("child_process");
+var import_child_process7 = require("child_process");
 var IncrementalReviewer = class _IncrementalReviewer {
   constructor(storage = new CacheStorage(), config = {
     enabled: true,
@@ -18926,7 +19035,7 @@ var IncrementalReviewer = class _IncrementalReviewer {
       );
       let output;
       try {
-        output = (0, import_child_process6.execFileSync)(
+        output = (0, import_child_process7.execFileSync)(
           "git",
           ["diff", "--name-status", `${lastCommit}...${pr2.headSha}`],
           {
@@ -21362,7 +21471,7 @@ ${deleted}`;
 };
 
 // src/github/client.ts
-var fs10 = __toESM(require("fs"));
+var fs11 = __toESM(require("fs"));
 var import_rest = __toESM(require_dist_node12());
 
 // src/github/rate-limit.ts
@@ -21573,7 +21682,7 @@ function getRepositoryFromEventPayload() {
     return void 0;
   }
   try {
-    const payload = JSON.parse(fs10.readFileSync(eventPath, "utf8"));
+    const payload = JSON.parse(fs11.readFileSync(eventPath, "utf8"));
     if (payload.repository?.full_name) {
       return payload.repository.full_name;
     }
@@ -23515,12 +23624,12 @@ var QuietModeFilter = class {
 };
 
 // src/analysis/context/graph-builder.ts
-var path9 = __toESM(require("path"));
+var path10 = __toESM(require("path"));
 function resolveImportPath(importerFile, moduleSpecifier) {
   if (moduleSpecifier.startsWith(".")) {
-    const importerDir = path9.dirname(importerFile);
+    const importerDir = path10.dirname(importerFile);
     if (importerDir && importerDir !== "." && importerDir !== importerFile) {
-      const resolved = path9.join(importerDir, moduleSpecifier);
+      const resolved = path10.join(importerDir, moduleSpecifier);
       return resolved.replace(/\\/g, "/");
     }
   }
@@ -25336,8 +25445,8 @@ var MetricsCollector = class _MetricsCollector {
 };
 
 // src/plugins/plugin-loader.ts
-var fs11 = __toESM(require("fs/promises"));
-var path10 = __toESM(require("path"));
+var fs12 = __toESM(require("fs/promises"));
+var path11 = __toESM(require("path"));
 var crypto5 = __toESM(require("crypto"));
 var import_url = require("url");
 var PluginLoader = class {
@@ -25369,18 +25478,18 @@ var PluginLoader = class {
       "\u2713 Plugin security acknowledged - loading plugins with full system access"
     );
     try {
-      const pluginDir = path10.resolve(this.config.pluginDir);
+      const pluginDir = path11.resolve(this.config.pluginDir);
       logger.info(`Loading plugins from: ${pluginDir}`);
       try {
-        await fs11.access(pluginDir);
+        await fs12.access(pluginDir);
       } catch {
         logger.warn(`Plugin directory does not exist: ${pluginDir}`);
         return;
       }
-      const entries = await fs11.readdir(pluginDir, { withFileTypes: true });
+      const entries = await fs12.readdir(pluginDir, { withFileTypes: true });
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        const pluginPath = path10.join(pluginDir, entry.name);
+        const pluginPath = path11.join(pluginDir, entry.name);
         await this.loadPlugin(pluginPath);
       }
       logger.info(`Loaded ${this.plugins.size} plugins`);
@@ -25394,9 +25503,9 @@ var PluginLoader = class {
    */
   async loadPlugin(pluginPath) {
     try {
-      const indexPath = path10.join(pluginPath, "index.js");
+      const indexPath = path11.join(pluginPath, "index.js");
       try {
-        await fs11.access(indexPath);
+        await fs12.access(indexPath);
       } catch {
         logger.debug(`Plugin at ${pluginPath} missing index.js, skipping`);
         return;
@@ -25493,9 +25602,9 @@ var PluginLoader = class {
    * }
    */
   async verifyPluginIntegrity(pluginPath, indexPath) {
-    const manifestPath = path10.join(pluginPath, "plugin-manifest.json");
+    const manifestPath = path11.join(pluginPath, "plugin-manifest.json");
     try {
-      await fs11.access(manifestPath);
+      await fs12.access(manifestPath);
     } catch {
       logger.debug(
         `No manifest found for plugin at ${pluginPath}, skipping integrity check`
@@ -25503,12 +25612,12 @@ var PluginLoader = class {
       return;
     }
     try {
-      const manifestContent = await fs11.readFile(manifestPath, "utf8");
+      const manifestContent = await fs12.readFile(manifestPath, "utf8");
       const manifest = JSON.parse(manifestContent);
       if (!manifest.sha256 || typeof manifest.sha256 !== "string") {
         throw new Error("Manifest missing valid sha256 checksum");
       }
-      const pluginCode = await fs11.readFile(indexPath, "utf8");
+      const pluginCode = await fs12.readFile(indexPath, "utf8");
       const hash = crypto5.createHash("sha256");
       hash.update(pluginCode);
       const actualChecksum = hash.digest("hex");
@@ -29716,11 +29825,11 @@ var qmarksTestNoExtDot = ([$0]) => {
   return (f2) => f2.length === len && f2 !== "." && f2 !== "..";
 };
 var defaultPlatform = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-var path11 = {
+var path12 = {
   win32: { sep: "\\" },
   posix: { sep: "/" }
 };
-var sep2 = defaultPlatform === "win32" ? path11.win32.sep : path11.posix.sep;
+var sep2 = defaultPlatform === "win32" ? path12.win32.sep : path12.posix.sep;
 minimatch.sep = sep2;
 var GLOBSTAR = Symbol("globstar **");
 minimatch.GLOBSTAR = GLOBSTAR;
@@ -31743,7 +31852,7 @@ var ProgressTracker = class _ProgressTracker {
 };
 
 // src/core/orchestrator.ts
-var fs12 = __toESM(require("fs/promises"));
+var fs13 = __toESM(require("fs/promises"));
 var import_path = __toESM(require("path"));
 var HEALTH_CHECK_TIMEOUT_MS = 3e4;
 var ReviewOrchestrator = class {
@@ -33696,12 +33805,12 @@ These types of changes are automatically filtered to save review time and API co
     );
     const sarifPath = import_path.default.join(process.cwd(), `${base}.sarif`);
     const jsonPath = import_path.default.join(process.cwd(), `${base}.json`);
-    await fs12.writeFile(
+    await fs13.writeFile(
       sarifPath,
       JSON.stringify(buildSarif(review.findings), null, 2),
       "utf8"
     );
-    await fs12.writeFile(jsonPath, buildJson(review), "utf8");
+    await fs13.writeFile(jsonPath, buildJson(review), "utf8");
     logger.info(`Wrote reports: ${sarifPath}, ${jsonPath}`);
   }
 };
@@ -33865,7 +33974,7 @@ function hasReviewRouterBotMarker(body) {
 }
 
 // src/github/interaction.ts
-var fs13 = __toESM(require("fs"));
+var fs14 = __toESM(require("fs"));
 
 // src/github/memory-interaction.ts
 var memoryItemIdPattern = "(mem_[A-Za-z0-9_-]+)";
@@ -34685,7 +34794,7 @@ function readEventPayload() {
     );
   }
   return JSON.parse(
-    fs13.readFileSync(eventPath, "utf8")
+    fs14.readFileSync(eventPath, "utf8")
   );
 }
 function sanitizeNoticeError(error2) {
@@ -34947,10 +35056,10 @@ function sanitizeError(error2) {
 }
 
 // src/discussion/codex-responder.ts
-var fs14 = __toESM(require("fs/promises"));
-var os5 = __toESM(require("os"));
-var path13 = __toESM(require("path"));
-var import_child_process7 = require("child_process");
+var fs15 = __toESM(require("fs/promises"));
+var os6 = __toESM(require("os"));
+var path14 = __toESM(require("path"));
+var import_child_process8 = require("child_process");
 var import_util5 = require("util");
 var INTENTS = [
   "question",
@@ -34964,7 +35073,7 @@ var SUGGESTED_ACTIONS = [
   "suggest_rr_skip",
   "ask_for_details"
 ];
-var execFileAsync = (0, import_util5.promisify)(import_child_process7.execFile);
+var execFileAsync = (0, import_util5.promisify)(import_child_process8.execFile);
 var CodexDiscussionResponder = class {
   constructor(model, timeoutMs) {
     this.model = model;
@@ -34975,7 +35084,7 @@ var CodexDiscussionResponder = class {
       agenticContext: false,
       eventAudit: false
     });
-    const cwd = await fs14.mkdtemp(path13.join(os5.tmpdir(), "review-router-chat-"));
+    const cwd = await fs15.mkdtemp(path14.join(os6.tmpdir(), "review-router-chat-"));
     try {
       await initializeEmptyGitRepository(cwd);
       const content = await provider.runStructuredPrompt(
@@ -34991,7 +35100,7 @@ var CodexDiscussionResponder = class {
       );
       return this.parse(content);
     } finally {
-      await fs14.rm(cwd, { recursive: true, force: true });
+      await fs15.rm(cwd, { recursive: true, force: true });
     }
   }
   buildPrompt(context) {
@@ -35127,7 +35236,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.61",
+  version: "1.0.62",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -35922,26 +36031,26 @@ function asRecord(value) {
 }
 
 // src/codex-oauth/codex-bootstrap.ts
-var import_child_process8 = require("child_process");
-var fs15 = __toESM(require("fs/promises"));
-var os6 = __toESM(require("os"));
-var path14 = __toESM(require("path"));
+var import_child_process9 = require("child_process");
+var fs16 = __toESM(require("fs/promises"));
+var os7 = __toESM(require("os"));
+var path15 = __toESM(require("path"));
 async function refreshCodexAuthWithOfficialCli(input) {
   const parent = await ensureCodexOAuthRuntimeParent();
-  const root = await fs15.mkdtemp(path14.join(parent, "reviewrouter-codex-oauth-"));
-  const home = path14.join(root, "home");
-  const codexHome = path14.join(root, "codex");
-  const emptyCwd = path14.join(root, "empty");
-  const authPath = path14.join(codexHome, "auth.json");
-  await fs15.mkdir(home, { recursive: true, mode: 448 });
-  await fs15.mkdir(codexHome, { recursive: true, mode: 448 });
-  await fs15.mkdir(emptyCwd, { recursive: true, mode: 448 });
-  await fs15.writeFile(authPath, input.authJsonBytes, {
+  const root = await fs16.mkdtemp(path15.join(parent, "reviewrouter-codex-oauth-"));
+  const home = path15.join(root, "home");
+  const codexHome = path15.join(root, "codex");
+  const emptyCwd = path15.join(root, "empty");
+  const authPath = path15.join(codexHome, "auth.json");
+  await fs16.mkdir(home, { recursive: true, mode: 448 });
+  await fs16.mkdir(codexHome, { recursive: true, mode: 448 });
+  await fs16.mkdir(emptyCwd, { recursive: true, mode: 448 });
+  await fs16.writeFile(authPath, input.authJsonBytes, {
     encoding: "utf8",
     mode: 384
   });
-  await fs15.writeFile(
-    path14.join(codexHome, "config.toml"),
+  await fs16.writeFile(
+    path15.join(codexHome, "config.toml"),
     'cli_auth_credentials_store = "file"\napproval_policy = "never"\n',
     { encoding: "utf8", mode: 384 }
   );
@@ -35954,26 +36063,26 @@ async function refreshCodexAuthWithOfficialCli(input) {
     codexHome,
     cwd: emptyCwd
   });
-  const refreshedAuth = await fs15.readFile(authPath, "utf8");
+  const refreshedAuth = await fs16.readFile(authPath, "utf8");
   return {
     authJsonBytes: refreshedAuth,
     codexHome,
     async clearAuthMaterial() {
-      await fs15.rm(root, { recursive: true, force: true });
+      await fs16.rm(root, { recursive: true, force: true });
     }
   };
 }
 async function ensureCodexOAuthRuntimeParent(env = process.env) {
-  const home = env.HOME?.trim() || os6.homedir();
-  const parent = home && path14.isAbsolute(home) ? path14.join(home, ".reviewrouter", "runtime") : path14.join(os6.tmpdir(), "reviewrouter-runtime");
-  await fs15.mkdir(parent, { recursive: true, mode: 448 });
-  await fs15.chmod(parent, 448).catch(() => void 0);
+  const home = env.HOME?.trim() || os7.homedir();
+  const parent = home && path15.isAbsolute(home) ? path15.join(home, ".reviewrouter", "runtime") : path15.join(os7.tmpdir(), "reviewrouter-runtime");
+  await fs16.mkdir(parent, { recursive: true, mode: 448 });
+  await fs16.chmod(parent, 448).catch(() => void 0);
   return parent;
 }
 async function runCodexBootstrapCommand(input) {
   const args = ["login", "status"];
   await new Promise((resolve3, reject) => {
-    const child = (0, import_child_process8.spawn)(input.binary, args, {
+    const child = (0, import_child_process9.spawn)(input.binary, args, {
       cwd: input.cwd,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
@@ -36022,144 +36131,20 @@ async function runCodexBootstrapCommand(input) {
       }
       reject(
         new Error(
-          `codex_oauth_refresh_failed:${code ?? "signal"}:${safeOutput(stderr || stdout)}`
+          `codex_oauth_refresh_failed:${code ?? "signal"}:${safeOutput2(stderr || stdout)}`
         )
       );
     });
   });
 }
 function safeError(error2) {
-  return error2 instanceof Error ? safeOutput(error2.message) : "unknown_error";
+  return error2 instanceof Error ? safeOutput2(error2.message) : "unknown_error";
 }
-function safeOutput(value) {
+function safeOutput2(value) {
   return value.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(
     /refresh[_-]?token["':= ]+[A-Za-z0-9._-]+/gi,
     "refresh_token=[redacted]"
   ).slice(0, 300);
-}
-
-// src/codex-oauth/codex-cli.ts
-var import_child_process9 = require("child_process");
-var fs16 = __toESM(require("fs/promises"));
-var os7 = __toESM(require("os"));
-var path15 = __toESM(require("path"));
-var CODEX_OAUTH_PINNED_CODEX_PACKAGE = "@openai/codex@0.133.0";
-async function prepareCodexCliBeforeAuthRead(input = {}) {
-  const explicit = process.env.REVIEWROUTER_CODEX_BINARY?.trim();
-  if (explicit) {
-    await assertCodexBinaryWorks(explicit, input.timeoutMs ?? 1e4);
-    return { binaryPath: explicit };
-  }
-  if (await canRunCodexBinary("codex", input.timeoutMs ?? 1e4)) {
-    return { binaryPath: "codex" };
-  }
-  input.logger?.info(
-    `Codex CLI not found on PATH; installing ${CODEX_OAUTH_PINNED_CODEX_PACKAGE} before auth materialization.`
-  );
-  const installRoot = await fs16.mkdtemp(
-    path15.join(os7.tmpdir(), "reviewrouter-codex-cli-")
-  );
-  await runNpmInstall({
-    installRoot,
-    timeoutMs: input.timeoutMs ?? 12e4
-  });
-  const binaryPath = path15.join(installRoot, "node_modules", ".bin", "codex");
-  await assertCodexBinaryWorks(binaryPath, input.timeoutMs ?? 1e4);
-  return {
-    binaryPath,
-    async clear() {
-      await fs16.rm(installRoot, { recursive: true, force: true });
-    }
-  };
-}
-async function assertCodexBinaryWorks(binaryPath, timeoutMs) {
-  if (!await canRunCodexBinary(binaryPath, timeoutMs)) {
-    throw new Error("codex_oauth_codex_cli_unavailable");
-  }
-}
-async function canRunCodexBinary(binaryPath, timeoutMs) {
-  try {
-    await runCommand(binaryPath, ["--version"], {
-      timeoutMs,
-      cwd: os7.tmpdir(),
-      env: safePreAuthEnv()
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-async function runNpmInstall(input) {
-  await runCommand(
-    "npm",
-    [
-      "install",
-      "--prefix",
-      input.installRoot,
-      "--omit=dev",
-      "--no-audit",
-      "--no-fund",
-      CODEX_OAUTH_PINNED_CODEX_PACKAGE
-    ],
-    {
-      timeoutMs: input.timeoutMs,
-      cwd: input.installRoot,
-      env: safePreAuthEnv()
-    }
-  );
-}
-function runCommand(command, args, options) {
-  return new Promise((resolve3, reject) => {
-    const child = (0, import_child_process9.spawn)(command, args, {
-      cwd: options.cwd,
-      env: options.env,
-      stdio: ["ignore", "ignore", "pipe"]
-    });
-    let stderr = "";
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGKILL");
-      reject(new Error("codex_oauth_codex_cli_prepare_timeout"));
-    }, options.timeoutMs);
-    child.stderr?.on("data", (chunk) => {
-      stderr += String(chunk);
-    });
-    child.on("error", (error2) => {
-      if (timedOut) return;
-      clearTimeout(timer);
-      reject(
-        new Error(
-          `codex_oauth_codex_cli_prepare_failed:${safeOutput2(String(error2))}`
-        )
-      );
-    });
-    child.on("close", (code) => {
-      if (timedOut) return;
-      clearTimeout(timer);
-      if (code === 0) {
-        resolve3();
-        return;
-      }
-      reject(
-        new Error(
-          `codex_oauth_codex_cli_prepare_failed:${code ?? "signal"}:${safeOutput2(
-            stderr
-          )}`
-        )
-      );
-    });
-  });
-}
-function safePreAuthEnv() {
-  return {
-    PATH: process.env.PATH || "",
-    HOME: process.env.HOME || os7.tmpdir(),
-    npm_config_loglevel: "error"
-  };
-}
-function safeOutput2(value) {
-  return value.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 200);
 }
 
 // src/codex-oauth/auth-input.ts

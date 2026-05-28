@@ -227,7 +227,14 @@ describe('CodexProvider', () => {
     expect(spawnMock).toHaveBeenCalledWith(
       '/tmp/reviewrouter-codex',
       ['--version'],
-      { stdio: 'ignore' }
+      expect.objectContaining({
+        cwd: os.tmpdir(),
+        env: expect.objectContaining({
+          GIT_CONFIG_GLOBAL: '/dev/null',
+          GIT_CONFIG_NOSYSTEM: '1',
+        }),
+        stdio: 'ignore',
+      })
     );
   });
 

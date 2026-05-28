@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
+import { prepareCodexCliBeforeAuthRead } from '../codex-oauth/codex-cli';
 import {
   buildReviewFindingsSchema,
   type ParsedReviewOutput,
@@ -1755,50 +1756,29 @@ export class CodexProvider extends Provider {
 
   private async canRun(cmd: string, args: string[]): Promise<boolean> {
     return new Promise((resolve) => {
-      const proc = spawn(cmd, args, { stdio: 'ignore' });
+      const proc = spawn(cmd, args, {
+        cwd: os.tmpdir(),
+        env: {
+          PATH: process.env.PATH || '',
+          HOME: process.env.HOME || os.tmpdir(),
+          GIT_CONFIG_NOSYSTEM: '1',
+          GIT_CONFIG_GLOBAL: '/dev/null',
+        },
+        stdio: 'ignore',
+      });
       proc.on('error', () => resolve(false));
       proc.on('close', (code) => resolve(code === 0));
     });
   }
 
   private async installPinnedCodexCli(): Promise<string> {
-    const installRoot = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'reviewrouter-codex-provider-cli-')
-    );
-    await this.runInstallCommand('npm', [
-      'install',
-      '--prefix',
-      installRoot,
-      '--omit=dev',
-      '--no-audit',
-      '--no-fund',
-      '@openai/codex@0.133.0',
-    ]);
-    return path.join(installRoot, 'node_modules', '.bin', 'codex');
-  }
-
-  private async runInstallCommand(
-    command: string,
-    args: readonly string[]
-  ): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(command, [...args], {
-        env: {
-          PATH: process.env.PATH || '',
-          HOME: process.env.HOME || os.tmpdir(),
-          npm_config_loglevel: 'error',
-        },
-        stdio: 'ignore',
-      });
-      proc.on('error', (error) => reject(error));
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-          return;
-        }
-        reject(new Error(`codex_cli_install_failed:${code ?? 'signal'}`));
-      });
+    const prepared = await prepareCodexCliBeforeAuthRead({
+      logger: {
+        info: (message) => logger.info(message),
+        warn: (message) => logger.warn(message),
+      },
     });
+    return prepared.binaryPath;
   }
 
   private extractFindings(content: string): Finding[] {

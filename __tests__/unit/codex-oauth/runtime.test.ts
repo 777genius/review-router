@@ -1,4 +1,5 @@
 import sodium from 'libsodium-wrappers';
+import path from 'path';
 import {
   runCodexOAuthRotatingRuntime,
   CodexOAuthRuntimePorts,
@@ -64,6 +65,7 @@ describe('Codex OAuth rotating runtime', () => {
     );
 
     expect(result.status).toBe('completed');
+    expect(process.env.REVIEWROUTER_CODEX_BINARY).toBeUndefined();
     expect(events).toEqual([
       'oidc',
       'prelease',
@@ -233,6 +235,8 @@ describe('Codex OAuth rotating runtime', () => {
         run: jest.fn(async (input) => {
           events.push('review');
           expect(input.codexBinaryPath).toBe('/tmp/codex-bin');
+          expect(process.env.REVIEWROUTER_CODEX_BINARY).toBe('/tmp/codex-bin');
+          expect(process.env.PATH?.split(path.delimiter)[0]).toBe('/tmp');
           expect(process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBe(
             'oidc-request-token'
           );

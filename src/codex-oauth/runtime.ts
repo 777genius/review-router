@@ -17,6 +17,7 @@ import {
   computeCodexAuthGenerationHash,
   encryptCodexAuthForGitHubSecret,
 } from './crypto';
+import * as path from 'path';
 
 export type CodexOAuthRuntimeInputs = {
   apiUrl: string;
@@ -151,9 +152,25 @@ export async function runCodexOAuthRotatingRuntime(
       }
     | undefined;
   let authMaterialCleared = false;
+  let previousCodexBinary: string | undefined;
+  let previousPath: string | undefined;
+  let preparedCodexCliEnvApplied = false;
 
   const clearAuth = async () => {
     ports.lifecycle?.clearOidcEnv?.();
+    if (preparedCodexCliEnvApplied) {
+      if (previousCodexBinary === undefined) {
+        delete process.env.REVIEWROUTER_CODEX_BINARY;
+      } else {
+        process.env.REVIEWROUTER_CODEX_BINARY = previousCodexBinary;
+      }
+      if (previousPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = previousPath;
+      }
+      preparedCodexCliEnvApplied = false;
+    }
     if (refreshed) {
       await refreshed.clearAuthMaterial();
       refreshed = undefined;
@@ -175,6 +192,16 @@ export async function runCodexOAuthRotatingRuntime(
       workflowSchemaVersion: input.workflowSchemaVersion,
     });
     preparedCodexCli = await ports.codex.prepareCli?.();
+    if (preparedCodexCli) {
+      previousCodexBinary = process.env.REVIEWROUTER_CODEX_BINARY;
+      previousPath = process.env.PATH;
+      const codexBinDir = path.dirname(preparedCodexCli.binaryPath);
+      process.env.REVIEWROUTER_CODEX_BINARY = preparedCodexCli.binaryPath;
+      process.env.PATH = previousPath
+        ? `${codexBinDir}${path.delimiter}${previousPath}`
+        : codexBinDir;
+      preparedCodexCliEnvApplied = true;
+    }
 
     const restoredAuth = readCodexRotatingAuthInput().authJsonBytes;
     const restoredCompact = compactCodexAuthJsonBytes({

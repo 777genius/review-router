@@ -1726,15 +1726,15 @@ var require_dist_node9 = __commonJS({
         octokit.log.debug("request", options);
         const start = Date.now();
         const requestOptions = octokit.request.endpoint.parse(options);
-        const path18 = requestOptions.url.replace(options.baseUrl, "");
+        const path19 = requestOptions.url.replace(options.baseUrl, "");
         return request(options).then((response) => {
           octokit.log.info(
-            `${requestOptions.method} ${path18} - ${response.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path19} - ${response.status} in ${Date.now() - start}ms`
           );
           return response;
         }).catch((error2) => {
           octokit.log.info(
-            `${requestOptions.method} ${path18} - ${error2.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path19} - ${error2.status} in ${Date.now() - start}ms`
           );
           throw error2;
         });
@@ -4427,12 +4427,12 @@ function setOutput(name, value) {
   const output = toCommandValue(value);
   const outputPath = process.env.GITHUB_OUTPUT;
   if (outputPath) {
-    const delimiter2 = `mpr_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const delimiter3 = `mpr_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     fs.appendFileSync(
       outputPath,
-      `${name}<<${delimiter2}
+      `${name}<<${delimiter3}
 ${output}
-${delimiter2}
+${delimiter3}
 `,
       "utf8"
     );
@@ -7776,8 +7776,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path18, errorMaps, issueData } = params;
-  const fullPath = [...path18, ...issueData.path || []];
+  const { data, path: path19, errorMaps, issueData } = params;
+  const fullPath = [...path19, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7893,11 +7893,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path18, key) {
+  constructor(parent, value, path19, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path18;
+    this._path = path19;
     this._key = key;
   }
   get path() {
@@ -12925,12 +12925,12 @@ function formatSummaryOnlyChunk(chunk, file) {
 function shellQuote(value) {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
-function unquoteGitPath(path18) {
-  if (path18.startsWith('"') && path18.endsWith('"')) {
-    path18 = path18.slice(1, -1);
+function unquoteGitPath(path19) {
+  if (path19.startsWith('"') && path19.endsWith('"')) {
+    path19 = path19.slice(1, -1);
   }
   try {
-    path18 = path18.replace(/\\([\\"tnr])/g, (_m, ch) => {
+    path19 = path19.replace(/\\([\\"tnr])/g, (_m, ch) => {
       switch (ch) {
         case "\\":
           return "\\";
@@ -12948,7 +12948,7 @@ function unquoteGitPath(path18) {
     });
   } catch {
   }
-  return path18;
+  return path19;
 }
 
 // src/utils/token-estimation.ts
@@ -19584,12 +19584,12 @@ var INLINE_MARKER_RE_GLOBAL = /<!--\s*(?:review-router|ai-robot-review)-inline:(
 var FINDING_MARKER_RE = /<!--\s*review-router-finding:([a-f0-9]{24,64})\s*-->/i;
 var FINDING_MARKER_RE_GLOBAL = /<!--\s*review-router-finding:([a-f0-9]{24,64})\s*-->/gi;
 var MAX_NEARBY_LINE_DISTANCE = 12;
-function signatureFromInlineComment(path18, line, body) {
+function signatureFromInlineComment(path19, line, body) {
   const cleanBody = stripInlineFingerprintMarkers(body);
   const severity = extractSeverity(cleanBody);
   if (severity) {
     return [
-      (path18 || "unknown").toLowerCase(),
+      (path19 || "unknown").toLowerCase(),
       String(line ?? 0),
       severity
     ].join(":");
@@ -19597,13 +19597,13 @@ function signatureFromInlineComment(path18, line, body) {
   const titleMatch = cleanBody.match(/\*\*(.+?)\*\*/);
   const title = titleMatch ? titleMatch[1] : cleanBody.split("\n")[0] || "unknown";
   return [
-    (path18 || "unknown").toLowerCase(),
+    (path19 || "unknown").toLowerCase(),
     String(line ?? 0),
     normalizeForSignature(title)
   ].join(":");
 }
-function fingerprintFromInlineComment(path18, line, body) {
-  return (0, import_crypto2.createHash)("sha256").update(signatureFromInlineComment(path18, line, body)).digest("hex").slice(0, 16);
+function fingerprintFromInlineComment(path19, line, body) {
+  return (0, import_crypto2.createHash)("sha256").update(signatureFromInlineComment(path19, line, body)).digest("hex").slice(0, 16);
 }
 function inlineFingerprintMarker(fingerprint) {
   return `<!-- review-router-inline:${fingerprint} -->`;
@@ -19619,17 +19619,17 @@ function extractFindingFingerprint(body) {
   const match2 = body?.match(FINDING_MARKER_RE);
   return match2?.[1]?.toLowerCase() ?? null;
 }
-function appendInlineFingerprintMarker(body, path18, line) {
+function appendInlineFingerprintMarker(body, path19, line) {
   const parts = [body.trimEnd()];
   if (!extractInlineFingerprint(body)) {
     parts.push(
-      inlineFingerprintMarker(fingerprintFromInlineComment(path18, line, body))
+      inlineFingerprintMarker(fingerprintFromInlineComment(path19, line, body))
     );
   }
   if (!extractFindingFingerprint(body)) {
     parts.push(
       findingFingerprintMarker(
-        findingFingerprintFromInlineComment(path18, line, body)
+        findingFingerprintFromInlineComment(path19, line, body)
       )
     );
   }
@@ -19652,12 +19652,12 @@ function findingFingerprintFromFinding(finding) {
     message: finding.message
   });
 }
-function findingFingerprintFromInlineComment(path18, _line, body) {
+function findingFingerprintFromInlineComment(path19, _line, body) {
   const marker = extractFindingFingerprint(body);
   if (marker) return marker;
   const cleanBody = stripInlineFingerprintMarkers(body);
   return stableFindingFingerprint({
-    path: path18,
+    path: path19,
     severity: extractSeverity(cleanBody) || "unknown",
     title: extractNormalizedTitle(cleanBody),
     message: extractCoreMessage(cleanBody)
@@ -20093,10 +20093,10 @@ ${content.substring(0, 500)}...`
     }
     return { keys, comments: activeComments };
   }
-  hasInlineDuplicate(activeComments, path18, line, body) {
+  hasInlineDuplicate(activeComments, path19, line, body) {
     const marker = extractInlineFingerprint(body);
-    return activeComments.keys.has(signatureFromInlineComment(path18, line, body)) || activeComments.keys.has(fingerprintFromInlineComment(path18, line, body)) || (marker ? activeComments.keys.has(marker) : false) || activeComments.comments.some(
-      (comment) => isLikelySameInlineFinding(comment, { path: path18, line, body })
+    return activeComments.keys.has(signatureFromInlineComment(path19, line, body)) || activeComments.keys.has(fingerprintFromInlineComment(path19, line, body)) || (marker ? activeComments.keys.has(marker) : false) || activeComments.comments.some(
+      (comment) => isLikelySameInlineFinding(comment, { path: path19, line, body })
     );
   }
   /**
@@ -22812,8 +22812,8 @@ var FeedbackFilter = class {
       (existing) => isLikelySameDismissedFinding(existing, comment)
     );
   }
-  signatureFromComment(path18, line, body) {
-    return signatureFromInlineComment(path18, line, body);
+  signatureFromComment(path19, line, body) {
+    return signatureFromInlineComment(path19, line, body);
   }
 };
 function skippedFindingBody(skip) {
@@ -22933,9 +22933,9 @@ var TOKEN_STOPWORDS = /* @__PURE__ */ new Set([
   "when",
   "with"
 ]);
-function locationKey(path18, line) {
-  if (!path18 || line == null) return null;
-  return `${path18.toLowerCase()}:${line}`;
+function locationKey(path19, line) {
+  if (!path19 || line == null) return null;
+  return `${path19.toLowerCase()}:${line}`;
 }
 
 // src/github/ledger.ts
@@ -23601,8 +23601,8 @@ var CodeGraph = class _CodeGraph {
   /**
    * Normalize a file path for comparison (strips extensions, converts to posix)
    */
-  normalizePathForComparison(path18) {
-    let normalized = path18.replace(/\\/g, "/");
+  normalizePathForComparison(path19) {
+    let normalized = path19.replace(/\\/g, "/");
     normalized = normalized.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "");
     return normalized;
   }
@@ -26957,8 +26957,8 @@ async function readSafeErrorCode(response) {
   }
   return void 0;
 }
-function joinApiPath(apiUrl, path18) {
-  return `${apiUrl.replace(/\/+$/, "")}${path18}`;
+function joinApiPath(apiUrl, path19) {
+  return `${apiUrl.replace(/\/+$/, "")}${path19}`;
 }
 function safeReason(message) {
   return message.replace(/[^a-zA-Z0-9:_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
@@ -27036,13 +27036,13 @@ var ControlPlaneMemoryClient = class {
     }
     return results.map(parseMutationResponse);
   }
-  async postJson(path18, body) {
+  async postJson(path19, body) {
     if (!this.isAvailable()) {
       throw new Error("memory_runtime_unavailable");
     }
     const runtimeConfig = this.runtimeConfig;
     const response = await this.fetchImpl(
-      joinApiPath2(runtimeConfig.apiUrl, path18),
+      joinApiPath2(runtimeConfig.apiUrl, path19),
       {
         method: "POST",
         headers: {
@@ -27164,14 +27164,14 @@ function endpointPath(value, fallback2) {
   const normalized = value?.trim();
   return normalized || fallback2;
 }
-function joinApiPath2(apiUrl, path18) {
-  return new URL(path18, ensureTrailingSlash(apiUrl)).toString();
+function joinApiPath2(apiUrl, path19) {
+  return new URL(path19, ensureTrailingSlash(apiUrl)).toString();
 }
 function ensureTrailingSlash(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
-function compactPathHint(path18) {
-  return path18.split("/").filter(Boolean).slice(-3).join("/");
+function compactPathHint(path19) {
+  return path19.split("/").filter(Boolean).slice(-3).join("/");
 }
 function compactWhitespace(value) {
   return value.replace(/\s+/g, " ").trim();
@@ -30882,11 +30882,11 @@ function extractDiffDestinationPaths(diff) {
   }
   return paths;
 }
-function unquoteGitPath2(path18) {
-  if (path18.startsWith('"') && path18.endsWith('"')) {
-    path18 = path18.slice(1, -1);
+function unquoteGitPath2(path19) {
+  if (path19.startsWith('"') && path19.endsWith('"')) {
+    path19 = path19.slice(1, -1);
   }
-  return path18.replace(/\\([\\"tnr])/g, (_match, char) => {
+  return path19.replace(/\\([\\"tnr])/g, (_match, char) => {
     switch (char) {
       case "\\":
         return "\\";
@@ -32822,17 +32822,17 @@ var ReviewOrchestrator = class {
     if (reviewCommentState.commandDismissed?.has(target.fingerprint)) {
       return true;
     }
-    const path18 = target.currentPath || target.originalPath;
+    const path19 = target.currentPath || target.originalPath;
     const line = target.currentLine ?? target.originalLine;
-    if (path18 && line != null && reviewCommentState.commandDismissedLocations?.has(
-      `${path18.toLowerCase()}:${line}`
+    if (path19 && line != null && reviewCommentState.commandDismissedLocations?.has(
+      `${path19.toLowerCase()}:${line}`
     )) {
       return true;
     }
     const severity = target.severity === "critical" || target.severity === "major" || target.severity === "minor" ? target.severity : "minor";
     return this.components.feedbackFilter.isInlineCommandDismissed(
       {
-        path: path18,
+        path: path19,
         line: line ?? 0,
         side: "RIGHT",
         body: target.message,
@@ -34362,14 +34362,14 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     }
   }
   matchesReviewWorkflowRun(candidate, workflowFile, prNumber, headSha) {
-    const path18 = String(candidate.path || "");
+    const path19 = String(candidate.path || "");
     const knownWorkflowFiles = [
       workflowFile,
       "reviewrouter.yml",
       "ai-robot-review.yml"
     ];
     const matchesWorkflow = knownWorkflowFiles.some(
-      (file) => path18.endsWith(`/${file}`) || path18 === file
+      (file) => path19.endsWith(`/${file}`) || path19 === file
     );
     const matchesSha = candidate.head_sha === headSha;
     const matchesPr = (candidate.pull_requests || []).some(
@@ -35049,7 +35049,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.58",
+  version: "1.0.59",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -35313,8 +35313,8 @@ async function readSafeErrorCode2(response) {
   }
   return void 0;
 }
-function joinApiPath3(apiUrl, path18) {
-  return new URL(path18, ensureTrailingSlash2(apiUrl)).toString();
+function joinApiPath3(apiUrl, path19) {
+  return new URL(path19, ensureTrailingSlash2(apiUrl)).toString();
 }
 function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -35404,8 +35404,8 @@ function fallback(input, reason) {
   );
   return { status: "fallback", token: input.fallbackToken, reason };
 }
-function joinApiPath4(apiUrl, path18) {
-  return `${apiUrl.replace(/\/+$/, "")}${path18}`;
+function joinApiPath4(apiUrl, path19) {
+  return `${apiUrl.replace(/\/+$/, "")}${path19}`;
 }
 async function readSafeErrorCode3(response) {
   try {
@@ -35572,8 +35572,8 @@ function safeErrorSummaryForCategory(category) {
       return void 0;
   }
 }
-function joinApiPath5(apiUrl, path18) {
-  return new URL(path18, ensureTrailingSlash3(apiUrl)).toString();
+function joinApiPath5(apiUrl, path19) {
+  return new URL(path19, ensureTrailingSlash3(apiUrl)).toString();
 }
 function ensureTrailingSlash3(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -35687,7 +35687,7 @@ function pluralize(word, count) {
 
 // src/codex-oauth/action.ts
 var fs18 = __toESM(require("fs"));
-var path17 = __toESM(require("path"));
+var path18 = __toESM(require("path"));
 
 // src/codex-oauth/control-plane.ts
 var CodexOAuthControlPlaneClient = class {
@@ -35744,8 +35744,8 @@ var CodexOAuthControlPlaneClient = class {
       isCodexRotatingCommentTokenResponse
     );
   }
-  async postJson(path18, body, guard) {
-    const response = await this.fetchImpl(resolveApiPath(this.apiUrl, path18), {
+  async postJson(path19, body, guard) {
+    const response = await this.fetchImpl(resolveApiPath(this.apiUrl, path19), {
       method: "POST",
       headers: {
         accept: "application/json",
@@ -35818,11 +35818,11 @@ function parseTrustedApiUrl(apiUrl) {
   }
   throw new Error("codex_oauth_api_url_invalid");
 }
-function resolveApiPath(apiUrl, path18) {
-  if (!path18.startsWith("/") || path18.startsWith("//") || path18.includes("\\") || path18.includes("?") || path18.includes("#") || path18.includes("..") || /%2e|%2f|%5c/i.test(path18)) {
+function resolveApiPath(apiUrl, path19) {
+  if (!path19.startsWith("/") || path19.startsWith("//") || path19.includes("\\") || path19.includes("?") || path19.includes("#") || path19.includes("..") || /%2e|%2f|%5c/i.test(path19)) {
     throw new Error("codex_oauth_api_path_invalid");
   }
-  const resolved = new URL(path18, apiUrl);
+  const resolved = new URL(path19, apiUrl);
   if (resolved.origin !== apiUrl.origin) {
     throw new Error("codex_oauth_api_path_invalid");
   }
@@ -39818,12 +39818,29 @@ function looksLikePlaintextAuthJson(value) {
 }
 
 // src/codex-oauth/runtime.ts
+var path16 = __toESM(require("path"));
 async function runCodexOAuthRotatingRuntime(input, ports) {
   let refreshed;
   let preparedCodexCli;
   let authMaterialCleared = false;
+  let previousCodexBinary;
+  let previousPath;
+  let preparedCodexCliEnvApplied = false;
   const clearAuth = async () => {
     ports.lifecycle?.clearOidcEnv?.();
+    if (preparedCodexCliEnvApplied) {
+      if (previousCodexBinary === void 0) {
+        delete process.env.REVIEWROUTER_CODEX_BINARY;
+      } else {
+        process.env.REVIEWROUTER_CODEX_BINARY = previousCodexBinary;
+      }
+      if (previousPath === void 0) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = previousPath;
+      }
+      preparedCodexCliEnvApplied = false;
+    }
     if (refreshed) {
       await refreshed.clearAuthMaterial();
       refreshed = void 0;
@@ -39844,6 +39861,14 @@ async function runCodexOAuthRotatingRuntime(input, ports) {
       workflowSchemaVersion: input.workflowSchemaVersion
     });
     preparedCodexCli = await ports.codex.prepareCli?.();
+    if (preparedCodexCli) {
+      previousCodexBinary = process.env.REVIEWROUTER_CODEX_BINARY;
+      previousPath = process.env.PATH;
+      const codexBinDir = path16.dirname(preparedCodexCli.binaryPath);
+      process.env.REVIEWROUTER_CODEX_BINARY = preparedCodexCli.binaryPath;
+      process.env.PATH = previousPath ? `${codexBinDir}${path16.delimiter}${previousPath}` : codexBinDir;
+      preparedCodexCliEnvApplied = true;
+    }
     const restoredAuth = readCodexRotatingAuthInput().authJsonBytes;
     const restoredCompact = compactCodexAuthJsonBytes({
       authJsonBytes: restoredAuth
@@ -39941,12 +39966,12 @@ function clearCodexRotatingAuthInputSafe() {
 var import_child_process10 = require("child_process");
 var fs17 = __toESM(require("fs/promises"));
 var os8 = __toESM(require("os"));
-var path16 = __toESM(require("path"));
+var path17 = __toESM(require("path"));
 async function safeCheckoutRepository(input) {
   assertRepositoryFullName(input.repository);
   assertFullSha(input.headSha);
   await assertWorkspaceEmpty(input.workspacePath);
-  const gitHome = await fs17.mkdtemp(path16.join(os8.tmpdir(), "reviewrouter-git-"));
+  const gitHome = await fs17.mkdtemp(path17.join(os8.tmpdir(), "reviewrouter-git-"));
   try {
     await runGit(["init", "."], input.workspacePath, gitHome);
     await runGit(
@@ -40175,8 +40200,8 @@ async function runReviewComputation(input) {
     process.env.CODEX_HOME = input.codexHome;
     if (input.codexBinaryPath) {
       process.env.REVIEWROUTER_CODEX_BINARY = input.codexBinaryPath;
-      const codexBinDir = path17.dirname(input.codexBinaryPath);
-      process.env.PATH = previousPath ? `${codexBinDir}${path17.delimiter}${previousPath}` : codexBinDir;
+      const codexBinDir = path18.dirname(input.codexBinaryPath);
+      process.env.PATH = previousPath ? `${codexBinDir}${path18.delimiter}${previousPath}` : codexBinDir;
     }
     process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = "never";
     await applyCodexRotatingReviewRuntimeConfig({

@@ -13500,7 +13500,7 @@ var CodexCliExitError = class extends Error {
     this.name = "CodexCliExitError";
   }
 };
-var CodexProvider = class extends Provider {
+var CodexProvider = class _CodexProvider extends Provider {
   constructor(model, options = {}) {
     super(
       `${options.providerNamePrefix || "codex"}/${options.providerNameModel || model}`
@@ -13508,6 +13508,7 @@ var CodexProvider = class extends Provider {
     this.model = model;
     this.options = options;
   }
+  static preparedBinaryPath;
   // Verify the CLI is available. Model/auth failures are surfaced by the real
   // review call; a model-exec health check costs an extra Codex subscription
   // request and can exhaust limited OAuth usage before review starts.
@@ -14715,6 +14716,9 @@ var CodexProvider = class extends Provider {
     return message.includes("reseed auth.json") ? message : this.truncateCliError(`${message} ${hint}`);
   }
   async resolveBinary() {
+    if (_CodexProvider.preparedBinaryPath && await this.canRun(_CodexProvider.preparedBinaryPath, ["--version"])) {
+      return _CodexProvider.preparedBinaryPath;
+    }
     const explicitBinary = process.env.REVIEWROUTER_CODEX_BINARY?.trim();
     if (explicitBinary) {
       if (await this.canRun(explicitBinary, ["--version"])) {
@@ -14732,7 +14736,13 @@ var CodexProvider = class extends Provider {
     }
     const preparedBinary = await this.findPreparedRotatingCodexBinary();
     if (preparedBinary && await this.canRun(preparedBinary, ["--version"])) {
+      _CodexProvider.preparedBinaryPath = preparedBinary;
       return preparedBinary;
+    }
+    const installedBinary = await this.installPinnedCodexCli();
+    if (await this.canRun(installedBinary, ["--version"])) {
+      _CodexProvider.preparedBinaryPath = installedBinary;
+      return installedBinary;
     }
     throw new Error("Codex CLI is not available (tried: codex, codex-cli)");
   }
@@ -14770,6 +14780,41 @@ var CodexProvider = class extends Provider {
       const proc = (0, import_child_process3.spawn)(cmd, args, { stdio: "ignore" });
       proc.on("error", () => resolve3(false));
       proc.on("close", (code) => resolve3(code === 0));
+    });
+  }
+  async installPinnedCodexCli() {
+    const installRoot = await fs5.mkdtemp(
+      path4.join(os2.tmpdir(), "reviewrouter-codex-provider-cli-")
+    );
+    await this.runInstallCommand("npm", [
+      "install",
+      "--prefix",
+      installRoot,
+      "--omit=dev",
+      "--no-audit",
+      "--no-fund",
+      "@openai/codex@0.133.0"
+    ]);
+    return path4.join(installRoot, "node_modules", ".bin", "codex");
+  }
+  async runInstallCommand(command, args) {
+    await new Promise((resolve3, reject) => {
+      const proc = (0, import_child_process3.spawn)(command, [...args], {
+        env: {
+          PATH: process.env.PATH || "",
+          HOME: process.env.HOME || os2.tmpdir(),
+          npm_config_loglevel: "error"
+        },
+        stdio: "ignore"
+      });
+      proc.on("error", (error2) => reject(error2));
+      proc.on("close", (code) => {
+        if (code === 0) {
+          resolve3();
+          return;
+        }
+        reject(new Error(`codex_cli_install_failed:${code ?? "signal"}`));
+      });
     });
   }
   extractFindings(content) {
@@ -35082,7 +35127,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.60",
+  version: "1.0.61",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

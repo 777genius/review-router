@@ -64,6 +64,8 @@ class CodexCliExitError extends Error {
 }
 
 export class CodexProvider extends Provider {
+  private static preparedBinaryPath: string | undefined;
+
   constructor(
     private readonly model: string,
     private readonly options: CodexProviderOptions = {}
@@ -1681,6 +1683,12 @@ export class CodexProvider extends Provider {
   }
 
   private async resolveBinary(): Promise<string> {
+    if (
+      CodexProvider.preparedBinaryPath &&
+      (await this.canRun(CodexProvider.preparedBinaryPath, ['--version']))
+    ) {
+      return CodexProvider.preparedBinaryPath;
+    }
     const explicitBinary = process.env.REVIEWROUTER_CODEX_BINARY?.trim();
     if (explicitBinary) {
       if (await this.canRun(explicitBinary, ['--version'])) {
@@ -1700,7 +1708,13 @@ export class CodexProvider extends Provider {
     }
     const preparedBinary = await this.findPreparedRotatingCodexBinary();
     if (preparedBinary && (await this.canRun(preparedBinary, ['--version']))) {
+      CodexProvider.preparedBinaryPath = preparedBinary;
       return preparedBinary;
+    }
+    const installedBinary = await this.installPinnedCodexCli();
+    if (await this.canRun(installedBinary, ['--version'])) {
+      CodexProvider.preparedBinaryPath = installedBinary;
+      return installedBinary;
     }
     throw new Error('Codex CLI is not available (tried: codex, codex-cli)');
   }
@@ -1744,6 +1758,46 @@ export class CodexProvider extends Provider {
       const proc = spawn(cmd, args, { stdio: 'ignore' });
       proc.on('error', () => resolve(false));
       proc.on('close', (code) => resolve(code === 0));
+    });
+  }
+
+  private async installPinnedCodexCli(): Promise<string> {
+    const installRoot = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'reviewrouter-codex-provider-cli-')
+    );
+    await this.runInstallCommand('npm', [
+      'install',
+      '--prefix',
+      installRoot,
+      '--omit=dev',
+      '--no-audit',
+      '--no-fund',
+      '@openai/codex@0.133.0',
+    ]);
+    return path.join(installRoot, 'node_modules', '.bin', 'codex');
+  }
+
+  private async runInstallCommand(
+    command: string,
+    args: readonly string[]
+  ): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(command, [...args], {
+        env: {
+          PATH: process.env.PATH || '',
+          HOME: process.env.HOME || os.tmpdir(),
+          npm_config_loglevel: 'error',
+        },
+        stdio: 'ignore',
+      });
+      proc.on('error', (error) => reject(error));
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(new Error(`codex_cli_install_failed:${code ?? 'signal'}`));
+      });
     });
   }
 

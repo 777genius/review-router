@@ -35233,7 +35233,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.64",
+  version: "1.0.65",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -40254,10 +40254,12 @@ function readCodexOAuthActionInputs() {
 async function runReviewComputation(input) {
   const previousCodexHome = process.env.CODEX_HOME;
   const previousCodexBinary = process.env.REVIEWROUTER_CODEX_BINARY;
+  const previousCodexHealthCheckMode = process.env.CODEX_HEALTHCHECK_MODE;
   const previousPath = process.env.PATH;
   const previousProgress = process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
   try {
     process.env.CODEX_HOME = input.codexHome;
+    process.env.CODEX_HEALTHCHECK_MODE = "binary";
     if (input.codexBinaryPath) {
       process.env.REVIEWROUTER_CODEX_BINARY = input.codexBinaryPath;
       const codexBinDir = path18.dirname(input.codexBinaryPath);
@@ -40313,6 +40315,11 @@ async function runReviewComputation(input) {
       delete process.env.PATH;
     } else {
       process.env.PATH = previousPath;
+    }
+    if (previousCodexHealthCheckMode === void 0) {
+      delete process.env.CODEX_HEALTHCHECK_MODE;
+    } else {
+      process.env.CODEX_HEALTHCHECK_MODE = previousCodexHealthCheckMode;
     }
     if (previousCodexBinary === void 0) {
       delete process.env.REVIEWROUTER_CODEX_BINARY;

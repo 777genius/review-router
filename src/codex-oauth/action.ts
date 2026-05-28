@@ -147,10 +147,12 @@ async function runReviewComputation(input: {
 }) {
   const previousCodexHome = process.env.CODEX_HOME;
   const previousCodexBinary = process.env.REVIEWROUTER_CODEX_BINARY;
+  const previousCodexHealthCheckMode = process.env.CODEX_HEALTHCHECK_MODE;
   const previousPath = process.env.PATH;
   const previousProgress = process.env.REVIEW_ROUTER_PROGRESS_COMMENTS;
   try {
     process.env.CODEX_HOME = input.codexHome;
+    process.env.CODEX_HEALTHCHECK_MODE = 'binary';
     if (input.codexBinaryPath) {
       process.env.REVIEWROUTER_CODEX_BINARY = input.codexBinaryPath;
       const codexBinDir = path.dirname(input.codexBinaryPath);
@@ -215,6 +217,11 @@ async function runReviewComputation(input: {
       delete process.env.PATH;
     } else {
       process.env.PATH = previousPath;
+    }
+    if (previousCodexHealthCheckMode === undefined) {
+      delete process.env.CODEX_HEALTHCHECK_MODE;
+    } else {
+      process.env.CODEX_HEALTHCHECK_MODE = previousCodexHealthCheckMode;
     }
     if (previousCodexBinary === undefined) {
       delete process.env.REVIEWROUTER_CODEX_BINARY;

@@ -39781,6 +39781,7 @@ async function runCodexOAuthRotatingRuntime(input, ports) {
   let preparedCodexCli;
   let authMaterialCleared = false;
   const clearAuth = async () => {
+    ports.lifecycle?.clearOidcEnv?.();
     if (refreshed) {
       await refreshed.clearAuthMaterial();
       refreshed = void 0;
@@ -39800,7 +39801,6 @@ async function runCodexOAuthRotatingRuntime(input, ports) {
       providerInstanceId: input.providerInstanceId,
       workflowSchemaVersion: input.workflowSchemaVersion
     });
-    ports.lifecycle?.clearOidcEnv?.();
     preparedCodexCli = await ports.codex.prepareCli?.();
     const restoredAuth = readCodexRotatingAuthInput().authJsonBytes;
     const restoredCompact = compactCodexAuthJsonBytes({

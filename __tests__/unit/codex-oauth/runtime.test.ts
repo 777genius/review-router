@@ -67,7 +67,6 @@ describe('Codex OAuth rotating runtime', () => {
     expect(events).toEqual([
       'oidc',
       'prelease',
-      'clear-oidc-env',
       'prepare-codex',
       'finalize',
       'public-key',
@@ -77,6 +76,7 @@ describe('Codex OAuth rotating runtime', () => {
       'checkout-token',
       'checkout',
       'review',
+      'clear-oidc-env',
       'clear-auth-material',
       'clear-process-auth-env',
       'comment-token',
@@ -118,9 +118,9 @@ describe('Codex OAuth rotating runtime', () => {
     expect(events).toEqual([
       'oidc',
       'prelease',
-      'clear-oidc-env',
       'prepare-codex',
       'finalize',
+      'clear-oidc-env',
       'clear-process-auth-env',
     ]);
   });
@@ -232,6 +232,9 @@ describe('Codex OAuth rotating runtime', () => {
       review: {
         run: jest.fn(async () => {
           events.push('review');
+          expect(process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBe(
+            'oidc-request-token'
+          );
           return { skipped: false, markdown: 'summary' };
         }),
       },

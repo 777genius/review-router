@@ -59,6 +59,19 @@ export class LLMExecutor {
         queue.add(async () => {
           const started = Date.now();
           try {
+            if (provider.name.startsWith('codex/')) {
+              healthyProviders.push(provider);
+              healthCheckResults.push({
+                name: provider.name,
+                status: 'success',
+                durationSeconds: 0,
+              });
+              logger.info(
+                `✓ Provider ${provider.name} health check skipped for Codex CLI runtime`
+              );
+              return;
+            }
+
             const isHealthy = await provider.healthCheck(healthCheckTimeoutMs);
             // Duration is measured immediately after health check completes
             const duration = Date.now() - started;

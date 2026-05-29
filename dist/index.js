@@ -17191,6 +17191,18 @@ var LLMExecutor = class {
         queue.add(async () => {
           const started = Date.now();
           try {
+            if (provider.name.startsWith("codex/")) {
+              healthyProviders.push(provider);
+              healthCheckResults.push({
+                name: provider.name,
+                status: "success",
+                durationSeconds: 0
+              });
+              logger.info(
+                `\u2713 Provider ${provider.name} health check skipped for Codex CLI runtime`
+              );
+              return;
+            }
             const isHealthy = await provider.healthCheck(healthCheckTimeoutMs);
             const duration = Date.now() - started;
             if (isHealthy) {
@@ -35233,7 +35245,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.66",
+  version: "1.0.67",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

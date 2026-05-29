@@ -35245,7 +35245,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.70",
+  version: "1.0.71",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -36179,6 +36179,11 @@ function readCodexRotatingAuthInput(env = process.env) {
   maskCodexAuthJson(authJsonBytes);
   clearCodexRotatingAuthInput(env);
   return { authJsonBytes };
+}
+function hasCodexRotatingAuthInput(env = process.env) {
+  return CODEX_ROTATING_AUTH_INPUT_ENV_NAMES.some(
+    (name) => (env[name] ?? "").trim().length > 0
+  );
 }
 function clearCodexRotatingAuthInput(env = process.env) {
   for (const name of CODEX_ROTATING_AUTH_INPUT_ENV_NAMES) {
@@ -40168,9 +40173,26 @@ function safeGitError(value) {
 
 // src/codex-oauth/action.ts
 var CODEX_OAUTH_ROTATING_MODE = "codex-oauth-rotating";
+var SETUP_PULL_REQUEST_BRANCH = "reviewrouter/setup";
+var SETUP_PREVIEW_MISSING_AUTH_SKIP_REASON = "setup_pr_waiting_for_codex_auth";
 async function runCodexOAuthRotatingAction(options = {}) {
   const inputs = readCodexOAuthActionInputs();
   clearCodexRotatingProviderSecretEnv();
+  if (shouldSkipCodexOAuthSetupPreviewWithoutAuth({
+    eventName: inputs.eventName,
+    headRef: inputs.headRef
+  })) {
+    clearCodexRotatingProcessAuthEnv();
+    setOutput("reviewrouter_state", "skipped");
+    setOutput(
+      "reviewrouter_skipped_reason",
+      SETUP_PREVIEW_MISSING_AUTH_SKIP_REASON
+    );
+    info(
+      "Skipping ReviewRouter Codex OAuth setup PR preview until REVIEWROUTER_CODEX_AUTH_JSON is configured after merge."
+    );
+    return;
+  }
   const controlPlane = new CodexOAuthControlPlaneClient({
     apiUrl: inputs.apiUrl,
     fetchImpl: options.fetchImpl
@@ -40260,8 +40282,13 @@ function readCodexOAuthActionInputs() {
     providerSecrets: readCodexRotatingProviderSecretInputs(),
     repository: event.repository,
     headSha: event.headSha,
+    headRef: event.headRef,
+    eventName: event.eventName,
     workspacePath: process.env.GITHUB_WORKSPACE || process.cwd()
   };
+}
+function shouldSkipCodexOAuthSetupPreviewWithoutAuth(input) {
+  return input.eventName === "pull_request" && input.headRef === SETUP_PULL_REQUEST_BRANCH && !hasCodexRotatingAuthInput();
 }
 async function runReviewComputation(input) {
   const previousCodexHome = process.env.CODEX_HOME;
@@ -40386,6 +40413,7 @@ function readPullRequestEvent() {
   const prNumber = event.pull_request?.number;
   const headRepository = event.pull_request?.head?.repo?.full_name;
   const headSha = event.pull_request?.head?.sha;
+  const headRef = event.pull_request?.head?.ref;
   if (typeof repository !== "string" || typeof headRepository !== "string" || repository !== headRepository) {
     throw new Error("codex_oauth_pull_request_must_be_same_repository");
   }
@@ -40395,7 +40423,13 @@ function readPullRequestEvent() {
   if (typeof headSha !== "string" || !/^[a-f0-9]{40}$/i.test(headSha)) {
     throw new Error("codex_oauth_head_sha_invalid");
   }
-  return { repository, number: prNumber, headSha };
+  return {
+    repository,
+    number: prNumber,
+    headSha,
+    headRef: typeof headRef === "string" ? headRef : "",
+    eventName: process.env.GITHUB_EVENT_NAME || ""
+  };
 }
 function readInput(name) {
   const direct = getInput(name);

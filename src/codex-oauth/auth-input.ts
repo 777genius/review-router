@@ -39,6 +39,14 @@ export function readCodexRotatingAuthInput(
   return { authJsonBytes };
 }
 
+export function hasCodexRotatingAuthInput(
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return CODEX_ROTATING_AUTH_INPUT_ENV_NAMES.some(
+    (name) => (env[name] ?? '').trim().length > 0
+  );
+}
+
 export function clearCodexRotatingAuthInput(
   env: NodeJS.ProcessEnv = process.env
 ): void {

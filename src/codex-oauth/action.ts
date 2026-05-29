@@ -17,6 +17,7 @@ import {
   clearCodexRotatingOidcRequestEnv,
   clearCodexRotatingProviderSecretEnv,
   clearCodexRotatingProcessAuthEnv,
+  hasCodexRotatingAuthInput,
   readCodexRotatingProviderSecretInputs,
   type CodexRotatingProviderSecretInputs,
 } from './auth-input';
@@ -29,6 +30,9 @@ import {
 import { safeCheckoutRepository } from './safe-checkout';
 
 export const CODEX_OAUTH_ROTATING_MODE = 'codex-oauth-rotating';
+const SETUP_PULL_REQUEST_BRANCH = 'reviewrouter/setup';
+const SETUP_PREVIEW_MISSING_AUTH_SKIP_REASON =
+  'setup_pr_waiting_for_codex_auth';
 
 export async function runCodexOAuthRotatingAction(
   options: {
@@ -37,6 +41,23 @@ export async function runCodexOAuthRotatingAction(
 ): Promise<void> {
   const inputs = readCodexOAuthActionInputs();
   clearCodexRotatingProviderSecretEnv();
+  if (
+    shouldSkipCodexOAuthSetupPreviewWithoutAuth({
+      eventName: inputs.eventName,
+      headRef: inputs.headRef,
+    })
+  ) {
+    clearCodexRotatingProcessAuthEnv();
+    core.setOutput('reviewrouter_state', 'skipped');
+    core.setOutput(
+      'reviewrouter_skipped_reason',
+      SETUP_PREVIEW_MISSING_AUTH_SKIP_REASON
+    );
+    core.info(
+      'Skipping ReviewRouter Codex OAuth setup PR preview until REVIEWROUTER_CODEX_AUTH_JSON is configured after merge.'
+    );
+    return;
+  }
   const controlPlane = new CodexOAuthControlPlaneClient({
     apiUrl: inputs.apiUrl,
     fetchImpl: options.fetchImpl,
@@ -133,8 +154,21 @@ function readCodexOAuthActionInputs() {
     providerSecrets: readCodexRotatingProviderSecretInputs(),
     repository: event.repository,
     headSha: event.headSha,
+    headRef: event.headRef,
+    eventName: event.eventName,
     workspacePath: process.env.GITHUB_WORKSPACE || process.cwd(),
   };
+}
+
+export function shouldSkipCodexOAuthSetupPreviewWithoutAuth(input: {
+  eventName: string;
+  headRef: string;
+}): boolean {
+  return (
+    input.eventName === 'pull_request' &&
+    input.headRef === SETUP_PULL_REQUEST_BRANCH &&
+    !hasCodexRotatingAuthInput()
+  );
 }
 
 async function runReviewComputation(input: {
@@ -286,6 +320,8 @@ function readPullRequestEvent(): {
   repository: string;
   number: number;
   headSha: string;
+  headRef: string;
+  eventName: string;
 } {
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!eventPath) {
@@ -295,13 +331,14 @@ function readPullRequestEvent(): {
     repository?: { full_name?: unknown };
     pull_request?: {
       number?: unknown;
-      head?: { sha?: unknown; repo?: { full_name?: unknown } };
+      head?: { ref?: unknown; sha?: unknown; repo?: { full_name?: unknown } };
     };
   };
   const repository = event.repository?.full_name;
   const prNumber = event.pull_request?.number;
   const headRepository = event.pull_request?.head?.repo?.full_name;
   const headSha = event.pull_request?.head?.sha;
+  const headRef = event.pull_request?.head?.ref;
   if (
     typeof repository !== 'string' ||
     typeof headRepository !== 'string' ||
@@ -315,7 +352,13 @@ function readPullRequestEvent(): {
   if (typeof headSha !== 'string' || !/^[a-f0-9]{40}$/i.test(headSha)) {
     throw new Error('codex_oauth_head_sha_invalid');
   }
-  return { repository, number: prNumber, headSha };
+  return {
+    repository,
+    number: prNumber,
+    headSha,
+    headRef: typeof headRef === 'string' ? headRef : '',
+    eventName: process.env.GITHUB_EVENT_NAME || '',
+  };
 }
 
 function readInput(name: string): string {

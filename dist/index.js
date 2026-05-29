@@ -35233,7 +35233,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.65",
+  version: "1.0.66",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -40271,6 +40271,7 @@ async function runReviewComputation(input) {
       audience: input.audience,
       fetchImpl: input.fetchImpl
     });
+    process.env.CODEX_HEALTHCHECK_MODE = "binary";
     applyCodexRotatingProviderSecretInputs(input.providerSecrets);
     const config = ConfigLoader.load();
     const userDryRun = config.dryRun;

@@ -167,6 +167,7 @@ async function runReviewComputation(input: {
       audience: input.audience,
       fetchImpl: input.fetchImpl,
     });
+    process.env.CODEX_HEALTHCHECK_MODE = 'binary';
     applyCodexRotatingProviderSecretInputs(input.providerSecrets);
 
     const config = ConfigLoader.load();

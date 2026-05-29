@@ -18,6 +18,7 @@ import {
   encryptCodexAuthForGitHubSecret,
 } from './crypto';
 import * as path from 'path';
+import type { Review } from '../types';
 
 export type CodexOAuthRuntimeInputs = {
   apiUrl: string;
@@ -116,7 +117,7 @@ export type CodexOAuthReviewResult = {
   blockingFailure?: string;
   userDryRun?: boolean;
   markdown?: string;
-  review?: unknown;
+  review?: Review;
 };
 
 export type CodexOAuthRuntimeResult =

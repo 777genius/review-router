@@ -6,6 +6,7 @@ import { ConfigLoader } from '../config/loader';
 import { createComponents } from '../setup';
 import { GitHubClient } from '../github/client';
 import { CommentPoster } from '../github/comment-poster';
+import { PullRequestLoader } from '../github/pr-loader';
 import { formatBlockingFindingFailure } from '../output/severity-gate';
 import { applyControlPlaneRuntimeConfig } from '../control-plane/runtime-config';
 import { CodexOAuthControlPlaneClient, FetchLike } from './control-plane';
@@ -194,7 +195,7 @@ async function runReviewComputation(input: {
     return {
       skipped: !review,
       userDryRun,
-      review,
+      review: review ?? undefined,
       markdown: review ? components.formatter.format(review) : '',
       blockingFailure: review
         ? formatBlockingFindingFailure(
@@ -252,7 +253,7 @@ export async function applyCodexRotatingReviewRuntimeConfig(input: {
   });
 }
 
-async function postReviewAfterAuthClear(input: {
+export async function postReviewAfterAuthClear(input: {
   commentToken: string;
   review: CodexOAuthReviewResult;
 }): Promise<void> {
@@ -268,6 +269,17 @@ async function postReviewAfterAuthClear(input: {
   const githubClient = new GitHubClient(input.commentToken);
   const poster = new CommentPoster(githubClient, false, config);
   await poster.postSummary(prNumber, input.review.markdown, false);
+  const review = input.review.review;
+  if (!review) {
+    return;
+  }
+  const pr = await new PullRequestLoader(githubClient).load(prNumber);
+  await poster.postInline(
+    prNumber,
+    review.inlineComments,
+    pr.files,
+    pr.headSha
+  );
 }
 
 function readPullRequestEvent(): {

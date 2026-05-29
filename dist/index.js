@@ -35245,7 +35245,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.69",
+  version: "1.0.70",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -40306,7 +40306,7 @@ async function runReviewComputation(input) {
     return {
       skipped: !review,
       userDryRun,
-      review,
+      review: review ?? void 0,
       markdown: review ? components.formatter.format(review) : "",
       blockingFailure: review ? formatBlockingFindingFailure(
         review,
@@ -40364,6 +40364,17 @@ async function postReviewAfterAuthClear(input) {
   const githubClient = new GitHubClient(input.commentToken);
   const poster = new CommentPoster(githubClient, false, config);
   await poster.postSummary(prNumber, input.review.markdown, false);
+  const review = input.review.review;
+  if (!review) {
+    return;
+  }
+  const pr2 = await new PullRequestLoader(githubClient).load(prNumber);
+  await poster.postInline(
+    prNumber,
+    review.inlineComments,
+    pr2.files,
+    pr2.headSha
+  );
 }
 function readPullRequestEvent() {
   const eventPath = process.env.GITHUB_EVENT_PATH;

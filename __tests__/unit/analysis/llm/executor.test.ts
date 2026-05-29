@@ -69,7 +69,7 @@ class TimeoutCaptureProvider extends Provider {
 
 describe('LLMExecutor', () => {
   it('waits for queued health checks before returning', async () => {
-    const provider = new DelayedProvider('codex/gpt-5.5');
+    const provider = new DelayedProvider('openrouter/test-model');
     const executor = new LLMExecutor(DEFAULT_CONFIG);
 
     const result = await executor.filterHealthyProviders([provider], 1000);
@@ -77,6 +77,20 @@ describe('LLMExecutor', () => {
     expect(provider.healthCompleted).toBe(true);
     expect(result.healthy).toEqual([provider]);
     expect(result.healthCheckResults).toHaveLength(1);
+  });
+
+  it('skips brittle health probes for Codex CLI providers', async () => {
+    const provider = new DelayedProvider('codex/gpt-5.5');
+    const executor = new LLMExecutor(DEFAULT_CONFIG);
+
+    const result = await executor.filterHealthyProviders([provider], 1000);
+
+    expect(provider.healthCompleted).toBe(false);
+    expect(result.healthy).toEqual([provider]);
+    expect(result.healthCheckResults[0]).toMatchObject({
+      name: 'codex/gpt-5.5',
+      status: 'success',
+    });
   });
 
   it('waits for queued reviews before returning', async () => {

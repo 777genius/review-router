@@ -7294,7 +7294,10 @@ var DEFAULT_CONFIG = {
     major: 0.85,
     minor: 0.8,
     unknown: 0.9
-  }
+  },
+  // Natural language for human-readable finding text. English keeps the
+  // prompt byte-identical to previous behaviour (no language directive added).
+  outputLanguage: "English"
 };
 var FALLBACK_STATIC_PROVIDERS = [...PREFERRED_OPENROUTER_FREE_MODELS];
 
@@ -11405,6 +11408,7 @@ function isValidRegexPattern(pattern) {
 var ReviewConfigSchema = external_exports.object({
   providers: external_exports.array(external_exports.string()).optional(),
   synthesis_model: external_exports.string().optional(),
+  output_language: external_exports.string().max(60).optional(),
   fallback_providers: external_exports.array(external_exports.string()).optional(),
   provider_allowlist: external_exports.array(external_exports.string()).optional(),
   provider_blocklist: external_exports.array(external_exports.string()).optional(),
@@ -11869,6 +11873,7 @@ var ConfigLoader = class {
       reviewThreadLifecycleResolveConfidence: this.parseLifecycleConfidence(
         env.REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE
       ),
+      outputLanguage: this.parseLanguage(env.REVIEW_OUTPUT_LANGUAGE),
       dryRun: this.parseBoolean(env.DRY_RUN)
     };
   }
@@ -11876,6 +11881,7 @@ var ConfigLoader = class {
     return {
       providers: config.providers,
       synthesisModel: config.synthesis_model,
+      outputLanguage: config.output_language,
       fallbackProviders: config.fallback_providers,
       providerAllowlist: config.provider_allowlist,
       providerBlocklist: config.provider_blocklist,
@@ -11979,6 +11985,17 @@ var ConfigLoader = class {
   static parseArray(value) {
     if (!value) return void 0;
     return value.split(",").map((v2) => v2.trim()).filter(Boolean);
+  }
+  /**
+   * Sanitize a free-text language name before it reaches the model prompt.
+   * Keeps a single line of letters/marks/spaces plus a few separators, caps
+   * length, and drops everything else so the value cannot smuggle prompt
+   * instructions.
+   */
+  static parseLanguage(value) {
+    if (!value) return void 0;
+    const cleaned = value.split(/[\r\n]/)[0].replace(/[^\p{L}\p{M}\s()\-/]/gu, "").replace(/\s+/g, " ").trim().slice(0, 40);
+    return cleaned.length > 0 ? cleaned : void 0;
   }
   static codexProviderFromModel(value) {
     const model = value?.trim();
@@ -16193,6 +16210,18 @@ var PromptBuilder = class {
       "   \u2022 Semantic inversions and dropped structured fields are bugs when existing callers depend on the previous meaning, even if the changed line is not directly user-facing",
       ""
     ];
+    const outputLanguage = normalizeReviewOutputLanguage(
+      this.config.outputLanguage
+    );
+    if (outputLanguage) {
+      instructions.push(
+        "OUTPUT LANGUAGE:",
+        `Write the "title" and "message" fields of every finding in ${outputLanguage}.`,
+        'Translate only that human-readable text. Keep the JSON structure, every field name, severity value, file path, identifier, and any code inside "suggestion" exactly as specified above; never translate code or JSON keys.',
+        "This directive controls wording only and does not relax any rule above.",
+        ""
+      );
+    }
     if (compacted.summaryOnlyFiles.length > 0) {
       instructions.push(
         "SMART DIFF COMPACTION:",
@@ -16420,6 +16449,16 @@ ${sanitizeLifecyclePromptField(target.diffHunk, 2e3)}` : "diffHunk: unavailable"
     return false;
   }
 };
+function normalizeReviewOutputLanguage(value) {
+  if (!value) return null;
+  const cleaned = value.split(/[\r\n]/)[0].replace(/[^\p{L}\p{M}\s()\-/]/gu, "").replace(/\s+/g, " ").trim().slice(0, 40);
+  if (!cleaned) return null;
+  const lower = cleaned.toLowerCase();
+  if (lower === "english" || lower === "en" || lower === "en-us") {
+    return null;
+  }
+  return cleaned;
+}
 function truncatePromptField(value, maxLength) {
   if (value.length <= maxLength) {
     return value;

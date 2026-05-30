@@ -183,6 +183,8 @@ export class ConfigLoader {
         env.REVIEW_THREAD_LIFECYCLE_RESOLVE_CONFIDENCE
       ),
 
+      outputLanguage: this.parseLanguage(env.REVIEW_OUTPUT_LANGUAGE),
+
       dryRun: this.parseBoolean(env.DRY_RUN),
     };
   }
@@ -193,6 +195,7 @@ export class ConfigLoader {
     return {
       providers: config.providers,
       synthesisModel: config.synthesis_model,
+      outputLanguage: config.output_language,
       fallbackProviders: config.fallback_providers,
       providerAllowlist: config.provider_allowlist,
       providerBlocklist: config.provider_blocklist,
@@ -306,6 +309,23 @@ export class ConfigLoader {
       .split(',')
       .map((v) => v.trim())
       .filter(Boolean);
+  }
+
+  /**
+   * Sanitize a free-text language name before it reaches the model prompt.
+   * Keeps a single line of letters/marks/spaces plus a few separators, caps
+   * length, and drops everything else so the value cannot smuggle prompt
+   * instructions.
+   */
+  private static parseLanguage(value?: string): string | undefined {
+    if (!value) return undefined;
+    const cleaned = value
+      .split(/[\r\n]/)[0]
+      .replace(/[^\p{L}\p{M}\s()\-/]/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 40);
+    return cleaned.length > 0 ? cleaned : undefined;
   }
 
   private static codexProviderFromModel(value?: string): string | undefined {

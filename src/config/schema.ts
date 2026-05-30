@@ -4,6 +4,7 @@ import { isValidRegexPattern } from '../utils/regex-validator';
 export const ReviewConfigSchema = z.object({
   providers: z.array(z.string()).optional(),
   synthesis_model: z.string().optional(),
+  output_language: z.string().max(60).optional(),
   fallback_providers: z.array(z.string()).optional(),
   provider_allowlist: z.array(z.string()).optional(),
   provider_blocklist: z.array(z.string()).optional(),

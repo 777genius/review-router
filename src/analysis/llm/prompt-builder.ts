@@ -201,6 +201,19 @@ export class PromptBuilder {
       '',
     ];
 
+    const outputLanguage = normalizeReviewOutputLanguage(
+      this.config.outputLanguage
+    );
+    if (outputLanguage) {
+      instructions.push(
+        'OUTPUT LANGUAGE:',
+        `Write the "title" and "message" fields of every finding in ${outputLanguage}.`,
+        'Translate only that human-readable text. Keep the JSON structure, every field name, severity value, file path, identifier, and any code inside "suggestion" exactly as specified above; never translate code or JSON keys.',
+        'This directive controls wording only and does not relax any rule above.',
+        ''
+      );
+    }
+
     if (compacted.summaryOnlyFiles.length > 0) {
       instructions.push(
         'SMART DIFF COMPACTION:',
@@ -496,6 +509,24 @@ export class PromptBuilder {
 
     return false;
   }
+}
+
+function normalizeReviewOutputLanguage(
+  value: string | undefined
+): string | null {
+  if (!value) return null;
+  const cleaned = value
+    .split(/[\r\n]/)[0]
+    .replace(/[^\p{L}\p{M}\s()\-/]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40);
+  if (!cleaned) return null;
+  const lower = cleaned.toLowerCase();
+  if (lower === 'english' || lower === 'en' || lower === 'en-us') {
+    return null;
+  }
+  return cleaned;
 }
 
 function truncatePromptField(value: string, maxLength: number): string {

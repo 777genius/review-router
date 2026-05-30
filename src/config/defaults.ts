@@ -128,6 +128,10 @@ export const DEFAULT_CONFIG: ReviewConfig = {
     minor: 0.8,
     unknown: 0.9,
   },
+
+  // Natural language for human-readable finding text. English keeps the
+  // prompt byte-identical to previous behaviour (no language directive added).
+  outputLanguage: 'English',
 };
 
 /**

@@ -83,6 +83,13 @@ export interface ReviewConfig {
   learningMinFeedbackCount?: number;
   learningLookbackDays?: number;
 
+  /**
+   * Natural language for the human-readable finding text (title/message).
+   * Defaults to English; any other value asks providers to write findings in
+   * that language while keeping JSON structure, code, and identifiers intact.
+   */
+  outputLanguage?: string;
+
   inlineMaxComments: number;
   inlineMinSeverity: Severity;
   inlineMinAgreement: number;

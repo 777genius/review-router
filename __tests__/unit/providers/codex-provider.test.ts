@@ -717,6 +717,70 @@ describe('CodexProvider', () => {
     );
   });
 
+  it('preserves first-pass findings when audit retry hits a Codex usage limit', async () => {
+    let execCount = 0;
+    const firstFinding = {
+      findings: [
+        {
+          file: 'src/app.ts',
+          startLine: null,
+          line: 42,
+          endLine: null,
+          severity: 'major',
+          title: 'Retry quota should not discard first pass',
+          message:
+            'The first pass produced a valid review result before the exploration retry hit quota.',
+          suggestion: null,
+        },
+      ],
+      revalidations: [],
+    };
+
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      execCount += 1;
+      return createMockProcess((proc) => {
+        const outputIndex = args.indexOf('--output-last-message');
+        const outputFile = args[outputIndex + 1];
+        if (execCount === 1) {
+          fs.writeFileSync(outputFile, JSON.stringify(firstFinding));
+          return;
+        }
+
+        proc.stderr.emit(
+          'data',
+          "You've hit your usage limit. Visit https://example.test to purchase more credits."
+        );
+      }, execCount === 1 ? 0 : 1);
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: true,
+    });
+    const result = await provider.review(
+      [
+        'Files changed:',
+        '- src/app.ts (modified, +1/-1)',
+        '',
+        'Diff:',
+        'diff --git a/src/app.ts b/src/app.ts',
+      ].join('\n'),
+      1000
+    );
+    const execCalls = spawnMock.mock.calls.filter(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+
+    expect(execCalls).toHaveLength(2);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings?.[0]?.title).toBe(
+      'Retry quota should not discard first pass'
+    );
+  });
+
   it('does not rerun empty agentic review when a read-only exploration command is recorded', async () => {
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('--version')) {

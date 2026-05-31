@@ -13746,26 +13746,39 @@ var CodexProvider = class _CodexProvider extends Provider {
         const firstContent = content;
         const firstParsed = parsed;
         const firstRunResult = runResult;
-        runResult = await this.runCliWithStdin(
-          binary2,
-          this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
-          timeoutMs,
-          {
-            healthCheck: false,
-            outputSchema: this.buildFindingsSchema(),
-            eventAudit,
-            jsonEvents: true,
-            acceptReviewOutputOnNonZero: true
+        try {
+          runResult = await this.runCliWithStdin(
+            binary2,
+            this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
+            timeoutMs,
+            {
+              healthCheck: false,
+              outputSchema: this.buildFindingsSchema(),
+              eventAudit,
+              jsonEvents: true,
+              acceptReviewOutputOnNonZero: true
+            }
+          );
+          content = this.sanitizeReviewContent(
+            (runResult.lastMessage || runResult.stdout).trim()
+          );
+          if (runResult.audit) {
+            this.logAgenticAudit(runResult.audit, true);
           }
-        );
-        content = this.sanitizeReviewContent(
-          (runResult.lastMessage || runResult.stdout).trim()
-        );
-        if (runResult.audit) {
-          this.logAgenticAudit(runResult.audit, true);
+          parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
+        } catch (retryError) {
+          if (auditMode === "strict") {
+            throw retryError;
+          }
+          const normalizedRetryError = this.normalizeCodexError(retryError);
+          logger.warn(
+            `Codex agentic retry failed for ${this.name}; preserving first-pass findings. ${normalizedRetryError.message}`
+          );
+          content = firstContent;
+          parsed = firstParsed;
+          runResult = firstRunResult;
         }
-        parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
-        if (this.isMissingAgenticExploration(parsed, runResult.audit, prompt) && firstParsed.findings.length >= parsed.findings.length) {
+        if (runResult !== firstRunResult && this.isMissingAgenticExploration(parsed, runResult.audit, prompt) && firstParsed.findings.length >= parsed.findings.length) {
           logger.warn(
             `Codex agentic retry still lacked read-only exploration and did not add findings; preserving first-pass findings for ${this.name}`
           );
@@ -35284,7 +35297,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.71",
+  version: "1.0.72",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

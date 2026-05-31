@@ -128,27 +128,31 @@ export class CommentPoster {
       };
     }
 
-    if (updateExisting) {
-      logger.info(
-        'Creating a new ReviewRouter summary comment; existing summaries are kept as history'
-      );
-    }
-
-    // Create new comment(s)
-    for (let i = 0; i < chunks.length; i++) {
+    const markedBodies = chunks.map((chunk, index) => {
       const header =
         chunks.length > 1
-          ? `## Review Summary (Part ${i + 1}/${chunks.length})\n\n`
+          ? `## Review Summary (Part ${index + 1}/${chunks.length})\n\n`
           : '';
-      const markedBody =
-        CommentPoster.BOT_COMMENT_MARKER + '\n\n' + header + chunks[i];
+      return CommentPoster.BOT_COMMENT_MARKER + '\n\n' + header + chunk;
+    });
+
+    if (updateExisting) {
+      const updated = await this.updateExistingSummaryComment(
+        prNumber,
+        markedBodies,
+        summaryMetadata
+      );
+      if (updated) return { posted: true, skippedStale: false };
+    }
+
+    for (let i = 0; i < chunks.length; i++) {
       await withRetry(
         () =>
           octokit.rest.issues.createComment({
             owner,
             repo,
             issue_number: prNumber,
-            body: markedBody,
+            body: markedBodies[i],
           }),
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
@@ -222,6 +226,70 @@ export class CommentPoster {
       logger.warn('Failed to find newer ReviewRouter summary', error as Error);
       return null;
     }
+  }
+
+  private async updateExistingSummaryComment(
+    prNumber: number,
+    markedBodies: readonly string[],
+    summaryMetadata?: ReviewSummaryMetadata
+  ): Promise<boolean> {
+    const { octokit, owner, repo } = this.client;
+    const comments = await this.listIssueComments(prNumber);
+    const summaries = comments.filter((comment) => {
+      const body = comment.body ?? '';
+      return (
+        CommentPoster.isSummaryComment(body) &&
+        !shouldSkipSummaryWriteForExisting(body, summaryMetadata).shouldSkip
+      );
+    });
+    const target = summaries.at(-1);
+    if (!target) return false;
+
+    await withRetry(
+      () =>
+        octokit.rest.issues.updateComment({
+          owner,
+          repo,
+          comment_id: target.id,
+          body: markedBodies[0] ?? CommentPoster.BOT_COMMENT_MARKER,
+        }),
+      { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
+    );
+
+    for (let index = 1; index < markedBodies.length; index += 1) {
+      await withRetry(
+        () =>
+          octokit.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: prNumber,
+            body: markedBodies[index],
+          }),
+        { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
+      );
+    }
+
+    const staleSummaries = summaries.filter(
+      (summary) => summary.id !== target.id
+    );
+    for (const stale of staleSummaries) {
+      await withRetry(
+        () =>
+          octokit.rest.issues.deleteComment({
+            owner,
+            repo,
+            comment_id: stale.id,
+          }),
+        { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
+      );
+    }
+    if (staleSummaries.length > 0) {
+      logger.info(
+        `Deleted ${staleSummaries.length} duplicate ReviewRouter summary comment(s)`
+      );
+    }
+
+    return true;
   }
 
   private async listIssueComments(

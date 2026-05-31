@@ -306,7 +306,7 @@ export class ReviewOrchestrator {
             await this.components.commentPoster.postSummary(
               pr.number,
               markdown,
-              false,
+              true,
               summaryMetadata
             );
           } else {
@@ -1415,7 +1415,7 @@ export class ReviewOrchestrator {
           await this.components.commentPoster.postSummary(
             pr.number,
             markdown,
-            false,
+            true,
             summaryMetadata
           );
         }

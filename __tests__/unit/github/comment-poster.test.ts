@@ -67,7 +67,7 @@ describe('CommentPoster', () => {
       );
     });
 
-    it('creates a fresh summary instead of editing old ReviewRouter comments', async () => {
+    it('updates an existing ReviewRouter summary instead of duplicating it', async () => {
       mockOctokit.rest.issues.listComments.mockResolvedValueOnce({
         data: [
           {
@@ -80,13 +80,43 @@ describe('CommentPoster', () => {
 
       await poster.postSummary(123, 'New summary', true);
 
-      expect(mockOctokit.rest.issues.updateComment).not.toHaveBeenCalled();
-      expect(mockOctokit.rest.issues.deleteComment).not.toHaveBeenCalled();
-      expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledWith({
+      expect(mockOctokit.rest.issues.updateComment).toHaveBeenCalledWith({
         owner: 'test-owner',
         repo: 'test-repo',
-        issue_number: 123,
+        comment_id: 99,
         body: expect.stringContaining('New summary'),
+      });
+      expect(mockOctokit.rest.issues.deleteComment).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
+    it('deletes older duplicate ReviewRouter summaries after updating the latest one', async () => {
+      mockOctokit.rest.issues.listComments.mockResolvedValueOnce({
+        data: [
+          {
+            id: 98,
+            body: '<!-- review-router-bot -->\n\n# ReviewRouter\nolder summary',
+          },
+          {
+            id: 99,
+            body: '<!-- review-router-bot -->\n\n# ReviewRouter\nold summary',
+          },
+        ],
+      });
+      const poster = new CommentPoster(mockClient, false);
+
+      await poster.postSummary(123, 'New summary', true);
+
+      expect(mockOctokit.rest.issues.updateComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          comment_id: 99,
+          body: expect.stringContaining('New summary'),
+        })
+      );
+      expect(mockOctokit.rest.issues.deleteComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        comment_id: 98,
       });
     });
 

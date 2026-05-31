@@ -238,7 +238,7 @@ describe('Trivial Detection Integration', () => {
       expect(postSummary).toHaveBeenCalledWith(
         999,
         expect.stringContaining('Previous Review Threads'),
-        false,
+        true,
         expect.objectContaining({ reviewedHeadSha: 'def456' })
       );
       expect(postSummary.mock.calls[0][1]).not.toContain('## All Clear!');

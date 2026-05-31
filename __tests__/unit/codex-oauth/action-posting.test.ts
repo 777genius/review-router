@@ -117,7 +117,7 @@ describe('Codex OAuth rotating post-auth commenting', () => {
     expect(postSummary).toHaveBeenCalledWith(
       12,
       '<!-- review-router-bot -->\n\n# ReviewRouter',
-      false
+      true
     );
     expect(loadPr).toHaveBeenCalledWith(12);
     expect(postInline).toHaveBeenCalledWith(

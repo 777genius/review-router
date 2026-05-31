@@ -263,7 +263,7 @@ describe('GitHub integration mock (no network)', () => {
     expect(fakeOctokit.pulls.createReview).toHaveBeenCalled();
   });
 
-  it('keeps old summary comments and creates a fresh summary when findings exist', async () => {
+  it('updates the existing summary comment when findings exist', async () => {
     const fakeOctokit: any = {
       rest: {
         pulls: {
@@ -385,15 +385,15 @@ describe('GitHub integration mock (no network)', () => {
 
     await new ReviewOrchestrator(components).execute(1);
 
-    expect(fakeOctokit.issues.updateComment).not.toHaveBeenCalled();
-    expect(fakeOctokit.issues.deleteComment).not.toHaveBeenCalled();
-    expect(fakeOctokit.issues.createComment).toHaveBeenCalledWith(
+    expect(fakeOctokit.issues.updateComment).toHaveBeenCalledWith(
       expect.objectContaining({
-        issue_number: 1,
+        comment_id: 99,
         body: expect.stringContaining('Fresh finding'),
       })
     );
-    expect(fakeOctokit.issues.createComment.mock.calls[0][0].body).toContain(
+    expect(fakeOctokit.issues.deleteComment).not.toHaveBeenCalled();
+    expect(fakeOctokit.issues.createComment).not.toHaveBeenCalled();
+    expect(fakeOctokit.issues.updateComment.mock.calls[0][0].body).toContain(
       '<!-- review-router-bot -->'
     );
     expect(fakeOctokit.pulls.createReview).toHaveBeenCalledTimes(1);

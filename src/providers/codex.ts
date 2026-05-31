@@ -187,26 +187,40 @@ export class CodexProvider extends Provider {
         const firstContent = content;
         const firstParsed = parsed;
         const firstRunResult = runResult;
-        runResult = await this.runCliWithStdin(
-          binary,
-          this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
-          timeoutMs,
-          {
-            healthCheck: false,
-            outputSchema: this.buildFindingsSchema(),
-            eventAudit,
-            jsonEvents: true,
-            acceptReviewOutputOnNonZero: true,
+        try {
+          runResult = await this.runCliWithStdin(
+            binary,
+            this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
+            timeoutMs,
+            {
+              healthCheck: false,
+              outputSchema: this.buildFindingsSchema(),
+              eventAudit,
+              jsonEvents: true,
+              acceptReviewOutputOnNonZero: true,
+            }
+          );
+          content = this.sanitizeReviewContent(
+            (runResult.lastMessage || runResult.stdout).trim()
+          );
+          if (runResult.audit) {
+            this.logAgenticAudit(runResult.audit, true);
           }
-        );
-        content = this.sanitizeReviewContent(
-          (runResult.lastMessage || runResult.stdout).trim()
-        );
-        if (runResult.audit) {
-          this.logAgenticAudit(runResult.audit, true);
+          parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
+        } catch (retryError) {
+          if (auditMode === 'strict') {
+            throw retryError;
+          }
+          const normalizedRetryError = this.normalizeCodexError(retryError);
+          logger.warn(
+            `Codex agentic retry failed for ${this.name}; preserving first-pass findings. ${normalizedRetryError.message}`
+          );
+          content = firstContent;
+          parsed = firstParsed;
+          runResult = firstRunResult;
         }
-        parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
         if (
+          runResult !== firstRunResult &&
           this.isMissingAgenticExploration(parsed, runResult.audit, prompt) &&
           firstParsed.findings.length >= parsed.findings.length
         ) {

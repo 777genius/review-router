@@ -302,7 +302,7 @@ export async function postReviewAfterAuthClear(input: {
   const config = ConfigLoader.load();
   const githubClient = new GitHubClient(input.commentToken);
   const poster = new CommentPoster(githubClient, false, config);
-  await poster.postSummary(prNumber, input.review.markdown, false);
+  await poster.postSummary(prNumber, input.review.markdown, true);
   const review = input.review.review;
   if (!review) {
     return;

@@ -20183,22 +20183,27 @@ ${content.substring(0, 500)}...`
         reason: "newer_summary_exists"
       };
     }
-    if (updateExisting) {
-      logger.info(
-        "Creating a new ReviewRouter summary comment; existing summaries are kept as history"
-      );
-    }
-    for (let i2 = 0; i2 < chunks.length; i2++) {
-      const header = chunks.length > 1 ? `## Review Summary (Part ${i2 + 1}/${chunks.length})
+    const markedBodies = chunks.map((chunk, index) => {
+      const header = chunks.length > 1 ? `## Review Summary (Part ${index + 1}/${chunks.length})
 
 ` : "";
-      const markedBody = _CommentPoster.BOT_COMMENT_MARKER + "\n\n" + header + chunks[i2];
+      return _CommentPoster.BOT_COMMENT_MARKER + "\n\n" + header + chunk;
+    });
+    if (updateExisting) {
+      const updated = await this.updateExistingSummaryComment(
+        prNumber,
+        markedBodies,
+        summaryMetadata
+      );
+      if (updated) return { posted: true, skippedStale: false };
+    }
+    for (let i2 = 0; i2 < chunks.length; i2++) {
       await withRetry(
         () => octokit.rest.issues.createComment({
           owner,
           repo,
           issue_number: prNumber,
-          body: markedBody
+          body: markedBodies[i2]
         }),
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
@@ -20252,6 +20257,55 @@ ${content.substring(0, 500)}...`
       logger.warn("Failed to find newer ReviewRouter summary", error2);
       return null;
     }
+  }
+  async updateExistingSummaryComment(prNumber, markedBodies, summaryMetadata) {
+    const { octokit, owner, repo } = this.client;
+    const comments = await this.listIssueComments(prNumber);
+    const summaries = comments.filter((comment) => {
+      const body = comment.body ?? "";
+      return _CommentPoster.isSummaryComment(body) && !shouldSkipSummaryWriteForExisting(body, summaryMetadata).shouldSkip;
+    });
+    const target = summaries.at(-1);
+    if (!target) return false;
+    await withRetry(
+      () => octokit.rest.issues.updateComment({
+        owner,
+        repo,
+        comment_id: target.id,
+        body: markedBodies[0] ?? _CommentPoster.BOT_COMMENT_MARKER
+      }),
+      { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+    );
+    for (let index = 1; index < markedBodies.length; index += 1) {
+      await withRetry(
+        () => octokit.rest.issues.createComment({
+          owner,
+          repo,
+          issue_number: prNumber,
+          body: markedBodies[index]
+        }),
+        { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+      );
+    }
+    const staleSummaries = summaries.filter(
+      (summary) => summary.id !== target.id
+    );
+    for (const stale of staleSummaries) {
+      await withRetry(
+        () => octokit.rest.issues.deleteComment({
+          owner,
+          repo,
+          comment_id: stale.id
+        }),
+        { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+      );
+    }
+    if (staleSummaries.length > 0) {
+      logger.info(
+        `Deleted ${staleSummaries.length} duplicate ReviewRouter summary comment(s)`
+      );
+    }
+    return true;
   }
   async listIssueComments(prNumber) {
     const { octokit, owner, repo } = this.client;
@@ -32047,7 +32101,7 @@ var ReviewOrchestrator = class {
             await this.components.commentPoster.postSummary(
               pr2.number,
               markdown2,
-              false,
+              true,
               summaryMetadata
             );
           } else {
@@ -32929,7 +32983,7 @@ var ReviewOrchestrator = class {
           await this.components.commentPoster.postSummary(
             pr2.number,
             markdown,
-            false,
+            true,
             summaryMetadata
           );
         }
@@ -35297,7 +35351,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.72",
+  version: "1.0.73",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -40442,7 +40496,7 @@ async function postReviewAfterAuthClear(input) {
   const config = ConfigLoader.load();
   const githubClient = new GitHubClient(input.commentToken);
   const poster = new CommentPoster(githubClient, false, config);
-  await poster.postSummary(prNumber, input.review.markdown, false);
+  await poster.postSummary(prNumber, input.review.markdown, true);
   const review = input.review.review;
   if (!review) {
     return;

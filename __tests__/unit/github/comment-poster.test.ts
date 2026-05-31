@@ -27,6 +27,7 @@ describe('CommentPoster', () => {
           updateComment: jest.fn().mockResolvedValue({}),
           deleteComment: jest.fn().mockResolvedValue({}),
           listComments: jest.fn().mockResolvedValue({ data: [] }),
+          listEventsForTimeline: jest.fn().mockResolvedValue({ data: [] }),
         },
         pulls: {
           get: jest
@@ -87,6 +88,42 @@ describe('CommentPoster', () => {
         body: expect.stringContaining('New summary'),
       });
       expect(mockOctokit.rest.issues.deleteComment).not.toHaveBeenCalled();
+      expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
+    it('falls back to timeline comments when the issue comments list has no summaries', async () => {
+      mockOctokit.rest.issues.listComments.mockResolvedValueOnce({
+        data: [],
+      });
+      mockOctokit.rest.issues.listEventsForTimeline.mockResolvedValueOnce({
+        data: [
+          {
+            id: 97,
+            event: 'commented',
+            body: '<!-- review-router-bot -->\n\n# ReviewRouter\nolder summary',
+          },
+          {
+            id: 99,
+            event: 'commented',
+            body: '<!-- review-router-bot -->\n\n# ReviewRouter\nold summary',
+          },
+        ],
+      });
+      const poster = new CommentPoster(mockClient, false);
+
+      await poster.postSummary(123, 'New summary', true);
+
+      expect(mockOctokit.rest.issues.updateComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          comment_id: 99,
+          body: expect.stringContaining('New summary'),
+        })
+      );
+      expect(mockOctokit.rest.issues.deleteComment).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        comment_id: 97,
+      });
       expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
     });
 

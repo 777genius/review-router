@@ -60,6 +60,11 @@ type InlineCommentWithLegacyRange = InlineComment & {
   end_line?: unknown;
 };
 
+interface IssueCommentSummaryCandidate {
+  id: number;
+  body?: string | null;
+}
+
 export class CommentPoster {
   private static readonly MAX_COMMENT_SIZE = 60_000;
   private static readonly BOT_COMMENT_MARKER = '<!-- review-router-bot -->';
@@ -242,8 +247,17 @@ export class CommentPoster {
         !shouldSkipSummaryWriteForExisting(body, summaryMetadata).shouldSkip
       );
     });
+    logger.info(
+      `ReviewRouter summary lookup found ${summaries.length} existing summary comment(s) on PR #${prNumber}`
+    );
     const target = summaries.at(-1);
-    if (!target) return false;
+    if (!target) {
+      logger.info(
+        'Creating a new ReviewRouter summary comment because no existing summary was found'
+      );
+      return false;
+    }
+    logger.info(`Updating ReviewRouter summary comment ${target.id}`);
 
     await withRetry(
       () =>
@@ -294,9 +308,37 @@ export class CommentPoster {
 
   private async listIssueComments(
     prNumber: number
-  ): Promise<Array<{ id: number; body?: string | null }>> {
+  ): Promise<IssueCommentSummaryCandidate[]> {
+    const comments = await this.listIssueCommentsViaCommentsApi(prNumber);
+    if (comments.some((comment) => CommentPoster.isSummaryComment(comment.body))) {
+      return comments;
+    }
+
+    const timelineComments =
+      await this.listIssueCommentsViaTimelineApi(prNumber);
+    if (timelineComments.length === 0) {
+      return comments;
+    }
+
+    const merged = [...comments];
+    const knownIds = new Set(comments.map((comment) => comment.id));
+    for (const comment of timelineComments) {
+      if (!knownIds.has(comment.id)) {
+        merged.push(comment);
+        knownIds.add(comment.id);
+      }
+    }
+    logger.info(
+      `Loaded ${timelineComments.length} issue comment(s) from timeline fallback on PR #${prNumber}`
+    );
+    return merged;
+  }
+
+  private async listIssueCommentsViaCommentsApi(
+    prNumber: number
+  ): Promise<IssueCommentSummaryCandidate[]> {
     const { octokit, owner, repo } = this.client;
-    const comments: Array<{ id: number; body?: string | null }> = [];
+    const comments: IssueCommentSummaryCandidate[] = [];
     let page = 1;
     let hasMore = true;
 
@@ -313,6 +355,54 @@ export class CommentPoster {
         { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
       );
       comments.push(...response.data);
+      hasMore = response.data.length === 100;
+      page += 1;
+    }
+
+    return comments;
+  }
+
+  private async listIssueCommentsViaTimelineApi(
+    prNumber: number
+  ): Promise<IssueCommentSummaryCandidate[]> {
+    const { octokit, owner, repo } = this.client;
+    if (!octokit.rest.issues.listEventsForTimeline) {
+      return [];
+    }
+
+    const comments: IssueCommentSummaryCandidate[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await withRetry(
+        () =>
+          octokit.rest.issues.listEventsForTimeline({
+            owner,
+            repo,
+            issue_number: prNumber,
+            per_page: 100,
+            page,
+          }),
+        { retries: 2, minTimeout: 1000, maxTimeout: 5000 }
+      );
+      for (const event of response.data) {
+        const candidate = event as {
+          id?: unknown;
+          event?: unknown;
+          body?: unknown;
+        };
+        if (
+          candidate.event === 'commented' &&
+          typeof candidate.id === 'number'
+        ) {
+          comments.push({
+            id: candidate.id,
+            body:
+              typeof candidate.body === 'string' ? candidate.body : undefined,
+          });
+        }
+      }
       hasMore = response.data.length === 100;
       page += 1;
     }

@@ -20265,8 +20265,17 @@ ${content.substring(0, 500)}...`
       const body = comment.body ?? "";
       return _CommentPoster.isSummaryComment(body) && !shouldSkipSummaryWriteForExisting(body, summaryMetadata).shouldSkip;
     });
+    logger.info(
+      `ReviewRouter summary lookup found ${summaries.length} existing summary comment(s) on PR #${prNumber}`
+    );
     const target = summaries.at(-1);
-    if (!target) return false;
+    if (!target) {
+      logger.info(
+        "Creating a new ReviewRouter summary comment because no existing summary was found"
+      );
+      return false;
+    }
+    logger.info(`Updating ReviewRouter summary comment ${target.id}`);
     await withRetry(
       () => octokit.rest.issues.updateComment({
         owner,
@@ -20308,6 +20317,28 @@ ${content.substring(0, 500)}...`
     return true;
   }
   async listIssueComments(prNumber) {
+    const comments = await this.listIssueCommentsViaCommentsApi(prNumber);
+    if (comments.some((comment) => _CommentPoster.isSummaryComment(comment.body))) {
+      return comments;
+    }
+    const timelineComments = await this.listIssueCommentsViaTimelineApi(prNumber);
+    if (timelineComments.length === 0) {
+      return comments;
+    }
+    const merged = [...comments];
+    const knownIds = new Set(comments.map((comment) => comment.id));
+    for (const comment of timelineComments) {
+      if (!knownIds.has(comment.id)) {
+        merged.push(comment);
+        knownIds.add(comment.id);
+      }
+    }
+    logger.info(
+      `Loaded ${timelineComments.length} issue comment(s) from timeline fallback on PR #${prNumber}`
+    );
+    return merged;
+  }
+  async listIssueCommentsViaCommentsApi(prNumber) {
     const { octokit, owner, repo } = this.client;
     const comments = [];
     let page = 1;
@@ -20324,6 +20355,39 @@ ${content.substring(0, 500)}...`
         { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
       );
       comments.push(...response.data);
+      hasMore = response.data.length === 100;
+      page += 1;
+    }
+    return comments;
+  }
+  async listIssueCommentsViaTimelineApi(prNumber) {
+    const { octokit, owner, repo } = this.client;
+    if (!octokit.rest.issues.listEventsForTimeline) {
+      return [];
+    }
+    const comments = [];
+    let page = 1;
+    let hasMore = true;
+    while (hasMore) {
+      const response = await withRetry(
+        () => octokit.rest.issues.listEventsForTimeline({
+          owner,
+          repo,
+          issue_number: prNumber,
+          per_page: 100,
+          page
+        }),
+        { retries: 2, minTimeout: 1e3, maxTimeout: 5e3 }
+      );
+      for (const event of response.data) {
+        const candidate = event;
+        if (candidate.event === "commented" && typeof candidate.id === "number") {
+          comments.push({
+            id: candidate.id,
+            body: typeof candidate.body === "string" ? candidate.body : void 0
+          });
+        }
+      }
       hasMore = response.data.length === 100;
       page += 1;
     }
@@ -35351,7 +35415,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.73",
+  version: "1.0.74",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

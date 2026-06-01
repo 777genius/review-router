@@ -13,6 +13,19 @@ describe('Codex OAuth rotating action metadata', () => {
     expect(action.inputs).toHaveProperty('workflow-schema-version');
     expect(action.inputs).toHaveProperty('claude-code-oauth-token');
     expect(action.inputs).toHaveProperty('openrouter-api-key');
+    expect(action.inputs?.mode).toMatchObject({
+      required: false,
+    });
+    expect(action.inputs?.mode).not.toHaveProperty('default');
+    expect(action.inputs?.['api-url']).toMatchObject({
+      required: false,
+    });
+    expect(action.inputs?.['provider-instance-id']).toMatchObject({
+      required: false,
+    });
+    expect(action.inputs?.['auth-json']).toMatchObject({
+      required: false,
+    });
     expect(action.runs).toMatchObject({
       using: 'node24',
       main: 'action-dist/index.cjs',

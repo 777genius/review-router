@@ -123,7 +123,11 @@ export async function runCodexOAuthRotatingAction(
   core.setOutput('reviewrouter_state', runtime.status);
   if (runtime.status === 'skipped') {
     core.setOutput('reviewrouter_skipped_reason', runtime.reason);
-    core.warning(`Codex OAuth rotating review skipped: ${runtime.reason}`);
+    const message =
+      runtime.reason === 'stale_queued_secret'
+        ? 'Codex OAuth rotating review did not run because this workflow restored an older queued secret generation. Re-run the latest workflow after reconnecting Codex if needed.'
+        : `Codex OAuth rotating review skipped: ${runtime.reason}`;
+    core.setFailed(message);
     return;
   }
   if (runtime.review.blockingFailure) {

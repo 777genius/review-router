@@ -19,6 +19,7 @@ describe('Codex OAuth rotating setup PR preview', () => {
   let outputPath: string;
 
   beforeEach(() => {
+    process.exitCode = undefined;
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-codex-preview-'));
     eventPath = path.join(tempDir, 'event.json');
     outputPath = path.join(tempDir, 'output');
@@ -32,6 +33,7 @@ describe('Codex OAuth rotating setup PR preview', () => {
   afterEach(() => {
     jest.restoreAllMocks();
     process.env = originalEnv;
+    process.exitCode = undefined;
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -51,6 +53,7 @@ describe('Codex OAuth rotating setup PR preview', () => {
     expect(fs.readFileSync(outputPath, 'utf8')).toContain(
       'setup_pr_waiting_for_codex_auth'
     );
+    expect(process.exitCode).toBeUndefined();
   });
 
   it('does not skip ordinary pull requests when the Codex auth secret is missing', async () => {
@@ -63,6 +66,10 @@ describe('Codex OAuth rotating setup PR preview', () => {
     await runCodexOAuthRotatingAction();
 
     expect(mockedRuntime).toHaveBeenCalledTimes(1);
+    expect(process.exitCode).toBe(1);
+    expect(fs.readFileSync(outputPath, 'utf8')).toContain(
+      'stale_queued_secret'
+    );
   });
 
   it('does not skip setup PR preview when Codex auth is already configured', async () => {
@@ -81,6 +88,27 @@ describe('Codex OAuth rotating setup PR preview', () => {
     await runCodexOAuthRotatingAction();
 
     expect(mockedRuntime).toHaveBeenCalledTimes(1);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('fails closed when runtime skips after setup because review did not run', async () => {
+    mockedRuntime.mockResolvedValue({
+      status: 'skipped',
+      reason: 'permission_required',
+    });
+    process.env = actionEnv({
+      eventPath,
+      outputPath,
+      headRef: 'feature/change',
+    });
+
+    await runCodexOAuthRotatingAction();
+
+    expect(mockedRuntime).toHaveBeenCalledTimes(1);
+    expect(process.exitCode).toBe(1);
+    expect(fs.readFileSync(outputPath, 'utf8')).toContain(
+      'permission_required'
+    );
   });
 });
 

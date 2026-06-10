@@ -40541,6 +40541,11 @@ async function runReviewComputation(input) {
   }
 }
 async function applyCodexRotatingReviewRuntimeConfig(input) {
+  if (process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE === "static") {
+    process.env.REVIEWROUTER_API_URL ||= input.apiUrl;
+    process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK = "false";
+    return;
+  }
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = "oidc";
   process.env.REVIEWROUTER_API_URL = input.apiUrl;
   process.env.REVIEWROUTER_OIDC_AUDIENCE = input.audience;

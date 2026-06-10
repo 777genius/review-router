@@ -65,6 +65,31 @@ describe('Codex OAuth rotating review runtime config', () => {
     ).rejects.toThrow('network_down');
     expect(process.env.REVIEW_PROVIDERS).toBeUndefined();
   });
+
+  it('keeps static runtime config for the post-lease review child process', async () => {
+    process.env = {
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: 'static',
+      REVIEWROUTER_API_URL: 'https://api.reviewrouter.site',
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+      REVIEW_PROVIDERS: 'codex/gpt-5.5',
+    };
+    const fetchImpl =
+      jest.fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>();
+
+    await applyCodexRotatingReviewRuntimeConfig({
+      apiUrl: 'https://api.reviewrouter.site',
+      audience: 'reviewrouter',
+      fetchImpl,
+    });
+
+    expect(process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE).toBe('static');
+    expect(process.env.REVIEWROUTER_API_URL).toBe(
+      'https://api.reviewrouter.site'
+    );
+    expect(process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK).toBe('false');
+    expect(process.env.REVIEW_PROVIDERS).toBe('codex/gpt-5.5');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });
 
 function jsonResponse(body: unknown, status = 200): Response {

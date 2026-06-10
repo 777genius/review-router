@@ -37,8 +37,8 @@ import { parseMemoryInteraction } from './github/memory-interaction';
 import { countPreviousStillValidBySeverity } from './analysis/thread-lifecycle';
 import { formatBlockingFindingFailure } from './output/severity-gate';
 import {
-  CODEX_OAUTH_ROTATING_MODE,
   runCodexOAuthRotatingAction,
+  shouldEnterCodexOAuthRotatingAction,
 } from './codex-oauth/action';
 
 function syncEnvFromInputs(): void {
@@ -158,7 +158,12 @@ async function run(): Promise<void> {
       core.getInput('mode') ||
       process.env.REVIEW_ROUTER_MODE ||
       core.getInput('REVIEW_ROUTER_MODE');
-    if (requestedMode === CODEX_OAUTH_ROTATING_MODE) {
+    if (
+      shouldEnterCodexOAuthRotatingAction({
+        requestedMode,
+        env: process.env,
+      })
+    ) {
       await runCodexOAuthRotatingAction();
       return;
     }

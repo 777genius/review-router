@@ -40345,6 +40345,9 @@ function safeGitError(value) {
 var CODEX_OAUTH_ROTATING_MODE = "codex-oauth-rotating";
 var SETUP_PULL_REQUEST_BRANCH = "reviewrouter/setup";
 var SETUP_PREVIEW_MISSING_AUTH_SKIP_REASON = "setup_pr_waiting_for_codex_auth";
+function shouldEnterCodexOAuthRotatingAction(input) {
+  return input.requestedMode === CODEX_OAUTH_ROTATING_MODE && (input.env ?? process.env).REVIEWROUTER_RUNTIME_CONFIG_MODE !== "static";
+}
 async function runCodexOAuthRotatingAction(options = {}) {
   const inputs = readCodexOAuthActionInputs();
   clearCodexRotatingProviderSecretEnv();
@@ -40728,7 +40731,10 @@ async function run() {
   try {
     syncEnvFromInputs();
     const requestedMode = getInput("mode") || process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE");
-    if (requestedMode === CODEX_OAUTH_ROTATING_MODE) {
+    if (shouldEnterCodexOAuthRotatingAction({
+      requestedMode,
+      env: process.env
+    })) {
       await runCodexOAuthRotatingAction();
       return;
     }

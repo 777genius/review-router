@@ -34,6 +34,16 @@ const SETUP_PULL_REQUEST_BRANCH = 'reviewrouter/setup';
 const SETUP_PREVIEW_MISSING_AUTH_SKIP_REASON =
   'setup_pr_waiting_for_codex_auth';
 
+export function shouldEnterCodexOAuthRotatingAction(input: {
+  requestedMode: string | undefined;
+  env?: NodeJS.ProcessEnv;
+}): boolean {
+  return (
+    input.requestedMode === CODEX_OAUTH_ROTATING_MODE &&
+    (input.env ?? process.env).REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'static'
+  );
+}
+
 export async function runCodexOAuthRotatingAction(
   options: {
     fetchImpl?: FetchLike;

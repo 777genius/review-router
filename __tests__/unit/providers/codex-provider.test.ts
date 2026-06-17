@@ -441,6 +441,39 @@ describe('CodexProvider', () => {
     );
   });
 
+  it('drops GitHub workspace env for OpenRouter-backed Codex in fork sandbox mode', async () => {
+    process.env.REVIEWROUTER_FORK_AGENTIC_SANDBOX = 'true';
+    process.env.GITHUB_WORKSPACE = '/home/runner/work/repo/repo';
+    process.env.OPENROUTER_API_KEY = 'sk-or-test';
+
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess(() => {
+        const outputIndex = args.indexOf('--output-last-message');
+        const outputFile = args[outputIndex + 1];
+        fs.writeFileSync(outputFile, '{"findings":[]}');
+      });
+    });
+
+    const provider = new CodexProvider('openai/gpt-5.3-codex', {
+      agenticContext: true,
+      eventAudit: false,
+      modelProvider: 'openrouter',
+      providerNamePrefix: 'openrouter',
+    });
+    await provider.review('review prompt', 1000);
+
+    const execCall = spawnMock.mock.calls.find(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+    expect(execCall?.[1]).toContain('model_provider="openrouter"');
+    expect(execCall?.[2]?.env.OPENROUTER_API_KEY).toBe('sk-or-test');
+    expect(execCall?.[2]?.env.GITHUB_WORKSPACE).toBeUndefined();
+  });
+
   it('reruns agentic review once when empty findings have no recorded exploration', async () => {
     let execCount = 0;
     const finding = {

@@ -71,7 +71,8 @@ export class ClaudeCodeProvider extends Provider {
 
   async review(prompt: string, timeoutMs: number): Promise<ReviewResult> {
     const started = Date.now();
-    const agenticContext = this.options.agenticContext === true;
+    const agenticContext =
+      this.options.agenticContext === true || this.isForkSandboxMode();
     const reviewPrompt = agenticContext
       ? this.wrapReadOnlyAgenticPrompt(prompt)
       : prompt;
@@ -243,9 +244,19 @@ export class ClaudeCodeProvider extends Provider {
       await fs.writeFile(promptFile, stdin, { encoding: 'utf8', mode: 0o600 });
       fd = await fs.open(promptFile, 'r');
       const fdNum = fd.fd;
+      const effectiveArgs = [...args];
+      if (this.isForkSandboxMode()) {
+        const settingsPath = path.join(tmpDir, 'fork-safe-settings.json');
+        await fs.writeFile(
+          settingsPath,
+          JSON.stringify(this.buildForkSafeSettings()),
+          { encoding: 'utf8', mode: 0o600 }
+        );
+        effectiveArgs.push(...this.buildForkSafeArgs(settingsPath));
+      }
 
       return await new Promise((resolve, reject) => {
-        const proc = spawn(bin, args, {
+        const proc = spawn(bin, effectiveArgs, {
           stdio: [fdNum, 'pipe', 'pipe'],
           detached: true,
           env: this.buildSafeEnv({
@@ -331,9 +342,71 @@ export class ClaudeCodeProvider extends Provider {
     }
 
     return buildCliSafeEnv({
+      includeWorkspaceEnv: !this.isForkSandboxMode(),
       extraAllowedKeys: [CLAUDE_CODE_OAUTH_TOKEN_ENV],
       overrides,
     });
+  }
+
+  private isForkSandboxMode(): boolean {
+    return this.parseBooleanEnv(
+      process.env.REVIEWROUTER_FORK_AGENTIC_SANDBOX,
+      false
+    );
+  }
+
+  private parseBooleanEnv(
+    value: string | undefined,
+    defaultValue: boolean
+  ): boolean {
+    if (value === undefined || value === '') return defaultValue;
+    return !['0', 'false', 'no', 'off'].includes(value.trim().toLowerCase());
+  }
+
+  private buildForkSafeArgs(settingsPath: string): string[] {
+    return [
+      '--safe-mode',
+      '--strict-mcp-config',
+      '--mcp-config',
+      '{"mcpServers":{}}',
+      '--permission-mode',
+      'dontAsk',
+      '--settings',
+      settingsPath,
+      '--disallowedTools',
+      'Bash,Edit,Write,mcp__*',
+    ];
+  }
+
+  private buildForkSafeSettings(): unknown {
+    return {
+      permissions: {
+        defaultMode: 'dontAsk',
+        disableBypassPermissionsMode: 'disable',
+        allow: ['Read', 'Grep', 'Glob'],
+        deny: [
+          'Bash',
+          'Edit',
+          'Write',
+          'mcp__*',
+          'Read(../.reviewrouter-codex-home/**)',
+          'Read(../.git/**)',
+          'Read(.git/**)',
+          'Read(./.git/**)',
+          'Read(.claude/**)',
+          'Read(./.claude/**)',
+          'Read(CLAUDE.md)',
+          'Read(./CLAUDE.md)',
+          'Read(**/CLAUDE.md)',
+          'Read(**/.env)',
+          'Read(**/.env.*)',
+          'Read(**/auth.json)',
+          'Read(**/.aws/**)',
+          'Read(**/.ssh/**)',
+          'Read(**/.config/gh/**)',
+        ],
+      },
+    };
   }
 
   private formatCliError(stderr: string, stdout: string): string {

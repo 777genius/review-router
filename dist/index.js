@@ -13225,7 +13225,7 @@ var ClaudeCodeProvider = class extends Provider {
   }
   async review(prompt, timeoutMs) {
     const started = Date.now();
-    const agenticContext = this.options.agenticContext === true;
+    const agenticContext = this.options.agenticContext === true || this.isForkSandboxMode();
     const reviewPrompt = agenticContext ? this.wrapReadOnlyAgenticPrompt(prompt) : prompt;
     this.assertPromptWithinStdinLimit(reviewPrompt);
     const oauthToken = this.readClaudeCodeOAuthToken();
@@ -13363,8 +13363,18 @@ var ClaudeCodeProvider = class extends Provider {
       await fs4.writeFile(promptFile, stdin, { encoding: "utf8", mode: 384 });
       fd = await fs4.open(promptFile, "r");
       const fdNum = fd.fd;
+      const effectiveArgs = [...args];
+      if (this.isForkSandboxMode()) {
+        const settingsPath = path3.join(tmpDir, "fork-safe-settings.json");
+        await fs4.writeFile(
+          settingsPath,
+          JSON.stringify(this.buildForkSafeSettings()),
+          { encoding: "utf8", mode: 384 }
+        );
+        effectiveArgs.push(...this.buildForkSafeArgs(settingsPath));
+      }
       return await new Promise((resolve3, reject) => {
-        const proc = (0, import_child_process2.spawn)(bin, args, {
+        const proc = (0, import_child_process2.spawn)(bin, effectiveArgs, {
           stdio: [fdNum, "pipe", "pipe"],
           detached: true,
           env: this.buildSafeEnv({
@@ -13439,9 +13449,64 @@ var ClaudeCodeProvider = class extends Provider {
       overrides[CLAUDE_CODE_OAUTH_TOKEN_ENV] = options.oauthToken;
     }
     return buildCliSafeEnv({
+      includeWorkspaceEnv: !this.isForkSandboxMode(),
       extraAllowedKeys: [CLAUDE_CODE_OAUTH_TOKEN_ENV],
       overrides
     });
+  }
+  isForkSandboxMode() {
+    return this.parseBooleanEnv(
+      process.env.REVIEWROUTER_FORK_AGENTIC_SANDBOX,
+      false
+    );
+  }
+  parseBooleanEnv(value, defaultValue) {
+    if (value === void 0 || value === "") return defaultValue;
+    return !["0", "false", "no", "off"].includes(value.trim().toLowerCase());
+  }
+  buildForkSafeArgs(settingsPath) {
+    return [
+      "--safe-mode",
+      "--strict-mcp-config",
+      "--mcp-config",
+      '{"mcpServers":{}}',
+      "--permission-mode",
+      "dontAsk",
+      "--settings",
+      settingsPath,
+      "--disallowedTools",
+      "Bash,Edit,Write,mcp__*"
+    ];
+  }
+  buildForkSafeSettings() {
+    return {
+      permissions: {
+        defaultMode: "dontAsk",
+        disableBypassPermissionsMode: "disable",
+        allow: ["Read", "Grep", "Glob"],
+        deny: [
+          "Bash",
+          "Edit",
+          "Write",
+          "mcp__*",
+          "Read(../.reviewrouter-codex-home/**)",
+          "Read(../.git/**)",
+          "Read(.git/**)",
+          "Read(./.git/**)",
+          "Read(.claude/**)",
+          "Read(./.claude/**)",
+          "Read(CLAUDE.md)",
+          "Read(./CLAUDE.md)",
+          "Read(**/CLAUDE.md)",
+          "Read(**/.env)",
+          "Read(**/.env.*)",
+          "Read(**/auth.json)",
+          "Read(**/.aws/**)",
+          "Read(**/.ssh/**)",
+          "Read(**/.config/gh/**)"
+        ]
+      }
+    };
   }
   formatCliError(stderr, stdout) {
     const text = `${stderr || stdout || "no output"}`.trim();

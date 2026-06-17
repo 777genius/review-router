@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { readFileSync } from 'fs';
 import { spawn } from 'child_process';
 import { ClaudeCodeProvider } from '../../../src/providers/claude-code';
 
@@ -148,6 +149,81 @@ describe('ClaudeCodeProvider', () => {
       ])
     );
     expect(args.join(' ')).not.toMatch(/\b(Bash|Edit|Write)\b/);
+  });
+
+  it('forces read-only context and fork-safe Claude settings in fork sandbox mode', async () => {
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'sk-ant-oat01-oauth-secret';
+    process.env.REVIEWROUTER_FORK_AGENTIC_SANDBOX = 'true';
+    process.env.GITHUB_WORKSPACE = '/home/runner/work/repo/repo';
+    let forkSafeSettings: any;
+
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      const settingsPath = args[args.indexOf('--settings') + 1];
+      forkSafeSettings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+
+      return createMockProcess((proc) => {
+        proc.stdout.emit(
+          'data',
+          JSON.stringify({
+            structured_output: { findings: [] },
+          })
+        );
+      });
+    });
+
+    const provider = new ClaudeCodeProvider('sonnet', {
+      agenticContext: false,
+    });
+    await provider.review('review prompt', 1000);
+
+    const runCall = spawnMock.mock.calls.find(
+      (call) => Array.isArray(call[1]) && call[1].includes('--json-schema')
+    );
+    const args = runCall?.[1] as string[];
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '--tools',
+        'Read,Grep,Glob',
+        '--allowedTools',
+        'Read,Grep,Glob',
+        '--safe-mode',
+        '--strict-mcp-config',
+        '--mcp-config',
+        '{"mcpServers":{}}',
+        '--permission-mode',
+        'dontAsk',
+        '--disallowedTools',
+        'Bash,Edit,Write,mcp__*',
+      ])
+    );
+    expect(args).toContain('--settings');
+    expect(forkSafeSettings.permissions.allow).toEqual([
+      'Read',
+      'Grep',
+      'Glob',
+    ]);
+    expect(forkSafeSettings.permissions.deny).toEqual(
+      expect.arrayContaining([
+        'Bash',
+        'Edit',
+        'Write',
+        'mcp__*',
+        'Read(.git/**)',
+        'Read(.claude/**)',
+        'Read(**/CLAUDE.md)',
+        'Read(**/.env)',
+      ])
+    );
+    expect(args.join(' ')).not.toMatch(/dangerously-skip-permissions/);
+    expect(runCall?.[2]?.env.GITHUB_WORKSPACE).toBeUndefined();
+    expect(runCall?.[2]?.env.GITHUB_TOKEN).toBeUndefined();
+    expect(runCall?.[2]?.env.CLAUDE_CODE_OAUTH_TOKEN).toBe(
+      'sk-ant-oat01-oauth-secret'
+    );
   });
 
   it('trims surrounding whitespace from Claude OAuth tokens before spawning', async () => {

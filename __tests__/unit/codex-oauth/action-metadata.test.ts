@@ -35,4 +35,14 @@ describe('Codex OAuth rotating action metadata', () => {
     expect(action.runs).not.toHaveProperty('post');
     expect(action.runs).not.toHaveProperty('post-if');
   });
+
+  it('prunes inherited secret-like env keys in the bundled action runtime', () => {
+    const actionDist = fs.readFileSync('action-dist/index.cjs', 'utf8');
+
+    expect(actionDist).toContain('const normalizedKey = key.toUpperCase();');
+    expect(actionDist).toContain('key.startsWith("INPUT_")');
+    expect(actionDist).toContain(
+      '/(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|AUTH_JSON)/.test(normalizedKey)'
+    );
+  });
 });

@@ -13850,13 +13850,15 @@ var CodexProvider = class _CodexProvider extends Provider {
       "--sandbox",
       "read-only",
       "--ephemeral",
-      "--ignore-user-config",
       "--ignore-rules",
       "-c",
       "approval_policy=never",
       "--output-last-message",
       options.outputLastMessageFile
     ];
+    if (!this.shouldUseForkSandboxCodexHomeConfig()) {
+      args.splice(args.indexOf("--ignore-rules"), 0, "--ignore-user-config");
+    }
     if (options.skipGitRepoCheck) {
       args.splice(1, 0, "--skip-git-repo-check");
     }
@@ -14167,6 +14169,12 @@ var CodexProvider = class _CodexProvider extends Provider {
         ...this.options.modelProvider === "openrouter" ? ["OPENROUTER_API_KEY"] : []
       ]
     });
+  }
+  shouldUseForkSandboxCodexHomeConfig() {
+    return this.parseBooleanEnv(
+      process.env.REVIEWROUTER_FORK_AGENTIC_SANDBOX,
+      false
+    );
   }
   sanitizeReviewContent(content) {
     const cwd = process.cwd().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

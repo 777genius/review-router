@@ -32,6 +32,7 @@ var github_action_exports = {};
 __export(github_action_exports, {
   assertSupportedRunnerEnvironment: () => assertSupportedRunnerEnvironment,
   buildCodexCommand: () => buildCodexCommand,
+  buildFullReviewRuntimeEnv: () => buildFullReviewRuntimeEnv,
   deleteFullRuntimeProgressComments: () => deleteFullRuntimeProgressComments,
   deleteStaleCodexRotatingSummaryComments: () => deleteStaleCodexRotatingSummaryComments,
   extractReviewRouterRuntimeFailure: () => extractReviewRouterRuntimeFailure,
@@ -20568,6 +20569,7 @@ var networkRetryMaxAttempts = 3;
 var networkRetryBaseDelayMs = 750;
 var fullRuntimeProgressCommentMarker = "<!-- review-router-progress-tracker -->";
 var providerNeutralReviewFindingsArtifactFileName = "reviewrouter-findings.json";
+var reviewThreadLifecycleResolveTokenEnvKey = "REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN";
 async function runCodexRotatingGitHubAction(runtime = {}) {
   const env = runtime.env ?? process.env;
   const io = runtime.io ?? { stdout: process.stdout, stderr: process.stderr };
@@ -22043,6 +22045,10 @@ async function runFullReviewRouterRuntime(input) {
   const actionPath = resolveGitHubActionPath(input.env);
   const runtimePath = (0, import_node_path4.join)(actionPath, "dist", "index.js");
   await (0, import_promises4.access)(runtimePath, import_node_fs.constants.R_OK);
+  const reviewThreadLifecycleResolveToken = input.env[reviewThreadLifecycleResolveTokenEnvKey]?.trim() || void 0;
+  if (reviewThreadLifecycleResolveToken) {
+    mask(input.io, reviewThreadLifecycleResolveToken);
+  }
   const codexBinDir = await makeTempDirectory("reviewrouter-codex-bin-");
   try {
     await (0, import_promises4.symlink)(input.codexBinaryPath, (0, import_node_path4.join)(codexBinDir, "codex"));
@@ -22057,7 +22063,8 @@ async function runFullReviewRouterRuntime(input) {
       codexBinDir,
       commentToken: input.commentToken,
       runtimeConfigVersion: input.runtimeConfigVersion,
-      runtimeEnv: input.runtimeEnv
+      runtimeEnv: input.runtimeEnv,
+      reviewThreadLifecycleResolveToken
     });
     await ensureFullReviewRuntimeTools({
       env: childEnv,
@@ -22087,10 +22094,14 @@ function buildFullReviewRuntimeEnv(input) {
     runtimeEnv,
     providerSecrets: input.inputs.providerSecrets
   });
+  const reviewThreadLifecycleResolveEnv = input.reviewThreadLifecycleResolveToken ? {
+    [reviewThreadLifecycleResolveTokenEnvKey]: input.reviewThreadLifecycleResolveToken
+  } : {};
   return {
     ...inherited,
     ...runtimeEnv,
     ...providerSecretEnv,
+    ...reviewThreadLifecycleResolveEnv,
     HOME: input.tempHome,
     CODEX_HOME: input.tempCodexHome,
     GITHUB_WORKSPACE: input.workspace,
@@ -22744,6 +22755,7 @@ if (shouldAutoRunCodexRotatingAction({ env: process.env, argv: process.argv })) 
 0 && (module.exports = {
   assertSupportedRunnerEnvironment,
   buildCodexCommand,
+  buildFullReviewRuntimeEnv,
   deleteFullRuntimeProgressComments,
   deleteStaleCodexRotatingSummaryComments,
   extractReviewRouterRuntimeFailure,

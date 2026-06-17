@@ -727,7 +727,8 @@ export class CodexProvider extends Provider {
 
   private buildSafeEnv(includeWorkspaceEnv = true): NodeJS.ProcessEnv {
     return buildCliSafeEnv({
-      includeWorkspaceEnv,
+      includeWorkspaceEnv:
+        includeWorkspaceEnv && !this.shouldUseForkSandboxCodexHomeConfig(),
       extraAllowedKeys: [
         'CODEX_HOME',
         'OPENAI_API_KEY',

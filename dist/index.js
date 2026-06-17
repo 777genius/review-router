@@ -14227,7 +14227,7 @@ var CodexProvider = class _CodexProvider extends Provider {
   }
   buildSafeEnv(includeWorkspaceEnv = true) {
     return buildCliSafeEnv({
-      includeWorkspaceEnv,
+      includeWorkspaceEnv: includeWorkspaceEnv && !this.shouldUseForkSandboxCodexHomeConfig(),
       extraAllowedKeys: [
         "CODEX_HOME",
         "OPENAI_API_KEY",

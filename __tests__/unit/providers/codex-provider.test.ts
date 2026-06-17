@@ -64,6 +64,22 @@ describe('CodexProvider', () => {
     expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
   });
 
+  it('allows generated CODEX_HOME config in fork agentic sandbox mode', () => {
+    process.env.REVIEWROUTER_FORK_AGENTIC_SANDBOX = 'true';
+    const provider = new CodexProvider('gpt-5.5');
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+      outputSchemaFile: '/tmp/codex-schema.json',
+      eventAudit: true,
+    });
+
+    expect(args).not.toContain('--ignore-user-config');
+    expect(args).toContain('--ignore-rules');
+    expect(args).toContain('--sandbox');
+    expect(args).toContain('read-only');
+  });
+
   it('can request JSON events for agentic audit without enabling verbose event audit', () => {
     const provider = new CodexProvider('gpt-5.4-mini');
     const args = (provider as any).buildExecArgs({
@@ -742,19 +758,22 @@ describe('CodexProvider', () => {
       }
 
       execCount += 1;
-      return createMockProcess((proc) => {
-        const outputIndex = args.indexOf('--output-last-message');
-        const outputFile = args[outputIndex + 1];
-        if (execCount === 1) {
-          fs.writeFileSync(outputFile, JSON.stringify(firstFinding));
-          return;
-        }
+      return createMockProcess(
+        (proc) => {
+          const outputIndex = args.indexOf('--output-last-message');
+          const outputFile = args[outputIndex + 1];
+          if (execCount === 1) {
+            fs.writeFileSync(outputFile, JSON.stringify(firstFinding));
+            return;
+          }
 
-        proc.stderr.emit(
-          'data',
-          "You've hit your usage limit. Visit https://example.test to purchase more credits."
-        );
-      }, execCount === 1 ? 0 : 1);
+          proc.stderr.emit(
+            'data',
+            "You've hit your usage limit. Visit https://example.test to purchase more credits."
+          );
+        },
+        execCount === 1 ? 0 : 1
+      );
     });
 
     const provider = new CodexProvider('gpt-5.4-mini', {

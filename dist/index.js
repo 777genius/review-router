@@ -40804,15 +40804,17 @@ async function run() {
   try {
     syncEnvFromInputs();
     const requestedMode = getInput("mode") || process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE");
+    const lifecycleResolveTokenFromEnv = process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN?.trim() || void 0;
+    if (lifecycleResolveTokenFromEnv) {
+      setSecret(lifecycleResolveTokenFromEnv);
+      delete process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN;
+    }
     if (shouldEnterCodexOAuthRotatingAction({
       requestedMode,
       env: process.env
     })) {
       await runCodexOAuthRotatingAction();
       return;
-    }
-    if (process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN) {
-      setSecret(process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN);
     }
     runtimeConfig = await applyControlPlaneRuntimeConfig({
       logger: {
@@ -40837,9 +40839,9 @@ async function run() {
     });
     const fallbackToken = token;
     token = commentToken.token;
-    const lifecycleResolveToken = process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN || fallbackToken;
-    if (lifecycleResolveToken && lifecycleResolveToken !== token && lifecycleResolveToken !== fallbackToken) {
-      setSecret(lifecycleResolveToken);
+    const lifecycleResolveToken = lifecycleResolveTokenFromEnv || fallbackToken;
+    if (lifecycleResolveTokenFromEnv && lifecycleResolveTokenFromEnv !== token && lifecycleResolveTokenFromEnv !== fallbackToken) {
+      setSecret(lifecycleResolveTokenFromEnv);
     }
     process.env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS = commentToken.status;
     if (mode === "interaction") {

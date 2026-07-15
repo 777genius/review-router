@@ -91,6 +91,7 @@ function makeOrchestrator(
       generateIncrementalSummary: jest.fn(),
       saveReview: jest.fn(),
       getChangedFilesSince: jest.fn(),
+      getIncrementalChangeSet: jest.fn(),
     } as any,
     costTracker: {
       record: jest.fn(),

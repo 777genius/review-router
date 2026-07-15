@@ -4486,7 +4486,7 @@ function escapeProperty(value) {
 }
 
 // src/main.ts
-var fs19 = __toESM(require("fs"));
+var fs20 = __toESM(require("fs"));
 
 // src/config/loader.ts
 var fs2 = __toESM(require("fs"));
@@ -18956,50 +18956,9 @@ var CacheStorage = class {
 
 // src/cache/key-builder.ts
 var import_crypto = require("crypto");
-function buildCacheKey(pr2, configHash) {
-  const hash = (0, import_crypto.createHash)("sha1").update(`${pr2.baseSha}:${pr2.headSha}`).digest("hex").slice(0, 12);
-  const suffix = configHash ? `-${configHash}` : "";
-  return `mpr-${hash}${suffix}`;
-}
-function hashConfig(config) {
-  const relevantConfig = {
-    // Analysis toggles
-    enableAstAnalysis: config.enableAstAnalysis,
-    enableSecurity: config.enableSecurity,
-    enableTestHints: config.enableTestHints,
-    enableAiDetection: config.enableAiDetection,
-    // Graph analysis config
-    graphEnabled: config.graphEnabled,
-    graphMaxDepth: config.graphMaxDepth,
-    // Triviality detection affects which files are analyzed
-    skipTrivialChanges: config.skipTrivialChanges,
-    trivialPatterns: config.trivialPatterns,
-    // Inline comment filtering
-    inlineMinSeverity: config.inlineMinSeverity,
-    inlineMinAgreement: config.inlineMinAgreement,
-    // Intensity affects prompt depth
-    pathBasedIntensity: config.pathBasedIntensity,
-    pathIntensityPatterns: config.pathIntensityPatterns,
-    pathDefaultIntensity: config.pathDefaultIntensity
-  };
-  const sortObject = (value) => {
-    if (Array.isArray(value)) return value.map(sortObject);
-    if (value && typeof value === "object") {
-      const sorted = {};
-      for (const key of Object.keys(value).sort()) {
-        sorted[key] = sortObject(value[key]);
-      }
-      return sorted;
-    }
-    return value;
-  };
-  const stableJson = JSON.stringify(sortObject(relevantConfig));
-  const hash = (0, import_crypto.createHash)("sha256").update(stableJson).digest("hex");
-  return hash.slice(0, 16);
-}
 
 // src/cache/version.ts
-var CACHE_VERSION = 7;
+var CACHE_VERSION = 8;
 function versionCache(data) {
   return {
     version: CACHE_VERSION,
@@ -19029,6 +18988,59 @@ function unversionCache(cached, maxAge) {
   } catch {
     return null;
   }
+}
+
+// src/cache/key-builder.ts
+function buildCacheKey(pr2, configHash) {
+  const hash = (0, import_crypto.createHash)("sha1").update(`${pr2.baseSha}:${pr2.headSha}`).digest("hex").slice(0, 12);
+  const suffix = configHash ? `-${configHash}` : "";
+  return `mpr-${hash}${suffix}`;
+}
+function hashConfig(config) {
+  const relevantConfig = {
+    // Analysis toggles
+    enableAstAnalysis: config.enableAstAnalysis,
+    enableSecurity: config.enableSecurity,
+    enableTestHints: config.enableTestHints,
+    enableAiDetection: config.enableAiDetection,
+    // Graph analysis config
+    graphEnabled: config.graphEnabled,
+    graphMaxDepth: config.graphMaxDepth,
+    // Triviality detection affects which files are analyzed
+    skipTrivialChanges: config.skipTrivialChanges,
+    trivialPatterns: config.trivialPatterns,
+    // Inline comment filtering
+    inlineMinSeverity: config.inlineMinSeverity,
+    inlineMinAgreement: config.inlineMinAgreement,
+    // Intensity affects prompt depth
+    pathBasedIntensity: config.pathBasedIntensity,
+    pathIntensityPatterns: config.pathIntensityPatterns,
+    pathDefaultIntensity: config.pathDefaultIntensity
+  };
+  const stableJson = JSON.stringify(sortObject(relevantConfig));
+  const hash = (0, import_crypto.createHash)("sha256").update(stableJson).digest("hex");
+  return hash.slice(0, 16);
+}
+function hashIncrementalCompatibility(config, runtimeConfigVersion) {
+  const stableJson = JSON.stringify(
+    sortObject({
+      cacheVersion: CACHE_VERSION,
+      reviewConfig: config,
+      runtimeConfigVersion: runtimeConfigVersion?.trim() || null
+    })
+  );
+  return (0, import_crypto.createHash)("sha256").update(stableJson).digest("hex");
+}
+function sortObject(value) {
+  if (Array.isArray(value)) return value.map(sortObject);
+  if (value && typeof value === "object") {
+    const sorted = {};
+    for (const key of Object.keys(value).sort()) {
+      sorted[key] = sortObject(value[key]);
+    }
+    return sorted;
+  }
+  return value;
 }
 
 // src/cache/manager.ts
@@ -19077,9 +19089,10 @@ var IncrementalReviewer = class _IncrementalReviewer {
   constructor(storage = new CacheStorage(), config = {
     enabled: true,
     cacheTtlDays: 7
-  }) {
+  }, repositoryPath = process.cwd()) {
     this.storage = storage;
     this.config = config;
+    this.repositoryPath = repositoryPath;
   }
   static CACHE_KEY_PREFIX = "incremental-review-pr-";
   static DEFAULT_TTL_DAYS = 7;
@@ -19096,6 +19109,14 @@ var IncrementalReviewer = class _IncrementalReviewer {
     if (!lastReview) {
       logger.debug("No previous review found, running full review");
       return false;
+    }
+    if (this.config.requireCompatibleSnapshot) {
+      if (lastReview.schemaVersion !== 1 || lastReview.baseSha !== pr2.baseSha || !this.config.compatibilityKey || lastReview.compatibilityKey !== this.config.compatibilityKey || !lastReview.expiresAt || lastReview.expiresAt <= Date.now()) {
+        logger.info(
+          "Hosted incremental snapshot is incompatible or expired; running full review"
+        );
+        return false;
+      }
     }
     const ageMs = Date.now() - lastReview.timestamp;
     const ttlMs = this.config.cacheTtlDays * _IncrementalReviewer.MS_PER_DAY;
@@ -19135,12 +19156,17 @@ var IncrementalReviewer = class _IncrementalReviewer {
    */
   async saveReview(pr2, review) {
     const key = this.buildCacheKey(pr2.number);
+    const timestamp2 = Date.now();
     const data = {
       prNumber: pr2.number,
       lastReviewedCommit: pr2.headSha,
-      timestamp: Date.now(),
+      timestamp: timestamp2,
       findings: review.findings,
-      reviewSummary: review.summary
+      reviewSummary: review.summary,
+      schemaVersion: 1,
+      baseSha: pr2.baseSha,
+      ...this.config.compatibilityKey ? { compatibilityKey: this.config.compatibilityKey } : {},
+      expiresAt: timestamp2 + this.config.cacheTtlDays * _IncrementalReviewer.MS_PER_DAY
     };
     await this.storage.write(key, JSON.stringify(data));
     logger.info(
@@ -19151,12 +19177,15 @@ var IncrementalReviewer = class _IncrementalReviewer {
    * Validate that a string is a valid git SHA
    */
   isValidSha(sha) {
-    return /^[a-f0-9]{4,40}$/i.test(sha);
+    return /^[a-f0-9]{40}$/i.test(sha);
   }
   /**
    * Get list of files changed since the last review
    */
   async getChangedFilesSince(pr2, lastCommit) {
+    return (await this.getIncrementalChangeSet(pr2, lastCommit)).files;
+  }
+  async getIncrementalChangeSet(pr2, lastCommit) {
     try {
       if (!this.isValidSha(lastCommit)) {
         throw new Error(`Invalid commit SHA: ${lastCommit}`);
@@ -19165,16 +19194,16 @@ var IncrementalReviewer = class _IncrementalReviewer {
         throw new Error(`Invalid PR head SHA: ${pr2.headSha}`);
       }
       logger.debug(
-        `Running git diff --name-status ${lastCommit.substring(0, 7)}...${pr2.headSha.substring(0, 7)}`
+        `Running git diff --name-status ${lastCommit.substring(0, 7)}..${pr2.headSha.substring(0, 7)}`
       );
       let output;
       try {
         output = (0, import_child_process7.execFileSync)(
           "git",
-          ["diff", "--name-status", `${lastCommit}...${pr2.headSha}`],
+          ["diff", "--name-status", "-z", "-M", lastCommit, pr2.headSha],
           {
             encoding: "utf8",
-            cwd: process.cwd(),
+            cwd: this.repositoryPath,
             timeout: 1e4
             // 10 second timeout
           }
@@ -19183,16 +19212,30 @@ var IncrementalReviewer = class _IncrementalReviewer {
         logger.warn(
           `Failed to get git diff: ${error2 instanceof Error ? error2.message : String(error2)}`
         );
-        return pr2.files;
+        return {
+          files: pr2.files,
+          invalidatedPaths: [],
+          canReusePreviousFindings: false
+        };
       }
       const changedFiles = [];
-      const lines = output.trim().split("\n").filter(Boolean);
-      for (const line of lines) {
-        const pathParts = line.split("	").slice(1);
-        const filename = pathParts.join("	");
-        const prFile = pr2.files.find((f2) => f2.filename === filename);
-        if (prFile) {
+      const changedFileNames = /* @__PURE__ */ new Set();
+      const invalidatedPaths = /* @__PURE__ */ new Set();
+      const fields = output.split("\0");
+      let index = 0;
+      while (index < fields.length && fields[index]) {
+        const status = fields[index++] ?? "";
+        const previousFilename = /^[RC]/.test(status) ? fields[index++] : void 0;
+        const filename = fields[index++] ?? "";
+        if (!filename) continue;
+        invalidatedPaths.add(filename);
+        if (previousFilename) invalidatedPaths.add(previousFilename);
+        const prFile = pr2.files.find(
+          (f2) => f2.filename === filename || previousFilename !== void 0 && f2.previousFilename === previousFilename
+        );
+        if (prFile && !changedFileNames.has(prFile.filename)) {
           changedFiles.push(prFile);
+          changedFileNames.add(prFile.filename);
         } else {
           logger.debug(`File ${filename} in diff but not in PR files`);
         }
@@ -19200,13 +19243,21 @@ var IncrementalReviewer = class _IncrementalReviewer {
       logger.info(
         `Found ${changedFiles.length} changed files since ${lastCommit.substring(0, 7)}`
       );
-      return changedFiles;
+      return {
+        files: changedFiles,
+        invalidatedPaths: [...invalidatedPaths],
+        canReusePreviousFindings: true
+      };
     } catch (error2) {
       logger.error("Failed to get changed files from git diff", error2);
       logger.warn(
         `Falling back to full review (${pr2.files.length} files) due to git diff failure`
       );
-      return pr2.files;
+      return {
+        files: pr2.files,
+        invalidatedPaths: [],
+        canReusePreviousFindings: false
+      };
     }
   }
   /**
@@ -19217,8 +19268,12 @@ var IncrementalReviewer = class _IncrementalReviewer {
    * 2. Remove findings from changed files (they'll be replaced by new review)
    * 3. Add new findings from current review
    */
-  mergeFindings(previousFindings, newFindings, changedFiles) {
-    const changedFilenames = new Set(changedFiles.map((f2) => f2.filename));
+  mergeFindings(previousFindings, newFindings, changedFiles, invalidatedPaths = []) {
+    const changedFilenames = new Set(
+      changedFiles.flatMap(
+        (file) => file.previousFilename ? [file.filename, file.previousFilename] : [file.filename]
+      ).concat(invalidatedPaths)
+    );
     const keptFindings = previousFindings.filter(
       (f2) => !changedFilenames.has(f2.file)
     );
@@ -19257,6 +19312,296 @@ ${previousSummary}
     return `${_IncrementalReviewer.CACHE_KEY_PREFIX}${prNumber}`;
   }
 };
+
+// src/cache/review-snapshot-bridge.ts
+var fs11 = __toESM(require("fs/promises"));
+
+// src/utils/redaction.ts
+function redactSensitiveText(value) {
+  return value.replace(
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+    "-----BEGIN PRIVATE KEY-----***-----END PRIVATE KEY-----"
+  ).replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/ghs_[A-Za-z0-9_]{16,}/g, "ghs_***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(
+    /(?:eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g,
+    "jwt-***"
+  ).replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(access_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(id_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(client_secret["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(private[-_ ]?key["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(CODEX_AUTH_JSON["'\s:=]+)\{[\s\S]*?\}/gi, "$1***").replace(/(CLAUDE_CODE_OAUTH_TOKEN["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(
+    /((?:api[_-]?key|apikey|api[_-]?secret|token|password)["'\s:=]+)[A-Za-z0-9_./+=-]{16,}/gi,
+    "$1***"
+  );
+}
+
+// src/cache/review-snapshot-bridge.ts
+var REVIEW_SNAPSHOT_INPUT_PATH_ENV = "REVIEWROUTER_INCREMENTAL_SNAPSHOT_INPUT_PATH";
+var REVIEW_SNAPSHOT_OUTPUT_PATH_ENV = "REVIEWROUTER_INCREMENTAL_SNAPSHOT_OUTPUT_PATH";
+var REVIEW_SNAPSHOT_REQUIRED_ENV = "REVIEWROUTER_INCREMENTAL_SNAPSHOT_REQUIRED";
+var REVIEW_SNAPSHOT_MAX_PAYLOAD_BYTES = 512 * 1024;
+var REVIEW_SNAPSHOT_MAX_CANDIDATE_BYTES = REVIEW_SNAPSHOT_MAX_PAYLOAD_BYTES + 16 * 1024;
+var findingSchema = external_exports.object({
+  file: external_exports.string().min(1).max(4096),
+  startLine: external_exports.number().int().positive().optional(),
+  line: external_exports.number().int().positive(),
+  endLine: external_exports.number().int().positive().optional(),
+  severity: external_exports.enum(["critical", "major", "minor"]),
+  title: external_exports.string().min(1).max(1e3),
+  message: external_exports.string().min(1).max(2e4),
+  provider: external_exports.string().min(1).max(500).optional(),
+  providers: external_exports.array(external_exports.string().min(1).max(500)).max(50).optional(),
+  actualModel: external_exports.string().min(1).max(500).optional(),
+  providerVoteKeys: external_exports.array(external_exports.string().min(1).max(500)).max(50).optional(),
+  providerPoolSize: external_exports.number().int().positive().optional(),
+  confidence: external_exports.number().min(0).max(1).optional(),
+  category: external_exports.string().min(1).max(500).optional(),
+  hasConsensus: external_exports.boolean().optional()
+}).strict();
+var snapshotSchema = external_exports.object({
+  version: external_exports.number().int().positive(),
+  schemaVersion: external_exports.literal(1),
+  reviewedHeadSha: external_exports.string().regex(/^[a-f0-9]{40}$/i),
+  baseSha: external_exports.string().regex(/^[a-f0-9]{40}$/i),
+  compatibilityKey: external_exports.string().regex(/^[a-f0-9]{64}$/i),
+  payload: external_exports.object({
+    reviewSummary: external_exports.string().min(1).max(1e5),
+    findings: external_exports.array(findingSchema).max(500)
+  }).strict(),
+  reviewedAt: external_exports.string().datetime(),
+  expiresAt: external_exports.string().datetime()
+}).strict();
+var restoreEnvelopeSchema = external_exports.object({
+  protocolVersion: external_exports.literal(1),
+  status: external_exports.enum(["found", "missing", "expired", "base_changed"]),
+  expectedVersion: external_exports.number().int().nonnegative(),
+  snapshot: snapshotSchema.optional()
+}).strict().superRefine((value, context) => {
+  if (value.status === "found") {
+    if (!value.snapshot) {
+      context.addIssue({
+        code: external_exports.ZodIssueCode.custom,
+        message: "Found snapshot response must include a snapshot",
+        path: ["snapshot"]
+      });
+    } else if (value.expectedVersion !== value.snapshot.version) {
+      context.addIssue({
+        code: external_exports.ZodIssueCode.custom,
+        message: "Snapshot version does not match expected version",
+        path: ["expectedVersion"]
+      });
+    }
+  } else if (value.snapshot) {
+    context.addIssue({
+      code: external_exports.ZodIssueCode.custom,
+      message: "Non-found snapshot response must not include a snapshot",
+      path: ["snapshot"]
+    });
+  }
+});
+var incrementalCacheDataSchema = external_exports.object({
+  prNumber: external_exports.number().int().positive(),
+  lastReviewedCommit: external_exports.string().regex(/^[a-f0-9]{40}$/i),
+  timestamp: external_exports.number().int().nonnegative(),
+  findings: external_exports.array(external_exports.unknown()),
+  reviewSummary: external_exports.string(),
+  schemaVersion: external_exports.literal(1),
+  baseSha: external_exports.string().regex(/^[a-f0-9]{40}$/i),
+  compatibilityKey: external_exports.string().regex(/^[a-f0-9]{64}$/i),
+  expiresAt: external_exports.number().int().positive()
+});
+var FileReviewSnapshotStorage = class _FileReviewSnapshotStorage {
+  constructor(inputPath, outputPath) {
+    this.inputPath = inputPath;
+    this.outputPath = outputPath;
+  }
+  static fromEnvironment(env = process.env) {
+    const inputPath = env[REVIEW_SNAPSHOT_INPUT_PATH_ENV]?.trim();
+    const outputPath = env[REVIEW_SNAPSHOT_OUTPUT_PATH_ENV]?.trim();
+    if (!inputPath && !outputPath) return null;
+    if (!inputPath || !outputPath) {
+      logger.warn("Hosted incremental snapshot bridge is incomplete");
+      return null;
+    }
+    return new _FileReviewSnapshotStorage(inputPath, outputPath);
+  }
+  envelope;
+  async read(key) {
+    const prNumber = parsePrNumber(key);
+    const envelope = await this.readEnvelope();
+    if (!prNumber || !envelope || envelope.status !== "found") return null;
+    if (!envelope.snapshot) {
+      logger.warn(
+        "Hosted incremental snapshot response is missing its payload"
+      );
+      return null;
+    }
+    const reviewedAt = Date.parse(envelope.snapshot.reviewedAt);
+    const expiresAt = Date.parse(envelope.snapshot.expiresAt);
+    if (!Number.isFinite(reviewedAt) || !Number.isFinite(expiresAt)) {
+      logger.warn("Hosted incremental snapshot contains invalid timestamps");
+      return null;
+    }
+    const data = {
+      prNumber,
+      lastReviewedCommit: envelope.snapshot.reviewedHeadSha,
+      timestamp: reviewedAt,
+      findings: envelope.snapshot.payload.findings,
+      reviewSummary: envelope.snapshot.payload.reviewSummary,
+      schemaVersion: envelope.snapshot.schemaVersion,
+      baseSha: envelope.snapshot.baseSha,
+      compatibilityKey: envelope.snapshot.compatibilityKey,
+      expiresAt
+    };
+    return JSON.stringify(data);
+  }
+  async write(_key, value) {
+    const envelope = await this.readEnvelope();
+    if (!envelope) return;
+    const parsedData = incrementalCacheDataSchema.safeParse(
+      safeJsonParse(value)
+    );
+    if (!parsedData.success) {
+      logger.warn(
+        "Hosted incremental snapshot candidate is invalid; persistence skipped"
+      );
+      return;
+    }
+    const data = parsedData.data;
+    const normalizedFindings = data.findings.map(normalizeFinding).filter((finding) => !!finding).slice(0, 500);
+    const candidate = {
+      protocolVersion: 1,
+      expectedVersion: envelope.expectedVersion,
+      pullRequestNumber: data.prNumber,
+      schemaVersion: data.schemaVersion,
+      reviewedHeadSha: data.lastReviewedCommit,
+      baseSha: data.baseSha,
+      compatibilityKey: data.compatibilityKey,
+      payload: {
+        reviewSummary: normalizeText(data.reviewSummary, 1e5),
+        findings: []
+      }
+    };
+    let payloadBytes = Buffer.byteLength(JSON.stringify(candidate.payload));
+    let candidateBytes = Buffer.byteLength(JSON.stringify(candidate));
+    for (const finding of normalizedFindings) {
+      const additionalBytes = Buffer.byteLength(JSON.stringify(finding)) + (candidate.payload.findings.length > 0 ? 1 : 0);
+      if (payloadBytes + additionalBytes > REVIEW_SNAPSHOT_MAX_PAYLOAD_BYTES || candidateBytes + additionalBytes > REVIEW_SNAPSHOT_MAX_CANDIDATE_BYTES) {
+        continue;
+      }
+      candidate.payload.findings.push(finding);
+      payloadBytes += additionalBytes;
+      candidateBytes += additionalBytes;
+    }
+    if (candidate.payload.findings.length < normalizedFindings.length) {
+      logger.warn("Hosted incremental snapshot findings were size-limited");
+    }
+    const serializedCandidate = JSON.stringify(candidate);
+    if (Buffer.byteLength(serializedCandidate) > REVIEW_SNAPSHOT_MAX_CANDIDATE_BYTES) {
+      logger.warn("Hosted incremental snapshot candidate exceeds size limit");
+      return;
+    }
+    const temporaryPath = `${this.outputPath}.tmp-${process.pid}`;
+    try {
+      await fs11.writeFile(temporaryPath, serializedCandidate, {
+        encoding: "utf8",
+        mode: 384
+      });
+      await fs11.rename(temporaryPath, this.outputPath);
+      logger.info("Prepared hosted incremental review snapshot candidate");
+    } finally {
+      await fs11.rm(temporaryPath, { force: true }).catch(() => void 0);
+    }
+  }
+  async readEnvelope() {
+    if (this.envelope !== void 0) return this.envelope;
+    try {
+      const raw = await fs11.readFile(this.inputPath, "utf8");
+      const parsed = restoreEnvelopeSchema.safeParse(JSON.parse(raw));
+      if (!parsed.success) {
+        logger.warn(
+          "Hosted incremental snapshot response is invalid; running full review"
+        );
+        this.envelope = null;
+        return this.envelope;
+      }
+      this.envelope = parsed.data;
+      return this.envelope;
+    } catch (error2) {
+      logger.warn(
+        `Hosted incremental snapshot unavailable; running full review: ${safeError(error2)}`
+      );
+      this.envelope = null;
+      return this.envelope;
+    }
+  }
+};
+function parsePrNumber(key) {
+  const match2 = /^incremental-review-pr-(\d+)$/.exec(key);
+  if (!match2) return null;
+  const parsed = Number(match2[1]);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+function safeJsonParse(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+function normalizeFinding(finding) {
+  if (!finding || typeof finding !== "object") return null;
+  const candidate = finding;
+  if (typeof candidate.file !== "string" || typeof candidate.title !== "string" || typeof candidate.message !== "string") {
+    return null;
+  }
+  const parsed = findingSchema.safeParse({
+    file: normalizeText(candidate.file, 4096),
+    ...candidate.startLine !== void 0 ? { startLine: candidate.startLine } : {},
+    line: candidate.line,
+    ...candidate.endLine !== void 0 ? { endLine: candidate.endLine } : {},
+    severity: candidate.severity,
+    title: normalizeText(candidate.title, 1e3),
+    message: normalizeText(candidate.message, 2e4),
+    ...typeof candidate.provider === "string" ? { provider: normalizeText(candidate.provider, 500) } : {},
+    ...Array.isArray(candidate.providers) ? {
+      providers: candidate.providers.filter((value) => typeof value === "string").slice(0, 50).map((value) => normalizeText(value, 500))
+    } : {},
+    ...typeof candidate.actualModel === "string" ? { actualModel: normalizeText(candidate.actualModel, 500) } : {},
+    ...Array.isArray(candidate.providerVoteKeys) ? {
+      providerVoteKeys: candidate.providerVoteKeys.filter((value) => typeof value === "string").slice(0, 50).map((value) => normalizeText(value, 500))
+    } : {},
+    ...candidate.providerPoolSize !== void 0 ? { providerPoolSize: candidate.providerPoolSize } : {},
+    ...candidate.confidence !== void 0 ? { confidence: candidate.confidence } : {},
+    ...typeof candidate.category === "string" ? { category: normalizeText(candidate.category, 500) } : {},
+    ...candidate.hasConsensus !== void 0 ? { hasConsensus: candidate.hasConsensus } : {}
+  });
+  return parsed.success ? parsed.data : null;
+}
+function normalizeText(value, maxLength) {
+  return redactSensitiveText(value).slice(0, maxLength) || "Redacted.";
+}
+function isHostedReviewSnapshotRequired(env = process.env) {
+  const value = env[REVIEW_SNAPSHOT_REQUIRED_ENV]?.trim().toLowerCase();
+  return value === "1" || value === "true";
+}
+var DisabledIncrementalStorage = class {
+  async read() {
+    return null;
+  }
+  async write() {
+  }
+};
+function selectIncrementalSnapshotStorage(input) {
+  const env = input.env ?? process.env;
+  const hostedStorage = FileReviewSnapshotStorage.fromEnvironment(env);
+  const hostedRequired = isHostedReviewSnapshotRequired(env);
+  const hostedSnapshotUnavailable = hostedRequired && hostedStorage === null;
+  return {
+    storage: hostedStorage ?? (hostedSnapshotUnavailable ? new DisabledIncrementalStorage() : input.localStorage),
+    enabled: input.incrementalEnabled && !hostedSnapshotUnavailable,
+    requireCompatibleSnapshot: hostedRequired || hostedStorage !== null,
+    hostedSnapshotUnavailable
+  };
+}
+function safeError(error2) {
+  return error2 instanceof Error ? redactSensitiveText(error2.message).slice(0, 500) : "unknown_error";
+}
 
 // src/cost/pricing.ts
 var PricingService = class _PricingService {
@@ -21779,7 +22124,7 @@ ${deleted}`;
 };
 
 // src/github/client.ts
-var fs11 = __toESM(require("fs"));
+var fs12 = __toESM(require("fs"));
 var import_rest = __toESM(require_dist_node12());
 
 // src/github/rate-limit.ts
@@ -21990,7 +22335,7 @@ function getRepositoryFromEventPayload() {
     return void 0;
   }
   try {
-    const payload = JSON.parse(fs11.readFileSync(eventPath, "utf8"));
+    const payload = JSON.parse(fs12.readFileSync(eventPath, "utf8"));
     if (payload.repository?.full_name) {
       return payload.repository.full_name;
     }
@@ -24877,9 +25222,9 @@ var PromptGenerator = class {
    * Save prompts to a file (for CLI usage)
    */
   async saveToFile(prompts, filepath, format = this.defaultFormat) {
-    const fs20 = await import("fs/promises");
+    const fs21 = await import("fs/promises");
     const content = this.formatForIDE(prompts, format);
-    await fs20.writeFile(filepath, content, "utf8");
+    await fs21.writeFile(filepath, content, "utf8");
     logger.info(`Saved ${prompts.length} fix prompts to ${filepath}`);
   }
   /**
@@ -25753,7 +26098,7 @@ var MetricsCollector = class _MetricsCollector {
 };
 
 // src/plugins/plugin-loader.ts
-var fs12 = __toESM(require("fs/promises"));
+var fs13 = __toESM(require("fs/promises"));
 var path11 = __toESM(require("path"));
 var crypto5 = __toESM(require("crypto"));
 var import_url = require("url");
@@ -25789,12 +26134,12 @@ var PluginLoader = class {
       const pluginDir = path11.resolve(this.config.pluginDir);
       logger.info(`Loading plugins from: ${pluginDir}`);
       try {
-        await fs12.access(pluginDir);
+        await fs13.access(pluginDir);
       } catch {
         logger.warn(`Plugin directory does not exist: ${pluginDir}`);
         return;
       }
-      const entries = await fs12.readdir(pluginDir, { withFileTypes: true });
+      const entries = await fs13.readdir(pluginDir, { withFileTypes: true });
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         const pluginPath = path11.join(pluginDir, entry.name);
@@ -25813,7 +26158,7 @@ var PluginLoader = class {
     try {
       const indexPath = path11.join(pluginPath, "index.js");
       try {
-        await fs12.access(indexPath);
+        await fs13.access(indexPath);
       } catch {
         logger.debug(`Plugin at ${pluginPath} missing index.js, skipping`);
         return;
@@ -25912,7 +26257,7 @@ var PluginLoader = class {
   async verifyPluginIntegrity(pluginPath, indexPath) {
     const manifestPath = path11.join(pluginPath, "plugin-manifest.json");
     try {
-      await fs12.access(manifestPath);
+      await fs13.access(manifestPath);
     } catch {
       logger.debug(
         `No manifest found for plugin at ${pluginPath}, skipping integrity check`
@@ -25920,12 +26265,12 @@ var PluginLoader = class {
       return;
     }
     try {
-      const manifestContent = await fs12.readFile(manifestPath, "utf8");
+      const manifestContent = await fs13.readFile(manifestPath, "utf8");
       const manifest = JSON.parse(manifestContent);
       if (!manifest.sha256 || typeof manifest.sha256 !== "string") {
         throw new Error("Manifest missing valid sha256 checksum");
       }
-      const pluginCode = await fs12.readFile(indexPath, "utf8");
+      const pluginCode = await fs13.readFile(indexPath, "utf8");
       const hash = crypto5.createHash("sha256");
       hash.update(pluginCode);
       const actualChecksum = hash.digest("hex");
@@ -27718,10 +28063,27 @@ async function createComponents(config, githubToken, options = {}) {
   const testCoverage = new TestCoverageAnalyzer();
   const astAnalyzer = new ASTAnalyzer();
   const cache = new CacheManager(void 0, config);
-  const incrementalReviewer = new IncrementalReviewer(new CacheStorage(), {
-    enabled: config.incrementalEnabled,
-    cacheTtlDays: config.incrementalCacheTtlDays
+  const incrementalSnapshotStorage = selectIncrementalSnapshotStorage({
+    localStorage: new CacheStorage(),
+    incrementalEnabled: config.incrementalEnabled
   });
+  if (incrementalSnapshotStorage.hostedSnapshotUnavailable) {
+    logger.warn(
+      "Hosted incremental snapshot bridge is unavailable; incremental review is disabled for this run"
+    );
+  }
+  const incrementalReviewer = new IncrementalReviewer(
+    incrementalSnapshotStorage.storage,
+    {
+      enabled: incrementalSnapshotStorage.enabled,
+      cacheTtlDays: config.incrementalCacheTtlDays,
+      compatibilityKey: hashIncrementalCompatibility(
+        config,
+        process.env.REVIEWROUTER_CONFIG_VERSION
+      ),
+      requireCompatibleSnapshot: incrementalSnapshotStorage.requireCompatibleSnapshot
+    }
+  );
   const pricing = new PricingService(process.env.OPENROUTER_API_KEY);
   const costTracker = new CostTracker(pricing);
   const security = new SecurityScanner();
@@ -31461,16 +31823,7 @@ function formatActionError(error2) {
   ].join("\n");
 }
 function sanitizeErrorMessage(message) {
-  const redacted = message.replace(
-    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
-    "-----BEGIN PRIVATE KEY-----***-----END PRIVATE KEY-----"
-  ).replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(
-    /(?:eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g,
-    "jwt-***"
-  ).replace(/(authorization:\s*bearer\s+)[^\s]+/gi, "$1***").replace(/(access_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(refresh_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(id_token["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(client_secret["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(private[-_ ]?key["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(CODEX_AUTH_JSON["'\s:=]+)\{[\s\S]*?\}/gi, "$1***").replace(/(CLAUDE_CODE_OAUTH_TOKEN["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENAI_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(/(OPENROUTER_API_KEY["'\s:=]+)[^"',\s}]+/gi, "$1***").replace(
-    /((?:api[_-]?key|apikey|api[_-]?secret|token|password)["'\s:=]+)[A-Za-z0-9_./+=-]{16,}/gi,
-    "$1***"
-  );
+  const redacted = redactSensitiveText(message);
   return redacted.length > 1600 ? `${redacted.slice(0, 1600)}
 ... truncated ...` : redacted;
 }
@@ -32160,7 +32513,7 @@ var ProgressTracker = class _ProgressTracker {
 };
 
 // src/core/orchestrator.ts
-var fs13 = __toESM(require("fs/promises"));
+var fs14 = __toESM(require("fs/promises"));
 var import_path = __toESM(require("path"));
 var HEALTH_CHECK_TIMEOUT_MS = 3e4;
 var ReviewOrchestrator = class {
@@ -32417,22 +32770,29 @@ var ReviewOrchestrator = class {
       logger.info(
         `Intensity settings: ${intensityProviderLimit} providers, ${intensityTimeout}ms timeout, ${openrouterTimeout}ms OpenRouter timeout (${reviewIntensity} mode)`
       );
-      const useIncremental = await this.components.incrementalReviewer.shouldUseIncremental(
+      let useIncremental = await this.components.incrementalReviewer.shouldUseIncremental(
         reviewContext
       );
       let filesToReview = reviewContext.files;
+      let incrementalInvalidatedPaths = [];
       let lastReviewData = null;
       if (useIncremental) {
         lastReviewData = await this.components.incrementalReviewer.getLastReview(
           reviewContext.number
         );
         if (lastReviewData) {
-          filesToReview = await this.components.incrementalReviewer.getChangedFilesSince(
+          const changeSet = await this.components.incrementalReviewer.getIncrementalChangeSet(
             reviewContext,
             lastReviewData.lastReviewedCommit
           );
+          filesToReview = changeSet.files;
+          incrementalInvalidatedPaths = changeSet.invalidatedPaths;
+          if (!changeSet.canReusePreviousFindings) {
+            useIncremental = false;
+            lastReviewData = null;
+          }
           logger.info(
-            `Incremental review: reviewing ${filesToReview.length} changed files`
+            useIncremental ? `Incremental review: reviewing ${filesToReview.length} changed files` : `Incremental diff unavailable: reviewing all ${filesToReview.length} files`
           );
           if (codeGraph && this.components.graphBuilder) {
             try {
@@ -32980,7 +33340,8 @@ var ReviewOrchestrator = class {
         review.findings = this.components.incrementalReviewer.mergeFindings(
           lastReviewData.findings,
           review.findings,
-          filesToReview
+          filesToReview,
+          incrementalInvalidatedPaths
         );
         review.summary = this.components.incrementalReviewer.generateIncrementalSummary(
           lastReviewData.reviewSummary,
@@ -33040,9 +33401,6 @@ var ReviewOrchestrator = class {
       }
       if (config.enableCaching) {
         await this.components.cache.save(pr2, review);
-      }
-      if (config.incrementalEnabled) {
-        await this.components.incrementalReviewer.saveReview(pr2, review);
       }
       if (config.analyticsEnabled && this.components.metricsCollector) {
         try {
@@ -33213,6 +33571,16 @@ var ReviewOrchestrator = class {
         if (replaced) {
           logger.info(
             "Replaced ReviewRouter progress comment with final no-findings summary"
+          );
+        }
+      }
+      if (config.incrementalEnabled) {
+        try {
+          await this.components.incrementalReviewer.saveReview(pr2, review);
+        } catch (error2) {
+          logger.warn(
+            "Failed to save incremental review snapshot; review output remains valid",
+            error2
           );
         }
       }
@@ -34113,12 +34481,12 @@ These types of changes are automatically filtered to save review time and API co
     );
     const sarifPath = import_path.default.join(process.cwd(), `${base}.sarif`);
     const jsonPath = import_path.default.join(process.cwd(), `${base}.json`);
-    await fs13.writeFile(
+    await fs14.writeFile(
       sarifPath,
       JSON.stringify(buildSarif(review.findings), null, 2),
       "utf8"
     );
-    await fs13.writeFile(jsonPath, buildJson(review), "utf8");
+    await fs14.writeFile(jsonPath, buildJson(review), "utf8");
     logger.info(`Wrote reports: ${sarifPath}, ${jsonPath}`);
   }
 };
@@ -34282,7 +34650,7 @@ function hasReviewRouterBotMarker(body) {
 }
 
 // src/github/interaction.ts
-var fs14 = __toESM(require("fs"));
+var fs15 = __toESM(require("fs"));
 
 // src/github/memory-interaction.ts
 var memoryItemIdPattern = "(mem_[A-Za-z0-9_-]+)";
@@ -35102,7 +35470,7 @@ function readEventPayload() {
     );
   }
   return JSON.parse(
-    fs14.readFileSync(eventPath, "utf8")
+    fs15.readFileSync(eventPath, "utf8")
   );
 }
 function sanitizeNoticeError(error2) {
@@ -35364,7 +35732,7 @@ function sanitizeError(error2) {
 }
 
 // src/discussion/codex-responder.ts
-var fs15 = __toESM(require("fs/promises"));
+var fs16 = __toESM(require("fs/promises"));
 var os6 = __toESM(require("os"));
 var path14 = __toESM(require("path"));
 var import_child_process8 = require("child_process");
@@ -35392,7 +35760,7 @@ var CodexDiscussionResponder = class {
       agenticContext: false,
       eventAudit: false
     });
-    const cwd = await fs15.mkdtemp(path14.join(os6.tmpdir(), "review-router-chat-"));
+    const cwd = await fs16.mkdtemp(path14.join(os6.tmpdir(), "review-router-chat-"));
     try {
       await initializeEmptyGitRepository(cwd);
       const content = await provider.runStructuredPrompt(
@@ -35408,7 +35776,7 @@ var CodexDiscussionResponder = class {
       );
       return this.parse(content);
     } finally {
-      await fs15.rm(cwd, { recursive: true, force: true });
+      await fs16.rm(cwd, { recursive: true, force: true });
     }
   }
   buildPrompt(context) {
@@ -36181,7 +36549,7 @@ function pluralize(word, count) {
 }
 
 // src/codex-oauth/action.ts
-var fs18 = __toESM(require("fs"));
+var fs19 = __toESM(require("fs"));
 var path18 = __toESM(require("path"));
 
 // src/codex-oauth/control-plane.ts
@@ -36340,24 +36708,24 @@ function asRecord(value) {
 
 // src/codex-oauth/codex-bootstrap.ts
 var import_child_process9 = require("child_process");
-var fs16 = __toESM(require("fs/promises"));
+var fs17 = __toESM(require("fs/promises"));
 var os7 = __toESM(require("os"));
 var path15 = __toESM(require("path"));
 async function refreshCodexAuthWithOfficialCli(input) {
   const parent = await ensureCodexOAuthRuntimeParent();
-  const root = await fs16.mkdtemp(path15.join(parent, "reviewrouter-codex-oauth-"));
+  const root = await fs17.mkdtemp(path15.join(parent, "reviewrouter-codex-oauth-"));
   const home = path15.join(root, "home");
   const codexHome = path15.join(root, "codex");
   const emptyCwd = path15.join(root, "empty");
   const authPath = path15.join(codexHome, "auth.json");
-  await fs16.mkdir(home, { recursive: true, mode: 448 });
-  await fs16.mkdir(codexHome, { recursive: true, mode: 448 });
-  await fs16.mkdir(emptyCwd, { recursive: true, mode: 448 });
-  await fs16.writeFile(authPath, input.authJsonBytes, {
+  await fs17.mkdir(home, { recursive: true, mode: 448 });
+  await fs17.mkdir(codexHome, { recursive: true, mode: 448 });
+  await fs17.mkdir(emptyCwd, { recursive: true, mode: 448 });
+  await fs17.writeFile(authPath, input.authJsonBytes, {
     encoding: "utf8",
     mode: 384
   });
-  await fs16.writeFile(
+  await fs17.writeFile(
     path15.join(codexHome, "config.toml"),
     'cli_auth_credentials_store = "file"\napproval_policy = "never"\n',
     { encoding: "utf8", mode: 384 }
@@ -36371,20 +36739,20 @@ async function refreshCodexAuthWithOfficialCli(input) {
     codexHome,
     cwd: emptyCwd
   });
-  const refreshedAuth = await fs16.readFile(authPath, "utf8");
+  const refreshedAuth = await fs17.readFile(authPath, "utf8");
   return {
     authJsonBytes: refreshedAuth,
     codexHome,
     async clearAuthMaterial() {
-      await fs16.rm(root, { recursive: true, force: true });
+      await fs17.rm(root, { recursive: true, force: true });
     }
   };
 }
 async function ensureCodexOAuthRuntimeParent(env = process.env) {
   const home = env.HOME?.trim() || os7.homedir();
   const parent = home && path15.isAbsolute(home) ? path15.join(home, ".reviewrouter", "runtime") : path15.join(os7.tmpdir(), "reviewrouter-runtime");
-  await fs16.mkdir(parent, { recursive: true, mode: 448 });
-  await fs16.chmod(parent, 448).catch(() => void 0);
+  await fs17.mkdir(parent, { recursive: true, mode: 448 });
+  await fs17.chmod(parent, 448).catch(() => void 0);
   return parent;
 }
 async function runCodexBootstrapCommand(input) {
@@ -36426,7 +36794,7 @@ async function runCodexBootstrapCommand(input) {
       if (!timedOut) {
         clearTimeout(timer);
         reject(
-          new Error(`codex_oauth_refresh_spawn_failed:${safeError(error2)}`)
+          new Error(`codex_oauth_refresh_spawn_failed:${safeError2(error2)}`)
         );
       }
     });
@@ -36445,7 +36813,7 @@ async function runCodexBootstrapCommand(input) {
     });
   });
 }
-function safeError(error2) {
+function safeError2(error2) {
   return error2 instanceof Error ? safeOutput2(error2.message) : "unknown_error";
 }
 function safeOutput2(value) {
@@ -40340,14 +40708,14 @@ function clearCodexRotatingAuthInputSafe() {
 
 // src/codex-oauth/safe-checkout.ts
 var import_child_process10 = require("child_process");
-var fs17 = __toESM(require("fs/promises"));
+var fs18 = __toESM(require("fs/promises"));
 var os8 = __toESM(require("os"));
 var path17 = __toESM(require("path"));
 async function safeCheckoutRepository(input) {
   assertRepositoryFullName(input.repository);
   assertFullSha(input.headSha);
   await assertWorkspaceEmpty(input.workspacePath);
-  const gitHome = await fs17.mkdtemp(path17.join(os8.tmpdir(), "reviewrouter-git-"));
+  const gitHome = await fs18.mkdtemp(path17.join(os8.tmpdir(), "reviewrouter-git-"));
   try {
     await runGit(["init", "."], input.workspacePath, gitHome);
     await runGit(
@@ -40404,12 +40772,12 @@ async function safeCheckoutRepository(input) {
       gitHome
     );
   } finally {
-    await fs17.rm(gitHome, { recursive: true, force: true });
+    await fs18.rm(gitHome, { recursive: true, force: true });
   }
 }
 async function assertWorkspaceEmpty(workspacePath) {
-  await fs17.mkdir(workspacePath, { recursive: true, mode: 448 });
-  const entries = await fs17.readdir(workspacePath);
+  await fs18.mkdir(workspacePath, { recursive: true, mode: 448 });
+  const entries = await fs18.readdir(workspacePath);
   const unsafeEntries = entries.filter((entry) => entry !== ".git");
   if (unsafeEntries.length > 0) {
     throw new Error("codex_oauth_workspace_not_empty_before_checkout");
@@ -40716,7 +41084,7 @@ function readPullRequestEvent() {
   if (!eventPath) {
     throw new Error("codex_oauth_github_event_path_missing");
   }
-  const event = JSON.parse(fs18.readFileSync(eventPath, "utf8"));
+  const event = JSON.parse(fs19.readFileSync(eventPath, "utf8"));
   const repository = event.repository?.full_name;
   const prNumber = event.pull_request?.number;
   const headRepository = event.pull_request?.head?.repo?.full_name;
@@ -41036,7 +41404,7 @@ async function runInteractionPreflight(token) {
   const githubClient = new GitHubClient(token);
   const discussionHandler = createDiscussionHandler(githubClient);
   const payload = JSON.parse(
-    fs19.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
+    fs20.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
   );
   const body = String(payload?.comment?.body || "");
   const botComment = payload?.comment?.user?.type === "Bot" || String(payload?.comment?.user?.login || "").endsWith("[bot]");

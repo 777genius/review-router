@@ -2,7 +2,10 @@ import { CacheManager, DEFAULT_CACHE_TTL_MS } from '../../../src/cache/manager';
 import { CacheStorage } from '../../../src/cache/storage';
 import { PRContext, Review, ReviewConfig, Finding } from '../../../src/types';
 import { CACHE_VERSION } from '../../../src/cache/version';
-import { hashConfig } from '../../../src/cache/key-builder';
+import {
+  hashConfig,
+  hashIncrementalCompatibility,
+} from '../../../src/cache/key-builder';
 
 // Mock the storage
 jest.mock('../../../src/cache/storage');
@@ -253,6 +256,27 @@ describe('CacheManager Versioning', () => {
       const hash2 = hashConfig(config2);
 
       expect(hash1).toBe(hash2);
+    });
+
+    it('invalidates hosted incremental snapshots for any effective config change', () => {
+      const first = {
+        providers: ['codex/gpt-5.5'],
+        outputLanguage: 'English',
+      } as unknown as ReviewConfig;
+      const second = {
+        providers: ['codex/gpt-5.5'],
+        outputLanguage: 'Russian',
+      } as unknown as ReviewConfig;
+
+      expect(hashIncrementalCompatibility(first, '7')).not.toBe(
+        hashIncrementalCompatibility(second, '7')
+      );
+      expect(hashIncrementalCompatibility(first, '7')).not.toBe(
+        hashIncrementalCompatibility(first, '8')
+      );
+      expect(hashIncrementalCompatibility(first, '7')).toMatch(
+        /^[a-f0-9]{64}$/
+      );
     });
   });
 

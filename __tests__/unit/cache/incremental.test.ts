@@ -148,17 +148,18 @@ describe('IncrementalReviewer', () => {
 
   describe('getChangedFilesSince', () => {
     it('returns changed files from git diff', async () => {
-      const gitOutput = 'M\tsrc/file1.ts\nA\tsrc/file2.ts\nD\tsrc/file3.ts';
+      const gitOutput = 'M\0src/file1.ts\0A\0src/file2.ts\0D\0src/file3.ts\0';
       (execFileSync as jest.Mock).mockReturnValue(gitOutput);
 
       const pr: PRContext = createMockPR({
+        headSha: 'b'.repeat(40),
         files: [
           createMockFile({ filename: 'src/file1.ts' }),
           createMockFile({ filename: 'src/file2.ts' }),
         ],
       });
 
-      const result = await reviewer.getChangedFilesSince(pr, 'old-sha');
+      const result = await reviewer.getChangedFilesSince(pr, 'a'.repeat(40));
 
       expect(result).toHaveLength(2);
       expect(result[0].filename).toBe('src/file1.ts');
@@ -171,26 +172,89 @@ describe('IncrementalReviewer', () => {
       });
 
       const pr: PRContext = createMockPR({
+        headSha: 'b'.repeat(40),
         files: [createMockFile(), createMockFile({ filename: 'src/file2.ts' })],
       });
 
-      const result = await reviewer.getChangedFilesSince(pr, 'old-sha');
+      const result = await reviewer.getChangedFilesSince(pr, 'a'.repeat(40));
 
       expect(result).toEqual(pr.files);
     });
 
     it('handles files with tabs in filename', async () => {
-      const gitOutput = 'M\tsrc/file\twith\ttabs.ts';
+      const gitOutput = 'M\0src/file\twith\ttabs.ts\0';
       (execFileSync as jest.Mock).mockReturnValue(gitOutput);
 
       const pr: PRContext = createMockPR({
+        headSha: 'b'.repeat(40),
         files: [createMockFile({ filename: 'src/file\twith\ttabs.ts' })],
       });
 
-      const result = await reviewer.getChangedFilesSince(pr, 'old-sha');
+      const result = await reviewer.getChangedFilesSince(pr, 'a'.repeat(40));
 
       expect(result).toHaveLength(1);
       expect(result[0].filename).toBe('src/file\twith\ttabs.ts');
+    });
+
+    it('uses an exact two-commit diff and resolves renamed files', async () => {
+      (execFileSync as jest.Mock).mockReturnValue(
+        'R100\0src/old.ts\0src/new.ts\0'
+      );
+      const renamed = createMockFile({
+        filename: 'src/new.ts',
+        previousFilename: 'src/old.ts',
+        status: 'renamed',
+      });
+
+      const result = await reviewer.getChangedFilesSince(
+        createMockPR({
+          headSha: 'b'.repeat(40),
+          files: [renamed],
+        }),
+        'a'.repeat(40)
+      );
+
+      expect(result).toEqual([renamed]);
+      expect(execFileSync).toHaveBeenCalledWith(
+        'git',
+        ['diff', '--name-status', '-z', '-M', 'a'.repeat(40), 'b'.repeat(40)],
+        expect.any(Object)
+      );
+    });
+
+    it('tracks reverted paths even when they are absent from current PR files', async () => {
+      (execFileSync as jest.Mock).mockReturnValue(
+        'M\0src/reverted-to-base.ts\0'
+      );
+
+      const result = await reviewer.getIncrementalChangeSet(
+        createMockPR({ headSha: 'b'.repeat(40), files: [] }),
+        'a'.repeat(40)
+      );
+
+      expect(result).toEqual({
+        files: [],
+        invalidatedPaths: ['src/reverted-to-base.ts'],
+        canReusePreviousFindings: true,
+      });
+    });
+
+    it('disables previous finding reuse when exact diff fails', async () => {
+      (execFileSync as jest.Mock).mockImplementation(() => {
+        throw new Error('Git command failed');
+      });
+      const pr = createMockPR({
+        headSha: 'b'.repeat(40),
+        files: [createMockFile()],
+      });
+
+      const result = await reviewer.getIncrementalChangeSet(pr, 'a'.repeat(40));
+
+      expect(result).toEqual({
+        files: pr.files,
+        invalidatedPaths: [],
+        canReusePreviousFindings: false,
+      });
     });
   });
 
@@ -274,6 +338,44 @@ describe('IncrementalReviewer', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].file).toBe('unchanged.ts');
+    });
+
+    it('invalidates findings at both sides of a rename', () => {
+      const result = reviewer.mergeFindings(
+        [
+          createMockFinding({ file: 'src/old.ts' }),
+          createMockFinding({ file: 'src/untouched.ts' }),
+        ],
+        [createMockFinding({ file: 'src/new.ts' })],
+        [
+          createMockFile({
+            filename: 'src/new.ts',
+            previousFilename: 'src/old.ts',
+            status: 'renamed',
+          }),
+        ]
+      );
+
+      expect(result.map((finding) => finding.file)).toEqual([
+        'src/untouched.ts',
+        'src/new.ts',
+      ]);
+    });
+
+    it('invalidates a reverted path that is absent from current PR files', () => {
+      const result = reviewer.mergeFindings(
+        [
+          createMockFinding({ file: 'src/reverted-to-base.ts' }),
+          createMockFinding({ file: 'src/untouched.ts' }),
+        ],
+        [],
+        [],
+        ['src/reverted-to-base.ts']
+      );
+
+      expect(result.map((finding) => finding.file)).toEqual([
+        'src/untouched.ts',
+      ]);
     });
   });
 

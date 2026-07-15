@@ -36,6 +36,7 @@
  * - v5: Aggressive false positive filtering - invalidate cache to apply new filter logic
  * - v6: Exclude finding-filter from self-review (fix self-reference paradox)
  * - v7: Broadly exclude ALL review infrastructure (analysis/, config/, cache/, orchestration)
+ * - v8: Hosted incremental snapshots use exact commit deltas and full config compatibility
  *
  * TESTING:
  * When bumping version, verify:
@@ -45,7 +46,7 @@
  * See: __tests__/unit/cache/version.test.ts
  */
 
-export const CACHE_VERSION = 7; // Current version - increment for breaking changes
+export const CACHE_VERSION = 8; // Current version - increment for breaking changes
 
 export interface VersionedCache<T> {
   version: number;

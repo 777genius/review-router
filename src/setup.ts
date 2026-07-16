@@ -20,6 +20,7 @@ import { PullRequestLoader } from './github/pr-loader';
 import { CommentPoster } from './github/comment-poster';
 import { PullRequestDescriptionUpdater } from './github/pr-description';
 import { GitHubClient } from './github/client';
+import { GitHubTokenProvider } from './github/token-provider';
 import { MarkdownFormatterV2 } from './output/formatter-v2';
 import { ReviewComponents } from './core/orchestrator';
 import { ContextRetriever } from './analysis/context';
@@ -321,6 +322,7 @@ export async function createComponents(
   options: {
     fallbackGithubToken?: string;
     runtimeConfig?: RuntimeConfigResult;
+    githubTokenProvider?: GitHubTokenProvider;
   } = {}
 ): Promise<ReviewComponents> {
   // Initialize plugins if enabled
@@ -381,7 +383,9 @@ export async function createComponents(
   const costTracker = new CostTracker(pricing);
   const security = new SecurityScanner();
   const rules = RuleLoader.load();
-  const githubClient = new GitHubClient(githubToken);
+  const githubClient = new GitHubClient(githubToken, {
+    tokenProvider: options.githubTokenProvider,
+  });
   const fallbackGithubClient =
     options.fallbackGithubToken && options.fallbackGithubToken !== githubToken
       ? new GitHubClient(options.fallbackGithubToken)

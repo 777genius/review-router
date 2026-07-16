@@ -30,6 +30,8 @@ import {
   RuntimeConfigResult,
 } from './control-plane/runtime-config';
 import { resolveGitHubCommentToken } from './control-plane/comment-token';
+import { createRotatingCommentTokenProvider } from './control-plane/rotating-comment-token';
+import { GitHubTokenProvider } from './github/token-provider';
 import { reportControlPlaneActionHealth } from './control-plane/health-report';
 import { ControlPlaneMemoryClient } from './control-plane/memory';
 import { resolveProviderCliPlan } from './control-plane/provider-cli-plan';
@@ -148,6 +150,7 @@ function syncEnvFromInputs(): void {
 
 async function run(): Promise<void> {
   let token: string | undefined;
+  let githubTokenProvider: GitHubTokenProvider | undefined;
   let prNumber: number | undefined;
   let runtimeConfig: RuntimeConfigResult | undefined;
   const startedAt = new Date();
@@ -199,6 +202,10 @@ async function run(): Promise<void> {
     });
     const fallbackToken = token;
     token = commentToken.token;
+    githubTokenProvider = createRotatingCommentTokenProvider({
+      initialToken: token,
+      onToken: (refreshedToken) => core.setSecret(refreshedToken),
+    });
     const lifecycleResolveToken = lifecycleResolveTokenFromEnv || fallbackToken;
     if (
       lifecycleResolveTokenFromEnv &&
@@ -207,7 +214,9 @@ async function run(): Promise<void> {
     ) {
       core.setSecret(lifecycleResolveTokenFromEnv);
     }
-    process.env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS = commentToken.status;
+    process.env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS = githubTokenProvider
+      ? 'rotating'
+      : commentToken.status;
 
     if (mode === 'interaction') {
       await runInteraction(token!, fallbackToken, runtimeConfig);
@@ -222,6 +231,7 @@ async function run(): Promise<void> {
     const components = await createComponents(config, token!, {
       fallbackGithubToken: lifecycleResolveToken,
       runtimeConfig,
+      githubTokenProvider,
     });
     const orchestrator = new ReviewOrchestrator(components);
 
@@ -241,7 +251,10 @@ async function run(): Promise<void> {
 
     if (!review) {
       core.info('Review skipped');
-      await clearReviewFailureSummaries(token, prNumber);
+      await clearReviewFailureSummaries(
+        await currentGitHubToken(token, githubTokenProvider),
+        prNumber
+      );
       await reportControlPlaneActionHealth({
         runtimeConfig,
         review,
@@ -254,7 +267,10 @@ async function run(): Promise<void> {
       return;
     }
 
-    await clearReviewFailureSummaries(token, prNumber);
+    await clearReviewFailureSummaries(
+      await currentGitHubToken(token, githubTokenProvider),
+      prNumber
+    );
 
     const previousStillValidCounts = countPreviousStillValidBySeverity(
       review.threadLifecycle
@@ -315,7 +331,11 @@ async function run(): Promise<void> {
 
     core.setFailed(formatActionError(normalizedError));
 
-    await postReviewFailureSummary(normalizedError, token, prNumber);
+    await postReviewFailureSummary(
+      normalizedError,
+      await currentGitHubToken(token, githubTokenProvider),
+      prNumber
+    );
     await reportControlPlaneActionHealth({
       runtimeConfig,
       error: normalizedError,
@@ -328,6 +348,18 @@ async function run(): Promise<void> {
 
     // core.setFailed() sets process.exitCode, so explicit process.exit() is unnecessary
     // Removed process.exit(1) to allow proper cleanup and resource disposal
+  }
+}
+
+async function currentGitHubToken(
+  fallbackToken: string | undefined,
+  tokenProvider: GitHubTokenProvider | undefined
+): Promise<string | undefined> {
+  if (!tokenProvider) return fallbackToken;
+  try {
+    return await tokenProvider.getToken();
+  } catch {
+    return fallbackToken;
   }
 }
 

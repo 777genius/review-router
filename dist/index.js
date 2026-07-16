@@ -22265,8 +22265,8 @@ var GitHubClient = class {
   owner;
   repo;
   rateLimitTracker = new GitHubRateLimitTracker();
-  constructor(token) {
-    this.octokit = new import_rest.Octokit({ auth: token });
+  constructor(token, options = {}) {
+    this.octokit = options.tokenProvider ? createRefreshableOctokit(options.tokenProvider) : new import_rest.Octokit({ auth: token });
     const repoEnv = process.env.GITHUB_REPOSITORY || getRepositoryFromEventPayload() || "/";
     const [owner, repo] = repoEnv.split("/");
     this.owner = owner || "";
@@ -22376,6 +22376,24 @@ var GitHubClient = class {
     }
   }
 };
+function createRefreshableOctokit(tokenProvider) {
+  const octokit = new import_rest.Octokit();
+  octokit.hook.wrap("request", async (request, options) => {
+    const requestWithToken = (token) => {
+      options.headers.authorization = `Bearer ${token}`;
+      return request(options);
+    };
+    try {
+      return await requestWithToken(await tokenProvider.getToken());
+    } catch (error2) {
+      if (typeof error2 !== "object" || error2 === null || error2.status !== 401) {
+        throw error2;
+      }
+      return requestWithToken(await tokenProvider.refreshToken());
+    }
+  });
+  return octokit;
+}
 function getRepositoryFromEventPayload() {
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!eventPath) {
@@ -29450,7 +29468,9 @@ async function createComponents(config, githubToken, options = {}) {
   const costTracker = new CostTracker(pricing);
   const security = new SecurityScanner();
   const rules = RuleLoader.load();
-  const githubClient = new GitHubClient(githubToken);
+  const githubClient = new GitHubClient(githubToken, {
+    tokenProvider: options.githubTokenProvider
+  });
   const fallbackGithubClient = options.fallbackGithubToken && options.fallbackGithubToken !== githubToken ? new GitHubClient(options.fallbackGithubToken) : githubClient;
   const prLoader = new PullRequestLoader(githubClient);
   const contextRetriever = new ContextRetriever();
@@ -38404,6 +38424,142 @@ function safeReason4(message) {
   return message.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 120);
 }
 
+// src/control-plane/rotating-comment-token.ts
+var rotatingCommentTokenMode = "codex-oauth-rotating";
+var tokenRefreshLeadTimeMs = 5 * 60 * 1e3;
+var tokenRefreshRetryDelayMs = 30 * 1e3;
+var tokenRequestTimeoutMs = 3e4;
+function createRotatingCommentTokenProvider(input) {
+  const env = input.env ?? process.env;
+  if (env.REVIEWROUTER_COMMENT_TOKEN_MODE !== rotatingCommentTokenMode) {
+    return void 0;
+  }
+  const refreshUrl = requireEnvironmentValue(
+    env,
+    "REVIEWROUTER_COMMENT_TOKEN_REFRESH_URL"
+  );
+  assertSafeRefreshUrl(refreshUrl);
+  const leaseId = requireEnvironmentValue(
+    env,
+    "REVIEWROUTER_COMMENT_TOKEN_LEASE_ID"
+  );
+  const providerInstanceId = requireEnvironmentValue(
+    env,
+    "REVIEWROUTER_COMMENT_TOKEN_PROVIDER_INSTANCE_ID"
+  );
+  const repository = requireEnvironmentValue(
+    env,
+    "REVIEWROUTER_REPOSITORY_FULL_NAME"
+  );
+  const initialExpiresAt = parseExpiry(
+    env.REVIEWROUTER_COMMENT_TOKEN_EXPIRES_AT
+  );
+  return new RotatingCommentTokenProvider({
+    initialToken: input.initialToken,
+    initialExpiresAt,
+    refreshUrl,
+    leaseId,
+    providerInstanceId,
+    repository,
+    fetchImpl: input.fetchImpl ?? fetch,
+    now: input.now ?? Date.now,
+    onToken: input.onToken
+  });
+}
+var RotatingCommentTokenProvider = class {
+  constructor(input) {
+    this.input = input;
+    this.token = input.initialToken;
+    this.expiresAt = input.initialExpiresAt;
+  }
+  token;
+  expiresAt;
+  refreshRetryAt = 0;
+  refreshInFlight;
+  async getToken() {
+    const now = this.input.now();
+    if (now + tokenRefreshLeadTimeMs < this.expiresAt || now < this.expiresAt && now < this.refreshRetryAt) {
+      return this.token;
+    }
+    try {
+      return await this.refreshToken();
+    } catch (error2) {
+      if (this.input.now() < this.expiresAt) {
+        this.refreshRetryAt = this.input.now() + tokenRefreshRetryDelayMs;
+        return this.token;
+      }
+      throw error2;
+    }
+  }
+  refreshToken() {
+    if (!this.refreshInFlight) {
+      this.refreshInFlight = this.issueToken().finally(() => {
+        this.refreshInFlight = void 0;
+      });
+    }
+    return this.refreshInFlight;
+  }
+  async issueToken() {
+    const response = await this.input.fetchImpl(this.input.refreshUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        leaseId: this.input.leaseId,
+        providerInstanceId: this.input.providerInstanceId,
+        authCleared: true
+      }),
+      signal: AbortSignal.timeout(tokenRequestTimeoutMs)
+    });
+    if (!response.ok) {
+      throw new Error(
+        `rotating_comment_token_refresh_failed:${response.status}`
+      );
+    }
+    const refreshed = parseResponse(await response.json());
+    if (refreshed.repository !== this.input.repository) {
+      throw new Error("rotating_comment_token_repository_mismatch");
+    }
+    const expiresAt = parseExpiry(refreshed.expiresAt);
+    if (expiresAt <= this.input.now()) {
+      throw new Error("rotating_comment_token_expiry_invalid");
+    }
+    this.token = refreshed.token;
+    this.expiresAt = expiresAt;
+    this.refreshRetryAt = 0;
+    this.input.onToken?.(refreshed.token);
+    return refreshed.token;
+  }
+};
+function parseResponse(value) {
+  if (!value || typeof value !== "object") {
+    throw new Error("rotating_comment_token_response_invalid");
+  }
+  const response = value;
+  if (response.protocolVersion !== 1 || typeof response.token !== "string" || response.token.length === 0 || typeof response.expiresAt !== "string" || typeof response.repository !== "string" || response.repository.length === 0) {
+    throw new Error("rotating_comment_token_response_invalid");
+  }
+  return response;
+}
+function parseExpiry(value) {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+function requireEnvironmentValue(env, key) {
+  const value = env[key]?.trim();
+  if (!value) {
+    throw new Error(`rotating_comment_token_environment_missing:${key}`);
+  }
+  return value;
+}
+function assertSafeRefreshUrl(value) {
+  const url = new URL(value);
+  const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new Error("rotating_comment_token_refresh_url_insecure");
+  }
+}
+
 // src/control-plane/health-report.ts
 async function reportControlPlaneActionHealth(input) {
   if (!input.runtimeConfig || input.runtimeConfig.status !== "applied") {
@@ -43338,6 +43494,7 @@ function syncEnvFromInputs() {
 }
 async function run() {
   let token;
+  let githubTokenProvider;
   let prNumber;
   let runtimeConfig;
   const startedAt = /* @__PURE__ */ new Date();
@@ -43379,11 +43536,15 @@ async function run() {
     });
     const fallbackToken = token;
     token = commentToken.token;
+    githubTokenProvider = createRotatingCommentTokenProvider({
+      initialToken: token,
+      onToken: (refreshedToken) => setSecret(refreshedToken)
+    });
     const lifecycleResolveToken = lifecycleResolveTokenFromEnv || fallbackToken;
     if (lifecycleResolveTokenFromEnv && lifecycleResolveTokenFromEnv !== token && lifecycleResolveTokenFromEnv !== fallbackToken) {
       setSecret(lifecycleResolveTokenFromEnv);
     }
-    process.env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS = commentToken.status;
+    process.env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS = githubTokenProvider ? "rotating" : commentToken.status;
     if (mode === "interaction") {
       await runInteraction(token, fallbackToken, runtimeConfig);
       return;
@@ -43395,7 +43556,8 @@ async function run() {
     const config = ConfigLoader.load();
     const components = await createComponents(config, token, {
       fallbackGithubToken: lifecycleResolveToken,
-      runtimeConfig
+      runtimeConfig,
+      githubTokenProvider
     });
     const orchestrator = new ReviewOrchestrator(components);
     const prInput = getInput("PR_NUMBER") || process.env.PR_NUMBER;
@@ -43410,7 +43572,10 @@ async function run() {
     const review = await orchestrator.execute(prNumber);
     if (!review) {
       info("Review skipped");
-      await clearReviewFailureSummaries(token, prNumber);
+      await clearReviewFailureSummaries(
+        await currentGitHubToken(token, githubTokenProvider),
+        prNumber
+      );
       await reportControlPlaneActionHealth({
         runtimeConfig,
         review,
@@ -43422,7 +43587,10 @@ async function run() {
       });
       return;
     }
-    await clearReviewFailureSummaries(token, prNumber);
+    await clearReviewFailureSummaries(
+      await currentGitHubToken(token, githubTokenProvider),
+      prNumber
+    );
     const previousStillValidCounts = countPreviousStillValidBySeverity(
       review.threadLifecycle
     );
@@ -43472,7 +43640,11 @@ async function run() {
 ${formatValidationError(error2)}`) : error2;
     const normalizedError = normalizeReviewError(presentableError);
     setFailed(formatActionError(normalizedError));
-    await postReviewFailureSummary(normalizedError, token, prNumber);
+    await postReviewFailureSummary(
+      normalizedError,
+      await currentGitHubToken(token, githubTokenProvider),
+      prNumber
+    );
     await reportControlPlaneActionHealth({
       runtimeConfig,
       error: normalizedError,
@@ -43482,6 +43654,14 @@ ${formatValidationError(error2)}`) : error2;
         warn: (message) => warning(message)
       }
     });
+  }
+}
+async function currentGitHubToken(fallbackToken, tokenProvider) {
+  if (!tokenProvider) return fallbackToken;
+  try {
+    return await tokenProvider.getToken();
+  } catch {
+    return fallbackToken;
   }
 }
 function runRuntimePreflight(runtimeConfig) {

@@ -210,6 +210,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
         lastReview: {
           prNumber: 1,
           lastReviewedCommit: 'h',
+          baseSha: 'b',
           timestamp: Date.now(),
           findings: [finding],
           reviewSummary: 'Previous completed review',
@@ -259,6 +260,16 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(
       (orchestrator as any).components.llmExecutor.execute
     ).not.toHaveBeenCalled();
+    expect(
+      (orchestrator as any).components.synthesis.synthesize
+    ).not.toHaveBeenCalled();
+    expect(incrementalReviewer.mergeFindings).not.toHaveBeenCalled();
+    expect(
+      incrementalReviewer.generateIncrementalSummary
+    ).not.toHaveBeenCalled();
+    expect(incrementalReviewer.saveReview).not.toHaveBeenCalled();
+    expect(review.summary).toBe('Previous completed review');
+    expect(review.metrics.cached).toBe(true);
   });
 
   it('detects a trivial PR before building its code graph', async () => {

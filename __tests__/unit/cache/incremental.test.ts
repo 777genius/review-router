@@ -72,6 +72,7 @@ describe('IncrementalReviewer', () => {
         JSON.stringify({
           prNumber: 1,
           lastReviewedCommit: 'current-head-sha',
+          baseSha: 'base-sha',
           timestamp: Date.now(),
           findings: [],
           reviewSummary: 'Previous review',
@@ -89,6 +90,7 @@ describe('IncrementalReviewer', () => {
         JSON.stringify({
           prNumber: 1,
           lastReviewedCommit: 'old-sha',
+          baseSha: 'base-sha',
           timestamp: Date.now(),
           findings: [],
           reviewSummary: 'Previous review',
@@ -107,6 +109,7 @@ describe('IncrementalReviewer', () => {
       const snapshot = {
         prNumber: 1,
         lastReviewedCommit: 'b'.repeat(40),
+        baseSha: 'base-sha',
         timestamp: Date.now(),
         findings: [createMockFinding()],
         reviewSummary: 'Completed review',
@@ -131,6 +134,7 @@ describe('IncrementalReviewer', () => {
       const snapshot = {
         prNumber: 1,
         lastReviewedCommit: 'a'.repeat(40),
+        baseSha: 'base-sha',
         timestamp: Date.now(),
         findings: [],
         reviewSummary: 'Completed review',
@@ -151,6 +155,29 @@ describe('IncrementalReviewer', () => {
       });
       expect(mockStorage.read).toHaveBeenCalledTimes(1);
       expect(execFileSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs a full review when the base revision changed', async () => {
+      mockStorage.read.mockResolvedValue(
+        JSON.stringify({
+          prNumber: 1,
+          lastReviewedCommit: 'b'.repeat(40),
+          baseSha: 'old-base',
+          timestamp: Date.now(),
+          findings: [],
+          reviewSummary: 'Completed review',
+        })
+      );
+
+      const plan = await reviewer.planReview(
+        createMockPR({ headSha: 'b'.repeat(40), baseSha: 'new-base' })
+      );
+
+      expect(plan).toMatchObject({
+        mode: IncrementalReviewPlanMode.Full,
+        lastReview: null,
+      });
+      expect(execFileSync).not.toHaveBeenCalled();
     });
   });
 

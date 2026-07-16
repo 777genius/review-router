@@ -87,7 +87,16 @@ export class PullRequestLoader {
           : localFiles.length === pr.changed_files);
 
       if (localFiles && localDiffIsComplete) {
-        files.splice(0, files.length, ...localFiles);
+        const githubFilesByPath = new Map(
+          files.map((file) => [file.filename, file] as const)
+        );
+        const recoveredFiles = localFiles.map((file) => {
+          const githubFile = githubFilesByPath.get(file.filename);
+          return githubFile?.patch
+            ? { ...file, patch: githubFile.patch }
+            : file;
+        });
+        files.splice(0, files.length, ...recoveredFiles);
         fileLimitOmission = null;
         logger.info(
           `Recovered the complete ${files.length}-file list for PR #${prNumber} from local git after reaching GitHub's API limit.`

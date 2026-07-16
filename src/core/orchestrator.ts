@@ -35,6 +35,7 @@ import { CacheManager } from '../cache/manager';
 import {
   IncrementalReviewer,
   IncrementalReviewPlanMode,
+  type IncrementalCacheData,
   type IncrementalReviewPlan,
 } from '../cache/incremental';
 import { GraphCache } from '../cache/graph-cache';
@@ -445,15 +446,28 @@ export class ReviewOrchestrator {
       const filesToReview = [...incrementalPlan.files];
       const incrementalInvalidatedPaths = [...incrementalPlan.invalidatedPaths];
       const lastReviewData = incrementalPlan.lastReview;
+      if (incrementalPlan.mode === IncrementalReviewPlanMode.ReuseCompleted) {
+        logger.info(
+          'Completed snapshot matches the current revision; returning it without analysis or snapshot advancement'
+        );
+        const reusedReview = this.createReusedReview(
+          incrementalPlan.lastReview,
+          start
+        );
+        if (progressTracker) {
+          await progressTracker.replaceWith(
+            this.markReviewRouterSummary(
+              this.components.formatter.format(reusedReview)
+            )
+          );
+        }
+        review = reusedReview;
+        success = true;
+        return reusedReview;
+      }
       if (incrementalPlan.mode === IncrementalReviewPlanMode.Delta) {
         logger.info(
           `Incremental review: reviewing ${filesToReview.length} changed files`
-        );
-      } else if (
-        incrementalPlan.mode === IncrementalReviewPlanMode.ReuseCompleted
-      ) {
-        logger.info(
-          'Completed snapshot matches the current head; provider and static analysis execution will be skipped'
         );
       }
 
@@ -3099,6 +3113,46 @@ export class ReviewOrchestrator {
         totalTokens: 0,
         durationSeconds,
         cacheHit: false,
+        synthesisModel: '',
+        providerPoolSize: 0,
+      },
+    };
+  }
+
+  private createReusedReview(
+    snapshot: IncrementalCacheData,
+    startTime: number
+  ): Review {
+    const findings = snapshot.findings.map((finding) => ({ ...finding }));
+    const durationSeconds = Math.max(0.001, (Date.now() - startTime) / 1000);
+
+    return {
+      summary: snapshot.reviewSummary,
+      findings,
+      inlineComments: [],
+      actionItems: [],
+      metrics: {
+        totalFindings: findings.length,
+        critical: findings.filter((finding) => finding.severity === 'critical')
+          .length,
+        major: findings.filter((finding) => finding.severity === 'major')
+          .length,
+        minor: findings.filter((finding) => finding.severity === 'minor')
+          .length,
+        providersUsed: 0,
+        providersSuccess: 0,
+        providersFailed: 0,
+        totalTokens: 0,
+        totalCost: 0,
+        durationSeconds,
+        cached: true,
+      },
+      runDetails: {
+        providers: [],
+        totalCost: 0,
+        totalTokens: 0,
+        durationSeconds,
+        cacheHit: true,
         synthesisModel: '',
         providerPoolSize: 0,
       },

@@ -486,6 +486,9 @@ describe('PullRequestLoader', () => {
       expect(localDiffLoader).toHaveBeenCalledWith('base-sha', 'head-sha');
       expect(context.files).toHaveLength(3001);
       expect(context.files.at(-1)?.filename).toBe('src/file-3000.ts');
+      expect(context.files[0].patch).toBe(apiFiles[0].patch);
+      expect(context.files.at(-1)?.patch).toBeUndefined();
+      expect(context.diff).toContain('+export const value = true;');
       expect(context.loadCompleteness).toEqual({
         status: PullRequestLoadStatus.Complete,
         omissions: [],

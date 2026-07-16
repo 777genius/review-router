@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 const GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/i;
 const MAX_LOCAL_DIFF_FILES = 20_000;
 const MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024;
+const GIT_DIFF_TIMEOUT_MS = 30_000;
 
 interface FileStatus {
   status: FileChange['status'];
@@ -187,6 +188,7 @@ function runGit(args: string[], cwd: string): Promise<string> {
         cwd,
         encoding: 'utf8',
         maxBuffer: MAX_GIT_OUTPUT_BYTES,
+        timeout: GIT_DIFF_TIMEOUT_MS,
       },
       (error, stdout) => {
         if (error) {

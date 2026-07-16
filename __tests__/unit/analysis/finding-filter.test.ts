@@ -902,6 +902,28 @@ index 51097d9..d0723db 100644
       expect(totalWorkflowFiltered).toBe(2);
     });
 
+    test('filters proven workflow security false positives before runtime wording', () => {
+      const diff = `
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          echo "SECURITY VIOLATION: Fork PR has access to secrets"
+          exit 1
+        fi
+      `;
+      const finding: Finding = {
+        file: '.github/workflows/reviewrouter.yml',
+        line: 97,
+        severity: 'critical',
+        title: 'Fork PR secret exposure breaks workflow isolation',
+        message:
+          'Fork pull requests now receive secrets and this workflow loses its security boundary.',
+      };
+
+      const { findings, stats } = filter.filter([finding], diff);
+
+      expect(findings).toEqual([]);
+      expect(stats.filtered).toBe(1);
+    });
+
     test('deduplicates similar findings', () => {
       const findings: Finding[] = [
         {

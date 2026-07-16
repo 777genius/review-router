@@ -8,6 +8,7 @@ export interface ModelPricing {
 export class PricingService {
   private cache = new Map<string, ModelPricing>();
   private cacheExpiry = 0;
+  private refreshPromise?: Promise<void>;
   private static readonly CACHE_TTL = 60 * 60 * 1000;
   private static readonly FAILURE_CACHE_TTL = 5 * 60 * 1000;
 
@@ -19,7 +20,10 @@ export class PricingService {
     }
 
     if (Date.now() > this.cacheExpiry) {
-      await this.refresh();
+      this.refreshPromise ??= this.refresh().finally(() => {
+        this.refreshPromise = undefined;
+      });
+      await this.refreshPromise;
     }
 
     return (
@@ -33,18 +37,20 @@ export class PricingService {
   }
 
   private async refresh(): Promise<void> {
-    if (!this.apiKey) return;
-
-    // Avoid turning a transient pricing outage into one request per provider
-    // result on large reviews. A successful refresh replaces this short TTL.
-    this.cacheExpiry = Date.now() + PricingService.FAILURE_CACHE_TTL;
+    if (!this.apiKey) {
+      this.cacheExpiry = Date.now() + PricingService.FAILURE_CACHE_TTL;
+      return;
+    }
 
     try {
       const response = await fetch('https://openrouter.ai/api/v1/models', {
         headers: { Authorization: `Bearer ${this.apiKey}` },
       });
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        this.cacheExpiry = Date.now() + PricingService.FAILURE_CACHE_TTL;
+        return;
+      }
 
       const data = (await response.json()) as {
         data?: Array<{
@@ -65,6 +71,7 @@ export class PricingService {
       this.cacheExpiry = Date.now() + PricingService.CACHE_TTL;
     } catch {
       // Silently ignore pricing failures; downstream cost estimates will be zeroed.
+      this.cacheExpiry = Date.now() + PricingService.FAILURE_CACHE_TTL;
     }
   }
 }

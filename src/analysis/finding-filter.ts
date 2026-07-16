@@ -136,13 +136,13 @@ export class FindingFilter {
     }
 
     if (this.isWorkflowOrCIFile(finding.file)) {
+      if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
+        return 'filter';
+      }
       if (this.isConcreteRuntimeRegression(finding)) {
         return 'keep';
       }
-      if (
-        this.isWorkflowSecurityFalsePositive(finding, diffContent) ||
-        this.isWorkflowConfigurationIssue(finding)
-      ) {
+      if (this.isWorkflowConfigurationIssue(finding)) {
         return 'filter';
       }
     }

@@ -1,6 +1,18 @@
-import { mergeGitDiffMetadata } from '../../../src/github/local-git-diff';
+import { execFile } from 'child_process';
+import {
+  loadPullRequestFilesFromGit,
+  mergeGitDiffMetadata,
+} from '../../../src/github/local-git-diff';
+
+jest.mock('child_process', () => ({
+  execFile: jest.fn(),
+}));
 
 describe('local git PR diff metadata', () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
   it('maps modifications, additions, deletions, renames, and binary files', () => {
     const files = mergeGitDiffMetadata(
       [
@@ -67,5 +79,25 @@ describe('local git PR diff metadata', () => {
         changes: 0,
       },
     ]);
+  });
+
+  it('bounds every local git diff command with a timeout', async () => {
+    (execFile as unknown as jest.Mock).mockImplementation(
+      (_command, args, _options, callback) => {
+        callback(
+          null,
+          args.includes('--name-status') ? 'M\0src/a.ts\0' : '1\t0\tsrc/a.ts\0'
+        );
+      }
+    );
+
+    await expect(
+      loadPullRequestFilesFromGit('a'.repeat(40), 'b'.repeat(40))
+    ).resolves.toHaveLength(1);
+
+    expect(execFile).toHaveBeenCalledTimes(2);
+    for (const call of (execFile as unknown as jest.Mock).mock.calls) {
+      expect(call[2]).toMatchObject({ timeout: 30_000 });
+    }
   });
 });

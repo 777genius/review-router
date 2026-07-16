@@ -310,7 +310,9 @@ export class CommentPoster {
     prNumber: number
   ): Promise<IssueCommentSummaryCandidate[]> {
     const comments = await this.listIssueCommentsViaCommentsApi(prNumber);
-    if (comments.some((comment) => CommentPoster.isSummaryComment(comment.body))) {
+    if (
+      comments.some((comment) => CommentPoster.isSummaryComment(comment.body))
+    ) {
       return comments;
     }
 

@@ -15,14 +15,14 @@ The incremental review system dramatically reduces review time and cost on PR up
 
 ### First Review (Full Review)
 
-```
+```text
 PR opened → Review all 50 files → Post comment → Save state
 Cache: { commit: "abc123", findings: [...], timestamp: now }
 ```
 
 ### Subsequent Review (Incremental)
 
-```
+```text
 PR updated → Check cache → Git diff → Review 3 changed files → Merge findings → Update comment
 Cache updated: { commit: "def456", findings: [...], timestamp: now }
 ```
@@ -92,11 +92,13 @@ plan.
 Without full history, `git diff` will fail and automatically fall back to full review.
 
 When GitHub's pull-request files API reaches its 3,000-file ceiling, the hosted
-checkout may recover the complete inventory through bounded local
-`git diff --name-status --numstat`. Recovery is accepted only for validated
-base/head object IDs and when the local count matches GitHub metadata. Missing
-history, a count mismatch, command failure, or a safety-limit hit leaves the
-review explicitly truncated.
+checkout may recover the complete metadata inventory through bounded local
+`git diff --name-status` and `git diff --numstat` calls. Recovery is accepted
+only for validated base/head object IDs and when the local count matches GitHub
+metadata. GitHub patches remain attached to files returned by the API; files
+beyond the API ceiling use synthesized metadata-only diff content. Missing
+history, a count mismatch, command failure, timeout, or a safety-limit hit
+leaves the review explicitly truncated.
 
 ```typescript
 async getChangedFilesSince(pr: PRContext, lastCommit: string): FileChange[] {
@@ -185,12 +187,16 @@ interface IncrementalCacheData {
   timestamp: number; // When review happened
   findings: Finding[]; // All findings
   reviewSummary: string; // Full summary text
+  schemaVersion?: number; // Snapshot schema version
+  baseSha?: string; // Base SHA used to compute the reviewed diff
+  compatibilityKey?: string; // Review configuration compatibility hash
+  expiresAt?: number; // Absolute expiry time in milliseconds
 }
 ```
 
 ### Cache Key
 
-```
+```text
 incremental-review-pr-{prNumber}
 ```
 
@@ -322,7 +328,7 @@ async postSummary(prNumber: number, body: string, updateExisting = true) {
 
 **Full Review (Without Incremental):**
 
-```
+```text
 Load PR          →  2s
 Review 50 files  → 25s (50 files × 0.5s avg)
 Post comments    →  3s
@@ -332,7 +338,7 @@ Cost: ~$0.015
 
 **Incremental Review (With Incremental):**
 
-```
+```text
 Load PR          →  2s
 Git diff         →  0.1s
 Review 3 files   →  1.5s (3 files × 0.5s avg)
@@ -352,37 +358,39 @@ Cost: ~$0.003
 
 ### 1. No Previous Review
 
-```
+```text
 First review → Full review of all files
 ```
 
 ### 2. Cache Expired
 
-```
+```text
 Last review > 7 days ago → Full review
 ```
 
 ### 3. No Changes
 
-```
-Commit SHA unchanged → Skip review entirely
+```text
+Head and base SHAs unchanged → Reuse the completed snapshot and its output;
+skip graph construction, memory, static analysis, provider/LLM work, synthesis,
+and snapshot advancement
 ```
 
 ### 4. Git Diff Fails
 
-```
+```text
 Git error → Fallback to full review of all files
 ```
 
 ### 5. All Files Changed
 
-```
+```text
 50/50 files changed → Review all files (same as full review)
 ```
 
 ### 6. Comment Update Fails
 
-```
+```text
 Can't find existing comment → Create new comment
 ```
 
@@ -448,31 +456,31 @@ grep "Incremental review" logs.txt
 
 ### "Incremental review disabled"
 
-```
+```text
 Check: INCREMENTAL_ENABLED=true in config
 ```
 
 ### "No previous review found"
 
-```
+```text
 Normal on first review. Will be available on next PR update.
 ```
 
 ### "Cache expired"
 
-```
+```text
 Last review was > TTL days ago. Increase INCREMENTAL_CACHE_TTL_DAYS or run reviews more frequently.
 ```
 
 ### "Git diff failed"
 
-```
+```text
 Check git repository is available. Falls back to full review.
 ```
 
 ### "All files treated as changed"
 
-```
+```text
 Git diff may have failed. Check logs for git errors.
 ```
 
@@ -493,7 +501,7 @@ Git diff may have failed. Check logs for git errors.
 
 ### Log Messages
 
-```
+```text
 [INFO] Incremental review available from abc1234 to def4567
 [INFO] Incremental review: reviewing 3 changed files
 [INFO] Merged findings: 10 kept from unchanged files, 2 new from review, total 12

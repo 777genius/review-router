@@ -18661,6 +18661,12 @@ var IncrementalReviewer = class _IncrementalReviewer {
       );
       return fullReviewDecision();
     }
+    if (lastReview.baseSha !== pr2.baseSha) {
+      logger.info(
+        "Completed review snapshot has a different or unknown base revision; running full review"
+      );
+      return fullReviewDecision();
+    }
     if (lastReview.lastReviewedCommit === pr2.headSha) {
       logger.info(
         `PR head ${pr2.headSha.substring(0, 7)} already has a completed review snapshot; reusing it without provider execution`
@@ -19191,6 +19197,7 @@ var PricingService = class _PricingService {
   }
   cache = /* @__PURE__ */ new Map();
   cacheExpiry = 0;
+  refreshPromise;
   static CACHE_TTL = 60 * 60 * 1e3;
   static FAILURE_CACHE_TTL = 5 * 60 * 1e3;
   async getPricing(modelId) {
@@ -19198,7 +19205,10 @@ var PricingService = class _PricingService {
       return { modelId, promptPrice: 0, completionPrice: 0, isFree: true };
     }
     if (Date.now() > this.cacheExpiry) {
-      await this.refresh();
+      this.refreshPromise ??= this.refresh().finally(() => {
+        this.refreshPromise = void 0;
+      });
+      await this.refreshPromise;
     }
     return this.cache.get(modelId) || {
       modelId,
@@ -19208,13 +19218,18 @@ var PricingService = class _PricingService {
     };
   }
   async refresh() {
-    if (!this.apiKey) return;
-    this.cacheExpiry = Date.now() + _PricingService.FAILURE_CACHE_TTL;
+    if (!this.apiKey) {
+      this.cacheExpiry = Date.now() + _PricingService.FAILURE_CACHE_TTL;
+      return;
+    }
     try {
       const response = await fetch("https://openrouter.ai/api/v1/models", {
         headers: { Authorization: `Bearer ${this.apiKey}` }
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        this.cacheExpiry = Date.now() + _PricingService.FAILURE_CACHE_TTL;
+        return;
+      }
       const data = await response.json();
       for (const model of data.data || []) {
         const pricing = model.pricing || {};
@@ -19227,6 +19242,7 @@ var PricingService = class _PricingService {
       }
       this.cacheExpiry = Date.now() + _PricingService.CACHE_TTL;
     } catch {
+      this.cacheExpiry = Date.now() + _PricingService.FAILURE_CACHE_TTL;
     }
   }
 };
@@ -19446,6 +19462,7 @@ var import_child_process8 = require("child_process");
 var GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/i;
 var MAX_LOCAL_DIFF_FILES = 2e4;
 var MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024;
+var GIT_DIFF_TIMEOUT_MS = 3e4;
 async function loadPullRequestFilesFromGit(baseSha, headSha) {
   if (!GIT_OBJECT_ID.test(baseSha) || !GIT_OBJECT_ID.test(headSha)) {
     return null;
@@ -19585,7 +19602,8 @@ function runGit(args, cwd) {
       {
         cwd,
         encoding: "utf8",
-        maxBuffer: MAX_GIT_OUTPUT_BYTES
+        maxBuffer: MAX_GIT_OUTPUT_BYTES,
+        timeout: GIT_DIFF_TIMEOUT_MS
       },
       (error2, stdout) => {
         if (error2) {
@@ -19654,7 +19672,14 @@ var PullRequestLoader = class {
       const localFiles = await this.localDiffLoader(baseSha, headSha);
       const localDiffIsComplete = localFiles !== null && (pr2.changed_files === void 0 ? localFiles.length >= files.length : localFiles.length === pr2.changed_files);
       if (localFiles && localDiffIsComplete) {
-        files.splice(0, files.length, ...localFiles);
+        const githubFilesByPath = new Map(
+          files.map((file) => [file.filename, file])
+        );
+        const recoveredFiles = localFiles.map((file) => {
+          const githubFile = githubFilesByPath.get(file.filename);
+          return githubFile?.patch ? { ...file, patch: githubFile.patch } : file;
+        });
+        files.splice(0, files.length, ...recoveredFiles);
         fileLimitOmission = null;
         logger.info(
           `Recovered the complete ${files.length}-file list for PR #${prNumber} from local git after reaching GitHub's API limit.`
@@ -29491,10 +29516,13 @@ var FindingFilter = class {
       return "filter";
     }
     if (this.isWorkflowOrCIFile(finding.file)) {
+      if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
+        return "filter";
+      }
       if (this.isConcreteRuntimeRegression(finding)) {
         return "keep";
       }
-      if (this.isWorkflowSecurityFalsePositive(finding, diffContent) || this.isWorkflowConfigurationIssue(finding)) {
+      if (this.isWorkflowConfigurationIssue(finding)) {
         return "filter";
       }
     }
@@ -34228,13 +34256,28 @@ var ReviewOrchestrator = class {
       const filesToReview = [...incrementalPlan.files];
       const incrementalInvalidatedPaths = [...incrementalPlan.invalidatedPaths];
       const lastReviewData = incrementalPlan.lastReview;
+      if (incrementalPlan.mode === "reuse_completed" /* ReuseCompleted */) {
+        logger.info(
+          "Completed snapshot matches the current revision; returning it without analysis or snapshot advancement"
+        );
+        const reusedReview = this.createReusedReview(
+          incrementalPlan.lastReview,
+          start
+        );
+        if (progressTracker) {
+          await progressTracker.replaceWith(
+            this.markReviewRouterSummary(
+              this.components.formatter.format(reusedReview)
+            )
+          );
+        }
+        review = reusedReview;
+        success = true;
+        return reusedReview;
+      }
       if (incrementalPlan.mode === "delta" /* Delta */) {
         logger.info(
           `Incremental review: reviewing ${filesToReview.length} changed files`
-        );
-      } else if (incrementalPlan.mode === "reuse_completed" /* ReuseCompleted */) {
-        logger.info(
-          "Completed snapshot matches the current head; provider and static analysis execution will be skipped"
         );
       }
       const { codeGraph, contextRetriever } = await this.prepareCodeGraph({
@@ -36211,6 +36254,38 @@ These types of changes are automatically filtered to save review time and API co
         totalTokens: 0,
         durationSeconds,
         cacheHit: false,
+        synthesisModel: "",
+        providerPoolSize: 0
+      }
+    };
+  }
+  createReusedReview(snapshot, startTime) {
+    const findings = snapshot.findings.map((finding) => ({ ...finding }));
+    const durationSeconds = Math.max(1e-3, (Date.now() - startTime) / 1e3);
+    return {
+      summary: snapshot.reviewSummary,
+      findings,
+      inlineComments: [],
+      actionItems: [],
+      metrics: {
+        totalFindings: findings.length,
+        critical: findings.filter((finding) => finding.severity === "critical").length,
+        major: findings.filter((finding) => finding.severity === "major").length,
+        minor: findings.filter((finding) => finding.severity === "minor").length,
+        providersUsed: 0,
+        providersSuccess: 0,
+        providersFailed: 0,
+        totalTokens: 0,
+        totalCost: 0,
+        durationSeconds,
+        cached: true
+      },
+      runDetails: {
+        providers: [],
+        totalCost: 0,
+        totalTokens: 0,
+        durationSeconds,
+        cacheHit: true,
         synthesisModel: "",
         providerPoolSize: 0
       }

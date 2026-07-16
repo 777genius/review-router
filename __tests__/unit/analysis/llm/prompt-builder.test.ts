@@ -204,7 +204,9 @@ describe('PromptBuilder', () => {
       const prompt = await builder.build(pr);
 
       expect(prompt).toContain('SMART DIFF COMPACTION');
-      expect(prompt).toContain('summary-only in prompt: large diff over 1000 bytes');
+      expect(prompt).toContain(
+        'summary-only in prompt: large diff over 1000 bytes'
+      );
       expect(prompt).toContain('full diff omitted from primary prompt');
       expect(prompt).toContain('git diff --');
       expect(prompt).not.toContain('{"table":"users"}');

@@ -166,6 +166,13 @@ export class IncrementalReviewer {
       return fullReviewDecision();
     }
 
+    if (lastReview.baseSha !== pr.baseSha) {
+      logger.info(
+        'Completed review snapshot has a different or unknown base revision; running full review'
+      );
+      return fullReviewDecision();
+    }
+
     if (lastReview.lastReviewedCommit === pr.headSha) {
       logger.info(
         `PR head ${pr.headSha.substring(0, 7)} already has a completed review snapshot; reusing it without provider execution`

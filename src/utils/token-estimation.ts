@@ -226,7 +226,8 @@ export interface BatchSizeRecommendation {
 export function calculateOptimalBatchSize(
   files: FileChange[],
   targetTokensPerBatch: number = 50000, // ~50k tokens per batch (fits most models well)
-  maxFilesPerBatch: number = 200
+  maxFilesPerBatch: number = 200,
+  preserveInputOrder: boolean = false
 ): BatchSizeRecommendation {
   if (files.length === 0) {
     return {
@@ -243,8 +244,10 @@ export function calculateOptimalBatchSize(
     tokens: estimateTokensForFile(file),
   }));
 
-  // Sort files by size (largest first) for better bin packing
-  filesWithSizes.sort((a, b) => b.tokens - a.tokens);
+  // Risk-aware callers already provide an intentional order.
+  if (!preserveInputOrder) {
+    filesWithSizes.sort((a, b) => b.tokens - a.tokens);
+  }
 
   // Greedy bin packing: fill batches to target size
   const batches: FileChange[][] = [];

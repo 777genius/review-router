@@ -55,8 +55,6 @@ import {
 import { buildReviewCoverage } from '../analysis/review-coverage';
 import { z } from 'zod';
 import { Provider } from '../providers/base';
-import { createQueue } from '../utils/parallel';
-import PQueue from 'p-queue';
 import {
   ReviewConfig,
   Review,
@@ -74,6 +72,9 @@ import {
   InlineComment,
   ReviewThreadLifecycleMode,
   ReviewThreadLifecycleResult,
+  PullRequestLoadOmissionReason,
+  PullRequestLoadStatus,
+  ProviderLifecycleRevalidation,
 } from '../types';
 import { logger } from '../utils/logger';
 import {
@@ -108,6 +109,22 @@ import {
   ActionMemoryBundleProvider,
   formatActionMemoryBundleForPrompt,
 } from '../control-plane/memory';
+import { ExecutionDeadline } from '../review-execution/domain/execution-deadline';
+import {
+  classifyProviderCapacitySignal,
+  createReviewBatchPlan,
+  prioritizeFilesByRisk,
+} from '../review-execution/domain';
+import {
+  AdaptiveBatchScheduler,
+  BatchExecutionStatus,
+} from '../review-execution/application';
+import {
+  ReviewCheckpointProviderStatus,
+  type ReviewCheckpointBatchPayload,
+  type ReviewCheckpointPlanIdentity,
+} from '../review-execution/domain/review-checkpoint';
+import type { ReviewCheckpointSession } from '../review-execution/application/review-checkpoint-session';
 
 // Configuration constants
 const HEALTH_CHECK_TIMEOUT_MS = 30_000; // 30 seconds
@@ -149,6 +166,11 @@ export interface ReviewComponents {
   acceptanceDetector?: AcceptanceDetector;
   providerWeightTracker?: ProviderWeightTracker;
   memoryBundleProvider?: ActionMemoryBundleProvider;
+  executionDeadline?: ExecutionDeadline;
+  reviewCompatibilityKey?: string;
+  openReviewCheckpointSession?: (
+    plan: ReviewCheckpointPlanIdentity
+  ) => Promise<ReviewCheckpointSession | null>;
 }
 
 export class ReviewOrchestrator {
@@ -602,6 +624,41 @@ export class ReviewOrchestrator {
       const llmFindings: Finding[] = [];
       let providerResults: ProviderResult[] = [];
       let aiAnalysis: ReturnType<typeof summarizeAIDetection> | undefined;
+      const unreviewedFiles = new Map<string, string>();
+      const loadLimitations: string[] = [];
+      let additionalUnreviewedFiles = 0;
+      if (
+        reviewContext.loadCompleteness?.status ===
+        PullRequestLoadStatus.Truncated
+      ) {
+        for (const omission of reviewContext.loadCompleteness.omissions) {
+          if (
+            omission.reason ===
+            PullRequestLoadOmissionReason.SynthesizedDiffSizeLimit
+          ) {
+            for (const filename of omission.omittedFiles) {
+              unreviewedFiles.set(
+                filename,
+                'file patch was omitted by the synthesized diff size limit'
+              );
+            }
+            loadLimitations.push(
+              `${omission.omittedFileCount} file patch(es) were omitted by the synthesized diff size limit`
+            );
+          } else {
+            additionalUnreviewedFiles += omission.omittedFileCount ?? 0;
+            loadLimitations.push(
+              omission.omittedFileCount === undefined
+                ? 'GitHub omitted an unknown number of files beyond its API limit'
+                : `GitHub omitted ${omission.omittedFileCount} file(s) beyond its API limit`
+            );
+          }
+        }
+      }
+      let llmCoverageComplete =
+        filesToReview.length === 0 &&
+        unreviewedFiles.size === 0 &&
+        loadLimitations.length === 0;
       const requiredHealthyProviders =
         this.requiredHealthyProviderNames(config);
       let providers =
@@ -756,6 +813,12 @@ export class ReviewOrchestrator {
             );
           }
           providerResults = allHealthResults;
+          for (const file of filesToReview) {
+            unreviewedFiles.set(
+              file.filename,
+              'no healthy provider was available for this batch'
+            );
+          }
           await this.recordReliability(providerResults);
           await progressTracker?.updateProgress(
             'llm',
@@ -791,12 +854,13 @@ export class ReviewOrchestrator {
           // Use token-aware batching if enabled
           let batches: FileChange[][];
           const providerNames = healthy.map((p) => p.name);
+          const prioritizedFiles = prioritizeFilesByRisk(filesToReview);
           lifecyclePlannedProviders = providerNames;
 
           if (config.enableTokenAwareBatching) {
             try {
               batches = batchOrchestrator.createTokenAwareBatches(
-                filesToReview,
+                prioritizedFiles,
                 providerNames
               );
             } catch (error) {
@@ -806,7 +870,7 @@ export class ReviewOrchestrator {
               );
               const batchSize = batchOrchestrator.getBatchSize(providerNames);
               batches = batchOrchestrator.createBatches(
-                filesToReview,
+                prioritizedFiles,
                 batchSize
               );
             }
@@ -814,7 +878,7 @@ export class ReviewOrchestrator {
             const batchSize = batchOrchestrator.getBatchSize(providerNames);
             try {
               batches = batchOrchestrator.createBatches(
-                filesToReview,
+                prioritizedFiles,
                 batchSize
               );
             } catch (error) {
@@ -822,7 +886,35 @@ export class ReviewOrchestrator {
                 `Invalid batch size computed from providers - falling back to size 1`,
                 error as Error
               );
-              batches = batchOrchestrator.createBatches(filesToReview, 1);
+              batches = batchOrchestrator.createBatches(prioritizedFiles, 1);
+            }
+          }
+
+          const batchPlan = createReviewBatchPlan({
+            batches,
+            baseSha: pr.baseSha,
+            headSha: pr.headSha,
+            compatibilityKey:
+              this.components.reviewCompatibilityKey ?? '0'.repeat(64),
+            providerNames,
+          });
+          let checkpointSession: ReviewCheckpointSession | null = null;
+          if (this.components.openReviewCheckpointSession) {
+            try {
+              checkpointSession =
+                await this.components.openReviewCheckpointSession({
+                  pullRequestNumber: pr.number,
+                  baseSha: batchPlan.baseSha,
+                  headSha: batchPlan.headSha,
+                  compatibilityKey: batchPlan.compatibilityKey,
+                  planHash: batchPlan.planHash,
+                  workKeys: batchPlan.batches.map((batch) => batch.id),
+                });
+            } catch (error) {
+              logger.warn(
+                'Hosted review checkpoint could not be opened; continuing without resume',
+                error as Error
+              );
             }
           }
 
@@ -845,166 +937,224 @@ export class ReviewOrchestrator {
                   providerNames
                 );
 
-          const batchQueue = createQueue(
-            Math.max(1, Number(config.providerMaxParallel) || 1)
-          );
-
           logger.info(`Processing ${batches.length} batch(es)`);
 
-          // Create batch execution functions and queue them for parallel processing
-          // Using Promise.allSettled() enables true parallel execution and partial success handling
-          const batchPromises = batches.map(
-            (batch, batchIndex) =>
-              batchQueue.add(async () => {
-                const batchDiff = filterDiffByFiles(reviewContext.diff, batch);
-                const batchContext: PRContext = {
-                  ...reviewContext,
-                  files: batch,
-                  diff: batchDiff,
-                };
-                const lifecycleTargetsForBatch =
-                  lifecycleTargetsByBatch[batchIndex] ?? [];
-                const lifecycleAssignedTargetIds = lifecycleTargetsForBatch.map(
-                  (target) => target.targetId
-                );
-                const promptBuilder = new PromptBuilder(
-                  config,
-                  reviewIntensity,
-                  undefined,
-                  codeGraph,
-                  memoryPromptContext
-                );
-                const prompt = await promptBuilder.build(
-                  batchContext,
-                  undefined,
-                  lifecycleTargetsForBatch
-                );
+          const batchResults: ProviderResult[] = [];
+          const acceptedCheckpointResults =
+            checkpointSession?.acceptedBatchResults ?? new Map();
+          for (const plannedBatch of batchPlan.batches) {
+            const accepted = acceptedCheckpointResults.get(plannedBatch.id);
+            if (!accepted) continue;
+            const restoredResults =
+              this.restoreCheckpointProviderResults(accepted);
+            await this.recordProviderUsage(
+              restoredResults,
+              config.budgetMaxUsd
+            );
+            batchResults.push(...restoredResults);
+            this.recordLifecycleBatchProviderFailures(
+              lifecycleTargetsByBatch[plannedBatch.index] ?? [],
+              restoredResults,
+              lifecycleFailedProvidersByTarget
+            );
+          }
+          const pendingBatches = batchPlan.batches.filter(
+            (batch) => !acceptedCheckpointResults.has(batch.id)
+          );
+          if (acceptedCheckpointResults.size > 0) {
+            logger.info(
+              `Resuming review with ${acceptedCheckpointResults.size}/${batchPlan.batches.length} durable batch(es)`
+            );
+          }
 
-                try {
-                  const results = await this.components.llmExecutor.execute(
-                    healthy,
-                    prompt,
-                    intensityTimeout
-                  );
-                  const scopedResults = results.map((result) => ({
+          const scheduler = new AdaptiveBatchScheduler(
+            this.components.executionDeadline ?? { canStartBatch: () => true }
+          );
+          const scheduled = await scheduler.schedule(
+            pendingBatches,
+            async (plannedBatch) => {
+              const batch = [...plannedBatch.files];
+              const batchIndex = plannedBatch.index;
+              const batchDiff = filterDiffByFiles(reviewContext.diff, batch);
+              const batchContext: PRContext = {
+                ...reviewContext,
+                files: batch,
+                diff: batchDiff,
+              };
+              const lifecycleTargetsForBatch =
+                lifecycleTargetsByBatch[batchIndex] ?? [];
+              const lifecycleAssignedTargetIds = lifecycleTargetsForBatch.map(
+                (target) => target.targetId
+              );
+              const promptBuilder = new PromptBuilder(
+                config,
+                reviewIntensity,
+                undefined,
+                codeGraph,
+                memoryPromptContext
+              );
+              const prompt = await promptBuilder.build(
+                batchContext,
+                undefined,
+                lifecycleTargetsForBatch
+              );
+
+              try {
+                const results = await this.components.llmExecutor.execute(
+                  healthy,
+                  prompt,
+                  intensityTimeout
+                );
+                const scopedResults = results
+                  .map((result) => ({
                     ...result,
                     lifecycleAssignedTargetIds,
-                  }));
-                  this.recordLifecycleBatchProviderFailures(
-                    lifecycleTargetsForBatch,
-                    scopedResults,
-                    lifecycleFailedProvidersByTarget
-                  );
+                  }))
+                  .sort((left, right) => left.name.localeCompare(right.name));
+                this.recordLifecycleBatchProviderFailures(
+                  lifecycleTargetsForBatch,
+                  scopedResults,
+                  lifecycleFailedProvidersByTarget
+                );
 
-                  for (const result of scopedResults) {
-                    await this.components.costTracker.record(
-                      result.name,
-                      result.result?.usage,
-                      config.budgetMaxUsd
-                    );
-                  }
+                await this.recordProviderUsage(
+                  scopedResults,
+                  config.budgetMaxUsd
+                );
 
-                  return scopedResults;
-                } catch (error) {
-                  logger.error('Batch execution failed', error as Error);
-                  const failedResults = healthy.map((provider) => ({
-                    name: provider.name,
-                    status: 'error' as const,
-                    error: error as Error,
-                    durationSeconds: 0,
-                    lifecycleAssignedTargetIds,
-                  }));
-                  this.recordLifecycleBatchProviderFailures(
-                    lifecycleTargetsForBatch,
-                    failedResults,
-                    lifecycleFailedProvidersByTarget
-                  );
-                  return failedResults;
-                }
-              }) as Promise<ProviderResult[]>
-          );
-
-          // Wait for all batches in parallel and handle partial successes
-          // Even if some batches fail, we use the successful results
-          const batchResults: ProviderResult[] = [];
-          let batchFailures = 0;
-          let batchSuccesses = 0;
-          const requiredProviderFailures: Error[] = [];
-          try {
-            const settled = await Promise.allSettled(batchPromises);
-
-            for (const [batchIndex, result] of settled.entries()) {
-              if (result.status === 'fulfilled') {
-                batchResults.push(...result.value);
                 const requiredFailure =
                   this.findRequiredProviderExecutionFailure(
                     requiredHealthyProviders,
-                    result.value
+                    scopedResults
                   );
-                if (requiredFailure) {
-                  requiredProviderFailures.push(requiredFailure);
+                if (
+                  checkpointSession &&
+                  !requiredFailure &&
+                  scopedResults.some((result) => result.status === 'success')
+                ) {
+                  await checkpointSession.commitSuccessfulBatch({
+                    workKey: plannedBatch.id,
+                    files: batch,
+                    findings: extractFindings(scopedResults),
+                    providerResults: scopedResults,
+                  });
                 }
-                const successfulProviders = result.value.filter(
-                  (r) => r.status === 'success'
-                );
-                const degradedProviders = result.value.filter(
-                  (r) => r.status !== 'success'
-                );
 
-                if (successfulProviders.length > 0) {
-                  batchSuccesses += 1;
-                  for (const degraded of degradedProviders) {
-                    const structuredOutputFailure =
-                      degraded.error &&
-                      shouldRetryProviderReviewError(degraded.error);
-                    const reason = this.redactProviderFailureReason(
-                      degraded.error?.message || degraded.status
-                    );
-                    if (requiredHealthyProviders.has(degraded.name)) {
-                      logger.warn(
-                        structuredOutputFailure
-                          ? `Required provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); review will fail after batch completion. ${reason}`
-                          : `Required provider ${degraded.name} failed; review will fail after batch completion. ${reason}`
-                      );
-                      continue;
-                    }
-                    logger.warn(
-                      structuredOutputFailure
-                        ? `Provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); continuing with successful providers. ${reason}`
-                        : `Provider ${degraded.name} degraded; continuing with successful providers. ${reason}`
-                    );
-                  }
-                } else {
-                  batchFailures += 1;
-                }
-              } else {
-                batchFailures += 1;
-                logger.error('Batch promise rejected', result.reason);
-                // Add error results for all providers in this batch
-                const lifecycleAssignedTargetIds = (
-                  lifecycleTargetsByBatch[batchIndex] ?? []
-                ).map((target) => target.targetId);
-                const failedBatchResults = healthy.map((provider) => ({
+                return scopedResults;
+              } catch (error) {
+                logger.error('Batch execution failed', error as Error);
+                const failedResults = healthy.map((provider) => ({
                   name: provider.name,
                   status: 'error' as const,
-                  error: result.reason as Error,
+                  error: error as Error,
                   durationSeconds: 0,
                   lifecycleAssignedTargetIds,
                 }));
-                batchResults.push(...failedBatchResults);
-                const requiredFailure =
-                  this.findRequiredProviderExecutionFailure(
-                    requiredHealthyProviders,
-                    failedBatchResults
+                this.recordLifecycleBatchProviderFailures(
+                  lifecycleTargetsForBatch,
+                  failedResults,
+                  lifecycleFailedProvidersByTarget
+                );
+                return failedResults;
+              }
+            },
+            classifyProviderCapacitySignal
+          );
+
+          // Use completed work in deterministic plan order and surface anything
+          // not started before the deadline as explicit coverage gaps.
+          let batchFailures = 0;
+          let batchSuccesses = acceptedCheckpointResults.size;
+          const requiredProviderFailures: Error[] = [];
+          for (const result of scheduled.completed) {
+            const batchIndex = result.item.index;
+            if (result.status === BatchExecutionStatus.Fulfilled) {
+              batchResults.push(...result.result);
+              const requiredFailure = this.findRequiredProviderExecutionFailure(
+                requiredHealthyProviders,
+                result.result
+              );
+              if (requiredFailure) {
+                requiredProviderFailures.push(requiredFailure);
+              }
+              const successfulProviders = result.result.filter(
+                (r) => r.status === 'success'
+              );
+              const degradedProviders = result.result.filter(
+                (r) => r.status !== 'success'
+              );
+
+              if (successfulProviders.length > 0) {
+                batchSuccesses += 1;
+                for (const degraded of degradedProviders) {
+                  const structuredOutputFailure =
+                    degraded.error &&
+                    shouldRetryProviderReviewError(degraded.error);
+                  const reason = this.redactProviderFailureReason(
+                    degraded.error?.message || degraded.status
                   );
-                if (requiredFailure) {
-                  requiredProviderFailures.push(requiredFailure);
+                  if (requiredHealthyProviders.has(degraded.name)) {
+                    logger.warn(
+                      structuredOutputFailure
+                        ? `Required provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); review will fail after batch completion. ${reason}`
+                        : `Required provider ${degraded.name} failed; review will fail after batch completion. ${reason}`
+                    );
+                    continue;
+                  }
+                  logger.warn(
+                    structuredOutputFailure
+                      ? `Provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); continuing with successful providers. ${reason}`
+                      : `Provider ${degraded.name} degraded; continuing with successful providers. ${reason}`
+                  );
+                }
+              } else {
+                batchFailures += 1;
+                for (const file of batches[batchIndex] ?? []) {
+                  unreviewedFiles.set(
+                    file.filename,
+                    'all providers failed for this batch'
+                  );
                 }
               }
+            } else {
+              batchFailures += 1;
+              for (const file of batches[batchIndex] ?? []) {
+                unreviewedFiles.set(
+                  file.filename,
+                  'batch execution did not complete'
+                );
+              }
+              logger.error('Batch promise rejected', result.error);
+              // Add error results for all providers in this batch
+              const lifecycleAssignedTargetIds = (
+                lifecycleTargetsByBatch[batchIndex] ?? []
+              ).map((target) => target.targetId);
+              const failedBatchResults = healthy.map((provider) => ({
+                name: provider.name,
+                status: 'error' as const,
+                error: result.error as Error,
+                durationSeconds: 0,
+                lifecycleAssignedTargetIds,
+              }));
+              batchResults.push(...failedBatchResults);
+              const requiredFailure = this.findRequiredProviderExecutionFailure(
+                requiredHealthyProviders,
+                failedBatchResults
+              );
+              if (requiredFailure) {
+                requiredProviderFailures.push(requiredFailure);
+              }
             }
-          } finally {
-            await batchQueue.onIdle();
-            this.cleanupQueue(batchQueue);
+          }
+
+          for (const deferred of scheduled.deferred) {
+            batchFailures += 1;
+            for (const file of deferred.item.files) {
+              unreviewedFiles.set(
+                file.filename,
+                'batch was not started because the review deadline was near'
+              );
+            }
           }
 
           this.applyLifecycleBatchProviderFailures(
@@ -1030,6 +1180,9 @@ export class ReviewOrchestrator {
 
           if (requiredProviderFailures.length > 0) {
             throw requiredProviderFailures[0];
+          }
+          if (checkpointSession && batchFailures === 0) {
+            await checkpointSession.finalize();
           }
 
           // Use partial success: proceed if at least some batches succeeded
@@ -1077,6 +1230,11 @@ export class ReviewOrchestrator {
               `Processed ${batches.length} batch(es)`
             );
           }
+
+          llmCoverageComplete =
+            batchFailures === 0 &&
+            unreviewedFiles.size === 0 &&
+            loadLimitations.length === 0;
 
           llmFindings.push(...extractFindings(batchResults));
           providerResults = mergedResults;
@@ -1177,9 +1335,19 @@ export class ReviewOrchestrator {
         mermaidDiagram
       );
       review.coverage = buildReviewCoverage(reviewPR, config, {
-        totalFiles: pr.files.length,
+        totalFiles: pr.files.length + additionalUnreviewedFiles,
         skippedFiles: skippedTrivialFiles,
+        unreviewedFiles: filesToReview
+          .filter((file) => unreviewedFiles.has(file.filename))
+          .map((file) => ({
+            file,
+            reason:
+              unreviewedFiles.get(file.filename) ??
+              'LLM review did not complete',
+          })),
         mode: useIncremental && lastReviewData ? 'incremental' : 'full',
+        additionalUnreviewedFiles,
+        limitations: loadLimitations,
       });
 
       // Merge with previous review if incremental
@@ -1461,7 +1629,7 @@ export class ReviewOrchestrator {
           );
         }
       }
-      if (config.incrementalEnabled) {
+      if (config.incrementalEnabled && llmCoverageComplete) {
         try {
           await this.components.incrementalReviewer.saveReview(pr, review);
         } catch (error) {
@@ -1470,6 +1638,10 @@ export class ReviewOrchestrator {
             error as Error
           );
         }
+      } else if (config.incrementalEnabled) {
+        logger.warn(
+          'Incremental snapshot was not advanced because LLM batch coverage is incomplete'
+        );
       }
       success = true;
       return review;
@@ -2506,7 +2678,8 @@ export class ReviewOrchestrator {
     if (
       review.findings.length > 0 ||
       inlineComments.length > 0 ||
-      review.actionItems.length > 0
+      review.actionItems.length > 0 ||
+      (review.coverage?.unreviewedFiles ?? 0) > 0
     ) {
       return true;
     }
@@ -2548,6 +2721,93 @@ export class ReviewOrchestrator {
    * Sanitize filename to prevent path traversal attacks
    * Removes directory separators, path traversal sequences, and absolute paths
    */
+  private restoreCheckpointProviderResults(
+    payload: ReviewCheckpointBatchPayload
+  ): ProviderResult[] {
+    const providerNames = new Set(
+      payload.providerResults.map((result) => result.name)
+    );
+    const unattributedFindings = payload.findings.filter(
+      (finding) => !finding.provider || !providerNames.has(finding.provider)
+    );
+    let unattributedAssigned = false;
+
+    return payload.providerResults.map((providerResult) => {
+      const status = this.restoreCheckpointProviderStatus(
+        providerResult.status
+      );
+      const attributedFindings = payload.findings.filter(
+        (finding) =>
+          finding.provider === providerResult.name ||
+          finding.providers?.includes(providerResult.name)
+      );
+      const includeUnattributed = status === 'success' && !unattributedAssigned;
+      if (includeUnattributed) unattributedAssigned = true;
+      const findings = [
+        ...attributedFindings,
+        ...(includeUnattributed ? unattributedFindings : []),
+      ].map((finding) => ({ ...finding }) as Finding);
+      const revalidations = (providerResult.lifecycleRevalidations ?? []).map(
+        (revalidation) => ({ ...revalidation }) as ProviderLifecycleRevalidation
+      );
+
+      return {
+        name: providerResult.name,
+        status,
+        durationSeconds: providerResult.durationMs / 1000,
+        lifecycleAssignedTargetIds: [
+          ...(providerResult.lifecycleAssignedTargetIds ?? []),
+        ],
+        ...(status === 'success'
+          ? {
+              result: {
+                content: '',
+                findings,
+                revalidations,
+                durationSeconds: providerResult.durationMs / 1000,
+                actualModel: providerResult.actualModel,
+                aiLikelihood: providerResult.aiLikelihood,
+                usage: providerResult.usage,
+              },
+            }
+          : {
+              error: new Error(
+                providerResult.errorMessage ??
+                  'Provider did not complete the checkpointed batch'
+              ),
+            }),
+      };
+    });
+  }
+
+  private restoreCheckpointProviderStatus(
+    status: ReviewCheckpointProviderStatus
+  ): ProviderResult['status'] {
+    switch (status) {
+      case ReviewCheckpointProviderStatus.Success:
+        return 'success';
+      case ReviewCheckpointProviderStatus.Timeout:
+        return 'timeout';
+      case ReviewCheckpointProviderStatus.RateLimited:
+        return 'rate-limited';
+      case ReviewCheckpointProviderStatus.Error:
+        return 'error';
+    }
+  }
+
+  private async recordProviderUsage(
+    results: readonly ProviderResult[],
+    budgetMaxUsd?: number
+  ): Promise<void> {
+    for (const result of results) {
+      await this.components.costTracker.record(
+        result.name,
+        result.result?.usage,
+        budgetMaxUsd
+      );
+    }
+  }
+
   private sanitizeFilename(filename: string): string {
     // Check for path traversal patterns
     if (
@@ -2571,10 +2831,6 @@ export class ReviewOrchestrator {
 
     // Ensure we don't end up with an empty string
     return sanitized || 'review-router';
-  }
-
-  private cleanupQueue(queue: PQueue): void {
-    queue.clear?.();
   }
 
   /**

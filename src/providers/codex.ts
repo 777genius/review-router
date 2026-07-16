@@ -1,4 +1,4 @@
-import { Provider } from './base';
+import { Provider, ProviderExecutionPolicy } from './base';
 import { Finding, ReviewResult } from '../types';
 import { logger } from '../utils/logger';
 import { spawn, spawnSync } from 'child_process';
@@ -136,7 +136,11 @@ export class CodexProvider extends Provider {
     }
   }
 
-  async review(prompt: string, timeoutMs: number): Promise<ReviewResult> {
+  async review(
+    prompt: string,
+    timeoutMs: number,
+    executionPolicy?: ProviderExecutionPolicy
+  ): Promise<ReviewResult> {
     const started = Date.now();
 
     const binary = await this.resolveBinary();
@@ -179,7 +183,8 @@ export class CodexProvider extends Provider {
           runResult.audit,
           prompt,
           auditMode
-        )
+        ) &&
+        (executionPolicy?.canStartOptionalRetry() ?? true)
       ) {
         logger.warn(
           `Codex agentic review completed without read-only exploration; retrying once for ${this.name}`
@@ -188,10 +193,17 @@ export class CodexProvider extends Provider {
         const firstParsed = parsed;
         const firstRunResult = runResult;
         try {
+          const retryTimeoutMs =
+            executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
+          if (retryTimeoutMs <= 0) {
+            throw new Error(
+              'Review execution deadline reached before Codex agentic retry'
+            );
+          }
           runResult = await this.runCliWithStdin(
             binary,
             this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
-            timeoutMs,
+            retryTimeoutMs,
             {
               healthCheck: false,
               outputSchema: this.buildFindingsSchema(),

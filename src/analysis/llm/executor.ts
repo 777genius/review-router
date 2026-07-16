@@ -1,19 +1,48 @@
-import { Provider } from '../../providers/base';
+import { Provider, ProviderExecutionPolicy } from '../../providers/base';
 import { RateLimitError } from '../../providers/base';
 import { ReviewConfig, ProviderResult } from '../../types';
-import { createQueue } from '../../utils/parallel';
 import { withRetry } from '../../utils/retry';
 import { logger } from '../../utils/logger';
+import { withTimeout } from '../../utils/timeout';
 import {
   buildProviderReviewPromptForAttempt,
   getProviderReviewTotalAttempts,
   shouldRetryProviderReviewError,
 } from './retry-policy';
+import { ExecutionDeadline } from '../../review-execution/domain/execution-deadline';
+import { ProviderCallLimiter } from '../../review-execution/application/provider-call-limiter';
+
+export interface LLMExecutionPolicy {
+  readonly deadline?: ExecutionDeadline;
+  readonly maxParallelCalls?: number;
+}
 
 type ErrorWithCode = Error & { code?: string };
 
 export class LLMExecutor {
-  constructor(private readonly config: ReviewConfig) {}
+  private readonly callLimiter: ProviderCallLimiter;
+  private readonly providerExecutionPolicy?: ProviderExecutionPolicy;
+
+  constructor(
+    private readonly config: ReviewConfig,
+    private readonly policy: LLMExecutionPolicy = {}
+  ) {
+    const maxParallelCalls = Math.max(
+      1,
+      Math.min(
+        3,
+        Math.floor(policy.maxParallelCalls ?? config.providerMaxParallel)
+      )
+    );
+    this.callLimiter = new ProviderCallLimiter(maxParallelCalls);
+    if (policy.deadline) {
+      this.providerExecutionPolicy = {
+        canStartOptionalRetry: () => policy.deadline!.canStartOptionalRetry(),
+        clampTimeoutMs: (requestedTimeoutMs) =>
+          policy.deadline!.clampProviderTimeout(requestedTimeoutMs),
+      };
+    }
+  }
 
   private resolveProviderTimeoutMs(
     provider: Provider,
@@ -30,6 +59,46 @@ export class LLMExecutor {
       );
     }
     return baseTimeoutMs;
+  }
+
+  canStartProviderDiscovery(): boolean {
+    return this.policy.deadline?.canStartBatch() ?? true;
+  }
+
+  clampProviderDiscoveryTimeout(requestedTimeoutMs: number): number {
+    return (
+      this.policy.deadline?.clampProviderTimeout(requestedTimeoutMs) ??
+      requestedTimeoutMs
+    );
+  }
+
+  async runProviderDiscoveryWave<T>(
+    operation: () => Promise<T>,
+    requestedTimeoutMs: number
+  ): Promise<T | undefined> {
+    if (!this.canStartProviderDiscovery()) {
+      logger.info(
+        'Skipping provider discovery because the review execution deadline reserve was reached'
+      );
+      return undefined;
+    }
+
+    const actualTimeoutMs =
+      this.clampProviderDiscoveryTimeout(requestedTimeoutMs);
+    if (actualTimeoutMs <= 0) return undefined;
+
+    try {
+      return await withTimeout(
+        operation(),
+        actualTimeoutMs,
+        `Provider discovery timed out after ${actualTimeoutMs}ms`
+      );
+    } catch (error) {
+      logger.warn(
+        `Provider discovery wave failed within its deadline: ${(error as Error).message}`
+      );
+      return undefined;
+    }
   }
 
   /**
@@ -49,14 +118,13 @@ export class LLMExecutor {
       `Running health checks on ${providers.length} provider(s) with ${healthCheckTimeoutMs}ms timeout...`
     );
 
-    const queue = createQueue(this.config.providerMaxParallel);
     const healthyProviders: Provider[] = [];
     const healthCheckResults: ProviderResult[] = [];
     const tasks: Array<Promise<void>> = [];
 
     for (const provider of providers) {
       tasks.push(
-        queue.add(async () => {
+        this.callLimiter.run(async () => {
           const started = Date.now();
           try {
             if (provider.name.startsWith('codex/')) {
@@ -72,7 +140,31 @@ export class LLMExecutor {
               return;
             }
 
-            const isHealthy = await provider.healthCheck(healthCheckTimeoutMs);
+            if (!this.canStartProviderDiscovery()) {
+              const deadlineError = new Error(
+                'Health check skipped because there is not enough time to start a review batch'
+              ) as ErrorWithCode;
+              deadlineError.name = 'TimeoutError';
+              deadlineError.code = 'REVIEW_DEADLINE_REACHED';
+              throw deadlineError;
+            }
+
+            const actualTimeoutMs =
+              this.clampProviderDiscoveryTimeout(healthCheckTimeoutMs);
+            if (actualTimeoutMs <= 0) {
+              const deadlineError = new Error(
+                'Health check skipped because the review execution deadline reserve was reached'
+              ) as ErrorWithCode;
+              deadlineError.name = 'TimeoutError';
+              deadlineError.code = 'REVIEW_DEADLINE_REACHED';
+              throw deadlineError;
+            }
+
+            const isHealthy = await withTimeout(
+              provider.healthCheck(actualTimeoutMs),
+              actualTimeoutMs,
+              `Provider ${provider.name} health check timed out after ${actualTimeoutMs}ms`
+            );
             // Duration is measured immediately after health check completes
             const duration = Date.now() - started;
 
@@ -108,9 +200,11 @@ export class LLMExecutor {
             // Determine if this is a timeout error
             let status: ProviderResult['status'] = 'error';
             if (
+              err.name === 'TimeoutError' ||
               err.message.toLowerCase().includes('timed out') ||
               err.message.toLowerCase().includes('timeout') ||
-              err.code === 'ETIMEDOUT'
+              err.code === 'ETIMEDOUT' ||
+              err.code === 'REVIEW_DEADLINE_REACHED'
             ) {
               status = 'timeout';
             }
@@ -131,7 +225,6 @@ export class LLMExecutor {
     }
 
     await Promise.all(tasks);
-    await queue.onIdle();
 
     logger.info(
       `Health checks complete: ${healthyProviders.length}/${providers.length} provider(s) are responsive`
@@ -145,15 +238,14 @@ export class LLMExecutor {
     prompt: string,
     timeoutMs?: number
   ): Promise<ProviderResult[]> {
-    const queue = createQueue(this.config.providerMaxParallel);
     const results: ProviderResult[] = [];
     const tasks: Array<Promise<void>> = [];
 
     for (const provider of providers) {
       tasks.push(
-        queue.add(async () => {
+        this.callLimiter.run(async () => {
           const started = Date.now();
-          const actualTimeoutMs = this.resolveProviderTimeoutMs(
+          const requestedTimeoutMs = this.resolveProviderTimeoutMs(
             provider,
             timeoutMs
           );
@@ -165,13 +257,26 @@ export class LLMExecutor {
           let previousError: Error | undefined;
           const runner = async () => {
             attempt += 1;
+            const actualTimeoutMs =
+              this.providerExecutionPolicy?.clampTimeoutMs(
+                requestedTimeoutMs
+              ) ?? requestedTimeoutMs;
+            if (actualTimeoutMs <= 0) {
+              const deadlineError = new Error(
+                'Review execution deadline reached before provider invocation'
+              ) as ErrorWithCode;
+              deadlineError.name = 'TimeoutError';
+              deadlineError.code = 'REVIEW_DEADLINE_REACHED';
+              throw deadlineError;
+            }
             return provider.review(
               buildProviderReviewPromptForAttempt(
                 prompt,
                 attempt,
                 previousError
               ),
-              actualTimeoutMs
+              actualTimeoutMs,
+              this.providerExecutionPolicy
             );
           };
 
@@ -182,7 +287,11 @@ export class LLMExecutor {
               maxTimeout: 0,
               retryOn: (error) => {
                 previousError = error;
-                return shouldRetryProviderReviewError(error);
+                return (
+                  shouldRetryProviderReviewError(error) &&
+                  (this.providerExecutionPolicy?.canStartOptionalRetry() ??
+                    true)
+                );
               },
             });
             results.push({
@@ -223,7 +332,6 @@ export class LLMExecutor {
     }
 
     await Promise.all(tasks);
-    await queue.onIdle();
     return results;
   }
 }

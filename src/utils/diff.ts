@@ -340,7 +340,7 @@ export function isRangeWithinSingleHunk(
  */
 export function filterDiffByFiles(
   diff: string,
-  files: { filename: string }[]
+  files: ReadonlyArray<{ filename: string }>
 ): string {
   if (files.length === 0) return '';
   if (!diff || diff.trim().length === 0) return '';
@@ -385,6 +385,73 @@ export function filterDiffByFiles(
 
   // Remove possible trailing empty string from split/join differences
   return chunks.join('\n').trimEnd();
+}
+
+export interface RecoveredFileDiffResult {
+  readonly diff: string;
+  readonly unavailableFiles: readonly string[];
+}
+
+/**
+ * Recover file patches omitted only from an aggregate PR diff. GitHub still
+ * returns those patches through the paginated files API, so bounded batches
+ * can review them without lifting the aggregate memory cap.
+ */
+export function recoverDiffForFiles(
+  aggregateDiff: string,
+  files: ReadonlyArray<{
+    filename: string;
+    status: string;
+    patch?: string;
+    previousFilename?: string;
+  }>
+): RecoveredFileDiffResult {
+  const filtered = filterDiffByFiles(aggregateDiff, files);
+  const includedPaths = extractDiffPaths(filtered);
+  const recoveredBlocks: string[] = [];
+  const unavailableFiles: string[] = [];
+
+  for (const file of files) {
+    if (
+      includedPaths.has(file.filename) ||
+      (file.previousFilename && includedPaths.has(file.previousFilename))
+    ) {
+      continue;
+    }
+    if (!file.patch?.trim()) {
+      unavailableFiles.push(file.filename);
+      continue;
+    }
+
+    const oldPath = file.previousFilename || file.filename;
+    const fromPath = file.status === 'added' ? '/dev/null' : `a/${oldPath}`;
+    const toPath =
+      file.status === 'removed' ? '/dev/null' : `b/${file.filename}`;
+    recoveredBlocks.push(
+      [
+        `diff --git a/${oldPath} b/${file.filename}`,
+        `--- ${fromPath}`,
+        `+++ ${toPath}`,
+        file.patch,
+      ].join('\n')
+    );
+  }
+
+  return {
+    diff: [filtered, ...recoveredBlocks].filter(Boolean).join('\n'),
+    unavailableFiles,
+  };
+}
+
+function extractDiffPaths(diff: string): Set<string> {
+  const paths = new Set<string>();
+  const header = /^diff --git\s+a\/(.+?)\s+b\/(.+)$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = header.exec(diff)) !== null) {
+    paths.add(unquoteGitPath(match[1].trim()));
+    paths.add(unquoteGitPath(match[2].trim()));
+  }
+  return paths;
 }
 
 export interface CompactedDiffFile {

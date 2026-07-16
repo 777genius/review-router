@@ -34,6 +34,10 @@ import {
   appendReviewSummaryMetadata,
   shouldSkipSummaryWriteForExisting,
 } from './summary-metadata';
+import {
+  PullRequestHeadVerificationStatus,
+  verifyPullRequestHead,
+} from './pr-head-guard';
 
 interface ActiveInlineComments {
   keys: Set<string>;
@@ -52,7 +56,7 @@ interface GitHubInlineCommentPayload {
 export interface SummaryPostResult {
   posted: boolean;
   skippedStale: boolean;
-  reason?: 'head_sha_changed' | 'newer_summary_exists';
+  reason?: 'head_sha_changed' | 'head_unverifiable' | 'newer_summary_exists';
 }
 
 type InlineCommentWithLegacyRange = InlineComment & {
@@ -151,6 +155,16 @@ export class CommentPoster {
     }
 
     for (let i = 0; i < chunks.length; i++) {
+      const headGuard = await this.shouldSkipForStaleHead(
+        prNumber,
+        summaryMetadata
+      );
+      if (headGuard.skippedStale) {
+        logger.warn(
+          'Stopping summary write because the PR head is not current'
+        );
+        return headGuard;
+      }
       await withRetry(
         () =>
           octokit.rest.issues.createComment({
@@ -194,6 +208,17 @@ export class CommentPoster {
         !shouldSkipSummaryWriteForExisting(body, summaryMetadata).shouldSkip
       );
     });
+
+    const mutationGuard = await this.shouldSkipForStaleHead(
+      prNumber,
+      summaryMetadata
+    );
+    if (mutationGuard.skippedStale) {
+      logger.warn(
+        'Skipping summary cleanup because the PR head is not current'
+      );
+      return;
+    }
 
     for (const stale of staleSummaries) {
       await withRetry(
@@ -255,6 +280,14 @@ export class CommentPoster {
       logger.info(
         'Creating a new ReviewRouter summary comment because no existing summary was found'
       );
+      return false;
+    }
+    const mutationGuard = await this.shouldSkipForStaleHead(
+      prNumber,
+      summaryMetadata
+    );
+    if (mutationGuard.skippedStale) {
+      logger.warn('Skipping summary update because the PR head is not current');
       return false;
     }
     logger.info(`Updating ReviewRouter summary comment ${target.id}`);
@@ -419,27 +452,54 @@ export class CommentPoster {
     if (!summaryMetadata?.reviewedHeadSha || this.dryRun) {
       return { posted: false, skippedStale: false };
     }
-    try {
-      const response = await this.client.octokit.rest.pulls.get({
-        owner: this.client.owner,
-        repo: this.client.repo,
-        pull_number: prNumber,
-      });
-      const freshHead = response.data.head?.sha;
-      if (freshHead && freshHead !== summaryMetadata.reviewedHeadSha) {
-        return {
-          posted: false,
-          skippedStale: true,
-          reason: 'head_sha_changed',
-        };
-      }
-    } catch (error) {
-      logger.warn(
-        'Failed to refresh PR head before summary write; continuing with existing summary behavior',
-        error as Error
-      );
+    const verification = await verifyPullRequestHead(this.client.octokit, {
+      owner: this.client.owner,
+      repo: this.client.repo,
+      prNumber,
+      expectedHeadSha: summaryMetadata.reviewedHeadSha,
+    });
+    if (verification.status === PullRequestHeadVerificationStatus.Current) {
+      return { posted: false, skippedStale: false };
     }
-    return { posted: false, skippedStale: false };
+    if (verification.status === PullRequestHeadVerificationStatus.Changed) {
+      return {
+        posted: false,
+        skippedStale: true,
+        reason: 'head_sha_changed',
+      };
+    }
+    logger.warn(
+      'Failed to verify the current PR head before summary mutation; failing closed',
+      verification.error as Error | undefined
+    );
+    return {
+      posted: false,
+      skippedStale: true,
+      reason: 'head_unverifiable',
+    };
+  }
+
+  private async canMutateExpectedHead(
+    prNumber: number,
+    expectedHeadSha: string,
+    operation: string
+  ): Promise<boolean> {
+    const verification = await verifyPullRequestHead(this.client.octokit, {
+      owner: this.client.owner,
+      repo: this.client.repo,
+      prNumber,
+      expectedHeadSha,
+    });
+    if (verification.status === PullRequestHeadVerificationStatus.Current) {
+      return true;
+    }
+    logger.warn(
+      verification.status === PullRequestHeadVerificationStatus.Changed
+        ? `Skipping ${operation} because the PR head changed`
+        : `Skipping ${operation} because the current PR head could not be verified`,
+      verification.error as Error | undefined
+    );
+    return false;
   }
 
   private static isSummaryComment(body?: string | null): boolean {
@@ -645,11 +705,23 @@ export class CommentPoster {
     headSha?: string,
     dedupeComments?: InlineCommentReference[]
   ): Promise<void> {
+    if (
+      !this.dryRun &&
+      headSha &&
+      !(await this.canMutateExpectedHead(
+        prNumber,
+        headSha,
+        'inline publication'
+      ))
+    ) {
+      return;
+    }
     if (comments.length === 0) {
       if (!this.dryRun) {
         await this.deleteInlineFallbackComments(
           prNumber,
-          'no current inline findings remain'
+          'no current inline findings remain',
+          headSha
         );
       }
       return;
@@ -875,6 +947,16 @@ export class CommentPoster {
     }
 
     const { octokit, owner, repo } = this.client;
+    if (
+      headSha &&
+      !(await this.canMutateExpectedHead(
+        prNumber,
+        headSha,
+        'inline review creation'
+      ))
+    ) {
+      return;
+    }
     try {
       await withRetry(
         () =>
@@ -882,6 +964,7 @@ export class CommentPoster {
             owner,
             repo,
             pull_number: prNumber,
+            ...(headSha ? { commit_id: headSha } : {}),
             event: 'COMMENT',
             comments: apiComments,
           }),
@@ -889,7 +972,8 @@ export class CommentPoster {
       );
       await this.deleteInlineFallbackComments(
         prNumber,
-        'inline comments posted successfully'
+        'inline comments posted successfully',
+        headSha
       );
     } catch (error) {
       if (!CommentPoster.shouldFallbackInlineReviewError(error)) {
@@ -900,6 +984,16 @@ export class CommentPoster {
         'GitHub inline review API failed; posting inline findings as a PR comment fallback',
         error as Error
       );
+      if (
+        headSha &&
+        !(await this.canMutateExpectedHead(
+          prNumber,
+          headSha,
+          'inline fallback publication'
+        ))
+      ) {
+        return;
+      }
       const remainingComments = headSha
         ? await this.postIndividualInlineComments(
             prNumber,
@@ -912,12 +1006,14 @@ export class CommentPoster {
         await this.postInlineFallback(
           prNumber,
           remainingComments,
-          error as Error
+          error as Error,
+          headSha
         );
       } else {
         await this.deleteInlineFallbackComments(
           prNumber,
-          'inline comments posted successfully'
+          'inline comments posted successfully',
+          headSha
         );
       }
     }
@@ -952,6 +1048,15 @@ export class CommentPoster {
     let postedCount = 0;
 
     for (const comment of comments) {
+      if (
+        !(await this.canMutateExpectedHead(
+          prNumber,
+          headSha,
+          'individual inline comment creation'
+        ))
+      ) {
+        return [...failedComments, ...comments.slice(postedCount)];
+      }
       try {
         await withRetry(
           () =>
@@ -1069,12 +1174,34 @@ export class CommentPoster {
   private async postInlineFallback(
     prNumber: number,
     comments: GitHubInlineCommentPayload[],
-    error: Error
+    error: Error,
+    headSha?: string
   ): Promise<void> {
+    if (
+      headSha &&
+      !(await this.canMutateExpectedHead(
+        prNumber,
+        headSha,
+        'inline fallback comment write'
+      ))
+    ) {
+      return;
+    }
     const { octokit, owner, repo } = this.client;
     const body = CommentPoster.formatInlineFallbackBody(comments, error);
     const chunks = this.chunk(body);
     const existingComments = await this.findInlineFallbackComments(prNumber);
+
+    if (
+      headSha &&
+      !(await this.canMutateExpectedHead(
+        prNumber,
+        headSha,
+        'inline fallback comment write'
+      ))
+    ) {
+      return;
+    }
 
     const updates = Math.min(existingComments.length, chunks.length);
     for (let i = 0; i < updates; i++) {
@@ -1149,8 +1276,19 @@ export class CommentPoster {
 
   private async deleteInlineFallbackComments(
     prNumber: number,
-    reason: string
+    reason: string,
+    headSha?: string
   ): Promise<void> {
+    if (
+      headSha &&
+      !(await this.canMutateExpectedHead(
+        prNumber,
+        headSha,
+        'inline fallback cleanup'
+      ))
+    ) {
+      return;
+    }
     const { octokit, owner, repo } = this.client;
     const existingComments = await this.findInlineFallbackComments(prNumber);
 

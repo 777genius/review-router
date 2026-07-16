@@ -339,4 +339,33 @@ describe('PromptBuilder', () => {
       expect(prompt).toContain('[old_finding_data tag removed]');
     });
   });
+
+  it('keeps every assigned filename visible when a batch has no diff patches', async () => {
+    const builder = new PromptBuilder(DEFAULT_CONFIG);
+    const prompt = await builder.build({
+      ...mockPR,
+      diff: '',
+      files: [
+        {
+          filename: 'src/first-missing.ts',
+          status: 'modified',
+          additions: 10,
+          deletions: 2,
+          changes: 12,
+        },
+        {
+          filename: 'src/second-missing.ts',
+          status: 'modified',
+          additions: 4,
+          deletions: 1,
+          changes: 5,
+        },
+      ],
+    });
+
+    expect(prompt).toContain('src/first-missing.ts');
+    expect(prompt).toContain('src/second-missing.ts');
+    expect(prompt).toContain('metadata-only: unified diff patch unavailable');
+    expect(prompt).not.toContain('additional file(s) truncated');
+  });
 });

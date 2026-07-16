@@ -61,12 +61,14 @@ function createPR(overrides: Partial<PRContext> = {}): PRContext {
 
 describe('PullRequestDescriptionUpdater', () => {
   const updateMock = jest.fn();
+  const getMock = jest.fn();
   const client = {
     owner: 'owner',
     repo: 'repo',
     octokit: {
       rest: {
         pulls: {
+          get: getMock,
           update: updateMock,
         },
       },
@@ -75,6 +77,12 @@ describe('PullRequestDescriptionUpdater', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    getMock.mockResolvedValue({
+      data: {
+        head: { sha: 'head' },
+        body: 'Author-written context stays first.',
+      },
+    });
   });
 
   it('preserves author text before the generated block', () => {
@@ -264,5 +272,37 @@ describe('PullRequestDescriptionUpdater', () => {
         body: expect.stringContaining('Author-written context stays first.'),
       })
     );
+  });
+
+  it('merges into the freshly fetched body and preserves concurrent author edits', async () => {
+    getMock.mockResolvedValueOnce({
+      data: {
+        head: { sha: 'head' },
+        body: 'Author edited this while the review was running.',
+      },
+    });
+    const updater = new PullRequestDescriptionUpdater(client, false);
+
+    await updater.update(createPR());
+
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining(
+          'Author edited this while the review was running.'
+        ),
+      })
+    );
+  });
+
+  it('does not update the body when the PR head changed or is unverifiable', async () => {
+    const updater = new PullRequestDescriptionUpdater(client, false);
+    getMock
+      .mockResolvedValueOnce({ data: { head: { sha: 'new-head' }, body: '' } })
+      .mockRejectedValueOnce(new Error('GitHub unavailable'));
+
+    await updater.update(createPR());
+    await updater.update(createPR());
+
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });

@@ -86,6 +86,7 @@ import {
   chooseBestAddedLineForComment,
   mapAddedLines,
   filterDiffByFiles,
+  recoverDiffForFiles,
 } from '../utils/diff';
 import { BatchOrchestrator } from './batch-orchestrator';
 import { ProgressTracker } from '../github/progress-tracker';
@@ -572,8 +573,11 @@ export class ReviewOrchestrator {
       let providerResults: ProviderResult[] = [];
       let aiAnalysis: ReturnType<typeof summarizeAIDetection> | undefined;
       const unreviewedFiles = new Map<string, string>();
+      const unavailablePatchFiles = new Set<string>();
+      const successfulReviewContexts: PRContext[] = [];
       const loadLimitations: string[] = [];
       let additionalUnreviewedFiles = 0;
+      let hasTransientLlmCoverageGap = false;
       if (
         reviewContext.loadCompleteness?.status ===
         PullRequestLoadStatus.Truncated
@@ -583,14 +587,8 @@ export class ReviewOrchestrator {
             omission.reason ===
             PullRequestLoadOmissionReason.SynthesizedDiffSizeLimit
           ) {
-            for (const filename of omission.omittedFiles) {
-              unreviewedFiles.set(
-                filename,
-                'file patch was omitted by the synthesized diff size limit'
-              );
-            }
-            loadLimitations.push(
-              `${omission.omittedFileCount} file patch(es) were omitted by the synthesized diff size limit`
+            logger.info(
+              `${omission.omittedFileCount} file patch(es) were omitted from the aggregate synthesized diff and will be recovered per batch`
             );
           } else {
             additionalUnreviewedFiles += omission.omittedFileCount ?? 0;
@@ -606,6 +604,19 @@ export class ReviewOrchestrator {
         filesToReview.length === 0 &&
         unreviewedFiles.size === 0 &&
         loadLimitations.length === 0;
+      const hasOnlyDeterministicCoverageGaps = (): boolean => {
+        if (hasTransientLlmCoverageGap) return false;
+        const hasDeterministicGap =
+          unavailablePatchFiles.size > 0 ||
+          additionalUnreviewedFiles > 0 ||
+          loadLimitations.length > 0;
+        return (
+          hasDeterministicGap &&
+          Array.from(unreviewedFiles.keys()).every((filename) =>
+            unavailablePatchFiles.has(filename)
+          )
+        );
+      };
       const requiredHealthyProviders =
         this.requiredHealthyProviderNames(config);
       let providers: Provider[] = [];
@@ -762,6 +773,7 @@ export class ReviewOrchestrator {
             );
           }
           providerResults = allHealthResults;
+          hasTransientLlmCoverageGap = true;
           for (const file of filesToReview) {
             unreviewedFiles.set(
               file.filename,
@@ -847,6 +859,21 @@ export class ReviewOrchestrator {
               this.components.reviewCompatibilityKey ?? '0'.repeat(64),
             providerNames,
           });
+          const createBatchContext = (batch: readonly FileChange[]) => {
+            const recovered = recoverDiffForFiles(reviewContext.diff, batch);
+            for (const filename of recovered.unavailableFiles) {
+              unavailablePatchFiles.add(filename);
+              unreviewedFiles.set(
+                filename,
+                'unified diff patch was unavailable from GitHub and local git'
+              );
+            }
+            return {
+              ...reviewContext,
+              files: [...batch],
+              diff: recovered.diff,
+            } satisfies PRContext;
+          };
           let checkpointSession: ReviewCheckpointSession | null = null;
           if (
             this.components.openReviewCheckpointSession &&
@@ -901,6 +928,9 @@ export class ReviewOrchestrator {
           for (const plannedBatch of batchPlan.batches) {
             const accepted = acceptedCheckpointResults.get(plannedBatch.id);
             if (!accepted) continue;
+            successfulReviewContexts.push(
+              createBatchContext(plannedBatch.files)
+            );
             const restoredResults =
               this.restoreCheckpointProviderResults(accepted);
             await this.recordProviderUsage(
@@ -931,12 +961,7 @@ export class ReviewOrchestrator {
             async (plannedBatch) => {
               const batch = [...plannedBatch.files];
               const batchIndex = plannedBatch.index;
-              const batchDiff = filterDiffByFiles(reviewContext.diff, batch);
-              const batchContext: PRContext = {
-                ...reviewContext,
-                files: batch,
-                diff: batchDiff,
-              };
+              const batchContext = createBatchContext(batch);
               const lifecycleTargetsForBatch =
                 lifecycleTargetsByBatch[batchIndex] ?? [];
               const lifecycleAssignedTargetIds = lifecycleTargetsForBatch.map(
@@ -989,6 +1014,12 @@ export class ReviewOrchestrator {
                     findings: extractFindings(scopedResults),
                     providerResults: scopedResults,
                   });
+                }
+
+                if (
+                  scopedResults.some((result) => result.status === 'success')
+                ) {
+                  successfulReviewContexts.push(batchContext);
                 }
 
                 await this.recordProviderUsage(
@@ -1112,6 +1143,9 @@ export class ReviewOrchestrator {
               );
             }
           }
+          if (batchFailures > 0) {
+            hasTransientLlmCoverageGap = true;
+          }
 
           this.applyLifecycleBatchProviderFailures(
             lifecycleAssignmentRecords,
@@ -1192,7 +1226,7 @@ export class ReviewOrchestrator {
               snapshotAdvancementRequired:
                 (this.components.incrementalSnapshotAdvancementEnabled ??
                   config.incrementalEnabled) &&
-                llmCoverageComplete,
+                (llmCoverageComplete || hasOnlyDeterministicCoverageGaps()),
             });
           }
 
@@ -1308,6 +1342,7 @@ export class ReviewOrchestrator {
         mode: useIncremental && lastReviewData ? 'incremental' : 'full',
         additionalUnreviewedFiles,
         limitations: loadLimitations,
+        reviewedContexts: successfulReviewContexts,
       });
 
       // Merge with previous review if incremental
@@ -1590,7 +1625,10 @@ export class ReviewOrchestrator {
           );
         }
       }
-      if (config.incrementalEnabled && llmCoverageComplete) {
+      if (
+        config.incrementalEnabled &&
+        (llmCoverageComplete || hasOnlyDeterministicCoverageGaps())
+      ) {
         try {
           await this.components.incrementalReviewer.saveReview(pr, review);
         } catch (error) {

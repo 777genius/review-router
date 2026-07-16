@@ -702,6 +702,9 @@ describe('CommentPoster', () => {
 
       expect(mockOctokit.paginate).not.toHaveBeenCalled();
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledWith(
+        expect.objectContaining({ commit_id: 'head-sha' })
+      );
     });
 
     it('suppresses duplicates from trusted unresolved lifecycle dedupe refs', async () => {
@@ -828,7 +831,7 @@ describe('CommentPoster', () => {
             patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
           },
         ],
-        'abc123'
+        'head-sha'
       );
 
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
@@ -836,7 +839,7 @@ describe('CommentPoster', () => {
         owner: 'test-owner',
         repo: 'test-repo',
         pull_number: 123,
-        commit_id: 'abc123',
+        commit_id: 'head-sha',
         path: 'src/test.ts',
         line: 10,
         side: 'RIGHT',
@@ -882,7 +885,7 @@ describe('CommentPoster', () => {
             patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
           },
         ],
-        'abc123'
+        'head-sha'
       );
 
       expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledTimes(
@@ -966,7 +969,7 @@ describe('CommentPoster', () => {
             patch: '@@ -8,3 +8,4 @@\n line8\n line9\n+line10\n line11',
           },
         ],
-        'abc123'
+        'head-sha'
       );
 
       expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledTimes(
@@ -1039,7 +1042,7 @@ describe('CommentPoster', () => {
             patch: '@@ -18,3 +18,4 @@\n line18\n line19\n+line20\n line21',
           },
         ],
-        'abc123'
+        'head-sha'
       );
 
       expect(mockOctokit.rest.pulls.createReviewComment).toHaveBeenCalledTimes(
@@ -1294,6 +1297,82 @@ describe('CommentPoster', () => {
     });
     expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
     expect(mockOctokit.rest.issues.updateComment).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the PR head cannot be verified before summary write', async () => {
+    mockOctokit.rest.pulls.get.mockRejectedValueOnce(
+      new Error('GitHub unavailable')
+    );
+    const poster = new CommentPoster(mockClient, false);
+
+    const result = await poster.postSummary(123, 'summary', true, {
+      reviewedHeadSha: 'head-sha',
+    });
+
+    expect(result).toMatchObject({
+      posted: false,
+      skippedStale: true,
+      reason: 'head_unverifiable',
+    });
+    expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+    expect(mockOctokit.rest.issues.updateComment).not.toHaveBeenCalled();
+  });
+
+  it('does not publish inline findings when the head changes immediately before createReview', async () => {
+    mockOctokit.rest.pulls.get
+      .mockResolvedValueOnce({ data: { head: { sha: 'head-sha' } } })
+      .mockResolvedValueOnce({ data: { head: { sha: 'new-head' } } });
+    const poster = new CommentPoster(mockClient, false);
+
+    await poster.postInline(
+      123,
+      [
+        {
+          path: 'src/test.ts',
+          line: 10,
+          side: 'RIGHT',
+          body: 'Stale finding',
+          severity: 'major',
+        },
+      ],
+      [
+        {
+          filename: 'src/test.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -9,1 +9,2 @@\n line9\n+line10',
+        },
+      ],
+      'head-sha',
+      []
+    );
+
+    expect(mockOctokit.rest.pulls.createReview).not.toHaveBeenCalled();
+    expect(mockOctokit.rest.pulls.createReviewComment).not.toHaveBeenCalled();
+    expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+  });
+
+  it('does not delete summary comments when the head changes after listing', async () => {
+    mockOctokit.rest.pulls.get
+      .mockResolvedValueOnce({ data: { head: { sha: 'head-sha' } } })
+      .mockResolvedValueOnce({ data: { head: { sha: 'new-head' } } });
+    mockOctokit.rest.issues.listComments.mockResolvedValueOnce({
+      data: [
+        {
+          id: 99,
+          body: '<!-- review-router-bot -->\n\n# ReviewRouter\nold',
+        },
+      ],
+    });
+    const poster = new CommentPoster(mockClient, false);
+
+    await poster.deleteSummaryComments(123, {
+      reviewedHeadSha: 'head-sha',
+    });
+
+    expect(mockOctokit.rest.issues.deleteComment).not.toHaveBeenCalled();
   });
 
   it('skips replacing a newer same-head summary', async () => {

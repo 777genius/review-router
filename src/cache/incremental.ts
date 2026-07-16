@@ -21,6 +21,40 @@ export interface IncrementalChangeSet {
   canReusePreviousFindings: boolean;
 }
 
+export enum IncrementalReviewPlanMode {
+  Full = 'full',
+  Delta = 'delta',
+  ReuseCompleted = 'reuse_completed',
+}
+
+export type IncrementalReviewPlan =
+  | {
+      readonly mode: IncrementalReviewPlanMode.Full;
+      readonly files: FileChange[];
+      readonly invalidatedPaths: readonly [];
+      readonly lastReview: null;
+    }
+  | {
+      readonly mode:
+        | IncrementalReviewPlanMode.Delta
+        | IncrementalReviewPlanMode.ReuseCompleted;
+      readonly files: FileChange[];
+      readonly invalidatedPaths: string[];
+      readonly lastReview: IncrementalCacheData;
+    };
+
+type IncrementalReviewDecision =
+  | {
+      readonly mode: IncrementalReviewPlanMode.Full;
+      readonly lastReview: null;
+    }
+  | {
+      readonly mode:
+        | IncrementalReviewPlanMode.Delta
+        | IncrementalReviewPlanMode.ReuseCompleted;
+      readonly lastReview: IncrementalCacheData;
+    };
+
 export interface IncrementalStoragePort {
   read(key: string): Promise<string | null>;
   write(key: string, value: string): Promise<void>;
@@ -51,15 +85,58 @@ export class IncrementalReviewer {
    * Check if incremental review should be used for this PR
    */
   async shouldUseIncremental(pr: PRContext): Promise<boolean> {
+    return (
+      (await this.decideReview(pr)).mode === IncrementalReviewPlanMode.Delta
+    );
+  }
+
+  /**
+   * Decide once whether this head needs a full review, a delta review, or can
+   * reuse an already completed snapshot. Keeping this distinction in the
+   * incremental bounded context prevents callers from treating an unchanged
+   * head as a cache miss and spending provider capacity again.
+   */
+  async planReview(pr: PRContext): Promise<IncrementalReviewPlan> {
+    const decision = await this.decideReview(pr);
+    if (decision.mode === IncrementalReviewPlanMode.Full) {
+      return fullReviewPlan(pr.files);
+    }
+    if (decision.mode === IncrementalReviewPlanMode.ReuseCompleted) {
+      return {
+        mode: decision.mode,
+        files: [],
+        invalidatedPaths: [],
+        lastReview: decision.lastReview,
+      };
+    }
+
+    const changeSet = await this.getIncrementalChangeSet(
+      pr,
+      decision.lastReview.lastReviewedCommit
+    );
+    if (!changeSet.canReusePreviousFindings) {
+      return fullReviewPlan(changeSet.files);
+    }
+    return {
+      mode: IncrementalReviewPlanMode.Delta,
+      files: changeSet.files,
+      invalidatedPaths: changeSet.invalidatedPaths,
+      lastReview: decision.lastReview,
+    };
+  }
+
+  private async decideReview(
+    pr: PRContext
+  ): Promise<IncrementalReviewDecision> {
     if (!this.config.enabled) {
       logger.debug('Incremental review disabled by configuration');
-      return false;
+      return fullReviewDecision();
     }
 
     const lastReview = await this.getLastReview(pr.number);
     if (!lastReview) {
       logger.debug('No previous review found, running full review');
-      return false;
+      return fullReviewDecision();
     }
 
     if (this.config.requireCompatibleSnapshot) {
@@ -74,7 +151,7 @@ export class IncrementalReviewer {
         logger.info(
           'Hosted incremental snapshot is incompatible or expired; running full review'
         );
-        return false;
+        return fullReviewDecision();
       }
     }
 
@@ -86,19 +163,26 @@ export class IncrementalReviewer {
       logger.debug(
         `Cache expired (age: ${ageMinutes} minutes, TTL: ${this.config.cacheTtlDays} days)`
       );
-      return false;
+      return fullReviewDecision();
     }
 
-    // Check if the commit is still reachable
     if (lastReview.lastReviewedCommit === pr.headSha) {
-      logger.debug('PR head SHA unchanged since last review');
-      return false; // No changes, skip review entirely
+      logger.info(
+        `PR head ${pr.headSha.substring(0, 7)} already has a completed review snapshot; reusing it without provider execution`
+      );
+      return {
+        mode: IncrementalReviewPlanMode.ReuseCompleted,
+        lastReview,
+      };
     }
 
     logger.info(
       `Incremental review available from ${lastReview.lastReviewedCommit.substring(0, 7)} to ${pr.headSha.substring(0, 7)}`
     );
-    return true;
+    return {
+      mode: IncrementalReviewPlanMode.Delta,
+      lastReview,
+    };
   }
 
   /**
@@ -333,4 +417,20 @@ ${previousSummary}
   private buildCacheKey(prNumber: number): string {
     return `${IncrementalReviewer.CACHE_KEY_PREFIX}${prNumber}`;
   }
+}
+
+function fullReviewPlan(files: FileChange[]): IncrementalReviewPlan {
+  return {
+    mode: IncrementalReviewPlanMode.Full,
+    files: [...files],
+    invalidatedPaths: [],
+    lastReview: null,
+  };
+}
+
+function fullReviewDecision(): IncrementalReviewDecision {
+  return {
+    mode: IncrementalReviewPlanMode.Full,
+    lastReview: null,
+  };
 }

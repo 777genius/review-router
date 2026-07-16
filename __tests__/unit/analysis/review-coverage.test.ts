@@ -88,7 +88,7 @@ describe('buildReviewCoverage', () => {
         expect.objectContaining({
           path: 'db/migrations/001.sql',
           status: 'compacted',
-          reason: 'migration artifact',
+          reason: 'large diff over 200 bytes',
         }),
         expect.objectContaining({
           path: 'assets/logo.png',

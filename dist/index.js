@@ -29,9 +29,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/retry/lib/retry_operation.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/retry/lib/retry_operation.js
 var require_retry_operation = __commonJS({
-  "node_modules/retry/lib/retry_operation.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/retry/lib/retry_operation.js"(exports2, module2) {
     function RetryOperation(timeouts, options) {
       if (typeof options === "boolean") {
         options = { forever: options };
@@ -164,9 +164,9 @@ var require_retry_operation = __commonJS({
   }
 });
 
-// node_modules/retry/lib/retry.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/retry/lib/retry.js
 var require_retry = __commonJS({
-  "node_modules/retry/lib/retry.js"(exports2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/retry/lib/retry.js"(exports2) {
     var RetryOperation = require_retry_operation();
     exports2.operation = function(options) {
       var timeouts = exports2.timeouts(options);
@@ -250,16 +250,16 @@ var require_retry = __commonJS({
   }
 });
 
-// node_modules/retry/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/retry/index.js
 var require_retry2 = __commonJS({
-  "node_modules/retry/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/retry/index.js"(exports2, module2) {
     module2.exports = require_retry();
   }
 });
 
-// node_modules/universal-user-agent/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/universal-user-agent/dist-node/index.js
 var require_dist_node = __commonJS({
-  "node_modules/universal-user-agent/dist-node/index.js"(exports2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/universal-user-agent/dist-node/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     function getUserAgent() {
@@ -275,9 +275,9 @@ var require_dist_node = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/lib/register.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/register.js
 var require_register = __commonJS({
-  "node_modules/before-after-hook/lib/register.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/register.js"(exports2, module2) {
     module2.exports = register;
     function register(state, name, method, options) {
       if (typeof method !== "function") {
@@ -303,9 +303,9 @@ var require_register = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/lib/add.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/add.js
 var require_add = __commonJS({
-  "node_modules/before-after-hook/lib/add.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/add.js"(exports2, module2) {
     module2.exports = addHook;
     function addHook(state, kind, name, hook) {
       var orig = hook;
@@ -343,9 +343,9 @@ var require_add = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/lib/remove.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/remove.js
 var require_remove = __commonJS({
-  "node_modules/before-after-hook/lib/remove.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/remove.js"(exports2, module2) {
     module2.exports = removeHook;
     function removeHook(state, name, method) {
       if (!state.registry[name]) {
@@ -362,9 +362,9 @@ var require_remove = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/index.js
 var require_before_after_hook = __commonJS({
-  "node_modules/before-after-hook/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/index.js"(exports2, module2) {
     var register = require_register();
     var addHook = require_add();
     var removeHook = require_remove();
@@ -418,9 +418,9 @@ var require_before_after_hook = __commonJS({
   }
 });
 
-// node_modules/@octokit/endpoint/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/endpoint/dist-node/index.js
 var require_dist_node2 = __commonJS({
-  "node_modules/@octokit/endpoint/dist-node/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/endpoint/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -764,9 +764,9 @@ var require_dist_node2 = __commonJS({
   }
 });
 
-// node_modules/deprecation/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/deprecation/dist-node/index.js
 var require_dist_node3 = __commonJS({
-  "node_modules/deprecation/dist-node/index.js"(exports2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/deprecation/dist-node/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var Deprecation = class extends Error {
@@ -782,9 +782,9 @@ var require_dist_node3 = __commonJS({
   }
 });
 
-// node_modules/wrappy/wrappy.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/wrappy/wrappy.js
 var require_wrappy = __commonJS({
-  "node_modules/wrappy/wrappy.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/wrappy/wrappy.js"(exports2, module2) {
     module2.exports = wrappy;
     function wrappy(fn, cb) {
       if (fn && cb) return wrappy(fn)(cb);
@@ -812,9 +812,9 @@ var require_wrappy = __commonJS({
   }
 });
 
-// node_modules/once/once.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/once/once.js
 var require_once = __commonJS({
-  "node_modules/once/once.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/once/once.js"(exports2, module2) {
     var wrappy = require_wrappy();
     module2.exports = wrappy(once);
     module2.exports.strict = wrappy(onceStrict);
@@ -856,9 +856,9 @@ var require_once = __commonJS({
   }
 });
 
-// node_modules/@octokit/request-error/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/request-error/dist-node/index.js
 var require_dist_node4 = __commonJS({
-  "node_modules/@octokit/request-error/dist-node/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/request-error/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
     var __defProp2 = Object.defineProperty;
@@ -948,9 +948,9 @@ var require_dist_node4 = __commonJS({
   }
 });
 
-// node_modules/@octokit/request/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/request/dist-node/index.js
 var require_dist_node5 = __commonJS({
-  "node_modules/@octokit/request/dist-node/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/request/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1158,9 +1158,9 @@ var require_dist_node5 = __commonJS({
   }
 });
 
-// node_modules/@octokit/graphql/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/graphql/dist-node/index.js
 var require_dist_node6 = __commonJS({
-  "node_modules/@octokit/graphql/dist-node/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/graphql/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1295,9 +1295,9 @@ var require_dist_node6 = __commonJS({
   }
 });
 
-// node_modules/@octokit/auth-token/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/auth-token/dist-node/index.js
 var require_dist_node7 = __commonJS({
-  "node_modules/@octokit/auth-token/dist-node/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/auth-token/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1366,9 +1366,9 @@ var require_dist_node7 = __commonJS({
   }
 });
 
-// node_modules/@octokit/core/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/core/dist-node/index.js
 var require_dist_node8 = __commonJS({
-  "node_modules/@octokit/core/dist-node/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/core/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1532,9 +1532,9 @@ var require_dist_node8 = __commonJS({
   }
 });
 
-// node_modules/@octokit/plugin-request-log/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/plugin-request-log/dist-node/index.js
 var require_dist_node9 = __commonJS({
-  "node_modules/@octokit/plugin-request-log/dist-node/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/plugin-request-log/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1582,9 +1582,9 @@ var require_dist_node9 = __commonJS({
   }
 });
 
-// node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
 var require_dist_node10 = __commonJS({
-  "node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1977,9 +1977,9 @@ var require_dist_node10 = __commonJS({
   }
 });
 
-// node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
 var require_dist_node11 = __commonJS({
-  "node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -4210,9 +4210,9 @@ var require_dist_node11 = __commonJS({
   }
 });
 
-// node_modules/@octokit/rest/dist-node/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/dist-node/index.js
 var require_dist_node12 = __commonJS({
-  "node_modules/@octokit/rest/dist-node/index.js"(exports2, module2) {
+  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -4330,7 +4330,7 @@ var fs21 = __toESM(require("fs"));
 var fs2 = __toESM(require("fs"));
 var path = __toESM(require("path"));
 
-// node_modules/js-yaml/dist/js-yaml.mjs
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/js-yaml/dist/js-yaml.mjs
 function isNothing(subject) {
   return typeof subject === "undefined" || subject === null;
 }
@@ -7139,7 +7139,7 @@ var DEFAULT_CONFIG = {
 };
 var FALLBACK_STATIC_PROVIDERS = [...PREFERRED_OPENROUTER_FREE_MODELS];
 
-// node_modules/zod/v3/external.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -7251,7 +7251,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_2) => {
@@ -7385,7 +7385,7 @@ var getParsedType = (data) => {
   }
 };
 
-// node_modules/zod/v3/ZodError.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -7503,7 +7503,7 @@ ZodError.create = (issues) => {
   return error2;
 };
 
-// node_modules/zod/v3/locales/en.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -7606,7 +7606,7 @@ var errorMap = (issue, _ctx) => {
 };
 var en_default = errorMap;
 
-// node_modules/zod/v3/errors.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map2) {
   overrideErrorMap = map2;
@@ -7615,7 +7615,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path: path19, errorMaps, issueData } = params;
   const fullPath = [...path19, ...issueData.path || []];
@@ -7725,14 +7725,14 @@ var isDirty = (x2) => x2.status === "dirty";
 var isValid = (x2) => x2.status === "valid";
 var isAsync = (x2) => typeof Promise !== "undefined" && x2 instanceof Promise;
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// node_modules/zod/v3/types.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path19, key) {
     this._cachedPath = [];
@@ -12749,7 +12749,6 @@ function getSummaryOnlyDiffReason(filename, bytes, changes, options = {}) {
   const lower = filename.toLowerCase();
   if (isDependencyLockPath(lower)) return "dependency lock file";
   if (isGeneratedPath(lower)) return "generated file";
-  if (isMigrationArtifactPath(lower)) return "migration artifact";
   if (bytes > maxFullFileBytes)
     return `large diff over ${maxFullFileBytes} bytes`;
   if (changes > maxFullFileChanges)
@@ -12763,9 +12762,6 @@ function isDependencyLockPath(lower) {
 }
 function isGeneratedPath(lower) {
   return lower.includes("/generated/") || lower.includes("/generated_") || /\.(g|freezed|pb|pbenum|pbjson|pbserver)\.dart$/.test(lower) || /\.generated\.[jt]sx?$/.test(lower) || /\.min\.(js|css)$/.test(lower) || /\.map$/.test(lower);
-}
-function isMigrationArtifactPath(lower) {
-  return /(^|\/)migrations?\//.test(lower) || /(^|\/)schema\//.test(lower) || /(^|\/)prisma\/migrations\//.test(lower);
 }
 function formatSummaryOnlyChunk(chunk, file) {
   return [
@@ -16120,12 +16116,11 @@ var PromptBuilder = class {
       "",
       "CRITICAL RULES (READ CAREFULLY):",
       "",
-      "1. SKIP these file types entirely - DO NOT review them:",
+      "1. SKIP low-signal content, but review changed runtime contracts:",
       "   \u2022 Test files: *.test.ts, *.spec.ts, __tests__/*, *test*, *spec*",
-      "   \u2022 Workflow/CI: .github/workflows/*, .github/actions/*, *.yml in .github/",
-      "   \u2022 Config: *.json, *.yaml, *.yml (except for syntax errors)",
       "   \u2022 Docs: *.md, README*, CHANGELOG*",
-      "   \u2022 Generated/migration/lock files unless you inspect the actual diff and find a real runtime/data risk",
+      "   \u2022 Generated/lock files unless the actual diff creates a runtime or supply-chain risk",
+      "   \u2022 DO review workflow/CI, action manifests, runtime config, schemas, and migrations when changed semantics can break execution, auth, persistence, deployment, data, or public contracts",
       "",
       "2. NEVER report these (they are NOT bugs):",
       '   \u2022 Suggestions ("Consider", "Add", "Should", "Could", "Ensure that", "Validate")',
@@ -16143,6 +16138,7 @@ var PromptBuilder = class {
       "   \u2022 Break a changed helper/API contract that callers rely on, including inverted boolean/filter/ignore semantics",
       "   \u2022 Drop or corrupt structured data used by downstream matching, serialization, cache, UI state, or workflow routing",
       "   \u2022 Break create/update/delete side effects, draft/recovery flows, auth/config behavior, or persisted state",
+      "   \u2022 Break workflow routing, concurrency, cancellation, timeout, permissions, deployment, or migration behavior",
       "",
       "4. CONTEXT CHECKLIST for changed helpers/contracts:",
       "   \u2022 Inspect function names, comments, nearby tests, direct callers, and sibling implementations before deciding findings are empty",
@@ -16413,10 +16409,10 @@ function sanitizeLifecyclePromptField(value, maxLength) {
   );
 }
 
-// node_modules/p-retry/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/p-retry/index.js
 var import_retry = __toESM(require_retry2(), 1);
 
-// node_modules/is-network-error/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/is-network-error/index.js
 var objectToString = Object.prototype.toString;
 var isError = (value) => objectToString.call(value) === "[object Error]";
 var errorMessages = /* @__PURE__ */ new Set([
@@ -16454,7 +16450,7 @@ function isNetworkError(error2) {
   return errorMessages.has(message);
 }
 
-// node_modules/p-retry/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/p-retry/index.js
 var AbortError = class extends Error {
   constructor(message) {
     super();
@@ -16884,6 +16880,14 @@ var LLMExecutor = class {
           let previousError;
           const runner = async () => {
             attempt += 1;
+            if (attempt === 1 && this.policy.deadline && !this.policy.deadline.canStartInitialInvocation()) {
+              const deadlineError = new Error(
+                "Review execution deadline reached while waiting for provider capacity"
+              );
+              deadlineError.name = "TimeoutError";
+              deadlineError.code = "REVIEW_DEADLINE_REACHED";
+              throw deadlineError;
+            }
             const actualTimeoutMs = this.providerExecutionPolicy?.clampTimeoutMs(
               requestedTimeoutMs
             ) ?? requestedTimeoutMs;
@@ -18595,21 +18599,57 @@ var IncrementalReviewer = class _IncrementalReviewer {
    * Check if incremental review should be used for this PR
    */
   async shouldUseIncremental(pr2) {
+    return (await this.decideReview(pr2)).mode === "delta" /* Delta */;
+  }
+  /**
+   * Decide once whether this head needs a full review, a delta review, or can
+   * reuse an already completed snapshot. Keeping this distinction in the
+   * incremental bounded context prevents callers from treating an unchanged
+   * head as a cache miss and spending provider capacity again.
+   */
+  async planReview(pr2) {
+    const decision = await this.decideReview(pr2);
+    if (decision.mode === "full" /* Full */) {
+      return fullReviewPlan(pr2.files);
+    }
+    if (decision.mode === "reuse_completed" /* ReuseCompleted */) {
+      return {
+        mode: decision.mode,
+        files: [],
+        invalidatedPaths: [],
+        lastReview: decision.lastReview
+      };
+    }
+    const changeSet = await this.getIncrementalChangeSet(
+      pr2,
+      decision.lastReview.lastReviewedCommit
+    );
+    if (!changeSet.canReusePreviousFindings) {
+      return fullReviewPlan(changeSet.files);
+    }
+    return {
+      mode: "delta" /* Delta */,
+      files: changeSet.files,
+      invalidatedPaths: changeSet.invalidatedPaths,
+      lastReview: decision.lastReview
+    };
+  }
+  async decideReview(pr2) {
     if (!this.config.enabled) {
       logger.debug("Incremental review disabled by configuration");
-      return false;
+      return fullReviewDecision();
     }
     const lastReview = await this.getLastReview(pr2.number);
     if (!lastReview) {
       logger.debug("No previous review found, running full review");
-      return false;
+      return fullReviewDecision();
     }
     if (this.config.requireCompatibleSnapshot) {
       if (lastReview.schemaVersion !== 1 || lastReview.baseSha !== pr2.baseSha || !this.config.compatibilityKey || lastReview.compatibilityKey !== this.config.compatibilityKey || !lastReview.expiresAt || lastReview.expiresAt <= Date.now()) {
         logger.info(
           "Hosted incremental snapshot is incompatible or expired; running full review"
         );
-        return false;
+        return fullReviewDecision();
       }
     }
     const ageMs = Date.now() - lastReview.timestamp;
@@ -18619,16 +18659,24 @@ var IncrementalReviewer = class _IncrementalReviewer {
       logger.debug(
         `Cache expired (age: ${ageMinutes} minutes, TTL: ${this.config.cacheTtlDays} days)`
       );
-      return false;
+      return fullReviewDecision();
     }
     if (lastReview.lastReviewedCommit === pr2.headSha) {
-      logger.debug("PR head SHA unchanged since last review");
-      return false;
+      logger.info(
+        `PR head ${pr2.headSha.substring(0, 7)} already has a completed review snapshot; reusing it without provider execution`
+      );
+      return {
+        mode: "reuse_completed" /* ReuseCompleted */,
+        lastReview
+      };
     }
     logger.info(
       `Incremental review available from ${lastReview.lastReviewedCommit.substring(0, 7)} to ${pr2.headSha.substring(0, 7)}`
     );
-    return true;
+    return {
+      mode: "delta" /* Delta */,
+      lastReview
+    };
   }
   /**
    * Get the last review data for a PR
@@ -18806,6 +18854,20 @@ ${previousSummary}
     return `${_IncrementalReviewer.CACHE_KEY_PREFIX}${prNumber}`;
   }
 };
+function fullReviewPlan(files) {
+  return {
+    mode: "full" /* Full */,
+    files: [...files],
+    invalidatedPaths: [],
+    lastReview: null
+  };
+}
+function fullReviewDecision() {
+  return {
+    mode: "full" /* Full */,
+    lastReview: null
+  };
+}
 
 // src/cache/review-snapshot-bridge.ts
 var fs11 = __toESM(require("fs/promises"));
@@ -19130,6 +19192,7 @@ var PricingService = class _PricingService {
   cache = /* @__PURE__ */ new Map();
   cacheExpiry = 0;
   static CACHE_TTL = 60 * 60 * 1e3;
+  static FAILURE_CACHE_TTL = 5 * 60 * 1e3;
   async getPricing(modelId) {
     if (modelId.includes(":free")) {
       return { modelId, promptPrice: 0, completionPrice: 0, isFree: true };
@@ -19146,6 +19209,7 @@ var PricingService = class _PricingService {
   }
   async refresh() {
     if (!this.apiKey) return;
+    this.cacheExpiry = Date.now() + _PricingService.FAILURE_CACHE_TTL;
     try {
       const response = await fetch("https://openrouter.ai/api/v1/models", {
         headers: { Authorization: `Bearer ${this.apiKey}` }
@@ -19377,14 +19441,172 @@ var RuleLoader = class {
   }
 };
 
+// src/github/local-git-diff.ts
+var import_child_process8 = require("child_process");
+var GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/i;
+var MAX_LOCAL_DIFF_FILES = 2e4;
+var MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024;
+async function loadPullRequestFilesFromGit(baseSha, headSha) {
+  if (!GIT_OBJECT_ID.test(baseSha) || !GIT_OBJECT_ID.test(headSha)) {
+    return null;
+  }
+  const cwd = process.env.REVIEW_ROUTER_PR_WORKSPACE || process.cwd();
+  try {
+    const range2 = `${baseSha}..${headSha}`;
+    const [nameStatus, numstat] = await Promise.all([
+      runGit(
+        [
+          "diff",
+          "--name-status",
+          "-z",
+          "--find-renames",
+          "--no-ext-diff",
+          range2
+        ],
+        cwd
+      ),
+      runGit(
+        ["diff", "--numstat", "-z", "--find-renames", "--no-ext-diff", range2],
+        cwd
+      )
+    ]);
+    const files = mergeGitDiffMetadata(nameStatus, numstat);
+    if (files.length > MAX_LOCAL_DIFF_FILES) {
+      logger.warn(
+        `Local git diff contains ${files.length} files, exceeding the ${MAX_LOCAL_DIFF_FILES}-file safety limit.`
+      );
+      return null;
+    }
+    return files;
+  } catch (error2) {
+    logger.warn(
+      `Unable to recover the complete PR file list from local git: ${error2 instanceof Error ? error2.message : String(error2)}`
+    );
+    return null;
+  }
+}
+function mergeGitDiffMetadata(nameStatusOutput, numstatOutput) {
+  const statuses = parseNameStatus(nameStatusOutput);
+  const stats = parseNumstat(numstatOutput);
+  return [...statuses.entries()].map(([filename, status]) => {
+    const fileStats = stats.get(filename) || { additions: 0, deletions: 0 };
+    return {
+      filename,
+      status: status.status,
+      additions: fileStats.additions,
+      deletions: fileStats.deletions,
+      changes: fileStats.additions + fileStats.deletions,
+      ...status.previousFilename ? { previousFilename: status.previousFilename } : {}
+    };
+  });
+}
+function parseNameStatus(output) {
+  const fields = splitNullDelimited(output);
+  const statuses = /* @__PURE__ */ new Map();
+  for (let index = 0; index < fields.length; ) {
+    const statusCode = fields[index++];
+    if (!statusCode) {
+      continue;
+    }
+    const kind = statusCode[0];
+    if (kind === "R" || kind === "C") {
+      const previousFilename = fields[index++];
+      const filename2 = fields[index++];
+      if (!previousFilename || !filename2) {
+        throw new Error("Malformed rename entry in git name-status output.");
+      }
+      statuses.set(filename2, {
+        status: kind === "R" ? "renamed" : "added",
+        ...kind === "R" ? { previousFilename } : {}
+      });
+      continue;
+    }
+    const filename = fields[index++];
+    if (!filename) {
+      throw new Error("Malformed entry in git name-status output.");
+    }
+    statuses.set(filename, { status: mapGitStatus(kind) });
+  }
+  return statuses;
+}
+function parseNumstat(output) {
+  const fields = splitNullDelimited(output);
+  const stats = /* @__PURE__ */ new Map();
+  for (let index = 0; index < fields.length; ) {
+    const entry = fields[index++];
+    if (!entry) {
+      continue;
+    }
+    const [rawAdditions, rawDeletions, ...pathParts] = entry.split("	");
+    let filename = pathParts.join("	");
+    if (!filename) {
+      const previousFilename = fields[index++];
+      filename = fields[index++];
+      if (!previousFilename || !filename) {
+        throw new Error("Malformed rename entry in git numstat output.");
+      }
+    }
+    stats.set(filename, {
+      additions: parseLineCount(rawAdditions),
+      deletions: parseLineCount(rawDeletions)
+    });
+  }
+  return stats;
+}
+function splitNullDelimited(output) {
+  const fields = output.split("\0");
+  if (fields.at(-1) === "") {
+    fields.pop();
+  }
+  return fields;
+}
+function parseLineCount(value) {
+  if (!value || value === "-") {
+    return 0;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+function mapGitStatus(status) {
+  switch (status) {
+    case "A":
+      return "added";
+    case "D":
+      return "removed";
+    default:
+      return "modified";
+  }
+}
+function runGit(args, cwd) {
+  return new Promise((resolve3, reject) => {
+    (0, import_child_process8.execFile)(
+      "git",
+      args,
+      {
+        cwd,
+        encoding: "utf8",
+        maxBuffer: MAX_GIT_OUTPUT_BYTES
+      },
+      (error2, stdout) => {
+        if (error2) {
+          reject(error2);
+          return;
+        }
+        resolve3(stdout);
+      }
+    );
+  });
+}
+
 // src/github/pr-loader.ts
 var FILES_PER_PAGE = 100;
 var MAX_GITHUB_FILES = 3e3;
 var MAX_RAW_DIFF_FILES = 300;
 var MAX_SYNTHESIZED_DIFF_BYTES = 8 * 1024 * 1024;
 var PullRequestLoader = class {
-  constructor(client) {
+  constructor(client, localDiffLoader = loadPullRequestFilesFromGit) {
     this.client = client;
+    this.localDiffLoader = localDiffLoader;
   }
   async load(prNumber) {
     const { octokit, owner, repo } = this.client;
@@ -19424,16 +19646,26 @@ var PullRequestLoader = class {
       }
     }
     const omissions = [];
-    const fileLimitOmission = this.getFileLimitOmission(
+    let fileLimitOmission = this.getFileLimitOmission(
       files.length,
       pr2.changed_files
     );
     if (fileLimitOmission) {
-      omissions.push(fileLimitOmission);
-      const omittedCount = fileLimitOmission.omittedFileCount;
-      logger.warn(
-        `PR #${prNumber} reached GitHub's ${MAX_GITHUB_FILES}-file API limit; ${omittedCount === void 0 ? "an unknown number of additional files were" : `${omittedCount} additional file(s) were`} omitted.`
-      );
+      const localFiles = await this.localDiffLoader(baseSha, headSha);
+      const localDiffIsComplete = localFiles !== null && (pr2.changed_files === void 0 ? localFiles.length >= files.length : localFiles.length === pr2.changed_files);
+      if (localFiles && localDiffIsComplete) {
+        files.splice(0, files.length, ...localFiles);
+        fileLimitOmission = null;
+        logger.info(
+          `Recovered the complete ${files.length}-file list for PR #${prNumber} from local git after reaching GitHub's API limit.`
+        );
+      } else {
+        omissions.push(fileLimitOmission);
+        const omittedCount = fileLimitOmission.omittedFileCount;
+        logger.warn(
+          `PR #${prNumber} reached GitHub's ${MAX_GITHUB_FILES}-file API limit; ${omittedCount === void 0 ? "an unknown number of additional files were" : `${omittedCount} additional file(s) were`} omitted.`
+        );
+      }
     }
     const diffResult = await this.fetchDiff(owner, repo, prNumber, files);
     if (diffResult.omittedFiles.length > 0) {
@@ -24428,8 +24660,22 @@ var CodeGraphBuilder = class {
     );
     for (const file of changedFiles) {
       try {
-        graph.removeFile(file.filename);
-        await this.analyzeFile(file, graph);
+        const stalePaths = new Set(
+          [file.previousFilename, file.filename].filter(
+            (value) => Boolean(value)
+          )
+        );
+        for (const stalePath of stalePaths) {
+          graph.removeFile(stalePath);
+          const trackedIndex = graph.files.indexOf(stalePath);
+          if (trackedIndex >= 0) graph.files.splice(trackedIndex, 1);
+        }
+        if (file.status !== "removed") {
+          if (!graph.files.includes(file.filename)) {
+            graph.files.push(file.filename);
+          }
+          await this.analyzeFile(file, graph);
+        }
       } catch (error2) {
         logger.warn(`Failed to analyze ${file.filename}`, error2);
       }
@@ -27685,6 +27931,9 @@ var ExecutionDeadline = class {
   canStartBatch() {
     return this.remainingMs() >= this.windows.completionReserveMs + this.windows.minimumBatchStartWindowMs;
   }
+  canStartInitialInvocation() {
+    return this.canStartBatch();
+  }
   clampProviderTimeout(requestedTimeoutMs) {
     requireNonNegativeFinite(requestedTimeoutMs, "requestedTimeoutMs");
     if (this.deadlineEpochMs === void 0) return requestedTimeoutMs;
@@ -29242,7 +29491,12 @@ var FindingFilter = class {
       return "filter";
     }
     if (this.isWorkflowOrCIFile(finding.file)) {
-      return "filter";
+      if (this.isConcreteRuntimeRegression(finding)) {
+        return "keep";
+      }
+      if (this.isWorkflowSecurityFalsePositive(finding, diffContent) || this.isWorkflowConfigurationIssue(finding)) {
+        return "filter";
+      }
     }
     if (this.isFilterInfrastructure(finding.file)) {
       return "filter";
@@ -30293,7 +30547,7 @@ var TrivialDetector = class {
   }
 };
 
-// node_modules/minimatch/node_modules/balanced-match/dist/esm/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/node_modules/balanced-match/dist/esm/index.js
 var balanced = (a2, b2, str2) => {
   const ma2 = a2 instanceof RegExp ? maybeMatch(a2, str2) : a2;
   const mb = b2 instanceof RegExp ? maybeMatch(b2, str2) : b2;
@@ -30346,7 +30600,7 @@ var range = (a2, b2, str2) => {
   return result;
 };
 
-// node_modules/minimatch/node_modules/brace-expansion/dist/esm/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/node_modules/brace-expansion/dist/esm/index.js
 var escSlash = "\0SLASH" + Math.random() + "\0";
 var escOpen = "\0OPEN" + Math.random() + "\0";
 var escClose = "\0CLOSE" + Math.random() + "\0";
@@ -30506,7 +30760,7 @@ function expand_(str2, max, isTop) {
   return expansions;
 }
 
-// node_modules/minimatch/dist/esm/assert-valid-pattern.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/assert-valid-pattern.js
 var MAX_PATTERN_LENGTH = 1024 * 64;
 var assertValidPattern = (pattern) => {
   if (typeof pattern !== "string") {
@@ -30517,7 +30771,7 @@ var assertValidPattern = (pattern) => {
   }
 };
 
-// node_modules/minimatch/dist/esm/brace-expressions.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/brace-expressions.js
 var posixClasses = {
   "[:alnum:]": ["\\p{L}\\p{Nl}\\p{Nd}", true],
   "[:alpha:]": ["\\p{L}\\p{Nl}", true],
@@ -30626,7 +30880,7 @@ var parseClass = (glob, position) => {
   return [comb, uflag, endPos - pos, true];
 };
 
-// node_modules/minimatch/dist/esm/unescape.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/unescape.js
 var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}) => {
   if (magicalBraces) {
     return windowsPathsNoEscape ? s2.replace(/\[([^/\\])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\])\]/g, "$1$2").replace(/\\([^/])/g, "$1");
@@ -30634,7 +30888,7 @@ var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}
   return windowsPathsNoEscape ? s2.replace(/\[([^/\\{}])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\{}])\]/g, "$1$2").replace(/\\([^/{}])/g, "$1");
 };
 
-// node_modules/minimatch/dist/esm/ast.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/ast.js
 var _a;
 var types = /* @__PURE__ */ new Set(["!", "?", "+", "*", "@"]);
 var isExtglobType = (c2) => types.has(c2);
@@ -31278,7 +31532,7 @@ var AST = class {
 };
 _a = AST;
 
-// node_modules/minimatch/dist/esm/escape.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/escape.js
 var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {}) => {
   if (magicalBraces) {
     return windowsPathsNoEscape ? s2.replace(/[?*()[\]{}]/g, "[$&]") : s2.replace(/[?*()[\]\\{}]/g, "\\$&");
@@ -31286,7 +31540,7 @@ var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {})
   return windowsPathsNoEscape ? s2.replace(/[?*()[\]]/g, "[$&]") : s2.replace(/[?*()[\]\\]/g, "\\$&");
 };
 
-// node_modules/minimatch/dist/esm/index.js
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/index.js
 var minimatch = (p2, pattern, options = {}) => {
   assertValidPattern(pattern);
   if (!options.nocomment && pattern.charAt(0) === "#") {
@@ -33796,55 +34050,6 @@ var ReviewOrchestrator = class {
       progressTracker?.addItem("llm", "LLM review (batched)");
       progressTracker?.addItem("static", "Static analysis & rules");
       progressTracker?.addItem("synthesis", "Synthesize & report");
-      let codeGraph;
-      let contextRetriever = this.components.contextRetriever;
-      if (config.graphEnabled && this.components.graphBuilder) {
-        try {
-          const graphStart = Date.now();
-          if (this.graphCache) {
-            const cached = await this.graphCache.get(pr2.number, pr2.headSha);
-            if (cached) {
-              codeGraph = cached;
-            }
-          }
-          if (codeGraph) {
-            const graphTime = Date.now() - graphStart;
-            logger.info(`Loaded code graph from cache (${graphTime}ms)`);
-            await progressTracker?.updateProgress(
-              "graph",
-              "completed",
-              `Loaded from cache in ${graphTime}ms`
-            );
-          } else {
-            codeGraph = await this.components.graphBuilder.buildGraph(pr2.files);
-            const graphTime = Date.now() - graphStart;
-            logger.info(
-              `Code graph built in ${graphTime}ms: ${codeGraph.getStats().definitions} definitions, ${codeGraph.getStats().imports} imports`
-            );
-            await progressTracker?.updateProgress(
-              "graph",
-              "completed",
-              `Built in ${graphTime}ms`
-            );
-            if (this.graphCache) {
-              await this.graphCache.set(pr2.number, pr2.headSha, codeGraph);
-            }
-          }
-          if (codeGraph) {
-            contextRetriever = new ContextRetriever(codeGraph);
-          }
-        } catch (error2) {
-          logger.warn(
-            "Failed to build code graph, falling back to regex-based context",
-            error2
-          );
-          await progressTracker?.updateProgress(
-            "graph",
-            "failed",
-            "Graph build failed, using regex context"
-          );
-        }
-      }
       let reviewContext = pr2;
       let skippedTrivialFiles = [];
       if (config.skipTrivialChanges) {
@@ -33861,6 +34066,16 @@ var ReviewOrchestrator = class {
         const trivialResult = trivialDetector.detect(pr2.files);
         if (trivialResult.isTrivial) {
           logger.info(`Skipping review: ${trivialResult.reason}`);
+          await progressTracker?.updateProgress(
+            "graph",
+            "completed",
+            "Skipped for trivial review"
+          );
+          await progressTracker?.updateProgress(
+            "llm",
+            "completed",
+            "Skipped for trivial review"
+          );
           const trivialReview = this.createTrivialReview(
             trivialResult.reason,
             pr2.files.length,
@@ -34008,46 +34223,29 @@ var ReviewOrchestrator = class {
       logger.info(
         `Intensity settings: ${intensityProviderLimit} providers, ${intensityTimeout}ms timeout, ${openrouterTimeout}ms OpenRouter timeout (${reviewIntensity} mode)`
       );
-      let useIncremental = await this.components.incrementalReviewer.shouldUseIncremental(
-        reviewContext
-      );
-      let filesToReview = reviewContext.files;
-      let incrementalInvalidatedPaths = [];
-      let lastReviewData = null;
-      if (useIncremental) {
-        lastReviewData = await this.components.incrementalReviewer.getLastReview(
-          reviewContext.number
+      const incrementalPlan = await this.planIncrementalReview(reviewContext);
+      const useIncremental = incrementalPlan.mode !== "full" /* Full */;
+      const filesToReview = [...incrementalPlan.files];
+      const incrementalInvalidatedPaths = [...incrementalPlan.invalidatedPaths];
+      const lastReviewData = incrementalPlan.lastReview;
+      if (incrementalPlan.mode === "delta" /* Delta */) {
+        logger.info(
+          `Incremental review: reviewing ${filesToReview.length} changed files`
         );
-        if (lastReviewData) {
-          const changeSet = await this.components.incrementalReviewer.getIncrementalChangeSet(
-            reviewContext,
-            lastReviewData.lastReviewedCommit
-          );
-          filesToReview = changeSet.files;
-          incrementalInvalidatedPaths = changeSet.invalidatedPaths;
-          if (!changeSet.canReusePreviousFindings) {
-            useIncremental = false;
-            lastReviewData = null;
-          }
-          logger.info(
-            useIncremental ? `Incremental review: reviewing ${filesToReview.length} changed files` : `Incremental diff unavailable: reviewing all ${filesToReview.length} files`
-          );
-          if (codeGraph && this.components.graphBuilder) {
-            try {
-              codeGraph = await this.components.graphBuilder.updateGraph(
-                codeGraph,
-                filesToReview
-              );
-              logger.debug("Code graph updated incrementally");
-            } catch (error2) {
-              logger.warn(
-                "Failed to update code graph incrementally",
-                error2
-              );
-            }
-          }
-        }
+      } else if (incrementalPlan.mode === "reuse_completed" /* ReuseCompleted */) {
+        logger.info(
+          "Completed snapshot matches the current head; provider and static analysis execution will be skipped"
+        );
       }
+      const { codeGraph, contextRetriever } = await this.prepareCodeGraph({
+        prNumber: pr2.number,
+        headSha: pr2.headSha,
+        reviewFiles: reviewContext.files,
+        filesToReview,
+        previousHeadSha: lastReviewData?.lastReviewedCommit,
+        useIncremental,
+        progressTracker
+      });
       const cachedFindings = config.enableCaching ? await this.components.cache.load(reviewContext) : null;
       const reviewPR = useIncremental ? {
         ...reviewContext,
@@ -34055,7 +34253,7 @@ var ReviewOrchestrator = class {
         diff: filterDiffByFiles(reviewContext.diff, filesToReview)
       } : reviewContext;
       let memoryPromptContext;
-      if (this.components.memoryBundleProvider) {
+      if (filesToReview.length > 0 && this.components.memoryBundleProvider) {
         try {
           memoryPromptContext = formatActionMemoryBundleForPrompt(
             await this.components.memoryBundleProvider.fetchBundleForPullRequest(
@@ -34148,36 +34346,39 @@ var ReviewOrchestrator = class {
       }
       let llmCoverageComplete = filesToReview.length === 0 && unreviewedFiles.size === 0 && loadLimitations.length === 0;
       const requiredHealthyProviders = this.requiredHealthyProviderNames(config);
-      let providers = await this.components.providerRegistry.createProviders(config);
-      providers = await this.applyReliabilityFilters(providers);
-      this.assertRequiredProvidersAvailable(
-        requiredHealthyProviders,
-        providers,
-        "provider selection"
-      );
-      if (providers.length === 0) {
-        logger.warn(
-          "All providers filtered out by circuit breakers/reliability; skipping LLM execution"
+      let providers = [];
+      if (filesToReview.length > 0) {
+        providers = await this.components.providerRegistry.createProviders(config);
+        providers = await this.applyReliabilityFilters(providers);
+        this.assertRequiredProvidersAvailable(
+          requiredHealthyProviders,
+          providers,
+          "provider selection"
         );
-        await progressTracker?.updateProgress(
-          "llm",
-          "failed",
-          "No available providers after reliability filtering"
-        );
+        if (providers.length === 0) {
+          logger.warn(
+            "All providers filtered out by circuit breakers/reliability; skipping LLM execution"
+          );
+          await progressTracker?.updateProgress(
+            "llm",
+            "failed",
+            "No available providers after reliability filtering"
+          );
+        }
       }
-      const batchOrchestrator = this.components.batchOrchestrator || new BatchOrchestrator({
-        defaultBatchSize: config.batchMaxFiles || 30,
-        providerOverrides: config.providerBatchOverrides,
-        enableTokenAwareBatching: config.enableTokenAwareBatching,
-        targetTokensPerBatch: config.targetTokensPerBatch,
-        maxBatchSize: config.batchMaxFiles
-      });
       if (filesToReview.length === 0) {
         logger.info(
           "No files to review in incremental update, using cached findings only"
         );
       } else {
         await this.ensureBudget(config);
+        const batchOrchestrator = this.components.batchOrchestrator || new BatchOrchestrator({
+          defaultBatchSize: config.batchMaxFiles || 30,
+          providerOverrides: config.providerBatchOverrides,
+          enableTokenAwareBatching: config.enableTokenAwareBatching,
+          targetTokensPerBatch: config.targetTokensPerBatch,
+          maxBatchSize: config.batchMaxFiles
+        });
         let allHealthResults = [];
         let healthy = [];
         const triedProviders = new Set(providers.map((p2) => p2.name));
@@ -34327,7 +34528,7 @@ var ReviewOrchestrator = class {
             providerNames
           });
           let checkpointSession = null;
-          if (this.components.openReviewCheckpointSession) {
+          if (this.components.openReviewCheckpointSession && batchPlan.batches.length > 1) {
             try {
               checkpointSession = await this.components.openReviewCheckpointSession({
                 pullRequestNumber: pr2.number,
@@ -34343,6 +34544,10 @@ var ReviewOrchestrator = class {
                 error2
               );
             }
+          } else if (this.components.openReviewCheckpointSession) {
+            logger.debug(
+              "Skipping durable batch checkpoint for a single-batch review"
+            );
           }
           const lifecycleTargetsByBatch = lifecycleMode === "off" ? [] : batches.map(
             (batch) => this.lifecycleTargetsForBatch(lifecycleTargets, batch)
@@ -34424,10 +34629,6 @@ var ReviewOrchestrator = class {
                   scopedResults,
                   lifecycleFailedProvidersByTarget
                 );
-                await this.recordProviderUsage(
-                  scopedResults,
-                  config.budgetMaxUsd
-                );
                 const requiredFailure = this.findRequiredProviderExecutionFailure(
                   requiredHealthyProviders,
                   scopedResults
@@ -34440,6 +34641,10 @@ var ReviewOrchestrator = class {
                     providerResults: scopedResults
                   });
                 }
+                await this.recordProviderUsage(
+                  scopedResults,
+                  config.budgetMaxUsd
+                );
                 return scopedResults;
               } catch (error2) {
                 logger.error("Batch execution failed", error2);
@@ -34866,7 +35071,7 @@ var ReviewOrchestrator = class {
       }
       const markdown = this.components.formatter.format(review);
       await this.updatePullRequestDescription(pr2);
-      if (this.components.acceptanceDetector && this.components.providerWeightTracker && this.components.githubClient) {
+      if (config.learningEnabled && this.components.acceptanceDetector && this.components.providerWeightTracker && this.components.githubClient) {
         try {
           await this.detectAndRecordAcceptances(pr2.number);
         } catch (error2) {
@@ -34979,6 +35184,112 @@ var ReviewOrchestrator = class {
   async dispose() {
     this.components.costTracker.reset();
     logger.debug("Orchestrator resources disposed");
+  }
+  async planIncrementalReview(pr2) {
+    const reviewer = this.components.incrementalReviewer;
+    if (typeof reviewer.planReview === "function") {
+      return reviewer.planReview(pr2);
+    }
+    const useIncremental = await reviewer.shouldUseIncremental(pr2);
+    if (!useIncremental) {
+      return {
+        mode: "full" /* Full */,
+        files: [...pr2.files],
+        invalidatedPaths: [],
+        lastReview: null
+      };
+    }
+    const lastReview = await reviewer.getLastReview(pr2.number);
+    if (!lastReview) {
+      return {
+        mode: "full" /* Full */,
+        files: [...pr2.files],
+        invalidatedPaths: [],
+        lastReview: null
+      };
+    }
+    const changeSet = await reviewer.getIncrementalChangeSet(
+      pr2,
+      lastReview.lastReviewedCommit
+    );
+    if (!changeSet.canReusePreviousFindings) {
+      return {
+        mode: "full" /* Full */,
+        files: [...changeSet.files],
+        invalidatedPaths: [],
+        lastReview: null
+      };
+    }
+    return {
+      mode: "delta" /* Delta */,
+      files: [...changeSet.files],
+      invalidatedPaths: [...changeSet.invalidatedPaths],
+      lastReview
+    };
+  }
+  async prepareCodeGraph(input) {
+    const { config, graphBuilder, contextRetriever } = this.components;
+    if (!config.graphEnabled || !graphBuilder) {
+      return { contextRetriever };
+    }
+    if (input.filesToReview.length === 0) {
+      await input.progressTracker?.updateProgress(
+        "graph",
+        "completed",
+        "No changed files require graph analysis"
+      );
+      return { contextRetriever };
+    }
+    try {
+      const startedAt = Date.now();
+      let codeGraph = this.graphCache ? await this.graphCache.get(input.prNumber, input.headSha) : null;
+      let cacheCurrentGraph = false;
+      let source = "current cache";
+      if (!codeGraph && input.useIncremental && input.previousHeadSha && this.graphCache) {
+        const previousGraph = await this.graphCache.get(
+          input.prNumber,
+          input.previousHeadSha
+        );
+        if (previousGraph) {
+          codeGraph = await graphBuilder.updateGraph(
+            previousGraph,
+            input.filesToReview
+          );
+          cacheCurrentGraph = true;
+          source = "incremental cache update";
+        }
+      }
+      if (!codeGraph) {
+        codeGraph = await graphBuilder.buildGraph(input.reviewFiles);
+        cacheCurrentGraph = true;
+        source = "full build";
+      }
+      if (cacheCurrentGraph && this.graphCache) {
+        await this.graphCache.set(input.prNumber, input.headSha, codeGraph);
+      }
+      const durationMs = Date.now() - startedAt;
+      logger.info(`Prepared code graph from ${source} (${durationMs}ms)`);
+      await input.progressTracker?.updateProgress(
+        "graph",
+        "completed",
+        `${source} in ${durationMs}ms`
+      );
+      return {
+        codeGraph,
+        contextRetriever: new ContextRetriever(codeGraph)
+      };
+    } catch (error2) {
+      logger.warn(
+        "Failed to prepare code graph, falling back to regex-based context",
+        error2
+      );
+      await input.progressTracker?.updateProgress(
+        "graph",
+        "failed",
+        "Graph preparation failed, using regex context"
+      );
+      return { contextRetriever };
+    }
   }
   prepareLifecycleTargets(candidates, reviewCommentState, maxTargets) {
     const active = [];
@@ -37165,7 +37476,7 @@ function sanitizeError(error2) {
 var fs17 = __toESM(require("fs/promises"));
 var os6 = __toESM(require("os"));
 var path14 = __toESM(require("path"));
-var import_child_process8 = require("child_process");
+var import_child_process9 = require("child_process");
 var import_util5 = require("util");
 var INTENTS = [
   "question",
@@ -37179,7 +37490,7 @@ var SUGGESTED_ACTIONS = [
   "suggest_rr_skip",
   "ask_for_details"
 ];
-var execFileAsync = (0, import_util5.promisify)(import_child_process8.execFile);
+var execFileAsync = (0, import_util5.promisify)(import_child_process9.execFile);
 var CodexDiscussionResponder = class {
   constructor(model, timeoutMs) {
     this.model = model;
@@ -38137,7 +38448,7 @@ function asRecord2(value) {
 }
 
 // src/codex-oauth/codex-bootstrap.ts
-var import_child_process9 = require("child_process");
+var import_child_process10 = require("child_process");
 var fs18 = __toESM(require("fs/promises"));
 var os7 = __toESM(require("os"));
 var path15 = __toESM(require("path"));
@@ -38188,7 +38499,7 @@ async function ensureCodexOAuthRuntimeParent(env = process.env) {
 async function runCodexBootstrapCommand(input) {
   const args = ["login", "status"];
   await new Promise((resolve3, reject) => {
-    const child = (0, import_child_process9.spawn)(input.binary, args, {
+    const child = (0, import_child_process10.spawn)(input.binary, args, {
       cwd: input.cwd,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
@@ -38459,7 +38770,7 @@ function safeOidcErrorCode(payload) {
 // src/codex-oauth/crypto.ts
 var import_crypto11 = require("crypto");
 
-// node_modules/libsodium/dist/modules-esm/libsodium.mjs
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/libsodium/dist/modules-esm/libsodium.mjs
 var import_meta = {};
 async function A(A3 = {}) {
   var I2, g2 = A3, C2 = !!globalThis.window, B2 = !!globalThis.WorkerGlobalScope, Q2 = (globalThis.process?.versions?.node && globalThis.process, import_meta.url);
@@ -38657,7 +38968,7 @@ async function A(A3 = {}) {
 }
 var libsodium_default = A;
 
-// node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
+// ../../../Users/belief/dev/projects/review-router-action/node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
 var r;
 var t = {};
 if (void 0 === globalThis.crypto || "function" != typeof globalThis.crypto.getRandomValues) throw new Error("globalThis.crypto.getRandomValues is not available. The ESM build of libsodium requires a secure random source (available in all browsers and Node.js 19+).");
@@ -42137,7 +42448,7 @@ function clearCodexRotatingAuthInputSafe() {
 }
 
 // src/codex-oauth/safe-checkout.ts
-var import_child_process10 = require("child_process");
+var import_child_process11 = require("child_process");
 var fs19 = __toESM(require("fs/promises"));
 var os8 = __toESM(require("os"));
 var path17 = __toESM(require("path"));
@@ -42147,28 +42458,28 @@ async function safeCheckoutRepository(input) {
   await assertWorkspaceEmpty(input.workspacePath);
   const gitHome = await fs19.mkdtemp(path17.join(os8.tmpdir(), "reviewrouter-git-"));
   try {
-    await runGit(["init", "."], input.workspacePath, gitHome);
-    await runGit(
+    await runGit2(["init", "."], input.workspacePath, gitHome);
+    await runGit2(
       ["config", "--local", "gc.auto", "0"],
       input.workspacePath,
       gitHome
     );
-    await runGit(
+    await runGit2(
       ["config", "--local", "core.hooksPath", "/dev/null"],
       input.workspacePath,
       gitHome
     );
-    await runGit(
+    await runGit2(
       ["config", "--local", "advice.detachedHead", "false"],
       input.workspacePath,
       gitHome
     );
-    await runGit(
+    await runGit2(
       ["remote", "add", "origin", `https://github.com/${input.repository}.git`],
       input.workspacePath,
       gitHome
     );
-    await runGit(
+    await runGit2(
       [
         "-c",
         "protocol.file.allow=never",
@@ -42188,7 +42499,7 @@ async function safeCheckoutRepository(input) {
       input.workspacePath,
       gitHome
     );
-    await runGit(
+    await runGit2(
       [
         "-c",
         "protocol.file.allow=never",
@@ -42213,9 +42524,9 @@ async function assertWorkspaceEmpty(workspacePath) {
     throw new Error("codex_oauth_workspace_not_empty_before_checkout");
   }
 }
-function runGit(args, cwd, home) {
+function runGit2(args, cwd, home) {
   return new Promise((resolve3, reject) => {
-    const child = (0, import_child_process10.spawn)("git", args, {
+    const child = (0, import_child_process11.spawn)("git", args, {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       env: {

@@ -9,6 +9,7 @@ export class PricingService {
   private cache = new Map<string, ModelPricing>();
   private cacheExpiry = 0;
   private static readonly CACHE_TTL = 60 * 60 * 1000;
+  private static readonly FAILURE_CACHE_TTL = 5 * 60 * 1000;
 
   constructor(private readonly apiKey?: string) {}
 
@@ -33,6 +34,10 @@ export class PricingService {
 
   private async refresh(): Promise<void> {
     if (!this.apiKey) return;
+
+    // Avoid turning a transient pricing outage into one request per provider
+    // result on large reviews. A successful refresh replaces this short TTL.
+    this.cacheExpiry = Date.now() + PricingService.FAILURE_CACHE_TTL;
 
     try {
       const response = await fetch('https://openrouter.ai/api/v1/models', {

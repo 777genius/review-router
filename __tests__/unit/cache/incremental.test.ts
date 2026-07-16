@@ -1,4 +1,7 @@
-import { IncrementalReviewer } from '../../../src/cache/incremental';
+import {
+  IncrementalReviewer,
+  IncrementalReviewPlanMode,
+} from '../../../src/cache/incremental';
 import { CacheStorage } from '../../../src/cache/storage';
 import { PRContext, Review, Finding, FileChange } from '../../../src/types';
 import { execFileSync } from 'child_process';
@@ -96,6 +99,58 @@ describe('IncrementalReviewer', () => {
       const result = await reviewer.shouldUseIncremental(pr);
 
       expect(result).toBe(true);
+    });
+  });
+
+  describe('planReview', () => {
+    it('reuses a completed snapshot when the current head is unchanged', async () => {
+      const snapshot = {
+        prNumber: 1,
+        lastReviewedCommit: 'b'.repeat(40),
+        timestamp: Date.now(),
+        findings: [createMockFinding()],
+        reviewSummary: 'Completed review',
+      };
+      mockStorage.read.mockResolvedValue(JSON.stringify(snapshot));
+
+      const plan = await reviewer.planReview(
+        createMockPR({ headSha: 'b'.repeat(40) })
+      );
+
+      expect(plan).toEqual({
+        mode: IncrementalReviewPlanMode.ReuseCompleted,
+        files: [],
+        invalidatedPaths: [],
+        lastReview: snapshot,
+      });
+      expect(execFileSync).not.toHaveBeenCalled();
+      expect(mockStorage.read).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns an exact delta plan without reading the snapshot twice', async () => {
+      const snapshot = {
+        prNumber: 1,
+        lastReviewedCommit: 'a'.repeat(40),
+        timestamp: Date.now(),
+        findings: [],
+        reviewSummary: 'Completed review',
+      };
+      mockStorage.read.mockResolvedValue(JSON.stringify(snapshot));
+      (execFileSync as jest.Mock).mockReturnValue('M\0src/test.ts\0');
+      const file = createMockFile();
+
+      const plan = await reviewer.planReview(
+        createMockPR({ headSha: 'b'.repeat(40), files: [file] })
+      );
+
+      expect(plan).toEqual({
+        mode: IncrementalReviewPlanMode.Delta,
+        files: [file],
+        invalidatedPaths: ['src/test.ts'],
+        lastReview: snapshot,
+      });
+      expect(mockStorage.read).toHaveBeenCalledTimes(1);
+      expect(execFileSync).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -468,4 +468,51 @@ describe('LLMExecutor', () => {
 
     expect(provider.maxActive).toBe(2);
   });
+
+  it('does not start a queued paid call after its start window closes', async () => {
+    let now = 0;
+    const first = new SequenceProvider('codex/first', [
+      {
+        content: '{"findings":[]}',
+        findings: [],
+        durationSeconds: 0,
+      },
+    ]);
+    const firstReview = first.review.bind(first);
+    first.review = async (prompt: string) => {
+      const result = await firstReview(prompt);
+      now = 80;
+      return result;
+    };
+    const second = new SequenceProvider('codex/second', [
+      {
+        content: '{"findings":[]}',
+        findings: [],
+        durationSeconds: 0,
+      },
+    ]);
+    const deadline = new ExecutionDeadline(
+      100,
+      {
+        completionReserveMs: 20,
+        minimumBatchStartWindowMs: 10,
+        minimumOptionalRetryStartWindowMs: 10,
+      },
+      { now: () => now }
+    );
+    const executor = new LLMExecutor(
+      { ...DEFAULT_CONFIG, providerMaxParallel: 1 },
+      { deadline }
+    );
+
+    const results = await executor.execute([first, second], 'prompt', 100);
+
+    expect(first.prompts).toHaveLength(1);
+    expect(second.prompts).toHaveLength(0);
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'codex/second', status: 'timeout' }),
+      ])
+    );
+  });
 });

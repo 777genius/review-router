@@ -5,6 +5,7 @@
 The incremental review system dramatically reduces review time and cost on PR updates by only reviewing files that have changed since the last review.
 
 **Key Metrics:**
+
 - ⚡ **6x faster** on PR updates (5s vs 30s estimated)
 - 💰 **80% cost reduction** on updates
 - 📝 **Less spam** - updates existing comment
@@ -13,12 +14,14 @@ The incremental review system dramatically reduces review time and cost on PR up
 ## How It Works
 
 ### First Review (Full Review)
+
 ```
 PR opened → Review all 50 files → Post comment → Save state
 Cache: { commit: "abc123", findings: [...], timestamp: now }
 ```
 
 ### Subsequent Review (Incremental)
+
 ```
 PR updated → Check cache → Git diff → Review 3 changed files → Merge findings → Update comment
 Cache updated: { commit: "def456", findings: [...], timestamp: now }
@@ -29,6 +32,7 @@ Cache updated: { commit: "def456", findings: [...], timestamp: now }
 ### Core Components
 
 **IncrementalReviewer** (`src/cache/incremental.ts`)
+
 ```typescript
 class IncrementalReviewer {
   // Check if incremental review should be used
@@ -54,35 +58,45 @@ class IncrementalReviewer {
 ### Decision Logic
 
 ```typescript
-async shouldUseIncremental(pr: PRContext): boolean {
-  // 1. Is incremental enabled?
-  if (!config.incrementalEnabled) return false;
+const plan = await incrementalReviewer.planReview(pr);
 
-  // 2. Do we have a previous review?
-  const lastReview = await getLastReview(pr.number);
-  if (!lastReview) return false;
-
-  // 3. Is cache expired (> TTL days)?
-  const age = Date.now() - lastReview.timestamp;
-  if (age > cacheTtlDays * 24 * 60 * 60 * 1000) return false;
-
-  // 4. Has the PR actually changed?
-  if (lastReview.lastReviewedCommit === pr.headSha) return false;
-
-  return true; // Use incremental!
+switch (plan.mode) {
+  case IncrementalReviewPlanMode.Full:
+    // No compatible completed snapshot: review the current PR inventory.
+    break;
+  case IncrementalReviewPlanMode.Delta:
+    // Review only files changed since the completed snapshot.
+    break;
+  case IncrementalReviewPlanMode.ReuseCompleted:
+    // The exact head is already complete. Skip graph, memory, provider health,
+    // and LLM work.
+    break;
 }
 ```
+
+`planReview` reads completed state once. The legacy boolean
+`shouldUseIncremental` remains a compatibility helper and is true only for the
+`Delta` mode; callers that need correct same-head behavior use the tri-state
+plan.
 
 ### Git Diff Integration
 
 **Important:** Requires full git history for commit comparison. In CI environments:
+
 ```yaml
 - uses: actions/checkout@v4
   with:
-    fetch-depth: 0  # Required for incremental review git diff
+    fetch-depth: 0 # Required for incremental review git diff
 ```
 
 Without full history, `git diff` will fail and automatically fall back to full review.
+
+When GitHub's pull-request files API reaches its 3,000-file ceiling, the hosted
+checkout may recover the complete inventory through bounded local
+`git diff --name-status --numstat`. Recovery is accepted only for validated
+base/head object IDs and when the local count matches GitHub metadata. Missing
+history, a count mismatch, command failure, or a safety-limit hit leaves the
+review explicitly truncated.
 
 ```typescript
 async getChangedFilesSince(pr: PRContext, lastCommit: string): FileChange[] {
@@ -167,10 +181,10 @@ incremental_cache_ttl_days: 7
 ```typescript
 interface IncrementalCacheData {
   prNumber: number;
-  lastReviewedCommit: string;  // Last reviewed SHA
-  timestamp: number;            // When review happened
-  findings: Finding[];          // All findings
-  reviewSummary: string;        // Full summary text
+  lastReviewedCommit: string; // Last reviewed SHA
+  timestamp: number; // When review happened
+  findings: Finding[]; // All findings
+  reviewSummary: string; // Full summary text
 }
 ```
 
@@ -185,6 +199,7 @@ Example: `incremental-review-pr-123`
 ### Storage
 
 Uses the same `CacheStorage` as the main cache:
+
 - GitHub Actions Cache API
 - Persists across workflow runs
 - Shared within repository
@@ -199,6 +214,7 @@ Uses the same `CacheStorage` as the main cache:
 This is an incremental review covering changes from `abc1234` to `def9876`.
 
 **Files reviewed in this update:** 3
+
 - src/auth.ts
 - src/middleware/auth.ts
 - tests/auth.test.ts
@@ -305,6 +321,7 @@ async postSummary(prNumber: number, body: string, updateExisting = true) {
 ### Scenario: 50-file PR, 3 files changed on update
 
 **Full Review (Without Incremental):**
+
 ```
 Load PR          →  2s
 Review 50 files  → 25s (50 files × 0.5s avg)
@@ -314,6 +331,7 @@ Cost: ~$0.015
 ```
 
 **Incremental Review (With Incremental):**
+
 ```
 Load PR          →  2s
 Git diff         →  0.1s
@@ -325,6 +343,7 @@ Cost: ~$0.003
 ```
 
 **Savings:**
+
 - ⚡ **6x faster** (30s → 5s)
 - 💰 **80% cheaper** ($0.015 → $0.003)
 - 📝 **No new comment spam**
@@ -332,31 +351,37 @@ Cost: ~$0.003
 ## Edge Cases Handled
 
 ### 1. No Previous Review
+
 ```
 First review → Full review of all files
 ```
 
 ### 2. Cache Expired
+
 ```
 Last review > 7 days ago → Full review
 ```
 
 ### 3. No Changes
+
 ```
 Commit SHA unchanged → Skip review entirely
 ```
 
 ### 4. Git Diff Fails
+
 ```
 Git error → Fallback to full review of all files
 ```
 
 ### 5. All Files Changed
+
 ```
 50/50 files changed → Review all files (same as full review)
 ```
 
 ### 6. Comment Update Fails
+
 ```
 Can't find existing comment → Create new comment
 ```
@@ -370,6 +395,7 @@ npm test -- __tests__/unit/cache/incremental.test.ts
 ```
 
 **Coverage:**
+
 - ✅ shouldUseIncremental logic
 - ✅ Cache read/write/parse errors
 - ✅ Git diff parsing
@@ -421,26 +447,31 @@ grep "Incremental review" logs.txt
 ## Troubleshooting
 
 ### "Incremental review disabled"
+
 ```
 Check: INCREMENTAL_ENABLED=true in config
 ```
 
 ### "No previous review found"
+
 ```
 Normal on first review. Will be available on next PR update.
 ```
 
 ### "Cache expired"
+
 ```
 Last review was > TTL days ago. Increase INCREMENTAL_CACHE_TTL_DAYS or run reviews more frequently.
 ```
 
 ### "Git diff failed"
+
 ```
 Check git repository is available. Falls back to full review.
 ```
 
 ### "All files treated as changed"
+
 ```
 Git diff may have failed. Check logs for git errors.
 ```
@@ -473,22 +504,27 @@ Git diff may have failed. Check logs for git errors.
 ## Best Practices
 
 ### 1. Enable by Default
+
 ```yaml
-incremental_enabled: true  # On by default
+incremental_enabled: true # On by default
 ```
 
 ### 2. Set Reasonable TTL
+
 ```yaml
-incremental_cache_ttl_days: 7  # 7 days is good default
+incremental_cache_ttl_days: 7 # 7 days is good default
 ```
 
 ### 3. Monitor Cache Hit Rate
+
 Track how often incremental is used vs full review.
 
 ### 4. Test on Real PRs
+
 Run on active development PRs to validate savings.
 
 ### 5. Document for Users
+
 Let users know their PR updates will be faster!
 
 ## FAQ

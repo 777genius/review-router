@@ -257,6 +257,18 @@ export class LLMExecutor {
           let previousError: Error | undefined;
           const runner = async () => {
             attempt += 1;
+            if (
+              attempt === 1 &&
+              this.policy.deadline &&
+              !this.policy.deadline.canStartInitialInvocation()
+            ) {
+              const deadlineError = new Error(
+                'Review execution deadline reached while waiting for provider capacity'
+              ) as ErrorWithCode;
+              deadlineError.name = 'TimeoutError';
+              deadlineError.code = 'REVIEW_DEADLINE_REACHED';
+              throw deadlineError;
+            }
             const actualTimeoutMs =
               this.providerExecutionPolicy?.clampTimeoutMs(
                 requestedTimeoutMs

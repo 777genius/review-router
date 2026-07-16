@@ -982,6 +982,24 @@ index 51097d9..d0723db 100644
       ).toBe(2);
     });
 
+    test('keeps concrete workflow execution regressions', () => {
+      const findings: Finding[] = [
+        {
+          file: '.github/workflows/review.yml',
+          line: 10,
+          severity: 'major',
+          title: 'Provider-wide queue prevents new pull request reviews',
+          message:
+            'cancel-in-progress false now keeps stale synchronize runs, so later pull request reviews never start before old 180-minute workflow jobs finish.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered).toEqual(findings);
+      expect(stats.kept).toBe(1);
+    });
+
     test('filters general workflow security config warnings', () => {
       const findings: Finding[] = [
         {

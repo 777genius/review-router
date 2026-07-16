@@ -436,7 +436,8 @@ describe('PullRequestLoader', () => {
       );
 
       const context = await new PullRequestLoader(
-        createMockClient(mockOctokit)
+        createMockClient(mockOctokit),
+        async () => null
       ).load(1);
 
       expect(context.files).toHaveLength(3000);
@@ -449,6 +450,45 @@ describe('PullRequestLoader', () => {
             omittedFileCount: 7,
           },
         ],
+      });
+    });
+
+    it('recovers files beyond the GitHub API cap from local git', async () => {
+      const apiFiles = Array.from({ length: 3000 }, (_, index) => ({
+        filename: `src/file-${index}.ts`,
+        status: 'modified' as const,
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+        patch: '@@ -0,0 +1 @@\n+export const value = true;',
+      }));
+      const localFiles = Array.from({ length: 3001 }, (_, index) => ({
+        filename: `src/file-${index}.ts`,
+        status: 'modified' as const,
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+      }));
+      const mockOctokit = createMockOctokit();
+      setReportedChangedFiles(mockOctokit, 3001);
+      mockOctokit.rest.pulls.listFiles = jest.fn(({ page, per_page }) =>
+        Promise.resolve({
+          data: apiFiles.slice((page - 1) * per_page, page * per_page),
+        })
+      );
+      const localDiffLoader = jest.fn().mockResolvedValue(localFiles);
+
+      const context = await new PullRequestLoader(
+        createMockClient(mockOctokit),
+        localDiffLoader
+      ).load(1);
+
+      expect(localDiffLoader).toHaveBeenCalledWith('base-sha', 'head-sha');
+      expect(context.files).toHaveLength(3001);
+      expect(context.files.at(-1)?.filename).toBe('src/file-3000.ts');
+      expect(context.loadCompleteness).toEqual({
+        status: PullRequestLoadStatus.Complete,
+        omissions: [],
       });
     });
 
@@ -470,7 +510,8 @@ describe('PullRequestLoader', () => {
       );
 
       const context = await new PullRequestLoader(
-        createMockClient(mockOctokit)
+        createMockClient(mockOctokit),
+        async () => null
       ).load(1);
 
       expect(context.loadCompleteness).toEqual({

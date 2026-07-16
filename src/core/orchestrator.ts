@@ -32,7 +32,11 @@ import {
 import { buildJson } from '../output/json';
 import { buildSarif } from '../output/sarif';
 import { CacheManager } from '../cache/manager';
-import { IncrementalReviewer } from '../cache/incremental';
+import {
+  IncrementalReviewer,
+  IncrementalReviewPlanMode,
+  type IncrementalReviewPlan,
+} from '../cache/incremental';
 import { GraphCache } from '../cache/graph-cache';
 import { CostTracker } from '../cost/tracker';
 import { SecurityScanner } from '../security/scanner';
@@ -225,65 +229,6 @@ export class ReviewOrchestrator {
       progressTracker?.addItem('static', 'Static analysis & rules');
       progressTracker?.addItem('synthesis', 'Synthesize & report');
 
-      // Build code graph if enabled
-      let codeGraph: CodeGraph | undefined;
-      let contextRetriever = this.components.contextRetriever;
-      if (config.graphEnabled && this.components.graphBuilder) {
-        try {
-          const graphStart = Date.now();
-
-          // Try loading from cache first
-          if (this.graphCache) {
-            const cached = await this.graphCache.get(pr.number, pr.headSha);
-            if (cached) {
-              codeGraph = cached;
-            }
-          }
-
-          if (codeGraph) {
-            const graphTime = Date.now() - graphStart;
-            logger.info(`Loaded code graph from cache (${graphTime}ms)`);
-            await progressTracker?.updateProgress(
-              'graph',
-              'completed',
-              `Loaded from cache in ${graphTime}ms`
-            );
-          } else {
-            // Full rebuild
-            codeGraph = await this.components.graphBuilder.buildGraph(pr.files);
-            const graphTime = Date.now() - graphStart;
-            logger.info(
-              `Code graph built in ${graphTime}ms: ${codeGraph.getStats().definitions} definitions, ${codeGraph.getStats().imports} imports`
-            );
-            await progressTracker?.updateProgress(
-              'graph',
-              'completed',
-              `Built in ${graphTime}ms`
-            );
-
-            // Cache the graph
-            if (this.graphCache) {
-              await this.graphCache.set(pr.number, pr.headSha, codeGraph);
-            }
-          }
-
-          // Create new context retriever with graph for this review (don't mutate shared component)
-          if (codeGraph) {
-            contextRetriever = new ContextRetriever(codeGraph);
-          }
-        } catch (error) {
-          logger.warn(
-            'Failed to build code graph, falling back to regex-based context',
-            error as Error
-          );
-          await progressTracker?.updateProgress(
-            'graph',
-            'failed',
-            'Graph build failed, using regex context'
-          );
-        }
-      }
-
       // Check for trivial changes (dependency locks, docs, config files, test fixtures)
       let reviewContext = pr;
       let skippedTrivialFiles: FileChange[] = [];
@@ -304,6 +249,16 @@ export class ReviewOrchestrator {
         if (trivialResult.isTrivial) {
           // Entire PR is trivial - post simple comment and skip review
           logger.info(`Skipping review: ${trivialResult.reason}`);
+          await progressTracker?.updateProgress(
+            'graph',
+            'completed',
+            'Skipped for trivial review'
+          );
+          await progressTracker?.updateProgress(
+            'llm',
+            'completed',
+            'Skipped for trivial review'
+          );
           const trivialReview = this.createTrivialReview(
             trivialResult.reason!,
             pr.files.length,
@@ -484,56 +439,33 @@ export class ReviewOrchestrator {
           `${openrouterTimeout}ms OpenRouter timeout (${reviewIntensity} mode)`
       );
 
-      // Check for incremental review (use reviewContext which may have filtered trivial files)
-      let useIncremental =
-        await this.components.incrementalReviewer.shouldUseIncremental(
-          reviewContext
+      const incrementalPlan = await this.planIncrementalReview(reviewContext);
+      const useIncremental =
+        incrementalPlan.mode !== IncrementalReviewPlanMode.Full;
+      const filesToReview = [...incrementalPlan.files];
+      const incrementalInvalidatedPaths = [...incrementalPlan.invalidatedPaths];
+      const lastReviewData = incrementalPlan.lastReview;
+      if (incrementalPlan.mode === IncrementalReviewPlanMode.Delta) {
+        logger.info(
+          `Incremental review: reviewing ${filesToReview.length} changed files`
         );
-      let filesToReview: FileChange[] = reviewContext.files;
-      let incrementalInvalidatedPaths: string[] = [];
-      let lastReviewData = null;
-
-      if (useIncremental) {
-        lastReviewData =
-          await this.components.incrementalReviewer.getLastReview(
-            reviewContext.number
-          );
-        if (lastReviewData) {
-          const changeSet =
-            await this.components.incrementalReviewer.getIncrementalChangeSet(
-              reviewContext,
-              lastReviewData.lastReviewedCommit
-            );
-          filesToReview = changeSet.files;
-          incrementalInvalidatedPaths = changeSet.invalidatedPaths;
-          if (!changeSet.canReusePreviousFindings) {
-            useIncremental = false;
-            lastReviewData = null;
-          }
-          logger.info(
-            useIncremental
-              ? `Incremental review: reviewing ${filesToReview.length} changed files`
-              : `Incremental diff unavailable: reviewing all ${filesToReview.length} files`
-          );
-
-          // Update graph incrementally if available
-          if (codeGraph && this.components.graphBuilder) {
-            try {
-              codeGraph = await this.components.graphBuilder.updateGraph(
-                codeGraph,
-                filesToReview
-              );
-              logger.debug('Code graph updated incrementally');
-            } catch (error) {
-              logger.warn(
-                'Failed to update code graph incrementally',
-                error as Error
-              );
-            }
-          }
-        }
+      } else if (
+        incrementalPlan.mode === IncrementalReviewPlanMode.ReuseCompleted
+      ) {
+        logger.info(
+          'Completed snapshot matches the current head; provider and static analysis execution will be skipped'
+        );
       }
 
+      const { codeGraph, contextRetriever } = await this.prepareCodeGraph({
+        prNumber: pr.number,
+        headSha: pr.headSha,
+        reviewFiles: reviewContext.files,
+        filesToReview,
+        previousHeadSha: lastReviewData?.lastReviewedCommit,
+        useIncremental,
+        progressTracker,
+      });
       const cachedFindings = config.enableCaching
         ? await this.components.cache.load(reviewContext)
         : null;
@@ -547,7 +479,7 @@ export class ReviewOrchestrator {
           }
         : reviewContext;
       let memoryPromptContext: string | undefined;
-      if (this.components.memoryBundleProvider) {
+      if (filesToReview.length > 0 && this.components.memoryBundleProvider) {
         try {
           memoryPromptContext = formatActionMemoryBundleForPrompt(
             await this.components.memoryBundleProvider.fetchBundleForPullRequest(
@@ -662,34 +594,27 @@ export class ReviewOrchestrator {
         loadLimitations.length === 0;
       const requiredHealthyProviders =
         this.requiredHealthyProviderNames(config);
-      let providers =
-        await this.components.providerRegistry.createProviders(config);
-      providers = await this.applyReliabilityFilters(providers);
-      this.assertRequiredProvidersAvailable(
-        requiredHealthyProviders,
-        providers,
-        'provider selection'
-      );
-      if (providers.length === 0) {
-        logger.warn(
-          'All providers filtered out by circuit breakers/reliability; skipping LLM execution'
+      let providers: Provider[] = [];
+      if (filesToReview.length > 0) {
+        providers =
+          await this.components.providerRegistry.createProviders(config);
+        providers = await this.applyReliabilityFilters(providers);
+        this.assertRequiredProvidersAvailable(
+          requiredHealthyProviders,
+          providers,
+          'provider selection'
         );
-        await progressTracker?.updateProgress(
-          'llm',
-          'failed',
-          'No available providers after reliability filtering'
-        );
+        if (providers.length === 0) {
+          logger.warn(
+            'All providers filtered out by circuit breakers/reliability; skipping LLM execution'
+          );
+          await progressTracker?.updateProgress(
+            'llm',
+            'failed',
+            'No available providers after reliability filtering'
+          );
+        }
       }
-
-      const batchOrchestrator =
-        this.components.batchOrchestrator ||
-        new BatchOrchestrator({
-          defaultBatchSize: config.batchMaxFiles || 30,
-          providerOverrides: config.providerBatchOverrides,
-          enableTokenAwareBatching: config.enableTokenAwareBatching,
-          targetTokensPerBatch: config.targetTokensPerBatch,
-          maxBatchSize: config.batchMaxFiles,
-        });
 
       if (filesToReview.length === 0) {
         logger.info(
@@ -697,6 +622,15 @@ export class ReviewOrchestrator {
         );
       } else {
         await this.ensureBudget(config);
+        const batchOrchestrator =
+          this.components.batchOrchestrator ||
+          new BatchOrchestrator({
+            defaultBatchSize: config.batchMaxFiles || 30,
+            providerOverrides: config.providerBatchOverrides,
+            enableTokenAwareBatching: config.enableTokenAwareBatching,
+            targetTokensPerBatch: config.targetTokensPerBatch,
+            maxBatchSize: config.batchMaxFiles,
+          });
 
         // Health check providers, retrying discovery if we don't hit minimum healthy targets
         let allHealthResults: ProviderResult[] = [];
@@ -900,7 +834,10 @@ export class ReviewOrchestrator {
             providerNames,
           });
           let checkpointSession: ReviewCheckpointSession | null = null;
-          if (this.components.openReviewCheckpointSession) {
+          if (
+            this.components.openReviewCheckpointSession &&
+            batchPlan.batches.length > 1
+          ) {
             try {
               checkpointSession =
                 await this.components.openReviewCheckpointSession({
@@ -917,6 +854,10 @@ export class ReviewOrchestrator {
                 error as Error
               );
             }
+          } else if (this.components.openReviewCheckpointSession) {
+            logger.debug(
+              'Skipping durable batch checkpoint for a single-batch review'
+            );
           }
 
           const lifecycleTargetsByBatch =
@@ -1018,11 +959,6 @@ export class ReviewOrchestrator {
                   lifecycleFailedProvidersByTarget
                 );
 
-                await this.recordProviderUsage(
-                  scopedResults,
-                  config.budgetMaxUsd
-                );
-
                 const requiredFailure =
                   this.findRequiredProviderExecutionFailure(
                     requiredHealthyProviders,
@@ -1040,6 +976,11 @@ export class ReviewOrchestrator {
                     providerResults: scopedResults,
                   });
                 }
+
+                await this.recordProviderUsage(
+                  scopedResults,
+                  config.budgetMaxUsd
+                );
 
                 return scopedResults;
               } catch (error) {
@@ -1560,6 +1501,7 @@ export class ReviewOrchestrator {
 
       // Detect and record suggestion acceptances (positive feedback)
       if (
+        config.learningEnabled &&
         this.components.acceptanceDetector &&
         this.components.providerWeightTracker &&
         this.components.githubClient
@@ -1687,6 +1629,142 @@ export class ReviewOrchestrator {
     // For in-memory caches, would call cache.clear() here
 
     logger.debug('Orchestrator resources disposed');
+  }
+
+  private async planIncrementalReview(
+    pr: PRContext
+  ): Promise<IncrementalReviewPlan> {
+    const reviewer = this.components
+      .incrementalReviewer as IncrementalReviewer & {
+      planReview?: (context: PRContext) => Promise<IncrementalReviewPlan>;
+    };
+    if (typeof reviewer.planReview === 'function') {
+      return reviewer.planReview(pr);
+    }
+
+    const useIncremental = await reviewer.shouldUseIncremental(pr);
+    if (!useIncremental) {
+      return {
+        mode: IncrementalReviewPlanMode.Full,
+        files: [...pr.files],
+        invalidatedPaths: [],
+        lastReview: null,
+      };
+    }
+    const lastReview = await reviewer.getLastReview(pr.number);
+    if (!lastReview) {
+      return {
+        mode: IncrementalReviewPlanMode.Full,
+        files: [...pr.files],
+        invalidatedPaths: [],
+        lastReview: null,
+      };
+    }
+    const changeSet = await reviewer.getIncrementalChangeSet(
+      pr,
+      lastReview.lastReviewedCommit
+    );
+    if (!changeSet.canReusePreviousFindings) {
+      return {
+        mode: IncrementalReviewPlanMode.Full,
+        files: [...changeSet.files],
+        invalidatedPaths: [],
+        lastReview: null,
+      };
+    }
+    return {
+      mode: IncrementalReviewPlanMode.Delta,
+      files: [...changeSet.files],
+      invalidatedPaths: [...changeSet.invalidatedPaths],
+      lastReview,
+    };
+  }
+
+  private async prepareCodeGraph(input: {
+    readonly prNumber: number;
+    readonly headSha: string;
+    readonly reviewFiles: FileChange[];
+    readonly filesToReview: FileChange[];
+    readonly previousHeadSha?: string;
+    readonly useIncremental: boolean;
+    readonly progressTracker?: ProgressTracker;
+  }): Promise<{
+    readonly codeGraph?: CodeGraph;
+    readonly contextRetriever: ContextRetriever;
+  }> {
+    const { config, graphBuilder, contextRetriever } = this.components;
+    if (!config.graphEnabled || !graphBuilder) {
+      return { contextRetriever };
+    }
+    if (input.filesToReview.length === 0) {
+      await input.progressTracker?.updateProgress(
+        'graph',
+        'completed',
+        'No changed files require graph analysis'
+      );
+      return { contextRetriever };
+    }
+
+    try {
+      const startedAt = Date.now();
+      let codeGraph = this.graphCache
+        ? await this.graphCache.get(input.prNumber, input.headSha)
+        : null;
+      let cacheCurrentGraph = false;
+      let source = 'current cache';
+
+      if (
+        !codeGraph &&
+        input.useIncremental &&
+        input.previousHeadSha &&
+        this.graphCache
+      ) {
+        const previousGraph = await this.graphCache.get(
+          input.prNumber,
+          input.previousHeadSha
+        );
+        if (previousGraph) {
+          codeGraph = await graphBuilder.updateGraph(
+            previousGraph,
+            input.filesToReview
+          );
+          cacheCurrentGraph = true;
+          source = 'incremental cache update';
+        }
+      }
+
+      if (!codeGraph) {
+        codeGraph = await graphBuilder.buildGraph(input.reviewFiles);
+        cacheCurrentGraph = true;
+        source = 'full build';
+      }
+      if (cacheCurrentGraph && this.graphCache) {
+        await this.graphCache.set(input.prNumber, input.headSha, codeGraph);
+      }
+
+      const durationMs = Date.now() - startedAt;
+      logger.info(`Prepared code graph from ${source} (${durationMs}ms)`);
+      await input.progressTracker?.updateProgress(
+        'graph',
+        'completed',
+        `${source} in ${durationMs}ms`
+      );
+      return {
+        codeGraph,
+        contextRetriever: new ContextRetriever(codeGraph),
+      };
+    } catch (error) {
+      logger.warn(
+        'Failed to prepare code graph, falling back to regex-based context',
+        error as Error
+      );
+      await input.progressTracker?.updateProgress(
+        'graph',
+        'failed',
+        'Graph preparation failed, using regex context'
+      );
+      return { contextRetriever };
+    }
   }
 
   private prepareLifecycleTargets(

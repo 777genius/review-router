@@ -15,6 +15,10 @@ import {
   ReviewThreadLifecycleBackendResolver,
 } from '../control-plane/review-thread-lifecycle';
 import { logger } from '../utils/logger';
+import {
+  PullRequestHeadVerificationStatus,
+  verifyPullRequestHead,
+} from './pr-head-guard';
 
 export interface ReviewThreadResolveResult {
   resolved: LifecycleResolvedThread[];
@@ -206,6 +210,24 @@ export class ReviewThreadResolver {
         continue;
       }
 
+      const mutationHeadFailure = await this.headMutationFailureReason(
+        prNumber,
+        reviewedHeadSha
+      );
+      if (mutationHeadFailure) {
+        result.skipped.push(
+          ...candidates
+            .slice(index)
+            .map((remaining) =>
+              this.withReason(remaining, [mutationHeadFailure])
+            )
+        );
+        result.warnings.push(
+          'review thread lifecycle mutations stopped because the analyzed PR head is no longer verifiably current'
+        );
+        return result;
+      }
+
       try {
         await this.resolveThread(candidate.target.threadId);
         result.resolved.push({
@@ -227,6 +249,20 @@ export class ReviewThreadResolver {
           return result;
         }
         if (permissionDenied(error) && this.backendResolver) {
+          const backendHeadFailure = await this.headMutationFailureReason(
+            prNumber,
+            reviewedHeadSha
+          );
+          if (backendHeadFailure) {
+            result.skipped.push(
+              ...candidates
+                .slice(index)
+                .map((remaining) =>
+                  this.withReason(remaining, [backendHeadFailure])
+                )
+            );
+            return result;
+          }
           const backendResult = await this.tryBackendResolve(
             prNumber,
             reviewedHeadSha,
@@ -278,6 +314,19 @@ export class ReviewThreadResolver {
           }
         }
 
+        const fallbackHeadFailure = permissionDenied(error)
+          ? await this.headMutationFailureReason(prNumber, reviewedHeadSha)
+          : null;
+        if (fallbackHeadFailure) {
+          result.skipped.push(
+            ...candidates
+              .slice(index)
+              .map((remaining) =>
+                this.withReason(remaining, [fallbackHeadFailure])
+              )
+          );
+          return result;
+        }
         const fallbackCommentPosted = permissionDenied(error)
           ? await this.tryPostResolutionFallbackComment(
               prNumber,
@@ -431,6 +480,29 @@ export class ReviewThreadResolver {
       prNumber,
     });
     return response.repository?.pullRequest?.headRefOid ?? undefined;
+  }
+
+  private async headMutationFailureReason(
+    prNumber: number,
+    reviewedHeadSha: string
+  ): Promise<LifecycleReasonCode | null> {
+    const verification = await verifyPullRequestHead(this.client.octokit, {
+      owner: this.client.owner,
+      repo: this.client.repo,
+      prNumber,
+      expectedHeadSha: reviewedHeadSha,
+    });
+    if (verification.status === PullRequestHeadVerificationStatus.Current) {
+      return null;
+    }
+    if (verification.status === PullRequestHeadVerificationStatus.Changed) {
+      return 'head_sha_changed';
+    }
+    logger.warn(
+      'Failed to verify PR head immediately before review thread lifecycle mutation; failing closed',
+      verification.error as Error | undefined
+    );
+    return 'thread_changed_before_mutation';
   }
 
   private async loadThread(threadId: string): Promise<GraphQLThread | null> {

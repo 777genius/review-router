@@ -17,6 +17,7 @@ export interface BuildReviewCoverageOptions {
   additionalUnreviewedFiles?: number;
   limitations?: readonly string[];
   mode?: ReviewCoverage['mode'];
+  reviewedContexts?: readonly PRContext[];
 }
 
 export function buildReviewCoverage(
@@ -24,16 +25,9 @@ export function buildReviewCoverage(
   config: ReviewConfig,
   options: BuildReviewCoverageOptions = {}
 ): ReviewCoverage {
-  const compacted = compactDiffForPrompt(pr.diff, pr.files, {
-    enabled: config.smartDiffCompaction ?? true,
-    maxFullFileBytes: config.maxFullDiffFileBytes,
-    maxFullFileChanges: config.maxFullDiffFileChanges,
-  });
-  const trimmedDiff = trimDiff(compacted.diff, config.diffMaxBytes);
-  const pathsBeforeTrim = extractDiffDestinationPaths(compacted.diff);
-  const pathsAfterTrim = extractDiffDestinationPaths(trimmedDiff);
-  const compactedByFile = new Map(
-    compacted.summaryOnlyFiles.map((file) => [file.filename, file])
+  const promptCoverageByPath = classifyPromptCoverage(
+    options.reviewedContexts ?? [pr],
+    config
   );
   const unreviewedByPath = new Map(
     (options.unreviewedFiles ?? []).map(({ file, reason }) => [
@@ -43,9 +37,7 @@ export function buildReviewCoverage(
   );
 
   const reviewedFiles: ReviewCoverageFile[] = pr.files.map((file) => {
-    const compactedFile = compactedByFile.get(file.filename);
-    const wasInPromptBeforeTrim = pathsBeforeTrim.has(file.filename);
-    const isInPrompt = pathsAfterTrim.has(file.filename);
+    const promptCoverage = promptCoverageByPath.get(file.filename);
     const base = {
       path: file.filename,
       additions: file.additions,
@@ -61,21 +53,21 @@ export function buildReviewCoverage(
       };
     }
 
-    if (!isInPrompt) {
+    if (!promptCoverage || promptCoverage.status === 'metadata-only') {
       return {
         ...base,
         status: 'metadata-only' as const,
-        reason: wasInPromptBeforeTrim
-          ? 'trimmed by prompt byte budget'
-          : 'no unified diff patch available',
+        reason:
+          promptCoverage?.reason ??
+          'no successful LLM prompt included this file',
       };
     }
 
-    if (compactedFile) {
+    if (promptCoverage.status === 'compacted') {
       return {
         ...base,
         status: 'compacted' as const,
-        reason: compactedFile.reason,
+        reason: promptCoverage.reason,
       };
     }
 
@@ -116,6 +108,65 @@ export function buildReviewCoverage(
     agenticContext: config.codexAgenticContext ?? false,
     files,
   };
+}
+
+function classifyPromptCoverage(
+  contexts: readonly PRContext[],
+  config: ReviewConfig
+): Map<string, Pick<ReviewCoverageFile, 'status' | 'reason'>> {
+  const coverage = new Map<
+    string,
+    Pick<ReviewCoverageFile, 'status' | 'reason'>
+  >();
+  const priority: Record<'metadata-only' | 'compacted' | 'full', number> = {
+    'metadata-only': 1,
+    compacted: 2,
+    full: 3,
+  };
+
+  for (const context of contexts) {
+    const compacted = compactDiffForPrompt(context.diff, context.files, {
+      enabled: config.smartDiffCompaction ?? true,
+      maxFullFileBytes: config.maxFullDiffFileBytes,
+      maxFullFileChanges: config.maxFullDiffFileChanges,
+    });
+    const trimmedDiff = trimDiff(compacted.diff, config.diffMaxBytes);
+    const pathsBeforeTrim = extractDiffDestinationPaths(compacted.diff);
+    const pathsAfterTrim = extractDiffDestinationPaths(trimmedDiff);
+    const compactedByFile = new Map(
+      compacted.summaryOnlyFiles.map((file) => [file.filename, file])
+    );
+
+    for (const file of context.files) {
+      const compactedFile = compactedByFile.get(file.filename);
+      const next = pathsAfterTrim.has(file.filename)
+        ? compactedFile
+          ? ({
+              status: 'compacted' as const,
+              reason: compactedFile.reason,
+            } satisfies Pick<ReviewCoverageFile, 'status' | 'reason'>)
+          : ({ status: 'full' as const } satisfies Pick<
+              ReviewCoverageFile,
+              'status' | 'reason'
+            >)
+        : ({
+            status: 'metadata-only' as const,
+            reason: pathsBeforeTrim.has(file.filename)
+              ? 'trimmed by prompt byte budget'
+              : 'unified diff patch unavailable',
+          } satisfies Pick<ReviewCoverageFile, 'status' | 'reason'>);
+      const previous = coverage.get(file.filename);
+      if (
+        !previous ||
+        priority[next.status as keyof typeof priority] >
+          priority[previous.status as keyof typeof priority]
+      ) {
+        coverage.set(file.filename, next);
+      }
+    }
+  }
+
+  return coverage;
 }
 
 function countByStatus(

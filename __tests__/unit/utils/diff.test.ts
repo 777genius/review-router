@@ -2,6 +2,7 @@ import {
   compactDiffForPrompt,
   filterDiffByFiles,
   isRangeWithinSingleHunk,
+  recoverDiffForFiles,
 } from '../../../src/utils/diff';
 
 const sampleDiff = `diff --git a/src/old.ts b/src/new.ts
@@ -40,6 +41,32 @@ describe('filterDiffByFiles', () => {
     expect(result).toContain('rename to src/new.ts');
     expect(result).toContain('diff --git a/src/keep.ts b/src/keep.ts');
     expect(result).not.toContain('src/remove.ts');
+  });
+
+  it('recovers assigned patches omitted from the aggregate diff', () => {
+    const result = recoverDiffForFiles(sampleDiff, [
+      {
+        filename: 'src/keep.ts',
+        status: 'modified',
+        patch: '@@\n-old\n+new',
+      },
+      {
+        filename: 'src/recovered.ts',
+        status: 'modified',
+        patch: '@@ -0,0 +1 @@\n+export const recovered = true;',
+      },
+      {
+        filename: 'src/unavailable.ts',
+        status: 'modified',
+      },
+    ]);
+
+    expect(result.diff.match(/src\/keep\.ts/g)?.length).toBeGreaterThan(0);
+    expect(result.diff).toContain(
+      'diff --git a/src/recovered.ts b/src/recovered.ts'
+    );
+    expect(result.diff).toContain('export const recovered = true');
+    expect(result.unavailableFiles).toEqual(['src/unavailable.ts']);
   });
 
   it('returns empty string when no files are requested', () => {

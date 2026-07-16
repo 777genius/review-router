@@ -7,6 +7,7 @@ describe('ProgressTracker', () => {
   let createCommentMock: jest.Mock;
   let updateCommentMock: jest.Mock;
   let listCommentsMock: jest.Mock;
+  let getPullMock: jest.Mock;
   let tracker: ProgressTracker;
 
   const config = {
@@ -20,6 +21,9 @@ describe('ProgressTracker', () => {
     createCommentMock = jest.fn();
     updateCommentMock = jest.fn();
     listCommentsMock = jest.fn().mockResolvedValue({ data: [] });
+    getPullMock = jest
+      .fn()
+      .mockResolvedValue({ data: { head: { sha: 'head-sha' } } });
 
     octokit = {
       rest: {
@@ -29,14 +33,48 @@ describe('ProgressTracker', () => {
           listComments: listCommentsMock,
         },
         pulls: {
-          get: jest
-            .fn()
-            .mockResolvedValue({ data: { head: { sha: 'head-sha' } } }),
+          get: getPullMock,
         },
       },
     } as any;
 
     tracker = new ProgressTracker(octokit, config);
+  });
+
+  it('fails closed for progress updates, finalization, and replacement after the head changes', async () => {
+    createCommentMock.mockResolvedValue({ data: { id: 456 } });
+    const guardedConfig = {
+      ...config,
+      summaryMetadata: { reviewedHeadSha: 'head-sha' },
+    };
+    tracker = new ProgressTracker(octokit, guardedConfig);
+    await tracker.initialize();
+    updateCommentMock.mockClear();
+    tracker.addItem('llm', 'LLM review');
+    getPullMock.mockResolvedValue({ data: { head: { sha: 'new-head' } } });
+
+    await tracker.updateProgress('llm', 'completed');
+    await tracker.finalize(true);
+    const replaced = await tracker.replaceWith('# ReviewRouter\n\nfinal');
+
+    expect(replaced).toBe(false);
+    expect(updateCommentMock).not.toHaveBeenCalled();
+  });
+
+  it('does not initialize or replace progress when head verification fails', async () => {
+    createCommentMock.mockResolvedValue({ data: { id: 456 } });
+    tracker = new ProgressTracker(octokit, {
+      ...config,
+      summaryMetadata: { reviewedHeadSha: 'head-sha' },
+    });
+    getPullMock.mockRejectedValue(new Error('GitHub unavailable'));
+
+    await tracker.initialize();
+    const replaced = await tracker.replaceWith('# ReviewRouter\n\nfinal');
+
+    expect(replaced).toBe(false);
+    expect(createCommentMock).not.toHaveBeenCalled();
+    expect(updateCommentMock).not.toHaveBeenCalled();
   });
 
   describe('initialization', () => {

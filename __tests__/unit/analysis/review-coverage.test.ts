@@ -167,4 +167,34 @@ describe('buildReviewCoverage', () => {
       ])
     );
   });
+
+  it('uses successful batch contexts instead of the capped aggregate diff', () => {
+    const input = pr();
+    const recoveredFile = input.files[1];
+    if (!recoveredFile) throw new Error('missing recovered file');
+    const recoveredContext: PRContext = {
+      ...input,
+      files: [recoveredFile],
+      diff: [
+        `diff --git a/${recoveredFile.filename} b/${recoveredFile.filename}`,
+        `--- a/${recoveredFile.filename}`,
+        `+++ b/${recoveredFile.filename}`,
+        '@@ -0,0 +1 @@',
+        '+CREATE TABLE recovered(id int);',
+      ].join('\n'),
+    };
+
+    const coverage = buildReviewCoverage(
+      { ...input, diff: '' },
+      { ...config, smartDiffCompaction: false },
+      { reviewedContexts: [recoveredContext] }
+    );
+
+    expect(coverage.files).toContainEqual(
+      expect.objectContaining({
+        path: recoveredFile.filename,
+        status: 'full',
+      })
+    );
+  });
 });

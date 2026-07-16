@@ -144,23 +144,18 @@ export class PromptBuilder {
       filesInDiff.add(match[2]); // Use the "b/" path (destination)
     }
 
-    // Filter file list to only show files that are in the diff
-    const includedFiles = pr.files.filter((f) => filesInDiff.has(f.filename));
-    const excludedCount = pr.files.length - includedFiles.length;
-
-    const fileList = [
-      ...includedFiles.map((f) => {
+    // Keep every assigned file visible even when GitHub did not provide a
+    // patch. Providers must never receive an anonymous "truncated files" batch.
+    const fileList = pr.files.map((f) => {
+      if (filesInDiff.has(f.filename)) {
         const summaryOnly = summaryOnlyFiles.get(f.filename);
         const suffix = summaryOnly
           ? `, summary-only in prompt: ${summaryOnly.reason}`
           : '';
         return `- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions}${suffix})`;
-      }),
-    ];
-
-    if (excludedCount > 0) {
-      fileList.push(`  (${excludedCount} additional file(s) truncated)`);
-    }
+      }
+      return `- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions}, metadata-only: unified diff patch unavailable)`;
+    });
 
     const _depth =
       this.config.intensityPromptDepth?.[this.intensity] ?? 'standard';

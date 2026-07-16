@@ -12669,6 +12669,46 @@ function filterDiffByFiles(diff, files) {
   pushChunkIfIncluded();
   return chunks.join("\n").trimEnd();
 }
+function recoverDiffForFiles(aggregateDiff, files) {
+  const filtered = filterDiffByFiles(aggregateDiff, files);
+  const includedPaths = extractDiffPaths(filtered);
+  const recoveredBlocks = [];
+  const unavailableFiles = [];
+  for (const file of files) {
+    if (includedPaths.has(file.filename) || file.previousFilename && includedPaths.has(file.previousFilename)) {
+      continue;
+    }
+    if (!file.patch?.trim()) {
+      unavailableFiles.push(file.filename);
+      continue;
+    }
+    const oldPath = file.previousFilename || file.filename;
+    const fromPath = file.status === "added" ? "/dev/null" : `a/${oldPath}`;
+    const toPath = file.status === "removed" ? "/dev/null" : `b/${file.filename}`;
+    recoveredBlocks.push(
+      [
+        `diff --git a/${oldPath} b/${file.filename}`,
+        `--- ${fromPath}`,
+        `+++ ${toPath}`,
+        file.patch
+      ].join("\n")
+    );
+  }
+  return {
+    diff: [filtered, ...recoveredBlocks].filter(Boolean).join("\n"),
+    unavailableFiles
+  };
+}
+function extractDiffPaths(diff) {
+  const paths = /* @__PURE__ */ new Set();
+  const header = /^diff --git\s+a\/(.+?)\s+b\/(.+)$/gm;
+  let match2;
+  while ((match2 = header.exec(diff)) !== null) {
+    paths.add(unquoteGitPath(match2[1].trim()));
+    paths.add(unquoteGitPath(match2[2].trim()));
+  }
+  return paths;
+}
 function compactDiffForPrompt(diff, files, options = {}) {
   if (!options.enabled || !diff.trim()) {
     return { diff, summaryOnlyFiles: [] };
@@ -16098,18 +16138,14 @@ var PromptBuilder = class {
     while ((match2 = diffGitPattern.exec(diff)) !== null) {
       filesInDiff.add(match2[2]);
     }
-    const includedFiles = pr2.files.filter((f2) => filesInDiff.has(f2.filename));
-    const excludedCount = pr2.files.length - includedFiles.length;
-    const fileList = [
-      ...includedFiles.map((f2) => {
+    const fileList = pr2.files.map((f2) => {
+      if (filesInDiff.has(f2.filename)) {
         const summaryOnly = summaryOnlyFiles.get(f2.filename);
         const suffix = summaryOnly ? `, summary-only in prompt: ${summaryOnly.reason}` : "";
         return `- ${f2.filename} (${f2.status}, +${f2.additions}/-${f2.deletions}${suffix})`;
-      })
-    ];
-    if (excludedCount > 0) {
-      fileList.push(`  (${excludedCount} additional file(s) truncated)`);
-    }
+      }
+      return `- ${f2.filename} (${f2.status}, +${f2.additions}/-${f2.deletions}, metadata-only: unified diff patch unavailable)`;
+    });
     const _depth = this.config.intensityPromptDepth?.[this.intensity] ?? "standard";
     const instructions = [
       `You are a code reviewer. ONLY report actual bugs and regressions with concrete evidence - code that will crash, lose data, create security vulnerabilities, cause clear user-visible functional regressions, or break changed-line contracts that callers, tests, workflows, persistence, auth, configuration, MCP tools, or public/internal APIs rely on.`,
@@ -20458,6 +20494,31 @@ function numberFromString(value) {
   return Number.isFinite(parsed) ? parsed : void 0;
 }
 
+// src/github/pr-head-guard.ts
+async function verifyPullRequestHead(octokit, input) {
+  try {
+    const response = await octokit.rest.pulls.get({
+      owner: input.owner,
+      repo: input.repo,
+      pull_number: input.prNumber
+    });
+    const actualHeadSha = response.data.head?.sha?.trim();
+    if (!actualHeadSha) {
+      return { status: "unverifiable" /* Unverifiable */ };
+    }
+    return {
+      status: actualHeadSha.toLowerCase() === input.expectedHeadSha.trim().toLowerCase() ? "current" /* Current */ : "changed" /* Changed */,
+      actualHeadSha,
+      body: response.data.body ?? ""
+    };
+  } catch (error2) {
+    return {
+      status: "unverifiable" /* Unverifiable */,
+      error: error2
+    };
+  }
+}
+
 // src/github/comment-poster.ts
 var CommentPoster = class _CommentPoster {
   constructor(client, dryRun = false, config, suppressionTracker, providerWeightTracker) {
@@ -20528,6 +20589,16 @@ ${content.substring(0, 500)}...`
       if (updated) return { posted: true, skippedStale: false };
     }
     for (let i2 = 0; i2 < chunks.length; i2++) {
+      const headGuard = await this.shouldSkipForStaleHead(
+        prNumber,
+        summaryMetadata
+      );
+      if (headGuard.skippedStale) {
+        logger.warn(
+          "Stopping summary write because the PR head is not current"
+        );
+        return headGuard;
+      }
       await withRetry(
         () => octokit.rest.issues.createComment({
           owner,
@@ -20559,6 +20630,16 @@ ${content.substring(0, 500)}...`
       const body = comment.body ?? "";
       return _CommentPoster.isSummaryComment(body) && !shouldSkipSummaryWriteForExisting(body, summaryMetadata).shouldSkip;
     });
+    const mutationGuard = await this.shouldSkipForStaleHead(
+      prNumber,
+      summaryMetadata
+    );
+    if (mutationGuard.skippedStale) {
+      logger.warn(
+        "Skipping summary cleanup because the PR head is not current"
+      );
+      return;
+    }
     for (const stale of staleSummaries) {
       await withRetry(
         () => octokit.rest.issues.deleteComment({
@@ -20603,6 +20684,14 @@ ${content.substring(0, 500)}...`
       logger.info(
         "Creating a new ReviewRouter summary comment because no existing summary was found"
       );
+      return false;
+    }
+    const mutationGuard = await this.shouldSkipForStaleHead(
+      prNumber,
+      summaryMetadata
+    );
+    if (mutationGuard.skippedStale) {
+      logger.warn("Skipping summary update because the PR head is not current");
       return false;
     }
     logger.info(`Updating ReviewRouter summary comment ${target.id}`);
@@ -20727,27 +20816,47 @@ ${content.substring(0, 500)}...`
     if (!summaryMetadata?.reviewedHeadSha || this.dryRun) {
       return { posted: false, skippedStale: false };
     }
-    try {
-      const response = await this.client.octokit.rest.pulls.get({
-        owner: this.client.owner,
-        repo: this.client.repo,
-        pull_number: prNumber
-      });
-      const freshHead = response.data.head?.sha;
-      if (freshHead && freshHead !== summaryMetadata.reviewedHeadSha) {
-        return {
-          posted: false,
-          skippedStale: true,
-          reason: "head_sha_changed"
-        };
-      }
-    } catch (error2) {
-      logger.warn(
-        "Failed to refresh PR head before summary write; continuing with existing summary behavior",
-        error2
-      );
+    const verification = await verifyPullRequestHead(this.client.octokit, {
+      owner: this.client.owner,
+      repo: this.client.repo,
+      prNumber,
+      expectedHeadSha: summaryMetadata.reviewedHeadSha
+    });
+    if (verification.status === "current" /* Current */) {
+      return { posted: false, skippedStale: false };
     }
-    return { posted: false, skippedStale: false };
+    if (verification.status === "changed" /* Changed */) {
+      return {
+        posted: false,
+        skippedStale: true,
+        reason: "head_sha_changed"
+      };
+    }
+    logger.warn(
+      "Failed to verify the current PR head before summary mutation; failing closed",
+      verification.error
+    );
+    return {
+      posted: false,
+      skippedStale: true,
+      reason: "head_unverifiable"
+    };
+  }
+  async canMutateExpectedHead(prNumber, expectedHeadSha, operation) {
+    const verification = await verifyPullRequestHead(this.client.octokit, {
+      owner: this.client.owner,
+      repo: this.client.repo,
+      prNumber,
+      expectedHeadSha
+    });
+    if (verification.status === "current" /* Current */) {
+      return true;
+    }
+    logger.warn(
+      verification.status === "changed" /* Changed */ ? `Skipping ${operation} because the PR head changed` : `Skipping ${operation} because the current PR head could not be verified`,
+      verification.error
+    );
+    return false;
   }
   static isSummaryComment(body) {
     if (!body) return false;
@@ -20889,11 +20998,19 @@ ${content.substring(0, 500)}...`
     return { valid: true, hasConsensus };
   }
   async postInline(prNumber, comments, files, headSha, dedupeComments) {
+    if (!this.dryRun && headSha && !await this.canMutateExpectedHead(
+      prNumber,
+      headSha,
+      "inline publication"
+    )) {
+      return;
+    }
     if (comments.length === 0) {
       if (!this.dryRun) {
         await this.deleteInlineFallbackComments(
           prNumber,
-          "no current inline findings remain"
+          "no current inline findings remain",
+          headSha
         );
       }
       return;
@@ -21079,12 +21196,20 @@ ${comment.body.substring(0, 200)}...`
       return;
     }
     const { octokit, owner, repo } = this.client;
+    if (headSha && !await this.canMutateExpectedHead(
+      prNumber,
+      headSha,
+      "inline review creation"
+    )) {
+      return;
+    }
     try {
       await withRetry(
         () => octokit.rest.pulls.createReview({
           owner,
           repo,
           pull_number: prNumber,
+          ...headSha ? { commit_id: headSha } : {},
           event: "COMMENT",
           comments: apiComments
         }),
@@ -21092,7 +21217,8 @@ ${comment.body.substring(0, 200)}...`
       );
       await this.deleteInlineFallbackComments(
         prNumber,
-        "inline comments posted successfully"
+        "inline comments posted successfully",
+        headSha
       );
     } catch (error2) {
       if (!_CommentPoster.shouldFallbackInlineReviewError(error2)) {
@@ -21102,6 +21228,13 @@ ${comment.body.substring(0, 200)}...`
         "GitHub inline review API failed; posting inline findings as a PR comment fallback",
         error2
       );
+      if (headSha && !await this.canMutateExpectedHead(
+        prNumber,
+        headSha,
+        "inline fallback publication"
+      )) {
+        return;
+      }
       const remainingComments = headSha ? await this.postIndividualInlineComments(
         prNumber,
         apiComments,
@@ -21112,12 +21245,14 @@ ${comment.body.substring(0, 200)}...`
         await this.postInlineFallback(
           prNumber,
           remainingComments,
-          error2
+          error2,
+          headSha
         );
       } else {
         await this.deleteInlineFallbackComments(
           prNumber,
-          "inline comments posted successfully"
+          "inline comments posted successfully",
+          headSha
         );
       }
     }
@@ -21140,6 +21275,13 @@ ${comment.body.substring(0, 200)}...`
     const failedComments = [];
     let postedCount = 0;
     for (const comment of comments) {
+      if (!await this.canMutateExpectedHead(
+        prNumber,
+        headSha,
+        "individual inline comment creation"
+      )) {
+        return [...failedComments, ...comments.slice(postedCount)];
+      }
       try {
         await withRetry(
           () => octokit.rest.pulls.createReviewComment({
@@ -21226,11 +21368,25 @@ ${comment.body.substring(0, 200)}...`
   static integerOrUndefined(value) {
     return Number.isInteger(value) ? value : void 0;
   }
-  async postInlineFallback(prNumber, comments, error2) {
+  async postInlineFallback(prNumber, comments, error2, headSha) {
+    if (headSha && !await this.canMutateExpectedHead(
+      prNumber,
+      headSha,
+      "inline fallback comment write"
+    )) {
+      return;
+    }
     const { octokit, owner, repo } = this.client;
     const body = _CommentPoster.formatInlineFallbackBody(comments, error2);
     const chunks = this.chunk(body);
     const existingComments = await this.findInlineFallbackComments(prNumber);
+    if (headSha && !await this.canMutateExpectedHead(
+      prNumber,
+      headSha,
+      "inline fallback comment write"
+    )) {
+      return;
+    }
     const updates = Math.min(existingComments.length, chunks.length);
     for (let i2 = 0; i2 < updates; i2++) {
       await withRetry(
@@ -21288,7 +21444,14 @@ ${comment.body.substring(0, 200)}...`
       return [];
     }
   }
-  async deleteInlineFallbackComments(prNumber, reason) {
+  async deleteInlineFallbackComments(prNumber, reason, headSha) {
+    if (headSha && !await this.canMutateExpectedHead(
+      prNumber,
+      headSha,
+      "inline fallback cleanup"
+    )) {
+      return;
+    }
     const { octokit, owner, repo } = this.client;
     const existingComments = await this.findInlineFallbackComments(prNumber);
     for (const comment of existingComments) {
@@ -21418,15 +21581,34 @@ var PullRequestDescriptionUpdater = class {
     this.dryRun = dryRun;
   }
   async update(pr2) {
-    const nextBody = this.merge(pr2.body || "", this.buildGeneratedBlock(pr2));
-    if (nextBody === (pr2.body || "")) {
-      logger.debug("PR description already up to date");
-      return;
-    }
     if (this.dryRun) {
+      const nextBody2 = this.merge(pr2.body || "", this.buildGeneratedBlock(pr2));
+      if (nextBody2 === (pr2.body || "")) {
+        logger.debug("PR description already up to date");
+        return;
+      }
       logger.info(
         `[DRY RUN] Would update PR #${pr2.number} description with ReviewRouter summary`
       );
+      return;
+    }
+    const verification = await verifyPullRequestHead(this.client.octokit, {
+      owner: this.client.owner,
+      repo: this.client.repo,
+      prNumber: pr2.number,
+      expectedHeadSha: pr2.headSha
+    });
+    if (verification.status !== "current" /* Current */) {
+      logger.warn(
+        verification.status === "changed" /* Changed */ ? "Skipping PR description update because the PR head changed" : "Skipping PR description update because the current PR head could not be verified",
+        verification.error
+      );
+      return;
+    }
+    const currentBody = verification.body ?? "";
+    const nextBody = this.merge(currentBody, this.buildGeneratedBlock(pr2));
+    if (nextBody === currentBody) {
+      logger.debug("PR description already up to date");
       return;
     }
     await this.client.octokit.rest.pulls.update({
@@ -27307,6 +27489,21 @@ var ReviewThreadResolver = class {
         result.skipped.push(this.withReason(candidate, guard.reasonCodes));
         continue;
       }
+      const mutationHeadFailure = await this.headMutationFailureReason(
+        prNumber,
+        reviewedHeadSha
+      );
+      if (mutationHeadFailure) {
+        result.skipped.push(
+          ...candidates.slice(index).map(
+            (remaining) => this.withReason(remaining, [mutationHeadFailure])
+          )
+        );
+        result.warnings.push(
+          "review thread lifecycle mutations stopped because the analyzed PR head is no longer verifiably current"
+        );
+        return result;
+      }
       try {
         await this.resolveThread(candidate.target.threadId);
         result.resolved.push({
@@ -27326,6 +27523,18 @@ var ReviewThreadResolver = class {
           return result;
         }
         if (permissionDenied(error2) && this.backendResolver) {
+          const backendHeadFailure = await this.headMutationFailureReason(
+            prNumber,
+            reviewedHeadSha
+          );
+          if (backendHeadFailure) {
+            result.skipped.push(
+              ...candidates.slice(index).map(
+                (remaining) => this.withReason(remaining, [backendHeadFailure])
+              )
+            );
+            return result;
+          }
           const backendResult = await this.tryBackendResolve(
             prNumber,
             reviewedHeadSha,
@@ -27375,6 +27584,15 @@ var ReviewThreadResolver = class {
             );
             continue;
           }
+        }
+        const fallbackHeadFailure = permissionDenied(error2) ? await this.headMutationFailureReason(prNumber, reviewedHeadSha) : null;
+        if (fallbackHeadFailure) {
+          result.skipped.push(
+            ...candidates.slice(index).map(
+              (remaining) => this.withReason(remaining, [fallbackHeadFailure])
+            )
+          );
+          return result;
         }
         const fallbackCommentPosted = permissionDenied(error2) ? await this.tryPostResolutionFallbackComment(
           prNumber,
@@ -27476,6 +27694,25 @@ var ReviewThreadResolver = class {
       prNumber
     });
     return response.repository?.pullRequest?.headRefOid ?? void 0;
+  }
+  async headMutationFailureReason(prNumber, reviewedHeadSha) {
+    const verification = await verifyPullRequestHead(this.client.octokit, {
+      owner: this.client.owner,
+      repo: this.client.repo,
+      prNumber,
+      expectedHeadSha: reviewedHeadSha
+    });
+    if (verification.status === "current" /* Current */) {
+      return null;
+    }
+    if (verification.status === "changed" /* Changed */) {
+      return "head_sha_changed";
+    }
+    logger.warn(
+      "Failed to verify PR head immediately before review thread lifecycle mutation; failing closed",
+      verification.error
+    );
+    return "thread_changed_before_mutation";
   }
   async loadThread(threadId) {
     const response = await this.graphql(
@@ -32800,16 +33037,9 @@ function createDefaultPathMatcherConfig() {
 
 // src/analysis/review-coverage.ts
 function buildReviewCoverage(pr2, config, options = {}) {
-  const compacted = compactDiffForPrompt(pr2.diff, pr2.files, {
-    enabled: config.smartDiffCompaction ?? true,
-    maxFullFileBytes: config.maxFullDiffFileBytes,
-    maxFullFileChanges: config.maxFullDiffFileChanges
-  });
-  const trimmedDiff = trimDiff(compacted.diff, config.diffMaxBytes);
-  const pathsBeforeTrim = extractDiffDestinationPaths(compacted.diff);
-  const pathsAfterTrim = extractDiffDestinationPaths(trimmedDiff);
-  const compactedByFile = new Map(
-    compacted.summaryOnlyFiles.map((file) => [file.filename, file])
+  const promptCoverageByPath = classifyPromptCoverage(
+    options.reviewedContexts ?? [pr2],
+    config
   );
   const unreviewedByPath = new Map(
     (options.unreviewedFiles ?? []).map(({ file, reason }) => [
@@ -32818,9 +33048,7 @@ function buildReviewCoverage(pr2, config, options = {}) {
     ])
   );
   const reviewedFiles = pr2.files.map((file) => {
-    const compactedFile = compactedByFile.get(file.filename);
-    const wasInPromptBeforeTrim = pathsBeforeTrim.has(file.filename);
-    const isInPrompt = pathsAfterTrim.has(file.filename);
+    const promptCoverage = promptCoverageByPath.get(file.filename);
     const base = {
       path: file.filename,
       additions: file.additions,
@@ -32834,18 +33062,18 @@ function buildReviewCoverage(pr2, config, options = {}) {
         reason: unreviewedReason
       };
     }
-    if (!isInPrompt) {
+    if (!promptCoverage || promptCoverage.status === "metadata-only") {
       return {
         ...base,
         status: "metadata-only",
-        reason: wasInPromptBeforeTrim ? "trimmed by prompt byte budget" : "no unified diff patch available"
+        reason: promptCoverage?.reason ?? "no successful LLM prompt included this file"
       };
     }
-    if (compactedFile) {
+    if (promptCoverage.status === "compacted") {
       return {
         ...base,
         status: "compacted",
-        reason: compactedFile.reason
+        reason: promptCoverage.reason
       };
     }
     return {
@@ -32882,6 +33110,42 @@ function buildReviewCoverage(pr2, config, options = {}) {
     agenticContext: config.codexAgenticContext ?? false,
     files
   };
+}
+function classifyPromptCoverage(contexts, config) {
+  const coverage = /* @__PURE__ */ new Map();
+  const priority = {
+    "metadata-only": 1,
+    compacted: 2,
+    full: 3
+  };
+  for (const context of contexts) {
+    const compacted = compactDiffForPrompt(context.diff, context.files, {
+      enabled: config.smartDiffCompaction ?? true,
+      maxFullFileBytes: config.maxFullDiffFileBytes,
+      maxFullFileChanges: config.maxFullDiffFileChanges
+    });
+    const trimmedDiff = trimDiff(compacted.diff, config.diffMaxBytes);
+    const pathsBeforeTrim = extractDiffDestinationPaths(compacted.diff);
+    const pathsAfterTrim = extractDiffDestinationPaths(trimmedDiff);
+    const compactedByFile = new Map(
+      compacted.summaryOnlyFiles.map((file) => [file.filename, file])
+    );
+    for (const file of context.files) {
+      const compactedFile = compactedByFile.get(file.filename);
+      const next = pathsAfterTrim.has(file.filename) ? compactedFile ? {
+        status: "compacted",
+        reason: compactedFile.reason
+      } : { status: "full" } : {
+        status: "metadata-only",
+        reason: pathsBeforeTrim.has(file.filename) ? "trimmed by prompt byte budget" : "unified diff patch unavailable"
+      };
+      const previous = coverage.get(file.filename);
+      if (!previous || priority[next.status] > priority[previous.status]) {
+        coverage.set(file.filename, next);
+      }
+    }
+  }
+  return coverage;
 }
 function countByStatus(files, status) {
   return files.filter((file) => file.status === status).length;
@@ -33329,6 +33593,9 @@ var ProgressTracker = class _ProgressTracker {
       return;
     }
     try {
+      if (!await this.canMutateCurrentHead("progress initialization")) {
+        return;
+      }
       const body = this.formatProgressComment();
       const existing = await this.findReusableComment();
       if (existing.blockedByNewerSummary) {
@@ -33491,6 +33758,9 @@ var ProgressTracker = class _ProgressTracker {
       return;
     }
     try {
+      if (!await this.canMutateCurrentHead("progress update")) {
+        return;
+      }
       const body = this.overrideBody ?? this.formatProgressComment();
       await this.octokit.rest.issues.updateComment({
         owner: this.config.owner,
@@ -33524,10 +33794,7 @@ var ProgressTracker = class _ProgressTracker {
       return false;
     }
     try {
-      if (await this.isCurrentRunStale()) {
-        logger.warn(
-          "Skipping progress replacement because the PR head changed"
-        );
+      if (!await this.canMutateCurrentHead("progress replacement")) {
         return false;
       }
       if (await this.hasNewerReviewSummary()) {
@@ -33608,26 +33875,25 @@ var ProgressTracker = class _ProgressTracker {
       return false;
     }
   }
-  async isCurrentRunStale() {
+  async canMutateCurrentHead(operation) {
     const reviewedHeadSha = this.config.summaryMetadata?.reviewedHeadSha;
     if (!reviewedHeadSha || !this.octokit?.rest?.pulls?.get) {
-      return false;
+      return true;
     }
-    try {
-      const response = await this.octokit.rest.pulls.get({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        pull_number: this.config.prNumber
-      });
-      const freshHeadSha = response.data.head?.sha;
-      return Boolean(freshHeadSha && freshHeadSha !== reviewedHeadSha);
-    } catch (error2) {
-      logger.warn(
-        "Failed to refresh PR head before progress summary replacement",
-        error2
-      );
-      return false;
+    const verification = await verifyPullRequestHead(this.octokit, {
+      owner: this.config.owner,
+      repo: this.config.repo,
+      prNumber: this.config.prNumber,
+      expectedHeadSha: reviewedHeadSha
+    });
+    if (verification.status === "current" /* Current */) {
+      return true;
     }
+    logger.warn(
+      verification.status === "changed" /* Changed */ ? `Skipping ${operation} because the PR head changed` : `Skipping ${operation} because the current PR head could not be verified`,
+      verification.error
+    );
+    return false;
   }
   async listIssueComments() {
     const comments = [];
@@ -34365,19 +34631,16 @@ var ReviewOrchestrator = class {
       let providerResults = [];
       let aiAnalysis;
       const unreviewedFiles = /* @__PURE__ */ new Map();
+      const unavailablePatchFiles = /* @__PURE__ */ new Set();
+      const successfulReviewContexts = [];
       const loadLimitations = [];
       let additionalUnreviewedFiles = 0;
+      let hasTransientLlmCoverageGap = false;
       if (reviewContext.loadCompleteness?.status === "truncated" /* Truncated */) {
         for (const omission of reviewContext.loadCompleteness.omissions) {
           if (omission.reason === "synthesized_diff_size_limit" /* SynthesizedDiffSizeLimit */) {
-            for (const filename of omission.omittedFiles) {
-              unreviewedFiles.set(
-                filename,
-                "file patch was omitted by the synthesized diff size limit"
-              );
-            }
-            loadLimitations.push(
-              `${omission.omittedFileCount} file patch(es) were omitted by the synthesized diff size limit`
+            logger.info(
+              `${omission.omittedFileCount} file patch(es) were omitted from the aggregate synthesized diff and will be recovered per batch`
             );
           } else {
             additionalUnreviewedFiles += omission.omittedFileCount ?? 0;
@@ -34388,6 +34651,13 @@ var ReviewOrchestrator = class {
         }
       }
       let llmCoverageComplete = filesToReview.length === 0 && unreviewedFiles.size === 0 && loadLimitations.length === 0;
+      const hasOnlyDeterministicCoverageGaps = () => {
+        if (hasTransientLlmCoverageGap) return false;
+        const hasDeterministicGap = unavailablePatchFiles.size > 0 || additionalUnreviewedFiles > 0 || loadLimitations.length > 0;
+        return hasDeterministicGap && Array.from(unreviewedFiles.keys()).every(
+          (filename) => unavailablePatchFiles.has(filename)
+        );
+      };
       const requiredHealthyProviders = this.requiredHealthyProviderNames(config);
       let providers = [];
       if (filesToReview.length > 0) {
@@ -34493,6 +34763,7 @@ var ReviewOrchestrator = class {
             );
           }
           providerResults = allHealthResults;
+          hasTransientLlmCoverageGap = true;
           for (const file of filesToReview) {
             unreviewedFiles.set(
               file.filename,
@@ -34570,6 +34841,21 @@ var ReviewOrchestrator = class {
             compatibilityKey: this.components.reviewCompatibilityKey ?? "0".repeat(64),
             providerNames
           });
+          const createBatchContext = (batch) => {
+            const recovered = recoverDiffForFiles(reviewContext.diff, batch);
+            for (const filename of recovered.unavailableFiles) {
+              unavailablePatchFiles.add(filename);
+              unreviewedFiles.set(
+                filename,
+                "unified diff patch was unavailable from GitHub and local git"
+              );
+            }
+            return {
+              ...reviewContext,
+              files: [...batch],
+              diff: recovered.diff
+            };
+          };
           let checkpointSession = null;
           if (this.components.openReviewCheckpointSession && batchPlan.batches.length > 1) {
             try {
@@ -34607,6 +34893,9 @@ var ReviewOrchestrator = class {
           for (const plannedBatch of batchPlan.batches) {
             const accepted = acceptedCheckpointResults.get(plannedBatch.id);
             if (!accepted) continue;
+            successfulReviewContexts.push(
+              createBatchContext(plannedBatch.files)
+            );
             const restoredResults = this.restoreCheckpointProviderResults(accepted);
             await this.recordProviderUsage(
               restoredResults,
@@ -34635,12 +34924,7 @@ var ReviewOrchestrator = class {
             async (plannedBatch) => {
               const batch = [...plannedBatch.files];
               const batchIndex = plannedBatch.index;
-              const batchDiff = filterDiffByFiles(reviewContext.diff, batch);
-              const batchContext = {
-                ...reviewContext,
-                files: batch,
-                diff: batchDiff
-              };
+              const batchContext = createBatchContext(batch);
               const lifecycleTargetsForBatch = lifecycleTargetsByBatch[batchIndex] ?? [];
               const lifecycleAssignedTargetIds = lifecycleTargetsForBatch.map(
                 (target) => target.targetId
@@ -34683,6 +34967,9 @@ var ReviewOrchestrator = class {
                     findings: extractFindings(scopedResults),
                     providerResults: scopedResults
                   });
+                }
+                if (scopedResults.some((result) => result.status === "success")) {
+                  successfulReviewContexts.push(batchContext);
                 }
                 await this.recordProviderUsage(
                   scopedResults,
@@ -34790,6 +35077,9 @@ var ReviewOrchestrator = class {
               );
             }
           }
+          if (batchFailures > 0) {
+            hasTransientLlmCoverageGap = true;
+          }
           this.applyLifecycleBatchProviderFailures(
             lifecycleAssignmentRecords,
             lifecycleFailedProvidersByTarget
@@ -34847,7 +35137,7 @@ var ReviewOrchestrator = class {
           llmCoverageComplete = batchFailures === 0 && unreviewedFiles.size === 0 && loadLimitations.length === 0;
           if (checkpointSession && batchFailures === 0) {
             await checkpointSession.finalize({
-              snapshotAdvancementRequired: (this.components.incrementalSnapshotAdvancementEnabled ?? config.incrementalEnabled) && llmCoverageComplete
+              snapshotAdvancementRequired: (this.components.incrementalSnapshotAdvancementEnabled ?? config.incrementalEnabled) && (llmCoverageComplete || hasOnlyDeterministicCoverageGaps())
             });
           }
           llmFindings.push(...extractFindings(batchResults));
@@ -34941,7 +35231,8 @@ var ReviewOrchestrator = class {
         })),
         mode: useIncremental && lastReviewData ? "incremental" : "full",
         additionalUnreviewedFiles,
-        limitations: loadLimitations
+        limitations: loadLimitations,
+        reviewedContexts: successfulReviewContexts
       });
       if (useIncremental && lastReviewData) {
         review.findings = this.components.incrementalReviewer.mergeFindings(
@@ -35181,7 +35472,7 @@ var ReviewOrchestrator = class {
           );
         }
       }
-      if (config.incrementalEnabled && llmCoverageComplete) {
+      if (config.incrementalEnabled && (llmCoverageComplete || hasOnlyDeterministicCoverageGaps())) {
         try {
           await this.components.incrementalReviewer.saveReview(pr2, review);
         } catch (error2) {

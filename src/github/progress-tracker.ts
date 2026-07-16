@@ -9,6 +9,10 @@ import {
   appendReviewSummaryMetadata,
   shouldSkipSummaryWriteForExisting,
 } from './summary-metadata';
+import {
+  PullRequestHeadVerificationStatus,
+  verifyPullRequestHead,
+} from './pr-head-guard';
 
 export type ProgressStatus =
   | 'pending'
@@ -78,6 +82,9 @@ export class ProgressTracker {
       return;
     }
     try {
+      if (!(await this.canMutateCurrentHead('progress initialization'))) {
+        return;
+      }
       const body = this.formatProgressComment();
       const existing = await this.findReusableComment();
       if (existing.blockedByNewerSummary) {
@@ -279,6 +286,9 @@ export class ProgressTracker {
     }
 
     try {
+      if (!(await this.canMutateCurrentHead('progress update'))) {
+        return;
+      }
       const body = this.overrideBody ?? this.formatProgressComment();
 
       await this.octokit.rest.issues.updateComment({
@@ -317,10 +327,7 @@ export class ProgressTracker {
     }
 
     try {
-      if (await this.isCurrentRunStale()) {
-        logger.warn(
-          'Skipping progress replacement because the PR head changed'
-        );
+      if (!(await this.canMutateCurrentHead('progress replacement'))) {
         return false;
       }
       if (await this.hasNewerReviewSummary()) {
@@ -422,26 +429,27 @@ export class ProgressTracker {
     }
   }
 
-  private async isCurrentRunStale(): Promise<boolean> {
+  private async canMutateCurrentHead(operation: string): Promise<boolean> {
     const reviewedHeadSha = this.config.summaryMetadata?.reviewedHeadSha;
     if (!reviewedHeadSha || !this.octokit?.rest?.pulls?.get) {
-      return false;
+      return true;
     }
-    try {
-      const response = await this.octokit.rest.pulls.get({
-        owner: this.config.owner,
-        repo: this.config.repo,
-        pull_number: this.config.prNumber,
-      });
-      const freshHeadSha = response.data.head?.sha;
-      return Boolean(freshHeadSha && freshHeadSha !== reviewedHeadSha);
-    } catch (error) {
-      logger.warn(
-        'Failed to refresh PR head before progress summary replacement',
-        error as Error
-      );
-      return false;
+    const verification = await verifyPullRequestHead(this.octokit, {
+      owner: this.config.owner,
+      repo: this.config.repo,
+      prNumber: this.config.prNumber,
+      expectedHeadSha: reviewedHeadSha,
+    });
+    if (verification.status === PullRequestHeadVerificationStatus.Current) {
+      return true;
     }
+    logger.warn(
+      verification.status === PullRequestHeadVerificationStatus.Changed
+        ? `Skipping ${operation} because the PR head changed`
+        : `Skipping ${operation} because the current PR head could not be verified`,
+      verification.error as Error | undefined
+    );
+    return false;
   }
 
   private async listIssueComments(): Promise<

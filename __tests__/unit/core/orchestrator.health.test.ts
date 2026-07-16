@@ -14,6 +14,8 @@ import {
 import { Provider } from '../../../src/providers/base';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import { IncrementalReviewPlanMode } from '../../../src/cache/incremental';
+import { PullRequestLoader } from '../../../src/github/pr-loader';
+import { GitHubClient } from '../../../src/github/client';
 
 // Minimal helpers
 const emptyReview: any = {
@@ -156,6 +158,11 @@ function makeOrchestrator(
 }
 
 function makePR(files: FileChange[]): PRContext {
+  const normalizedFiles = files.map((file, index) => ({
+    ...file,
+    patch:
+      file.patch ?? `@@ -0,0 +1 @@\n+export const fixture${index} = ${index};`,
+  }));
   return {
     number: 1,
     title: 't',
@@ -164,8 +171,17 @@ function makePR(files: FileChange[]): PRContext {
     labels: [],
     additions: 0,
     deletions: 0,
-    files,
-    diff: '',
+    files: normalizedFiles,
+    diff: normalizedFiles
+      .map((file) =>
+        [
+          `diff --git a/${file.filename} b/${file.filename}`,
+          `--- a/${file.filename}`,
+          `+++ b/${file.filename}`,
+          file.patch,
+        ].join('\n')
+      )
+      .join('\n'),
     baseSha: 'b',
     headSha: 'h',
     body: '',
@@ -1382,7 +1398,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
     ).toBe(true);
   });
 
-  it('does not advance a snapshot when GitHub omitted files but loaded work is empty', async () => {
+  it('saves a terminal partial snapshot when GitHub omitted files but loaded work is empty', async () => {
     const saveReview = jest.fn();
     const orchestrator = makeOrchestrator({
       config: {
@@ -1424,7 +1440,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
       complete: false,
       unreviewedFiles: 1,
     });
-    expect(saveReview).not.toHaveBeenCalled();
+    expect(saveReview).toHaveBeenCalledWith(pr, review);
   });
 
   it('pins required healthy providers during execution limiting', async () => {
@@ -2088,6 +2104,188 @@ describe('ReviewOrchestrator health check guard rails', () => {
 
     expect(restored[0].result.findings).toHaveLength(1);
     expect(restored[1].result.findings).toHaveLength(0);
+  });
+
+  it('reviews a 759-file capped diff once, recovers batch patches, and reuses the completed snapshot', async () => {
+    const files = Array.from({ length: 759 }, (_, fileIndex) => {
+      const patch = [
+        '@@ -0,0 +1,259 @@',
+        ...Array.from({ length: 259 }, (_, lineIndex) =>
+          `+export const value_${fileIndex}_${lineIndex} = ${lineIndex};`.padEnd(
+            72,
+            'x'
+          )
+        ),
+      ].join('\n');
+      return {
+        filename: `src/generated/file-${fileIndex}.ts`,
+        status: 'modified' as const,
+        additions: 259,
+        deletions: 0,
+        changes: 259,
+        patch,
+      };
+    });
+    const baseSha = 'b'.repeat(40);
+    const headSha = 'c'.repeat(40);
+    const pullRequest = {
+      number: 240,
+      title: 'Representative huge PR',
+      body: '',
+      draft: false,
+      labels: [],
+      additions: 759 * 259,
+      deletions: 0,
+      changed_files: files.length,
+      base: { sha: baseSha },
+      head: { sha: headSha },
+      user: { login: 'fixture-author', type: 'User' },
+    };
+    const octokit = {
+      request: jest.fn(),
+      rest: {
+        pulls: {
+          get: jest.fn().mockResolvedValue({ data: pullRequest }),
+          listFiles: jest.fn().mockImplementation(({ page, per_page }) =>
+            Promise.resolve({
+              data: files.slice((page - 1) * per_page, page * per_page),
+            })
+          ),
+        },
+      },
+    };
+    const loader = new PullRequestLoader({
+      octokit,
+      owner: 'fixture-owner',
+      repo: 'fixture-repo',
+    } as unknown as GitHubClient);
+    const pr = await loader.load(240);
+    const synthesizedDiffBytes = Buffer.byteLength(pr.diff, 'utf8');
+
+    expect(octokit.request).not.toHaveBeenCalled();
+    expect(synthesizedDiffBytes).toBeLessThanOrEqual(8 * 1024 * 1024);
+    expect(pr.loadCompleteness).toEqual({
+      status: PullRequestLoadStatus.Truncated,
+      omissions: [
+        expect.objectContaining({
+          reason: PullRequestLoadOmissionReason.SynthesizedDiffSizeLimit,
+          omittedFileCount: expect.any(Number),
+        }),
+      ],
+    });
+    expect(pr.loadCompleteness?.omissions[0]?.omittedFileCount).toBeGreaterThan(
+      0
+    );
+
+    const provider = {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const prompts: string[] = [];
+    const execute = jest.fn().mockImplementation(async (_providers, prompt) => {
+      prompts.push(prompt);
+      return [
+        {
+          name: 'p1',
+          status: 'success',
+          result: {
+            content: '{"findings":[],"revalidations":[]}',
+            findings: [],
+            revalidations: [],
+          },
+          durationSeconds: 1,
+        } as ProviderResult,
+      ];
+    });
+    let savedSnapshot:
+      | {
+          prNumber: number;
+          lastReviewedCommit: string;
+          baseSha: string;
+          timestamp: number;
+          findings: Finding[];
+          reviewSummary: string;
+        }
+      | undefined;
+    const saveReview = jest.fn().mockImplementation(async (_pr, review) => {
+      savedSnapshot = {
+        prNumber: pr.number,
+        lastReviewedCommit: pr.headSha,
+        baseSha: pr.baseSha,
+        timestamp: Date.now(),
+        findings: review.findings,
+        reviewSummary: review.summary,
+      };
+    });
+    const planReview = jest.fn().mockImplementation(async () =>
+      savedSnapshot
+        ? {
+            mode: IncrementalReviewPlanMode.ReuseCompleted,
+            files: [],
+            invalidatedPaths: [],
+            lastReview: savedSnapshot,
+          }
+        : {
+            mode: IncrementalReviewPlanMode.Full,
+            files: pr.files,
+            invalidatedPaths: [],
+            lastReview: null,
+          }
+    );
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        skipTrivialChanges: false,
+        incrementalEnabled: true,
+        smartDiffCompaction: false,
+        diffMaxBytes: 2 * 1024 * 1024,
+        enableTokenAwareBatching: false,
+        batchMaxFiles: 50,
+        providers: ['p1'],
+        fallbackProviders: [],
+        requiredHealthyProviders: [],
+        providerLimit: 1,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as unknown as ReviewComponents['providerRegistry'],
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute,
+      } as unknown as ReviewComponents['llmExecutor'],
+      incrementalReviewer: {
+        planReview,
+        saveReview,
+        mergeFindings: jest.fn(),
+        generateIncrementalSummary: jest.fn(),
+      } as unknown as ReviewComponents['incrementalReviewer'],
+    });
+
+    const firstReview = await orchestrator.executeReview(pr);
+    const providerCallsAfterFirstReview = execute.mock.calls.length;
+    const secondReview = await orchestrator.executeReview(pr);
+
+    expect(pr.additions).toBeGreaterThanOrEqual(196_000);
+    expect(firstReview.coverage).toMatchObject({
+      totalFiles: 759,
+      fullDiffFiles: 759,
+      unreviewedFiles: 0,
+      complete: true,
+    });
+    expect(prompts.some((prompt) => prompt.includes('file-758.ts'))).toBe(true);
+    expect(providerCallsAfterFirstReview).toBeGreaterThan(1);
+    expect(execute).toHaveBeenCalledTimes(providerCallsAfterFirstReview);
+    expect(saveReview).toHaveBeenCalledTimes(1);
+    expect(secondReview.metrics.cached).toBe(true);
   });
 
   it('fails when every LLM provider fails and provider failure is configured as blocking', async () => {

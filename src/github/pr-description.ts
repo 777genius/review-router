@@ -1,6 +1,10 @@
 import { FileChange, PRContext } from '../types';
 import { GitHubClient } from './client';
 import { logger } from '../utils/logger';
+import {
+  PullRequestHeadVerificationStatus,
+  verifyPullRequestHead,
+} from './pr-head-guard';
 
 const START_MARKER = '<!-- review-router-summary:start -->';
 const END_MARKER = '<!-- review-router-summary:end -->';
@@ -30,17 +34,38 @@ export class PullRequestDescriptionUpdater {
   ) {}
 
   async update(pr: PRContext): Promise<void> {
-    const nextBody = this.merge(pr.body || '', this.buildGeneratedBlock(pr));
-
-    if (nextBody === (pr.body || '')) {
-      logger.debug('PR description already up to date');
-      return;
-    }
-
     if (this.dryRun) {
+      const nextBody = this.merge(pr.body || '', this.buildGeneratedBlock(pr));
+      if (nextBody === (pr.body || '')) {
+        logger.debug('PR description already up to date');
+        return;
+      }
       logger.info(
         `[DRY RUN] Would update PR #${pr.number} description with ReviewRouter summary`
       );
+      return;
+    }
+
+    const verification = await verifyPullRequestHead(this.client.octokit, {
+      owner: this.client.owner,
+      repo: this.client.repo,
+      prNumber: pr.number,
+      expectedHeadSha: pr.headSha,
+    });
+    if (verification.status !== PullRequestHeadVerificationStatus.Current) {
+      logger.warn(
+        verification.status === PullRequestHeadVerificationStatus.Changed
+          ? 'Skipping PR description update because the PR head changed'
+          : 'Skipping PR description update because the current PR head could not be verified',
+        verification.error as Error | undefined
+      );
+      return;
+    }
+
+    const currentBody = verification.body ?? '';
+    const nextBody = this.merge(currentBody, this.buildGeneratedBlock(pr));
+    if (nextBody === currentBody) {
+      logger.debug('PR description already up to date');
       return;
     }
 

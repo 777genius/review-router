@@ -47,6 +47,27 @@ const threadResponse = (overrides: Record<string, unknown> = {}) => ({
   },
 });
 
+function githubClient(
+  graphql: jest.Mock,
+  pulls: Record<string, unknown> = {}
+): GitHubClient {
+  return {
+    owner: 'owner',
+    repo: 'repo',
+    octokit: {
+      graphql,
+      rest: {
+        pulls: {
+          get: jest.fn().mockResolvedValue({
+            data: { head: { sha: 'head-sha' } },
+          }),
+          ...pulls,
+        },
+      },
+    },
+  } as unknown as GitHubClient;
+}
+
 describe('ReviewThreadResolver', () => {
   it('skips every candidate if the PR head changed before mutation', async () => {
     const graphql = jest.fn().mockResolvedValueOnce({
@@ -56,11 +77,7 @@ describe('ReviewThreadResolver', () => {
         },
       },
     });
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(githubClient(graphql));
 
     const result = await resolver.resolveGuarded(123, 'old-head', [record()]);
 
@@ -73,11 +90,7 @@ describe('ReviewThreadResolver', () => {
       status: 403,
     });
     const graphql = jest.fn().mockRejectedValueOnce(rateLimitError);
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(githubClient(graphql));
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
 
@@ -105,17 +118,32 @@ describe('ReviewThreadResolver', () => {
           },
         },
       });
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(githubClient(graphql));
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
 
     expect(result.resolved).toHaveLength(1);
     expect(result.resolved[0].resolvedBy).toBe('review-router');
     expect(result.failed).toHaveLength(0);
+  });
+
+  it('does not resolve a thread when the head changes after thread inspection', async () => {
+    const graphql = jest
+      .fn()
+      .mockResolvedValueOnce({
+        repository: { pullRequest: { headRefOid: 'head-sha' } },
+      })
+      .mockResolvedValueOnce(threadResponse());
+    const get = jest.fn().mockResolvedValue({
+      data: { head: { sha: 'new-head' } },
+    });
+    const resolver = new ReviewThreadResolver(githubClient(graphql, { get }));
+
+    const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
+
+    expect(result.resolved).toHaveLength(0);
+    expect(result.skipped[0].reasonCodes).toContain('head_sha_changed');
+    expect(graphql).toHaveBeenCalledTimes(2);
   });
 
   it('attempts the mutation even when viewerCanResolve is false', async () => {
@@ -137,11 +165,7 @@ describe('ReviewThreadResolver', () => {
           },
         },
       });
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(githubClient(graphql));
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
 
@@ -175,18 +199,10 @@ describe('ReviewThreadResolver', () => {
       },
     });
     const resolver = new ReviewThreadResolver(
-      {
-        owner: 'owner',
-        repo: 'repo',
-        octokit: { graphql: primaryGraphql },
-      } as unknown as GitHubClient,
+      githubClient(primaryGraphql),
       false,
       undefined,
-      {
-        owner: 'owner',
-        repo: 'repo',
-        octokit: { graphql: fallbackGraphql },
-      } as unknown as GitHubClient
+      githubClient(fallbackGraphql)
     );
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
@@ -221,18 +237,10 @@ describe('ReviewThreadResolver', () => {
       },
     });
     const resolver = new ReviewThreadResolver(
-      {
-        owner: 'owner',
-        repo: 'repo',
-        octokit: { graphql: primaryGraphql },
-      } as unknown as GitHubClient,
+      githubClient(primaryGraphql),
       false,
       undefined,
-      {
-        owner: 'owner',
-        repo: 'repo',
-        octokit: { graphql: fallbackGraphql },
-      } as unknown as GitHubClient
+      githubClient(fallbackGraphql)
     );
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
@@ -267,11 +275,7 @@ describe('ReviewThreadResolver', () => {
       }),
     };
     const resolver = new ReviewThreadResolver(
-      {
-        owner: 'owner',
-        repo: 'repo',
-        octokit: { graphql },
-      } as unknown as GitHubClient,
+      githubClient(graphql),
       false,
       undefined,
       undefined,
@@ -306,18 +310,9 @@ describe('ReviewThreadResolver', () => {
       .mockResolvedValueOnce(threadResponse())
       .mockRejectedValueOnce(permissionError);
     const createReplyForReviewComment = jest.fn().mockResolvedValue({});
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: {
-        graphql,
-        rest: {
-          pulls: {
-            createReplyForReviewComment,
-          },
-        },
-      },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(
+      githubClient(graphql, { createReplyForReviewComment })
+    );
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
 
@@ -358,18 +353,9 @@ describe('ReviewThreadResolver', () => {
     const createReplyForReviewComment = jest
       .fn()
       .mockRejectedValue(new Error('reply denied'));
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: {
-        graphql,
-        rest: {
-          pulls: {
-            createReplyForReviewComment,
-          },
-        },
-      },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(
+      githubClient(graphql, { createReplyForReviewComment })
+    );
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
 
@@ -391,11 +377,7 @@ describe('ReviewThreadResolver', () => {
         },
       })
       .mockResolvedValueOnce(threadResponse({ isResolved: true }));
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(githubClient(graphql));
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
 
@@ -438,11 +420,7 @@ describe('ReviewThreadResolver', () => {
           },
         })
       );
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(githubClient(graphql));
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
 
@@ -476,11 +454,7 @@ describe('ReviewThreadResolver', () => {
           },
         })
       );
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(githubClient(graphql));
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
 
@@ -514,11 +488,7 @@ describe('ReviewThreadResolver', () => {
           },
         })
       );
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(githubClient(graphql));
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
 
@@ -538,11 +508,7 @@ describe('ReviewThreadResolver', () => {
       })
       .mockResolvedValueOnce(threadResponse())
       .mockRejectedValueOnce(new Error('mutation failed'));
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(githubClient(graphql));
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
 
@@ -566,11 +532,7 @@ describe('ReviewThreadResolver', () => {
       })
       .mockResolvedValueOnce(threadResponse())
       .mockRejectedValueOnce(rateLimitError);
-    const resolver = new ReviewThreadResolver({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+    const resolver = new ReviewThreadResolver(githubClient(graphql));
 
     const result = await resolver.resolveGuarded(123, 'head-sha', [
       record(),

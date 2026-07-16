@@ -13,6 +13,7 @@ import {
 } from '../../../src/types';
 import { Provider } from '../../../src/providers/base';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
+import { IncrementalReviewPlanMode } from '../../../src/cache/incremental';
 
 // Minimal helpers
 const emptyReview: any = {
@@ -82,7 +83,11 @@ function makeOrchestrator(
     } as any,
     deduplicator: { dedupe: (f: Finding[]) => f } as any,
     consensus: { filter: (f: Finding[]) => f } as any,
-    synthesis: { synthesize: jest.fn().mockReturnValue(emptyReview) } as any,
+    synthesis: {
+      synthesize: jest
+        .fn()
+        .mockImplementation(() => JSON.parse(JSON.stringify(emptyReview))),
+    } as any,
     testCoverage: { analyze: jest.fn().mockReturnValue(undefined) } as any,
     astAnalyzer: { analyze: jest.fn().mockReturnValue([]) } as any,
     cache: { load: jest.fn().mockResolvedValue(null), save: jest.fn() } as any,
@@ -176,6 +181,128 @@ describe('ReviewOrchestrator health check guard rails', () => {
     } else {
       process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = originalProgressComments;
     }
+  });
+
+  it('does not initialize graph, memory, or providers for an already reviewed head', async () => {
+    const finding: Finding = {
+      file: 'src/a.ts',
+      line: 1,
+      severity: 'major',
+      title: 'Existing finding',
+      message: 'Already reviewed',
+    };
+    const providerRegistry = {
+      createProviders: jest.fn(),
+      discoverAdditionalFreeProviders: jest.fn(),
+    } as any;
+    const graphBuilder = {
+      buildGraph: jest.fn(),
+      updateGraph: jest.fn(),
+    } as any;
+    const memoryBundleProvider = {
+      fetchBundleForPullRequest: jest.fn(),
+    } as any;
+    const incrementalReviewer = {
+      planReview: jest.fn().mockResolvedValue({
+        mode: IncrementalReviewPlanMode.ReuseCompleted,
+        files: [],
+        invalidatedPaths: [],
+        lastReview: {
+          prNumber: 1,
+          lastReviewedCommit: 'h',
+          baseSha: 'b',
+          timestamp: Date.now(),
+          findings: [finding],
+          reviewSummary: 'Previous completed review',
+        },
+      }),
+      mergeFindings: jest.fn().mockReturnValue([finding]),
+      generateIncrementalSummary: jest
+        .fn()
+        .mockReturnValue('Reused completed review'),
+      saveReview: jest.fn(),
+    } as any;
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        analyticsEnabled: false,
+        enableCaching: false,
+        graphEnabled: true,
+        graphCacheEnabled: false,
+        skipTrivialChanges: false,
+      },
+      providerRegistry,
+      graphBuilder,
+      memoryBundleProvider,
+      incrementalReviewer,
+    });
+
+    const review = await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'src/a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(review.findings).toEqual([finding]);
+    expect(providerRegistry.createProviders).not.toHaveBeenCalled();
+    expect(graphBuilder.buildGraph).not.toHaveBeenCalled();
+    expect(graphBuilder.updateGraph).not.toHaveBeenCalled();
+    expect(
+      memoryBundleProvider.fetchBundleForPullRequest
+    ).not.toHaveBeenCalled();
+    expect(
+      (orchestrator as any).components.llmExecutor.execute
+    ).not.toHaveBeenCalled();
+    expect(
+      (orchestrator as any).components.synthesis.synthesize
+    ).not.toHaveBeenCalled();
+    expect(incrementalReviewer.mergeFindings).not.toHaveBeenCalled();
+    expect(
+      incrementalReviewer.generateIncrementalSummary
+    ).not.toHaveBeenCalled();
+    expect(incrementalReviewer.saveReview).not.toHaveBeenCalled();
+    expect(review.summary).toBe('Previous completed review');
+    expect(review.metrics.cached).toBe(true);
+  });
+
+  it('detects a trivial PR before building its code graph', async () => {
+    const graphBuilder = {
+      buildGraph: jest.fn(),
+      updateGraph: jest.fn(),
+    } as any;
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        analyticsEnabled: false,
+        graphEnabled: true,
+        graphCacheEnabled: false,
+        skipTrivialChanges: true,
+      },
+      graphBuilder,
+    });
+
+    await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'README.md',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(graphBuilder.buildGraph).not.toHaveBeenCalled();
+    expect(graphBuilder.updateGraph).not.toHaveBeenCalled();
   });
 
   it('short-circuits LLM execution when no healthy providers and records reliability', async () => {
@@ -1873,7 +2000,68 @@ describe('ReviewOrchestrator health check guard rails', () => {
       .record as jest.Mock;
     expect(recordUsage).toHaveBeenNthCalledWith(1, 'p1', restoredUsage, 5);
     expect(recordUsage).toHaveBeenNthCalledWith(2, 'p1', executedUsage, 5);
+    expect(commitSuccessfulBatch.mock.invocationCallOrder[0]).toBeLessThan(
+      recordUsage.mock.invocationCallOrder[1]
+    );
     expect(review.coverage?.complete).toBe(true);
+  });
+
+  it('does not open a durable checkpoint for a single-batch review', async () => {
+    const provider = {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const openReviewCheckpointSession = jest.fn();
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: ['p1'],
+        fallbackProviders: [],
+        providerLimit: 1,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute: jest.fn().mockResolvedValue([
+          {
+            name: 'p1',
+            status: 'success',
+            result: {
+              content: '{"findings":[]}',
+              findings: [],
+              usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+            },
+            durationSeconds: 0,
+          } as ProviderResult,
+        ]),
+      } as any,
+      openReviewCheckpointSession,
+    });
+
+    await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(openReviewCheckpointSession).not.toHaveBeenCalled();
   });
 
   it('restores plural provider attribution without duplicating findings', () => {

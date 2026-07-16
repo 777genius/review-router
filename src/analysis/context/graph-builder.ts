@@ -739,11 +739,23 @@ export class CodeGraphBuilder {
     // Remove stale data and re-analyze changed files
     for (const file of changedFiles) {
       try {
-        // Remove old data for this file to avoid stale entries
-        graph.removeFile(file.filename);
+        const stalePaths = new Set(
+          [file.previousFilename, file.filename].filter(
+            (value): value is string => Boolean(value)
+          )
+        );
+        for (const stalePath of stalePaths) {
+          graph.removeFile(stalePath);
+          const trackedIndex = graph.files.indexOf(stalePath);
+          if (trackedIndex >= 0) graph.files.splice(trackedIndex, 1);
+        }
 
-        // Re-analyze the file with fresh data
-        await this.analyzeFile(file, graph);
+        if (file.status !== 'removed') {
+          if (!graph.files.includes(file.filename)) {
+            graph.files.push(file.filename);
+          }
+          await this.analyzeFile(file, graph);
+        }
       } catch (error) {
         logger.warn(`Failed to analyze ${file.filename}`, error as Error);
       }

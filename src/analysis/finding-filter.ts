@@ -135,11 +135,16 @@ export class FindingFilter {
       return 'filter';
     }
 
-    // COMPLETELY filter workflow/CI files - prompt explicitly says "DO NOT review workflow/CI files"
     if (this.isWorkflowOrCIFile(finding.file)) {
-      // Filter ALL workflow/CI findings - NO exceptions
-      // Workflow configuration is infrastructure, not application code
-      return 'filter';
+      if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
+        return 'filter';
+      }
+      if (this.isConcreteRuntimeRegression(finding)) {
+        return 'keep';
+      }
+      if (this.isWorkflowConfigurationIssue(finding)) {
+        return 'filter';
+      }
     }
 
     // COMPLETELY filter the finding-filter itself - avoid self-reference paradox

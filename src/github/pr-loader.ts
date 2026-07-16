@@ -9,6 +9,10 @@ import {
   PullRequestLoadStatus,
 } from '../types';
 import { logger } from '../utils/logger';
+import {
+  loadPullRequestFilesFromGit,
+  LocalPullRequestDiffLoader,
+} from './local-git-diff';
 
 const FILES_PER_PAGE = 100;
 const MAX_GITHUB_FILES = 3000;
@@ -21,7 +25,10 @@ interface DiffLoadResult {
 }
 
 export class PullRequestLoader {
-  constructor(private readonly client: GitHubClient) {}
+  constructor(
+    private readonly client: GitHubClient,
+    private readonly localDiffLoader: LocalPullRequestDiffLoader = loadPullRequestFilesFromGit
+  ) {}
 
   async load(prNumber: number): Promise<PRContext> {
     const { octokit, owner, repo } = this.client;
@@ -67,16 +74,40 @@ export class PullRequestLoader {
     }
 
     const omissions: PullRequestLoadOmission[] = [];
-    const fileLimitOmission = this.getFileLimitOmission(
+    let fileLimitOmission = this.getFileLimitOmission(
       files.length,
       pr.changed_files
     );
     if (fileLimitOmission) {
-      omissions.push(fileLimitOmission);
-      const omittedCount = fileLimitOmission.omittedFileCount;
-      logger.warn(
-        `PR #${prNumber} reached GitHub's ${MAX_GITHUB_FILES}-file API limit; ${omittedCount === undefined ? 'an unknown number of additional files were' : `${omittedCount} additional file(s) were`} omitted.`
-      );
+      const localFiles = await this.localDiffLoader(baseSha, headSha);
+      const localDiffIsComplete =
+        localFiles !== null &&
+        (pr.changed_files === undefined
+          ? localFiles.length >= files.length
+          : localFiles.length === pr.changed_files);
+
+      if (localFiles && localDiffIsComplete) {
+        const githubFilesByPath = new Map(
+          files.map((file) => [file.filename, file] as const)
+        );
+        const recoveredFiles = localFiles.map((file) => {
+          const githubFile = githubFilesByPath.get(file.filename);
+          return githubFile?.patch
+            ? { ...file, patch: githubFile.patch }
+            : file;
+        });
+        files.splice(0, files.length, ...recoveredFiles);
+        fileLimitOmission = null;
+        logger.info(
+          `Recovered the complete ${files.length}-file list for PR #${prNumber} from local git after reaching GitHub's API limit.`
+        );
+      } else {
+        omissions.push(fileLimitOmission);
+        const omittedCount = fileLimitOmission.omittedFileCount;
+        logger.warn(
+          `PR #${prNumber} reached GitHub's ${MAX_GITHUB_FILES}-file API limit; ${omittedCount === undefined ? 'an unknown number of additional files were' : `${omittedCount} additional file(s) were`} omitted.`
+        );
+      }
     }
 
     const diffResult = await this.fetchDiff(owner, repo, prNumber, files);

@@ -524,7 +524,6 @@ export function getSummaryOnlyDiffReason(
 
   if (isDependencyLockPath(lower)) return 'dependency lock file';
   if (isGeneratedPath(lower)) return 'generated file';
-  if (isMigrationArtifactPath(lower)) return 'migration artifact';
   if (bytes > maxFullFileBytes)
     return `large diff over ${maxFullFileBytes} bytes`;
   if (changes > maxFullFileChanges)
@@ -547,14 +546,6 @@ function isGeneratedPath(lower: string): boolean {
     /\.generated\.[jt]sx?$/.test(lower) ||
     /\.min\.(js|css)$/.test(lower) ||
     /\.map$/.test(lower)
-  );
-}
-
-function isMigrationArtifactPath(lower: string): boolean {
-  return (
-    /(^|\/)migrations?\//.test(lower) ||
-    /(^|\/)schema\//.test(lower) ||
-    /(^|\/)prisma\/migrations\//.test(lower)
   );
 }
 

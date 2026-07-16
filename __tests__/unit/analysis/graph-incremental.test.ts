@@ -477,6 +477,7 @@ describe('Incremental Graph Updates', () => {
       const updated = await builder.updateGraph(graph, changedFiles);
 
       expect(updated.getFileSymbols('file1.ts')).toEqual([]);
+      expect(updated.files).toEqual(['file2.ts']);
     });
 
     it('should handle added files', async () => {
@@ -509,6 +510,35 @@ describe('Incremental Graph Updates', () => {
       const updated = await builder.updateGraph(graph, changedFiles);
 
       expect(updated).toBeDefined();
+      expect(updated.files).toEqual(['file1.ts', 'file2.ts']);
+    });
+
+    it('removes the previous path when a file is renamed', async () => {
+      const graph = await builder.buildGraph([
+        {
+          filename: 'src/old.ts',
+          status: 'added',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '+ export const oldName = true;',
+        },
+      ]);
+
+      const updated = await builder.updateGraph(graph, [
+        {
+          filename: 'src/new.ts',
+          previousFilename: 'src/old.ts',
+          status: 'renamed',
+          additions: 1,
+          deletions: 1,
+          changes: 2,
+          patch: '+ export const newName = true;',
+        },
+      ]);
+
+      expect(updated.files).toEqual(['src/new.ts']);
+      expect(updated.getFileSymbols('src/old.ts')).toEqual([]);
     });
 
     it('should handle empty change list', async () => {

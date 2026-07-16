@@ -73,8 +73,10 @@ describe('Codex OAuth rotating review runtime config', () => {
       REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
       REVIEW_PROVIDERS: 'codex/gpt-5.5',
     };
-    const fetchImpl =
-      jest.fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>();
+    const fetchImpl = jest.fn<
+      Promise<Response>,
+      [RequestInfo | URL, RequestInit?]
+    >();
 
     await applyCodexRotatingReviewRuntimeConfig({
       apiUrl: 'https://api.reviewrouter.site',

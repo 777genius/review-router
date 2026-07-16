@@ -902,6 +902,28 @@ index 51097d9..d0723db 100644
       expect(totalWorkflowFiltered).toBe(2);
     });
 
+    test('filters proven workflow security false positives before runtime wording', () => {
+      const diff = `
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          echo "SECURITY VIOLATION: Fork PR has access to secrets"
+          exit 1
+        fi
+      `;
+      const finding: Finding = {
+        file: '.github/workflows/reviewrouter.yml',
+        line: 97,
+        severity: 'critical',
+        title: 'Fork PR secret exposure breaks workflow isolation',
+        message:
+          'Fork pull requests now receive secrets and this workflow loses its security boundary.',
+      };
+
+      const { findings, stats } = filter.filter([finding], diff);
+
+      expect(findings).toEqual([]);
+      expect(stats.filtered).toBe(1);
+    });
+
     test('deduplicates similar findings', () => {
       const findings: Finding[] = [
         {
@@ -980,6 +1002,24 @@ index 51097d9..d0723db 100644
       expect(
         stats.reasons['workflow/CI configuration (not application code)']
       ).toBe(2);
+    });
+
+    test('keeps concrete workflow execution regressions', () => {
+      const findings: Finding[] = [
+        {
+          file: '.github/workflows/review.yml',
+          line: 10,
+          severity: 'major',
+          title: 'Provider-wide queue prevents new pull request reviews',
+          message:
+            'cancel-in-progress false now keeps stale synchronize runs, so later pull request reviews never start before old 180-minute workflow jobs finish.',
+        },
+      ];
+
+      const { findings: filtered, stats } = filter.filter(findings, '');
+
+      expect(filtered).toEqual(findings);
+      expect(stats.kept).toBe(1);
     });
 
     test('filters general workflow security config warnings', () => {

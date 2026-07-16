@@ -53,6 +53,10 @@ export class ExecutionDeadline {
     );
   }
 
+  canStartInitialInvocation(): boolean {
+    return this.canStartBatch();
+  }
+
   clampProviderTimeout(requestedTimeoutMs: number): number {
     requireNonNegativeFinite(requestedTimeoutMs, 'requestedTimeoutMs');
     if (this.deadlineEpochMs === undefined) return requestedTimeoutMs;

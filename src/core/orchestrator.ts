@@ -91,6 +91,10 @@ import {
 import { BatchOrchestrator } from './batch-orchestrator';
 import { ProgressTracker } from '../github/progress-tracker';
 import { GitHubClient } from '../github/client';
+import {
+  PullRequestHeadVerificationStatus,
+  verifyPullRequestHead,
+} from '../github/pr-head-guard';
 import { PullRequestDescriptionUpdater } from '../github/pr-description';
 import { ReviewThreadInventoryLoader } from '../github/review-thread-inventory';
 import {
@@ -1625,22 +1629,23 @@ export class ReviewOrchestrator {
           );
         }
       }
-      if (
-        config.incrementalEnabled &&
-        (llmCoverageComplete || hasOnlyDeterministicCoverageGaps())
-      ) {
-        try {
-          await this.components.incrementalReviewer.saveReview(pr, review);
-        } catch (error) {
+      if (config.incrementalEnabled) {
+        if (llmCoverageComplete || hasOnlyDeterministicCoverageGaps()) {
+          if (await this.canAdvanceIncrementalSnapshot(pr)) {
+            try {
+              await this.components.incrementalReviewer.saveReview(pr, review);
+            } catch (error) {
+              logger.warn(
+                'Failed to save incremental review snapshot; review output remains valid',
+                error as Error
+              );
+            }
+          }
+        } else {
           logger.warn(
-            'Failed to save incremental review snapshot; review output remains valid',
-            error as Error
+            'Incremental snapshot was not advanced because LLM batch coverage is incomplete'
           );
         }
-      } else if (config.incrementalEnabled) {
-        logger.warn(
-          'Incremental snapshot was not advanced because LLM batch coverage is incomplete'
-        );
       }
       success = true;
       return review;
@@ -1667,6 +1672,29 @@ export class ReviewOrchestrator {
         }
       }
     }
+  }
+
+  private async canAdvanceIncrementalSnapshot(pr: PRContext): Promise<boolean> {
+    const githubClient = this.components.githubClient;
+    if (!githubClient) {
+      return true;
+    }
+    const verification = await verifyPullRequestHead(githubClient.octokit, {
+      owner: githubClient.owner,
+      repo: githubClient.repo,
+      prNumber: pr.number,
+      expectedHeadSha: pr.headSha,
+    });
+    if (verification.status === PullRequestHeadVerificationStatus.Current) {
+      return true;
+    }
+    logger.warn(
+      verification.status === PullRequestHeadVerificationStatus.Changed
+        ? 'Incremental snapshot was not advanced because the PR head changed'
+        : 'Incremental snapshot was not advanced because the current PR head could not be verified',
+      verification.error as Error | undefined
+    );
+    return false;
   }
 
   /**

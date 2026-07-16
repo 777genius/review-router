@@ -97,5 +97,45 @@ describe('GitHubClient', () => {
       expect(initialRequest.isDone()).toBe(true);
       expect(retriedRequest.isDone()).toBe(true);
     });
+
+    it('retries transient GitHub failures without refreshing the token', async () => {
+      const tokenProvider = {
+        getToken: jest.fn().mockResolvedValue('ghs_initial'),
+        refreshToken: jest.fn(),
+      };
+      const requests = nock('https://api.github.com', {
+        reqheaders: { authorization: 'Bearer ghs_initial' },
+      })
+        .get('/repos/owner/repo')
+        .reply(503, { message: 'Service unavailable' })
+        .get('/repos/owner/repo')
+        .reply(502, { message: 'Bad gateway' })
+        .get('/repos/owner/repo')
+        .reply(200, { id: 1, name: 'repo' });
+      const client = new GitHubClient(mockToken, { tokenProvider });
+
+      await expect(
+        client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+      ).resolves.toMatchObject({ status: 200 });
+      expect(tokenProvider.getToken).toHaveBeenCalledTimes(1);
+      expect(tokenProvider.refreshToken).not.toHaveBeenCalled();
+      expect(requests.isDone()).toBe(true);
+    });
+
+    it('retries transient GitHub failures for a static token', async () => {
+      const requests = nock('https://api.github.com', {
+        reqheaders: { authorization: 'token TEST_TOKEN' },
+      })
+        .get('/repos/owner/repo')
+        .reply(503, { message: 'Service unavailable' })
+        .get('/repos/owner/repo')
+        .reply(200, { id: 1, name: 'repo' });
+      const client = new GitHubClient(mockToken);
+
+      await expect(
+        client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+      ).resolves.toMatchObject({ status: 200 });
+      expect(requests.isDone()).toBe(true);
+    });
   });
 });

@@ -113,7 +113,11 @@ export class ReviewCheckpointSession {
       if (
         started.headSha.toLowerCase() !== plan.headSha ||
         started.planHash.toLowerCase() !== plan.planHash ||
-        started.version < expectedVersion
+        !isValidVersionAcknowledgement(
+          started.version,
+          expectedVersion,
+          started.status === ReviewCheckpointStartStatus.Idempotent
+        )
       ) {
         warnFailOpen(input.logger, 'invalid_start_acknowledgement');
         return null;
@@ -180,8 +184,10 @@ export class ReviewCheckpointSession {
     return this.enqueue(() => this.commitSuccessfulBatchNow(input));
   }
 
-  finalize(): Promise<FinalizeReviewCheckpointSessionResult> {
-    return this.enqueue(() => this.finalizeNow());
+  finalize(input: {
+    readonly snapshotAdvancementRequired: boolean;
+  }): Promise<FinalizeReviewCheckpointSessionResult> {
+    return this.enqueue(() => this.finalizeNow(input));
   }
 
   private async commitSuccessfulBatchNow(
@@ -235,7 +241,14 @@ export class ReviewCheckpointSession {
         this.disable('repeated_version_conflict');
         return disabledCommit();
       }
-      if (!this.isExactBatchAcknowledgement(result, workKey)) {
+      if (
+        !this.isExactBatchAcknowledgement(result, workKey) ||
+        !isValidVersionAcknowledgement(
+          result.version,
+          this.expectedVersion,
+          result.status === ReviewCheckpointBatchResultStatus.Idempotent
+        )
+      ) {
         this.disable('mismatched_batch_acknowledgement');
         return disabledCommit();
       }
@@ -256,7 +269,9 @@ export class ReviewCheckpointSession {
     }
   }
 
-  private async finalizeNow(): Promise<FinalizeReviewCheckpointSessionResult> {
+  private async finalizeNow(input: {
+    readonly snapshotAdvancementRequired: boolean;
+  }): Promise<FinalizeReviewCheckpointSessionResult> {
     if (this.disabled) return disabledFinalize();
     const missingWorkKeys = this.plan.workKeys.filter(
       (workKey) => !this.acceptedResults.has(workKey)
@@ -291,7 +306,12 @@ export class ReviewCheckpointSession {
       }
       if (
         result.headSha.toLowerCase() !== this.plan.headSha ||
-        result.planHash.toLowerCase() !== this.plan.planHash
+        result.planHash.toLowerCase() !== this.plan.planHash ||
+        !isValidVersionAcknowledgement(
+          result.version,
+          this.expectedVersion,
+          result.status === ReviewCheckpointFinalizeStatus.Idempotent
+        )
       ) {
         this.disable('mismatched_finalize_acknowledgement');
         return disabledFinalize();
@@ -299,7 +319,9 @@ export class ReviewCheckpointSession {
 
       this.expectedVersion = result.version;
       this.finalized = true;
-      const markerWritten = await this.writeFinalizationMarker();
+      const markerWritten = await this.writeFinalizationMarker(
+        input.snapshotAdvancementRequired
+      );
       return {
         status:
           result.status === ReviewCheckpointFinalizeStatus.Idempotent
@@ -431,7 +453,9 @@ export class ReviewCheckpointSession {
     );
   }
 
-  private async writeFinalizationMarker(): Promise<boolean> {
+  private async writeFinalizationMarker(
+    snapshotAdvancementRequired: boolean
+  ): Promise<boolean> {
     if (!this.markerWriter) return false;
     try {
       await this.markerWriter.write({
@@ -440,6 +464,7 @@ export class ReviewCheckpointSession {
         headSha: this.plan.headSha,
         planHash: this.plan.planHash,
         expectedVersion: this.expectedVersion,
+        snapshotAdvancementRequired,
       });
       return true;
     } catch {
@@ -462,6 +487,16 @@ export class ReviewCheckpointSession {
     );
     return result;
   }
+}
+
+function isValidVersionAcknowledgement(
+  acknowledgedVersion: number,
+  expectedVersion: number,
+  idempotent: boolean
+): boolean {
+  return idempotent
+    ? acknowledgedVersion >= expectedVersion
+    : acknowledgedVersion === expectedVersion + 1;
 }
 
 function acceptedResultsInPlanOrder(

@@ -182,6 +182,7 @@ export const reviewCheckpointFinalizationMarkerSchema = z
     headSha: z.string().regex(GIT_SHA_PATTERN),
     planHash: z.string().regex(HASH_PATTERN),
     expectedVersion: z.number().int().nonnegative(),
+    snapshotAdvancementRequired: z.boolean(),
   })
   .strict();
 

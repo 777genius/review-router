@@ -31,8 +31,24 @@ const SECURITY_TOKENS = new Set([
   'security',
   'session',
   'sessions',
-  'token',
-  'tokens',
+]);
+
+const SENSITIVE_TOKEN_CONTEXT = new Set([
+  'access',
+  'api',
+  'bearer',
+  'credential',
+  'credentials',
+  'csrf',
+  'identity',
+  'keyring',
+  'manager',
+  'refresh',
+  'secret',
+  'signing',
+  'storage',
+  'store',
+  'vault',
 ]);
 
 const MIGRATION_TOKENS = new Set([
@@ -75,6 +91,13 @@ function includesToken(
   return tokens.some((token) => candidates.has(token));
 }
 
+function isSensitiveTokenPath(tokens: readonly string[]): boolean {
+  return (
+    (tokens.includes('token') || tokens.includes('tokens')) &&
+    includesToken(tokens, SENSITIVE_TOKEN_CONTEXT)
+  );
+}
+
 function isActionManifest(
   filename: string,
   tokens: readonly string[]
@@ -91,7 +114,9 @@ function isActionManifest(
 export function classifyFileRisk(filename: string): FileRiskTier {
   const tokens = pathTokens(filename);
 
-  if (includesToken(tokens, SECURITY_TOKENS)) return FileRiskTier.Security;
+  if (includesToken(tokens, SECURITY_TOKENS) || isSensitiveTokenPath(tokens)) {
+    return FileRiskTier.Security;
+  }
   if (includesToken(tokens, MIGRATION_TOKENS)) return FileRiskTier.Migration;
   if (includesToken(tokens, PERSISTENCE_TOKENS)) {
     return FileRiskTier.Persistence;

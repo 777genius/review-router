@@ -521,6 +521,7 @@ export async function createComponents(
     memoryBundleProvider,
     executionDeadline,
     reviewCompatibilityKey,
+    incrementalSnapshotAdvancementEnabled: incrementalSnapshotStorage.enabled,
     openReviewCheckpointSession: (plan) =>
       createReviewCheckpointSessionFromEnvironment({
         plan,

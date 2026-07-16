@@ -46,6 +46,7 @@ const RESPONSE_MAX_BYTES =
 const gitShaSchema = z.string().regex(/^[a-f0-9]{40}$/i);
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/i);
 const versionSchema = z.number().int().nonnegative();
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
 
 const acceptedResultSchema = z
   .object({
@@ -182,14 +183,7 @@ export class HttpReviewCheckpointClient implements ReviewCheckpointClientPort {
       env[REVIEW_CHECKPOINT_PROVIDER_INSTANCE_ID_ENV]?.trim();
     if (!apiUrl || !leaseId || !providerInstanceId) return null;
 
-    try {
-      const parsedUrl = new URL(apiUrl);
-      if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
-        return null;
-      }
-    } catch {
-      return null;
-    }
+    if (!isAllowedCheckpointApiUrl(apiUrl)) return null;
 
     return new HttpReviewCheckpointClient({
       apiUrl,
@@ -217,7 +211,13 @@ export class HttpReviewCheckpointClient implements ReviewCheckpointClientPort {
     readonly requestTimeoutMs?: number;
     readonly now?: () => number;
   }) {
-    this.apiUrl = input.apiUrl.replace(/\/+$/, '');
+    const parsedApiUrl = isAllowedCheckpointApiUrl(input.apiUrl);
+    if (!parsedApiUrl) {
+      throw new ReviewCheckpointHttpError(
+        ReviewCheckpointHttpFailureCode.UnsupportedEndpoint
+      );
+    }
+    this.apiUrl = parsedApiUrl.toString().replace(/\/+$/, '');
     this.leaseId = input.leaseId;
     this.providerInstanceId = input.providerInstanceId;
     this.fetchImpl = input.fetchImpl ?? fetch;
@@ -405,6 +405,7 @@ export class HttpReviewCheckpointClient implements ReviewCheckpointClientPort {
         response = await Promise.race([
           this.fetchImpl(`${this.apiUrl}${CHECKPOINT_PATH}${path}`, {
             method: 'POST',
+            redirect: 'error',
             headers: {
               accept: 'application/json',
               'content-type': 'application/json',
@@ -519,6 +520,19 @@ export class HttpReviewCheckpointClient implements ReviewCheckpointClientPort {
         ReviewCheckpointHttpFailureCode.ResponseTooLarge
       );
     }
+  }
+}
+
+function isAllowedCheckpointApiUrl(input: string): URL | null {
+  try {
+    const parsed = new URL(input);
+    if (parsed.protocol === 'https:') return parsed;
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    return parsed.protocol === 'http:' && LOOPBACK_HOSTNAMES.has(hostname)
+      ? parsed
+      : null;
+  } catch {
+    return null;
   }
 }
 

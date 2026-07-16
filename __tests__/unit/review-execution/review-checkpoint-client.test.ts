@@ -60,6 +60,41 @@ describe('HttpReviewCheckpointClient', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('rejects plaintext remote endpoints but allows loopback development', async () => {
+    const fetchImpl = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >();
+    const remoteSession = await createReviewCheckpointSessionFromEnvironment({
+      plan,
+      env: {
+        ...hostedEnv,
+        REVIEWROUTER_API_URL: 'http://reviewrouter.example',
+      },
+      fetchImpl,
+    });
+
+    expect(remoteSession).toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(
+      () =>
+        new HttpReviewCheckpointClient({
+          apiUrl: 'http://reviewrouter.example',
+          leaseId: 'lease',
+          providerInstanceId: 'provider',
+          fetchImpl,
+        })
+    ).toThrow('review_checkpoint_unsupported_endpoint');
+    expect(
+      new HttpReviewCheckpointClient({
+        apiUrl: 'http://127.0.0.1:3000',
+        leaseId: 'lease',
+        providerInstanceId: 'provider',
+        fetchImpl,
+      })
+    ).toBeInstanceOf(HttpReviewCheckpointClient);
+  });
+
   it('restores then starts with exact credentialed request bodies', async () => {
     const fetchImpl = jest
       .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
@@ -91,6 +126,10 @@ describe('HttpReviewCheckpointClient', () => {
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
       'https://reviewrouter.example/api/action/v1/codex-oauth/review-execution-checkpoint/restore',
       'https://reviewrouter.example/api/action/v1/codex-oauth/review-execution-checkpoint/start',
+    ]);
+    expect(fetchImpl.mock.calls.map(([, init]) => init?.redirect)).toEqual([
+      'error',
+      'error',
     ]);
     expect(requestBody(fetchImpl, 0)).toEqual({
       protocolVersion: 1,
@@ -459,6 +498,7 @@ describe('HttpReviewCheckpointClient', () => {
       headSha,
       planHash,
       expectedVersion: 3,
+      snapshotAdvancementRequired: true,
     });
 
     expect(requestBody(fetchImpl, 0)).toEqual({

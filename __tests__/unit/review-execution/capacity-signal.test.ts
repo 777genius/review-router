@@ -11,6 +11,12 @@ describe('classifyProviderCapacitySignal', () => {
     [{ status: 'error', error: new Error('HTTP 429 from provider') }],
     [{ status: 'error', error: 'Rate limit exceeded' }],
     [{ status: 'error', error: { message: 'Monthly quota exhausted' } }],
+    [
+      {
+        status: 'error',
+        error: { error: { code: 429, message: 'rate limit exceeded' } },
+      },
+    ],
   ])(
     'classifies capacity pressure from status and error messages',
     (result) => {
@@ -20,7 +26,7 @@ describe('classifyProviderCapacitySignal', () => {
     }
   );
 
-  it('does not treat structured JSON failures or JSON payloads as pressure', () => {
+  it('rejects structured-output noise but recognizes known JSON error fields', () => {
     expect(
       classifyProviderCapacitySignal({
         status: 'error',
@@ -33,6 +39,25 @@ describe('classifyProviderCapacitySignal', () => {
       classifyProviderCapacitySignal({
         status: 'error',
         error: '{"error":{"code":429,"message":"quota exceeded"}}',
+      })
+    ).toBe(CapacitySignal.CapacityPressure);
+    expect(
+      classifyProviderCapacitySignal({
+        status: 'error',
+        error: '{"metadata":"rate limit text is not an error"}',
+      })
+    ).toBe(CapacitySignal.Neutral);
+    expect(
+      classifyProviderCapacitySignal({
+        status: 'error',
+        error:
+          '{"error":{"code":429,"message":"structured output rate limit exceeded"}}',
+      })
+    ).toBe(CapacitySignal.CapacityPressure);
+    expect(
+      classifyProviderCapacitySignal({
+        status: 'error',
+        error: '{"error":{"message":"structured output rate limit exceeded"}}',
       })
     ).toBe(CapacitySignal.Neutral);
   });

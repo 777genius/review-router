@@ -132,7 +132,7 @@ export class MarkdownFormatter {
     ];
 
     if (limitedFiles.length > 0) {
-      lines.push('', 'Files not shown as full diffs in the primary prompt:');
+      lines.push('', 'Files with limited or incomplete review coverage:');
       limitedFiles.slice(0, 20).forEach((file) => {
         const reason = file.reason ? ` - ${file.reason}` : '';
         lines.push(`- \`${file.path}\` - ${file.status}${reason}`);

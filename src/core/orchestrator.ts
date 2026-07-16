@@ -168,6 +168,7 @@ export interface ReviewComponents {
   memoryBundleProvider?: ActionMemoryBundleProvider;
   executionDeadline?: ExecutionDeadline;
   reviewCompatibilityKey?: string;
+  incrementalSnapshotAdvancementEnabled?: boolean;
   openReviewCheckpointSession?: (
     plan: ReviewCheckpointPlanIdentity
   ) => Promise<ReviewCheckpointSession | null>;
@@ -1181,10 +1182,6 @@ export class ReviewOrchestrator {
           if (requiredProviderFailures.length > 0) {
             throw requiredProviderFailures[0];
           }
-          if (checkpointSession && batchFailures === 0) {
-            await checkpointSession.finalize();
-          }
-
           // Use partial success: proceed if at least some batches succeeded
           // Even if ALL batches failed, continue with AST/security analysis
           if (batchFailures > 0) {
@@ -1235,6 +1232,14 @@ export class ReviewOrchestrator {
             batchFailures === 0 &&
             unreviewedFiles.size === 0 &&
             loadLimitations.length === 0;
+          if (checkpointSession && batchFailures === 0) {
+            await checkpointSession.finalize({
+              snapshotAdvancementRequired:
+                (this.components.incrementalSnapshotAdvancementEnabled ??
+                  config.incrementalEnabled) &&
+                llmCoverageComplete,
+            });
+          }
 
           llmFindings.push(...extractFindings(batchResults));
           providerResults = mergedResults;
@@ -2679,7 +2684,8 @@ export class ReviewOrchestrator {
       review.findings.length > 0 ||
       inlineComments.length > 0 ||
       review.actionItems.length > 0 ||
-      (review.coverage?.unreviewedFiles ?? 0) > 0
+      review.coverage?.complete === false ||
+      (review.coverage?.limitations?.length ?? 0) > 0
     ) {
       return true;
     }
@@ -2728,7 +2734,11 @@ export class ReviewOrchestrator {
       payload.providerResults.map((result) => result.name)
     );
     const unattributedFindings = payload.findings.filter(
-      (finding) => !finding.provider || !providerNames.has(finding.provider)
+      (finding) =>
+        !(
+          (finding.provider && providerNames.has(finding.provider)) ||
+          finding.providers?.some((provider) => providerNames.has(provider))
+        )
     );
     let unattributedAssigned = false;
 

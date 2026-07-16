@@ -13620,10 +13620,18 @@ var CodexProvider = class _CodexProvider extends Provider {
       `Running Codex CLI safely: codex exec --model ${this.model} --sandbox read-only --ephemeral ...`
     );
     try {
+      const initialTimeoutMs = executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
+      if (initialTimeoutMs <= 0) {
+        const deadlineError = new Error(
+          "Review execution deadline reached before Codex invocation"
+        );
+        deadlineError.name = "TimeoutError";
+        throw deadlineError;
+      }
       let runResult = await this.runCliWithStdin(
         binary2,
         promptForCodex,
-        timeoutMs,
+        initialTimeoutMs,
         {
           healthCheck: false,
           outputSchema: this.buildFindingsSchema(),
@@ -22844,7 +22852,7 @@ var MarkdownFormatterV2 = class {
   hasScopeLimitations(review) {
     const coverage = review.coverage;
     if (!coverage) return false;
-    return coverage.compactedFiles > 0 || coverage.metadataOnlyFiles > 0 || coverage.skippedFiles > 0 || coverage.unreviewedFiles > 0;
+    return coverage.compactedFiles > 0 || coverage.metadataOnlyFiles > 0 || coverage.skippedFiles > 0 || coverage.unreviewedFiles > 0 || coverage.complete === false || (coverage.limitations?.length ?? 0) > 0;
   }
   didAllProviderRunsFail(review) {
     return review.metrics.providersUsed > 0 && review.metrics.providersSuccess === 0 && review.metrics.providersFailed > 0;
@@ -27801,7 +27809,8 @@ var reviewCheckpointFinalizationMarkerSchema = external_exports.object({
   pullRequestNumber: external_exports.number().int().positive(),
   headSha: external_exports.string().regex(GIT_SHA_PATTERN),
   planHash: external_exports.string().regex(HASH_PATTERN),
-  expectedVersion: external_exports.number().int().nonnegative()
+  expectedVersion: external_exports.number().int().nonnegative(),
+  snapshotAdvancementRequired: external_exports.boolean()
 }).strict();
 function createReviewCheckpointPlanIdentity(input) {
   const parsed = reviewCheckpointPlanIdentitySchema.parse(input);
@@ -28064,7 +28073,11 @@ var ReviewCheckpointSession = class _ReviewCheckpointSession {
         warnFailOpen(input.logger, "start_version_conflict");
         return null;
       }
-      if (started.headSha.toLowerCase() !== plan.headSha || started.planHash.toLowerCase() !== plan.planHash || started.version < expectedVersion) {
+      if (started.headSha.toLowerCase() !== plan.headSha || started.planHash.toLowerCase() !== plan.planHash || !isValidVersionAcknowledgement(
+        started.version,
+        expectedVersion,
+        started.status === "idempotent" /* Idempotent */
+      )) {
         warnFailOpen(input.logger, "invalid_start_acknowledgement");
         return null;
       }
@@ -28110,8 +28123,8 @@ var ReviewCheckpointSession = class _ReviewCheckpointSession {
   commitSuccessfulBatch(input) {
     return this.enqueue(() => this.commitSuccessfulBatchNow(input));
   }
-  finalize() {
-    return this.enqueue(() => this.finalizeNow());
+  finalize(input) {
+    return this.enqueue(() => this.finalizeNow(input));
   }
   async commitSuccessfulBatchNow(input) {
     if (this.disabled || this.finalized) return disabledCommit();
@@ -28159,7 +28172,11 @@ var ReviewCheckpointSession = class _ReviewCheckpointSession {
         this.disable("repeated_version_conflict");
         return disabledCommit();
       }
-      if (!this.isExactBatchAcknowledgement(result, workKey)) {
+      if (!this.isExactBatchAcknowledgement(result, workKey) || !isValidVersionAcknowledgement(
+        result.version,
+        this.expectedVersion,
+        result.status === "idempotent" /* Idempotent */
+      )) {
         this.disable("mismatched_batch_acknowledgement");
         return disabledCommit();
       }
@@ -28175,7 +28192,7 @@ var ReviewCheckpointSession = class _ReviewCheckpointSession {
       return disabledCommit();
     }
   }
-  async finalizeNow() {
+  async finalizeNow(input) {
     if (this.disabled) return disabledFinalize();
     const missingWorkKeys = this.plan.workKeys.filter(
       (workKey) => !this.acceptedResults.has(workKey)
@@ -28207,13 +28224,19 @@ var ReviewCheckpointSession = class _ReviewCheckpointSession {
         this.disable("repeated_finalize_version_conflict");
         return disabledFinalize();
       }
-      if (result.headSha.toLowerCase() !== this.plan.headSha || result.planHash.toLowerCase() !== this.plan.planHash) {
+      if (result.headSha.toLowerCase() !== this.plan.headSha || result.planHash.toLowerCase() !== this.plan.planHash || !isValidVersionAcknowledgement(
+        result.version,
+        this.expectedVersion,
+        result.status === "idempotent" /* Idempotent */
+      )) {
         this.disable("mismatched_finalize_acknowledgement");
         return disabledFinalize();
       }
       this.expectedVersion = result.version;
       this.finalized = true;
-      const markerWritten = await this.writeFinalizationMarker();
+      const markerWritten = await this.writeFinalizationMarker(
+        input.snapshotAdvancementRequired
+      );
       return {
         status: result.status === "idempotent" /* Idempotent */ ? "idempotent" /* Idempotent */ : "finalized" /* Finalized */,
         expectedVersion: this.expectedVersion,
@@ -28297,7 +28320,7 @@ var ReviewCheckpointSession = class _ReviewCheckpointSession {
       })
     );
   }
-  async writeFinalizationMarker() {
+  async writeFinalizationMarker(snapshotAdvancementRequired) {
     if (!this.markerWriter) return false;
     try {
       await this.markerWriter.write({
@@ -28305,7 +28328,8 @@ var ReviewCheckpointSession = class _ReviewCheckpointSession {
         pullRequestNumber: this.plan.pullRequestNumber,
         headSha: this.plan.headSha,
         planHash: this.plan.planHash,
-        expectedVersion: this.expectedVersion
+        expectedVersion: this.expectedVersion,
+        snapshotAdvancementRequired
       });
       return true;
     } catch {
@@ -28327,6 +28351,9 @@ var ReviewCheckpointSession = class _ReviewCheckpointSession {
     return result;
   }
 };
+function isValidVersionAcknowledgement(acknowledgedVersion, expectedVersion, idempotent) {
+  return idempotent ? acknowledgedVersion >= expectedVersion : acknowledgedVersion === expectedVersion + 1;
+}
 function acceptedResultsInPlanOrder(plan, checkpoint) {
   const byWorkKey = /* @__PURE__ */ new Map();
   for (const accepted of checkpoint.acceptedResults) {
@@ -28381,6 +28408,7 @@ var RESPONSE_MAX_BYTES = REVIEW_CHECKPOINT_MAX_AGGREGATE_BYTES + RESPONSE_ENVELO
 var gitShaSchema = external_exports.string().regex(/^[a-f0-9]{40}$/i);
 var hashSchema = external_exports.string().regex(/^[a-f0-9]{64}$/i);
 var versionSchema = external_exports.number().int().nonnegative();
+var LOOPBACK_HOSTNAMES = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "::1"]);
 var acceptedResultSchema = external_exports.object({
   workKey: hashSchema,
   payload: reviewCheckpointBatchPayloadSchema
@@ -28473,14 +28501,7 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
     const leaseId = env[REVIEW_CHECKPOINT_LEASE_ID_ENV]?.trim();
     const providerInstanceId = env[REVIEW_CHECKPOINT_PROVIDER_INSTANCE_ID_ENV]?.trim();
     if (!apiUrl || !leaseId || !providerInstanceId) return null;
-    try {
-      const parsedUrl = new URL(apiUrl);
-      if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
-        return null;
-      }
-    } catch {
-      return null;
-    }
+    if (!isAllowedCheckpointApiUrl(apiUrl)) return null;
     return new _HttpReviewCheckpointClient({
       apiUrl,
       leaseId,
@@ -28497,7 +28518,13 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
   requestTimeoutMs;
   now;
   constructor(input) {
-    this.apiUrl = input.apiUrl.replace(/\/+$/, "");
+    const parsedApiUrl = isAllowedCheckpointApiUrl(input.apiUrl);
+    if (!parsedApiUrl) {
+      throw new ReviewCheckpointHttpError(
+        "unsupported_endpoint" /* UnsupportedEndpoint */
+      );
+    }
+    this.apiUrl = parsedApiUrl.toString().replace(/\/+$/, "");
     this.leaseId = input.leaseId;
     this.providerInstanceId = input.providerInstanceId;
     this.fetchImpl = input.fetchImpl ?? fetch;
@@ -28631,6 +28658,7 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
         response = await Promise.race([
           this.fetchImpl(`${this.apiUrl}${CHECKPOINT_PATH}${path19}`, {
             method: "POST",
+            redirect: "error",
             headers: {
               accept: "application/json",
               "content-type": "application/json"
@@ -28734,6 +28762,16 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
     }
   }
 };
+function isAllowedCheckpointApiUrl(input) {
+  try {
+    const parsed = new URL(input);
+    if (parsed.protocol === "https:") return parsed;
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return parsed.protocol === "http:" && LOOPBACK_HOSTNAMES.has(hostname) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 var FileReviewCheckpointFinalizationMarkerWriter = class _FileReviewCheckpointFinalizationMarkerWriter {
   constructor(path19) {
     this.path = path19;
@@ -29018,6 +29056,7 @@ async function createComponents(config, githubToken, options = {}) {
     memoryBundleProvider,
     executionDeadline,
     reviewCompatibilityKey,
+    incrementalSnapshotAdvancementEnabled: incrementalSnapshotStorage.enabled,
     openReviewCheckpointSession: (plan) => createReviewCheckpointSessionFromEnvironment({
       plan,
       logger: { warn: (message) => logger.warn(message) }
@@ -32541,11 +32580,15 @@ function buildReviewCoverage(pr2, config, options = {}) {
   }));
   const files = [...reviewedFiles, ...skippedFiles];
   const loadedUnreviewedFiles = countByStatus(files, "unreviewed");
-  const unreviewedFiles = loadedUnreviewedFiles + Math.max(0, options.additionalUnreviewedFiles ?? 0);
+  const additionalUnreviewedFiles = Math.max(
+    0,
+    options.additionalUnreviewedFiles ?? 0
+  );
+  const unreviewedFiles = loadedUnreviewedFiles + additionalUnreviewedFiles;
   const limitations = [...options.limitations ?? []];
   return {
     mode: options.mode ?? "full",
-    totalFiles: options.totalFiles ?? files.length,
+    totalFiles: options.totalFiles ?? files.length + additionalUnreviewedFiles,
     filesConsidered: Math.max(0, pr2.files.length - loadedUnreviewedFiles),
     fullDiffFiles: countByStatus(files, "full"),
     compactedFiles: countByStatus(files, "compacted"),
@@ -33350,29 +33393,81 @@ var import_path = __toESM(require("path"));
 // src/review-execution/domain/capacity-signal.ts
 var STRUCTURED_OUTPUT_ERROR = /\b(?:structured\s+(?:json|output|response)|(?:invalid|malformed)\s+json|json\s+(?:schema|parse|parsing|validation)|(?:parse|parsing|validate)\s+(?:structured\s+)?json|failed\s+to\s+(?:parse|validate).*json)\b/i;
 var CAPACITY_MESSAGE = /(?:\bcapacity[\s_-]*unavailable\b|\brate[\s_-]*limit(?:ed|ing)?\b|\bratelimit(?:ed|ing)?\b|\btoo many requests\b|\b429\b|\bquota(?:[\s_-]*(?:exceeded|exhausted|unavailable))?\b)/i;
+var DEFINITIVE_CAPACITY_CODE = /^(?:429|capacity[_-]?unavailable|rate[_-]?limit(?:ed|_exceeded)?|too[_-]?many[_-]?requests|quota[_-]?(?:exceeded|exhausted|unavailable)|resource[_-]?exhausted)$/i;
 function messageFromError(error2) {
   if (typeof error2 === "string") return error2;
-  if (error2 instanceof Error) return error2.message;
-  if (typeof error2 === "object" && error2 !== null && "message" in error2 && typeof error2.message === "string") {
-    return error2.message;
+  if (typeof error2 === "object" && error2 !== null) {
+    try {
+      const record = error2;
+      const serialized = JSON.stringify({
+        ...record,
+        ..."message" in record && typeof record.message === "string" ? { message: record.message } : error2 instanceof Error ? { message: error2.message } : {}
+      });
+      if (serialized !== "{}") return serialized;
+    } catch {
+    }
+    if (error2 instanceof Error) return error2.message;
+    if ("message" in error2 && typeof error2.message === "string") {
+      return error2.message;
+    }
   }
   return void 0;
 }
-function isJsonPayload(message) {
+function capacityFieldsFromJson(message) {
   const trimmed = message.trim();
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return void 0;
   try {
     const parsed = JSON.parse(trimmed);
-    return typeof parsed === "object" && parsed !== null;
+    const evidence = collectKnownCapacityFields(parsed);
+    return {
+      fields: evidence.values.join(" "),
+      definitive: evidence.definitive
+    };
   } catch {
-    return false;
+    return void 0;
   }
+}
+function collectKnownCapacityFields(value, depth = 0) {
+  if (depth > 2 || typeof value !== "object" || value === null) {
+    return { values: [], definitive: false };
+  }
+  if (Array.isArray(value)) {
+    return value.reduce(
+      (combined, item) => {
+        const nested = collectKnownCapacityFields(item, depth + 1);
+        combined.values.push(...nested.values);
+        combined.definitive ||= nested.definitive;
+        return combined;
+      },
+      { values: [], definitive: false }
+    );
+  }
+  const record = value;
+  const fields = [];
+  let definitive = false;
+  for (const key of ["error", "status", "message", "code"]) {
+    const field = record[key];
+    if (typeof field === "string" || typeof field === "number") {
+      const normalized = String(field);
+      fields.push(normalized);
+      if ((key === "status" || key === "code") && DEFINITIVE_CAPACITY_CODE.test(normalized)) {
+        definitive = true;
+      }
+    } else if (typeof field === "object" && field !== null) {
+      const nested = collectKnownCapacityFields(field, depth + 1);
+      fields.push(...nested.values);
+      definitive ||= nested.definitive;
+    }
+  }
+  return { values: fields, definitive };
 }
 function hasCapacityMessage(message) {
   if (message === void 0) return false;
-  if (STRUCTURED_OUTPUT_ERROR.test(message) || isJsonPayload(message)) {
-    return false;
+  const jsonFields = capacityFieldsFromJson(message);
+  if (jsonFields !== void 0) {
+    return jsonFields.definitive || !STRUCTURED_OUTPUT_ERROR.test(jsonFields.fields) && CAPACITY_MESSAGE.test(jsonFields.fields);
   }
+  if (STRUCTURED_OUTPUT_ERROR.test(message)) return false;
   return CAPACITY_MESSAGE.test(message);
 }
 function classifyOne(result) {
@@ -33415,9 +33510,24 @@ var SECURITY_TOKENS = /* @__PURE__ */ new Set([
   "oauth",
   "security",
   "session",
-  "sessions",
-  "token",
-  "tokens"
+  "sessions"
+]);
+var SENSITIVE_TOKEN_CONTEXT = /* @__PURE__ */ new Set([
+  "access",
+  "api",
+  "bearer",
+  "credential",
+  "credentials",
+  "csrf",
+  "identity",
+  "keyring",
+  "manager",
+  "refresh",
+  "secret",
+  "signing",
+  "storage",
+  "store",
+  "vault"
 ]);
 var MIGRATION_TOKENS = /* @__PURE__ */ new Set([
   "migration",
@@ -33447,6 +33557,9 @@ function pathTokens(filename) {
 function includesToken(tokens, candidates) {
   return tokens.some((token) => candidates.has(token));
 }
+function isSensitiveTokenPath(tokens) {
+  return (tokens.includes("token") || tokens.includes("tokens")) && includesToken(tokens, SENSITIVE_TOKEN_CONTEXT);
+}
 function isActionManifest(filename, tokens) {
   const basename3 = filename.split("/").at(-1)?.toLowerCase();
   if (basename3 === "action.yml" || basename3 === "action.yaml") return true;
@@ -33454,7 +33567,9 @@ function isActionManifest(filename, tokens) {
 }
 function classifyFileRisk(filename) {
   const tokens = pathTokens(filename);
-  if (includesToken(tokens, SECURITY_TOKENS)) return "security" /* Security */;
+  if (includesToken(tokens, SECURITY_TOKENS) || isSensitiveTokenPath(tokens)) {
+    return "security" /* Security */;
+  }
   if (includesToken(tokens, MIGRATION_TOKENS)) return "migration" /* Migration */;
   if (includesToken(tokens, PERSISTENCE_TOKENS)) {
     return "persistence" /* Persistence */;
@@ -34446,9 +34561,6 @@ var ReviewOrchestrator = class {
           if (requiredProviderFailures.length > 0) {
             throw requiredProviderFailures[0];
           }
-          if (checkpointSession && batchFailures === 0) {
-            await checkpointSession.finalize();
-          }
           if (batchFailures > 0) {
             if (batchSuccesses === 0) {
               const failedNames = mergedResults.filter((r2) => r2.status !== "success").map((r2) => r2.name).join(", ");
@@ -34485,6 +34597,11 @@ var ReviewOrchestrator = class {
             );
           }
           llmCoverageComplete = batchFailures === 0 && unreviewedFiles.size === 0 && loadLimitations.length === 0;
+          if (checkpointSession && batchFailures === 0) {
+            await checkpointSession.finalize({
+              snapshotAdvancementRequired: (this.components.incrementalSnapshotAdvancementEnabled ?? config.incrementalEnabled) && llmCoverageComplete
+            });
+          }
           llmFindings.push(...extractFindings(batchResults));
           providerResults = mergedResults;
           aiAnalysis = config.enableAiDetection ? summarizeAIDetection(providerResults) : void 0;
@@ -35541,7 +35658,7 @@ ${markdown}`;
     return body.includes("<!-- review-router-inline:") || body.includes("<!-- review-router-skip-help -->") || body.includes("<!-- ai-robot-review-inline:");
   }
   shouldPostReviewOutput(review, inlineComments) {
-    if (review.findings.length > 0 || inlineComments.length > 0 || review.actionItems.length > 0 || (review.coverage?.unreviewedFiles ?? 0) > 0) {
+    if (review.findings.length > 0 || inlineComments.length > 0 || review.actionItems.length > 0 || review.coverage?.complete === false || (review.coverage?.limitations?.length ?? 0) > 0) {
       return true;
     }
     const lifecycle = review.threadLifecycle;
@@ -35571,7 +35688,7 @@ ${markdown}`;
       payload.providerResults.map((result) => result.name)
     );
     const unattributedFindings = payload.findings.filter(
-      (finding) => !finding.provider || !providerNames.has(finding.provider)
+      (finding) => !(finding.provider && providerNames.has(finding.provider) || finding.providers?.some((provider) => providerNames.has(provider)))
     );
     let unattributedAssigned = false;
     return payload.providerResults.map((providerResult) => {

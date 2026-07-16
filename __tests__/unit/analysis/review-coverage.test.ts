@@ -138,6 +138,15 @@ describe('buildReviewCoverage', () => {
     expect(coverage.complete).toBe(false);
   });
 
+  it('includes unknown omitted files in the default total', () => {
+    const coverage = buildReviewCoverage(pr(), config, {
+      additionalUnreviewedFiles: 2,
+    });
+
+    expect(coverage.totalFiles).toBe(5);
+    expect(coverage.unreviewedFiles).toBe(2);
+  });
+
   it('marks files trimmed by the prompt byte budget as metadata-only', () => {
     const coverage = buildReviewCoverage(
       pr(),

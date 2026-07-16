@@ -29,168 +29,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/eventemitter3/index.js
-var require_eventemitter3 = __commonJS({
-  "node_modules/eventemitter3/index.js"(exports2, module2) {
-    "use strict";
-    var has = Object.prototype.hasOwnProperty;
-    var prefix = "~";
-    function Events() {
-    }
-    if (Object.create) {
-      Events.prototype = /* @__PURE__ */ Object.create(null);
-      if (!new Events().__proto__) prefix = false;
-    }
-    function EE(fn, context, once) {
-      this.fn = fn;
-      this.context = context;
-      this.once = once || false;
-    }
-    function addListener(emitter, event, fn, context, once) {
-      if (typeof fn !== "function") {
-        throw new TypeError("The listener must be a function");
-      }
-      var listener = new EE(fn, context || emitter, once), evt = prefix ? prefix + event : event;
-      if (!emitter._events[evt]) emitter._events[evt] = listener, emitter._eventsCount++;
-      else if (!emitter._events[evt].fn) emitter._events[evt].push(listener);
-      else emitter._events[evt] = [emitter._events[evt], listener];
-      return emitter;
-    }
-    function clearEvent(emitter, evt) {
-      if (--emitter._eventsCount === 0) emitter._events = new Events();
-      else delete emitter._events[evt];
-    }
-    function EventEmitter2() {
-      this._events = new Events();
-      this._eventsCount = 0;
-    }
-    EventEmitter2.prototype.eventNames = function eventNames() {
-      var names = [], events, name;
-      if (this._eventsCount === 0) return names;
-      for (name in events = this._events) {
-        if (has.call(events, name)) names.push(prefix ? name.slice(1) : name);
-      }
-      if (Object.getOwnPropertySymbols) {
-        return names.concat(Object.getOwnPropertySymbols(events));
-      }
-      return names;
-    };
-    EventEmitter2.prototype.listeners = function listeners(event) {
-      var evt = prefix ? prefix + event : event, handlers = this._events[evt];
-      if (!handlers) return [];
-      if (handlers.fn) return [handlers.fn];
-      for (var i2 = 0, l2 = handlers.length, ee2 = new Array(l2); i2 < l2; i2++) {
-        ee2[i2] = handlers[i2].fn;
-      }
-      return ee2;
-    };
-    EventEmitter2.prototype.listenerCount = function listenerCount(event) {
-      var evt = prefix ? prefix + event : event, listeners = this._events[evt];
-      if (!listeners) return 0;
-      if (listeners.fn) return 1;
-      return listeners.length;
-    };
-    EventEmitter2.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
-      var evt = prefix ? prefix + event : event;
-      if (!this._events[evt]) return false;
-      var listeners = this._events[evt], len = arguments.length, args, i2;
-      if (listeners.fn) {
-        if (listeners.once) this.removeListener(event, listeners.fn, void 0, true);
-        switch (len) {
-          case 1:
-            return listeners.fn.call(listeners.context), true;
-          case 2:
-            return listeners.fn.call(listeners.context, a1), true;
-          case 3:
-            return listeners.fn.call(listeners.context, a1, a2), true;
-          case 4:
-            return listeners.fn.call(listeners.context, a1, a2, a3), true;
-          case 5:
-            return listeners.fn.call(listeners.context, a1, a2, a3, a4), true;
-          case 6:
-            return listeners.fn.call(listeners.context, a1, a2, a3, a4, a5), true;
-        }
-        for (i2 = 1, args = new Array(len - 1); i2 < len; i2++) {
-          args[i2 - 1] = arguments[i2];
-        }
-        listeners.fn.apply(listeners.context, args);
-      } else {
-        var length = listeners.length, j2;
-        for (i2 = 0; i2 < length; i2++) {
-          if (listeners[i2].once) this.removeListener(event, listeners[i2].fn, void 0, true);
-          switch (len) {
-            case 1:
-              listeners[i2].fn.call(listeners[i2].context);
-              break;
-            case 2:
-              listeners[i2].fn.call(listeners[i2].context, a1);
-              break;
-            case 3:
-              listeners[i2].fn.call(listeners[i2].context, a1, a2);
-              break;
-            case 4:
-              listeners[i2].fn.call(listeners[i2].context, a1, a2, a3);
-              break;
-            default:
-              if (!args) for (j2 = 1, args = new Array(len - 1); j2 < len; j2++) {
-                args[j2 - 1] = arguments[j2];
-              }
-              listeners[i2].fn.apply(listeners[i2].context, args);
-          }
-        }
-      }
-      return true;
-    };
-    EventEmitter2.prototype.on = function on(event, fn, context) {
-      return addListener(this, event, fn, context, false);
-    };
-    EventEmitter2.prototype.once = function once(event, fn, context) {
-      return addListener(this, event, fn, context, true);
-    };
-    EventEmitter2.prototype.removeListener = function removeListener(event, fn, context, once) {
-      var evt = prefix ? prefix + event : event;
-      if (!this._events[evt]) return this;
-      if (!fn) {
-        clearEvent(this, evt);
-        return this;
-      }
-      var listeners = this._events[evt];
-      if (listeners.fn) {
-        if (listeners.fn === fn && (!once || listeners.once) && (!context || listeners.context === context)) {
-          clearEvent(this, evt);
-        }
-      } else {
-        for (var i2 = 0, events = [], length = listeners.length; i2 < length; i2++) {
-          if (listeners[i2].fn !== fn || once && !listeners[i2].once || context && listeners[i2].context !== context) {
-            events.push(listeners[i2]);
-          }
-        }
-        if (events.length) this._events[evt] = events.length === 1 ? events[0] : events;
-        else clearEvent(this, evt);
-      }
-      return this;
-    };
-    EventEmitter2.prototype.removeAllListeners = function removeAllListeners(event) {
-      var evt;
-      if (event) {
-        evt = prefix ? prefix + event : event;
-        if (this._events[evt]) clearEvent(this, evt);
-      } else {
-        this._events = new Events();
-        this._eventsCount = 0;
-      }
-      return this;
-    };
-    EventEmitter2.prototype.off = EventEmitter2.prototype.removeListener;
-    EventEmitter2.prototype.addListener = EventEmitter2.prototype.on;
-    EventEmitter2.prefixed = prefix;
-    EventEmitter2.EventEmitter = EventEmitter2;
-    if ("undefined" !== typeof module2) {
-      module2.exports = EventEmitter2;
-    }
-  }
-});
-
 // node_modules/retry/lib/retry_operation.js
 var require_retry_operation = __commonJS({
   "node_modules/retry/lib/retry_operation.js"(exports2, module2) {
@@ -4486,7 +4324,7 @@ function escapeProperty(value) {
 }
 
 // src/main.ts
-var fs20 = __toESM(require("fs"));
+var fs21 = __toESM(require("fs"));
 
 // src/config/loader.ts
 var fs2 = __toESM(require("fs"));
@@ -13087,7 +12925,7 @@ function estimateTokensForFile(file) {
 function estimateTokensForFiles(files) {
   return files.reduce((total, file) => total + estimateTokensForFile(file), 0);
 }
-function calculateOptimalBatchSize(files, targetTokensPerBatch = 5e4, maxFilesPerBatch = 200) {
+function calculateOptimalBatchSize(files, targetTokensPerBatch = 5e4, maxFilesPerBatch = 200, preserveInputOrder = false) {
   if (files.length === 0) {
     return {
       batchSize: 0,
@@ -13100,7 +12938,9 @@ function calculateOptimalBatchSize(files, targetTokensPerBatch = 5e4, maxFilesPe
     file,
     tokens: estimateTokensForFile(file)
   }));
-  filesWithSizes.sort((a2, b2) => b2.tokens - a2.tokens);
+  if (!preserveInputOrder) {
+    filesWithSizes.sort((a2, b2) => b2.tokens - a2.tokens);
+  }
   const batches = [];
   let currentBatch = [];
   let currentBatchTokens = 0;
@@ -13769,7 +13609,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       return false;
     }
   }
-  async review(prompt, timeoutMs) {
+  async review(prompt, timeoutMs, executionPolicy) {
     const started = Date.now();
     const binary2 = await this.resolveBinary();
     const agenticContext = this.shouldUseAgenticContext();
@@ -13804,7 +13644,7 @@ var CodexProvider = class _CodexProvider extends Provider {
         runResult.audit,
         prompt,
         auditMode
-      )) {
+      ) && (executionPolicy?.canStartOptionalRetry() ?? true)) {
         logger.warn(
           `Codex agentic review completed without read-only exploration; retrying once for ${this.name}`
         );
@@ -13812,10 +13652,16 @@ var CodexProvider = class _CodexProvider extends Provider {
         const firstParsed = parsed;
         const firstRunResult = runResult;
         try {
+          const retryTimeoutMs = executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
+          if (retryTimeoutMs <= 0) {
+            throw new Error(
+              "Review execution deadline reached before Codex agentic retry"
+            );
+          }
           runResult = await this.runCliWithStdin(
             binary2,
             this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
-            timeoutMs,
+            retryTimeoutMs,
             {
               healthCheck: false,
               outputSchema: this.buildFindingsSchema(),
@@ -16559,495 +16405,6 @@ function sanitizeLifecyclePromptField(value, maxLength) {
   );
 }
 
-// node_modules/eventemitter3/index.mjs
-var import_index = __toESM(require_eventemitter3(), 1);
-
-// node_modules/p-timeout/index.js
-var TimeoutError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "TimeoutError";
-  }
-};
-var AbortError = class extends Error {
-  constructor(message) {
-    super();
-    this.name = "AbortError";
-    this.message = message;
-  }
-};
-var getDOMException = (errorMessage2) => globalThis.DOMException === void 0 ? new AbortError(errorMessage2) : new DOMException(errorMessage2);
-var getAbortedReason = (signal) => {
-  const reason = signal.reason === void 0 ? getDOMException("This operation was aborted.") : signal.reason;
-  return reason instanceof Error ? reason : getDOMException(reason);
-};
-function pTimeout(promise, options) {
-  const {
-    milliseconds,
-    fallback: fallback2,
-    message,
-    customTimers = { setTimeout, clearTimeout }
-  } = options;
-  let timer;
-  let abortHandler;
-  const wrappedPromise = new Promise((resolve3, reject) => {
-    if (typeof milliseconds !== "number" || Math.sign(milliseconds) !== 1) {
-      throw new TypeError(`Expected \`milliseconds\` to be a positive number, got \`${milliseconds}\``);
-    }
-    if (options.signal) {
-      const { signal } = options;
-      if (signal.aborted) {
-        reject(getAbortedReason(signal));
-      }
-      abortHandler = () => {
-        reject(getAbortedReason(signal));
-      };
-      signal.addEventListener("abort", abortHandler, { once: true });
-    }
-    if (milliseconds === Number.POSITIVE_INFINITY) {
-      promise.then(resolve3, reject);
-      return;
-    }
-    const timeoutError = new TimeoutError();
-    timer = customTimers.setTimeout.call(void 0, () => {
-      if (fallback2) {
-        try {
-          resolve3(fallback2());
-        } catch (error2) {
-          reject(error2);
-        }
-        return;
-      }
-      if (typeof promise.cancel === "function") {
-        promise.cancel();
-      }
-      if (message === false) {
-        resolve3();
-      } else if (message instanceof Error) {
-        reject(message);
-      } else {
-        timeoutError.message = message ?? `Promise timed out after ${milliseconds} milliseconds`;
-        reject(timeoutError);
-      }
-    }, milliseconds);
-    (async () => {
-      try {
-        resolve3(await promise);
-      } catch (error2) {
-        reject(error2);
-      }
-    })();
-  });
-  const cancelablePromise = wrappedPromise.finally(() => {
-    cancelablePromise.clear();
-    if (abortHandler && options.signal) {
-      options.signal.removeEventListener("abort", abortHandler);
-    }
-  });
-  cancelablePromise.clear = () => {
-    customTimers.clearTimeout.call(void 0, timer);
-    timer = void 0;
-  };
-  return cancelablePromise;
-}
-
-// node_modules/p-queue/dist/lower-bound.js
-function lowerBound(array, value, comparator) {
-  let first = 0;
-  let count = array.length;
-  while (count > 0) {
-    const step = Math.trunc(count / 2);
-    let it2 = first + step;
-    if (comparator(array[it2], value) <= 0) {
-      first = ++it2;
-      count -= step + 1;
-    } else {
-      count = step;
-    }
-  }
-  return first;
-}
-
-// node_modules/p-queue/dist/priority-queue.js
-var PriorityQueue = class {
-  #queue = [];
-  enqueue(run2, options) {
-    options = {
-      priority: 0,
-      ...options
-    };
-    const element = {
-      priority: options.priority,
-      id: options.id,
-      run: run2
-    };
-    if (this.size === 0 || this.#queue[this.size - 1].priority >= options.priority) {
-      this.#queue.push(element);
-      return;
-    }
-    const index = lowerBound(this.#queue, element, (a2, b2) => b2.priority - a2.priority);
-    this.#queue.splice(index, 0, element);
-  }
-  setPriority(id, priority) {
-    const index = this.#queue.findIndex((element) => element.id === id);
-    if (index === -1) {
-      throw new ReferenceError(`No promise function with the id "${id}" exists in the queue.`);
-    }
-    const [item] = this.#queue.splice(index, 1);
-    this.enqueue(item.run, { priority, id });
-  }
-  dequeue() {
-    const item = this.#queue.shift();
-    return item?.run;
-  }
-  filter(options) {
-    return this.#queue.filter((element) => element.priority === options.priority).map((element) => element.run);
-  }
-  get size() {
-    return this.#queue.length;
-  }
-};
-
-// node_modules/p-queue/dist/index.js
-var PQueue = class extends import_index.default {
-  #carryoverConcurrencyCount;
-  #isIntervalIgnored;
-  #intervalCount = 0;
-  #intervalCap;
-  #interval;
-  #intervalEnd = 0;
-  #intervalId;
-  #timeoutId;
-  #queue;
-  #queueClass;
-  #pending = 0;
-  // The `!` is needed because of https://github.com/microsoft/TypeScript/issues/32194
-  #concurrency;
-  #isPaused;
-  #throwOnTimeout;
-  // Use to assign a unique identifier to a promise function, if not explicitly specified
-  #idAssigner = 1n;
-  /**
-      Per-operation timeout in milliseconds. Operations fulfill once `timeout` elapses if they haven't already.
-  
-      Applies to each future operation.
-      */
-  timeout;
-  // TODO: The `throwOnTimeout` option should affect the return types of `add()` and `addAll()`
-  constructor(options) {
-    super();
-    options = {
-      carryoverConcurrencyCount: false,
-      intervalCap: Number.POSITIVE_INFINITY,
-      interval: 0,
-      concurrency: Number.POSITIVE_INFINITY,
-      autoStart: true,
-      queueClass: PriorityQueue,
-      ...options
-    };
-    if (!(typeof options.intervalCap === "number" && options.intervalCap >= 1)) {
-      throw new TypeError(`Expected \`intervalCap\` to be a number from 1 and up, got \`${options.intervalCap?.toString() ?? ""}\` (${typeof options.intervalCap})`);
-    }
-    if (options.interval === void 0 || !(Number.isFinite(options.interval) && options.interval >= 0)) {
-      throw new TypeError(`Expected \`interval\` to be a finite number >= 0, got \`${options.interval?.toString() ?? ""}\` (${typeof options.interval})`);
-    }
-    this.#carryoverConcurrencyCount = options.carryoverConcurrencyCount;
-    this.#isIntervalIgnored = options.intervalCap === Number.POSITIVE_INFINITY || options.interval === 0;
-    this.#intervalCap = options.intervalCap;
-    this.#interval = options.interval;
-    this.#queue = new options.queueClass();
-    this.#queueClass = options.queueClass;
-    this.concurrency = options.concurrency;
-    this.timeout = options.timeout;
-    this.#throwOnTimeout = options.throwOnTimeout === true;
-    this.#isPaused = options.autoStart === false;
-  }
-  get #doesIntervalAllowAnother() {
-    return this.#isIntervalIgnored || this.#intervalCount < this.#intervalCap;
-  }
-  get #doesConcurrentAllowAnother() {
-    return this.#pending < this.#concurrency;
-  }
-  #next() {
-    this.#pending--;
-    this.#tryToStartAnother();
-    this.emit("next");
-  }
-  #onResumeInterval() {
-    this.#onInterval();
-    this.#initializeIntervalIfNeeded();
-    this.#timeoutId = void 0;
-  }
-  get #isIntervalPaused() {
-    const now = Date.now();
-    if (this.#intervalId === void 0) {
-      const delay = this.#intervalEnd - now;
-      if (delay < 0) {
-        this.#intervalCount = this.#carryoverConcurrencyCount ? this.#pending : 0;
-      } else {
-        if (this.#timeoutId === void 0) {
-          this.#timeoutId = setTimeout(() => {
-            this.#onResumeInterval();
-          }, delay);
-        }
-        return true;
-      }
-    }
-    return false;
-  }
-  #tryToStartAnother() {
-    if (this.#queue.size === 0) {
-      if (this.#intervalId) {
-        clearInterval(this.#intervalId);
-      }
-      this.#intervalId = void 0;
-      this.emit("empty");
-      if (this.#pending === 0) {
-        this.emit("idle");
-      }
-      return false;
-    }
-    if (!this.#isPaused) {
-      const canInitializeInterval = !this.#isIntervalPaused;
-      if (this.#doesIntervalAllowAnother && this.#doesConcurrentAllowAnother) {
-        const job = this.#queue.dequeue();
-        if (!job) {
-          return false;
-        }
-        this.emit("active");
-        job();
-        if (canInitializeInterval) {
-          this.#initializeIntervalIfNeeded();
-        }
-        return true;
-      }
-    }
-    return false;
-  }
-  #initializeIntervalIfNeeded() {
-    if (this.#isIntervalIgnored || this.#intervalId !== void 0) {
-      return;
-    }
-    this.#intervalId = setInterval(() => {
-      this.#onInterval();
-    }, this.#interval);
-    this.#intervalEnd = Date.now() + this.#interval;
-  }
-  #onInterval() {
-    if (this.#intervalCount === 0 && this.#pending === 0 && this.#intervalId) {
-      clearInterval(this.#intervalId);
-      this.#intervalId = void 0;
-    }
-    this.#intervalCount = this.#carryoverConcurrencyCount ? this.#pending : 0;
-    this.#processQueue();
-  }
-  /**
-  Executes all queued functions until it reaches the limit.
-  */
-  #processQueue() {
-    while (this.#tryToStartAnother()) {
-    }
-  }
-  get concurrency() {
-    return this.#concurrency;
-  }
-  set concurrency(newConcurrency) {
-    if (!(typeof newConcurrency === "number" && newConcurrency >= 1)) {
-      throw new TypeError(`Expected \`concurrency\` to be a number from 1 and up, got \`${newConcurrency}\` (${typeof newConcurrency})`);
-    }
-    this.#concurrency = newConcurrency;
-    this.#processQueue();
-  }
-  async #throwOnAbort(signal) {
-    return new Promise((_resolve, reject) => {
-      signal.addEventListener("abort", () => {
-        reject(signal.reason);
-      }, { once: true });
-    });
-  }
-  /**
-      Updates the priority of a promise function by its id, affecting its execution order. Requires a defined concurrency limit to take effect.
-  
-      For example, this can be used to prioritize a promise function to run earlier.
-  
-      ```js
-      import PQueue from 'p-queue';
-  
-      const queue = new PQueue({concurrency: 1});
-  
-      queue.add(async () => '🦄', {priority: 1});
-      queue.add(async () => '🦀', {priority: 0, id: '🦀'});
-      queue.add(async () => '🦄', {priority: 1});
-      queue.add(async () => '🦄', {priority: 1});
-  
-      queue.setPriority('🦀', 2);
-      ```
-  
-      In this case, the promise function with `id: '🦀'` runs second.
-  
-      You can also deprioritize a promise function to delay its execution:
-  
-      ```js
-      import PQueue from 'p-queue';
-  
-      const queue = new PQueue({concurrency: 1});
-  
-      queue.add(async () => '🦄', {priority: 1});
-      queue.add(async () => '🦀', {priority: 1, id: '🦀'});
-      queue.add(async () => '🦄');
-      queue.add(async () => '🦄', {priority: 0});
-  
-      queue.setPriority('🦀', -1);
-      ```
-      Here, the promise function with `id: '🦀'` executes last.
-      */
-  setPriority(id, priority) {
-    this.#queue.setPriority(id, priority);
-  }
-  async add(function_, options = {}) {
-    options.id ??= (this.#idAssigner++).toString();
-    options = {
-      timeout: this.timeout,
-      throwOnTimeout: this.#throwOnTimeout,
-      ...options
-    };
-    return new Promise((resolve3, reject) => {
-      this.#queue.enqueue(async () => {
-        this.#pending++;
-        try {
-          options.signal?.throwIfAborted();
-          this.#intervalCount++;
-          let operation = function_({ signal: options.signal });
-          if (options.timeout) {
-            operation = pTimeout(Promise.resolve(operation), { milliseconds: options.timeout });
-          }
-          if (options.signal) {
-            operation = Promise.race([operation, this.#throwOnAbort(options.signal)]);
-          }
-          const result = await operation;
-          resolve3(result);
-          this.emit("completed", result);
-        } catch (error2) {
-          if (error2 instanceof TimeoutError && !options.throwOnTimeout) {
-            resolve3();
-            return;
-          }
-          reject(error2);
-          this.emit("error", error2);
-        } finally {
-          this.#next();
-        }
-      }, options);
-      this.emit("add");
-      this.#tryToStartAnother();
-    });
-  }
-  async addAll(functions, options) {
-    return Promise.all(functions.map(async (function_) => this.add(function_, options)));
-  }
-  /**
-  Start (or resume) executing enqueued tasks within concurrency limit. No need to call this if queue is not paused (via `options.autoStart = false` or by `.pause()` method.)
-  */
-  start() {
-    if (!this.#isPaused) {
-      return this;
-    }
-    this.#isPaused = false;
-    this.#processQueue();
-    return this;
-  }
-  /**
-  Put queue execution on hold.
-  */
-  pause() {
-    this.#isPaused = true;
-  }
-  /**
-  Clear the queue.
-  */
-  clear() {
-    this.#queue = new this.#queueClass();
-  }
-  /**
-      Can be called multiple times. Useful if you for example add additional items at a later time.
-  
-      @returns A promise that settles when the queue becomes empty.
-      */
-  async onEmpty() {
-    if (this.#queue.size === 0) {
-      return;
-    }
-    await this.#onEvent("empty");
-  }
-  /**
-      @returns A promise that settles when the queue size is less than the given limit: `queue.size < limit`.
-  
-      If you want to avoid having the queue grow beyond a certain size you can `await queue.onSizeLessThan()` before adding a new item.
-  
-      Note that this only limits the number of items waiting to start. There could still be up to `concurrency` jobs already running that this call does not include in its calculation.
-      */
-  async onSizeLessThan(limit) {
-    if (this.#queue.size < limit) {
-      return;
-    }
-    await this.#onEvent("next", () => this.#queue.size < limit);
-  }
-  /**
-      The difference with `.onEmpty` is that `.onIdle` guarantees that all work from the queue has finished. `.onEmpty` merely signals that the queue is empty, but it could mean that some promises haven't completed yet.
-  
-      @returns A promise that settles when the queue becomes empty, and all promises have completed; `queue.size === 0 && queue.pending === 0`.
-      */
-  async onIdle() {
-    if (this.#pending === 0 && this.#queue.size === 0) {
-      return;
-    }
-    await this.#onEvent("idle");
-  }
-  async #onEvent(event, filter2) {
-    return new Promise((resolve3) => {
-      const listener = () => {
-        if (filter2 && !filter2()) {
-          return;
-        }
-        this.off(event, listener);
-        resolve3();
-      };
-      this.on(event, listener);
-    });
-  }
-  /**
-  Size of the queue, the number of queued items waiting to run.
-  */
-  get size() {
-    return this.#queue.size;
-  }
-  /**
-      Size of the queue, filtered by the given options.
-  
-      For example, this can be used to find the number of items remaining in the queue with a specific priority level.
-      */
-  sizeBy(options) {
-    return this.#queue.filter(options).length;
-  }
-  /**
-  Number of running items (no longer in the queue).
-  */
-  get pending() {
-    return this.#pending;
-  }
-  /**
-  Whether the queue is currently paused.
-  */
-  get isPaused() {
-    return this.#isPaused;
-  }
-};
-
-// src/utils/parallel.ts
-function createQueue(concurrency) {
-  return new PQueue({ concurrency, autoStart: true });
-}
-
 // node_modules/p-retry/index.js
 var import_retry = __toESM(require_retry2(), 1);
 
@@ -17090,7 +16447,7 @@ function isNetworkError(error2) {
 }
 
 // node_modules/p-retry/index.js
-var AbortError2 = class extends Error {
+var AbortError = class extends Error {
   constructor(message) {
     super();
     if (message instanceof Error) {
@@ -17139,7 +16496,7 @@ async function pRetry(input, options) {
           if (!(error2 instanceof Error)) {
             throw new TypeError(`Non-error was thrown: "${error2}". You should only throw errors.`);
           }
-          if (error2 instanceof AbortError2) {
+          if (error2 instanceof AbortError) {
             throw error2.originalError;
           }
           if (error2 instanceof TypeError && !isNetworkError(error2)) {
@@ -17200,6 +16557,23 @@ async function withRetry(fn, options) {
       );
     }
   });
+}
+
+// src/utils/timeout.ts
+function withTimeout(promise, timeoutMs, onTimeoutMessage) {
+  let timeoutHandle;
+  const timeoutPromise = new Promise((_2, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(
+        new Error(
+          onTimeoutMessage || `Operation timed out after ${timeoutMs}ms`
+        )
+      );
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(
+    () => clearTimeout(timeoutHandle)
+  );
 }
 
 // src/analysis/llm/retry-policy.ts
@@ -17280,11 +16654,66 @@ function sanitizeRetryReason(message) {
   return message.replace(/sk-[A-Za-z0-9_-]+/g, "sk-[redacted]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "gh[redacted]").replace(/refresh[_-]?token[=:]\S+/gi, "refresh_token=[redacted]").slice(0, 240);
 }
 
+// src/review-execution/application/provider-call-limiter.ts
+var ProviderCallLimiter = class {
+  constructor(maxParallel) {
+    this.maxParallel = maxParallel;
+    if (!Number.isInteger(maxParallel) || maxParallel < 1 || maxParallel > 3) {
+      throw new Error(
+        "Provider call parallelism must be an integer from 1 to 3"
+      );
+    }
+  }
+  active = 0;
+  waiters = [];
+  async run(operation) {
+    await this.acquire();
+    try {
+      return await operation();
+    } finally {
+      this.release();
+    }
+  }
+  acquire() {
+    if (this.active < this.maxParallel) {
+      this.active += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve3) => {
+      this.waiters.push(() => {
+        this.active += 1;
+        resolve3();
+      });
+    });
+  }
+  release() {
+    this.active -= 1;
+    this.waiters.shift()?.();
+  }
+};
+
 // src/analysis/llm/executor.ts
 var LLMExecutor = class {
-  constructor(config) {
+  constructor(config, policy = {}) {
     this.config = config;
+    this.policy = policy;
+    const maxParallelCalls = Math.max(
+      1,
+      Math.min(
+        3,
+        Math.floor(policy.maxParallelCalls ?? config.providerMaxParallel)
+      )
+    );
+    this.callLimiter = new ProviderCallLimiter(maxParallelCalls);
+    if (policy.deadline) {
+      this.providerExecutionPolicy = {
+        canStartOptionalRetry: () => policy.deadline.canStartOptionalRetry(),
+        clampTimeoutMs: (requestedTimeoutMs) => policy.deadline.clampProviderTimeout(requestedTimeoutMs)
+      };
+    }
   }
+  callLimiter;
+  providerExecutionPolicy;
   resolveProviderTimeoutMs(provider, timeoutMs) {
     const baseTimeoutMs = timeoutMs ?? this.config.runTimeoutSeconds * 1e3;
     if (provider.name.startsWith("openrouter/") || provider.name.startsWith("codex-openrouter/")) {
@@ -17294,6 +16723,34 @@ var LLMExecutor = class {
       );
     }
     return baseTimeoutMs;
+  }
+  canStartProviderDiscovery() {
+    return this.policy.deadline?.canStartBatch() ?? true;
+  }
+  clampProviderDiscoveryTimeout(requestedTimeoutMs) {
+    return this.policy.deadline?.clampProviderTimeout(requestedTimeoutMs) ?? requestedTimeoutMs;
+  }
+  async runProviderDiscoveryWave(operation, requestedTimeoutMs) {
+    if (!this.canStartProviderDiscovery()) {
+      logger.info(
+        "Skipping provider discovery because the review execution deadline reserve was reached"
+      );
+      return void 0;
+    }
+    const actualTimeoutMs = this.clampProviderDiscoveryTimeout(requestedTimeoutMs);
+    if (actualTimeoutMs <= 0) return void 0;
+    try {
+      return await withTimeout(
+        operation(),
+        actualTimeoutMs,
+        `Provider discovery timed out after ${actualTimeoutMs}ms`
+      );
+    } catch (error2) {
+      logger.warn(
+        `Provider discovery wave failed within its deadline: ${error2.message}`
+      );
+      return void 0;
+    }
   }
   /**
    * Filter providers by running health checks to identify responsive providers
@@ -17307,13 +16764,12 @@ var LLMExecutor = class {
     logger.info(
       `Running health checks on ${providers.length} provider(s) with ${healthCheckTimeoutMs}ms timeout...`
     );
-    const queue = createQueue(this.config.providerMaxParallel);
     const healthyProviders = [];
     const healthCheckResults = [];
     const tasks = [];
     for (const provider of providers) {
       tasks.push(
-        queue.add(async () => {
+        this.callLimiter.run(async () => {
           const started = Date.now();
           try {
             if (provider.name.startsWith("codex/")) {
@@ -17328,7 +16784,28 @@ var LLMExecutor = class {
               );
               return;
             }
-            const isHealthy = await provider.healthCheck(healthCheckTimeoutMs);
+            if (!this.canStartProviderDiscovery()) {
+              const deadlineError = new Error(
+                "Health check skipped because there is not enough time to start a review batch"
+              );
+              deadlineError.name = "TimeoutError";
+              deadlineError.code = "REVIEW_DEADLINE_REACHED";
+              throw deadlineError;
+            }
+            const actualTimeoutMs = this.clampProviderDiscoveryTimeout(healthCheckTimeoutMs);
+            if (actualTimeoutMs <= 0) {
+              const deadlineError = new Error(
+                "Health check skipped because the review execution deadline reserve was reached"
+              );
+              deadlineError.name = "TimeoutError";
+              deadlineError.code = "REVIEW_DEADLINE_REACHED";
+              throw deadlineError;
+            }
+            const isHealthy = await withTimeout(
+              provider.healthCheck(actualTimeoutMs),
+              actualTimeoutMs,
+              `Provider ${provider.name} health check timed out after ${actualTimeoutMs}ms`
+            );
             const duration = Date.now() - started;
             if (isHealthy) {
               healthyProviders.push(provider);
@@ -17358,7 +16835,7 @@ var LLMExecutor = class {
             const duration = Date.now() - started;
             const err = error2;
             let status = "error";
-            if (err.message.toLowerCase().includes("timed out") || err.message.toLowerCase().includes("timeout") || err.code === "ETIMEDOUT") {
+            if (err.name === "TimeoutError" || err.message.toLowerCase().includes("timed out") || err.message.toLowerCase().includes("timeout") || err.code === "ETIMEDOUT" || err.code === "REVIEW_DEADLINE_REACHED") {
               status = "timeout";
             }
             const result = {
@@ -17376,21 +16853,19 @@ var LLMExecutor = class {
       );
     }
     await Promise.all(tasks);
-    await queue.onIdle();
     logger.info(
       `Health checks complete: ${healthyProviders.length}/${providers.length} provider(s) are responsive`
     );
     return { healthy: healthyProviders, healthCheckResults };
   }
   async execute(providers, prompt, timeoutMs) {
-    const queue = createQueue(this.config.providerMaxParallel);
     const results = [];
     const tasks = [];
     for (const provider of providers) {
       tasks.push(
-        queue.add(async () => {
+        this.callLimiter.run(async () => {
           const started = Date.now();
-          const actualTimeoutMs = this.resolveProviderTimeoutMs(
+          const requestedTimeoutMs = this.resolveProviderTimeoutMs(
             provider,
             timeoutMs
           );
@@ -17401,13 +16876,25 @@ var LLMExecutor = class {
           let previousError;
           const runner = async () => {
             attempt += 1;
+            const actualTimeoutMs = this.providerExecutionPolicy?.clampTimeoutMs(
+              requestedTimeoutMs
+            ) ?? requestedTimeoutMs;
+            if (actualTimeoutMs <= 0) {
+              const deadlineError = new Error(
+                "Review execution deadline reached before provider invocation"
+              );
+              deadlineError.name = "TimeoutError";
+              deadlineError.code = "REVIEW_DEADLINE_REACHED";
+              throw deadlineError;
+            }
             return provider.review(
               buildProviderReviewPromptForAttempt(
                 prompt,
                 attempt,
                 previousError
               ),
-              actualTimeoutMs
+              actualTimeoutMs,
+              this.providerExecutionPolicy
             );
           };
           try {
@@ -17417,7 +16904,7 @@ var LLMExecutor = class {
               maxTimeout: 0,
               retryOn: (error2) => {
                 previousError = error2;
-                return shouldRetryProviderReviewError(error2);
+                return shouldRetryProviderReviewError(error2) && (this.providerExecutionPolicy?.canStartOptionalRetry() ?? true);
               }
             });
             results.push({
@@ -17453,7 +16940,6 @@ var LLMExecutor = class {
       );
     }
     await Promise.all(tasks);
-    await queue.onIdle();
     return results;
   }
 };
@@ -19900,6 +19386,10 @@ var PullRequestLoader = class {
       pull_number: prNumber
     });
     const pr2 = prResponse.data;
+    const baseSha = pr2.base?.sha || "";
+    const headSha = pr2.head?.sha || "";
+    this.assertExpectedSha(prNumber, "base", "REVIEWROUTER_BASE_SHA", baseSha);
+    this.assertExpectedSha(prNumber, "head", "REVIEWROUTER_HEAD_SHA", headSha);
     const files = [];
     for (let page = 1; files.length < MAX_GITHUB_FILES; page += 1) {
       const res = await octokit.rest.pulls.listFiles({
@@ -19925,12 +19415,39 @@ var PullRequestLoader = class {
         break;
       }
     }
-    if (files.length === MAX_GITHUB_FILES) {
+    const omissions = [];
+    const fileLimitOmission = this.getFileLimitOmission(
+      files.length,
+      pr2.changed_files
+    );
+    if (fileLimitOmission) {
+      omissions.push(fileLimitOmission);
+      const omittedCount = fileLimitOmission.omittedFileCount;
       logger.warn(
-        `PR #${prNumber} reached GitHub's ${MAX_GITHUB_FILES}-file API limit; additional files cannot be reviewed.`
+        `PR #${prNumber} reached GitHub's ${MAX_GITHUB_FILES}-file API limit; ${omittedCount === void 0 ? "an unknown number of additional files were" : `${omittedCount} additional file(s) were`} omitted.`
       );
     }
-    const diff = await this.fetchDiff(owner, repo, prNumber, files);
+    const diffResult = await this.fetchDiff(owner, repo, prNumber, files);
+    if (diffResult.omittedFiles.length > 0) {
+      omissions.push({
+        reason: "synthesized_diff_size_limit" /* SynthesizedDiffSizeLimit */,
+        omittedFileCount: diffResult.omittedFiles.length,
+        omittedFiles: diffResult.omittedFiles
+      });
+    }
+    const verifiedPrResponse = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber
+    });
+    this.assertRevisionUnchanged(
+      prNumber,
+      { baseSha, headSha },
+      {
+        baseSha: verifiedPrResponse.data.base?.sha || "",
+        headSha: verifiedPrResponse.data.head?.sha || ""
+      }
+    );
     return {
       number: pr2.number,
       title: pr2.title || "",
@@ -19941,11 +19458,12 @@ var PullRequestLoader = class {
         (label) => typeof label === "string" ? label : label.name || ""
       ),
       files,
-      diff,
+      diff: diffResult.diff,
       additions: pr2.additions || 0,
       deletions: pr2.deletions || 0,
-      baseSha: pr2.base?.sha || "",
-      headSha: pr2.head?.sha || ""
+      baseSha,
+      headSha,
+      loadCompleteness: this.describeCompleteness(omissions)
     };
   }
   async fetchDiff(owner, repo, prNumber, files) {
@@ -19966,7 +19484,10 @@ var PullRequestLoader = class {
           headers: { accept: "application/vnd.github.v3.diff" }
         }
       );
-      return typeof res.data === "string" ? res.data : "";
+      return {
+        diff: typeof res.data === "string" ? res.data : "",
+        omittedFiles: []
+      };
     } catch (error2) {
       if (!this.isDiffTooLargeError(error2)) {
         throw error2;
@@ -19980,7 +19501,7 @@ var PullRequestLoader = class {
   synthesizeDiff(prNumber, files) {
     const blocks = [];
     let byteCount = 0;
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
       const oldPath = file.previousFilename || file.filename;
       const fromPath = file.status === "added" ? "/dev/null" : `a/${oldPath}`;
       const toPath = file.status === "removed" ? "/dev/null" : `b/${file.filename}`;
@@ -19994,15 +19515,60 @@ var PullRequestLoader = class {
       ].join("\n");
       const blockBytes = Buffer.byteLength(block, "utf8");
       if (byteCount + blockBytes > MAX_SYNTHESIZED_DIFF_BYTES) {
+        const omittedFiles = files.slice(index).map(({ filename }) => filename);
         logger.warn(
-          `Synthesized diff for PR #${prNumber} reached the ${MAX_SYNTHESIZED_DIFF_BYTES}-byte safety limit; remaining patches were omitted.`
+          `Synthesized diff for PR #${prNumber} reached the ${MAX_SYNTHESIZED_DIFF_BYTES}-byte safety limit; ${omittedFiles.length} remaining file(s) were omitted.`
         );
-        break;
+        return { diff: blocks.join("\n"), omittedFiles };
       }
       blocks.push(block);
       byteCount += blockBytes;
     }
-    return blocks.join("\n");
+    return { diff: blocks.join("\n"), omittedFiles: [] };
+  }
+  getFileLimitOmission(loadedFileCount, reportedChangedFileCount) {
+    if (loadedFileCount < MAX_GITHUB_FILES || reportedChangedFileCount === loadedFileCount) {
+      return null;
+    }
+    const omittedFileCount = reportedChangedFileCount !== void 0 && reportedChangedFileCount > loadedFileCount ? reportedChangedFileCount - loadedFileCount : void 0;
+    return {
+      reason: "github_file_limit" /* GitHubFileLimit */,
+      ...omittedFileCount === void 0 ? {} : { omittedFileCount }
+    };
+  }
+  describeCompleteness(omissions) {
+    const [firstOmission, ...remainingOmissions] = omissions;
+    if (!firstOmission) {
+      return {
+        status: "complete" /* Complete */,
+        omissions: []
+      };
+    }
+    return {
+      status: "truncated" /* Truncated */,
+      omissions: [firstOmission, ...remainingOmissions]
+    };
+  }
+  assertExpectedSha(prNumber, kind, environmentVariable, actualSha) {
+    const expectedSha = process.env[environmentVariable]?.trim();
+    if (!expectedSha || expectedSha === actualSha) {
+      return;
+    }
+    throw new Error(
+      `PR #${prNumber} ${kind} SHA mismatch: expected ${expectedSha} from ${environmentVariable}, received ${actualSha || "(missing)"} from GitHub; refusing to load a potentially mixed revision.`
+    );
+  }
+  assertRevisionUnchanged(prNumber, initial, verified) {
+    const changes = [
+      initial.headSha === verified.headSha ? null : `head changed from ${initial.headSha || "(missing)"} to ${verified.headSha || "(missing)"}`,
+      initial.baseSha === verified.baseSha ? null : `base changed from ${initial.baseSha || "(missing)"} to ${verified.baseSha || "(missing)"}`
+    ].filter((change) => change !== null);
+    if (changes.length === 0) {
+      return;
+    }
+    throw new Error(
+      `PR #${prNumber} revision changed while loading content: ${changes.join(", ")}; refusing to return a potentially mixed revision.`
+    );
   }
   isDiffTooLargeError(error2) {
     if (!error2 || typeof error2 !== "object") {
@@ -22932,7 +22498,7 @@ var MarkdownFormatterV2 = class {
     if (!coverage) return "";
     const lines = [];
     const limitedFiles = coverage.files.filter(
-      (file) => file.status === "compacted" || file.status === "metadata-only" || file.status === "skipped"
+      (file) => file.status === "compacted" || file.status === "metadata-only" || file.status === "skipped" || file.status === "unreviewed"
     );
     lines.push("<details>");
     lines.push("<summary>Review Scope</summary>");
@@ -22947,10 +22513,17 @@ var MarkdownFormatterV2 = class {
     lines.push(`| Compacted in prompt | ${coverage.compactedFiles} |`);
     lines.push(`| Metadata-only or trimmed | ${coverage.metadataOnlyFiles} |`);
     lines.push(`| Skipped before LLM review | ${coverage.skippedFiles} |`);
+    lines.push(`| Not reviewed by an LLM | ${coverage.unreviewedFiles} |`);
+    lines.push(
+      `| Review coverage complete | ${coverage.complete ? "Yes" : "No"} |`
+    );
     lines.push(
       `| Codex agentic context | ${coverage.agenticContext ? "Enabled for Codex providers" : "Disabled"} |`
     );
     lines.push(`| Review mode | ${coverage.mode} |`);
+    for (const limitation of coverage.limitations ?? []) {
+      lines.push(`| Coverage limitation | ${limitation} |`);
+    }
     if (limitedFiles.length > 0) {
       lines.push("");
       lines.push("Files not shown as full diffs in the primary prompt:");
@@ -23271,7 +22844,7 @@ var MarkdownFormatterV2 = class {
   hasScopeLimitations(review) {
     const coverage = review.coverage;
     if (!coverage) return false;
-    return coverage.compactedFiles > 0 || coverage.metadataOnlyFiles > 0 || coverage.skippedFiles > 0;
+    return coverage.compactedFiles > 0 || coverage.metadataOnlyFiles > 0 || coverage.skippedFiles > 0 || coverage.unreviewedFiles > 0;
   }
   didAllProviderRunsFail(review) {
     return review.metrics.providersUsed > 0 && review.metrics.providersSuccess === 0 && review.metrics.providersFailed > 0;
@@ -25247,9 +24820,9 @@ var PromptGenerator = class {
    * Save prompts to a file (for CLI usage)
    */
   async saveToFile(prompts, filepath, format = this.defaultFormat) {
-    const fs21 = await import("fs/promises");
+    const fs22 = await import("fs/promises");
     const content = this.formatForIDE(prompts, format);
-    await fs21.writeFile(filepath, content, "utf8");
+    await fs22.writeFile(filepath, content, "utf8");
     logger.info(`Saved ${prompts.length} fix prompts to ${filepath}`);
   }
   /**
@@ -26448,7 +26021,8 @@ var BatchOrchestrator = class {
     const recommendation = calculateOptimalBatchSize(
       files,
       targetTokens,
-      maxFiles
+      maxFiles,
+      true
     );
     logger.info(`Token-aware batching: ${recommendation.reason}`);
     return recommendation.batches;
@@ -28066,7 +27640,1205 @@ function safeReason2(error2) {
   return message.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, "<redacted>").replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/sk-[A-Za-z0-9_-]+/g, "[redacted-api-key]").slice(0, 160);
 }
 
+// src/review-execution/domain/execution-deadline.ts
+var SYSTEM_CLOCK = {
+  now: () => Date.now()
+};
+function requireNonNegativeFinite(value, field) {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${field} must be a non-negative finite number`);
+  }
+}
+var ExecutionDeadline = class {
+  constructor(deadlineEpochMs, windows, clock = SYSTEM_CLOCK) {
+    this.deadlineEpochMs = deadlineEpochMs;
+    this.windows = windows;
+    this.clock = clock;
+    if (deadlineEpochMs !== void 0) {
+      requireNonNegativeFinite(deadlineEpochMs, "deadlineEpochMs");
+    }
+    requireNonNegativeFinite(
+      windows.completionReserveMs,
+      "completionReserveMs"
+    );
+    requireNonNegativeFinite(
+      windows.minimumBatchStartWindowMs,
+      "minimumBatchStartWindowMs"
+    );
+    requireNonNegativeFinite(
+      windows.minimumOptionalRetryStartWindowMs,
+      "minimumOptionalRetryStartWindowMs"
+    );
+  }
+  remainingMs() {
+    if (this.deadlineEpochMs === void 0) return Number.POSITIVE_INFINITY;
+    return Math.max(0, this.deadlineEpochMs - this.clock.now());
+  }
+  canStartBatch() {
+    return this.remainingMs() >= this.windows.completionReserveMs + this.windows.minimumBatchStartWindowMs;
+  }
+  clampProviderTimeout(requestedTimeoutMs) {
+    requireNonNegativeFinite(requestedTimeoutMs, "requestedTimeoutMs");
+    if (this.deadlineEpochMs === void 0) return requestedTimeoutMs;
+    const usableTime = Math.max(
+      0,
+      this.remainingMs() - this.windows.completionReserveMs
+    );
+    return Math.min(requestedTimeoutMs, usableTime);
+  }
+  canStartOptionalRetry() {
+    return this.remainingMs() >= this.windows.completionReserveMs + this.windows.minimumOptionalRetryStartWindowMs;
+  }
+};
+
+// src/review-execution/infrastructure/http-review-checkpoint-client.ts
+var fs14 = __toESM(require("fs/promises"));
+var import_crypto8 = require("crypto");
+
+// src/review-execution/domain/review-checkpoint.ts
+var REVIEW_CHECKPOINT_PROTOCOL_VERSION = 1;
+var REVIEW_CHECKPOINT_MAX_REQUEST_BYTES = 128 * 1024;
+var REVIEW_CHECKPOINT_MAX_AGGREGATE_BYTES = 2 * 1024 * 1024;
+var GIT_SHA_PATTERN = /^[a-f0-9]{40}$/i;
+var HASH_PATTERN = /^[a-f0-9]{64}$/i;
+var MAX_FILE_PATHS = 200;
+var MAX_PLANNED_WORK_KEYS = 200;
+var MAX_FINDINGS = 500;
+var MAX_PROVIDER_RESULTS = 50;
+var MAX_LIFECYCLE_TARGETS = 200;
+var MAX_REVALIDATIONS = 200;
+var MAX_REVALIDATION_EVIDENCE = 20;
+var MAX_DURATION_MS = 24 * 60 * 60 * 1e3;
+var MAX_TOKEN_COUNT = 1e9;
+var ReviewCheckpointProviderStatus = /* @__PURE__ */ ((ReviewCheckpointProviderStatus2) => {
+  ReviewCheckpointProviderStatus2["Success"] = "success";
+  ReviewCheckpointProviderStatus2["Error"] = "error";
+  ReviewCheckpointProviderStatus2["Timeout"] = "timeout";
+  ReviewCheckpointProviderStatus2["RateLimited"] = "rate_limited";
+  return ReviewCheckpointProviderStatus2;
+})(ReviewCheckpointProviderStatus || {});
+var ReviewCheckpointFindingSeverity = /* @__PURE__ */ ((ReviewCheckpointFindingSeverity2) => {
+  ReviewCheckpointFindingSeverity2["Critical"] = "critical";
+  ReviewCheckpointFindingSeverity2["Major"] = "major";
+  ReviewCheckpointFindingSeverity2["Minor"] = "minor";
+  return ReviewCheckpointFindingSeverity2;
+})(ReviewCheckpointFindingSeverity || {});
+var ReviewCheckpointLifecycleVerdict = /* @__PURE__ */ ((ReviewCheckpointLifecycleVerdict2) => {
+  ReviewCheckpointLifecycleVerdict2["Resolved"] = "resolved";
+  ReviewCheckpointLifecycleVerdict2["StillValid"] = "still_valid";
+  ReviewCheckpointLifecycleVerdict2["Uncertain"] = "uncertain";
+  return ReviewCheckpointLifecycleVerdict2;
+})(ReviewCheckpointLifecycleVerdict || {});
+var reviewCheckpointPlanIdentitySchema = external_exports.object({
+  pullRequestNumber: external_exports.number().int().positive(),
+  baseSha: external_exports.string().regex(GIT_SHA_PATTERN),
+  headSha: external_exports.string().regex(GIT_SHA_PATTERN),
+  compatibilityKey: external_exports.string().regex(HASH_PATTERN),
+  planHash: external_exports.string().regex(HASH_PATTERN),
+  workKeys: external_exports.array(external_exports.string().regex(HASH_PATTERN)).max(MAX_PLANNED_WORK_KEYS)
+}).strict().superRefine((value, context) => {
+  if (new Set(value.workKeys.map((key) => key.toLowerCase())).size !== value.workKeys.length) {
+    context.addIssue({
+      code: external_exports.ZodIssueCode.custom,
+      message: "Checkpoint work keys must be unique",
+      path: ["workKeys"]
+    });
+  }
+});
+var checkpointFindingSchema = external_exports.object({
+  file: external_exports.string().min(1).max(4096),
+  startLine: external_exports.number().int().positive().optional(),
+  line: external_exports.number().int().positive(),
+  endLine: external_exports.number().int().positive().optional(),
+  severity: external_exports.nativeEnum(ReviewCheckpointFindingSeverity),
+  title: external_exports.string().min(1).max(1e3),
+  message: external_exports.string().min(1).max(2e4),
+  provider: external_exports.string().min(1).max(500).optional(),
+  providers: external_exports.array(external_exports.string().min(1).max(500)).max(50).optional(),
+  actualModel: external_exports.string().min(1).max(500).optional(),
+  providerVoteKeys: external_exports.array(external_exports.string().min(1).max(500)).max(50).optional(),
+  providerPoolSize: external_exports.number().int().positive().optional(),
+  confidence: external_exports.number().min(0).max(1).optional(),
+  category: external_exports.string().min(1).max(500).optional(),
+  hasConsensus: external_exports.boolean().optional()
+}).strict();
+var lifecycleEvidenceSchema = external_exports.object({
+  path: external_exports.string().min(1).max(4096),
+  startLine: external_exports.number().int().positive().optional(),
+  endLine: external_exports.number().int().positive().optional(),
+  reason: external_exports.string().min(1).max(2e3)
+}).strict();
+var lifecycleRevalidationSchema = external_exports.object({
+  targetId: external_exports.string().min(1).max(500),
+  fingerprint: external_exports.string().min(1).max(500).optional(),
+  verdict: external_exports.nativeEnum(ReviewCheckpointLifecycleVerdict),
+  confidence: external_exports.number().min(0).max(1).optional(),
+  evidence: external_exports.array(lifecycleEvidenceSchema).max(MAX_REVALIDATION_EVIDENCE).optional(),
+  rationale: external_exports.string().min(1).max(2e3).optional()
+}).strict();
+var checkpointProviderResultSchema = external_exports.object({
+  name: external_exports.string().min(1).max(500),
+  status: external_exports.nativeEnum(ReviewCheckpointProviderStatus),
+  durationMs: external_exports.number().int().min(0).max(MAX_DURATION_MS),
+  errorMessage: external_exports.string().min(1).max(1e3).optional(),
+  actualModel: external_exports.string().min(1).max(500).optional(),
+  aiLikelihood: external_exports.number().min(0).max(1).optional(),
+  usage: external_exports.object({
+    promptTokens: external_exports.number().int().min(0).max(MAX_TOKEN_COUNT),
+    completionTokens: external_exports.number().int().min(0).max(MAX_TOKEN_COUNT),
+    totalTokens: external_exports.number().int().min(0).max(MAX_TOKEN_COUNT)
+  }).strict().optional(),
+  lifecycleAssignedTargetIds: external_exports.array(external_exports.string().min(1).max(500)).max(MAX_LIFECYCLE_TARGETS).refine((items) => new Set(items).size === items.length).optional(),
+  lifecycleRevalidations: external_exports.array(lifecycleRevalidationSchema).max(MAX_REVALIDATIONS).optional()
+}).strict();
+var reviewCheckpointBatchPayloadSchema = external_exports.object({
+  filePaths: external_exports.array(external_exports.string().min(1).max(4096)).max(MAX_FILE_PATHS).refine((items) => new Set(items).size === items.length),
+  findings: external_exports.array(checkpointFindingSchema).max(MAX_FINDINGS),
+  providerResults: external_exports.array(checkpointProviderResultSchema).max(MAX_PROVIDER_RESULTS)
+}).strict();
+var reviewCheckpointFinalizationMarkerSchema = external_exports.object({
+  protocolVersion: external_exports.literal(REVIEW_CHECKPOINT_PROTOCOL_VERSION),
+  pullRequestNumber: external_exports.number().int().positive(),
+  headSha: external_exports.string().regex(GIT_SHA_PATTERN),
+  planHash: external_exports.string().regex(HASH_PATTERN),
+  expectedVersion: external_exports.number().int().nonnegative()
+}).strict();
+function createReviewCheckpointPlanIdentity(input) {
+  const parsed = reviewCheckpointPlanIdentitySchema.parse(input);
+  return Object.freeze({
+    ...parsed,
+    baseSha: parsed.baseSha.toLowerCase(),
+    headSha: parsed.headSha.toLowerCase(),
+    compatibilityKey: parsed.compatibilityKey.toLowerCase(),
+    planHash: parsed.planHash.toLowerCase(),
+    workKeys: parsed.workKeys.map((key) => key.toLowerCase())
+  });
+}
+function normalizeReviewCheckpointBatchPayload(input) {
+  const record = asRecord(input);
+  const rawProviderResults = Array.isArray(input) ? input : Array.isArray(record?.providerResults) ? record.providerResults : [];
+  assertCollectionWithinLimit(
+    rawProviderResults,
+    MAX_PROVIDER_RESULTS,
+    "providerResults"
+  );
+  const providerResults = rawProviderResults.map(normalizeProviderResult).map((result) => requireNormalized(result, "providerResult"));
+  const rawFindings = Array.isArray(record?.findings) ? record.findings : rawProviderResults.flatMap((providerResult) => {
+    const provider = asRecord(providerResult);
+    const result = asRecord(provider?.result);
+    return Array.isArray(result?.findings) ? result.findings : [];
+  });
+  assertCollectionWithinLimit(rawFindings, MAX_FINDINGS, "findings");
+  return reviewCheckpointBatchPayloadSchema.parse({
+    filePaths: normalizeFilePaths(record),
+    findings: rawFindings.map(normalizeFinding2).map((finding) => requireNormalized(finding, "finding")),
+    providerResults
+  });
+}
+function parseReviewCheckpointFinalizationMarker(input) {
+  const value = typeof input === "string" ? JSON.parse(input) : input;
+  return reviewCheckpointFinalizationMarkerSchema.parse(value);
+}
+function checkpointPlansMatch(left, right) {
+  return left.pullRequestNumber === right.pullRequestNumber && left.baseSha === right.baseSha && left.headSha === right.headSha && left.compatibilityKey === right.compatibilityKey && left.planHash === right.planHash && left.workKeys.length === right.workKeys.length && left.workKeys.every((workKey, index) => workKey === right.workKeys[index]);
+}
+function checkpointPayloadsMatch(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+function normalizeFilePaths(record) {
+  const explicitPaths = Array.isArray(record?.filePaths) ? record.filePaths : [];
+  const fileObjects = Array.isArray(record?.files) ? record.files : [];
+  const values = [
+    ...explicitPaths,
+    ...fileObjects.map((file) => asRecord(file)?.filename)
+  ];
+  const paths = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const path19 = normalizeText2(value, 4096);
+    if (!path19 || seen.has(path19)) continue;
+    seen.add(path19);
+    paths.push(path19);
+    if (paths.length > MAX_FILE_PATHS) {
+      throw new Error("review_checkpoint_filePaths_limit_exceeded");
+    }
+  }
+  return paths;
+}
+function normalizeFinding2(value) {
+  const finding = asRecord(value);
+  if (!finding) return null;
+  const parsed = checkpointFindingSchema.safeParse({
+    file: normalizeRequiredText(finding.file, 4096),
+    ...finding.startLine !== void 0 ? { startLine: finding.startLine } : {},
+    line: finding.line,
+    ...finding.endLine !== void 0 ? { endLine: finding.endLine } : {},
+    severity: finding.severity,
+    title: normalizeRequiredText(finding.title, 1e3),
+    message: normalizeRequiredText(finding.message, 2e4),
+    ...typeof finding.provider === "string" ? { provider: normalizeText2(finding.provider, 500) } : {},
+    ...Array.isArray(finding.providers) ? { providers: normalizeStringArray(finding.providers, 50, 500) } : {},
+    ...typeof finding.actualModel === "string" ? { actualModel: normalizeText2(finding.actualModel, 500) } : {},
+    ...Array.isArray(finding.providerVoteKeys) ? {
+      providerVoteKeys: normalizeStringArray(
+        finding.providerVoteKeys,
+        50,
+        500
+      )
+    } : {},
+    ...finding.providerPoolSize !== void 0 ? { providerPoolSize: finding.providerPoolSize } : {},
+    ...finding.confidence !== void 0 ? { confidence: finding.confidence } : {},
+    ...typeof finding.category === "string" ? { category: normalizeText2(finding.category, 500) } : {},
+    ...finding.hasConsensus !== void 0 ? { hasConsensus: finding.hasConsensus } : {}
+  });
+  return parsed.success ? parsed.data : null;
+}
+function normalizeProviderResult(value) {
+  const provider = asRecord(value);
+  if (!provider || typeof provider.name !== "string") return null;
+  const result = asRecord(provider.result);
+  const errorMessage2 = messageFromUnknown(
+    provider.errorMessage ?? provider.error
+  );
+  const parsed = checkpointProviderResultSchema.safeParse({
+    name: normalizeText2(provider.name, 500),
+    status: normalizeProviderStatus(provider.status),
+    durationMs: normalizeDurationMs(provider),
+    ...errorMessage2 ? { errorMessage: normalizeText2(errorMessage2, 1e3) } : {},
+    ...typeof (provider.actualModel ?? result?.actualModel) === "string" ? {
+      actualModel: normalizeText2(
+        provider.actualModel ?? result?.actualModel,
+        500
+      )
+    } : {},
+    ...isProbability(provider.aiLikelihood ?? result?.aiLikelihood) ? { aiLikelihood: provider.aiLikelihood ?? result?.aiLikelihood } : {},
+    ...normalizeProviderUsage(provider, result),
+    ...Array.isArray(provider.lifecycleAssignedTargetIds) ? {
+      lifecycleAssignedTargetIds: normalizeStringArray(
+        provider.lifecycleAssignedTargetIds,
+        MAX_LIFECYCLE_TARGETS,
+        500
+      )
+    } : {},
+    ...normalizeProviderRevalidations(provider, result)
+  });
+  return parsed.success ? parsed.data : null;
+}
+function normalizeProviderUsage(provider, result) {
+  const usage = asRecord(provider.usage) ?? asRecord(result?.usage);
+  if (!usage) return {};
+  const parsed = external_exports.object({
+    promptTokens: external_exports.number().int().min(0).max(MAX_TOKEN_COUNT),
+    completionTokens: external_exports.number().int().min(0).max(MAX_TOKEN_COUNT),
+    totalTokens: external_exports.number().int().min(0).max(MAX_TOKEN_COUNT)
+  }).strict().safeParse(usage);
+  return parsed.success ? { usage: parsed.data } : {};
+}
+function normalizeProviderRevalidations(provider, result) {
+  const raw = Array.isArray(provider.lifecycleRevalidations) ? provider.lifecycleRevalidations : Array.isArray(result?.lifecycleRevalidations) ? result.lifecycleRevalidations : Array.isArray(result?.revalidations) ? result.revalidations : null;
+  if (!raw) return {};
+  assertCollectionWithinLimit(raw, MAX_REVALIDATIONS, "lifecycleRevalidations");
+  return {
+    lifecycleRevalidations: raw.map(normalizeLifecycleRevalidation).map(
+      (revalidation) => requireNormalized(revalidation, "lifecycleRevalidation")
+    )
+  };
+}
+function normalizeLifecycleRevalidation(value) {
+  const revalidation = asRecord(value);
+  if (!revalidation) return null;
+  const evidence = Array.isArray(revalidation.evidence) ? (assertCollectionWithinLimit(
+    revalidation.evidence,
+    MAX_REVALIDATION_EVIDENCE,
+    "lifecycleEvidence"
+  ), revalidation.evidence.map(normalizeLifecycleEvidence).map((entry) => requireNormalized(entry, "lifecycleEvidence"))) : void 0;
+  const parsed = lifecycleRevalidationSchema.safeParse({
+    targetId: normalizeRequiredText(revalidation.targetId, 500),
+    ...typeof revalidation.fingerprint === "string" ? { fingerprint: normalizeText2(revalidation.fingerprint, 500) } : {},
+    verdict: revalidation.verdict,
+    ...isProbability(revalidation.confidence) ? { confidence: revalidation.confidence } : {},
+    ...evidence ? { evidence } : {},
+    ...typeof revalidation.rationale === "string" ? { rationale: normalizeText2(revalidation.rationale, 2e3) } : {}
+  });
+  return parsed.success ? parsed.data : null;
+}
+function normalizeLifecycleEvidence(value) {
+  const evidence = asRecord(value);
+  if (!evidence) return null;
+  const parsed = lifecycleEvidenceSchema.safeParse({
+    path: normalizeRequiredText(evidence.path, 4096),
+    ...evidence.startLine !== void 0 ? { startLine: evidence.startLine } : {},
+    ...evidence.endLine !== void 0 ? { endLine: evidence.endLine } : {},
+    reason: normalizeRequiredText(evidence.reason, 2e3)
+  });
+  return parsed.success ? parsed.data : null;
+}
+function normalizeProviderStatus(value) {
+  switch (value) {
+    case "success":
+      return "success" /* Success */;
+    case "timeout":
+      return "timeout" /* Timeout */;
+    case "rate-limited":
+    case "rate_limited":
+      return "rate_limited" /* RateLimited */;
+    case "error":
+    default:
+      return "error" /* Error */;
+  }
+}
+function normalizeDurationMs(provider) {
+  const raw = typeof provider.durationMs === "number" ? provider.durationMs : typeof provider.durationSeconds === "number" ? provider.durationSeconds * 1e3 : 0;
+  if (!Number.isFinite(raw)) return 0;
+  return Math.min(MAX_DURATION_MS, Math.max(0, Math.round(raw)));
+}
+function normalizeStringArray(values, maxItems, maxLength) {
+  assertCollectionWithinLimit(values, maxItems, "stringArray");
+  return [
+    ...new Set(
+      values.filter((value) => typeof value === "string").map((value) => normalizeText2(value, maxLength)).filter((value) => value.length > 0)
+    )
+  ];
+}
+function normalizeRequiredText(value, maxLength) {
+  return typeof value === "string" ? normalizeText2(value, maxLength) : value;
+}
+function normalizeText2(value, maxLength) {
+  const normalized = redactSensitiveText(value);
+  if (normalized.length > maxLength) {
+    throw new Error("review_checkpoint_text_limit_exceeded");
+  }
+  return normalized;
+}
+function assertCollectionWithinLimit(values, maxItems, field) {
+  if (values.length > maxItems) {
+    throw new Error(`review_checkpoint_${field}_limit_exceeded`);
+  }
+}
+function requireNormalized(value, field) {
+  if (value === null) {
+    throw new Error(`review_checkpoint_${field}_invalid`);
+  }
+  return value;
+}
+function messageFromUnknown(value) {
+  if (typeof value === "string") return value;
+  if (value instanceof Error) return value.message;
+  const record = asRecord(value);
+  return typeof record?.message === "string" ? record.message : void 0;
+}
+function isProbability(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+function asRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+// src/review-execution/application/review-checkpoint-session.ts
+var ReviewCheckpointSession = class _ReviewCheckpointSession {
+  static async open(input) {
+    const plan = createReviewCheckpointPlanIdentity(input.plan);
+    try {
+      const restored = await input.client.restore(restoreInput(plan));
+      if (restored.status === "found" /* Found */ && checkpointPlansMatch(restored.checkpoint.plan, plan)) {
+        const acceptedResults = acceptedResultsInPlanOrder(
+          plan,
+          restored.checkpoint
+        );
+        if (acceptedResults === null || restored.expectedVersion !== restored.checkpoint.version || restored.checkpoint.finalized && acceptedResults.size !== plan.workKeys.length) {
+          warnFailOpen(input.logger, "invalid_restored_checkpoint");
+          return null;
+        }
+        return new _ReviewCheckpointSession({
+          ...input,
+          plan,
+          expectedVersion: restored.expectedVersion,
+          acceptedResults,
+          finalized: restored.checkpoint.finalized
+        });
+      }
+      const expectedVersion = restored.expectedVersion;
+      const started = await input.client.start({ expectedVersion, plan });
+      if (started.status === "conflict" /* Conflict */) {
+        warnFailOpen(input.logger, "start_version_conflict");
+        return null;
+      }
+      if (started.headSha.toLowerCase() !== plan.headSha || started.planHash.toLowerCase() !== plan.planHash || started.version < expectedVersion) {
+        warnFailOpen(input.logger, "invalid_start_acknowledgement");
+        return null;
+      }
+      return new _ReviewCheckpointSession({
+        ...input,
+        plan,
+        expectedVersion: started.version,
+        acceptedResults: /* @__PURE__ */ new Map(),
+        finalized: false
+      });
+    } catch (error2) {
+      warnFailOpen(input.logger, safeFailureReason(error2));
+      return null;
+    }
+  }
+  expectedVersion;
+  acceptedResults;
+  finalized;
+  disabled = false;
+  operationQueue = Promise.resolve();
+  client;
+  plan;
+  markerWriter;
+  logger;
+  constructor(input) {
+    this.client = input.client;
+    this.plan = input.plan;
+    this.expectedVersion = input.expectedVersion;
+    this.acceptedResults = input.acceptedResults;
+    this.finalized = input.finalized;
+    this.markerWriter = input.markerWriter;
+    this.logger = input.logger;
+  }
+  get isEnabled() {
+    return !this.disabled;
+  }
+  get currentExpectedVersion() {
+    return this.expectedVersion;
+  }
+  get acceptedBatchResults() {
+    return new Map(this.acceptedResults);
+  }
+  commitSuccessfulBatch(input) {
+    return this.enqueue(() => this.commitSuccessfulBatchNow(input));
+  }
+  finalize() {
+    return this.enqueue(() => this.finalizeNow());
+  }
+  async commitSuccessfulBatchNow(input) {
+    if (this.disabled || this.finalized) return disabledCommit();
+    const workKey = input.workKey.toLowerCase();
+    if (!this.plan.workKeys.includes(workKey)) {
+      this.disable("unplanned_work_key");
+      return disabledCommit();
+    }
+    let payload;
+    try {
+      payload = normalizeReviewCheckpointBatchPayload(input);
+    } catch {
+      this.disable("invalid_batch_payload");
+      return disabledCommit();
+    }
+    const existing = this.acceptedResults.get(workKey);
+    if (existing) {
+      if (!checkpointPayloadsMatch(existing, payload)) {
+        this.disable("non_idempotent_batch_replay");
+        return disabledCommit();
+      }
+      return {
+        status: "idempotent" /* Idempotent */,
+        expectedVersion: this.expectedVersion,
+        payload: existing
+      };
+    }
+    try {
+      let result = await this.sendBatchResult(workKey, payload);
+      if (result.status === "conflict" /* Conflict */) {
+        const reconciled = await this.reconcileAfterConflict(workKey, payload);
+        if (reconciled === "idempotent" /* Idempotent */) {
+          return {
+            status: reconciled,
+            expectedVersion: this.expectedVersion,
+            payload
+          };
+        }
+        if (reconciled === "disabled" /* Disabled */) {
+          return disabledCommit();
+        }
+        result = await this.sendBatchResult(workKey, payload);
+      }
+      if (result.status === "conflict" /* Conflict */) {
+        this.disable("repeated_version_conflict");
+        return disabledCommit();
+      }
+      if (!this.isExactBatchAcknowledgement(result, workKey)) {
+        this.disable("mismatched_batch_acknowledgement");
+        return disabledCommit();
+      }
+      this.expectedVersion = result.version;
+      this.setAcceptedResult(workKey, payload);
+      return {
+        status: result.status === "idempotent" /* Idempotent */ ? "idempotent" /* Idempotent */ : "accepted" /* Accepted */,
+        expectedVersion: this.expectedVersion,
+        payload
+      };
+    } catch (error2) {
+      this.disable(safeFailureReason(error2));
+      return disabledCommit();
+    }
+  }
+  async finalizeNow() {
+    if (this.disabled) return disabledFinalize();
+    const missingWorkKeys = this.plan.workKeys.filter(
+      (workKey) => !this.acceptedResults.has(workKey)
+    );
+    if (missingWorkKeys.length > 0) {
+      return {
+        status: "incomplete" /* Incomplete */,
+        missingWorkKeys
+      };
+    }
+    try {
+      let result = await this.client.finalize({
+        expectedVersion: this.expectedVersion,
+        pullRequestNumber: this.plan.pullRequestNumber,
+        headSha: this.plan.headSha,
+        planHash: this.plan.planHash
+      });
+      if (result.status === "conflict" /* Conflict */) {
+        const reconciled = await this.reconcileFinalizationConflict();
+        if (!reconciled) return disabledFinalize();
+        result = await this.client.finalize({
+          expectedVersion: this.expectedVersion,
+          pullRequestNumber: this.plan.pullRequestNumber,
+          headSha: this.plan.headSha,
+          planHash: this.plan.planHash
+        });
+      }
+      if (result.status === "conflict" /* Conflict */) {
+        this.disable("repeated_finalize_version_conflict");
+        return disabledFinalize();
+      }
+      if (result.headSha.toLowerCase() !== this.plan.headSha || result.planHash.toLowerCase() !== this.plan.planHash) {
+        this.disable("mismatched_finalize_acknowledgement");
+        return disabledFinalize();
+      }
+      this.expectedVersion = result.version;
+      this.finalized = true;
+      const markerWritten = await this.writeFinalizationMarker();
+      return {
+        status: result.status === "idempotent" /* Idempotent */ ? "idempotent" /* Idempotent */ : "finalized" /* Finalized */,
+        expectedVersion: this.expectedVersion,
+        markerWritten
+      };
+    } catch (error2) {
+      this.disable(safeFailureReason(error2));
+      return disabledFinalize();
+    }
+  }
+  sendBatchResult(workKey, payload) {
+    return this.client.commitBatchResult({
+      expectedVersion: this.expectedVersion,
+      pullRequestNumber: this.plan.pullRequestNumber,
+      headSha: this.plan.headSha,
+      planHash: this.plan.planHash,
+      workKey,
+      batchId: workKey,
+      batchIndex: this.plan.workKeys.indexOf(workKey),
+      payload
+    });
+  }
+  async reconcileAfterConflict(workKey, payload) {
+    const restored = await this.client.restore(restoreInput(this.plan));
+    if (restored.status !== "found" /* Found */ || !checkpointPlansMatch(restored.checkpoint.plan, this.plan)) {
+      this.disable("checkpoint_plan_changed_during_reconcile");
+      return "disabled" /* Disabled */;
+    }
+    if (!this.applyRestoredCheckpoint(
+      restored.checkpoint,
+      restored.expectedVersion
+    )) {
+      this.disable("invalid_reconciled_checkpoint");
+      return "disabled" /* Disabled */;
+    }
+    const accepted = this.acceptedResults.get(workKey);
+    if (!accepted) {
+      if (this.finalized) {
+        this.disable("finalized_checkpoint_missing_batch");
+        return "disabled" /* Disabled */;
+      }
+      return "accepted" /* Accepted */;
+    }
+    if (!checkpointPayloadsMatch(accepted, payload)) {
+      this.disable("checkpoint_batch_payload_changed");
+      return "disabled" /* Disabled */;
+    }
+    return "idempotent" /* Idempotent */;
+  }
+  async reconcileFinalizationConflict() {
+    const restored = await this.client.restore(restoreInput(this.plan));
+    if (restored.status !== "found" /* Found */ || !checkpointPlansMatch(restored.checkpoint.plan, this.plan) || !this.applyRestoredCheckpoint(
+      restored.checkpoint,
+      restored.expectedVersion
+    ) || this.acceptedResults.size !== this.plan.workKeys.length) {
+      this.disable("checkpoint_changed_during_finalize");
+      return false;
+    }
+    return true;
+  }
+  applyRestoredCheckpoint(checkpoint, expectedVersion) {
+    const acceptedResults = acceptedResultsInPlanOrder(this.plan, checkpoint);
+    if (acceptedResults === null || checkpoint.version !== expectedVersion || checkpoint.finalized && acceptedResults.size !== this.plan.workKeys.length) {
+      return false;
+    }
+    this.expectedVersion = expectedVersion;
+    this.acceptedResults = acceptedResults;
+    this.finalized = checkpoint.finalized;
+    return true;
+  }
+  isExactBatchAcknowledgement(result, workKey) {
+    return result.headSha.toLowerCase() === this.plan.headSha && result.planHash.toLowerCase() === this.plan.planHash && result.workKey.toLowerCase() === workKey;
+  }
+  setAcceptedResult(workKey, payload) {
+    const results = new Map(this.acceptedResults);
+    results.set(workKey, payload);
+    this.acceptedResults = new Map(
+      this.plan.workKeys.flatMap((key) => {
+        const accepted = results.get(key);
+        return accepted ? [[key, accepted]] : [];
+      })
+    );
+  }
+  async writeFinalizationMarker() {
+    if (!this.markerWriter) return false;
+    try {
+      await this.markerWriter.write({
+        protocolVersion: REVIEW_CHECKPOINT_PROTOCOL_VERSION,
+        pullRequestNumber: this.plan.pullRequestNumber,
+        headSha: this.plan.headSha,
+        planHash: this.plan.planHash,
+        expectedVersion: this.expectedVersion
+      });
+      return true;
+    } catch {
+      warnFailOpen(this.logger, "finalization_marker_write_failed");
+      return false;
+    }
+  }
+  disable(reason) {
+    if (this.disabled) return;
+    this.disabled = true;
+    warnFailOpen(this.logger, reason);
+  }
+  enqueue(operation) {
+    const result = this.operationQueue.then(operation, operation);
+    this.operationQueue = result.then(
+      () => void 0,
+      () => void 0
+    );
+    return result;
+  }
+};
+function acceptedResultsInPlanOrder(plan, checkpoint) {
+  const byWorkKey = /* @__PURE__ */ new Map();
+  for (const accepted of checkpoint.acceptedResults) {
+    const workKey = accepted.workKey.toLowerCase();
+    if (!plan.workKeys.includes(workKey) || byWorkKey.has(workKey)) return null;
+    byWorkKey.set(workKey, accepted.payload);
+  }
+  return new Map(
+    plan.workKeys.flatMap((workKey) => {
+      const payload = byWorkKey.get(workKey);
+      return payload ? [[workKey, payload]] : [];
+    })
+  );
+}
+function restoreInput(plan) {
+  return {
+    pullRequestNumber: plan.pullRequestNumber,
+    baseSha: plan.baseSha,
+    headSha: plan.headSha,
+    compatibilityKey: plan.compatibilityKey,
+    planHash: plan.planHash
+  };
+}
+function disabledCommit() {
+  return { status: "disabled" /* Disabled */ };
+}
+function disabledFinalize() {
+  return { status: "disabled" /* Disabled */ };
+}
+function safeFailureReason(error2) {
+  if (error2 instanceof Error && /^review_checkpoint_[a-z_]+$/.test(error2.message)) {
+    return error2.message;
+  }
+  return "unexpected_checkpoint_error";
+}
+function warnFailOpen(logger2, reason) {
+  logger2?.warn(
+    `Hosted review checkpoint unavailable; continuing without durable batch persistence (${reason.slice(0, 120)}).`
+  );
+}
+
+// src/review-execution/infrastructure/http-review-checkpoint-client.ts
+var REVIEW_CHECKPOINT_API_URL_ENV = "REVIEWROUTER_API_URL";
+var REVIEW_CHECKPOINT_LEASE_ID_ENV = "REVIEWROUTER_COMMENT_TOKEN_LEASE_ID";
+var REVIEW_CHECKPOINT_PROVIDER_INSTANCE_ID_ENV = "REVIEWROUTER_COMMENT_TOKEN_PROVIDER_INSTANCE_ID";
+var REVIEW_CHECKPOINT_FINALIZATION_PATH_ENV = "REVIEWROUTER_REVIEW_CHECKPOINT_FINALIZATION_PATH";
+var CHECKPOINT_PATH = "/api/action/v1/codex-oauth/review-execution-checkpoint";
+var EXECUTION_DEADLINE_ENV = "REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS";
+var DEFAULT_REQUEST_TIMEOUT_MS = 1e4;
+var RESPONSE_ENVELOPE_MAX_BYTES = 256 * 1024;
+var RESPONSE_MAX_BYTES = REVIEW_CHECKPOINT_MAX_AGGREGATE_BYTES + RESPONSE_ENVELOPE_MAX_BYTES;
+var gitShaSchema = external_exports.string().regex(/^[a-f0-9]{40}$/i);
+var hashSchema = external_exports.string().regex(/^[a-f0-9]{64}$/i);
+var versionSchema = external_exports.number().int().nonnegative();
+var acceptedResultSchema = external_exports.object({
+  workKey: hashSchema,
+  payload: reviewCheckpointBatchPayloadSchema
+}).strict();
+var restoredCheckpointSchema = external_exports.object({
+  version: versionSchema,
+  baseSha: gitShaSchema,
+  headSha: gitShaSchema,
+  compatibilityKey: hashSchema,
+  planHash: hashSchema,
+  plannedWorkKeys: external_exports.array(hashSchema).max(200),
+  acceptedResults: external_exports.array(acceptedResultSchema).max(500),
+  finalized: external_exports.boolean()
+}).strict();
+var restoreResponseSchema = external_exports.discriminatedUnion("status", [
+  external_exports.object({
+    protocolVersion: external_exports.literal(REVIEW_CHECKPOINT_PROTOCOL_VERSION),
+    status: external_exports.literal("missing" /* Missing */),
+    expectedVersion: versionSchema
+  }).strict(),
+  external_exports.object({
+    protocolVersion: external_exports.literal(REVIEW_CHECKPOINT_PROTOCOL_VERSION),
+    status: external_exports.literal("found" /* Found */),
+    expectedVersion: versionSchema,
+    checkpoint: restoredCheckpointSchema
+  }).strict()
+]);
+var startResponseSchema = external_exports.union([
+  external_exports.object({
+    protocolVersion: external_exports.literal(REVIEW_CHECKPOINT_PROTOCOL_VERSION),
+    status: external_exports.union([
+      external_exports.literal("started" /* Started */),
+      external_exports.literal("replaced" /* Replaced */),
+      external_exports.literal("idempotent" /* Idempotent */)
+    ]),
+    version: versionSchema,
+    headSha: gitShaSchema,
+    planHash: hashSchema
+  }).strict(),
+  conflictResponseSchema(external_exports.literal("conflict" /* Conflict */))
+]);
+var batchResultResponseSchema = external_exports.union([
+  external_exports.object({
+    protocolVersion: external_exports.literal(REVIEW_CHECKPOINT_PROTOCOL_VERSION),
+    status: external_exports.union([
+      external_exports.literal("accepted" /* Accepted */),
+      external_exports.literal("idempotent" /* Idempotent */)
+    ]),
+    version: versionSchema,
+    headSha: gitShaSchema,
+    planHash: hashSchema,
+    workKey: hashSchema
+  }).strict(),
+  conflictResponseSchema(external_exports.literal("conflict" /* Conflict */))
+]);
+var finalizeResponseSchema = external_exports.union([
+  external_exports.object({
+    protocolVersion: external_exports.literal(REVIEW_CHECKPOINT_PROTOCOL_VERSION),
+    status: external_exports.union([
+      external_exports.literal("finalized" /* Finalized */),
+      external_exports.literal("idempotent" /* Idempotent */)
+    ]),
+    version: versionSchema,
+    headSha: gitShaSchema,
+    planHash: hashSchema
+  }).strict(),
+  conflictResponseSchema(external_exports.literal("conflict" /* Conflict */))
+]);
+var clearResponseSchema = external_exports.union([
+  external_exports.object({
+    protocolVersion: external_exports.literal(REVIEW_CHECKPOINT_PROTOCOL_VERSION),
+    status: external_exports.union([
+      external_exports.literal("cleared" /* Cleared */),
+      external_exports.literal("missing" /* Missing */)
+    ])
+  }).strict(),
+  conflictResponseSchema(external_exports.literal("conflict" /* Conflict */))
+]);
+var ReviewCheckpointHttpError = class extends Error {
+  constructor(code) {
+    super(`review_checkpoint_${code}`);
+    this.code = code;
+    this.name = "ReviewCheckpointHttpError";
+  }
+};
+var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
+  static fromEnvironment(input) {
+    const env = input.env ?? process.env;
+    const apiUrl = env[REVIEW_CHECKPOINT_API_URL_ENV]?.trim();
+    const leaseId = env[REVIEW_CHECKPOINT_LEASE_ID_ENV]?.trim();
+    const providerInstanceId = env[REVIEW_CHECKPOINT_PROVIDER_INSTANCE_ID_ENV]?.trim();
+    if (!apiUrl || !leaseId || !providerInstanceId) return null;
+    try {
+      const parsedUrl = new URL(apiUrl);
+      if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+    return new _HttpReviewCheckpointClient({
+      apiUrl,
+      leaseId,
+      providerInstanceId,
+      fetchImpl: input.fetchImpl,
+      deadlineEpochMs: parseOptionalEpochMs(env[EXECUTION_DEADLINE_ENV])
+    });
+  }
+  apiUrl;
+  leaseId;
+  providerInstanceId;
+  fetchImpl;
+  deadlineEpochMs;
+  requestTimeoutMs;
+  now;
+  constructor(input) {
+    this.apiUrl = input.apiUrl.replace(/\/+$/, "");
+    this.leaseId = input.leaseId;
+    this.providerInstanceId = input.providerInstanceId;
+    this.fetchImpl = input.fetchImpl ?? fetch;
+    this.deadlineEpochMs = input.deadlineEpochMs;
+    this.requestTimeoutMs = input.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.now = input.now ?? Date.now;
+  }
+  async restore(input) {
+    const response = await this.post(
+      "/restore",
+      this.withCredentials({
+        pullRequestNumber: input.pullRequestNumber,
+        baseSha: input.baseSha,
+        headSha: input.headSha,
+        compatibilityKey: input.compatibilityKey,
+        planHash: input.planHash
+      }),
+      restoreResponseSchema
+    );
+    if (response.status === "missing" /* Missing */) {
+      return response;
+    }
+    return {
+      status: response.status,
+      expectedVersion: response.expectedVersion,
+      checkpoint: {
+        version: response.checkpoint.version,
+        plan: {
+          pullRequestNumber: input.pullRequestNumber,
+          baseSha: response.checkpoint.baseSha.toLowerCase(),
+          headSha: response.checkpoint.headSha.toLowerCase(),
+          compatibilityKey: response.checkpoint.compatibilityKey.toLowerCase(),
+          planHash: response.checkpoint.planHash.toLowerCase(),
+          workKeys: response.checkpoint.plannedWorkKeys.map(
+            (key) => key.toLowerCase()
+          )
+        },
+        acceptedResults: response.checkpoint.acceptedResults.map((result) => ({
+          workKey: result.workKey.toLowerCase(),
+          payload: result.payload
+        })),
+        finalized: response.checkpoint.finalized
+      }
+    };
+  }
+  start(input) {
+    return this.post(
+      "/start",
+      this.withCredentials({
+        expectedVersion: input.expectedVersion,
+        pullRequestNumber: input.plan.pullRequestNumber,
+        baseSha: input.plan.baseSha,
+        headSha: input.plan.headSha,
+        compatibilityKey: input.plan.compatibilityKey,
+        planHash: input.plan.planHash,
+        plannedWorkKeys: input.plan.workKeys
+      }),
+      startResponseSchema
+    );
+  }
+  commitBatchResult(input) {
+    return this.post(
+      "/batch-result",
+      this.withCredentials({
+        expectedVersion: input.expectedVersion,
+        pullRequestNumber: input.pullRequestNumber,
+        headSha: input.headSha,
+        planHash: input.planHash,
+        workKey: input.workKey,
+        batchId: input.batchId,
+        batchIndex: input.batchIndex,
+        payload: input.payload
+      }),
+      batchResultResponseSchema
+    );
+  }
+  finalize(input) {
+    return this.post(
+      "/finalize",
+      this.withCredentials({ ...input }),
+      finalizeResponseSchema
+    );
+  }
+  clear(input) {
+    return this.post(
+      "/clear",
+      this.withCredentials({ ...input }),
+      clearResponseSchema
+    );
+  }
+  clearFinalized(marker) {
+    const parsed = parseReviewCheckpointFinalizationMarker(marker);
+    return this.clear({
+      expectedVersion: parsed.expectedVersion,
+      pullRequestNumber: parsed.pullRequestNumber,
+      headSha: parsed.headSha,
+      planHash: parsed.planHash
+    });
+  }
+  withCredentials(body) {
+    return {
+      protocolVersion: REVIEW_CHECKPOINT_PROTOCOL_VERSION,
+      leaseId: this.leaseId,
+      providerInstanceId: this.providerInstanceId,
+      ...body
+    };
+  }
+  async post(path19, body, schema2) {
+    const serialized = JSON.stringify(body);
+    if (Buffer.byteLength(serialized, "utf8") > REVIEW_CHECKPOINT_MAX_REQUEST_BYTES) {
+      throw new ReviewCheckpointHttpError(
+        "request_too_large" /* RequestTooLarge */
+      );
+    }
+    const timeoutMs = this.availableRequestTimeMs();
+    const abortController = new AbortController();
+    let timeout;
+    const timeoutFailure = new Promise((_2, reject) => {
+      timeout = setTimeout(() => {
+        abortController.abort();
+        reject(
+          new ReviewCheckpointHttpError(
+            "request_timed_out" /* RequestTimedOut */
+          )
+        );
+      }, timeoutMs);
+    });
+    try {
+      let response;
+      try {
+        response = await Promise.race([
+          this.fetchImpl(`${this.apiUrl}${CHECKPOINT_PATH}${path19}`, {
+            method: "POST",
+            headers: {
+              accept: "application/json",
+              "content-type": "application/json"
+            },
+            body: serialized,
+            signal: abortController.signal
+          }),
+          timeoutFailure
+        ]);
+      } catch (error2) {
+        if (error2 instanceof ReviewCheckpointHttpError) throw error2;
+        throw new ReviewCheckpointHttpError(
+          "request_failed" /* RequestFailed */
+        );
+      }
+      if ([404, 405, 410, 501].includes(response.status)) {
+        throw new ReviewCheckpointHttpError(
+          "unsupported_endpoint" /* UnsupportedEndpoint */
+        );
+      }
+      let text;
+      try {
+        text = await this.readBoundedResponseText(
+          response,
+          timeoutFailure,
+          abortController
+        );
+      } catch (error2) {
+        if (error2 instanceof ReviewCheckpointHttpError) throw error2;
+        throw new ReviewCheckpointHttpError(
+          "request_failed" /* RequestFailed */
+        );
+      }
+      if (!response.ok && response.status !== 409) {
+        throw new ReviewCheckpointHttpError(
+          "request_failed" /* RequestFailed */
+        );
+      }
+      let decoded;
+      try {
+        decoded = JSON.parse(text);
+      } catch {
+        throw new ReviewCheckpointHttpError(
+          "invalid_response" /* InvalidResponse */
+        );
+      }
+      const parsed = schema2.safeParse(decoded);
+      if (!parsed.success) {
+        throw new ReviewCheckpointHttpError(
+          "invalid_response" /* InvalidResponse */
+        );
+      }
+      return parsed.data;
+    } finally {
+      if (timeout !== void 0) clearTimeout(timeout);
+    }
+  }
+  availableRequestTimeMs() {
+    const remainingMs = this.deadlineEpochMs === void 0 ? Number.POSITIVE_INFINITY : Math.max(0, this.deadlineEpochMs - this.now());
+    return Math.max(0, Math.min(this.requestTimeoutMs, remainingMs));
+  }
+  async readBoundedResponseText(response, timeoutFailure, abortController) {
+    if (!response.body) {
+      const text2 = await Promise.race([response.text(), timeoutFailure]);
+      this.assertResponseSize(text2);
+      return text2;
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let byteCount = 0;
+    let text = "";
+    let completed = false;
+    let endOfBody = false;
+    try {
+      while (!endOfBody) {
+        const chunk = await Promise.race([reader.read(), timeoutFailure]);
+        endOfBody = chunk.done;
+        if (chunk.done) continue;
+        byteCount += chunk.value.byteLength;
+        if (byteCount > RESPONSE_MAX_BYTES) {
+          abortController.abort();
+          void reader.cancel().catch(() => void 0);
+          throw new ReviewCheckpointHttpError(
+            "response_too_large" /* ResponseTooLarge */
+          );
+        }
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+      text += decoder.decode();
+      completed = true;
+      return text;
+    } finally {
+      if (completed) reader.releaseLock();
+    }
+  }
+  assertResponseSize(text) {
+    if (Buffer.byteLength(text, "utf8") > RESPONSE_MAX_BYTES) {
+      throw new ReviewCheckpointHttpError(
+        "response_too_large" /* ResponseTooLarge */
+      );
+    }
+  }
+};
+var FileReviewCheckpointFinalizationMarkerWriter = class _FileReviewCheckpointFinalizationMarkerWriter {
+  constructor(path19) {
+    this.path = path19;
+  }
+  static fromEnvironment(env = process.env) {
+    const path19 = env[REVIEW_CHECKPOINT_FINALIZATION_PATH_ENV]?.trim();
+    return path19 ? new _FileReviewCheckpointFinalizationMarkerWriter(path19) : null;
+  }
+  static parse(input) {
+    return parseReviewCheckpointFinalizationMarker(input);
+  }
+  async write(marker) {
+    const validated = reviewCheckpointFinalizationMarkerSchema.parse(marker);
+    const temporaryPath = `${this.path}.tmp-${process.pid}-${(0, import_crypto8.randomUUID)()}`;
+    try {
+      await fs14.writeFile(temporaryPath, JSON.stringify(validated), {
+        encoding: "utf8",
+        flag: "wx",
+        mode: 384
+      });
+      await fs14.rename(temporaryPath, this.path);
+      await fs14.chmod(this.path, 384);
+    } finally {
+      await fs14.rm(temporaryPath, { force: true }).catch(() => void 0);
+    }
+  }
+};
+async function createReviewCheckpointSessionFromEnvironment(input) {
+  const env = input.env ?? process.env;
+  const client = HttpReviewCheckpointClient.fromEnvironment({
+    env,
+    fetchImpl: input.fetchImpl
+  });
+  if (!client) return null;
+  return ReviewCheckpointSession.open({
+    client,
+    plan: input.plan,
+    markerWriter: FileReviewCheckpointFinalizationMarkerWriter.fromEnvironment(env),
+    logger: input.logger
+  });
+}
+function conflictResponseSchema(status) {
+  const base = {
+    protocolVersion: external_exports.literal(REVIEW_CHECKPOINT_PROTOCOL_VERSION),
+    status,
+    currentVersion: versionSchema
+  };
+  return external_exports.union([
+    external_exports.object(base).strict(),
+    external_exports.object({ ...base, currentHeadSha: gitShaSchema }).strict(),
+    external_exports.object({
+      ...base,
+      currentHeadSha: gitShaSchema,
+      currentPlanHash: hashSchema
+    }).strict()
+  ]);
+}
+function parseOptionalEpochMs(value) {
+  if (!value?.trim()) return void 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : void 0;
+}
+
 // src/setup.ts
+var DEFAULT_COMPLETION_RESERVE_MS = 12e4;
+var DEFAULT_MINIMUM_BATCH_START_WINDOW_MS = 3e4;
+var DEFAULT_MINIMUM_RETRY_START_WINDOW_MS = 3e4;
+var DEFAULT_PROVIDER_DISCOVERY_WAVE_TIMEOUT_MS = 15e3;
+function parseOptionalEpochMs2(value) {
+  if (!value?.trim()) return void 0;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(
+      "REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS must be a positive epoch timestamp"
+    );
+  }
+  return parsed;
+}
+function parseBoundedParallelism(value) {
+  if (!value?.trim()) return void 0;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 3) {
+    throw new Error(
+      "REVIEWROUTER_LARGE_PR_MAX_PARALLEL must be an integer from 1 to 3"
+    );
+  }
+  return parsed;
+}
+function createExecutionDeadline() {
+  return new ExecutionDeadline(
+    parseOptionalEpochMs2(process.env.REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS),
+    {
+      completionReserveMs: DEFAULT_COMPLETION_RESERVE_MS,
+      minimumBatchStartWindowMs: DEFAULT_MINIMUM_BATCH_START_WINDOW_MS,
+      minimumOptionalRetryStartWindowMs: DEFAULT_MINIMUM_RETRY_START_WINDOW_MS
+    }
+  );
+}
+function bindDeadlineAwareProviderDiscovery(providerRegistry, llmExecutor) {
+  const discover = providerRegistry.discoverAdditionalFreeProviders.bind(providerRegistry);
+  providerRegistry.discoverAdditionalFreeProviders = async (existing, max, config) => await llmExecutor.runProviderDiscoveryWave(
+    () => discover(existing, max, config),
+    DEFAULT_PROVIDER_DISCOVERY_WAVE_TIMEOUT_MS
+  ) ?? [];
+}
 async function createComponents(config, githubToken, options = {}) {
   const pluginLoader = config.pluginsEnabled ? new PluginLoader({
     pluginDir: config.pluginDir || "./plugins",
@@ -28077,7 +28849,13 @@ async function createComponents(config, githubToken, options = {}) {
   if (pluginLoader) {
     await pluginLoader.loadPlugins();
   }
-  const llmExecutor = new LLMExecutor(config);
+  const executionDeadline = createExecutionDeadline();
+  const llmExecutor = new LLMExecutor(config, {
+    deadline: executionDeadline,
+    maxParallelCalls: parseBoundedParallelism(
+      process.env.REVIEWROUTER_LARGE_PR_MAX_PARALLEL
+    )
+  });
   const deduplicator = new Deduplicator();
   const consensus = new ConsensusEngine({
     minAgreement: config.inlineMinAgreement,
@@ -28088,6 +28866,10 @@ async function createComponents(config, githubToken, options = {}) {
   const testCoverage = new TestCoverageAnalyzer();
   const astAnalyzer = new ASTAnalyzer();
   const cache = new CacheManager(void 0, config);
+  const reviewCompatibilityKey = hashIncrementalCompatibility(
+    config,
+    process.env.REVIEWROUTER_CONFIG_VERSION
+  );
   const incrementalSnapshotStorage = selectIncrementalSnapshotStorage({
     localStorage: new CacheStorage(),
     incrementalEnabled: config.incrementalEnabled
@@ -28102,10 +28884,7 @@ async function createComponents(config, githubToken, options = {}) {
     {
       enabled: incrementalSnapshotStorage.enabled,
       cacheTtlDays: config.incrementalCacheTtlDays,
-      compatibilityKey: hashIncrementalCompatibility(
-        config,
-        process.env.REVIEWROUTER_CONFIG_VERSION
-      ),
+      compatibilityKey: reviewCompatibilityKey,
       requireCompatibleSnapshot: incrementalSnapshotStorage.requireCompatibleSnapshot
     }
   );
@@ -28191,6 +28970,7 @@ async function createComponents(config, githubToken, options = {}) {
     pluginLoader,
     reliabilityTracker
   );
+  bindDeadlineAwareProviderDiscovery(providerRegistry, llmExecutor);
   const metricsCollector = config.analyticsEnabled ? new MetricsCollector(cacheStorage, config) : void 0;
   const batchOrchestrator = new BatchOrchestrator({
     defaultBatchSize: config.batchMaxFiles || 30,
@@ -28235,7 +29015,13 @@ async function createComponents(config, githubToken, options = {}) {
     reviewThreadResolver,
     acceptanceDetector,
     providerWeightTracker,
-    memoryBundleProvider
+    memoryBundleProvider,
+    executionDeadline,
+    reviewCompatibilityKey,
+    openReviewCheckpointSession: (plan) => createReviewCheckpointSessionFromEnvironment({
+      plan,
+      logger: { warn: (message) => logger.warn(message) }
+    })
   };
 }
 
@@ -31704,6 +32490,12 @@ function buildReviewCoverage(pr2, config, options = {}) {
   const compactedByFile = new Map(
     compacted.summaryOnlyFiles.map((file) => [file.filename, file])
   );
+  const unreviewedByPath = new Map(
+    (options.unreviewedFiles ?? []).map(({ file, reason }) => [
+      file.filename,
+      reason
+    ])
+  );
   const reviewedFiles = pr2.files.map((file) => {
     const compactedFile = compactedByFile.get(file.filename);
     const wasInPromptBeforeTrim = pathsBeforeTrim.has(file.filename);
@@ -31713,6 +32505,14 @@ function buildReviewCoverage(pr2, config, options = {}) {
       additions: file.additions,
       deletions: file.deletions
     };
+    const unreviewedReason = unreviewedByPath.get(file.filename);
+    if (unreviewedReason) {
+      return {
+        ...base,
+        status: "unreviewed",
+        reason: unreviewedReason
+      };
+    }
     if (!isInPrompt) {
       return {
         ...base,
@@ -31740,14 +32540,20 @@ function buildReviewCoverage(pr2, config, options = {}) {
     deletions: file.deletions
   }));
   const files = [...reviewedFiles, ...skippedFiles];
+  const loadedUnreviewedFiles = countByStatus(files, "unreviewed");
+  const unreviewedFiles = loadedUnreviewedFiles + Math.max(0, options.additionalUnreviewedFiles ?? 0);
+  const limitations = [...options.limitations ?? []];
   return {
     mode: options.mode ?? "full",
     totalFiles: options.totalFiles ?? files.length,
-    filesConsidered: pr2.files.length,
+    filesConsidered: Math.max(0, pr2.files.length - loadedUnreviewedFiles),
     fullDiffFiles: countByStatus(files, "full"),
     compactedFiles: countByStatus(files, "compacted"),
     metadataOnlyFiles: countByStatus(files, "metadata-only"),
     skippedFiles: countByStatus(files, "skipped"),
+    unreviewedFiles,
+    complete: unreviewedFiles === 0 && limitations.length === 0,
+    ...limitations.length > 0 ? { limitations } : {},
     agenticContext: config.codexAgenticContext ?? false,
     files
   };
@@ -32538,8 +33344,300 @@ var ProgressTracker = class _ProgressTracker {
 };
 
 // src/core/orchestrator.ts
-var fs14 = __toESM(require("fs/promises"));
+var fs15 = __toESM(require("fs/promises"));
 var import_path = __toESM(require("path"));
+
+// src/review-execution/domain/capacity-signal.ts
+var STRUCTURED_OUTPUT_ERROR = /\b(?:structured\s+(?:json|output|response)|(?:invalid|malformed)\s+json|json\s+(?:schema|parse|parsing|validation)|(?:parse|parsing|validate)\s+(?:structured\s+)?json|failed\s+to\s+(?:parse|validate).*json)\b/i;
+var CAPACITY_MESSAGE = /(?:\bcapacity[\s_-]*unavailable\b|\brate[\s_-]*limit(?:ed|ing)?\b|\bratelimit(?:ed|ing)?\b|\btoo many requests\b|\b429\b|\bquota(?:[\s_-]*(?:exceeded|exhausted|unavailable))?\b)/i;
+function messageFromError(error2) {
+  if (typeof error2 === "string") return error2;
+  if (error2 instanceof Error) return error2.message;
+  if (typeof error2 === "object" && error2 !== null && "message" in error2 && typeof error2.message === "string") {
+    return error2.message;
+  }
+  return void 0;
+}
+function isJsonPayload(message) {
+  const trimmed = message.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return typeof parsed === "object" && parsed !== null;
+  } catch {
+    return false;
+  }
+}
+function hasCapacityMessage(message) {
+  if (message === void 0) return false;
+  if (STRUCTURED_OUTPUT_ERROR.test(message) || isJsonPayload(message)) {
+    return false;
+  }
+  return CAPACITY_MESSAGE.test(message);
+}
+function classifyOne(result) {
+  const status = typeof result.status === "string" ? result.status : void 0;
+  if (hasCapacityMessage(status) || hasCapacityMessage(messageFromError(result.error))) {
+    return "capacity_pressure" /* CapacityPressure */;
+  }
+  if (status?.toLowerCase() === "success") return "healthy" /* Healthy */;
+  return "neutral" /* Neutral */;
+}
+function classifyProviderCapacitySignal(result) {
+  const results = Array.isArray(result) ? result : [result];
+  if (results.length === 0) return "neutral" /* Neutral */;
+  const signals = results.map(classifyOne);
+  if (signals.includes("capacity_pressure" /* CapacityPressure */)) {
+    return "capacity_pressure" /* CapacityPressure */;
+  }
+  return signals.every((signal) => signal === "healthy" /* Healthy */) ? "healthy" /* Healthy */ : "neutral" /* Neutral */;
+}
+
+// src/review-execution/domain/file-risk-priority.ts
+var TIER_ORDER = {
+  ["security" /* Security */]: 0,
+  ["migration" /* Migration */]: 1,
+  ["persistence" /* Persistence */]: 2,
+  ["public_contract" /* PublicContract */]: 3,
+  ["normal" /* Normal */]: 4
+};
+var SECURITY_TOKENS = /* @__PURE__ */ new Set([
+  "access",
+  "auth",
+  "authentication",
+  "authorization",
+  "authenticator",
+  "authn",
+  "authz",
+  "crypto",
+  "cryptography",
+  "jwt",
+  "oauth",
+  "security",
+  "session",
+  "sessions",
+  "token",
+  "tokens"
+]);
+var MIGRATION_TOKENS = /* @__PURE__ */ new Set([
+  "migration",
+  "migrations",
+  "schema",
+  "schemas"
+]);
+var PERSISTENCE_TOKENS = /* @__PURE__ */ new Set([
+  "database",
+  "datastore",
+  "db",
+  "persistence",
+  "persistent",
+  "repositories",
+  "repository",
+  "storage"
+]);
+var PUBLIC_CONTRACT_TOKENS = /* @__PURE__ */ new Set([
+  "api",
+  "apis",
+  "contract",
+  "contracts"
+]);
+function pathTokens(filename) {
+  return filename.replace(/([a-z0-9])([A-Z])/g, "$1/$2").toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length > 0);
+}
+function includesToken(tokens, candidates) {
+  return tokens.some((token) => candidates.has(token));
+}
+function isActionManifest(filename, tokens) {
+  const basename3 = filename.split("/").at(-1)?.toLowerCase();
+  if (basename3 === "action.yml" || basename3 === "action.yaml") return true;
+  return tokens.includes("manifest") && (tokens.includes("action") || tokens.includes("actions"));
+}
+function classifyFileRisk(filename) {
+  const tokens = pathTokens(filename);
+  if (includesToken(tokens, SECURITY_TOKENS)) return "security" /* Security */;
+  if (includesToken(tokens, MIGRATION_TOKENS)) return "migration" /* Migration */;
+  if (includesToken(tokens, PERSISTENCE_TOKENS)) {
+    return "persistence" /* Persistence */;
+  }
+  if (includesToken(tokens, PUBLIC_CONTRACT_TOKENS) || isActionManifest(filename, tokens)) {
+    return "public_contract" /* PublicContract */;
+  }
+  return "normal" /* Normal */;
+}
+function prioritizeFilesByRisk(files) {
+  return files.map((file, originalIndex) => ({
+    file,
+    originalIndex,
+    tier: classifyFileRisk(file.filename)
+  })).sort((left, right) => {
+    const tierDifference = TIER_ORDER[left.tier] - TIER_ORDER[right.tier];
+    return tierDifference !== 0 ? tierDifference : left.originalIndex - right.originalIndex;
+  }).map(({ file }) => file);
+}
+
+// src/review-execution/domain/review-batch-plan.ts
+var import_crypto9 = require("crypto");
+function compareCodePoints(left, right) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+function requireNonEmpty(value, field) {
+  if (value.trim().length === 0) {
+    throw new Error(`${field} must not be empty`);
+  }
+}
+function canonicalFile(file) {
+  return {
+    filename: file.filename,
+    status: file.status,
+    additions: file.additions,
+    deletions: file.deletions,
+    changes: file.changes,
+    patch: file.patch ?? null,
+    previousFilename: file.previousFilename ?? null,
+    language: file.language ?? null
+  };
+}
+function cloneFile(file) {
+  return Object.freeze({ ...file });
+}
+function createReviewBatchPlan(input) {
+  requireNonEmpty(input.baseSha, "baseSha");
+  requireNonEmpty(input.headSha, "headSha");
+  requireNonEmpty(input.compatibilityKey, "compatibilityKey");
+  input.providerNames.forEach((name) => requireNonEmpty(name, "providerName"));
+  const providerNames = Object.freeze(
+    [...input.providerNames].sort(compareCodePoints)
+  );
+  const canonicalBatches = input.batches.map(
+    (batch) => batch.map(canonicalFile)
+  );
+  const payload = {
+    version: "v1" /* V1 */,
+    baseSha: input.baseSha,
+    headSha: input.headSha,
+    compatibilityKey: input.compatibilityKey,
+    providerNames,
+    batches: canonicalBatches
+  };
+  const planHash = (0, import_crypto9.createHash)("sha256").update(JSON.stringify(payload)).digest("hex");
+  const batches = Object.freeze(
+    input.batches.map((batch, index) => {
+      const id = (0, import_crypto9.createHash)("sha256").update(
+        JSON.stringify({
+          version: "v1" /* V1 */,
+          planHash,
+          index,
+          files: canonicalBatches[index]
+        })
+      ).digest("hex");
+      return Object.freeze({
+        id,
+        index,
+        files: Object.freeze(batch.map(cloneFile))
+      });
+    })
+  );
+  return Object.freeze({
+    version: "v1" /* V1 */,
+    planHash,
+    baseSha: input.baseSha,
+    headSha: input.headSha,
+    compatibilityKey: input.compatibilityKey,
+    providerNames,
+    batches
+  });
+}
+
+// src/review-execution/application/adaptive-batch-scheduler.ts
+var ADAPTIVE_BATCH_HARD_MAX_CONCURRENCY = 3;
+var INITIAL_MULTIPLE_ITEM_CONCURRENCY = 2;
+var AdaptiveBatchScheduler = class {
+  constructor(startPolicy) {
+    this.startPolicy = startPolicy;
+  }
+  schedule(items, execute, classifyCompletion) {
+    if (items.length === 0) {
+      return Promise.resolve({ completed: [], deferred: [] });
+    }
+    return new Promise((resolve3) => {
+      const completed = [];
+      const deferred = [];
+      let nextIndex = 0;
+      let activeCount = 0;
+      let concurrency = items.length > 1 ? INITIAL_MULTIPLE_ITEM_CONCURRENCY : 1;
+      let capacityPressureObserved = false;
+      let launchClosed = false;
+      let resolved = false;
+      const finishIfDone = () => {
+        if (resolved || nextIndex < items.length || activeCount > 0) return;
+        resolved = true;
+        completed.sort((left, right) => left.index - right.index);
+        deferred.sort((left, right) => left.index - right.index);
+        resolve3({ completed, deferred });
+      };
+      const deferUnstarted = () => {
+        launchClosed = true;
+        while (nextIndex < items.length) {
+          deferred.push({
+            index: nextIndex,
+            item: items[nextIndex],
+            reason: "insufficient_deadline" /* InsufficientDeadline */
+          });
+          nextIndex += 1;
+        }
+      };
+      const adaptConcurrency = (signal) => {
+        if (signal === "capacity_pressure" /* CapacityPressure */) {
+          capacityPressureObserved = true;
+          concurrency = 1;
+          return;
+        }
+        if (signal === "healthy" /* Healthy */ && !capacityPressureObserved) {
+          concurrency = ADAPTIVE_BATCH_HARD_MAX_CONCURRENCY;
+        }
+      };
+      const pump = () => {
+        while (!launchClosed && activeCount < concurrency && nextIndex < items.length) {
+          if (!this.startPolicy.canStartBatch()) {
+            deferUnstarted();
+            break;
+          }
+          const index = nextIndex;
+          const item = items[index];
+          nextIndex += 1;
+          activeCount += 1;
+          void Promise.resolve().then(() => execute(item, index)).then((result) => {
+            const signal = classifyCompletion(result);
+            completed.push({
+              status: "fulfilled" /* Fulfilled */,
+              index,
+              item,
+              result
+            });
+            adaptConcurrency(signal);
+          }).catch((error2) => {
+            completed.push({
+              status: "rejected" /* Rejected */,
+              index,
+              item,
+              error: error2
+            });
+          }).finally(() => {
+            activeCount -= 1;
+            pump();
+            finishIfDone();
+          });
+        }
+        finishIfDone();
+      };
+      pump();
+    });
+  }
+};
+
+// src/core/orchestrator.ts
 var HEALTH_CHECK_TIMEOUT_MS = 3e4;
 var ReviewOrchestrator = class {
   constructor(components) {
@@ -32910,6 +34008,30 @@ var ReviewOrchestrator = class {
       const llmFindings = [];
       let providerResults = [];
       let aiAnalysis;
+      const unreviewedFiles = /* @__PURE__ */ new Map();
+      const loadLimitations = [];
+      let additionalUnreviewedFiles = 0;
+      if (reviewContext.loadCompleteness?.status === "truncated" /* Truncated */) {
+        for (const omission of reviewContext.loadCompleteness.omissions) {
+          if (omission.reason === "synthesized_diff_size_limit" /* SynthesizedDiffSizeLimit */) {
+            for (const filename of omission.omittedFiles) {
+              unreviewedFiles.set(
+                filename,
+                "file patch was omitted by the synthesized diff size limit"
+              );
+            }
+            loadLimitations.push(
+              `${omission.omittedFileCount} file patch(es) were omitted by the synthesized diff size limit`
+            );
+          } else {
+            additionalUnreviewedFiles += omission.omittedFileCount ?? 0;
+            loadLimitations.push(
+              omission.omittedFileCount === void 0 ? "GitHub omitted an unknown number of files beyond its API limit" : `GitHub omitted ${omission.omittedFileCount} file(s) beyond its API limit`
+            );
+          }
+        }
+      }
+      let llmCoverageComplete = filesToReview.length === 0 && unreviewedFiles.size === 0 && loadLimitations.length === 0;
       const requiredHealthyProviders = this.requiredHealthyProviderNames(config);
       let providers = await this.components.providerRegistry.createProviders(config);
       providers = await this.applyReliabilityFilters(providers);
@@ -33012,6 +34134,12 @@ var ReviewOrchestrator = class {
             );
           }
           providerResults = allHealthResults;
+          for (const file of filesToReview) {
+            unreviewedFiles.set(
+              file.filename,
+              "no healthy provider was available for this batch"
+            );
+          }
           await this.recordReliability(providerResults);
           await progressTracker?.updateProgress(
             "llm",
@@ -33042,11 +34170,12 @@ var ReviewOrchestrator = class {
           );
           let batches;
           const providerNames = healthy.map((p2) => p2.name);
+          const prioritizedFiles = prioritizeFilesByRisk(filesToReview);
           lifecyclePlannedProviders = providerNames;
           if (config.enableTokenAwareBatching) {
             try {
               batches = batchOrchestrator.createTokenAwareBatches(
-                filesToReview,
+                prioritizedFiles,
                 providerNames
               );
             } catch (error2) {
@@ -33056,7 +34185,7 @@ var ReviewOrchestrator = class {
               );
               const batchSize = batchOrchestrator.getBatchSize(providerNames);
               batches = batchOrchestrator.createBatches(
-                filesToReview,
+                prioritizedFiles,
                 batchSize
               );
             }
@@ -33064,7 +34193,7 @@ var ReviewOrchestrator = class {
             const batchSize = batchOrchestrator.getBatchSize(providerNames);
             try {
               batches = batchOrchestrator.createBatches(
-                filesToReview,
+                prioritizedFiles,
                 batchSize
               );
             } catch (error2) {
@@ -33072,7 +34201,32 @@ var ReviewOrchestrator = class {
                 `Invalid batch size computed from providers - falling back to size 1`,
                 error2
               );
-              batches = batchOrchestrator.createBatches(filesToReview, 1);
+              batches = batchOrchestrator.createBatches(prioritizedFiles, 1);
+            }
+          }
+          const batchPlan = createReviewBatchPlan({
+            batches,
+            baseSha: pr2.baseSha,
+            headSha: pr2.headSha,
+            compatibilityKey: this.components.reviewCompatibilityKey ?? "0".repeat(64),
+            providerNames
+          });
+          let checkpointSession = null;
+          if (this.components.openReviewCheckpointSession) {
+            try {
+              checkpointSession = await this.components.openReviewCheckpointSession({
+                pullRequestNumber: pr2.number,
+                baseSha: batchPlan.baseSha,
+                headSha: batchPlan.headSha,
+                compatibilityKey: batchPlan.compatibilityKey,
+                planHash: batchPlan.planHash,
+                workKeys: batchPlan.batches.map((batch) => batch.id)
+              });
+            } catch (error2) {
+              logger.warn(
+                "Hosted review checkpoint could not be opened; continuing without resume",
+                error2
+              );
             }
           }
           const lifecycleTargetsByBatch = lifecycleMode === "off" ? [] : batches.map(
@@ -33084,12 +34238,40 @@ var ReviewOrchestrator = class {
             lifecycleTargetsByBatch,
             providerNames
           );
-          const batchQueue = createQueue(
-            Math.max(1, Number(config.providerMaxParallel) || 1)
-          );
           logger.info(`Processing ${batches.length} batch(es)`);
-          const batchPromises = batches.map(
-            (batch, batchIndex) => batchQueue.add(async () => {
+          const batchResults = [];
+          const acceptedCheckpointResults = checkpointSession?.acceptedBatchResults ?? /* @__PURE__ */ new Map();
+          for (const plannedBatch of batchPlan.batches) {
+            const accepted = acceptedCheckpointResults.get(plannedBatch.id);
+            if (!accepted) continue;
+            const restoredResults = this.restoreCheckpointProviderResults(accepted);
+            await this.recordProviderUsage(
+              restoredResults,
+              config.budgetMaxUsd
+            );
+            batchResults.push(...restoredResults);
+            this.recordLifecycleBatchProviderFailures(
+              lifecycleTargetsByBatch[plannedBatch.index] ?? [],
+              restoredResults,
+              lifecycleFailedProvidersByTarget
+            );
+          }
+          const pendingBatches = batchPlan.batches.filter(
+            (batch) => !acceptedCheckpointResults.has(batch.id)
+          );
+          if (acceptedCheckpointResults.size > 0) {
+            logger.info(
+              `Resuming review with ${acceptedCheckpointResults.size}/${batchPlan.batches.length} durable batch(es)`
+            );
+          }
+          const scheduler = new AdaptiveBatchScheduler(
+            this.components.executionDeadline ?? { canStartBatch: () => true }
+          );
+          const scheduled = await scheduler.schedule(
+            pendingBatches,
+            async (plannedBatch) => {
+              const batch = [...plannedBatch.files];
+              const batchIndex = plannedBatch.index;
               const batchDiff = filterDiffByFiles(reviewContext.diff, batch);
               const batchContext = {
                 ...reviewContext,
@@ -33121,18 +34303,27 @@ var ReviewOrchestrator = class {
                 const scopedResults = results.map((result) => ({
                   ...result,
                   lifecycleAssignedTargetIds
-                }));
+                })).sort((left, right) => left.name.localeCompare(right.name));
                 this.recordLifecycleBatchProviderFailures(
                   lifecycleTargetsForBatch,
                   scopedResults,
                   lifecycleFailedProvidersByTarget
                 );
-                for (const result of scopedResults) {
-                  await this.components.costTracker.record(
-                    result.name,
-                    result.result?.usage,
-                    config.budgetMaxUsd
-                  );
+                await this.recordProviderUsage(
+                  scopedResults,
+                  config.budgetMaxUsd
+                );
+                const requiredFailure = this.findRequiredProviderExecutionFailure(
+                  requiredHealthyProviders,
+                  scopedResults
+                );
+                if (checkpointSession && !requiredFailure && scopedResults.some((result) => result.status === "success")) {
+                  await checkpointSession.commitSuccessfulBatch({
+                    workKey: plannedBatch.id,
+                    files: batch,
+                    findings: extractFindings(scopedResults),
+                    providerResults: scopedResults
+                  });
                 }
                 return scopedResults;
               } catch (error2) {
@@ -33151,74 +34342,90 @@ var ReviewOrchestrator = class {
                 );
                 return failedResults;
               }
-            })
+            },
+            classifyProviderCapacitySignal
           );
-          const batchResults = [];
           let batchFailures = 0;
-          let batchSuccesses = 0;
+          let batchSuccesses = acceptedCheckpointResults.size;
           const requiredProviderFailures = [];
-          try {
-            const settled = await Promise.allSettled(batchPromises);
-            for (const [batchIndex, result] of settled.entries()) {
-              if (result.status === "fulfilled") {
-                batchResults.push(...result.value);
-                const requiredFailure = this.findRequiredProviderExecutionFailure(
-                  requiredHealthyProviders,
-                  result.value
-                );
-                if (requiredFailure) {
-                  requiredProviderFailures.push(requiredFailure);
-                }
-                const successfulProviders = result.value.filter(
-                  (r2) => r2.status === "success"
-                );
-                const degradedProviders = result.value.filter(
-                  (r2) => r2.status !== "success"
-                );
-                if (successfulProviders.length > 0) {
-                  batchSuccesses += 1;
-                  for (const degraded of degradedProviders) {
-                    const structuredOutputFailure = degraded.error && shouldRetryProviderReviewError(degraded.error);
-                    const reason = this.redactProviderFailureReason(
-                      degraded.error?.message || degraded.status
-                    );
-                    if (requiredHealthyProviders.has(degraded.name)) {
-                      logger.warn(
-                        structuredOutputFailure ? `Required provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); review will fail after batch completion. ${reason}` : `Required provider ${degraded.name} failed; review will fail after batch completion. ${reason}`
-                      );
-                      continue;
-                    }
+          for (const result of scheduled.completed) {
+            const batchIndex = result.item.index;
+            if (result.status === "fulfilled" /* Fulfilled */) {
+              batchResults.push(...result.result);
+              const requiredFailure = this.findRequiredProviderExecutionFailure(
+                requiredHealthyProviders,
+                result.result
+              );
+              if (requiredFailure) {
+                requiredProviderFailures.push(requiredFailure);
+              }
+              const successfulProviders = result.result.filter(
+                (r2) => r2.status === "success"
+              );
+              const degradedProviders = result.result.filter(
+                (r2) => r2.status !== "success"
+              );
+              if (successfulProviders.length > 0) {
+                batchSuccesses += 1;
+                for (const degraded of degradedProviders) {
+                  const structuredOutputFailure = degraded.error && shouldRetryProviderReviewError(degraded.error);
+                  const reason = this.redactProviderFailureReason(
+                    degraded.error?.message || degraded.status
+                  );
+                  if (requiredHealthyProviders.has(degraded.name)) {
                     logger.warn(
-                      structuredOutputFailure ? `Provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); continuing with successful providers. ${reason}` : `Provider ${degraded.name} degraded; continuing with successful providers. ${reason}`
+                      structuredOutputFailure ? `Required provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); review will fail after batch completion. ${reason}` : `Required provider ${degraded.name} failed; review will fail after batch completion. ${reason}`
                     );
+                    continue;
                   }
-                } else {
-                  batchFailures += 1;
+                  logger.warn(
+                    structuredOutputFailure ? `Provider ${degraded.name} failed structured output after ${config.providerRetries} attempt(s); continuing with successful providers. ${reason}` : `Provider ${degraded.name} degraded; continuing with successful providers. ${reason}`
+                  );
                 }
               } else {
                 batchFailures += 1;
-                logger.error("Batch promise rejected", result.reason);
-                const lifecycleAssignedTargetIds = (lifecycleTargetsByBatch[batchIndex] ?? []).map((target) => target.targetId);
-                const failedBatchResults = healthy.map((provider) => ({
-                  name: provider.name,
-                  status: "error",
-                  error: result.reason,
-                  durationSeconds: 0,
-                  lifecycleAssignedTargetIds
-                }));
-                batchResults.push(...failedBatchResults);
-                const requiredFailure = this.findRequiredProviderExecutionFailure(
-                  requiredHealthyProviders,
-                  failedBatchResults
-                );
-                if (requiredFailure) {
-                  requiredProviderFailures.push(requiredFailure);
+                for (const file of batches[batchIndex] ?? []) {
+                  unreviewedFiles.set(
+                    file.filename,
+                    "all providers failed for this batch"
+                  );
                 }
               }
+            } else {
+              batchFailures += 1;
+              for (const file of batches[batchIndex] ?? []) {
+                unreviewedFiles.set(
+                  file.filename,
+                  "batch execution did not complete"
+                );
+              }
+              logger.error("Batch promise rejected", result.error);
+              const lifecycleAssignedTargetIds = (lifecycleTargetsByBatch[batchIndex] ?? []).map((target) => target.targetId);
+              const failedBatchResults = healthy.map((provider) => ({
+                name: provider.name,
+                status: "error",
+                error: result.error,
+                durationSeconds: 0,
+                lifecycleAssignedTargetIds
+              }));
+              batchResults.push(...failedBatchResults);
+              const requiredFailure = this.findRequiredProviderExecutionFailure(
+                requiredHealthyProviders,
+                failedBatchResults
+              );
+              if (requiredFailure) {
+                requiredProviderFailures.push(requiredFailure);
+              }
             }
-          } finally {
-            await batchQueue.onIdle();
-            this.cleanupQueue(batchQueue);
+          }
+          for (const deferred of scheduled.deferred) {
+            batchFailures += 1;
+            for (const file of deferred.item.files) {
+              unreviewedFiles.set(
+                file.filename,
+                "batch was not started because the review deadline was near"
+              );
+            }
           }
           this.applyLifecycleBatchProviderFailures(
             lifecycleAssignmentRecords,
@@ -33238,6 +34445,9 @@ var ReviewOrchestrator = class {
           await this.recordReliability(mergedResults);
           if (requiredProviderFailures.length > 0) {
             throw requiredProviderFailures[0];
+          }
+          if (checkpointSession && batchFailures === 0) {
+            await checkpointSession.finalize();
           }
           if (batchFailures > 0) {
             if (batchSuccesses === 0) {
@@ -33274,6 +34484,7 @@ var ReviewOrchestrator = class {
               `Processed ${batches.length} batch(es)`
             );
           }
+          llmCoverageComplete = batchFailures === 0 && unreviewedFiles.size === 0 && loadLimitations.length === 0;
           llmFindings.push(...extractFindings(batchResults));
           providerResults = mergedResults;
           aiAnalysis = config.enableAiDetection ? summarizeAIDetection(providerResults) : void 0;
@@ -33357,9 +34568,15 @@ var ReviewOrchestrator = class {
         mermaidDiagram
       );
       review.coverage = buildReviewCoverage(reviewPR, config, {
-        totalFiles: pr2.files.length,
+        totalFiles: pr2.files.length + additionalUnreviewedFiles,
         skippedFiles: skippedTrivialFiles,
-        mode: useIncremental && lastReviewData ? "incremental" : "full"
+        unreviewedFiles: filesToReview.filter((file) => unreviewedFiles.has(file.filename)).map((file) => ({
+          file,
+          reason: unreviewedFiles.get(file.filename) ?? "LLM review did not complete"
+        })),
+        mode: useIncremental && lastReviewData ? "incremental" : "full",
+        additionalUnreviewedFiles,
+        limitations: loadLimitations
       });
       if (useIncremental && lastReviewData) {
         review.findings = this.components.incrementalReviewer.mergeFindings(
@@ -33599,7 +34816,7 @@ var ReviewOrchestrator = class {
           );
         }
       }
-      if (config.incrementalEnabled) {
+      if (config.incrementalEnabled && llmCoverageComplete) {
         try {
           await this.components.incrementalReviewer.saveReview(pr2, review);
         } catch (error2) {
@@ -33608,6 +34825,10 @@ var ReviewOrchestrator = class {
             error2
           );
         }
+      } else if (config.incrementalEnabled) {
+        logger.warn(
+          "Incremental snapshot was not advanced because LLM batch coverage is incomplete"
+        );
       }
       success = true;
       return review;
@@ -34320,7 +35541,7 @@ ${markdown}`;
     return body.includes("<!-- review-router-inline:") || body.includes("<!-- review-router-skip-help -->") || body.includes("<!-- ai-robot-review-inline:");
   }
   shouldPostReviewOutput(review, inlineComments) {
-    if (review.findings.length > 0 || inlineComments.length > 0 || review.actionItems.length > 0) {
+    if (review.findings.length > 0 || inlineComments.length > 0 || review.actionItems.length > 0 || (review.coverage?.unreviewedFiles ?? 0) > 0) {
       return true;
     }
     const lifecycle = review.threadLifecycle;
@@ -34345,6 +35566,76 @@ ${markdown}`;
    * Sanitize filename to prevent path traversal attacks
    * Removes directory separators, path traversal sequences, and absolute paths
    */
+  restoreCheckpointProviderResults(payload) {
+    const providerNames = new Set(
+      payload.providerResults.map((result) => result.name)
+    );
+    const unattributedFindings = payload.findings.filter(
+      (finding) => !finding.provider || !providerNames.has(finding.provider)
+    );
+    let unattributedAssigned = false;
+    return payload.providerResults.map((providerResult) => {
+      const status = this.restoreCheckpointProviderStatus(
+        providerResult.status
+      );
+      const attributedFindings = payload.findings.filter(
+        (finding) => finding.provider === providerResult.name || finding.providers?.includes(providerResult.name)
+      );
+      const includeUnattributed = status === "success" && !unattributedAssigned;
+      if (includeUnattributed) unattributedAssigned = true;
+      const findings = [
+        ...attributedFindings,
+        ...includeUnattributed ? unattributedFindings : []
+      ].map((finding) => ({ ...finding }));
+      const revalidations = (providerResult.lifecycleRevalidations ?? []).map(
+        (revalidation) => ({ ...revalidation })
+      );
+      return {
+        name: providerResult.name,
+        status,
+        durationSeconds: providerResult.durationMs / 1e3,
+        lifecycleAssignedTargetIds: [
+          ...providerResult.lifecycleAssignedTargetIds ?? []
+        ],
+        ...status === "success" ? {
+          result: {
+            content: "",
+            findings,
+            revalidations,
+            durationSeconds: providerResult.durationMs / 1e3,
+            actualModel: providerResult.actualModel,
+            aiLikelihood: providerResult.aiLikelihood,
+            usage: providerResult.usage
+          }
+        } : {
+          error: new Error(
+            providerResult.errorMessage ?? "Provider did not complete the checkpointed batch"
+          )
+        }
+      };
+    });
+  }
+  restoreCheckpointProviderStatus(status) {
+    switch (status) {
+      case "success" /* Success */:
+        return "success";
+      case "timeout" /* Timeout */:
+        return "timeout";
+      case "rate_limited" /* RateLimited */:
+        return "rate-limited";
+      case "error" /* Error */:
+        return "error";
+    }
+  }
+  async recordProviderUsage(results, budgetMaxUsd) {
+    for (const result of results) {
+      await this.components.costTracker.record(
+        result.name,
+        result.result?.usage,
+        budgetMaxUsd
+      );
+    }
+  }
   sanitizeFilename(filename) {
     if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
       logger.warn(`Detected path traversal attempt in filename: ${filename}`);
@@ -34356,9 +35647,6 @@ ${markdown}`;
     }
     const sanitized = filename.replace(/[^a-zA-Z0-9_-]/g, "-").substring(0, 50);
     return sanitized || "review-router";
-  }
-  cleanupQueue(queue) {
-    queue.clear?.();
   }
   /**
    * Filter diff to only include files that changed
@@ -34506,12 +35794,12 @@ These types of changes are automatically filtered to save review time and API co
     );
     const sarifPath = import_path.default.join(process.cwd(), `${base}.sarif`);
     const jsonPath = import_path.default.join(process.cwd(), `${base}.json`);
-    await fs14.writeFile(
+    await fs15.writeFile(
       sarifPath,
       JSON.stringify(buildSarif(review.findings), null, 2),
       "utf8"
     );
-    await fs14.writeFile(jsonPath, buildJson(review), "utf8");
+    await fs15.writeFile(jsonPath, buildJson(review), "utf8");
     logger.info(`Wrote reports: ${sarifPath}, ${jsonPath}`);
   }
 };
@@ -34675,7 +35963,7 @@ function hasReviewRouterBotMarker(body) {
 }
 
 // src/github/interaction.ts
-var fs15 = __toESM(require("fs"));
+var fs16 = __toESM(require("fs"));
 
 // src/github/memory-interaction.ts
 var memoryItemIdPattern = "(mem_[A-Za-z0-9_-]+)";
@@ -35495,7 +36783,7 @@ function readEventPayload() {
     );
   }
   return JSON.parse(
-    fs15.readFileSync(eventPath, "utf8")
+    fs16.readFileSync(eventPath, "utf8")
   );
 }
 function sanitizeNoticeError(error2) {
@@ -35504,7 +36792,7 @@ function sanitizeNoticeError(error2) {
 }
 
 // src/github/discussion.ts
-var import_crypto8 = require("crypto");
+var import_crypto10 = require("crypto");
 var DISCUSSION_MARKER = "reviewrouter-discussion:v1";
 var DISCUSSION_MARKER_RE = /<!--\s*reviewrouter-discussion:v1\s+user_comment_id=(\d+)\s+body_sha=([a-f0-9]{64})\s*-->/;
 var ReviewDiscussionHandler = class {
@@ -35749,7 +37037,7 @@ function isBotUser(user) {
   return user?.type === "Bot" || login.endsWith("[bot]");
 }
 function bodyHash(body) {
-  return (0, import_crypto8.createHash)("sha256").update(body.trim()).digest("hex");
+  return (0, import_crypto10.createHash)("sha256").update(body.trim()).digest("hex");
 }
 function sanitizeError(error2) {
   const message = error2 instanceof Error ? error2.message : String(error2);
@@ -35757,7 +37045,7 @@ function sanitizeError(error2) {
 }
 
 // src/discussion/codex-responder.ts
-var fs16 = __toESM(require("fs/promises"));
+var fs17 = __toESM(require("fs/promises"));
 var os6 = __toESM(require("os"));
 var path14 = __toESM(require("path"));
 var import_child_process8 = require("child_process");
@@ -35785,7 +37073,7 @@ var CodexDiscussionResponder = class {
       agenticContext: false,
       eventAudit: false
     });
-    const cwd = await fs16.mkdtemp(path14.join(os6.tmpdir(), "review-router-chat-"));
+    const cwd = await fs17.mkdtemp(path14.join(os6.tmpdir(), "review-router-chat-"));
     try {
       await initializeEmptyGitRepository(cwd);
       const content = await provider.runStructuredPrompt(
@@ -35801,7 +37089,7 @@ var CodexDiscussionResponder = class {
       );
       return this.parse(content);
     } finally {
-      await fs16.rm(cwd, { recursive: true, force: true });
+      await fs17.rm(cwd, { recursive: true, force: true });
     }
   }
   buildPrompt(context) {
@@ -36574,7 +37862,7 @@ function pluralize(word, count) {
 }
 
 // src/codex-oauth/action.ts
-var fs19 = __toESM(require("fs"));
+var fs20 = __toESM(require("fs"));
 var path18 = __toESM(require("path"));
 
 // src/codex-oauth/control-plane.ts
@@ -36655,11 +37943,11 @@ var CodexOAuthControlPlaneClient = class {
   }
 };
 function isCodexRotatingPreleaseResponse(value) {
-  const input = asRecord(value);
+  const input = asRecord2(value);
   return input?.protocolVersion === 1 && isNonEmptyString(input.leaseId) && isNonEmptyString(input.providerInstanceId) && isNonEmptyString(input.repository) && isNonEmptyString(input.generationHashSalt) && typeof input.currentGeneration === "number" && Number.isInteger(input.currentGeneration) && input.currentGeneration > 0 && isNonEmptyString(input.expiresAt);
 }
 function isCodexRotatingFinalizeResponse(value) {
-  const input = asRecord(value);
+  const input = asRecord2(value);
   if (input?.protocolVersion !== 1 || !isNonEmptyString(input.leaseId) || !Number.isInteger(input.nextGeneration)) {
     return false;
   }
@@ -36669,23 +37957,23 @@ function isCodexRotatingFinalizeResponse(value) {
   return input.status === "finalized" && isNonEmptyString(input.repositoryOwner) && isNonEmptyString(input.repositoryName) && isNonEmptyString(input.publicKeyReadToken) && isNonEmptyString(input.publicKeyReadTokenExpiresAt);
 }
 function isCodexRotatingWritebackPreflightResponse(value) {
-  const input = asRecord(value);
+  const input = asRecord2(value);
   if (input?.protocolVersion !== 1) return false;
   if (input.status === "ready") return true;
   return input.status === "skipped" && (input.reason === "lease_not_active" || input.reason === "stale_queued_secret" || input.reason === "permission_required");
 }
 function isCodexRotatingWritebackResponse(value) {
-  const input = asRecord(value);
+  const input = asRecord2(value);
   return input?.protocolVersion === 1 && (input.status === "accepted" || input.status === "idempotent_replay" || input.status === "github_put_failed" || input.status === "writeback_idempotency_conflict");
 }
 function isCodexRotatingCheckoutTokenResponse(value) {
-  const input = asRecord(value);
-  const permissions = asRecord(input?.permissions);
+  const input = asRecord2(value);
+  const permissions = asRecord2(input?.permissions);
   return input?.protocolVersion === 1 && isNonEmptyString(input.token) && isNonEmptyString(input.expiresAt) && isNonEmptyString(input.repository) && permissions?.contents === "read" && permissions.pullRequests === "read";
 }
 function isCodexRotatingCommentTokenResponse(value) {
-  const input = asRecord(value);
-  const permissions = asRecord(input?.permissions);
+  const input = asRecord2(value);
+  const permissions = asRecord2(input?.permissions);
   return input?.protocolVersion === 1 && isNonEmptyString(input.token) && isNonEmptyString(input.expiresAt) && isNonEmptyString(input.repository) && permissions?.contents === "read" && permissions.pullRequests === "write" && permissions.issues === "write";
 }
 function parseTrustedApiUrl(apiUrl) {
@@ -36720,37 +38008,37 @@ function isLocalhost(hostname) {
   return hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
 }
 function safeErrorCode(payload) {
-  const input = asRecord(payload);
-  const raw = typeof input?.error === "string" ? input.error : typeof asRecord(input?.error)?.code === "string" ? asRecord(input?.error)?.code : "unknown_error";
+  const input = asRecord2(payload);
+  const raw = typeof input?.error === "string" ? input.error : typeof asRecord2(input?.error)?.code === "string" ? asRecord2(input?.error)?.code : "unknown_error";
   return String(raw).replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/[^\w:-]/g, "_").slice(0, 120);
 }
 function isNonEmptyString(value) {
   return typeof value === "string" && value.length > 0;
 }
-function asRecord(value) {
+function asRecord2(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 
 // src/codex-oauth/codex-bootstrap.ts
 var import_child_process9 = require("child_process");
-var fs17 = __toESM(require("fs/promises"));
+var fs18 = __toESM(require("fs/promises"));
 var os7 = __toESM(require("os"));
 var path15 = __toESM(require("path"));
 async function refreshCodexAuthWithOfficialCli(input) {
   const parent = await ensureCodexOAuthRuntimeParent();
-  const root = await fs17.mkdtemp(path15.join(parent, "reviewrouter-codex-oauth-"));
+  const root = await fs18.mkdtemp(path15.join(parent, "reviewrouter-codex-oauth-"));
   const home = path15.join(root, "home");
   const codexHome = path15.join(root, "codex");
   const emptyCwd = path15.join(root, "empty");
   const authPath = path15.join(codexHome, "auth.json");
-  await fs17.mkdir(home, { recursive: true, mode: 448 });
-  await fs17.mkdir(codexHome, { recursive: true, mode: 448 });
-  await fs17.mkdir(emptyCwd, { recursive: true, mode: 448 });
-  await fs17.writeFile(authPath, input.authJsonBytes, {
+  await fs18.mkdir(home, { recursive: true, mode: 448 });
+  await fs18.mkdir(codexHome, { recursive: true, mode: 448 });
+  await fs18.mkdir(emptyCwd, { recursive: true, mode: 448 });
+  await fs18.writeFile(authPath, input.authJsonBytes, {
     encoding: "utf8",
     mode: 384
   });
-  await fs17.writeFile(
+  await fs18.writeFile(
     path15.join(codexHome, "config.toml"),
     'cli_auth_credentials_store = "file"\napproval_policy = "never"\n',
     { encoding: "utf8", mode: 384 }
@@ -36764,20 +38052,20 @@ async function refreshCodexAuthWithOfficialCli(input) {
     codexHome,
     cwd: emptyCwd
   });
-  const refreshedAuth = await fs17.readFile(authPath, "utf8");
+  const refreshedAuth = await fs18.readFile(authPath, "utf8");
   return {
     authJsonBytes: refreshedAuth,
     codexHome,
     async clearAuthMaterial() {
-      await fs17.rm(root, { recursive: true, force: true });
+      await fs18.rm(root, { recursive: true, force: true });
     }
   };
 }
 async function ensureCodexOAuthRuntimeParent(env = process.env) {
   const home = env.HOME?.trim() || os7.homedir();
   const parent = home && path15.isAbsolute(home) ? path15.join(home, ".reviewrouter", "runtime") : path15.join(os7.tmpdir(), "reviewrouter-runtime");
-  await fs17.mkdir(parent, { recursive: true, mode: 448 });
-  await fs17.chmod(parent, 448).catch(() => void 0);
+  await fs18.mkdir(parent, { recursive: true, mode: 448 });
+  await fs18.chmod(parent, 448).catch(() => void 0);
   return parent;
 }
 async function runCodexBootstrapCommand(input) {
@@ -37052,7 +38340,7 @@ function safeOidcErrorCode(payload) {
 }
 
 // src/codex-oauth/crypto.ts
-var import_crypto9 = require("crypto");
+var import_crypto11 = require("crypto");
 
 // node_modules/libsodium/dist/modules-esm/libsodium.mjs
 var import_meta = {};
@@ -40506,7 +41794,7 @@ function compactCodexAuthJsonBytes(input) {
   return {
     compactAuthJsonBytes,
     byteLength: compactByteLength,
-    exactBytesSha256: (0, import_crypto9.createHash)("sha256").update(input.authJsonBytes, "utf8").digest("hex")
+    exactBytesSha256: (0, import_crypto11.createHash)("sha256").update(input.authJsonBytes, "utf8").digest("hex")
   };
 }
 function computeCodexAuthGenerationHash(input) {
@@ -40514,7 +41802,7 @@ function computeCodexAuthGenerationHash(input) {
   if (salt.length < 16) {
     throw new Error("generation_hash_salt_too_short");
   }
-  return (0, import_crypto9.createHmac)("sha256", salt).update(input.authJsonBytes, "utf8").digest("base64url");
+  return (0, import_crypto11.createHmac)("sha256", salt).update(input.authJsonBytes, "utf8").digest("base64url");
 }
 async function encryptCodexAuthForGitHubSecret(input) {
   const compact = compactCodexAuthJsonBytes({
@@ -40552,7 +41840,7 @@ function buildCodexRotatingWritebackRequest(input) {
     latestGenerationHash: input.latestGenerationHash,
     encryptedValue: input.encryptedValue,
     keyId: input.keyId,
-    idempotencyKey: input.idempotencyKey ?? `wrb:${(0, import_crypto9.randomUUID)()}`
+    idempotencyKey: input.idempotencyKey ?? `wrb:${(0, import_crypto11.randomUUID)()}`
   };
 }
 function assertCodexChatGptAuth(value) {
@@ -40733,14 +42021,14 @@ function clearCodexRotatingAuthInputSafe() {
 
 // src/codex-oauth/safe-checkout.ts
 var import_child_process10 = require("child_process");
-var fs18 = __toESM(require("fs/promises"));
+var fs19 = __toESM(require("fs/promises"));
 var os8 = __toESM(require("os"));
 var path17 = __toESM(require("path"));
 async function safeCheckoutRepository(input) {
   assertRepositoryFullName(input.repository);
   assertFullSha(input.headSha);
   await assertWorkspaceEmpty(input.workspacePath);
-  const gitHome = await fs18.mkdtemp(path17.join(os8.tmpdir(), "reviewrouter-git-"));
+  const gitHome = await fs19.mkdtemp(path17.join(os8.tmpdir(), "reviewrouter-git-"));
   try {
     await runGit(["init", "."], input.workspacePath, gitHome);
     await runGit(
@@ -40797,12 +42085,12 @@ async function safeCheckoutRepository(input) {
       gitHome
     );
   } finally {
-    await fs18.rm(gitHome, { recursive: true, force: true });
+    await fs19.rm(gitHome, { recursive: true, force: true });
   }
 }
 async function assertWorkspaceEmpty(workspacePath) {
-  await fs18.mkdir(workspacePath, { recursive: true, mode: 448 });
-  const entries = await fs18.readdir(workspacePath);
+  await fs19.mkdir(workspacePath, { recursive: true, mode: 448 });
+  const entries = await fs19.readdir(workspacePath);
   const unsafeEntries = entries.filter((entry) => entry !== ".git");
   if (unsafeEntries.length > 0) {
     throw new Error("codex_oauth_workspace_not_empty_before_checkout");
@@ -41109,7 +42397,7 @@ function readPullRequestEvent() {
   if (!eventPath) {
     throw new Error("codex_oauth_github_event_path_missing");
   }
-  const event = JSON.parse(fs19.readFileSync(eventPath, "utf8"));
+  const event = JSON.parse(fs20.readFileSync(eventPath, "utf8"));
   const repository = event.repository?.full_name;
   const prNumber = event.pull_request?.number;
   const headRepository = event.pull_request?.head?.repo?.full_name;
@@ -41429,7 +42717,7 @@ async function runInteractionPreflight(token) {
   const githubClient = new GitHubClient(token);
   const discussionHandler = createDiscussionHandler(githubClient);
   const payload = JSON.parse(
-    fs20.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
+    fs21.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
   );
   const body = String(payload?.comment?.body || "");
   const botComment = payload?.comment?.user?.type === "Bot" || String(payload?.comment?.user?.login || "").endsWith("[bot]");

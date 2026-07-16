@@ -256,6 +256,44 @@ export interface Finding {
   hasConsensus?: boolean; // Set during aggregation when multiple providers agree
 }
 
+export enum PullRequestLoadStatus {
+  Complete = 'complete',
+  Truncated = 'truncated',
+}
+
+export enum PullRequestLoadOmissionReason {
+  GitHubFileLimit = 'github_file_limit',
+  SynthesizedDiffSizeLimit = 'synthesized_diff_size_limit',
+}
+
+export interface GitHubFileLimitOmission {
+  readonly reason: PullRequestLoadOmissionReason.GitHubFileLimit;
+  readonly omittedFileCount?: number;
+}
+
+export interface SynthesizedDiffSizeLimitOmission {
+  readonly reason: PullRequestLoadOmissionReason.SynthesizedDiffSizeLimit;
+  readonly omittedFileCount: number;
+  readonly omittedFiles: readonly string[];
+}
+
+export type PullRequestLoadOmission =
+  | GitHubFileLimitOmission
+  | SynthesizedDiffSizeLimitOmission;
+
+export type PullRequestLoadCompleteness =
+  | {
+      readonly status: PullRequestLoadStatus.Complete;
+      readonly omissions: readonly [];
+    }
+  | {
+      readonly status: PullRequestLoadStatus.Truncated;
+      readonly omissions: readonly [
+        PullRequestLoadOmission,
+        ...PullRequestLoadOmission[],
+      ];
+    };
+
 export interface PRContext {
   number: number;
   title: string;
@@ -269,6 +307,7 @@ export interface PRContext {
   deletions: number;
   baseSha: string;
   headSha: string;
+  loadCompleteness?: PullRequestLoadCompleteness;
 }
 
 export interface FileChange {
@@ -330,7 +369,8 @@ export type ReviewCoverageFileStatus =
   | 'full'
   | 'compacted'
   | 'metadata-only'
-  | 'skipped';
+  | 'skipped'
+  | 'unreviewed';
 
 export interface ReviewCoverageFile {
   path: string;
@@ -348,6 +388,9 @@ export interface ReviewCoverage {
   compactedFiles: number;
   metadataOnlyFiles: number;
   skippedFiles: number;
+  unreviewedFiles: number;
+  complete: boolean;
+  limitations?: string[];
   agenticContext: boolean;
   files: ReviewCoverageFile[];
 }

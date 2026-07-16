@@ -328,7 +328,8 @@ export class MarkdownFormatterV2 {
       (file) =>
         file.status === 'compacted' ||
         file.status === 'metadata-only' ||
-        file.status === 'skipped'
+        file.status === 'skipped' ||
+        file.status === 'unreviewed'
     );
 
     lines.push('<details>');
@@ -344,10 +345,17 @@ export class MarkdownFormatterV2 {
     lines.push(`| Compacted in prompt | ${coverage.compactedFiles} |`);
     lines.push(`| Metadata-only or trimmed | ${coverage.metadataOnlyFiles} |`);
     lines.push(`| Skipped before LLM review | ${coverage.skippedFiles} |`);
+    lines.push(`| Not reviewed by an LLM | ${coverage.unreviewedFiles} |`);
+    lines.push(
+      `| Review coverage complete | ${coverage.complete ? 'Yes' : 'No'} |`
+    );
     lines.push(
       `| Codex agentic context | ${coverage.agenticContext ? 'Enabled for Codex providers' : 'Disabled'} |`
     );
     lines.push(`| Review mode | ${coverage.mode} |`);
+    for (const limitation of coverage.limitations ?? []) {
+      lines.push(`| Coverage limitation | ${limitation} |`);
+    }
 
     if (limitedFiles.length > 0) {
       lines.push('');
@@ -776,7 +784,8 @@ export class MarkdownFormatterV2 {
     return (
       coverage.compactedFiles > 0 ||
       coverage.metadataOnlyFiles > 0 ||
-      coverage.skippedFiles > 0
+      coverage.skippedFiles > 0 ||
+      coverage.unreviewedFiles > 0
     );
   }
 

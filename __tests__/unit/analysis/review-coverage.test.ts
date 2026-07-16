@@ -79,6 +79,8 @@ describe('buildReviewCoverage', () => {
     expect(coverage.compactedFiles).toBe(1);
     expect(coverage.metadataOnlyFiles).toBe(1);
     expect(coverage.skippedFiles).toBe(1);
+    expect(coverage.unreviewedFiles).toBe(0);
+    expect(coverage.complete).toBe(true);
     expect(coverage.agenticContext).toBe(true);
     expect(coverage.files).toEqual(
       expect.arrayContaining([
@@ -98,6 +100,42 @@ describe('buildReviewCoverage', () => {
         }),
       ])
     );
+  });
+
+  it('reports actual files whose LLM batch did not complete', () => {
+    const input = pr();
+    const failedFile = input.files[1];
+    if (!failedFile) throw new Error('missing test file');
+
+    const coverage = buildReviewCoverage(input, config, {
+      unreviewedFiles: [
+        { file: failedFile, reason: 'all providers failed for this batch' },
+      ],
+    });
+
+    expect(coverage.filesConsidered).toBe(2);
+    expect(coverage.unreviewedFiles).toBe(1);
+    expect(coverage.complete).toBe(false);
+    expect(coverage.files).toContainEqual(
+      expect.objectContaining({
+        path: failedFile.filename,
+        status: 'unreviewed',
+        reason: 'all providers failed for this batch',
+      })
+    );
+  });
+
+  it('does not subtract files beyond the GitHub cap from loaded coverage', () => {
+    const coverage = buildReviewCoverage(pr(), config, {
+      totalFiles: 103,
+      additionalUnreviewedFiles: 100,
+      limitations: ['GitHub returned only the first 3 files'],
+    });
+
+    expect(coverage.totalFiles).toBe(103);
+    expect(coverage.filesConsidered).toBe(3);
+    expect(coverage.unreviewedFiles).toBe(100);
+    expect(coverage.complete).toBe(false);
   });
 
   it('marks files trimmed by the prompt byte budget as metadata-only', () => {

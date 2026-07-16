@@ -122,7 +122,8 @@ export class BatchOrchestrator {
     const recommendation = calculateOptimalBatchSize(
       files,
       targetTokens,
-      maxFiles
+      maxFiles,
+      true
     );
 
     logger.info(`Token-aware batching: ${recommendation.reason}`);

@@ -1,9 +1,18 @@
 import { ReviewResult } from '../types';
 
+export interface ProviderExecutionPolicy {
+  canStartOptionalRetry(): boolean;
+  clampTimeoutMs(requestedTimeoutMs: number): number;
+}
+
 export abstract class Provider {
   constructor(public readonly name: string) {}
 
-  abstract review(prompt: string, timeoutMs: number): Promise<ReviewResult>;
+  abstract review(
+    prompt: string,
+    timeoutMs: number,
+    executionPolicy?: ProviderExecutionPolicy
+  ): Promise<ReviewResult>;
 
   /**
    * Health check to verify provider responsiveness before running full review

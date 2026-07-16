@@ -85,6 +85,8 @@ describe('MarkdownFormatterV2', () => {
           compactedFiles: 1,
           metadataOnlyFiles: 1,
           skippedFiles: 1,
+          unreviewedFiles: 0,
+          complete: true,
           agenticContext: true,
           files: [
             { path: 'src/app.ts', status: 'full' },

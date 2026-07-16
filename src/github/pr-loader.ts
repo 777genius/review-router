@@ -1,11 +1,24 @@
 import { GitHubClient } from './client';
-import { FileChange, PRContext } from '../types';
+import {
+  FileChange,
+  GitHubFileLimitOmission,
+  PRContext,
+  PullRequestLoadCompleteness,
+  PullRequestLoadOmission,
+  PullRequestLoadOmissionReason,
+  PullRequestLoadStatus,
+} from '../types';
 import { logger } from '../utils/logger';
 
 const FILES_PER_PAGE = 100;
 const MAX_GITHUB_FILES = 3000;
 const MAX_RAW_DIFF_FILES = 300;
 const MAX_SYNTHESIZED_DIFF_BYTES = 8 * 1024 * 1024;
+
+interface DiffLoadResult {
+  diff: string;
+  omittedFiles: string[];
+}
 
 export class PullRequestLoader {
   constructor(private readonly client: GitHubClient) {}
@@ -19,6 +32,11 @@ export class PullRequestLoader {
       pull_number: prNumber,
     });
     const pr = prResponse.data;
+    const baseSha = pr.base?.sha || '';
+    const headSha = pr.head?.sha || '';
+
+    this.assertExpectedSha(prNumber, 'base', 'REVIEWROUTER_BASE_SHA', baseSha);
+    this.assertExpectedSha(prNumber, 'head', 'REVIEWROUTER_HEAD_SHA', headSha);
 
     const files: FileChange[] = [];
     for (let page = 1; files.length < MAX_GITHUB_FILES; page += 1) {
@@ -48,13 +66,41 @@ export class PullRequestLoader {
       }
     }
 
-    if (files.length === MAX_GITHUB_FILES) {
+    const omissions: PullRequestLoadOmission[] = [];
+    const fileLimitOmission = this.getFileLimitOmission(
+      files.length,
+      pr.changed_files
+    );
+    if (fileLimitOmission) {
+      omissions.push(fileLimitOmission);
+      const omittedCount = fileLimitOmission.omittedFileCount;
       logger.warn(
-        `PR #${prNumber} reached GitHub's ${MAX_GITHUB_FILES}-file API limit; additional files cannot be reviewed.`
+        `PR #${prNumber} reached GitHub's ${MAX_GITHUB_FILES}-file API limit; ${omittedCount === undefined ? 'an unknown number of additional files were' : `${omittedCount} additional file(s) were`} omitted.`
       );
     }
 
-    const diff = await this.fetchDiff(owner, repo, prNumber, files);
+    const diffResult = await this.fetchDiff(owner, repo, prNumber, files);
+    if (diffResult.omittedFiles.length > 0) {
+      omissions.push({
+        reason: PullRequestLoadOmissionReason.SynthesizedDiffSizeLimit,
+        omittedFileCount: diffResult.omittedFiles.length,
+        omittedFiles: diffResult.omittedFiles,
+      });
+    }
+
+    const verifiedPrResponse = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber,
+    });
+    this.assertRevisionUnchanged(
+      prNumber,
+      { baseSha, headSha },
+      {
+        baseSha: verifiedPrResponse.data.base?.sha || '',
+        headSha: verifiedPrResponse.data.head?.sha || '',
+      }
+    );
 
     return {
       number: pr.number,
@@ -66,11 +112,12 @@ export class PullRequestLoader {
         typeof label === 'string' ? label : label.name || ''
       ),
       files,
-      diff,
+      diff: diffResult.diff,
       additions: pr.additions || 0,
       deletions: pr.deletions || 0,
-      baseSha: pr.base?.sha || '',
-      headSha: pr.head?.sha || '',
+      baseSha,
+      headSha,
+      loadCompleteness: this.describeCompleteness(omissions),
     };
   }
 
@@ -79,7 +126,7 @@ export class PullRequestLoader {
     repo: string,
     prNumber: number,
     files: FileChange[]
-  ): Promise<string> {
+  ): Promise<DiffLoadResult> {
     if (files.length > MAX_RAW_DIFF_FILES) {
       logger.warn(
         `PR #${prNumber} exceeds GitHub's ${MAX_RAW_DIFF_FILES}-file raw diff limit; using paginated file patches.`
@@ -98,7 +145,10 @@ export class PullRequestLoader {
           headers: { accept: 'application/vnd.github.v3.diff' },
         }
       );
-      return typeof res.data === 'string' ? res.data : '';
+      return {
+        diff: typeof res.data === 'string' ? res.data : '',
+        omittedFiles: [],
+      };
     } catch (error) {
       if (!this.isDiffTooLargeError(error)) {
         throw error;
@@ -110,11 +160,14 @@ export class PullRequestLoader {
     }
   }
 
-  private synthesizeDiff(prNumber: number, files: FileChange[]): string {
+  private synthesizeDiff(
+    prNumber: number,
+    files: FileChange[]
+  ): DiffLoadResult {
     const blocks: string[] = [];
     let byteCount = 0;
 
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
       const oldPath = file.previousFilename || file.filename;
       const fromPath = file.status === 'added' ? '/dev/null' : `a/${oldPath}`;
       const toPath =
@@ -131,17 +184,97 @@ export class PullRequestLoader {
       const blockBytes = Buffer.byteLength(block, 'utf8');
 
       if (byteCount + blockBytes > MAX_SYNTHESIZED_DIFF_BYTES) {
+        const omittedFiles = files.slice(index).map(({ filename }) => filename);
         logger.warn(
-          `Synthesized diff for PR #${prNumber} reached the ${MAX_SYNTHESIZED_DIFF_BYTES}-byte safety limit; remaining patches were omitted.`
+          `Synthesized diff for PR #${prNumber} reached the ${MAX_SYNTHESIZED_DIFF_BYTES}-byte safety limit; ${omittedFiles.length} remaining file(s) were omitted.`
         );
-        break;
+        return { diff: blocks.join('\n'), omittedFiles };
       }
 
       blocks.push(block);
       byteCount += blockBytes;
     }
 
-    return blocks.join('\n');
+    return { diff: blocks.join('\n'), omittedFiles: [] };
+  }
+
+  private getFileLimitOmission(
+    loadedFileCount: number,
+    reportedChangedFileCount: number | undefined
+  ): GitHubFileLimitOmission | null {
+    if (
+      loadedFileCount < MAX_GITHUB_FILES ||
+      reportedChangedFileCount === loadedFileCount
+    ) {
+      return null;
+    }
+
+    const omittedFileCount =
+      reportedChangedFileCount !== undefined &&
+      reportedChangedFileCount > loadedFileCount
+        ? reportedChangedFileCount - loadedFileCount
+        : undefined;
+
+    return {
+      reason: PullRequestLoadOmissionReason.GitHubFileLimit,
+      ...(omittedFileCount === undefined ? {} : { omittedFileCount }),
+    };
+  }
+
+  private describeCompleteness(
+    omissions: PullRequestLoadOmission[]
+  ): PullRequestLoadCompleteness {
+    const [firstOmission, ...remainingOmissions] = omissions;
+    if (!firstOmission) {
+      return {
+        status: PullRequestLoadStatus.Complete,
+        omissions: [],
+      };
+    }
+
+    return {
+      status: PullRequestLoadStatus.Truncated,
+      omissions: [firstOmission, ...remainingOmissions],
+    };
+  }
+
+  private assertExpectedSha(
+    prNumber: number,
+    kind: 'base' | 'head',
+    environmentVariable: 'REVIEWROUTER_BASE_SHA' | 'REVIEWROUTER_HEAD_SHA',
+    actualSha: string
+  ): void {
+    const expectedSha = process.env[environmentVariable]?.trim();
+    if (!expectedSha || expectedSha === actualSha) {
+      return;
+    }
+
+    throw new Error(
+      `PR #${prNumber} ${kind} SHA mismatch: expected ${expectedSha} from ${environmentVariable}, received ${actualSha || '(missing)'} from GitHub; refusing to load a potentially mixed revision.`
+    );
+  }
+
+  private assertRevisionUnchanged(
+    prNumber: number,
+    initial: { baseSha: string; headSha: string },
+    verified: { baseSha: string; headSha: string }
+  ): void {
+    const changes = [
+      initial.headSha === verified.headSha
+        ? null
+        : `head changed from ${initial.headSha || '(missing)'} to ${verified.headSha || '(missing)'}`,
+      initial.baseSha === verified.baseSha
+        ? null
+        : `base changed from ${initial.baseSha || '(missing)'} to ${verified.baseSha || '(missing)'}`,
+    ].filter((change): change is string => change !== null);
+
+    if (changes.length === 0) {
+      return;
+    }
+
+    throw new Error(
+      `PR #${prNumber} revision changed while loading content: ${changes.join(', ')}; refusing to return a potentially mixed revision.`
+    );
   }
 
   private isDiffTooLargeError(error: unknown): boolean {

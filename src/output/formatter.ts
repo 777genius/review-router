@@ -113,7 +113,8 @@ export class MarkdownFormatter {
       (file) =>
         file.status === 'compacted' ||
         file.status === 'metadata-only' ||
-        file.status === 'skipped'
+        file.status === 'skipped' ||
+        file.status === 'unreviewed'
     );
     const lines = [
       '<details><summary>Review Scope</summary>',
@@ -124,6 +125,8 @@ export class MarkdownFormatter {
       `- Compacted in prompt: ${coverage.compactedFiles}`,
       `- Metadata-only or trimmed: ${coverage.metadataOnlyFiles}`,
       `- Skipped before LLM review: ${coverage.skippedFiles}`,
+      `- Not reviewed by an LLM: ${coverage.unreviewedFiles}`,
+      `- Review coverage complete: ${coverage.complete ? 'yes' : 'no'}`,
       `- Codex agentic context: ${coverage.agenticContext ? 'enabled for Codex providers' : 'disabled'}`,
       `- Review mode: ${coverage.mode}`,
     ];
@@ -137,6 +140,10 @@ export class MarkdownFormatter {
       if (limitedFiles.length > 20) {
         lines.push(`- ...and ${limitedFiles.length - 20} more`);
       }
+    }
+
+    for (const limitation of coverage.limitations ?? []) {
+      lines.push(`- Coverage limitation: ${limitation}`);
     }
 
     lines.push('', '</details>');

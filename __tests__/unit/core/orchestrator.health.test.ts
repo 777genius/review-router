@@ -8,6 +8,8 @@ import {
   Finding,
   FileChange,
   ProviderResult,
+  PullRequestLoadOmissionReason,
+  PullRequestLoadStatus,
 } from '../../../src/types';
 import { Provider } from '../../../src/providers/base';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
@@ -1148,6 +1150,149 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(execute).toHaveBeenCalledTimes(2);
   });
 
+  it('publishes partial coverage without advancing the completed snapshot', async () => {
+    const provider = {
+      name: 'codex/gpt-5.5',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const execute = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          name: provider.name,
+          status: 'success',
+          result: {
+            content: '{"findings":[],"revalidations":[]}',
+            findings: [],
+            revalidations: [],
+          },
+          durationSeconds: 1,
+        } as ProviderResult,
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: provider.name,
+          status: 'error',
+          error: new Error('capacity_unavailable'),
+          durationSeconds: 1,
+        } as ProviderResult,
+      ]);
+    const saveReview = jest.fn();
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        incrementalEnabled: true,
+        providers: [provider.name],
+        requiredHealthyProviders: [],
+        fallbackProviders: [],
+        providerLimit: 1,
+        batchMaxFiles: 1,
+        enableTokenAwareBatching: false,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute,
+      } as any,
+      incrementalReviewer: {
+        shouldUseIncremental: jest.fn().mockResolvedValue(false),
+        getLastReview: jest.fn(),
+        mergeFindings: jest.fn(),
+        generateIncrementalSummary: jest.fn(),
+        saveReview,
+        getChangedFilesSince: jest.fn(),
+        getIncrementalChangeSet: jest.fn(),
+      } as any,
+    });
+
+    const review = await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'src/first.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+        {
+          filename: 'src/second.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(review.coverage).toMatchObject({
+      complete: false,
+      unreviewedFiles: 1,
+    });
+    expect(review.coverage?.files).toContainEqual(
+      expect.objectContaining({
+        path: 'src/second.ts',
+        status: 'unreviewed',
+      })
+    );
+    expect(saveReview).not.toHaveBeenCalled();
+  });
+
+  it('does not advance a snapshot when GitHub omitted files but loaded work is empty', async () => {
+    const saveReview = jest.fn();
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        incrementalEnabled: true,
+        providers: [],
+        fallbackProviders: [],
+      },
+      incrementalReviewer: {
+        shouldUseIncremental: jest.fn().mockResolvedValue(false),
+        getLastReview: jest.fn(),
+        mergeFindings: jest.fn(),
+        generateIncrementalSummary: jest.fn(),
+        saveReview,
+        getChangedFilesSince: jest.fn(),
+        getIncrementalChangeSet: jest.fn(),
+      } as any,
+    });
+    const pr: PRContext = {
+      ...makePR([]),
+      loadCompleteness: {
+        status: PullRequestLoadStatus.Truncated,
+        omissions: [
+          {
+            reason: PullRequestLoadOmissionReason.GitHubFileLimit,
+            omittedFileCount: 1,
+          },
+        ],
+      },
+    };
+
+    const review = await orchestrator.executeReview(pr);
+
+    expect(review.coverage).toMatchObject({
+      complete: false,
+      unreviewedFiles: 1,
+    });
+    expect(saveReview).not.toHaveBeenCalled();
+  });
+
   it('pins required healthy providers during execution limiting', async () => {
     const providers = ['opencode/high', 'opencode/required-low'].map(
       (name) =>
@@ -1585,6 +1730,129 @@ describe('ReviewOrchestrator health check guard rails', () => {
         process.env.FAIL_ON_NO_HEALTHY_PROVIDERS = previousFailOnNoHealthy;
       }
     }
+  });
+
+  it('resumes accepted batches and invokes providers only for missing work', async () => {
+    const restoredUsage = {
+      promptTokens: 11,
+      completionTokens: 3,
+      totalTokens: 14,
+    };
+    const executedUsage = {
+      promptTokens: 17,
+      completionTokens: 5,
+      totalTokens: 22,
+    };
+    const provider = {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const execute = jest.fn().mockResolvedValue([
+      {
+        name: 'p1',
+        status: 'success',
+        result: {
+          content: '{"findings":[]}',
+          findings: [],
+          revalidations: [],
+          usage: executedUsage,
+        },
+        durationSeconds: 1,
+      } as ProviderResult,
+    ]);
+    const commitSuccessfulBatch = jest.fn().mockResolvedValue({
+      status: 'accepted',
+      expectedVersion: 3,
+      payload: { filePaths: [], findings: [], providerResults: [] },
+    });
+    const finalize = jest.fn().mockResolvedValue({
+      status: 'finalized',
+      expectedVersion: 4,
+      markerWritten: true,
+    });
+    const openReviewCheckpointSession = jest
+      .fn()
+      .mockImplementation(async (plan: { workKeys: string[] }) => ({
+        acceptedBatchResults: new Map([
+          [
+            plan.workKeys[0],
+            {
+              filePaths: ['a.ts'],
+              findings: [],
+              providerResults: [
+                {
+                  name: 'p1',
+                  status: 'success',
+                  durationMs: 1000,
+                  usage: restoredUsage,
+                  lifecycleAssignedTargetIds: [],
+                  lifecycleRevalidations: [],
+                },
+              ],
+            },
+          ],
+        ]),
+        commitSuccessfulBatch,
+        finalize,
+      }));
+
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: ['p1'],
+        fallbackProviders: [],
+        providerLimit: 1,
+        batchMaxFiles: 1,
+        enableTokenAwareBatching: false,
+        budgetMaxUsd: 5,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute,
+      } as any,
+      reviewCompatibilityKey: '1'.repeat(64),
+      openReviewCheckpointSession,
+    });
+
+    const review = await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+        {
+          filename: 'b.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(commitSuccessfulBatch).toHaveBeenCalledTimes(1);
+    expect(finalize).toHaveBeenCalledTimes(1);
+    const recordUsage = (orchestrator as any).components.costTracker
+      .record as jest.Mock;
+    expect(recordUsage).toHaveBeenNthCalledWith(1, 'p1', restoredUsage, 5);
+    expect(recordUsage).toHaveBeenNthCalledWith(2, 'p1', executedUsage, 5);
+    expect(review.coverage?.complete).toBe(true);
   });
 
   it('fails when every LLM provider fails and provider failure is configured as blocking', async () => {

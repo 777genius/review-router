@@ -1,19 +1,70 @@
 import { PullRequestLoader } from '../../../src/github/pr-loader';
 import { GitHubClient } from '../../../src/github/client';
 import {
+  PullRequestLoadOmissionReason,
+  PullRequestLoadStatus,
+} from '../../../src/types';
+import {
   createMockOctokit,
   createErrorOctokit,
 } from '../../helpers/github-mock';
 
-function createMockClient(octokit: any): jest.Mocked<GitHubClient> {
+function createMockClient(
+  octokit: ReturnType<typeof createMockOctokit>
+): GitHubClient {
   return {
     octokit,
     owner: 'test-owner',
     repo: 'test-repo',
-  } as any;
+  } as unknown as GitHubClient;
+}
+
+function setReportedChangedFiles(
+  octokit: ReturnType<typeof createMockOctokit>,
+  changedFiles: number
+): void {
+  octokit.rest.pulls.get.mockResolvedValue({
+    data: {
+      number: 1,
+      title: 'Test PR',
+      body: 'Test description',
+      draft: false,
+      labels: [],
+      additions: changedFiles,
+      deletions: 0,
+      changed_files: changedFiles,
+      base: { sha: 'base-sha' },
+      head: { sha: 'head-sha' },
+      user: { login: 'test-user', type: 'User' },
+    },
+  });
+}
+
+function restoreEnvironmentVariable(
+  name: 'REVIEWROUTER_BASE_SHA' | 'REVIEWROUTER_HEAD_SHA',
+  value: string | undefined
+): void {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
 }
 
 describe('PullRequestLoader', () => {
+  const originalBaseSha = process.env.REVIEWROUTER_BASE_SHA;
+  const originalHeadSha = process.env.REVIEWROUTER_HEAD_SHA;
+
+  beforeEach(() => {
+    delete process.env.REVIEWROUTER_BASE_SHA;
+    delete process.env.REVIEWROUTER_HEAD_SHA;
+  });
+
+  afterAll(() => {
+    restoreEnvironmentVariable('REVIEWROUTER_BASE_SHA', originalBaseSha);
+    restoreEnvironmentVariable('REVIEWROUTER_HEAD_SHA', originalHeadSha);
+  });
+
   describe('load', () => {
     it('loads PR context successfully', async () => {
       const mockClient = createMockClient(createMockOctokit());
@@ -28,6 +79,10 @@ describe('PullRequestLoader', () => {
       expect(context.files).toHaveLength(1);
       expect(context.baseSha).toBe('base-sha');
       expect(context.headSha).toBe('head-sha');
+      expect(context.loadCompleteness).toEqual({
+        status: PullRequestLoadStatus.Complete,
+        omissions: [],
+      });
     });
 
     it('loads PR files', async () => {
@@ -83,6 +138,84 @@ describe('PullRequestLoader', () => {
       const context = await loader.load(1);
 
       expect(context.author).toBe('dependabot[bot]');
+    });
+
+    it.each([
+      ['REVIEWROUTER_HEAD_SHA', 'event-head-sha', 'head'],
+      ['REVIEWROUTER_BASE_SHA', 'event-base-sha', 'base'],
+    ] as const)(
+      'rejects a mismatched %s before loading files',
+      async (environmentVariable, expectedSha, kind) => {
+        process.env[environmentVariable] = expectedSha;
+        const mockOctokit = createMockOctokit();
+        const loader = new PullRequestLoader(createMockClient(mockOctokit));
+
+        await expect(loader.load(1)).rejects.toThrow(
+          `PR #1 ${kind} SHA mismatch: expected ${expectedSha} from ${environmentVariable}`
+        );
+        expect(mockOctokit.rest.pulls.listFiles).not.toHaveBeenCalled();
+        expect(mockOctokit.request).not.toHaveBeenCalled();
+      }
+    );
+
+    it('accepts nonempty expected SHAs when both match', async () => {
+      process.env.REVIEWROUTER_HEAD_SHA = ' head-sha ';
+      process.env.REVIEWROUTER_BASE_SHA = 'base-sha';
+      const mockOctokit = createMockOctokit();
+      const mockClient = createMockClient(mockOctokit);
+
+      const context = await new PullRequestLoader(mockClient).load(1);
+
+      expect(context.headSha).toBe('head-sha');
+      expect(context.baseSha).toBe('base-sha');
+      expect(mockOctokit.rest.pulls.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects content loaded across a force-pushed head revision', async () => {
+      const mockOctokit = createMockOctokit();
+      mockOctokit.rest.pulls.get
+        .mockResolvedValueOnce({
+          data: {
+            number: 1,
+            title: 'Test PR',
+            body: 'Test description',
+            draft: false,
+            labels: [],
+            additions: 5,
+            deletions: 2,
+            changed_files: 1,
+            base: { sha: 'base-sha' },
+            head: { sha: 'head-before-load' },
+            user: { login: 'test-user', type: 'User' },
+          },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            base: { sha: 'base-sha' },
+            head: { sha: 'head-after-force-push' },
+          },
+        });
+      const loader = new PullRequestLoader(createMockClient(mockOctokit));
+
+      await expect(loader.load(1)).rejects.toThrow(
+        'PR #1 revision changed while loading content: head changed from head-before-load to head-after-force-push; refusing to return a potentially mixed revision.'
+      );
+      expect(mockOctokit.rest.pulls.listFiles).toHaveBeenCalled();
+      expect(mockOctokit.request).toHaveBeenCalled();
+      expect(mockOctokit.rest.pulls.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns the initial revision when the post-load verification is stable', async () => {
+      const mockOctokit = createMockOctokit();
+      const loader = new PullRequestLoader(createMockClient(mockOctokit));
+
+      const context = await loader.load(1);
+
+      expect(context).toMatchObject({
+        baseSha: 'base-sha',
+        headSha: 'head-sha',
+      });
+      expect(mockOctokit.rest.pulls.get).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -227,6 +360,153 @@ describe('PullRequestLoader', () => {
       expect(context.diff).toContain(
         'Binary file or patch unavailable from GitHub API'
       );
+    });
+
+    it('reports files omitted by the synthesized diff byte cap', async () => {
+      const files = [
+        {
+          filename: 'src/included.ts',
+          status: 'modified' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -0,0 +1 @@\n+export const included = true;',
+        },
+        {
+          filename: 'src/oversized.ts',
+          status: 'modified' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: `@@ -0,0 +1 @@\n+${'x'.repeat(8 * 1024 * 1024)}`,
+        },
+        {
+          filename: 'src/after-oversized.ts',
+          status: 'modified' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -0,0 +1 @@\n+export const after = true;',
+        },
+      ];
+      const mockOctokit = createMockOctokit({ files });
+      mockOctokit.request = jest.fn().mockRejectedValue({
+        status: 422,
+        response: {
+          data: {
+            message: 'The diff is too large.',
+            errors: [{ code: 'too_large' }],
+          },
+        },
+      });
+
+      const context = await new PullRequestLoader(
+        createMockClient(mockOctokit)
+      ).load(1);
+
+      expect(context.diff).toContain('src/included.ts');
+      expect(context.diff).not.toContain('src/oversized.ts');
+      expect(context.loadCompleteness).toEqual({
+        status: PullRequestLoadStatus.Truncated,
+        omissions: [
+          {
+            reason: PullRequestLoadOmissionReason.SynthesizedDiffSizeLimit,
+            omittedFileCount: 2,
+            omittedFiles: ['src/oversized.ts', 'src/after-oversized.ts'],
+          },
+        ],
+      });
+    });
+
+    it('reports GitHub file-cap omissions using the API changed-file count', async () => {
+      const files = Array.from({ length: 3000 }, (_, index) => ({
+        filename: `src/file-${index}.ts`,
+        status: 'modified' as const,
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+        patch: `@@ -0,0 +1 @@\n+export const value${index} = ${index};`,
+      }));
+      const mockOctokit = createMockOctokit();
+      setReportedChangedFiles(mockOctokit, 3007);
+      mockOctokit.rest.pulls.listFiles = jest.fn(({ page, per_page }) =>
+        Promise.resolve({
+          data: files.slice((page - 1) * per_page, page * per_page),
+        })
+      );
+
+      const context = await new PullRequestLoader(
+        createMockClient(mockOctokit)
+      ).load(1);
+
+      expect(context.files).toHaveLength(3000);
+      expect(mockOctokit.rest.pulls.listFiles).toHaveBeenCalledTimes(30);
+      expect(context.loadCompleteness).toEqual({
+        status: PullRequestLoadStatus.Truncated,
+        omissions: [
+          {
+            reason: PullRequestLoadOmissionReason.GitHubFileLimit,
+            omittedFileCount: 7,
+          },
+        ],
+      });
+    });
+
+    it('reports an exact 3000-file PR as complete when GitHub confirms the count', async () => {
+      const files = Array.from({ length: 3000 }, (_, index) => ({
+        filename: `src/file-${index}.ts`,
+        status: 'modified' as const,
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+        patch: '@@ -0,0 +1 @@\n+export const value = true;',
+      }));
+      const mockOctokit = createMockOctokit();
+      setReportedChangedFiles(mockOctokit, 3000);
+      mockOctokit.rest.pulls.listFiles = jest.fn(({ page, per_page }) =>
+        Promise.resolve({
+          data: files.slice((page - 1) * per_page, page * per_page),
+        })
+      );
+
+      const context = await new PullRequestLoader(
+        createMockClient(mockOctokit)
+      ).load(1);
+
+      expect(context.loadCompleteness).toEqual({
+        status: PullRequestLoadStatus.Complete,
+        omissions: [],
+      });
+    });
+
+    it('reports an unknown omission count when the cap is reached without GitHub total metadata', async () => {
+      const files = Array.from({ length: 3000 }, (_, index) => ({
+        filename: `src/file-${index}.ts`,
+        status: 'modified' as const,
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+        patch: '@@ -0,0 +1 @@\n+export const value = true;',
+      }));
+      const mockOctokit = createMockOctokit();
+      mockOctokit.rest.pulls.listFiles = jest.fn(({ page, per_page }) =>
+        Promise.resolve({
+          data: files.slice((page - 1) * per_page, page * per_page),
+        })
+      );
+
+      const context = await new PullRequestLoader(
+        createMockClient(mockOctokit)
+      ).load(1);
+
+      expect(context.loadCompleteness).toEqual({
+        status: PullRequestLoadStatus.Truncated,
+        omissions: [
+          {
+            reason: PullRequestLoadOmissionReason.GitHubFileLimit,
+          },
+        ],
+      });
     });
   });
 });

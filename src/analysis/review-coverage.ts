@@ -10,6 +10,12 @@ import { compactDiffForPrompt, trimDiff } from '../utils/diff';
 export interface BuildReviewCoverageOptions {
   totalFiles?: number;
   skippedFiles?: FileChange[];
+  unreviewedFiles?: ReadonlyArray<{
+    readonly file: FileChange;
+    readonly reason: string;
+  }>;
+  additionalUnreviewedFiles?: number;
+  limitations?: readonly string[];
   mode?: ReviewCoverage['mode'];
 }
 
@@ -29,6 +35,12 @@ export function buildReviewCoverage(
   const compactedByFile = new Map(
     compacted.summaryOnlyFiles.map((file) => [file.filename, file])
   );
+  const unreviewedByPath = new Map(
+    (options.unreviewedFiles ?? []).map(({ file, reason }) => [
+      file.filename,
+      reason,
+    ])
+  );
 
   const reviewedFiles: ReviewCoverageFile[] = pr.files.map((file) => {
     const compactedFile = compactedByFile.get(file.filename);
@@ -39,6 +51,15 @@ export function buildReviewCoverage(
       additions: file.additions,
       deletions: file.deletions,
     };
+
+    const unreviewedReason = unreviewedByPath.get(file.filename);
+    if (unreviewedReason) {
+      return {
+        ...base,
+        status: 'unreviewed' as const,
+        reason: unreviewedReason,
+      };
+    }
 
     if (!isInPrompt) {
       return {
@@ -73,15 +94,22 @@ export function buildReviewCoverage(
   }));
 
   const files = [...reviewedFiles, ...skippedFiles];
+  const loadedUnreviewedFiles = countByStatus(files, 'unreviewed');
+  const unreviewedFiles =
+    loadedUnreviewedFiles + Math.max(0, options.additionalUnreviewedFiles ?? 0);
+  const limitations = [...(options.limitations ?? [])];
 
   return {
     mode: options.mode ?? 'full',
     totalFiles: options.totalFiles ?? files.length,
-    filesConsidered: pr.files.length,
+    filesConsidered: Math.max(0, pr.files.length - loadedUnreviewedFiles),
     fullDiffFiles: countByStatus(files, 'full'),
     compactedFiles: countByStatus(files, 'compacted'),
     metadataOnlyFiles: countByStatus(files, 'metadata-only'),
     skippedFiles: countByStatus(files, 'skipped'),
+    unreviewedFiles,
+    complete: unreviewedFiles === 0 && limitations.length === 0,
+    ...(limitations.length > 0 ? { limitations } : {}),
     agenticContext: config.codexAgenticContext ?? false,
     files,
   };

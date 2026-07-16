@@ -50,6 +50,65 @@ import { ControlPlaneReviewThreadLifecycleResolver } from './control-plane/revie
 import { RuntimeConfigResult } from './control-plane/runtime-config';
 import { ControlPlaneMemoryClient } from './control-plane/memory';
 import { logger } from './utils/logger';
+import { ExecutionDeadline } from './review-execution/domain/execution-deadline';
+import { createReviewCheckpointSessionFromEnvironment } from './review-execution/infrastructure/http-review-checkpoint-client';
+
+const DEFAULT_COMPLETION_RESERVE_MS = 120_000;
+const DEFAULT_MINIMUM_BATCH_START_WINDOW_MS = 30_000;
+const DEFAULT_MINIMUM_RETRY_START_WINDOW_MS = 30_000;
+const DEFAULT_PROVIDER_DISCOVERY_WAVE_TIMEOUT_MS = 15_000;
+
+function parseOptionalEpochMs(value: string | undefined): number | undefined {
+  if (!value?.trim()) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(
+      'REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS must be a positive epoch timestamp'
+    );
+  }
+  return parsed;
+}
+
+function parseBoundedParallelism(
+  value: string | undefined
+): number | undefined {
+  if (!value?.trim()) return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 3) {
+    throw new Error(
+      'REVIEWROUTER_LARGE_PR_MAX_PARALLEL must be an integer from 1 to 3'
+    );
+  }
+  return parsed;
+}
+
+function createExecutionDeadline(): ExecutionDeadline {
+  return new ExecutionDeadline(
+    parseOptionalEpochMs(process.env.REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS),
+    {
+      completionReserveMs: DEFAULT_COMPLETION_RESERVE_MS,
+      minimumBatchStartWindowMs: DEFAULT_MINIMUM_BATCH_START_WINDOW_MS,
+      minimumOptionalRetryStartWindowMs: DEFAULT_MINIMUM_RETRY_START_WINDOW_MS,
+    }
+  );
+}
+
+function bindDeadlineAwareProviderDiscovery(
+  providerRegistry: ProviderRegistry,
+  llmExecutor: LLMExecutor
+): void {
+  const discover =
+    providerRegistry.discoverAdditionalFreeProviders.bind(providerRegistry);
+  providerRegistry.discoverAdditionalFreeProviders = async (
+    existing,
+    max,
+    config
+  ) =>
+    (await llmExecutor.runProviderDiscoveryWave(
+      () => discover(existing, max, config),
+      DEFAULT_PROVIDER_DISCOVERY_WAVE_TIMEOUT_MS
+    )) ?? [];
+}
 
 export interface SetupOptions {
   cliMode?: boolean;
@@ -104,7 +163,13 @@ async function createComponentsForCLI(
     await pluginLoader.loadPlugins();
   }
 
-  const llmExecutor = new LLMExecutor(config);
+  const executionDeadline = createExecutionDeadline();
+  const llmExecutor = new LLMExecutor(config, {
+    deadline: executionDeadline,
+    maxParallelCalls: parseBoundedParallelism(
+      process.env.REVIEWROUTER_LARGE_PR_MAX_PARALLEL
+    ),
+  });
   const deduplicator = new Deduplicator();
   const consensus = new ConsensusEngine({
     minAgreement: config.inlineMinAgreement,
@@ -115,9 +180,14 @@ async function createComponentsForCLI(
   const testCoverage = new TestCoverageAnalyzer();
   const astAnalyzer = new ASTAnalyzer();
   const cache = new CacheManager(undefined, config);
+  const reviewCompatibilityKey = hashIncrementalCompatibility(
+    config,
+    process.env.REVIEWROUTER_CONFIG_VERSION
+  );
   const incrementalReviewer = new IncrementalReviewer(new CacheStorage(), {
     enabled: config.incrementalEnabled,
     cacheTtlDays: config.incrementalCacheTtlDays,
+    compatibilityKey: reviewCompatibilityKey,
   });
   const pricing = new PricingService(process.env.OPENROUTER_API_KEY);
   const costTracker = new CostTracker(pricing);
@@ -168,6 +238,7 @@ async function createComponentsForCLI(
     pluginLoader,
     reliabilityTracker
   );
+  bindDeadlineAwareProviderDiscovery(providerRegistry, llmExecutor);
   const metricsCollector = config.analyticsEnabled
     ? new MetricsCollector(cacheStorage, config)
     : undefined;
@@ -239,6 +310,8 @@ async function createComponentsForCLI(
     batchOrchestrator,
     acceptanceDetector,
     providerWeightTracker,
+    executionDeadline,
+    reviewCompatibilityKey,
   };
 }
 
@@ -264,7 +337,13 @@ export async function createComponents(
     await pluginLoader.loadPlugins();
   }
 
-  const llmExecutor = new LLMExecutor(config);
+  const executionDeadline = createExecutionDeadline();
+  const llmExecutor = new LLMExecutor(config, {
+    deadline: executionDeadline,
+    maxParallelCalls: parseBoundedParallelism(
+      process.env.REVIEWROUTER_LARGE_PR_MAX_PARALLEL
+    ),
+  });
   const deduplicator = new Deduplicator();
   const consensus = new ConsensusEngine({
     minAgreement: config.inlineMinAgreement,
@@ -275,6 +354,10 @@ export async function createComponents(
   const testCoverage = new TestCoverageAnalyzer();
   const astAnalyzer = new ASTAnalyzer();
   const cache = new CacheManager(undefined, config);
+  const reviewCompatibilityKey = hashIncrementalCompatibility(
+    config,
+    process.env.REVIEWROUTER_CONFIG_VERSION
+  );
   const incrementalSnapshotStorage = selectIncrementalSnapshotStorage({
     localStorage: new CacheStorage(),
     incrementalEnabled: config.incrementalEnabled,
@@ -289,10 +372,7 @@ export async function createComponents(
     {
       enabled: incrementalSnapshotStorage.enabled,
       cacheTtlDays: config.incrementalCacheTtlDays,
-      compatibilityKey: hashIncrementalCompatibility(
-        config,
-        process.env.REVIEWROUTER_CONFIG_VERSION
-      ),
+      compatibilityKey: reviewCompatibilityKey,
       requireCompatibleSnapshot:
         incrementalSnapshotStorage.requireCompatibleSnapshot,
     }
@@ -390,6 +470,7 @@ export async function createComponents(
     pluginLoader,
     reliabilityTracker
   );
+  bindDeadlineAwareProviderDiscovery(providerRegistry, llmExecutor);
   const metricsCollector = config.analyticsEnabled
     ? new MetricsCollector(cacheStorage, config)
     : undefined;
@@ -438,5 +519,12 @@ export async function createComponents(
     acceptanceDetector,
     providerWeightTracker,
     memoryBundleProvider,
+    executionDeadline,
+    reviewCompatibilityKey,
+    openReviewCheckpointSession: (plan) =>
+      createReviewCheckpointSessionFromEnvironment({
+        plan,
+        logger: { warn: (message) => logger.warn(message) },
+      }),
   };
 }

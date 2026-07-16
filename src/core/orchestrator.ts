@@ -462,11 +462,12 @@ export class ReviewOrchestrator {
       );
 
       // Check for incremental review (use reviewContext which may have filtered trivial files)
-      const useIncremental =
+      let useIncremental =
         await this.components.incrementalReviewer.shouldUseIncremental(
           reviewContext
         );
       let filesToReview: FileChange[] = reviewContext.files;
+      let incrementalInvalidatedPaths: string[] = [];
       let lastReviewData = null;
 
       if (useIncremental) {
@@ -475,13 +476,21 @@ export class ReviewOrchestrator {
             reviewContext.number
           );
         if (lastReviewData) {
-          filesToReview =
-            await this.components.incrementalReviewer.getChangedFilesSince(
+          const changeSet =
+            await this.components.incrementalReviewer.getIncrementalChangeSet(
               reviewContext,
               lastReviewData.lastReviewedCommit
             );
+          filesToReview = changeSet.files;
+          incrementalInvalidatedPaths = changeSet.invalidatedPaths;
+          if (!changeSet.canReusePreviousFindings) {
+            useIncremental = false;
+            lastReviewData = null;
+          }
           logger.info(
-            `Incremental review: reviewing ${filesToReview.length} changed files`
+            useIncremental
+              ? `Incremental review: reviewing ${filesToReview.length} changed files`
+              : `Incremental diff unavailable: reviewing all ${filesToReview.length} files`
           );
 
           // Update graph incrementally if available
@@ -1179,7 +1188,8 @@ export class ReviewOrchestrator {
         review.findings = this.components.incrementalReviewer.mergeFindings(
           lastReviewData.findings,
           review.findings,
-          filesToReview
+          filesToReview,
+          incrementalInvalidatedPaths
         );
 
         // Update summary with incremental note
@@ -1253,11 +1263,6 @@ export class ReviewOrchestrator {
 
       if (config.enableCaching) {
         await this.components.cache.save(pr, review);
-      }
-
-      // Save incremental review data
-      if (config.incrementalEnabled) {
-        await this.components.incrementalReviewer.saveReview(pr, review);
       }
 
       // Record review metrics for analytics
@@ -1453,6 +1458,16 @@ export class ReviewOrchestrator {
         if (replaced) {
           logger.info(
             'Replaced ReviewRouter progress comment with final no-findings summary'
+          );
+        }
+      }
+      if (config.incrementalEnabled) {
+        try {
+          await this.components.incrementalReviewer.saveReview(pr, review);
+        } catch (error) {
+          logger.warn(
+            'Failed to save incremental review snapshot; review output remains valid',
+            error as Error
           );
         }
       }

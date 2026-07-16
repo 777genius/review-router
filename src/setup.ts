@@ -10,6 +10,8 @@ import { ASTAnalyzer } from './analysis/ast/analyzer';
 import { CacheManager } from './cache/manager';
 import { IncrementalReviewer } from './cache/incremental';
 import { CacheStorage } from './cache/storage';
+import { selectIncrementalSnapshotStorage } from './cache/review-snapshot-bridge';
+import { hashIncrementalCompatibility } from './cache/key-builder';
 import { PricingService } from './cost/pricing';
 import { CostTracker } from './cost/tracker';
 import { SecurityScanner } from './security/scanner';
@@ -47,6 +49,7 @@ import { ReviewThreadResolver } from './github/review-thread-resolver';
 import { ControlPlaneReviewThreadLifecycleResolver } from './control-plane/review-thread-lifecycle';
 import { RuntimeConfigResult } from './control-plane/runtime-config';
 import { ControlPlaneMemoryClient } from './control-plane/memory';
+import { logger } from './utils/logger';
 
 export interface SetupOptions {
   cliMode?: boolean;
@@ -272,10 +275,28 @@ export async function createComponents(
   const testCoverage = new TestCoverageAnalyzer();
   const astAnalyzer = new ASTAnalyzer();
   const cache = new CacheManager(undefined, config);
-  const incrementalReviewer = new IncrementalReviewer(new CacheStorage(), {
-    enabled: config.incrementalEnabled,
-    cacheTtlDays: config.incrementalCacheTtlDays,
+  const incrementalSnapshotStorage = selectIncrementalSnapshotStorage({
+    localStorage: new CacheStorage(),
+    incrementalEnabled: config.incrementalEnabled,
   });
+  if (incrementalSnapshotStorage.hostedSnapshotUnavailable) {
+    logger.warn(
+      'Hosted incremental snapshot bridge is unavailable; incremental review is disabled for this run'
+    );
+  }
+  const incrementalReviewer = new IncrementalReviewer(
+    incrementalSnapshotStorage.storage,
+    {
+      enabled: incrementalSnapshotStorage.enabled,
+      cacheTtlDays: config.incrementalCacheTtlDays,
+      compatibilityKey: hashIncrementalCompatibility(
+        config,
+        process.env.REVIEWROUTER_CONFIG_VERSION
+      ),
+      requireCompatibleSnapshot:
+        incrementalSnapshotStorage.requireCompatibleSnapshot,
+    }
+  );
   const pricing = new PricingService(process.env.OPENROUTER_API_KEY);
   const costTracker = new CostTracker(pricing);
   const security = new SecurityScanner();

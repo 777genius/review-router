@@ -3,17 +3,34 @@ import { CacheStorage } from './storage';
 import { logger } from '../utils/logger';
 import { execFileSync } from 'child_process';
 
-interface IncrementalCacheData {
+export interface IncrementalCacheData {
   prNumber: number;
   lastReviewedCommit: string;
   timestamp: number;
   findings: Finding[];
   reviewSummary: string;
+  schemaVersion?: number;
+  baseSha?: string;
+  compatibilityKey?: string;
+  expiresAt?: number;
+}
+
+export interface IncrementalChangeSet {
+  files: FileChange[];
+  invalidatedPaths: string[];
+  canReusePreviousFindings: boolean;
+}
+
+export interface IncrementalStoragePort {
+  read(key: string): Promise<string | null>;
+  write(key: string, value: string): Promise<void>;
 }
 
 export interface IncrementalConfig {
   enabled: boolean;
   cacheTtlDays: number;
+  compatibilityKey?: string;
+  requireCompatibleSnapshot?: boolean;
 }
 
 export class IncrementalReviewer {
@@ -22,11 +39,12 @@ export class IncrementalReviewer {
   private static readonly MS_PER_DAY = 24 * 60 * 60 * 1000;
 
   constructor(
-    private readonly storage = new CacheStorage(),
+    private readonly storage: IncrementalStoragePort = new CacheStorage(),
     private readonly config: IncrementalConfig = {
       enabled: true,
       cacheTtlDays: 7,
-    }
+    },
+    private readonly repositoryPath = process.cwd()
   ) {}
 
   /**
@@ -42,6 +60,22 @@ export class IncrementalReviewer {
     if (!lastReview) {
       logger.debug('No previous review found, running full review');
       return false;
+    }
+
+    if (this.config.requireCompatibleSnapshot) {
+      if (
+        lastReview.schemaVersion !== 1 ||
+        lastReview.baseSha !== pr.baseSha ||
+        !this.config.compatibilityKey ||
+        lastReview.compatibilityKey !== this.config.compatibilityKey ||
+        !lastReview.expiresAt ||
+        lastReview.expiresAt <= Date.now()
+      ) {
+        logger.info(
+          'Hosted incremental snapshot is incompatible or expired; running full review'
+        );
+        return false;
+      }
     }
 
     // Check if cache is expired
@@ -89,12 +123,20 @@ export class IncrementalReviewer {
    */
   async saveReview(pr: PRContext, review: Review): Promise<void> {
     const key = this.buildCacheKey(pr.number);
+    const timestamp = Date.now();
     const data: IncrementalCacheData = {
       prNumber: pr.number,
       lastReviewedCommit: pr.headSha,
-      timestamp: Date.now(),
+      timestamp,
       findings: review.findings,
       reviewSummary: review.summary,
+      schemaVersion: 1,
+      baseSha: pr.baseSha,
+      ...(this.config.compatibilityKey
+        ? { compatibilityKey: this.config.compatibilityKey }
+        : {}),
+      expiresAt:
+        timestamp + this.config.cacheTtlDays * IncrementalReviewer.MS_PER_DAY,
     };
 
     await this.storage.write(key, JSON.stringify(data));
@@ -107,8 +149,7 @@ export class IncrementalReviewer {
    * Validate that a string is a valid git SHA
    */
   private isValidSha(sha: string): boolean {
-    // Git SHAs are 4-40 character hex strings (git allows short SHAs)
-    return /^[a-f0-9]{4,40}$/i.test(sha);
+    return /^[a-f0-9]{40}$/i.test(sha);
   }
 
   /**
@@ -118,6 +159,13 @@ export class IncrementalReviewer {
     pr: PRContext,
     lastCommit: string
   ): Promise<FileChange[]> {
+    return (await this.getIncrementalChangeSet(pr, lastCommit)).files;
+  }
+
+  async getIncrementalChangeSet(
+    pr: PRContext,
+    lastCommit: string
+  ): Promise<IncrementalChangeSet> {
     try {
       // Validate SHAs to prevent command injection
       if (!this.isValidSha(lastCommit)) {
@@ -129,17 +177,17 @@ export class IncrementalReviewer {
 
       // Get the diff between last reviewed commit and current HEAD
       logger.debug(
-        `Running git diff --name-status ${lastCommit.substring(0, 7)}...${pr.headSha.substring(0, 7)}`
+        `Running git diff --name-status ${lastCommit.substring(0, 7)}..${pr.headSha.substring(0, 7)}`
       );
 
       let output: string;
       try {
         output = execFileSync(
           'git',
-          ['diff', '--name-status', `${lastCommit}...${pr.headSha}`],
+          ['diff', '--name-status', '-z', '-M', lastCommit, pr.headSha],
           {
             encoding: 'utf8',
-            cwd: process.cwd(),
+            cwd: this.repositoryPath,
             timeout: 10000, // 10 second timeout
           }
         );
@@ -148,21 +196,39 @@ export class IncrementalReviewer {
           `Failed to get git diff: ${error instanceof Error ? error.message : String(error)}`
         );
         // If git diff fails, fall back to reviewing all files
-        return pr.files;
+        return {
+          files: pr.files,
+          invalidatedPaths: [],
+          canReusePreviousFindings: false,
+        };
       }
 
       const changedFiles: FileChange[] = [];
-      const lines = output.trim().split('\n').filter(Boolean);
+      const changedFileNames = new Set<string>();
+      const invalidatedPaths = new Set<string>();
+      const fields = output.split('\0');
+      let index = 0;
 
-      for (const line of lines) {
-        // Git diff format: "M\tfilepath" - skip status, keep filepath
-        const pathParts = line.split('\t').slice(1);
-        const filename = pathParts.join('\t'); // Handle filenames with tabs
+      while (index < fields.length && fields[index]) {
+        const status = fields[index++] ?? '';
+        const previousFilename = /^[RC]/.test(status)
+          ? fields[index++]
+          : undefined;
+        const filename = fields[index++] ?? '';
+        if (!filename) continue;
+        invalidatedPaths.add(filename);
+        if (previousFilename) invalidatedPaths.add(previousFilename);
 
         // Find this file in the PR files list to get full details
-        const prFile = pr.files.find((f) => f.filename === filename);
-        if (prFile) {
+        const prFile = pr.files.find(
+          (f) =>
+            f.filename === filename ||
+            (previousFilename !== undefined &&
+              f.previousFilename === previousFilename)
+        );
+        if (prFile && !changedFileNames.has(prFile.filename)) {
           changedFiles.push(prFile);
+          changedFileNames.add(prFile.filename);
         } else {
           // File not in PR files (possibly deleted or outside PR scope)
           logger.debug(`File ${filename} in diff but not in PR files`);
@@ -172,14 +238,22 @@ export class IncrementalReviewer {
       logger.info(
         `Found ${changedFiles.length} changed files since ${lastCommit.substring(0, 7)}`
       );
-      return changedFiles;
+      return {
+        files: changedFiles,
+        invalidatedPaths: [...invalidatedPaths],
+        canReusePreviousFindings: true,
+      };
     } catch (error) {
       logger.error('Failed to get changed files from git diff', error as Error);
       logger.warn(
         `Falling back to full review (${pr.files.length} files) due to git diff failure`
       );
       // On error, return all PR files (fallback to full review)
-      return pr.files;
+      return {
+        files: pr.files,
+        invalidatedPaths: [],
+        canReusePreviousFindings: false,
+      };
     }
   }
 
@@ -194,9 +268,18 @@ export class IncrementalReviewer {
   mergeFindings(
     previousFindings: Finding[],
     newFindings: Finding[],
-    changedFiles: FileChange[]
+    changedFiles: FileChange[],
+    invalidatedPaths: readonly string[] = []
   ): Finding[] {
-    const changedFilenames = new Set(changedFiles.map((f) => f.filename));
+    const changedFilenames = new Set(
+      changedFiles
+        .flatMap((file) =>
+          file.previousFilename
+            ? [file.filename, file.previousFilename]
+            : [file.filename]
+        )
+        .concat(invalidatedPaths)
+    );
 
     // Keep findings from unchanged files
     const keptFindings = previousFindings.filter(

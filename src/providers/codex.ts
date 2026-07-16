@@ -157,10 +157,19 @@ export class CodexProvider extends Provider {
     );
 
     try {
+      const initialTimeoutMs =
+        executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
+      if (initialTimeoutMs <= 0) {
+        const deadlineError = new Error(
+          'Review execution deadline reached before Codex invocation'
+        );
+        deadlineError.name = 'TimeoutError';
+        throw deadlineError;
+      }
       let runResult = await this.runCliWithStdin(
         binary,
         promptForCodex,
-        timeoutMs,
+        initialTimeoutMs,
         {
           healthCheck: false,
           outputSchema: this.buildFindingsSchema(),

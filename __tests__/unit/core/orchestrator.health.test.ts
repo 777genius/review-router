@@ -1179,6 +1179,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
         } as ProviderResult,
       ]);
     const saveReview = jest.fn();
+    const format = jest.fn().mockReturnValue('');
     const orchestrator = makeOrchestrator({
       config: {
         ...DEFAULT_CONFIG,
@@ -1214,6 +1215,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
         getChangedFilesSince: jest.fn(),
         getIncrementalChangeSet: jest.fn(),
       } as any,
+      formatter: { format } as any,
     });
 
     const review = await orchestrator.executeReview(
@@ -1246,6 +1248,11 @@ describe('ReviewOrchestrator health check guard rails', () => {
       })
     );
     expect(saveReview).not.toHaveBeenCalled();
+    expect(
+      format.mock.calls.some(
+        ([formattedReview]) => formattedReview.coverage?.complete === false
+      )
+    ).toBe(true);
   });
 
   it('does not advance a snapshot when GitHub omitted files but loaded work is empty', async () => {
@@ -1771,31 +1778,35 @@ describe('ReviewOrchestrator health check guard rails', () => {
       expectedVersion: 4,
       markerWritten: true,
     });
+    let plannedWorkKeys: string[] = [];
     const openReviewCheckpointSession = jest
       .fn()
-      .mockImplementation(async (plan: { workKeys: string[] }) => ({
-        acceptedBatchResults: new Map([
-          [
-            plan.workKeys[0],
-            {
-              filePaths: ['a.ts'],
-              findings: [],
-              providerResults: [
-                {
-                  name: 'p1',
-                  status: 'success',
-                  durationMs: 1000,
-                  usage: restoredUsage,
-                  lifecycleAssignedTargetIds: [],
-                  lifecycleRevalidations: [],
-                },
-              ],
-            },
-          ],
-        ]),
-        commitSuccessfulBatch,
-        finalize,
-      }));
+      .mockImplementation(async (plan: { workKeys: string[] }) => {
+        plannedWorkKeys = [...plan.workKeys];
+        return {
+          acceptedBatchResults: new Map([
+            [
+              plan.workKeys[0],
+              {
+                filePaths: ['a.ts'],
+                findings: [],
+                providerResults: [
+                  {
+                    name: 'p1',
+                    status: 'success',
+                    durationMs: 1000,
+                    usage: restoredUsage,
+                    lifecycleAssignedTargetIds: [],
+                    lifecycleRevalidations: [],
+                  },
+                ],
+              },
+            ],
+          ]),
+          commitSuccessfulBatch,
+          finalize,
+        };
+      });
 
     const orchestrator = makeOrchestrator({
       config: {
@@ -1823,6 +1834,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
         execute,
       } as any,
       reviewCompatibilityKey: '1'.repeat(64),
+      incrementalSnapshotAdvancementEnabled: false,
       openReviewCheckpointSession,
     });
 
@@ -1847,12 +1859,47 @@ describe('ReviewOrchestrator health check guard rails', () => {
 
     expect(execute).toHaveBeenCalledTimes(1);
     expect(commitSuccessfulBatch).toHaveBeenCalledTimes(1);
+    expect(commitSuccessfulBatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workKey: plannedWorkKeys[1],
+        files: [expect.objectContaining({ filename: 'b.ts' })],
+      })
+    );
     expect(finalize).toHaveBeenCalledTimes(1);
+    expect(finalize).toHaveBeenCalledWith({
+      snapshotAdvancementRequired: false,
+    });
     const recordUsage = (orchestrator as any).components.costTracker
       .record as jest.Mock;
     expect(recordUsage).toHaveBeenNthCalledWith(1, 'p1', restoredUsage, 5);
     expect(recordUsage).toHaveBeenNthCalledWith(2, 'p1', executedUsage, 5);
     expect(review.coverage?.complete).toBe(true);
+  });
+
+  it('restores plural provider attribution without duplicating findings', () => {
+    const orchestrator = makeOrchestrator({});
+    const restored = (orchestrator as any).restoreCheckpointProviderResults({
+      filePaths: ['src/a.ts'],
+      findings: [
+        {
+          id: 'finding-1',
+          file: 'src/a.ts',
+          line: 1,
+          severity: 'major',
+          title: 'Finding',
+          message: 'Message',
+          confidence: 0.9,
+          providers: ['p1'],
+        },
+      ],
+      providerResults: [
+        { name: 'p1', status: 'success', durationMs: 1 },
+        { name: 'p2', status: 'success', durationMs: 1 },
+      ],
+    });
+
+    expect(restored[0].result.findings).toHaveLength(1);
+    expect(restored[1].result.findings).toHaveLength(0);
   });
 
   it('fails when every LLM provider fails and provider failure is configured as blocking', async () => {

@@ -62,6 +62,27 @@ describe('risk-first file planning', () => {
     expect(classifyFileRisk('src/components/button.ts')).toBe(
       FileRiskTier.Normal
     );
+    expect(classifyFileRisk('src/utils/token-estimation.ts')).toBe(
+      FileRiskTier.Normal
+    );
+    expect(classifyFileRisk('src/auth/refresh-token.ts')).toBe(
+      FileRiskTier.Security
+    );
+    expect(classifyFileRisk('src/runtime/token-store.ts')).toBe(
+      FileRiskTier.Security
+    );
+    expect(classifyFileRisk('src/runtime/token-storage.ts')).toBe(
+      FileRiskTier.Security
+    );
+    expect(classifyFileRisk('src/runtime/token-vault.ts')).toBe(
+      FileRiskTier.Security
+    );
+    expect(classifyFileRisk('src/runtime/token-manager.ts')).toBe(
+      FileRiskTier.Security
+    );
+    expect(classifyFileRisk('src/runtime/token-keyring.ts')).toBe(
+      FileRiskTier.Security
+    );
   });
 });
 

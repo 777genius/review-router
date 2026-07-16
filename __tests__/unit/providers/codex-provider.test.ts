@@ -1030,6 +1030,27 @@ describe('CodexProvider', () => {
     expect(result.findings).toEqual([]);
   });
 
+  it('re-clamps the deadline immediately before the initial Codex invocation', async () => {
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: false,
+    });
+    jest
+      .spyOn(provider as any, 'resolveBinary')
+      .mockResolvedValue('/tmp/codex');
+    const runCli = jest.spyOn(provider as any, 'runCliWithStdin');
+    const clampTimeoutMs = jest.fn().mockReturnValue(0);
+
+    await expect(
+      provider.review('review prompt', 1000, {
+        canStartOptionalRetry: () => false,
+        clampTimeoutMs,
+      })
+    ).rejects.toMatchObject({ name: 'TimeoutError' });
+
+    expect(clampTimeoutMs).toHaveBeenCalledWith(1000);
+    expect(runCli).not.toHaveBeenCalled();
+  });
+
   it('fails review when Codex returns invalid JSON instead of silently passing', async () => {
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('--version')) {

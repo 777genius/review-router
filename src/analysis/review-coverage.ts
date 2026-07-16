@@ -95,13 +95,16 @@ export function buildReviewCoverage(
 
   const files = [...reviewedFiles, ...skippedFiles];
   const loadedUnreviewedFiles = countByStatus(files, 'unreviewed');
-  const unreviewedFiles =
-    loadedUnreviewedFiles + Math.max(0, options.additionalUnreviewedFiles ?? 0);
+  const additionalUnreviewedFiles = Math.max(
+    0,
+    options.additionalUnreviewedFiles ?? 0
+  );
+  const unreviewedFiles = loadedUnreviewedFiles + additionalUnreviewedFiles;
   const limitations = [...(options.limitations ?? [])];
 
   return {
     mode: options.mode ?? 'full',
-    totalFiles: options.totalFiles ?? files.length,
+    totalFiles: options.totalFiles ?? files.length + additionalUnreviewedFiles,
     filesConsidered: Math.max(0, pr.files.length - loadedUnreviewedFiles),
     fullDiffFiles: countByStatus(files, 'full'),
     compactedFiles: countByStatus(files, 'compacted'),

@@ -79,6 +79,34 @@ function batchInput(workKey: string) {
 }
 
 describe('ReviewCheckpointSession', () => {
+  it.each([
+    [ReviewCheckpointStartStatus.Started, 0],
+    [ReviewCheckpointStartStatus.Replaced, 2],
+  ] as const)(
+    'rejects a state-changing %s acknowledgement unless it advances exactly one version',
+    async (status, version) => {
+      const checkpointPlan = plan();
+      const checkpointClient = clientMock();
+      checkpointClient.restore.mockResolvedValueOnce({
+        status: ReviewCheckpointRestoreStatus.Missing,
+        expectedVersion: 0,
+      });
+      checkpointClient.start.mockResolvedValueOnce({
+        status,
+        version,
+        headSha,
+        planHash,
+      });
+
+      const session = await ReviewCheckpointSession.open({
+        client: checkpointClient,
+        plan: checkpointPlan,
+      });
+
+      expect(session).toBeNull();
+    }
+  );
+
   it('restores accepted results in deterministic plan order', async () => {
     const checkpointPlan = plan();
     const checkpointClient = clientMock();
@@ -238,7 +266,9 @@ describe('ReviewCheckpointSession', () => {
       plan: checkpointPlan,
     });
 
-    const result = await session!.finalize();
+    const result = await session!.finalize({
+      snapshotAdvancementRequired: true,
+    });
 
     expect(result).toEqual({
       status: ReviewCheckpointSessionFinalizeStatus.Incomplete,
@@ -284,7 +314,9 @@ describe('ReviewCheckpointSession', () => {
         });
         await session!.commitSuccessfulBatch(batchInput(firstWorkKey));
 
-        const result = await session!.finalize();
+        const result = await session!.finalize({
+          snapshotAdvancementRequired: true,
+        });
         const rawMarker = await fs.readFile(markerPath, 'utf8');
         const marker = parseReviewCheckpointFinalizationMarker(rawMarker);
         const mode = (await fs.stat(markerPath)).mode & 0o777;
@@ -303,6 +335,7 @@ describe('ReviewCheckpointSession', () => {
           headSha,
           planHash,
           expectedVersion: 3,
+          snapshotAdvancementRequired: true,
         });
         expect(Object.keys(marker)).toEqual([
           'protocolVersion',
@@ -310,6 +343,7 @@ describe('ReviewCheckpointSession', () => {
           'headSha',
           'planHash',
           'expectedVersion',
+          'snapshotAdvancementRequired',
         ]);
         expect(mode).toBe(0o600);
         expect(checkpointClient.clear).not.toHaveBeenCalled();
@@ -322,6 +356,98 @@ describe('ReviewCheckpointSession', () => {
       } finally {
         await fs.rm(directory, { recursive: true, force: true });
       }
+    }
+  );
+
+  it.each([0, 1, 3])(
+    'rejects a state-changing batch acknowledgement at invalid version %s',
+    async (version) => {
+      const checkpointPlan = plan([firstWorkKey]);
+      const checkpointClient = clientMock();
+      startedClient(checkpointClient, checkpointPlan);
+      checkpointClient.commitBatchResult.mockResolvedValueOnce({
+        status: ReviewCheckpointBatchResultStatus.Accepted,
+        version,
+        headSha,
+        planHash,
+        workKey: firstWorkKey,
+      });
+      const session = await ReviewCheckpointSession.open({
+        client: checkpointClient,
+        plan: checkpointPlan,
+      });
+
+      const result = await session!.commitSuccessfulBatch(
+        batchInput(firstWorkKey)
+      );
+
+      expect(result.status).toBe(ReviewCheckpointCommitStatus.Disabled);
+      expect(session!.currentExpectedVersion).toBe(1);
+      expect(session!.acceptedBatchResults.size).toBe(0);
+    }
+  );
+
+  it('accepts a non-regressing idempotent batch acknowledgement', async () => {
+    const checkpointPlan = plan([firstWorkKey]);
+    const checkpointClient = clientMock();
+    startedClient(checkpointClient, checkpointPlan);
+    checkpointClient.commitBatchResult.mockResolvedValueOnce({
+      status: ReviewCheckpointBatchResultStatus.Idempotent,
+      version: 3,
+      headSha,
+      planHash,
+      workKey: firstWorkKey,
+    });
+    const session = await ReviewCheckpointSession.open({
+      client: checkpointClient,
+      plan: checkpointPlan,
+    });
+
+    const result = await session!.commitSuccessfulBatch(
+      batchInput(firstWorkKey)
+    );
+
+    expect(result.status).toBe(ReviewCheckpointCommitStatus.Idempotent);
+    expect(session!.currentExpectedVersion).toBe(3);
+    expect(session!.acceptedBatchResults.size).toBe(1);
+  });
+
+  it.each([1, 2, 4])(
+    'rejects a state-changing finalize acknowledgement at invalid version %s',
+    async (version) => {
+      const checkpointPlan = plan([firstWorkKey]);
+      const checkpointClient = clientMock();
+      startedClient(checkpointClient, checkpointPlan);
+      checkpointClient.commitBatchResult.mockResolvedValueOnce({
+        status: ReviewCheckpointBatchResultStatus.Accepted,
+        version: 2,
+        headSha,
+        planHash,
+        workKey: firstWorkKey,
+      });
+      checkpointClient.finalize.mockResolvedValueOnce({
+        status: ReviewCheckpointFinalizeStatus.Finalized,
+        version,
+        headSha,
+        planHash,
+      });
+      const markerWriter = { write: jest.fn() };
+      const session = await ReviewCheckpointSession.open({
+        client: checkpointClient,
+        plan: checkpointPlan,
+        markerWriter,
+      });
+      await session!.commitSuccessfulBatch(batchInput(firstWorkKey));
+
+      const result = await session!.finalize({
+        snapshotAdvancementRequired: false,
+      });
+
+      expect(result.status).toBe(
+        ReviewCheckpointSessionFinalizeStatus.Disabled
+      );
+      expect(session!.currentExpectedVersion).toBe(2);
+      expect(markerWriter.write).not.toHaveBeenCalled();
     }
   );
 });

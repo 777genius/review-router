@@ -785,7 +785,9 @@ export class MarkdownFormatterV2 {
       coverage.compactedFiles > 0 ||
       coverage.metadataOnlyFiles > 0 ||
       coverage.skippedFiles > 0 ||
-      coverage.unreviewedFiles > 0
+      coverage.unreviewedFiles > 0 ||
+      coverage.complete === false ||
+      (coverage.limitations?.length ?? 0) > 0
     );
   }
 

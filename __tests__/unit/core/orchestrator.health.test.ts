@@ -1443,6 +1443,58 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(saveReview).toHaveBeenCalledWith(pr, review);
   });
 
+  it('does not advance the snapshot when the reviewed head is unverifiable', async () => {
+    const saveReview = jest.fn();
+    const getPullRequest = jest
+      .fn()
+      .mockRejectedValue(
+        Object.assign(new Error('GitHub unavailable'), { status: 503 })
+      );
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        incrementalEnabled: true,
+        providers: [],
+        fallbackProviders: [],
+      },
+      githubClient: {
+        owner: 'owner',
+        repo: 'repo',
+        octokit: { rest: { pulls: { get: getPullRequest } } },
+      } as any,
+      incrementalReviewer: {
+        shouldUseIncremental: jest.fn().mockResolvedValue(false),
+        getLastReview: jest.fn(),
+        mergeFindings: jest.fn(),
+        generateIncrementalSummary: jest.fn(),
+        saveReview,
+        getChangedFilesSince: jest.fn(),
+        getIncrementalChangeSet: jest.fn(),
+      } as any,
+    });
+    const pr: PRContext = {
+      ...makePR([]),
+      loadCompleteness: {
+        status: PullRequestLoadStatus.Truncated,
+        omissions: [
+          {
+            reason: PullRequestLoadOmissionReason.GitHubFileLimit,
+            omittedFileCount: 1,
+          },
+        ],
+      },
+    };
+
+    await orchestrator.executeReview(pr);
+
+    expect(getPullRequest).toHaveBeenCalledTimes(1);
+    expect(saveReview).not.toHaveBeenCalled();
+  });
+
   it('pins required healthy providers during execution limiting', async () => {
     const providers = ['opencode/high', 'opencode/required-low'].map(
       (name) =>

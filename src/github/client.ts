@@ -14,9 +14,7 @@ export class GitHubClient {
     token: string,
     options: { readonly tokenProvider?: GitHubTokenProvider } = {}
   ) {
-    this.octokit = options.tokenProvider
-      ? createRefreshableOctokit(options.tokenProvider)
-      : new Octokit({ auth: token });
+    this.octokit = createResilientOctokit(token, options.tokenProvider);
 
     // Prefer the explicit Actions env var, then fall back to the event payload.
     const repoEnv =
@@ -172,27 +170,55 @@ export class GitHubClient {
   }
 }
 
-function createRefreshableOctokit(tokenProvider: GitHubTokenProvider): Octokit {
+function createResilientOctokit(
+  initialToken: string,
+  tokenProvider?: GitHubTokenProvider
+): Octokit {
   const octokit = new Octokit();
   octokit.hook.wrap('request', async (request, options) => {
     const requestWithToken = (token: string) => {
-      options.headers.authorization = `Bearer ${token}`;
+      options.headers.authorization = tokenProvider
+        ? `Bearer ${token}`
+        : `token ${token}`;
       return request(options);
     };
-    try {
-      return await requestWithToken(await tokenProvider.getToken());
-    } catch (error) {
-      if (
-        typeof error !== 'object' ||
-        error === null ||
-        (error as { status?: unknown }).status !== 401
-      ) {
+    let token = tokenProvider ? await tokenProvider.getToken() : initialToken;
+    let authRefreshAttempted = false;
+    let transientFailures = 0;
+
+    for (;;) {
+      try {
+        return await requestWithToken(token);
+      } catch (error) {
+        const status = getHttpStatus(error);
+        if (status === 401 && tokenProvider && !authRefreshAttempted) {
+          token = await tokenProvider.refreshToken();
+          authRefreshAttempted = true;
+          continue;
+        }
+        if (isTransientGitHubStatus(status) && transientFailures < 2) {
+          const delayMs = transientFailures === 0 ? 250 : 1_000;
+          transientFailures += 1;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
         throw error;
       }
-      return requestWithToken(await tokenProvider.refreshToken());
     }
   });
   return octokit;
+}
+
+function getHttpStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null) {
+    return undefined;
+  }
+  const status = (error as { status?: unknown }).status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+function isTransientGitHubStatus(status: number | undefined): boolean {
+  return status === 502 || status === 503 || status === 504;
 }
 
 function getRepositoryFromEventPayload(): string | undefined {

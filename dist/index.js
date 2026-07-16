@@ -20548,7 +20548,9 @@ var CommentPoster = class _CommentPoster {
       summaryMetadata
     );
     if (staleHead.skippedStale) {
-      logger.warn("Skipping summary write because the PR head changed");
+      logger.warn(
+        staleHead.reason === "head_sha_changed" ? "Skipping summary write because the PR head changed" : "Skipping summary write because the current PR head could not be verified"
+      );
       return { posted: false, skippedStale: true, reason: staleHead.reason };
     }
     const chunks = this.chunk(guardedBody);
@@ -22266,7 +22268,7 @@ var GitHubClient = class {
   repo;
   rateLimitTracker = new GitHubRateLimitTracker();
   constructor(token, options = {}) {
-    this.octokit = options.tokenProvider ? createRefreshableOctokit(options.tokenProvider) : new import_rest.Octokit({ auth: token });
+    this.octokit = createResilientOctokit(token, options.tokenProvider);
     const repoEnv = process.env.GITHUB_REPOSITORY || getRepositoryFromEventPayload() || "/";
     const [owner, repo] = repoEnv.split("/");
     this.owner = owner || "";
@@ -22376,23 +22378,47 @@ var GitHubClient = class {
     }
   }
 };
-function createRefreshableOctokit(tokenProvider) {
+function createResilientOctokit(initialToken, tokenProvider) {
   const octokit = new import_rest.Octokit();
   octokit.hook.wrap("request", async (request, options) => {
-    const requestWithToken = (token) => {
-      options.headers.authorization = `Bearer ${token}`;
+    const requestWithToken = (token2) => {
+      options.headers.authorization = tokenProvider ? `Bearer ${token2}` : `token ${token2}`;
       return request(options);
     };
-    try {
-      return await requestWithToken(await tokenProvider.getToken());
-    } catch (error2) {
-      if (typeof error2 !== "object" || error2 === null || error2.status !== 401) {
+    let token = tokenProvider ? await tokenProvider.getToken() : initialToken;
+    let authRefreshAttempted = false;
+    let transientFailures = 0;
+    for (; ; ) {
+      try {
+        return await requestWithToken(token);
+      } catch (error2) {
+        const status = getHttpStatus(error2);
+        if (status === 401 && tokenProvider && !authRefreshAttempted) {
+          token = await tokenProvider.refreshToken();
+          authRefreshAttempted = true;
+          continue;
+        }
+        if (isTransientGitHubStatus(status) && transientFailures < 2) {
+          const delayMs = transientFailures === 0 ? 250 : 1e3;
+          transientFailures += 1;
+          await new Promise((resolve3) => setTimeout(resolve3, delayMs));
+          continue;
+        }
         throw error2;
       }
-      return requestWithToken(await tokenProvider.refreshToken());
     }
   });
   return octokit;
+}
+function getHttpStatus(error2) {
+  if (typeof error2 !== "object" || error2 === null) {
+    return void 0;
+  }
+  const status = error2.status;
+  return typeof status === "number" ? status : void 0;
+}
+function isTransientGitHubStatus(status) {
+  return status === 502 || status === 503 || status === 504;
 }
 function getRepositoryFromEventPayload() {
   const eventPath = process.env.GITHUB_EVENT_PATH;
@@ -35501,19 +35527,23 @@ var ReviewOrchestrator = class {
           );
         }
       }
-      if (config.incrementalEnabled && (llmCoverageComplete || hasOnlyDeterministicCoverageGaps())) {
-        try {
-          await this.components.incrementalReviewer.saveReview(pr2, review);
-        } catch (error2) {
+      if (config.incrementalEnabled) {
+        if (llmCoverageComplete || hasOnlyDeterministicCoverageGaps()) {
+          if (await this.canAdvanceIncrementalSnapshot(pr2)) {
+            try {
+              await this.components.incrementalReviewer.saveReview(pr2, review);
+            } catch (error2) {
+              logger.warn(
+                "Failed to save incremental review snapshot; review output remains valid",
+                error2
+              );
+            }
+          }
+        } else {
           logger.warn(
-            "Failed to save incremental review snapshot; review output remains valid",
-            error2
+            "Incremental snapshot was not advanced because LLM batch coverage is incomplete"
           );
         }
-      } else if (config.incrementalEnabled) {
-        logger.warn(
-          "Incremental snapshot was not advanced because LLM batch coverage is incomplete"
-        );
       }
       success = true;
       return review;
@@ -35540,6 +35570,26 @@ var ReviewOrchestrator = class {
         }
       }
     }
+  }
+  async canAdvanceIncrementalSnapshot(pr2) {
+    const githubClient = this.components.githubClient;
+    if (!githubClient) {
+      return true;
+    }
+    const verification = await verifyPullRequestHead(githubClient.octokit, {
+      owner: githubClient.owner,
+      repo: githubClient.repo,
+      prNumber: pr2.number,
+      expectedHeadSha: pr2.headSha
+    });
+    if (verification.status === "current" /* Current */) {
+      return true;
+    }
+    logger.warn(
+      verification.status === "changed" /* Changed */ ? "Incremental snapshot was not advanced because the PR head changed" : "Incremental snapshot was not advanced because the current PR head could not be verified",
+      verification.error
+    );
+    return false;
   }
   /**
    * Cleanup resources after review to prevent memory leaks in long-running processes

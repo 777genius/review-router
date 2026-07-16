@@ -97,7 +97,11 @@ export class CommentPoster {
       summaryMetadata
     );
     if (staleHead.skippedStale) {
-      logger.warn('Skipping summary write because the PR head changed');
+      logger.warn(
+        staleHead.reason === 'head_sha_changed'
+          ? 'Skipping summary write because the PR head changed'
+          : 'Skipping summary write because the current PR head could not be verified'
+      );
       return { posted: false, skippedStale: true, reason: staleHead.reason };
     }
 

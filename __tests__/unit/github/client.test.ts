@@ -1,4 +1,5 @@
 import { GitHubClient } from '../../../src/github/client';
+import nock from 'nock';
 
 describe('GitHubClient', () => {
   const mockToken = 'TEST_TOKEN';
@@ -12,6 +13,7 @@ describe('GitHubClient', () => {
   });
 
   afterEach(() => {
+    nock.cleanAll();
     process.env = originalEnv;
   });
 
@@ -68,6 +70,32 @@ describe('GitHubClient', () => {
 
       // Octokit should be configured with the token
       expect(client.octokit).toBeDefined();
+    });
+
+    it('refreshes once and retries a request rejected with 401', async () => {
+      const tokenProvider = {
+        getToken: jest.fn().mockResolvedValue('ghs_initial'),
+        refreshToken: jest.fn().mockResolvedValue('ghs_refreshed'),
+      };
+      const initialRequest = nock('https://api.github.com', {
+        reqheaders: { authorization: 'Bearer ghs_initial' },
+      })
+        .get('/repos/owner/repo')
+        .reply(401, { message: 'Bad credentials' });
+      const retriedRequest = nock('https://api.github.com', {
+        reqheaders: { authorization: 'Bearer ghs_refreshed' },
+      })
+        .get('/repos/owner/repo')
+        .reply(200, { id: 1, name: 'repo' });
+      const client = new GitHubClient(mockToken, { tokenProvider });
+
+      await expect(
+        client.octokit.rest.repos.get({ owner: 'owner', repo: 'repo' })
+      ).resolves.toMatchObject({ status: 200 });
+      expect(tokenProvider.getToken).toHaveBeenCalledTimes(1);
+      expect(tokenProvider.refreshToken).toHaveBeenCalledTimes(1);
+      expect(initialRequest.isDone()).toBe(true);
+      expect(retriedRequest.isDone()).toBe(true);
     });
   });
 });

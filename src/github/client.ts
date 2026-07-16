@@ -2,6 +2,7 @@ import * as core from '../actions/core';
 import * as fs from 'fs';
 import { Octokit } from '@octokit/rest';
 import { GitHubRateLimitTracker } from './rate-limit';
+import { GitHubTokenProvider } from './token-provider';
 
 export class GitHubClient {
   public readonly octokit: Octokit;
@@ -9,8 +10,13 @@ export class GitHubClient {
   public readonly repo: string;
   private readonly rateLimitTracker = new GitHubRateLimitTracker();
 
-  constructor(token: string) {
-    this.octokit = new Octokit({ auth: token });
+  constructor(
+    token: string,
+    options: { readonly tokenProvider?: GitHubTokenProvider } = {}
+  ) {
+    this.octokit = options.tokenProvider
+      ? createRefreshableOctokit(options.tokenProvider)
+      : new Octokit({ auth: token });
 
     // Prefer the explicit Actions env var, then fall back to the event payload.
     const repoEnv =
@@ -164,6 +170,29 @@ export class GitHubClient {
       return null;
     }
   }
+}
+
+function createRefreshableOctokit(tokenProvider: GitHubTokenProvider): Octokit {
+  const octokit = new Octokit();
+  octokit.hook.wrap('request', async (request, options) => {
+    const requestWithToken = (token: string) => {
+      options.headers.authorization = `Bearer ${token}`;
+      return request(options);
+    };
+    try {
+      return await requestWithToken(await tokenProvider.getToken());
+    } catch (error) {
+      if (
+        typeof error !== 'object' ||
+        error === null ||
+        (error as { status?: unknown }).status !== 401
+      ) {
+        throw error;
+      }
+      return requestWithToken(await tokenProvider.refreshToken());
+    }
+  });
+  return octokit;
 }
 
 function getRepositoryFromEventPayload(): string | undefined {

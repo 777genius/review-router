@@ -165,10 +165,36 @@ export class FileReviewSnapshotStorage implements IncrementalStoragePort {
       return;
     }
     const data = parsedData.data;
-    const normalizedFindings = data.findings
-      .map(normalizeFinding)
-      .filter((finding): finding is NonNullable<typeof finding> => !!finding)
-      .slice(0, 500);
+    if (data.findings.length > 500) {
+      logger.warn(
+        'Hosted incremental snapshot has too many findings; persistence skipped'
+      );
+      return;
+    }
+    const normalizedFindings: Array<z.infer<typeof findingSchema>> = [];
+    for (const finding of data.findings) {
+      const normalizedFinding = normalizeFinding(finding);
+      if (!normalizedFinding) {
+        logger.warn(
+          'Hosted incremental snapshot contains an invalid finding; persistence skipped'
+        );
+        return;
+      }
+      normalizedFindings.push(normalizedFinding);
+    }
+    const payload = {
+      reviewSummary: normalizeText(data.reviewSummary, 100_000),
+      findings: normalizedFindings,
+    };
+    if (
+      Buffer.byteLength(JSON.stringify(payload)) >
+      REVIEW_SNAPSHOT_MAX_PAYLOAD_BYTES
+    ) {
+      logger.warn(
+        'Hosted incremental snapshot payload exceeds size limit; persistence skipped'
+      );
+      return;
+    }
     const candidate = {
       protocolVersion: 1,
       expectedVersion: envelope.expectedVersion,
@@ -177,30 +203,8 @@ export class FileReviewSnapshotStorage implements IncrementalStoragePort {
       reviewedHeadSha: data.lastReviewedCommit,
       baseSha: data.baseSha,
       compatibilityKey: data.compatibilityKey,
-      payload: {
-        reviewSummary: normalizeText(data.reviewSummary, 100_000),
-        findings: [] as Array<(typeof normalizedFindings)[number]>,
-      },
+      payload,
     };
-    let payloadBytes = Buffer.byteLength(JSON.stringify(candidate.payload));
-    let candidateBytes = Buffer.byteLength(JSON.stringify(candidate));
-    for (const finding of normalizedFindings) {
-      const additionalBytes =
-        Buffer.byteLength(JSON.stringify(finding)) +
-        (candidate.payload.findings.length > 0 ? 1 : 0);
-      if (
-        payloadBytes + additionalBytes > REVIEW_SNAPSHOT_MAX_PAYLOAD_BYTES ||
-        candidateBytes + additionalBytes > REVIEW_SNAPSHOT_MAX_CANDIDATE_BYTES
-      ) {
-        continue;
-      }
-      candidate.payload.findings.push(finding);
-      payloadBytes += additionalBytes;
-      candidateBytes += additionalBytes;
-    }
-    if (candidate.payload.findings.length < normalizedFindings.length) {
-      logger.warn('Hosted incremental snapshot findings were size-limited');
-    }
     const serializedCandidate = JSON.stringify(candidate);
     if (
       Buffer.byteLength(serializedCandidate) >
@@ -226,11 +230,31 @@ export class FileReviewSnapshotStorage implements IncrementalStoragePort {
   private async readEnvelope(): Promise<RestoreEnvelope | null> {
     if (this.envelope !== undefined) return this.envelope;
     try {
-      const raw = await fs.readFile(this.inputPath, 'utf8');
-      const parsed = restoreEnvelopeSchema.safeParse(JSON.parse(raw));
+      const raw = await fs.readFile(this.inputPath);
+      if (raw.byteLength > REVIEW_SNAPSHOT_MAX_CANDIDATE_BYTES) {
+        logger.warn(
+          'Hosted incremental snapshot response exceeds size limit; running full review'
+        );
+        this.envelope = null;
+        return this.envelope;
+      }
+      const parsed = restoreEnvelopeSchema.safeParse(
+        JSON.parse(raw.toString('utf8'))
+      );
       if (!parsed.success) {
         logger.warn(
           'Hosted incremental snapshot response is invalid; running full review'
+        );
+        this.envelope = null;
+        return this.envelope;
+      }
+      if (
+        parsed.data.snapshot &&
+        Buffer.byteLength(JSON.stringify(parsed.data.snapshot.payload)) >
+          REVIEW_SNAPSHOT_MAX_PAYLOAD_BYTES
+      ) {
+        logger.warn(
+          'Hosted incremental snapshot payload exceeds size limit; running full review'
         );
         this.envelope = null;
         return this.envelope;

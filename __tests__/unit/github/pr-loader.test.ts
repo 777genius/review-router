@@ -140,23 +140,31 @@ describe('PullRequestLoader', () => {
       expect(context.author).toBe('dependabot[bot]');
     });
 
-    it.each([
-      ['REVIEWROUTER_HEAD_SHA', 'event-head-sha', 'head'],
-      ['REVIEWROUTER_BASE_SHA', 'event-base-sha', 'base'],
-    ] as const)(
-      'rejects a mismatched %s before loading files',
-      async (environmentVariable, expectedSha, kind) => {
-        process.env[environmentVariable] = expectedSha;
-        const mockOctokit = createMockOctokit();
-        const loader = new PullRequestLoader(createMockClient(mockOctokit));
+    it('rejects a mismatched head SHA before loading files', async () => {
+      process.env.REVIEWROUTER_HEAD_SHA = 'event-head-sha';
+      const mockOctokit = createMockOctokit();
+      const loader = new PullRequestLoader(createMockClient(mockOctokit));
 
-        await expect(loader.load(1)).rejects.toThrow(
-          `PR #1 ${kind} SHA mismatch: expected ${expectedSha} from ${environmentVariable}`
-        );
-        expect(mockOctokit.rest.pulls.listFiles).not.toHaveBeenCalled();
-        expect(mockOctokit.request).not.toHaveBeenCalled();
-      }
-    );
+      await expect(loader.load(1)).rejects.toThrow(
+        'PR #1 head SHA mismatch: expected event-head-sha from REVIEWROUTER_HEAD_SHA'
+      );
+      expect(mockOctokit.rest.pulls.listFiles).not.toHaveBeenCalled();
+      expect(mockOctokit.request).not.toHaveBeenCalled();
+    });
+
+    it('loads the current GitHub base when the queued event base advanced', async () => {
+      process.env.REVIEWROUTER_BASE_SHA = 'event-base-sha';
+      const mockOctokit = createMockOctokit();
+      const loader = new PullRequestLoader(createMockClient(mockOctokit));
+
+      const context = await loader.load(1);
+
+      expect(context.baseSha).toBe('base-sha');
+      expect(context.headSha).toBe('head-sha');
+      expect(mockOctokit.rest.pulls.listFiles).toHaveBeenCalled();
+      expect(mockOctokit.request).toHaveBeenCalled();
+      expect(mockOctokit.rest.pulls.get).toHaveBeenCalledTimes(2);
+    });
 
     it('accepts nonempty expected SHAs when both match', async () => {
       process.env.REVIEWROUTER_HEAD_SHA = ' head-sha ';
@@ -199,6 +207,40 @@ describe('PullRequestLoader', () => {
 
       await expect(loader.load(1)).rejects.toThrow(
         'PR #1 revision changed while loading content: head changed from head-before-load to head-after-force-push; refusing to return a potentially mixed revision.'
+      );
+      expect(mockOctokit.rest.pulls.listFiles).toHaveBeenCalled();
+      expect(mockOctokit.request).toHaveBeenCalled();
+      expect(mockOctokit.rest.pulls.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects content when the base changes during loading', async () => {
+      const mockOctokit = createMockOctokit();
+      mockOctokit.rest.pulls.get
+        .mockResolvedValueOnce({
+          data: {
+            number: 1,
+            title: 'Test PR',
+            body: 'Test description',
+            draft: false,
+            labels: [],
+            additions: 5,
+            deletions: 2,
+            changed_files: 1,
+            base: { sha: 'base-before-load' },
+            head: { sha: 'stable-head' },
+            user: { login: 'test-user', type: 'User' },
+          },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            base: { sha: 'base-after-load' },
+            head: { sha: 'stable-head' },
+          },
+        });
+      const loader = new PullRequestLoader(createMockClient(mockOctokit));
+
+      await expect(loader.load(1)).rejects.toThrow(
+        'PR #1 revision changed while loading content: base changed from base-before-load to base-after-load; refusing to return a potentially mixed revision.'
       );
       expect(mockOctokit.rest.pulls.listFiles).toHaveBeenCalled();
       expect(mockOctokit.request).toHaveBeenCalled();

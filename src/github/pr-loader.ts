@@ -42,8 +42,8 @@ export class PullRequestLoader {
     const baseSha = pr.base?.sha || '';
     const headSha = pr.head?.sha || '';
 
-    this.assertExpectedSha(prNumber, 'base', 'REVIEWROUTER_BASE_SHA', baseSha);
-    this.assertExpectedSha(prNumber, 'head', 'REVIEWROUTER_HEAD_SHA', headSha);
+    this.warnIfExpectedBaseShaChanged(prNumber, baseSha);
+    this.assertExpectedHeadSha(prNumber, headSha);
 
     const files: FileChange[] = [];
     for (let page = 1; files.length < MAX_GITHUB_FILES; page += 1) {
@@ -269,19 +269,28 @@ export class PullRequestLoader {
     };
   }
 
-  private assertExpectedSha(
+  private warnIfExpectedBaseShaChanged(
     prNumber: number,
-    kind: 'base' | 'head',
-    environmentVariable: 'REVIEWROUTER_BASE_SHA' | 'REVIEWROUTER_HEAD_SHA',
     actualSha: string
   ): void {
-    const expectedSha = process.env[environmentVariable]?.trim();
+    const expectedSha = process.env.REVIEWROUTER_BASE_SHA?.trim();
+    if (!expectedSha || expectedSha === actualSha) {
+      return;
+    }
+
+    logger.warn(
+      `PR #${prNumber} base SHA changed from ${expectedSha} in the workflow event to ${actualSha || '(missing)'} on GitHub; loading the current base revision.`
+    );
+  }
+
+  private assertExpectedHeadSha(prNumber: number, actualSha: string): void {
+    const expectedSha = process.env.REVIEWROUTER_HEAD_SHA?.trim();
     if (!expectedSha || expectedSha === actualSha) {
       return;
     }
 
     throw new Error(
-      `PR #${prNumber} ${kind} SHA mismatch: expected ${expectedSha} from ${environmentVariable}, received ${actualSha || '(missing)'} from GitHub; refusing to load a potentially mixed revision.`
+      `PR #${prNumber} head SHA mismatch: expected ${expectedSha} from REVIEWROUTER_HEAD_SHA, received ${actualSha || '(missing)'} from GitHub; refusing to load a potentially mixed revision.`
     );
   }
 

@@ -332,6 +332,12 @@ describe('ReviewThreadResolver', () => {
     expect(createReplyForReviewComment.mock.calls[0][0].body).toContain(
       'reviewrouter-lifecycle-resolution:v1'
     );
+    expect(createReplyForReviewComment.mock.calls[0][0].body).toContain(
+      '**Resolved ✅ ✅ ✅**\n\n<sub>ReviewRouter rechecked this finding'
+    );
+    expect(createReplyForReviewComment.mock.calls[0][0].body).toContain(
+      'a maintainer can click Resolve conversation.</sub>'
+    );
   });
 
   it('reports when the resolution fallback reply could not be posted', async () => {

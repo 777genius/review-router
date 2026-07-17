@@ -218,6 +218,11 @@ describe('ReviewOrchestrator health check guard rails', () => {
     const memoryBundleProvider = {
       fetchBundleForPullRequest: jest.fn(),
     } as any;
+    const commentPoster = {
+      postSummary: jest.fn(),
+      postInline: jest.fn(),
+      deleteSummaryComments: jest.fn(),
+    } as any;
     const incrementalReviewer = {
       planReview: jest.fn().mockResolvedValue({
         mode: IncrementalReviewPlanMode.ReuseCompleted,
@@ -252,6 +257,8 @@ describe('ReviewOrchestrator health check guard rails', () => {
       graphBuilder,
       memoryBundleProvider,
       incrementalReviewer,
+      commentPoster,
+      formatter: { format: jest.fn().mockReturnValue('Cached review') } as any,
     });
 
     const review = await orchestrator.executeReview(
@@ -286,6 +293,12 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(incrementalReviewer.saveReview).not.toHaveBeenCalled();
     expect(review.summary).toBe('Previous completed review');
     expect(review.metrics.cached).toBe(true);
+    expect(commentPoster.postSummary).toHaveBeenCalledWith(
+      1,
+      'Cached review',
+      true,
+      expect.objectContaining({ reviewedHeadSha: 'h' })
+    );
   });
 
   it('detects a trivial PR before building its code graph', async () => {

@@ -459,11 +459,20 @@ export class ReviewOrchestrator {
           incrementalPlan.lastReview,
           start
         );
+        const reusedMarkdown = this.components.formatter.format(reusedReview);
         if (progressTracker) {
           await progressTracker.replaceWith(
-            this.markReviewRouterSummary(
-              this.components.formatter.format(reusedReview)
-            )
+            this.markReviewRouterSummary(reusedMarkdown)
+          );
+        } else if (this.shouldPostReviewOutput(reusedReview, [])) {
+          await this.components.commentPoster.postSummary(
+            pr.number,
+            reusedMarkdown,
+            true,
+            summaryMetadata
+          );
+          logger.info(
+            'Republished the completed snapshot summary without provider execution'
           );
         }
         review = reusedReview;

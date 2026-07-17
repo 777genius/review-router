@@ -46,6 +46,8 @@ type CodexRunResult = {
 
 type CodexAgenticAuditMode = 'off' | 'rerun' | 'strict';
 
+const MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS = 24_000;
+
 type CodexAgenticAudit = {
   commandExecutions: number;
   readOnlyExplorationCommands: number;
@@ -615,10 +617,22 @@ export class CodexProvider extends Provider {
     prompt: string,
     mode: CodexAgenticAuditMode
   ): boolean {
-    return (
-      (mode === 'rerun' || mode === 'strict') &&
-      this.isMissingAgenticExploration(parsed, audit, prompt)
-    );
+    if (
+      (mode !== 'rerun' && mode !== 'strict') ||
+      !this.isMissingAgenticExploration(parsed, audit, prompt)
+    ) {
+      return false;
+    }
+    if (mode === 'strict') return true;
+
+    const promptTokens = estimateTokensSimple(prompt).tokens;
+    if (promptTokens > MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS) {
+      logger.info(
+        `Skipping optional Codex agentic retry for ${this.name}: prompt is approximately ${promptTokens} tokens (limit ${MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS})`
+      );
+      return false;
+    }
+    return true;
   }
 
   private isMissingAgenticExploration(

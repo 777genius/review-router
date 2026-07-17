@@ -13575,6 +13575,7 @@ function safeOutput(value) {
 }
 
 // src/providers/codex.ts
+var MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS = 24e3;
 var CodexCliExitError = class extends Error {
   constructor(code, stdout, stderr, message) {
     super(message);
@@ -14016,7 +14017,18 @@ var CodexProvider = class _CodexProvider extends Provider {
     return parseReviewOutputStrict(content, "Codex CLI");
   }
   shouldRetryForMissingAgenticExploration(parsed, audit, prompt, mode) {
-    return (mode === "rerun" || mode === "strict") && this.isMissingAgenticExploration(parsed, audit, prompt);
+    if (mode !== "rerun" && mode !== "strict" || !this.isMissingAgenticExploration(parsed, audit, prompt)) {
+      return false;
+    }
+    if (mode === "strict") return true;
+    const promptTokens = estimateTokensSimple(prompt).tokens;
+    if (promptTokens > MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS) {
+      logger.info(
+        `Skipping optional Codex agentic retry for ${this.name}: prompt is approximately ${promptTokens} tokens (limit ${MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS})`
+      );
+      return false;
+    }
+    return true;
   }
   isMissingAgenticExploration(parsed, audit, prompt) {
     if (!this.looksLikePullRequestReviewPrompt(prompt)) return false;

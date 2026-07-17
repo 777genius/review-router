@@ -878,7 +878,44 @@ describe('CodexProvider', () => {
     expect(result.findings).toEqual([]);
   });
 
-  it('strict agentic audit reruns once, then fails if exploration is still missing', async () => {
+  it('does not repeat an oversized prompt only to satisfy the optional agentic audit', async () => {
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess(() => {
+        const outputIndex = args.indexOf('--output-last-message');
+        fs.writeFileSync(
+          args[outputIndex + 1],
+          '{"findings":[],"revalidations":[]}'
+        );
+      });
+    });
+
+    const provider = new CodexProvider('gpt-5.4-mini', {
+      agenticContext: true,
+    });
+    const result = await provider.review(
+      [
+        'Files changed:',
+        '- src/generated.ts (modified, +1/-1)',
+        '',
+        'Diff:',
+        'diff --git a/src/generated.ts b/src/generated.ts',
+        'x'.repeat(120_000),
+      ].join('\n'),
+      1000
+    );
+    const execCalls = spawnMock.mock.calls.filter(
+      (call) => Array.isArray(call[1]) && call[1][0] === 'exec'
+    );
+
+    expect(execCalls).toHaveLength(1);
+    expect(result.findings).toEqual([]);
+  });
+
+  it('strict agentic audit reruns an oversized prompt, then fails if exploration is still missing', async () => {
     process.env.CODEX_AGENTIC_AUDIT = 'strict';
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('--version')) {
@@ -905,6 +942,7 @@ describe('CodexProvider', () => {
           '',
           'Diff:',
           'diff --git a/src/app.ts b/src/app.ts',
+          'x'.repeat(120_000),
         ].join('\n'),
         1000
       )

@@ -654,7 +654,9 @@ function renderResolutionFallbackComment(
   return [
     `<!-- ${RESOLUTION_REPLY_MARKER} target_id=${candidate.target.targetId} fingerprint=${candidate.target.fingerprint} -->`,
     '',
-    'ReviewRouter rechecked this finding and the provider quorum marked it resolved. GitHub did not allow the app token to close this review thread automatically, so a maintainer can mark the conversation resolved manually.',
+    '**Resolved ✅ ✅ ✅**',
+    '',
+    '<sub>ReviewRouter rechecked this finding and the provider quorum marked it resolved. GitHub did not allow the app token to close this review thread automatically, so a maintainer can click Resolve conversation.</sub>',
   ].join('\n');
 }
 

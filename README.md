@@ -63,6 +63,7 @@ Available but still experimental:
 - **GitHub identity options:** post as `github-actions[bot]` or as your own GitHub App bot.
 - **Reusable App profiles:** create a GitHub App once, then reuse its saved local profile for more repositories.
 - **Read-only agentic context:** Codex starts from the PR diff, then may inspect related repository files in a read-only sandbox.
+- **Bounded agentic retries:** normal reviews can retry once when repository exploration is missing, but oversized prompts are not run twice unless strict audit mode is enabled.
 - **Strict JSON findings:** provider output is parsed into `{file,line,severity,title,message,suggestion}` before posting.
 - **Inline comments:** posts only valid comments on changed lines, with severity labels in the comment body.
 - **Progress comment:** shows live progress until the PR has a ReviewRouter result; clean first runs become an all-clear summary.

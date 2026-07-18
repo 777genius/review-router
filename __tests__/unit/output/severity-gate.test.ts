@@ -6,6 +6,7 @@ import {
   Finding,
   LifecycleThreadRecord,
   Review,
+  ReviewFindingProvenance,
   Severity,
 } from '../../../src/types';
 
@@ -30,10 +31,12 @@ const previousThread = (
 
 const review = (
   findings: Finding[],
-  previousStillValid: LifecycleThreadRecord[] = []
+  previousStillValid: LifecycleThreadRecord[] = [],
+  findingProvenance?: ReviewFindingProvenance
 ): Review =>
   ({
     findings,
+    findingProvenance,
     threadLifecycle: {
       previousStillValid,
     },
@@ -47,7 +50,7 @@ describe('severity gate formatting', () => {
     );
 
     expect(result).toBe(
-      'ReviewRouter found 1 blocking major+ finding: 1 new current major+ finding. Review comments were posted before failing this check.'
+      'ReviewRouter found 1 blocking major+ finding: 1 major+ finding produced by this review. Review comments were posted before failing this check.'
     );
   });
 
@@ -56,11 +59,37 @@ describe('severity gate formatting', () => {
 
     expect(getBlockingFindingBreakdown(input, 'major')).toEqual({
       current: 0,
+      fromCurrentReview: 0,
+      carriedForward: 0,
+      unclassifiedCurrent: 0,
       previousStillValid: 1,
       total: 1,
     });
     expect(formatBlockingFindingFailure(input, 'major')).toBe(
-      'ReviewRouter found 1 blocking major+ finding: 1 previous unresolved major+ finding still valid. No new current major+ findings were kept after filtering. Review comments were posted before failing this check.'
+      'ReviewRouter found 1 blocking major+ finding: 1 previous unresolved major+ finding still valid. No major+ findings were produced by this review. Review comments were posted before failing this check.'
+    );
+  });
+
+  it('reports carried-forward findings without calling them new', () => {
+    const input = review(
+      [finding('major'), finding('major'), finding('major')],
+      [],
+      {
+        fromCurrentReview: { critical: 0, major: 0, minor: 0 },
+        carriedForward: { critical: 0, major: 3, minor: 0 },
+      }
+    );
+
+    expect(getBlockingFindingBreakdown(input, 'major')).toEqual({
+      current: 3,
+      fromCurrentReview: 0,
+      carriedForward: 3,
+      unclassifiedCurrent: 0,
+      previousStillValid: 0,
+      total: 3,
+    });
+    expect(formatBlockingFindingFailure(input, 'major')).toBe(
+      'ReviewRouter found 3 blocking major+ findings: 3 carried-forward major+ findings from unchanged files. No major+ findings were produced by this review. Review comments were posted before failing this check.'
     );
   });
 
@@ -71,7 +100,7 @@ describe('severity gate formatting', () => {
     );
 
     expect(result).toBe(
-      'ReviewRouter found 2 blocking major+ findings: 1 new current major+ finding and 1 previous unresolved major+ finding still valid. Review comments were posted before failing this check.'
+      'ReviewRouter found 2 blocking major+ findings: 1 major+ finding produced by this review and 1 previous unresolved major+ finding still valid. Review comments were posted before failing this check.'
     );
   });
 
@@ -83,6 +112,9 @@ describe('severity gate formatting', () => {
 
     expect(getBlockingFindingBreakdown(input, 'major')).toEqual({
       current: 1,
+      fromCurrentReview: 1,
+      carriedForward: 0,
+      unclassifiedCurrent: 0,
       previousStillValid: 0,
       total: 1,
     });

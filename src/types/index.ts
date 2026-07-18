@@ -395,6 +395,11 @@ export interface ReviewCoverage {
   files: ReviewCoverageFile[];
 }
 
+export interface ReviewFindingProvenance {
+  fromCurrentReview: Record<Severity, number>;
+  carriedForward: Record<Severity, number>;
+}
+
 export interface Review {
   summary: string;
   findings: Finding[];
@@ -406,6 +411,7 @@ export interface Review {
   providerResults?: ProviderResult[];
   runDetails?: RunDetails;
   coverage?: ReviewCoverage;
+  findingProvenance?: ReviewFindingProvenance;
   impactAnalysis?: ImpactAnalysis;
   mermaidDiagram?: string;
   threadLifecycle?: ReviewThreadLifecycleResult;

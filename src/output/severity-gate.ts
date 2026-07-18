@@ -135,7 +135,9 @@ function countAtOrAbove(
 ): number {
   return (Object.keys(severityRank) as Severity[]).reduce(
     (total, severity) =>
-      severityRank[severity] >= minRank ? total + counts[severity] : total,
+      severityRank[severity] >= minRank
+        ? total + (counts[severity] ?? 0)
+        : total,
     0
   );
 }

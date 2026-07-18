@@ -3295,7 +3295,9 @@ function countFindingsBySeverity(
 ): Record<Severity, number> {
   const counts = emptyFindingCounts();
   for (const finding of findings) {
-    counts[finding.severity] += 1;
+    if (Object.prototype.hasOwnProperty.call(counts, finding.severity)) {
+      counts[finding.severity] += 1;
+    }
   }
   return counts;
 }

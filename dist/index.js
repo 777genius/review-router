@@ -36732,7 +36732,9 @@ function buildIncrementalFindingProvenance(fromCurrentReview, mergedFindings) {
 function countFindingsBySeverity(findings) {
   const counts = emptyFindingCounts();
   for (const finding of findings) {
-    counts[finding.severity] += 1;
+    if (Object.prototype.hasOwnProperty.call(counts, finding.severity)) {
+      counts[finding.severity] += 1;
+    }
   }
   return counts;
 }
@@ -38968,7 +38970,7 @@ function formatBlockingFindingFailure(review, threshold) {
 }
 function countAtOrAbove(counts, minRank) {
   return Object.keys(severityRank).reduce(
-    (total, severity) => severityRank[severity] >= minRank ? total + counts[severity] : total,
+    (total, severity) => severityRank[severity] >= minRank ? total + (counts[severity] ?? 0) : total,
     0
   );
 }

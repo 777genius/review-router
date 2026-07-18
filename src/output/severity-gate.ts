@@ -9,6 +9,9 @@ const severityRank: Record<Severity, number> = {
 
 export interface BlockingFindingBreakdown {
   current: number;
+  fromCurrentReview: number;
+  carriedForward: number;
+  unclassifiedCurrent: number;
   previousStillValid: number;
   total: number;
 }
@@ -18,13 +21,32 @@ export function getBlockingFindingBreakdown(
   threshold: Severity | 'off' | undefined
 ): BlockingFindingBreakdown {
   if (!threshold || threshold === 'off') {
-    return { current: 0, previousStillValid: 0, total: 0 };
+    return {
+      current: 0,
+      fromCurrentReview: 0,
+      carriedForward: 0,
+      unclassifiedCurrent: 0,
+      previousStillValid: 0,
+      total: 0,
+    };
   }
 
   const minRank = severityRank[threshold];
   const current = review.findings.filter(
     (finding) => severityRank[finding.severity] >= minRank
   ).length;
+  const attributedFromCurrentReview = review.findingProvenance
+    ? countAtOrAbove(review.findingProvenance.fromCurrentReview, minRank)
+    : current;
+  const attributedCarriedForward = review.findingProvenance
+    ? countAtOrAbove(review.findingProvenance.carriedForward, minRank)
+    : 0;
+  const fromCurrentReview = Math.min(current, attributedFromCurrentReview);
+  const carriedForward = Math.min(
+    current - fromCurrentReview,
+    attributedCarriedForward
+  );
+  const unclassifiedCurrent = current - fromCurrentReview - carriedForward;
   const previousStillValid = (
     review.threadLifecycle?.previousStillValid ?? []
   ).filter((record) => {
@@ -40,6 +62,9 @@ export function getBlockingFindingBreakdown(
 
   return {
     current,
+    fromCurrentReview,
+    carriedForward,
+    unclassifiedCurrent,
     previousStillValid,
     total: current + previousStillValid,
   };
@@ -55,9 +80,28 @@ export function formatBlockingFindingFailure(
   if (breakdown.total === 0) return undefined;
 
   const parts: string[] = [];
-  if (breakdown.current > 0) {
+  if (breakdown.fromCurrentReview > 0) {
     parts.push(
-      `${breakdown.current} new current ${threshold}+ ${pluralize('finding', breakdown.current)}`
+      `${breakdown.fromCurrentReview} ${threshold}+ ${pluralize(
+        'finding',
+        breakdown.fromCurrentReview
+      )} produced by this review`
+    );
+  }
+  if (breakdown.carriedForward > 0) {
+    parts.push(
+      `${breakdown.carriedForward} carried-forward ${threshold}+ ${pluralize(
+        'finding',
+        breakdown.carriedForward
+      )} from unchanged files`
+    );
+  }
+  if (breakdown.unclassifiedCurrent > 0) {
+    parts.push(
+      `${breakdown.unclassifiedCurrent} active current ${threshold}+ ${pluralize(
+        'finding',
+        breakdown.unclassifiedCurrent
+      )} with unavailable provenance`
     );
   }
   if (breakdown.previousStillValid > 0) {
@@ -70,9 +114,9 @@ export function formatBlockingFindingFailure(
   }
 
   const detail = parts.join(' and ');
-  const noNewCurrent =
-    breakdown.current === 0
-      ? ` No new current ${threshold}+ findings were kept after filtering.`
+  const noNewFromCurrentReview =
+    breakdown.fromCurrentReview === 0
+      ? ` No ${threshold}+ findings were produced by this review.`
       : '';
 
   return (
@@ -80,8 +124,21 @@ export function formatBlockingFindingFailure(
       'finding',
       breakdown.total
     )}: ${detail}.` +
-    noNewCurrent +
+    noNewFromCurrentReview +
     ' Review comments were posted before failing this check.'
+  );
+}
+
+function countAtOrAbove(
+  counts: Record<Severity, number>,
+  minRank: number
+): number {
+  return (Object.keys(severityRank) as Severity[]).reduce(
+    (total, severity) =>
+      severityRank[severity] >= minRank
+        ? total + (counts[severity] ?? 0)
+        : total,
+    0
   );
 }
 

@@ -29,9 +29,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/retry/lib/retry_operation.js
+// node_modules/retry/lib/retry_operation.js
 var require_retry_operation = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/retry/lib/retry_operation.js"(exports2, module2) {
+  "node_modules/retry/lib/retry_operation.js"(exports2, module2) {
     function RetryOperation(timeouts, options) {
       if (typeof options === "boolean") {
         options = { forever: options };
@@ -164,9 +164,9 @@ var require_retry_operation = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/retry/lib/retry.js
+// node_modules/retry/lib/retry.js
 var require_retry = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/retry/lib/retry.js"(exports2) {
+  "node_modules/retry/lib/retry.js"(exports2) {
     var RetryOperation = require_retry_operation();
     exports2.operation = function(options) {
       var timeouts = exports2.timeouts(options);
@@ -250,16 +250,16 @@ var require_retry = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/retry/index.js
+// node_modules/retry/index.js
 var require_retry2 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/retry/index.js"(exports2, module2) {
+  "node_modules/retry/index.js"(exports2, module2) {
     module2.exports = require_retry();
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/universal-user-agent/dist-node/index.js
+// node_modules/universal-user-agent/dist-node/index.js
 var require_dist_node = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/universal-user-agent/dist-node/index.js"(exports2) {
+  "node_modules/universal-user-agent/dist-node/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     function getUserAgent() {
@@ -275,9 +275,9 @@ var require_dist_node = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/register.js
+// node_modules/before-after-hook/lib/register.js
 var require_register = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/register.js"(exports2, module2) {
+  "node_modules/before-after-hook/lib/register.js"(exports2, module2) {
     module2.exports = register;
     function register(state, name, method, options) {
       if (typeof method !== "function") {
@@ -303,9 +303,9 @@ var require_register = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/add.js
+// node_modules/before-after-hook/lib/add.js
 var require_add = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/add.js"(exports2, module2) {
+  "node_modules/before-after-hook/lib/add.js"(exports2, module2) {
     module2.exports = addHook;
     function addHook(state, kind, name, hook) {
       var orig = hook;
@@ -343,9 +343,9 @@ var require_add = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/remove.js
+// node_modules/before-after-hook/lib/remove.js
 var require_remove = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/lib/remove.js"(exports2, module2) {
+  "node_modules/before-after-hook/lib/remove.js"(exports2, module2) {
     module2.exports = removeHook;
     function removeHook(state, name, method) {
       if (!state.registry[name]) {
@@ -362,9 +362,9 @@ var require_remove = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/index.js
+// node_modules/before-after-hook/index.js
 var require_before_after_hook = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/before-after-hook/index.js"(exports2, module2) {
+  "node_modules/before-after-hook/index.js"(exports2, module2) {
     var register = require_register();
     var addHook = require_add();
     var removeHook = require_remove();
@@ -418,9 +418,9 @@ var require_before_after_hook = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/endpoint/dist-node/index.js
+// node_modules/@octokit/endpoint/dist-node/index.js
 var require_dist_node2 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/endpoint/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/endpoint/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -764,9 +764,9 @@ var require_dist_node2 = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/deprecation/dist-node/index.js
+// node_modules/deprecation/dist-node/index.js
 var require_dist_node3 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/deprecation/dist-node/index.js"(exports2) {
+  "node_modules/deprecation/dist-node/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var Deprecation = class extends Error {
@@ -782,9 +782,9 @@ var require_dist_node3 = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/wrappy/wrappy.js
+// node_modules/wrappy/wrappy.js
 var require_wrappy = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/wrappy/wrappy.js"(exports2, module2) {
+  "node_modules/wrappy/wrappy.js"(exports2, module2) {
     module2.exports = wrappy;
     function wrappy(fn, cb) {
       if (fn && cb) return wrappy(fn)(cb);
@@ -812,9 +812,9 @@ var require_wrappy = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/once/once.js
+// node_modules/once/once.js
 var require_once = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/once/once.js"(exports2, module2) {
+  "node_modules/once/once.js"(exports2, module2) {
     var wrappy = require_wrappy();
     module2.exports = wrappy(once);
     module2.exports.strict = wrappy(onceStrict);
@@ -856,9 +856,9 @@ var require_once = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/request-error/dist-node/index.js
+// node_modules/@octokit/request-error/dist-node/index.js
 var require_dist_node4 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/request-error/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/request-error/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
     var __defProp2 = Object.defineProperty;
@@ -948,9 +948,9 @@ var require_dist_node4 = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/request/dist-node/index.js
+// node_modules/@octokit/request/dist-node/index.js
 var require_dist_node5 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/request/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/request/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1158,9 +1158,9 @@ var require_dist_node5 = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/graphql/dist-node/index.js
+// node_modules/@octokit/graphql/dist-node/index.js
 var require_dist_node6 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/graphql/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/graphql/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1295,9 +1295,9 @@ var require_dist_node6 = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/auth-token/dist-node/index.js
+// node_modules/@octokit/auth-token/dist-node/index.js
 var require_dist_node7 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/auth-token/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/auth-token/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1366,9 +1366,9 @@ var require_dist_node7 = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/core/dist-node/index.js
+// node_modules/@octokit/core/dist-node/index.js
 var require_dist_node8 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/core/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/core/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1532,9 +1532,9 @@ var require_dist_node8 = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/plugin-request-log/dist-node/index.js
+// node_modules/@octokit/plugin-request-log/dist-node/index.js
 var require_dist_node9 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/plugin-request-log/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/plugin-request-log/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1582,9 +1582,9 @@ var require_dist_node9 = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
+// node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
 var require_dist_node10 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -1977,9 +1977,9 @@ var require_dist_node10 = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
+// node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
 var require_dist_node11 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -4210,9 +4210,9 @@ var require_dist_node11 = __commonJS({
   }
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/dist-node/index.js
+// node_modules/@octokit/rest/dist-node/index.js
 var require_dist_node12 = __commonJS({
-  "../../../Users/belief/dev/projects/review-router-action/node_modules/@octokit/rest/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/rest/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -4330,7 +4330,7 @@ var fs21 = __toESM(require("fs"));
 var fs2 = __toESM(require("fs"));
 var path = __toESM(require("path"));
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/js-yaml/dist/js-yaml.mjs
+// node_modules/js-yaml/dist/js-yaml.mjs
 function isNothing(subject) {
   return typeof subject === "undefined" || subject === null;
 }
@@ -7139,7 +7139,7 @@ var DEFAULT_CONFIG = {
 };
 var FALLBACK_STATIC_PROVIDERS = [...PREFERRED_OPENROUTER_FREE_MODELS];
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/external.js
+// node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -7251,7 +7251,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/helpers/util.js
+// node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_2) => {
@@ -7385,7 +7385,7 @@ var getParsedType = (data) => {
   }
 };
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/ZodError.js
+// node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -7503,7 +7503,7 @@ ZodError.create = (issues) => {
   return error2;
 };
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/locales/en.js
+// node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -7606,7 +7606,7 @@ var errorMap = (issue, _ctx) => {
 };
 var en_default = errorMap;
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/errors.js
+// node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map2) {
   overrideErrorMap = map2;
@@ -7615,7 +7615,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/helpers/parseUtil.js
+// node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path: path19, errorMaps, issueData } = params;
   const fullPath = [...path19, ...issueData.path || []];
@@ -7725,14 +7725,14 @@ var isDirty = (x2) => x2.status === "dirty";
 var isValid = (x2) => x2.status === "valid";
 var isAsync = (x2) => typeof Promise !== "undefined" && x2 instanceof Promise;
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/helpers/errorUtil.js
+// node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/zod/v3/types.js
+// node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path19, key) {
     this._cachedPath = [];
@@ -16457,10 +16457,10 @@ function sanitizeLifecyclePromptField(value, maxLength) {
   );
 }
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/p-retry/index.js
+// node_modules/p-retry/index.js
 var import_retry = __toESM(require_retry2(), 1);
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/is-network-error/index.js
+// node_modules/is-network-error/index.js
 var objectToString = Object.prototype.toString;
 var isError = (value) => objectToString.call(value) === "[object Error]";
 var errorMessages = /* @__PURE__ */ new Set([
@@ -16498,7 +16498,7 @@ function isNetworkError(error2) {
   return errorMessages.has(message);
 }
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/p-retry/index.js
+// node_modules/p-retry/index.js
 var AbortError = class extends Error {
   constructor(message) {
     super();
@@ -30881,7 +30881,7 @@ var TrivialDetector = class {
   }
 };
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/node_modules/balanced-match/dist/esm/index.js
+// node_modules/minimatch/node_modules/balanced-match/dist/esm/index.js
 var balanced = (a2, b2, str2) => {
   const ma2 = a2 instanceof RegExp ? maybeMatch(a2, str2) : a2;
   const mb = b2 instanceof RegExp ? maybeMatch(b2, str2) : b2;
@@ -30934,7 +30934,7 @@ var range = (a2, b2, str2) => {
   return result;
 };
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/node_modules/brace-expansion/dist/esm/index.js
+// node_modules/minimatch/node_modules/brace-expansion/dist/esm/index.js
 var escSlash = "\0SLASH" + Math.random() + "\0";
 var escOpen = "\0OPEN" + Math.random() + "\0";
 var escClose = "\0CLOSE" + Math.random() + "\0";
@@ -31094,7 +31094,7 @@ function expand_(str2, max, isTop) {
   return expansions;
 }
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/assert-valid-pattern.js
+// node_modules/minimatch/dist/esm/assert-valid-pattern.js
 var MAX_PATTERN_LENGTH = 1024 * 64;
 var assertValidPattern = (pattern) => {
   if (typeof pattern !== "string") {
@@ -31105,7 +31105,7 @@ var assertValidPattern = (pattern) => {
   }
 };
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/brace-expressions.js
+// node_modules/minimatch/dist/esm/brace-expressions.js
 var posixClasses = {
   "[:alnum:]": ["\\p{L}\\p{Nl}\\p{Nd}", true],
   "[:alpha:]": ["\\p{L}\\p{Nl}", true],
@@ -31214,7 +31214,7 @@ var parseClass = (glob, position) => {
   return [comb, uflag, endPos - pos, true];
 };
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/unescape.js
+// node_modules/minimatch/dist/esm/unescape.js
 var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}) => {
   if (magicalBraces) {
     return windowsPathsNoEscape ? s2.replace(/\[([^/\\])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\])\]/g, "$1$2").replace(/\\([^/])/g, "$1");
@@ -31222,7 +31222,7 @@ var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}
   return windowsPathsNoEscape ? s2.replace(/\[([^/\\{}])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\{}])\]/g, "$1$2").replace(/\\([^/{}])/g, "$1");
 };
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/ast.js
+// node_modules/minimatch/dist/esm/ast.js
 var _a;
 var types = /* @__PURE__ */ new Set(["!", "?", "+", "*", "@"]);
 var isExtglobType = (c2) => types.has(c2);
@@ -31866,7 +31866,7 @@ var AST = class {
 };
 _a = AST;
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/escape.js
+// node_modules/minimatch/dist/esm/escape.js
 var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {}) => {
   if (magicalBraces) {
     return windowsPathsNoEscape ? s2.replace(/[?*()[\]{}]/g, "[$&]") : s2.replace(/[?*()[\]\\{}]/g, "\\$&");
@@ -31874,7 +31874,7 @@ var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {})
   return windowsPathsNoEscape ? s2.replace(/[?*()[\]]/g, "[$&]") : s2.replace(/[?*()[\]\\]/g, "\\$&");
 };
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/minimatch/dist/esm/index.js
+// node_modules/minimatch/dist/esm/index.js
 var minimatch = (p2, pattern, options = {}) => {
   assertValidPattern(pattern);
   if (!options.nocomment && pattern.charAt(0) === "#") {
@@ -34619,6 +34619,7 @@ var ReviewOrchestrator = class {
         success = true;
         return reusedReview;
       }
+      let currentReviewFindingFingerprints;
       if (incrementalPlan.mode === "delta" /* Delta */) {
         logger.info(
           `Incremental review: reviewing ${filesToReview.length} changed files`
@@ -35313,9 +35314,13 @@ var ReviewOrchestrator = class {
         reviewedContexts: successfulReviewContexts
       });
       if (useIncremental && lastReviewData) {
+        const currentReviewFindings = review.findings;
+        currentReviewFindingFingerprints = new Set(
+          currentReviewFindings.map(findingFingerprintFromFinding)
+        );
         review.findings = this.components.incrementalReviewer.mergeFindings(
           lastReviewData.findings,
-          review.findings,
+          currentReviewFindings,
           filesToReview,
           incrementalInvalidatedPaths
         );
@@ -35406,6 +35411,15 @@ var ReviewOrchestrator = class {
       if (dismissedCount > 0) {
         logger.info(
           `Applied ${dismissedCount} /rr skip dismissal(s) before publishing review`
+        );
+      }
+      if (currentReviewFindingFingerprints) {
+        const currentFingerprints = currentReviewFindingFingerprints;
+        review.findingProvenance = buildIncrementalFindingProvenance(
+          review.findings.filter(
+            (finding) => currentFingerprints.has(findingFingerprintFromFinding(finding))
+          ),
+          review.findings
         );
       }
       if (lifecycleMode !== "off") {
@@ -36681,6 +36695,10 @@ These types of changes are automatically filtered to save review time and API co
         cacheHit: true,
         synthesisModel: "",
         providerPoolSize: 0
+      },
+      findingProvenance: {
+        fromCurrentReview: emptyFindingCounts(),
+        carriedForward: countFindingsBySeverity(findings)
       }
     };
   }
@@ -36699,6 +36717,30 @@ These types of changes are automatically filtered to save review time and API co
     logger.info(`Wrote reports: ${sarifPath}, ${jsonPath}`);
   }
 };
+function buildIncrementalFindingProvenance(fromCurrentReview, mergedFindings) {
+  const currentCounts = countFindingsBySeverity(fromCurrentReview);
+  const mergedCounts = countFindingsBySeverity(mergedFindings);
+  return {
+    fromCurrentReview: currentCounts,
+    carriedForward: {
+      critical: Math.max(0, mergedCounts.critical - currentCounts.critical),
+      major: Math.max(0, mergedCounts.major - currentCounts.major),
+      minor: Math.max(0, mergedCounts.minor - currentCounts.minor)
+    }
+  };
+}
+function countFindingsBySeverity(findings) {
+  const counts = emptyFindingCounts();
+  for (const finding of findings) {
+    if (Object.prototype.hasOwnProperty.call(counts, finding.severity)) {
+      counts[finding.severity] += 1;
+    }
+  }
+  return counts;
+}
+function emptyFindingCounts() {
+  return { critical: 0, major: 0, minor: 0 };
+}
 
 // src/github/failure-summary.ts
 var REVIEW_ROUTER_BOT_MARKER = "<!-- review-router-bot -->";
@@ -38847,12 +38889,27 @@ var severityRank = {
 };
 function getBlockingFindingBreakdown(review, threshold) {
   if (!threshold || threshold === "off") {
-    return { current: 0, previousStillValid: 0, total: 0 };
+    return {
+      current: 0,
+      fromCurrentReview: 0,
+      carriedForward: 0,
+      unclassifiedCurrent: 0,
+      previousStillValid: 0,
+      total: 0
+    };
   }
   const minRank = severityRank[threshold];
   const current = review.findings.filter(
     (finding) => severityRank[finding.severity] >= minRank
   ).length;
+  const attributedFromCurrentReview = review.findingProvenance ? countAtOrAbove(review.findingProvenance.fromCurrentReview, minRank) : current;
+  const attributedCarriedForward = review.findingProvenance ? countAtOrAbove(review.findingProvenance.carriedForward, minRank) : 0;
+  const fromCurrentReview = Math.min(current, attributedFromCurrentReview);
+  const carriedForward = Math.min(
+    current - fromCurrentReview,
+    attributedCarriedForward
+  );
+  const unclassifiedCurrent = current - fromCurrentReview - carriedForward;
   const previousStillValid = (review.threadLifecycle?.previousStillValid ?? []).filter((record) => {
     if (isLinkedCurrentFinding(record)) return false;
     const severity = record.target.severity;
@@ -38860,6 +38917,9 @@ function getBlockingFindingBreakdown(review, threshold) {
   }).length;
   return {
     current,
+    fromCurrentReview,
+    carriedForward,
+    unclassifiedCurrent,
     previousStillValid,
     total: current + previousStillValid
   };
@@ -38869,9 +38929,28 @@ function formatBlockingFindingFailure(review, threshold) {
   const breakdown = getBlockingFindingBreakdown(review, threshold);
   if (breakdown.total === 0) return void 0;
   const parts = [];
-  if (breakdown.current > 0) {
+  if (breakdown.fromCurrentReview > 0) {
     parts.push(
-      `${breakdown.current} new current ${threshold}+ ${pluralize("finding", breakdown.current)}`
+      `${breakdown.fromCurrentReview} ${threshold}+ ${pluralize(
+        "finding",
+        breakdown.fromCurrentReview
+      )} produced by this review`
+    );
+  }
+  if (breakdown.carriedForward > 0) {
+    parts.push(
+      `${breakdown.carriedForward} carried-forward ${threshold}+ ${pluralize(
+        "finding",
+        breakdown.carriedForward
+      )} from unchanged files`
+    );
+  }
+  if (breakdown.unclassifiedCurrent > 0) {
+    parts.push(
+      `${breakdown.unclassifiedCurrent} active current ${threshold}+ ${pluralize(
+        "finding",
+        breakdown.unclassifiedCurrent
+      )} with unavailable provenance`
     );
   }
   if (breakdown.previousStillValid > 0) {
@@ -38883,11 +38962,17 @@ function formatBlockingFindingFailure(review, threshold) {
     );
   }
   const detail = parts.join(" and ");
-  const noNewCurrent = breakdown.current === 0 ? ` No new current ${threshold}+ findings were kept after filtering.` : "";
+  const noNewFromCurrentReview = breakdown.fromCurrentReview === 0 ? ` No ${threshold}+ findings were produced by this review.` : "";
   return `ReviewRouter found ${breakdown.total} blocking ${threshold}+ ${pluralize(
     "finding",
     breakdown.total
-  )}: ${detail}.` + noNewCurrent + " Review comments were posted before failing this check.";
+  )}: ${detail}.` + noNewFromCurrentReview + " Review comments were posted before failing this check.";
+}
+function countAtOrAbove(counts, minRank) {
+  return Object.keys(severityRank).reduce(
+    (total, severity) => severityRank[severity] >= minRank ? total + (counts[severity] ?? 0) : total,
+    0
+  );
 }
 function pluralize(word, count) {
   return count === 1 ? word : `${word}s`;
@@ -39374,7 +39459,7 @@ function safeOidcErrorCode(payload) {
 // src/codex-oauth/crypto.ts
 var import_crypto11 = require("crypto");
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/libsodium/dist/modules-esm/libsodium.mjs
+// node_modules/libsodium/dist/modules-esm/libsodium.mjs
 var import_meta = {};
 async function A(A3 = {}) {
   var I2, g2 = A3, C2 = !!globalThis.window, B2 = !!globalThis.WorkerGlobalScope, Q2 = (globalThis.process?.versions?.node && globalThis.process, import_meta.url);
@@ -39572,7 +39657,7 @@ async function A(A3 = {}) {
 }
 var libsodium_default = A;
 
-// ../../../Users/belief/dev/projects/review-router-action/node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
+// node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
 var r;
 var t = {};
 if (void 0 === globalThis.crypto || "function" != typeof globalThis.crypto.getRandomValues) throw new Error("globalThis.crypto.getRandomValues is not available. The ESM build of libsodium requires a secure random source (available in all browsers and Node.js 19+).");

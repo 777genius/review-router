@@ -20,6 +20,7 @@ import { FeedbackFilter, ReviewCommentState } from '../github/feedback';
 import {
   extractFindingFingerprint,
   extractInlineFingerprint,
+  findingFingerprintFromFinding,
   fingerprintFromInlineComment,
   InlineCommentReference,
   signatureFromInlineComment,
@@ -80,6 +81,8 @@ import {
   PullRequestLoadOmissionReason,
   PullRequestLoadStatus,
   ProviderLifecycleRevalidation,
+  ReviewFindingProvenance,
+  Severity,
 } from '../types';
 import { logger } from '../utils/logger';
 import {
@@ -479,6 +482,7 @@ export class ReviewOrchestrator {
         success = true;
         return reusedReview;
       }
+      let currentReviewFindingFingerprints: ReadonlySet<string> | undefined;
       if (incrementalPlan.mode === IncrementalReviewPlanMode.Delta) {
         logger.info(
           `Incremental review: reviewing ${filesToReview.length} changed files`
@@ -1360,10 +1364,14 @@ export class ReviewOrchestrator {
 
       // Merge with previous review if incremental
       if (useIncremental && lastReviewData) {
+        const currentReviewFindings = review.findings;
+        currentReviewFindingFingerprints = new Set(
+          currentReviewFindings.map(findingFingerprintFromFinding)
+        );
         // Merge findings: keep findings from unchanged files, add new findings
         review.findings = this.components.incrementalReviewer.mergeFindings(
           lastReviewData.findings,
-          review.findings,
+          currentReviewFindings,
           filesToReview,
           incrementalInvalidatedPaths
         );
@@ -1472,6 +1480,15 @@ export class ReviewOrchestrator {
       if (dismissedCount > 0) {
         logger.info(
           `Applied ${dismissedCount} /rr skip dismissal(s) before publishing review`
+        );
+      }
+      if (currentReviewFindingFingerprints) {
+        const currentFingerprints = currentReviewFindingFingerprints;
+        review.findingProvenance = buildIncrementalFindingProvenance(
+          review.findings.filter((finding) =>
+            currentFingerprints.has(findingFingerprintFromFinding(finding))
+          ),
+          review.findings
         );
       }
 
@@ -3231,6 +3248,10 @@ export class ReviewOrchestrator {
         synthesisModel: '',
         providerPoolSize: 0,
       },
+      findingProvenance: {
+        fromCurrentReview: emptyFindingCounts(),
+        carriedForward: countFindingsBySeverity(findings),
+      },
     };
   }
 
@@ -3250,4 +3271,37 @@ export class ReviewOrchestrator {
     await fs.writeFile(jsonPath, buildJson(review), 'utf8');
     logger.info(`Wrote reports: ${sarifPath}, ${jsonPath}`);
   }
+}
+
+function buildIncrementalFindingProvenance(
+  fromCurrentReview: readonly Finding[],
+  mergedFindings: readonly Finding[]
+): ReviewFindingProvenance {
+  const currentCounts = countFindingsBySeverity(fromCurrentReview);
+  const mergedCounts = countFindingsBySeverity(mergedFindings);
+
+  return {
+    fromCurrentReview: currentCounts,
+    carriedForward: {
+      critical: Math.max(0, mergedCounts.critical - currentCounts.critical),
+      major: Math.max(0, mergedCounts.major - currentCounts.major),
+      minor: Math.max(0, mergedCounts.minor - currentCounts.minor),
+    },
+  };
+}
+
+function countFindingsBySeverity(
+  findings: readonly Finding[]
+): Record<Severity, number> {
+  const counts = emptyFindingCounts();
+  for (const finding of findings) {
+    if (Object.prototype.hasOwnProperty.call(counts, finding.severity)) {
+      counts[finding.severity] += 1;
+    }
+  }
+  return counts;
+}
+
+function emptyFindingCounts(): Record<Severity, number> {
+  return { critical: 0, major: 0, minor: 0 };
 }

@@ -293,12 +293,165 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(incrementalReviewer.saveReview).not.toHaveBeenCalled();
     expect(review.summary).toBe('Previous completed review');
     expect(review.metrics.cached).toBe(true);
+    expect(review.findingProvenance).toEqual({
+      fromCurrentReview: { critical: 0, major: 0, minor: 0 },
+      carriedForward: { critical: 0, major: 1, minor: 0 },
+    });
     expect(commentPoster.postSummary).toHaveBeenCalledWith(
       1,
       'Cached review',
       true,
       expect.objectContaining({ reviewedHeadSha: 'h' })
     );
+  });
+
+  it('marks unchanged-file findings as carried forward in a delta review', async () => {
+    const carriedFinding: Finding = {
+      file: 'src/unchanged.ts',
+      line: 7,
+      severity: 'major',
+      title: 'Existing finding',
+      message: 'Still applies to an unchanged file.',
+    };
+    const incrementalReviewer = {
+      planReview: jest.fn().mockResolvedValue({
+        mode: IncrementalReviewPlanMode.Delta,
+        files: [],
+        invalidatedPaths: [],
+        lastReview: {
+          prNumber: 1,
+          lastReviewedCommit: 'previous-head',
+          baseSha: 'b',
+          timestamp: Date.now(),
+          findings: [carriedFinding],
+          reviewSummary: 'Previous review',
+        },
+      }),
+      mergeFindings: jest.fn().mockReturnValue([carriedFinding]),
+      generateIncrementalSummary: jest.fn().mockReturnValue('Delta review'),
+      saveReview: jest.fn(),
+    } as any;
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        skipTrivialChanges: false,
+        incrementalEnabled: true,
+        providers: [],
+        fallbackProviders: [],
+      },
+      incrementalReviewer,
+    });
+
+    const review = await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'docs/update.md',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(review.findingProvenance).toEqual({
+      fromCurrentReview: { critical: 0, major: 0, minor: 0 },
+      carriedForward: { critical: 0, major: 1, minor: 0 },
+    });
+    expect(incrementalReviewer.mergeFindings).toHaveBeenCalledWith(
+      [carriedFinding],
+      [],
+      [],
+      []
+    );
+  });
+
+  it('preserves finding provenance when an incremental adapter clones findings', async () => {
+    const changedFile: FileChange = {
+      filename: 'src/changed.ts',
+      status: 'modified',
+      additions: 1,
+      deletions: 0,
+      changes: 1,
+    };
+    const carriedFinding: Finding = {
+      file: 'src/unchanged.ts',
+      line: 7,
+      severity: 'critical',
+      title: 'Existing finding',
+      message: 'Still applies to an unchanged file.',
+    };
+    const currentFinding: Finding = {
+      file: changedFile.filename,
+      line: 1,
+      severity: 'major',
+      title: 'Current finding',
+      message: 'Produced while reviewing the changed file.',
+    };
+    const incrementalReviewer = {
+      planReview: jest.fn().mockResolvedValue({
+        mode: IncrementalReviewPlanMode.Delta,
+        files: [changedFile],
+        invalidatedPaths: [],
+        lastReview: {
+          prNumber: 1,
+          lastReviewedCommit: 'previous-head',
+          baseSha: 'b',
+          timestamp: Date.now(),
+          findings: [carriedFinding],
+          reviewSummary: 'Previous review',
+        },
+      }),
+      mergeFindings: jest
+        .fn()
+        .mockImplementation((previous: Finding[], current: Finding[]) =>
+          JSON.parse(JSON.stringify([...previous, ...current]))
+        ),
+      generateIncrementalSummary: jest.fn().mockReturnValue('Delta review'),
+      saveReview: jest.fn(),
+    } as any;
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        skipTrivialChanges: false,
+        incrementalEnabled: true,
+        providers: [],
+        fallbackProviders: [],
+      },
+      incrementalReviewer,
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [],
+          healthCheckResults: [],
+        }),
+        execute: jest.fn(),
+      } as any,
+      synthesis: {
+        synthesize: jest.fn().mockReturnValue({
+          ...emptyReview,
+          findings: [currentFinding],
+        }),
+      } as any,
+    });
+
+    const review = await orchestrator.executeReview(makePR([changedFile]));
+
+    expect(review.findingProvenance).toEqual({
+      fromCurrentReview: { critical: 0, major: 1, minor: 0 },
+      carriedForward: { critical: 1, major: 0, minor: 0 },
+    });
   });
 
   it('detects a trivial PR before building its code graph', async () => {

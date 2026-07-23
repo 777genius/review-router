@@ -39,6 +39,32 @@ function parseWorkflow(filePath: string): WorkflowDocument {
 }
 
 describe('production reusable workflows', () => {
+  it('exposes a dedicated read-only T0 reusable entrypoint', () => {
+    const workflowPath = '.github/workflows/reviewrouter-t0-reusable.yml';
+    const workflowSource = readRepoFile(workflowPath);
+    const workflow = parseWorkflow(workflowPath);
+    const review = workflow.jobs?.review;
+
+    expect(review?.permissions).toEqual({
+      contents: 'read',
+      'pull-requests': 'read',
+      'id-token': 'write',
+    });
+    expect(review?.uses).toBe(
+      './.github/workflows/reviewrouter-execution-reusable.yml'
+    );
+    expect(review?.with?.review_action_lane).toBe('t0');
+    expect(review?.with).toHaveProperty('runtime_ref');
+    expect(review?.with).toHaveProperty('review_head_sha');
+    expect(review?.with).toHaveProperty('provider_instance_id');
+    expect(workflowSource).not.toContain('pull-requests: write');
+    expect(workflowSource).not.toContain('issues: write');
+    expect(workflowSource).not.toContain('REVIEW_APP_PRIVATE_KEY');
+    expect(workflowSource).not.toContain(
+      'REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN'
+    );
+  });
+
   it('routes T0 through a read-only job without SCM mutation secrets', () => {
     const workflow = parseWorkflow(
       '.github/workflows/reviewrouter-reusable.yml'

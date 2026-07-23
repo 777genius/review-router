@@ -596,6 +596,7 @@ function acceptedObservation() {
     schemaValidated: true,
     fullyConsumed: true,
     eligibilityPolicyVersion: 't0-v1',
+    providerKind: ReviewExecutionProviderKind.Codex,
     providerInvocationKey: providerManifest.providerInvocationKey,
     providerVoteIdentityHash: providerManifest.providerVoteIdentityHash,
   };

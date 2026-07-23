@@ -277,6 +277,7 @@ export class ReviewActionV2ControlPlaneAdapter implements ReviewActionV2ControlP
             result.eligibilityPolicyVersion,
             'eligibility_policy_version'
           ),
+          providerKind: input.workSlot.providerKind,
           providerInvocationKey: input.manifest.providerInvocationKey,
           providerVoteIdentityHash: input.manifest.providerVoteIdentityHash,
         },

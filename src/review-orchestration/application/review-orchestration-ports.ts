@@ -163,6 +163,7 @@ export type ReviewObservationPayload = {
 export type AcceptedReviewObservation = ReviewObservationPayload & {
   readonly observationId: string;
   readonly eligibilityPolicyVersion: string;
+  readonly providerKind: ReviewExecutionProviderKind;
   readonly providerInvocationKey: string;
   readonly providerVoteIdentityHash: string;
 };

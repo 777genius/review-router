@@ -644,6 +644,7 @@ export class RunT0ReviewOrchestration {
           ...observationPayload,
           observationId: committed.observationId,
           eligibilityPolicyVersion: committed.eligibilityPolicyVersion,
+          providerKind: input.workSlot.providerKind,
           providerInvocationKey: manifest.providerInvocationKey,
           providerVoteIdentityHash: manifest.providerVoteIdentityHash,
         };

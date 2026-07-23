@@ -300,7 +300,14 @@ describe('BuildCurrentReviewProjection', () => {
       CheckConclusion.Neutral
     );
     expect(result.envelope.publishing.inlineReviewChunks).toEqual([]);
-    expect(result.envelope.publishing.lifecycle).toEqual([]);
+    expect(result.envelope.publishing.lifecycle).toEqual([
+      expect.objectContaining({
+        targetId: 'target-1',
+        threadId: 'thread-1',
+        mutationEligible: false,
+        reasonCodes: expect.arrayContaining(['partial_coverage']),
+      }),
+    ]);
     expect(result.envelope.snapshot).toEqual({
       occurrenceProvenance: [],
       lineageHints: [],

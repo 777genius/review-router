@@ -160,15 +160,17 @@ export class BuildCurrentReviewProjection {
     const coverageOnly = coverage.state === ProjectionCoverageState.Partial;
     const allClear =
       !coverageOnly && canClaimAllClear(coverage, inventory, occurrences, gate);
-    const lifecycleFacts = coverageOnly
-      ? []
-      : buildLifecycleFacts(
-          inventory,
-          lifecycleDecisions,
-          command.priorLineageHints,
-          coverage,
-          occurrences
-        );
+    // Preserve target identities even for partial coverage so the control plane
+    // can prove that live lifecycle state is still the state this projection saw.
+    // buildLifecycleFacts already makes every partial-coverage target ineligible
+    // for mutation.
+    const lifecycleFacts = buildLifecycleFacts(
+      inventory,
+      lifecycleDecisions,
+      command.priorLineageHints,
+      coverage,
+      occurrences
+    );
     const inlineChunks = coverageOnly
       ? []
       : buildInlineChunks(occurrences, this.limits);
@@ -476,7 +478,7 @@ function buildInlineChunks(
 
   assertWithinProjectionLimit('maxInlineComments', comments.length, limits);
   const chunks: ReviewProjectionInlineChunkFact[] = [];
-  for (let offset = 0; offset < comments.length; ) {
+  for (let offset = 0; offset < comments.length;) {
     const chunkComments = comments.slice(
       offset,
       offset + limits.maxInlineCommentsPerChunk

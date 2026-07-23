@@ -9,6 +9,7 @@ function readRepoFile(filePath: string): string {
 }
 
 type WorkflowJob = {
+  env?: Record<string, unknown>;
   permissions?: Record<string, string>;
   uses?: string;
   if?: string;
@@ -89,6 +90,9 @@ describe('production reusable workflows', () => {
     const workflowSource = readRepoFile(workflowPath);
     const workflow = parseWorkflow(workflowPath);
     const steps = workflow.jobs?.review?.steps ?? [];
+    const runtimePreparation = steps.find(
+      (step) => step.name === 'Prepare ReviewRouter runtime settings'
+    );
     const t0Run = steps.find((step) => step.name === 'Run ReviewRouter T0');
     const legacyRun = steps.find(
       (step) => step.name === 'Run ReviewRouter legacy'
@@ -108,6 +112,14 @@ describe('production reusable workflows', () => {
     expect(workflowSource).toContain(
       'RR_WORKFLOW_SHA: ${{ job.workflow_sha }}'
     );
+    expect(workflow.jobs?.review?.env).not.toHaveProperty(
+      'RR_WORKFLOW_REPOSITORY'
+    );
+    expect(workflow.jobs?.review?.env).not.toHaveProperty('RR_WORKFLOW_SHA');
+    expect(runtimePreparation?.env).toMatchObject({
+      RR_WORKFLOW_REPOSITORY: '${{ job.workflow_repository }}',
+      RR_WORKFLOW_SHA: '${{ job.workflow_sha }}',
+    });
     expect(workflowSource).toContain("eventName === 'merge_group'");
     expect(workflowSource).toContain("isMergeGroup ? 'merge_group'");
     expect(workflowSource).toContain('ReviewRouter merge queue check passed');

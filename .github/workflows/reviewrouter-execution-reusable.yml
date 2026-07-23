@@ -75,8 +75,6 @@ jobs:
       RR_REVIEW_ACTION_LANE: ${{ inputs.review_action_lane }}
       RR_RUNTIME_REF: ${{ inputs.runtime_ref }}
       RR_STATIC_RUNTIME_ENV_JSON: ${{ inputs.static_runtime_env_json }}
-      RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
-      RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
       REVIEWROUTER_API_URL: ${{ inputs.api_url }}
       REVIEWROUTER_OIDC_AUDIENCE: reviewrouter
       REVIEWROUTER_RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
@@ -206,6 +204,8 @@ jobs:
         env:
           GITHUB_HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name || '' }}
           RR_REVIEW_APP_CLIENT_ID: ${{ inputs.review_app_client_id }}
+          RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
 
       - name: Skip unsupported review context
         if: ${{ steps.runtime.outputs.can_run == 'false' }}

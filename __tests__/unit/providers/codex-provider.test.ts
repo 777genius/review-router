@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { CodexProvider } from '../../../src/providers/codex';
+import { logger } from '../../../src/utils/logger';
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
@@ -164,6 +165,30 @@ describe('CodexProvider', () => {
     );
     expect(execCall).toBeTruthy();
     expect(execCall?.[1]).toContain('gpt-5.4-mini');
+  });
+
+  it('logs normalized failures without exposing the original stack', async () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const providerError = new Error("You've hit your usage limit.");
+    providerError.stack = 'provider stack with bearer-secret-value';
+    jest
+      .spyOn(provider as any, 'executePreparedDetailed')
+      .mockRejectedValue(providerError);
+    const logError = jest
+      .spyOn(logger, 'error')
+      .mockImplementation(() => undefined);
+
+    await expect(provider.executePreparedInvocation({} as any)).rejects.toThrow(
+      'usage limit'
+    );
+
+    expect(logError).toHaveBeenCalledWith(
+      'Codex provider failed: codex/gpt-5.4-mini',
+      { error: "You've hit your usage limit." }
+    );
+    expect(JSON.stringify(logError.mock.calls)).not.toContain(
+      'bearer-secret-value'
+    );
   });
 
   it('can disable interactive/tool features for isolated discussion prompts', () => {

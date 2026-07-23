@@ -8,6 +8,7 @@ import {
 } from '../domain';
 import {
   ReviewEvidenceLookupKind,
+  ReviewInvocationFailureClass,
   ReviewPublicationState,
   RestoredReviewWorkSlotState,
   type AcceptedReviewObservation,
@@ -18,6 +19,7 @@ import {
   type ReviewActionV2ControlPlanePort,
   type ReviewExecutionAdmission,
   type ReviewInvocationLease,
+  type ReviewInvocationFailureClassifierPort,
   type ReviewInvocationLeaseSupervisorPort,
   type ReviewOidcTokenPort,
   type ReviewOrchestrationDelayPort,
@@ -73,6 +75,7 @@ export type RunT0ReviewOrchestrationDependencies = {
   readonly oidc: ReviewOidcTokenPort;
   readonly invocationManifestAssembler: ProviderInvocationManifestAssemblerPort;
   readonly invocations: PreparedReviewInvocationPort;
+  readonly invocationFailureClassifier: ReviewInvocationFailureClassifierPort;
   readonly leaseSupervisor: ReviewInvocationLeaseSupervisorPort;
   readonly projectionBuilder: CurrentReviewProjectionBuilderPort;
   readonly identities: ReviewOrchestrationIdentityPort;
@@ -603,6 +606,21 @@ export class RunT0ReviewOrchestration {
       } catch (error) {
         await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
         if (error instanceof ReviewExecutionSupersededSignal) throw error;
+        const failureClass =
+          this.dependencies.invocationFailureClassifier.classify(error);
+        if (failureClass === ReviewInvocationFailureClass.CapacityUnavailable) {
+          throw new ReviewProviderUnavailableSignal(
+            'provider_capacity_unavailable'
+          );
+        }
+        if (
+          failureClass ===
+          ReviewInvocationFailureClass.AuthenticationUnavailable
+        ) {
+          throw new ReviewProviderUnavailableSignal(
+            'provider_authentication_unavailable'
+          );
+        }
         continue;
       }
       try {
@@ -1170,5 +1188,11 @@ function isTerminal(phase: ReviewOrchestrationPhase): boolean {
 class ReviewExecutionSupersededSignal extends Error {
   constructor(readonly currentRevisionHash: string) {
     super('review_orchestration_superseded');
+  }
+}
+
+class ReviewProviderUnavailableSignal extends Error {
+  constructor(failureCode: string) {
+    super(failureCode);
   }
 }

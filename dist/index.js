@@ -21643,7 +21643,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       };
     } catch (error2) {
       const normalized = this.normalizeCodexError(error2);
-      logger.error(`Codex provider failed: ${this.name}`, normalized);
+      this.logNormalizedFailure(normalized);
       throw normalized;
     }
   }
@@ -21707,8 +21707,15 @@ var CodexProvider = class _CodexProvider extends Provider {
     try {
       return (await this.executePreparedDetailed(invocation, credentialLease, signal)).result;
     } catch (error2) {
-      throw this.normalizeCodexError(error2);
+      const normalized = this.normalizeCodexError(error2);
+      this.logNormalizedFailure(normalized);
+      throw normalized;
     }
+  }
+  logNormalizedFailure(error2) {
+    logger.error(`Codex provider failed: ${this.name}`, {
+      error: error2.message
+    });
   }
   prepareRetryInvocation(previous, retryPrompt, timeoutMs) {
     return createPreparedProviderInvocation({
@@ -42334,8 +42341,8 @@ var import_path = __toESM(require("path"));
 
 // src/review-execution/domain/capacity-signal.ts
 var STRUCTURED_OUTPUT_ERROR = /\b(?:structured\s+(?:json|output|response)|(?:invalid|malformed)\s+json|json\s+(?:schema|parse|parsing|validation)|(?:parse|parsing|validate)\s+(?:structured\s+)?json|failed\s+to\s+(?:parse|validate).*json)\b/i;
-var CAPACITY_MESSAGE = /(?:\bcapacity[\s_-]*unavailable\b|\brate[\s_-]*limit(?:ed|ing)?\b|\bratelimit(?:ed|ing)?\b|\btoo many requests\b|\b429\b|\bquota(?:[\s_-]*(?:exceeded|exhausted|unavailable))?\b)/i;
-var DEFINITIVE_CAPACITY_CODE = /^(?:429|capacity[_-]?unavailable|rate[_-]?limit(?:ed|_exceeded)?|too[_-]?many[_-]?requests|quota[_-]?(?:exceeded|exhausted|unavailable)|resource[_-]?exhausted)$/i;
+var CAPACITY_MESSAGE = /(?:\bcapacity[\s_-]*unavailable\b|\brate[\s_-]*limit(?:ed|ing)?\b|\bratelimit(?:ed|ing)?\b|\busage[\s_-]*limit(?:ed|[\s_-]*(?:reached|exceeded|exhausted))?\b|\bbilling[\s_-]*limit(?:ed|[\s_-]*(?:reached|exceeded))?\b|\binsufficient[\s_-]*quota\b|\btoo many requests\b|\b429\b|\bquota(?:[\s_-]*(?:exceeded|exhausted|unavailable|limited))?\b)/i;
+var DEFINITIVE_CAPACITY_CODE = /^(?:429|capacity[_-]?unavailable|rate[_-]?limit(?:ed|_exceeded)?|usage[_-]?limit(?:ed|_reached|_exceeded|_exhausted)?|billing[_-]?limit(?:ed|_reached|_exceeded)?|insufficient[_-]?quota|too[_-]?many[_-]?requests|quota[_-]?(?:exceeded|exhausted|unavailable|limited)|resource[_-]?exhausted)$/i;
 function messageFromError(error2) {
   if (typeof error2 === "string") return error2;
   if (typeof error2 === "object" && error2 !== null) {
@@ -69279,6 +69286,17 @@ var RunT0ReviewOrchestration = class {
       } catch (error2) {
         await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
         if (error2 instanceof ReviewExecutionSupersededSignal) throw error2;
+        const failureClass = this.dependencies.invocationFailureClassifier.classify(error2);
+        if (failureClass === "capacity_unavailable" /* CapacityUnavailable */) {
+          throw new ReviewProviderUnavailableSignal(
+            "provider_capacity_unavailable"
+          );
+        }
+        if (failureClass === "authentication_unavailable" /* AuthenticationUnavailable */) {
+          throw new ReviewProviderUnavailableSignal(
+            "provider_authentication_unavailable"
+          );
+        }
         continue;
       }
       try {
@@ -69641,6 +69659,11 @@ var ReviewExecutionSupersededSignal = class extends Error {
   constructor(currentRevisionHash) {
     super("review_orchestration_superseded");
     this.currentRevisionHash = currentRevisionHash;
+  }
+};
+var ReviewProviderUnavailableSignal = class extends Error {
+  constructor(failureCode) {
+    super(failureCode);
   }
 };
 
@@ -70321,6 +70344,19 @@ function compareCodeUnits(left, right) {
   if (left > right) return 1;
   return 0;
 }
+
+// src/review-orchestration/infrastructure/provider-invocation-failure-classifier.ts
+var ProviderInvocationFailureClassifier = class {
+  classify(error2) {
+    if (classifyProviderCapacitySignal({ error: error2 }) === "capacity_pressure" /* CapacityPressure */) {
+      return "capacity_unavailable" /* CapacityUnavailable */;
+    }
+    if (normalizeReviewError(error2).category === "provider_auth") {
+      return "authentication_unavailable" /* AuthenticationUnavailable */;
+    }
+    return "retryable" /* Retryable */;
+  }
+};
 
 // src/review-orchestration/infrastructure/github-review-state-adapter.ts
 var import_crypto22 = require("crypto");
@@ -73202,6 +73238,7 @@ var ProductionT0ReviewRunner = class {
         compatibilityKey
       ),
       invocations: invocationAdapter,
+      invocationFailureClassifier: new ProviderInvocationFailureClassifier(),
       leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
       projectionBuilder: createProductionReviewProjectionBuilder({
         authorizationFacts: authorization.facts,

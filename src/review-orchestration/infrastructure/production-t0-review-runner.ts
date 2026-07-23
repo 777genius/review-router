@@ -43,6 +43,7 @@ import {
   SystemReviewOrchestrationDelay,
   type CodexReviewAssignment,
 } from './codex-review-invocation-adapter';
+import { ProviderInvocationFailureClassifier } from './provider-invocation-failure-classifier';
 import {
   FreshGitHubLifecycleInventory,
   GitHubReviewRevisionGuard,
@@ -156,6 +157,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           compatibilityKey
         ),
       invocations: invocationAdapter,
+      invocationFailureClassifier: new ProviderInvocationFailureClassifier(),
       leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
       projectionBuilder: createProductionReviewProjectionBuilder({
         authorizationFacts: authorization.facts,

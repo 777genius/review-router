@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import {
   ReviewEvidenceLookupKind,
   ReviewExecutionProviderKind,
+  ReviewInvocationFailureClass,
   ReviewOrchestrationResultStatus,
   ReviewPublicationState,
   RestoredReviewExecutionState,
@@ -259,6 +260,48 @@ describe('RunT0ReviewOrchestration', () => {
       }
     );
     expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails fast across the review when provider capacity is unavailable', async () => {
+    const fixture = createFixture({ maxAttempts: 3 });
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockRejectedValue(new Error('quota_exceeded'));
+    jest
+      .mocked(fixture.dependencies.invocationFailureClassifier.classify)
+      .mockReturnValue(ReviewInvocationFailureClass.CapacityUnavailable);
+
+    const result = await fixture.useCase.execute(fixture.command);
+
+    expect(result).toMatchObject({
+      status: ReviewOrchestrationResultStatus.Failed,
+      failureCode: 'provider_capacity_unavailable',
+    });
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+    expect(fixture.dependencies.projectionBuilder.build).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when provider authentication is unavailable', async () => {
+    const fixture = createFixture({ maxAttempts: 3 });
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockRejectedValue(new Error('refresh token was revoked'));
+    jest
+      .mocked(fixture.dependencies.invocationFailureClassifier.classify)
+      .mockReturnValue(ReviewInvocationFailureClass.AuthenticationUnavailable);
+
+    const result = await fixture.useCase.execute(fixture.command);
+
+    expect(result).toMatchObject({
+      status: ReviewOrchestrationResultStatus.Failed,
+      failureCode: 'provider_authentication_unavailable',
+    });
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.projectionBuilder.build).not.toHaveBeenCalled();
   });
 
   it('supersedes before scheduling stale work and never projects it', async () => {
@@ -762,6 +805,11 @@ function createFixture(options: { maxAttempts?: number } = {}) {
           }),
         })),
       execute: jest.fn().mockResolvedValue(observationPayload),
+    },
+    invocationFailureClassifier: {
+      classify: jest
+        .fn()
+        .mockReturnValue(ReviewInvocationFailureClass.Retryable),
     },
     leaseSupervisor: {
       run: jest

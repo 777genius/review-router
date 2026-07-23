@@ -12,9 +12,9 @@ export interface ProviderResultLike {
 const STRUCTURED_OUTPUT_ERROR =
   /\b(?:structured\s+(?:json|output|response)|(?:invalid|malformed)\s+json|json\s+(?:schema|parse|parsing|validation)|(?:parse|parsing|validate)\s+(?:structured\s+)?json|failed\s+to\s+(?:parse|validate).*json)\b/i;
 const CAPACITY_MESSAGE =
-  /(?:\bcapacity[\s_-]*unavailable\b|\brate[\s_-]*limit(?:ed|ing)?\b|\bratelimit(?:ed|ing)?\b|\btoo many requests\b|\b429\b|\bquota(?:[\s_-]*(?:exceeded|exhausted|unavailable))?\b)/i;
+  /(?:\bcapacity[\s_-]*unavailable\b|\brate[\s_-]*limit(?:ed|ing)?\b|\bratelimit(?:ed|ing)?\b|\busage[\s_-]*limit(?:ed|[\s_-]*(?:reached|exceeded|exhausted))?\b|\bbilling[\s_-]*limit(?:ed|[\s_-]*(?:reached|exceeded))?\b|\binsufficient[\s_-]*quota\b|\btoo many requests\b|\b429\b|\bquota(?:[\s_-]*(?:exceeded|exhausted|unavailable|limited))?\b)/i;
 const DEFINITIVE_CAPACITY_CODE =
-  /^(?:429|capacity[_-]?unavailable|rate[_-]?limit(?:ed|_exceeded)?|too[_-]?many[_-]?requests|quota[_-]?(?:exceeded|exhausted|unavailable)|resource[_-]?exhausted)$/i;
+  /^(?:429|capacity[_-]?unavailable|rate[_-]?limit(?:ed|_exceeded)?|usage[_-]?limit(?:ed|_reached|_exceeded|_exhausted)?|billing[_-]?limit(?:ed|_reached|_exceeded)?|insufficient[_-]?quota|too[_-]?many[_-]?requests|quota[_-]?(?:exceeded|exhausted|unavailable|limited)|resource[_-]?exhausted)$/i;
 
 interface JsonCapacityEvidence {
   readonly fields: string;

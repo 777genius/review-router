@@ -1,0 +1,93 @@
+name: ReviewRouter T0 Reusable
+
+on:
+  workflow_call:
+    inputs:
+      runtime_ref:
+        description: 'Immutable ReviewRouter runtime commit SHA'
+        required: true
+        type: string
+      api_url:
+        description: 'ReviewRouter API URL used for OIDC runtime config'
+        required: false
+        type: string
+        default: https://api.reviewrouter.site
+      runtime_config_mode:
+        description: 'Runtime config mode; the T0 lane requires oidc'
+        required: false
+        type: string
+        default: oidc
+      static_runtime_env_json:
+        description: 'JSON object with non-secret static fallback env values'
+        required: false
+        type: string
+        default: '{}'
+      pr_number:
+        description: 'Pull request number selected by ReviewRouter'
+        required: true
+        type: string
+      review_head_sha:
+        description: 'Exact pull request head selected by ReviewRouter'
+        required: true
+        type: string
+      provider_instance_id:
+        description: 'Server-registered provider instance used by the T0 lane'
+        required: true
+        type: string
+      workflow_schema_version:
+        description: 'Server-registered hosted workflow schema version'
+        required: true
+        type: number
+      review_timeout_minutes:
+        description: 'Maximum execution time for the review job'
+        required: false
+        type: number
+        default: 60
+      max_changed_lines:
+        description: 'Skip review above this changed-line count; zero disables the limit'
+        required: false
+        type: string
+        default: '0'
+    secrets:
+      REVIEW_ROUTER_LEDGER_KEY:
+        required: false
+      CODEX_AUTH_JSON:
+        required: false
+      CODEX_CONFIG_TOML:
+        required: false
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+      OPENAI_API_KEY:
+        required: false
+      OPENROUTER_API_KEY:
+        required: false
+
+jobs:
+  review:
+    name: review
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+    uses: ./.github/workflows/reviewrouter-execution-reusable.yml
+    with:
+      review_action_lane: t0
+      runtime_ref: ${{ inputs.runtime_ref }}
+      api_url: ${{ inputs.api_url }}
+      runtime_config_mode: ${{ inputs.runtime_config_mode }}
+      static_runtime_env_json: ${{ inputs.static_runtime_env_json }}
+      pr_number: ${{ inputs.pr_number }}
+      review_head_sha: ${{ inputs.review_head_sha }}
+      review_app_client_id: ''
+      review_app_repository: ''
+      provider_instance_id: ${{ inputs.provider_instance_id }}
+      workflow_schema_version: ${{ inputs.workflow_schema_version }}
+      review_timeout_minutes: ${{ inputs.review_timeout_minutes }}
+      max_changed_lines: ${{ inputs.max_changed_lines }}
+    secrets:
+      REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
+      CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+      CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

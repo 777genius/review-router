@@ -32637,6 +32637,18 @@ var import_crypto4 = require("crypto");
 var LEDGER_MARKER = "reviewrouter-ledger:v1";
 var LEDGER_RE = /<!--\s*reviewrouter-ledger:v1\s+payload=([A-Za-z0-9_-]+)\s+signature=([a-f0-9]{64})\s*-->/;
 var MAX_LEDGER_ENTRIES = 200;
+function commandLedgerWatermark(payload) {
+  return Math.max(
+    0,
+    ...payload.entries.map((entry) => {
+      const value = entry.commandCommentId ?? entry.parentCommentId;
+      if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new Error("review_router_command_ledger_watermark_invalid");
+      }
+      return value;
+    })
+  );
+}
 var ReviewLedger = class {
   constructor(client, secret, dryRun = false) {
     this.client = client;
@@ -71093,19 +71105,24 @@ var GitHubReviewRevisionGuard = class {
   }
 };
 var FreshGitHubLifecycleInventory = class {
-  loader;
-  constructor(client) {
+  constructor(client, ledger) {
+    this.ledger = ledger;
     this.loader = new ReviewThreadInventoryLoader(client);
   }
+  loader;
   async loadCurrent(query) {
-    return mapFreshInventory(
-      await this.loader.load(query.scope.pullRequestNumber),
-      query.scope.reviewedHeadSha
-    );
+    const [raw, ledger] = await Promise.all([
+      this.loader.load(query.scope.pullRequestNumber),
+      this.ledger.load(query.scope.pullRequestNumber)
+    ]);
+    return mapFreshInventory(raw, query.scope.reviewedHeadSha, ledger);
   }
   async loadForPrompt(pullRequestNumber, expectedHeadSha) {
-    const raw = await this.loader.load(pullRequestNumber);
-    const inventory = mapFreshInventory(raw, expectedHeadSha);
+    const [raw, ledger] = await Promise.all([
+      this.loader.load(pullRequestNumber),
+      this.ledger.load(pullRequestNumber)
+    ]);
+    const inventory = mapFreshInventory(raw, expectedHeadSha, ledger);
     return Object.freeze({
       inventory,
       promptTargets: Object.freeze([
@@ -71115,7 +71132,7 @@ var FreshGitHubLifecycleInventory = class {
     });
   }
 };
-function mapFreshInventory(raw, expectedHeadSha) {
+function mapFreshInventory(raw, expectedHeadSha, ledger) {
   if (raw.failed) {
     throw new Error("review_action_v2_lifecycle_inventory_unavailable");
   }
@@ -71138,13 +71155,10 @@ function mapFreshInventory(raw, expectedHeadSha) {
   if (new Set(rawTargets.map(({ target }) => target.targetId)).size !== rawTargets.length) {
     throw new Error("review_action_v2_lifecycle_inventory_duplicate_target");
   }
-  const missingDatabaseId = rawTargets.some(
-    ({ target }) => target.parentCommentDatabaseId === void 0
-  );
-  const warnings = [
-    ...raw.warnings,
-    ...missingDatabaseId ? ["review thread comment watermark is incomplete"] : []
-  ].sort();
+  if (!ledger.valid) {
+    throw new Error("review_action_v2_command_ledger_unavailable");
+  }
+  const warnings = [...raw.warnings].sort();
   const targets = rawTargets.map(({ target, manual }) => ({
     targetId: target.targetId,
     threadId: target.threadId,
@@ -71169,16 +71183,12 @@ function mapFreshInventory(raw, expectedHeadSha) {
       }
     } : {}
   }));
-  const commandLedgerWatermark = String(
-    Math.max(
-      0,
-      ...rawTargets.map(({ target }) => target.parentCommentDatabaseId ?? 0)
-    )
-  );
+  const commandWatermark = commandLedgerWatermark(ledger.payload);
+  const commandLedgerWatermarkValue = String(commandWatermark);
   const lifecycleStateHash = sha2568(
     canonicalJson9({
-      commandLedgerWatermark,
-      complete: !missingDatabaseId,
+      commandLedgerWatermark: commandLedgerWatermarkValue,
+      complete: true,
       loadedForHeadSha,
       targets,
       warnings
@@ -71188,8 +71198,8 @@ function mapFreshInventory(raw, expectedHeadSha) {
     inventoryVersion: "review_lifecycle_inventory.v1",
     loadedForHeadSha,
     lifecycleStateHash,
-    commandLedgerWatermark,
-    complete: !missingDatabaseId,
+    commandLedgerWatermark: commandLedgerWatermarkValue,
+    complete: true,
     warnings: Object.freeze(warnings),
     targets: Object.freeze(targets)
   });
@@ -71303,7 +71313,7 @@ var BuildCurrentReviewProjection = class {
     occurrences = applyPlacementDecisions(occurrences, presentation.placements);
     const coverageOnly = coverage.state === "partial" /* Partial */;
     const allClear = !coverageOnly && canClaimAllClear(coverage, inventory, occurrences, gate);
-    const lifecycleFacts = coverageOnly ? [] : buildLifecycleFacts(
+    const lifecycleFacts = buildLifecycleFacts(
       inventory,
       lifecycleDecisions,
       command.priorLineageHints,
@@ -73591,7 +73601,10 @@ var ProductionT0ReviewRunner = class {
     if (pr2.baseSha.toLowerCase() !== authorization.facts.baseSha || pr2.headSha.toLowerCase() !== authorization.facts.headSha) {
       return { outcome: "superseded" /* Superseded */ };
     }
-    const lifecycleInventory = new FreshGitHubLifecycleInventory(github);
+    const lifecycleInventory = new FreshGitHubLifecycleInventory(
+      github,
+      new ReviewLedger(github, process.env.REVIEW_ROUTER_LEDGER_KEY)
+    );
     const initialLifecycle = await lifecycleInventory.loadForPrompt(
       pr2.number,
       authorization.facts.headSha

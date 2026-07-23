@@ -12,6 +12,7 @@ import { ReviewActionV2Client } from '../../control-plane/review-action-v2-clien
 import { BatchOrchestrator } from '../../core/batch-orchestrator';
 import { prioritizeFilesByRisk } from '../../review-execution/domain/file-risk-priority';
 import { GitHubClient } from '../../github/client';
+import { ReviewLedger } from '../../github/ledger';
 import { PullRequestLoader } from '../../github/pr-loader';
 import { CodexProvider } from '../../providers/codex';
 import { recoverDiffForFiles } from '../../utils/diff';
@@ -104,7 +105,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     ) {
       return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
     }
-    const lifecycleInventory = new FreshGitHubLifecycleInventory(github);
+    const lifecycleInventory = new FreshGitHubLifecycleInventory(
+      github,
+      new ReviewLedger(github, process.env.REVIEW_ROUTER_LEDGER_KEY)
+    );
     const initialLifecycle = await lifecycleInventory.loadForPrompt(
       pr.number,
       authorization.facts.headSha

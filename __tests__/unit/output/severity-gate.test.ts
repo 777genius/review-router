@@ -120,6 +120,42 @@ describe('severity gate formatting', () => {
     });
   });
 
+  it('does not severity-block a carried finding deactivated by a trusted fallback reply', () => {
+    const input = review([], [], {
+      fromCurrentReview: { critical: 0, major: 0, minor: 0 },
+      carriedForward: { critical: 0, major: 0, minor: 0 },
+    });
+    input.threadLifecycle = {
+      mode: 'resolve',
+      quorumMode: 'single-provider',
+      plannedProviders: ['provider-a'],
+      resolvedCandidates: [],
+      resolvedByLifecycle: [],
+      previousStillValid: [],
+      previousUncertain: [],
+      manualAttention: [],
+      mutationSkipped: [],
+      mutationFailed: [
+        previousThread('major', [
+          'mutation_permission_denied',
+          'resolution_comment_posted',
+        ]),
+      ],
+      skipped: [],
+      warnings: [],
+    };
+
+    expect(getBlockingFindingBreakdown(input, 'major')).toEqual({
+      current: 0,
+      fromCurrentReview: 0,
+      carriedForward: 0,
+      unclassifiedCurrent: 0,
+      previousStillValid: 0,
+      total: 0,
+    });
+    expect(formatBlockingFindingFailure(input, 'major')).toBeUndefined();
+  });
+
   it('does not block when the threshold is off', () => {
     expect(
       formatBlockingFindingFailure(review([finding('critical')]), 'off')

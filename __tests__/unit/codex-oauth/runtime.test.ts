@@ -1,8 +1,11 @@
 import sodium from 'libsodium-wrappers';
 import path from 'path';
 import {
+  CodexOAuthLegacyRuntimePorts,
+  CodexOAuthReviewRuntimeMode,
   runCodexOAuthRotatingRuntime,
-  CodexOAuthRuntimePorts,
+  CodexOAuthV2ReviewOutcome,
+  CodexOAuthV2RuntimePorts,
 } from '../../../src/codex-oauth/runtime';
 
 describe('Codex OAuth rotating runtime', () => {
@@ -58,13 +61,21 @@ describe('Codex OAuth rotating runtime', () => {
         providerInstanceId: 'codex-rotating:123456',
         workflowSchemaVersion: 1,
         repository: '777genius/agent-teams-ai',
+        pullRequestNumber: 252,
         headSha: '0123456789abcdef0123456789abcdef01234567',
         workspacePath: '/tmp/workspace',
       },
       ports
     );
 
-    expect(result.status).toBe('completed');
+    expect(result).toEqual({
+      status: 'completed',
+      review: {
+        skipped: false,
+        markdown: 'summary',
+        reviewedHeadSha: '0123456789abcdef0123456789abcdef01234567',
+      },
+    });
     expect(process.env.REVIEWROUTER_CODEX_BINARY).toBeUndefined();
     expect(events).toEqual([
       'oidc',
@@ -107,6 +118,7 @@ describe('Codex OAuth rotating runtime', () => {
         providerInstanceId: 'codex-rotating:123456',
         workflowSchemaVersion: 1,
         repository: '777genius/agent-teams-ai',
+        pullRequestNumber: 252,
         headSha: '0123456789abcdef0123456789abcdef01234567',
         workspacePath: '/tmp/workspace',
       },
@@ -127,7 +139,194 @@ describe('Codex OAuth rotating runtime', () => {
     ]);
   });
 
-  function buildPorts(events: string[]): CodexOAuthRuntimePorts {
+  it('runs server-published v2 without exposing a comment token or v1 comments', async () => {
+    const events: string[] = [];
+    const v2Review = jest.fn(async (input) => {
+      events.push('v2-review');
+      expect(input).toMatchObject({
+        repository: '777genius/agent-teams-ai',
+        pullRequestNumber: 252,
+        headSha: '0123456789abcdef0123456789abcdef01234567',
+        workspacePath: '/tmp/workspace',
+        codexHome: '/tmp/codex-home',
+        codexBinaryPath: '/tmp/codex-bin',
+        scmReadToken: 'ghs_checkout',
+        scmReadTokenExpiresAt: '2026-05-25T12:15:00.000Z',
+      });
+      expect(input).not.toHaveProperty('commentToken');
+      expect(input).not.toHaveProperty('commentTokenProvider');
+      expect(input).not.toHaveProperty('comments');
+      expect(input).not.toHaveProperty('write');
+      expect(process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBe(
+        'oidc-request-token'
+      );
+      return { outcome: CodexOAuthV2ReviewOutcome.Completed };
+    });
+    const ports = buildV2Ports(events, { run: v2Review });
+
+    const result = await runCodexOAuthRotatingRuntime(
+      {
+        apiUrl: 'https://api.reviewrouter.site',
+        audience: 'reviewrouter',
+        providerInstanceId: 'codex-rotating:123456',
+        workflowSchemaVersion: 1,
+        repository: '777genius/agent-teams-ai',
+        pullRequestNumber: 252,
+        headSha: '0123456789abcdef0123456789abcdef01234567',
+        workspacePath: '/tmp/workspace',
+        reviewMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+      },
+      ports
+    );
+
+    expect(result).toEqual({
+      status: 'completed',
+      publicationMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+      v2Review: { outcome: CodexOAuthV2ReviewOutcome.Completed },
+    });
+    expect(v2Review).toHaveBeenCalledTimes(1);
+    expect(events).toEqual([
+      'oidc',
+      'prelease',
+      'prepare-codex',
+      'finalize',
+      'public-key',
+      'writeback-preflight',
+      'refresh',
+      'writeback',
+      'checkout-token',
+      'checkout',
+      'v2-review',
+      'clear-oidc-env',
+      'clear-auth-material',
+      'clear-process-auth-env',
+    ]);
+    expect(process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBeUndefined();
+    expect(process.env['INPUT_AUTH-JSON']).toBeUndefined();
+  });
+
+  it('fails closed and clears auth when v2 composition is missing', async () => {
+    const events: string[] = [];
+    const ports = buildV2Ports(events);
+
+    await expect(
+      runCodexOAuthRotatingRuntime(
+        {
+          apiUrl: 'https://api.reviewrouter.site',
+          audience: 'reviewrouter',
+          providerInstanceId: 'codex-rotating:123456',
+          workflowSchemaVersion: 1,
+          repository: '777genius/agent-teams-ai',
+          pullRequestNumber: 252,
+          headSha: '0123456789abcdef0123456789abcdef01234567',
+          workspacePath: '/tmp/workspace',
+          reviewMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+        },
+        ports
+      )
+    ).rejects.toThrow('review_action_v2_runner_missing');
+
+    expect(events).not.toContain('comment-token');
+    expect(events).not.toContain('comment');
+    expect(events.slice(-3)).toEqual([
+      'clear-oidc-env',
+      'clear-auth-material',
+      'clear-process-auth-env',
+    ]);
+    expect(process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBeUndefined();
+    expect(process.env['INPUT_AUTH-JSON']).toBeUndefined();
+  });
+
+  it('rejects a checkout capability if the control plane widens it to write', async () => {
+    const events: string[] = [];
+    const v2Review = jest.fn(async () => ({
+      outcome: CodexOAuthV2ReviewOutcome.Completed,
+    }));
+    const ports = buildV2Ports(events, { run: v2Review });
+    ports.controlPlane.checkoutToken = jest.fn(async () => ({
+      protocolVersion: 1 as const,
+      token: 'ghs_widened',
+      expiresAt: '2026-05-25T12:15:00.000Z',
+      repository: '777genius/agent-teams-ai',
+      permissions: {
+        contents: 'read' as const,
+        pullRequests: 'write',
+      },
+    })) as never;
+
+    await expect(
+      runCodexOAuthRotatingRuntime(
+        {
+          apiUrl: 'https://api.reviewrouter.site',
+          audience: 'reviewrouter',
+          providerInstanceId: 'codex-rotating:123456',
+          workflowSchemaVersion: 1,
+          repository: '777genius/agent-teams-ai',
+          pullRequestNumber: 252,
+          headSha: '0123456789abcdef0123456789abcdef01234567',
+          workspacePath: '/tmp/workspace',
+          reviewMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+        },
+        ports
+      )
+    ).rejects.toThrow('review_action_v2_scm_read_token_scope_invalid');
+
+    expect(v2Review).not.toHaveBeenCalled();
+    expect(events).not.toContain('comment-token');
+    expect(events.slice(-3)).toEqual([
+      'clear-oidc-env',
+      'clear-auth-material',
+      'clear-process-auth-env',
+    ]);
+  });
+
+  it('preserves stale queued secret semantics in v2 mode', async () => {
+    const events: string[] = [];
+    const v2Review = jest.fn(async () => ({
+      outcome: CodexOAuthV2ReviewOutcome.Completed,
+    }));
+    const ports = buildV2Ports(events, { run: v2Review });
+    ports.controlPlane.finalize = jest.fn(async () => {
+      events.push('finalize');
+      return {
+        protocolVersion: 1 as const,
+        leaseId: 'lease:12345678',
+        nextGeneration: 2,
+        status: 'stale_queued_secret' as const,
+      };
+    });
+
+    const result = await runCodexOAuthRotatingRuntime(
+      {
+        apiUrl: 'https://api.reviewrouter.site',
+        audience: 'reviewrouter',
+        providerInstanceId: 'codex-rotating:123456',
+        workflowSchemaVersion: 1,
+        repository: '777genius/agent-teams-ai',
+        pullRequestNumber: 252,
+        headSha: '0123456789abcdef0123456789abcdef01234567',
+        workspacePath: '/tmp/workspace',
+        reviewMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+      },
+      ports
+    );
+
+    expect(result).toEqual({
+      status: 'skipped',
+      reason: 'stale_queued_secret',
+    });
+    expect(v2Review).not.toHaveBeenCalled();
+    expect(events).toEqual([
+      'oidc',
+      'prelease',
+      'prepare-codex',
+      'finalize',
+      'clear-oidc-env',
+      'clear-process-auth-env',
+    ]);
+  });
+
+  function buildPorts(events: string[]): CodexOAuthLegacyRuntimePorts {
     return {
       oidc: {
         requestToken: jest.fn(async () => {
@@ -244,8 +443,11 @@ describe('Codex OAuth rotating runtime', () => {
         }),
       },
       comments: {
-        post: jest.fn(async () => {
+        post: jest.fn(async (input) => {
           events.push('comment');
+          expect(input.review.reviewedHeadSha).toBe(
+            '0123456789abcdef0123456789abcdef01234567'
+          );
         }),
       },
       lifecycle: {
@@ -259,6 +461,28 @@ describe('Codex OAuth rotating runtime', () => {
           delete process.env.CODEX_HOME;
         },
       },
+    };
+  }
+
+  function buildV2Ports(
+    events: string[],
+    v2Review?: CodexOAuthV2RuntimePorts['v2Review']
+  ): CodexOAuthV2RuntimePorts {
+    const legacy = buildPorts(events);
+    return {
+      oidc: legacy.oidc,
+      controlPlane: {
+        prelease: legacy.controlPlane.prelease,
+        finalize: legacy.controlPlane.finalize,
+        writebackPreflight: legacy.controlPlane.writebackPreflight,
+        writeback: legacy.controlPlane.writeback,
+        checkoutToken: legacy.controlPlane.checkoutToken,
+      },
+      githubSecrets: legacy.githubSecrets,
+      codex: legacy.codex,
+      checkout: legacy.checkout,
+      lifecycle: legacy.lifecycle,
+      ...(v2Review ? { v2Review } : {}),
     };
   }
 });

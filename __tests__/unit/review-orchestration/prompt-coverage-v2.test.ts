@@ -1,0 +1,141 @@
+import { PromptBuilder } from '../../../src/analysis/llm/prompt-builder';
+import type { PRContext, ReviewConfig } from '../../../src/types';
+import {
+  createReviewPromptCoverageManifest,
+  isReviewPromptCoverageComplete,
+  ReviewPromptPathCoverageKind,
+} from '../../../src/review-orchestration/domain';
+
+describe('prepared review prompt v2 coverage', () => {
+  it('marks a giant compacted single file summary-only, never complete', async () => {
+    const prepared = await builder({
+      smartDiffCompaction: true,
+      maxFullDiffFileBytes: 100,
+      diffMaxBytes: 50_000,
+    }).buildPreparedV2(pr([file('src/giant.ts', 200)], 200));
+
+    expect(prepared.pathCoverage).toEqual([
+      expect.objectContaining({
+        path: 'src/giant.ts',
+        kind: ReviewPromptPathCoverageKind.SummaryOnly,
+      }),
+    ]);
+    expect(
+      isReviewPromptCoverageComplete(manifest(prepared.pathCoverage))
+    ).toBe(false);
+  });
+
+  it('marks every omitted tail path trimmed after multi-file byte trimming', async () => {
+    const files = [
+      file('src/a.ts', 40),
+      file('src/b.ts', 40),
+      file('src/c.ts', 40),
+    ];
+    const prepared = await builder({
+      smartDiffCompaction: false,
+      diffMaxBytes: 260,
+    }).buildPreparedV2(pr(files, 40));
+
+    expect(
+      prepared.pathCoverage.some(
+        (fact) => fact.kind === ReviewPromptPathCoverageKind.Trimmed
+      )
+    ).toBe(true);
+    expect(
+      isReviewPromptCoverageComplete(manifest(prepared.pathCoverage))
+    ).toBe(false);
+  });
+
+  it('enforces Complete implies closed full-patch proof for every assigned path', async () => {
+    const kinds = Object.values(ReviewPromptPathCoverageKind).filter(
+      (kind) => kind !== ReviewPromptPathCoverageKind.TrustedRead
+    );
+    for (const kind of kinds) {
+      const coverage = manifest([
+        {
+          path: 'src/a.ts',
+          kind,
+          contentHash:
+            kind === ReviewPromptPathCoverageKind.FullPatch
+              ? 'a'.repeat(64)
+              : null,
+        },
+      ]);
+      expect(isReviewPromptCoverageComplete(coverage)).toBe(
+        kind === ReviewPromptPathCoverageKind.FullPatch
+      );
+    }
+  });
+
+  it('rejects an unvalidated trusted-read receipt', () => {
+    expect(() =>
+      manifest([
+        {
+          path: 'src/a.ts',
+          kind: ReviewPromptPathCoverageKind.TrustedRead,
+          contentHash: 'a'.repeat(64),
+        },
+      ])
+    ).toThrow('review_prompt_coverage_untrusted_fact');
+  });
+});
+
+function builder(overrides: Partial<ReviewConfig>) {
+  return new PromptBuilder({
+    diffMaxBytes: 50_000,
+    smartDiffCompaction: true,
+    ...overrides,
+  } as ReviewConfig);
+}
+
+function file(filename: string, bodyLines: number) {
+  return {
+    filename,
+    status: 'modified' as const,
+    additions: bodyLines,
+    deletions: 0,
+    changes: bodyLines,
+    patch: `@@ -1,1 +1,${bodyLines} @@\n${Array.from(
+      { length: bodyLines },
+      (_, index) => `+const value${index} = ${index};`
+    ).join('\n')}`,
+  };
+}
+
+function pr(files: ReturnType<typeof file>[], bodyLines: number): PRContext {
+  return {
+    number: 1,
+    title: 'Coverage',
+    body: '',
+    author: 'reviewer',
+    draft: false,
+    labels: [],
+    files,
+    diff: files
+      .map(
+        (item) =>
+          `diff --git a/${item.filename} b/${item.filename}\n--- a/${item.filename}\n+++ b/${item.filename}\n@@ -1,1 +1,${bodyLines} @@\n${Array.from(
+            { length: bodyLines },
+            (_, index) => `+const value${index} = ${index};`
+          ).join('\n')}`
+      )
+      .join('\n'),
+    additions: files.reduce((sum, item) => sum + item.additions, 0),
+    deletions: 0,
+    baseSha: '1'.repeat(40),
+    headSha: '2'.repeat(40),
+  };
+}
+
+function manifest(
+  pathCoverage: Parameters<
+    typeof createReviewPromptCoverageManifest
+  >[0]['pathCoverage']
+) {
+  return createReviewPromptCoverageManifest({
+    workSlotId: 'slot-1',
+    reviewRevisionHash: '1'.repeat(64),
+    assignedPaths: pathCoverage.map((fact) => fact.path),
+    pathCoverage,
+  });
+}

@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import {
   LifecycleTarget,
   PRContext,
@@ -14,6 +15,11 @@ import { logger } from '../../utils/logger';
 import { ValidationDetector } from '../context/validation-detector';
 import { PromptEnricher } from '../../learning/prompt-enrichment';
 import { CodeGraph, Definition } from '../context/graph-builder';
+import {
+  PreparedPromptPathCoverageKind,
+  type PreparedPromptPathCoverage,
+  type PreparedReviewPromptV2,
+} from './prepared-review-prompt';
 
 export class PromptBuilder {
   private readonly validationDetector: ValidationDetector;
@@ -101,6 +107,14 @@ export class PromptBuilder {
     prNumber?: number,
     lifecycleTargets: LifecycleTarget[] = []
   ): Promise<string> {
+    return (await this.buildPreparedV2(pr, prNumber, lifecycleTargets)).prompt;
+  }
+
+  async buildPreparedV2(
+    pr: PRContext,
+    prNumber?: number,
+    lifecycleTargets: LifecycleTarget[] = []
+  ): Promise<PreparedReviewPromptV2> {
     // Validate PR context
     if (!pr || typeof pr !== 'object') {
       throw new Error('Invalid PR context: must be a valid PRContext object');
@@ -127,6 +141,13 @@ export class PromptBuilder {
     const summaryOnlyFiles = new Map(
       compacted.summaryOnlyFiles.map((file) => [file.filename, file])
     );
+    const pathCoverage = classifyPreparedPromptCoverage({
+      files: pr.files,
+      sourceDiff: pr.diff,
+      compactedDiff: compacted.diff,
+      finalDiff: diff,
+      summaryOnlyPaths: new Set(summaryOnlyFiles.keys()),
+    });
     const skipSuggestions =
       compacted.summaryOnlyFiles.length > 0 ||
       this.shouldSkipSuggestions(pr.diff);
@@ -364,7 +385,11 @@ export class PromptBuilder {
       );
     }
 
-    return instructions.join('\n');
+    return Object.freeze({
+      version: 'prepared_review_prompt.v2',
+      prompt: instructions.join('\n'),
+      pathCoverage,
+    });
   }
 
   /**
@@ -539,4 +564,86 @@ function sanitizeLifecyclePromptField(
     /<\/?old_finding_data>/gi,
     '[old_finding_data tag removed]'
   );
+}
+
+function classifyPreparedPromptCoverage(input: {
+  readonly files: PRContext['files'];
+  readonly sourceDiff: string;
+  readonly compactedDiff: string;
+  readonly finalDiff: string;
+  readonly summaryOnlyPaths: ReadonlySet<string>;
+}): readonly PreparedPromptPathCoverage[] {
+  const source = splitDiffByDestinationPath(input.sourceDiff);
+  const compacted = splitDiffByDestinationPath(input.compactedDiff);
+  const final = splitDiffByDestinationPath(input.finalDiff);
+  return Object.freeze(
+    input.files
+      .map((file): PreparedPromptPathCoverage => {
+        const finalChunk = final.get(file.filename);
+        if (finalChunk !== undefined) {
+          return Object.freeze({
+            path: file.filename,
+            kind: input.summaryOnlyPaths.has(file.filename)
+              ? PreparedPromptPathCoverageKind.SummaryOnly
+              : PreparedPromptPathCoverageKind.FullPatch,
+            contentHash: sha256(finalChunk),
+          });
+        }
+        if (compacted.has(file.filename)) {
+          return Object.freeze({
+            path: file.filename,
+            kind: PreparedPromptPathCoverageKind.Trimmed,
+            contentHash: null,
+          });
+        }
+        if (!source.has(file.filename) && !file.patch) {
+          return Object.freeze({
+            path: file.filename,
+            kind: PreparedPromptPathCoverageKind.MetadataOnly,
+            contentHash: null,
+          });
+        }
+        return Object.freeze({
+          path: file.filename,
+          kind: PreparedPromptPathCoverageKind.Unavailable,
+          contentHash: null,
+        });
+      })
+      .sort((left, right) => compareCodePoints(left.path, right.path))
+  );
+}
+
+function splitDiffByDestinationPath(diff: string): Map<string, string> {
+  const chunks = new Map<string, string>();
+  const matches = [...diff.matchAll(/^diff --git\s+a\/(.+?)\s+b\/(.+)$/gm)];
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    if (match.index === undefined) continue;
+    const path = unquoteGitPath(match[2].trim());
+    const end = matches[index + 1]?.index ?? diff.length;
+    if (!path || chunks.has(path)) continue;
+    chunks.set(path, diff.slice(match.index, end).replace(/\n+$/, ''));
+  }
+  return chunks;
+}
+
+function unquoteGitPath(value: string): string {
+  const path =
+    value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path.replace(/\\([\\"tnr])/g, (_match, char: string) => {
+    if (char === 't') return '\t';
+    if (char === 'n') return '\n';
+    if (char === 'r') return '\r';
+    return char;
+  });
+}
+
+function compareCodePoints(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }

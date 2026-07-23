@@ -79,6 +79,7 @@ describe('Codex OAuth rotating post-auth commenting', () => {
       });
     const review: CodexOAuthReviewResult = {
       skipped: false,
+      reviewedHeadSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       userDryRun: false,
       markdown: '<!-- review-router-bot -->\n\n# ReviewRouter',
       review: {
@@ -117,7 +118,10 @@ describe('Codex OAuth rotating post-auth commenting', () => {
     expect(postSummary).toHaveBeenCalledWith(
       12,
       '<!-- review-router-bot -->\n\n# ReviewRouter',
-      true
+      true,
+      expect.objectContaining({
+        reviewedHeadSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      })
     );
     expect(loadPr).toHaveBeenCalledWith(12);
     expect(postInline).toHaveBeenCalledWith(
@@ -138,10 +142,64 @@ describe('Codex OAuth rotating post-auth commenting', () => {
       commentToken: 'ghs_comment_after_auth_clear',
       review: {
         skipped: false,
+        reviewedHeadSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         userDryRun: true,
         markdown: '<!-- review-router-bot -->\n\n# ReviewRouter',
       },
     });
+
+    expect(postSummary).not.toHaveBeenCalled();
+    expect(postInline).not.toHaveBeenCalled();
+  });
+
+  it('does not attach reviewed output to a newer pull request head', async () => {
+    const postSummary = jest.spyOn(CommentPoster.prototype, 'postSummary');
+    const postInline = jest.spyOn(CommentPoster.prototype, 'postInline');
+    jest.spyOn(PullRequestLoader.prototype, 'load').mockResolvedValue({
+      number: 12,
+      title: 'Test PR',
+      body: '',
+      author: 'belief',
+      draft: false,
+      labels: [],
+      files: [],
+      diff: '',
+      additions: 0,
+      deletions: 0,
+      baseSha: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      headSha: 'cccccccccccccccccccccccccccccccccccccccc',
+    });
+
+    await postReviewAfterAuthClear({
+      commentToken: 'ghs_comment_after_auth_clear',
+      review: {
+        skipped: false,
+        reviewedHeadSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        markdown: '# ReviewRouter',
+      },
+    });
+
+    expect(postSummary).not.toHaveBeenCalled();
+    expect(postInline).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the current pull request revision is unverifiable', async () => {
+    const postSummary = jest.spyOn(CommentPoster.prototype, 'postSummary');
+    const postInline = jest.spyOn(CommentPoster.prototype, 'postInline');
+    jest
+      .spyOn(PullRequestLoader.prototype, 'load')
+      .mockRejectedValue(new Error('GitHub unavailable'));
+
+    await expect(
+      postReviewAfterAuthClear({
+        commentToken: 'ghs_comment_after_auth_clear',
+        review: {
+          skipped: false,
+          reviewedHeadSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          markdown: '# ReviewRouter',
+        },
+      })
+    ).rejects.toThrow('GitHub unavailable');
 
     expect(postSummary).not.toHaveBeenCalled();
     expect(postInline).not.toHaveBeenCalled();

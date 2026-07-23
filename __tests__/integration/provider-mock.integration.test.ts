@@ -49,6 +49,29 @@ describe('OpenRouterProvider (mocked)', () => {
     const result = await provider.review('prompt', 1000);
     expect(result.findings).toHaveLength(1);
     expect(result.usage?.totalTokens).toBe(15);
+    expect(result.transportAttemptCount).toBe(1);
+  });
+
+  it('reports the real transport count after a network retry', async () => {
+    const provider = new OpenRouterProvider('mistral:test', apiKey, limiter);
+
+    global.fetch = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('temporary transport failure'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ findings: [] }) } }],
+        }),
+        headers: new Map(),
+      } as any);
+
+    const result = await provider.review('prompt', 2_000);
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result.transportAttemptCount).toBe(2);
   });
 
   it('routes free aliases to the OpenRouter free meta-model id', async () => {

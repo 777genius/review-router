@@ -5,6 +5,31 @@ export const CODEX_ROTATING_AUTH_INPUT_ENV_NAMES = [
   'INPUT_AUTH_JSON',
 ] as const;
 
+export const REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES = [
+  'GITHUB_TOKEN',
+  'GH_TOKEN',
+  'INPUT_GITHUB_TOKEN',
+  'INPUT_GITHUB-TOKEN',
+  'REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN',
+  'INPUT_REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN',
+  'INPUT_REVIEW-THREAD-LIFECYCLE-RESOLVE-TOKEN',
+  'REVIEW_APP_PRIVATE_KEY',
+  'REVIEW_ROUTER_APP_PRIVATE_KEY',
+  'REVIEWROUTER_APP_PRIVATE_KEY',
+  'INPUT_REVIEW_APP_PRIVATE_KEY',
+  'INPUT_REVIEW-APP-PRIVATE-KEY',
+  'GITHUB_APP_TOKEN',
+  'REVIEW_APP_TOKEN',
+  'REVIEW_ROUTER_APP_TOKEN',
+  'REVIEWROUTER_APP_TOKEN',
+  'REVIEW_ROUTER_COMMENT_TOKEN',
+  'REVIEWROUTER_COMMENT_TOKEN',
+] as const;
+
+const REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAME_SET = new Set<string>(
+  REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES
+);
+
 const CODEX_ROTATING_PROVIDER_SECRET_INPUT_ENV_NAMES = {
   claudeCodeOAuthToken: [
     'INPUT_CLAUDE-CODE-OAUTH-TOKEN',
@@ -113,6 +138,43 @@ export function clearCodexRotatingOidcRequestEnv(
   delete env.ACTIONS_ID_TOKEN_REQUEST_URL;
 }
 
+export function scrubAndAssertReviewActionV2ScmMutationEnv(
+  env: NodeJS.ProcessEnv = process.env
+): readonly string[] {
+  const scrubbed = REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES.filter(
+    (name) => env[name] !== undefined
+  ).sort();
+  for (const name of scrubbed) {
+    delete env[name];
+  }
+  const unexpected = Object.keys(env)
+    .filter(isReviewActionV2ScmMutationEnvName)
+    .sort();
+  for (const name of unexpected) {
+    delete env[name];
+  }
+  assertReviewActionV2ScmMutationEnvAbsent(env);
+  if (unexpected.length > 0) {
+    throw new Error(
+      `review_action_v2_unexpected_scm_mutation_env_scrubbed:${unexpected.join(',')}`
+    );
+  }
+  return Object.freeze(scrubbed);
+}
+
+export function assertReviewActionV2ScmMutationEnvAbsent(
+  env: NodeJS.ProcessEnv = process.env
+): void {
+  const remaining = Object.keys(env)
+    .filter(isReviewActionV2ScmMutationEnvName)
+    .sort();
+  if (remaining.length > 0) {
+    throw new Error(
+      `review_action_v2_scm_mutation_env_present:${remaining.join(',')}`
+    );
+  }
+}
+
 export function clearCodexRotatingProcessAuthEnv(
   env: NodeJS.ProcessEnv = process.env
 ): void {
@@ -153,4 +215,13 @@ function readOptionalSecretInput(
     core.setSecret(value);
   }
   return value;
+}
+
+function isReviewActionV2ScmMutationEnvName(name: string): boolean {
+  const normalized = name.replace(/-/g, '_').toUpperCase();
+  if (REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAME_SET.has(name)) return true;
+  if (/^(?:INPUT_)?(?:GITHUB|GH)_TOKEN$/.test(normalized)) return true;
+  return /^(?:INPUT_)?(?:REVIEW|REVIEW_ROUTER|REVIEWROUTER)_(?:APP_(?:TOKEN|PRIVATE_KEY)|THREAD_LIFECYCLE_RESOLVE_TOKEN|(?:SCM_)?(?:WRITE|MUTATION|COMMENT)_TOKEN)$/.test(
+    normalized
+  );
 }

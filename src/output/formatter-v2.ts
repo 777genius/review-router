@@ -596,7 +596,8 @@ export class MarkdownFormatterV2 {
       mutation_permission_denied: 'missing permission to resolve',
       mutation_rate_limited: 'GitHub rate limited mutation',
       resolution_comment_failed: 'resolution reply failed',
-      resolution_comment_posted: 'resolution reply posted',
+      resolution_comment_posted:
+        'fallback resolution reply posted; GitHub thread remains open',
       outside_review_scope: 'outside reviewed diff scope',
       pagination_incomplete: 'thread comments were truncated',
       provider_failed: 'provider failed',

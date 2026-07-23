@@ -16,6 +16,14 @@ import {
   parseReviewOutputStrict,
   parseReviewFindingsStrict,
 } from './review-output';
+import {
+  createPreparedProviderInvocation,
+  mergeCredentialEnvironment,
+  type PreparedProviderInvocation,
+  type ProviderCredentialLease,
+  ProviderKind,
+  requirePreparedProviderInvocation,
+} from './prepared-invocation';
 
 export interface CodexProviderOptions {
   agenticContext?: boolean;
@@ -35,6 +43,7 @@ type CodexRunOptions = {
   disableTools?: boolean;
   skipGitRepoCheck?: boolean;
   acceptReviewOutputOnNonZero?: boolean;
+  signal?: AbortSignal;
 };
 
 type CodexRunResult = {
@@ -53,6 +62,37 @@ type CodexAgenticAudit = {
   readOnlyExplorationCommands: number;
   commands: string[];
 };
+
+type CodexPreparedRequest = {
+  readonly binary: string;
+  readonly prompt: string;
+  readonly cwd: string;
+  readonly argsTemplate: readonly string[];
+  readonly outputSchema: unknown;
+  readonly environment: Readonly<NodeJS.ProcessEnv>;
+  readonly eventAudit: boolean;
+  readonly jsonEvents: boolean;
+  readonly auditMode: CodexAgenticAuditMode;
+  readonly optionalAgenticRetryMaxPromptTokens: number;
+  readonly acceptReviewOutputOnNonZero: boolean;
+};
+
+type CodexPreparedExecution = {
+  readonly result: ReviewResult;
+  readonly content: string;
+  readonly parsed: ParsedReviewOutput;
+  readonly runResult: CodexRunResult;
+};
+
+type CodexFrozenCliConfig = {
+  readonly model: string;
+  readonly modelProvider: CodexProviderOptions['modelProvider'];
+  readonly forkSandbox: boolean;
+  readonly reasoningEffort?: string;
+};
+
+const CODEX_OUTPUT_FILE_PLACEHOLDER = '{reviewrouter_output_file}';
+const CODEX_SCHEMA_FILE_PLACEHOLDER = '{reviewrouter_schema_file}';
 
 class CodexCliExitError extends Error {
   constructor(
@@ -144,65 +184,35 @@ export class CodexProvider extends Provider {
     executionPolicy?: ProviderExecutionPolicy
   ): Promise<ReviewResult> {
     const started = Date.now();
-
-    const binary = await this.resolveBinary();
-
-    const agenticContext = this.shouldUseAgenticContext();
-    const promptForCodex = agenticContext
-      ? await this.wrapAgenticReviewPrompt(prompt)
-      : this.wrapPromptOnlyReviewPrompt(prompt);
-    const auditMode = agenticContext ? this.agenticAuditMode() : 'off';
-    const eventAudit = this.shouldUseEventAudit();
-
-    logger.info(
-      `Running Codex CLI safely: codex exec --model ${this.model} --sandbox read-only --ephemeral ...`
-    );
-
     try {
-      const initialTimeoutMs =
-        executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
-      if (initialTimeoutMs <= 0) {
-        const deadlineError = new Error(
-          'Review execution deadline reached before Codex invocation'
-        );
-        deadlineError.name = 'TimeoutError';
-        throw deadlineError;
-      }
-      let runResult = await this.runCliWithStdin(
-        binary,
-        promptForCodex,
-        initialTimeoutMs,
-        {
-          healthCheck: false,
-          outputSchema: this.buildFindingsSchema(),
-          eventAudit,
-          jsonEvents: auditMode !== 'off',
-          acceptReviewOutputOnNonZero: true,
-        }
+      let invocation = await this.prepareInvocation(
+        prompt,
+        timeoutMs,
+        executionPolicy
       );
-      let content = this.sanitizeReviewContent(
-        (runResult.lastMessage || runResult.stdout).trim()
+      const credentialLease = this.captureCredentialLease(invocation);
+      let execution = await this.executePreparedDetailed(
+        invocation,
+        credentialLease
       );
-      if (runResult.audit) {
-        this.logAgenticAudit(runResult.audit, false);
+      if (execution.runResult.audit) {
+        this.logAgenticAudit(execution.runResult.audit, false);
       }
-      let parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
 
       if (
         this.shouldRetryForMissingAgenticExploration(
-          parsed,
-          runResult.audit,
+          execution.parsed,
+          execution.runResult.audit,
           prompt,
-          auditMode
+          invocation.request.auditMode,
+          invocation.request.optionalAgenticRetryMaxPromptTokens
         ) &&
         (executionPolicy?.canStartOptionalRetry() ?? true)
       ) {
         logger.warn(
           `Codex agentic review completed without read-only exploration; retrying once for ${this.name}`
         );
-        const firstContent = content;
-        const firstParsed = parsed;
-        const firstRunResult = runResult;
+        const firstExecution = execution;
         try {
           const retryTimeoutMs =
             executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
@@ -211,54 +221,55 @@ export class CodexProvider extends Provider {
               'Review execution deadline reached before Codex agentic retry'
             );
           }
-          runResult = await this.runCliWithStdin(
-            binary,
-            this.buildAgenticRetryPrompt(promptForCodex, runResult.audit),
-            retryTimeoutMs,
-            {
-              healthCheck: false,
-              outputSchema: this.buildFindingsSchema(),
-              eventAudit,
-              jsonEvents: true,
-              acceptReviewOutputOnNonZero: true,
-            }
+          invocation = this.prepareRetryInvocation(
+            invocation,
+            this.buildAgenticRetryPrompt(
+              invocation.request.prompt,
+              execution.runResult.audit
+            ),
+            retryTimeoutMs
           );
-          content = this.sanitizeReviewContent(
-            (runResult.lastMessage || runResult.stdout).trim()
+          execution = await this.executePreparedDetailed(
+            invocation,
+            credentialLease
           );
-          if (runResult.audit) {
-            this.logAgenticAudit(runResult.audit, true);
+          if (execution.runResult.audit) {
+            this.logAgenticAudit(execution.runResult.audit, true);
           }
-          parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
         } catch (retryError) {
-          if (auditMode === 'strict') {
+          if (invocation.request.auditMode === 'strict') {
             throw retryError;
           }
           const normalizedRetryError = this.normalizeCodexError(retryError);
           logger.warn(
             `Codex agentic retry failed for ${this.name}; preserving first-pass findings. ${normalizedRetryError.message}`
           );
-          content = firstContent;
-          parsed = firstParsed;
-          runResult = firstRunResult;
+          execution = firstExecution;
         }
         if (
-          runResult !== firstRunResult &&
-          this.isMissingAgenticExploration(parsed, runResult.audit, prompt) &&
-          firstParsed.findings.length >= parsed.findings.length
+          execution !== firstExecution &&
+          this.isMissingAgenticExploration(
+            execution.parsed,
+            execution.runResult.audit,
+            prompt
+          ) &&
+          firstExecution.parsed.findings.length >=
+            execution.parsed.findings.length
         ) {
           logger.warn(
             `Codex agentic retry still lacked read-only exploration and did not add findings; preserving first-pass findings for ${this.name}`
           );
-          content = firstContent;
-          parsed = firstParsed;
-          runResult = firstRunResult;
+          execution = firstExecution;
         }
       }
 
       if (
-        auditMode === 'strict' &&
-        this.isMissingAgenticExploration(parsed, runResult.audit, prompt)
+        invocation.request.auditMode === 'strict' &&
+        this.isMissingAgenticExploration(
+          execution.parsed,
+          execution.runResult.audit,
+          prompt
+        )
       ) {
         throw new Error(
           'Codex agentic review completed without recorded read-only repository exploration'
@@ -267,21 +278,200 @@ export class CodexProvider extends Provider {
 
       const durationSeconds = (Date.now() - started) / 1000;
       logger.info(
-        `Codex CLI output for ${this.name}: final=${content.length} bytes, stdout=${runResult.stdout.length} bytes, stderr=${runResult.stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
+        `Codex CLI output for ${this.name}: final=${execution.content.length} bytes, stdout=${execution.runResult.stdout.length} bytes, stderr=${execution.runResult.stderr.length} bytes, duration=${durationSeconds.toFixed(1)}s`
       );
 
       return {
-        content,
+        ...execution.result,
         durationSeconds,
-        usage: this.estimateUsage(prompt, content),
-        findings: parsed.findings,
-        revalidations: parsed.revalidations,
+        usage: this.estimateUsage(prompt, execution.content),
       };
     } catch (error) {
       const normalized = this.normalizeCodexError(error);
       logger.error(`Codex provider failed: ${this.name}`, normalized);
       throw normalized;
     }
+  }
+
+  async prepareInvocation(
+    prompt: string,
+    timeoutMs: number,
+    executionPolicy?: ProviderExecutionPolicy
+  ): Promise<PreparedProviderInvocation<CodexPreparedRequest>> {
+    const effectiveTimeoutMs =
+      executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
+    if (effectiveTimeoutMs <= 0) {
+      const deadlineError = new Error(
+        'Review execution deadline reached before Codex invocation'
+      );
+      deadlineError.name = 'TimeoutError';
+      throw deadlineError;
+    }
+    const binary = await this.resolveBinary();
+    const cwd = process.cwd();
+    const agenticContext = this.shouldUseAgenticContext();
+    const finalPrompt = agenticContext
+      ? await this.wrapAgenticReviewPrompt(prompt)
+      : this.wrapPromptOnlyReviewPrompt(prompt);
+    const auditMode = agenticContext ? this.agenticAuditMode() : 'off';
+    const eventAudit = this.shouldUseEventAudit();
+    const forkSandbox = this.shouldUseForkSandboxCodexHomeConfig();
+    const reasoningEffort = this.resolveReasoningEffort(false);
+    const frozenCliConfig: CodexFrozenCliConfig = {
+      model: this.model,
+      modelProvider: this.options.modelProvider,
+      forkSandbox,
+      reasoningEffort,
+    };
+    const fullEnvironment = this.buildSafeEnv(true, frozenCliConfig);
+    const environment = this.withoutCredentialEnvironment(fullEnvironment);
+    const outputSchema = this.buildFindingsSchema();
+    const argsTemplate = this.buildExecArgs(
+      {
+        healthCheck: false,
+        outputLastMessageFile: CODEX_OUTPUT_FILE_PLACEHOLDER,
+        outputSchemaFile: CODEX_SCHEMA_FILE_PLACEHOLDER,
+        eventAudit,
+        jsonEvents: auditMode !== 'off',
+      },
+      frozenCliConfig
+    );
+
+    return createPreparedProviderInvocation({
+      providerKind: ProviderKind.CodexCli,
+      providerName: this.name,
+      requestedModel: this.model,
+      timeoutMs: effectiveTimeoutMs,
+      request: {
+        binary,
+        prompt: finalPrompt,
+        cwd,
+        argsTemplate,
+        outputSchema,
+        environment,
+        eventAudit,
+        jsonEvents: auditMode !== 'off',
+        auditMode,
+        optionalAgenticRetryMaxPromptTokens:
+          MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
+        acceptReviewOutputOnNonZero: true,
+      },
+    });
+  }
+
+  async executePreparedInvocation(
+    invocation: PreparedProviderInvocation,
+    credentialLease?: ProviderCredentialLease,
+    signal?: AbortSignal
+  ): Promise<ReviewResult> {
+    try {
+      return (
+        await this.executePreparedDetailed(invocation, credentialLease, signal)
+      ).result;
+    } catch (error) {
+      throw this.normalizeCodexError(error);
+    }
+  }
+
+  private prepareRetryInvocation(
+    previous: PreparedProviderInvocation<CodexPreparedRequest>,
+    retryPrompt: string,
+    timeoutMs: number
+  ): PreparedProviderInvocation<CodexPreparedRequest> {
+    return createPreparedProviderInvocation({
+      providerKind: ProviderKind.CodexCli,
+      providerName: previous.providerName,
+      requestedModel: previous.requestedModel,
+      timeoutMs,
+      request: {
+        ...previous.request,
+        prompt: retryPrompt,
+        jsonEvents: true,
+      },
+    });
+  }
+
+  private async executePreparedDetailed(
+    invocation: PreparedProviderInvocation,
+    credentialLease?: ProviderCredentialLease,
+    signal?: AbortSignal
+  ): Promise<CodexPreparedExecution> {
+    const prepared = requirePreparedProviderInvocation<CodexPreparedRequest>(
+      invocation,
+      ProviderKind.CodexCli,
+      this.name
+    );
+    const request = prepared.request;
+    logger.info(
+      `Running Codex CLI safely: ${request.binary} exec --model ${prepared.requestedModel} --sandbox read-only --ephemeral ...`
+    );
+    const started = Date.now();
+    const runResult = await this.runCliWithStdin(
+      request.binary,
+      request.prompt,
+      prepared.timeoutMs,
+      {
+        healthCheck: false,
+        outputSchema: request.outputSchema,
+        eventAudit: request.eventAudit,
+        jsonEvents: request.jsonEvents,
+        cwd: request.cwd,
+        acceptReviewOutputOnNonZero: request.acceptReviewOutputOnNonZero,
+        signal,
+      },
+      {
+        argsTemplate: request.argsTemplate,
+        cwd: request.cwd,
+        environment: mergeCredentialEnvironment(
+          request.environment,
+          credentialLease?.environment
+        ),
+      }
+    );
+    const content = this.sanitizeReviewContent(
+      (runResult.lastMessage || runResult.stdout).trim(),
+      request.cwd
+    );
+    const parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
+    return {
+      content,
+      parsed,
+      runResult,
+      result: {
+        content,
+        durationSeconds: (Date.now() - started) / 1000,
+        usage: this.estimateUsage(request.prompt, content),
+        findings: parsed.findings,
+        revalidations: parsed.revalidations,
+      },
+    };
+  }
+
+  private captureCredentialLease(
+    invocation: PreparedProviderInvocation<CodexPreparedRequest>
+  ): ProviderCredentialLease {
+    const environment: NodeJS.ProcessEnv = {};
+    const credentialKeys = ['OPENAI_API_KEY'];
+    if (
+      invocation.request.argsTemplate.includes(
+        'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
+      )
+    ) {
+      credentialKeys.push('OPENROUTER_API_KEY');
+    }
+    for (const key of credentialKeys) {
+      if (process.env[key] !== undefined) environment[key] = process.env[key];
+    }
+    return { environment: Object.freeze(environment) };
+  }
+
+  private withoutCredentialEnvironment(
+    environment: NodeJS.ProcessEnv
+  ): Readonly<NodeJS.ProcessEnv> {
+    const sanitized = { ...environment };
+    delete sanitized.OPENAI_API_KEY;
+    delete sanitized.OPENROUTER_API_KEY;
+    return Object.freeze(sanitized);
   }
 
   async runStructuredPrompt(
@@ -330,20 +520,31 @@ export class CodexProvider extends Provider {
     };
   }
 
-  private buildExecArgs(options: {
-    healthCheck: boolean;
-    outputLastMessageFile: string;
-    outputSchemaFile?: string;
-    eventAudit?: boolean;
-    jsonEvents?: boolean;
-    disableTools?: boolean;
-    skipGitRepoCheck?: boolean;
-  }): string[] {
+  private buildExecArgs(
+    options: {
+      healthCheck: boolean;
+      outputLastMessageFile: string;
+      outputSchemaFile?: string;
+      eventAudit?: boolean;
+      jsonEvents?: boolean;
+      disableTools?: boolean;
+      skipGitRepoCheck?: boolean;
+    },
+    frozenConfig?: CodexFrozenCliConfig
+  ): string[] {
+    const config =
+      frozenConfig ??
+      ({
+        model: this.model,
+        modelProvider: this.options.modelProvider,
+        forkSandbox: this.shouldUseForkSandboxCodexHomeConfig(),
+        reasoningEffort: this.resolveReasoningEffort(options.healthCheck),
+      } satisfies CodexFrozenCliConfig);
     // The top-level `codex` command starts the interactive TUI and fails in CI.
     const args = [
       'exec',
       '--model',
-      this.model,
+      config.model,
       '--sandbox',
       'read-only',
       '--ephemeral',
@@ -354,7 +555,7 @@ export class CodexProvider extends Provider {
       options.outputLastMessageFile,
     ];
 
-    if (!this.shouldUseForkSandboxCodexHomeConfig()) {
+    if (!config.forkSandbox) {
       args.splice(args.indexOf('--ignore-rules'), 0, '--ignore-user-config');
     }
 
@@ -391,18 +592,14 @@ export class CodexProvider extends Provider {
       args.push('--json');
     }
 
-    const effort = options.healthCheck
-      ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || 'low'
-      : process.env.CODEX_REASONING_EFFORT;
-
-    if (effort) {
-      const normalized = effort.trim().toLowerCase();
+    if (config.reasoningEffort) {
+      const normalized = config.reasoningEffort.trim().toLowerCase();
       if (/^[a-z]+$/.test(normalized)) {
         args.push('-c', `model_reasoning_effort="${normalized}"`);
       }
     }
 
-    if (this.options.modelProvider === 'openrouter') {
+    if (config.modelProvider === 'openrouter') {
       args.push(
         '-c',
         'model_provider="openrouter"',
@@ -423,7 +620,12 @@ export class CodexProvider extends Provider {
     bin: string,
     stdin: string,
     timeoutMs: number,
-    options: CodexRunOptions
+    options: CodexRunOptions,
+    prepared?: {
+      readonly argsTemplate: readonly string[];
+      readonly cwd: string;
+      readonly environment: Readonly<NodeJS.ProcessEnv>;
+    }
   ): Promise<CodexRunResult> {
     // Write prompt to temporary file to avoid TTY check issues
     // Use restrictive permissions (0600) since prompt may contain sensitive PR diffs
@@ -444,15 +646,21 @@ export class CodexProvider extends Provider {
         });
       }
 
-      const args = this.buildExecArgs({
-        healthCheck: options.healthCheck,
-        outputLastMessageFile: outputFile,
-        outputSchemaFile: schemaFile,
-        eventAudit: options.eventAudit && !options.healthCheck,
-        jsonEvents: options.jsonEvents && !options.healthCheck,
-        disableTools: options.disableTools,
-        skipGitRepoCheck: options.skipGitRepoCheck,
-      });
+      const args = prepared
+        ? prepared.argsTemplate.map((argument) =>
+            argument
+              .replace(CODEX_OUTPUT_FILE_PLACEHOLDER, outputFile)
+              .replace(CODEX_SCHEMA_FILE_PLACEHOLDER, schemaFile ?? '')
+          )
+        : this.buildExecArgs({
+            healthCheck: options.healthCheck,
+            outputLastMessageFile: outputFile,
+            outputSchemaFile: schemaFile,
+            eventAudit: options.eventAudit && !options.healthCheck,
+            jsonEvents: options.jsonEvents && !options.healthCheck,
+            disableTools: options.disableTools,
+            skipGitRepoCheck: options.skipGitRepoCheck,
+          });
 
       // Use stdin redirection via file descriptor instead of shell
       // This avoids both "stdin is not a terminal" error and shell injection
@@ -463,33 +671,53 @@ export class CodexProvider extends Provider {
         stdout: string;
         stderr: string;
       }>((resolve, reject) => {
+        if (options.signal?.aborted) {
+          reject(abortError());
+          return;
+        }
         const proc = spawn(bin, args, {
           stdio: [fdNum, 'pipe', 'pipe'],
           detached: true,
-          cwd: options.cwd || process.cwd(),
-          env: this.buildSafeEnv(options.includeWorkspaceEnv !== false),
+          cwd: prepared?.cwd ?? options.cwd ?? process.cwd(),
+          env:
+            prepared?.environment ??
+            this.buildSafeEnv(options.includeWorkspaceEnv !== false),
         });
 
         let stdout = '';
         let stderr = '';
-        let timedOut = false;
+        let settled = false;
 
-        const timer = setTimeout(() => {
-          timedOut = true;
-          logger.warn(
-            `Codex CLI timeout (${timeoutMs}ms), killing process and all children`
-          );
-
+        const terminate = () => {
           try {
-            if (proc.pid) {
-              process.kill(-proc.pid, 'SIGKILL');
-            }
+            if (proc.pid) process.kill(-proc.pid, 'SIGKILL');
           } catch {
             proc.kill('SIGKILL');
           }
+        };
+        const cleanup = () => {
+          clearTimeout(timer);
+          options.signal?.removeEventListener('abort', onAbort);
+        };
+        const fail = (error: unknown) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(error);
+        };
+        const onAbort = () => {
+          terminate();
+          fail(abortError());
+        };
 
-          reject(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
+        const timer = setTimeout(() => {
+          logger.warn(
+            `Codex CLI timeout (${timeoutMs}ms), killing process and all children`
+          );
+          terminate();
+          fail(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
         }, timeoutMs);
+        options.signal?.addEventListener('abort', onAbort, { once: true });
 
         proc.stdout?.on('data', (chunk) => {
           stdout += chunk.toString();
@@ -498,23 +726,21 @@ export class CodexProvider extends Provider {
           stderr += chunk.toString();
         });
         proc.on('error', (err) => {
-          if (!timedOut) {
-            clearTimeout(timer);
-            reject(err);
-          }
+          fail(err);
         });
         proc.on('close', (code) => {
-          if (!timedOut) {
-            clearTimeout(timer);
-            if (code !== 0) {
-              const message = `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr, stdout)}`;
-              reject(new CodexCliExitError(code, stdout, stderr, message));
-            } else {
-              resolve({ stdout, stderr });
-            }
+          if (settled) return;
+          settled = true;
+          cleanup();
+          if (code !== 0) {
+            const message = `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr, stdout)}`;
+            reject(new CodexCliExitError(code, stdout, stderr, message));
+          } else {
+            resolve({ stdout, stderr });
           }
         });
       }).catch(async (error) => {
+        if (options.signal?.aborted) throw error;
         const lastMessage = await this.readOptionalFile(outputFile);
         if (
           options.acceptReviewOutputOnNonZero &&
@@ -615,7 +841,8 @@ export class CodexProvider extends Provider {
     parsed: ParsedReviewOutput,
     audit: CodexAgenticAudit | undefined,
     prompt: string,
-    mode: CodexAgenticAuditMode
+    mode: CodexAgenticAuditMode,
+    maxPromptTokens = MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS
   ): boolean {
     if (
       (mode !== 'rerun' && mode !== 'strict') ||
@@ -626,9 +853,9 @@ export class CodexProvider extends Provider {
     if (mode === 'strict') return true;
 
     const promptTokens = estimateTokensSimple(prompt).tokens;
-    if (promptTokens > MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS) {
+    if (promptTokens > maxPromptTokens) {
       logger.info(
-        `Skipping optional Codex agentic retry for ${this.name}: prompt is approximately ${promptTokens} tokens (limit ${MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS})`
+        `Skipping optional Codex agentic retry for ${this.name}: prompt is approximately ${promptTokens} tokens (limit ${maxPromptTokens})`
       );
       return false;
     }
@@ -760,16 +987,20 @@ export class CodexProvider extends Provider {
     return buildReviewFindingsSchema();
   }
 
-  private buildSafeEnv(includeWorkspaceEnv = true): NodeJS.ProcessEnv {
+  private buildSafeEnv(
+    includeWorkspaceEnv = true,
+    frozenConfig?: Pick<CodexFrozenCliConfig, 'forkSandbox' | 'modelProvider'>
+  ): NodeJS.ProcessEnv {
+    const forkSandbox =
+      frozenConfig?.forkSandbox ?? this.shouldUseForkSandboxCodexHomeConfig();
+    const modelProvider =
+      frozenConfig?.modelProvider ?? this.options.modelProvider;
     return buildCliSafeEnv({
-      includeWorkspaceEnv:
-        includeWorkspaceEnv && !this.shouldUseForkSandboxCodexHomeConfig(),
+      includeWorkspaceEnv: includeWorkspaceEnv && !forkSandbox,
       extraAllowedKeys: [
         'CODEX_HOME',
         'OPENAI_API_KEY',
-        ...(this.options.modelProvider === 'openrouter'
-          ? ['OPENROUTER_API_KEY']
-          : []),
+        ...(modelProvider === 'openrouter' ? ['OPENROUTER_API_KEY'] : []),
       ],
     });
   }
@@ -781,12 +1012,21 @@ export class CodexProvider extends Provider {
     );
   }
 
-  private sanitizeReviewContent(content: string): string {
-    const cwd = process.cwd().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  private sanitizeReviewContent(
+    content: string,
+    workingDirectory = process.cwd()
+  ): string {
+    const cwd = workingDirectory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return content
       .replace(new RegExp(`${cwd}/?`, 'g'), '')
       .replace(/\/home\/runner\/work\/[^/\s")]+\/[^/\s")]+\//g, '')
       .replace(/\/private\/tmp\/[^/\s")]+\//g, '');
+  }
+
+  private resolveReasoningEffort(healthCheck: boolean): string | undefined {
+    return healthCheck
+      ? process.env.CODEX_HEALTHCHECK_REASONING_EFFORT || 'low'
+      : process.env.CODEX_REASONING_EFFORT;
   }
 
   private async buildRepositoryContextSeed(prompt: string): Promise<string> {
@@ -1853,4 +2093,10 @@ export class CodexProvider extends Provider {
   private parseFindingsStrict(content: string): Finding[] {
     return parseReviewFindingsStrict(content, 'Codex CLI');
   }
+}
+
+function abortError(): Error {
+  const error = new Error('Codex CLI aborted');
+  error.name = 'AbortError';
+  return error;
 }

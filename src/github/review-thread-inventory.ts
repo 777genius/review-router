@@ -16,6 +16,7 @@ import { logger } from '../utils/logger';
 
 export const DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS = ['review-router-ai[bot]'];
 const GITHUB_ACTIONS_BOT_AUTHOR = 'github-actions[bot]';
+const RESOLUTION_REPLY_MARKER = 'reviewrouter-lifecycle-resolution:v1';
 
 const TRUSTED_AUTHOR_ENV_KEYS = [
   'REVIEW_THREAD_LIFECYCLE_TRUSTED_AUTHORS',
@@ -294,8 +295,18 @@ export class ReviewThreadInventoryLoader {
     if (!hasOldFindingDetails) reasonCodes.push('missing_old_finding_details');
     if (commentsTruncated) reasonCodes.push('pagination_incomplete');
 
+    const targetId = targetIdFor(thread.id, parent.id, fingerprint);
+    const trustedResolutionMarker = commentsTruncated
+      ? undefined
+      : findTrustedResolutionMarker({
+          comments,
+          targetId,
+          fingerprint,
+          expectedAuthorLogin: parent.author?.login,
+          isTrustedAuthor: (login) => this.isTrustedAuthor(login),
+        });
     const target: LifecycleTarget = {
-      targetId: targetIdFor(thread.id, parent.id, fingerprint),
+      targetId,
       threadId: thread.id,
       threadUrl: parent.url ?? undefined,
       fingerprint,
@@ -315,6 +326,7 @@ export class ReviewThreadInventoryLoader {
       viewerCanResolve: Boolean(thread.viewerCanResolve),
       hasHumanReply: humanReply,
       trustedAuthor,
+      ...(trustedResolutionMarker ? { trustedResolutionMarker } : {}),
       reasonCodes,
     };
 
@@ -462,6 +474,55 @@ function targetIdFor(
     .update(`${threadId}\n${parentCommentId}\n${fingerprint}`)
     .digest('hex')
     .slice(0, 16)}`;
+}
+
+function findTrustedResolutionMarker(input: {
+  comments: readonly GraphQLComment[];
+  targetId: string;
+  fingerprint: string;
+  expectedAuthorLogin?: string | null;
+  isTrustedAuthor(login?: string | null): boolean;
+}): LifecycleTarget['trustedResolutionMarker'] | undefined {
+  const expectedAuthor = canonicalBotLogin(input.expectedAuthorLogin);
+  if (!expectedAuthor || expectedAuthor === GITHUB_ACTIONS_BOT_AUTHOR) {
+    return undefined;
+  }
+  for (const comment of input.comments.slice(1)) {
+    const markerAuthor = canonicalBotLogin(comment.author?.login);
+    if (
+      markerAuthor !== expectedAuthor ||
+      !input.isTrustedAuthor(comment.author?.login)
+    ) {
+      continue;
+    }
+    const marker = parseResolutionMarker(comment.body ?? '');
+    if (
+      marker?.targetId !== input.targetId ||
+      marker.fingerprint !== input.fingerprint
+    ) {
+      continue;
+    }
+    return {
+      schemaVersion: 'reviewrouter-lifecycle-resolution.v1',
+      targetId: marker.targetId,
+      fingerprint: marker.fingerprint,
+      commentId: comment.id,
+      commentUpdatedAt:
+        comment.updatedAt || comment.createdAt || new Date(0).toISOString(),
+    };
+  }
+  return undefined;
+}
+
+function parseResolutionMarker(
+  body: string
+): { targetId: string; fingerprint: string } | undefined {
+  const match = new RegExp(
+    `<!--\\s*${RESOLUTION_REPLY_MARKER}\\s+target_id=([A-Za-z0-9._:-]{1,160})\\s+fingerprint=([a-f0-9]{24})\\s*-->`,
+    'i'
+  ).exec(body);
+  if (!match?.[1] || !match[2]) return undefined;
+  return { targetId: match[1], fingerprint: match[2].toLowerCase() };
 }
 
 function normalizeLifecycleSeverity(

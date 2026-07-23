@@ -410,6 +410,99 @@ export function hasLifecycleUncertainty(
   );
 }
 
+export function reconcileCarriedFindingsWithLifecycle(input: {
+  mergedFindings: readonly Finding[];
+  carriedFindings: readonly Finding[];
+  lifecycle: ReviewThreadLifecycleResult;
+}): { findings: Finding[]; removed: Finding[] } {
+  if (input.carriedFindings.length === 0 || input.lifecycle.inventoryFailed) {
+    return { findings: [...input.mergedFindings], removed: [] };
+  }
+
+  const carried = new Set(input.carriedFindings);
+  const projectionInactiveTargets = [
+    ...input.lifecycle.resolvedByLifecycle.map((record) => record.target),
+    ...input.lifecycle.mutationFailed
+      .filter((record) => hasTrustedResolutionFallback(record, input.lifecycle))
+      .map((record) => record.target),
+    ...allLifecycleRecords(input.lifecycle)
+      .filter((record) => hasTrustedRecordedResolution(record.target))
+      .map((record) => record.target),
+  ];
+  if (projectionInactiveTargets.length === 0) {
+    return { findings: [...input.mergedFindings], removed: [] };
+  }
+
+  const removed: Finding[] = [];
+  const findings = input.mergedFindings.filter((finding) => {
+    if (!carried.has(finding)) return true;
+    const inactive = projectionInactiveTargets.some((target) =>
+      currentFindingMatchesTarget(finding, target)
+    );
+    if (inactive) removed.push(finding);
+    return !inactive;
+  });
+
+  return { findings, removed };
+}
+
+function allLifecycleRecords(
+  lifecycle: ReviewThreadLifecycleResult
+): LifecycleThreadRecord[] {
+  return [
+    ...lifecycle.resolvedCandidates,
+    ...lifecycle.resolvedByLifecycle,
+    ...lifecycle.previousStillValid,
+    ...lifecycle.previousUncertain,
+    ...lifecycle.manualAttention,
+    ...lifecycle.mutationSkipped,
+    ...lifecycle.mutationFailed,
+    ...lifecycle.skipped,
+  ];
+}
+
+function hasTrustedRecordedResolution(target: LifecycleTarget): boolean {
+  const marker = target.trustedResolutionMarker;
+  return Boolean(
+    marker &&
+    target.trustedAuthor &&
+    !target.hasHumanReply &&
+    marker.schemaVersion === 'reviewrouter-lifecycle-resolution.v1' &&
+    marker.targetId === target.targetId &&
+    marker.fingerprint === target.fingerprint
+  );
+}
+
+function hasTrustedResolutionFallback(
+  record: LifecycleThreadRecord,
+  lifecycle: ReviewThreadLifecycleResult
+): boolean {
+  const reasonCodes = new Set(record.reasonCodes);
+  if (
+    lifecycle.mode !== 'resolve' ||
+    !record.target.trustedAuthor ||
+    record.target.hasHumanReply ||
+    !reasonCodes.has('mutation_permission_denied') ||
+    !reasonCodes.has('resolution_comment_posted') ||
+    Array.from(reasonCodes).some(
+      (reason) =>
+        reason !== 'mutation_permission_denied' &&
+        reason !== 'resolution_comment_posted'
+    )
+  ) {
+    return false;
+  }
+
+  const resolvedProviders = new Set(
+    (record.providerVotes ?? [])
+      .filter((vote) => vote.valid && vote.verdict === 'resolved')
+      .map((vote) => vote.providerId)
+  );
+  return lifecycle.quorumMode === 'single-provider'
+    ? resolvedProviders.size >= 1
+    : resolvedProviders.size >= 2;
+}
+
 function hasConcreteEvidence(
   evidence: Array<{ path?: string; reason?: string }>
 ): boolean {

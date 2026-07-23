@@ -1390,4 +1390,48 @@ describe('CodexProvider', () => {
     expect(content).toContain('[src/ratePolicies.js](src/ratePolicies.js)');
     expect(content).not.toContain('/home/runner/work/');
   });
+
+  it('kills the detached Codex process group when execution is aborted', async () => {
+    const proc = new EventEmitter() as any;
+    proc.stdout = new EventEmitter();
+    proc.stderr = new EventEmitter();
+    proc.kill = jest.fn();
+    proc.pid = 12345;
+    spawnMock.mockReturnValue(proc);
+    const kill = jest
+      .spyOn(process, 'kill')
+      .mockImplementation((() => true) as any);
+    const abort = new AbortController();
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const running = (provider as any).runCliWithStdin(
+      'codex',
+      'review prompt',
+      60_000,
+      { healthCheck: false, signal: abort.signal }
+    );
+    const rejected = expect(running).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+
+    try {
+      for (
+        let attempt = 0;
+        attempt < 100 && spawnMock.mock.calls.length === 0;
+        attempt += 1
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+
+      abort.abort();
+
+      await rejected;
+      expect(kill).toHaveBeenCalledWith(-proc.pid, 'SIGKILL');
+      expect(proc.kill).not.toHaveBeenCalled();
+    } finally {
+      abort.abort();
+      await running.catch(() => undefined);
+      kill.mockRestore();
+    }
+  });
 });

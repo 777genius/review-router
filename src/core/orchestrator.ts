@@ -28,6 +28,7 @@ import {
 import { FindingFilter } from '../analysis/finding-filter';
 import {
   isLinkedCurrentFinding,
+  reconcileCarriedFindingsWithLifecycle,
   ThreadLifecycleAggregator,
 } from '../analysis/thread-lifecycle';
 import { buildJson } from '../output/json';
@@ -456,11 +457,16 @@ export class ReviewOrchestrator {
       const lastReviewData = incrementalPlan.lastReview;
       if (incrementalPlan.mode === IncrementalReviewPlanMode.ReuseCompleted) {
         logger.info(
-          'Completed snapshot matches the current revision; returning it without analysis or snapshot advancement'
+          'Completed snapshot matches the current revision; re-projecting live lifecycle state without provider execution or snapshot advancement'
         );
         const reusedReview = this.createReusedReview(
           incrementalPlan.lastReview,
           start
+        );
+        await this.projectCurrentStateOntoReusedReview(
+          pr,
+          reusedReview,
+          configuredLifecycleMode
         );
         const reusedMarkdown = this.components.formatter.format(reusedReview);
         if (progressTracker) {
@@ -554,7 +560,7 @@ export class ReviewOrchestrator {
         lifecycleWarnings = inventory.warnings;
         lifecycleInventoryFailed = inventory.failed;
         lifecycleDedupeComments = inventory.failed
-          ? []
+          ? undefined
           : inventory.dedupeComments;
         if (inventory.failed) {
           lifecycleTargets = [];
@@ -590,11 +596,10 @@ export class ReviewOrchestrator {
       let providerResults: ProviderResult[] = [];
       let aiAnalysis: ReturnType<typeof summarizeAIDetection> | undefined;
       const unreviewedFiles = new Map<string, string>();
-      const unavailablePatchFiles = new Set<string>();
       const successfulReviewContexts: PRContext[] = [];
       const loadLimitations: string[] = [];
       let additionalUnreviewedFiles = 0;
-      let hasTransientLlmCoverageGap = false;
+      let hasProviderCoverageGap = false;
       if (
         reviewContext.loadCompleteness?.status ===
         PullRequestLoadStatus.Truncated
@@ -621,19 +626,6 @@ export class ReviewOrchestrator {
         filesToReview.length === 0 &&
         unreviewedFiles.size === 0 &&
         loadLimitations.length === 0;
-      const hasOnlyDeterministicCoverageGaps = (): boolean => {
-        if (hasTransientLlmCoverageGap) return false;
-        const hasDeterministicGap =
-          unavailablePatchFiles.size > 0 ||
-          additionalUnreviewedFiles > 0 ||
-          loadLimitations.length > 0;
-        return (
-          hasDeterministicGap &&
-          Array.from(unreviewedFiles.keys()).every((filename) =>
-            unavailablePatchFiles.has(filename)
-          )
-        );
-      };
       const requiredHealthyProviders =
         this.requiredHealthyProviderNames(config);
       let providers: Provider[] = [];
@@ -790,7 +782,7 @@ export class ReviewOrchestrator {
             );
           }
           providerResults = allHealthResults;
-          hasTransientLlmCoverageGap = true;
+          hasProviderCoverageGap = true;
           for (const file of filesToReview) {
             unreviewedFiles.set(
               file.filename,
@@ -879,7 +871,6 @@ export class ReviewOrchestrator {
           const createBatchContext = (batch: readonly FileChange[]) => {
             const recovered = recoverDiffForFiles(reviewContext.diff, batch);
             for (const filename of recovered.unavailableFiles) {
-              unavailablePatchFiles.add(filename);
               unreviewedFiles.set(
                 filename,
                 'unified diff patch was unavailable from GitHub and local git'
@@ -940,6 +931,22 @@ export class ReviewOrchestrator {
           logger.info(`Processing ${batches.length} batch(es)`);
 
           const batchResults: ProviderResult[] = [];
+          const restoredCheckpointResults =
+            checkpointSession?.acceptedBatchResults ?? new Map();
+          if (
+            Array.from(restoredCheckpointResults.values()).some(
+              (payload) =>
+                !this.hasCompleteProviderCheckpointCoverage(
+                  healthy,
+                  this.restoreCheckpointProviderResults(payload)
+                )
+            )
+          ) {
+            logger.warn(
+              'Ignoring the v1 checkpoint session because a restored batch contains partial provider results'
+            );
+            checkpointSession = null;
+          }
           const acceptedCheckpointResults =
             checkpointSession?.acceptedBatchResults ?? new Map();
           for (const plannedBatch of batchPlan.batches) {
@@ -1023,7 +1030,10 @@ export class ReviewOrchestrator {
                 if (
                   checkpointSession &&
                   !requiredFailure &&
-                  scopedResults.some((result) => result.status === 'success')
+                  this.hasCompleteProviderCheckpointCoverage(
+                    healthy,
+                    scopedResults
+                  )
                 ) {
                   await checkpointSession.commitSuccessfulBatch({
                     workKey: plannedBatch.id,
@@ -1087,6 +1097,14 @@ export class ReviewOrchestrator {
               const degradedProviders = result.result.filter(
                 (r) => r.status !== 'success'
               );
+              if (
+                !this.hasCompleteProviderCheckpointCoverage(
+                  healthy,
+                  result.result
+                )
+              ) {
+                hasProviderCoverageGap = true;
+              }
 
               if (successfulProviders.length > 0) {
                 batchSuccesses += 1;
@@ -1121,6 +1139,7 @@ export class ReviewOrchestrator {
                 }
               }
             } else {
+              hasProviderCoverageGap = true;
               batchFailures += 1;
               for (const file of batches[batchIndex] ?? []) {
                 unreviewedFiles.set(
@@ -1152,6 +1171,7 @@ export class ReviewOrchestrator {
           }
 
           for (const deferred of scheduled.deferred) {
+            hasProviderCoverageGap = true;
             batchFailures += 1;
             for (const file of deferred.item.files) {
               unreviewedFiles.set(
@@ -1161,7 +1181,14 @@ export class ReviewOrchestrator {
             }
           }
           if (batchFailures > 0) {
-            hasTransientLlmCoverageGap = true;
+            logger.warn(
+              'Review batch coverage is partial; no completed incremental snapshot will be persisted'
+            );
+          }
+          if (hasProviderCoverageGap) {
+            loadLimitations.push(
+              'One or more selected providers did not complete every review batch'
+            );
           }
 
           this.applyLifecycleBatchProviderFailures(
@@ -1243,7 +1270,7 @@ export class ReviewOrchestrator {
               snapshotAdvancementRequired:
                 (this.components.incrementalSnapshotAdvancementEnabled ??
                   config.incrementalEnabled) &&
-                (llmCoverageComplete || hasOnlyDeterministicCoverageGaps()),
+                llmCoverageComplete,
             });
           }
 
@@ -1468,10 +1495,12 @@ export class ReviewOrchestrator {
           pr.headSha
         );
       if (lifecycleMode !== 'off') {
-        this.applyGraphQLDedupeState(
-          reviewCommentState,
-          lifecycleDedupeComments ?? []
-        );
+        if (lifecycleDedupeComments !== undefined) {
+          this.applyGraphQLDedupeState(
+            reviewCommentState,
+            lifecycleDedupeComments
+          );
+        }
       }
       const dismissedCount = this.applyCommandDismissals(
         review,
@@ -1492,6 +1521,22 @@ export class ReviewOrchestrator {
         );
       }
 
+      const freshCurrentFindings = currentReviewFindingFingerprints
+        ? review.findings.filter((finding) =>
+            currentReviewFindingFingerprints.has(
+              findingFingerprintFromFinding(finding)
+            )
+          )
+        : review.findings;
+      const carriedFindings = currentReviewFindingFingerprints
+        ? review.findings.filter(
+            (finding) =>
+              !currentReviewFindingFingerprints.has(
+                findingFingerprintFromFinding(finding)
+              )
+          )
+        : [];
+
       if (lifecycleMode !== 'off') {
         lifecycleManualAttention = this.filterCommandDismissedLifecycleRecords(
           lifecycleManualAttention,
@@ -1509,7 +1554,7 @@ export class ReviewOrchestrator {
           targets: activeLifecycleTargets,
           plannedProviders: lifecyclePlannedProviders,
           providerResults: lifecycleProviderResults,
-          currentFindings: review.findings,
+          currentFindings: freshCurrentFindings,
           assignmentRecords: lifecycleAssignmentRecords,
           initialManualAttention: lifecycleManualAttention,
           skipped: lifecycleSkipped,
@@ -1572,6 +1617,29 @@ export class ReviewOrchestrator {
         }
         this.failUnconfirmedLifecycleCandidates(lifecycle);
 
+        if (currentReviewFindingFingerprints) {
+          const reconciled = reconcileCarriedFindingsWithLifecycle({
+            mergedFindings: review.findings,
+            carriedFindings,
+            lifecycle,
+          });
+          if (reconciled.removed.length > 0) {
+            review.findings = reconciled.findings;
+            this.refreshFindingDerivedState(review);
+            logger.info(
+              `Removed ${reconciled.removed.length} carried-forward finding(s) after confirmed live lifecycle deactivation`
+            );
+          }
+          review.findingProvenance = buildIncrementalFindingProvenance(
+            review.findings.filter((finding) =>
+              currentReviewFindingFingerprints.has(
+                findingFingerprintFromFinding(finding)
+              )
+            ),
+            review.findings
+          );
+        }
+
         review.threadLifecycle = lifecycle;
       }
 
@@ -1623,7 +1691,7 @@ export class ReviewOrchestrator {
           inlineFiltered,
           pr.files,
           pr.headSha,
-          lifecycleMode !== 'off' ? (lifecycleDedupeComments ?? []) : undefined
+          lifecycleMode !== 'off' ? lifecycleDedupeComments : undefined
         );
       } else {
         logger.info(
@@ -1656,7 +1724,7 @@ export class ReviewOrchestrator {
         }
       }
       if (config.incrementalEnabled) {
-        if (llmCoverageComplete || hasOnlyDeterministicCoverageGaps()) {
+        if (llmCoverageComplete) {
           if (await this.canAdvanceIncrementalSnapshot(pr)) {
             try {
               await this.components.incrementalReviewer.saveReview(pr, review);
@@ -2143,7 +2211,9 @@ export class ReviewOrchestrator {
   private async buildUnreviewedLifecycleForSkippedReview(
     pr: PRContext,
     configuredLifecycleMode: ReviewThreadLifecycleMode,
-    reason: string
+    reason: string,
+    currentFindings: Finding[] = [],
+    loadedReviewCommentState?: ReviewCommentState
   ): Promise<ReviewThreadLifecycleResult | undefined> {
     const lifecycleMode: ReviewThreadLifecycleMode =
       this.components.reviewThreadInventory && this.components.githubClient
@@ -2153,24 +2223,26 @@ export class ReviewOrchestrator {
       return undefined;
     }
 
-    let reviewCommentState: ReviewCommentState;
-    try {
-      reviewCommentState =
-        await this.components.feedbackFilter.loadReviewCommentState(
-          pr.number,
-          pr.headSha
+    let reviewCommentState = loadedReviewCommentState;
+    if (!reviewCommentState) {
+      try {
+        reviewCommentState =
+          await this.components.feedbackFilter.loadReviewCommentState(
+            pr.number,
+            pr.headSha
+          );
+      } catch (error) {
+        logger.warn(
+          'Failed to load review comment state for skipped review lifecycle',
+          error as Error
         );
-    } catch (error) {
-      logger.warn(
-        'Failed to load review comment state for skipped review lifecycle',
-        error as Error
-      );
-      reviewCommentState = {
-        suppressed: new Set(),
-        alreadyPosted: new Set(),
-        suppressedComments: [],
-        alreadyPostedComments: [],
-      };
+        reviewCommentState = {
+          suppressed: new Set(),
+          alreadyPosted: new Set(),
+          suppressedComments: [],
+          alreadyPostedComments: [],
+        };
+      }
     }
 
     const inventory = await this.components.reviewThreadInventory.load(
@@ -2190,7 +2262,7 @@ export class ReviewOrchestrator {
         targets: [],
         plannedProviders: [],
         providerResults: [],
-        currentFindings: [],
+        currentFindings,
         initialManualAttention: [],
         skipped: [],
         warnings,
@@ -2236,12 +2308,63 @@ export class ReviewOrchestrator {
       targets,
       plannedProviders: [],
       providerResults: [],
-      currentFindings: [],
+      currentFindings,
       initialManualAttention: manualAttention,
       skipped,
       warnings,
       config: this.components.config,
     });
+  }
+
+  private async projectCurrentStateOntoReusedReview(
+    pr: PRContext,
+    review: Review,
+    configuredLifecycleMode: ReviewThreadLifecycleMode
+  ): Promise<void> {
+    const reviewCommentState =
+      await this.components.feedbackFilter.loadReviewCommentState(
+        pr.number,
+        pr.headSha
+      );
+    const dismissedCount = this.applyCommandDismissals(
+      review,
+      reviewCommentState
+    );
+    if (dismissedCount > 0) {
+      logger.info(
+        `Applied ${dismissedCount} current /rr skip dismissal(s) to the completed snapshot projection`
+      );
+    }
+    review.findingProvenance = {
+      fromCurrentReview: emptyFindingCounts(),
+      carriedForward: countFindingsBySeverity(review.findings),
+    };
+    review.threadLifecycle =
+      await this.buildUnreviewedLifecycleForSkippedReview(
+        pr,
+        configuredLifecycleMode,
+        'completed snapshot replayed without provider lifecycle revalidation',
+        review.findings,
+        reviewCommentState
+      );
+    if (review.threadLifecycle) {
+      const reconciled = reconcileCarriedFindingsWithLifecycle({
+        mergedFindings: review.findings,
+        carriedFindings: review.findings,
+        lifecycle: review.threadLifecycle,
+      });
+      if (reconciled.removed.length > 0) {
+        review.findings = reconciled.findings;
+        this.refreshFindingDerivedState(review);
+        review.findingProvenance = {
+          fromCurrentReview: emptyFindingCounts(),
+          carriedForward: countFindingsBySeverity(review.findings),
+        };
+        logger.info(
+          `Removed ${reconciled.removed.length} carried-forward finding(s) from the completed snapshot after trusted lifecycle resolution`
+        );
+      }
+    }
   }
 
   private failUnconfirmedLifecycleCandidates(
@@ -2541,6 +2664,22 @@ export class ReviewOrchestrator {
     }
 
     return undefined;
+  }
+
+  private hasCompleteProviderCheckpointCoverage(
+    plannedProviders: readonly Provider[],
+    results: readonly ProviderResult[]
+  ): boolean {
+    if (results.length !== plannedProviders.length) return false;
+    const resultByName = new Map(
+      results.map((result) => [result.name, result] as const)
+    );
+    if (resultByName.size !== results.length) return false;
+
+    return plannedProviders.every((provider) => {
+      const result = resultByName.get(provider.name);
+      return result?.status === 'success' && result.result !== undefined;
+    });
   }
 
   private selectExecutionProviders(
@@ -3144,6 +3283,15 @@ export class ReviewOrchestrator {
       (comment) =>
         !this.components.feedbackFilter.isInlineCommandDismissed(comment, state)
     );
+    this.refreshFindingDerivedState(review);
+    review.metrics.dismissedFindings =
+      (review.metrics.dismissedFindings ?? 0) +
+      (before - review.findings.length);
+
+    return before - review.findings.length;
+  }
+
+  private refreshFindingDerivedState(review: Review): void {
     review.actionItems = Array.from(
       new Set(
         review.findings
@@ -3164,11 +3312,6 @@ export class ReviewOrchestrator {
     review.metrics.minor = review.findings.filter(
       (finding) => finding.severity === 'minor'
     ).length;
-    review.metrics.dismissedFindings =
-      (review.metrics.dismissedFindings ?? 0) +
-      (before - review.findings.length);
-
-    return before - review.findings.length;
   }
 
   /**

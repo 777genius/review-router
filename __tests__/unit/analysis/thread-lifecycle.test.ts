@@ -2,6 +2,7 @@ import {
   countPreviousStillValidBySeverity,
   ThreadLifecycleAggregator,
   hasLifecycleUncertainty,
+  reconcileCarriedFindingsWithLifecycle,
 } from '../../../src/analysis/thread-lifecycle';
 import {
   Finding,
@@ -748,4 +749,284 @@ describe('ThreadLifecycleAggregator', () => {
     expect(lifecycle.manualAttention).toHaveLength(0);
     expect(hasLifecycleUncertainty(lifecycle)).toBe(false);
   });
+
+  it('removes only carried findings whose live lifecycle resolution was confirmed', () => {
+    const carriedFinding: Finding = {
+      file: 'src/app.ts',
+      line: 12,
+      severity: 'major',
+      title: 'Old bug',
+      message: 'Old bug still matters',
+    };
+    const freshFinding: Finding = {
+      ...carriedFinding,
+      title: 'Fresh bug',
+      message: 'A fresh issue from this review.',
+      line: 40,
+    };
+    const lifecycle = new ThreadLifecycleAggregator().aggregate({
+      mode: 'resolve',
+      targets: [target()],
+      plannedProviders: ['provider-a'],
+      providerResults: [success('provider-a', [resolvedVote()])],
+      currentFindings: [freshFinding],
+    });
+    lifecycle.resolvedByLifecycle.push(
+      ...lifecycle.resolvedCandidates.map((record) => ({
+        ...record,
+        resolvedBy: 'review-router' as const,
+      }))
+    );
+    lifecycle.resolvedCandidates = [];
+
+    expect(
+      reconcileCarriedFindingsWithLifecycle({
+        mergedFindings: [carriedFinding, freshFinding],
+        carriedFindings: [carriedFinding],
+        lifecycle,
+      })
+    ).toEqual({ findings: [freshFinding], removed: [carriedFinding] });
+  });
+
+  it('deactivates a carried finding after a trusted fallback resolution reply is posted', () => {
+    const carriedFinding: Finding = {
+      file: 'src/app.ts',
+      line: 12,
+      severity: 'major',
+      title: 'Old bug',
+      message: 'Old bug still matters',
+    };
+    const lifecycle = new ThreadLifecycleAggregator().aggregate({
+      mode: 'resolve',
+      targets: [target()],
+      plannedProviders: ['provider-a'],
+      providerResults: [success('provider-a', [resolvedVote()])],
+      currentFindings: [],
+    });
+    lifecycle.mutationFailed.push(
+      ...lifecycle.resolvedCandidates.map((record) => ({
+        ...record,
+        reasonCodes: [
+          ...record.reasonCodes,
+          'mutation_permission_denied' as const,
+          'resolution_comment_posted' as const,
+        ],
+      }))
+    );
+    lifecycle.resolvedCandidates = [];
+
+    expect(
+      reconcileCarriedFindingsWithLifecycle({
+        mergedFindings: [carriedFinding],
+        carriedFindings: [carriedFinding],
+        lifecycle,
+      })
+    ).toEqual({ findings: [], removed: [carriedFinding] });
+    expect(lifecycle.resolvedByLifecycle).toHaveLength(0);
+    expect(lifecycle.mutationFailed).toHaveLength(1);
+  });
+
+  it('deactivates a carried finding from a previously recorded trusted resolution marker', () => {
+    const carriedFinding: Finding = {
+      file: 'src/app.ts',
+      line: 12,
+      severity: 'major',
+      title: 'Old bug',
+      message: 'Old bug still matters',
+    };
+    const resolvedTarget = target({
+      trustedResolutionMarker: {
+        schemaVersion: 'reviewrouter-lifecycle-resolution.v1',
+        targetId: 'rrt_target_1',
+        fingerprint: 'a'.repeat(24),
+        commentId: 'comment-resolution',
+        commentUpdatedAt: '2026-07-22T00:00:00.000Z',
+      },
+    });
+    const lifecycle = new ThreadLifecycleAggregator().aggregate({
+      mode: 'resolve',
+      targets: [resolvedTarget],
+      plannedProviders: [],
+      providerResults: [],
+      currentFindings: [carriedFinding],
+    });
+
+    expect(
+      reconcileCarriedFindingsWithLifecycle({
+        mergedFindings: [carriedFinding],
+        carriedFindings: [carriedFinding],
+        lifecycle,
+      })
+    ).toEqual({ findings: [], removed: [carriedFinding] });
+  });
+
+  it('retains a carried finding when a fallback marker lacks resolved provider quorum', () => {
+    const carriedFinding: Finding = {
+      file: 'src/app.ts',
+      line: 12,
+      severity: 'major',
+      title: 'Old bug',
+      message: 'Old bug still matters',
+    };
+    const oneResolvedVote = {
+      ...resolvedVote(),
+      providerId: 'provider-a',
+      valid: true,
+      reasonCodes: [],
+    };
+    const lifecycle = new ThreadLifecycleAggregator().aggregate({
+      mode: 'resolve',
+      targets: [],
+      plannedProviders: ['provider-a', 'provider-b'],
+      providerResults: [],
+      currentFindings: [],
+    });
+    lifecycle.mutationFailed.push({
+      target: target(),
+      reasonCodes: ['mutation_permission_denied', 'resolution_comment_posted'],
+      providerVotes: [oneResolvedVote],
+    });
+
+    expect(
+      reconcileCarriedFindingsWithLifecycle({
+        mergedFindings: [carriedFinding],
+        carriedFindings: [carriedFinding],
+        lifecycle,
+      })
+    ).toEqual({ findings: [carriedFinding], removed: [] });
+  });
+
+  it.each([
+    {
+      name: 'fallback reply failed',
+      reasonCodes: [
+        'mutation_permission_denied',
+        'resolution_comment_failed',
+      ] as const,
+      targetOverrides: {},
+      inventoryFailed: false,
+    },
+    {
+      name: 'permission denied without a fallback marker',
+      reasonCodes: ['mutation_permission_denied'] as const,
+      targetOverrides: {},
+      inventoryFailed: false,
+    },
+    {
+      name: 'fallback marker belongs to an untrusted target',
+      reasonCodes: [
+        'mutation_permission_denied',
+        'resolution_comment_posted',
+      ] as const,
+      targetOverrides: { trustedAuthor: false },
+      inventoryFailed: false,
+    },
+    {
+      name: 'fallback marker is mixed with an uncertain outcome',
+      reasonCodes: [
+        'mutation_permission_denied',
+        'resolution_comment_posted',
+        'provider_uncertain',
+      ] as const,
+      targetOverrides: {},
+      inventoryFailed: false,
+    },
+    {
+      name: 'fallback marker is mixed with a skipped outcome',
+      reasonCodes: [
+        'mutation_permission_denied',
+        'resolution_comment_posted',
+        'head_sha_changed',
+      ] as const,
+      targetOverrides: {},
+      inventoryFailed: false,
+    },
+    {
+      name: 'thread inventory failed',
+      reasonCodes: [
+        'mutation_permission_denied',
+        'resolution_comment_posted',
+      ] as const,
+      targetOverrides: {},
+      inventoryFailed: true,
+    },
+  ])('retains carried findings when $name', (scenario) => {
+    const carriedFinding: Finding = {
+      file: 'src/app.ts',
+      line: 12,
+      severity: 'major',
+      title: 'Old bug',
+      message: 'Old bug still matters',
+    };
+    const lifecycle = new ThreadLifecycleAggregator().aggregate({
+      mode: 'resolve',
+      targets: [target(scenario.targetOverrides)],
+      plannedProviders: ['provider-a'],
+      providerResults: [success('provider-a', [resolvedVote()])],
+      currentFindings: [],
+    });
+    const candidate = lifecycle.resolvedCandidates[0] ?? {
+      target: target(scenario.targetOverrides),
+      reasonCodes: [],
+      providerVotes: [
+        {
+          ...resolvedVote(),
+          providerId: 'provider-a',
+          valid: true,
+          reasonCodes: [],
+        },
+      ],
+    };
+    lifecycle.mutationFailed.push({
+      ...candidate,
+      reasonCodes: [...scenario.reasonCodes],
+    });
+    lifecycle.resolvedCandidates = [];
+    lifecycle.inventoryFailed = scenario.inventoryFailed;
+
+    expect(
+      reconcileCarriedFindingsWithLifecycle({
+        mergedFindings: [carriedFinding],
+        carriedFindings: [carriedFinding],
+        lifecycle,
+      })
+    ).toEqual({ findings: [carriedFinding], removed: [] });
+  });
+
+  it.each([
+    'previousUncertain',
+    'mutationSkipped',
+    'mutationFailed',
+    'skipped',
+  ] as const)(
+    'retains carried findings when the target is only in %s',
+    (outcome) => {
+      const carriedFinding: Finding = {
+        file: 'src/app.ts',
+        line: 12,
+        severity: 'major',
+        title: 'Old bug',
+        message: 'Old bug still matters',
+      };
+      const lifecycle = new ThreadLifecycleAggregator().aggregate({
+        mode: 'resolve',
+        targets: [],
+        plannedProviders: [],
+        providerResults: [],
+        currentFindings: [],
+      });
+      lifecycle[outcome].push({
+        target: target(),
+        reasonCodes: ['provider_uncertain'],
+      });
+
+      expect(
+        reconcileCarriedFindingsWithLifecycle({
+          mergedFindings: [carriedFinding],
+          carriedFindings: [carriedFinding],
+          lifecycle,
+        })
+      ).toEqual({ findings: [carriedFinding], removed: [] });
+    }
+  );
 });

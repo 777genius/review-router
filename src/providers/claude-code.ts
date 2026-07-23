@@ -13,6 +13,13 @@ import {
   parseReviewOutputStrict,
   parseReviewFindingsStrict,
 } from './review-output';
+import {
+  createPreparedProviderInvocation,
+  type PreparedProviderInvocation,
+  type ProviderCredentialLease,
+  ProviderKind,
+  requirePreparedProviderInvocation,
+} from './prepared-invocation';
 
 const CLAUDE_STDIN_LIMIT_BYTES = 10 * 1024 * 1024;
 const CLAUDE_CODE_OAUTH_TOKEN_ENV = 'CLAUDE_CODE_OAUTH_TOKEN';
@@ -20,6 +27,18 @@ const CLAUDE_CODE_OAUTH_TOKEN_ENV = 'CLAUDE_CODE_OAUTH_TOKEN';
 type ClaudeCodeProviderOptions = {
   readonly agenticContext?: boolean;
 };
+
+type ClaudeCodePreparedRequest = {
+  readonly binary: string;
+  readonly prompt: string;
+  readonly argsTemplate: readonly string[];
+  readonly forkArgsTemplate: readonly string[];
+  readonly environment: Readonly<NodeJS.ProcessEnv>;
+  readonly forkSandbox: boolean;
+  readonly forkSafeSettings: unknown | null;
+};
+
+const CLAUDE_SETTINGS_FILE_PLACEHOLDER = '{reviewrouter_settings_file}';
 
 export class ClaudeCodeProvider extends Provider {
   constructor(
@@ -70,18 +89,29 @@ export class ClaudeCodeProvider extends Provider {
   }
 
   async review(prompt: string, timeoutMs: number): Promise<ReviewResult> {
-    const started = Date.now();
-    const agenticContext =
-      this.options.agenticContext === true || this.isForkSandboxMode();
+    const oauthToken = this.readClaudeCodeOAuthToken();
+    const invocation = await this.prepareInvocation(prompt, timeoutMs);
+    const result = await this.executePreparedInvocation(invocation, {
+      bearerToken: oauthToken,
+    });
+    return {
+      ...result,
+      usage: this.estimateUsage(prompt, result.content),
+    };
+  }
+
+  async prepareInvocation(
+    prompt: string,
+    timeoutMs: number
+  ): Promise<PreparedProviderInvocation<ClaudeCodePreparedRequest>> {
+    const forkSandbox = this.isForkSandboxMode();
+    const agenticContext = this.options.agenticContext === true || forkSandbox;
     const reviewPrompt = agenticContext
       ? this.wrapReadOnlyAgenticPrompt(prompt)
       : prompt;
     this.assertPromptWithinStdinLimit(reviewPrompt);
-    const oauthToken = this.readClaudeCodeOAuthToken();
-
     const binary = await this.resolveBinary();
-    const schema = JSON.stringify(buildReviewFindingsSchema());
-    const args = [
+    const argsTemplate = [
       '--model',
       this.model,
       '--print',
@@ -94,20 +124,50 @@ export class ClaudeCodeProvider extends Provider {
       '--output-format',
       'json',
       '--json-schema',
-      schema,
+      JSON.stringify(buildReviewFindingsSchema()),
     ];
 
+    return createPreparedProviderInvocation({
+      providerKind: ProviderKind.ClaudeCodeCli,
+      providerName: this.name,
+      requestedModel: this.model,
+      timeoutMs,
+      request: {
+        binary,
+        prompt: reviewPrompt,
+        argsTemplate,
+        forkArgsTemplate: forkSandbox
+          ? this.buildForkSafeArgs(CLAUDE_SETTINGS_FILE_PLACEHOLDER)
+          : [],
+        environment: this.buildSafeEnv({ forkSandbox }),
+        forkSandbox,
+        forkSafeSettings: forkSandbox ? this.buildForkSafeSettings() : null,
+      },
+    });
+  }
+
+  async executePreparedInvocation(
+    invocation: PreparedProviderInvocation,
+    credentialLease?: ProviderCredentialLease
+  ): Promise<ReviewResult> {
+    const prepared =
+      requirePreparedProviderInvocation<ClaudeCodePreparedRequest>(
+        invocation,
+        ProviderKind.ClaudeCodeCli,
+        this.name
+      );
+    const request = prepared.request;
+    const started = Date.now();
+
     logger.info(
-      `Running Claude Code CLI safely: ${binary} --model ${this.model} --print --output-format json ...`
+      `Running Claude Code CLI safely: ${request.binary} --model ${prepared.requestedModel} --print --output-format json ...`
     );
 
     try {
       const { stdout, stderr } = await this.runCliWithStdin(
-        binary,
-        args,
-        reviewPrompt,
-        timeoutMs,
-        oauthToken
+        request,
+        prepared.timeoutMs,
+        credentialLease?.bearerToken
       );
       const content = this.extractReviewContent(stdout);
       const durationSeconds = (Date.now() - started) / 1000;
@@ -123,7 +183,7 @@ export class ClaudeCodeProvider extends Provider {
       return {
         content,
         durationSeconds,
-        usage: this.estimateUsage(prompt, content),
+        usage: this.estimateUsage(request.prompt, content),
         findings: parsed.findings,
         revalidations: parsed.revalidations,
       };
@@ -226,9 +286,7 @@ export class ClaudeCodeProvider extends Provider {
   }
 
   private async runCliWithStdin(
-    bin: string,
-    args: string[],
-    stdin: string,
+    request: Readonly<ClaudeCodePreparedRequest>,
     timeoutMs: number,
     oauthToken?: string
   ): Promise<{ stdout: string; stderr: string }> {
@@ -241,25 +299,32 @@ export class ClaudeCodeProvider extends Provider {
 
     try {
       await fs.mkdir(claudeConfigDir, { mode: 0o700 });
-      await fs.writeFile(promptFile, stdin, { encoding: 'utf8', mode: 0o600 });
+      await fs.writeFile(promptFile, request.prompt, {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
       fd = await fs.open(promptFile, 'r');
       const fdNum = fd.fd;
-      const effectiveArgs = [...args];
-      if (this.isForkSandboxMode()) {
+      const effectiveArgs = [...request.argsTemplate];
+      if (request.forkSandbox) {
         const settingsPath = path.join(tmpDir, 'fork-safe-settings.json');
         await fs.writeFile(
           settingsPath,
-          JSON.stringify(this.buildForkSafeSettings()),
+          JSON.stringify(request.forkSafeSettings),
           { encoding: 'utf8', mode: 0o600 }
         );
-        effectiveArgs.push(...this.buildForkSafeArgs(settingsPath));
+        effectiveArgs.push(
+          ...request.forkArgsTemplate.map((argument) =>
+            argument.replace(CLAUDE_SETTINGS_FILE_PLACEHOLDER, settingsPath)
+          )
+        );
       }
 
       return await new Promise((resolve, reject) => {
-        const proc = spawn(bin, effectiveArgs, {
+        const proc = spawn(request.binary, effectiveArgs, {
           stdio: [fdNum, 'pipe', 'pipe'],
           detached: true,
-          env: this.buildSafeEnv({
+          env: this.buildExecutionEnv(request.environment, {
             claudeConfigDir: oauthToken ? claudeConfigDir : undefined,
             oauthToken,
           }),
@@ -330,22 +395,24 @@ export class ClaudeCodeProvider extends Provider {
     }
   }
 
-  private buildSafeEnv(
+  private buildSafeEnv(options: { forkSandbox: boolean }): NodeJS.ProcessEnv {
+    return buildCliSafeEnv({
+      includeWorkspaceEnv: !options.forkSandbox,
+    });
+  }
+
+  private buildExecutionEnv(
+    baseEnvironment: Readonly<NodeJS.ProcessEnv>,
     options: { claudeConfigDir?: string; oauthToken?: string } = {}
   ): NodeJS.ProcessEnv {
-    const overrides: NodeJS.ProcessEnv = {};
+    const environment: NodeJS.ProcessEnv = { ...baseEnvironment };
     if (options.claudeConfigDir) {
-      overrides.CLAUDE_CONFIG_DIR = options.claudeConfigDir;
+      environment.CLAUDE_CONFIG_DIR = options.claudeConfigDir;
     }
     if (options.oauthToken) {
-      overrides[CLAUDE_CODE_OAUTH_TOKEN_ENV] = options.oauthToken;
+      environment[CLAUDE_CODE_OAUTH_TOKEN_ENV] = options.oauthToken;
     }
-
-    return buildCliSafeEnv({
-      includeWorkspaceEnv: !this.isForkSandboxMode(),
-      extraAllowedKeys: [CLAUDE_CODE_OAUTH_TOKEN_ENV],
-      overrides,
-    });
+    return environment;
   }
 
   private isForkSandboxMode(): boolean {

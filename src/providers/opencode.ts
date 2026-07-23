@@ -6,6 +6,27 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { parseReviewOutputStrict } from './review-output';
+import {
+  createPreparedProviderInvocation,
+  mergeCredentialEnvironment,
+  type PreparedProviderInvocation,
+  type ProviderCredentialLease,
+  ProviderKind,
+  requirePreparedProviderInvocation,
+  snapshotCredentialEnvironment,
+  splitProviderEnvironment,
+} from './prepared-invocation';
+
+type OpenCodePreparedRequest = {
+  readonly binary: string;
+  readonly argsTemplate: readonly string[];
+  readonly prompt: string;
+  readonly cwd: string;
+  readonly environment: Readonly<NodeJS.ProcessEnv>;
+  readonly environmentContract: Readonly<Record<string, string>>;
+};
+
+const OPENCODE_PROMPT_FILE_PLACEHOLDER = '{reviewrouter_prompt_file}';
 
 export class OpenCodeProvider extends Provider {
   constructor(private readonly modelId: string) {
@@ -55,15 +76,81 @@ export class OpenCodeProvider extends Provider {
   }
 
   async review(prompt: string, timeoutMs: number): Promise<ReviewResult> {
-    const started = Date.now();
+    const environment = splitProviderEnvironment(
+      snapshotCredentialEnvironment()
+    );
+    const invocation = await this.prepareInvocationWithEnvironment(
+      prompt,
+      timeoutMs,
+      environment
+    );
+    return this.executePreparedInvocation(invocation, {
+      environment: environment.credentialEnvironment,
+    });
+  }
 
+  async prepareInvocation(
+    prompt: string,
+    timeoutMs: number
+  ): Promise<PreparedProviderInvocation<OpenCodePreparedRequest>> {
+    return this.prepareInvocationWithEnvironment(
+      prompt,
+      timeoutMs,
+      splitProviderEnvironment(snapshotCredentialEnvironment())
+    );
+  }
+
+  private async prepareInvocationWithEnvironment(
+    prompt: string,
+    timeoutMs: number,
+    environment: ReturnType<typeof splitProviderEnvironment>
+  ): Promise<PreparedProviderInvocation<OpenCodePreparedRequest>> {
     const { bin, args: baseArgs } = await this.resolveBinary();
     const cliModel = this.modelId.startsWith('opencode/')
       ? this.modelId
       : `opencode/${this.modelId}`;
+    return createPreparedProviderInvocation({
+      providerKind: ProviderKind.OpenCodeCli,
+      providerName: this.name,
+      requestedModel: cliModel,
+      timeoutMs,
+      request: {
+        binary: bin,
+        argsTemplate: [
+          ...baseArgs,
+          'run',
+          '-m',
+          cliModel,
+          '--file',
+          OPENCODE_PROMPT_FILE_PLACEHOLDER,
+          '--',
+          'Review the attached PR context and provide structured findings.',
+        ],
+        prompt,
+        cwd: process.cwd(),
+        environment: environment.runtimeEnvironment,
+        environmentContract: environment.contract,
+      },
+    });
+  }
+
+  async executePreparedInvocation(
+    invocation: PreparedProviderInvocation,
+    credentialLease?: ProviderCredentialLease
+  ): Promise<ReviewResult> {
+    const prepared = requirePreparedProviderInvocation<OpenCodePreparedRequest>(
+      invocation,
+      ProviderKind.OpenCodeCli,
+      this.name
+    );
+    const request = prepared.request;
+    if (!credentialLease?.environment) {
+      throw new Error('opencode_credential_lease_missing');
+    }
+    const started = Date.now();
 
     // Write prompt to temp file to avoid command line length limits
-    const tmpRoot = path.join(process.cwd(), '.reviewrouter-opencode');
+    const tmpRoot = path.join(request.cwd, '.reviewrouter-opencode');
     await fs.mkdir(tmpRoot, { recursive: true, mode: 0o700 });
     await fs.chmod(tmpRoot, 0o700).catch(() => undefined);
     const tmpDir = await fs.mkdtemp(path.join(tmpRoot, 'opencode-'));
@@ -72,23 +159,30 @@ export class OpenCodeProvider extends Provider {
       tmpDir,
       `prompt-${crypto.randomBytes(8).toString('hex')}.txt`
     );
-    await fs.writeFile(promptFile, prompt, { encoding: 'utf8', mode: 0o600 });
+    await fs.writeFile(promptFile, request.prompt, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
 
-    const args = [
-      ...baseArgs,
-      'run',
-      '-m',
-      cliModel,
-      '--file',
-      promptFile,
-      '--',
-      'Review the attached PR context and provide structured findings.',
-    ];
+    const args = request.argsTemplate.map((argument) =>
+      argument.replace(OPENCODE_PROMPT_FILE_PLACEHOLDER, promptFile)
+    );
 
-    logger.info(`Running OpenCode CLI: ${bin} ${args.slice(0, 3).join(' ')} …`);
+    logger.info(
+      `Running OpenCode CLI: ${request.binary} ${args.slice(0, 3).join(' ')} …`
+    );
 
     try {
-      const { stdout, stderr } = await this.runCli(bin, args, timeoutMs);
+      const { stdout, stderr } = await this.runCli(
+        request.binary,
+        args,
+        prepared.timeoutMs,
+        request.cwd,
+        mergeCredentialEnvironment(
+          request.environment,
+          credentialLease.environment
+        )
+      );
       const content = stdout.trim();
       const durationSeconds = (Date.now() - started) / 1000;
       logger.info(
@@ -124,7 +218,9 @@ export class OpenCodeProvider extends Provider {
   private runCli(
     bin: string,
     args: string[],
-    timeoutMs: number
+    timeoutMs: number,
+    cwd?: string,
+    environment?: Readonly<NodeJS.ProcessEnv>
   ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       // Use detached: true to create a new process group
@@ -132,6 +228,8 @@ export class OpenCodeProvider extends Provider {
       const proc = spawn(bin, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
+        ...(cwd ? { cwd } : {}),
+        ...(environment ? { env: environment } : {}),
       });
 
       // Unref to avoid keeping parent alive (if available)

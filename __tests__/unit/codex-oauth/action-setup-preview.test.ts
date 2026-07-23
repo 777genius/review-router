@@ -3,8 +3,14 @@ import * as os from 'os';
 import * as path from 'path';
 import { runCodexOAuthRotatingRuntime } from '../../../src/codex-oauth/runtime';
 import { runCodexOAuthRotatingAction } from '../../../src/codex-oauth/action';
+import {
+  CodexOAuthReviewRuntimeMode,
+  CodexOAuthV2ReviewOutcome,
+} from '../../../src/codex-oauth/runtime';
+import { ReviewActionV2RuntimeMode } from '../../../src/control-plane/review-action-v2-contract';
 
 jest.mock('../../../src/codex-oauth/runtime', () => ({
+  ...jest.requireActual('../../../src/codex-oauth/runtime'),
   runCodexOAuthRotatingRuntime: jest.fn(),
 }));
 
@@ -66,6 +72,12 @@ describe('Codex OAuth rotating setup PR preview', () => {
     await runCodexOAuthRotatingAction();
 
     expect(mockedRuntime).toHaveBeenCalledTimes(1);
+    const [runtimeInput, runtimePorts] = mockedRuntime.mock.calls[0];
+    expect(runtimeInput).not.toHaveProperty('reviewMode');
+    expect(runtimePorts.controlPlane).toHaveProperty('commentToken');
+    expect(runtimePorts).toHaveProperty('comments');
+    expect(runtimePorts).toHaveProperty('review');
+    expect(runtimePorts).not.toHaveProperty('v2Review');
     expect(process.exitCode).toBe(1);
     expect(fs.readFileSync(outputPath, 'utf8')).toContain(
       'stale_queued_secret'
@@ -109,6 +121,92 @@ describe('Codex OAuth rotating setup PR preview', () => {
     expect(fs.readFileSync(outputPath, 'utf8')).toContain(
       'permission_required'
     );
+  });
+
+  it('wires verified v2 without exposing legacy comment capabilities', async () => {
+    mockedRuntime.mockResolvedValue({
+      status: 'completed',
+      publicationMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+      v2Review: { outcome: CodexOAuthV2ReviewOutcome.Completed },
+    });
+    process.env = actionEnv({
+      eventPath,
+      outputPath,
+      headRef: 'feature/change',
+    });
+    const v2ReviewRunner = {
+      run: jest.fn(async () => ({
+        outcome: CodexOAuthV2ReviewOutcome.Completed,
+      })),
+    };
+
+    await runCodexOAuthRotatingAction({
+      reviewActionV2Activation: {
+        mode: ReviewActionV2RuntimeMode.T0,
+        handoff: {
+          saasSourceCommit: 'a'.repeat(40),
+          expectedPublicActionBaseCommit: 'b'.repeat(40),
+          schemaDigest: 'c'.repeat(64),
+          canonicalizerDigest: 'd'.repeat(64),
+          goldenFixtureDigest: 'e'.repeat(64),
+          generatedFileCount: 8,
+        },
+      },
+      v2ReviewRunner,
+    });
+
+    expect(mockedRuntime).toHaveBeenCalledTimes(1);
+    const [runtimeInput, runtimePorts] = mockedRuntime.mock.calls[0];
+    expect(runtimeInput.reviewMode).toBe(
+      CodexOAuthReviewRuntimeMode.ServerPublishedV2
+    );
+    expect(runtimePorts.controlPlane).not.toHaveProperty('commentToken');
+    expect(runtimePorts).not.toHaveProperty('comments');
+    expect(runtimePorts).not.toHaveProperty('review');
+    expect(runtimePorts).toHaveProperty('v2Review', v2ReviewRunner);
+    expect(process.exitCode).toBeUndefined();
+    expect(fs.readFileSync(outputPath, 'utf8')).toContain(
+      'reviewrouter_v2_outcome'
+    );
+  });
+
+  it('uses the production T0 runner when no test runner is injected', async () => {
+    mockedRuntime.mockResolvedValue({
+      status: 'completed',
+      publicationMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+      v2Review: { outcome: CodexOAuthV2ReviewOutcome.Completed },
+    });
+    process.env = actionEnv({
+      eventPath,
+      outputPath,
+      headRef: 'feature/change',
+    });
+
+    await runCodexOAuthRotatingAction({
+      reviewActionV2Activation: {
+        mode: ReviewActionV2RuntimeMode.T0,
+        handoff: {
+          saasSourceCommit: 'a'.repeat(40),
+          expectedPublicActionBaseCommit: 'b'.repeat(40),
+          schemaDigest: 'c'.repeat(64),
+          canonicalizerDigest: 'd'.repeat(64),
+          goldenFixtureDigest: 'e'.repeat(64),
+          generatedFileCount: 8,
+        },
+      },
+    });
+
+    const [, runtimePorts] = mockedRuntime.mock.calls[0];
+    expect('v2Review' in runtimePorts).toBe(true);
+    if (!('v2Review' in runtimePorts)) {
+      throw new Error('expected production v2 review runner');
+    }
+    expect(runtimePorts.v2Review).toEqual(
+      expect.objectContaining({ run: expect.any(Function) })
+    );
+    expect(runtimePorts.controlPlane).not.toHaveProperty('commentToken');
+    expect(runtimePorts).not.toHaveProperty('comments');
+    expect(runtimePorts).not.toHaveProperty('review');
   });
 });
 

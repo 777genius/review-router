@@ -919,6 +919,7 @@ const acceptedObservation = {
   ...observationPayload,
   observationId: 'observation-1',
   eligibilityPolicyVersion: 't0-v1',
+  providerKind: ReviewExecutionProviderKind.Codex,
   providerInvocationKey: hash('invocation-1'),
   providerVoteIdentityHash: hash('vote'),
 };

@@ -94,12 +94,10 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     const revalidations: LifecycleRevalidation[] = [];
     for (const observation of input.observations) {
       const payload = parseObservation(observation.payloadCanonicalJson);
-      payload.findings.forEach((finding, index) => {
-        findings.push(
-          toFinding(observation, payload.providerName, finding, index)
-        );
+      payload.normalizedFindings.forEach((finding, index) => {
+        findings.push(toFinding(observation, finding, index));
       });
-      for (const revalidation of payload.revalidations) {
+      for (const revalidation of payload.normalizedLifecycleRevalidations) {
         revalidations.push(toRevalidation(observation, revalidation));
       }
     }
@@ -259,53 +257,51 @@ function validateCoverageManifests(input: {
 }
 
 type NormalizedObservation = {
-  readonly providerName: string;
-  readonly findings: readonly Record<string, unknown>[];
-  readonly revalidations: readonly Record<string, unknown>[];
+  readonly normalizedFindings: readonly Record<string, unknown>[];
+  readonly normalizedLifecycleRevalidations: readonly Record<
+    string,
+    unknown
+  >[];
 };
 
 function parseObservation(value: string): NormalizedObservation {
   const parsed = JSON.parse(value) as Record<string, unknown>;
   if (
-    parsed.observationVersion !== 'review_observation.v1' ||
-    typeof parsed.providerName !== 'string' ||
-    !Array.isArray(parsed.findings) ||
-    !Array.isArray(parsed.revalidations) ||
-    parsed.findings.some((item) => !isRecord(item)) ||
-    parsed.revalidations.some((item) => !isRecord(item))
+    parsed.payloadVersion !== 2 ||
+    !Array.isArray(parsed.normalizedFindings) ||
+    !Array.isArray(parsed.normalizedLifecycleRevalidations) ||
+    parsed.normalizedFindings.some((item) => !isRecord(item)) ||
+    parsed.normalizedLifecycleRevalidations.some((item) => !isRecord(item))
   ) {
     throw new Error('review_action_v2_observation_payload_invalid');
   }
   return {
-    providerName: parsed.providerName,
-    findings: parsed.findings as Record<string, unknown>[],
-    revalidations: parsed.revalidations as Record<string, unknown>[],
+    normalizedFindings: parsed.normalizedFindings as Record<string, unknown>[],
+    normalizedLifecycleRevalidations:
+      parsed.normalizedLifecycleRevalidations as Record<string, unknown>[],
   };
 }
 
 function toFinding(
   observation: AcceptedReviewObservation,
-  providerName: string,
   value: Record<string, unknown>,
   index: number
 ): CurrentFindingCandidate {
   const category = optionalString(value.category) ?? 'correctness';
   const title = requireString(value.title, 'finding_title');
   const message = requireString(value.message, 'finding_message');
-  const filePath = requireString(value.file, 'finding_file');
+  const filePath = requireString(value.path, 'finding_file');
+  const normalizedFailureModeHash = requireDigest(
+    value.normalizedFailureModeHash,
+    'finding_failure_mode_hash'
+  );
   return Object.freeze({
     sourceFindingId: deterministicId('finding', [
       observation.observationId,
       String(index),
     ]),
     category,
-    normalizedFailureModeHash: sha256(
-      canonicalJson({
-        category: normalizeText(category),
-        message: normalizeText(message),
-        title: normalizeText(title),
-      })
-    ),
+    normalizedFailureModeHash,
     severity: toFindingSeverity(value.severity),
     title,
     message,
@@ -316,16 +312,16 @@ function toFinding(
     ...(optionalPositiveInteger(value.startLine) !== undefined
       ? { startLine: optionalPositiveInteger(value.startLine) }
       : {}),
-    ...(optionalPositiveInteger(value.line) !== undefined
-      ? { line: optionalPositiveInteger(value.line) }
+    ...(optionalPositiveInteger(value.startLine) !== undefined
+      ? { line: optionalPositiveInteger(value.startLine) }
       : {}),
     ...(optionalPositiveInteger(value.endLine) !== undefined
       ? { endLine: optionalPositiveInteger(value.endLine) }
       : {}),
-    ...(optionalConfidence(value.confidence) !== undefined
-      ? { confidence: optionalConfidence(value.confidence) }
+    ...(optionalConfidence(value.placementConfidence) !== undefined
+      ? { confidence: optionalConfidence(value.placementConfidence) }
       : {}),
-    providerIds: Object.freeze([providerName]),
+    providerIds: Object.freeze([observation.providerKind]),
     providerVoteKeys: Object.freeze([observation.providerVoteIdentityHash]),
     observationIds: Object.freeze([observation.observationId]),
   });
@@ -462,12 +458,16 @@ function requireString(value: unknown, field: string): string {
   return parsed;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function requireDigest(value: unknown, field: string): string {
+  const parsed = requireString(value, field);
+  if (!/^[a-f0-9]{64}$/u.test(parsed)) {
+    throw new Error(`review_action_v2_${field}_invalid`);
+  }
+  return parsed;
 }
 
-function normalizeText(value: string): string {
-  return value.trim().replace(/\s+/g, ' ').toLowerCase();
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function deterministicId(namespace: string, parts: readonly string[]): string {
@@ -478,20 +478,6 @@ export function compareCodeUnits(left: string, right: string): number {
   if (left < right) return -1;
   if (left > right) return 1;
   return 0;
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value as Record<string, unknown>)
-      .sort()
-      .map(
-        (key) =>
-          `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`
-      )
-      .join(',')}}`;
-  }
-  return JSON.stringify(value);
 }
 
 function sha256(value: string): string {

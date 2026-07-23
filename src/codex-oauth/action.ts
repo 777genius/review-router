@@ -29,7 +29,10 @@ import {
   type CodexOAuthReviewResult,
   type CodexOAuthV2ReviewRunnerPort,
 } from './runtime';
-import { safeCheckoutRepository } from './safe-checkout';
+import {
+  createIsolatedCheckoutWorkspace,
+  safeCheckoutRepository,
+} from './safe-checkout';
 import { buildReviewSummaryMetadata } from '../github/summary-metadata';
 import {
   resolveReviewActionV2Activation,
@@ -140,68 +143,84 @@ export async function runCodexOAuthRotatingAction(
       clearProcessAuthEnv: () => clearCodexRotatingProcessAuthEnv(),
     },
   };
-  const runtime =
+  const t0WorkspacePath =
     reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0
-      ? await runCodexOAuthRotatingRuntime(
-          {
-            ...inputs,
-            reviewMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
-          },
-          {
+      ? await createIsolatedCheckoutWorkspace({
+          runnerTempPath: process.env.RUNNER_TEMP,
+          githubWorkspacePath: inputs.workspacePath,
+        })
+      : null;
+  try {
+    const runtime =
+      reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0
+        ? await runCodexOAuthRotatingRuntime(
+            {
+              ...inputs,
+              workspacePath: t0WorkspacePath!,
+              reviewMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+            },
+            {
+              ...sharedRuntimePorts,
+              v2Review:
+                options.v2ReviewRunner ??
+                createProductionT0ReviewRunner({
+                  fetchImpl: options.fetchImpl,
+                }),
+            }
+          )
+        : await runCodexOAuthRotatingRuntime(inputs, {
             ...sharedRuntimePorts,
-            v2Review:
-              options.v2ReviewRunner ??
-              createProductionT0ReviewRunner({ fetchImpl: options.fetchImpl }),
-          }
-        )
-      : await runCodexOAuthRotatingRuntime(inputs, {
-          ...sharedRuntimePorts,
-          controlPlane: {
-            ...sharedRuntimePorts.controlPlane,
-            commentToken: (
-              input: Parameters<typeof controlPlane.commentToken>[0]
-            ) => controlPlane.commentToken(input),
-          },
-          review: {
-            run: (input) =>
-              runReviewComputation({
-                apiUrl: inputs.apiUrl,
-                audience: inputs.audience,
-                checkoutToken: input.checkoutToken,
-                codexHome: input.codexHome,
-                codexBinaryPath: input.codexBinaryPath,
-                fetchImpl: options.fetchImpl,
-                providerSecrets: inputs.providerSecrets,
-              }),
-          },
-          comments: {
-            post: (input) =>
-              postReviewAfterAuthClear({
-                commentToken: input.commentToken,
-                review: input.review,
-              }),
-          },
-        });
+            controlPlane: {
+              ...sharedRuntimePorts.controlPlane,
+              commentToken: (
+                input: Parameters<typeof controlPlane.commentToken>[0]
+              ) => controlPlane.commentToken(input),
+            },
+            review: {
+              run: (input) =>
+                runReviewComputation({
+                  apiUrl: inputs.apiUrl,
+                  audience: inputs.audience,
+                  checkoutToken: input.checkoutToken,
+                  codexHome: input.codexHome,
+                  codexBinaryPath: input.codexBinaryPath,
+                  fetchImpl: options.fetchImpl,
+                  providerSecrets: inputs.providerSecrets,
+                }),
+            },
+            comments: {
+              post: (input) =>
+                postReviewAfterAuthClear({
+                  commentToken: input.commentToken,
+                  review: input.review,
+                }),
+            },
+          });
 
-  core.setOutput('reviewrouter_state', runtime.status);
-  if (runtime.status === 'skipped') {
-    core.setOutput('reviewrouter_skipped_reason', runtime.reason);
-    const message =
-      runtime.reason === 'stale_queued_secret'
-        ? 'Codex OAuth rotating review did not run because this workflow restored an older queued secret generation. Re-run the latest workflow after reconnecting Codex if needed.'
-        : `Codex OAuth rotating review skipped: ${runtime.reason}`;
-    core.setFailed(message);
-    return;
-  }
-  if ('v2Review' in runtime) {
-    core.setOutput('reviewrouter_v2_outcome', runtime.v2Review.outcome);
-    if (runtime.v2Review.blockingFailure) {
-      core.setFailed(runtime.v2Review.blockingFailure);
+    core.setOutput('reviewrouter_state', runtime.status);
+    if (runtime.status === 'skipped') {
+      core.setOutput('reviewrouter_skipped_reason', runtime.reason);
+      const message =
+        runtime.reason === 'stale_queued_secret'
+          ? 'Codex OAuth rotating review did not run because this workflow restored an older queued secret generation. Re-run the latest workflow after reconnecting Codex if needed.'
+          : `Codex OAuth rotating review skipped: ${runtime.reason}`;
+      core.setFailed(message);
+      return;
     }
-    return;
-  }
-  if (runtime.review.blockingFailure) {
-    core.setFailed(runtime.review.blockingFailure);
+    if ('v2Review' in runtime) {
+      core.setOutput('reviewrouter_v2_outcome', runtime.v2Review.outcome);
+      if (runtime.v2Review.blockingFailure) {
+        core.setFailed(runtime.v2Review.blockingFailure);
+      }
+      return;
+    }
+    if (runtime.review.blockingFailure) {
+      core.setFailed(runtime.review.blockingFailure);
+    }
+  } finally {
+    if (t0WorkspacePath) {
+      fs.rmSync(t0WorkspacePath, { recursive: true, force: true });
+    }
   }
 }
 

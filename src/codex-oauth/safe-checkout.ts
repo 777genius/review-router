@@ -3,6 +3,32 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
+export async function createIsolatedCheckoutWorkspace(input: {
+  runnerTempPath?: string;
+  githubWorkspacePath?: string;
+}): Promise<string> {
+  const runnerTempPath = input.runnerTempPath || os.tmpdir();
+  await fs.mkdir(runnerTempPath, { recursive: true, mode: 0o700 });
+  const realRunnerTempPath = await fs.realpath(runnerTempPath);
+  const workspacePath = await fs.mkdtemp(
+    path.join(realRunnerTempPath, 'reviewrouter-pr-')
+  );
+  await fs.chmod(workspacePath, 0o700);
+
+  try {
+    if (input.githubWorkspacePath) {
+      const githubWorkspacePath = await fs.realpath(input.githubWorkspacePath);
+      if (pathsOverlap(workspacePath, githubWorkspacePath)) {
+        throw new Error('codex_oauth_checkout_workspace_not_isolated');
+      }
+    }
+    return workspacePath;
+  } catch (error) {
+    await fs.rm(workspacePath, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 export async function safeCheckoutRepository(input: {
   repository: string;
   headSha: string;
@@ -136,6 +162,20 @@ function assertFullSha(value: string): void {
   if (!/^[a-f0-9]{40}$/i.test(value)) {
     throw new Error('codex_oauth_invalid_head_sha');
   }
+}
+
+function pathsOverlap(left: string, right: string): boolean {
+  return pathIsWithin(left, right) || pathIsWithin(right, left);
+}
+
+function pathIsWithin(parent: string, candidate: string): boolean {
+  const relative = path.relative(parent, candidate);
+  return (
+    relative === '' ||
+    (!relative.startsWith(`..${path.sep}`) &&
+      relative !== '..' &&
+      !path.isAbsolute(relative))
+  );
 }
 
 function safeGitError(value: string): string {

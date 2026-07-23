@@ -73,6 +73,7 @@ describe('Codex OAuth rotating setup PR preview', () => {
 
     expect(mockedRuntime).toHaveBeenCalledTimes(1);
     const [runtimeInput, runtimePorts] = mockedRuntime.mock.calls[0];
+    expect(runtimeInput.workspacePath).toBe(process.env.GITHUB_WORKSPACE);
     expect(runtimeInput).not.toHaveProperty('reviewMode');
     expect(runtimePorts.controlPlane).toHaveProperty('commentToken');
     expect(runtimePorts).toHaveProperty('comments');
@@ -160,6 +161,11 @@ describe('Codex OAuth rotating setup PR preview', () => {
     expect(runtimeInput.reviewMode).toBe(
       CodexOAuthReviewRuntimeMode.ServerPublishedV2
     );
+    expect(runtimeInput.workspacePath).not.toBe(process.env.GITHUB_WORKSPACE);
+    expect(path.dirname(runtimeInput.workspacePath)).toBe(
+      fs.realpathSync(process.env.RUNNER_TEMP!)
+    );
+    expect(fs.existsSync(runtimeInput.workspacePath)).toBe(false);
     expect(runtimePorts.controlPlane).not.toHaveProperty('commentToken');
     expect(runtimePorts).not.toHaveProperty('comments');
     expect(runtimePorts).not.toHaveProperty('review');
@@ -235,8 +241,19 @@ function actionEnv(input: {
     GITHUB_EVENT_PATH: input.eventPath,
     GITHUB_OUTPUT: input.outputPath,
     GITHUB_REPOSITORY: 'Padelapp-Club/monitoring-service',
+    GITHUB_WORKSPACE: ensureDirectory(
+      path.join(path.dirname(input.eventPath), 'github-workspace')
+    ),
+    RUNNER_TEMP: ensureDirectory(
+      path.join(path.dirname(input.eventPath), 'runner-temp')
+    ),
     'INPUT_API-URL': 'https://api.reviewrouter.site',
     'INPUT_PROVIDER-INSTANCE-ID': 'codex-rotating:1196598615',
     'INPUT_WORKFLOW-SCHEMA-VERSION': '1',
   };
+}
+
+function ensureDirectory(directory: string): string {
+  fs.mkdirSync(directory, { recursive: true });
+  return directory;
 }

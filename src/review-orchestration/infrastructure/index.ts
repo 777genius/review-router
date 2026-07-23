@@ -5,3 +5,4 @@ export * from './codex-review-invocation-adapter';
 export * from './github-review-state-adapter';
 export * from './production-review-projection';
 export * from './production-t0-review-runner';
+export * from './provider-invocation-failure-classifier';

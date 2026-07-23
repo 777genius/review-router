@@ -14,6 +14,12 @@ export enum ReviewTaskKind {
   LifecycleRevalidation = 'lifecycle_revalidation',
 }
 
+export enum ReviewInvocationFailureClass {
+  Retryable = 'retryable',
+  CapacityUnavailable = 'capacity_unavailable',
+  AuthenticationUnavailable = 'authentication_unavailable',
+}
+
 export enum ReviewPublicationState {
   Pending = 'pending',
   Publishing = 'publishing',
@@ -111,6 +117,10 @@ export type PreparedReviewInvocation = {
   readonly manifestFacts: PreparedReviewInvocationManifestFacts;
   readonly coverageManifest: import('../domain').ReviewPromptCoverageManifest;
 };
+
+export interface ReviewInvocationFailureClassifierPort {
+  classify(error: unknown): ReviewInvocationFailureClass;
+}
 
 export type PreparedReviewInvocationManifestFacts = {
   readonly taskKindSet: readonly ReviewTaskKind[];

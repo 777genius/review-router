@@ -288,7 +288,7 @@ export class CodexProvider extends Provider {
       };
     } catch (error) {
       const normalized = this.normalizeCodexError(error);
-      logger.error(`Codex provider failed: ${this.name}`, normalized);
+      this.logNormalizedFailure(normalized);
       throw normalized;
     }
   }
@@ -369,8 +369,16 @@ export class CodexProvider extends Provider {
         await this.executePreparedDetailed(invocation, credentialLease, signal)
       ).result;
     } catch (error) {
-      throw this.normalizeCodexError(error);
+      const normalized = this.normalizeCodexError(error);
+      this.logNormalizedFailure(normalized);
+      throw normalized;
     }
+  }
+
+  private logNormalizedFailure(error: Error): void {
+    logger.error(`Codex provider failed: ${this.name}`, {
+      error: error.message,
+    });
   }
 
   private prepareRetryInvocation(

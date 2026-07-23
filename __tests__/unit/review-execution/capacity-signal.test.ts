@@ -8,8 +8,16 @@ describe('classifyProviderCapacitySignal', () => {
     [{ status: 'capacity_unavailable' }],
     [{ status: 'rate-limited' }],
     [{ status: 'quota_exceeded' }],
+    [{ status: 'usage_limit_reached' }],
     [{ status: 'error', error: new Error('HTTP 429 from provider') }],
     [{ status: 'error', error: 'Rate limit exceeded' }],
+    [{ status: 'error', error: "You've hit your usage limit." }],
+    [
+      {
+        status: 'error',
+        error: 'Codex usage, rate, or billing limit was reached',
+      },
+    ],
     [{ status: 'error', error: { message: 'Monthly quota exhausted' } }],
     [
       {

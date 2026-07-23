@@ -28,6 +28,11 @@ on:
         required: false
         type: string
         default: ''
+      review_head_sha:
+        description: 'Expected pull request head for durable workflow_dispatch review requests'
+        required: false
+        type: string
+        default: ''
       review_app_client_id:
         description: 'Optional user-owned GitHub App client ID for static-mode bot comments'
         required: false
@@ -97,6 +102,7 @@ jobs:
         env:
           REVIEW_ACTION_V2_MODE: ${{ inputs.review_action_v2_mode }}
           PROVIDER_INSTANCE_ID: ${{ inputs.provider_instance_id }}
+          REVIEW_HEAD_SHA: ${{ inputs.review_head_sha }}
           WORKFLOW_SCHEMA_VERSION: ${{ inputs.workflow_schema_version }}
           RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
         run: |
@@ -111,6 +117,10 @@ jobs:
           if [ "$REVIEW_ACTION_V2_MODE" = "t0" ]; then
             if [ -z "$PROVIDER_INSTANCE_ID" ]; then
               echo "::error::provider_instance_id is required for the t0 lane."
+              exit 1
+            fi
+            if ! [[ "$REVIEW_HEAD_SHA" =~ ^[a-fA-F0-9]{40}$ ]]; then
+              echo "::error::review_head_sha must be a 40-character commit SHA for the t0 lane."
               exit 1
             fi
             if ! [[ "$WORKFLOW_SCHEMA_VERSION" =~ ^[1-9][0-9]*$ ]]; then
@@ -139,6 +149,7 @@ jobs:
       runtime_config_mode: ${{ inputs.runtime_config_mode }}
       static_runtime_env_json: ${{ inputs.static_runtime_env_json }}
       pr_number: ${{ inputs.pr_number }}
+      review_head_sha: ${{ inputs.review_head_sha }}
       review_app_client_id: ''
       review_app_repository: ''
       provider_instance_id: ${{ inputs.provider_instance_id }}
@@ -170,6 +181,7 @@ jobs:
       runtime_config_mode: ${{ inputs.runtime_config_mode }}
       static_runtime_env_json: ${{ inputs.static_runtime_env_json }}
       pr_number: ${{ inputs.pr_number }}
+      review_head_sha: ''
       review_app_client_id: ${{ inputs.review_app_client_id }}
       review_app_repository: ${{ inputs.review_app_repository }}
       provider_instance_id: ''

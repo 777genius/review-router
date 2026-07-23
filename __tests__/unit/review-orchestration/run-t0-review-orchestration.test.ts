@@ -283,6 +283,9 @@ describe('RunT0ReviewOrchestration', () => {
 
   it('releases the lease and supersedes when revision moves after provider execution', async () => {
     const fixture = createFixture();
+    jest
+      .mocked(fixture.dependencies.delay.sleep)
+      .mockImplementation(() => new Promise<void>(() => undefined));
     const revisionGuard = jest.mocked(
       fixture.dependencies.revisionGuard.loadCurrentRevision
     );
@@ -305,6 +308,54 @@ describe('RunT0ReviewOrchestration', () => {
       1
     );
     expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts an active provider invocation when the revision moves', async () => {
+    const fixture = createFixture();
+    let releaseRevisionPoll!: () => void;
+    jest.mocked(fixture.dependencies.delay.sleep).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseRevisionPoll = resolve;
+        })
+    );
+    let providerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      providerStarted = resolve;
+    });
+    let observedSignal: AbortSignal | undefined;
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ signal }) => {
+        observedSignal = signal;
+        providerStarted();
+        return new Promise<never>((_resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => reject(signal.reason || new Error('aborted')),
+            { once: true }
+          );
+        });
+      });
+
+    const resultPromise = fixture.useCase.execute(fixture.command);
+    await started;
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        headSha: '9'.repeat(40),
+        reviewRevisionHash: hash('new-head-during-provider'),
+      });
+    releaseRevisionPoll();
+    const result = await resultPromise;
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Superseded);
+    expect(observedSignal?.aborted).toBe(true);
+    expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
   });
 
   it('publishes an explicit partial result after bounded attempt exhaustion', async () => {
@@ -339,15 +390,14 @@ describe('RunT0ReviewOrchestration', () => {
     const result = await fixture.useCase.execute(fixture.command);
 
     expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
-    expect(fixture.dependencies.invocations.prepare).toHaveBeenCalledTimes(2);
-    expect(fixture.dependencies.invocations.prepare).toHaveBeenNthCalledWith(
-      1,
+    expect(fixture.dependencies.invocations.prepare).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.prepare).toHaveBeenCalledWith(
       expect.objectContaining({ attemptOrdinal: 1 })
     );
-    expect(fixture.dependencies.invocations.prepare).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ attemptOrdinal: 1 })
+    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+      2
     );
+    expect(fixture.dependencies.delay.sleep).toHaveBeenCalledWith(500);
     expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
   });
 
@@ -422,10 +472,10 @@ describe('RunT0ReviewOrchestration', () => {
         operation,
       }: {
         renew: () => Promise<unknown>;
-        operation: () => Promise<unknown>;
+        operation: (signal: AbortSignal) => Promise<unknown>;
       }) => {
         await renew();
-        return operation();
+        return operation(new AbortController().signal);
       }
     );
     fixture.controlPlane.renewInvocationLease.mockResolvedValue({
@@ -452,10 +502,10 @@ describe('RunT0ReviewOrchestration', () => {
         operation,
       }: {
         renew: () => Promise<unknown>;
-        operation: () => Promise<unknown>;
+        operation: (signal: AbortSignal) => Promise<unknown>;
       }) => {
         await renew();
-        return operation();
+        return operation(new AbortController().signal);
       }
     );
     fixture.controlPlane.renewInvocationLease.mockResolvedValue({

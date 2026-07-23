@@ -23,6 +23,10 @@ on:
         required: false
         type: string
         default: ''
+      review_head_sha:
+        required: false
+        type: string
+        default: ''
       review_app_client_id:
         required: false
         type: string
@@ -213,8 +217,15 @@ jobs:
             echo "ReviewRouter skipped this fork pull request because secret-backed provider execution is disabled by default."
           fi
 
+      - name: Checkout exact T0 review revision
+        if: ${{ inputs.review_action_lane == 't0' && steps.runtime.outputs.can_run == 'true' }}
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.review_head_sha }}
+          persist-credentials: false
+
       - name: Checkout pull request code
-        if: ${{ steps.runtime.outputs.can_run == 'true' }}
+        if: ${{ inputs.review_action_lane == 'legacy' && steps.runtime.outputs.can_run == 'true' }}
         uses: actions/checkout@v6
         with:
           persist-credentials: false
@@ -325,6 +336,7 @@ jobs:
           INPUT_OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.review_head_sha }}
           REVIEW_ROUTER_MEMORY_ENABLED: 'true'
           REVIEW_ROUTER_MEMORY_PROTOCOL_VERSION: '1'
           REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT: /api/action/v1/memory

@@ -36,6 +36,7 @@ import { reportControlPlaneActionHealth } from './control-plane/health-report';
 import { ControlPlaneMemoryClient } from './control-plane/memory';
 import { resolveProviderCliPlan } from './control-plane/provider-cli-plan';
 import { parseMemoryInteraction } from './github/memory-interaction';
+import { ControlPlaneManualReviewRequestClient } from './control-plane/review-request';
 import { countPreviousStillValidBySeverity } from './analysis/thread-lifecycle';
 import { formatBlockingFindingFailure } from './output/severity-gate';
 import {
@@ -413,12 +414,16 @@ async function runInteraction(
   );
   const discussionHandler = createDiscussionHandler(githubClient);
   const memoryClient = new ControlPlaneMemoryClient(runtimeConfig);
+  const reviewRequests = new ControlPlaneManualReviewRequestClient(
+    runtimeConfig
+  );
   const handler = new ReviewInteractionHandler(
     githubClient,
     ledger,
     discussionHandler,
     actionsClient,
-    memoryClient
+    memoryClient,
+    reviewRequests
   );
   await handler.execute();
 }

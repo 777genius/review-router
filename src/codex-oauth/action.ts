@@ -415,7 +415,7 @@ export async function postReviewAfterAuthClear(input: {
   );
 }
 
-function readPullRequestEvent(): {
+export function readPullRequestEvent(): {
   repository: string;
   number: number;
   headSha: string;
@@ -428,15 +428,33 @@ function readPullRequestEvent(): {
   }
   const event = JSON.parse(fs.readFileSync(eventPath, 'utf8')) as {
     repository?: { full_name?: unknown };
+    inputs?: { pr_number?: unknown; review_head_sha?: unknown };
     pull_request?: {
       number?: unknown;
       head?: { ref?: unknown; sha?: unknown; repo?: { full_name?: unknown } };
     };
   };
-  const repository = event.repository?.full_name;
-  const prNumber = event.pull_request?.number;
-  const headRepository = event.pull_request?.head?.repo?.full_name;
-  const headSha = event.pull_request?.head?.sha;
+  const eventName = process.env.GITHUB_EVENT_NAME || '';
+  const workflowDispatch = eventName === 'workflow_dispatch';
+  const repository =
+    event.repository?.full_name || process.env.GITHUB_REPOSITORY;
+  const rawPrNumber =
+    event.pull_request?.number ||
+    event.inputs?.pr_number ||
+    readEnv('PR_NUMBER');
+  const prNumber =
+    typeof rawPrNumber === 'number'
+      ? rawPrNumber
+      : typeof rawPrNumber === 'string' && /^[1-9][0-9]*$/.test(rawPrNumber)
+        ? Number(rawPrNumber)
+        : null;
+  const headRepository =
+    event.pull_request?.head?.repo?.full_name ||
+    (workflowDispatch ? repository : undefined);
+  const headSha =
+    event.pull_request?.head?.sha ||
+    event.inputs?.review_head_sha ||
+    readEnv('REVIEW_HEAD_SHA');
   const headRef = event.pull_request?.head?.ref;
   if (
     typeof repository !== 'string' ||
@@ -456,7 +474,7 @@ function readPullRequestEvent(): {
     number: prNumber,
     headSha,
     headRef: typeof headRef === 'string' ? headRef : '',
-    eventName: process.env.GITHUB_EVENT_NAME || '',
+    eventName,
   };
 }
 

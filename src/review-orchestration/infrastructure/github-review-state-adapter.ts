@@ -1,6 +1,11 @@
 import { createHash } from 'crypto';
 import { GitHubClient } from '../../github/client';
 import {
+  commandLedgerWatermark,
+  type LoadedLedger,
+  type ReviewLedger,
+} from '../../github/ledger';
+import {
   ReviewThreadInventoryLoader,
   type ReviewThreadInventory,
 } from '../../github/review-thread-inventory';
@@ -91,17 +96,21 @@ export class GitHubReviewRevisionGuard implements ReviewRevisionGuardPort {
 export class FreshGitHubLifecycleInventory implements CurrentLifecycleInventoryPort {
   private readonly loader: ReviewThreadInventoryLoader;
 
-  constructor(client: GitHubClient) {
+  constructor(
+    client: GitHubClient,
+    private readonly ledger: ReviewLedger
+  ) {
     this.loader = new ReviewThreadInventoryLoader(client);
   }
 
   async loadCurrent(query: {
     readonly scope: ReviewProjectionScope;
   }): Promise<CurrentLifecycleInventory> {
-    return mapFreshInventory(
-      await this.loader.load(query.scope.pullRequestNumber),
-      query.scope.reviewedHeadSha
-    );
+    const [raw, ledger] = await Promise.all([
+      this.loader.load(query.scope.pullRequestNumber),
+      this.ledger.load(query.scope.pullRequestNumber),
+    ]);
+    return mapFreshInventory(raw, query.scope.reviewedHeadSha, ledger);
   }
 
   async loadForPrompt(
@@ -111,8 +120,11 @@ export class FreshGitHubLifecycleInventory implements CurrentLifecycleInventoryP
     readonly inventory: CurrentLifecycleInventory;
     readonly promptTargets: readonly LifecycleTarget[];
   }> {
-    const raw = await this.loader.load(pullRequestNumber);
-    const inventory = mapFreshInventory(raw, expectedHeadSha);
+    const [raw, ledger] = await Promise.all([
+      this.loader.load(pullRequestNumber),
+      this.ledger.load(pullRequestNumber),
+    ]);
+    const inventory = mapFreshInventory(raw, expectedHeadSha, ledger);
     return Object.freeze({
       inventory,
       promptTargets: Object.freeze([
@@ -125,7 +137,8 @@ export class FreshGitHubLifecycleInventory implements CurrentLifecycleInventoryP
 
 function mapFreshInventory(
   raw: ReviewThreadInventory,
-  expectedHeadSha: string
+  expectedHeadSha: string,
+  ledger: LoadedLedger
 ): CurrentLifecycleInventory {
   if (raw.failed) {
     throw new Error('review_action_v2_lifecycle_inventory_unavailable');
@@ -154,15 +167,10 @@ function mapFreshInventory(
     throw new Error('review_action_v2_lifecycle_inventory_duplicate_target');
   }
 
-  const missingDatabaseId = rawTargets.some(
-    ({ target }) => target.parentCommentDatabaseId === undefined
-  );
-  const warnings = [
-    ...raw.warnings,
-    ...(missingDatabaseId
-      ? ['review thread comment watermark is incomplete']
-      : []),
-  ].sort();
+  if (!ledger.valid) {
+    throw new Error('review_action_v2_command_ledger_unavailable');
+  }
+  const warnings = [...raw.warnings].sort();
   const targets = rawTargets.map(({ target, manual }) => ({
     targetId: target.targetId,
     threadId: target.threadId,
@@ -197,16 +205,12 @@ function mapFreshInventory(
         }
       : {}),
   }));
-  const commandLedgerWatermark = String(
-    Math.max(
-      0,
-      ...rawTargets.map(({ target }) => target.parentCommentDatabaseId ?? 0)
-    )
-  );
+  const commandWatermark = commandLedgerWatermark(ledger.payload);
+  const commandLedgerWatermarkValue = String(commandWatermark);
   const lifecycleStateHash = sha256(
     canonicalJson({
-      commandLedgerWatermark,
-      complete: !missingDatabaseId,
+      commandLedgerWatermark: commandLedgerWatermarkValue,
+      complete: true,
       loadedForHeadSha,
       targets,
       warnings,
@@ -216,8 +220,8 @@ function mapFreshInventory(
     inventoryVersion: 'review_lifecycle_inventory.v1',
     loadedForHeadSha,
     lifecycleStateHash,
-    commandLedgerWatermark,
-    complete: !missingDatabaseId,
+    commandLedgerWatermark: commandLedgerWatermarkValue,
+    complete: true,
     warnings: Object.freeze(warnings),
     targets: Object.freeze(targets),
   });

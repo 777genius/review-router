@@ -51,6 +51,19 @@ export interface ActiveLedgerSkip extends LedgerEntry {
   action: 'skip';
 }
 
+export function commandLedgerWatermark(payload: ReviewLedgerPayload): number {
+  return Math.max(
+    0,
+    ...payload.entries.map((entry) => {
+      const value = entry.commandCommentId ?? entry.parentCommentId;
+      if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new Error('review_router_command_ledger_watermark_invalid');
+      }
+      return value;
+    })
+  );
+}
+
 export class ReviewLedger {
   constructor(
     private readonly client: GitHubClient,

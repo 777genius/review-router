@@ -1,4 +1,7 @@
-import { ReviewLedger } from '../../../src/github/ledger';
+import {
+  ReviewLedger,
+  commandLedgerWatermark,
+} from '../../../src/github/ledger';
 import { GitHubClient } from '../../../src/github/client';
 
 function makeClient(
@@ -23,6 +26,59 @@ function makeClient(
 }
 
 describe('ReviewLedger', () => {
+  it('derives a stable watermark from accepted command comment ids', () => {
+    expect(
+      commandLedgerWatermark({
+        version: 1,
+        repo: 'test-owner/test-repo',
+        pr: 123,
+        entries: [
+          {
+            action: 'skip',
+            fingerprint: 'abc123',
+            severity: 'major',
+            actor: 'maintainer',
+            actorRole: 'maintain',
+            parentCommentId: 99,
+            commandCommentId: 101,
+            createdAt: '2026-05-01T00:00:00.000Z',
+          },
+          {
+            action: 'unskip',
+            fingerprint: 'abc123',
+            severity: 'major',
+            actor: 'maintainer',
+            actorRole: 'maintain',
+            parentCommentId: 99,
+            commandCommentId: 105,
+            createdAt: '2026-05-01T00:01:00.000Z',
+          },
+        ],
+      })
+    ).toBe(105);
+  });
+
+  it('uses the parent id for legacy signed entries without a command id', () => {
+    expect(
+      commandLedgerWatermark({
+        version: 1,
+        repo: 'test-owner/test-repo',
+        pr: 123,
+        entries: [
+          {
+            action: 'skip',
+            fingerprint: 'abc123',
+            severity: 'major',
+            actor: 'maintainer',
+            actorRole: 'maintain',
+            parentCommentId: 99,
+            createdAt: '2026-05-01T00:00:00.000Z',
+          },
+        ],
+      })
+    ).toBe(99);
+  });
+
   it('creates a signed ledger comment and can load it back', async () => {
     const { client, octokit } = makeClient([]);
     const ledger = new ReviewLedger(client, 'test-secret');

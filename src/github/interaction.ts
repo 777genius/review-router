@@ -30,8 +30,12 @@ import {
   ParsedMemoryInteraction,
   ParsedMemoryInstruction,
 } from './memory-interaction';
+import {
+  ManualReviewRequestAvailability,
+  type ManualReviewRequestPort,
+} from '../control-plane/review-request';
 
-type CommandKind = 'skip' | 'unskip' | 'status';
+type CommandKind = 'skip' | 'unskip' | 'status' | 'review';
 
 interface ParsedCommand {
   kind: CommandKind;
@@ -115,7 +119,8 @@ export class ReviewInteractionHandler {
     private readonly ledger: ReviewLedger,
     private readonly discussionHandler?: ReviewDiscussionHandler,
     private readonly actionsClient: GitHubClient = client,
-    private readonly memoryClient?: ActionMemoryInteractionPort
+    private readonly memoryClient?: ActionMemoryInteractionPort,
+    private readonly reviewRequests?: ManualReviewRequestPort
   ) {}
 
   async execute(): Promise<void> {
@@ -169,8 +174,86 @@ export class ReviewInteractionHandler {
       await this.postStatus(prContext.prNumber, prContext.headSha);
       return;
     }
+    if (command.kind === 'review') {
+      await this.handleManualReviewCommand(payload, prContext);
+      return;
+    }
 
-    await this.handleSkipCommand(payload, command, prContext.prNumber);
+    await this.handleSkipCommand(
+      payload,
+      command,
+      prContext.prNumber,
+      prContext.headSha
+    );
+  }
+
+  private async handleManualReviewCommand(
+    payload: ReviewCommentEventPayload,
+    prContext: InteractionPullRequestContext
+  ): Promise<void> {
+    const comment = payload.comment;
+    const actor = comment?.user?.login || 'unknown';
+    if (!comment?.id) return;
+    const role = await this.getRole(actor);
+    if (role !== 'write' && role !== 'maintain' && role !== 'admin') {
+      await this.postNotice(
+        prContext.prNumber,
+        `@${actor} cannot request a ReviewRouter rerun. Required role: write, maintain, or admin.`
+      );
+      return;
+    }
+    if (!prContext.headSha) {
+      await this.postNotice(
+        prContext.prNumber,
+        'ReviewRouter could not verify the current head SHA and did not request a review.'
+      );
+      return;
+    }
+    const availability =
+      this.reviewRequests?.availability() ??
+      ManualReviewRequestAvailability.ExplicitlyUnsupported;
+    if (availability === ManualReviewRequestAvailability.Unavailable) {
+      await this.postNotice(
+        prContext.prNumber,
+        'ReviewRouter could not confirm the revision-aware review request. No older workflow attempt was rerun.'
+      );
+      return;
+    }
+    if (availability === ManualReviewRequestAvailability.Available) {
+      try {
+        const requested = await this.reviewRequests!.request({
+          pullRequestNumber: prContext.prNumber,
+          expectedHeadSha: prContext.headSha,
+          sourceId: `manual-comment:${comment.id}`,
+          commandKind: 'review',
+        });
+        if (requested.status !== 'unsupported') {
+          logger.info(
+            `Queued revision-aware ReviewRouter review for PR #${prContext.prNumber}`
+          );
+          return;
+        }
+      } catch (error) {
+        await this.postNotice(
+          prContext.prNumber,
+          `The revision-aware review request could not be confirmed: ${sanitizeNoticeError(error)}. ReviewRouter did not rerun an older workflow attempt.`
+        );
+        return;
+      }
+    }
+    const rerun = await this.rerunReviewAfterOverride(
+      prContext.prNumber,
+      prContext.headSha
+    );
+    if (rerun.outcome === 'rerun' || rerun.outcome === 'already-running') {
+      return;
+    }
+    const reason =
+      rerun.outcome === 'not-started' ? rerun.reason : rerun.outcome;
+    await this.postNotice(
+      prContext.prNumber,
+      `ReviewRouter did not start a review: ${reason}.`
+    );
   }
 
   private async handleMemoryInteraction(
@@ -310,7 +393,8 @@ export class ReviewInteractionHandler {
   private async handleSkipCommand(
     payload: ReviewCommentEventPayload,
     command: ParsedCommand,
-    prNumber: number
+    prNumber: number,
+    headSha?: string
   ): Promise<void> {
     const comment = payload.comment;
     const parentId = comment?.in_reply_to_id;
@@ -387,10 +471,47 @@ export class ReviewInteractionHandler {
       reason: command.reason,
     });
 
-    const rerun = await this.rerunReviewAfterOverride(
-      prNumber,
-      payload.pull_request?.head?.sha
-    );
+    const requestAvailability =
+      this.reviewRequests?.availability() ??
+      ManualReviewRequestAvailability.ExplicitlyUnsupported;
+    if (requestAvailability === ManualReviewRequestAvailability.Unavailable) {
+      await this.postNotice(
+        prNumber,
+        `Recorded \`/rr ${command.kind}\`, but the revision-aware review request could not be confirmed. ReviewRouter did not rerun an older workflow attempt.`
+      );
+      return;
+    }
+    if (requestAvailability === ManualReviewRequestAvailability.Available) {
+      if (!headSha) {
+        await this.postNotice(
+          prNumber,
+          `Recorded \`/rr ${command.kind}\`, but ReviewRouter could not verify the current head SHA and did not request a rerun.`
+        );
+        return;
+      }
+      try {
+        const requested = await this.reviewRequests!.request({
+          pullRequestNumber: prNumber,
+          expectedHeadSha: headSha,
+          sourceId: `review-comment:${comment.id}`,
+          commandKind: command.kind === 'skip' ? 'skip' : 'unskip',
+        });
+        if (requested.status !== 'unsupported') {
+          logger.info(
+            `Queued revision-aware ReviewRouter review after /rr ${command.kind}`
+          );
+          return;
+        }
+      } catch (error) {
+        await this.postNotice(
+          prNumber,
+          `Recorded \`/rr ${command.kind}\`, but the revision-aware review request could not be confirmed: ${sanitizeNoticeError(error)}. ReviewRouter did not rerun an older workflow attempt.`
+        );
+        return;
+      }
+    }
+
+    const rerun = await this.rerunReviewAfterOverride(prNumber, headSha);
     if (rerun.outcome === 'rerun') {
       logger.info(
         `Requested rerun of ReviewRouter workflow run ${rerun.runId}`
@@ -850,7 +971,9 @@ async function sleep(ms: number): Promise<void> {
 
 function parseCommand(body: string): ParsedCommand | null {
   const trimmed = body.trim();
-  const match = trimmed.match(/^\/rr\s+(skip|unskip|status)\b[\s:,-]*(.*)$/is);
+  const match = trimmed.match(
+    /^\/rr\s+(skip|unskip|status|review)\b[\s:,-]*(.*)$/is
+  );
   if (!match) return null;
   return {
     kind: match[1].toLowerCase() as CommandKind,

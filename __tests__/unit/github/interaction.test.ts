@@ -10,6 +10,11 @@ import {
   ActionMemoryInteractionPort,
   ActionMemoryMutationResponse,
 } from '../../../src/control-plane/memory';
+import {
+  ManualReviewRequestAvailability,
+  type ManualReviewRequestPort,
+  type ManualReviewRequestCommandKind,
+} from '../../../src/control-plane/review-request';
 
 function writeEvent(payload: unknown): string {
   const file = path.join(
@@ -118,6 +123,28 @@ class CapturingMemoryClient implements ActionMemoryInteractionPort {
   }
 }
 
+class CapturingReviewRequestClient implements ManualReviewRequestPort {
+  public readonly requests: Array<{
+    readonly pullRequestNumber: number;
+    readonly expectedHeadSha: string;
+    readonly sourceId: string;
+    readonly commandKind: ManualReviewRequestCommandKind;
+  }> = [];
+
+  constructor(
+    private readonly state = ManualReviewRequestAvailability.Available
+  ) {}
+
+  availability(): ManualReviewRequestAvailability {
+    return this.state;
+  }
+
+  async request(input: (typeof this.requests)[number]) {
+    this.requests.push(input);
+    return { status: 'queued' as const };
+  }
+}
+
 describe('ReviewInteractionHandler', () => {
   const originalEnv = { ...process.env };
 
@@ -180,6 +207,131 @@ describe('ReviewInteractionHandler', () => {
       expect.objectContaining({
         body: expect.stringContaining(
           'Dismissed by @maintainer via `/rr skip`; this finding no longer blocks ReviewRouter. Reason: validated elsewhere'
+        ),
+      })
+    );
+  });
+
+  it('creates a revision-aware manual intent without rerunning an old workflow attempt', async () => {
+    const { client, octokit } = makeClient();
+    const reviewRequests = new CapturingReviewRequestClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 11,
+        in_reply_to_id: 10,
+        body: '/rr skip verified',
+        user: { login: 'maintainer' },
+      },
+      pull_request: {
+        number: 123,
+        head: { sha: 'a'.repeat(40), repo: { fork: false } },
+        user: { login: 'author' },
+      },
+    });
+    octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+
+    await new ReviewInteractionHandler(
+      client,
+      new ReviewLedger(client, 'test-secret'),
+      undefined,
+      client,
+      undefined,
+      reviewRequests
+    ).execute();
+
+    expect(reviewRequests.requests).toEqual([
+      {
+        pullRequestNumber: 123,
+        expectedHeadSha: 'a'.repeat(40),
+        sourceId: 'review-comment:11',
+        commandKind: 'skip',
+      },
+    ]);
+    expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
+    expect(octokit.rest.actions.reRunWorkflowFailedJobs).not.toHaveBeenCalled();
+  });
+
+  it('queues a top-level /rr review as a distinct same-head request', async () => {
+    const { client, octokit } = makeClient();
+    const reviewRequests = new CapturingReviewRequestClient();
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 22,
+        body: '/rr review',
+        user: { login: 'maintainer' },
+      },
+      issue: { number: 123, pull_request: {} },
+    });
+    octokit.rest.pulls.get.mockResolvedValue({
+      data: {
+        number: 123,
+        head: { sha: 'b'.repeat(40), repo: { fork: false } },
+        user: { login: 'author' },
+      },
+    });
+    octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+
+    await new ReviewInteractionHandler(
+      client,
+      new ReviewLedger(client, 'test-secret'),
+      undefined,
+      client,
+      undefined,
+      reviewRequests
+    ).execute();
+
+    expect(reviewRequests.requests).toEqual([
+      {
+        pullRequestNumber: 123,
+        expectedHeadSha: 'b'.repeat(40),
+        sourceId: 'manual-comment:22',
+        commandKind: 'review',
+      },
+    ]);
+    expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
+  });
+
+  it('does not rerun a legacy attempt when control-plane availability is ambiguous', async () => {
+    const { client, octokit } = makeClient();
+    const reviewRequests = new CapturingReviewRequestClient(
+      ManualReviewRequestAvailability.Unavailable
+    );
+    process.env.GITHUB_EVENT_PATH = writeEvent({
+      comment: {
+        id: 11,
+        in_reply_to_id: 10,
+        body: '/rr skip verified',
+        user: { login: 'maintainer' },
+      },
+      pull_request: {
+        number: 123,
+        head: { sha: 'a'.repeat(40), repo: { fork: false } },
+        user: { login: 'author' },
+      },
+    });
+    octokit.rest.repos.getCollaboratorPermissionLevel.mockResolvedValue({
+      data: { permission: 'write', role_name: 'maintain' },
+    });
+
+    await new ReviewInteractionHandler(
+      client,
+      new ReviewLedger(client, 'test-secret'),
+      undefined,
+      client,
+      undefined,
+      reviewRequests
+    ).execute();
+
+    expect(octokit.rest.actions.listWorkflowRunsForRepo).not.toHaveBeenCalled();
+    expect(octokit.rest.actions.reRunWorkflowFailedJobs).not.toHaveBeenCalled();
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining(
+          'did not rerun an older workflow attempt'
         ),
       })
     );

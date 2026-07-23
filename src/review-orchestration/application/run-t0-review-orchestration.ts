@@ -13,6 +13,7 @@ import {
   type AcceptedReviewObservation,
   type CurrentReviewProjectionBuilderPort,
   type PreparedReviewInvocationPort,
+  type PreparedReviewInvocation,
   type ProviderInvocationManifestAssemblerPort,
   type ReviewActionV2ControlPlanePort,
   type ReviewExecutionAdmission,
@@ -24,6 +25,7 @@ import {
   type ReviewProtocolLimits,
   type ReviewRevisionGuardPort,
   type ReviewRevisionFacts,
+  type ReviewObservationPayload,
   type ReviewRunAuthorization,
   type RestoredReviewExecution,
   type RestoredReviewWorkSlot,
@@ -81,7 +83,8 @@ export class RunT0ReviewOrchestration {
   constructor(
     private readonly dependencies: RunT0ReviewOrchestrationDependencies,
     private readonly maxPublicationPolls = 30,
-    private readonly maxBusyPollsPerSlot = 8
+    private readonly maxBusyPollsPerSlot = 600,
+    private readonly revisionPollIntervalMs = 5_000
   ) {
     if (
       !Number.isSafeInteger(maxPublicationPolls) ||
@@ -93,9 +96,16 @@ export class RunT0ReviewOrchestration {
     if (
       !Number.isSafeInteger(maxBusyPollsPerSlot) ||
       maxBusyPollsPerSlot < 1 ||
-      maxBusyPollsPerSlot > 60
+      maxBusyPollsPerSlot > 720
     ) {
       throw new Error('review_orchestration_busy_poll_limit_invalid');
+    }
+    if (
+      !Number.isSafeInteger(revisionPollIntervalMs) ||
+      revisionPollIntervalMs < 10 ||
+      revisionPollIntervalMs > 60_000
+    ) {
+      throw new Error('review_orchestration_revision_poll_interval_invalid');
     }
   }
 
@@ -419,7 +429,6 @@ export class RunT0ReviewOrchestration {
     readonly streamVersion: string;
   }> {
     let streamVersion = input.execution.streamVersion;
-    let busyPollCount = 0;
     for (
       let attemptOrdinal = 1;
       attemptOrdinal <= input.workSlot.attemptBudget;
@@ -542,29 +551,31 @@ export class RunT0ReviewOrchestration {
         String(attemptOrdinal),
         manifest.providerInvocationKey,
       ]);
-      let lease = await this.dependencies.controlPlane.acquireInvocationLease({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey('lease-acquire', [
-          input.execution.executionId,
-          input.workSlot.workSlotId,
-          acquireRequestId,
-        ]),
-        execution: { ...input.execution, streamVersion },
-        workSlot: input.workSlot,
-        manifest,
-        acquireRequestId,
-        ownerIdHash: input.ownerIdHash,
-      });
-      if (!lease) {
-        busyPollCount += 1;
+      let lease = null;
+      for (let busyPollCount = 0; lease === null; busyPollCount += 1) {
         if (busyPollCount >= this.maxBusyPollsPerSlot) {
           throw new Error('review_orchestration_slot_busy_timeout');
         }
-        await this.dependencies.delay.sleep(500);
-        attemptOrdinal -= 1;
-        continue;
+        if (busyPollCount > 0) {
+          await this.dependencies.delay.sleep(
+            Math.min(5_000, 500 * 2 ** Math.min(busyPollCount - 1, 4))
+          );
+          await this.assertRevisionCurrent(input.revision);
+        }
+        lease = await this.dependencies.controlPlane.acquireInvocationLease({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey('lease-acquire', [
+            input.execution.executionId,
+            input.workSlot.workSlotId,
+            acquireRequestId,
+          ]),
+          execution: { ...input.execution, streamVersion },
+          workSlot: input.workSlot,
+          manifest,
+          acquireRequestId,
+          ownerIdHash: input.ownerIdHash,
+        });
       }
-      busyPollCount = 0;
       input.onEvent({
         type: ReviewOrchestrationEventType.SlotLeaseAcquired,
         workSlotId: input.workSlot.workSlotId,
@@ -581,10 +592,11 @@ export class RunT0ReviewOrchestration {
             return lease;
           },
           operation: (signal) =>
-            this.dependencies.invocations.execute({
+            this.executeInvocationWithRevisionWatch({
               invocation,
               lease: lease!,
               signal,
+              revision: input.revision,
             }),
         });
         await this.assertRevisionCurrent(input.revision);
@@ -695,6 +707,50 @@ export class RunT0ReviewOrchestration {
       throw new ReviewExecutionSupersededSignal(
         currentRevision.reviewRevisionHash
       );
+    }
+  }
+
+  private async executeInvocationWithRevisionWatch(input: {
+    readonly signal: AbortSignal;
+    readonly invocation: PreparedReviewInvocation;
+    readonly lease: ReviewInvocationLease;
+    readonly revision: ReviewRevisionFacts;
+  }): Promise<ReviewObservationPayload> {
+    const abort = new AbortController();
+    let stopped = false;
+    const relayLeaseAbort = () => abort.abort(input.signal.reason);
+    if (input.signal.aborted) relayLeaseAbort();
+    else
+      input.signal.addEventListener('abort', relayLeaseAbort, { once: true });
+    const monitor = async () => {
+      while (!stopped && !abort.signal.aborted) {
+        await this.dependencies.delay.sleep(this.revisionPollIntervalMs);
+        if (stopped || abort.signal.aborted) return;
+        try {
+          await this.assertRevisionCurrent(input.revision);
+        } catch (error) {
+          if (error instanceof ReviewExecutionSupersededSignal) {
+            abort.abort(error);
+            return;
+          }
+        }
+      }
+    };
+    void monitor();
+    try {
+      return await this.dependencies.invocations.execute({
+        invocation: input.invocation,
+        lease: input.lease,
+        signal: abort.signal,
+      });
+    } catch (error) {
+      if (abort.signal.reason instanceof ReviewExecutionSupersededSignal) {
+        throw abort.signal.reason;
+      }
+      throw error;
+    } finally {
+      stopped = true;
+      input.signal.removeEventListener('abort', relayLeaseAbort);
     }
   }
 

@@ -7,6 +7,27 @@ import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { parseReviewOutputStrict } from './review-output';
+import {
+  createPreparedProviderInvocation,
+  mergeCredentialEnvironment,
+  type PreparedProviderInvocation,
+  type ProviderCredentialLease,
+  ProviderKind,
+  requirePreparedProviderInvocation,
+  snapshotCredentialEnvironment,
+  splitProviderEnvironment,
+} from './prepared-invocation';
+
+type GeminiPreparedRequest = {
+  readonly binary: string;
+  readonly argsTemplate: readonly string[];
+  readonly prompt: string;
+  readonly cwd: string;
+  readonly environment: Readonly<NodeJS.ProcessEnv>;
+  readonly environmentContract: Readonly<Record<string, string>>;
+};
+
+const GEMINI_PROMPT_FILE_PLACEHOLDER = '{reviewrouter_prompt_file}';
 
 export class GeminiProvider extends Provider {
   constructor(private readonly model: string) {
@@ -50,9 +71,76 @@ export class GeminiProvider extends Provider {
   }
 
   async review(prompt: string, timeoutMs: number): Promise<ReviewResult> {
-    const started = Date.now();
+    const environment = splitProviderEnvironment(
+      snapshotCredentialEnvironment()
+    );
+    const invocation = await this.prepareInvocationWithEnvironment(
+      prompt,
+      timeoutMs,
+      environment
+    );
+    return this.executePreparedInvocation(invocation, {
+      environment: environment.credentialEnvironment,
+    });
+  }
 
+  async prepareInvocation(
+    prompt: string,
+    timeoutMs: number
+  ): Promise<PreparedProviderInvocation<GeminiPreparedRequest>> {
+    return this.prepareInvocationWithEnvironment(
+      prompt,
+      timeoutMs,
+      splitProviderEnvironment(snapshotCredentialEnvironment())
+    );
+  }
+
+  private async prepareInvocationWithEnvironment(
+    prompt: string,
+    timeoutMs: number,
+    environment: ReturnType<typeof splitProviderEnvironment>
+  ): Promise<PreparedProviderInvocation<GeminiPreparedRequest>> {
     const { bin, args: baseArgs } = await this.resolveBinary();
+    return createPreparedProviderInvocation({
+      providerKind: ProviderKind.GeminiCli,
+      providerName: this.name,
+      requestedModel: this.model,
+      timeoutMs,
+      request: {
+        binary: bin,
+        argsTemplate: [
+          ...baseArgs,
+          '--model',
+          this.model,
+          '--prompt',
+          GEMINI_PROMPT_FILE_PLACEHOLDER,
+          '--output-format',
+          'json',
+          '--approval-mode',
+          'yolo',
+        ],
+        prompt,
+        cwd: process.cwd(),
+        environment: environment.runtimeEnvironment,
+        environmentContract: environment.contract,
+      },
+    });
+  }
+
+  async executePreparedInvocation(
+    invocation: PreparedProviderInvocation,
+    credentialLease?: ProviderCredentialLease
+  ): Promise<ReviewResult> {
+    const prepared = requirePreparedProviderInvocation<GeminiPreparedRequest>(
+      invocation,
+      ProviderKind.GeminiCli,
+      this.name
+    );
+    const request = prepared.request;
+    if (!credentialLease?.environment) {
+      throw new Error('gemini_credential_lease_missing');
+    }
+    const started = Date.now();
 
     // Write prompt to temp file to avoid command line length limits
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gemini-'));
@@ -61,28 +149,32 @@ export class GeminiProvider extends Provider {
       tmpDir,
       `prompt-${crypto.randomBytes(8).toString('hex')}.txt`
     );
-    await fs.writeFile(promptFile, prompt, { encoding: 'utf8', mode: 0o600 });
+    await fs.writeFile(promptFile, request.prompt, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
 
     // Gemini CLI command:
     // gemini --model <model> --prompt <prompt-file> --output-format json --approval-mode yolo
-    const args = [
-      ...baseArgs,
-      '--model',
-      this.model,
-      '--prompt',
-      promptFile,
-      '--output-format',
-      'json',
-      '--approval-mode',
-      'yolo',
-    ];
+    const args = request.argsTemplate.map((argument) =>
+      argument.replace(GEMINI_PROMPT_FILE_PLACEHOLDER, promptFile)
+    );
 
     logger.info(
-      `Running Gemini CLI: ${bin} --model ${this.model} --output-format json --approval-mode yolo ...`
+      `Running Gemini CLI: ${request.binary} --model ${prepared.requestedModel} --output-format json --approval-mode yolo ...`
     );
 
     try {
-      const { stdout, stderr } = await this.runCli(bin, args, timeoutMs);
+      const { stdout, stderr } = await this.runCli(
+        request.binary,
+        args,
+        prepared.timeoutMs,
+        request.cwd,
+        mergeCredentialEnvironment(
+          request.environment,
+          credentialLease.environment
+        )
+      );
       const content = stdout.trim();
       const durationSeconds = (Date.now() - started) / 1000;
       logger.info(
@@ -117,7 +209,9 @@ export class GeminiProvider extends Provider {
   private runCli(
     bin: string,
     args: string[],
-    timeoutMs: number
+    timeoutMs: number,
+    cwd?: string,
+    environment?: Readonly<NodeJS.ProcessEnv>
   ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       // Use detached: true to create a new process group
@@ -125,7 +219,8 @@ export class GeminiProvider extends Provider {
       const proc = spawn(bin, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: true,
-        env: process.env,
+        ...(cwd ? { cwd } : {}),
+        ...(environment ? { env: environment } : {}),
       });
 
       // Unref to avoid keeping parent alive (if available)

@@ -7,9 +7,33 @@ import {
   buildReviewFindingsSchema,
   parseReviewOutputStrict,
 } from './review-output';
+import {
+  createPreparedProviderInvocation,
+  type PreparedProviderInvocation,
+  type ProviderCredentialLease,
+  ProviderKind,
+  requirePreparedProviderInvocation,
+} from './prepared-invocation';
 // Node 18+ provides global fetch; if unavailable, we throw a clear error.
 
 const REVIEW_TOOL_NAME = 'submit_review';
+
+type OpenRouterPreparedRequest = {
+  readonly endpoint: string;
+  readonly method: 'POST';
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: {
+    readonly model: string;
+    readonly messages: readonly [
+      { readonly role: 'user'; readonly content: string },
+    ];
+    readonly tools: readonly unknown[];
+    readonly tool_choice: unknown;
+    readonly temperature: number;
+    readonly max_tokens: number;
+  };
+  readonly transportRetries: number;
+};
 
 export class OpenRouterProvider extends Provider {
   private static readonly BASE_URL = 'https://openrouter.ai/api/v1';
@@ -28,62 +52,101 @@ export class OpenRouterProvider extends Provider {
   }
 
   async review(prompt: string, timeoutMs: number): Promise<ReviewResult> {
-    if (await this.rateLimiter.isRateLimited(this.name)) {
-      throw new RateLimitError(`${this.name} is currently rate-limited`);
-    }
+    const invocation = await this.prepareInvocation(prompt, timeoutMs);
+    return this.executePreparedInvocation(invocation, {
+      bearerToken: this.apiKey,
+    });
+  }
 
+  async prepareInvocation(
+    prompt: string,
+    timeoutMs: number
+  ): Promise<PreparedProviderInvocation<OpenRouterPreparedRequest>> {
+    const baseModelId = this.modelId.replace(/#\d+$/, '');
+    const apiModelId = baseModelId === 'free' ? 'openrouter/free' : baseModelId;
+    return createPreparedProviderInvocation({
+      providerKind: ProviderKind.OpenRouterHttp,
+      providerName: this.name,
+      requestedModel: apiModelId,
+      timeoutMs,
+      request: {
+        endpoint: `${OpenRouterProvider.BASE_URL}/chat/completions`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/777genius/review-router',
+          'X-Title': 'ReviewRouter',
+        },
+        body: {
+          model: apiModelId,
+          messages: [{ role: 'user', content: prompt }],
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: REVIEW_TOOL_NAME,
+                description:
+                  'Submit the complete ReviewRouter code review result.',
+                parameters: buildReviewFindingsSchema(),
+              },
+            },
+          ],
+          tool_choice: {
+            type: 'function',
+            function: { name: REVIEW_TOOL_NAME },
+          },
+          temperature: 0.1,
+          max_tokens: 2000,
+        },
+        transportRetries: 1,
+      },
+    });
+  }
+
+  async executePreparedInvocation(
+    invocation: PreparedProviderInvocation,
+    credentialLease?: ProviderCredentialLease
+  ): Promise<ReviewResult> {
+    const prepared =
+      requirePreparedProviderInvocation<OpenRouterPreparedRequest>(
+        invocation,
+        ProviderKind.OpenRouterHttp,
+        this.name
+      );
+    const request = prepared.request;
+    const apiKey = credentialLease?.bearerToken;
+    if (!apiKey) throw new Error('openrouter_credential_lease_missing');
+    if (await this.rateLimiter.isRateLimited(prepared.providerName)) {
+      throw new RateLimitError(
+        `${prepared.providerName} is currently rate-limited`
+      );
+    }
     if (typeof fetch !== 'function') {
       throw new Error(
         'Global fetch is not available; please use Node 18+ or provide a fetch polyfill.'
       );
     }
-
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const timeout = setTimeout(() => controller.abort(), prepared.timeoutMs);
     const started = Date.now();
-
-    // Strip instance suffix (e.g., "free#1" -> "free") for API routing.
-    // OpenRouter's free meta-model id is "openrouter/free", while ReviewRouter
-    // provider names already use the "openrouter/" prefix as a provider namespace.
-    const baseModelId = this.modelId.replace(/#\d+$/, '');
-    const apiModelId = baseModelId === 'free' ? 'openrouter/free' : baseModelId;
+    let transportAttemptCount = 0;
 
     try {
       const response = await withRetry(
-        () =>
-          fetch(`${OpenRouterProvider.BASE_URL}/chat/completions`, {
-            method: 'POST',
+        () => {
+          transportAttemptCount += 1;
+          return fetch(request.endpoint, {
+            method: request.method,
             headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.apiKey}`,
-              'HTTP-Referer': 'https://github.com/777genius/review-router',
-              'X-Title': 'ReviewRouter',
+              ...request.headers,
+              Authorization: `Bearer ${apiKey}`,
             },
-            body: JSON.stringify({
-              model: apiModelId,
-              messages: [{ role: 'user', content: prompt }],
-              tools: [
-                {
-                  type: 'function',
-                  function: {
-                    name: REVIEW_TOOL_NAME,
-                    description:
-                      'Submit the complete ReviewRouter code review result.',
-                    parameters: buildReviewFindingsSchema(),
-                  },
-                },
-              ],
-              tool_choice: {
-                type: 'function',
-                function: { name: REVIEW_TOOL_NAME },
-              },
-              temperature: 0.1,
-              max_tokens: 2000,
-            }),
+            body: JSON.stringify(request.body),
             signal: controller.signal,
-          }),
+          });
+        },
         {
-          retries: 1,
+          retries: request.transportRetries,
           retryOn: (error) => {
             const err = error as Error;
             if (err instanceof RateLimitError) return false;
@@ -122,11 +185,14 @@ export class OpenRouterProvider extends Provider {
 
         if (response.status === 429) {
           await this.rateLimiter.markRateLimited(
-            this.name,
+            prepared.providerName,
             minutes,
             'HTTP 429 from OpenRouter'
           );
-          throw new RateLimitError(`Rate limited: ${this.name}`, minutes * 60);
+          throw new RateLimitError(
+            `Rate limited: ${prepared.providerName}`,
+            minutes * 60
+          );
         }
 
         // HTTP 402 Payment Required: Model requires payment/credits
@@ -145,17 +211,17 @@ export class OpenRouterProvider extends Provider {
         if (response.status === 402) {
           const blockMinutes = Math.max(minutes || 0, 60 * 24);
           logger.warn(
-            `Model ${this.name} returned 402 Payment Required. ` +
+            `Model ${prepared.providerName} returned 402 Payment Required. ` +
               `Blocking for ${blockMinutes} minutes to avoid repeated failures. ` +
               `This usually means the model requires credits or a paid plan.`
           );
           await this.rateLimiter.markRateLimited(
-            this.name,
+            prepared.providerName,
             blockMinutes,
             'HTTP 402 Payment Required from OpenRouter'
           );
           throw new RateLimitError(
-            `Payment required: ${this.name}`,
+            `Payment required: ${prepared.providerName}`,
             blockMinutes * 60
           );
         }
@@ -194,12 +260,15 @@ export class OpenRouterProvider extends Provider {
       const aiAnalysis = this.extractAIAnalysis(content);
 
       // Log which model was actually used for dynamic routing transparency
-      if (actualModel && actualModel !== apiModelId) {
-        logger.info(`OpenRouter routed ${this.name} -> ${actualModel}`);
+      if (actualModel && actualModel !== request.body.model) {
+        logger.info(
+          `OpenRouter routed ${prepared.providerName} -> ${actualModel}`
+        );
       }
 
       return {
         content,
+        transportAttemptCount,
         usage: usage
           ? {
               promptTokens: usage.prompt_tokens ?? 0,

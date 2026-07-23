@@ -4,6 +4,7 @@ import {
   trustedReviewThreadAuthorsFromEnv,
 } from '../../../src/github/review-thread-inventory';
 import { GitHubClient } from '../../../src/github/client';
+import { createHash } from 'crypto';
 
 const parentBody = [
   '**🟡 Major - Previous Bug**',
@@ -142,6 +143,98 @@ describe('ReviewThreadInventoryLoader', () => {
     });
     expect(inventory.dedupeComments).toHaveLength(1);
     expectGraphqlBracesBalanced(graphql.mock.calls[0]?.[0] as string);
+  });
+
+  it('recognizes only a trusted resolution marker bound to the exact target and fingerprint', async () => {
+    const fingerprint = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+    const targetId = `rrt_${createHash('sha256')
+      .update(`active-thread\nactive-comment\n${fingerprint}`)
+      .digest('hex')
+      .slice(0, 16)}`;
+    const graphql = jest.fn().mockResolvedValue({
+      repository: {
+        pullRequest: {
+          headRefOid: 'head-sha',
+          reviewThreads: {
+            pageInfo: { hasNextPage: false, endCursor: null },
+            nodes: [
+              {
+                id: 'active-thread',
+                isResolved: false,
+                viewerCanResolve: false,
+                path: 'src/app.ts',
+                line: 12,
+                comments: {
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                  nodes: [
+                    {
+                      id: 'active-comment',
+                      author: { login: 'review-router-ai[bot]' },
+                      body: parentBody,
+                      createdAt: '2026-05-14T00:00:00Z',
+                      updatedAt: '2026-05-14T00:00:00Z',
+                      path: 'src/app.ts',
+                      line: 12,
+                      originalLine: 10,
+                    },
+                    {
+                      id: 'untrusted-copy',
+                      author: { login: 'contributor' },
+                      body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=${fingerprint} -->`,
+                      createdAt: '2026-05-14T00:01:00Z',
+                      updatedAt: '2026-05-14T00:01:00Z',
+                    },
+                    {
+                      id: 'trusted-mismatch',
+                      author: { login: 'review-router-ai[bot]' },
+                      body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=bbbbbbbbbbbbbbbbbbbbbbbb -->`,
+                      createdAt: '2026-05-14T00:02:00Z',
+                      updatedAt: '2026-05-14T00:02:00Z',
+                    },
+                    {
+                      id: 'generic-actions-copy',
+                      author: { login: 'github-actions[bot]' },
+                      body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=${fingerprint} -->`,
+                      createdAt: '2026-05-14T00:02:30Z',
+                      updatedAt: '2026-05-14T00:02:30Z',
+                    },
+                    {
+                      id: 'trusted-resolution',
+                      author: { login: 'review-router-ai[bot]' },
+                      body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=${fingerprint} -->`,
+                      createdAt: '2026-05-14T00:03:00Z',
+                      updatedAt: '2026-05-14T00:03:00Z',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+    const loader = new ReviewThreadInventoryLoader(
+      {
+        owner: 'owner',
+        repo: 'repo',
+        octokit: { graphql },
+      } as unknown as GitHubClient,
+      ['review-router-ai[bot]', 'github-actions[bot]']
+    );
+
+    const inventory = await loader.load(123);
+
+    expect(inventory.candidates).toHaveLength(0);
+    expect(inventory.manualAttention[0]?.target).toMatchObject({
+      targetId,
+      hasHumanReply: true,
+      trustedResolutionMarker: {
+        schemaVersion: 'reviewrouter-lifecycle-resolution.v1',
+        targetId,
+        fingerprint,
+        commentId: 'trusted-resolution',
+      },
+    });
   });
 
   it('keeps outdated unresolved threads as lifecycle targets but not dedupe refs', async () => {

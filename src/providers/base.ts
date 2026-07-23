@@ -1,4 +1,8 @@
 import { ReviewResult } from '../types';
+import {
+  type PreparedProviderInvocation,
+  type ProviderCredentialLease,
+} from './prepared-invocation';
 
 export interface ProviderExecutionPolicy {
   canStartOptionalRetry(): boolean;
@@ -13,6 +17,22 @@ export abstract class Provider {
     timeoutMs: number,
     executionPolicy?: ProviderExecutionPolicy
   ): Promise<ReviewResult>;
+
+  async prepareInvocation(
+    _prompt: string,
+    _timeoutMs: number,
+    _executionPolicy?: ProviderExecutionPolicy
+  ): Promise<PreparedProviderInvocation> {
+    throw new Error(`provider_preparation_not_supported:${this.name}`);
+  }
+
+  async executePreparedInvocation(
+    _invocation: PreparedProviderInvocation,
+    _credentialLease?: ProviderCredentialLease,
+    _signal?: AbortSignal
+  ): Promise<ReviewResult> {
+    throw new Error(`provider_prepared_execution_not_supported:${this.name}`);
+  }
 
   /**
    * Health check to verify provider responsiveness before running full review

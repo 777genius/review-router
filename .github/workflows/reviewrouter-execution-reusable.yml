@@ -1,0 +1,351 @@
+name: ReviewRouter Execution Internal
+
+on:
+  workflow_call:
+    inputs:
+      review_action_lane:
+        description: 'Internal execution lane: legacy or t0'
+        required: true
+        type: string
+      runtime_ref:
+        required: true
+        type: string
+      api_url:
+        required: true
+        type: string
+      runtime_config_mode:
+        required: true
+        type: string
+      static_runtime_env_json:
+        required: true
+        type: string
+      pr_number:
+        required: false
+        type: string
+        default: ''
+      review_app_client_id:
+        required: false
+        type: string
+        default: ''
+      review_app_repository:
+        required: false
+        type: string
+        default: ''
+      provider_instance_id:
+        required: false
+        type: string
+        default: ''
+      workflow_schema_version:
+        required: true
+        type: number
+      review_timeout_minutes:
+        required: true
+        type: number
+      max_changed_lines:
+        required: true
+        type: string
+    secrets:
+      REVIEW_ROUTER_LEDGER_KEY:
+        required: false
+      REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN:
+        required: false
+      REVIEW_APP_PRIVATE_KEY:
+        required: false
+      CODEX_AUTH_JSON:
+        required: false
+      CODEX_CONFIG_TOML:
+        required: false
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+      OPENAI_API_KEY:
+        required: false
+      OPENROUTER_API_KEY:
+        required: false
+
+jobs:
+  review:
+    name: review
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.review_timeout_minutes }}
+    env:
+      RR_REVIEW_ACTION_LANE: ${{ inputs.review_action_lane }}
+      RR_RUNTIME_REF: ${{ inputs.runtime_ref }}
+      RR_STATIC_RUNTIME_ENV_JSON: ${{ inputs.static_runtime_env_json }}
+      RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+      RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
+      REVIEWROUTER_API_URL: ${{ inputs.api_url }}
+      REVIEWROUTER_OIDC_AUDIENCE: reviewrouter
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'true'
+      CODEX_AUTH_JSON_PRESENT: ${{ secrets.CODEX_AUTH_JSON != '' && '1' || '0' }}
+      CLAUDE_CODE_OAUTH_TOKEN_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && '1' || '0' }}
+      OPENAI_API_KEY_PRESENT: ${{ secrets.OPENAI_API_KEY != '' && '1' || '0' }}
+      REVIEW_APP_PRIVATE_KEY_PRESENT: ${{ secrets.REVIEW_APP_PRIVATE_KEY != '' && '1' || '0' }}
+    steps:
+      - name: Prepare ReviewRouter runtime settings
+        id: runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+
+          const fail = (message) => {
+            console.error(`::error::${message}`);
+            process.exit(1);
+          };
+
+          const reviewActionLane = (process.env.RR_REVIEW_ACTION_LANE || '').trim();
+          if (!['legacy', 't0'].includes(reviewActionLane)) {
+            fail('Invalid internal Review Action execution lane.');
+          }
+
+          const requestedRuntimeRef = (process.env.RR_RUNTIME_REF || '').trim();
+          if (!/^(main|v1|v1\.[0-9]+\.[0-9]+|[a-fA-F0-9]{40})$/.test(requestedRuntimeRef)) {
+            fail('Invalid ReviewRouter runtime_ref. Use main, v1, v1.x.x, or a 40-character commit SHA.');
+          }
+          const runtimeRepository =
+            reviewActionLane === 't0'
+              ? (process.env.RR_WORKFLOW_REPOSITORY || '').trim()
+              : '777genius/review-router';
+          const runtimeRef =
+            reviewActionLane === 't0'
+              ? (process.env.RR_WORKFLOW_SHA || '').trim().toLowerCase()
+              : requestedRuntimeRef;
+          if (reviewActionLane === 't0') {
+            if (runtimeRepository !== '777genius/review-router') {
+              fail('The T0 runtime must execute from the ReviewRouter reusable workflow repository.');
+            }
+            if (!/^[a-f0-9]{40}$/.test(runtimeRef)) {
+              fail('The T0 runtime requires the immutable reusable workflow commit SHA.');
+            }
+          }
+
+          const runtimeConfigMode = (process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE || '').trim();
+          if (!['oidc', 'static'].includes(runtimeConfigMode)) {
+            fail('Invalid ReviewRouter runtime_config_mode. Use oidc or static.');
+          }
+
+          const githubEnv = process.env.GITHUB_ENV;
+          const githubOutput = process.env.GITHUB_OUTPUT;
+          if (!githubEnv || !githubOutput) {
+            fail('GitHub environment files are unavailable.');
+          }
+
+          const appendEnv = (key, value) => {
+            if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+              fail(`Invalid static runtime env key: ${key}`);
+            }
+            const text = String(value);
+            if (text.includes('\0')) {
+              fail(`Invalid static runtime env value for ${key}`);
+            }
+            const delimiter = `RR_ENV_${key}_${crypto.randomUUID().replace(/-/g, '')}`;
+            fs.appendFileSync(githubEnv, `${key}<<${delimiter}\n${text}\n${delimiter}\n`);
+          };
+
+          appendEnv('REVIEWROUTER_ACTION_VERSION', runtimeRef);
+          appendEnv(
+            'REVIEWROUTER_COMMENT_TOKEN_MODE',
+            runtimeConfigMode === 'oidc' ? 'app-oidc' : 'github-token'
+          );
+
+          let staticEnv;
+          try {
+            staticEnv = JSON.parse(process.env.RR_STATIC_RUNTIME_ENV_JSON || '{}');
+          } catch (error) {
+            fail(`static_runtime_env_json is not valid JSON: ${error.message}`);
+          }
+          if (!staticEnv || typeof staticEnv !== 'object' || Array.isArray(staticEnv)) {
+            fail('static_runtime_env_json must be a JSON object.');
+          }
+          if (staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS === undefined) {
+            staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';
+          }
+          const staticRuntimeEnvAllowlist = new Set(['TARGET_TOKENS_PER_BATCH']);
+          const isSecretLikeStaticRuntimeEnvKey = (key) =>
+            !staticRuntimeEnvAllowlist.has(key) &&
+            /(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|AUTH_JSON)/.test(key);
+          for (const [key, value] of Object.entries(staticEnv)) {
+            if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+              fail(`Invalid static runtime env key: ${key}`);
+            }
+            if (key === 'REVIEWROUTER_ACTION_V2_MODE') {
+              fail('Set review_action_v2_mode on the reusable workflow instead of static_runtime_env_json.');
+            }
+            if (isSecretLikeStaticRuntimeEnvKey(key)) {
+              fail(`Static runtime env cannot contain secret-like key: ${key}`);
+            }
+            if (typeof value !== 'string') {
+              fail(`Static runtime env value must be a string: ${key}`);
+            }
+            appendEnv(key, value);
+          }
+
+          const appTokenNeeded =
+            reviewActionLane === 'legacy' &&
+            runtimeConfigMode === 'static' &&
+            process.env.REVIEW_APP_PRIVATE_KEY_PRESENT === '1' &&
+            (process.env.RR_REVIEW_APP_CLIENT_ID || '').trim().length > 0;
+          const eventName = process.env.GITHUB_EVENT_NAME || '';
+          const isForkPullRequest =
+            eventName === 'pull_request' &&
+            process.env.GITHUB_HEAD_REPO_FULL_NAME !== process.env.GITHUB_REPOSITORY;
+          const isMergeGroup = eventName === 'merge_group';
+          fs.appendFileSync(githubOutput, `runtime_ref=${runtimeRef}\n`);
+          fs.appendFileSync(githubOutput, `runtime_repository=${runtimeRepository}\n`);
+          fs.appendFileSync(githubOutput, `can_run=${!isForkPullRequest && !isMergeGroup ? 'true' : 'false'}\n`);
+          fs.appendFileSync(githubOutput, `skip_reason=${isMergeGroup ? 'merge_group' : isForkPullRequest ? 'fork' : ''}\n`);
+          fs.appendFileSync(githubOutput, `app_token_needed=${appTokenNeeded ? 'true' : 'false'}\n`);
+          NODE
+        env:
+          GITHUB_HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          RR_REVIEW_APP_CLIENT_ID: ${{ inputs.review_app_client_id }}
+
+      - name: Skip unsupported review context
+        if: ${{ steps.runtime.outputs.can_run == 'false' }}
+        shell: bash
+        run: |
+          if [ "${{ steps.runtime.outputs.skip_reason }}" = "merge_group" ]; then
+            echo "ReviewRouter merge queue check passed. Full review runs on pull_request events where a PR number is available."
+          else
+            echo "ReviewRouter skipped this fork pull request because secret-backed provider execution is disabled by default."
+          fi
+
+      - name: Checkout pull request code
+        if: ${{ steps.runtime.outputs.can_run == 'true' }}
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Checkout ReviewRouter runtime
+        if: ${{ steps.runtime.outputs.can_run == 'true' }}
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ steps.runtime.outputs.runtime_repository }}
+          ref: ${{ steps.runtime.outputs.runtime_ref }}
+          path: .reviewrouter-runtime
+          persist-credentials: false
+
+      - name: Setup Node.js
+        if: ${{ steps.runtime.outputs.can_run == 'true' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Resolve ReviewRouter runtime provider tooling
+        id: provider-tooling
+        if: ${{ steps.runtime.outputs.can_run == 'true' }}
+        shell: bash
+        env:
+          REVIEW_ROUTER_MODE: runtime-preflight
+        run: node .reviewrouter-runtime/dist/index.js
+
+      - name: Create ReviewRouter GitHub App token
+        id: app-token
+        if: ${{ inputs.review_action_lane == 'legacy' && steps.runtime.outputs.can_run == 'true' && steps.runtime.outputs.app_token_needed == 'true' }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.review_app_client_id }}
+          private-key: ${{ secrets.REVIEW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ inputs.review_app_repository }}
+          permission-contents: read
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Install Codex CLI
+        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}
+        shell: bash
+        run: npm install -g @openai/codex@0.125.0
+
+      - name: Install Claude Code CLI
+        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.claude_cli_needed == 'true' }}
+        shell: bash
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Restore Codex subscription auth
+        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_oauth_needed == 'true' && env.CODEX_AUTH_JSON_PRESENT == '1' }}
+        shell: bash
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+          CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const payload = process.env.CODEX_AUTH_JSON || '';
+          const fail = (message) => {
+            console.error('::error::' + message);
+            process.exit(1);
+          };
+          const warn = (message) => {
+            console.error('::warning::' + message);
+          };
+          let auth;
+          try {
+            auth = JSON.parse(payload);
+          } catch (error) {
+            fail('CODEX_AUTH_JSON is not valid JSON. reseed auth.json from a trusted machine. ' + error.message);
+          }
+          if (auth.auth_mode !== 'chatgpt') {
+            fail('CODEX_AUTH_JSON auth_mode must be chatgpt. reseed auth.json with Codex CLI subscription login or switch this repo to API-key mode.');
+          }
+          if (!auth.tokens || typeof auth.tokens.refresh_token !== 'string' || auth.tokens.refresh_token.length === 0) {
+            fail('CODEX_AUTH_JSON tokens.refresh_token is missing. Run codex login on a trusted machine and reseed auth.json.');
+          }
+          if (!auth.last_refresh) {
+            warn('CODEX_AUTH_JSON last_refresh is missing. If Codex later fails with an auth error, run codex login on a trusted machine and reseed auth.json.');
+          }
+          NODE
+          export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+          mkdir -p "$CODEX_HOME"
+          chmod 700 "$CODEX_HOME"
+          printf '%s' "$CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"
+          chmod 600 "$CODEX_HOME/auth.json"
+          if [ -n "${CODEX_CONFIG_TOML:-}" ]; then
+            printf '%s' "$CODEX_CONFIG_TOML" > "$CODEX_HOME/config.toml"
+            chmod 600 "$CODEX_HOME/config.toml"
+          fi
+
+      - name: Run ReviewRouter T0
+        if: ${{ inputs.review_action_lane == 't0' && steps.runtime.outputs.can_run == 'true' }}
+        shell: bash
+        env:
+          REVIEWROUTER_ACTION_V2_MODE: t0
+          REVIEW_ROUTER_MODE: codex-oauth-rotating
+          INPUT_API_URL: ${{ inputs.api_url }}
+          INPUT_PROVIDER_INSTANCE_ID: ${{ inputs.provider_instance_id }}
+          INPUT_WORKFLOW_SCHEMA_VERSION: ${{ inputs.workflow_schema_version }}
+          INPUT_MAX_CHANGED_LINES: ${{ inputs.max_changed_lines }}
+          INPUT_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+          INPUT_CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          INPUT_OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          REVIEW_ROUTER_MEMORY_ENABLED: 'true'
+          REVIEW_ROUTER_MEMORY_PROTOCOL_VERSION: '1'
+          REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT: /api/action/v1/memory
+          CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+        run: node .reviewrouter-runtime/dist/index.js
+
+      - name: Run ReviewRouter legacy
+        if: ${{ inputs.review_action_lane == 'legacy' && steps.runtime.outputs.can_run == 'true' }}
+        shell: bash
+        env:
+          REVIEWROUTER_ACTION_V2_MODE: disabled
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
+          REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN: ${{ secrets.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          REVIEW_ROUTER_MEMORY_ENABLED: 'true'
+          REVIEW_ROUTER_MEMORY_PROTOCOL_VERSION: '1'
+          REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT: /api/action/v1/memory
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+          CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: node .reviewrouter-runtime/dist/index.js

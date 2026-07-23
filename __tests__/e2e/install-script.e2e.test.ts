@@ -250,6 +250,34 @@ describe('review-router curl installer e2e', () => {
     expect(interactionWorkflow).not.toContain('pull_request_target');
   });
 
+  it('preserves an immutable runtime SHA in both reusable workflows', () => {
+    const runtimeSha = '0123456789abcdef0123456789abcdef01234567';
+    const result = runInstaller({
+      REVIEW_ROUTER_WORKFLOW_STYLE: 'reusable',
+      REVIEW_ROUTER_IDENTITY: 'actions',
+      REVIEW_ROUTER_AUTH: 'openrouter',
+      REVIEW_ROUTER_PRESET: 'minimal',
+      REVIEW_ROUTER_OPENROUTER_API_KEY: 'or-test-key',
+      REVIEW_ROUTER_ACTION_REF: `777genius/review-router@${runtimeSha}`,
+    });
+
+    expect(result.status).toBe(0);
+    const workflow = workflowText(result.workflowPath);
+    expect(workflow).toContain(
+      `uses: 777genius/review-router/.github/workflows/reviewrouter-reusable.yml@${runtimeSha}`
+    );
+    expect(workflow).toContain(`runtime_ref: ${runtimeSha}`);
+    expect(workflow).toContain(
+      'group: review-router-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}'
+    );
+    expect(workflow).toContain('cancel-in-progress: true');
+
+    const interactionWorkflow = workflowText(result.interactionWorkflowPath);
+    expect(interactionWorkflow).toContain(
+      `uses: 777genius/review-router/.github/workflows/reviewrouter-interaction-reusable.yml@${runtimeSha}`
+    );
+  });
+
   it('keeps GitHub App bot identity in compact reusable caller workflows', () => {
     const result = runInstaller({
       REVIEW_ROUTER_WORKFLOW_STYLE: 'reusable',

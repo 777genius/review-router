@@ -1,10 +1,13 @@
 import {
   CODEX_ROTATING_AUTH_INPUT_ENV_NAMES,
+  REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES,
   applyCodexRotatingProviderSecretInputs,
+  assertReviewActionV2ScmMutationEnvAbsent,
   clearCodexRotatingOidcRequestEnv,
   clearCodexRotatingProcessAuthEnv,
   readCodexRotatingProviderSecretInputs,
   readCodexRotatingAuthInput,
+  scrubAndAssertReviewActionV2ScmMutationEnv,
 } from '../../../src/codex-oauth/auth-input';
 
 describe('Codex OAuth rotating auth input', () => {
@@ -111,5 +114,45 @@ describe('Codex OAuth rotating auth input', () => {
     expect(env['INPUT_CLAUDE-CODE-OAUTH-TOKEN']).toBeUndefined();
     expect(env.INPUT_OPENROUTER_API_KEY).toBeUndefined();
     expect(env.CODEX_HOME).toBeUndefined();
+  });
+
+  it('scrubs every known SCM mutation credential before a v2 runner starts', () => {
+    const env: NodeJS.ProcessEnv = {
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'oidc-request-token',
+      ACTIONS_ID_TOKEN_REQUEST_URL:
+        'https://token.actions.githubusercontent.com',
+      OPENAI_API_KEY: 'provider-key',
+      REVIEWROUTER_SCM_READ_TOKEN: 'read-only-token',
+    };
+    for (const name of REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES) {
+      env[name] = `secret-for-${name}`;
+    }
+
+    const scrubbed = scrubAndAssertReviewActionV2ScmMutationEnv(env);
+
+    expect(scrubbed).toEqual(
+      [...REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES].sort()
+    );
+    for (const name of REVIEW_ACTION_V2_SCM_MUTATION_ENV_NAMES) {
+      expect(env[name]).toBeUndefined();
+    }
+    expect(env.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBe('oidc-request-token');
+    expect(env.OPENAI_API_KEY).toBe('provider-key');
+    expect(env.REVIEWROUTER_SCM_READ_TOKEN).toBe('read-only-token');
+  });
+
+  it('fails closed for an unlisted SCM write-token alias', () => {
+    const env: NodeJS.ProcessEnv = {
+      REVIEW_ROUTER_SCM_WRITE_TOKEN: 'unexpected-write-token',
+    };
+
+    expect(() => assertReviewActionV2ScmMutationEnvAbsent(env)).toThrow(
+      'review_action_v2_scm_mutation_env_present:REVIEW_ROUTER_SCM_WRITE_TOKEN'
+    );
+
+    expect(() => scrubAndAssertReviewActionV2ScmMutationEnv(env)).toThrow(
+      'review_action_v2_unexpected_scm_mutation_env_scrubbed:REVIEW_ROUTER_SCM_WRITE_TOKEN'
+    );
+    expect(env.REVIEW_ROUTER_SCM_WRITE_TOKEN).toBeUndefined();
   });
 });

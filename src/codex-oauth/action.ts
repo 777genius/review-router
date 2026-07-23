@@ -24,10 +24,19 @@ import {
 import { fetchGitHubRepositoryPublicKey } from './github-secrets';
 import { GitHubActionsOidcTokenProvider } from './github-actions-oidc';
 import {
+  CodexOAuthReviewRuntimeMode,
   runCodexOAuthRotatingRuntime,
   type CodexOAuthReviewResult,
+  type CodexOAuthV2ReviewRunnerPort,
 } from './runtime';
 import { safeCheckoutRepository } from './safe-checkout';
+import { buildReviewSummaryMetadata } from '../github/summary-metadata';
+import {
+  resolveReviewActionV2Activation,
+  ReviewActionV2RuntimeMode,
+  type ReviewActionV2Activation,
+} from '../control-plane/review-action-v2-contract';
+import { createProductionT0ReviewRunner } from '../review-orchestration/infrastructure/production-t0-review-runner';
 
 export const CODEX_OAUTH_ROTATING_MODE = 'codex-oauth-rotating';
 const SETUP_PULL_REQUEST_BRANCH = 'reviewrouter/setup';
@@ -47,9 +56,14 @@ export function shouldEnterCodexOAuthRotatingAction(input: {
 export async function runCodexOAuthRotatingAction(
   options: {
     fetchImpl?: FetchLike;
+    reviewActionV2Activation?: ReviewActionV2Activation;
+    v2ReviewRunner?: CodexOAuthV2ReviewRunnerPort;
   } = {}
 ): Promise<void> {
   const inputs = readCodexOAuthActionInputs();
+  const reviewActionV2Activation =
+    options.reviewActionV2Activation ??
+    resolveReviewActionV2Activation({ env: process.env });
   clearCodexRotatingProviderSecretEnv();
   if (
     shouldSkipCodexOAuthSetupPreviewWithoutAuth({
@@ -72,13 +86,26 @@ export async function runCodexOAuthRotatingAction(
     apiUrl: inputs.apiUrl,
     fetchImpl: options.fetchImpl,
   });
-  const runtime = await runCodexOAuthRotatingRuntime(inputs, {
+  const sharedRuntimePorts = {
     oidc: new GitHubActionsOidcTokenProvider({
       fetchImpl: options.fetchImpl,
     }),
-    controlPlane,
+    controlPlane: {
+      prelease: (input: Parameters<typeof controlPlane.prelease>[0]) =>
+        controlPlane.prelease(input),
+      finalize: (input: Parameters<typeof controlPlane.finalize>[0]) =>
+        controlPlane.finalize(input),
+      writebackPreflight: (
+        input: Parameters<typeof controlPlane.writebackPreflight>[0]
+      ) => controlPlane.writebackPreflight(input),
+      writeback: (input: Parameters<typeof controlPlane.writeback>[0]) =>
+        controlPlane.writeback(input),
+      checkoutToken: (
+        input: Parameters<typeof controlPlane.checkoutToken>[0]
+      ) => controlPlane.checkoutToken(input),
+    },
     githubSecrets: {
-      fetchPublicKey: (input) =>
+      fetchPublicKey: (input: { owner: string; repo: string; token: string }) =>
         fetchGitHubRepositoryPublicKey({
           ...input,
           fetchImpl: options.fetchImpl,
@@ -92,7 +119,10 @@ export async function runCodexOAuthRotatingAction(
             warn: (message) => core.warning(message),
           },
         }),
-      refreshAuth: (input) =>
+      refreshAuth: (input: {
+        authJsonBytes: string;
+        codexBinaryPath?: string;
+      }) =>
         refreshCodexAuthWithOfficialCli({
           authJsonBytes: input.authJsonBytes,
           codexBinaryPath: input.codexBinaryPath,
@@ -105,30 +135,53 @@ export async function runCodexOAuthRotatingAction(
     checkout: {
       checkoutExactHead: safeCheckoutRepository,
     },
-    review: {
-      run: (input) =>
-        runReviewComputation({
-          apiUrl: inputs.apiUrl,
-          audience: inputs.audience,
-          checkoutToken: input.checkoutToken,
-          codexHome: input.codexHome,
-          codexBinaryPath: input.codexBinaryPath,
-          fetchImpl: options.fetchImpl,
-          providerSecrets: inputs.providerSecrets,
-        }),
-    },
-    comments: {
-      post: (input) =>
-        postReviewAfterAuthClear({
-          commentToken: input.commentToken,
-          review: input.review,
-        }),
-    },
     lifecycle: {
       clearOidcEnv: () => clearCodexRotatingOidcRequestEnv(),
       clearProcessAuthEnv: () => clearCodexRotatingProcessAuthEnv(),
     },
-  });
+  };
+  const runtime =
+    reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0
+      ? await runCodexOAuthRotatingRuntime(
+          {
+            ...inputs,
+            reviewMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+          },
+          {
+            ...sharedRuntimePorts,
+            v2Review:
+              options.v2ReviewRunner ??
+              createProductionT0ReviewRunner({ fetchImpl: options.fetchImpl }),
+          }
+        )
+      : await runCodexOAuthRotatingRuntime(inputs, {
+          ...sharedRuntimePorts,
+          controlPlane: {
+            ...sharedRuntimePorts.controlPlane,
+            commentToken: (
+              input: Parameters<typeof controlPlane.commentToken>[0]
+            ) => controlPlane.commentToken(input),
+          },
+          review: {
+            run: (input) =>
+              runReviewComputation({
+                apiUrl: inputs.apiUrl,
+                audience: inputs.audience,
+                checkoutToken: input.checkoutToken,
+                codexHome: input.codexHome,
+                codexBinaryPath: input.codexBinaryPath,
+                fetchImpl: options.fetchImpl,
+                providerSecrets: inputs.providerSecrets,
+              }),
+          },
+          comments: {
+            post: (input) =>
+              postReviewAfterAuthClear({
+                commentToken: input.commentToken,
+                review: input.review,
+              }),
+          },
+        });
 
   core.setOutput('reviewrouter_state', runtime.status);
   if (runtime.status === 'skipped') {
@@ -138,6 +191,13 @@ export async function runCodexOAuthRotatingAction(
         ? 'Codex OAuth rotating review did not run because this workflow restored an older queued secret generation. Re-run the latest workflow after reconnecting Codex if needed.'
         : `Codex OAuth rotating review skipped: ${runtime.reason}`;
     core.setFailed(message);
+    return;
+  }
+  if ('v2Review' in runtime) {
+    core.setOutput('reviewrouter_v2_outcome', runtime.v2Review.outcome);
+    if (runtime.v2Review.blockingFailure) {
+      core.setFailed(runtime.v2Review.blockingFailure);
+    }
     return;
   }
   if (runtime.review.blockingFailure) {
@@ -167,6 +227,7 @@ function readCodexOAuthActionInputs() {
     workflowSchemaVersion,
     providerSecrets: readCodexRotatingProviderSecretInputs(),
     repository: event.repository,
+    pullRequestNumber: event.number,
     headSha: event.headSha,
     headRef: event.headRef,
     eventName: event.eventName,
@@ -322,17 +383,35 @@ export async function postReviewAfterAuthClear(input: {
   const config = ConfigLoader.load();
   const githubClient = new GitHubClient(input.commentToken);
   const poster = new CommentPoster(githubClient, false, config);
-  await poster.postSummary(prNumber, input.review.markdown, true);
+  const pr = await new PullRequestLoader(githubClient).load(prNumber);
+  if (pr.headSha.toLowerCase() !== input.review.reviewedHeadSha.toLowerCase()) {
+    core.warning(
+      `Skipping Codex OAuth review publication because PR #${prNumber} advanced from ${input.review.reviewedHeadSha} to ${pr.headSha}`
+    );
+    return;
+  }
+  const summaryMetadata = buildReviewSummaryMetadata({
+    reviewedHeadSha: input.review.reviewedHeadSha,
+    lifecycleMode: config.reviewThreadLifecycle,
+  });
+  const summaryResult = await poster.postSummary(
+    prNumber,
+    input.review.markdown,
+    true,
+    summaryMetadata
+  );
+  if (summaryResult.skippedStale) {
+    return;
+  }
   const review = input.review.review;
   if (!review) {
     return;
   }
-  const pr = await new PullRequestLoader(githubClient).load(prNumber);
   await poster.postInline(
     prNumber,
     review.inlineComments,
     pr.files,
-    pr.headSha
+    input.review.reviewedHeadSha
   );
 }
 

@@ -7,6 +7,7 @@ import {
   PRContext,
   Finding,
   FileChange,
+  LifecycleThreadRecord,
   ProviderResult,
   PullRequestLoadOmissionReason,
   PullRequestLoadStatus,
@@ -16,6 +17,7 @@ import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import { IncrementalReviewPlanMode } from '../../../src/cache/incremental';
 import { PullRequestLoader } from '../../../src/github/pr-loader';
 import { GitHubClient } from '../../../src/github/client';
+import { findingFingerprintFromFinding } from '../../../src/github/comment-fingerprint';
 
 // Minimal helpers
 const emptyReview: any = {
@@ -291,6 +293,9 @@ describe('ReviewOrchestrator health check guard rails', () => {
       incrementalReviewer.generateIncrementalSummary
     ).not.toHaveBeenCalled();
     expect(incrementalReviewer.saveReview).not.toHaveBeenCalled();
+    expect(
+      (orchestrator as any).components.feedbackFilter.loadReviewCommentState
+    ).toHaveBeenCalledWith(1, 'h');
     expect(review.summary).toBe('Previous completed review');
     expect(review.metrics.cached).toBe(true);
     expect(review.findingProvenance).toEqual({
@@ -303,6 +308,277 @@ describe('ReviewOrchestrator health check guard rails', () => {
       true,
       expect.objectContaining({ reviewedHeadSha: 'h' })
     );
+  });
+
+  it('preserves REST inline dedupe fallback when GraphQL lifecycle inventory fails', async () => {
+    const finding: Finding = {
+      file: 'src/a.ts',
+      line: 1,
+      severity: 'major',
+      title: 'Current finding',
+      message: 'Current review output.',
+    };
+    const restReference = {
+      path: 'src/existing.ts',
+      line: 2,
+      body: 'existing ReviewRouter inline comment',
+    };
+    const commentState = {
+      suppressed: new Set<string>(),
+      alreadyPosted: new Set(['rest-signature']),
+      suppressedComments: [],
+      alreadyPostedComments: [restReference],
+      commandDismissed: new Set<string>(),
+      commandDismissedLocations: new Set<string>(),
+    };
+    const postInline = jest.fn();
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        analyticsEnabled: false,
+        enableCaching: false,
+        graphEnabled: false,
+        skipTrivialChanges: false,
+        reviewThreadLifecycle: 'report',
+        providers: [],
+        fallbackProviders: [],
+      },
+      githubClient: { owner: 'owner', repo: 'repo' } as any,
+      reviewThreadInventory: {
+        load: jest.fn().mockResolvedValue({
+          candidates: [],
+          manualAttention: [],
+          dedupeComments: [],
+          warnings: ['GraphQL unavailable'],
+          failed: true,
+        }),
+      } as any,
+      feedbackFilter: {
+        loadReviewCommentState: jest.fn().mockResolvedValue(commentState),
+        shouldPost: jest.fn(() => true),
+        isFindingCommandDismissed: jest.fn(() => false),
+        isInlineCommandDismissed: jest.fn(() => false),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [],
+          healthCheckResults: [],
+        }),
+        execute: jest.fn(),
+      } as any,
+      synthesis: {
+        synthesize: jest.fn().mockReturnValue({
+          ...JSON.parse(JSON.stringify(emptyReview)),
+          findings: [finding],
+          inlineComments: [
+            {
+              path: finding.file,
+              line: finding.line,
+              side: 'RIGHT',
+              severity: finding.severity,
+              title: finding.title,
+              body: finding.message,
+            },
+          ],
+          metrics: {
+            ...emptyReview.metrics,
+            totalFindings: 1,
+            major: 1,
+          },
+        }),
+      } as any,
+      astAnalyzer: { analyze: jest.fn().mockReturnValue([finding]) } as any,
+      commentPoster: {
+        postSummary: jest.fn(),
+        postInline,
+        deleteSummaryComments: jest.fn(),
+      } as any,
+    });
+
+    await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'src/a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(commentState.alreadyPosted).toEqual(new Set(['rest-signature']));
+    expect(commentState.alreadyPostedComments).toEqual([restReference]);
+    expect(postInline).toHaveBeenCalledWith(
+      1,
+      expect.any(Array),
+      expect.any(Array),
+      'h',
+      undefined
+    );
+  });
+
+  it('re-projects current dismissals and human replies for an already reviewed head', async () => {
+    const dismissedFinding: Finding = {
+      file: 'src/dismissed.ts',
+      line: 4,
+      severity: 'major',
+      title: 'Dismissed finding',
+      message: 'No longer relevant by maintainer command.',
+    };
+    const retainedFinding: Finding = {
+      file: 'src/active.ts',
+      line: 8,
+      severity: 'major',
+      title: 'Active finding',
+      message: 'Still active on this revision.',
+    };
+    const markerResolvedFinding: Finding = {
+      file: 'src/resolved.ts',
+      line: 12,
+      severity: 'major',
+      title: 'Resolved finding',
+      message: 'A trusted fallback reply already recorded this as resolved.',
+    };
+    const providerRegistry = {
+      createProviders: jest.fn(),
+      discoverAdditionalFreeProviders: jest.fn(),
+    } as any;
+    const loadReviewCommentState = jest.fn().mockResolvedValue({
+      suppressed: new Set(),
+      alreadyPosted: new Set(),
+      suppressedComments: [],
+      alreadyPostedComments: [],
+      commandDismissed: new Set(['dismissed']),
+      commandDismissedLocations: new Set(),
+      commandDismissedComments: [],
+    });
+    const humanReplyTarget = {
+      targetId: 'thread-1',
+      threadId: 'thread-1',
+      fingerprint: 'a'.repeat(24),
+      severity: 'major' as const,
+      title: 'Earlier finding with reply',
+      message: 'Maintainer replied to this thread.',
+      originalPath: 'src/active.ts',
+      currentPath: 'src/active.ts',
+      originalLine: 8,
+      currentLine: 8,
+      parentCommentId: 'comment-1',
+      parentCommentUpdatedAt: '2026-07-22T00:00:00.000Z',
+      threadCommentCount: 2,
+      viewerCanResolve: true,
+      hasHumanReply: true,
+      trustedAuthor: true,
+    };
+    const markerResolvedTarget = {
+      targetId: 'thread-resolved-1',
+      threadId: 'thread-resolved-1',
+      fingerprint: findingFingerprintFromFinding(markerResolvedFinding),
+      severity: 'major' as const,
+      title: markerResolvedFinding.title,
+      message: markerResolvedFinding.message,
+      originalPath: markerResolvedFinding.file,
+      currentPath: markerResolvedFinding.file,
+      originalLine: markerResolvedFinding.line,
+      currentLine: markerResolvedFinding.line,
+      parentCommentId: 'comment-resolved-1',
+      parentCommentUpdatedAt: '2026-07-22T00:00:00.000Z',
+      threadCommentCount: 2,
+      viewerCanResolve: false,
+      hasHumanReply: false,
+      trustedAuthor: true,
+      trustedResolutionMarker: {
+        schemaVersion: 'reviewrouter-lifecycle-resolution.v1' as const,
+        targetId: 'thread-resolved-1',
+        fingerprint: findingFingerprintFromFinding(markerResolvedFinding),
+        commentId: 'resolution-reply-1',
+        commentUpdatedAt: '2026-07-22T00:01:00.000Z',
+      },
+    };
+    const loadInventory = jest.fn().mockResolvedValue({
+      headRefOid: 'h',
+      candidates: [markerResolvedTarget],
+      manualAttention: [
+        { target: humanReplyTarget, reasonCodes: ['human_reply'] },
+      ],
+      dedupeComments: [],
+      warnings: [],
+      failed: false,
+    });
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        analyticsEnabled: false,
+        enableCaching: false,
+        graphEnabled: false,
+        skipTrivialChanges: false,
+        reviewThreadLifecycle: 'report',
+      },
+      providerRegistry,
+      githubClient: { owner: 'owner', repo: 'repo' } as any,
+      reviewThreadInventory: { load: loadInventory } as any,
+      feedbackFilter: {
+        loadReviewCommentState,
+        isFindingCommandDismissed: jest.fn(
+          (finding: Finding) => finding.title === dismissedFinding.title
+        ),
+        isInlineCommandDismissed: jest.fn(() => false),
+        shouldPost: jest.fn(() => true),
+      } as any,
+      incrementalReviewer: {
+        planReview: jest.fn().mockResolvedValue({
+          mode: IncrementalReviewPlanMode.ReuseCompleted,
+          files: [],
+          invalidatedPaths: [],
+          lastReview: {
+            prNumber: 1,
+            lastReviewedCommit: 'h',
+            baseSha: 'b',
+            timestamp: Date.now(),
+            findings: [
+              dismissedFinding,
+              retainedFinding,
+              markerResolvedFinding,
+            ],
+            reviewSummary: 'Previous completed review',
+          },
+        }),
+        saveReview: jest.fn(),
+      } as any,
+      formatter: { format: jest.fn().mockReturnValue('Cached review') } as any,
+    });
+
+    const review = await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'src/active.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(loadReviewCommentState).toHaveBeenCalledWith(1, 'h');
+    expect(loadInventory).toHaveBeenCalledWith(1);
+    expect(providerRegistry.createProviders).not.toHaveBeenCalled();
+    expect(review.findings).toEqual([retainedFinding]);
+    expect(review.metrics.dismissedFindings).toBe(1);
+    expect(review.findingProvenance?.carriedForward).toEqual({
+      critical: 0,
+      major: 1,
+      minor: 0,
+    });
+    expect(review.threadLifecycle?.manualAttention).toEqual([
+      expect.objectContaining({
+        target: expect.objectContaining({ targetId: 'thread-1' }),
+        reasonCodes: expect.arrayContaining(['human_reply']),
+      }),
+    ]);
   });
 
   it('marks unchanged-file findings as carried forward in a delta review', async () => {
@@ -452,6 +728,213 @@ describe('ReviewOrchestrator health check guard rails', () => {
       fromCurrentReview: { critical: 0, major: 1, minor: 0 },
       carriedForward: { critical: 1, major: 0, minor: 0 },
     });
+  });
+
+  it('deactivates a carried finding after a trusted lifecycle fallback reply is posted', async () => {
+    const changedFile: FileChange = {
+      filename: 'src/unchanged.ts',
+      status: 'modified',
+      additions: 1,
+      deletions: 0,
+      changes: 1,
+    };
+    const carriedFinding: Finding = {
+      file: changedFile.filename,
+      line: 7,
+      severity: 'major',
+      title: 'Missing imported module',
+      message: 'The imported module does not exist.',
+    };
+    const lifecycleTarget = {
+      targetId: 'thread-carried-1',
+      threadId: 'thread-carried-1',
+      threadUrl: 'https://github.test/thread/carried-1',
+      fingerprint: findingFingerprintFromFinding(carriedFinding),
+      severity: 'major' as const,
+      title: carriedFinding.title,
+      message: carriedFinding.message,
+      originalPath: carriedFinding.file,
+      currentPath: carriedFinding.file,
+      originalLine: carriedFinding.line,
+      currentLine: carriedFinding.line,
+      parentCommentId: 'comment-carried-1',
+      parentCommentUpdatedAt: '2026-07-22T00:00:00.000Z',
+      threadCommentCount: 1,
+      viewerCanResolve: true,
+      hasHumanReply: false,
+      trustedAuthor: true,
+    };
+    const provider = {
+      name: 'p1',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const providerResult: ProviderResult = {
+      name: provider.name,
+      status: 'success',
+      durationSeconds: 1,
+      result: {
+        content: '{}',
+        findings: [],
+        revalidations: [
+          {
+            targetId: lifecycleTarget.targetId,
+            fingerprint: lifecycleTarget.fingerprint,
+            verdict: 'resolved',
+            confidence: 0.99,
+            evidence: [
+              {
+                path: carriedFinding.file,
+                reason: 'The imported module exists on the current head.',
+              },
+            ],
+            rationale: 'The old failure mode is gone.',
+          },
+        ],
+      },
+    };
+    const resolveGuarded = jest
+      .fn()
+      .mockImplementation(
+        async (
+          _prNumber: number,
+          _headSha: string,
+          records: LifecycleThreadRecord[]
+        ) => ({
+          resolved: [],
+          manualAttention: [],
+          skipped: [],
+          failed: records.map((record) => ({
+            ...record,
+            reasonCodes: [
+              ...record.reasonCodes,
+              'mutation_permission_denied' as const,
+              'resolution_comment_posted' as const,
+            ],
+            errorMessage: 'Resource not accessible by integration',
+          })),
+          warnings: [],
+        })
+      );
+    const loadInventory = jest
+      .fn()
+      .mockResolvedValueOnce({
+        headRefOid: 'h',
+        candidates: [lifecycleTarget],
+        manualAttention: [],
+        dedupeComments: [],
+        warnings: [],
+        failed: false,
+      })
+      .mockResolvedValue({
+        headRefOid: 'h',
+        candidates: [],
+        manualAttention: [],
+        dedupeComments: [],
+        warnings: [],
+        failed: false,
+      });
+    const incrementalReviewer = {
+      planReview: jest.fn().mockResolvedValue({
+        mode: IncrementalReviewPlanMode.Delta,
+        files: [changedFile],
+        invalidatedPaths: [],
+        lastReview: {
+          prNumber: 1,
+          lastReviewedCommit: 'previous-head',
+          baseSha: 'b',
+          timestamp: Date.now(),
+          findings: [carriedFinding],
+          reviewSummary: 'Previous review',
+        },
+      }),
+      mergeFindings: jest.fn().mockReturnValue([carriedFinding]),
+      generateIncrementalSummary: jest.fn().mockReturnValue('Delta review'),
+      saveReview: jest.fn(),
+    } as any;
+    const commentState = {
+      suppressed: new Set<string>(),
+      alreadyPosted: new Set<string>(),
+      suppressedComments: [],
+      alreadyPostedComments: [],
+      commandDismissed: new Set<string>(),
+      commandDismissedLocations: new Set<string>(),
+      commandDismissedComments: [],
+    };
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        skipTrivialChanges: false,
+        incrementalEnabled: true,
+        reviewThreadLifecycle: 'resolve',
+        providers: [provider.name],
+        fallbackProviders: [],
+        providerLimit: 1,
+      },
+      githubClient: { owner: 'owner', repo: 'repo' } as any,
+      reviewThreadInventory: { load: loadInventory } as any,
+      reviewThreadResolver: { resolveGuarded } as any,
+      feedbackFilter: {
+        loadReviewCommentState: jest.fn().mockResolvedValue(commentState),
+        shouldPost: jest.fn().mockReturnValue(true),
+        isFindingCommandDismissed: jest.fn().mockReturnValue(false),
+        isInlineCommandDismissed: jest.fn().mockReturnValue(false),
+      } as any,
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute: jest.fn().mockResolvedValue([providerResult]),
+      } as any,
+      synthesis: {
+        synthesize: jest.fn().mockReturnValue({
+          ...JSON.parse(JSON.stringify(emptyReview)),
+          findings: [],
+        }),
+      } as any,
+      incrementalReviewer,
+    });
+
+    const review = await orchestrator.executeReview(makePR([changedFile]));
+
+    expect(resolveGuarded).toHaveBeenCalledWith(
+      1,
+      'h',
+      expect.arrayContaining([
+        expect.objectContaining({
+          target: expect.objectContaining({
+            targetId: lifecycleTarget.targetId,
+          }),
+        }),
+      ])
+    );
+    expect(review.findings).toEqual([]);
+    expect(review.metrics).toMatchObject({
+      totalFindings: 0,
+      major: 0,
+    });
+    expect(review.findingProvenance).toEqual({
+      fromCurrentReview: { critical: 0, major: 0, minor: 0 },
+      carriedForward: { critical: 0, major: 0, minor: 0 },
+    });
+    expect(review.threadLifecycle?.resolvedByLifecycle).toHaveLength(0);
+    expect(review.threadLifecycle?.mutationFailed).toEqual([
+      expect.objectContaining({
+        reasonCodes: expect.arrayContaining([
+          'mutation_permission_denied',
+          'resolution_comment_posted',
+        ]),
+      }),
+    ]);
   });
 
   it('detects a trivial PR before building its code graph', async () => {
@@ -1564,7 +2047,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
     ).toBe(true);
   });
 
-  it('saves a terminal partial snapshot when GitHub omitted files but loaded work is empty', async () => {
+  it('does not save a completed snapshot when GitHub omitted files but loaded work is empty', async () => {
     const saveReview = jest.fn();
     const orchestrator = makeOrchestrator({
       config: {
@@ -1606,7 +2089,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
       complete: false,
       unreviewedFiles: 1,
     });
-    expect(saveReview).toHaveBeenCalledWith(pr, review);
+    expect(saveReview).not.toHaveBeenCalled();
   });
 
   it('does not advance the snapshot when the reviewed head is unverifiable', async () => {
@@ -1642,18 +2125,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
         getIncrementalChangeSet: jest.fn(),
       } as any,
     });
-    const pr: PRContext = {
-      ...makePR([]),
-      loadCompleteness: {
-        status: PullRequestLoadStatus.Truncated,
-        omissions: [
-          {
-            reason: PullRequestLoadOmissionReason.GitHubFileLimit,
-            omittedFileCount: 1,
-          },
-        ],
-      },
-    };
+    const pr = makePR([]);
 
     await orchestrator.executeReview(pr);
 
@@ -2040,6 +2512,16 @@ describe('ReviewOrchestrator health check guard rails', () => {
         durationSeconds: 1,
       } as ProviderResult,
     ]);
+    const commitSuccessfulBatch = jest.fn();
+    const finalizeCheckpoint = jest.fn().mockResolvedValue({
+      status: 'incomplete',
+      missingWorkKeys: ['mixed-provider-batch'],
+    });
+    const openReviewCheckpointSession = jest.fn().mockResolvedValue({
+      acceptedBatchResults: new Map(),
+      commitSuccessfulBatch,
+      finalize: finalizeCheckpoint,
+    });
 
     try {
       const orchestrator = makeOrchestrator({
@@ -2066,6 +2548,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
           }),
           execute,
         } as any,
+        openReviewCheckpointSession,
       });
 
       const review = await orchestrator.executeReview(
@@ -2091,6 +2574,15 @@ describe('ReviewOrchestrator health check guard rails', () => {
       expect(execute).toHaveBeenCalledTimes(2);
       expect(review.metrics.providersSuccess).toBe(1);
       expect(review.metrics.providersFailed).toBe(1);
+      expect(openReviewCheckpointSession).toHaveBeenCalledTimes(1);
+      expect(commitSuccessfulBatch).not.toHaveBeenCalled();
+      expect(finalizeCheckpoint).toHaveBeenCalledTimes(1);
+      expect(review.coverage).toMatchObject({
+        complete: false,
+        limitations: [
+          'One or more selected providers did not complete every review batch',
+        ],
+      });
     } finally {
       if (previousFailOnNoHealthy === undefined) {
         delete process.env.FAIL_ON_NO_HEALTHY_PROVIDERS;
@@ -2237,6 +2729,113 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(commitSuccessfulBatch.mock.invocationCallOrder[0]).toBeLessThan(
       recordUsage.mock.invocationCallOrder[1]
     );
+    expect(review.coverage?.complete).toBe(true);
+  });
+
+  it('reruns all work when a legacy checkpoint contains mixed provider outcomes', async () => {
+    const providers = ['p1', 'p2'].map(
+      (name) =>
+        ({
+          name,
+          review: jest.fn(),
+          healthCheck: jest.fn(),
+        }) as unknown as Provider
+    );
+    const execute = jest.fn().mockResolvedValue(
+      providers.map(
+        (provider) =>
+          ({
+            name: provider.name,
+            status: 'success',
+            result: {
+              content: '{"findings":[]}',
+              findings: [],
+              revalidations: [],
+            },
+            durationSeconds: 1,
+          }) as ProviderResult
+      )
+    );
+    const commitSuccessfulBatch = jest.fn();
+    const finalize = jest.fn();
+    const openReviewCheckpointSession = jest
+      .fn()
+      .mockImplementation(async (plan: { workKeys: string[] }) => ({
+        acceptedBatchResults: new Map([
+          [
+            plan.workKeys[0],
+            {
+              filePaths: ['a.ts'],
+              findings: [],
+              providerResults: [
+                {
+                  name: 'p1',
+                  status: 'success',
+                  durationMs: 1000,
+                },
+                {
+                  name: 'p2',
+                  status: 'timeout',
+                  durationMs: 1000,
+                  errorMessage: 'timed out',
+                },
+              ],
+            },
+          ],
+        ]),
+        commitSuccessfulBatch,
+        finalize,
+      }));
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        providers: providers.map((provider) => provider.name),
+        fallbackProviders: [],
+        providerLimit: 2,
+        batchMaxFiles: 1,
+        enableTokenAwareBatching: false,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue(providers),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: providers,
+          healthCheckResults: [],
+        }),
+        execute,
+      } as any,
+      openReviewCheckpointSession,
+      incrementalSnapshotAdvancementEnabled: false,
+    });
+
+    const review = await orchestrator.executeReview(
+      makePR([
+        {
+          filename: 'a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+        {
+          filename: 'b.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ])
+    );
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(commitSuccessfulBatch).not.toHaveBeenCalled();
+    expect(finalize).not.toHaveBeenCalled();
     expect(review.coverage?.complete).toBe(true);
   });
 

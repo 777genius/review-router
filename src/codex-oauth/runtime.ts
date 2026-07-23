@@ -26,44 +26,81 @@ export type CodexOAuthRuntimeInputs = {
   providerInstanceId: string;
   workflowSchemaVersion: number;
   repository: string;
+  pullRequestNumber: number;
   headSha: string;
   workspacePath: string;
+  reviewMode?: CodexOAuthReviewRuntimeMode;
 };
 
-export type CodexOAuthRuntimePorts = {
+export enum CodexOAuthReviewRuntimeMode {
+  LegacyComments = 'legacy_comments',
+  ServerPublishedV2 = 'server_published_v2',
+}
+
+export enum CodexOAuthV2ReviewOutcome {
+  Completed = 'completed',
+  PartialCompleted = 'partial_completed',
+  Superseded = 'superseded',
+}
+
+export type CodexOAuthV2ReviewResult = {
+  readonly outcome: CodexOAuthV2ReviewOutcome;
+  readonly blockingFailure?: string;
+};
+
+export interface CodexOAuthV2ReviewRunnerPort {
+  run(input: {
+    readonly apiUrl: string;
+    readonly audience: string;
+    readonly providerInstanceId: string;
+    readonly workflowSchemaVersion: number;
+    readonly repository: string;
+    readonly pullRequestNumber: number;
+    readonly headSha: string;
+    readonly workspacePath: string;
+    readonly codexHome: string;
+    readonly codexBinaryPath?: string;
+    /**
+     * Short-lived GitHub capability restricted by the control plane to
+     * contents:read and pull_requests:read. The v2 runner may use it only to
+     * reload revision and lifecycle facts; it is never a publication token.
+     */
+    readonly scmReadToken: string;
+    readonly scmReadTokenExpiresAt: string;
+  }): Promise<CodexOAuthV2ReviewResult>;
+}
+
+type CodexOAuthSharedControlPlanePort = {
+  prelease(input: {
+    oidcToken: string;
+    audience: string;
+    providerInstanceId: string;
+    workflowSchemaVersion: number;
+  }): Promise<CodexRotatingPreleaseResponse>;
+  finalize(input: {
+    leaseId: string;
+    providerInstanceId: string;
+    restoredGenerationHash: string;
+  }): Promise<CodexRotatingFinalizeResponse>;
+  writebackPreflight(input: {
+    leaseId: string;
+    providerInstanceId: string;
+    githubKeyId: string;
+  }): Promise<CodexRotatingWritebackPreflightResponse>;
+  writeback(
+    body: Record<string, unknown>
+  ): Promise<CodexRotatingWritebackResponse>;
+  checkoutToken(input: {
+    leaseId: string;
+    providerInstanceId: string;
+  }): Promise<CodexRotatingCheckoutTokenResponse>;
+};
+
+type CodexOAuthSharedRuntimePorts = {
   oidc: {
     requestToken(audience: string): Promise<string>;
   };
-  controlPlane: {
-    prelease(input: {
-      oidcToken: string;
-      audience: string;
-      providerInstanceId: string;
-      workflowSchemaVersion: number;
-    }): Promise<CodexRotatingPreleaseResponse>;
-    finalize(input: {
-      leaseId: string;
-      providerInstanceId: string;
-      restoredGenerationHash: string;
-    }): Promise<CodexRotatingFinalizeResponse>;
-    writebackPreflight(input: {
-      leaseId: string;
-      providerInstanceId: string;
-      githubKeyId: string;
-    }): Promise<CodexRotatingWritebackPreflightResponse>;
-    writeback(
-      body: Record<string, unknown>
-    ): Promise<CodexRotatingWritebackResponse>;
-    checkoutToken(input: {
-      leaseId: string;
-      providerInstanceId: string;
-    }): Promise<CodexRotatingCheckoutTokenResponse>;
-    commentToken(input: {
-      leaseId: string;
-      providerInstanceId: string;
-      authCleared: true;
-    }): Promise<CodexRotatingCommentTokenResponse>;
-  };
+  controlPlane: CodexOAuthSharedControlPlanePort;
   githubSecrets: {
     fetchPublicKey(input: {
       owner: string;
@@ -93,12 +130,26 @@ export type CodexOAuthRuntimePorts = {
       token: string;
     }): Promise<void>;
   };
+  lifecycle?: {
+    clearOidcEnv?(): void;
+    clearProcessAuthEnv?(): void;
+  };
+};
+
+export type CodexOAuthLegacyRuntimePorts = CodexOAuthSharedRuntimePorts & {
+  controlPlane: CodexOAuthSharedControlPlanePort & {
+    commentToken(input: {
+      leaseId: string;
+      providerInstanceId: string;
+      authCleared: true;
+    }): Promise<CodexRotatingCommentTokenResponse>;
+  };
   review: {
     run(input: {
       checkoutToken: string;
       codexHome: string;
       codexBinaryPath?: string;
-    }): Promise<CodexOAuthReviewResult>;
+    }): Promise<CodexOAuthReviewComputationResult>;
   };
   comments: {
     post(input: {
@@ -106,13 +157,17 @@ export type CodexOAuthRuntimePorts = {
       review: CodexOAuthReviewResult;
     }): Promise<void>;
   };
-  lifecycle?: {
-    clearOidcEnv?(): void;
-    clearProcessAuthEnv?(): void;
-  };
 };
 
-export type CodexOAuthReviewResult = {
+export type CodexOAuthV2RuntimePorts = CodexOAuthSharedRuntimePorts & {
+  v2Review?: CodexOAuthV2ReviewRunnerPort;
+};
+
+export type CodexOAuthRuntimePorts =
+  | CodexOAuthLegacyRuntimePorts
+  | CodexOAuthV2RuntimePorts;
+
+export type CodexOAuthReviewComputationResult = {
   skipped: boolean;
   blockingFailure?: string;
   userDryRun?: boolean;
@@ -120,10 +175,19 @@ export type CodexOAuthReviewResult = {
   review?: Review;
 };
 
+export type CodexOAuthReviewResult = CodexOAuthReviewComputationResult & {
+  reviewedHeadSha: string;
+};
+
 export type CodexOAuthRuntimeResult =
   | {
       status: 'completed';
       review: CodexOAuthReviewResult;
+    }
+  | {
+      status: 'completed';
+      publicationMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2;
+      v2Review: CodexOAuthV2ReviewResult;
     }
   | {
       status: 'skipped';
@@ -156,8 +220,10 @@ export async function runCodexOAuthRotatingRuntime(
   let previousCodexBinary: string | undefined;
   let previousPath: string | undefined;
   let preparedCodexCliEnvApplied = false;
+  let scmReadToken: string | undefined;
 
   const clearAuth = async () => {
+    scmReadToken = undefined;
     ports.lifecycle?.clearOidcEnv?.();
     if (preparedCodexCliEnvApplied) {
       if (previousCodexBinary === undefined) {
@@ -272,27 +338,64 @@ export async function runCodexOAuthRotatingRuntime(
       leaseId: prelease.leaseId,
       providerInstanceId: input.providerInstanceId,
     });
+    assertScmReadToken(checkoutToken, input.repository);
+    scmReadToken = checkoutToken.token;
     await ports.checkout.checkoutExactHead({
       repository: input.repository,
       headSha: input.headSha,
       workspacePath: input.workspacePath,
       token: checkoutToken.token,
     });
-    const review = await ports.review.run({
+
+    if (input.reviewMode === CodexOAuthReviewRuntimeMode.ServerPublishedV2) {
+      const v2Ports = ports as CodexOAuthV2RuntimePorts;
+      if (!v2Ports.v2Review) {
+        throw new Error('review_action_v2_runner_missing');
+      }
+      const v2Review = await v2Ports.v2Review.run({
+        apiUrl: input.apiUrl,
+        audience: input.audience,
+        providerInstanceId: input.providerInstanceId,
+        workflowSchemaVersion: input.workflowSchemaVersion,
+        repository: input.repository,
+        pullRequestNumber: input.pullRequestNumber,
+        headSha: input.headSha,
+        workspacePath: input.workspacePath,
+        codexHome: refreshed.codexHome,
+        scmReadToken,
+        scmReadTokenExpiresAt: checkoutToken.expiresAt,
+        ...(preparedCodexCli
+          ? { codexBinaryPath: preparedCodexCli.binaryPath }
+          : {}),
+      });
+      await clearAuth();
+      return {
+        status: 'completed',
+        publicationMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
+        v2Review,
+      };
+    }
+
+    const legacyPorts = ports as CodexOAuthLegacyRuntimePorts;
+    const computedReview = await legacyPorts.review.run({
       checkoutToken: checkoutToken.token,
       codexHome: refreshed.codexHome,
       ...(preparedCodexCli
         ? { codexBinaryPath: preparedCodexCli.binaryPath }
         : {}),
     });
+    const review: CodexOAuthReviewResult = {
+      ...computedReview,
+      reviewedHeadSha: input.headSha,
+    };
 
     await clearAuth();
-    const commentToken = await ports.controlPlane.commentToken({
+    const commentToken = await legacyPorts.controlPlane.commentToken({
       leaseId: prelease.leaseId,
       providerInstanceId: input.providerInstanceId,
       authCleared: true,
     });
-    await ports.comments.post({
+    await legacyPorts.comments.post({
       commentToken: commentToken.token,
       review,
     });
@@ -308,4 +411,17 @@ export async function runCodexOAuthRotatingRuntime(
 function clearCodexRotatingAuthInputSafe(): void {
   clearCodexRotatingOidcRequestEnv();
   clearCodexRotatingProcessAuthEnv();
+}
+
+function assertScmReadToken(
+  token: CodexRotatingCheckoutTokenResponse,
+  expectedRepository: string
+): void {
+  if (
+    token.repository !== expectedRepository ||
+    token.permissions.contents !== 'read' ||
+    token.permissions.pullRequests !== 'read'
+  ) {
+    throw new Error('review_action_v2_scm_read_token_scope_invalid');
+  }
 }

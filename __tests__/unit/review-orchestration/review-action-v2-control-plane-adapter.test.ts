@@ -1,0 +1,642 @@
+import { createHash } from 'crypto';
+import { ReviewActionV2Client } from '../../../src/control-plane/review-action-v2-client';
+import {
+  ReviewEvidenceLookupResultStatus,
+  ReviewEvidenceCommitResultStatus,
+  ReviewActionV2OperationId,
+  ReviewExecutionMutationResultStatus,
+  ReviewExecutionRestoreResultStatus,
+  ReviewExecutionStartResultStatus,
+  ReviewInvocationLeaseResultStatus,
+  ReviewRunAuthorizationResultStatus,
+} from '../../../src/control-plane/generated/review-action-v2/review-action-v2';
+import {
+  ReviewExecutionProviderKind,
+  ReviewEvidenceLookupKind,
+  ReviewTaskKind,
+  RestoredReviewExecutionState,
+  RestoredReviewWorkSlotState,
+} from '../../../src/review-orchestration/application';
+import { ReviewActionV2ControlPlaneAdapter } from '../../../src/review-orchestration/infrastructure';
+
+describe('ReviewActionV2ControlPlaneAdapter', () => {
+  it('normalizes a complete generated authorization and selected limits', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewRunAuthorizationResultStatus.Authorized,
+      authorizationId: 'authorization-1',
+      authorizationToken: 'authorization.token',
+      producerReleaseId: 'release-1',
+      protocolLimitsProfileId: 'limits-1',
+      operationalSloProfileId: 'slo-1',
+      mutationEpoch: '1',
+      expiresAt: '2026-07-22T13:00:00.000Z',
+      protocolLimitsCanonicalJson: JSON.stringify(protocolLimits),
+      authorizationFactsCanonicalJson: canonicalJson(authorizationFacts),
+    });
+    const adapter = createAdapter(execute);
+
+    await expect(
+      adapter.authorize({ oidcToken: 'oidc.token' })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        authorizationId: 'authorization-1',
+        limits: protocolLimits,
+        facts: authorizationFacts,
+      })
+    );
+  });
+
+  it('uses the generated execution version needed by finalize', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewExecutionStartResultStatus.Admitted,
+      executionId: 'execution-1',
+      generation: '1',
+      streamVersion: '1',
+      executionVersion: '2',
+      executionCanonicalJson: canonicalExecution({ version: '2' }),
+    });
+    const adapter = createAdapter(execute);
+
+    await expect(adapter.startExecution(startInput)).resolves.toEqual(
+      expect.objectContaining({
+        executionId: 'execution-1',
+        generation: '1',
+        streamVersion: '1',
+        executionVersion: '2',
+        restoredExecution: expect.objectContaining({
+          planHash: startInput.planHash,
+          workSlots: [expect.objectContaining({ workSlotId: 'slot-1' })],
+        }),
+      })
+    );
+  });
+
+  it('consumes a lookup hit payload and its attachment capability', async () => {
+    const payloadCanonicalJson = canonicalJson({ findings: [] });
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewEvidenceLookupResultStatus.Hit,
+      observationId: 'observation-1',
+      payloadCanonicalJson,
+      payloadHash: hash(payloadCanonicalJson),
+      byteCount: Buffer.byteLength(payloadCanonicalJson),
+      findingCount: 0,
+      actualModel: 'gpt-test',
+      qualityFlags: [],
+      transportAttemptCount: 1,
+      attachmentCapability: 'attachment.capability',
+      attachmentKind: 'exact_revision_reuse',
+      reuseSafetyDecisionHash: hash('reuse-safety'),
+      eligibilityPolicyVersion: 't0-v1',
+    });
+    const adapter = createAdapter(execute);
+
+    await expect(
+      adapter.lookupEvidence({
+        authorization,
+        execution,
+        workSlot,
+        planHash: '2'.repeat(64),
+        manifest: {
+          manifestCanonicalJson: '{"fixture":true}',
+          manifestKey: '3'.repeat(64),
+          providerInvocationKey: '4'.repeat(64),
+          providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+        },
+      })
+    ).resolves.toEqual(
+      expect.objectContaining({
+        kind: ReviewEvidenceLookupKind.Hit,
+        attachment: expect.objectContaining({
+          kind: 'exact_revision_reuse',
+          capability: 'attachment.capability',
+        }),
+        observation: expect.objectContaining({
+          payloadCanonicalJson,
+          payloadHash: hash(payloadCanonicalJson),
+        }),
+      })
+    );
+  });
+
+  it('turns a fenced same-execution shadow into adoptable evidence', async () => {
+    const payloadCanonicalJson = canonicalJson({ findings: [] });
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewEvidenceLookupResultStatus.Shadow,
+      observationId: 'observation-1',
+      payloadCanonicalJson,
+      payloadHash: hash(payloadCanonicalJson),
+      byteCount: Buffer.byteLength(payloadCanonicalJson),
+      findingCount: 0,
+      actualModel: 'gpt-test',
+      qualityFlags: [],
+      transportAttemptCount: 1,
+      attachmentCapability: null,
+      attachmentKind: null,
+      reuseSafetyDecisionHash: null,
+      eligibilityPolicyVersion: 't0-v1',
+      sourceLeaseId: baseLease.leaseId,
+      sourceFencingToken: baseLease.fencingToken,
+      sourceOwnerIdHash: hash('owner'),
+    });
+
+    await expect(
+      createAdapter(execute).lookupEvidence({
+        authorization,
+        execution,
+        workSlot,
+        planHash: execution.restoredExecution.planHash,
+        manifest: providerManifest,
+      })
+    ).resolves.toMatchObject({
+      kind: ReviewEvidenceLookupKind.Hit,
+      attachment: {
+        kind: 'same_execution',
+        sourceLeaseId: baseLease.leaseId,
+        sourceFencingToken: baseLease.fencingToken,
+        sourceOwnerIdHash: hash('owner'),
+      },
+    });
+  });
+
+  it('rejects a partial same-execution adoption source tuple', async () => {
+    const payloadCanonicalJson = canonicalJson({ findings: [] });
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewEvidenceLookupResultStatus.Shadow,
+      observationId: 'observation-1',
+      payloadCanonicalJson,
+      payloadHash: hash(payloadCanonicalJson),
+      byteCount: Buffer.byteLength(payloadCanonicalJson),
+      findingCount: 0,
+      actualModel: 'gpt-test',
+      qualityFlags: [],
+      transportAttemptCount: 1,
+      eligibilityPolicyVersion: 't0-v1',
+      sourceLeaseId: baseLease.leaseId,
+      sourceFencingToken: null,
+      sourceOwnerIdHash: hash('owner'),
+    });
+
+    await expect(
+      createAdapter(execute).lookupEvidence({
+        authorization,
+        execution,
+        workSlot,
+        planHash: execution.restoredExecution.planHash,
+        manifest: providerManifest,
+      })
+    ).rejects.toThrow('review_action_v2_source_fencing_token_missing');
+  });
+
+  it('restores a bounded exact-revision execution instead of dropping it', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewExecutionRestoreResultStatus.Found,
+      executionId: 'execution-1',
+      generation: '1',
+      streamVersion: '1',
+      executionState: RestoredReviewExecutionState.Running,
+      executionCanonicalJson: canonicalExecution(),
+    });
+    const adapter = createAdapter(execute);
+
+    await expect(
+      adapter.restoreExecution({
+        authorization,
+        reviewRevisionHash: startInput.reviewRevisionHash,
+      })
+    ).resolves.toMatchObject({
+      executionId: 'execution-1',
+      reviewRevisionHash: startInput.reviewRevisionHash,
+      planHash: startInput.planHash,
+    });
+  });
+
+  it('rejects restored slot and observation identity drift', async () => {
+    const malformed = JSON.parse(canonicalExecution()) as Record<
+      string,
+      unknown
+    >;
+    malformed.workSlots = [
+      {
+        acceptedObservationRefId: 'observation-1',
+        activeLeaseId: null,
+        providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+        required: true,
+        state: RestoredReviewWorkSlotState.Satisfied,
+        workSlotId: workSlot.workSlotId,
+      },
+    ];
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewExecutionStartResultStatus.Restored,
+      executionId: 'execution-1',
+      generation: '1',
+      streamVersion: '2',
+      executionVersion: '1',
+      executionCanonicalJson: canonicalJson(malformed),
+    });
+
+    await expect(
+      createAdapter(execute).startExecution(startInput)
+    ).rejects.toThrow('review_action_v2_restored_work_slot_state_invalid');
+  });
+
+  it('preserves the lease identity and accepts the rotated capability', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewInvocationLeaseResultStatus.Applied,
+      leaseId: baseLease.leaseId,
+      fencingToken: baseLease.fencingToken,
+      expiresAt: '2026-07-22T12:11:00.000Z',
+      leaseCapability: 'lease.capability.renewed',
+    });
+
+    await expect(
+      createAdapter(execute).renewInvocationLease({
+        idempotencyKey: 'idem:renew:1',
+        lease: baseLease,
+        ownerIdHash: hash('owner'),
+        renewRequestId: 'renew-1',
+      })
+    ).resolves.toEqual({
+      ...baseLease,
+      leaseCapability: 'lease.capability.renewed',
+      expiresAt: '2026-07-22T12:11:00.000Z',
+    });
+  });
+
+  it('accepts an idempotent renewal at the fixed lease ceiling', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewInvocationLeaseResultStatus.Restored,
+      leaseId: baseLease.leaseId,
+      fencingToken: baseLease.fencingToken,
+      expiresAt: baseLease.expiresAt,
+      leaseCapability: baseLease.leaseCapability,
+    });
+
+    await expect(
+      createAdapter(execute).renewInvocationLease({
+        idempotencyKey: 'idem:renew:ceiling',
+        lease: baseLease,
+        ownerIdHash: hash('owner'),
+        renewRequestId: 'renew-ceiling',
+      })
+    ).resolves.toEqual({
+      ...baseLease,
+      renewalCeilingReached: true,
+    });
+  });
+
+  it('rejects an acquire response on the renewal operation', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewInvocationLeaseResultStatus.Acquired,
+      leaseId: baseLease.leaseId,
+      fencingToken: baseLease.fencingToken,
+      expiresAt: '2026-07-22T12:11:00.000Z',
+      leaseCapability: 'lease.capability.renewed',
+    });
+
+    await expect(
+      createAdapter(execute).renewInvocationLease({
+        idempotencyKey: 'idem:renew:acquired',
+        lease: baseLease,
+        ownerIdHash: hash('owner'),
+        renewRequestId: 'renew-acquired',
+      })
+    ).rejects.toThrow('review_action_v2_lease_renew_acquired');
+  });
+
+  it('requires a rotated capability when renewal is applied', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewInvocationLeaseResultStatus.Applied,
+      leaseId: baseLease.leaseId,
+      fencingToken: baseLease.fencingToken,
+      expiresAt: '2026-07-22T12:11:00.000Z',
+      leaseCapability: baseLease.leaseCapability,
+    });
+
+    await expect(
+      createAdapter(execute).renewInvocationLease({
+        idempotencyKey: 'idem:renew:not-rotated',
+        lease: baseLease,
+        ownerIdHash: hash('owner'),
+        renewRequestId: 'renew-not-rotated',
+      })
+    ).rejects.toThrow('review_action_v2_lease_renewal_drift');
+  });
+
+  it('rejects renewal without a replacement capability', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewInvocationLeaseResultStatus.Applied,
+      leaseId: baseLease.leaseId,
+      fencingToken: baseLease.fencingToken,
+      expiresAt: '2026-07-22T12:11:00.000Z',
+    });
+
+    await expect(
+      createAdapter(execute).renewInvocationLease({
+        idempotencyKey: 'idem:renew:1',
+        lease: baseLease,
+        ownerIdHash: hash('owner'),
+        renewRequestId: 'renew-1',
+      })
+    ).rejects.toThrow('review_action_v2_lease_renew_capability_missing');
+  });
+
+  it('rejects a changed fencing term as takeover, not renewal', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewInvocationLeaseResultStatus.Applied,
+      leaseId: baseLease.leaseId,
+      fencingToken: '2',
+      expiresAt: '2026-07-22T12:11:00.000Z',
+      leaseCapability: 'lease.capability.renewed',
+    });
+
+    await expect(
+      createAdapter(execute).renewInvocationLease({
+        idempotencyKey: 'idem:renew:1',
+        lease: baseLease,
+        ownerIdHash: hash('owner'),
+        renewRequestId: 'renew-1',
+      })
+    ).rejects.toThrow('review_action_v2_lease_renewal_drift');
+  });
+
+  it('treats an omitted historicalOnly flag on a fresh commit as current', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewEvidenceCommitResultStatus.Accepted,
+      observationId: 'observation-1',
+      eligibilityPolicyVersion: 't0-v1',
+    });
+    const adapter = createAdapter(execute);
+
+    await expect(
+      adapter.commitEvidence({
+        authorization,
+        idempotencyKey: 'idem:commit:1',
+        lease: {
+          leaseId: 'lease-1',
+          attemptId: 'attempt-1',
+          leaseCapability: 'lease.capability',
+          fencingToken: '1',
+          expiresAt: '2026-07-22T12:10:00.000Z',
+          resultReportUntil: '2026-07-22T12:20:00.000Z',
+          renewalCeilingReached: false,
+        },
+        ownerIdHash: '7'.repeat(64),
+        observation: {
+          payloadCanonicalJson: '{"findings":[]}',
+          payloadHash: hash('{"findings":[]}'),
+          byteCount: 15,
+          findingCount: 0,
+          actualModel: 'gpt-test',
+          qualityFlags: [],
+          transportAttemptCount: 1,
+          schemaValidated: true,
+          fullyConsumed: true,
+        },
+      })
+    ).resolves.toMatchObject({ historicalOnly: false });
+  });
+
+  it('adopts same-execution evidence with exact source and response identities', async () => {
+    const observation = acceptedObservation();
+    const source = {
+      sourceLeaseId: baseLease.leaseId,
+      sourceFencingToken: baseLease.fencingToken,
+      sourceOwnerIdHash: hash('owner'),
+    };
+    const facts = canonicalJson({
+      observationId: observation.observationId,
+      sourceExecutionId: execution.executionId,
+      sourceLeaseId: source.sourceLeaseId,
+      sourceFencingToken: source.sourceFencingToken,
+      providerInvocationKey: observation.providerInvocationKey,
+      providerVoteIdentityHash: observation.providerVoteIdentityHash,
+      manifestKey: providerManifest.manifestKey,
+      payloadHash: observation.payloadHash,
+      byteCount: observation.byteCount,
+      findingCount: observation.findingCount,
+      actualModel: observation.actualModel,
+      qualityFlags: observation.qualityFlags,
+      transportAttemptCount: observation.transportAttemptCount,
+      eligibilityPolicyVersion: observation.eligibilityPolicyVersion,
+      planHash: execution.restoredExecution.planHash,
+      reviewRevisionHash: authorization.facts.reviewRevisionHash,
+    });
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewExecutionMutationResultStatus.Applied,
+      executionId: execution.executionId,
+      workSlotId: workSlot.workSlotId,
+      streamVersion: '2',
+      observationPayloadCanonicalJson: observation.payloadCanonicalJson,
+      observationFactsCanonicalJson: facts,
+    });
+    const adapter = createAdapter(execute);
+
+    await expect(
+      adapter.adoptObservation({
+        authorization,
+        idempotencyKey: 'idem:adopt:1',
+        execution,
+        workSlot,
+        planHash: execution.restoredExecution.planHash,
+        manifest: providerManifest,
+        observation,
+        source,
+      })
+    ).resolves.toEqual({ streamVersion: '2' });
+    expect(execute).toHaveBeenCalledWith(
+      ReviewActionV2OperationId.ReviewExecutionObservationAdopt,
+      expect.objectContaining({
+        executionGeneration: execution.generation,
+        expectedStreamVersion: execution.streamVersion,
+        expectedExecutionVersion: execution.executionVersion,
+        sourceLeaseId: source.sourceLeaseId,
+        sourceFencingToken: source.sourceFencingToken,
+        ownerIdHash: source.sourceOwnerIdHash,
+      })
+    );
+  });
+});
+
+function createAdapter(execute: jest.Mock) {
+  return new ReviewActionV2ControlPlaneAdapter({
+    execute,
+  } as unknown as ReviewActionV2Client);
+}
+
+const protocolLimits = {
+  maxAttemptsPerSlot: 3,
+  maxLeaseDurationMs: 60_000,
+  maxObservationBytes: 100_000,
+  maxObservationFindings: 100,
+  maxProjectionBytes: 200_000,
+  maxProjectionFindings: 100,
+  maxPublicationBodyBytes: 200_000,
+  maxPublicationChunks: 20,
+  maxPublicationOperations: 100,
+  maxReconciliationDurationMs: 60_000,
+  maxRequestBatchSize: 20,
+  maxResultReportDurationMs: 60_000,
+  maxWorkSlots: 10,
+};
+
+const authorizationFacts = {
+  workspaceId: 'workspace-1',
+  repositoryConnectionId: 'connection-1',
+  scmRepositoryIdentityId: 'repository-1',
+  pullRequestNumber: 252,
+  sourceRunId: 'run-1',
+  sourceRunAttempt: '1',
+  baseSha: '1'.repeat(40),
+  mergeBaseSha: '2'.repeat(40),
+  headSha: '3'.repeat(40),
+  reviewRevisionHash: '4'.repeat(64),
+  trustDomain: 'github-actions',
+  producerReleaseId: 'release-1',
+  selectedProtocolVersion: 'review-action-v2',
+  schemaDigest: '5'.repeat(64),
+  providerVoteLanes: [
+    {
+      providerKind: ReviewExecutionProviderKind.Codex,
+      providerVoteIdentityHash: '6'.repeat(64),
+    },
+  ],
+};
+
+const authorization = {
+  authorizationId: 'authorization-1',
+  authorizationToken: 'authorization.token',
+  producerReleaseId: 'release-1',
+  protocolLimitsProfileId: 'limits-1',
+  operationalSloProfileId: 'slo-1',
+  mutationEpoch: '1',
+  expiresAt: '2026-07-22T13:00:00.000Z',
+  limits: protocolLimits,
+  facts: authorizationFacts,
+};
+
+const execution = {
+  executionId: 'execution-1',
+  generation: '1',
+  streamVersion: '1',
+  executionVersion: '1',
+  restoredExecution: {
+    executionId: 'execution-1',
+    version: '1',
+    streamVersion: '1',
+    generation: '1',
+    state: RestoredReviewExecutionState.Running,
+    authorizationId: authorization.authorizationId,
+    reviewRevisionHash: authorization.facts.reviewRevisionHash,
+    planHash: '2'.repeat(64),
+    workSlots: [
+      {
+        workSlotId: 'slot-1',
+        state: RestoredReviewWorkSlotState.Pending,
+        required: true,
+        providerVoteIdentityHash: '5'.repeat(64),
+        activeLeaseId: null,
+        acceptedObservationRefId: null,
+      },
+    ],
+  },
+};
+
+const workSlot = {
+  workSlotId: 'slot-1',
+  taskKind: ReviewTaskKind.FindingDiscovery,
+  providerKind: ReviewExecutionProviderKind.Codex,
+  providerVoteIdentityHash: '5'.repeat(64),
+  shardKey: 'batch-1',
+  required: true,
+  attemptBudget: 1,
+  retryPolicyVersion: 'retry-v1',
+};
+
+const providerManifest = {
+  manifestCanonicalJson: '{"fixture":true}',
+  manifestKey: '3'.repeat(64),
+  providerInvocationKey: '4'.repeat(64),
+  providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+};
+
+const baseLease = {
+  leaseId: 'lease-1',
+  attemptId: 'attempt-1',
+  leaseCapability: 'lease.capability',
+  fencingToken: '1',
+  expiresAt: '2026-07-22T12:10:00.000Z',
+  resultReportUntil: '2026-07-22T12:20:00.000Z',
+  renewalCeilingReached: false,
+};
+
+const startInput = {
+  authorization,
+  idempotencyKey: 'idem:start:1',
+  executionId: 'execution-1',
+  reviewRevisionHash: '1'.repeat(64),
+  compatibilityKey: '2'.repeat(64),
+  planHash: '3'.repeat(64),
+  workSlotsCanonicalJson: '[]',
+  workSlots: [workSlot],
+  sourceRunId: 'run-1',
+  sourceRunAttempt: '1',
+};
+
+function acceptedObservation() {
+  const payloadCanonicalJson = canonicalJson({ findings: [] });
+  return {
+    observationId: 'observation-1',
+    payloadCanonicalJson,
+    payloadHash: hash(payloadCanonicalJson),
+    byteCount: Buffer.byteLength(payloadCanonicalJson),
+    findingCount: 0,
+    actualModel: 'gpt-test',
+    qualityFlags: [] as readonly string[],
+    transportAttemptCount: 1,
+    schemaValidated: true,
+    fullyConsumed: true,
+    eligibilityPolicyVersion: 't0-v1',
+    providerInvocationKey: providerManifest.providerInvocationKey,
+    providerVoteIdentityHash: providerManifest.providerVoteIdentityHash,
+  };
+}
+
+function canonicalExecution(overrides: { version?: string } = {}) {
+  return canonicalJson({
+    authorizationId: authorization.authorizationId,
+    executionId: startInput.executionId,
+    generation: '1',
+    planHash: startInput.planHash,
+    reviewRevisionHash: startInput.reviewRevisionHash,
+    state: RestoredReviewExecutionState.Running,
+    version: overrides.version ?? '1',
+    workSlots: [
+      {
+        acceptedObservationRefId: null,
+        activeLeaseId: null,
+        providerVoteIdentityHash: workSlot.providerVoteIdentityHash,
+        required: workSlot.required,
+        state: RestoredReviewWorkSlotState.Pending,
+        workSlotId: workSlot.workSlotId,
+      },
+    ],
+  });
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`
+      )
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function hash(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}

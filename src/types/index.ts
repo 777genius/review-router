@@ -211,6 +211,8 @@ export interface TokenUsage {
 
 export interface ReviewResult {
   content: string;
+  /** Number of network/process transport invocations consumed by this result. */
+  transportAttemptCount?: number;
   usage?: TokenUsage;
   durationSeconds?: number;
   findings?: Finding[];
@@ -453,6 +455,13 @@ export interface LifecycleTarget {
   viewerCanResolve: boolean;
   hasHumanReply: boolean;
   trustedAuthor: boolean;
+  trustedResolutionMarker?: {
+    schemaVersion: 'reviewrouter-lifecycle-resolution.v1';
+    targetId: string;
+    fingerprint: string;
+    commentId: string;
+    commentUpdatedAt: string;
+  };
   reasonCodes?: LifecycleReasonCode[];
 }
 

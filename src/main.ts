@@ -42,6 +42,11 @@ import {
   runCodexOAuthRotatingAction,
   shouldEnterCodexOAuthRotatingAction,
 } from './codex-oauth/action';
+import { scrubAndAssertReviewActionV2ScmMutationEnv } from './codex-oauth/auth-input';
+import {
+  resolveReviewActionV2Activation,
+  ReviewActionV2RuntimeMode,
+} from './control-plane/review-action-v2-contract';
 
 function syncEnvFromInputs(): void {
   const inputKeys = [
@@ -138,6 +143,7 @@ function syncEnvFromInputs(): void {
     'REVIEW_APP_BOT_LOGIN',
     'REVIEW_ROUTER_APP_SLUG',
     'REVIEW_ROUTER_APP_BOT_LOGIN',
+    'REVIEWROUTER_ACTION_V2_MODE',
   ];
 
   for (const key of inputKeys) {
@@ -157,6 +163,12 @@ async function run(): Promise<void> {
 
   try {
     syncEnvFromInputs();
+    const reviewActionV2Activation = resolveReviewActionV2Activation({
+      env: process.env,
+    });
+    if (reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0) {
+      scrubAndAssertReviewActionV2ScmMutationEnv(process.env);
+    }
     const requestedMode =
       core.getInput('mode') ||
       process.env.REVIEW_ROUTER_MODE ||
@@ -167,13 +179,18 @@ async function run(): Promise<void> {
       core.setSecret(lifecycleResolveTokenFromEnv);
       delete process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN;
     }
+    const entersCodexOAuthRotatingAction = shouldEnterCodexOAuthRotatingAction({
+      requestedMode,
+      env: process.env,
+    });
     if (
-      shouldEnterCodexOAuthRotatingAction({
-        requestedMode,
-        env: process.env,
-      })
+      reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0 &&
+      !entersCodexOAuthRotatingAction
     ) {
-      await runCodexOAuthRotatingAction();
+      throw new Error('review_action_v2_requires_codex_oauth_rotating');
+    }
+    if (entersCodexOAuthRotatingAction) {
+      await runCodexOAuthRotatingAction({ reviewActionV2Activation });
       return;
     }
     runtimeConfig = await applyControlPlaneRuntimeConfig({

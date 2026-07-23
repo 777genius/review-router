@@ -283,6 +283,43 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('Previous Major Bug');
     });
 
+    it('reports a posted fallback reply without claiming the GitHub thread was resolved', () => {
+      const review = createMockReview({
+        threadLifecycle: {
+          mode: 'resolve',
+          quorumMode: 'single-provider',
+          plannedProviders: ['provider-a'],
+          resolvedCandidates: [],
+          resolvedByLifecycle: [],
+          previousStillValid: [],
+          previousUncertain: [],
+          manualAttention: [],
+          mutationSkipped: [],
+          mutationFailed: [
+            {
+              target: createLifecycleTarget(),
+              reasonCodes: [
+                'mutation_permission_denied',
+                'resolution_comment_posted',
+              ],
+            },
+          ],
+          skipped: [],
+          warnings: [],
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('Lifecycle attention required');
+      expect(output).toContain(
+        'fallback resolution reply posted; GitHub thread remains open'
+      );
+      expect(output).not.toContain('Resolved by this run:');
+      expect(output).not.toContain('Previous threads resolved');
+      expect(output).not.toContain('## All Clear!');
+    });
+
     it('blocks all clear for uncertain previous threads even without current findings', () => {
       const review = createMockReview({
         threadLifecycle: {
@@ -313,6 +350,35 @@ describe('MarkdownFormatterV2', () => {
       );
       expect(output).toContain('Lifecycle attention required');
       expect(output).not.toContain('## All Clear!');
+    });
+
+    it('does not claim all clear when lifecycle inventory is incomplete', () => {
+      const review = createMockReview({
+        threadLifecycle: {
+          mode: 'resolve',
+          quorumMode: 'single-provider',
+          plannedProviders: ['provider-a'],
+          resolvedCandidates: [],
+          resolvedByLifecycle: [],
+          previousStillValid: [],
+          previousUncertain: [],
+          manualAttention: [],
+          mutationSkipped: [],
+          mutationFailed: [],
+          skipped: [],
+          warnings: ['review thread lifecycle inventory failed'],
+          inventoryFailed: true,
+        },
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain('Lifecycle attention required');
+      expect(output).toContain(
+        'Review thread inventory failed; no thread was auto-resolved.'
+      );
+      expect(output).not.toContain('## All Clear!');
+      expect(output).not.toContain('No reportable findings');
     });
 
     it('should format critical findings with emoji', () => {

@@ -12,6 +12,7 @@ import {
   type PreparedProviderInvocation,
 } from '../../providers/prepared-invocation';
 import type { LifecycleTarget, PRContext, ReviewConfig } from '../../types';
+import { logger } from '../../utils/logger';
 import {
   ReviewExecutionProviderKind,
   ReviewTaskKind,
@@ -26,10 +27,12 @@ import {
   type ReviewWorkSlotPlan,
 } from '../application';
 import {
+  createProviderVisibleReviewCoverage,
   createReviewPromptCoverageManifest,
-  serializeReviewPromptCoverageManifest,
+  serializeProviderVisibleReviewCoverage,
 } from '../domain';
 import { normalizeReviewObservation } from './review-observation-normalizer';
+import type { ContextGatewayInvocationSessionFactoryPort } from './context-gateway-invocation-session';
 
 export type CodexReviewAssignment = {
   readonly workSlot: ReviewWorkSlotPlan;
@@ -41,14 +44,21 @@ export type CodexReviewAssignment = {
 
 export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPort {
   private readonly assignments = new Map<string, CodexReviewAssignment>();
-  private readonly prepared = new WeakSet<object>();
+  private readonly prepared = new WeakMap<
+    object,
+    Readonly<{
+      prompt: string;
+      assignment: CodexReviewAssignment;
+    }>
+  >();
 
   constructor(
     private readonly provider: CodexProvider,
     private readonly promptBuilder: PromptBuilder,
     assignments: readonly CodexReviewAssignment[],
     private readonly timeoutMs: number,
-    private readonly agenticContext: boolean
+    private readonly agenticContext: boolean,
+    private readonly contextGateway?: ContextGatewayInvocationSessionFactoryPort
   ) {
     for (const assignment of assignments) {
       if (this.assignments.has(assignment.workSlot.workSlotId)) {
@@ -77,17 +87,31 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
       assignedPaths: assignment.context.files.map((file) => file.filename),
       pathCoverage: preparedPrompt.pathCoverage,
     });
-    const coverageCanonicalJson =
-      serializeReviewPromptCoverageManifest(coverageManifest);
-    const prompt = `${preparedPrompt.prompt}\n\nREVIEWROUTER_COVERAGE_MANIFEST_V2_BASE64URL:${Buffer.from(
+    const providerVisibleCoverage =
+      createProviderVisibleReviewCoverage(coverageManifest);
+    const coverageCanonicalJson = serializeProviderVisibleReviewCoverage(
+      providerVisibleCoverage
+    );
+    const prompt = `${preparedPrompt.prompt}\n\nREVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
       coverageCanonicalJson,
       'utf8'
     ).toString('base64url')}`;
+    const gatewayPlanningConfig = this.contextGateway
+      ? await this.contextGateway.planningConfig({
+          baseSha: assignment.context.baseSha,
+          headSha: assignment.context.headSha,
+        })
+      : undefined;
     const prepared = await this.provider.prepareInvocation(
       prompt,
-      this.timeoutMs
+      this.timeoutMs,
+      undefined,
+      gatewayPlanningConfig
     );
-    this.prepared.add(prepared as object);
+    this.prepared.set(
+      prepared as object,
+      Object.freeze({ prompt, assignment })
+    );
     const request = prepared.request as Readonly<Record<string, unknown>>;
     const environment = isStringRecord(request.environment)
       ? request.environment
@@ -115,6 +139,14 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
         providerCapabilityHash: sha256(
           canonicalJson({
             agenticContext: this.agenticContext,
+            contextGateway: gatewayPlanningConfig
+              ? {
+                  gatewayBinaryHash: gatewayPlanningConfig.gatewayBinaryHash,
+                  gatewayPolicyVersion:
+                    gatewayPlanningConfig.gatewayPolicyVersion,
+                  enabledTools: [...gatewayPlanningConfig.enabledTools].sort(),
+                }
+              : null,
             preparedInvocationContract: PROVIDER_EXECUTION_CONTRACT_VERSION,
             providerKind: prepared.providerKind,
           })
@@ -138,7 +170,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
           canonicalJson({
             author: assignment.context.author,
             body: assignment.context.body,
-            coverageHash: coverageManifest.coverageHash,
+            coverageHash: providerVisibleCoverage.coverageHash,
             lifecycleTargetIds: assignment.lifecycleTargets
               .map((target) => target.targetId)
               .sort(),
@@ -166,18 +198,47 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
             ? assignment.liveLifecycleStateHash
             : null,
         toolPolicyHash: sha256(
-          canonicalJson({
-            sandbox: 'read-only',
-            network: 'provider-controlled',
-            workspaceMutation: false,
-          })
+          canonicalJson(
+            gatewayPlanningConfig
+              ? {
+                  sandbox: 'read-only',
+                  network: false,
+                  workspaceMutation: false,
+                  builtinTools: false,
+                  mcpTransport: 'stdio',
+                  gatewayBinaryHash: gatewayPlanningConfig.gatewayBinaryHash,
+                  gatewayPolicyVersion:
+                    gatewayPlanningConfig.gatewayPolicyVersion,
+                  enabledTools: [...gatewayPlanningConfig.enabledTools].sort(),
+                }
+              : {
+                  sandbox: 'read-only',
+                  network: 'provider-controlled',
+                  workspaceMutation: false,
+                }
+          )
         ),
-        executionProfile: this.agenticContext
-          ? 'agentic_unbounded_v1'
-          : 'prompt_only_envelope_v1',
-        baseTreeHash: null,
+        executionProfile: gatewayPlanningConfig
+          ? 'context_gateway_v1'
+          : this.agenticContext
+            ? 'agentic_unbounded_v1'
+            : 'prompt_only_envelope_v1',
+        baseTreeHash: gatewayPlanningConfig
+          ? sha256(
+              gatewayPlanningConfig.runtimeEnvironment
+                .REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID!
+            )
+          : null,
         environmentContractHash: sha256(
-          canonicalJson(describeEnvironmentContract(environment))
+          canonicalJson(
+            describeEnvironmentContract(
+              Object.fromEntries(
+                Object.entries(environment).filter(
+                  ([key]) => !key.startsWith('REVIEWROUTER_CONTEXT_')
+                )
+              )
+            )
+          )
         ),
       }),
     });
@@ -185,7 +246,10 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
 
   async execute(input: {
     readonly invocation: PreparedReviewInvocation;
+    readonly manifest: import('../application').ProviderInvocationManifest;
     readonly lease: ReviewInvocationLease;
+    readonly sourceExecutionId: string;
+    readonly sourceReviewRevisionHash: string;
     readonly signal: AbortSignal;
   }) {
     const prepared = input.invocation
@@ -199,18 +263,97 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     ) {
       throw new Error('review_action_v2_prepared_invocation_identity_mismatch');
     }
-    const result = await this.provider.executePreparedInvocation(
-      prepared,
-      undefined,
-      input.signal
-    );
-    return normalizeReviewObservation({
-      workSlotId: input.invocation.workSlotId,
-      attemptOrdinal: input.invocation.attemptOrdinal,
-      providerName: input.invocation.provider,
+    const preparedFacts = this.prepared.get(prepared as object)!;
+    if (!this.contextGateway) {
+      const result = await this.provider.executePreparedInvocation(
+        prepared,
+        undefined,
+        input.signal
+      );
+      return normalizeReviewObservation({
+        workSlotId: input.invocation.workSlotId,
+        attemptOrdinal: input.invocation.attemptOrdinal,
+        providerName: input.invocation.provider,
+        requestedModel: input.invocation.requestedModel,
+        result,
+      });
+    }
+
+    const session = await this.contextGateway.open({
+      invocationLease: input.lease,
+      sourceExecutionId: input.sourceExecutionId,
+      sourceWorkSlotId: input.invocation.workSlotId,
+      sourceReviewRevisionHash: input.sourceReviewRevisionHash,
+      providerKind: input.invocation.manifestFacts.providerKind,
       requestedModel: input.invocation.requestedModel,
-      result,
+      executionProfile: input.invocation.manifestFacts.executionProfile,
+      providerInvocationKey: input.manifest.providerInvocationKey,
+      toolPolicyHash: input.invocation.manifestFacts.toolPolicyHash,
+      revision: {
+        baseSha: preparedFacts.assignment.context.baseSha,
+        headSha: preparedFacts.assignment.context.headSha,
+      },
     });
+    try {
+      const runtimePrepared = await this.provider.prepareInvocation(
+        preparedFacts.prompt,
+        prepared.timeoutMs,
+        undefined,
+        session.providerConfig
+      );
+      if (
+        runtimePrepared.observableInputPreimage !==
+        prepared.observableInputPreimage
+      ) {
+        throw new Error(
+          'review_action_v2_context_gateway_materialization_drift'
+        );
+      }
+      const result = await this.provider.executePreparedInvocation(
+        runtimePrepared,
+        session.credentialLease,
+        input.signal
+      );
+      const initial = normalizeReviewObservation({
+        workSlotId: input.invocation.workSlotId,
+        attemptOrdinal: input.invocation.attemptOrdinal,
+        providerName: input.invocation.provider,
+        requestedModel: input.invocation.requestedModel,
+        result,
+        qualityFlags: result.actualModel ? [] : ['actual_model_unverified'],
+      });
+      if (!result.actualModel) return initial;
+
+      try {
+        const attestation = await session.seal({
+          actualModel: result.actualModel,
+          terminalOutcomeHash: initial.payloadHash,
+        });
+        return normalizeReviewObservation({
+          workSlotId: input.invocation.workSlotId,
+          attemptOrdinal: input.invocation.attemptOrdinal,
+          providerName: input.invocation.provider,
+          requestedModel: input.invocation.requestedModel,
+          result,
+          qualityFlags: attestation ? [] : ['context_attestation_unavailable'],
+          ...(attestation ? { contextDependencyAttestation: attestation } : {}),
+        });
+      } catch {
+        logger.warn(
+          'Context attestation sealing failed; preserving fresh review as non-reusable'
+        );
+        return normalizeReviewObservation({
+          workSlotId: input.invocation.workSlotId,
+          attemptOrdinal: input.invocation.attemptOrdinal,
+          providerName: input.invocation.provider,
+          requestedModel: input.invocation.requestedModel,
+          result,
+          qualityFlags: ['context_attestation_unavailable'],
+        });
+      }
+    } finally {
+      await session.dispose();
+    }
   }
 }
 

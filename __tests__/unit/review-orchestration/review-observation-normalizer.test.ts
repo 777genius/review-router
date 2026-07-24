@@ -90,7 +90,9 @@ describe('normalizeReviewObservation', () => {
     expect(observation.payloadCanonicalJson).toContain('api_key=[REDACTED]');
     expect(observation.payloadCanonicalJson).toContain('token:[REDACTED]');
     expect(observation.payloadCanonicalJson).toContain('[REDACTED_JWT]');
-    expect(observation.payloadCanonicalJson).not.toContain('super-secret-value');
+    expect(observation.payloadCanonicalJson).not.toContain(
+      'super-secret-value'
+    );
     expect(observation.payloadCanonicalJson).not.toContain('hidden-value');
     expect(observation.payloadHash).toBe(
       createHash('sha256')

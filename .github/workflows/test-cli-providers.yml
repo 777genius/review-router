@@ -30,7 +30,7 @@ jobs:
         run: npm install -g @google/gemini-cli
 
       - name: Install Codex CLI
-        run: npm install -g @openai/codex@0.125.0
+        run: npm install -g @openai/codex@0.145.0
 
       - name: Install Claude Code CLI
         run: |

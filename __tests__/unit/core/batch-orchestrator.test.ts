@@ -1,4 +1,6 @@
 import { BatchOrchestrator } from '../../../src/core/batch-orchestrator';
+import { ReviewTaskKind } from '../../../src/review-orchestration/application';
+import { createStableReviewBatchId } from '../../../src/review-orchestration/domain';
 import { FileChange } from '../../../src/types';
 
 const makeFiles = (count: number): FileChange[] =>
@@ -20,9 +22,14 @@ describe('BatchOrchestrator', () => {
       orchestrator.getBatchSize(['provider/a'])
     );
 
-    expect(batches).toHaveLength(3);
-    expect(batches[0]).toHaveLength(3);
-    expect(batches[2]).toHaveLength(1);
+    expect(batches.length).toBeGreaterThanOrEqual(3);
+    expect(batches.every((batch) => batch.length <= 3)).toBe(true);
+    expect(
+      batches
+        .flat()
+        .map((file) => file.filename)
+        .sort()
+    ).toEqual(files.map((file) => file.filename).sort());
   });
 
   it('honors provider-specific override by picking the smallest', () => {
@@ -39,7 +46,8 @@ describe('BatchOrchestrator', () => {
     expect(batchSize).toBe(2);
 
     const batches = orchestrator.createBatches(files, batchSize);
-    expect(batches).toHaveLength(3);
+    expect(batches.length).toBeGreaterThanOrEqual(3);
+    expect(batches.every((batch) => batch.length <= 2)).toBe(true);
   });
 
   it('uses prefix overrides when exact match not provided', () => {
@@ -95,6 +103,85 @@ describe('BatchOrchestrator', () => {
     ]);
     expect(batchSize).toBe(3);
     const batches = orchestrator.createBatches(makeFiles(7), batchSize);
-    expect(batches).toHaveLength(3);
+    expect(batches.length).toBeGreaterThanOrEqual(3);
+    expect(batches.every((batch) => batch.length <= 3)).toBe(true);
+  });
+
+  it('keeps risk-prioritized input as scheduling order without using it for membership', () => {
+    const orchestrator = new BatchOrchestrator({
+      defaultBatchSize: 3,
+      maxBatchSize: 3,
+    });
+    const files = makeFiles(24);
+    const highRisk = files[17];
+    const prioritized = [
+      highRisk,
+      ...files.filter((file) => file !== highRisk),
+    ];
+
+    const prioritizedBatches = orchestrator.createBatches(prioritized, 3);
+    const permutedBatches = orchestrator.createBatches(
+      [...prioritized].reverse(),
+      3
+    );
+
+    expect(
+      prioritizedBatches[0].some((file) => file.filename === highRisk.filename)
+    ).toBe(true);
+    expect(batchIds(permutedBatches)).toEqual(batchIds(prioritizedBatches));
+  });
+
+  it('preserves every unaffected production batch id after a local perturbation', () => {
+    const orchestrator = new BatchOrchestrator({
+      defaultBatchSize: 9,
+      maxBatchSize: 9,
+    });
+    const files = makeFiles(211);
+    const before = batchIds(orchestrator.createBatches(files, 9));
+    const changed = files.map((file, index) =>
+      index === 77 ? { ...file, additions: 2, changes: 2 } : file
+    );
+    const added = [
+      ...files,
+      {
+        filename: 'new-local-file.ts',
+        status: 'modified' as const,
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+      },
+    ];
+
+    expect(
+      sharedIdentityCount(
+        before,
+        batchIds(orchestrator.createBatches(changed, 9))
+      )
+    ).toBeGreaterThanOrEqual(before.length - 1);
+    expect(
+      sharedIdentityCount(
+        before,
+        batchIds(orchestrator.createBatches(added, 9))
+      )
+    ).toBeGreaterThanOrEqual(before.length - 1);
   });
 });
+
+function batchIds(batches: readonly FileChange[][]): string[] {
+  return batches
+    .map((members) =>
+      createStableReviewBatchId({
+        taskKind: ReviewTaskKind.FindingDiscovery,
+        members,
+      })
+    )
+    .sort();
+}
+
+function sharedIdentityCount(
+  before: readonly string[],
+  after: readonly string[]
+): number {
+  const afterSet = new Set(after);
+  return before.filter((identity) => afterSet.has(identity)).length;
+}

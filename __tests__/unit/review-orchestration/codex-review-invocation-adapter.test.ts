@@ -10,6 +10,7 @@ import {
 import type { CodexProvider } from '../../../src/providers/codex';
 import type { PromptBuilder } from '../../../src/analysis/llm/prompt-builder';
 import type { ReviewConfig } from '../../../src/types';
+import type { ContextGatewayInvocationSessionFactoryPort } from '../../../src/review-orchestration/infrastructure/context-gateway-invocation-session';
 import {
   ReviewExecutionProviderKind,
   ReviewTaskKind,
@@ -64,7 +65,10 @@ describe('Codex T0 prepared invocation', () => {
     });
     const observation = await adapter.execute({
       invocation,
+      manifest: manifestFixture,
       lease: leaseFixture,
+      sourceExecutionId: 'execution-1',
+      sourceReviewRevisionHash: hash('revision'),
       signal: new AbortController().signal,
     });
 
@@ -75,6 +79,113 @@ describe('Codex T0 prepared invocation', () => {
       expect.any(AbortSignal)
     );
     expect(observation.schemaValidated).toBe(true);
+  });
+
+  it('materializes a lease-bound gateway session without changing semantic identity', async () => {
+    const planningPrepared = createPreparedProviderInvocation({
+      providerKind: ProviderKind.CodexCli,
+      providerName: 'codex/gpt-test',
+      requestedModel: 'gpt-test',
+      timeoutMs: 10_000,
+      request: {
+        prompt: 'planning prompt',
+        outputSchema: { type: 'object' },
+        environment: { PATH: '/usr/bin' },
+      },
+      observableRequest: { semantic: 'same' },
+    });
+    const runtimePrepared = createPreparedProviderInvocation({
+      providerKind: ProviderKind.CodexCli,
+      providerName: 'codex/gpt-test',
+      requestedModel: 'gpt-test',
+      timeoutMs: 10_000,
+      request: {
+        prompt: 'runtime prompt',
+        outputSchema: { type: 'object' },
+        environment: { PATH: '/usr/bin' },
+      },
+      observableRequest: { semantic: 'same' },
+    });
+    const provider = {
+      name: 'codex/gpt-test',
+      prepareInvocation: jest
+        .fn()
+        .mockResolvedValueOnce(planningPrepared)
+        .mockResolvedValueOnce(runtimePrepared),
+      executePreparedInvocation: jest.fn().mockResolvedValue({
+        content: '{}',
+        findings: [],
+        revalidations: [],
+        actualModel: 'gpt-test-actual',
+      }),
+    } as unknown as CodexProvider;
+    const promptBuilder = {
+      buildPreparedV2: jest.fn().mockResolvedValue({
+        version: 'prepared_review_prompt.v2',
+        prompt: 'prepared prompt',
+        pathCoverage: [],
+      }),
+    } as unknown as PromptBuilder;
+    const session = {
+      providerConfig: gatewayConfig,
+      credentialLease: {
+        environment: {
+          REVIEWROUTER_CONTEXT_GATEWAY_SECRET: 'secret',
+        },
+      },
+      seal: jest.fn().mockResolvedValue({
+        attestationId: 'attestation-1',
+        attestationHash: hash('attestation'),
+      }),
+      dispose: jest.fn().mockResolvedValue(undefined),
+    };
+    const gatewayFactory = {
+      planningConfig: jest.fn().mockResolvedValue(gatewayConfig),
+      open: jest.fn().mockResolvedValue(session),
+    } as unknown as ContextGatewayInvocationSessionFactoryPort;
+    const adapter = new CodexReviewInvocationAdapter(
+      provider,
+      promptBuilder,
+      [assignment],
+      10_000,
+      true,
+      gatewayFactory
+    );
+
+    const invocation = await adapter.prepare({
+      workSlot: assignment.workSlot,
+      attemptOrdinal: 1,
+    });
+    const observation = await adapter.execute({
+      invocation,
+      manifest: manifestFixture,
+      lease: leaseFixture,
+      sourceExecutionId: 'execution-1',
+      sourceReviewRevisionHash: hash('revision'),
+      signal: new AbortController().signal,
+    });
+
+    expect(gatewayFactory.open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceExecutionId: 'execution-1',
+        sourceWorkSlotId: 'slot-1',
+      })
+    );
+    expect(provider.executePreparedInvocation).toHaveBeenCalledWith(
+      runtimePrepared,
+      session.credentialLease,
+      expect.any(AbortSignal)
+    );
+    expect(session.seal).toHaveBeenCalledWith({
+      actualModel: 'gpt-test-actual',
+      terminalOutcomeHash: observation.payloadHash,
+    });
+    expect(observation).toMatchObject({
+      contextDependencyAttestationId: 'attestation-1',
+      contextDependencyAttestationHash: hash('attestation'),
+      qualityFlags: [],
+    });
+    expect(session.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('derives manifest and provider invocation keys only from generated canonicalizers', async () => {
@@ -304,6 +415,38 @@ const leaseFixture = {
   resultReportUntil: '2026-07-23T12:10:00.000Z',
   renewalCeilingReached: false,
 };
+
+const manifestFixture = Object.freeze({
+  manifestCanonicalJson: '{}',
+  manifestKey: hash('manifest'),
+  providerInvocationKey: hash('provider-invocation'),
+  providerVoteIdentityHash: hash('vote'),
+});
+
+const gatewayConfig = Object.freeze({
+  command: process.execPath,
+  args: Object.freeze(['/tmp/context-gateway.js']),
+  cwd: '/tmp/checkout',
+  gatewayBinaryHash: hash('gateway'),
+  gatewayPolicyVersion: 'context-gateway-v2',
+  enabledTools: Object.freeze([
+    'review_read_file',
+    'review_list_directory',
+    'review_search_text',
+    'review_git_fact',
+  ]),
+  runtimeEnvironment: Object.freeze({
+    REVIEWROUTER_CONTEXT_SESSION_ID: 'session-1',
+    REVIEWROUTER_CONTEXT_ROOT: '/tmp/checkout',
+    REVIEWROUTER_CONTEXT_TRANSCRIPT_PATH: '/tmp/transcript.json',
+    REVIEWROUTER_CONTEXT_REPLAY_MATERIAL_PATH: '/tmp/replay.json',
+    REVIEWROUTER_CONTEXT_GATEWAY_BINARY_HASH: hash('gateway'),
+    REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID: '4'.repeat(40),
+    REVIEWROUTER_CONTEXT_EVENT_CHAIN_SEED_HASH: hash('seed'),
+    REVIEWROUTER_CONTEXT_BASE_SHA: '1'.repeat(40),
+    REVIEWROUTER_CONTEXT_HEAD_SHA: '3'.repeat(40),
+  }),
+});
 
 function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');

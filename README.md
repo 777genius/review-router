@@ -120,7 +120,7 @@ permissions:
 
 concurrency:
   group: review-router-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   review:
@@ -137,7 +137,7 @@ jobs:
           node-version: '24'
 
       - name: Install official Codex CLI
-        run: npm install -g @openai/codex@0.125.0
+        run: npm install -g @openai/codex@0.145.0
 
       - name: Restore Codex OAuth config
         env:

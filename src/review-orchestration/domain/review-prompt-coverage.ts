@@ -14,6 +14,12 @@ export type ReviewPromptCoverageManifest = Readonly<{
   coverageHash: string;
 }>;
 
+export type ProviderVisibleReviewCoverage = Readonly<{
+  version: 'provider_visible_review_coverage.v1';
+  paths: readonly PreparedPromptPathCoverage[];
+  coverageHash: string;
+}>;
+
 export function createReviewPromptCoverageManifest(input: {
   readonly workSlotId: string;
   readonly reviewRevisionHash: string;
@@ -93,6 +99,45 @@ export function serializeReviewPromptCoverageManifest(
     }).coverageHash !== manifest.coverageHash
   ) {
     throw new Error('review_prompt_coverage_hash_mismatch');
+  }
+  return canonical;
+}
+
+export function createProviderVisibleReviewCoverage(
+  manifest: ReviewPromptCoverageManifest
+): ProviderVisibleReviewCoverage {
+  const paths = Object.freeze(manifest.paths.map((entry) => ({ ...entry })));
+  return Object.freeze({
+    version: 'provider_visible_review_coverage.v1',
+    paths,
+    coverageHash: sha256(
+      canonicalJson({
+        paths,
+        version: 'provider_visible_review_coverage.v1',
+      })
+    ),
+  });
+}
+
+export function serializeProviderVisibleReviewCoverage(
+  coverage: ProviderVisibleReviewCoverage
+): string {
+  const canonical = canonicalJson({
+    coverageHash: coverage.coverageHash,
+    paths: coverage.paths,
+    version: coverage.version,
+  });
+  if (
+    createProviderVisibleReviewCoverage(
+      createReviewPromptCoverageManifest({
+        workSlotId: 'semantic-validation',
+        reviewRevisionHash: '0'.repeat(64),
+        assignedPaths: coverage.paths.map((entry) => entry.path),
+        pathCoverage: coverage.paths,
+      })
+    ).coverageHash !== coverage.coverageHash
+  ) {
+    throw new Error('provider_visible_review_coverage_hash_mismatch');
   }
   return canonical;
 }

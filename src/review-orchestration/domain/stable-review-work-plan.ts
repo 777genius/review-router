@@ -18,12 +18,25 @@ export type StableReviewBatch = {
   readonly batchId: string;
   readonly taskKind: ReviewTaskKind;
   readonly required: boolean;
+  readonly schedulingOrdinal?: number;
+};
+
+export type StableReviewBatchMember = {
+  readonly filename: string;
+  readonly status: string;
+  readonly additions: number;
+  readonly deletions: number;
+  readonly changes: number;
+  readonly patch?: string;
+  readonly previousFilename?: string;
+  readonly language?: string;
 };
 
 export type StableReviewWorkAssignment = {
   readonly workSlot: ReviewWorkSlotPlan;
   readonly providerName: string;
   readonly batchId: string;
+  readonly schedulingOrdinal: number;
 };
 
 export type StableReviewWorkPlan = {
@@ -31,6 +44,41 @@ export type StableReviewWorkPlan = {
   readonly workSlotsCanonicalJson: string;
   readonly assignments: readonly StableReviewWorkAssignment[];
 };
+
+export function createStableReviewBatchId(input: {
+  readonly taskKind: ReviewTaskKind;
+  readonly members: readonly StableReviewBatchMember[];
+}): string {
+  if (!Object.values(ReviewTaskKind).includes(input.taskKind)) {
+    throw new Error('review_batch_task_kind_invalid');
+  }
+  assertUnique(
+    input.members.map((member) => member.filename),
+    'review_batch_member_duplicate'
+  );
+  const members = input.members
+    .map((member) => ({
+      additions: member.additions,
+      changes: member.changes,
+      deletions: member.deletions,
+      filename: member.filename,
+      language: member.language ?? null,
+      patch: member.patch ?? null,
+      previousFilename: member.previousFilename ?? null,
+      status: member.status,
+    }))
+    .sort(
+      (left, right) =>
+        compareCodePoints(left.filename, right.filename) ||
+        compareCodePoints(canonicalJson(left), canonicalJson(right))
+    );
+  return sha256(
+    `rr.review-batch.v2\0${canonicalJson({
+      members,
+      taskKind: input.taskKind,
+    })}`
+  );
+}
 
 export function createStableReviewWorkPlan(input: {
   readonly reviewRevisionHash: string;
@@ -51,9 +99,16 @@ export function createStableReviewWorkPlan(input: {
   const providers = [...input.providers].sort((left, right) =>
     compareCodePoints(left.providerName, right.providerName)
   );
-  const batches = [...input.batches].sort((left, right) =>
-    compareCodePoints(left.batchId, right.batchId)
-  );
+  const batches = input.batches
+    .map((batch, inputOrdinal) => ({
+      ...batch,
+      schedulingOrdinal: batch.schedulingOrdinal ?? inputOrdinal,
+    }))
+    .sort(
+      (left, right) =>
+        left.schedulingOrdinal - right.schedulingOrdinal ||
+        compareCodePoints(left.batchId, right.batchId)
+    );
   assertUnique(
     providers.map((provider) => provider.providerName),
     'review_work_plan_provider_duplicate'
@@ -66,10 +121,18 @@ export function createStableReviewWorkPlan(input: {
     batches.map((batch) => batch.batchId),
     'review_work_plan_batch_duplicate'
   );
+  assertUnique(
+    batches.map((batch) => String(batch.schedulingOrdinal)),
+    'review_work_plan_scheduling_ordinal_duplicate'
+  );
 
   const assignments: StableReviewWorkAssignment[] = [];
   for (const batch of batches) {
     requireIdentity(batch.batchId, 'batch_id');
+    requireNonNegativeInteger(
+      batch.schedulingOrdinal,
+      'batch_scheduling_ordinal'
+    );
     for (const provider of providers) {
       requireIdentity(provider.providerName, 'provider_name');
       requireIdentity(provider.retryPolicyVersion, 'retry_policy_version');
@@ -105,6 +168,7 @@ export function createStableReviewWorkPlan(input: {
       assignments.push({
         providerName: provider.providerName,
         batchId: batch.batchId,
+        schedulingOrdinal: batch.schedulingOrdinal,
         workSlot: {
           workSlotId,
           taskKind: batch.taskKind,
@@ -121,18 +185,24 @@ export function createStableReviewWorkPlan(input: {
   if (assignments.length > input.maxWorkSlots) {
     throw new Error('review_work_plan_slot_limit_exceeded');
   }
-  assignments.sort((left, right) =>
-    compareCodePoints(left.workSlot.workSlotId, right.workSlot.workSlotId)
+  assignments.sort(
+    (left, right) =>
+      left.schedulingOrdinal - right.schedulingOrdinal ||
+      compareCodePoints(left.providerName, right.providerName) ||
+      compareCodePoints(left.workSlot.workSlotId, right.workSlot.workSlotId)
   );
 
+  const canonicalAssignments = [...assignments].sort((left, right) =>
+    compareCodePoints(left.workSlot.workSlotId, right.workSlot.workSlotId)
+  );
   const workSlotsCanonicalJson = canonicalJson(
-    assignments.map((assignment) => assignment.workSlot)
+    canonicalAssignments.map((assignment) => assignment.workSlot)
   );
   const planHash = sha256(
     `rr.review-work-plan.v1\0${canonicalJson({
       compatibilityKey: input.compatibilityKey,
       reviewRevisionHash: input.reviewRevisionHash,
-      workSlots: assignments.map((assignment) => ({
+      workSlots: canonicalAssignments.map((assignment) => ({
         batchId: assignment.batchId,
         providerName: assignment.providerName,
         ...assignment.workSlot,
@@ -189,6 +259,12 @@ function requireIdentity(value: string, field: string): void {
 
 function requirePositiveInteger(value: number, field: string): void {
   if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${field}_invalid`);
+  }
+}
+
+function requireNonNegativeInteger(value: number, field: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
     throw new Error(`${field}_invalid`);
   }
 }

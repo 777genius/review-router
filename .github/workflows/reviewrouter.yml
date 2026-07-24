@@ -22,26 +22,18 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: "Pull request number to review"
+        description: 'Pull request number to review'
         required: true
       review_providers:
-        description: "Comma-separated list of model providers (validated against allowed patterns)"
+        description: 'Comma-separated list of model providers (validated against allowed patterns)'
         required: false
         type: string
 
-# Cancel in-progress runs for the same commit to prevent duplicate reviews
-# Strategy: Use PR number + head SHA for pull requests, github.sha for push
-# - For pull_request: group by PR number and head commit SHA
-# - For push: group by pushed commit SHA
-# - For workflow_dispatch: group by input PR number and current SHA
-# This ensures proper isolation and prevents race conditions between different PRs
+# Preserve an active confined invocation so its evidence can be sealed and
+# replayed. GitHub keeps only the latest pending run for each pull request.
 concurrency:
-  # Use distinct prefixes for different event types to prevent cross-event cancellation
-  # - pull_request: pr-{number}-{head_sha}
-  # - push: push-{sha}
-  # - workflow_dispatch: dispatch-{pr_number}-{sha}
-  group: ${{ github.event_name == 'pull_request' && format('pr-{0}-{1}', github.event.pull_request.number, github.event.pull_request.head.sha) || github.event_name == 'workflow_dispatch' && format('dispatch-{0}-{1}', inputs.pr_number, github.sha) || format('push-{0}', github.sha) }}
-  cancel-in-progress: true
+  group: review-router-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  cancel-in-progress: false
 
 # Permissions: Principle of least privilege
 # Only grant the minimum permissions required for code review functionality
@@ -51,9 +43,9 @@ concurrency:
 # - actions: read - Required for concurrency control to prevent duplicate reviews (read-only)
 # NOT granted: contents: write (cannot modify code), issues: write (cannot create issues)
 permissions:
-  contents: read        # Read repository code and PR diffs
-  pull-requests: write  # Post review comments and summaries
-  actions: read         # Check workflow status (for concurrency control)
+  contents: read # Read repository code and PR diffs
+  pull-requests: write # Post review comments and summaries
+  actions: read # Check workflow status (for concurrency control)
 
 jobs:
   review:
@@ -63,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0  # Fetch full history for incremental review git diff
+          fetch-depth: 0 # Fetch full history for incremental review git diff
       - name: Resolve PR number
         id: resolve-pr
         env:

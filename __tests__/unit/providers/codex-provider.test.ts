@@ -3,7 +3,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { spawn, spawnSync } from 'child_process';
-import { CodexProvider } from '../../../src/providers/codex';
+import {
+  CodexProvider,
+  type CodexContextGatewayInvocationConfig,
+} from '../../../src/providers/codex';
 import { RateLimitError } from '../../../src/providers/base';
 import { logger } from '../../../src/utils/logger';
 
@@ -28,6 +31,35 @@ function createMockProcess(onStart?: (proc: any) => void, closeCode = 0): any {
   });
 
   return proc;
+}
+
+function contextGatewayConfig(
+  suffix = 'one'
+): CodexContextGatewayInvocationConfig {
+  return {
+    command: process.execPath,
+    args: ['/tmp/reviewrouter-context-gateway.js'],
+    cwd: '/tmp/reviewrouter-checkout',
+    gatewayBinaryHash: 'a'.repeat(64),
+    gatewayPolicyVersion: 'context-gateway-v2',
+    enabledTools: [
+      'review_read_file',
+      'review_list_directory',
+      'review_search_text',
+      'review_git_fact',
+    ],
+    runtimeEnvironment: {
+      REVIEWROUTER_CONTEXT_SESSION_ID: `session-${suffix}`,
+      REVIEWROUTER_CONTEXT_ROOT: '/tmp/reviewrouter-checkout',
+      REVIEWROUTER_CONTEXT_TRANSCRIPT_PATH: `/tmp/transcript-${suffix}.json`,
+      REVIEWROUTER_CONTEXT_REPLAY_MATERIAL_PATH: `/tmp/replay-${suffix}.json`,
+      REVIEWROUTER_CONTEXT_GATEWAY_BINARY_HASH: 'a'.repeat(64),
+      REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID: 'b'.repeat(40),
+      REVIEWROUTER_CONTEXT_EVENT_CHAIN_SEED_HASH: 'c'.repeat(64),
+      REVIEWROUTER_CONTEXT_BASE_SHA: 'd'.repeat(40),
+      REVIEWROUTER_CONTEXT_HEAD_SHA: 'e'.repeat(40),
+    },
+  };
 }
 
 describe('CodexProvider', () => {
@@ -214,6 +246,101 @@ describe('CodexProvider', () => {
       ])
     );
     expect(args.indexOf('--skip-git-repo-check')).toBe(1);
+  });
+
+  it('confines context-gateway reviews to the allowlisted MCP server', () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const gateway = contextGatewayConfig();
+    const args = (provider as any).buildExecArgs(
+      {
+        healthCheck: false,
+        outputLastMessageFile: '/tmp/codex-output.txt',
+        outputSchemaFile: '/tmp/codex-schema.json',
+        jsonEvents: true,
+      },
+      undefined,
+      gateway
+    );
+
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '--disable',
+        'shell_tool',
+        'unified_exec',
+        'browser_use',
+        'computer_use',
+        'web_search_request',
+        'plugins',
+        '-c',
+        'mcp_servers={}',
+        `mcp_servers.reviewrouter.command=${JSON.stringify(process.execPath)}`,
+        `mcp_servers.reviewrouter.args=${JSON.stringify(gateway.args)}`,
+        'mcp_servers.reviewrouter.required=true',
+      ])
+    );
+    expect(args.join('\n')).toContain(
+      'mcp_servers.reviewrouter.enabled_tools='
+    );
+    expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+  });
+
+  it('keeps gateway session paths and revision hashes out of semantic identity', async () => {
+    process.env.REVIEWROUTER_CODEX_BINARY = process.execPath;
+    spawnMock.mockImplementation(() => createMockProcess());
+    const provider = new CodexProvider('gpt-5.4-mini');
+
+    const first = await provider.prepareInvocation(
+      'same semantic prompt',
+      1_000,
+      undefined,
+      contextGatewayConfig('first')
+    );
+    const second = await provider.prepareInvocation(
+      'same semantic prompt',
+      1_000,
+      undefined,
+      contextGatewayConfig('second')
+    );
+
+    expect(first.observableInputPreimage).toBe(second.observableInputPreimage);
+    expect(first.observableInputPreimage).not.toContain('session-first');
+    expect(first.observableInputPreimage).not.toContain('transcript-first');
+    expect(first.observableInputPreimage).not.toContain('b'.repeat(40));
+    expect(first.request.environment.REVIEWROUTER_CONTEXT_SESSION_ID).toBe(
+      'session-first'
+    );
+  });
+
+  it('accepts only one unambiguous session-configured actual model', () => {
+    const provider = new CodexProvider('gpt-5.4-mini');
+    const extract = (stdout: string) =>
+      (provider as any).extractActualModel(stdout);
+
+    expect(
+      extract(
+        `${JSON.stringify({
+          type: 'session_configured',
+          model: 'gpt-5.6-codex',
+        })}\n`
+      )
+    ).toBe('gpt-5.6-codex');
+    expect(
+      extract(
+        [
+          JSON.stringify({
+            type: 'session_configured',
+            model: 'gpt-5.6-codex',
+          }),
+          JSON.stringify({
+            type: 'session_configured',
+            model: 'gpt-5.5-codex',
+          }),
+        ].join('\n')
+      )
+    ).toBeUndefined();
+    expect(
+      extract(JSON.stringify({ type: 'thread.started', model: 'forged' }))
+    ).toBeUndefined();
   });
 
   it('sanitizes spawned Codex environment', () => {

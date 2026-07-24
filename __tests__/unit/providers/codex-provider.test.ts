@@ -249,6 +249,8 @@ describe('CodexProvider', () => {
   });
 
   it('confines context-gateway reviews to the allowlisted MCP server', () => {
+    process.env.REVIEWROUTER_CONTEXT_GATEWAY_SECRET =
+      'must-not-appear-in-cli-args';
     const provider = new CodexProvider('gpt-5.4-mini');
     const gateway = contextGatewayConfig();
     const args = (provider as any).buildExecArgs(
@@ -275,12 +277,19 @@ describe('CodexProvider', () => {
         'mcp_servers={}',
         `mcp_servers.reviewrouter.command=${JSON.stringify(process.execPath)}`,
         `mcp_servers.reviewrouter.args=${JSON.stringify(gateway.args)}`,
+        `mcp_servers.reviewrouter.env_vars=${JSON.stringify(
+          [
+            ...Object.keys(gateway.runtimeEnvironment),
+            'REVIEWROUTER_CONTEXT_GATEWAY_SECRET',
+          ].sort()
+        )}`,
         'mcp_servers.reviewrouter.required=true',
       ])
     );
     expect(args.join('\n')).toContain(
       'mcp_servers.reviewrouter.enabled_tools='
     );
+    expect(args.join('\n')).not.toContain('must-not-appear-in-cli-args');
     expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
   });
 

@@ -123,6 +123,12 @@ const CONTEXT_GATEWAY_RUNTIME_ENV_KEYS = new Set([
   'REVIEWROUTER_CONTEXT_BASE_SHA',
   'REVIEWROUTER_CONTEXT_HEAD_SHA',
 ]);
+const CONTEXT_GATEWAY_MCP_ENV_VARS = Object.freeze(
+  [
+    ...CONTEXT_GATEWAY_RUNTIME_ENV_KEYS,
+    'REVIEWROUTER_CONTEXT_GATEWAY_SECRET',
+  ].sort()
+);
 
 class CodexCliExitError extends Error {
   constructor(
@@ -653,6 +659,10 @@ export class CodexProvider extends Provider {
         `mcp_servers.reviewrouter.args=${tomlStringArray(contextGateway.args)}`,
         '-c',
         `mcp_servers.reviewrouter.cwd=${tomlString(contextGateway.cwd)}`,
+        '-c',
+        `mcp_servers.reviewrouter.env_vars=${tomlStringArray(
+          CONTEXT_GATEWAY_MCP_ENV_VARS
+        )}`,
         '-c',
         'mcp_servers.reviewrouter.required=true',
         '-c',

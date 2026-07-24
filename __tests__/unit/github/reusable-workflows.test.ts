@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
@@ -39,6 +40,22 @@ function parseWorkflow(filePath: string): WorkflowDocument {
 }
 
 describe('production reusable workflows', () => {
+  it('ships every runtime bundle required by the immutable action checkout', () => {
+    const contextGatewayBundle = 'dist/context-gateway.js';
+
+    expect(fs.existsSync(path.join(repoRoot, contextGatewayBundle))).toBe(true);
+    expect(
+      execFileSync(
+        'git',
+        ['ls-files', '--error-unmatch', contextGatewayBundle],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+        }
+      ).trim()
+    ).toBe(contextGatewayBundle);
+  });
+
   it('exposes a dedicated read-only T0 reusable entrypoint', () => {
     const workflowPath = '.github/workflows/reviewrouter-t0-reusable.yml';
     const workflowSource = readRepoFile(workflowPath);

@@ -529,15 +529,18 @@ export class ReviewActionV2ControlPlaneAdapter
     );
     const previousExpiry = Date.parse(input.lease.expiresAt);
     const renewedExpiry = Date.parse(expiresAt);
+    const expiryAdvanced = renewedExpiry > previousExpiry;
+    // Restored can recover a lost acknowledgement after the renewal was applied.
     const renewalCeilingReached =
-      result.status === ReviewInvocationLeaseResultStatus.Restored;
+      result.status === ReviewInvocationLeaseResultStatus.Restored &&
+      !expiryAdvanced;
     if (
       leaseId !== input.lease.leaseId ||
       fencingToken !== input.lease.fencingToken ||
-      (renewalCeilingReached
-        ? renewedExpiry !== previousExpiry
-        : renewedExpiry <= previousExpiry ||
-          leaseCapability === input.lease.leaseCapability)
+      renewedExpiry < previousExpiry ||
+      (expiryAdvanced && leaseCapability === input.lease.leaseCapability) ||
+      (result.status === ReviewInvocationLeaseResultStatus.Applied &&
+        !expiryAdvanced)
     ) {
       throw new Error('review_action_v2_lease_renewal_drift');
     }

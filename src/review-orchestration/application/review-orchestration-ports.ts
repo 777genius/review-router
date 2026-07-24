@@ -1,6 +1,7 @@
 export enum ReviewEvidenceLookupKind {
   Miss = 'miss',
   Hit = 'hit',
+  ReplayRequired = 'replay_required',
 }
 
 export enum ReviewExecutionProviderKind {
@@ -158,7 +159,77 @@ export type ReviewObservationPayload = {
   readonly transportAttemptCount: number;
   readonly schemaValidated: boolean;
   readonly fullyConsumed: boolean;
+  readonly contextDependencyAttestationId?: string;
+  readonly contextDependencyAttestationHash?: string;
 };
+
+export type ContextGatewaySessionLease = Readonly<{
+  sessionId: string;
+  eventChainSeedHash: string;
+  sealCapability: string;
+  gatewaySessionSecret: string;
+  expiresAt: string;
+}>;
+
+export type ContextDependencyAttestationReference = Readonly<{
+  attestationId: string;
+  attestationHash: string;
+}>;
+
+export type ContextDependencyReplayCandidate = Readonly<{
+  observation: AcceptedReviewObservation;
+  attestationId: string;
+  attestationHash: string;
+  replayCapability: string;
+  replayPlanCanonicalJson: string;
+  replayPlanHash: string;
+}>;
+
+export type ContextDependencyReplayResult = Readonly<{
+  targetCheckoutTreeOid: string;
+  replayResultCanonicalJson: string;
+  replayResultHash: string;
+}>;
+
+export interface ContextDependencyReplayPort {
+  replay(input: {
+    readonly candidate: ContextDependencyReplayCandidate;
+    readonly targetRevision: ReviewRevisionFacts;
+  }): Promise<ContextDependencyReplayResult | null>;
+}
+
+export interface ReviewContextAttestationPort {
+  openGatewaySession(input: {
+    readonly invocationLease: ReviewInvocationLease;
+    readonly sourceExecutionId: string;
+    readonly sourceWorkSlotId: string;
+    readonly sourceReviewRevisionHash: string;
+    readonly checkoutTreeOid: string;
+    readonly gatewayPolicyVersion: string;
+    readonly gatewayBinaryHash: string;
+    readonly confinementEvidenceHash: string;
+  }): Promise<ContextGatewaySessionLease>;
+  sealGatewaySession(input: {
+    readonly invocationLease: ReviewInvocationLease;
+    readonly session: ContextGatewaySessionLease;
+    readonly providerSucceeded: boolean;
+    readonly schemaValidated: boolean;
+    readonly fullyConsumed: boolean;
+    readonly actualModel: string;
+    readonly terminalOutcomeHash: string;
+    readonly transcriptCanonicalJson: string;
+    readonly transcriptHash: string;
+    readonly replayMaterialCanonicalJson: string;
+    readonly replayMaterialHash: string;
+  }): Promise<ContextDependencyAttestationReference | null>;
+  commitContextReplay(input: {
+    readonly authorization: ReviewRunAuthorization;
+    readonly execution: ReviewExecutionAdmission;
+    readonly workSlot: ReviewWorkSlotPlan;
+    readonly candidate: ContextDependencyReplayCandidate;
+    readonly result: ContextDependencyReplayResult;
+  }): Promise<{ readonly attachmentCapability: string } | null>;
+}
 
 export type AcceptedReviewObservation = ReviewObservationPayload & {
   readonly observationId: string;
@@ -265,6 +336,9 @@ export interface ReviewActionV2ControlPlanePort {
     readonly manifest: ProviderInvocationManifest;
   }): Promise<
     | { readonly kind: ReviewEvidenceLookupKind.Miss }
+    | ({
+        readonly kind: ReviewEvidenceLookupKind.ReplayRequired;
+      } & ContextDependencyReplayCandidate)
     | {
         readonly kind: ReviewEvidenceLookupKind.Hit;
         readonly observation: AcceptedReviewObservation;
@@ -389,7 +463,10 @@ export interface PreparedReviewInvocationPort {
   }): Promise<PreparedReviewInvocation>;
   execute(input: {
     readonly invocation: PreparedReviewInvocation;
+    readonly manifest: ProviderInvocationManifest;
     readonly lease: ReviewInvocationLease;
+    readonly sourceExecutionId: string;
+    readonly sourceReviewRevisionHash: string;
     readonly signal: AbortSignal;
   }): Promise<ReviewObservationPayload>;
 }

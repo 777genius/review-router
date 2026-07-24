@@ -258,10 +258,7 @@ function validateCoverageManifests(input: {
 
 type NormalizedObservation = {
   readonly normalizedFindings: readonly Record<string, unknown>[];
-  readonly normalizedLifecycleRevalidations: readonly Record<
-    string,
-    unknown
-  >[];
+  readonly normalizedLifecycleRevalidations: readonly Record<string, unknown>[];
 };
 
 function parseObservation(value: string): NormalizedObservation {

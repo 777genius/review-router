@@ -11,9 +11,11 @@
   "license": "MIT",
   "scripts": {
     "build": "npm run build:action && npm run build:cli",
-    "build:action": "esbuild src/main.ts --bundle --platform=node --target=node24 --outfile=dist/index.js --sourcemap --external:tree-sitter --external:tree-sitter-*",
+    "build:action": "npm run build:action:main && npm run build:context-gateway",
+    "build:action:main": "esbuild src/main.ts --bundle --platform=node --target=node24 --outfile=dist/index.js --sourcemap --external:tree-sitter --external:tree-sitter-*",
+    "build:context-gateway": "esbuild src/context-gateway/stdio-entry.ts --bundle --platform=node --target=node24 --outfile=dist/context-gateway.js --sourcemap",
     "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --target=node24 --outfile=dist/cli/index.js --sourcemap --external:tree-sitter --external:tree-sitter-*",
-    "build:prod": "npm run build:action -- --minify && npm run build:cli -- --minify",
+    "build:prod": "npm run build:action:main -- --minify && npm run build:context-gateway -- --minify && npm run build:cli -- --minify",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:unit": "jest --testPathIgnorePatterns=integration --testPathIgnorePatterns=benchmarks",
@@ -45,10 +47,11 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@octokit/rest": "^20.1.2",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
-    "js-yaml": "^4.1.1",
+    "js-yaml": "4.3.0",
     "libsodium-wrappers": "^0.8.4",
     "minimatch": "^10.2.5",
     "p-queue": "^8.1.1",
@@ -76,5 +79,14 @@
   "optionalDependencies": {
     "tree-sitter-go": "^0.21.0",
     "tree-sitter-rust": "^0.21.0"
+  },
+  "overrides": {
+    "@babel/core": "7.29.7",
+    "@hono/node-server": "2.0.11",
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "3.15.0"
+    },
+    "brace-expansion@<=1.1.15": "1.1.16",
+    "brace-expansion@>=3.0.0 <5.0.7": "5.0.8"
   }
 }

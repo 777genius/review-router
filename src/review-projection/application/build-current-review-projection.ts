@@ -478,7 +478,7 @@ function buildInlineChunks(
 
   assertWithinProjectionLimit('maxInlineComments', comments.length, limits);
   const chunks: ReviewProjectionInlineChunkFact[] = [];
-  for (let offset = 0; offset < comments.length;) {
+  for (let offset = 0; offset < comments.length; ) {
     const chunkComments = comments.slice(
       offset,
       offset + limits.maxInlineCommentsPerChunk

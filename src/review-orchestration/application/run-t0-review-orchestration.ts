@@ -13,10 +13,13 @@ import {
   RestoredReviewWorkSlotState,
   type AcceptedReviewObservation,
   type CurrentReviewProjectionBuilderPort,
+  type ContextDependencyReplayPort,
   type PreparedReviewInvocationPort,
   type PreparedReviewInvocation,
+  type ProviderInvocationManifest,
   type ProviderInvocationManifestAssemblerPort,
   type ReviewActionV2ControlPlanePort,
+  type ReviewContextAttestationPort,
   type ReviewExecutionAdmission,
   type ReviewInvocationLease,
   type ReviewInvocationFailureClassifierPort,
@@ -78,6 +81,8 @@ export type RunT0ReviewOrchestrationDependencies = {
   readonly invocationFailureClassifier: ReviewInvocationFailureClassifierPort;
   readonly leaseSupervisor: ReviewInvocationLeaseSupervisorPort;
   readonly projectionBuilder: CurrentReviewProjectionBuilderPort;
+  readonly contextReplay?: ContextDependencyReplayPort;
+  readonly contextAttestations?: ReviewContextAttestationPort;
   readonly identities: ReviewOrchestrationIdentityPort;
   readonly delay: ReviewOrchestrationDelayPort;
 };
@@ -86,7 +91,7 @@ export class RunT0ReviewOrchestration {
   constructor(
     private readonly dependencies: RunT0ReviewOrchestrationDependencies,
     private readonly maxPublicationPolls = 30,
-    private readonly maxBusyPollsPerSlot = 600,
+    private readonly maxBusyPollsPerSlot = 24,
     private readonly revisionPollIntervalMs = 5_000
   ) {
     if (
@@ -99,7 +104,7 @@ export class RunT0ReviewOrchestration {
     if (
       !Number.isSafeInteger(maxBusyPollsPerSlot) ||
       maxBusyPollsPerSlot < 1 ||
-      maxBusyPollsPerSlot > 720
+      maxBusyPollsPerSlot > 120
     ) {
       throw new Error('review_orchestration_busy_poll_limit_invalid');
     }
@@ -459,87 +464,16 @@ export class RunT0ReviewOrchestration {
       ) {
         throw new Error('review_orchestration_manifest_scope_mismatch');
       }
-      const lookup = await this.dependencies.controlPlane.lookupEvidence({
-        authorization: input.authorization,
+      const reused = await this.trySatisfyFromLookup({
+        ...input,
         execution: { ...input.execution, streamVersion },
-        workSlot: input.workSlot,
-        planHash: input.planHash,
         manifest,
       });
-      if (lookup.kind === ReviewEvidenceLookupKind.Hit) {
-        await this.assertRevisionCurrent(input.revision);
-        validateObservationAgainstLimits(
-          lookup.observation,
-          input.authorization.limits
-        );
-        if (
-          input.restoredSlot.state === RestoredReviewWorkSlotState.Satisfied
-        ) {
-          if (
-            input.restoredSlot.acceptedObservationRefId !==
-            observationRefId(
-              input.execution.executionId,
-              input.workSlot.workSlotId,
-              lookup.observation.observationId
-            )
-          ) {
-            throw new Error(
-              'review_orchestration_restored_observation_identity_mismatch'
-            );
-          }
-        } else if (lookup.attachment.kind === 'exact_revision_reuse') {
-          const attached =
-            await this.dependencies.controlPlane.attachObservation({
-              authorization: input.authorization,
-              idempotencyKey: this.idempotencyKey('attach', [
-                input.execution.executionId,
-                input.workSlot.workSlotId,
-                lookup.observation.observationId,
-              ]),
-              execution: { ...input.execution, streamVersion },
-              workSlot: input.workSlot,
-              observation: lookup.observation,
-              attachmentCapability: lookup.attachment.capability,
-            });
-          streamVersion = attached.streamVersion;
-        } else {
-          const latestExecution =
-            await this.dependencies.controlPlane.restoreExecution({
-              authorization: input.authorization,
-              reviewRevisionHash: input.revision.reviewRevisionHash,
-            });
-          const adoptionExecution = refreshExecutionAdmission(
-            { ...input.execution, streamVersion },
-            latestExecution
-          );
-          const adopted = await this.dependencies.controlPlane.adoptObservation(
-            {
-              authorization: input.authorization,
-              idempotencyKey: this.idempotencyKey('adopt', [
-                input.execution.executionId,
-                input.workSlot.workSlotId,
-                lookup.observation.observationId,
-                lookup.attachment.sourceLeaseId,
-                lookup.attachment.sourceFencingToken,
-              ]),
-              execution: adoptionExecution,
-              workSlot: input.workSlot,
-              planHash: input.planHash,
-              manifest,
-              observation: lookup.observation,
-              source: lookup.attachment,
-            }
-          );
-          streamVersion = adopted.streamVersion;
-        }
-        input.onEvent({
-          type: ReviewOrchestrationEventType.SlotSatisfied,
-          workSlotId: input.workSlot.workSlotId,
-        });
+      if (reused) {
         return {
-          observation: lookup.observation,
+          observation: reused.observation,
           coverageManifest: invocation.coverageManifest,
-          streamVersion,
+          streamVersion: reused.streamVersion,
         };
       }
       if (input.restoredSlot.state === RestoredReviewWorkSlotState.Satisfied) {
@@ -564,6 +498,18 @@ export class RunT0ReviewOrchestration {
             Math.min(5_000, 500 * 2 ** Math.min(busyPollCount - 1, 4))
           );
           await this.assertRevisionCurrent(input.revision);
+          const joined = await this.trySatisfyFromLookup({
+            ...input,
+            execution: { ...input.execution, streamVersion },
+            manifest,
+          });
+          if (joined) {
+            return {
+              observation: joined.observation,
+              coverageManifest: invocation.coverageManifest,
+              streamVersion: joined.streamVersion,
+            };
+          }
         }
         lease = await this.dependencies.controlPlane.acquireInvocationLease({
           authorization: input.authorization,
@@ -597,12 +543,18 @@ export class RunT0ReviewOrchestration {
           operation: (signal) =>
             this.executeInvocationWithRevisionWatch({
               invocation,
+              manifest,
               lease: lease!,
+              sourceExecutionId: input.execution.executionId,
               signal,
               revision: input.revision,
             }),
         });
-        await this.assertRevisionCurrent(input.revision);
+        if (
+          invocation.manifestFacts.executionProfile !== 'context_gateway_v1'
+        ) {
+          await this.assertRevisionCurrent(input.revision);
+        }
       } catch (error) {
         await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
         if (error instanceof ReviewExecutionSupersededSignal) throw error;
@@ -639,7 +591,12 @@ export class RunT0ReviewOrchestration {
           observation: observationPayload,
         });
         await this.assertRevisionCurrent(input.revision);
-        if (committed.historicalOnly) continue;
+        if (committed.historicalOnly) {
+          await this.assertRevisionCurrent(input.revision);
+          throw new Error(
+            'review_orchestration_historical_evidence_for_current_revision'
+          );
+        }
         const observation: AcceptedReviewObservation = {
           ...observationPayload,
           observationId: committed.observationId,
@@ -682,6 +639,163 @@ export class RunT0ReviewOrchestration {
       workSlotId: input.workSlot.workSlotId,
     });
     return { streamVersion };
+  }
+
+  private async trySatisfyFromLookup(input: {
+    readonly authorization: ReviewRunAuthorization;
+    readonly execution: ReviewExecutionAdmission;
+    readonly workSlot: ReviewWorkSlotPlan;
+    readonly planHash: string;
+    readonly manifest: ProviderInvocationManifest;
+    readonly revision: ReviewRevisionFacts;
+    readonly restoredSlot: RestoredReviewWorkSlot;
+    readonly onEvent: (event: {
+      readonly type: ReviewOrchestrationEventType.SlotSatisfied;
+      readonly workSlotId: string;
+    }) => void;
+  }): Promise<{
+    readonly observation: AcceptedReviewObservation;
+    readonly streamVersion: string;
+  } | null> {
+    const lookup = await this.dependencies.controlPlane.lookupEvidence({
+      authorization: input.authorization,
+      execution: input.execution,
+      workSlot: input.workSlot,
+      planHash: input.planHash,
+      manifest: input.manifest,
+    });
+    if (lookup.kind === ReviewEvidenceLookupKind.Miss) return null;
+
+    await this.assertRevisionCurrent(input.revision);
+    validateObservationAgainstLimits(
+      lookup.observation,
+      input.authorization.limits
+    );
+
+    let streamVersion = input.execution.streamVersion;
+    if (lookup.kind === ReviewEvidenceLookupKind.ReplayRequired) {
+      const replayed = await this.replayCandidate({
+        authorization: input.authorization,
+        execution: input.execution,
+        workSlot: input.workSlot,
+        revision: input.revision,
+        candidate: lookup,
+      });
+      if (!replayed) return null;
+      await this.assertRevisionCurrent(input.revision);
+      const attached = await this.dependencies.controlPlane.attachObservation({
+        authorization: input.authorization,
+        idempotencyKey: this.idempotencyKey('attach-replayed', [
+          input.execution.executionId,
+          input.workSlot.workSlotId,
+          lookup.observation.observationId,
+          lookup.attestationId,
+          input.revision.reviewRevisionHash,
+        ]),
+        execution: input.execution,
+        workSlot: input.workSlot,
+        observation: lookup.observation,
+        attachmentCapability: replayed.attachmentCapability,
+      });
+      streamVersion = attached.streamVersion;
+    } else if (
+      input.restoredSlot.state === RestoredReviewWorkSlotState.Satisfied
+    ) {
+      if (
+        input.restoredSlot.acceptedObservationRefId !==
+        observationRefId(
+          input.execution.executionId,
+          input.workSlot.workSlotId,
+          lookup.observation.observationId
+        )
+      ) {
+        throw new Error(
+          'review_orchestration_restored_observation_identity_mismatch'
+        );
+      }
+    } else if (lookup.attachment.kind === 'exact_revision_reuse') {
+      const attached = await this.dependencies.controlPlane.attachObservation({
+        authorization: input.authorization,
+        idempotencyKey: this.idempotencyKey('attach', [
+          input.execution.executionId,
+          input.workSlot.workSlotId,
+          lookup.observation.observationId,
+        ]),
+        execution: input.execution,
+        workSlot: input.workSlot,
+        observation: lookup.observation,
+        attachmentCapability: lookup.attachment.capability,
+      });
+      streamVersion = attached.streamVersion;
+    } else {
+      const latestExecution =
+        await this.dependencies.controlPlane.restoreExecution({
+          authorization: input.authorization,
+          reviewRevisionHash: input.revision.reviewRevisionHash,
+        });
+      const adoptionExecution = refreshExecutionAdmission(
+        input.execution,
+        latestExecution
+      );
+      const adopted = await this.dependencies.controlPlane.adoptObservation({
+        authorization: input.authorization,
+        idempotencyKey: this.idempotencyKey('adopt', [
+          input.execution.executionId,
+          input.workSlot.workSlotId,
+          lookup.observation.observationId,
+          lookup.attachment.sourceLeaseId,
+          lookup.attachment.sourceFencingToken,
+        ]),
+        execution: adoptionExecution,
+        workSlot: input.workSlot,
+        planHash: input.planHash,
+        manifest: input.manifest,
+        observation: lookup.observation,
+        source: lookup.attachment,
+      });
+      streamVersion = adopted.streamVersion;
+    }
+
+    input.onEvent({
+      type: ReviewOrchestrationEventType.SlotSatisfied,
+      workSlotId: input.workSlot.workSlotId,
+    });
+    return { observation: lookup.observation, streamVersion };
+  }
+
+  private async replayCandidate(input: {
+    readonly authorization: ReviewRunAuthorization;
+    readonly execution: ReviewExecutionAdmission;
+    readonly workSlot: ReviewWorkSlotPlan;
+    readonly revision: ReviewRevisionFacts;
+    readonly candidate: Extract<
+      Awaited<ReturnType<ReviewActionV2ControlPlanePort['lookupEvidence']>>,
+      { readonly kind: ReviewEvidenceLookupKind.ReplayRequired }
+    >;
+  }): Promise<{ readonly attachmentCapability: string } | null> {
+    if (
+      !this.dependencies.contextReplay ||
+      !this.dependencies.contextAttestations
+    ) {
+      return null;
+    }
+    try {
+      const replay = await this.dependencies.contextReplay.replay({
+        candidate: input.candidate,
+        targetRevision: input.revision,
+      });
+      if (!replay) return null;
+      await this.assertRevisionCurrent(input.revision);
+      return this.dependencies.contextAttestations.commitContextReplay({
+        authorization: input.authorization,
+        execution: input.execution,
+        workSlot: input.workSlot,
+        candidate: input.candidate,
+        result: replay,
+      });
+    } catch {
+      return null;
+    }
   }
 
   private async renewLease(
@@ -732,7 +846,9 @@ export class RunT0ReviewOrchestration {
   private async executeInvocationWithRevisionWatch(input: {
     readonly signal: AbortSignal;
     readonly invocation: PreparedReviewInvocation;
+    readonly manifest: ProviderInvocationManifest;
     readonly lease: ReviewInvocationLease;
+    readonly sourceExecutionId: string;
     readonly revision: ReviewRevisionFacts;
   }): Promise<ReviewObservationPayload> {
     const abort = new AbortController();
@@ -741,7 +857,10 @@ export class RunT0ReviewOrchestration {
     if (input.signal.aborted) relayLeaseAbort();
     else
       input.signal.addEventListener('abort', relayLeaseAbort, { once: true });
+    const drainOnSupersession =
+      input.invocation.manifestFacts.executionProfile === 'context_gateway_v1';
     const monitor = async () => {
+      if (drainOnSupersession) return;
       while (!stopped && !abort.signal.aborted) {
         await this.dependencies.delay.sleep(this.revisionPollIntervalMs);
         if (stopped || abort.signal.aborted) return;
@@ -759,7 +878,10 @@ export class RunT0ReviewOrchestration {
     try {
       return await this.dependencies.invocations.execute({
         invocation: input.invocation,
+        manifest: input.manifest,
         lease: input.lease,
+        sourceExecutionId: input.sourceExecutionId,
+        sourceReviewRevisionHash: input.revision.reviewRevisionHash,
         signal: abort.signal,
       });
     } catch (error) {

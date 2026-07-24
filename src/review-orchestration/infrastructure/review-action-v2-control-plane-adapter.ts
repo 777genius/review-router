@@ -4,6 +4,9 @@ import {
   reviewActionV2PublishedProtocolVersion,
   reviewActionV2PublishedSchemaDigest,
   ReviewActionV2OperationId,
+  ReviewContextGatewayOpenResultStatus,
+  ReviewContextGatewaySealResultStatus,
+  ReviewContextReplayCommitResultStatus,
   ReviewEvidenceCommitResultStatus,
   ReviewEvidenceLookupResultStatus,
   ReviewExecutionMutationResultStatus,
@@ -13,6 +16,7 @@ import {
   ReviewPublicationRequestResultStatus,
   ReviewPublicationStatusResultStatus,
   ReviewRunAuthorizationResultStatus,
+  type ReviewEvidenceLookupResult,
   type ReviewExecutionStartResult,
 } from '../../control-plane/generated/review-action-v2/review-action-v2';
 import {
@@ -21,7 +25,9 @@ import {
   ReviewPublicationState,
   RestoredReviewExecutionState,
   RestoredReviewWorkSlotState,
+  type AcceptedReviewObservation,
   type ReviewActionV2ControlPlanePort,
+  type ReviewContextAttestationPort,
   type ReviewExecutionAdmission,
   type ReviewInvocationLease,
   type ReviewProtocolLimits,
@@ -30,7 +36,11 @@ import {
   type ReviewWorkSlotPlan,
 } from '../application';
 
-export class ReviewActionV2ControlPlaneAdapter implements ReviewActionV2ControlPlanePort {
+export class ReviewActionV2ControlPlaneAdapter
+  implements ReviewActionV2ControlPlanePort, ReviewContextAttestationPort
+{
+  private activeAuthorization: ReviewRunAuthorization | null = null;
+
   constructor(private readonly client: ReviewActionV2Client) {}
 
   async authorize(input: {
@@ -54,7 +64,7 @@ export class ReviewActionV2ControlPlaneAdapter implements ReviewActionV2ControlP
     ) {
       throw new Error('review_action_v2_authorization_denied');
     }
-    return {
+    const authorization = {
       authorizationId: requireString(
         result.authorizationId,
         'authorization_id'
@@ -80,6 +90,176 @@ export class ReviewActionV2ControlPlaneAdapter implements ReviewActionV2ControlP
       limits: parseProtocolLimits(result.protocolLimitsCanonicalJson),
       facts: parseAuthorizationFacts(result.authorizationFactsCanonicalJson),
     };
+    this.activeAuthorization = authorization;
+    return authorization;
+  }
+
+  async openGatewaySession(
+    input: Parameters<ReviewContextAttestationPort['openGatewaySession']>[0]
+  ): ReturnType<ReviewContextAttestationPort['openGatewaySession']> {
+    const authorization = this.requireActiveAuthorization();
+    const result = await this.client.execute(
+      ReviewActionV2OperationId.ReviewContextGatewayOpen,
+      {
+        authorizationToken: authorization.authorizationToken,
+        leaseCapability: input.invocationLease.leaseCapability,
+        idempotencyKey: deterministicIdempotencyKey('context-gateway-open', [
+          input.invocationLease.attemptId,
+          input.invocationLease.leaseId,
+          input.invocationLease.fencingToken,
+          input.sourceExecutionId,
+          input.sourceWorkSlotId,
+          input.sourceReviewRevisionHash,
+          input.checkoutTreeOid,
+          input.gatewayPolicyVersion,
+          input.gatewayBinaryHash,
+          input.confinementEvidenceHash,
+        ]),
+        attemptId: input.invocationLease.attemptId,
+        sourceLeaseId: input.invocationLease.leaseId,
+        fencingToken: input.invocationLease.fencingToken,
+        sourceExecutionId: input.sourceExecutionId,
+        sourceWorkSlotId: input.sourceWorkSlotId,
+        sourceReviewRevisionHash: input.sourceReviewRevisionHash,
+        checkoutTreeOid: input.checkoutTreeOid,
+        gatewayPolicyVersion: input.gatewayPolicyVersion,
+        gatewayBinaryHash: input.gatewayBinaryHash,
+        confinementEvidenceHash: input.confinementEvidenceHash,
+      }
+    );
+    if (
+      result.status !== ReviewContextGatewayOpenResultStatus.Opened &&
+      result.status !== ReviewContextGatewayOpenResultStatus.Idempotent
+    ) {
+      throw new Error(`review_action_v2_context_gateway_open_${result.status}`);
+    }
+    return Object.freeze({
+      sessionId: requireString(result.sessionId, 'context_gateway_session_id'),
+      eventChainSeedHash: requireDigest(
+        result.eventChainSeedHash,
+        'context_gateway_event_chain_seed_hash'
+      ),
+      sealCapability: requireString(
+        result.sealCapability,
+        'context_gateway_seal_capability'
+      ),
+      gatewaySessionSecret: requireString(
+        result.gatewaySessionSecret,
+        'context_gateway_session_secret'
+      ),
+      expiresAt: requireTimestamp(
+        result.expiresAt,
+        'context_gateway_expires_at'
+      ),
+    });
+  }
+
+  async sealGatewaySession(
+    input: Parameters<ReviewContextAttestationPort['sealGatewaySession']>[0]
+  ): ReturnType<ReviewContextAttestationPort['sealGatewaySession']> {
+    const authorization = this.requireActiveAuthorization();
+    const result = await this.client.execute(
+      ReviewActionV2OperationId.ReviewContextGatewaySeal,
+      {
+        authorizationToken: authorization.authorizationToken,
+        leaseCapability: input.invocationLease.leaseCapability,
+        idempotencyKey: deterministicIdempotencyKey('context-gateway-seal', [
+          input.session.sessionId,
+          input.transcriptHash,
+          input.replayMaterialHash,
+          input.terminalOutcomeHash,
+        ]),
+        sessionId: input.session.sessionId,
+        sealCapability: input.session.sealCapability,
+        attemptId: input.invocationLease.attemptId,
+        sourceLeaseId: input.invocationLease.leaseId,
+        fencingToken: input.invocationLease.fencingToken,
+        providerSucceeded: input.providerSucceeded,
+        schemaValidated: input.schemaValidated,
+        fullyConsumed: input.fullyConsumed,
+        actualModel: input.actualModel,
+        terminalOutcomeHash: input.terminalOutcomeHash,
+        transcriptCanonicalJson: input.transcriptCanonicalJson,
+        transcriptHash: input.transcriptHash,
+        replayMaterialCanonicalJson: input.replayMaterialCanonicalJson,
+        replayMaterialHash: input.replayMaterialHash,
+      }
+    );
+    if (
+      result.status === ReviewContextGatewaySealResultStatus.Denied ||
+      result.status === ReviewContextGatewaySealResultStatus.Conflict
+    ) {
+      return null;
+    }
+    if (
+      result.status !== ReviewContextGatewaySealResultStatus.Accepted &&
+      result.status !== ReviewContextGatewaySealResultStatus.Idempotent
+    ) {
+      throw new Error(`review_action_v2_context_gateway_seal_${result.status}`);
+    }
+    return Object.freeze({
+      attestationId: requireString(
+        result.attestationId,
+        'context_dependency_attestation_id'
+      ),
+      attestationHash: requireDigest(
+        result.attestationHash,
+        'context_dependency_attestation_hash'
+      ),
+    });
+  }
+
+  async commitContextReplay(
+    input: Parameters<ReviewContextAttestationPort['commitContextReplay']>[0]
+  ): ReturnType<ReviewContextAttestationPort['commitContextReplay']> {
+    const result = await this.client.execute(
+      ReviewActionV2OperationId.ReviewContextReplayCommit,
+      {
+        authorizationToken: input.authorization.authorizationToken,
+        idempotencyKey: deterministicIdempotencyKey('context-replay-commit', [
+          input.execution.executionId,
+          input.workSlot.workSlotId,
+          input.candidate.attestationId,
+          input.candidate.attestationHash,
+          input.result.targetCheckoutTreeOid,
+          input.result.replayResultHash,
+        ]),
+        executionId: input.execution.executionId,
+        workSlotId: input.workSlot.workSlotId,
+        attestationId: input.candidate.attestationId,
+        attestationHash: input.candidate.attestationHash,
+        targetReviewRevisionHash: input.authorization.facts.reviewRevisionHash,
+        targetCheckoutTreeOid: input.result.targetCheckoutTreeOid,
+        replayCapability: input.candidate.replayCapability,
+        replayResultCanonicalJson: input.result.replayResultCanonicalJson,
+        replayResultHash: input.result.replayResultHash,
+      }
+    );
+    if (
+      result.status === ReviewContextReplayCommitResultStatus.Denied ||
+      result.status === ReviewContextReplayCommitResultStatus.Conflict
+    ) {
+      return null;
+    }
+    if (
+      result.status !== ReviewContextReplayCommitResultStatus.Accepted &&
+      result.status !== ReviewContextReplayCommitResultStatus.Idempotent
+    ) {
+      throw new Error(`review_action_v2_context_replay_${result.status}`);
+    }
+    return Object.freeze({
+      attachmentCapability: requireString(
+        result.attachmentCapability,
+        'context_replay_attachment_capability'
+      ),
+    });
+  }
+
+  private requireActiveAuthorization(): ReviewRunAuthorization {
+    if (!this.activeAuthorization) {
+      throw new Error('review_action_v2_context_gateway_unauthorized');
+    }
+    return this.activeAuthorization;
   }
 
   async restoreSnapshot(input: {
@@ -210,6 +390,44 @@ export class ReviewActionV2ControlPlaneAdapter implements ReviewActionV2ControlP
     if (result.status === ReviewEvidenceLookupResultStatus.Miss) {
       return { kind: ReviewEvidenceLookupKind.Miss };
     }
+    if (result.status === ReviewEvidenceLookupResultStatus.ReplayRequired) {
+      const observation = parseLookupObservation(result, input);
+      const attestationId = requireString(
+        result.contextDependencyAttestationId,
+        'context_dependency_attestation_id'
+      );
+      const attestationHash = requireDigest(
+        result.contextDependencyAttestationHash,
+        'context_dependency_attestation_hash'
+      );
+      const replayPlanCanonicalJson = requireCanonicalJson(
+        result.contextReplayPlanCanonicalJson,
+        'context_replay_plan'
+      );
+      const replayPlanHash = requireDigest(
+        result.contextReplayPlanHash,
+        'context_replay_plan_hash'
+      );
+      if (
+        digest(replayPlanCanonicalJson) !== replayPlanHash ||
+        observation.contextDependencyAttestationId !== attestationId ||
+        observation.contextDependencyAttestationHash !== attestationHash
+      ) {
+        throw new Error('review_action_v2_context_replay_identity_mismatch');
+      }
+      return {
+        kind: ReviewEvidenceLookupKind.ReplayRequired,
+        observation,
+        attestationId,
+        attestationHash,
+        replayCapability: requireString(
+          result.contextReplayCapability,
+          'context_replay_capability'
+        ),
+        replayPlanCanonicalJson,
+        replayPlanHash,
+      };
+    }
     if (
       result.status === ReviewEvidenceLookupResultStatus.Hit ||
       result.status === ReviewEvidenceLookupResultStatus.Shadow
@@ -221,21 +439,7 @@ export class ReviewActionV2ControlPlaneAdapter implements ReviewActionV2ControlP
       ) {
         return { kind: ReviewEvidenceLookupKind.Miss };
       }
-      const payloadCanonicalJson = requireCanonicalJson(
-        result.payloadCanonicalJson,
-        'evidence_payload'
-      );
-      const payloadHash = requireDigest(result.payloadHash, 'payload_hash');
-      const byteCount = requireNonNegativeInteger(
-        result.byteCount,
-        'byte_count'
-      );
-      if (
-        payloadHash !== digest(payloadCanonicalJson) ||
-        byteCount !== Buffer.byteLength(payloadCanonicalJson, 'utf8')
-      ) {
-        throw new Error('review_action_v2_lookup_payload_identity_mismatch');
-      }
+      const observation = parseLookupObservation(result, input);
       const attachmentCapability = result.attachmentCapability ?? null;
       const attachmentKind = result.attachmentKind ?? null;
       const attachment = attachmentCapability
@@ -253,34 +457,7 @@ export class ReviewActionV2ControlPlaneAdapter implements ReviewActionV2ControlP
       return {
         kind: ReviewEvidenceLookupKind.Hit,
         attachment,
-        observation: {
-          observationId: requireString(result.observationId, 'observation_id'),
-          payloadCanonicalJson,
-          payloadHash,
-          byteCount,
-          findingCount: requireNonNegativeInteger(
-            result.findingCount,
-            'finding_count'
-          ),
-          actualModel: requireString(result.actualModel, 'actual_model'),
-          qualityFlags: requireStringArray(
-            result.qualityFlags,
-            'quality_flags'
-          ),
-          transportAttemptCount: requirePositiveInteger(
-            result.transportAttemptCount,
-            'transport_attempt_count'
-          ),
-          schemaValidated: true,
-          fullyConsumed: true,
-          eligibilityPolicyVersion: requireString(
-            result.eligibilityPolicyVersion,
-            'eligibility_policy_version'
-          ),
-          providerKind: input.workSlot.providerKind,
-          providerInvocationKey: input.manifest.providerInvocationKey,
-          providerVoteIdentityHash: input.manifest.providerVoteIdentityHash,
-        },
+        observation,
       };
     }
     throw new Error('review_action_v2_lookup_status_unknown');
@@ -414,6 +591,10 @@ export class ReviewActionV2ControlPlaneAdapter implements ReviewActionV2ControlP
         schemaValidated: input.observation.schemaValidated,
         fullyConsumed: input.observation.fullyConsumed,
         actualModel: input.observation.actualModel,
+        contextDependencyAttestationId:
+          input.observation.contextDependencyAttestationId ?? null,
+        contextDependencyAttestationHash:
+          input.observation.contextDependencyAttestationHash ?? null,
         payloadCanonicalJson: input.observation.payloadCanonicalJson,
         payloadHash: input.observation.payloadHash,
         qualityFlags: input.observation.qualityFlags,
@@ -606,6 +787,67 @@ export class ReviewActionV2ControlPlaneAdapter implements ReviewActionV2ControlP
       },
     };
   }
+}
+
+function parseLookupObservation(
+  result: ReviewEvidenceLookupResult,
+  input: Parameters<ReviewActionV2ControlPlanePort['lookupEvidence']>[0]
+): AcceptedReviewObservation {
+  const payloadCanonicalJson = requireCanonicalJson(
+    result.payloadCanonicalJson,
+    'evidence_payload'
+  );
+  const payloadHash = requireDigest(result.payloadHash, 'payload_hash');
+  const byteCount = requireNonNegativeInteger(result.byteCount, 'byte_count');
+  if (
+    payloadHash !== digest(payloadCanonicalJson) ||
+    byteCount !== Buffer.byteLength(payloadCanonicalJson, 'utf8')
+  ) {
+    throw new Error('review_action_v2_lookup_payload_identity_mismatch');
+  }
+  const contextAttestationId = result.contextDependencyAttestationId ?? null;
+  const contextAttestationHash =
+    result.contextDependencyAttestationHash ?? null;
+  if ((contextAttestationId === null) !== (contextAttestationHash === null)) {
+    throw new Error('review_action_v2_context_attestation_reference_invalid');
+  }
+  return Object.freeze({
+    observationId: requireString(result.observationId, 'observation_id'),
+    payloadCanonicalJson,
+    payloadHash,
+    byteCount,
+    findingCount: requireNonNegativeInteger(
+      result.findingCount,
+      'finding_count'
+    ),
+    actualModel: requireString(result.actualModel, 'actual_model'),
+    qualityFlags: requireStringArray(result.qualityFlags, 'quality_flags'),
+    transportAttemptCount: requirePositiveInteger(
+      result.transportAttemptCount,
+      'transport_attempt_count'
+    ),
+    schemaValidated: true,
+    fullyConsumed: true,
+    eligibilityPolicyVersion: requireString(
+      result.eligibilityPolicyVersion,
+      'eligibility_policy_version'
+    ),
+    providerKind: input.workSlot.providerKind,
+    providerInvocationKey: input.manifest.providerInvocationKey,
+    providerVoteIdentityHash: input.manifest.providerVoteIdentityHash,
+    ...(contextAttestationId === null
+      ? {}
+      : {
+          contextDependencyAttestationId: requireString(
+            contextAttestationId,
+            'context_dependency_attestation_id'
+          ),
+          contextDependencyAttestationHash: requireDigest(
+            contextAttestationHash,
+            'context_dependency_attestation_hash'
+          ),
+        }),
+  });
 }
 
 function parseExecutionAdmission(
@@ -1202,4 +1444,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function deterministicIdempotencyKey(
+  purpose: string,
+  parts: readonly string[]
+): string {
+  return `rr:${purpose}:${digest(
+    JSON.stringify({
+      parts,
+      purpose,
+    })
+  )}`;
 }

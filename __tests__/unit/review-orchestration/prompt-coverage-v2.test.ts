@@ -1,9 +1,11 @@
 import { PromptBuilder } from '../../../src/analysis/llm/prompt-builder';
 import type { PRContext, ReviewConfig } from '../../../src/types';
 import {
+  createProviderVisibleReviewCoverage,
   createReviewPromptCoverageManifest,
   isReviewPromptCoverageComplete,
   ReviewPromptPathCoverageKind,
+  serializeProviderVisibleReviewCoverage,
 } from '../../../src/review-orchestration/domain';
 
 describe('prepared review prompt v2 coverage', () => {
@@ -77,6 +79,38 @@ describe('prepared review prompt v2 coverage', () => {
         },
       ])
     ).toThrow('review_prompt_coverage_untrusted_fact');
+  });
+
+  it('keeps provider-visible coverage stable across work slots and revisions', () => {
+    const pathCoverage = [
+      {
+        path: 'src/a.ts',
+        kind: ReviewPromptPathCoverageKind.FullPatch,
+        contentHash: 'a'.repeat(64),
+      },
+    ];
+    const first = createReviewPromptCoverageManifest({
+      workSlotId: 'slot-first',
+      reviewRevisionHash: '1'.repeat(64),
+      assignedPaths: ['src/a.ts'],
+      pathCoverage,
+    });
+    const second = createReviewPromptCoverageManifest({
+      workSlotId: 'slot-second',
+      reviewRevisionHash: '2'.repeat(64),
+      assignedPaths: ['src/a.ts'],
+      pathCoverage,
+    });
+
+    expect(
+      serializeProviderVisibleReviewCoverage(
+        createProviderVisibleReviewCoverage(first)
+      )
+    ).toBe(
+      serializeProviderVisibleReviewCoverage(
+        createProviderVisibleReviewCoverage(second)
+      )
+    );
   });
 });
 

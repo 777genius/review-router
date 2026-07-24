@@ -4,6 +4,9 @@ import {
   ReviewEvidenceLookupResultStatus,
   ReviewEvidenceCommitResultStatus,
   ReviewActionV2OperationId,
+  ReviewContextGatewayOpenResultStatus,
+  ReviewContextGatewaySealResultStatus,
+  ReviewContextReplayCommitResultStatus,
   ReviewExecutionMutationResultStatus,
   ReviewExecutionRestoreResultStatus,
   ReviewExecutionStartResultStatus,
@@ -44,6 +47,126 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
         facts: authorizationFacts,
       })
     );
+  });
+
+  it('opens and seals a target-bound context gateway session', async () => {
+    const execute = jest
+      .fn()
+      .mockResolvedValueOnce(authorizationResponse())
+      .mockResolvedValueOnce({
+        status: ReviewContextGatewayOpenResultStatus.Opened,
+        sessionId: 'session-1',
+        eventChainSeedHash: hash('seed'),
+        gatewaySessionSecret: Buffer.alloc(32, 1).toString('base64url'),
+        sealCapability: 'seal.capability',
+        expiresAt: '2026-07-22T12:05:00.000Z',
+      })
+      .mockResolvedValueOnce({
+        status: ReviewContextGatewaySealResultStatus.Accepted,
+        attestationId: 'attestation-1',
+        attestationHash: hash('attestation'),
+      });
+    const adapter = createAdapter(execute);
+    await adapter.authorize({ oidcToken: 'oidc.token' });
+
+    const session = await adapter.openGatewaySession({
+      invocationLease: baseLease,
+      sourceExecutionId: execution.executionId,
+      sourceWorkSlotId: workSlot.workSlotId,
+      sourceReviewRevisionHash: authorization.facts.reviewRevisionHash,
+      checkoutTreeOid: '7'.repeat(40),
+      gatewayPolicyVersion: 'context-gateway-v2',
+      gatewayBinaryHash: hash('gateway'),
+      confinementEvidenceHash: hash('confinement'),
+    });
+    await expect(
+      adapter.sealGatewaySession({
+        invocationLease: baseLease,
+        session,
+        providerSucceeded: true,
+        schemaValidated: true,
+        fullyConsumed: true,
+        actualModel: 'gpt-5.6-sol',
+        terminalOutcomeHash: hash('outcome'),
+        transcriptCanonicalJson: '{"transcriptVersion":1}',
+        transcriptHash: hash('{"transcriptVersion":1}'),
+        replayMaterialCanonicalJson: '{"replayMaterialVersion":1}',
+        replayMaterialHash: hash('{"replayMaterialVersion":1}'),
+      })
+    ).resolves.toEqual({
+      attestationId: 'attestation-1',
+      attestationHash: hash('attestation'),
+    });
+    expect(execute).toHaveBeenNthCalledWith(
+      2,
+      ReviewActionV2OperationId.ReviewContextGatewayOpen,
+      expect.objectContaining({
+        leaseCapability: baseLease.leaseCapability,
+        sourceExecutionId: execution.executionId,
+      })
+    );
+  });
+
+  it('parses replay-required evidence and commits its target proof', async () => {
+    const payloadCanonicalJson = canonicalJson({ findings: [] });
+    const replayPlanCanonicalJson = canonicalJson({ planVersion: 1 });
+    const execute = jest
+      .fn()
+      .mockResolvedValueOnce({
+        status: ReviewEvidenceLookupResultStatus.ReplayRequired,
+        observationId: 'observation-1',
+        payloadCanonicalJson,
+        payloadHash: hash(payloadCanonicalJson),
+        byteCount: Buffer.byteLength(payloadCanonicalJson),
+        findingCount: 0,
+        actualModel: 'gpt-5.6-sol',
+        qualityFlags: [],
+        transportAttemptCount: 1,
+        eligibilityPolicyVersion: 't2-v1',
+        contextDependencyAttestationId: 'attestation-1',
+        contextDependencyAttestationHash: hash('attestation'),
+        contextReplayCapability: 'replay.capability',
+        contextReplayPlanCanonicalJson: replayPlanCanonicalJson,
+        contextReplayPlanHash: hash(replayPlanCanonicalJson),
+      })
+      .mockResolvedValueOnce({
+        status: ReviewContextReplayCommitResultStatus.Accepted,
+        replayProofId: 'proof-1',
+        replayProofHash: hash('proof'),
+        attachmentCapability: 'attachment.capability',
+      });
+    const adapter = createAdapter(execute);
+    const candidate = await adapter.lookupEvidence({
+      authorization,
+      execution,
+      workSlot,
+      planHash: execution.restoredExecution.planHash,
+      manifest: providerManifest,
+    });
+    expect(candidate).toMatchObject({
+      kind: ReviewEvidenceLookupKind.ReplayRequired,
+      attestationId: 'attestation-1',
+      replayPlanHash: hash(replayPlanCanonicalJson),
+    });
+    if (candidate.kind !== ReviewEvidenceLookupKind.ReplayRequired) {
+      throw new Error('expected replay candidate');
+    }
+
+    await expect(
+      adapter.commitContextReplay({
+        authorization,
+        execution,
+        workSlot,
+        candidate,
+        result: {
+          targetCheckoutTreeOid: '8'.repeat(40),
+          replayResultCanonicalJson: '{"manifestVersion":2}',
+          replayResultHash: hash('{"manifestVersion":2}'),
+        },
+      })
+    ).resolves.toEqual({
+      attachmentCapability: 'attachment.capability',
+    });
   });
 
   it('uses the generated execution version needed by finalize', async () => {
@@ -394,6 +517,51 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
         },
       })
     ).resolves.toMatchObject({ historicalOnly: false });
+    expect(execute).toHaveBeenCalledWith(
+      ReviewActionV2OperationId.ReviewEvidenceCommit,
+      expect.objectContaining({
+        contextDependencyAttestationId: null,
+        contextDependencyAttestationHash: null,
+      })
+    );
+  });
+
+  it('commits the context attestation identity as an exact pair', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewEvidenceCommitResultStatus.Accepted,
+      observationId: 'observation-1',
+      eligibilityPolicyVersion: 't0-v1',
+    });
+    const attestationId = 'attestation-1';
+    const attestationHash = hash('attestation');
+
+    await createAdapter(execute).commitEvidence({
+      authorization,
+      idempotencyKey: 'idem:commit:attested',
+      lease: baseLease,
+      ownerIdHash: hash('owner'),
+      observation: {
+        payloadCanonicalJson: '{"findings":[]}',
+        payloadHash: hash('{"findings":[]}'),
+        byteCount: 15,
+        findingCount: 0,
+        actualModel: 'gpt-test',
+        qualityFlags: [],
+        transportAttemptCount: 1,
+        schemaValidated: true,
+        fullyConsumed: true,
+        contextDependencyAttestationId: attestationId,
+        contextDependencyAttestationHash: attestationHash,
+      },
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      ReviewActionV2OperationId.ReviewEvidenceCommit,
+      expect.objectContaining({
+        contextDependencyAttestationId: attestationId,
+        contextDependencyAttestationHash: attestationHash,
+      })
+    );
   });
 
   it('adopts same-execution evidence with exact source and response identities', async () => {
@@ -461,6 +629,21 @@ function createAdapter(execute: jest.Mock) {
   return new ReviewActionV2ControlPlaneAdapter({
     execute,
   } as unknown as ReviewActionV2Client);
+}
+
+function authorizationResponse() {
+  return {
+    status: ReviewRunAuthorizationResultStatus.Authorized,
+    authorizationId: authorization.authorizationId,
+    authorizationToken: authorization.authorizationToken,
+    producerReleaseId: authorization.producerReleaseId,
+    protocolLimitsProfileId: authorization.protocolLimitsProfileId,
+    operationalSloProfileId: authorization.operationalSloProfileId,
+    mutationEpoch: authorization.mutationEpoch,
+    expiresAt: authorization.expiresAt,
+    protocolLimitsCanonicalJson: JSON.stringify(protocolLimits),
+    authorizationFactsCanonicalJson: canonicalJson(authorizationFacts),
+  };
 }
 
 const protocolLimits = {

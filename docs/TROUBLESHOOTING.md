@@ -19,18 +19,22 @@ This guide helps you diagnose and fix common issues with ReviewRouter.
 ### Problem: `npm install` fails with dependency errors
 
 **Symptoms:**
+
 ```text
 npm ERR! code ERESOLVE
 npm ERR! ERESOLVE unable to resolve dependency tree
 ```
 
 **Solutions:**
+
 1. **Update Node.js:** Ensure you're running Node.js 20 or later
+
    ```bash
    node --version  # Should be v20.x or higher
    ```
 
 2. **Clear npm cache:**
+
    ```bash
    npm cache clean --force
    rm -rf node_modules package-lock.json
@@ -45,18 +49,21 @@ npm ERR! ERESOLVE unable to resolve dependency tree
 ### Problem: Tree-sitter installation fails
 
 **Symptoms:**
+
 ```text
 Error: Cannot find module 'tree-sitter'
 gyp ERR! build error
 ```
 
 **Solutions:**
+
 1. **Install build tools:**
    - **macOS:** `xcode-select --install`
    - **Ubuntu/Debian:** `sudo apt-get install build-essential`
    - **Windows:** Install Visual Studio Build Tools
 
 2. **Rebuild native modules:**
+
    ```bash
    npm rebuild tree-sitter
    ```
@@ -70,12 +77,14 @@ gyp ERR! build error
 ### Problem: `OPENROUTER_API_KEY` not found or invalid
 
 **Symptoms:**
+
 ```text
 Error: OPENROUTER_API_KEY is required
 Error: API key for openrouter is required
 ```
 
 **Solutions:**
+
 1. **Verify key is set in GitHub Secrets:**
    - Go to Repository Settings → Secrets and variables → Actions
    - Ensure `OPENROUTER_API_KEY` exists and is correct
@@ -95,30 +104,35 @@ Error: API key for openrouter is required
 ### Problem: Rate limiting errors
 
 **Symptoms:**
+
 ```text
 Error: Rate limit exceeded
 status: 'rate-limited'
 ```
 
 **Solutions:**
+
 1. **Reduce parallel providers:**
+
    ```yaml
-   PROVIDER_MAX_PARALLEL: '2'  # Default is 3
+   PROVIDER_MAX_PARALLEL: '2' # Default is 3
    ```
 
 2. **Enable incremental review:**
+
    ```yaml
-   INCREMENTAL_ENABLED: 'true'  # Reduces API calls on updates
+   INCREMENTAL_ENABLED: 'true' # Reduces API calls on updates
    ```
 
 3. **Use provider rotation:**
+
    ```yaml
-   PROVIDER_LIMIT: '3'  # Use fewer providers per review
+   PROVIDER_LIMIT: '3' # Use fewer providers per review
    ```
 
 4. **Reduce structured-output retry attempts:**
    ```yaml
-   PROVIDER_RETRIES: '1'  # One total attempt, no JSON retry
+   PROVIDER_RETRIES: '1' # One total attempt, no JSON retry
    ```
 
 ---
@@ -128,6 +142,7 @@ status: 'rate-limited'
 ### Problem: All providers fail
 
 **Symptoms:**
+
 ```text
 Providers used: 3 (success 0, failed 3)
 Review completed with 0 findings
@@ -157,19 +172,23 @@ Check the "Raw provider outputs" section in the PR comment for specific error me
 ### Problem: Specific provider times out
 
 **Symptoms:**
+
 ```text
 Provider openrouter/model: timeout (30.0s)
 ```
 
 **Solutions:**
+
 1. **Increase timeout:**
+
    ```yaml
-   RUN_TIMEOUT_SECONDS: '900'  # Default is 600 (10 min)
+   RUN_TIMEOUT_SECONDS: '900' # Default is 600 (10 min)
    ```
 
 2. **Reduce diff size:**
+
    ```yaml
-   DIFF_MAX_BYTES: '80000'  # Default is 120000
+   DIFF_MAX_BYTES: '80000' # Default is 120000
    ```
 
 3. **Exclude large files:**
@@ -180,13 +199,16 @@ Provider openrouter/model: timeout (30.0s)
 ### Problem: Free providers not working
 
 **Symptoms:**
+
 ```text
 Error: Model requires credits
 Error: No free credits available
 ```
 
 **Solutions:**
+
 1. **Use confirmed free models:**
+
    ```yaml
    REVIEW_PROVIDERS: |
      openrouter/google/gemini-2.0-flash-exp:free,
@@ -206,31 +228,37 @@ Error: No free credits available
 
 **Diagnosis:**
 Check review duration in PR comment:
+
 ```text
 Duration: 300.0s • Cost: $0.1234 • Tokens: 50000
 ```
 
 **Solutions:**
+
 1. **Enable incremental review (fastest):**
+
    ```yaml
-   INCREMENTAL_ENABLED: 'true'  # 6x faster on PR updates
+   INCREMENTAL_ENABLED: 'true' # 6x faster on PR updates
    ```
 
 2. **Reduce provider count:**
+
    ```yaml
-   PROVIDER_LIMIT: '2'  # Use fewer providers
-   PROVIDER_MAX_PARALLEL: '2'  # Reduce parallelism
+   PROVIDER_LIMIT: '2' # Use fewer providers
+   PROVIDER_MAX_PARALLEL: '2' # Reduce parallelism
    ```
 
 3. **Exclude unnecessary files:**
+
    ```yaml
    EXCLUDE_PATTERNS: '**/*.test.ts,**/*.spec.ts,dist/**,node_modules/**'
    ```
 
 4. **Disable expensive features:**
+
    ```yaml
-   ENABLE_AST_ANALYSIS: 'false'  # Skip AST analysis
-   GRAPH_ENABLED: 'false'  # Skip dependency graph
+   ENABLE_AST_ANALYSIS: 'false' # Skip AST analysis
+   GRAPH_ENABLED: 'false' # Skip dependency graph
    ```
 
 5. **Use faster models:**
@@ -240,13 +268,16 @@ Duration: 300.0s • Cost: $0.1234 • Tokens: 50000
 ### Problem: High API costs
 
 **Symptoms:**
+
 ```text
 Cost: $5.00 per review
 Total monthly cost: $500+
 ```
 
 **Solutions:**
+
 1. **Use free providers:**
+
    ```yaml
    REVIEW_PROVIDERS: |
      openrouter/google/gemini-2.0-flash-exp:free,
@@ -254,52 +285,60 @@ Total monthly cost: $500+
    ```
 
 2. **Enable incremental review:**
+
    ```yaml
-   INCREMENTAL_ENABLED: 'true'  # 80% cost reduction on updates
+   INCREMENTAL_ENABLED: 'true' # 80% cost reduction on updates
    ```
 
 3. **Set budget limit:**
+
    ```yaml
-   BUDGET_MAX_USD: '0.10'  # Skip reviews exceeding $0.10
+   BUDGET_MAX_USD: '0.10' # Skip reviews exceeding $0.10
    ```
 
 4. **Enable caching:**
+
    ```yaml
-   ENABLE_CACHING: 'true'  # Cache findings for reuse
+   ENABLE_CACHING: 'true' # Cache findings for reuse
    ```
 
 5. **Review fewer files:**
    ```yaml
-   MAX_CHANGED_FILES: '50'  # Skip reviews with >50 files
+   MAX_CHANGED_FILES: '50' # Skip reviews with >50 files
    ```
 
 ### Problem: Action runs out of memory
 
 **Symptoms:**
+
 ```text
 Error: JavaScript heap out of memory
 FATAL ERROR: Reached heap limit
 ```
 
 **Solutions:**
+
 1. **Reduce diff size:**
+
    ```yaml
-   DIFF_MAX_BYTES: '50000'  # Smaller chunks
+   DIFF_MAX_BYTES: '50000' # Smaller chunks
    ```
 
 2. **Exclude large files:**
+
    ```yaml
    EXCLUDE_PATTERNS: '**/*.lock,**/*.svg,**/*.min.js'
    ```
 
 3. **Use smaller runner:** (Self-hosted only)
+
    ```yaml
-   runs-on: ubuntu-latest  # Has more memory than smaller runners
+   runs-on: ubuntu-latest # Has more memory than smaller runners
    ```
 
 4. **Disable graph features:**
    ```yaml
-   GRAPH_ENABLED: 'false'  # Reduces memory usage
+   GRAPH_ENABLED: 'false' # Reduces memory usage
    ```
 
 ---
@@ -309,16 +348,19 @@ FATAL ERROR: Reached heap limit
 ### Problem: Comments not posting to PR
 
 **Symptoms:**
+
 - Action completes successfully
 - No comments appear on PR
 - No errors in logs
 
 **Solutions:**
+
 1. **Check permissions:**
+
    ```yaml
    permissions:
      contents: read
-     pull-requests: write  # Required for commenting
+     pull-requests: write # Required for commenting
    ```
 
 2. **Verify token scope:**
@@ -337,32 +379,41 @@ FATAL ERROR: Reached heap limit
 ### Problem: Duplicate comments on every commit
 
 **Symptoms:**
+
 - New comment on every push
 - Old comments remain
 
 **Solutions:**
+
 1. **Enable incremental review:**
+
    ```yaml
-   INCREMENTAL_ENABLED: 'true'  # Updates existing comment
+   INCREMENTAL_ENABLED: 'true' # Updates existing comment
    ```
 
 2. **Check workflow trigger:**
+
    ```yaml
    on:
      pull_request:
-       types: [opened, synchronize]  # Not ready_for_review
+       types: [opened, synchronize] # Not ready_for_review
    ```
 
 3. **Use concurrency control:**
+
    ```yaml
    concurrency:
      group: review-${{ github.event.pull_request.number }}
-     cancel-in-progress: true
+     cancel-in-progress: false
    ```
+
+   This keeps the current confined invocation alive long enough to seal
+   reusable evidence. GitHub retains only the latest pending run for the PR.
 
 ### Problem: Fork PRs fail with secrets error
 
 **Symptoms:**
+
 ```text
 ⚠️  Skipping review for fork PR without OPENROUTER_API_KEY
 Fork PRs cannot access repository secrets
@@ -372,6 +423,7 @@ Fork PRs cannot access repository secrets
 This is expected behavior for security. Fork PRs don't have access to repository secrets.
 
 **Solutions:**
+
 1. **Manual trigger:** Use `workflow_dispatch` to manually approve and run review
 2. **Use free providers without secrets:** Not recommended for security reasons
 3. **Use GitHub App:** Create a GitHub App with proper permissions (advanced)
@@ -383,24 +435,29 @@ This is expected behavior for security. Fork PRs don't have access to repository
 ### Problem: Docker container won't start
 
 **Symptoms:**
+
 ```text
 Error: Cannot find module './dist/index.js'
 Container exits immediately
 ```
 
 **Solutions:**
+
 1. **Build dist files:**
+
    ```bash
    npm run build:prod
    ```
 
 2. **Verify dist directory:**
+
    ```bash
    ls -la dist/
    # Should contain index.js and CLI files
    ```
 
 3. **Check Docker logs:**
+
    ```bash
    docker logs mpr-review
    ```
@@ -414,12 +471,14 @@ Container exits immediately
 ### Problem: Webhook server returns 401 Unauthorized
 
 **Symptoms:**
+
 ```text
 Webhook delivery failed: 401 Unauthorized
 GitHub shows webhook delivery failure
 ```
 
 **Solutions:**
+
 1. **Verify webhook secret:**
    - Generate secure secret: `openssl rand -hex 32`
    - Set in `.env`: `WEBHOOK_SECRET=your_generated_secret`
@@ -438,13 +497,16 @@ GitHub shows webhook delivery failure
 ### Problem: Rate limit errors in self-hosted mode
 
 **Symptoms:**
+
 ```text
 Error: Rate limit exceeded for PR #123
 Too many reviews per minute
 ```
 
 **Solutions:**
+
 1. **Adjust rate limits:**
+
    ```bash
    WEBHOOK_RATE_LIMIT_PER_MINUTE=20  # Default: 10
    WEBHOOK_RATE_LIMIT_PER_PR=10      # Default: 5
@@ -467,7 +529,7 @@ Too many reviews per minute
 
 ```yaml
 env:
-  LOG_LEVEL: 'debug'  # debug, info, warn, error
+  LOG_LEVEL: 'debug' # debug, info, warn, error
   VERBOSE: 'true'
 ```
 
@@ -481,6 +543,7 @@ env:
 ### Download Artifacts
 
 Reports are saved as workflow artifacts:
+
 1. Go to workflow run
 2. Scroll to "Artifacts" section
 3. Download `review-router.json` and `review-router.sarif`
@@ -519,25 +582,27 @@ mpr review --dry-run
 
 ### Common Error Codes
 
-| Error Code | Meaning | Solution |
-|------------|---------|----------|
-| `ENOENT` | File not found | Check file paths, ensure `fetch-depth: 0` in workflow |
-| `EACCES` | Permission denied | Check file permissions, token scopes |
-| `ETIMEDOUT` | Operation timed out | Increase timeout, check network |
-| `ERESOLVE` | Dependency conflict | Clear cache, reinstall dependencies |
-| `ERR_MODULE_NOT_FOUND` | Missing dependency | Run `npm install`, rebuild native modules |
+| Error Code             | Meaning             | Solution                                              |
+| ---------------------- | ------------------- | ----------------------------------------------------- |
+| `ENOENT`               | File not found      | Check file paths, ensure `fetch-depth: 0` in workflow |
+| `EACCES`               | Permission denied   | Check file permissions, token scopes                  |
+| `ETIMEDOUT`            | Operation timed out | Increase timeout, check network                       |
+| `ERESOLVE`             | Dependency conflict | Clear cache, reinstall dependencies                   |
+| `ERR_MODULE_NOT_FOUND` | Missing dependency  | Run `npm install`, rebuild native modules             |
 
 ---
 
 ## Getting Help
 
 ### Check Documentation
+
 - [README.md](../README.md) - Quick start guide
 - [Self-Hosted Guide](./self-hosted.md) - Docker deployment
 - [Analytics Guide](./analytics.md) - Dashboard setup
 - [Plugin Development](./plugins.md) - Custom providers
 
 ### Report Issues
+
 If you've tried the solutions above and still have issues:
 
 1. **Check existing issues:** [GitHub Issues](https://github.com/777genius/review-router/issues)
@@ -549,6 +614,7 @@ If you've tried the solutions above and still have issues:
    - Relevant logs (from Actions or Docker)
 
 ### Community Support
+
 - **Discussions:** Use GitHub Discussions for questions
 - **Examples:** Check `__tests__` directory for usage examples
 - **Source Code:** All code is open source - explore to understand behavior

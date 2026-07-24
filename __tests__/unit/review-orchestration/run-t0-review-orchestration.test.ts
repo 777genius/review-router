@@ -115,6 +115,88 @@ describe('RunT0ReviewOrchestration', () => {
     );
   });
 
+  it('reuses evidence completed by the incumbent while waiting for its lease', async () => {
+    const fixture = createFixture();
+    fixture.controlPlane.lookupEvidence
+      .mockResolvedValueOnce({ kind: ReviewEvidenceLookupKind.Miss })
+      .mockResolvedValueOnce({
+        kind: ReviewEvidenceLookupKind.Hit,
+        observation: acceptedObservation,
+        attachment: {
+          kind: 'exact_revision_reuse',
+          capability: 'incumbent.attachment.capability',
+          reuseSafetyDecisionHash: hash('incumbent-reuse-safety'),
+        },
+      });
+    fixture.controlPlane.acquireInvocationLease.mockResolvedValueOnce(null);
+
+    const result = await fixture.useCase.execute(fixture.command);
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(fixture.dependencies.invocations.prepare).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+    expect(fixture.controlPlane.lookupEvidence).toHaveBeenCalledTimes(2);
+    expect(fixture.controlPlane.attachObservation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentCapability: 'incumbent.attachment.capability',
+      })
+    );
+  });
+
+  it('replays dependency-attested evidence before cross-revision attachment', async () => {
+    const fixture = createFixture();
+    const attestedObservation = {
+      ...acceptedObservation,
+      contextDependencyAttestationId: 'attestation-1',
+      contextDependencyAttestationHash: hash('attestation'),
+    };
+    const replayPlanCanonicalJson = '{"planVersion":1}';
+    fixture.controlPlane.lookupEvidence.mockResolvedValue({
+      kind: ReviewEvidenceLookupKind.ReplayRequired,
+      observation: attestedObservation,
+      attestationId: 'attestation-1',
+      attestationHash: hash('attestation'),
+      replayCapability: 'replay.capability',
+      replayPlanCanonicalJson,
+      replayPlanHash: hash(replayPlanCanonicalJson),
+    });
+    const contextReplay = {
+      replay: jest.fn().mockResolvedValue({
+        targetCheckoutTreeOid: '4'.repeat(40),
+        replayResultCanonicalJson: '{"manifestVersion":2}',
+        replayResultHash: hash('{"manifestVersion":2}'),
+      }),
+    };
+    const contextAttestations = {
+      openGatewaySession: jest.fn(),
+      sealGatewaySession: jest.fn(),
+      commitContextReplay: jest.fn().mockResolvedValue({
+        attachmentCapability: 'replayed.attachment.capability',
+      }),
+    };
+    Object.assign(fixture.dependencies, {
+      contextReplay,
+      contextAttestations,
+    });
+
+    const result = await fixture.useCase.execute(fixture.command);
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(contextReplay.replay).toHaveBeenCalledTimes(1);
+    expect(contextAttestations.commitContextReplay).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.acquireInvocationLease).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.attachObservation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        observation: attestedObservation,
+        attachmentCapability: 'replayed.attachment.capability',
+      })
+    );
+  });
+
   it('restores an already satisfied slot without rerunning or reattaching it', async () => {
     const fixture = createFixture();
     fixture.controlPlane.lookupEvidence.mockResolvedValue({
@@ -401,6 +483,55 @@ describe('RunT0ReviewOrchestration', () => {
     );
   });
 
+  it('drains a confined invocation and commits historical evidence after supersession', async () => {
+    const fixture = createFixture({
+      executionProfile: 'context_gateway_v1',
+    });
+    fixture.controlPlane.commitEvidence.mockResolvedValue({
+      observationId: 'observation-historical',
+      historicalOnly: true,
+      eligibilityPolicyVersion: 't0-v1',
+    });
+    let providerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      providerStarted = resolve;
+    });
+    let finishProvider!: () => void;
+    const providerMayFinish = new Promise<void>((resolve) => {
+      finishProvider = resolve;
+    });
+    let observedSignal: AbortSignal | undefined;
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockImplementation(async ({ signal }) => {
+        observedSignal = signal;
+        providerStarted();
+        await providerMayFinish;
+        return observationPayload;
+      });
+
+    const resultPromise = fixture.useCase.execute(fixture.command);
+    await started;
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue({
+        ...revisionOf(fixture.command),
+        headSha: '9'.repeat(40),
+        reviewRevisionHash: hash('new-head-during-confined-provider'),
+      });
+    finishProvider();
+    const result = await resultPromise;
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Superseded);
+    expect(observedSignal?.aborted).toBe(false);
+    expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+    expect(fixture.controlPlane.supersedeExecution).toHaveBeenCalledTimes(1);
+  });
+
   it('publishes an explicit partial result after bounded attempt exhaustion', async () => {
     const fixture = createFixture();
     jest
@@ -668,7 +799,15 @@ describe('RunT0ReviewOrchestration', () => {
   });
 });
 
-function createFixture(options: { maxAttempts?: number } = {}) {
+function createFixture(
+  options: {
+    maxAttempts?: number;
+    executionProfile?:
+      | 'prompt_only_envelope_v1'
+      | 'agentic_unbounded_v1'
+      | 'context_gateway_v1';
+  } = {}
+) {
   const controlPlane = {
     authorize: jest.fn().mockResolvedValue(authorization),
     restoreSnapshot: jest.fn().mockResolvedValue(undefined),
@@ -799,7 +938,8 @@ function createFixture(options: { maxAttempts?: number } = {}) {
             lifecycleTargetSetHash: null,
             liveLifecycleStateHash: null,
             toolPolicyHash: hash('tool-policy'),
-            executionProfile: 'agentic_unbounded_v1',
+            executionProfile:
+              options.executionProfile ?? 'agentic_unbounded_v1',
             baseTreeHash: null,
             environmentContractHash: hash('environment'),
           }),

@@ -179,7 +179,7 @@ describe('production reusable workflows', () => {
     expect(workflowSource).toContain("['TARGET_TOKENS_PER_BATCH']");
     expect(workflowSource).toContain('isSecretLikeStaticRuntimeEnvKey(key)');
     expect(workflowSource).toContain("key === 'REVIEWROUTER_ACTION_V2_MODE'");
-    expect(workflowSource).toContain('npm install -g @openai/codex@0.125.0');
+    expect(workflowSource).toContain('npm install -g @openai/codex@0.145.0');
     expect(workflowSource).toContain(
       'curl -fsSL https://claude.ai/install.sh | bash'
     );

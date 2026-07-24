@@ -34,7 +34,10 @@ import {
   RunT0ReviewOrchestration,
   type ReviewRunAuthorization,
 } from '../application';
-import { createStableReviewWorkPlan } from '../domain';
+import {
+  createStableReviewBatchId,
+  createStableReviewWorkPlan,
+} from '../domain';
 import {
   CodexReviewInvocationAdapter,
   CooperativeReviewLeaseSupervisor,
@@ -43,6 +46,8 @@ import {
   SystemReviewOrchestrationDelay,
   type CodexReviewAssignment,
 } from './codex-review-invocation-adapter';
+import { ContextGatewayInvocationSessionFactory } from './context-gateway-invocation-session';
+import { ContextAttestationReplayRunner } from './context-attestation-replay-runner';
 import { ProviderInvocationFailureClassifier } from './provider-invocation-failure-classifier';
 import {
   FreshGitHubLifecycleInventory,
@@ -125,6 +130,13 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       config,
       process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
     );
+    const gatewayBundlePath = resolveContextGatewayBundlePath();
+    const contextGateway = agenticContext
+      ? new ContextGatewayInvocationSessionFactory(controlPlane, {
+          checkoutRoot: path.resolve(input.workspacePath),
+          gatewayBundlePath,
+        })
+      : undefined;
     const planned = planAssignments({
       authorization,
       pr,
@@ -139,7 +151,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       new PromptBuilder(config),
       planned.assignments,
       Math.max(1_000, config.runTimeoutSeconds * 1_000),
-      agenticContext
+      agenticContext,
+      contextGateway
     );
     const identities = new DeterministicReviewOrchestrationIdentity();
     const useCase = new RunT0ReviewOrchestration({
@@ -174,6 +187,15 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
         lifecycleInventory,
       }),
+      ...(contextGateway
+        ? {
+            contextReplay: new ContextAttestationReplayRunner({
+              checkoutRoot: path.resolve(input.workspacePath),
+              gatewayBundlePath,
+            }),
+            contextAttestations: controlPlane,
+          }
+        : {}),
       identities,
       delay: new SystemReviewOrchestrationDelay(),
     });
@@ -223,6 +245,17 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         };
     }
   }
+}
+
+function resolveContextGatewayBundlePath(): string {
+  const entrypoint = process.argv[1];
+  if (!entrypoint) {
+    throw new Error('review_action_v2_runtime_entrypoint_missing');
+  }
+  return path.join(
+    path.dirname(path.resolve(entrypoint)),
+    'context-gateway.js'
+  );
 }
 
 export function createProductionT0ReviewRunner(
@@ -289,11 +322,10 @@ export function planAssignments(input: {
       )
     );
     return {
-      batchId: batchId(
-        ReviewTaskKind.FindingDiscovery,
-        batch,
-        lifecycleTargets
-      ),
+      batchId: createStableReviewBatchId({
+        taskKind: ReviewTaskKind.FindingDiscovery,
+        members: batch,
+      }),
       taskKind: ReviewTaskKind.FindingDiscovery,
       required: true,
       files: batch,
@@ -329,10 +361,11 @@ export function planAssignments(input: {
         retryPolicyVersion: CODEX_RETRY_POLICY_VERSION,
       },
     ],
-    batches: plannedBatches.map((batch) => ({
+    batches: plannedBatches.map((batch, schedulingOrdinal) => ({
       batchId: batch.batchId,
       taskKind: batch.taskKind,
       required: batch.required,
+      schedulingOrdinal,
     })),
     maxWorkSlots: maxSlots,
     maxAttemptsPerSlot: input.authorization.limits.maxAttemptsPerSlot,
@@ -379,24 +412,6 @@ function batchContext(pr: PRContext, files: readonly FileChange[]): PRContext {
     files: [...files],
     diff: recovered.diff,
   };
-}
-
-function batchId(
-  taskKind: ReviewTaskKind,
-  files: readonly FileChange[],
-  targets: readonly LifecycleTarget[]
-): string {
-  return sha256(
-    canonicalJson({
-      files: files.map((file) => ({
-        filename: file.filename,
-        patch: file.patch ?? null,
-        status: file.status,
-      })),
-      targetIds: targets.map((target) => target.targetId).sort(),
-      taskKind,
-    })
-  );
 }
 
 function selectCodexProvider(config: ReviewConfig): string {

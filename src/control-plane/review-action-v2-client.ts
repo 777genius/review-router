@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from 'crypto';
 import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
+import reviewContextGatewayOpenSchema from './generated/review-action-v2/schemas/review_context_gateway_open.schema.json';
+import reviewContextGatewaySealSchema from './generated/review-action-v2/schemas/review_context_gateway_seal.schema.json';
+import reviewContextReplayCommitSchema from './generated/review-action-v2/schemas/review_context_replay_commit.schema.json';
 import reviewEvidenceCommitSchema from './generated/review-action-v2/schemas/review_evidence_commit.schema.json';
 import reviewEvidenceLookupSchema from './generated/review-action-v2/schemas/review_evidence_lookup.schema.json';
 import reviewExecutionFinalizeSchema from './generated/review-action-v2/schemas/review_execution_finalize.schema.json';
@@ -127,7 +130,13 @@ const responseSchemas = {
     reviewInvocationLeaseRenewSchema,
   [ReviewActionV2OperationId.ReviewInvocationLeaseRelease]:
     reviewInvocationLeaseReleaseSchema,
+  [ReviewActionV2OperationId.ReviewContextGatewayOpen]:
+    reviewContextGatewayOpenSchema,
+  [ReviewActionV2OperationId.ReviewContextGatewaySeal]:
+    reviewContextGatewaySealSchema,
   [ReviewActionV2OperationId.ReviewEvidenceLookup]: reviewEvidenceLookupSchema,
+  [ReviewActionV2OperationId.ReviewContextReplayCommit]:
+    reviewContextReplayCommitSchema,
   [ReviewActionV2OperationId.ReviewEvidenceCommit]: reviewEvidenceCommitSchema,
   [ReviewActionV2OperationId.ReviewSnapshotRestore]:
     reviewSnapshotRestoreSchema,

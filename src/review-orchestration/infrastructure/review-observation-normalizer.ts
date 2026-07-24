@@ -15,6 +15,11 @@ export function normalizeReviewObservation(input: {
   readonly requestedModel: string;
   readonly result: ReviewResult;
   readonly transportAttemptCount?: number;
+  readonly qualityFlags?: readonly string[];
+  readonly contextDependencyAttestation?: Readonly<{
+    attestationId: string;
+    attestationHash: string;
+  }>;
 }): ReviewObservationPayload {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(input.workSlotId)) {
     throw new Error('review_observation_work_slot_id_invalid');
@@ -33,13 +38,31 @@ export function normalizeReviewObservation(input: {
 
   const payload = {
     normalizedFindings: (input.result.findings ?? []).map(normalizeFinding),
-    normalizedLifecycleRevalidations: (
-      input.result.revalidations ?? []
-    ).map(normalizeRevalidation),
+    normalizedLifecycleRevalidations: (input.result.revalidations ?? []).map(
+      normalizeRevalidation
+    ),
     payloadVersion: reviewEvidencePayloadVersion,
     safeUsage: normalizeUsage(input.result),
   } as const;
   const payloadCanonicalJson = canonicalJson(payload);
+  const qualityFlags = Object.freeze(
+    [...(input.qualityFlags ?? [])].map((flag) => {
+      if (!/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(flag)) {
+        throw new Error('review_observation_quality_flag_invalid');
+      }
+      return flag;
+    })
+  );
+  const contextDependencyAttestation = input.contextDependencyAttestation;
+  if (
+    contextDependencyAttestation &&
+    (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(
+      contextDependencyAttestation.attestationId
+    ) ||
+      !/^[a-f0-9]{64}$/u.test(contextDependencyAttestation.attestationHash))
+  ) {
+    throw new Error('review_observation_context_attestation_invalid');
+  }
 
   return Object.freeze({
     payloadCanonicalJson,
@@ -47,10 +70,18 @@ export function normalizeReviewObservation(input: {
     byteCount: Buffer.byteLength(payloadCanonicalJson, 'utf8'),
     findingCount: payload.normalizedFindings.length,
     actualModel: input.result.actualModel ?? input.requestedModel,
-    qualityFlags: Object.freeze([]),
+    qualityFlags,
     transportAttemptCount,
     schemaValidated: true,
     fullyConsumed: true,
+    ...(contextDependencyAttestation
+      ? {
+          contextDependencyAttestationId:
+            contextDependencyAttestation.attestationId,
+          contextDependencyAttestationHash:
+            contextDependencyAttestation.attestationHash,
+        }
+      : {}),
   });
 }
 

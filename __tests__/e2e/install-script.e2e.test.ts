@@ -270,7 +270,7 @@ describe('review-router curl installer e2e', () => {
     expect(workflow).toContain(
       'group: review-router-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}'
     );
-    expect(workflow).toContain('cancel-in-progress: true');
+    expect(workflow).toContain('cancel-in-progress: false');
 
     const interactionWorkflow = workflowText(result.interactionWorkflowPath);
     expect(interactionWorkflow).toContain(
@@ -581,7 +581,7 @@ describe('review-router curl installer e2e', () => {
       'GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}'
     );
     expect(workflow).not.toContain('secrets.GITHUB_TOKEN }}');
-    expect(workflow).toContain('npm install -g @openai/codex@0.125.0');
+    expect(workflow).toContain('npm install -g @openai/codex@0.145.0');
     expect(workflow).toContain(
       'CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}'
     );

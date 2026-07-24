@@ -47,12 +47,17 @@ export function createPreparedProviderInvocation<
   readonly requestedModel: string;
   readonly timeoutMs: number;
   readonly request: Request;
+  readonly observableRequest?: unknown;
 }): PreparedProviderInvocation<Request> {
   if (!Number.isSafeInteger(input.timeoutMs) || input.timeoutMs <= 0) {
     throw new Error('provider_invocation_timeout_invalid');
   }
 
   const request = cloneAndFreeze(input.request);
+  const observableRequest =
+    input.observableRequest === undefined
+      ? request
+      : cloneAndFreeze(input.observableRequest);
   const envelope = {
     contractVersion: PROVIDER_EXECUTION_CONTRACT_VERSION,
     providerKind: input.providerKind,
@@ -64,7 +69,10 @@ export function createPreparedProviderInvocation<
 
   return Object.freeze({
     ...envelope,
-    observableInputPreimage: canonicalize(envelope),
+    observableInputPreimage: canonicalize({
+      ...envelope,
+      request: observableRequest,
+    }),
   });
 }
 

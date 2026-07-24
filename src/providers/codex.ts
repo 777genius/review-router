@@ -34,6 +34,16 @@ export interface CodexProviderOptions {
   providerNameModel?: string;
 }
 
+export type CodexContextGatewayInvocationConfig = Readonly<{
+  command: string;
+  args: readonly string[];
+  cwd: string;
+  gatewayBinaryHash: string;
+  gatewayPolicyVersion: string;
+  enabledTools: readonly string[];
+  runtimeEnvironment: Readonly<NodeJS.ProcessEnv>;
+}>;
+
 type CodexRunOptions = {
   healthCheck: boolean;
   outputSchema?: unknown;
@@ -51,6 +61,7 @@ type CodexRunResult = {
   stdout: string;
   stderr: string;
   lastMessage: string;
+  actualModel?: string;
   audit?: CodexAgenticAudit;
 };
 
@@ -76,6 +87,7 @@ type CodexPreparedRequest = {
   readonly auditMode: CodexAgenticAuditMode;
   readonly optionalAgenticRetryMaxPromptTokens: number;
   readonly acceptReviewOutputOnNonZero: boolean;
+  readonly contextGateway?: CodexContextGatewayInvocationConfig;
 };
 
 type CodexPreparedExecution = {
@@ -94,6 +106,23 @@ type CodexFrozenCliConfig = {
 
 const CODEX_OUTPUT_FILE_PLACEHOLDER = '{reviewrouter_output_file}';
 const CODEX_SCHEMA_FILE_PLACEHOLDER = '{reviewrouter_schema_file}';
+const CONTEXT_GATEWAY_TOOLS = Object.freeze([
+  'review_git_fact',
+  'review_list_directory',
+  'review_read_file',
+  'review_search_text',
+]);
+const CONTEXT_GATEWAY_RUNTIME_ENV_KEYS = new Set([
+  'REVIEWROUTER_CONTEXT_SESSION_ID',
+  'REVIEWROUTER_CONTEXT_ROOT',
+  'REVIEWROUTER_CONTEXT_TRANSCRIPT_PATH',
+  'REVIEWROUTER_CONTEXT_REPLAY_MATERIAL_PATH',
+  'REVIEWROUTER_CONTEXT_GATEWAY_BINARY_HASH',
+  'REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID',
+  'REVIEWROUTER_CONTEXT_EVENT_CHAIN_SEED_HASH',
+  'REVIEWROUTER_CONTEXT_BASE_SHA',
+  'REVIEWROUTER_CONTEXT_HEAD_SHA',
+]);
 
 class CodexCliExitError extends Error {
   constructor(
@@ -297,8 +326,10 @@ export class CodexProvider extends Provider {
   async prepareInvocation(
     prompt: string,
     timeoutMs: number,
-    executionPolicy?: ProviderExecutionPolicy
+    executionPolicy?: ProviderExecutionPolicy,
+    contextGateway?: CodexContextGatewayInvocationConfig
   ): Promise<PreparedProviderInvocation<CodexPreparedRequest>> {
+    if (contextGateway) this.validateContextGatewayConfig(contextGateway);
     const effectiveTimeoutMs =
       executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
     if (effectiveTimeoutMs <= 0) {
@@ -310,12 +341,19 @@ export class CodexProvider extends Provider {
     }
     const binary = await this.resolveBinary();
     const cwd = process.cwd();
-    const agenticContext = this.shouldUseAgenticContext();
-    const finalPrompt = agenticContext
-      ? await this.wrapAgenticReviewPrompt(prompt)
-      : this.wrapPromptOnlyReviewPrompt(prompt);
-    const auditMode = agenticContext ? this.agenticAuditMode() : 'off';
-    const eventAudit = this.shouldUseEventAudit();
+    const agenticContext = contextGateway
+      ? true
+      : this.shouldUseAgenticContext();
+    const finalPrompt = contextGateway
+      ? this.wrapContextGatewayReviewPrompt(prompt)
+      : agenticContext
+        ? await this.wrapAgenticReviewPrompt(prompt)
+        : this.wrapPromptOnlyReviewPrompt(prompt);
+    // Gateway sessions prove exploration through their authenticated transcript.
+    // The legacy audit only understands shell command events.
+    const auditMode =
+      agenticContext && !contextGateway ? this.agenticAuditMode() : 'off';
+    const eventAudit = contextGateway ? true : this.shouldUseEventAudit();
     const forkSandbox = this.shouldUseForkSandboxCodexHomeConfig();
     const reasoningEffort = this.resolveReasoningEffort(false);
     const frozenCliConfig: CodexFrozenCliConfig = {
@@ -324,7 +362,10 @@ export class CodexProvider extends Provider {
       forkSandbox,
       reasoningEffort,
     };
-    const fullEnvironment = this.buildSafeEnv(true, frozenCliConfig);
+    const fullEnvironment = {
+      ...this.buildSafeEnv(true, frozenCliConfig),
+      ...(contextGateway?.runtimeEnvironment ?? {}),
+    };
     const environment = this.withoutCredentialEnvironment(fullEnvironment);
     const outputSchema = this.buildFindingsSchema();
     const argsTemplate = this.buildExecArgs(
@@ -333,30 +374,34 @@ export class CodexProvider extends Provider {
         outputLastMessageFile: CODEX_OUTPUT_FILE_PLACEHOLDER,
         outputSchemaFile: CODEX_SCHEMA_FILE_PLACEHOLDER,
         eventAudit,
-        jsonEvents: auditMode !== 'off',
+        jsonEvents: auditMode !== 'off' || contextGateway !== undefined,
       },
-      frozenCliConfig
+      frozenCliConfig,
+      contextGateway
     );
 
+    const request: CodexPreparedRequest = {
+      binary,
+      prompt: finalPrompt,
+      cwd,
+      argsTemplate,
+      outputSchema,
+      environment,
+      eventAudit,
+      jsonEvents: auditMode !== 'off' || contextGateway !== undefined,
+      auditMode,
+      optionalAgenticRetryMaxPromptTokens:
+        MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
+      acceptReviewOutputOnNonZero: true,
+      ...(contextGateway ? { contextGateway } : {}),
+    };
     return createPreparedProviderInvocation({
       providerKind: ProviderKind.CodexCli,
       providerName: this.name,
       requestedModel: this.model,
       timeoutMs: effectiveTimeoutMs,
-      request: {
-        binary,
-        prompt: finalPrompt,
-        cwd,
-        argsTemplate,
-        outputSchema,
-        environment,
-        eventAudit,
-        jsonEvents: auditMode !== 'off',
-        auditMode,
-        optionalAgenticRetryMaxPromptTokens:
-          MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
-        acceptReviewOutputOnNonZero: true,
-      },
+      request,
+      observableRequest: this.observablePreparedRequest(request),
     });
   }
 
@@ -452,6 +497,9 @@ export class CodexProvider extends Provider {
         usage: this.estimateUsage(request.prompt, content),
         findings: parsed.findings,
         revalidations: parsed.revalidations,
+        ...(runResult.actualModel
+          ? { actualModel: runResult.actualModel }
+          : {}),
       },
     };
   }
@@ -480,6 +528,7 @@ export class CodexProvider extends Provider {
     const sanitized = { ...environment };
     delete sanitized.OPENAI_API_KEY;
     delete sanitized.OPENROUTER_API_KEY;
+    delete sanitized.REVIEWROUTER_CONTEXT_GATEWAY_SECRET;
     return Object.freeze(sanitized);
   }
 
@@ -539,7 +588,8 @@ export class CodexProvider extends Provider {
       disableTools?: boolean;
       skipGitRepoCheck?: boolean;
     },
-    frozenConfig?: CodexFrozenCliConfig
+    frozenConfig?: CodexFrozenCliConfig,
+    contextGateway?: CodexContextGatewayInvocationConfig
   ): string[] {
     const config =
       frozenConfig ??
@@ -572,7 +622,7 @@ export class CodexProvider extends Provider {
       args.splice(1, 0, '--skip-git-repo-check');
     }
 
-    if (options.disableTools) {
+    if (options.disableTools || contextGateway) {
       args.push(
         '--disable',
         'shell_tool',
@@ -590,6 +640,29 @@ export class CodexProvider extends Provider {
         'web_search_request',
         '--disable',
         'plugins'
+      );
+    }
+
+    if (contextGateway) {
+      args.push(
+        '-c',
+        'mcp_servers={}',
+        '-c',
+        `mcp_servers.reviewrouter.command=${tomlString(contextGateway.command)}`,
+        '-c',
+        `mcp_servers.reviewrouter.args=${tomlStringArray(contextGateway.args)}`,
+        '-c',
+        `mcp_servers.reviewrouter.cwd=${tomlString(contextGateway.cwd)}`,
+        '-c',
+        'mcp_servers.reviewrouter.required=true',
+        '-c',
+        'mcp_servers.reviewrouter.startup_timeout_sec=15',
+        '-c',
+        'mcp_servers.reviewrouter.tool_timeout_sec=30',
+        '-c',
+        `mcp_servers.reviewrouter.enabled_tools=${tomlStringArray(
+          contextGateway.enabledTools
+        )}`
       );
     }
 
@@ -778,6 +851,7 @@ export class CodexProvider extends Provider {
         stdout,
         stderr,
         lastMessage,
+        actualModel: this.extractActualModel(stdout),
         audit:
           !options.healthCheck && (options.jsonEvents || options.eventAudit)
             ? this.buildAgenticAudit(stdout)
@@ -917,6 +991,119 @@ export class CodexProvider extends Provider {
   ): boolean {
     if (value === undefined || value === '') return defaultValue;
     return !['0', 'false', 'no', 'off'].includes(value.trim().toLowerCase());
+  }
+
+  private observablePreparedRequest(
+    request: CodexPreparedRequest
+  ): CodexPreparedRequest | Readonly<Record<string, unknown>> {
+    const gateway = request.contextGateway;
+    if (!gateway) return request;
+
+    const runtimeKeys = new Set(Object.keys(gateway.runtimeEnvironment));
+    const environment = Object.fromEntries(
+      Object.entries(request.environment).filter(
+        ([key]) => !runtimeKeys.has(key)
+      )
+    );
+    const replacements = new Map<string, string>([
+      [request.binary, '<codex-binary>'],
+      [request.cwd, '<checkout-root>'],
+      [gateway.command, '<context-gateway-command>'],
+      [gateway.cwd, '<checkout-root>'],
+      ...gateway.args.map(
+        (argument, index) =>
+          [argument, `<context-gateway-arg-${index}>`] as const
+      ),
+    ]);
+    const argsTemplate = request.argsTemplate.map((argument) => {
+      let normalized = argument;
+      for (const [actual, replacement] of replacements) {
+        normalized = normalized.split(actual).join(replacement);
+      }
+      return normalized;
+    });
+
+    return {
+      ...request,
+      binary: '<codex-binary>',
+      cwd: '<checkout-root>',
+      argsTemplate,
+      environment,
+      contextGateway: {
+        gatewayBinaryHash: gateway.gatewayBinaryHash,
+        gatewayPolicyVersion: gateway.gatewayPolicyVersion,
+        enabledTools: [...gateway.enabledTools].sort(),
+        transport: 'stdio',
+        confinement: 'mcp_only',
+      },
+    };
+  }
+
+  private validateContextGatewayConfig(
+    gateway: CodexContextGatewayInvocationConfig
+  ): void {
+    if (
+      !path.isAbsolute(gateway.command) ||
+      gateway.args.length !== 1 ||
+      !path.isAbsolute(gateway.args[0]) ||
+      !path.isAbsolute(gateway.cwd) ||
+      !/^[a-f0-9]{64}$/u.test(gateway.gatewayBinaryHash) ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(gateway.gatewayPolicyVersion)
+    ) {
+      throw new Error('codex_context_gateway_config_invalid');
+    }
+    const tools = [...gateway.enabledTools].sort();
+    if (
+      tools.length !== CONTEXT_GATEWAY_TOOLS.length ||
+      tools.some((tool, index) => tool !== CONTEXT_GATEWAY_TOOLS[index])
+    ) {
+      throw new Error('codex_context_gateway_tool_policy_invalid');
+    }
+    for (const [key, value] of Object.entries(gateway.runtimeEnvironment)) {
+      if (
+        !CONTEXT_GATEWAY_RUNTIME_ENV_KEYS.has(key) ||
+        typeof value !== 'string' ||
+        value.length === 0
+      ) {
+        throw new Error('codex_context_gateway_environment_invalid');
+      }
+    }
+    if (
+      Object.keys(gateway.runtimeEnvironment).length !==
+      CONTEXT_GATEWAY_RUNTIME_ENV_KEYS.size
+    ) {
+      throw new Error('codex_context_gateway_environment_incomplete');
+    }
+  }
+
+  private wrapContextGatewayReviewPrompt(prompt: string): string {
+    return [
+      'You are running as review-router inside GitHub Actions.',
+      '',
+      'Use the deterministic PR context below as the source of truth for review scope.',
+      'For related repository context, use only these read-only ReviewRouter MCP tools:',
+      '- review_read_file',
+      '- review_list_directory',
+      '- review_search_text',
+      '- review_git_fact',
+      'Inspect changed hunks and at least one directly related caller, test, schema, config, or helper when available.',
+      'Do not attempt shell, browser, web, network, environment, credential, or filesystem access outside these tools.',
+      'Use repository-relative paths only. Only report concrete bugs on changed lines.',
+      '',
+      '<deterministic_review_prompt>',
+      prompt,
+      '</deterministic_review_prompt>',
+      '',
+      'FINAL OUTPUT CONTRACT:',
+      'Return exactly one JSON object matching this shape: {"findings":[{"file":"path","startLine":null,"line":1,"endLine":null,"severity":"major","title":"short","message":"specific evidence","suggestion":null}],"revalidations":[{"targetId":"rrt_example","fingerprint":"abc","verdict":"resolved","confidence":0.9,"evidence":[{"path":"src/file.ts","startLine":1,"endLine":2,"reason":"why current code fixes it"}],"rationale":"short reason"}]}',
+      'Return ONLY one valid JSON object.',
+      'No markdown, prose, code fences, comments, trailing commas, or text before/after the JSON.',
+      'If no findings, return exactly {"findings":[],"revalidations":[]}.',
+      'The "findings" array may be empty. "severity" must be one of "critical", "major", or "minor".',
+      'The "revalidations" array may be empty. Include entries only for targetId values listed in the deterministic prompt.',
+      'When a finding covers a changed block, set "startLine" and "endLine" to its RIGHT-side range and keep "line" equal to "endLine". For a single line, use null for both range fields.',
+      'The "suggestion" field is required; use null unless there is an exact safe replacement.',
+    ].join('\n');
   }
 
   private async wrapAgenticReviewPrompt(prompt: string): Promise<string> {
@@ -1715,6 +1902,57 @@ export class CodexProvider extends Provider {
     );
   }
 
+  private extractActualModel(stdout: string): string | undefined {
+    const models = new Set<string>();
+    for (const line of stdout.split(/\r?\n/u)) {
+      if (!line.trim()) continue;
+      try {
+        this.collectSessionConfiguredModels(JSON.parse(line), models, 0);
+      } catch {
+        // Ignore non-JSON progress lines.
+      }
+    }
+    return models.size === 1 ? [...models][0] : undefined;
+  }
+
+  private collectSessionConfiguredModels(
+    value: unknown,
+    models: Set<string>,
+    depth: number
+  ): void {
+    if (!value || typeof value !== 'object' || depth > 5) return;
+    const event = value as Record<string, unknown>;
+    const type = event.type ?? event.event ?? event.kind;
+    if (type === 'session_configured') {
+      const model = this.findConfiguredModel(event);
+      if (model) models.add(model);
+    }
+    for (const nested of Object.values(event)) {
+      if (nested && typeof nested === 'object') {
+        this.collectSessionConfiguredModels(nested, models, depth + 1);
+      }
+    }
+  }
+
+  private findConfiguredModel(
+    event: Readonly<Record<string, unknown>>
+  ): string | undefined {
+    for (const candidate of [
+      event.model,
+      isRecord(event.payload) ? event.payload.model : undefined,
+      isRecord(event.data) ? event.data.model : undefined,
+      isRecord(event.session) ? event.session.model : undefined,
+    ]) {
+      if (
+        typeof candidate === 'string' &&
+        /^[A-Za-z0-9][A-Za-z0-9._:/+#-]{0,199}$/u.test(candidate)
+      ) {
+        return candidate;
+      }
+    }
+    return undefined;
+  }
+
   private logAgenticAudit(audit: CodexAgenticAudit, retry: boolean): void {
     const suffix = retry ? ' after retry' : '';
     const preview =
@@ -2221,4 +2459,16 @@ function abortError(): Error {
   const error = new Error('Codex CLI aborted');
   error.name = 'AbortError';
   return error;
+}
+
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function tomlStringArray(values: readonly string[]): string {
+  return `[${values.map(tomlString).join(',')}]`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

@@ -1,0 +1,277 @@
+#!/usr/bin/env node
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+import {
+  CONTEXT_GATEWAY_POLICY_VERSION,
+  requireGitOid,
+  requireSha256,
+} from './context-gateway-contract';
+import { ContextGatewayRecorder } from './context-gateway-recorder';
+import { FilesystemContextGateway } from './filesystem-context-gateway';
+
+async function main(): Promise<void> {
+  const config = readConfig();
+  const recorder = new ContextGatewayRecorder({
+    sessionId: config.sessionId,
+    transcriptPath: config.transcriptPath,
+    replayMaterialPath: config.replayMaterialPath,
+    secret: Buffer.from(config.secret, 'base64url'),
+    gatewayBinaryHash: config.gatewayBinaryHash,
+    checkoutTreeOid: config.checkoutTreeOid,
+    eventChainSeedHash: config.eventChainSeedHash,
+  });
+  const gateway = await FilesystemContextGateway.create({
+    root: config.root,
+    checkoutTreeOid: config.checkoutTreeOid,
+    baseSha: config.baseSha,
+    headSha: config.headSha,
+    recorder,
+  });
+  const server = new Server(
+    {
+      name: 'reviewrouter-context-gateway',
+      version: CONTEXT_GATEWAY_POLICY_VERSION,
+    },
+    { capabilities: { tools: {} } }
+  );
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      {
+        name: 'review_read_file',
+        description:
+          'Read a bounded byte range from one repository file. Read more ranges when eof is false.',
+        inputSchema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['path'],
+          properties: {
+            path: { type: 'string', minLength: 1, maxLength: 1_024 },
+            startByte: { type: 'integer', minimum: 0 },
+            maxBytes: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 2 * 1024 * 1024,
+            },
+          },
+        },
+      },
+      {
+        name: 'review_list_directory',
+        description:
+          'List tracked repository paths below a directory with bounded depth and result count.',
+        inputSchema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['path'],
+          properties: {
+            path: { type: 'string', minLength: 1, maxLength: 1_024 },
+            maxDepth: { type: 'integer', minimum: 1, maximum: 32 },
+            includeHidden: { type: 'boolean' },
+            maxEntries: { type: 'integer', minimum: 1, maximum: 20_000 },
+          },
+        },
+      },
+      {
+        name: 'review_search_text',
+        description:
+          'Search tracked non-binary repository text. A truncated result makes this review ineligible for reuse.',
+        inputSchema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['query'],
+          properties: {
+            query: { type: 'string', minLength: 1, maxLength: 4_096 },
+            paths: {
+              type: 'array',
+              maxItems: 128,
+              items: { type: 'string', minLength: 1, maxLength: 1_024 },
+            },
+            maxResults: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 20_000,
+            },
+            caseSensitive: { type: 'boolean' },
+          },
+        },
+      },
+      {
+        name: 'review_git_fact',
+        description:
+          'Read one allowlisted Git fact for the authorized pull request revision.',
+        inputSchema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['fact'],
+          properties: {
+            fact: {
+              type: 'string',
+              enum: ['changed_paths', 'diff_stat', 'merge_base'],
+            },
+          },
+        },
+      },
+    ],
+  }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const args = requireRecord(request.params.arguments);
+    switch (request.params.name) {
+      case 'review_read_file':
+        return response(
+          await gateway.readFile({
+            path: requireString(args.path, 'path'),
+            startByte: optionalInteger(args.startByte, 'startByte'),
+            maxBytes: optionalInteger(args.maxBytes, 'maxBytes'),
+          })
+        );
+      case 'review_list_directory':
+        return response(
+          await gateway.listDirectory({
+            path: requireString(args.path, 'path'),
+            maxDepth: optionalInteger(args.maxDepth, 'maxDepth'),
+            includeHidden: optionalBoolean(args.includeHidden, 'includeHidden'),
+            maxEntries: optionalInteger(args.maxEntries, 'maxEntries'),
+          })
+        );
+      case 'review_search_text':
+        return response(
+          await gateway.searchText({
+            query: requireString(args.query, 'query'),
+            paths: optionalStringArray(args.paths, 'paths'),
+            maxResults: optionalInteger(args.maxResults, 'maxResults'),
+            caseSensitive: optionalBoolean(args.caseSensitive, 'caseSensitive'),
+          })
+        );
+      case 'review_git_fact':
+        return response(
+          await gateway.gitFact({
+            fact: requireGitFact(args.fact),
+          })
+        );
+      default:
+        throw new Error('context_gateway_tool_unknown');
+    }
+  });
+
+  await server.connect(new StdioServerTransport());
+}
+
+function response(value: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(value) }],
+  };
+}
+
+function readConfig() {
+  const config = {
+    sessionId: requiredEnv('REVIEWROUTER_CONTEXT_SESSION_ID'),
+    root: requiredEnv('REVIEWROUTER_CONTEXT_ROOT'),
+    transcriptPath: requiredEnv('REVIEWROUTER_CONTEXT_TRANSCRIPT_PATH'),
+    replayMaterialPath: requiredEnv(
+      'REVIEWROUTER_CONTEXT_REPLAY_MATERIAL_PATH'
+    ),
+    secret: requiredEnv('REVIEWROUTER_CONTEXT_GATEWAY_SECRET'),
+    gatewayBinaryHash: requireSha256(
+      requiredEnv('REVIEWROUTER_CONTEXT_GATEWAY_BINARY_HASH'),
+      'gateway_binary_hash'
+    ),
+    checkoutTreeOid: requireGitOid(
+      requiredEnv('REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID'),
+      'checkout_tree_oid'
+    ),
+    eventChainSeedHash: requireSha256(
+      requiredEnv('REVIEWROUTER_CONTEXT_EVENT_CHAIN_SEED_HASH'),
+      'event_chain_seed_hash'
+    ),
+    baseSha: requireGitOid(
+      requiredEnv('REVIEWROUTER_CONTEXT_BASE_SHA'),
+      'base_sha'
+    ),
+    headSha: requireGitOid(
+      requiredEnv('REVIEWROUTER_CONTEXT_HEAD_SHA'),
+      'head_sha'
+    ),
+  };
+  if (Buffer.from(config.secret, 'base64url').byteLength < 32) {
+    throw new Error('context_gateway_secret_invalid');
+  }
+  return config;
+}
+
+function requireRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('context_gateway_tool_arguments_invalid');
+  }
+  return value as Record<string, unknown>;
+}
+
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`context_gateway_${field}_invalid`);
+  }
+  return value;
+}
+
+function optionalInteger(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`context_gateway_${field}_invalid`);
+  }
+  return value as number;
+}
+
+function optionalBoolean(value: unknown, field: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') {
+    throw new Error(`context_gateway_${field}_invalid`);
+  }
+  return value;
+}
+
+function optionalStringArray(
+  value: unknown,
+  field: string
+): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    !value.every((item) => typeof item === 'string')
+  ) {
+    throw new Error(`context_gateway_${field}_invalid`);
+  }
+  return value;
+}
+
+function requireGitFact(
+  value: unknown
+): 'changed_paths' | 'diff_stat' | 'merge_base' {
+  if (
+    value !== 'changed_paths' &&
+    value !== 'diff_stat' &&
+    value !== 'merge_base'
+  ) {
+    throw new Error('context_gateway_git_fact_invalid');
+  }
+  return value;
+}
+
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name.toLowerCase()}_missing`);
+  return value;
+}
+
+main().catch((error) => {
+  process.stderr.write(
+    `ReviewRouter context gateway failed: ${
+      error instanceof Error ? error.message : String(error)
+    }\n`
+  );
+  process.exitCode = 1;
+});

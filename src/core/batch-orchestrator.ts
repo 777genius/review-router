@@ -1,7 +1,9 @@
+import { createHash } from 'crypto';
+import { createContentDefinedReviewBatches } from '../review-orchestration/domain/content-defined-review-batches';
 import { FileChange } from '../types';
 import { logger } from '../utils/logger';
 import {
-  calculateOptimalBatchSize,
+  estimateTokensForFile,
   getContextWindowSize,
 } from '../utils/token-estimation';
 
@@ -47,7 +49,7 @@ export class BatchOrchestrator {
   }
 
   /**
-   * Split files into batches of at most batchSize items.
+   * Split files into stable content-defined batches of at most batchSize items.
    */
   createBatches(files: FileChange[], batchSize: number): FileChange[][] {
     if (
@@ -59,14 +61,12 @@ export class BatchOrchestrator {
         `Invalid batch size: ${batchSize}. Must be a positive integer.`
       );
     }
-    if (files.length === 0) return [];
-    const batches: FileChange[][] = [];
-
-    for (let i = 0; i < files.length; i += batchSize) {
-      batches.push(files.slice(i, i + batchSize));
-    }
-
-    return batches;
+    return this.createContentDefinedBatches(
+      files,
+      batchSize,
+      Number.MAX_SAFE_INTEGER,
+      () => 0
+    );
   }
 
   /**
@@ -118,17 +118,21 @@ export class BatchOrchestrator {
         `max ${maxFiles} files/batch, smallest context window: ${smallestWindow}`
     );
 
-    // Calculate optimal batches
-    const recommendation = calculateOptimalBatchSize(
+    const batches = this.createContentDefinedBatches(
       files,
-      targetTokens,
       maxFiles,
-      true
+      targetTokens,
+      estimateTokensForFile
     );
 
-    logger.info(`Token-aware batching: ${recommendation.reason}`);
+    const averageFiles =
+      batches.length === 0 ? 0 : Math.ceil(files.length / batches.length);
+    logger.info(
+      `Token-aware content-defined batching: ${batches.length} batches ` +
+        `(avg ${averageFiles} files)`
+    );
 
-    return recommendation.batches;
+    return batches;
   }
 
   /**
@@ -157,4 +161,42 @@ export class BatchOrchestrator {
     const prefix = providerName.split('/')[0];
     return overrides[prefix];
   }
+
+  private createContentDefinedBatches(
+    files: readonly FileChange[],
+    maxFilesPerBatch: number,
+    maxTokensPerBatch: number,
+    estimateTokens: (file: FileChange) => number
+  ): FileChange[][] {
+    return createContentDefinedReviewBatches(
+      files.map((file, schedulingPriority) => ({
+        value: file,
+        routeKey: file.filename,
+        canonicalIdentity: fileIdentity(file),
+        tokenCost: estimateTokens(file),
+        schedulingPriority,
+      })),
+      {
+        maxFilesPerBatch,
+        maxTokensPerBatch,
+      }
+    ).map((batch) => batch.units.map((unit) => unit.value));
+  }
+}
+
+function fileIdentity(file: FileChange): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        additions: file.additions,
+        changes: file.changes,
+        deletions: file.deletions,
+        filename: file.filename,
+        language: file.language ?? null,
+        patch: file.patch ?? null,
+        previousFilename: file.previousFilename ?? null,
+        status: file.status,
+      })
+    )
+    .digest('hex');
 }

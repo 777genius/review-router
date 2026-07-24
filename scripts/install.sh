@@ -16,7 +16,7 @@ DEFAULT_WORKFLOW_STYLE="reusable"
 DEFAULT_BRANCH_NAME="review-router/setup"
 WORKFLOW_PATH=".github/workflows/reviewrouter.yml"
 INTERACTION_WORKFLOW_PATH=".github/workflows/reviewrouter-interaction.yml"
-CODEX_NPM_PACKAGE="@openai/codex@0.125.0"
+CODEX_NPM_PACKAGE="@openai/codex@0.145.0"
 DEFAULT_CODEX_MODEL="gpt-5.5"
 DEFAULT_CLAUDE_MODEL="sonnet"
 DEFAULT_APP_LOGO_URL="https://i.imgur.com/Yz9XIQM.png"
@@ -1509,7 +1509,7 @@ permissions:
 
 concurrency:
   group: review-router-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   review:
@@ -1636,7 +1636,7 @@ permissions:
 
 concurrency:
   group: review-router-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   review:

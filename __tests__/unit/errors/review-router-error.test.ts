@@ -81,6 +81,19 @@ describe('normalizeReviewError', () => {
     ).toBe('required_provider_unhealthy');
   });
 
+  it('classifies Review Action v2 protocol failures as control-plane errors', () => {
+    const error = normalizeReviewError(
+      new Error(
+        'review_action_v2_protocol_error operation=review_run_authorize http_status=404 error_code=not_found issues=release_profile_unavailable'
+      )
+    );
+
+    expect(error.code).toBe('control_plane_protocol_error');
+    expect(error.category).toBe('control_plane');
+    expect(error.isUserActionable).toBe(false);
+    expect(error.safeMessage).toContain('issues=release_profile_unavailable');
+  });
+
   it('wraps unknown errors while preserving stack and sanitized details', () => {
     const source = new Error(
       'boom OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz'

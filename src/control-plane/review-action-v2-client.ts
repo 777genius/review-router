@@ -63,21 +63,36 @@ export class ReviewActionV2ClientError extends Error {
       readonly protocolErrorCode?: ReviewActionV2ProtocolErrorCode;
       readonly retryClass?: ReviewActionV2RetryClass;
       readonly retryAfterMs?: number;
+      readonly issues?: readonly string[];
       readonly cause?: unknown;
     } = {}
   ) {
-    super(`review_action_v2_${code}`, { cause: options.cause });
+    const diagnostics = [
+      `operation=${operationId}`,
+      options.httpStatus === undefined
+        ? null
+        : `http_status=${options.httpStatus}`,
+      options.protocolErrorCode === undefined
+        ? null
+        : `error_code=${options.protocolErrorCode}`,
+      options.issues?.length ? `issues=${options.issues.join(',')}` : null,
+    ].filter((value): value is string => value !== null);
+    super([`review_action_v2_${code}`, ...diagnostics].join(' '), {
+      cause: options.cause,
+    });
     this.name = 'ReviewActionV2ClientError';
     this.httpStatus = options.httpStatus;
     this.protocolErrorCode = options.protocolErrorCode;
     this.retryClass = options.retryClass;
     this.retryAfterMs = options.retryAfterMs;
+    this.issues = options.issues ? [...options.issues] : undefined;
   }
 
   readonly httpStatus?: number;
   readonly protocolErrorCode?: ReviewActionV2ProtocolErrorCode;
   readonly retryClass?: ReviewActionV2RetryClass;
   readonly retryAfterMs?: number;
+  readonly issues?: readonly string[];
 }
 
 export interface ReviewActionV2ClientOptions {
@@ -329,6 +344,7 @@ export class ReviewActionV2Client {
           protocolErrorCode: body.error.errorCode,
           retryClass: body.error.retryClass,
           retryAfterMs: readRetryAfterMs(response),
+          issues: body.error.details.issues,
         }
       );
     }

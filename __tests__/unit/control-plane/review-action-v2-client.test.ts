@@ -124,6 +124,48 @@ describe('ReviewActionV2Client', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves bounded server issues in protocol diagnostics', async () => {
+    const fetchImpl = jest.fn(async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      return jsonResponse(
+        {
+          protocolVersion: reviewActionV2PublishedProtocolVersion,
+          schemaDigest: reviewActionV2PublishedSchemaDigest,
+          requestId: request.requestId,
+          serverTime: '2026-07-22T12:00:00.000Z',
+          error: {
+            errorCode: ReviewActionV2ProtocolErrorCode.NotFound,
+            retryClass: ReviewActionV2RetryClass.Never,
+            details: { issues: ['release_profile_unavailable'] },
+          },
+        },
+        404
+      );
+    });
+
+    await expect(
+      createClient(fetchImpl).execute(
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          oidcToken: 'header.payload.signature',
+          supportedProtocols: [
+            {
+              protocolVersion: reviewActionV2PublishedProtocolVersion,
+              schemaDigest: reviewActionV2PublishedSchemaDigest,
+            },
+          ],
+        }
+      )
+    ).rejects.toMatchObject({
+      code: ReviewActionV2ClientFailureCode.ProtocolError,
+      httpStatus: 404,
+      protocolErrorCode: ReviewActionV2ProtocolErrorCode.NotFound,
+      issues: ['release_profile_unavailable'],
+      message:
+        'review_action_v2_protocol_error operation=review_run_authorize http_status=404 error_code=not_found issues=release_profile_unavailable',
+    });
+  });
+
   it('rejects unknown response fields and request identity drift', async () => {
     const fetchImpl = jest.fn(async () =>
       jsonResponse({

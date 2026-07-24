@@ -25,6 +25,7 @@ export type ReviewErrorCode =
   | 'github_inline_comment_failed'
   | 'github_rate_limited'
   | 'runtime_config_unavailable'
+  | 'control_plane_protocol_error'
   | 'oidc_unavailable'
   | 'timeout'
   | 'filesystem'
@@ -239,6 +240,10 @@ function descriptorFor(
     message.includes('action_version_blocked')
   ) {
     return descriptors.runtime_config_unavailable;
+  }
+
+  if (message.includes('review_action_v2_')) {
+    return descriptors.control_plane_protocol_error;
   }
 
   if (
@@ -496,6 +501,20 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     ],
     isRetryable: true,
     isUserActionable: true,
+  },
+  control_plane_protocol_error: {
+    code: 'control_plane_protocol_error',
+    category: 'control_plane',
+    summary: 'ReviewRouter control-plane protocol rejected the review run.',
+    whyItMatters:
+      'The review stopped before provider execution because the server-side run contract was not satisfied.',
+    nextSteps: [
+      'Inspect the protocol operation, HTTP status, error code, and issues in the details line.',
+      'Fix the named server-side invariant or retry after a transient control-plane condition is resolved.',
+      'Do not reseed provider credentials unless the issue explicitly reports provider authentication.',
+    ],
+    isRetryable: false,
+    isUserActionable: false,
   },
   oidc_unavailable: {
     code: 'oidc_unavailable',

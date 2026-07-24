@@ -41689,6 +41689,9 @@ function descriptorFor(rawMessage, error2) {
   if (message.includes("runtime_config") || message.includes("action_session") || message.includes("control plane") || message.includes("action_version_blocked")) {
     return descriptors.runtime_config_unavailable;
   }
+  if (message.includes("review_action_v2_")) {
+    return descriptors.control_plane_protocol_error;
+  }
   if (message.includes("configuration error") || message.includes("validationerror") || message.includes("input required and not supplied") || message.includes("invalid workflow") || message.includes("invalid reviewrouter")) {
     return descriptors.configuration_invalid;
   }
@@ -41905,6 +41908,19 @@ var descriptors = {
     ],
     isRetryable: true,
     isUserActionable: true
+  },
+  control_plane_protocol_error: {
+    code: "control_plane_protocol_error",
+    category: "control_plane",
+    summary: "ReviewRouter control-plane protocol rejected the review run.",
+    whyItMatters: "The review stopped before provider execution because the server-side run contract was not satisfied.",
+    nextSteps: [
+      "Inspect the protocol operation, HTTP status, error code, and issues in the details line.",
+      "Fix the named server-side invariant or retry after a transient control-plane condition is resolved.",
+      "Do not reseed provider credentials unless the issue explicitly reports provider authentication."
+    ],
+    isRetryable: false,
+    isUserActionable: false
   },
   oidc_unavailable: {
     code: "oidc_unavailable",
@@ -68124,7 +68140,15 @@ var review_snapshot_restore_schema_default = {
 // src/control-plane/review-action-v2-client.ts
 var ReviewActionV2ClientError = class extends Error {
   constructor(code, operationId, options = {}) {
-    super(`review_action_v2_${code}`, { cause: options.cause });
+    const diagnostics = [
+      `operation=${operationId}`,
+      options.httpStatus === void 0 ? null : `http_status=${options.httpStatus}`,
+      options.protocolErrorCode === void 0 ? null : `error_code=${options.protocolErrorCode}`,
+      options.issues?.length ? `issues=${options.issues.join(",")}` : null
+    ].filter((value) => value !== null);
+    super([`review_action_v2_${code}`, ...diagnostics].join(" "), {
+      cause: options.cause
+    });
     this.code = code;
     this.operationId = operationId;
     this.name = "ReviewActionV2ClientError";
@@ -68132,11 +68156,13 @@ var ReviewActionV2ClientError = class extends Error {
     this.protocolErrorCode = options.protocolErrorCode;
     this.retryClass = options.retryClass;
     this.retryAfterMs = options.retryAfterMs;
+    this.issues = options.issues ? [...options.issues] : void 0;
   }
   httpStatus;
   protocolErrorCode;
   retryClass;
   retryAfterMs;
+  issues;
 };
 var responseSchemas = {
   ["review_run_authorize" /* ReviewRunAuthorize */]: review_run_authorize_schema_default,
@@ -68317,7 +68343,8 @@ var ReviewActionV2Client = class {
           httpStatus: response.status,
           protocolErrorCode: body.error.errorCode,
           retryClass: body.error.retryClass,
-          retryAfterMs: readRetryAfterMs(response)
+          retryAfterMs: readRetryAfterMs(response),
+          issues: body.error.details.issues
         }
       );
     }

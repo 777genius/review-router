@@ -78335,8 +78335,9 @@ var ReviewActionV2ControlPlaneAdapter = class {
     );
     const previousExpiry = Date.parse(input.lease.expiresAt);
     const renewedExpiry = Date.parse(expiresAt);
-    const renewalCeilingReached = result.status === "restored" /* Restored */;
-    if (leaseId !== input.lease.leaseId || fencingToken !== input.lease.fencingToken || (renewalCeilingReached ? renewedExpiry !== previousExpiry : renewedExpiry <= previousExpiry || leaseCapability === input.lease.leaseCapability)) {
+    const expiryAdvanced = renewedExpiry > previousExpiry;
+    const renewalCeilingReached = result.status === "restored" /* Restored */ && !expiryAdvanced;
+    if (leaseId !== input.lease.leaseId || fencingToken !== input.lease.fencingToken || renewedExpiry < previousExpiry || expiryAdvanced && leaseCapability === input.lease.leaseCapability || result.status === "applied" /* Applied */ && !expiryAdvanced) {
       throw new Error("review_action_v2_lease_renewal_drift");
     }
     return {

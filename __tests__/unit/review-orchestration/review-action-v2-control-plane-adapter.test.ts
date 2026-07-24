@@ -407,6 +407,30 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     });
   });
 
+  it('recovers a lost renewal acknowledgement that advanced the lease', async () => {
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewInvocationLeaseResultStatus.Restored,
+      leaseId: baseLease.leaseId,
+      fencingToken: baseLease.fencingToken,
+      expiresAt: '2026-07-22T12:11:00.000Z',
+      leaseCapability: 'lease.capability.recovered',
+    });
+
+    await expect(
+      createAdapter(execute).renewInvocationLease({
+        idempotencyKey: 'idem:renew:recovered',
+        lease: baseLease,
+        ownerIdHash: hash('owner'),
+        renewRequestId: 'renew-recovered',
+      })
+    ).resolves.toEqual({
+      ...baseLease,
+      leaseCapability: 'lease.capability.recovered',
+      expiresAt: '2026-07-22T12:11:00.000Z',
+      renewalCeilingReached: false,
+    });
+  });
+
   it('rejects an acquire response on the renewal operation', async () => {
     const execute = jest.fn().mockResolvedValue({
       status: ReviewInvocationLeaseResultStatus.Acquired,

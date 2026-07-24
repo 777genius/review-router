@@ -1,6 +1,7 @@
-import { Provider, ProviderExecutionPolicy } from './base';
+import { Provider, ProviderExecutionPolicy, RateLimitError } from './base';
 import { Finding, ReviewResult } from '../types';
 import { logger } from '../utils/logger';
+import { redactSensitiveText } from '../utils/redaction';
 import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
@@ -1910,7 +1911,37 @@ export class CodexProvider extends Provider {
   }
 
   private formatCliError(stderr: string, stdout: string): string {
-    const raw = (stderr || stdout || 'no output')
+    const input = stderr || stdout || 'no output';
+    const jsonMessages = this.extractCliErrorMessages(input)
+      .map((message) => this.sanitizeCliErrorText(message))
+      .map((message) => message.trim())
+      .filter(Boolean);
+    if (jsonMessages.length > 0) {
+      return this.truncateCliError([...new Set(jsonMessages)].join(' '));
+    }
+
+    const raw = this.sanitizeCliErrorText(input);
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter(
+        (line) =>
+          !line.startsWith('user') && !line.includes('Respond with exactly:')
+      );
+
+    const important = lines.filter((line) =>
+      /not supported|invalid_request_error|auth|error|failed|timed out|timeout|capacity|limit|quota/i.test(
+        line
+      )
+    );
+    const summary = (important.length > 0 ? important : lines).join(' ');
+
+    return this.truncateCliError(summary);
+  }
+
+  private sanitizeCliErrorText(value: string): string {
+    return redactSensitiveText(value)
       .replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g'), '')
       .replace(
         /www_authenticate_header:\s*"[^"]+"/gi,
@@ -1932,31 +1963,96 @@ export class CodexProvider extends Provider {
       )
       .replace(/session id:\s*[a-f0-9-]+/gi, 'session id: [redacted]')
       .replace(/thread\s+[a-f0-9-]{8,}/gi, 'thread [redacted]');
+  }
 
-    const lines = raw
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .filter(
-        (line) =>
-          !line.startsWith('user') && !line.includes('Respond with exactly:')
-      );
+  private extractCliErrorMessages(raw: string): string[] {
+    const messages: string[] = [];
+    const seen = new Set<string>();
 
-    const jsonMessages = Array.from(raw.matchAll(/"message"\s*:\s*"([^"]+)"/gi))
-      .map((match) => match[1])
-      .filter(Boolean);
-    if (jsonMessages.length > 0) {
-      return this.truncateCliError([...new Set(jsonMessages)].join(' '));
+    const visit = (value: unknown, depth: number): void => {
+      if (depth > 4 || value === null || value === undefined) return;
+
+      if (typeof value === 'string') {
+        const text = value.trim();
+        if (!text || seen.has(text)) return;
+        seen.add(text);
+
+        if (
+          (text.startsWith('{') && text.endsWith('}')) ||
+          (text.startsWith('[') && text.endsWith(']'))
+        ) {
+          try {
+            visit(JSON.parse(text), depth + 1);
+            return;
+          } catch {
+            // Keep the original text when a provider emits malformed JSON.
+          }
+        }
+
+        const nestedValues = this.extractJsonStringFields(text);
+        if (nestedValues.length > 0) {
+          nestedValues.forEach((nested) => visit(nested, depth + 1));
+          return;
+        }
+
+        messages.push(text);
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach((item) => visit(item, depth + 1));
+        return;
+      }
+
+      if (typeof value === 'object') {
+        const record = value as Record<string, unknown>;
+        for (const key of [
+          'message',
+          'error',
+          'detail',
+          'error_description',
+          'code',
+          'status',
+        ]) {
+          if (key in record) visit(record[key], depth + 1);
+        }
+      }
+    };
+
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (
+        (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))
+      ) {
+        try {
+          visit(JSON.parse(trimmed), 0);
+        } catch {
+          // The field scanner below still handles JSON embedded in log text.
+        }
+      }
     }
 
-    const important = lines.filter((line) =>
-      /not supported|invalid_request_error|auth|error|failed|timed out|timeout/i.test(
-        line
-      )
-    );
-    const summary = (important.length > 0 ? important : lines).join(' ');
+    this.extractJsonStringFields(raw).forEach((value) => visit(value, 0));
+    return messages;
+  }
 
-    return this.truncateCliError(summary);
+  private extractJsonStringFields(raw: string): string[] {
+    const fields =
+      /"(?:message|error|detail|error_description|code|status)"\s*:\s*("(?:\\.|[^"\\])*")/gi;
+    const values: string[] = [];
+
+    for (const match of raw.matchAll(fields)) {
+      try {
+        const decoded = JSON.parse(match[1]);
+        if (typeof decoded === 'string') values.push(decoded);
+      } catch {
+        // Ignore malformed string fields and use the sanitized raw fallback.
+      }
+    }
+
+    return values;
   }
 
   private truncateCliError(message: string): string {
@@ -1965,14 +2061,32 @@ export class CodexProvider extends Provider {
 
   private normalizeCodexError(error: unknown): Error {
     const err = error instanceof Error ? error : new Error(String(error));
+    const detail =
+      err instanceof CodexCliExitError
+        ? this.formatCliError(err.stderr, err.stdout)
+        : this.formatCliError(err.message, '');
     const rawMessage = this.truncateCliError(
-      this.sanitizeReviewContent(this.formatCliError(err.message, ''))
+      this.sanitizeReviewContent(
+        err instanceof CodexCliExitError
+          ? `Codex CLI failed with exit code ${err.code}: ${detail}`
+          : detail
+      )
     );
     const message = this.withActionableAuthHint(rawMessage);
-    const normalized = new Error(message || 'Codex CLI failed');
-    normalized.name = err.name || 'CodexProviderError';
+    const normalized = this.isCapacityUnavailable(message)
+      ? new RateLimitError(message || 'Codex capacity unavailable')
+      : new Error(message || 'Codex CLI failed');
+    if (!(normalized instanceof RateLimitError)) {
+      normalized.name = err.name || 'CodexProviderError';
+    }
     normalized.stack = err.stack;
     return normalized;
+  }
+
+  private isCapacityUnavailable(message: string): boolean {
+    return /(?:\b429\b|\btoo many requests\b|\bcapacity[\s_-]*unavailable\b|\brate[\s_-]*limit(?:ed|ing)?\b|\busage[\s_-]*limit(?:ed|[\s_-]*(?:reached|exceeded|exhausted))?\b|\bquota(?:[\s_-]*(?:exceeded|exhausted|unavailable|limited))?\b|\binsufficient[\s_-]*quota\b|\bresource[\s_-]*exhausted\b)/i.test(
+      message
+    );
   }
 
   private withActionableAuthHint(message: string): string {

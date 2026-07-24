@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { CodexProvider } from '../../../src/providers/codex';
+import { RateLimitError } from '../../../src/providers/base';
 import { logger } from '../../../src/utils/logger';
 
 jest.mock('child_process', () => ({
@@ -1173,6 +1174,66 @@ describe('CodexProvider', () => {
     expect(thrown?.message).not.toContain('refresh-secret');
   });
 
+  it('preserves nested Codex usage-limit diagnostics as a capacity error', async () => {
+    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('--version')) {
+        return createMockProcess();
+      }
+
+      return createMockProcess((proc) => {
+        proc.stderr.emit(
+          'data',
+          JSON.stringify({
+            type: 'error',
+            message: JSON.stringify({
+              error: {
+                code: 'usage_limit_reached',
+                message:
+                  "You've hit your usage limit. Try again after 2026-07-25 01:00.",
+              },
+            }),
+          })
+        );
+      }, 1);
+    });
+
+    const provider = new CodexProvider('gpt-5.6-sol', {
+      agenticContext: false,
+    });
+
+    let thrown: Error | undefined;
+    try {
+      await provider.review('review prompt', 1000);
+    } catch (error) {
+      thrown = error as Error;
+    }
+
+    expect(thrown).toBeInstanceOf(RateLimitError);
+    expect(thrown?.message).toContain('usage_limit_reached');
+    expect(thrown?.message).toContain("You've hit your usage limit");
+    expect(thrown?.message).toContain('2026-07-25 01:00');
+    expect(thrown?.message).not.toContain('{\\"');
+  });
+
+  it('redacts secrets decoded from nested Codex error JSON', () => {
+    const provider = new CodexProvider('gpt-5.6-sol');
+    const formatted = (provider as any).formatCliError(
+      JSON.stringify({
+        message: JSON.stringify({
+          error: {
+            message:
+              'authentication failed refresh_token=refresh-secret-value-123456789',
+          },
+        }),
+      }),
+      ''
+    );
+
+    expect(formatted).toContain('authentication failed');
+    expect(formatted).toContain('refresh_token=***');
+    expect(formatted).not.toContain('refresh-secret-value-123456789');
+  });
+
   it('redacts secrets from raw Codex CLI error text', () => {
     const provider = new CodexProvider('gpt-5.4-mini');
     const formatted = (provider as any).formatCliError(
@@ -1185,7 +1246,7 @@ describe('CodexProvider', () => {
     );
 
     expect(formatted).toContain('[redacted-url]');
-    expect(formatted).toContain('[redacted-openai-key]');
+    expect(formatted).toContain('sk-***');
     expect(formatted).toContain('"refresh_token":"[redacted]"');
     expect(formatted).not.toContain('auth.openai.com');
     expect(formatted).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');

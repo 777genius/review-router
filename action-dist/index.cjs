@@ -22445,7 +22445,7 @@ async function startHostedCodexRelayProxy(input) {
           writeProxyError(res, 404, "proxy_route_denied");
           return;
         }
-        if (inFlightRelayRequests >= maxConcurrentRelayRequests || replayFenced && inFlightRelayRequests === 0) {
+        if (inFlightRelayRequests >= maxConcurrentRelayRequests || replayFenced && inFlightRelayRequests === 0 && successfulRelayRequests === 0) {
           writeProxyError(res, 409, "proxy_replay_fenced");
           return;
         }
@@ -22485,6 +22485,8 @@ async function startHostedCodexRelayProxy(input) {
             } else if (responseCompletion === "successful") {
               successfulRelayRequests += 1;
               failoverReason = void 0;
+              replayFenced = false;
+            } else if (upstream.status >= 200 && upstream.status < 300 && successfulRelayRequests > 0) {
               replayFenced = false;
             } else {
               replayFenced = true;
@@ -22780,7 +22782,7 @@ function isProvablySuccessfulRelayResponse(upstream, completionTail) {
   const contentType = upstream.headers.get("content-type")?.toLowerCase() ?? "";
   const mediaType = contentType.split(";", 1)[0]?.trim();
   if (mediaType === "text/event-stream") {
-    return completionTail.trimEnd().split(/\r?\n/u).at(-1)?.trim() === "data: [DONE]" ? "successful" : "non_successful";
+    return isSuccessfulHostedSseTail(completionTail) ? "successful" : "non_successful";
   }
   if (mediaType === "application/json") {
     try {
@@ -22791,6 +22793,12 @@ function isProvablySuccessfulRelayResponse(upstream, completionTail) {
     }
   }
   return "non_successful";
+}
+function isSuccessfulHostedSseTail(completionTail) {
+  const normalized = completionTail.replace(/\r\n/g, "\n").trimEnd();
+  const lastLine = normalized.split("\n").at(-1)?.trim();
+  if (lastLine === "data: [DONE]") return true;
+  return /"type"\s*:\s*"response\.completed"/.test(normalized);
 }
 function throwHostedRelayFailover(reason, cause) {
   if (reason === "authentication_failed") {

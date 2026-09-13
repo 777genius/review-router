@@ -127,6 +127,13 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Prepare review-quality fixture prerequisites
+        timeout-minutes: 5
+        run: |
+          python3 --version
+          docker info
+          docker pull postgres:17
+
       - name: Test
         run: npm run test -- --maxWorkers=2 --detectOpenHandles --testTimeout=20000
 

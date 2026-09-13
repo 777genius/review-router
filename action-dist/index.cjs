@@ -22226,6 +22226,7 @@ var defaultOidcAudience = "reviewrouter";
 var forkAgenticSandboxHostedPoolActionMode = "fork-agentic-sandbox-hosted-pool";
 var defaultMaxRequestBodyBytes = 2e6;
 var absoluteMaxRelayRequests = 64;
+var maxConcurrentRelayRequests = 2;
 var maxCommentTokenRefreshes = 8;
 var oidcRequestTimeoutMs = 2e4;
 var grantRequestTimeoutMs = 3e4;
@@ -22372,11 +22373,24 @@ async function startHostedCodexRelayProxy(input) {
   const maxBodyBytes = input.policy.maxRequestBodyBytes ?? defaultMaxRequestBodyBytes;
   let requestCount = 0;
   let commentTokenRefreshCount = 0;
+  let inFlightRelayRequests = 0;
   let closing = false;
   let failoverReason;
   let replayFenced = false;
   let successfulRelayRequests = 0;
   const activeUpstreamRequests = /* @__PURE__ */ new Set();
+  const relaySlotWaiters = [];
+  const notifyRelaySlot = () => {
+    const waiter = relaySlotWaiters.shift();
+    waiter?.();
+  };
+  const waitForRelaySlot = () => new Promise((resolve3) => {
+    relaySlotWaiters.push(resolve3);
+  });
+  const isDownstreamCloseError = (error51) => {
+    const message = error51 instanceof Error ? error51.message : "";
+    return message === "downstream_closed" || message === "aborted" || /EPIPE|ECONNRESET|ERR_STREAM_DESTROYED|ERR_STREAM_PREMATURE_CLOSE/i.test(message);
+  };
   const server = import_node_http.default.createServer((req, res) => {
     void (async () => {
       let downstreamClosed = false;
@@ -22443,9 +22457,12 @@ async function startHostedCodexRelayProxy(input) {
           writeProxyError(res, 404, "proxy_route_denied");
           return;
         }
-        if (replayFenced) {
-          writeProxyError(res, 409, "proxy_replay_fenced");
-          return;
+        while (inFlightRelayRequests >= maxConcurrentRelayRequests) {
+          if (closing) {
+            writeProxyError(res, 503, "proxy_closing");
+            return;
+          }
+          await waitForRelaySlot();
         }
         requestCount += 1;
         if (requestCount > input.policy.maxRequests) {
@@ -22453,41 +22470,71 @@ async function startHostedCodexRelayProxy(input) {
           return;
         }
         const ordinal = requestCount;
-        replayFenced = true;
+        inFlightRelayRequests += 1;
         failoverReason = "ambiguous";
-        const body = await readRequestBody(req, maxBodyBytes);
-        upstreamController = new AbortController();
-        activeUpstreamRequests.add(upstreamController);
-        const upstream = await fetchWithZeroizedBody(
-          input.fetchImpl,
-          input.relayUrl,
-          {
-            method: "POST",
-            headers: buildHostedRelayHeaders({
-              requestHeaders: req.headers,
-              grant: input.grant,
-              requestOrdinal: ordinal,
-              idempotencyKey: `${proxyRequestNamespace}:${ordinal}`,
-              requestBytes: body.byteLength
-            }),
-            signal: upstreamController.signal
-          },
-          body
-        );
-        if (!downstreamClosed) {
-          const responseCompletion = await writeUpstreamResponse(res, upstream);
-          if ((upstream.status === 401 || upstream.status === 429) && successfulRelayRequests === 0 && ordinal === 1) {
-            failoverReason = upstream.status === 401 ? "authentication_failed" : "quota_exhausted";
-            replayFenced = false;
-          } else if (responseCompletion === "successful") {
-            successfulRelayRequests += 1;
-            failoverReason = void 0;
-            replayFenced = false;
+        try {
+          const body = await readRequestBody(req, maxBodyBytes);
+          upstreamController = new AbortController();
+          activeUpstreamRequests.add(upstreamController);
+          const upstream = await fetchWithZeroizedBody(
+            input.fetchImpl,
+            input.relayUrl,
+            {
+              method: "POST",
+              headers: buildHostedRelayHeaders({
+                requestHeaders: req.headers,
+                grant: input.grant,
+                requestOrdinal: ordinal,
+                idempotencyKey: `${proxyRequestNamespace}:${ordinal}`,
+                requestBytes: body.byteLength
+              }),
+              signal: upstreamController.signal
+            },
+            body
+          );
+          if (!downstreamClosed) {
+            let responseCompletion;
+            try {
+              responseCompletion = await writeUpstreamResponse(res, upstream);
+            } catch (writeError) {
+              if ((isDownstreamCloseError(writeError) || downstreamClosed) && upstream.status >= 200 && upstream.status < 300) {
+                successfulRelayRequests += 1;
+                failoverReason = void 0;
+                replayFenced = false;
+                return;
+              }
+              throw writeError;
+            }
+            if ((upstream.status === 401 || upstream.status === 429) && successfulRelayRequests === 0 && ordinal === 1) {
+              failoverReason = upstream.status === 401 ? "authentication_failed" : "quota_exhausted";
+              replayFenced = false;
+            } else if (responseCompletion === "successful") {
+              successfulRelayRequests += 1;
+              failoverReason = void 0;
+              replayFenced = false;
+            } else if (upstream.status >= 200 && upstream.status < 300) {
+              successfulRelayRequests += 1;
+              failoverReason = void 0;
+              replayFenced = false;
+            } else {
+              replayFenced = true;
+            }
+          } else {
+            await upstream.body?.cancel().catch(() => void 0);
+            if (upstream.status >= 200 && upstream.status < 300) {
+              successfulRelayRequests += 1;
+              failoverReason = void 0;
+              replayFenced = false;
+            }
           }
-        } else {
-          await upstream.body?.cancel().catch(() => void 0);
+        } finally {
+          inFlightRelayRequests -= 1;
+          notifyRelaySlot();
         }
       } catch (error51) {
+        if (!isDownstreamCloseError(error51) && !downstreamClosed) {
+          replayFenced = true;
+        }
         if (!downstreamClosed) {
           const code = error51 instanceof Error && error51.message === "proxy_request_body_too_large" ? "proxy_request_body_too_large" : "proxy_upstream_failed";
           if (res.headersSent) {
@@ -22769,7 +22816,7 @@ function isProvablySuccessfulRelayResponse(upstream, completionTail) {
   const contentType = upstream.headers.get("content-type")?.toLowerCase() ?? "";
   const mediaType = contentType.split(";", 1)[0]?.trim();
   if (mediaType === "text/event-stream") {
-    return completionTail.trimEnd().split(/\r?\n/u).at(-1)?.trim() === "data: [DONE]" ? "successful" : "non_successful";
+    return isSuccessfulHostedSseTail(completionTail) ? "successful" : "non_successful";
   }
   if (mediaType === "application/json") {
     try {
@@ -22780,6 +22827,12 @@ function isProvablySuccessfulRelayResponse(upstream, completionTail) {
     }
   }
   return "non_successful";
+}
+function isSuccessfulHostedSseTail(completionTail) {
+  const normalized = completionTail.replace(/\r\n/g, "\n").trimEnd();
+  const lastLine = normalized.split("\n").at(-1)?.trim();
+  if (lastLine === "data: [DONE]") return true;
+  return /"type"\s*:\s*"response\.completed"/.test(normalized);
 }
 function throwHostedRelayFailover(reason, cause) {
   if (reason === "authentication_failed") {
@@ -24028,7 +24081,8 @@ async function readForkPullRequestTargetEvent(env) {
   };
 }
 async function readTrustedSameRepositoryPullRequestTargetEvent(env) {
-  if (env.GITHUB_EVENT_NAME !== "pull_request_target") {
+  const eventName = env.GITHUB_EVENT_NAME;
+  if (eventName !== "pull_request" && eventName !== "pull_request_target") {
     throw new Error("unsupported_event");
   }
   const eventPath = env.GITHUB_EVENT_PATH;
@@ -24041,9 +24095,6 @@ async function readTrustedSameRepositoryPullRequestTargetEvent(env) {
     event.pull_request?.head?.repo?.full_name,
     "head_repo"
   );
-  if (event.repository?.private !== true) {
-    throw new Error("hosted_public_repository_unsupported");
-  }
   if (repository !== headRepo) {
     throw new Error("hosted_fork_pull_request_unsupported");
   }

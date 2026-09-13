@@ -339,9 +339,9 @@ describe('production reusable workflows', () => {
       "fail('session_binding_version must be a positive integer for hosted pool execution.');"
     );
     expect(workflowSource).toContain(
-      "fail('Hosted pool execution requires pull_request_target.');"
+      "fail('Hosted pool execution requires pull_request.');"
     );
-    expect(workflowSource).toContain(
+    expect(workflowSource).not.toContain(
       "fail('Hosted pool execution requires a private repository.');"
     );
     expect(workflowSource).toContain(

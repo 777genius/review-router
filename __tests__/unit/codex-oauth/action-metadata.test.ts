@@ -72,7 +72,7 @@ describe('Codex OAuth rotating action metadata', () => {
     expect(actionDist).toContain(
       'sessionBindingId: requireInput(env, "session-binding-id")'
     );
-    expect(actionDist).toContain('"hosted_public_repository_unsupported"');
+    expect(actionDist).not.toContain('"hosted_public_repository_unsupported"');
     expect(actionDist).toContain('"hosted_fork_pull_request_unsupported"');
     expect(actionDist).toContain('runHostedCodexRelayTransport({');
     expect(hostedModeBranch).toBeGreaterThanOrEqual(0);

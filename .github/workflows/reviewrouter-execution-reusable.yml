@@ -137,11 +137,8 @@ jobs:
             if (reviewActionLane !== 't0') {
               fail('Hosted pool execution requires the T0 lane.');
             }
-            if (eventName !== 'pull_request_target') {
-              fail('Hosted pool execution requires pull_request_target.');
-            }
-            if (process.env.GITHUB_REPOSITORY_PRIVATE !== 'true') {
-              fail('Hosted pool execution requires a private repository.');
+            if (eventName !== 'pull_request' && eventName !== 'pull_request_target') {
+              fail('Hosted pool execution requires pull_request.');
             }
             if (
               !process.env.GITHUB_REPOSITORY ||

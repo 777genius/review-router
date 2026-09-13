@@ -1,3 +1,4 @@
+import { Deduplicator } from '../../../src/analysis/deduplicator';
 import { BuildCurrentReviewProjection } from '../../../src/review-projection/application/build-current-review-projection';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import {
@@ -208,6 +209,158 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
       expect(JSON.stringify(pair)).toBe(snapshot);
     }
   );
+
+  it('preserves all contributors when consensus merges deduplicated groups', async () => {
+    const title =
+      'Numeric response conversion breaks arithmetic caller contract';
+    const findings = [
+      candidate({
+        title: 'Stale cache',
+        message: 'Cache invalidation fails.',
+        sourceFindingId: 'a',
+        normalizedFailureModeHash: 'failure-a',
+        observationIds: ['observation-0', 'shared-observation'],
+      }),
+      candidate({
+        title,
+        message: 'Numeric addition produces concatenation.',
+        sourceFindingId: 'b',
+        normalizedFailureModeHash: 'failure-b',
+        providerIds: ['claude'],
+        providerVoteKeys: ['claude/account-2'],
+        observationIds: ['observation-1', 'shared-observation'],
+      }),
+      candidate({
+        title,
+        message: 'Cache invalidation fails.',
+        sourceFindingId: 'c',
+        normalizedFailureModeHash: 'failure-c',
+        observationIds: ['observation-2', 'shared-observation'],
+      }),
+    ];
+    const snapshot = JSON.stringify(findings);
+    // A/B stay separate; C joins A and supplies B's title. Consensus must
+    // then merge [A,C] with [B], including B's observation and unique vote.
+    const legacy = findings.map((f) => ({
+      ...f,
+      file: f.filePath,
+      severity: 'major' as const,
+      sourceFindingIds: [f.sourceFindingId],
+    }));
+    const deduplicator = new Deduplicator();
+    expect(deduplicator.dedupe(legacy.slice(0, 2))).toHaveLength(2);
+    expect(
+      deduplicator.dedupe(legacy).map((f) => ({
+        title: f.title,
+        ids: f.sourceFindingIds,
+      }))
+    ).toEqual([
+      { title, ids: ['a', 'c'] },
+      { title, ids: ['b'] },
+    ]);
+    const path = revisionFile().path;
+    const patch = revisionFile().patch;
+    const useCase = new BuildCurrentReviewProjection({
+      lifecycleInventory: {
+        loadCurrent: async () => ({
+          inventoryVersion: 'review_lifecycle_inventory.v1' as const,
+          loadedForHeadSha: '1'.repeat(40),
+          lifecycleStateHash: 'state',
+          commandLedgerWatermark: 'watermark',
+          complete: true,
+          warnings: [],
+          targets: [],
+        }),
+      },
+      findingPolicy: adapter,
+      lifecyclePolicy: adapter,
+      presentationPolicy: adapter,
+      mergeGatePolicy: adapter,
+      limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+    });
+    const command = {
+      projectionPolicyVersion: 'projection-policy.v1',
+      authoritativeObservationIds: [
+        'observation-0',
+        'observation-1',
+        'shared-observation',
+        'distinct-observation',
+        'observation-2',
+      ],
+      scope: {
+        scmRepositoryIdentityId: 'repo-1',
+        pullRequestNumber: 1,
+        baseSha: '0'.repeat(40),
+        reviewedHeadSha: '1'.repeat(40),
+        reviewRevisionHash: 'revision-1',
+      },
+      presentation: {
+        title: 'Review',
+        author: 'author',
+        additions: 1,
+        deletions: 1,
+      },
+      providerExecution: { plannedProviders: 1, succeededProviders: 1 },
+      currentFindings: findings,
+      priorLineageHints: [],
+      lifecycleRevalidations: [],
+      coverage: {
+        state: ProjectionCoverageState.Complete,
+        mode: 'full' as const,
+        totalFiles: 1,
+        reviewedFiles: 1,
+        unreviewedFiles: 0,
+        limitations: [],
+      },
+      revisionFiles: [{ path, status: RevisionFileStatus.Modified, patch }],
+      diff: `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n${patch}`,
+    };
+    const result = await useCase.execute(command);
+    expect(result.envelope.occurrences).toHaveLength(1);
+    expect(result.envelope.occurrences[0]).toMatchObject({
+      sourceFindingIds: ['a', 'b', 'c'],
+      normalizedFailureModeHash: 'failure-a',
+      observationIds: [
+        'observation-0',
+        'observation-1',
+        'observation-2',
+        'shared-observation',
+      ],
+      providerVoteKeys: ['claude/account-2', 'codex/account-1'],
+    });
+    expect(await useCase.execute(command)).toEqual(result);
+    const separate = await useCase.execute({
+      ...command,
+      currentFindings: [
+        ...findings,
+        candidate({
+          sourceFindingId: 'distinct',
+          normalizedFailureModeHash: 'distinct-failure',
+          title: 'Authorization bypass exposes private records',
+          message: 'Missing permission check allows unauthorized access.',
+          observationIds: ['distinct-observation'],
+          providerIds: ['gemini'],
+          providerVoteKeys: ['gemini/account-3'],
+        }),
+      ],
+    });
+    expect(separate.envelope.occurrences).toHaveLength(2);
+    expect(
+      separate.envelope.occurrences.find((f) =>
+        f.sourceFindingIds.includes('a')
+      )
+    ).toEqual(result.envelope.occurrences[0]);
+    expect(
+      separate.envelope.occurrences.find((f) =>
+        f.sourceFindingIds.includes('distinct')
+      )
+    ).toMatchObject({
+      sourceFindingIds: ['distinct'],
+      observationIds: ['distinct-observation'],
+      providerVoteKeys: ['gemini/account-3'],
+    });
+    expect(JSON.stringify(findings)).toBe(snapshot);
+  });
 
   it('degrades rename, deletion and unplaceable findings without false inline anchors', async () => {
     const occurrences = [

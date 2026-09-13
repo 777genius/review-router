@@ -176,102 +176,66 @@ describe("hosted pool replay-fenced failover artifact", () => {
     expect(grantCalls).toBe(1);
   });
 
-  it("keeps the outer-loop fence after a completed 5xx", async () => {
-    let grantCalls = 0;
-    let relayCalls = 0;
-    const attempts: number[] = [];
-    await expect(
-      actionBundle.runHostedPoolLeaseFailover({
-        maxAttempts: 2,
-        canRetry: () => true,
-        runAttempt: async ({ attempt }) => {
-          attempts.push(attempt);
-          await actionBundle.runHostedCodexRelayTransport({
-            env: freshOidcEnv(),
-            apiUrl,
-            providerInstanceId: "provider-1",
-            workflowSchemaVersion: 5,
-            bindingId: "binding-1",
-            bindingVersion: 7,
-            maskSecret: jest.fn(),
-            fetchImpl: jest.fn(async (url: string | URL) => {
-              if (String(url).startsWith(oidcUrl)) {
-                return Response.json({ value: "oidc" });
-              }
-              if (String(url).endsWith("/hosted-relay/grant")) {
-                grantCalls += 1;
-                return Response.json(validGrant(grantCalls));
-              }
-              relayCalls += 1;
-              return new Response("failed", { status: 500 });
-            }) as typeof fetch,
-            run: async ({ baseUrl }) => {
-              const result = await fetch(`${baseUrl}/responses`, {
-                method: "POST",
-                body: "{}",
-              });
-              await result.text();
-              throw new Error("runtime_rejected_response");
-            },
-          });
-        },
-      }),
-    ).rejects.toThrow("hosted_pool_effect_ambiguous");
-    expect(attempts).toEqual([1]);
-    expect(grantCalls).toBe(1);
-    expect(relayCalls).toBe(1);
-  });
+  it.each([
+    ["completed 5xx", () => new Response("failed", { status: 500 })],
+    [
+      "truncated 200",
+      () =>
+        new Response('data: {"type":"response.completed"}\n\n', {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+    ],
+  ] as const)(
+    "keeps the outer-loop fence after a %s",
+    async (_label, response) => {
+      let grantCalls = 0;
+      let relayCalls = 0;
+      const attempts: number[] = [];
+      await expect(
+        actionBundle.runHostedPoolLeaseFailover({
+          maxAttempts: 2,
+          canRetry: () => true,
+          runAttempt: async ({ attempt }) => {
+            attempts.push(attempt);
+            await actionBundle.runHostedCodexRelayTransport({
+              env: freshOidcEnv(),
+              apiUrl,
+              providerInstanceId: "provider-1",
+              workflowSchemaVersion: 5,
+              bindingId: "binding-1",
+              bindingVersion: 7,
+              maskSecret: jest.fn(),
+              fetchImpl: jest.fn(async (url: string | URL) => {
+                if (String(url).startsWith(oidcUrl)) {
+                  return Response.json({ value: "oidc" });
+                }
+                if (String(url).endsWith("/hosted-relay/grant")) {
+                  grantCalls += 1;
+                  return Response.json(validGrant(grantCalls));
+                }
+                relayCalls += 1;
+                return response();
+              }) as typeof fetch,
+              run: async ({ baseUrl }) => {
+                const result = await fetch(`${baseUrl}/responses`, {
+                  method: "POST",
+                  body: "{}",
+                });
+                await result.text();
+                throw new Error("runtime_rejected_response");
+              },
+            });
+          },
+        }),
+      ).rejects.toThrow("hosted_pool_effect_ambiguous");
+      expect(attempts).toEqual([1]);
+      expect(grantCalls).toBe(1);
+      expect(relayCalls).toBe(1);
+    },
+  );
 
-  it("treats a truncated 200 response.completed as a finished turn", async () => {
-    let grantCalls = 0;
-    let relayCalls = 0;
-    const attempts: number[] = [];
-    await expect(
-      actionBundle.runHostedPoolLeaseFailover({
-        maxAttempts: 2,
-        canRetry: () => true,
-        runAttempt: async ({ attempt }) => {
-          attempts.push(attempt);
-          await actionBundle.runHostedCodexRelayTransport({
-            env: freshOidcEnv(),
-            apiUrl,
-            providerInstanceId: "provider-1",
-            workflowSchemaVersion: 5,
-            bindingId: "binding-1",
-            bindingVersion: 7,
-            maskSecret: jest.fn(),
-            fetchImpl: jest.fn(async (url: string | URL) => {
-              if (String(url).startsWith(oidcUrl)) {
-                return Response.json({ value: "oidc" });
-              }
-              if (String(url).endsWith("/hosted-relay/grant")) {
-                grantCalls += 1;
-                return Response.json(validGrant(grantCalls));
-              }
-              relayCalls += 1;
-              return new Response('data: {"type":"response.completed"}\n\n', {
-                status: 200,
-                headers: { "content-type": "text/event-stream" },
-              });
-            }) as typeof fetch,
-            run: async ({ baseUrl }) => {
-              const result = await fetch(`${baseUrl}/responses`, {
-                method: "POST",
-                body: "{}",
-              });
-              await result.text();
-              throw new Error("runtime_rejected_response");
-            },
-          });
-        },
-      }),
-    ).rejects.toThrow("runtime_rejected_response");
-    expect(attempts).toEqual([1]);
-    expect(grantCalls).toBe(1);
-    expect(relayCalls).toBe(1);
-  });
-
-  it("queues a second /v1/responses instead of fencing an in-flight body", async () => {
+  it("sets the replay fence before a slow body can race another mutation", async () => {
     let relayCalls = 0;
     const proxy = await actionBundle.startHostedCodexRelayProxy({
       grant: "grant",
@@ -296,10 +260,12 @@ describe("hosted pool replay-fenced failover artifact", () => {
       });
       slow.write('{"input":"');
       await new Promise<void>((resolve) => setImmediate(resolve));
-      const concurrent = fetch(`${proxy.baseUrl}/responses`, {
+      const concurrent = await fetch(`${proxy.baseUrl}/responses`, {
         method: "POST",
         body: "{}",
       });
+      expect(concurrent.status).toBe(409);
+      expect(relayCalls).toBe(0);
       const finished = new Promise<void>((resolve, reject) => {
         slow.once("response", (response) => {
           response.resume();
@@ -308,11 +274,8 @@ describe("hosted pool replay-fenced failover artifact", () => {
         slow.once("error", reject);
       });
       slow.end('review"}');
-      const concurrentResponse = await concurrent;
-      expect(concurrentResponse.status).toBe(200);
-      expect(await concurrentResponse.text()).toBe("data: [DONE]\n\n");
       await finished;
-      expect(relayCalls).toBe(2);
+      expect(relayCalls).toBe(1);
     } finally {
       await proxy.close();
     }
@@ -353,13 +316,11 @@ describe("hosted pool replay-fenced failover artifact", () => {
       const first = fetch(`${proxy.baseUrl}/responses`, {
         method: "POST",
         body: JSON.stringify({ input: "first" }),
-        keepalive: false,
       });
       await firstUpstream;
       const second = await fetch(`${proxy.baseUrl}/responses`, {
         method: "POST",
         body: JSON.stringify({ input: "second" }),
-        keepalive: false,
       });
       expect(second.status).toBe(200);
       expect(await second.text()).toBe("data: [DONE]\n\n");

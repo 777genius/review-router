@@ -1,3 +1,4 @@
+import { BuildCurrentReviewProjection } from '../../../src/review-projection/application/build-current-review-projection';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import {
   FindingOccurrence,
@@ -45,6 +46,168 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
       'observation-2',
     ]);
   });
+
+
+  it.each([false, true])(
+    'preserves exact certificate pair membership through production projection (reversed=%s)',
+    async (reversed) => {
+      // Sanitized attempt04 certificate: keep both evidence identities intact.
+      const certificateFindings = [
+        {
+          fingerprint:
+            '68d66f0a7f44cdaa35eb916177c25f435d274260e754483e642d9316c9ab93ed',
+          severity: 'major',
+          title: 'Returning a string breaks the numeric caller',
+          body: '`hidden-caller.mjs` computes `changedApi() + 1`. With the previous numeric return this produced `2`; the new string return uses JavaScript concatenation and produces `"11"`, changing both the value and its type for this reachable caller.',
+          path: 'samples/module-01/src/service.mjs',
+          line: 1,
+          evidenceReceiptIds: [
+            '6c04f1974cf52a27bbbfd9bb260ca8a5d60d87186bb7793daa679cf28efe2720',
+            '8d27fd04d498103e08ff56c30ed6e721f040b88f91773239a27a8cc8e3ac404d',
+            '945c230d0a7b44e20648ebbdf9059059b416c0de71c3f753d6295ade21cb75d7',
+          ],
+        },
+        {
+          fingerprint:
+            'ce8f807ca48fe4d706f2791f99895e10467e7ee59a5c7b4df621c07c5706e373',
+          severity: 'major',
+          title: 'Returning a string breaks arithmetic in the existing caller',
+          body: '`hidden-caller.mjs` computes `changedApi() + 1`. With this change, JavaScript performs string concatenation and exports `"11"` instead of the previous numeric value `2`, breaking the caller\'s arithmetic contract.',
+          path: 'samples/module-01/src/service.mjs',
+          line: 1,
+          evidenceReceiptIds: [
+            '3228f4c76301b3b9e7b7c253dc85ef32c1a6b87769d4070da1cb0edfbebe9400',
+            '41675ed2b36e8a6baa8c5095d9b821affe8b7ca6ef8ec96f332a88d8cde1a75a',
+            'ab10aa708ff4bb0d25c60f117ec9d69fa66d21cc5d27a6acd8b4010926a186fc',
+            'f9eeebd103cff020ff7046f73478d00a896242718138a06ef826e8863d383183',
+          ],
+        },
+      ];
+      const pair = certificateFindings.map((finding, index) =>
+        candidate({
+          sourceFindingId: finding.fingerprint,
+          normalizedFailureModeHash: finding.fingerprint,
+          category: 'review_investigation',
+          title: finding.title,
+          message: finding.body,
+          filePath: finding.path,
+          line: finding.line,
+          startLine: finding.line,
+          endLine: finding.line,
+          observationIds: [`observation-${index}`, 'shared-observation'],
+          evidence: finding.evidenceReceiptIds,
+        })
+      );
+      if (reversed) pair.reverse();
+      const snapshot = JSON.stringify(pair);
+      const path = certificateFindings[0].path;
+      const patch =
+        '@@ -1 +1 @@\n-export function changedApi() { return 1; }\n+export function changedApi() { return "1"; }';
+      const useCase = new BuildCurrentReviewProjection({
+        lifecycleInventory: {
+          loadCurrent: async () => ({
+            inventoryVersion: 'review_lifecycle_inventory.v1' as const,
+            loadedForHeadSha: '1'.repeat(40),
+            lifecycleStateHash: 'state',
+            commandLedgerWatermark: 'watermark',
+            complete: true,
+            warnings: [],
+            targets: [],
+          }),
+        },
+        findingPolicy: adapter,
+        lifecyclePolicy: adapter,
+        presentationPolicy: adapter,
+        mergeGatePolicy: adapter,
+        limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+      });
+      const command = {
+        projectionPolicyVersion: 'projection-policy.v1',
+        authoritativeObservationIds: [
+          'observation-0',
+          'observation-1',
+          'shared-observation',
+          'distinct-observation',
+        ],
+        scope: {
+          scmRepositoryIdentityId: 'repo-1',
+          pullRequestNumber: 1,
+          baseSha: '0'.repeat(40),
+          reviewedHeadSha: '1'.repeat(40),
+          reviewRevisionHash: 'revision-1',
+        },
+        presentation: {
+          title: 'Review',
+          author: 'author',
+          additions: 1,
+          deletions: 1,
+        },
+        providerExecution: { plannedProviders: 1, succeededProviders: 1 },
+        currentFindings: pair,
+        priorLineageHints: [],
+        lifecycleRevalidations: [],
+        coverage: {
+          state: ProjectionCoverageState.Complete,
+          mode: 'full' as const,
+          totalFiles: 1,
+          reviewedFiles: 1,
+          unreviewedFiles: 0,
+          limitations: [],
+        },
+        revisionFiles: [{ path, status: RevisionFileStatus.Modified, patch }],
+        diff: `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n${patch}`,
+      };
+      const result = await useCase.execute(command);
+      expect(result.envelope.occurrences).toHaveLength(1);
+      expect(result.envelope.occurrences[0]).toMatchObject({
+        sourceFindingIds: certificateFindings.map((f) => f.fingerprint).sort(),
+        observationIds: [
+          'observation-0',
+          'observation-1',
+          'shared-observation',
+        ],
+        providerVoteKeys: ['codex/account-1'],
+      });
+      const distinct = candidate({
+        sourceFindingId: 'distinct',
+        normalizedFailureModeHash: 'distinct-failure-mode',
+        filePath: path,
+        line: 1,
+        startLine: 1,
+        endLine: 1,
+        title: 'Authorization bypass exposes private records',
+        message:
+          'Missing permission check allows unauthorized access to private records.',
+        providerIds: ['claude'],
+        providerVoteKeys: ['claude/account-2'],
+        observationIds: ['distinct-observation'],
+      });
+      const separate = await useCase.execute({
+        ...command,
+        currentFindings: [...pair, distinct],
+      });
+      expect(separate.envelope.occurrences).toHaveLength(2);
+      expect(
+        separate.envelope.occurrences.find((f) => f.title === distinct.title)
+      ).toMatchObject({
+        sourceFindingIds: ['distinct'],
+        observationIds: ['distinct-observation'],
+        providerVoteKeys: ['claude/account-2'],
+      });
+      expect(
+        separate.envelope.occurrences.find((f) => f.title !== distinct.title)
+      ).toMatchObject({
+        sourceFindingIds: certificateFindings.map((f) => f.fingerprint).sort(),
+        observationIds: [
+          'observation-0',
+          'observation-1',
+          'shared-observation',
+        ],
+        providerVoteKeys: ['codex/account-1'],
+      });
+      expect(JSON.stringify(pair)).toBe(snapshot);
+    }
+  );
 
   it('degrades rename, deletion and unplaceable findings without false inline anchors', async () => {
     const occurrences = [

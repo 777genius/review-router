@@ -22493,13 +22493,14 @@ async function startHostedCodexRelayProxy(input) {
             }
           } else {
             await upstream.body?.cancel().catch(() => void 0);
-            replayFenced = true;
           }
         } finally {
           inFlightRelayRequests -= 1;
         }
       } catch (error51) {
-        replayFenced = true;
+        if (error51 instanceof Error && error51.message !== "downstream_closed") {
+          replayFenced = true;
+        }
         if (!downstreamClosed) {
           const code = error51 instanceof Error && error51.message === "proxy_request_body_too_large" ? "proxy_request_body_too_large" : "proxy_upstream_failed";
           if (res.headersSent) {

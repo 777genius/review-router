@@ -22445,7 +22445,7 @@ async function startHostedCodexRelayProxy(input) {
           writeProxyError(res, 404, "proxy_route_denied");
           return;
         }
-        if (replayFenced || inFlightRelayRequests >= maxConcurrentRelayRequests) {
+        if (inFlightRelayRequests >= maxConcurrentRelayRequests || replayFenced && inFlightRelayRequests === 0) {
           writeProxyError(res, 409, "proxy_replay_fenced");
           return;
         }
@@ -22455,12 +22455,10 @@ async function startHostedCodexRelayProxy(input) {
           return;
         }
         const ordinal = requestCount;
-        replayFenced = true;
-        failoverReason = "ambiguous";
-        const body = await readRequestBody(req, maxBodyBytes);
         inFlightRelayRequests += 1;
-        replayFenced = false;
+        failoverReason = "ambiguous";
         try {
+          const body = await readRequestBody(req, maxBodyBytes);
           upstreamController = new AbortController();
           activeUpstreamRequests.add(upstreamController);
           const upstream = await fetchWithZeroizedBody(

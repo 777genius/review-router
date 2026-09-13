@@ -22480,10 +22480,7 @@ async function startHostedCodexRelayProxy(input) {
             body
           );
           if (!downstreamClosed) {
-            const responseCompletion = await writeUpstreamResponse(
-              res,
-              upstream
-            );
+            const responseCompletion = await writeUpstreamResponse(res, upstream);
             if ((upstream.status === 401 || upstream.status === 429) && successfulRelayRequests === 0 && ordinal === 1) {
               failoverReason = upstream.status === 401 ? "authentication_failed" : "quota_exhausted";
               replayFenced = false;
@@ -24043,7 +24040,8 @@ async function readForkPullRequestTargetEvent(env) {
   };
 }
 async function readTrustedSameRepositoryPullRequestTargetEvent(env) {
-  if (env.GITHUB_EVENT_NAME !== "pull_request_target") {
+  const eventName = env.GITHUB_EVENT_NAME;
+  if (eventName !== "pull_request" && eventName !== "pull_request_target") {
     throw new Error("unsupported_event");
   }
   const eventPath = env.GITHUB_EVENT_PATH;
@@ -24056,9 +24054,6 @@ async function readTrustedSameRepositoryPullRequestTargetEvent(env) {
     event.pull_request?.head?.repo?.full_name,
     "head_repo"
   );
-  if (event.repository?.private !== true) {
-    throw new Error("hosted_public_repository_unsupported");
-  }
   if (repository !== headRepo) {
     throw new Error("hosted_fork_pull_request_unsupported");
   }

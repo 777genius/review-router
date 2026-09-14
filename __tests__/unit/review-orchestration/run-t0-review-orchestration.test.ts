@@ -660,12 +660,16 @@ describe('RunT0ReviewOrchestration', () => {
       investigationMode: ReviewInvestigationRecordingMode.Authoritative,
       investigationVerifiedCleanEffectsEnabled: true,
       lifecycleBearingAuthoritative: true,
+      investigationPrepareError: new Error('investigation_should_not_start'),
     });
 
     const result = await fixture.useCase.execute(fixture.command);
 
     expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
-    expect(fixture.investigationRecording?.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.investigationRecording?.execute).not.toHaveBeenCalled();
+    expect(
+      fixture.dependencies.investigationInvocations?.prepare
+    ).not.toHaveBeenCalled();
     expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
     expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledWith(
       expect.objectContaining({

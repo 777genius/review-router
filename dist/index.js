@@ -97261,42 +97261,46 @@ var RunT0ReviewOrchestration = class {
           exhaustionReason: "deadline_reached" /* DeadlineReached */
         };
       }
-      let investigationCandidate;
-      try {
-        investigationCandidate = await this.prepareInvestigationCandidate({
-          authorization: input.authorization,
-          execution: input.execution,
-          workSlot: input.workSlot,
-          attemptOrdinal,
-          ownerIdHash: input.ownerIdHash,
-          revision: input.revision
-        });
-      } catch (error2) {
-        if (error2 instanceof ReviewExecutionDeadlineReachedSignal) {
+      let investigationCandidate = null;
+      if (!authoritativeInvocation.manifestFacts.taskKindSet.includes(
+        "lifecycle_revalidation" /* LifecycleRevalidation */
+      )) {
+        try {
+          investigationCandidate = await this.prepareInvestigationCandidate({
+            authorization: input.authorization,
+            execution: input.execution,
+            workSlot: input.workSlot,
+            attemptOrdinal,
+            ownerIdHash: input.ownerIdHash,
+            revision: input.revision
+          });
+        } catch (error2) {
+          if (error2 instanceof ReviewExecutionDeadlineReachedSignal) {
+            input.onEvent({
+              type: "slot_exhausted" /* SlotExhausted */,
+              workSlotId: input.workSlot.workSlotId
+            });
+            return {
+              streamVersion,
+              exhaustionReason: "deadline_reached" /* DeadlineReached */
+            };
+          }
+          if (!(error2 instanceof ReviewInvestigationDeferredSignal)) throw error2;
+          this.recordInvestigationDiagnostic({
+            outcome: "authoritative_deferred" /* AuthoritativeDeferred */,
+            workSlot: input.workSlot,
+            attemptOrdinal,
+            error: error2
+          });
           input.onEvent({
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: input.workSlot.workSlotId
           });
           return {
             streamVersion,
-            exhaustionReason: "deadline_reached" /* DeadlineReached */
+            exhaustionReason: "investigation_deferred" /* InvestigationDeferred */
           };
         }
-        if (!(error2 instanceof ReviewInvestigationDeferredSignal)) throw error2;
-        this.recordInvestigationDiagnostic({
-          outcome: "authoritative_deferred" /* AuthoritativeDeferred */,
-          workSlot: input.workSlot,
-          attemptOrdinal,
-          error: error2
-        });
-        input.onEvent({
-          type: "slot_exhausted" /* SlotExhausted */,
-          workSlotId: input.workSlot.workSlotId
-        });
-        return {
-          streamVersion,
-          exhaustionReason: "investigation_deferred" /* InvestigationDeferred */
-        };
       }
       const selectedInvestigationCandidate = investigationCandidate !== null && this.dependencies.investigationRecording?.mode === "authoritative" /* Authoritative */ && !authoritativeInvocation.manifestFacts.taskKindSet.includes(
         "lifecycle_revalidation" /* LifecycleRevalidation */

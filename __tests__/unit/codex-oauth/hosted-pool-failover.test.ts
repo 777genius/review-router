@@ -254,29 +254,42 @@ describe("hosted pool replay-fenced failover artifact", () => {
         });
       }) as typeof fetch,
     });
+    let slow: ReturnType<typeof httpRequest> | undefined;
+    let slowSettled: Promise<void> | undefined;
     try {
-      const slow = httpRequest(`${proxy.baseUrl}/responses`, {
+      const slowRequest = httpRequest(`${proxy.baseUrl}/responses`, {
         method: "POST",
+        agent: false,
+        headers: { connection: "close", expect: "100-continue" },
       });
-      slow.write('{"input":"');
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      const concurrent = await fetch(`${proxy.baseUrl}/responses`, {
-        method: "POST",
-        body: "{}",
-      });
-      expect(concurrent.status).toBe(409);
-      expect(relayCalls).toBe(0);
-      const finished = new Promise<void>((resolve, reject) => {
-        slow.once("response", (response) => {
+      slow = slowRequest;
+      const slowFinished = new Promise<void>((resolve, reject) => {
+        slowRequest.once("response", (response) => {
           response.resume();
           response.once("end", resolve);
+          response.once("error", reject);
         });
-        slow.once("error", reject);
+        slowRequest.once("error", reject);
       });
-      slow.end('review"}');
-      await finished;
+      const slowClosed = new Promise<void>((resolve) => {
+        slowRequest.once("close", resolve);
+      });
+      slowSettled = Promise.race([slowFinished, slowClosed]).catch(
+        () => undefined,
+      );
+      const slowAdmitted = waitForContinue(slowRequest);
+      slowRequest.flushHeaders();
+      await slowAdmitted;
+      slowRequest.write('{"input":"');
+      const concurrent = await requestProxy(`${proxy.baseUrl}/responses`, "{}");
+      expect(concurrent.status).toBe(409);
+      expect(relayCalls).toBe(0);
+      slowRequest.end('review"}');
+      await slowFinished;
       expect(relayCalls).toBe(1);
     } finally {
+      slow?.destroy();
+      await slowSettled;
       await proxy.close();
     }
   });
@@ -363,6 +376,56 @@ function freshOidcEnv(): NodeJS.ProcessEnv {
     ACTIONS_ID_TOKEN_REQUEST_URL: oidcUrl,
     ACTIONS_ID_TOKEN_REQUEST_TOKEN: "github-request-token",
   };
+}
+
+function waitForContinue(
+  request: ReturnType<typeof httpRequest>,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      request.off("continue", onContinue);
+      request.off("error", onError);
+    };
+    const onContinue = (): void => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+    request.once("continue", onContinue);
+    request.once("error", onError);
+  });
+}
+
+function requestProxy(
+  url: string,
+  body: string,
+): Promise<{ status: number }> {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(
+      url,
+      {
+        method: "POST",
+        agent: false,
+        headers: {
+          connection: "close",
+          "content-length": Buffer.byteLength(body),
+          "content-type": "application/json",
+        },
+      },
+      (response) => {
+        response.resume();
+        response.once("end", () => {
+          resolve({ status: response.statusCode ?? 0 });
+        });
+        response.once("error", reject);
+      },
+    );
+    request.once("error", reject);
+    request.end(body);
+  });
 }
 
 function validGrant(ordinal: number): Record<string, unknown> {

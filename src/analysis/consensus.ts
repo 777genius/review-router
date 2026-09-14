@@ -89,6 +89,16 @@ export class ConsensusEngine {
 
       grouped.set(key, {
         ...existing,
+        ...(existing.sourceFindingIds || finding.sourceFindingIds
+          ? {
+              sourceFindingIds: Array.from(
+                new Set([
+                  ...(existing.sourceFindingIds ?? []),
+                  ...(finding.sourceFindingIds ?? []),
+                ])
+              ).sort(),
+            }
+          : {}),
         providers: Array.from(
           new Set([...(existing.providers || []), ...providers])
         ),

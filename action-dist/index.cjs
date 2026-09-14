@@ -22578,6 +22578,7 @@ async function startHostedCodexRelayProxy(input) {
   let inFlightRelayRequests = 0;
   let closing = false;
   let failoverReason;
+  let replayFenced = false;
   let successfulRelayRequests = 0;
   const activeUpstreamRequests = /* @__PURE__ */ new Set();
   const relaySlotWaiters = [];
@@ -22660,6 +22661,10 @@ async function startHostedCodexRelayProxy(input) {
           writeProxyError(res, 404, "proxy_route_denied");
           return;
         }
+        if (replayFenced) {
+          writeProxyError(res, 409, "proxy_replay_fenced");
+          return;
+        }
         while (inFlightRelayRequests >= maxConcurrentRelayRequests) {
           if (closing) {
             writeProxyError(res, 503, "proxy_closing");
@@ -22673,10 +22678,12 @@ async function startHostedCodexRelayProxy(input) {
           return;
         }
         const ordinal = requestCount;
-        inFlightRelayRequests += 1;
+        replayFenced = true;
         failoverReason = "ambiguous";
+        const body = await readRequestBody(req, maxBodyBytes);
+        inFlightRelayRequests += 1;
+        replayFenced = false;
         try {
-          const body = await readRequestBody(req, maxBodyBytes);
           upstreamController = new AbortController();
           activeUpstreamRequests.add(upstreamController);
           const upstream = await fetchWithZeroizedBody(
@@ -22710,9 +22717,6 @@ async function startHostedCodexRelayProxy(input) {
             if ((upstream.status === 401 || upstream.status === 429) && successfulRelayRequests === 0 && ordinal === 1) {
               failoverReason = upstream.status === 401 ? "authentication_failed" : "quota_exhausted";
             } else if (responseCompletion === "successful") {
-              successfulRelayRequests += 1;
-              failoverReason = void 0;
-            } else if (upstream.status >= 200 && upstream.status < 300) {
               successfulRelayRequests += 1;
               failoverReason = void 0;
             }
@@ -23024,8 +23028,7 @@ function isProvablySuccessfulRelayResponse(upstream, completionTail) {
 function isSuccessfulHostedSseTail(completionTail) {
   const normalized = completionTail.replace(/\r\n/g, "\n").trimEnd();
   const lastLine = normalized.split("\n").at(-1)?.trim();
-  if (lastLine === "data: [DONE]") return true;
-  return /"type"\s*:\s*"response\.completed"/.test(normalized);
+  return lastLine === "data: [DONE]";
 }
 function throwHostedRelayFailover(reason, cause) {
   if (reason === "authentication_failed") {

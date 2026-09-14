@@ -410,10 +410,33 @@ describe("hosted pool replay-fenced failover artifact", () => {
       await slowContinued;
       slowRequest.write('{"input":"');
 
-      const otherWaiter = requestProxy(`${proxy.baseUrl}/responses`, "{}");
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      const otherRequest = httpRequest(`${proxy.baseUrl}/responses`, {
+        method: "POST",
+        agent: false,
+        headers: {
+          connection: "close",
+          "content-length": 2,
+          "content-type": "application/json",
+          expect: "100-continue",
+        },
+      });
+      const otherWaiter = new Promise<{ status: number }>((resolve, reject) => {
+        otherRequest.once("response", (response) => {
+          response.resume();
+          response.once("end", () => {
+            resolve({ status: response.statusCode ?? 0 });
+          });
+          response.once("error", reject);
+        });
+        otherRequest.once("error", reject);
+      });
+      const otherContinued = waitForContinue(otherRequest);
+      otherRequest.flushHeaders();
+      await otherContinued;
+      otherRequest.end("{}");
+
       releases.shift()?.();
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise<void>((resolve) => setImmediate(resolve));
       releases.shift()?.();
 
       await expect(otherWaiter).resolves.toEqual({ status: 409 });

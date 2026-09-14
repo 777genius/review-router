@@ -15,6 +15,7 @@ import {
   ReviewPublicationState,
   ReviewInvestigationRecordingMode,
   ReviewInvestigationDiagnosticOutcome,
+  ReviewTaskKind,
   RestoredReviewWorkSlotState,
   type AcceptedReviewObservation,
   type AcceptedReviewWorkSlotEvidence,
@@ -933,6 +934,9 @@ export class RunT0ReviewOrchestration {
         investigationCandidate !== null &&
         this.dependencies.investigationRecording?.mode ===
           ReviewInvestigationRecordingMode.Authoritative &&
+        !authoritativeInvocation.manifestFacts.taskKindSet.includes(
+          ReviewTaskKind.LifecycleRevalidation
+        ) &&
         (investigationCandidate.observation.findingCount > 0 ||
           (investigationCandidate.observation.qualityFlags.includes(
             'investigation_verified_clean'

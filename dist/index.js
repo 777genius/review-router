@@ -97298,7 +97298,9 @@ var RunT0ReviewOrchestration = class {
           exhaustionReason: "investigation_deferred" /* InvestigationDeferred */
         };
       }
-      const selectedInvestigationCandidate = investigationCandidate !== null && this.dependencies.investigationRecording?.mode === "authoritative" /* Authoritative */ && (investigationCandidate.observation.findingCount > 0 || investigationCandidate.observation.qualityFlags.includes(
+      const selectedInvestigationCandidate = investigationCandidate !== null && this.dependencies.investigationRecording?.mode === "authoritative" /* Authoritative */ && !authoritativeInvocation.manifestFacts.taskKindSet.includes(
+        "lifecycle_revalidation" /* LifecycleRevalidation */
+      ) && (investigationCandidate.observation.findingCount > 0 || investigationCandidate.observation.qualityFlags.includes(
         "investigation_verified_clean"
       ) && this.dependencies.investigationRecording.verifiedCleanEffectsEnabled === true) ? investigationCandidate : null;
       const invocation = selectedInvestigationCandidate ? selectedInvestigationCandidate.invocation : authoritativeInvocation;
@@ -99429,10 +99431,11 @@ var CodexReviewInvocationAdapter = class {
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error("review_action_v2_assignment_missing");
     }
+    const effectiveLifecycleTargets = this.investigationManifestBindingEnabled ? [] : assignment.lifecycleTargets;
     const preparedPrompt = await this.promptBuilder.buildPreparedV2(
       assignment.context,
       assignment.context.number,
-      [...assignment.lifecycleTargets]
+      [...effectiveLifecycleTargets]
     );
     const coverageManifest = createReviewPromptCoverageManifest({
       workSlotId: input.workSlot.workSlotId,
@@ -99461,7 +99464,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
       mergeBaseSha: assignment.mergeBaseSha,
       headSha: assignment.context.headSha
     });
-    const shouldPrepareInvestigationSeed = this.investigationManifestBindingEnabled && preparedPrompt.investigationProbePlan.status === "complete" /* Complete */ && assignment.lifecycleTargets.length === 0;
+    const shouldPrepareInvestigationSeed = this.investigationManifestBindingEnabled && preparedPrompt.investigationProbePlan.status === "complete" /* Complete */;
     const [gatewayPlanningConfig, canonicalInventory] = this.contextGateway ? await Promise.all([
       this.contextGateway.planningConfig(revision),
       shouldPrepareInvestigationSeed ? this.contextGateway.canonicalInventory(revision) : Promise.resolve(void 0)
@@ -99481,7 +99484,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
       Array.from(
         /* @__PURE__ */ new Set([
           input.workSlot.taskKind,
-          ...assignment.lifecycleTargets.length > 0 ? ["lifecycle_revalidation" /* LifecycleRevalidation */] : []
+          ...effectiveLifecycleTargets.length > 0 ? ["lifecycle_revalidation" /* LifecycleRevalidation */] : []
         ])
       ).sort()
     );
@@ -99561,16 +99564,16 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
             author: assignment.context.author,
             body: assignment.context.body,
             coverageHash: providerVisibleCoverage.coverageHash,
-            lifecycleTargetIds: assignment.lifecycleTargets.map((target) => target.targetId).sort(),
+            lifecycleTargetIds: effectiveLifecycleTargets.map((target) => target.targetId).sort(),
             investigationProbePlanHash: preparedPrompt.investigationProbePlan.planHash,
             investigationProbePlanStatus: preparedPrompt.investigationProbePlan.status,
             number: assignment.context.number,
             title: assignment.context.title
           })
         ),
-        lifecycleTargetSetHash: assignment.lifecycleTargets.length > 0 ? sha25612(
+        lifecycleTargetSetHash: effectiveLifecycleTargets.length > 0 ? sha25612(
           canonicalJson10(
-            assignment.lifecycleTargets.map((target) => ({
+            effectiveLifecycleTargets.map((target) => ({
               fingerprint: target.fingerprint,
               targetId: target.targetId
             })).sort(
@@ -99578,7 +99581,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
             )
           )
         ) : null,
-        liveLifecycleStateHash: assignment.lifecycleTargets.length > 0 ? assignment.liveLifecycleStateHash : null,
+        liveLifecycleStateHash: effectiveLifecycleTargets.length > 0 ? assignment.liveLifecycleStateHash : null,
         toolPolicyHash: sha25612(
           canonicalJson10(
             gatewayPlanningConfig ? {

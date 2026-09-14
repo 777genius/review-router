@@ -91,10 +91,13 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error('review_action_v2_assignment_missing');
     }
+    const effectiveLifecycleTargets = this.investigationManifestBindingEnabled
+      ? []
+      : assignment.lifecycleTargets;
     const preparedPrompt = await this.promptBuilder.buildPreparedV2(
       assignment.context,
       assignment.context.number,
-      [...assignment.lifecycleTargets]
+      [...effectiveLifecycleTargets]
     );
     const coverageManifest = createReviewPromptCoverageManifest({
       workSlotId: input.workSlot.workSlotId,
@@ -123,8 +126,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     const shouldPrepareInvestigationSeed =
       this.investigationManifestBindingEnabled &&
       preparedPrompt.investigationProbePlan.status ===
-        ReviewInvestigationProbePlanStatus.Complete &&
-      assignment.lifecycleTargets.length === 0;
+        ReviewInvestigationProbePlanStatus.Complete;
     const [gatewayPlanningConfig, canonicalInventory] = this.contextGateway
       ? await Promise.all([
           this.contextGateway.planningConfig(revision),
@@ -148,7 +150,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
       Array.from(
         new Set([
           input.workSlot.taskKind,
-          ...(assignment.lifecycleTargets.length > 0
+          ...(effectiveLifecycleTargets.length > 0
             ? [ReviewTaskKind.LifecycleRevalidation]
             : []),
         ])
@@ -251,7 +253,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
             author: assignment.context.author,
             body: assignment.context.body,
             coverageHash: providerVisibleCoverage.coverageHash,
-            lifecycleTargetIds: assignment.lifecycleTargets
+            lifecycleTargetIds: effectiveLifecycleTargets
               .map((target) => target.targetId)
               .sort(),
             investigationProbePlanHash:
@@ -263,10 +265,10 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
           })
         ),
         lifecycleTargetSetHash:
-          assignment.lifecycleTargets.length > 0
+          effectiveLifecycleTargets.length > 0
             ? sha256(
                 canonicalJson(
-                  assignment.lifecycleTargets
+                  effectiveLifecycleTargets
                     .map((target) => ({
                       fingerprint: target.fingerprint,
                       targetId: target.targetId,
@@ -278,7 +280,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
               )
             : null,
         liveLifecycleStateHash:
-          assignment.lifecycleTargets.length > 0
+          effectiveLifecycleTargets.length > 0
             ? assignment.liveLifecycleStateHash
             : null,
         toolPolicyHash: sha256(

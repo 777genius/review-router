@@ -27,6 +27,7 @@ import type { ReviewAgentProviderKind } from '../domain/runtime-profile';
 
 export enum ReviewInvestigationLegacyFallbackReason {
   CapabilityDisabledBeforeOpen = 'capability_disabled_before_open',
+  InfrastructureUnavailableBeforeOpen = 'infrastructure_unavailable_before_open',
   RecordOnlyDeferred = 'record_only_deferred',
   RecordOnlyBudgetExhausted = 'record_only_budget_exhausted',
 }
@@ -38,6 +39,22 @@ export class ReviewInvestigationLegacyFallbackSignal extends Error {
   ) {
     super(`review_investigation_legacy_fallback:${reason}`);
     this.name = 'ReviewInvestigationLegacyFallbackSignal';
+  }
+}
+
+/**
+ * A work-slot-local gate that prevents legacy execution once investigation
+ * replay or authority acquisition has begun.
+ */
+export class ReviewInvestigationLegacyFallbackGate {
+  private available = true;
+
+  isAvailable(): boolean {
+    return this.available;
+  }
+
+  close(): void {
+    this.available = false;
   }
 }
 
@@ -64,6 +81,7 @@ export class RunInvestigationWorkSlot {
       delay: ReviewInvestigationDelayPort;
       turnRunner: RunInvestigationTurn;
       replay?: ReviewInvestigationReplayUseCasePort;
+      legacyFallbackGate?: ReviewInvestigationLegacyFallbackGate;
       now?: () => Date;
     }>
   ) {}
@@ -90,6 +108,9 @@ export class RunInvestigationWorkSlot {
   ): Promise<ReviewInvestigationRunResult> {
     throwIfAborted(input.signal);
     let replayed: ReviewInvestigationSnapshot | null = null;
+    const legacyFallbackGate =
+      this.dependencies.legacyFallbackGate ??
+      new ReviewInvestigationLegacyFallbackGate();
     if (this.dependencies.replay) {
       if (
         !input.targetRevision ||
@@ -99,6 +120,9 @@ export class RunInvestigationWorkSlot {
       ) {
         throw new Error('review_investigation_replay_input_missing');
       }
+      // A null replay result only says that no snapshot can be resumed. Replay
+      // may already establish authority or commit a durable receipt proof.
+      legacyFallbackGate.close();
       replayed = await this.dependencies.replay.execute({
         open: input,
         scope: input.targetScope,
@@ -115,15 +139,32 @@ export class RunInvestigationWorkSlot {
         snapshot = await this.dependencies.controlPlane.open(input);
       } catch (error) {
         if (
-          error instanceof ReviewInvestigationControlPlaneError &&
-          error.failureClass ===
-            ReviewInvestigationControlPlaneFailureClass.CapabilityDisabled
+          legacyFallbackGate.isAvailable() &&
+          error instanceof ReviewInvestigationControlPlaneError
         ) {
-          throw new ReviewInvestigationLegacyFallbackSignal();
+          if (
+            error.failureClass ===
+            ReviewInvestigationControlPlaneFailureClass.CapabilityDisabled
+          ) {
+            throw new ReviewInvestigationLegacyFallbackSignal();
+          }
+          if (
+            error.failureClass ===
+              ReviewInvestigationControlPlaneFailureClass.Unavailable ||
+            error.failureClass ===
+              ReviewInvestigationControlPlaneFailureClass.CapacityLimited
+          ) {
+            throw new ReviewInvestigationLegacyFallbackSignal(
+              ReviewInvestigationLegacyFallbackReason.InfrastructureUnavailableBeforeOpen
+            );
+          }
         }
         throw error;
       }
     }
+    // From this point the investigation open/replay has acquired authority;
+    // no later failure may authorize legacy effects for this work slot.
+    legacyFallbackGate.close();
     for (
       let transition = 0;
       transition < input.maxStateTransitions;

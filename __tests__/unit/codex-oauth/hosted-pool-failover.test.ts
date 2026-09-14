@@ -177,23 +177,18 @@ describe("hosted pool replay-fenced failover artifact", () => {
   });
 
   it.each([
+    ["completed 5xx", () => new Response("failed", { status: 500 })],
     [
-      "completed 5xx",
-      () => new Response("failed", { status: 500 }),
-      "hosted_pool_effect_ambiguous",
-    ],
-    [
-      "completed 200 SSE",
+      "truncated 200",
       () =>
         new Response('data: {"type":"response.completed"}\n\n', {
           status: 200,
           headers: { "content-type": "text/event-stream" },
         }),
-      "runtime_rejected_response",
     ],
   ] as const)(
-    "does not run the outer loop again after a %s",
-    async (_label, response, expectedError) => {
+    "keeps the outer-loop fence after a %s",
+    async (_label, response) => {
       let grantCalls = 0;
       let relayCalls = 0;
       const attempts: number[] = [];
@@ -233,14 +228,14 @@ describe("hosted pool replay-fenced failover artifact", () => {
             });
           },
         }),
-      ).rejects.toThrow(expectedError);
+      ).rejects.toThrow("hosted_pool_effect_ambiguous");
       expect(attempts).toEqual([1]);
       expect(grantCalls).toBe(1);
       expect(relayCalls).toBe(1);
     },
   );
 
-  it("admits a second mutation while the first request body is incomplete", async () => {
+  it("sets the replay fence before a slow body can race another mutation", async () => {
     let relayCalls = 0;
     const proxy = await actionBundle.startHostedCodexRelayProxy({
       grant: "grant",
@@ -269,9 +264,8 @@ describe("hosted pool replay-fenced failover artifact", () => {
         method: "POST",
         body: "{}",
       });
-      expect(concurrent.status).toBe(200);
-      expect(await concurrent.text()).toBe("data: [DONE]\n\n");
-      expect(relayCalls).toBe(1);
+      expect(concurrent.status).toBe(409);
+      expect(relayCalls).toBe(0);
       const finished = new Promise<void>((resolve, reject) => {
         slow.once("response", (response) => {
           response.resume();
@@ -281,7 +275,7 @@ describe("hosted pool replay-fenced failover artifact", () => {
       });
       slow.end('review"}');
       await finished;
-      expect(relayCalls).toBe(2);
+      expect(relayCalls).toBe(1);
     } finally {
       await proxy.close();
     }

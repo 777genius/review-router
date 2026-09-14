@@ -158,6 +158,13 @@ describe('review invocation diagnostics', () => {
     expect(
       classifySafeInvestigationFailureReason(
         new ReviewInvestigationLegacyFallbackSignal(
+          ReviewInvestigationLegacyFallbackReason.InfrastructureUnavailableBeforeOpen
+        )
+      )
+    ).toBe('infrastructure_unavailable_before_open');
+    expect(
+      classifySafeInvestigationFailureReason(
+        new ReviewInvestigationLegacyFallbackSignal(
           ReviewInvestigationLegacyFallbackReason.RecordOnlyDeferred,
           ReviewInvestigationRunStatus.RecoveryRequired
         )

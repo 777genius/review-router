@@ -96327,6 +96327,15 @@ var ReviewInvestigationLegacyFallbackSignal = class extends Error {
     this.name = "ReviewInvestigationLegacyFallbackSignal";
   }
 };
+var ReviewInvestigationLegacyFallbackGate = class {
+  available = true;
+  isAvailable() {
+    return this.available;
+  }
+  close() {
+    this.available = false;
+  }
+};
 var ReviewInvestigationDeferredSignal = class extends Error {
   constructor(status, nextEligibleAt = null) {
     super(`review_investigation_deferred:${status}`);
@@ -96342,10 +96351,12 @@ var RunInvestigationWorkSlot = class {
   async execute(input) {
     throwIfAborted(input.signal);
     let replayed = null;
+    const legacyFallbackGate = this.dependencies.legacyFallbackGate ?? new ReviewInvestigationLegacyFallbackGate();
     if (this.dependencies.replay) {
       if (!input.targetRevision || !input.targetScope || !input.providerManifestCanonicalJson || !input.providerManifestHash) {
         throw new Error("review_investigation_replay_input_missing");
       }
+      legacyFallbackGate.close();
       replayed = await this.dependencies.replay.execute({
         open: input,
         scope: input.targetScope,
@@ -96361,12 +96372,20 @@ var RunInvestigationWorkSlot = class {
       try {
         snapshot = await this.dependencies.controlPlane.open(input);
       } catch (error2) {
-        if (error2 instanceof ReviewInvestigationControlPlaneError && error2.failureClass === "capability_disabled" /* CapabilityDisabled */) {
-          throw new ReviewInvestigationLegacyFallbackSignal();
+        if (legacyFallbackGate.isAvailable() && error2 instanceof ReviewInvestigationControlPlaneError) {
+          if (error2.failureClass === "capability_disabled" /* CapabilityDisabled */) {
+            throw new ReviewInvestigationLegacyFallbackSignal();
+          }
+          if (error2.failureClass === "unavailable" /* Unavailable */ || error2.failureClass === "capacity_limited" /* CapacityLimited */) {
+            throw new ReviewInvestigationLegacyFallbackSignal(
+              "infrastructure_unavailable_before_open" /* InfrastructureUnavailableBeforeOpen */
+            );
+          }
         }
         throw error2;
       }
     }
+    legacyFallbackGate.close();
     for (let transition = 0; transition < input.maxStateTransitions; transition += 1) {
       throwIfAborted(input.signal);
       if (isSuperseded(snapshot)) {
@@ -104085,6 +104104,9 @@ function classifySafeInvestigationFailureReason(error2) {
   if (error2 instanceof ReviewInvestigationLegacyFallbackSignal) {
     if (error2.reason === "capability_disabled_before_open" /* CapabilityDisabledBeforeOpen */) {
       return "capability_disabled_before_open";
+    }
+    if (error2.reason === "infrastructure_unavailable_before_open" /* InfrastructureUnavailableBeforeOpen */) {
+      return "infrastructure_unavailable_before_open";
     }
     if (error2.reason === "record_only_budget_exhausted" /* RecordOnlyBudgetExhausted */) {
       return "investigation_budget_exhausted";
@@ -112936,11 +112958,13 @@ var ProductionT0ReviewRunner = class {
     });
     const identities = new DeterministicReviewOrchestrationIdentity();
     const investigationProtocol = investigationRecordingEnabled ? new ReviewActionV2InvestigationAdapter(reviewActionClient) : void 0;
-    const investigationControlPlane = investigationProtocol ? new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
-      investigationProtocol
-    ) : void 0;
-    const investigationRecording = investigationControlPlane && contextGatewayOptions ? new ReviewInvestigationRecordingAdapter(
+    const investigationRecording = investigationProtocol && contextGatewayOptions ? new ReviewInvestigationRecordingAdapter(
       (recordingInput) => {
+        const legacyFallbackGate = new ReviewInvestigationLegacyFallbackGate();
+        const investigationControlPlane = new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
+          investigationProtocol,
+          legacyFallbackGate
+        );
         const currency = new RevisionGuardInvestigationCurrencyAdapter(
           revisionGuard
         );
@@ -112982,6 +113006,7 @@ var ProductionT0ReviewRunner = class {
         });
         return new RunInvestigationWorkSlot({
           controlPlane: investigationControlPlane,
+          legacyFallbackGate,
           delay: new SystemReviewOrchestrationDelay(),
           leases: new ReviewActionV2InvestigationLeaseAdapter(
             reviewActionClient
@@ -113117,41 +113142,52 @@ function resolveProductionContextGatewaySessionFactoryOptions(input) {
   });
 }
 var LegacyFallbackBeforeInvestigationAuthorityControlPlane = class {
-  constructor(delegate) {
+  constructor(delegate, legacyFallbackGate = new ReviewInvestigationLegacyFallbackGate()) {
     this.delegate = delegate;
+    this.legacyFallbackGate = legacyFallbackGate;
   }
   open(input) {
     return this.openWithLegacyFallback(() => this.delegate.open(input));
   }
   restore(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.restore(input);
   }
   planTurn(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.planTurn(input);
   }
   commitTurn(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.commitTurn(input);
   }
   abortTurn(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.abortTurn(input);
   }
   conclude(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.conclude(input);
   }
   prepareReplay(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.prepareReplay(input);
   }
   commitReceiptReplay(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.commitReceiptReplay(input);
   }
   replay(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.replay(input);
   }
   async openWithLegacyFallback(execute) {
     try {
-      return await execute();
+      const result2 = await execute();
+      this.legacyFallbackGate.close();
+      return result2;
     } catch (error2) {
-      if (error2 instanceof ReviewInvestigationControlPlaneError && error2.failureClass === "capability_disabled" /* CapabilityDisabled */) {
+      if (this.legacyFallbackGate.isAvailable() && error2 instanceof ReviewInvestigationControlPlaneError && error2.failureClass === "capability_disabled" /* CapabilityDisabled */) {
         throw new ReviewInvestigationLegacyFallbackSignal();
       }
       throw error2;

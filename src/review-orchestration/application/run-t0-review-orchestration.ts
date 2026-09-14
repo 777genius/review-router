@@ -15,6 +15,7 @@ import {
   ReviewPublicationState,
   ReviewInvestigationRecordingMode,
   ReviewInvestigationDiagnosticOutcome,
+  ReviewTaskKind,
   RestoredReviewWorkSlotState,
   type AcceptedReviewObservation,
   type AcceptedReviewWorkSlotEvidence,
@@ -891,48 +892,57 @@ export class RunT0ReviewOrchestration {
         };
       }
 
-      let investigationCandidate;
-      try {
-        investigationCandidate = await this.prepareInvestigationCandidate({
-          authorization: input.authorization,
-          execution: input.execution,
-          workSlot: input.workSlot,
-          attemptOrdinal,
-          ownerIdHash: input.ownerIdHash,
-          revision: input.revision,
-        });
-      } catch (error) {
-        if (error instanceof ReviewExecutionDeadlineReachedSignal) {
+      let investigationCandidate = null;
+      if (
+        !authoritativeInvocation.manifestFacts.taskKindSet.includes(
+          ReviewTaskKind.LifecycleRevalidation
+        )
+      ) {
+        try {
+          investigationCandidate = await this.prepareInvestigationCandidate({
+            authorization: input.authorization,
+            execution: input.execution,
+            workSlot: input.workSlot,
+            attemptOrdinal,
+            ownerIdHash: input.ownerIdHash,
+            revision: input.revision,
+          });
+        } catch (error) {
+          if (error instanceof ReviewExecutionDeadlineReachedSignal) {
+            input.onEvent({
+              type: ReviewOrchestrationEventType.SlotExhausted,
+              workSlotId: input.workSlot.workSlotId,
+            });
+            return {
+              streamVersion,
+              exhaustionReason: ReviewWorkSlotExhaustionReason.DeadlineReached,
+            };
+          }
+          if (!(error instanceof ReviewInvestigationDeferredSignal)) throw error;
+          this.recordInvestigationDiagnostic({
+            outcome: ReviewInvestigationDiagnosticOutcome.AuthoritativeDeferred,
+            workSlot: input.workSlot,
+            attemptOrdinal,
+            error,
+          });
           input.onEvent({
             type: ReviewOrchestrationEventType.SlotExhausted,
             workSlotId: input.workSlot.workSlotId,
           });
           return {
             streamVersion,
-            exhaustionReason: ReviewWorkSlotExhaustionReason.DeadlineReached,
+            exhaustionReason:
+              ReviewWorkSlotExhaustionReason.InvestigationDeferred,
           };
         }
-        if (!(error instanceof ReviewInvestigationDeferredSignal)) throw error;
-        this.recordInvestigationDiagnostic({
-          outcome: ReviewInvestigationDiagnosticOutcome.AuthoritativeDeferred,
-          workSlot: input.workSlot,
-          attemptOrdinal,
-          error,
-        });
-        input.onEvent({
-          type: ReviewOrchestrationEventType.SlotExhausted,
-          workSlotId: input.workSlot.workSlotId,
-        });
-        return {
-          streamVersion,
-          exhaustionReason:
-            ReviewWorkSlotExhaustionReason.InvestigationDeferred,
-        };
       }
       const selectedInvestigationCandidate =
         investigationCandidate !== null &&
         this.dependencies.investigationRecording?.mode ===
           ReviewInvestigationRecordingMode.Authoritative &&
+        !authoritativeInvocation.manifestFacts.taskKindSet.includes(
+          ReviewTaskKind.LifecycleRevalidation
+        ) &&
         (investigationCandidate.observation.findingCount > 0 ||
           (investigationCandidate.observation.qualityFlags.includes(
             'investigation_verified_clean'

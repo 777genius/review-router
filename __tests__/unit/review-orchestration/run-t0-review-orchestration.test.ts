@@ -654,6 +654,32 @@ describe('RunT0ReviewOrchestration', () => {
     );
   });
 
+  it('keeps lifecycle-bearing authoritative evidence when investigation recording is authoritative', async () => {
+    const fixture = createFixture({
+      executionProfile: 'context_gateway_v1',
+      investigationMode: ReviewInvestigationRecordingMode.Authoritative,
+      investigationVerifiedCleanEffectsEnabled: true,
+      lifecycleBearingAuthoritative: true,
+      investigationPrepareError: new Error('investigation_should_not_start'),
+    });
+
+    const result = await fixture.useCase.execute(fixture.command);
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(fixture.investigationRecording?.execute).not.toHaveBeenCalled();
+    expect(
+      fixture.dependencies.investigationInvocations?.prepare
+    ).not.toHaveBeenCalled();
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        observation: expect.objectContaining({
+          payloadHash: attestedObservationPayload.payloadHash,
+        }),
+      })
+    );
+  });
+
   it('fails closed instead of running legacy evidence under an investigation manifest', async () => {
     const fixture = createFixture({
       executionProfile: 'investigation_gateway_v1',
@@ -2047,6 +2073,7 @@ function createFixture(
     investigationError?: unknown;
     investigationPrepareError?: unknown;
     investigationSupported?: boolean;
+    lifecycleBearingAuthoritative?: boolean;
     executionProfile?:
       | 'prompt_only_envelope_v1'
       | 'agentic_unbounded_v1'
@@ -2212,15 +2239,21 @@ function createFixture(
           immutableRequest: Object.freeze({ prompt: 'review' }),
           coverageManifest: coverageManifest(workSlot.workSlotId),
           manifestFacts: Object.freeze({
-            taskKindSet: [workSlot.taskKind],
+            taskKindSet: options.lifecycleBearingAuthoritative
+              ? [workSlot.taskKind, ReviewTaskKind.LifecycleRevalidation]
+              : [workSlot.taskKind],
             providerKind: workSlot.providerKind,
             providerCapabilityHash: hash('capability'),
             providerRequestEnvelopeHash: hash('request'),
             outputSchemaHash: hash('schema'),
             filePatchManifestHash: hash('patch'),
             contextManifestHash: hash('context'),
-            lifecycleTargetSetHash: null,
-            liveLifecycleStateHash: null,
+            lifecycleTargetSetHash: options.lifecycleBearingAuthoritative
+              ? hash('lifecycle-targets')
+              : null,
+            liveLifecycleStateHash: options.lifecycleBearingAuthoritative
+              ? hash('lifecycle')
+              : null,
             toolPolicyHash: hash('tool-policy'),
             executionProfile:
               options.executionProfile ?? 'agentic_unbounded_v1',

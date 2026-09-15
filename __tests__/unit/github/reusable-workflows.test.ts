@@ -11,6 +11,7 @@ function readRepoFile(filePath: string): string {
 }
 
 type WorkflowJob = {
+  name?: string;
   env?: Record<string, unknown>;
   permissions?: Record<string, string>;
   uses?: string;
@@ -130,7 +131,7 @@ describe('production reusable workflows', () => {
     const workflowPath = '.github/workflows/reviewrouter-t0-reusable.yml';
     const workflowSource = readRepoFile(workflowPath);
     const workflow = parseWorkflow(workflowPath);
-    const review = workflow.jobs?.review;
+    const review = workflow.jobs?.['repository-secret-review'];
     const hostedPoolReview = workflow.jobs?.['review-hosted-pool'];
     const inputs = workflow.on?.workflow_call?.inputs;
 
@@ -179,6 +180,8 @@ describe('production reusable workflows', () => {
       session_binding_version: '${{ inputs.session_binding_version }}',
     });
     expect(hostedPoolReview?.secrets).toBeUndefined();
+    expect(review?.name).toBe('repository-secret-review');
+    expect(hostedPoolReview?.name).toBe('review');
     expect(workflowSource).not.toContain('pull-requests: write');
     expect(workflowSource).not.toContain('issues: write');
     expect(workflowSource).not.toContain('REVIEW_APP_PRIVATE_KEY');

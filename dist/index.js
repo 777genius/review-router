@@ -45298,11 +45298,11 @@ var descriptors = {
   provider_capacity_limited: {
     code: "provider_capacity_limited",
     category: "provider_runtime",
-    summary: "Codex account hit its usage limit (no remaining tokens).",
-    whyItMatters: "This ChatGPT account has no remaining Codex quota, so the review stopped.",
+    summary: "Usage limit reached (no remaining tokens).",
+    whyItMatters: "The review provider has no remaining quota, so the review stopped.",
     nextSteps: [
-      "Wait for the ChatGPT/Codex usage limit to reset, then re-run.",
-      "Add another ChatGPT account to the hosted pool so the next run can switch."
+      "Wait for the usage limit to reset, then re-run.",
+      "If this is hosted Codex, add another ChatGPT account so the next run can switch."
     ],
     isRetryable: true,
     isUserActionable: true

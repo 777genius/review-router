@@ -93,8 +93,8 @@ describe('normalizeReviewError', () => {
     expect(error.isRetryable).toBe(true);
     expect(error.nextSteps).toEqual(
       expect.arrayContaining([
-        'Wait for the ChatGPT/Codex usage limit to reset, then re-run.',
-        'Add another ChatGPT account to the hosted pool so the next run can switch.',
+        'Wait for the usage limit to reset, then re-run.',
+        'If this is hosted Codex, add another ChatGPT account so the next run can switch.',
       ])
     );
     expect(error.nextSteps.join('\n').toLowerCase()).not.toContain('reseed');

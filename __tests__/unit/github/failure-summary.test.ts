@@ -70,11 +70,11 @@ describe('formatReviewFailureSummary', () => {
       123
     );
 
+    expect(body).toContain('Usage limit reached (no remaining tokens)');
+    expect(body).toContain('Wait for the usage limit to reset');
     expect(body).toContain(
-      'Codex account hit its usage limit (no remaining tokens)'
+      'If this is hosted Codex, add another ChatGPT account'
     );
-    expect(body).toContain('Wait for the ChatGPT/Codex usage limit to reset');
-    expect(body).toContain('Add another ChatGPT account to the hosted pool');
     expect(body).not.toContain('## Why it matters');
     expect(body).toContain('Code: provider_capacity_limited');
     expect(body.toLowerCase()).not.toContain('reseed');

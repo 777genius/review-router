@@ -93,8 +93,8 @@ describe('normalizeReviewError', () => {
     expect(error.isRetryable).toBe(true);
     expect(error.nextSteps).toEqual(
       expect.arrayContaining([
-        'Wait for the provider limit to reset, then re-run the workflow.',
-        'Switch to another configured provider with available quota or capacity.',
+        'Wait for the ChatGPT/Codex usage limit to reset, then re-run.',
+        'Add another ChatGPT account to the hosted pool so the next run can switch.',
       ])
     );
     expect(error.nextSteps.join('\n').toLowerCase()).not.toContain('reseed');
@@ -184,7 +184,10 @@ describe('formatActionError', () => {
     );
 
     expect(formatted).toContain('Review failed [codex_oauth_invalid_secret]');
-    expect(formatted).toContain('How to fix:');
-    expect(formatted).toContain('User action required: yes');
+    expect(formatted).toContain(
+      'Reseed with the ReviewRouter Codex auth command'
+    );
+    expect(formatted).not.toContain('How to fix:');
+    expect(formatted).not.toContain('User action required:');
   });
 });

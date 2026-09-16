@@ -7,6 +7,7 @@ import {
 } from '../errors/review-router-error';
 
 const REVIEW_ROUTER_BOT_MARKER = '<!-- review-router-bot -->';
+const REVIEW_ROUTER_FAILURE_MARKER = '<!-- review-router-failure -->';
 const LEGACY_BOT_MARKERS = [
   '<!-- ai-robot-review-bot -->',
   '<!-- multi-provider-code-review-bot -->',
@@ -20,7 +21,11 @@ const PROGRESS_TRACKER_MARKERS = [
   '<!-- review-router-progress-tracker -->',
   '<!-- ai-robot-review-progress-tracker -->',
 ];
-const FAILED_PROGRESS_TEXT = ['❌ Failed', '### Review needs attention'];
+const FAILED_PROGRESS_TEXT = [
+  '❌ Failed',
+  '### Review needs attention',
+  '🔴 **',
+];
 const CODEX_SEED_SCRIPT_URL = 'https://reviewrouter.site/install/codex';
 
 export function formatReviewFailureSummary(
@@ -34,21 +39,14 @@ export function formatReviewFailureSummary(
   const reseedCommand = codexOAuthReseedCommand(normalized.code);
 
   return [
+    REVIEW_ROUTER_BOT_MARKER,
+    REVIEW_ROUTER_FAILURE_MARKER,
+    '',
     '# ReviewRouter',
     '',
-    '🔴 **Review failed before comments could be completed.**',
+    `🔴 **${normalized.summary}**`,
     '',
     prNumber ? `PR: #${prNumber}` : undefined,
-    '',
-    '## What failed',
-    '',
-    normalized.summary,
-    '',
-    '## Why it matters',
-    '',
-    normalized.whyItMatters,
-    '',
-    '## How to fix',
     '',
     ...normalized.nextSteps.map((step) => `- ${step}`),
     reseedCommand ? '' : undefined,
@@ -65,9 +63,6 @@ export function formatReviewFailureSummary(
     '',
     '```text',
     `Code: ${normalized.code}`,
-    `Category: ${normalized.category}`,
-    `Retryable: ${normalized.isRetryable ? 'yes' : 'no'}`,
-    `User action required: ${normalized.isUserActionable ? 'yes' : 'no'}`,
     '',
     safeDetails,
     '```',
@@ -189,7 +184,11 @@ async function listIssueComments(
 
 function isReviewFailureSummary(body?: string | null): boolean {
   if (!body) return false;
-  return hasReviewRouterBotMarker(body) && body.includes(FAILURE_SUMMARY_TEXT);
+  return (
+    hasReviewRouterBotMarker(body) &&
+    (body.includes(FAILURE_SUMMARY_TEXT) ||
+      body.includes(REVIEW_ROUTER_FAILURE_MARKER))
+  );
 }
 
 function isReviewFailureComment(body?: string | null): boolean {

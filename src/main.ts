@@ -352,11 +352,13 @@ async function run(): Promise<void> {
 
     core.setFailed(formatActionError(normalizedError));
 
-    await postReviewFailureSummary(
-      normalizedError,
-      await currentGitHubToken(token, githubTokenProvider),
-      prNumber
-    );
+    if (process.env.REVIEW_ROUTER_SUPPRESS_FAILURE_COMMENT !== '1') {
+      await postReviewFailureSummary(
+        normalizedError,
+        await currentGitHubToken(token, githubTokenProvider),
+        prNumber
+      );
+    }
     await reportControlPlaneActionHealth({
       runtimeConfig,
       error: normalizedError,

@@ -327,9 +327,7 @@ describe('ProgressTracker', () => {
         updateCommentMock.mock.calls[updateCommentMock.mock.calls.length - 1];
       const body = lastCall?.[0]?.body as string;
 
-      expect(body).toContain(
-        '**What failed:** Codex OAuth is stale or expired.'
-      );
+      expect(body).toContain('🔴 **Codex OAuth is stale or expired.**');
       expect(body).toContain('Reseed `CODEX_AUTH_JSON`');
       expect(body).toContain(
         '| LLM review | ❌ Failed | All batches failed: codex/gpt-5.5 |'

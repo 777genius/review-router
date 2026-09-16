@@ -45079,17 +45079,11 @@ function normalizeReviewError(error2) {
 }
 function formatActionError(error2) {
   const normalized = normalizeReviewError(error2);
-  const retryText = normalized.isRetryable ? "yes" : "no";
-  const actionText = normalized.isUserActionable ? "yes" : "no";
   return [
     `Review failed [${normalized.code}]: ${normalized.summary}`,
     "",
-    normalized.whyItMatters,
-    "",
-    "How to fix:",
     ...normalized.nextSteps.map((step) => `- ${step}`),
     "",
-    `Retryable: ${retryText}. User action required: ${actionText}.`,
     `Details: ${normalized.safeMessage}`
   ].join("\n");
 }
@@ -45304,12 +45298,11 @@ var descriptors = {
   provider_capacity_limited: {
     code: "provider_capacity_limited",
     category: "provider_runtime",
-    summary: "A review provider reached its quota or capacity limit.",
-    whyItMatters: "The required LLM review did not complete, so ReviewRouter marked the run as failed instead of reporting incomplete coverage as a successful review.",
+    summary: "Usage limit reached (no remaining tokens).",
+    whyItMatters: "The review provider has no remaining quota, so the review stopped.",
     nextSteps: [
-      "Wait for the provider limit to reset, then re-run the workflow.",
-      "Switch to another configured provider with available quota or capacity.",
-      "Check the provider usage or billing page if the limit is unexpected."
+      "Wait for the usage limit to reset, then re-run.",
+      "If this is hosted Codex, add another ChatGPT account so the next run can switch."
     ],
     isRetryable: true,
     isUserActionable: true
@@ -45607,11 +45600,7 @@ var ProgressTracker = class _ProgressTracker {
     }
     if (this.failure) {
       lines.push("");
-      lines.push("### Review needs attention");
-      lines.push("");
-      lines.push(`**What failed:** ${this.failure.summary}`);
-      lines.push("");
-      lines.push("**How to fix**");
+      lines.push(`\u{1F534} **${this.failure.summary}**`);
       for (const step of this.failure.nextSteps) {
         lines.push(`- ${step}`);
       }
@@ -48735,6 +48724,7 @@ function emptyFindingCounts() {
 
 // src/github/failure-summary.ts
 var REVIEW_ROUTER_BOT_MARKER = "<!-- review-router-bot -->";
+var REVIEW_ROUTER_FAILURE_MARKER = "<!-- review-router-failure -->";
 var LEGACY_BOT_MARKERS = [
   "<!-- ai-robot-review-bot -->",
   "<!-- multi-provider-code-review-bot -->"
@@ -48748,7 +48738,11 @@ var PROGRESS_TRACKER_MARKERS = [
   "<!-- review-router-progress-tracker -->",
   "<!-- ai-robot-review-progress-tracker -->"
 ];
-var FAILED_PROGRESS_TEXT = ["\u274C Failed", "### Review needs attention"];
+var FAILED_PROGRESS_TEXT = [
+  "\u274C Failed",
+  "### Review needs attention",
+  "\u{1F534} **"
+];
 var CODEX_SEED_SCRIPT_URL = "https://reviewrouter.site/install/codex";
 function formatReviewFailureSummary(error2, prNumber) {
   const normalized = normalizeReviewError(error2);
@@ -48757,21 +48751,14 @@ function formatReviewFailureSummary(error2, prNumber) {
   );
   const reseedCommand = codexOAuthReseedCommand(normalized.code);
   return [
+    REVIEW_ROUTER_BOT_MARKER,
+    REVIEW_ROUTER_FAILURE_MARKER,
+    "",
     "# ReviewRouter",
     "",
-    "\u{1F534} **Review failed before comments could be completed.**",
+    `\u{1F534} **${normalized.summary}**`,
     "",
     prNumber ? `PR: #${prNumber}` : void 0,
-    "",
-    "## What failed",
-    "",
-    normalized.summary,
-    "",
-    "## Why it matters",
-    "",
-    normalized.whyItMatters,
-    "",
-    "## How to fix",
     "",
     ...normalized.nextSteps.map((step) => `- ${step}`),
     reseedCommand ? "" : void 0,
@@ -48786,9 +48773,6 @@ function formatReviewFailureSummary(error2, prNumber) {
     "",
     "```text",
     `Code: ${normalized.code}`,
-    `Category: ${normalized.category}`,
-    `Retryable: ${normalized.isRetryable ? "yes" : "no"}`,
-    `User action required: ${normalized.isUserActionable ? "yes" : "no"}`,
     "",
     safeDetails,
     "```",
@@ -48877,7 +48861,7 @@ async function listIssueComments(client, prNumber) {
 }
 function isReviewFailureSummary(body) {
   if (!body) return false;
-  return hasReviewRouterBotMarker(body) && body.includes(FAILURE_SUMMARY_TEXT);
+  return hasReviewRouterBotMarker(body) && (body.includes(FAILURE_SUMMARY_TEXT) || body.includes(REVIEW_ROUTER_FAILURE_MARKER));
 }
 function isReviewFailureComment(body) {
   if (!body) return false;
@@ -115053,11 +115037,13 @@ async function run() {
 ${formatValidationError(error2)}`) : error2;
     const normalizedError = normalizeReviewError(presentableError);
     setFailed(formatActionError(normalizedError));
-    await postReviewFailureSummary(
-      normalizedError,
-      await currentGitHubToken(token, githubTokenProvider),
-      prNumber
-    );
+    if (process.env.REVIEW_ROUTER_SUPPRESS_FAILURE_COMMENT !== "1") {
+      await postReviewFailureSummary(
+        normalizedError,
+        await currentGitHubToken(token, githubTokenProvider),
+        prNumber
+      );
+    }
     await reportControlPlaneActionHealth({
       runtimeConfig,
       error: normalizedError,

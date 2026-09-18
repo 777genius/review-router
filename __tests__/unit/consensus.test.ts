@@ -65,6 +65,84 @@ describe('ConsensusEngine', () => {
     expect(result).toHaveLength(1);
   });
 
+  it.each([false, true])(
+    'unions contributor membership without mutating inputs (reversed=%s)',
+    (reversed) => {
+      const engine = new ConsensusEngine({
+        minAgreement: 2,
+        minSeverity: 'minor',
+        maxComments: 10,
+      });
+      const base: Finding = {
+        file: 'file.ts',
+        line: 10,
+        severity: 'major',
+        title: 'Issue',
+        message: 'Fix it',
+      };
+      const findings: Finding[] = [
+        {
+          ...base,
+          sourceFindingIds: ['c', 'a'],
+          provider: 'codex',
+          providerVoteKeys: ['codex'],
+        },
+        {
+          ...base,
+          sourceFindingIds: ['b', 'a'],
+          provider: 'claude',
+          providerVoteKeys: ['claude'],
+        },
+        {
+          ...base,
+          sourceFindingIds: ['d'],
+          provider: 'codex',
+          providerVoteKeys: ['codex'],
+        },
+      ];
+      if (reversed) findings.reverse();
+      const snapshot = JSON.stringify(findings);
+      const result = engine.filter(findings);
+      expect(result).toHaveLength(1);
+      expect(result[0].sourceFindingIds).toEqual(['a', 'b', 'c', 'd']);
+      expect(result[0].providerVoteKeys?.slice().sort()).toEqual([
+        'claude',
+        'codex',
+      ]);
+      expect(JSON.stringify(findings)).toBe(snapshot);
+    }
+  );
+
+  it.each([false, true])(
+    'preserves optional membership when only one input has it (reversed=%s)',
+    (reversed) => {
+      const engine = new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 10,
+      });
+      const base: Finding = {
+        file: 'file.ts',
+        line: 10,
+        severity: 'major',
+        title: 'Issue',
+        message: 'Fix it',
+      };
+      const findings = [base, { ...base, sourceFindingIds: ['a'] }];
+      if (reversed) findings.reverse();
+      expect(engine.filter(findings)[0].sourceFindingIds).toEqual(['a']);
+      expect(engine.filter([base, base])[0]).not.toHaveProperty(
+        'sourceFindingIds'
+      );
+      expect(
+        engine.filter([
+          base,
+          { ...base, title: 'Distinct finding', sourceFindingIds: ['b'] },
+        ])
+      ).toHaveLength(2);
+    }
+  );
+
   describe('checkSuggestionConsensus', () => {
     it('should detect AST-equivalent suggestions', () => {
       const engine = new ConsensusEngine({

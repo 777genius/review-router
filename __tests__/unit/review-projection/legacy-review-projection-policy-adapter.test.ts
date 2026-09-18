@@ -164,7 +164,7 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     });
 
     expect(projected.summaryBody).toContain(
-      '## Review incomplete - 1 preliminary finding preserved ⚠️'
+      '## Review incomplete — 1 preliminary finding'
     );
     expect(projected.summaryBody).toContain(
       'Inline comments and lifecycle changes were withheld'
@@ -213,11 +213,9 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     });
 
     expect(projected.summaryBody).toContain(
-      '## Review incomplete - 0 preliminary findings preserved ⚠️'
+      '## Review incomplete — 0 preliminary findings'
     );
-    expect(projected.summaryBody).not.toContain(
-      'No critical, major, or minor findings were reported for this revision.'
-    );
+    expect(projected.summaryBody).not.toContain('## No findings');
     expect(projected.summaryBody).toContain(
       'Inline comments and lifecycle changes were withheld'
     );

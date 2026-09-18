@@ -11,7 +11,8 @@ describe('DEFAULT_CONFIG', () => {
   });
 
   it('should have valid default thresholds', () => {
-    expect(DEFAULT_CONFIG.inlineMinSeverity).toBe('major');
+    expect(DEFAULT_CONFIG.inlineMinSeverity).toBe('minor');
+    expect(DEFAULT_CONFIG.inlineMaxComments).toBe(50);
     expect(DEFAULT_CONFIG.inlineMinAgreement).toBeGreaterThan(0);
   });
 

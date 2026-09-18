@@ -11,6 +11,10 @@ import {
   RunDetails,
   ImpactAnalysis,
 } from '../types';
+import {
+  renderReviewerSummaryMarkdown,
+  toReviewerSummaryFinding,
+} from '../output/reviewer-summary';
 import { compareSeverityDesc, getSeverityDisplay } from '../utils/severity';
 import {
   countMaxConsecutiveBackticks,
@@ -74,14 +78,7 @@ export class SynthesisEngine {
     impactAnalysis?: ImpactAnalysis;
     mermaidDiagram?: string;
   }): Review {
-    const summary = this.buildSummary(
-      input.pr,
-      input.findings,
-      input.metrics,
-      input.testHints,
-      input.aiAnalysis,
-      input.impactAnalysis
-    );
+    const summary = this.buildSummary(input.findings, input.metrics);
     const inlineComments = this.buildInlineComments(input.findings);
     const actionItems = this.buildActionItems(input.findings);
 
@@ -173,50 +170,12 @@ export class SynthesisEngine {
     };
   }
 
-  private buildSummary(
-    pr: PRContext,
-    findings: Finding[],
-    metrics: ReviewMetrics,
-    testHints?: TestCoverageHint[],
-    aiAnalysis?: AIAnalysis,
-    impactAnalysis?: ImpactAnalysis
-  ): string {
-    const totalProviders = metrics.providersUsed;
-    const successes = metrics.providersSuccess;
-    const failures = totalProviders - successes;
-
-    const impactText = impactAnalysis
-      ? `\n| Impact | ${impactAnalysis.impactLevel} |`
-      : '';
-    const aiText = aiAnalysis
-      ? `\n| AI-likelihood | ${(aiAnalysis.averageLikelihood * 100).toFixed(1)}% |`
-      : '';
-    const status =
-      metrics.totalFindings === 0 && failures === 0
-        ? 'Review complete ✅'
-        : failures > 0
-          ? 'Review complete with warnings ⚠️'
-          : 'Review complete with findings ⚠️';
-    const findingsText = `${formatInteger(metrics.totalFindings)} total (critical ${formatInteger(metrics.critical)}, major ${formatInteger(metrics.major)}, minor ${formatInteger(metrics.minor)})`;
-    const providerText = `${successes}/${totalProviders} succeeded${failures > 0 ? `, ${failures} failed` : ''}`;
-    const note =
-      metrics.totalFindings === 0
-        ? 'No critical, major, or minor findings were reported for this revision.'
-        : 'Inline comments were posted for actionable findings when GitHub accepted their diff positions.';
-
-    return [
-      `## ${status}`,
-      '',
-      `PR #${pr.number}: ${pr.title}`,
-      '',
-      '| Item | Result |',
-      '|---|---:|',
-      `| Findings | ${findingsText} |`,
-      `| Reviewed diff | ${formatInteger(pr.files.length)} files, +${formatInteger(pr.additions)} / -${formatInteger(pr.deletions)} |`,
-      `| Providers | ${providerText} |${impactText}${aiText}`,
-      '',
-      `<sub>${note}</sub>`,
-    ].join('\n');
+  private buildSummary(findings: Finding[], metrics: ReviewMetrics): string {
+    return renderReviewerSummaryMarkdown({
+      language: this.config.outputLanguage,
+      findings: findings.map(toReviewerSummaryFinding),
+      metrics,
+    });
   }
 
   private buildInlineComments(findings: Finding[]): InlineComment[] {
@@ -405,12 +364,6 @@ export class SynthesisEngine {
       ? `${finding.file}:${finding.startLine}-${finding.endLine}`
       : `${finding.file}:${finding.line}`;
   }
-}
-
-function formatInteger(value: number): string {
-  return Math.trunc(value)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 function suggestionToDiff(suggestion: string): string {

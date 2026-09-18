@@ -38,6 +38,13 @@ import {
   SelectedCurrentFinding,
 } from '../../domain/review-projection';
 import {
+  findingLocationLabel,
+  markReviewSummaryIncomplete,
+  renderReviewerLifecycleMarkdown,
+  reviewerSummaryCopy,
+  type ReviewerLifecycleLine,
+} from '../../../output/reviewer-summary';
+import {
   CurrentFindingPolicyPort,
   EvaluateMergeGateQuery,
   MergeGateDecision,
@@ -233,15 +240,16 @@ export class LegacyReviewProjectionPolicyAdapter
     const placements = query.occurrences.map((occurrence) =>
       this.placeOccurrence(occurrence, review, query.revisionFiles)
     );
-    const lifecycleLines = formatLifecycleLines(
-      query.scope.reviewedHeadSha,
-      query.occurrences
-    );
+    const lifecycleMarkdown = renderReviewerLifecycleMarkdown({
+      language: this.config.outputLanguage,
+      lines: lifecycleLinesForSummary(query.occurrences),
+    });
+    const copy = reviewerSummaryCopy(this.config.outputLanguage);
     const coverageLines =
       query.coverage.state === ProjectionCoverageState.Partial
         ? [
             '',
-            '### Coverage not completed',
+            copy.coverageHeading,
             ...query.coverage.limitations.map(
               (limitation) => `- ${limitation}`
             ),
@@ -249,11 +257,15 @@ export class LegacyReviewProjectionPolicyAdapter
         : [];
     const reviewSummary =
       query.coverage.state === ProjectionCoverageState.Partial
-        ? formatPartialReviewSummary(review.summary, currentOccurrences.length)
+        ? markReviewSummaryIncomplete({
+            summary: review.summary,
+            language: this.config.outputLanguage,
+            preliminaryFindingCount: currentOccurrences.length,
+          })
         : review.summary;
     const summaryBody = [
       reviewSummary,
-      ...(lifecycleLines.length > 0 ? ['', ...lifecycleLines] : []),
+      ...(lifecycleMarkdown ? ['', lifecycleMarkdown] : []),
       ...coverageLines,
     ].join('\n');
 
@@ -385,23 +397,49 @@ export class LegacyReviewProjectionPolicyAdapter
   }
 }
 
-function formatPartialReviewSummary(
-  summary: string,
-  preliminaryFindingCount: number
-): string {
-  const findingLabel = preliminaryFindingCount === 1 ? 'finding' : 'findings';
-  const partialHeading = `## Review incomplete - ${preliminaryFindingCount} preliminary ${findingLabel} preserved ⚠️`;
-  const partialNote =
-    '<sub>These preliminary findings were preserved in this summary. Inline comments and lifecycle changes were withheld because required coverage did not complete.</sub>';
-  const completeHeading = /^## Review complete[^\n]*$/m;
-  const synthesisNote = /^<sub>[^\n]*<\/sub>$/m;
-  if (!completeHeading.test(summary) || !synthesisNote.test(summary)) {
-    throw new Error('legacy_partial_review_summary_contract_invalid');
+function lifecycleLinesForSummary(
+  occurrences: readonly FindingOccurrence[]
+): ReviewerLifecycleLine[] {
+  const lines: ReviewerLifecycleLine[] = [];
+  for (const occurrence of occurrences) {
+    const kind = lifecycleKindForSummary(occurrence.state);
+    if (!kind) {
+      continue;
+    }
+    lines.push({
+      kind,
+      title: occurrence.title,
+      message: occurrence.message,
+      locationLabel: findingLocationLabel({
+        file: occurrence.filePath,
+        line: occurrence.line ?? occurrence.endLine ?? 1,
+        ...(occurrence.startLine !== undefined
+          ? { startLine: occurrence.startLine }
+          : {}),
+        ...(occurrence.endLine !== undefined
+          ? { endLine: occurrence.endLine }
+          : {}),
+      }),
+    });
   }
+  return lines;
+}
 
-  return summary
-    .replace(completeHeading, partialHeading)
-    .replace(synthesisNote, partialNote);
+function lifecycleKindForSummary(
+  state: FindingOccurrenceState
+): ReviewerLifecycleLine['kind'] | null {
+  switch (state) {
+    case FindingOccurrenceState.Resolved:
+      return 'resolved';
+    case FindingOccurrenceState.CarriedUnverified:
+      return 'carried';
+    case FindingOccurrenceState.Uncertain:
+      return 'uncertain';
+    case FindingOccurrenceState.SuppressedByHuman:
+      return 'suppressed';
+    default:
+      return null;
+  }
 }
 
 function toLegacyFinding(
@@ -573,30 +611,6 @@ function minimalLegacyReview(findings: Finding[]): Review {
       durationSeconds: 0,
     },
   };
-}
-
-function formatLifecycleLines(
-  headSha: string,
-  occurrences: readonly FindingOccurrence[]
-): string[] {
-  return occurrences.map((occurrence) => {
-    switch (occurrence.state) {
-      case FindingOccurrenceState.New:
-        return `New on ${headSha}: ${occurrence.title}`;
-      case FindingOccurrenceState.Reconfirmed:
-        return `Reconfirmed on ${headSha}: ${occurrence.title}`;
-      case FindingOccurrenceState.Changed:
-        return `Severity changed: ${occurrence.previousSeverity ?? 'unknown'} -> ${occurrence.severity} on ${headSha}: ${occurrence.title}`;
-      case FindingOccurrenceState.CarriedUnverified:
-        return `Carried from ${occurrence.firstSeenHeadSha} - not revalidated: ${occurrence.title}`;
-      case FindingOccurrenceState.Resolved:
-        return `Resolved on ${headSha} after revalidation: ${occurrence.title}`;
-      case FindingOccurrenceState.Uncertain:
-        return `Needs lifecycle attention on ${headSha}: ${occurrence.title}`;
-      case FindingOccurrenceState.SuppressedByHuman:
-        return `Suppressed by current human command: ${occurrence.title}`;
-    }
-  });
 }
 
 function findRevisionFile(

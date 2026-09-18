@@ -15237,8 +15237,8 @@ var DEFAULT_CONFIG = {
   learningEnabled: false,
   learningMinFeedbackCount: 5,
   learningLookbackDays: 30,
-  inlineMaxComments: 5,
-  inlineMinSeverity: "major",
+  inlineMaxComments: 50,
+  inlineMinSeverity: "minor",
   inlineMinAgreement: 1,
   skipLabels: [],
   skipDrafts: false,
@@ -15336,6 +15336,19 @@ var DEFAULT_CONFIG = {
   outputLanguage: "English"
 };
 var FALLBACK_STATIC_PROVIDERS = [...PREFERRED_OPENROUTER_FREE_MODELS];
+
+// src/config/inline-limits.ts
+var DEFAULT_INLINE_MAX_COMMENTS = 50;
+var LEGACY_DEFAULT_INLINE_MAX_COMMENTS = 5;
+function effectiveInlineMaxComments(value) {
+  if (value === 0) {
+    return 0;
+  }
+  if (value === LEGACY_DEFAULT_INLINE_MAX_COMMENTS) {
+    return DEFAULT_INLINE_MAX_COMMENTS;
+  }
+  return value;
+}
 
 // node_modules/zod/v3/external.js
 var external_exports = {};
@@ -19773,8 +19786,12 @@ var ConfigLoader = class {
     const fileConfig = this.loadFromFile();
     const envConfig = this.loadFromEnv();
     const merged = this.merge(DEFAULT_CONFIG, fileConfig, envConfig);
+    const resolved = {
+      ...merged,
+      inlineMaxComments: effectiveInlineMaxComments(merged.inlineMaxComments)
+    };
     try {
-      validateConfig(merged);
+      validateConfig(resolved);
     } catch (error2) {
       if (error2 instanceof ValidationError) {
         throw new ValidationError(
@@ -19785,7 +19802,7 @@ var ConfigLoader = class {
       }
       throw error2;
     }
-    return merged;
+    return resolved;
   }
   static loadFromFile() {
     for (const relPath of this.CONFIG_PATHS) {
@@ -27260,6 +27277,7 @@ var PromptBuilder = class {
         "OUTPUT LANGUAGE:",
         `Write the title and human-readable text of every finding in ${outputLanguage}.`,
         "Translate only that human-readable text. Keep every schema field name, severity value, file path, identifier, and code value unchanged; never translate code or JSON keys.",
+        "The published PR summary quotes each finding title and message, so write those in this language too.",
         "This directive controls wording only and does not relax any rule above.",
         ""
       );
@@ -27272,6 +27290,11 @@ var PromptBuilder = class {
         ""
       );
     }
+    pushShared(
+      "FINDING TEXT:",
+      "Each finding message must be complete enough to understand and fix the issue from the PR summary alone: what is wrong, why it matters, and how to fix it.",
+      ""
+    );
     if (skipSuggestions) {
       pushLegacy(
         'Return JSON object: {"findings":[{file, startLine, line, endLine, severity, title, message}],"revalidations":[{targetId, fingerprint, verdict, confidence, evidence, rationale}]}',
@@ -28991,6 +29014,460 @@ function uniqueSuggestionsByVoteKey(suggestions) {
   return unique3;
 }
 
+// src/utils/suggestion-formatter.ts
+function countMaxConsecutiveBackticks(str2) {
+  const backtickSequences = str2.match(/`+/g);
+  if (!backtickSequences) {
+    return 0;
+  }
+  return Math.max(...backtickSequences.map((seq2) => seq2.length));
+}
+function formatSuggestionBlock(content) {
+  if (!content || content.trim() === "") {
+    return "";
+  }
+  const maxBackticks = countMaxConsecutiveBackticks(content);
+  const fenceCount = Math.max(3, maxBackticks + 1);
+  const fence = "`".repeat(fenceCount);
+  return `${fence}suggestion
+${content}
+${fence}`;
+}
+
+// src/output/reviewer-summary.ts
+var REVIEW_SUMMARY_STATUS_COMPLETE_MARKER = "<!-- reviewrouter:review-status:complete -->";
+var REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER = "<!-- reviewrouter:review-status:incomplete -->";
+var maxSummaryBytes = 6e4;
+var maxFindingBodyChars = 2500;
+function resolveReviewerSummaryLocale(language) {
+  const normalized = language?.trim().toLowerCase() ?? "";
+  if (!normalized) {
+    return "en";
+  }
+  if (normalized === "en" || normalized.startsWith("en-") || normalized === "english") {
+    return "en";
+  }
+  if (normalized.startsWith("ru") || normalized.includes("\u0440\u0443\u0441") || normalized === "russian") {
+    return "ru";
+  }
+  if (normalized.startsWith("uk") || normalized.includes("\u0443\u043A\u0440") || normalized === "ukrainian") {
+    return "uk";
+  }
+  if (normalized.startsWith("es") || normalized === "spanish" || normalized.includes("espa\xF1ol")) {
+    return "es";
+  }
+  if (normalized.startsWith("pt") || normalized === "portuguese" || normalized.includes("portugu")) {
+    return "pt";
+  }
+  if (normalized.startsWith("fr") || normalized === "french" || normalized.includes("fran\xE7ais")) {
+    return "fr";
+  }
+  if (normalized.startsWith("de") || normalized === "german" || normalized.includes("deutsch")) {
+    return "de";
+  }
+  if (normalized.startsWith("it") || normalized === "italian" || normalized.includes("italiano")) {
+    return "it";
+  }
+  if (normalized.startsWith("zh") || normalized === "chinese" || normalized.includes("\u4E2D\u6587") || normalized.includes("\u6C49\u8BED") || normalized.includes("\u6F22\u8A9E")) {
+    return "zh";
+  }
+  if (normalized.startsWith("ja") || normalized === "japanese" || normalized.includes("\u65E5\u672C")) {
+    return "ja";
+  }
+  if (normalized.startsWith("ko") || normalized === "korean" || normalized.includes("\uD55C\uAD6D") || normalized.includes("\uC870\uC120")) {
+    return "ko";
+  }
+  return "en";
+}
+function reviewerSummaryCopy(language) {
+  return copies[resolveReviewerSummaryLocale(language)];
+}
+function renderReviewerSummaryMarkdown(input) {
+  const copy = reviewerSummaryCopy(input.language);
+  const counts = {
+    total: input.metrics.totalFindings,
+    critical: input.metrics.critical,
+    major: input.metrics.major,
+    minor: input.metrics.minor
+  };
+  const failedProviders = Math.max(
+    0,
+    input.metrics.providersUsed - input.metrics.providersSuccess
+  );
+  const heading = input.incomplete ? copy.incompleteHeading(counts.total) : counts.total === 0 ? copy.noFindingsHeading : copy.findingsHeading(counts);
+  const lines = [
+    input.incomplete ? REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER : REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
+    heading
+  ];
+  if (input.incomplete) {
+    lines.push("", copy.incompleteNote);
+  }
+  if (failedProviders > 0) {
+    lines.push(
+      "",
+      copy.providerFailures(failedProviders, input.metrics.providersUsed)
+    );
+  }
+  const sorted = [...input.findings].sort(compareSummaryFindings);
+  const remaining = [];
+  for (const finding of sorted) {
+    const block = renderFindingDetails(copy, finding);
+    const candidate = [...lines, "", block];
+    if (utf8Bytes(candidate.join("\n")) > maxSummaryBytes) {
+      remaining.push(compactFindingLine(finding));
+      continue;
+    }
+    lines.push("", block);
+  }
+  if (remaining.length > 0) {
+    const overflow = ["", copy.moreFindings(remaining.length), ...remaining];
+    const candidate = [...lines, ...overflow];
+    if (utf8Bytes(candidate.join("\n")) <= maxSummaryBytes) {
+      lines.push(...overflow);
+    }
+  }
+  return limitUtf8(lines.join("\n"), maxSummaryBytes);
+}
+function renderReviewerLifecycleMarkdown(input) {
+  if (input.lines.length === 0) {
+    return "";
+  }
+  const copy = reviewerSummaryCopy(input.language);
+  const blocks = input.lines.map((line) => {
+    const label = copy.lifecycle[line.kind];
+    const summary = escapeHtml(
+      `${label} \xB7 ${line.locationLabel} \xB7 ${line.title}`.trim()
+    );
+    const body = [line.message.trim(), line.locationLabel].filter(Boolean).join("\n\n");
+    return [
+      "<details>",
+      `<summary>${summary}</summary>`,
+      "",
+      sanitizeDetailsBody(body),
+      "",
+      "</details>"
+    ].join("\n");
+  });
+  return limitUtf8(blocks.join("\n\n"), maxSummaryBytes);
+}
+function markReviewSummaryIncomplete(input) {
+  const copy = reviewerSummaryCopy(input.language);
+  if (!input.summary.includes(REVIEW_SUMMARY_STATUS_COMPLETE_MARKER)) {
+    throw new Error("legacy_partial_review_summary_contract_invalid");
+  }
+  const heading = copy.incompleteHeading(input.preliminaryFindingCount);
+  const rewritten = input.summary.replace(
+    REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
+    REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER
+  ).replace(/^## .+$/m, heading);
+  if (rewritten.includes(copy.incompleteNote)) {
+    return rewritten;
+  }
+  return rewritten.replace(heading, `${heading}
+
+${copy.incompleteNote}`);
+}
+function toReviewerSummaryFinding(finding) {
+  return {
+    severity: finding.severity,
+    title: finding.title,
+    message: finding.message,
+    file: finding.file,
+    line: finding.line,
+    ...finding.startLine !== void 0 ? { startLine: finding.startLine } : {},
+    ...finding.endLine !== void 0 ? { endLine: finding.endLine } : {},
+    ...finding.suggestion ? { suggestion: finding.suggestion } : {}
+  };
+}
+function findingLocationLabel(finding) {
+  return finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `${finding.file}:${finding.startLine}-${finding.endLine}` : `${finding.file}:${finding.line}`;
+}
+function renderFindingDetails(copy, finding) {
+  const location = findingLocationLabel(finding);
+  const summary = escapeHtml(
+    `${finding.severity} \xB7 ${location} \xB7 ${finding.title.trim()}`
+  );
+  const message = truncateChars(
+    sanitizeDetailsBody(finding.message.trim()),
+    maxFindingBodyChars
+  );
+  const parts = [
+    "<details>",
+    `<summary>${summary}</summary>`,
+    "",
+    message,
+    "",
+    `**${copy.location}:** \`${escapeMarkdownInline(location)}\``
+  ];
+  if (finding.suggestion?.trim()) {
+    parts.push(
+      "",
+      `**${copy.fix}**`,
+      "",
+      formatCodeFence(finding.suggestion.trim())
+    );
+  }
+  parts.push("", "</details>");
+  return parts.join("\n");
+}
+function compactFindingLine(finding) {
+  return `- **${finding.severity}** \`${escapeMarkdownInline(findingLocationLabel(finding))}\` ${escapeMarkdownInline(finding.title.trim())}`;
+}
+function compareSummaryFindings(left, right) {
+  const rank = { critical: 3, major: 2, minor: 1 };
+  return rank[right.severity] - rank[left.severity] || left.file.localeCompare(right.file) || left.line - right.line;
+}
+function formatCodeFence(content) {
+  const fence = "`".repeat(
+    Math.max(3, countMaxConsecutiveBackticks(content) + 1)
+  );
+  return `${fence}
+${content.trimEnd()}
+${fence}`;
+}
+function formatSeverityCounts(counts) {
+  const parts = [
+    ["critical", counts.critical],
+    ["major", counts.major],
+    ["minor", counts.minor]
+  ].filter(([, count]) => count > 0).map(([label, count]) => `${count} ${label}`);
+  return parts.length > 0 ? parts.join(", ") : "0";
+}
+function slavicFindingWord(count, forms) {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  if (mod100 >= 11 && mod100 <= 14) {
+    return forms[2];
+  }
+  if (mod10 === 1) {
+    return forms[0];
+  }
+  if (mod10 >= 2 && mod10 <= 4) {
+    return forms[1];
+  }
+  return forms[2];
+}
+function englishFindingWord(count) {
+  return count === 1 ? "finding" : "findings";
+}
+var copies = {
+  en: {
+    noFindingsHeading: "## No findings",
+    findingsHeading: (counts) => `## ${counts.total} ${englishFindingWord(counts.total)} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `${failed} of ${planned} review providers failed.`,
+    location: "Location",
+    fix: "Fix",
+    incompleteHeading: (count) => `## Review incomplete \u2014 ${count} preliminary ${englishFindingWord(count)}`,
+    incompleteNote: "Inline comments and lifecycle changes were withheld because required coverage did not complete.",
+    coverageHeading: "### Coverage not completed",
+    moreFindings: (count) => `**${count} more ${englishFindingWord(count)} omitted from this summary because of size limits.**`,
+    lifecycle: {
+      resolved: "resolved",
+      carried: "carried, not revalidated",
+      uncertain: "needs attention",
+      suppressed: "suppressed"
+    }
+  },
+  ru: {
+    noFindingsHeading: "## \u0417\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439 \u043D\u0435\u0442",
+    findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `\u041D\u0435 \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B\u0438 ${failed} \u0438\u0437 ${planned} \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u043E\u0432 \u0440\u0435\u0432\u044C\u044E.`,
+    location: "\u041C\u0435\u0441\u0442\u043E",
+    fix: "\u0418\u0441\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435",
+    incompleteHeading: (count) => `## \u0420\u0435\u0432\u044C\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E \u2014 ${count} ${slavicFindingWord(count, ["\u043F\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0435 \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u043F\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u043F\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])}`,
+    incompleteNote: "\u0418\u043D\u043B\u0430\u0439\u043D-\u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0438 \u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F lifecycle \u043D\u0435 \u043F\u0443\u0431\u043B\u0438\u043A\u043E\u0432\u0430\u043B\u0438\u0441\u044C: \u043F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E.",
+    coverageHeading: "### \u041F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
+    moreFindings: (count) => `**\u0415\u0449\u0451 ${count} ${slavicFindingWord(count, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} \u043D\u0435 \u0432\u043B\u0435\u0437\u043B\u0438 \u0432 \u044D\u0442\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435 \u0438\u0437\u2011\u0437\u0430 \u043B\u0438\u043C\u0438\u0442\u0430 \u0440\u0430\u0437\u043C\u0435\u0440\u0430.**`,
+    lifecycle: {
+      resolved: "\u0441\u043D\u044F\u0442\u043E",
+      carried: "\u043F\u0435\u0440\u0435\u043D\u0435\u0441\u0435\u043D\u043E, \u043D\u0435 \u043F\u0435\u0440\u0435\u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E",
+      uncertain: "\u043D\u0443\u0436\u043D\u043E \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435",
+      suppressed: "\u0441\u043A\u0440\u044B\u0442\u043E"
+    }
+  },
+  uk: {
+    noFindingsHeading: "## \u0417\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C \u043D\u0435\u043C\u0430\u0454",
+    findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `\u041D\u0435 \u0441\u043F\u0440\u0430\u0446\u044E\u0432\u0430\u043B\u0438 ${failed} \u0437 ${planned} \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u0456\u0432 \u0440\u0435\u0432\u2019\u044E.`,
+    location: "\u041C\u0456\u0441\u0446\u0435",
+    fix: "\u0412\u0438\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043D\u044F",
+    incompleteHeading: (count) => `## \u0420\u0435\u0432\u2019\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E \u2014 ${count} ${slavicFindingWord(count, ["\u043F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0454 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u043F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0456 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u043F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0456\u0445 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])}`,
+    incompleteNote: "\u0406\u043D\u043B\u0430\u0439\u043D-\u043A\u043E\u043C\u0435\u043D\u0442\u0430\u0440\u0456 \u0442\u0430 \u0437\u043C\u0456\u043D\u0438 lifecycle \u043D\u0435 \u043F\u0443\u0431\u043B\u0456\u043A\u0443\u0432\u0430\u043B\u0438\u0441\u044F: \u043F\u043E\u043A\u0440\u0438\u0442\u0442\u044F \u0440\u0435\u0432\u2019\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E.",
+    coverageHeading: "### \u041F\u043E\u043A\u0440\u0438\u0442\u0442\u044F \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
+    moreFindings: (count) => `**\u0429\u0435 ${count} ${slavicFindingWord(count, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} \u043D\u0435 \u0432\u043C\u0456\u0441\u0442\u0438\u043B\u0438\u0441\u044F \u0432 \u0446\u0435 \u043F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u043D\u044F \u0447\u0435\u0440\u0435\u0437 \u043B\u0456\u043C\u0456\u0442 \u0440\u043E\u0437\u043C\u0456\u0440\u0443.**`,
+    lifecycle: {
+      resolved: "\u0437\u043D\u044F\u0442\u043E",
+      carried: "\u043F\u0435\u0440\u0435\u043D\u0435\u0441\u0435\u043D\u043E, \u043D\u0435 \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u0435\u043D\u043E \u0437\u043D\u043E\u0432\u0443",
+      uncertain: "\u043F\u043E\u0442\u0440\u0456\u0431\u043D\u0430 \u0443\u0432\u0430\u0433\u0430",
+      suppressed: "\u043F\u0440\u0438\u0445\u043E\u0432\u0430\u043D\u043E"
+    }
+  },
+  es: {
+    noFindingsHeading: "## Sin hallazgos",
+    findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "hallazgo" : "hallazgos"} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `Fallaron ${failed} de ${planned} proveedores de revisi\xF3n.`,
+    location: "Ubicaci\xF3n",
+    fix: "Correcci\xF3n",
+    incompleteHeading: (count) => `## Revisi\xF3n incompleta \u2014 ${count} ${count === 1 ? "hallazgo preliminar" : "hallazgos preliminares"}`,
+    incompleteNote: "No se publicaron comentarios en l\xEDnea ni cambios de ciclo de vida porque la cobertura no se complet\xF3.",
+    coverageHeading: "### Cobertura incompleta",
+    moreFindings: (count) => `**${count} ${count === 1 ? "hallazgo m\xE1s omitido" : "hallazgos m\xE1s omitidos"} de este resumen por el l\xEDmite de tama\xF1o.**`,
+    lifecycle: {
+      resolved: "resuelto",
+      carried: "arrastrado, no revalidado",
+      uncertain: "requiere atenci\xF3n",
+      suppressed: "omitido"
+    }
+  },
+  pt: {
+    noFindingsHeading: "## Nenhum achado",
+    findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "achado" : "achados"} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `${failed} de ${planned} provedores de revis\xE3o falharam.`,
+    location: "Local",
+    fix: "Corre\xE7\xE3o",
+    incompleteHeading: (count) => `## Revis\xE3o incompleta \u2014 ${count} ${count === 1 ? "achado preliminar" : "achados preliminares"}`,
+    incompleteNote: "Coment\xE1rios inline e mudan\xE7as de ciclo de vida n\xE3o foram publicados porque a cobertura n\xE3o foi conclu\xEDda.",
+    coverageHeading: "### Cobertura n\xE3o conclu\xEDda",
+    moreFindings: (count) => `**Mais ${count} ${count === 1 ? "achado omitido" : "achados omitidos"} deste resumo por limite de tamanho.**`,
+    lifecycle: {
+      resolved: "resolvido",
+      carried: "carregado, n\xE3o revalidado",
+      uncertain: "precisa de aten\xE7\xE3o",
+      suppressed: "suprimido"
+    }
+  },
+  fr: {
+    noFindingsHeading: "## Aucune anomalie",
+    findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "anomalie" : "anomalies"} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `${failed} fournisseur(s) de revue sur ${planned} ont \xE9chou\xE9.`,
+    location: "Emplacement",
+    fix: "Correctif",
+    incompleteHeading: (count) => `## Revue incompl\xE8te \u2014 ${count} ${count === 1 ? "anomalie pr\xE9liminaire" : "anomalies pr\xE9liminaires"}`,
+    incompleteNote: "Les commentaires inline et les changements de cycle de vie n\u2019ont pas \xE9t\xE9 publi\xE9s car la couverture est incompl\xE8te.",
+    coverageHeading: "### Couverture incompl\xE8te",
+    moreFindings: (count) => `**${count} ${count === 1 ? "anomalie suppl\xE9mentaire omise" : "anomalies suppl\xE9mentaires omises"} de ce r\xE9sum\xE9 \xE0 cause de la limite de taille.**`,
+    lifecycle: {
+      resolved: "r\xE9solu",
+      carried: "report\xE9, non revalid\xE9",
+      uncertain: "n\xE9cessite une attention",
+      suppressed: "masqu\xE9"
+    }
+  },
+  de: {
+    noFindingsHeading: "## Keine Befunde",
+    findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "Befund" : "Befunde"} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `${failed} von ${planned} Review-Providern sind fehlgeschlagen.`,
+    location: "Stelle",
+    fix: "Fix",
+    incompleteHeading: (count) => `## Review unvollst\xE4ndig \u2014 ${count} vorl\xE4ufige ${count === 1 ? "Befund" : "Befunde"}`,
+    incompleteNote: "Inline-Kommentare und Lifecycle-\xC4nderungen wurden nicht ver\xF6ffentlicht, weil die Abdeckung unvollst\xE4ndig ist.",
+    coverageHeading: "### Abdeckung unvollst\xE4ndig",
+    moreFindings: (count) => `**${count} weitere ${count === 1 ? "Befund" : "Befunde"} fehlen in dieser Zusammenfassung wegen des Gr\xF6\xDFenlimits.**`,
+    lifecycle: {
+      resolved: "erledigt",
+      carried: "\xFCbernommen, nicht erneut gepr\xFCft",
+      uncertain: "braucht Aufmerksamkeit",
+      suppressed: "unterdr\xFCckt"
+    }
+  },
+  it: {
+    noFindingsHeading: "## Nessun rilievo",
+    findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "rilievo" : "rilievi"} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `${failed} di ${planned} provider di review non sono riusciti.`,
+    location: "Posizione",
+    fix: "Correzione",
+    incompleteHeading: (count) => `## Review incompleta \u2014 ${count} ${count === 1 ? "rilievo preliminare" : "rilievi preliminari"}`,
+    incompleteNote: "I commenti inline e le modifiche di lifecycle non sono stati pubblicati perch\xE9 la copertura non \xE8 completa.",
+    coverageHeading: "### Copertura non completata",
+    moreFindings: (count) => `**Altri ${count} ${count === 1 ? "rilievo omesso" : "rilievi omessi"} da questo riassunto per il limite di dimensione.**`,
+    lifecycle: {
+      resolved: "risolto",
+      carried: "riportato, non rivalidato",
+      uncertain: "richiede attenzione",
+      suppressed: "soppresso"
+    }
+  },
+  zh: {
+    noFindingsHeading: "## \u65E0\u95EE\u9898",
+    findingsHeading: (counts) => `## ${counts.total} \u4E2A\u95EE\u9898\uFF08${formatSeverityCounts(counts)}\uFF09`,
+    providerFailures: (failed, planned) => `${planned} \u4E2A\u5BA1\u67E5\u63D0\u4F9B\u65B9\u4E2D\u6709 ${failed} \u4E2A\u5931\u8D25\u3002`,
+    location: "\u4F4D\u7F6E",
+    fix: "\u4FEE\u590D",
+    incompleteHeading: (count) => `## \u5BA1\u67E5\u672A\u5B8C\u6210 \u2014 \u4FDD\u7559 ${count} \u6761\u521D\u6B65\u95EE\u9898`,
+    incompleteNote: "\u56E0\u8986\u76D6\u672A\u5B8C\u6210\uFF0C\u672A\u53D1\u5E03\u884C\u5185\u8BC4\u8BBA\u548C\u751F\u547D\u5468\u671F\u53D8\u66F4\u3002",
+    coverageHeading: "### \u8986\u76D6\u672A\u5B8C\u6210",
+    moreFindings: (count) => `**\u53D7\u7BC7\u5E45\u9650\u5236\uFF0C\u672C\u6458\u8981\u8FD8\u7701\u7565\u4E86 ${count} \u6761\u95EE\u9898\u3002**`,
+    lifecycle: {
+      resolved: "\u5DF2\u89E3\u51B3",
+      carried: "\u6CBF\u7528\uFF0C\u672A\u590D\u9A8C",
+      uncertain: "\u9700\u8981\u5173\u6CE8",
+      suppressed: "\u5DF2\u6291\u5236"
+    }
+  },
+  ja: {
+    noFindingsHeading: "## \u6307\u6458\u306A\u3057",
+    findingsHeading: (counts) => `## \u6307\u6458 ${counts.total} \u4EF6\uFF08${formatSeverityCounts(counts)}\uFF09`,
+    providerFailures: (failed, planned) => `\u30EC\u30D3\u30E5\u30FC\u30D7\u30ED\u30D0\u30A4\u30C0\u30FC ${planned} \u4EF6\u4E2D ${failed} \u4EF6\u304C\u5931\u6557\u3057\u307E\u3057\u305F\u3002`,
+    location: "\u5834\u6240",
+    fix: "\u4FEE\u6B63",
+    incompleteHeading: (count) => `## \u30EC\u30D3\u30E5\u30FC\u672A\u5B8C\u4E86 \u2014 \u66AB\u5B9A\u306E\u6307\u6458 ${count} \u4EF6`,
+    incompleteNote: "\u30AB\u30D0\u30EC\u30C3\u30B8\u304C\u5B8C\u4E86\u3057\u3066\u3044\u306A\u3044\u305F\u3081\u3001\u30A4\u30F3\u30E9\u30A4\u30F3\u30B3\u30E1\u30F3\u30C8\u3068\u30E9\u30A4\u30D5\u30B5\u30A4\u30AF\u30EB\u5909\u66F4\u306F\u6295\u7A3F\u3057\u3066\u3044\u307E\u305B\u3093\u3002",
+    coverageHeading: "### \u30AB\u30D0\u30EC\u30C3\u30B8\u672A\u5B8C\u4E86",
+    moreFindings: (count) => `**\u30B5\u30A4\u30BA\u5236\u9650\u306E\u305F\u3081\u3001\u3053\u306E\u8981\u7D04\u304B\u3089\u6307\u6458\u304C\u3055\u3089\u306B ${count} \u4EF6\u7701\u7565\u3055\u308C\u3066\u3044\u307E\u3059\u3002**`,
+    lifecycle: {
+      resolved: "\u89E3\u6C7A\u6E08\u307F",
+      carried: "\u6301\u3061\u8D8A\u3057\u3001\u518D\u691C\u8A3C\u306A\u3057",
+      uncertain: "\u8981\u78BA\u8A8D",
+      suppressed: "\u6291\u5236\u6E08\u307F"
+    }
+  },
+  ko: {
+    noFindingsHeading: "## \uC774\uC288 \uC5C6\uC74C",
+    findingsHeading: (counts) => `## \uC774\uC288 ${counts.total}\uAC1C (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `\uB9AC\uBDF0 \uC81C\uACF5\uC790 ${planned}\uAC1C \uC911 ${failed}\uAC1C\uAC00 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.`,
+    location: "\uC704\uCE58",
+    fix: "\uC218\uC815",
+    incompleteHeading: (count) => `## \uB9AC\uBDF0 \uBBF8\uC644\uB8CC \u2014 \uC608\uBE44 \uC774\uC288 ${count}\uAC1C`,
+    incompleteNote: "\uCEE4\uBC84\uB9AC\uC9C0\uAC00 \uB05D\uB098\uC9C0 \uC54A\uC544 \uC778\uB77C\uC778 \uB313\uAE00\uACFC \uB77C\uC774\uD504\uC0AC\uC774\uD074 \uBCC0\uACBD\uC744 \uAC8C\uC2DC\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+    coverageHeading: "### \uCEE4\uBC84\uB9AC\uC9C0 \uBBF8\uC644\uB8CC",
+    moreFindings: (count) => `**\uD06C\uAE30 \uC81C\uD55C \uB54C\uBB38\uC5D0 \uC774 \uC694\uC57D\uC5D0\uC11C \uC774\uC288 ${count}\uAC1C\uAC00 \uB354 \uC0DD\uB7B5\uB418\uC5C8\uC2B5\uB2C8\uB2E4.**`,
+    lifecycle: {
+      resolved: "\uD574\uACB0\uB428",
+      carried: "\uC774\uC6D4\uB428, \uC7AC\uAC80\uC99D \uC548 \uD568",
+      uncertain: "\uD655\uC778 \uD544\uC694",
+      suppressed: "\uC228\uAE40"
+    }
+  }
+};
+function escapeHtml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+function escapeMarkdownInline(value) {
+  return value.replaceAll("\\", "\\\\").replaceAll("`", "\\`");
+}
+function sanitizeDetailsBody(value) {
+  return value.replace(/<\/details>/gi, "[/details]");
+}
+function truncateChars(value, maxChars) {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, maxChars - 12).trimEnd()}
+
+[truncated]`;
+}
+function utf8Bytes(value) {
+  return Buffer.byteLength(value, "utf8");
+}
+function limitUtf8(value, maxBytes) {
+  if (utf8Bytes(value) <= maxBytes) {
+    return value;
+  }
+  return `${Buffer.from(value, "utf8").subarray(0, maxBytes - 20).toString("utf8")}
+
+[truncated]`;
+}
+
 // src/utils/severity.ts
 var DISPLAYS = {
   critical: {
@@ -29027,26 +29504,6 @@ function severityLine(severity) {
   return `**Severity:** ${display.emoji} **${display.label}** - ${display.description}.`;
 }
 
-// src/utils/suggestion-formatter.ts
-function countMaxConsecutiveBackticks(str2) {
-  const backtickSequences = str2.match(/`+/g);
-  if (!backtickSequences) {
-    return 0;
-  }
-  return Math.max(...backtickSequences.map((seq2) => seq2.length));
-}
-function formatSuggestionBlock(content) {
-  if (!content || content.trim() === "") {
-    return "";
-  }
-  const maxBackticks = countMaxConsecutiveBackticks(content);
-  const fenceCount = Math.max(3, maxBackticks + 1);
-  const fence = "`".repeat(fenceCount);
-  return `${fence}suggestion
-${content}
-${fence}`;
-}
-
 // src/analysis/synthesis.ts
 var SynthesisEngine = class {
   constructor(config) {
@@ -29076,14 +29533,7 @@ var SynthesisEngine = class {
     return this.buildReview({ findings, pr: pr2, metrics });
   }
   buildReview(input) {
-    const summary = this.buildSummary(
-      input.pr,
-      input.findings,
-      input.metrics,
-      input.testHints,
-      input.aiAnalysis,
-      input.impactAnalysis
-    );
+    const summary = this.buildSummary(input.findings, input.metrics);
     const inlineComments = this.buildInlineComments(input.findings);
     const actionItems = this.buildActionItems(input.findings);
     return {
@@ -29155,31 +29605,12 @@ var SynthesisEngine = class {
       durationSeconds
     };
   }
-  buildSummary(pr2, findings, metrics, testHints, aiAnalysis, impactAnalysis) {
-    const totalProviders = metrics.providersUsed;
-    const successes = metrics.providersSuccess;
-    const failures = totalProviders - successes;
-    const impactText = impactAnalysis ? `
-| Impact | ${impactAnalysis.impactLevel} |` : "";
-    const aiText = aiAnalysis ? `
-| AI-likelihood | ${(aiAnalysis.averageLikelihood * 100).toFixed(1)}% |` : "";
-    const status = metrics.totalFindings === 0 && failures === 0 ? "Review complete \u2705" : failures > 0 ? "Review complete with warnings \u26A0\uFE0F" : "Review complete with findings \u26A0\uFE0F";
-    const findingsText = `${formatInteger(metrics.totalFindings)} total (critical ${formatInteger(metrics.critical)}, major ${formatInteger(metrics.major)}, minor ${formatInteger(metrics.minor)})`;
-    const providerText = `${successes}/${totalProviders} succeeded${failures > 0 ? `, ${failures} failed` : ""}`;
-    const note = metrics.totalFindings === 0 ? "No critical, major, or minor findings were reported for this revision." : "Inline comments were posted for actionable findings when GitHub accepted their diff positions.";
-    return [
-      `## ${status}`,
-      "",
-      `PR #${pr2.number}: ${pr2.title}`,
-      "",
-      "| Item | Result |",
-      "|---|---:|",
-      `| Findings | ${findingsText} |`,
-      `| Reviewed diff | ${formatInteger(pr2.files.length)} files, +${formatInteger(pr2.additions)} / -${formatInteger(pr2.deletions)} |`,
-      `| Providers | ${providerText} |${impactText}${aiText}`,
-      "",
-      `<sub>${note}</sub>`
-    ].join("\n");
+  buildSummary(findings, metrics) {
+    return renderReviewerSummaryMarkdown({
+      language: this.config.outputLanguage,
+      findings: findings.map(toReviewerSummaryFinding),
+      metrics
+    });
   }
   buildInlineComments(findings) {
     const minSeverity = this.config.inlineMinSeverity;
@@ -29327,9 +29758,6 @@ ${fence}`;
     return finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `${finding.file}:${finding.startLine}-${finding.endLine}` : `${finding.file}:${finding.line}`;
   }
 };
-function formatInteger(value) {
-  return Math.trunc(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
 function suggestionToDiff(suggestion) {
   return suggestion.trimEnd().split("\n").map((line) => `+${line}`).join("\n");
 }
@@ -105300,21 +105728,26 @@ var LegacyReviewProjectionPolicyAdapter = class {
     const placements = query.occurrences.map(
       (occurrence) => this.placeOccurrence(occurrence, review, query.revisionFiles)
     );
-    const lifecycleLines = formatLifecycleLines(
-      query.scope.reviewedHeadSha,
-      query.occurrences
-    );
+    const lifecycleMarkdown = renderReviewerLifecycleMarkdown({
+      language: this.config.outputLanguage,
+      lines: lifecycleLinesForSummary(query.occurrences)
+    });
+    const copy = reviewerSummaryCopy(this.config.outputLanguage);
     const coverageLines = query.coverage.state === "partial" /* Partial */ ? [
       "",
-      "### Coverage not completed",
+      copy.coverageHeading,
       ...query.coverage.limitations.map(
         (limitation) => `- ${limitation}`
       )
     ] : [];
-    const reviewSummary = query.coverage.state === "partial" /* Partial */ ? formatPartialReviewSummary(review.summary, currentOccurrences.length) : review.summary;
+    const reviewSummary = query.coverage.state === "partial" /* Partial */ ? markReviewSummaryIncomplete({
+      summary: review.summary,
+      language: this.config.outputLanguage,
+      preliminaryFindingCount: currentOccurrences.length
+    }) : review.summary;
     const summaryBody = [
       reviewSummary,
-      ...lifecycleLines.length > 0 ? ["", ...lifecycleLines] : [],
+      ...lifecycleMarkdown ? ["", lifecycleMarkdown] : [],
       ...coverageLines
     ].join("\n");
     return {
@@ -105415,16 +105848,40 @@ var LegacyReviewProjectionPolicyAdapter = class {
     };
   }
 };
-function formatPartialReviewSummary(summary, preliminaryFindingCount) {
-  const findingLabel = preliminaryFindingCount === 1 ? "finding" : "findings";
-  const partialHeading = `## Review incomplete - ${preliminaryFindingCount} preliminary ${findingLabel} preserved \u26A0\uFE0F`;
-  const partialNote = "<sub>These preliminary findings were preserved in this summary. Inline comments and lifecycle changes were withheld because required coverage did not complete.</sub>";
-  const completeHeading = /^## Review complete[^\n]*$/m;
-  const synthesisNote = /^<sub>[^\n]*<\/sub>$/m;
-  if (!completeHeading.test(summary) || !synthesisNote.test(summary)) {
-    throw new Error("legacy_partial_review_summary_contract_invalid");
+function lifecycleLinesForSummary(occurrences) {
+  const lines = [];
+  for (const occurrence of occurrences) {
+    const kind = lifecycleKindForSummary(occurrence.state);
+    if (!kind) {
+      continue;
+    }
+    lines.push({
+      kind,
+      title: occurrence.title,
+      message: occurrence.message,
+      locationLabel: findingLocationLabel({
+        file: occurrence.filePath,
+        line: occurrence.line ?? occurrence.endLine ?? 1,
+        ...occurrence.startLine !== void 0 ? { startLine: occurrence.startLine } : {},
+        ...occurrence.endLine !== void 0 ? { endLine: occurrence.endLine } : {}
+      })
+    });
   }
-  return summary.replace(completeHeading, partialHeading).replace(synthesisNote, partialNote);
+  return lines;
+}
+function lifecycleKindForSummary(state) {
+  switch (state) {
+    case "resolved" /* Resolved */:
+      return "resolved";
+    case "carried_unverified" /* CarriedUnverified */:
+      return "carried";
+    case "uncertain" /* Uncertain */:
+      return "uncertain";
+    case "suppressed_by_human" /* SuppressedByHuman */:
+      return "suppressed";
+    default:
+      return null;
+  }
 }
 function toLegacyFinding(finding) {
   const occurrence = "lineageId" in finding ? finding : void 0;
@@ -105547,26 +106004,6 @@ function minimalLegacyReview(findings) {
       durationSeconds: 0
     }
   };
-}
-function formatLifecycleLines(headSha, occurrences) {
-  return occurrences.map((occurrence) => {
-    switch (occurrence.state) {
-      case "new" /* New */:
-        return `New on ${headSha}: ${occurrence.title}`;
-      case "reconfirmed" /* Reconfirmed */:
-        return `Reconfirmed on ${headSha}: ${occurrence.title}`;
-      case "changed" /* Changed */:
-        return `Severity changed: ${occurrence.previousSeverity ?? "unknown"} -> ${occurrence.severity} on ${headSha}: ${occurrence.title}`;
-      case "carried_unverified" /* CarriedUnverified */:
-        return `Carried from ${occurrence.firstSeenHeadSha} - not revalidated: ${occurrence.title}`;
-      case "resolved" /* Resolved */:
-        return `Resolved on ${headSha} after revalidation: ${occurrence.title}`;
-      case "uncertain" /* Uncertain */:
-        return `Needs lifecycle attention on ${headSha}: ${occurrence.title}`;
-      case "suppressed_by_human" /* SuppressedByHuman */:
-        return `Suppressed by current human command: ${occurrence.title}`;
-    }
-  });
 }
 function findRevisionFile(path29, revisionFiles) {
   const normalized = normalizePath3(path29);

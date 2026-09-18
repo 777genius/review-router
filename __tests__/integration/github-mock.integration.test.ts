@@ -529,14 +529,12 @@ describe('GitHub integration mock (no network)', () => {
         owner: 'owner',
         repo: 'repo',
         comment_id: 99,
-        body: expect.stringContaining('Findings | 0 total'),
+        body: expect.stringContaining('## No findings'),
       })
     );
     expect(fakeOctokit.issues.updateComment).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: expect.stringContaining(
-          'No critical, major, or minor findings were reported for this revision.'
-        ),
+        body: expect.stringContaining('<!-- reviewrouter:review-status:complete -->')
       })
     );
     expect(fakeOctokit.issues.deleteComment).not.toHaveBeenCalled();

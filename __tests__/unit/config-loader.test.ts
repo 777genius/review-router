@@ -44,6 +44,14 @@ describe('ConfigLoader', () => {
     expect(config.inlineMinSeverity).toBe(DEFAULT_CONFIG.inlineMinSeverity);
   });
 
+  it('treats the legacy inline comment cap of 5 as the current safety cap', () => {
+    process.env.INLINE_MAX_COMMENTS = '5';
+
+    const config = ConfigLoader.load();
+
+    expect(config.inlineMaxComments).toBe(50);
+  });
+
   it('loads review_depth from user config and lets REVIEW_DEPTH override it', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-review-depth-'));
     process.chdir(tmp);

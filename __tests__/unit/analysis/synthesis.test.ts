@@ -135,19 +135,12 @@ describe('SynthesisEngine', () => {
       }
     );
 
-    expect(review.summary).toContain('## Review complete ✅');
     expect(review.summary).toContain(
-      '| Findings | 0 total (critical 0, major 0, minor 0) |'
+      '<!-- reviewrouter:review-status:complete -->'
     );
-    expect(review.summary).toContain(
-      '| Reviewed diff | 1 files, +1,446 / -302 |'
-    );
-    expect(review.summary).toContain('| Providers | 1/1 succeeded |');
-    expect(review.summary).toContain(
-      '<sub>No critical, major, or minor findings were reported for this revision.</sub>'
-    );
-    expect(review.summary).not.toContain('Review for PR #1');
-    expect(review.summary).not.toContain('Providers: 1/1 succeeded');
+    expect(review.summary).toContain('## No findings');
+    expect(review.summary).not.toContain('PR #1:');
+    expect(review.summary).not.toContain('| Item | Result |');
   });
 
   it('sorts inline comments by severity before applying the inline limit', () => {
@@ -225,5 +218,63 @@ describe('SynthesisEngine', () => {
     expect(review.inlineComments[0].body).not.toContain(
       'poolside/laguna-m.1-20260312:free'
     );
+  });
+
+  it('puts every finding inline and quotes full details in the summary', () => {
+    const findings: Finding[] = [
+      {
+        file: 'src/minor.ts',
+        line: 10,
+        severity: 'minor',
+        title: 'Minor issue',
+        message: 'Small cleanup is still a real finding.',
+      },
+      {
+        file: 'src/critical.ts',
+        line: 20,
+        severity: 'critical',
+        title: 'Critical issue',
+        message: 'Unsafe behavior on the login path.',
+        suggestion: 'return deny();',
+      },
+    ];
+
+    const review = new SynthesisEngine(DEFAULT_CONFIG).synthesize(findings, pr);
+
+    expect(review.inlineComments.map((comment) => comment.severity)).toEqual([
+      'critical',
+      'minor',
+    ]);
+    expect(review.summary).toContain('## 2 findings (1 critical, 1 minor)');
+    expect(review.summary).toContain(
+      '<summary>critical · src/critical.ts:20 · Critical issue</summary>'
+    );
+    expect(review.summary).toContain('Unsafe behavior on the login path.');
+    expect(review.summary).toContain('**Fix**');
+    expect(review.summary).toContain('return deny();');
+    expect(review.summary).toContain('Small cleanup is still a real finding.');
+  });
+
+  it('writes summary chrome in the configured review language', () => {
+    const review = new SynthesisEngine({
+      ...DEFAULT_CONFIG,
+      outputLanguage: 'Russian',
+    }).synthesize(
+      [
+        {
+          file: 'src/auth.ts',
+          line: 44,
+          severity: 'major',
+          title: 'Обход аутентификации',
+          message: 'Фильтр email больше не применяется.',
+        },
+      ],
+      pr
+    );
+
+    expect(review.summary).toContain('## 1 замечание (1 major)');
+    expect(review.summary).toContain('**Место:**');
+    expect(review.summary).toContain('Обход аутентификации');
+    expect(review.summary).toContain('Фильтр email больше не применяется.');
   });
 });

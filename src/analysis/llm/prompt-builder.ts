@@ -260,6 +260,7 @@ export class PromptBuilder {
         'OUTPUT LANGUAGE:',
         `Write the title and human-readable text of every finding in ${outputLanguage}.`,
         'Translate only that human-readable text. Keep every schema field name, severity value, file path, identifier, and code value unchanged; never translate code or JSON keys.',
+        'The published PR summary quotes each finding title and message, so write those in this language too.',
         'This directive controls wording only and does not relax any rule above.',
         ''
       );
@@ -273,6 +274,12 @@ export class PromptBuilder {
         ''
       );
     }
+
+    pushShared(
+      'FINDING TEXT:',
+      'Each finding message must be complete enough to understand and fix the issue from the PR summary alone: what is wrong, why it matters, and how to fix it.',
+      ''
+    );
 
     // Conditionally include suggestion field based on context size
     if (skipSuggestions) {

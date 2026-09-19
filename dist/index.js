@@ -29082,6 +29082,20 @@ function resolveReviewerSummaryLocale(language) {
 function reviewerSummaryCopy(language) {
   return copies[resolveReviewerSummaryLocale(language)];
 }
+function limitReviewerPostedMarkdown(value, maxChars = 65e3) {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const suffix = "\n\n[truncated]";
+  const budget = Math.max(0, maxChars - suffix.length);
+  return `${dropIncompleteDetails(value.slice(0, budget)).trimEnd()}${suffix}`;
+}
+function neutralizeDetailsMarkup(value) {
+  return value.replace(
+    /<\/?(?:details|summary)\b[^>]*>/gi,
+    (tag) => tag.replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  );
+}
 function renderReviewerSummaryMarkdown(input) {
   const copy = reviewerSummaryCopy(input.language);
   const counts = {
@@ -29120,10 +29134,16 @@ function renderReviewerSummaryMarkdown(input) {
     lines.push("", block);
   }
   if (remaining.length > 0) {
-    const overflow = ["", copy.moreFindings(remaining.length), ...remaining];
-    const candidate = [...lines, ...overflow];
-    if (utf8Bytes(candidate.join("\n")) <= maxSummaryBytes) {
-      lines.push(...overflow);
+    const header = ["", copy.moreFindings(remaining.length)];
+    if (utf8Bytes([...lines, ...header].join("\n")) <= maxSummaryBytes) {
+      lines.push(...header);
+      for (const compact of remaining) {
+        const candidate = [...lines, compact];
+        if (utf8Bytes(candidate.join("\n")) > maxSummaryBytes) {
+          break;
+        }
+        lines.push(compact);
+      }
     }
   }
   return limitUtf8(lines.join("\n"), maxSummaryBytes);
@@ -29138,12 +29158,15 @@ function renderReviewerLifecycleMarkdown(input) {
     const summary = escapeHtml(
       `${label} \xB7 ${line.locationLabel} \xB7 ${line.title}`.trim()
     );
-    const body = [line.message.trim(), line.locationLabel].filter(Boolean).join("\n\n");
+    const body = [
+      neutralizeDetailsMarkup(line.message.trim()),
+      line.locationLabel
+    ].filter(Boolean).join("\n\n");
     return [
       "<details>",
       `<summary>${summary}</summary>`,
       "",
-      sanitizeDetailsBody(body),
+      neutralizeDetailsMarkup(body),
       "",
       "</details>"
     ].join("\n");
@@ -29188,7 +29211,7 @@ function renderFindingDetails(copy, finding) {
     `${finding.severity} \xB7 ${location} \xB7 ${finding.title.trim()}`
   );
   const message = truncateChars(
-    sanitizeDetailsBody(finding.message.trim()),
+    neutralizeDetailsMarkup(finding.message.trim()),
     maxFindingBodyChars
   );
   const parts = [
@@ -29445,8 +29468,29 @@ function escapeHtml(value) {
 function escapeMarkdownInline(value) {
   return value.replaceAll("\\", "\\\\").replaceAll("`", "\\`");
 }
-function sanitizeDetailsBody(value) {
-  return value.replace(/<\/details>/gi, "[/details]");
+function dropIncompleteDetails(value) {
+  const openTags = Array.from(value.matchAll(/<details\b[^>]*>/gi));
+  const closeTags = Array.from(value.matchAll(/<\/details>/gi));
+  if (openTags.length <= closeTags.length) {
+    return value;
+  }
+  const lastOpen = openTags[openTags.length - 1];
+  if (lastOpen?.index === void 0) {
+    return value;
+  }
+  return value.slice(0, lastOpen.index).trimEnd();
+}
+function limitUtf8(value, maxBytes) {
+  if (utf8Bytes(value) <= maxBytes) {
+    return value;
+  }
+  const suffix = "\n\n[truncated]";
+  const budget = Math.max(0, maxBytes - utf8Bytes(suffix));
+  let cut = Buffer.from(value, "utf8").subarray(0, budget).toString("utf8");
+  if (cut.endsWith("\uFFFD")) {
+    cut = cut.slice(0, -1);
+  }
+  return `${dropIncompleteDetails(cut).trimEnd()}${suffix}`;
 }
 function truncateChars(value, maxChars) {
   if (value.length <= maxChars) {
@@ -29458,14 +29502,6 @@ function truncateChars(value, maxChars) {
 }
 function utf8Bytes(value) {
   return Buffer.byteLength(value, "utf8");
-}
-function limitUtf8(value, maxBytes) {
-  if (utf8Bytes(value) <= maxBytes) {
-    return value;
-  }
-  return `${Buffer.from(value, "utf8").subarray(0, maxBytes - 20).toString("utf8")}
-
-[truncated]`;
 }
 
 // src/utils/severity.ts
@@ -29640,7 +29676,7 @@ var SynthesisEngine = class {
       "",
       `**${finding.title}**`,
       "",
-      finding.message.trim()
+      neutralizeDetailsMarkup(finding.message.trim())
     ];
     if (finding.suggestion) {
       parts.push("", this.suggestedFixDetails(finding.suggestion));
@@ -105745,11 +105781,13 @@ var LegacyReviewProjectionPolicyAdapter = class {
       language: this.config.outputLanguage,
       preliminaryFindingCount: currentOccurrences.length
     }) : review.summary;
-    const summaryBody = [
-      reviewSummary,
-      ...lifecycleMarkdown ? ["", lifecycleMarkdown] : [],
-      ...coverageLines
-    ].join("\n");
+    const summaryBody = limitReviewerPostedMarkdown(
+      [
+        reviewSummary,
+        ...lifecycleMarkdown ? ["", lifecycleMarkdown] : [],
+        ...coverageLines
+      ].join("\n")
+    );
     return {
       summaryBody,
       checkName: "ReviewRouter",

@@ -13,6 +13,7 @@ import {
 } from '../types';
 import {
   renderReviewerSummaryMarkdown,
+  neutralizeDetailsMarkup,
   toReviewerSummaryFinding,
 } from '../output/reviewer-summary';
 import { compareSeverityDesc, getSeverityDisplay } from '../utils/severity';
@@ -215,7 +216,7 @@ export class SynthesisEngine {
       '',
       `**${finding.title}**`,
       '',
-      finding.message.trim(),
+      neutralizeDetailsMarkup(finding.message.trim()),
     ];
     if (finding.suggestion) {
       parts.push('', this.suggestedFixDetails(finding.suggestion));

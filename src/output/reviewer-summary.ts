@@ -161,6 +161,24 @@ export function reviewerSummaryCopy(
   return copies[resolveReviewerSummaryLocale(language)];
 }
 
+export function limitReviewerPostedMarkdown(
+  value: string,
+  maxChars = 65_000
+): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const suffix = '\n\n[truncated]';
+  const budget = Math.max(0, maxChars - suffix.length);
+  return `${dropIncompleteDetails(value.slice(0, budget)).trimEnd()}${suffix}`;
+}
+
+export function neutralizeDetailsMarkup(value: string): string {
+  return value.replace(/<\/?(?:details|summary)\b[^>]*>/gi, (tag) =>
+    tag.replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  );
+}
+
 export function renderReviewerSummaryMarkdown(input: {
   readonly language: string | undefined;
   readonly findings: readonly ReviewerSummaryFinding[];
@@ -220,10 +238,16 @@ export function renderReviewerSummaryMarkdown(input: {
   }
 
   if (remaining.length > 0) {
-    const overflow = ['', copy.moreFindings(remaining.length), ...remaining];
-    const candidate = [...lines, ...overflow];
-    if (utf8Bytes(candidate.join('\n')) <= maxSummaryBytes) {
-      lines.push(...overflow);
+    const header = ['', copy.moreFindings(remaining.length)];
+    if (utf8Bytes([...lines, ...header].join('\n')) <= maxSummaryBytes) {
+      lines.push(...header);
+      for (const compact of remaining) {
+        const candidate = [...lines, compact];
+        if (utf8Bytes(candidate.join('\n')) > maxSummaryBytes) {
+          break;
+        }
+        lines.push(compact);
+      }
     }
   }
 
@@ -243,14 +267,17 @@ export function renderReviewerLifecycleMarkdown(input: {
     const summary = escapeHtml(
       `${label} · ${line.locationLabel} · ${line.title}`.trim()
     );
-    const body = [line.message.trim(), line.locationLabel]
+    const body = [
+      neutralizeDetailsMarkup(line.message.trim()),
+      line.locationLabel,
+    ]
       .filter(Boolean)
       .join('\n\n');
     return [
       '<details>',
       `<summary>${summary}</summary>`,
       '',
-      sanitizeDetailsBody(body),
+      neutralizeDetailsMarkup(body),
       '',
       '</details>',
     ].join('\n');
@@ -319,7 +346,7 @@ function renderFindingDetails(
     `${finding.severity} · ${location} · ${finding.title.trim()}`
   );
   const message = truncateChars(
-    sanitizeDetailsBody(finding.message.trim()),
+    neutralizeDetailsMarkup(finding.message.trim()),
     maxFindingBodyChars
   );
   const parts = [
@@ -652,8 +679,30 @@ function escapeMarkdownInline(value: string): string {
   return value.replaceAll('\\', '\\\\').replaceAll('`', '\\`');
 }
 
-function sanitizeDetailsBody(value: string): string {
-  return value.replace(/<\/details>/gi, '[/details]');
+function dropIncompleteDetails(value: string): string {
+  const openTags = Array.from(value.matchAll(/<details\b[^>]*>/gi));
+  const closeTags = Array.from(value.matchAll(/<\/details>/gi));
+  if (openTags.length <= closeTags.length) {
+    return value;
+  }
+  const lastOpen = openTags[openTags.length - 1];
+  if (lastOpen?.index === undefined) {
+    return value;
+  }
+  return value.slice(0, lastOpen.index).trimEnd();
+}
+
+function limitUtf8(value: string, maxBytes: number): string {
+  if (utf8Bytes(value) <= maxBytes) {
+    return value;
+  }
+  const suffix = '\n\n[truncated]';
+  const budget = Math.max(0, maxBytes - utf8Bytes(suffix));
+  let cut = Buffer.from(value, 'utf8').subarray(0, budget).toString('utf8');
+  if (cut.endsWith('\uFFFD')) {
+    cut = cut.slice(0, -1);
+  }
+  return `${dropIncompleteDetails(cut).trimEnd()}${suffix}`;
 }
 
 function truncateChars(value: string, maxChars: number): string {
@@ -665,13 +714,4 @@ function truncateChars(value: string, maxChars: number): string {
 
 function utf8Bytes(value: string): number {
   return Buffer.byteLength(value, 'utf8');
-}
-
-function limitUtf8(value: string, maxBytes: number): string {
-  if (utf8Bytes(value) <= maxBytes) {
-    return value;
-  }
-  return `${Buffer.from(value, 'utf8')
-    .subarray(0, maxBytes - 20)
-    .toString('utf8')}\n\n[truncated]`;
 }

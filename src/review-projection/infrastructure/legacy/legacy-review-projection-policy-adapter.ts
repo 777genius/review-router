@@ -39,6 +39,7 @@ import {
 } from '../../domain/review-projection';
 import {
   findingLocationLabel,
+  limitReviewerPostedMarkdown,
   markReviewSummaryIncomplete,
   renderReviewerLifecycleMarkdown,
   reviewerSummaryCopy,
@@ -263,11 +264,13 @@ export class LegacyReviewProjectionPolicyAdapter
             preliminaryFindingCount: currentOccurrences.length,
           })
         : review.summary;
-    const summaryBody = [
-      reviewSummary,
-      ...(lifecycleMarkdown ? ['', lifecycleMarkdown] : []),
-      ...coverageLines,
-    ].join('\n');
+    const summaryBody = limitReviewerPostedMarkdown(
+      [
+        reviewSummary,
+        ...(lifecycleMarkdown ? ['', lifecycleMarkdown] : []),
+        ...coverageLines,
+      ].join('\n')
+    );
 
     return {
       summaryBody,

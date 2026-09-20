@@ -177,16 +177,20 @@ export function isLikelySameInlineFinding(
   const candidateTokens = tokenize(semanticText(candidateBody));
   const bodySimilarity = diceSimilarity(existingTokens, candidateTokens);
 
-  const existingCodeTokens = extractCodeTokens(existingBody);
-  const candidateCodeTokens = extractCodeTokens(candidateBody);
-  const sharedCodeTokens = intersectionSize(
-    existingCodeTokens,
-    candidateCodeTokens
+  const sharedDistinctiveCodeTokens = intersectionSize(
+    distinctiveCodeTokens(semanticText(existingBody)),
+    distinctiveCodeTokens(semanticText(candidateBody))
   );
 
+  // Nearby-line matching is for the same issue drifting a few lines, not for
+  // distinct bugs that share a file and leftover English tokens like `req.query`.
   if (nearbyLine && titleSimilarity >= 0.45) return true;
-  if (nearbyLine && bodySimilarity >= 0.38) return true;
-  if (nearbyLine && sharedCodeTokens > 0 && bodySimilarity >= 0.24) return true;
+  if (nearbyLine && sharedDistinctiveCodeTokens > 0 && bodySimilarity >= 0.24) {
+    return true;
+  }
+  if (nearbyLine && titleSimilarity >= 0.2 && bodySimilarity >= 0.38) {
+    return true;
+  }
 
   // Allow larger line shifts only when the model is clearly repeating the same issue.
   return titleSimilarity >= 0.6 && bodySimilarity >= 0.55;
@@ -249,7 +253,10 @@ function stableFindingFingerprint(input: {
 function semanticText(body: string): string {
   return body
     .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/<details[\s\S]*?<\/details>/gi, ' ')
+    .replace(/<sub[\s\S]*?<\/sub>/gi, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
     .replace(/\*\*Severity:\*\*[\s\S]*?(?:\n\n|$)/gi, ' ')
     .replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, ' ')
     .replace(/\*\*Suggestion:\*\*[\s\S]*?(?:\n\n|$)/gi, ' ');
@@ -276,6 +283,14 @@ function extractCodeTokens(body: string): Set<string> {
   return tokens;
 }
 
+function distinctiveCodeTokens(body: string): Set<string> {
+  const tokens = extractCodeTokens(body);
+  for (const token of GENERIC_CODE_TOKENS) {
+    tokens.delete(token);
+  }
+  return tokens;
+}
+
 function splitIdentifiers(value: string): string {
   return value.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_./:-]+/g, ' ');
 }
@@ -292,6 +307,38 @@ function intersectionSize(a: Set<string>, b: Set<string>): number {
   }
   return count;
 }
+
+const GENERIC_CODE_TOKENS = new Set([
+  'api',
+  'arg',
+  'args',
+  'body',
+  'config',
+  'context',
+  'cookie',
+  'cookies',
+  'ctx',
+  'data',
+  'env',
+  'err',
+  'error',
+  'header',
+  'headers',
+  'http',
+  'https',
+  'input',
+  'json',
+  'options',
+  'output',
+  'param',
+  'params',
+  'query',
+  'req',
+  'request',
+  'res',
+  'response',
+  'value',
+]);
 
 const STOPWORDS = new Set([
   'about',

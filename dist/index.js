@@ -32044,15 +32044,17 @@ function isLikelySameInlineFinding(existing, candidate) {
   const existingTokens = tokenize2(semanticText(existingBody));
   const candidateTokens = tokenize2(semanticText(candidateBody));
   const bodySimilarity = diceSimilarity(existingTokens, candidateTokens);
-  const existingCodeTokens = extractCodeTokens(existingBody);
-  const candidateCodeTokens = extractCodeTokens(candidateBody);
-  const sharedCodeTokens = intersectionSize(
-    existingCodeTokens,
-    candidateCodeTokens
+  const sharedDistinctiveCodeTokens = intersectionSize(
+    distinctiveCodeTokens(semanticText(existingBody)),
+    distinctiveCodeTokens(semanticText(candidateBody))
   );
   if (nearbyLine && titleSimilarity >= 0.45) return true;
-  if (nearbyLine && bodySimilarity >= 0.38) return true;
-  if (nearbyLine && sharedCodeTokens > 0 && bodySimilarity >= 0.24) return true;
+  if (nearbyLine && sharedDistinctiveCodeTokens > 0 && bodySimilarity >= 0.24) {
+    return true;
+  }
+  if (nearbyLine && titleSimilarity >= 0.2 && bodySimilarity >= 0.38) {
+    return true;
+  }
   return titleSimilarity >= 0.6 && bodySimilarity >= 0.55;
 }
 function normalizeForSignature(value) {
@@ -32086,7 +32088,7 @@ function stableFindingFingerprint(input) {
   return (0, import_crypto6.createHash)("sha256").update(canonical).digest("hex").slice(0, 32);
 }
 function semanticText(body) {
-  return body.replace(/```[\s\S]*?```/g, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/\*\*Severity:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Suggestion:\*\*[\s\S]*?(?:\n\n|$)/gi, " ");
+  return body.replace(/```[\s\S]*?```/g, " ").replace(/<details[\s\S]*?<\/details>/gi, " ").replace(/<sub[\s\S]*?<\/sub>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]+>/g, " ").replace(/\*\*Severity:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Suggestion:\*\*[\s\S]*?(?:\n\n|$)/gi, " ");
 }
 function tokenize2(value) {
   const normalized = splitIdentifiers(value).toLowerCase().replace(/[^a-z0-9_]+/g, " ");
@@ -32099,6 +32101,13 @@ function extractCodeTokens(body) {
     for (const token of tokenize2(match2[1])) {
       tokens.add(token);
     }
+  }
+  return tokens;
+}
+function distinctiveCodeTokens(body) {
+  const tokens = extractCodeTokens(body);
+  for (const token of GENERIC_CODE_TOKENS) {
+    tokens.delete(token);
   }
   return tokens;
 }
@@ -32116,6 +32125,37 @@ function intersectionSize(a2, b2) {
   }
   return count;
 }
+var GENERIC_CODE_TOKENS = /* @__PURE__ */ new Set([
+  "api",
+  "arg",
+  "args",
+  "body",
+  "config",
+  "context",
+  "cookie",
+  "cookies",
+  "ctx",
+  "data",
+  "env",
+  "err",
+  "error",
+  "header",
+  "headers",
+  "http",
+  "https",
+  "input",
+  "json",
+  "options",
+  "output",
+  "param",
+  "params",
+  "query",
+  "req",
+  "request",
+  "res",
+  "response",
+  "value"
+]);
 var STOPWORDS = /* @__PURE__ */ new Set([
   "about",
   "after",

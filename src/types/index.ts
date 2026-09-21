@@ -243,6 +243,8 @@ export interface ProviderModelAttribution {
 }
 
 export interface Finding {
+  /** Source identities unioned only when findings actually merge. */
+  sourceFindingIds?: readonly string[];
   file: string;
   startLine?: number;
   line: number;

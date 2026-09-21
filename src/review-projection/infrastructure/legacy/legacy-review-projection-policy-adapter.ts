@@ -100,8 +100,9 @@ export class LegacyReviewProjectionPolicyAdapter
 
     return filtered.map((finding) => {
       const metadata = finding as FindingWithProjectionMetadata;
+      const memberIds = new Set(finding.sourceFindingIds);
       const contributors = query.findings.filter((candidate) =>
-        candidateContributedToFinding(candidate, finding)
+        memberIds.has(candidate.sourceFindingId)
       );
       const representative =
         contributors.find(
@@ -131,10 +132,9 @@ export class LegacyReviewProjectionPolicyAdapter
         ...(finding.confidence !== undefined
           ? { confidence: finding.confidence }
           : {}),
-        providerIds: sortedUnique([
-          ...(finding.providers ?? []),
-          ...(finding.provider ? [finding.provider] : []),
-        ]),
+        providerIds: sortedUnique(
+          contributors.flatMap((candidate) => candidate.providerIds)
+        ),
         providerVoteKeys: sortedUnique(
           contributors.flatMap((candidate) => candidate.providerVoteKeys)
         ),
@@ -471,6 +471,10 @@ function toLegacyFinding(
     providerVoteKeys: [...finding.providerVoteKeys],
     confidence: 'confidence' in finding ? finding.confidence : undefined,
     category: finding.category,
+    sourceFindingIds:
+      'sourceFindingIds' in finding
+        ? [...finding.sourceFindingIds]
+        : [sourceFindingId],
     projectionSourceFindingId: sourceFindingId,
     projectionCategory: finding.category,
     projectionFailureModeHash: finding.normalizedFailureModeHash,
@@ -482,19 +486,6 @@ function toLegacyFinding(
       : {}),
     projectionObservationIds: [...finding.observationIds],
   };
-}
-
-function candidateContributedToFinding(
-  candidate: CurrentFindingCandidate,
-  finding: Finding
-): boolean {
-  return (
-    normalizePath(candidate.filePath) === normalizePath(finding.file) &&
-    Math.abs((candidate.line ?? candidate.endLine ?? 1) - finding.line) <= 2 &&
-    (candidate.normalizedFailureModeHash ===
-      (finding as FindingWithProjectionMetadata).projectionFailureModeHash ||
-      normalizeText(candidate.title) === normalizeText(finding.title))
-  );
 }
 
 function lifecycleProviderResults(
@@ -658,10 +649,6 @@ function toLegacySeverity(severity: FindingSeverity): Severity {
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
-}
-
-function normalizeText(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function sortedUnique(values: readonly string[]): string[] {

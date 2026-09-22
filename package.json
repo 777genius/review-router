@@ -1,6 +1,6 @@
 {
   "name": "review-router",
-  "version": "1.0.149",
+  "version": "1.0.150",
   "description": "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   "main": "dist/index.js",
   "type": "commonjs",
@@ -53,7 +53,7 @@
     "@octokit/rest": "^20.1.2",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
-    "js-yaml": "4.3.1",
+    "js-yaml": "4.3.2",
     "libsodium-wrappers": "^0.8.4",
     "minimatch": "^10.2.5",
     "p-queue": "^8.1.1",
@@ -85,10 +85,13 @@
   "overrides": {
     "@babel/core": "7.29.7",
     "@hono/node-server": "2.0.11",
+    "fast-uri": "3.1.6",
+    "hono": "4.13.8",
     "@istanbuljs/load-nyc-config": {
-      "js-yaml": "3.15.1"
+      "js-yaml": "3.15.2"
     },
     "brace-expansion@<=1.1.17": "1.1.18",
-    "brace-expansion@>=3.0.0 <5.0.9": "5.0.9"
+    "brace-expansion@>=3.0.0 <5.0.9": "5.0.9",
+    "qs": "6.16.0"
   }
 }

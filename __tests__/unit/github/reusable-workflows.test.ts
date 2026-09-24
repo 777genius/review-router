@@ -442,7 +442,7 @@ describe('production reusable workflows', () => {
       "inputs.codex_session_mode == 'codex_subscription_oauth_hosted_pool'"
     );
     expect(hostedPoolRun?.env).toMatchObject({
-      REVIEWROUTER_ACTION_V2_MODE: 't0',
+      REVIEWROUTER_ACTION_V2_MODE: 'disabled',
       INPUT_MODE: 'fork-agentic-sandbox-hosted-pool',
       INPUT_API_URL: '${{ inputs.api_url }}',
       INPUT_CONTROL_PLANE_URL: '${{ inputs.control_plane_url }}',

@@ -40,8 +40,8 @@ import {
 export interface CodexProviderOptions {
   agenticContext?: boolean;
   eventAudit?: boolean;
-  modelProvider?: 'openai' | 'openrouter';
-  providerNamePrefix?: 'codex' | 'codex-openrouter' | 'openrouter';
+  modelProvider?: 'openai' | 'openrouter' | 'mimo';
+  providerNamePrefix?: 'codex' | 'codex-openrouter' | 'openrouter' | 'codex-mimo';
   providerNameModel?: string;
 }
 
@@ -737,6 +737,26 @@ export class CodexProvider extends Provider {
       );
     }
 
+    if (config.modelProvider === 'mimo') {
+      args.push(
+        '-c',
+        'model_provider="mimo"',
+        '-c',
+        'model_providers.mimo.name="MiMo Token Plan"',
+        '-c',
+        'model_providers.mimo.base_url="https://token-plan-sgp.xiaomimimo.com/v1"',
+        '-c',
+        'model_providers.mimo.wire_api="responses"',
+        '-c',
+        'model_providers.mimo.env_key="MIMO_TOKEN_PLAN_API_KEY"',
+        // MiMo's gateway 400s on the web_search tool Codex sends by default
+        // (responses_feature_not_supported); confirmed empirically against
+        // the live endpoint, not documented anywhere.
+        '-c',
+        'web_search="disabled"'
+      );
+    }
+
     args.push('-');
     return args;
   }
@@ -1282,6 +1302,7 @@ export class CodexProvider extends Provider {
         'CODEX_HOME',
         'OPENAI_API_KEY',
         ...(modelProvider === 'openrouter' ? ['OPENROUTER_API_KEY'] : []),
+        ...(modelProvider === 'mimo' ? ['MIMO_TOKEN_PLAN_API_KEY'] : []),
       ],
     });
   }

@@ -181,6 +181,32 @@ describe('CodexProvider', () => {
     expect(args).toContain('--ignore-user-config');
   });
 
+  it('can route Codex CLI through MiMo Token Plan without user config', () => {
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+      outputSchemaFile: '/tmp/codex-schema.json',
+    });
+
+    expect(provider.name).toBe('codex-mimo/mimo-v2.6-pro');
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '-c',
+        'model_provider="mimo"',
+        'model_providers.mimo.name="MiMo Token Plan"',
+        'model_providers.mimo.base_url="https://token-plan-sgp.xiaomimimo.com/v1"',
+        'model_providers.mimo.wire_api="responses"',
+        'model_providers.mimo.env_key="MIMO_TOKEN_PLAN_API_KEY"',
+        'web_search="disabled"',
+      ])
+    );
+    expect(args).toContain('--ignore-user-config');
+  });
+
   it('can keep public OpenRouter provider identity while stripping instance suffix from Codex model', () => {
     const provider = new CodexProvider('openai/gpt-oss-120b:free', {
       modelProvider: 'openrouter',

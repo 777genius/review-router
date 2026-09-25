@@ -410,6 +410,19 @@ export class ProviderRegistry {
         continue;
       }
 
+      if (name.startsWith('codex-mimo/')) {
+        const model = name.replace('codex-mimo/', '');
+        list.push(
+          new CodexProvider(model, {
+            agenticContext: config.codexAgenticContext,
+            eventAudit: config.codexEventAudit,
+            modelProvider: 'mimo',
+            providerNamePrefix: 'codex-mimo',
+          })
+        );
+        continue;
+      }
+
       if (name.startsWith('gemini/')) {
         const model = name.replace('gemini/', '');
         list.push(new GeminiProvider(model));

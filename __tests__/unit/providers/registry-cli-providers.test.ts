@@ -61,6 +61,19 @@ describe('ProviderRegistry - New CLI Providers', () => {
       expect(providers[0].name).toBe('codex-openrouter/openai/gpt-5.3-codex');
     });
 
+    it('should instantiate MiMo-backed Codex providers', async () => {
+      const config: ReviewConfig = {
+        ...DEFAULT_CONFIG,
+        providers: ['codex-mimo/mimo-v2.6-pro'],
+      };
+
+      const providers = (registry as any).instantiate(config.providers, config);
+
+      expect(providers).toHaveLength(1);
+      expect(providers[0]).toBeInstanceOf(CodexProvider);
+      expect(providers[0].name).toBe('codex-mimo/mimo-v2.6-pro');
+    });
+
     it('should instantiate OpenRouter providers through Codex agent runtime', async () => {
       process.env.OPENROUTER_API_KEY = 'or-key';
       const config: ReviewConfig = {

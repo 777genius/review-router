@@ -104,7 +104,6 @@ jobs:
       CODEX_AUTH_JSON_PRESENT: ${{ secrets.CODEX_AUTH_JSON != '' && '1' || '0' }}
       CLAUDE_CODE_OAUTH_TOKEN_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && '1' || '0' }}
       OPENAI_API_KEY_PRESENT: ${{ secrets.OPENAI_API_KEY != '' && '1' || '0' }}
-      MIMO_TOKEN_PLAN_API_KEY_PRESENT: ${{ secrets.MIMO_TOKEN_PLAN_API_KEY != '' && '1' || '0' }}
       REVIEW_APP_PRIVATE_KEY_PRESENT: ${{ secrets.REVIEW_APP_PRIVATE_KEY != '' && '1' || '0' }}
     steps:
       - name: Prepare ReviewRouter runtime settings
@@ -352,7 +351,7 @@ jobs:
           permission-pull-requests: write
 
       - name: Install Codex CLI
-        if: ${{ steps.runtime.outputs.can_run == 'true' && (steps.provider-tooling.outputs.codex_cli_needed == 'true' || env.MIMO_TOKEN_PLAN_API_KEY_PRESENT == '1') }}
+        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}
         shell: bash
         run: npm install -g @openai/codex@0.147.0
 

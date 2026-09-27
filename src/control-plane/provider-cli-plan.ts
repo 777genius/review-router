@@ -23,6 +23,7 @@ export function resolveProviderCliPlan(
     .join(',');
 
   const codexProviderRequested = hasProviderPrefix(providerHints, 'codex');
+  const mimoProviderRequested = hasProviderPrefix(providerHints, 'codex-mimo');
   const openRouterProviderRequested = hasProviderPrefix(
     providerHints,
     'openrouter'
@@ -33,7 +34,9 @@ export function resolveProviderCliPlan(
       authMode === 'codex-oauth' ||
       authMode === 'openai-api' ||
       authMode === 'openrouter-api' ||
+      authMode === 'mimo-token-plan-api' ||
       codexProviderRequested ||
+      mimoProviderRequested ||
       openRouterProviderRequested,
     codexOauthNeeded: authMode === 'codex-oauth',
     claudeCliNeeded:
@@ -76,6 +79,8 @@ function inferredProviderFromEnv(
     case 'codex-oauth':
     case 'openai-api':
       return codexProvider || 'codex/gpt-5.6-sol';
+    case 'mimo-token-plan-api':
+      return undefined;
     default:
       return claudeProvider || codexProvider;
   }

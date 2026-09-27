@@ -333,20 +333,22 @@ describe('production reusable workflows', () => {
     expect(hostedPoolRun?.env).not.toHaveProperty(secretName);
   });
 
-  it('installs Codex for legacy MiMo-only selection despite the preflight gap', () => {
-    const workflow = parseWorkflow(
-      '.github/workflows/reviewrouter-execution-reusable.yml'
-    );
+  it('uses only the provider preflight for the parsed Codex install condition', () => {
+    const workflowPath =
+      '.github/workflows/reviewrouter-execution-reusable.yml';
+    const workflowSource = readRepoFile(workflowPath);
+    const workflow = parseWorkflow(workflowPath);
     const codexInstall = workflow.jobs?.review?.steps?.find(
       (step) => step.name === 'Install Codex CLI'
     );
 
-    expect(codexInstall?.if).toContain(
-      "steps.provider-tooling.outputs.codex_cli_needed == 'true'"
+    expect(codexInstall?.if).toBe(
+      "${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}"
     );
-    expect(codexInstall?.if).toContain(
-      "env.MIMO_TOKEN_PLAN_API_KEY_PRESENT == '1'"
+    expect(workflow.jobs?.review?.env).not.toHaveProperty(
+      'MIMO_TOKEN_PLAN_API_KEY_PRESENT'
     );
+    expect(workflowSource).not.toContain('MIMO_TOKEN_PLAN_API_KEY_PRESENT');
   });
 
   it('keeps the shared execution workflow sandbox-safe in both lanes', () => {
@@ -510,7 +512,7 @@ describe('production reusable workflows', () => {
     expect(t0Run?.if).toContain("inputs.review_action_lane == 't0'");
     expect(t0Run?.if).toContain("inputs.codex_session_mode == ''");
     expect(codexInstall?.if).toBe(
-      "${{ steps.runtime.outputs.can_run == 'true' && (steps.provider-tooling.outputs.codex_cli_needed == 'true' || env.MIMO_TOKEN_PLAN_API_KEY_PRESENT == '1') }}"
+      "${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}"
     );
     expect(codexInstall?.if).not.toContain(
       "inputs.review_action_lane == 'legacy'"

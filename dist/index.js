@@ -51957,12 +51957,13 @@ function resolveProviderCliPlan(env = process.env) {
     inferredProvider
   ].filter((value) => Boolean(value)).join(",");
   const codexProviderRequested = hasProviderPrefix(providerHints, "codex");
+  const mimoProviderRequested = hasProviderPrefix(providerHints, "codex-mimo");
   const openRouterProviderRequested = hasProviderPrefix(
     providerHints,
     "openrouter"
   );
   return {
-    codexCliNeeded: authMode === "codex-oauth" || authMode === "openai-api" || authMode === "openrouter-api" || codexProviderRequested || openRouterProviderRequested,
+    codexCliNeeded: authMode === "codex-oauth" || authMode === "openai-api" || authMode === "openrouter-api" || authMode === "mimo-token-plan-api" || codexProviderRequested || mimoProviderRequested || openRouterProviderRequested,
     codexOauthNeeded: authMode === "codex-oauth",
     claudeCliNeeded: authMode === "claude-oauth" || hasProviderPrefix(providerHints, "claude")
   };
@@ -51989,6 +51990,8 @@ function inferredProviderFromEnv(authMode, env) {
     case "codex-oauth":
     case "openai-api":
       return codexProvider || "codex/gpt-5.6-sol";
+    case "mimo-token-plan-api":
+      return void 0;
     default:
       return claudeProvider || codexProvider;
   }

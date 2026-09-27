@@ -20120,6 +20120,11 @@ var ConfigLoader = class {
       codexProvider
     );
     const providers = explicitProviders.length > 0 ? explicitProviders : inferredProvider ? [inferredProvider] : void 0;
+    if ((env.REVIEW_AUTH_MODE?.trim() === "mimo-token-plan-api" || providers?.some((provider) => provider.startsWith("codex-mimo/"))) && !env.MIMO_TOKEN_PLAN_API_KEY?.trim()) {
+      throw new Error(
+        "MIMO_TOKEN_PLAN_API_KEY is required for REVIEW_AUTH_MODE=mimo-token-plan-api"
+      );
+    }
     return {
       reviewDepth: this.parseReviewDepth(env.REVIEW_DEPTH),
       providers,
@@ -20362,6 +20367,8 @@ var ConfigLoader = class {
   }
   static inferredProviderFromAuthMode(authMode, claudeProvider, codexProvider) {
     switch ((authMode || "").trim()) {
+      case "mimo-token-plan-api":
+        return "codex-mimo/mimo-v2.6-pro";
       case "claude-oauth":
         return claudeProvider || "claude/sonnet";
       case "codex-oauth":
@@ -25109,27 +25116,6 @@ var ProviderRegistry = class {
       discoveryLimit
     );
     providers = selected.length > 0 ? selected : providers;
-    if (providers.length < discoveryLimit && config.fallbackProviders.length > 0) {
-      const remainingSlots = discoveryLimit - providers.length;
-      logger.info(
-        `Adding fallback providers to fill ${remainingSlots} remaining slots (target: ${discoveryLimit})`
-      );
-      const fallbacks = this.instantiate(config.fallbackProviders, config);
-      const filteredFallbacks = await this.filterRateLimited(fallbacks);
-      const dedupedFallbacks = this.dedupeProviders([
-        ...providers,
-        ...filteredFallbacks
-      ]).filter((p2) => !providers.some((existing) => existing.name === p2.name));
-      const fallbacksToAdd = dedupedFallbacks.slice(0, remainingSlots);
-      providers = [...providers, ...fallbacksToAdd];
-      logger.info(
-        `Added ${fallbacksToAdd.length} fallback providers (filtered ${dedupedFallbacks.length} candidates, total now: ${providers.length})`
-      );
-    } else {
-      logger.info(
-        `Skipping fallback providers: providers.length=${providers.length}, discoveryLimit=${discoveryLimit}, fallbackProviders.length=${config.fallbackProviders.length}`
-      );
-    }
     if (providers.length > discoveryLimit) {
       logger.warn(
         `Provider count ${providers.length} exceeds discovery limit ${discoveryLimit}, trimming`
@@ -25161,6 +25147,20 @@ var ProviderRegistry = class {
   async discoverAdditionalFreeProviders(existing, max = 6, config = DEFAULT_CONFIG) {
     const existingSet = new Set(existing);
     const discovered = [];
+    const configuredFallbacks = await this.filterRateLimited(
+      this.applyAllowBlock(
+        this.dedupeProviders(
+          this.instantiate(
+            config.fallbackProviders.filter((name) => !existingSet.has(name)),
+            config
+          )
+        ),
+        config
+      )
+    );
+    if (configuredFallbacks.length > 0) {
+      return configuredFallbacks.slice(0, max);
+    }
     if (process.env.OPENROUTER_API_KEY) {
       const moreOpenRouter = await getBestFreeModelsCached(20, 5e3);
       discovered.push(...moreOpenRouter.filter((m2) => !existingSet.has(m2)));
@@ -45941,6 +45941,9 @@ function descriptorFor(rawMessage, error2) {
   if (message.includes("codex_auth_json") || message.includes("auth.json") || message.includes("refresh_token is missing") || message.includes("auth_mode must be chatgpt") || message.includes("not valid json") || message.includes("tokens.refresh_token")) {
     return descriptors.codex_oauth_invalid_secret;
   }
+  if ((message.includes("mimo") || message.includes("mimo_token_plan_api_key")) && (message.includes("api key") || message.includes("api_key") || message.includes("401") || message.includes("unauthorized") || message.includes("403"))) {
+    return descriptors.mimo_api_key_invalid;
+  }
   if (message.includes("openrouter") && (message.includes("api key") || message.includes("401") || message.includes("unauthorized") || message.includes("403"))) {
     return descriptors.openrouter_api_key_invalid;
   }
@@ -46092,6 +46095,19 @@ var descriptors = {
     nextSteps: [
       "Verify `OPENROUTER_API_KEY` is available to this workflow.",
       "Verify the key has quota and access to the configured model.",
+      "Re-run the workflow after updating the secret."
+    ],
+    isRetryable: false,
+    isUserActionable: true
+  },
+  mimo_api_key_invalid: {
+    code: "mimo_api_key_invalid",
+    category: "provider_auth",
+    summary: "MiMo Token Plan API key is missing or invalid.",
+    whyItMatters: "ReviewRouter cannot call the configured MiMo model.",
+    nextSteps: [
+      "Verify `MIMO_TOKEN_PLAN_API_KEY` is available to this workflow.",
+      "Verify the MiMo Token Plan key has quota and access to the configured model.",
       "Re-run the workflow after updating the secret."
     ],
     isRetryable: false,

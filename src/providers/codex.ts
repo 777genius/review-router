@@ -41,7 +41,11 @@ export interface CodexProviderOptions {
   agenticContext?: boolean;
   eventAudit?: boolean;
   modelProvider?: 'openai' | 'openrouter' | 'mimo';
-  providerNamePrefix?: 'codex' | 'codex-openrouter' | 'openrouter' | 'codex-mimo';
+  providerNamePrefix?:
+    | 'codex'
+    | 'codex-openrouter'
+    | 'openrouter'
+    | 'codex-mimo';
   providerNameModel?: string;
 }
 
@@ -147,6 +151,7 @@ type CodexFrozenCliConfig = {
 
 const CODEX_OUTPUT_FILE_PLACEHOLDER = '{reviewrouter_output_file}';
 const CODEX_SCHEMA_FILE_PLACEHOLDER = '{reviewrouter_schema_file}';
+const MIMO_TOKEN_PLAN_API_KEY = 'MIMO_TOKEN_PLAN_API_KEY';
 const CONTEXT_GATEWAY_RUNTIME_ENV_KEY_SET = new Set(
   CONTEXT_GATEWAY_RUNTIME_ENV_KEYS
 );
@@ -362,6 +367,7 @@ export class CodexProvider extends Provider {
     executionPolicy?: ProviderExecutionPolicy,
     contextGateway?: CodexContextGatewayInvocationConfig
   ): Promise<PreparedProviderInvocation<CodexPreparedRequest>> {
+    this.requireModelProviderCredential();
     if (contextGateway) this.validateContextGatewayConfig(contextGateway);
     const effectiveTimeoutMs =
       executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
@@ -569,6 +575,13 @@ export class CodexProvider extends Provider {
     ) {
       credentialKeys.push('OPENROUTER_API_KEY');
     }
+    if (
+      invocation.request.argsTemplate.includes(
+        `model_providers.mimo.env_key="${MIMO_TOKEN_PLAN_API_KEY}"`
+      )
+    ) {
+      credentialKeys.push(MIMO_TOKEN_PLAN_API_KEY);
+    }
     for (const key of credentialKeys) {
       if (process.env[key] !== undefined) environment[key] = process.env[key];
     }
@@ -581,6 +594,7 @@ export class CodexProvider extends Provider {
     const sanitized = { ...environment };
     delete sanitized.OPENAI_API_KEY;
     delete sanitized.OPENROUTER_API_KEY;
+    delete sanitized[MIMO_TOKEN_PLAN_API_KEY];
     delete sanitized.REVIEWROUTER_CONTEXT_GATEWAY_SECRET;
     return Object.freeze(sanitized);
   }
@@ -748,7 +762,7 @@ export class CodexProvider extends Provider {
         '-c',
         'model_providers.mimo.wire_api="responses"',
         '-c',
-        'model_providers.mimo.env_key="MIMO_TOKEN_PLAN_API_KEY"',
+        `model_providers.mimo.env_key="${MIMO_TOKEN_PLAN_API_KEY}"`,
         // MiMo's gateway 400s on the web_search tool Codex sends by default
         // (responses_feature_not_supported); confirmed empirically against
         // the live endpoint, not documented anywhere.
@@ -1302,9 +1316,20 @@ export class CodexProvider extends Provider {
         'CODEX_HOME',
         'OPENAI_API_KEY',
         ...(modelProvider === 'openrouter' ? ['OPENROUTER_API_KEY'] : []),
-        ...(modelProvider === 'mimo' ? ['MIMO_TOKEN_PLAN_API_KEY'] : []),
+        ...(modelProvider === 'mimo' ? [MIMO_TOKEN_PLAN_API_KEY] : []),
       ],
     });
+  }
+
+  private requireModelProviderCredential(): void {
+    if (this.options.modelProvider !== 'mimo') return;
+    if (!process.env[MIMO_TOKEN_PLAN_API_KEY]?.trim()) {
+      const error = new Error(
+        `codex_mimo_api_key_missing: ${MIMO_TOKEN_PLAN_API_KEY} is required for ${this.name}`
+      );
+      error.name = 'CodexProviderError';
+      throw error;
+    }
   }
 
   private shouldUseForkSandboxCodexHomeConfig(): boolean {

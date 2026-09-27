@@ -207,6 +207,25 @@ describe('CodexProvider', () => {
     expect(args).toContain('--ignore-user-config');
   });
 
+  it('fails before Codex CLI preparation when the MiMo Token Plan key is absent', async () => {
+    delete process.env.MIMO_TOKEN_PLAN_API_KEY;
+    spawnMock.mockImplementation(() => {
+      throw new Error(
+        'Codex CLI resolution must not start without credentials'
+      );
+    });
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+
+    await expect(
+      provider.prepareInvocation('review prompt', 1000)
+    ).rejects.toThrow(
+      'codex_mimo_api_key_missing: MIMO_TOKEN_PLAN_API_KEY is required for codex-mimo/mimo-v2.6-pro'
+    );
+  });
+
   it('can keep public OpenRouter provider identity while stripping instance suffix from Codex model', () => {
     const provider = new CodexProvider('openai/gpt-oss-120b:free', {
       modelProvider: 'openrouter',

@@ -20554,7 +20554,7 @@ Respond with: {"findings": [{"file": "test.ts", "line": 1, "severity": "minor", 
     }
   }
   static validate(name) {
-    const pattern = /^(opencode\/[\w.:~-]+|openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*(?:#\d+)?|claude\/[\w.:~-]+|codex\/[\w.:~-]+|codex-openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*|gemini\/[\w.:~-]+)$/i;
+    const pattern = /^(opencode\/[\w.:~-]+|openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*(?:#\d+)?|claude\/[\w.:~-]+|codex\/[\w.:~-]+|codex-openrouter\/[\w.:~-]+(?:\/[\w.:~-]+)*|codex-mimo\/[\w.:~-]+|gemini\/[\w.:~-]+)$/i;
     return pattern.test(name);
   }
 };
@@ -22642,6 +22642,7 @@ var REVIEW_OUTPUT_CONTRACT = [
 ];
 var CODEX_OUTPUT_FILE_PLACEHOLDER = "{reviewrouter_output_file}";
 var CODEX_SCHEMA_FILE_PLACEHOLDER = "{reviewrouter_schema_file}";
+var MIMO_TOKEN_PLAN_API_KEY = "MIMO_TOKEN_PLAN_API_KEY";
 var CONTEXT_GATEWAY_RUNTIME_ENV_KEY_SET = new Set(
   CONTEXT_GATEWAY_RUNTIME_ENV_KEYS
 );
@@ -22816,6 +22817,7 @@ var CodexProvider = class _CodexProvider extends Provider {
     }
   }
   async prepareInvocation(prompt, timeoutMs, executionPolicy, contextGateway) {
+    this.requireModelProviderCredential();
     if (contextGateway) this.validateContextGatewayConfig(contextGateway);
     const effectiveTimeoutMs = executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
     if (effectiveTimeoutMs <= 0) {
@@ -22985,6 +22987,11 @@ var CodexProvider = class _CodexProvider extends Provider {
     )) {
       credentialKeys.push("OPENROUTER_API_KEY");
     }
+    if (invocation.request.argsTemplate.includes(
+      `model_providers.mimo.env_key="${MIMO_TOKEN_PLAN_API_KEY}"`
+    )) {
+      credentialKeys.push(MIMO_TOKEN_PLAN_API_KEY);
+    }
     for (const key of credentialKeys) {
       if (process.env[key] !== void 0) environment[key] = process.env[key];
     }
@@ -22994,6 +23001,7 @@ var CodexProvider = class _CodexProvider extends Provider {
     const sanitized = { ...environment };
     delete sanitized.OPENAI_API_KEY;
     delete sanitized.OPENROUTER_API_KEY;
+    delete sanitized[MIMO_TOKEN_PLAN_API_KEY];
     delete sanitized.REVIEWROUTER_CONTEXT_GATEWAY_SECRET;
     return Object.freeze(sanitized);
   }
@@ -23110,6 +23118,25 @@ var CodexProvider = class _CodexProvider extends Provider {
         'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
         "-c",
         'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
+      );
+    }
+    if (config.modelProvider === "mimo") {
+      args.push(
+        "-c",
+        'model_provider="mimo"',
+        "-c",
+        'model_providers.mimo.name="MiMo Token Plan"',
+        "-c",
+        'model_providers.mimo.base_url="https://token-plan-sgp.xiaomimimo.com/v1"',
+        "-c",
+        'model_providers.mimo.wire_api="responses"',
+        "-c",
+        `model_providers.mimo.env_key="${MIMO_TOKEN_PLAN_API_KEY}"`,
+        // MiMo's gateway 400s on the web_search tool Codex sends by default
+        // (responses_feature_not_supported); confirmed empirically against
+        // the live endpoint, not documented anywhere.
+        "-c",
+        'web_search="disabled"'
       );
     }
     args.push("-");
@@ -23511,9 +23538,20 @@ var CodexProvider = class _CodexProvider extends Provider {
       extraAllowedKeys: [
         "CODEX_HOME",
         "OPENAI_API_KEY",
-        ...modelProvider === "openrouter" ? ["OPENROUTER_API_KEY"] : []
+        ...modelProvider === "openrouter" ? ["OPENROUTER_API_KEY"] : [],
+        ...modelProvider === "mimo" ? [MIMO_TOKEN_PLAN_API_KEY] : []
       ]
     });
+  }
+  requireModelProviderCredential() {
+    if (this.options.modelProvider !== "mimo") return;
+    if (!process.env[MIMO_TOKEN_PLAN_API_KEY]?.trim()) {
+      const error2 = new Error(
+        `codex_mimo_api_key_missing: ${MIMO_TOKEN_PLAN_API_KEY} is required for ${this.name}`
+      );
+      error2.name = "CodexProviderError";
+      throw error2;
+    }
   }
   shouldUseForkSandboxCodexHomeConfig() {
     return this.parseBooleanEnv(
@@ -25209,6 +25247,18 @@ var ProviderRegistry = class {
             eventAudit: config.codexEventAudit,
             modelProvider: "openrouter",
             providerNamePrefix: "codex-openrouter"
+          })
+        );
+        continue;
+      }
+      if (name.startsWith("codex-mimo/")) {
+        const model = name.replace("codex-mimo/", "");
+        list.push(
+          new CodexProvider(model, {
+            agenticContext: config.codexAgenticContext,
+            eventAudit: config.codexEventAudit,
+            modelProvider: "mimo",
+            providerNamePrefix: "codex-mimo"
           })
         );
         continue;

@@ -22625,6 +22625,10 @@ function isSha2562(value) {
 
 // src/providers/codex.ts
 var MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS = 24e3;
+var SHELL_ENVIRONMENT_POLICY_ARGS = [
+  "shell_environment_policy.ignore_default_excludes=false",
+  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}'
+];
 var REVIEW_OUTPUT_CONTRACT = [
   "FINAL OUTPUT CONTRACT:",
   'Return exactly one JSON object with exactly two top-level arrays: "findings" and "revalidations".',
@@ -23138,6 +23142,9 @@ var CodexProvider = class _CodexProvider extends Provider {
         "-c",
         'web_search="disabled"'
       );
+    }
+    for (const configOverride of SHELL_ENVIRONMENT_POLICY_ARGS) {
+      args.push("-c", configOverride);
     }
     args.push("-");
     return args;
@@ -24415,8 +24422,8 @@ var CodexProvider = class _CodexProvider extends Provider {
     if (!/(401|unauthorized|access token|refresh token|auth|login)/i.test(message)) {
       return message;
     }
-    const hint = "Codex authentication failed. If using ChatGPT subscription OAuth, reseed auth.json by running `codex login` on a trusted machine and updating CODEX_AUTH_JSON. If using API-key mode, verify OPENAI_API_KEY.";
-    return message.includes("reseed auth.json") ? message : this.truncateCliError(`${message} ${hint}`);
+    const hint = this.options.modelProvider === "mimo" ? "Codex MiMo authentication failed. Verify MIMO_TOKEN_PLAN_API_KEY and ensure the MiMo Token Plan credential is valid." : "Codex authentication failed. If using ChatGPT subscription OAuth, reseed auth.json by running `codex login` on a trusted machine and updating CODEX_AUTH_JSON. If using API-key mode, verify OPENAI_API_KEY.";
+    return message.includes(hint) ? message : this.truncateCliError(`${message} ${hint}`);
   }
   async resolveBinary() {
     if (_CodexProvider.preparedBinaryPath && await this.canRun(_CodexProvider.preparedBinaryPath, ["--version"])) {

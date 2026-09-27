@@ -98,6 +98,11 @@ type CodexAgenticAuditMode = 'off' | 'rerun' | 'strict';
 
 const MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS = 24_000;
 
+const SHELL_ENVIRONMENT_POLICY_ARGS = [
+  'shell_environment_policy.ignore_default_excludes=false',
+  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}',
+] as const;
+
 const REVIEW_OUTPUT_CONTRACT = [
   'FINAL OUTPUT CONTRACT:',
   'Return exactly one JSON object with exactly two top-level arrays: "findings" and "revalidations".',
@@ -769,6 +774,10 @@ export class CodexProvider extends Provider {
         '-c',
         'web_search="disabled"'
       );
+    }
+
+    for (const configOverride of SHELL_ENVIRONMENT_POLICY_ARGS) {
+      args.push('-c', configOverride);
     }
 
     args.push('-');
@@ -2522,9 +2531,11 @@ export class CodexProvider extends Provider {
     }
 
     const hint =
-      'Codex authentication failed. If using ChatGPT subscription OAuth, reseed auth.json by running `codex login` on a trusted machine and updating CODEX_AUTH_JSON. If using API-key mode, verify OPENAI_API_KEY.';
+      this.options.modelProvider === 'mimo'
+        ? 'Codex MiMo authentication failed. Verify MIMO_TOKEN_PLAN_API_KEY and ensure the MiMo Token Plan credential is valid.'
+        : 'Codex authentication failed. If using ChatGPT subscription OAuth, reseed auth.json by running `codex login` on a trusted machine and updating CODEX_AUTH_JSON. If using API-key mode, verify OPENAI_API_KEY.';
 
-    return message.includes('reseed auth.json')
+    return message.includes(hint)
       ? message
       : this.truncateCliError(`${message} ${hint}`);
   }

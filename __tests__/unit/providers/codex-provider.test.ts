@@ -207,6 +207,49 @@ describe('CodexProvider', () => {
     expect(args).toContain('--ignore-user-config');
   });
 
+  it('keeps shell tools available while excluding provider credentials from their environment', () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+    });
+
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '-c',
+        'shell_environment_policy.ignore_default_excludes=false',
+        'shell_environment_policy.filters={OPENAI_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}',
+      ])
+    );
+    expect(args).not.toContain('shell_tool');
+    expect(
+      (provider as any).buildSafeEnv(false, {
+        forkSandbox: false,
+        modelProvider: 'mimo',
+      }).MIMO_TOKEN_PLAN_API_KEY
+    ).toBe('mimo-provider-test');
+  });
+
+  it('directs MiMo authentication failures to the MiMo credential', () => {
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+    const message = (provider as any).withActionableAuthHint(
+      '401 unauthorized from MiMo Token Plan'
+    );
+
+    expect(message).toContain('Verify MIMO_TOKEN_PLAN_API_KEY');
+    expect(message).not.toContain('codex login');
+    expect(message).not.toContain('OPENAI_API_KEY');
+
+    expect((provider as any).withActionableAuthHint(message)).toBe(message);
+  });
+
   it('fails before Codex CLI preparation when the MiMo Token Plan key is absent', async () => {
     delete process.env.MIMO_TOKEN_PLAN_API_KEY;
     spawnMock.mockImplementation(() => {

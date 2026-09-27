@@ -35,6 +35,7 @@ type WorkflowDocument = {
     workflow_dispatch?: unknown;
     workflow_call?: {
       inputs?: Record<string, { default?: unknown }>;
+      secrets?: Record<string, { required?: boolean }>;
     };
   };
   jobs?: Record<string, WorkflowJob>;
@@ -44,6 +45,34 @@ function parseWorkflow(filePath: string): WorkflowDocument {
   return yaml.load(readRepoFile(filePath), {
     schema: yaml.JSON_SCHEMA,
   }) as WorkflowDocument;
+}
+
+function traceSecretEnvBindings(
+  workflow: WorkflowDocument,
+  secretName: string
+): Array<{
+  job: string;
+  step: string;
+  environmentVariable: string;
+  value: string;
+}> {
+  const secretReference = `secrets.${secretName}`;
+  return Object.entries(workflow.jobs ?? {}).flatMap(([jobName, job]) =>
+    (job.steps ?? []).flatMap((step) =>
+      Object.entries(step.env ?? {})
+        .filter(
+          (binding): binding is [string, string] =>
+            typeof binding[1] === 'string' &&
+            binding[1].includes(secretReference)
+        )
+        .map(([environmentVariable, value]) => ({
+          job: jobName,
+          step: step.name ?? '<unnamed>',
+          environmentVariable,
+          value,
+        }))
+    )
+  );
 }
 
 function permissionEscalations(
@@ -246,6 +275,80 @@ describe('production reusable workflows', () => {
     expect(legacy?.secrets).toHaveProperty('REVIEW_APP_PRIVATE_KEY');
   });
 
+  it('traces the MiMo token secret through the legacy-only workflow contract', () => {
+    const secretName = 'MIMO_TOKEN_PLAN_API_KEY';
+    const secretExpression = '${{ secrets.MIMO_TOKEN_PLAN_API_KEY }}';
+    const parentWorkflow = parseWorkflow(
+      '.github/workflows/reviewrouter-reusable.yml'
+    );
+    const childWorkflow = parseWorkflow(
+      '.github/workflows/reviewrouter-execution-reusable.yml'
+    );
+    const parentInputs = parentWorkflow.jobs?.['review-legacy']?.with ?? {};
+    const childSteps = childWorkflow.jobs?.review?.steps ?? [];
+    const legacyRun = childSteps.find(
+      (step) => step.name === 'Run ReviewRouter legacy'
+    );
+    const t0Run = childSteps.find(
+      (step) => step.name === 'Run ReviewRouter T0'
+    );
+    const hostedPoolRun = childSteps.find(
+      (step) => step.name === 'Run ReviewRouter T0 hosted pool'
+    );
+
+    expect(
+      parentWorkflow.on?.workflow_call?.secrets?.[secretName]
+    ).toEqual({ required: false });
+    expect(childWorkflow.on?.workflow_call?.secrets?.[secretName]).toEqual({
+      required: false,
+    });
+    expect(
+      parentWorkflow.jobs?.['review-legacy']?.secrets?.[secretName]
+    ).toBe(secretExpression);
+    expect(
+      parentWorkflow.jobs?.['review-t0']?.secrets
+    ).not.toHaveProperty(secretName);
+    expect(
+      Object.values(parentInputs).some((value) =>
+        String(value).includes(secretName)
+      )
+    ).toBe(false);
+    expect(parentWorkflow.on?.workflow_call?.inputs).not.toHaveProperty(
+      secretName
+    );
+    expect(childWorkflow.on?.workflow_call?.inputs).not.toHaveProperty(
+      secretName
+    );
+    expect(childWorkflow.jobs?.review?.env).not.toHaveProperty(secretName);
+    expect(traceSecretEnvBindings(childWorkflow, secretName)).toEqual([
+      {
+        job: 'review',
+        step: 'Run ReviewRouter legacy',
+        environmentVariable: secretName,
+        value: secretExpression,
+      },
+    ]);
+    expect(legacyRun?.env?.[secretName]).toBe(secretExpression);
+    expect(t0Run?.env).not.toHaveProperty(secretName);
+    expect(hostedPoolRun?.env).not.toHaveProperty(secretName);
+  });
+
+  it('installs Codex for legacy MiMo-only selection despite the preflight gap', () => {
+    const workflow = parseWorkflow(
+      '.github/workflows/reviewrouter-execution-reusable.yml'
+    );
+    const codexInstall = workflow.jobs?.review?.steps?.find(
+      (step) => step.name === 'Install Codex CLI'
+    );
+
+    expect(codexInstall?.if).toContain(
+      "steps.provider-tooling.outputs.codex_cli_needed == 'true'"
+    );
+    expect(codexInstall?.if).toContain(
+      "env.MIMO_TOKEN_PLAN_API_KEY_PRESENT == '1'"
+    );
+  });
+
   it('keeps the shared execution workflow sandbox-safe in both lanes', () => {
     const workflowPath =
       '.github/workflows/reviewrouter-execution-reusable.yml';
@@ -407,7 +510,7 @@ describe('production reusable workflows', () => {
     expect(t0Run?.if).toContain("inputs.review_action_lane == 't0'");
     expect(t0Run?.if).toContain("inputs.codex_session_mode == ''");
     expect(codexInstall?.if).toBe(
-      "${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}"
+      "${{ steps.runtime.outputs.can_run == 'true' && (steps.provider-tooling.outputs.codex_cli_needed == 'true' || env.MIMO_TOKEN_PLAN_API_KEY_PRESENT == '1') }}"
     );
     expect(codexInstall?.if).not.toContain(
       "inputs.review_action_lane == 'legacy'"

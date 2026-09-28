@@ -170,6 +170,21 @@ export async function runHostedV4ActionFromEnvironment(
   env: NodeJS.ProcessEnv = process.env,
   fetchImpl: typeof fetch = fetch
 ): Promise<never> {
+  const checkpoint = await runHostedV4CheckpointFromEnvironment(
+    env,
+    fetchImpl,
+    core.setSecret
+  );
+  return advanceHostedV4PaidTurn(checkpoint);
+}
+
+/** Explicit environment mapping shared with the inert packaged entrypoint. */
+export async function runHostedV4CheckpointFromEnvironment(
+  env: NodeJS.ProcessEnv,
+  fetchImpl: typeof fetch,
+  maskSecret: (secret: string) => void,
+  now: () => number = Date.now
+): Promise<HostedReadCheckpoint> {
   const required = (name: string): string => {
     const value = env[name]?.trim();
     if (!value) throw new Error(`hosted_v4_input_missing_${name}`);
@@ -183,7 +198,7 @@ export async function runHostedV4ActionFromEnvironment(
     return Number(raw);
   };
   const deadlineEpochMs = number('REVIEW_ROUTER_HOSTED_V4_DEADLINE_EPOCH_MS');
-  const checkpoint = await runHostedV4ReadCheckpoint({
+  return runHostedV4ReadCheckpoint({
     apiUrl: required('REVIEWROUTER_API_URL'),
     oidcAudience: required('REVIEWROUTER_OIDC_AUDIENCE'),
     oidcProvider: {
@@ -192,8 +207,9 @@ export async function runHostedV4ActionFromEnvironment(
           env,
           fetchImpl,
           audience,
-          core.setSecret,
+          maskSecret,
           deadlineEpochMs,
+          now,
           signal
         ),
     },
@@ -227,11 +243,10 @@ export async function runHostedV4ActionFromEnvironment(
     },
     knownFilePath: required('REVIEW_ROUTER_HOSTED_V4_KNOWN_FILE_PATH'),
     deadlineEpochMs,
-    now: Date.now,
+    now,
     fetchImpl,
-    maskSecret: core.setSecret,
+    maskSecret,
   });
-  return advanceHostedV4PaidTurn(checkpoint);
 }
 
 function validateInput(input: HostedV4ActionInput): void {
@@ -278,6 +293,7 @@ async function requestFreshHostOidcToken(
   audience: string,
   maskSecret: (secret: string) => void,
   deadlineEpochMs: number,
+  now: () => number,
   signal?: AbortSignal
 ): Promise<string> {
   const requestUrl = env.ACTIONS_ID_TOKEN_REQUEST_URL;
@@ -291,7 +307,7 @@ async function requestFreshHostOidcToken(
     'hosted_v4_oidc_url_untrusted'
   );
   url.searchParams.set('audience', audience);
-  const remaining = deadlineEpochMs - Date.now();
+  const remaining = deadlineEpochMs - now();
   if (remaining <= 0) throw new Error('hosted_v4_deadline_expired');
   const controller = new AbortController();
   const onAbort = () => controller.abort();

@@ -22,6 +22,29 @@ const path = 'src/known.ts';
 const contentBase64 = Buffer.from('export const synthetic = true;\n').toString(
   'base64'
 );
+// Capture real timers before the deadline cases install Jest's fake timers.
+const realSetTimeout = setTimeout;
+const realClearTimeout = clearTimeout;
+
+async function withRealWatchdog<T>(
+  promise: Promise<T>,
+  checkpoint: string
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = realSetTimeout(
+          () => reject(new Error(`authorization ${checkpoint} did not occur`)),
+          2_000
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) realClearTimeout(timer);
+  }
+}
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -211,6 +234,8 @@ function json(body: unknown, status: number): Response {
 }
 
 describe('hosted v4 generated authorization and scoped read checkpoint', () => {
+  afterEach(() => jest.useRealTimers());
+
   it('authorizes, admits, reads, refreshes and rereads exact head without credentials in receipt', async () => {
     const { input, calls } = fixture();
     const result = await runHostedV4ReadCheckpoint(input);
@@ -432,28 +457,87 @@ describe('hosted v4 generated authorization and scoped read checkpoint', () => {
   it.each(['headers', 'body'])(
     'bounds generated authorization when %s never completes, with no admission',
     async (stage) => {
-      const { input, calls } = fixture();
-      const stalled = jest.fn(
-        () => {
-          if (stage === 'headers')
-            return new Promise<Response>(() => undefined);
-          const stream = new ReadableStream<Uint8Array>({
-            start: () => undefined,
-          });
-          return Promise.resolve(new Response(stream, { status: 201 }));
-        }
-      ) as unknown as typeof fetch;
-      const deadline = Date.now() + 1_000;
-      await expect(
-        runHostedV4ReadCheckpoint({
+      jest.useFakeTimers();
+      jest.setSystemTime(now);
+      try {
+        const { input } = fixture();
+        const read = {
+          admit: jest.fn(),
+          refresh: jest.fn(),
+          readFile: jest.fn(),
+          expiresAt: jest.fn(),
+        };
+        let enterRequest!: () => void;
+        const requestEntered = new Promise<void>((resolve) => {
+          enterRequest = resolve;
+        });
+        let enterBodyRead!: () => void;
+        const bodyReadStarted = new Promise<void>((resolve) => {
+          enterBodyRead = resolve;
+        });
+        let requestSignal: AbortSignal | undefined;
+        let requestPath: string | undefined;
+        const stalled = jest.fn(
+          (request: string | URL | Request, init?: RequestInit) => {
+            requestPath = new URL(String(request)).pathname;
+            requestSignal = init?.signal ?? undefined;
+            enterRequest();
+            if (stage === 'headers')
+              return new Promise<Response>(() => undefined);
+            const stream = new ReadableStream<Uint8Array>(
+              {
+                pull: () => enterBodyRead(),
+              },
+              { highWaterMark: 0 }
+            );
+            return Promise.resolve(new Response(stream, { status: 201 }));
+          }
+        ) as unknown as typeof fetch;
+        const checkpoint = runHostedV4ReadCheckpoint({
           ...input,
           now: Date.now,
-          deadlineEpochMs: deadline,
+          deadlineEpochMs: now + 1_000,
           fetchImpl: stalled,
-        })
-      ).rejects.toThrow();
-      expect(stalled).toHaveBeenCalledTimes(1);
-      expect(calls).toHaveLength(0);
+          read,
+        });
+        // Observe settlement immediately so an early rejection is handled while
+        // the request-entry latch is still pending.
+        const settlement = checkpoint.then(
+          () => ({ kind: 'resolved' as const }),
+          (error: unknown) => ({ kind: 'rejected' as const, error })
+        );
+        const entry = await withRealWatchdog(
+          Promise.race([
+            requestEntered.then(() => 'entered' as const),
+            settlement.then(() => 'settled' as const),
+          ]),
+          'request entry'
+        );
+        expect(entry).toBe('entered');
+        expect(stalled).toHaveBeenCalledTimes(1);
+        expect(requestPath).toBe('/api/action/v2/review-runs/authorize');
+        expect(requestSignal?.aborted).toBe(false);
+        if (stage === 'body') {
+          const bodyEntry = await withRealWatchdog(
+            Promise.race([
+              bodyReadStarted.then(() => 'reading' as const),
+              settlement.then(() => 'settled' as const),
+            ]),
+            'body read'
+          );
+          expect(bodyEntry).toBe('reading');
+        }
+        await jest.advanceTimersByTimeAsync(1_000);
+        const result = await withRealWatchdog(settlement, 'settlement');
+        expect(result.kind).toBe('rejected');
+        if (result.kind === 'rejected')
+          expect(result.error).toEqual(new Error('hosted_v4_deadline_expired'));
+        expect(requestSignal?.aborted).toBe(true);
+        expect(read.admit).not.toHaveBeenCalled();
+        expect(read.readFile).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
     }
   );
 

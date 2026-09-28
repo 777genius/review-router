@@ -332,7 +332,7 @@ async function requestFreshHostOidcToken(
     const chunks: Uint8Array[] = [];
     let size = 0;
     const reader = response.body.getReader();
-    while (true) {
+    for (;;) {
       const part = await Promise.race([reader.read(), timeout]);
       if (part.done) break;
       size += part.value.byteLength;

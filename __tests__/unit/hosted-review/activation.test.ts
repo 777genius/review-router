@@ -131,12 +131,11 @@ async function runMain(actionError?: Error) {
     shouldEnterCodexOAuthRotatingAction: jest.fn(() => false),
     runCodexOAuthRotatingAction: rotating,
   }));
-  const core =
-    require('../../../src/actions/core') as typeof import('../../../src/actions/core');
+  const core = await import('../../../src/actions/core');
   const failed = jest
     .spyOn(core, 'setFailed')
     .mockImplementation(() => undefined);
-  require('../../../src/main');
+  await import('../../../src/main');
   await new Promise((resolve) => setImmediate(resolve));
   return {
     action,

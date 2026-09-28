@@ -432,9 +432,9 @@ describe('hosted v4 generated authorization and scoped read checkpoint', () => {
   it.each(['headers', 'body'])(
     'bounds generated authorization when %s never completes, with no admission',
     async (stage) => {
-      const { input, calls, fetchImpl } = fixture();
+      const { input, calls } = fixture();
       const stalled = jest.fn(
-        (request: string | URL | Request, init?: RequestInit) => {
+        () => {
           if (stage === 'headers')
             return new Promise<Response>(() => undefined);
           const stream = new ReadableStream<Uint8Array>({
@@ -586,13 +586,12 @@ describe('hosted v4 generated authorization and scoped read checkpoint', () => {
         clearReviewFailureSummaries: jest.fn(),
         postReviewFailureSummary: failurePublisher,
       }));
-      const core =
-        require('../../../src/actions/core') as typeof import('../../../src/actions/core');
+      const core = await import('../../../src/actions/core');
       const failed = jest
         .spyOn(core, 'setFailed')
         .mockImplementation(() => undefined);
       jest.spyOn(core, 'setSecret').mockImplementation(() => undefined);
-      require('../../../src/main');
+      await import('../../../src/main');
       await new Promise((resolve) => setImmediate(resolve));
       expect(calls.map((call) => call.route)).toEqual([
         '/synthetic-oidc',
@@ -618,12 +617,11 @@ describe('hosted v4 generated authorization and scoped read checkpoint', () => {
         const noNetwork = jest.fn() as unknown as typeof fetch;
         global.fetch = noNetwork;
         jest.resetModules();
-        const invalidCore =
-          require('../../../src/actions/core') as typeof import('../../../src/actions/core');
+        const invalidCore = await import('../../../src/actions/core');
         const invalidFailure = jest
           .spyOn(invalidCore, 'setFailed')
           .mockImplementation(() => undefined);
-        require('../../../src/main');
+        await import('../../../src/main');
         await new Promise((resolve) => setImmediate(resolve));
         expect(invalidFailure).toHaveBeenCalledWith(
           'hosted_v4_api_url_invalid'
@@ -642,13 +640,12 @@ describe('hosted v4 generated authorization and scoped read checkpoint', () => {
       const denied = fixture({ facts: { headSha: '9'.repeat(40) } });
       global.fetch = denied.fetchImpl;
       jest.resetModules();
-      const deniedCore =
-        require('../../../src/actions/core') as typeof import('../../../src/actions/core');
+      const deniedCore = await import('../../../src/actions/core');
       const deniedFailure = jest
         .spyOn(deniedCore, 'setFailed')
         .mockImplementation(() => undefined);
       jest.spyOn(deniedCore, 'setSecret').mockImplementation(() => undefined);
-      require('../../../src/main');
+      await import('../../../src/main');
       await new Promise((resolve) => setImmediate(resolve));
       expect(denied.calls.map((call) => call.route)).toEqual([
         '/synthetic-oidc',
@@ -664,13 +661,12 @@ describe('hosted v4 generated authorization and scoped read checkpoint', () => {
       }) as unknown as typeof fetch;
       global.fetch = oidcFailure;
       jest.resetModules();
-      const oidcCore =
-        require('../../../src/actions/core') as typeof import('../../../src/actions/core');
+      const oidcCore = await import('../../../src/actions/core');
       const oidcFailed = jest
         .spyOn(oidcCore, 'setFailed')
         .mockImplementation(() => undefined);
       jest.spyOn(oidcCore, 'setSecret').mockImplementation(() => undefined);
-      require('../../../src/main');
+      await import('../../../src/main');
       await new Promise((resolve) => setImmediate(resolve));
       expect(oidcFailure).toHaveBeenCalledTimes(1);
       expect(oidcFailed).toHaveBeenCalledWith(

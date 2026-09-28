@@ -395,7 +395,7 @@ export class HostedV4ReadClient implements HostedV4ReadPort {
       const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];
       let size = 0;
-      while (true) {
+      for (;;) {
         const part = await Promise.race([reader.read(), timeout]);
         if (part.done) break;
         size += part.value.byteLength;

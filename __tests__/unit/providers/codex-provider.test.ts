@@ -8,6 +8,7 @@ import {
   type CodexContextGatewayInvocationConfig,
 } from '../../../src/providers/codex';
 import { RateLimitError } from '../../../src/providers/base';
+import { buildReviewFindingsSchema } from '../../../src/providers/review-output';
 import { logger } from '../../../src/utils/logger';
 
 jest.mock('child_process', () => ({
@@ -179,6 +180,7 @@ describe('CodexProvider', () => {
       ])
     );
     expect(args).toContain('--ignore-user-config');
+    expect(args).toContain('--output-schema');
   });
 
   it('can route Codex CLI through MiMo Token Plan without user config', () => {
@@ -205,6 +207,120 @@ describe('CodexProvider', () => {
       ])
     );
     expect(args).toContain('--ignore-user-config');
+    expect(args).not.toContain('--output-schema');
+    expect(args).not.toContain('/tmp/codex-schema.json');
+  });
+
+  it('prepares MiMo review without a CLI schema while keeping read-only exploration', async () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      agenticContext: true,
+    });
+    overridePrivate(provider, 'resolveBinary', async () => '/tmp/fake-codex');
+    const invocation = await provider.prepareInvocation('review prompt', 1000);
+    const { request } = invocation;
+    const args = request.argsTemplate;
+
+    expect(args).not.toContain('--output-schema');
+    expect(args).toEqual(expect.arrayContaining(['--sandbox', 'read-only']));
+    expect(request.prompt).toContain('run read-only exploration commands');
+    expect(request.outputSchema).toEqual(buildReviewFindingsSchema());
+    expect(request.environment.MIMO_TOKEN_PLAN_API_KEY).toBeUndefined();
+  });
+
+  it('validates MiMo review output locally after a prepared invocation', async () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      agenticContext: false,
+    });
+    overridePrivate(provider, 'resolveBinary', async () => '/tmp/fake-codex');
+    const invocation = await provider.prepareInvocation('review prompt', 1000);
+    const validFinding = {
+      file: 'src/app.ts',
+      startLine: null,
+      line: 1,
+      endLine: null,
+      severity: 'major',
+      title: 'Crash',
+      message: 'Evidence',
+      suggestion: null,
+    };
+    let response = JSON.stringify({
+      findings: [validFinding],
+      revalidations: [],
+    });
+    spawnMock.mockImplementation((_cmd: string, args: string[]) =>
+      createMockProcess(() => {
+        fs.writeFileSync(
+          args[args.indexOf('--output-last-message') + 1],
+          response
+        );
+      })
+    );
+
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).resolves.toMatchObject({
+      findings: [{ file: 'src/app.ts', line: 1, severity: 'major' }],
+      revalidations: [],
+    });
+    expect(spawnMock.mock.calls[0][1]).not.toContain('--output-schema');
+    response = JSON.stringify({
+      findings: [{ ...validFinding, suggestion: undefined }],
+      revalidations: [],
+    });
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).rejects.toThrow('Codex CLI returned invalid review JSON');
+    response = JSON.stringify({
+      findings: [validFinding],
+      revalidations: [{ targetId: 'target', verdict: 'invalid' }],
+    });
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).rejects.toThrow('Codex CLI returned invalid review JSON');
+    response = JSON.stringify({
+      findings: [validFinding],
+      revalidations: [],
+      extra: true,
+    });
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).rejects.toThrow('Codex CLI returned invalid review JSON');
+  });
+
+  it('validates MiMo structured prompts locally without a CLI schema', async () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+    });
+    overridePrivate(provider, 'resolveBinary', async () => '/tmp/fake-codex');
+    let response = '{"ok":true}';
+    spawnMock.mockImplementation((_cmd: string, args: string[]) =>
+      createMockProcess(() => {
+        fs.writeFileSync(
+          args[args.indexOf('--output-last-message') + 1],
+          response
+        );
+      })
+    );
+    const schema = {
+      type: 'object',
+      additionalProperties: false,
+      required: ['ok'],
+      properties: { ok: { type: 'boolean' } },
+    };
+
+    await expect(
+      provider.runStructuredPrompt('Return JSON', schema, 1000)
+    ).resolves.toBe(response);
+    expect(spawnMock.mock.calls[0][1]).not.toContain('--output-schema');
+    response = '{"ok":"true"}';
+    await expect(
+      provider.runStructuredPrompt('Return JSON', schema, 1000)
+    ).rejects.toThrow('Codex CLI returned invalid structured JSON');
   });
 
   it('keeps shell tools available while excluding provider credentials from their environment', () => {

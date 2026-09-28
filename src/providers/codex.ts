@@ -8,6 +8,7 @@ import * as fsSync from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import Ajv2020, { type AnySchema } from 'ajv/dist/2020';
 import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
 import { CODEX_CONFINEMENT_DISABLED_FEATURES } from './codex-confinement-policy';
@@ -131,6 +132,7 @@ type CodexPreparedRequest = {
   readonly cwd: string;
   readonly argsTemplate: readonly string[];
   readonly outputSchema: unknown;
+  readonly validateOutputLocally: boolean;
   readonly environment: Readonly<NodeJS.ProcessEnv>;
   readonly eventAudit: boolean;
   readonly jsonEvents: boolean;
@@ -416,6 +418,9 @@ export class CodexProvider extends Provider {
     };
     const environment = this.withoutCredentialEnvironment(fullEnvironment);
     const outputSchema = this.buildFindingsSchema();
+    const validateOutputLocally = !this.supportsCliOutputSchema(
+      frozenCliConfig.modelProvider
+    );
     const argsTemplate = this.buildExecArgs(
       {
         healthCheck: false,
@@ -434,6 +439,7 @@ export class CodexProvider extends Provider {
       cwd,
       argsTemplate,
       outputSchema,
+      validateOutputLocally,
       environment,
       eventAudit,
       jsonEvents: auditMode !== 'off' || contextGateway !== undefined,
@@ -547,6 +553,9 @@ export class CodexProvider extends Provider {
       (runResult.lastMessage || runResult.stdout).trim(),
       request.cwd
     );
+    if (request.validateOutputLocally) {
+      this.assertJsonMatchesSchema(content, request.outputSchema, 'review');
+    }
     const parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
     this.assertNoPlaceholderFindings(parsed.findings);
     const actualModel = this.resolveEffectiveActualModel(
@@ -615,6 +624,7 @@ export class CodexProvider extends Provider {
       skipGitRepoCheck?: boolean;
     } = {}
   ): Promise<string> {
+    this.requireModelProviderCredential();
     const binary = await this.resolveBinary();
     const { stdout, stderr, lastMessage } = await this.runCliWithStdin(
       binary,
@@ -636,7 +646,50 @@ export class CodexProvider extends Provider {
         `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
       );
     }
+    if (!this.supportsCliOutputSchema(this.options.modelProvider)) {
+      this.assertJsonMatchesSchema(content, outputSchema, 'structured');
+    }
     return content;
+  }
+
+  private supportsCliOutputSchema(
+    modelProvider: CodexProviderOptions['modelProvider']
+  ): boolean {
+    // MiMo's Responses endpoint rejects text.format=json_schema. Other
+    // providers retain Codex's native structured output enforcement.
+    return modelProvider !== 'mimo';
+  }
+
+  private assertJsonMatchesSchema(
+    content: string,
+    schema: unknown,
+    kind: 'review' | 'structured'
+  ): void {
+    let value: unknown;
+    try {
+      value = JSON.parse(content);
+    } catch {
+      throw new Error(
+        `Codex CLI returned invalid ${kind} JSON: response was not valid JSON`
+      );
+    }
+    try {
+      const validate = new Ajv2020({
+        strict: true,
+        allowUnionTypes: true,
+      }).compile(schema as AnySchema);
+      if ('$async' in validate) {
+        throw new Error('Asynchronous output schemas are unsupported');
+      }
+      if (validate(value)) return;
+    } catch {
+      throw new Error(
+        `Codex CLI returned invalid ${kind} JSON: output schema could not be validated`
+      );
+    }
+    throw new Error(
+      `Codex CLI returned invalid ${kind} JSON: output does not match schema`
+    );
   }
 
   private estimateUsage(prompt: string, content: string) {
@@ -728,7 +781,10 @@ export class CodexProvider extends Provider {
       );
     }
 
-    if (options.outputSchemaFile) {
+    if (
+      options.outputSchemaFile &&
+      this.supportsCliOutputSchema(config.modelProvider)
+    ) {
       args.push('--output-schema', options.outputSchemaFile);
     }
 
@@ -800,9 +856,13 @@ export class CodexProvider extends Provider {
     const runId = crypto.randomBytes(8).toString('hex');
     const tmpFile = path.join(os.tmpdir(), `codex-prompt-${runId}.txt`);
     const outputFile = path.join(os.tmpdir(), `codex-output-${runId}.txt`);
-    const schemaFile = options.outputSchema
-      ? path.join(os.tmpdir(), `codex-schema-${runId}.json`)
-      : undefined;
+    const cliSchemaEnabled = prepared
+      ? prepared.argsTemplate.includes('--output-schema')
+      : this.supportsCliOutputSchema(this.options.modelProvider);
+    const schemaFile =
+      options.outputSchema && cliSchemaEnabled
+        ? path.join(os.tmpdir(), `codex-schema-${runId}.json`)
+        : undefined;
     let fd: fs.FileHandle | undefined;
     try {
       await fs.writeFile(tmpFile, stdin, { encoding: 'utf8', mode: 0o600 });

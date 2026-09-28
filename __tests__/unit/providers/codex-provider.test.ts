@@ -15,6 +15,9 @@ jest.mock('child_process', () => ({
   spawnSync: jest.fn(),
 }));
 
+// Deliberately synthetic token-shaped input for redaction tests, not a credential.
+const syntheticOpenAiFixtureKey = 'sk-' + 'x'.repeat(37);
+
 const spawnMock = spawn as unknown as jest.Mock;
 const spawnSyncMock = spawnSync as unknown as jest.Mock;
 
@@ -1729,7 +1732,7 @@ describe('CodexProvider', () => {
           [
             'invalid_request_error: auth failed',
             'https://auth.openai.com/device?user_code=secret',
-            'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+            syntheticOpenAiFixtureKey,
             '"refresh_token":"refresh-secret"',
           ].join('\n')
         );
@@ -1750,7 +1753,7 @@ describe('CodexProvider', () => {
     expect(thrown?.message).toContain('Codex CLI failed with exit code 1');
     expect(thrown?.message).not.toContain('auth.openai.com');
     expect(thrown?.message).not.toContain(
-      'sk-proj-abcdefghijklmnopqrstuvwxyz123456'
+      syntheticOpenAiFixtureKey
     );
     expect(thrown?.message).not.toContain('refresh-secret');
   });
@@ -1878,18 +1881,20 @@ describe('CodexProvider', () => {
     const provider = new CodexProvider('gpt-5.4-mini');
     const formatted = (provider as any).formatCliError(
       [
+        'request rejected',
         'https://auth.openai.com/device?user_code=secret',
-        'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+        syntheticOpenAiFixtureKey,
         '"refresh_token":"refresh-secret"',
       ].join('\n'),
       ''
     );
 
+    expect(formatted).toContain('request rejected');
     expect(formatted).toContain('[redacted-url]');
     expect(formatted).toContain('sk-***');
     expect(formatted).toContain('"refresh_token":"[redacted]"');
     expect(formatted).not.toContain('auth.openai.com');
-    expect(formatted).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
+    expect(formatted).not.toContain(syntheticOpenAiFixtureKey);
     expect(formatted).not.toContain('refresh-secret');
   });
 

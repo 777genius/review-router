@@ -51,6 +51,12 @@ import {
   resolveReviewActionV2Activation,
   ReviewActionV2RuntimeMode,
 } from './control-plane/review-action-v2-contract';
+import {
+  HOSTED_V4_MODE,
+  resolveHostedV4Activation,
+} from './hosted-review/activation';
+import { runHostedV4ActionFromEnvironment } from './hosted-review/action';
+import { hostedV4SafeErrorCode } from './hosted-review/boundary';
 
 function syncEnvFromInputs(): void {
   const inputKeys = [
@@ -164,19 +170,27 @@ async function run(): Promise<void> {
   let prNumber: number | undefined;
   let runtimeConfig: RuntimeConfigResult | undefined;
   const startedAt = new Date();
+  let selectedHostedV4 = false;
 
   try {
     syncEnvFromInputs();
+    const requestedMode =
+      core.getInput('mode') ||
+      process.env.REVIEW_ROUTER_MODE ||
+      core.getInput('REVIEW_ROUTER_MODE');
+    selectedHostedV4 = requestedMode === HOSTED_V4_MODE;
+    if (selectedHostedV4) {
+      resolveHostedV4Activation({ requestedMode, env: process.env });
+      scrubAndAssertReviewActionV2ScmMutationEnv(process.env);
+      await runHostedV4ActionFromEnvironment();
+      throw new Error('hosted_v4_paid_turn_unavailable');
+    }
     const reviewActionV2Activation = resolveReviewActionV2Activation({
       env: process.env,
     });
     if (reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0) {
       scrubAndAssertReviewActionV2ScmMutationEnv(process.env);
     }
-    const requestedMode =
-      core.getInput('mode') ||
-      process.env.REVIEW_ROUTER_MODE ||
-      core.getInput('REVIEW_ROUTER_MODE');
     const lifecycleResolveTokenFromEnv =
       process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN?.trim() || undefined;
     if (lifecycleResolveTokenFromEnv) {
@@ -344,6 +358,12 @@ async function run(): Promise<void> {
     });
     core.info('Review completed successfully');
   } catch (error) {
+    if (selectedHostedV4) {
+      // This branch owns every selected hosted denial, including activation failures.
+      // Do not acquire an App comment token or enter the legacy failure publisher.
+      core.setFailed(hostedV4SafeErrorCode(error));
+      return;
+    }
     const presentableError =
       error instanceof ValidationError
         ? new Error(`Configuration error:\n${formatValidationError(error)}`)

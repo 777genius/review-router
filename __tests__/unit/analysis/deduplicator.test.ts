@@ -2,6 +2,34 @@ import { Deduplicator } from '../../../src/analysis/deduplicator';
 import { Finding } from '../../../src/types';
 
 describe('Deduplicator', () => {
+  it('unions actual source membership across repeated merges without changing inputs', () => {
+    const base: Finding = {
+      file: 'service.ts',
+      line: 1,
+      severity: 'major',
+      title: 'Returning a string breaks the numeric caller',
+      message: 'Numeric caller receives a string.',
+    };
+    const findings = [
+      { ...base, sourceFindingIds: ['a', 'shared'] },
+      { ...base, sourceFindingIds: ['b', 'shared'] },
+      { ...base, sourceFindingIds: ['c'] },
+      {
+        ...base,
+        title: 'Authorization bypass exposes private records',
+        message: 'Missing permission check permits unauthorized access.',
+        sourceFindingIds: ['d'],
+      },
+    ];
+    const snapshot = JSON.stringify(findings);
+    const deduped = new Deduplicator().dedupe(findings);
+    expect(deduped).toHaveLength(2);
+    expect(deduped[0].sourceFindingIds).toEqual(['a', 'shared', 'b', 'c']);
+    expect(deduped[1].sourceFindingIds).toEqual(['d']);
+    expect(new Deduplicator().dedupe(deduped)).toEqual(deduped);
+    expect(JSON.stringify(findings)).toBe(snapshot);
+  });
+
   it('preserves provider model attribution when merging duplicate findings', () => {
     const findings: Finding[] = [
       {

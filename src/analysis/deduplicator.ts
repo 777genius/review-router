@@ -84,6 +84,14 @@ function mergeFindings(existing: Finding, incoming: Finding): Finding {
 
   return {
     ...existing,
+    ...(existing.sourceFindingIds || incoming.sourceFindingIds
+      ? {
+          sourceFindingIds: Array.from(new Set([
+            ...(existing.sourceFindingIds ?? []),
+            ...(incoming.sourceFindingIds ?? []),
+          ])),
+        }
+      : {}),
     startLine: mergeStartLine(existing, incoming),
     line: Math.max(existing.line, incoming.line),
     endLine: mergeEndLine(existing, incoming),

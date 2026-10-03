@@ -361,6 +361,10 @@ describe("hosted pool replay-fenced failover artifact", () => {
   });
 
   it("rechecks the replay fence when capacity waiters wake", async () => {
+    const completedResponseBody = `data: ${JSON.stringify({
+      type: "response.completed",
+      response: { id: "response-fixture", status: "completed" },
+    })}\n\ndata: [DONE]\n\n`;
     const releases: Array<() => void> = [];
     let relayCalls = 0;
     const relayStarted: Array<() => void> = [];
@@ -419,7 +423,7 @@ describe("hosted pool replay-fenced failover artifact", () => {
         if (call < 2) {
           await new Promise<void>((resolve) => releases.push(resolve));
         }
-        return new Response("data: [DONE]\n\n", {
+        return new Response(completedResponseBody, {
           headers: { "content-type": "text/event-stream" },
         });
       }) as typeof fetch,
@@ -499,7 +503,12 @@ describe("hosted pool replay-fenced failover artifact", () => {
       await otherArrival;
 
       releases.shift()?.();
-      await slowAdmission;
+      await Promise.race([
+        slowAdmission,
+        slowFinished.then(({ status }) => {
+          throw new Error(`Slow waiter returned ${status} before admission`);
+        }),
+      ]);
       releases.shift()?.();
 
       await expect(otherWaiter).resolves.toEqual({ status: 409 });
@@ -507,7 +516,7 @@ describe("hosted pool replay-fenced failover artifact", () => {
       slowRequest.end('review"}');
       await expect(slowFinished).resolves.toEqual({
         status: 200,
-        body: "data: [DONE]\n\n",
+        body: completedResponseBody,
       });
       expect(relayCalls).toBe(3);
       const responses = await Promise.all(active);

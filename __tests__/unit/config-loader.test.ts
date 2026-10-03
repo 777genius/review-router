@@ -100,6 +100,30 @@ describe('ConfigLoader', () => {
     expect(config.synthesisModel).toBe('claude/sonnet');
   });
 
+  it('infers the MiMo Token Plan provider for explicit MiMo auth', () => {
+    process.env.REVIEW_AUTH_MODE = 'mimo-token-plan-api';
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'test-only-mimo-key';
+    process.env.CLAUDE_MODEL = 'sonnet';
+    process.env.CODEX_MODEL = 'gpt-5.6-sol';
+
+    const config = ConfigLoader.load();
+
+    expect(config.providers).toEqual(['codex-mimo/mimo-v2.6-pro']);
+    expect(config.synthesisModel).toBe('codex-mimo/mimo-v2.6-pro');
+  });
+
+  it('fails closed before fallback discovery when MiMo auth has no key', () => {
+    process.env.REVIEW_AUTH_MODE = 'mimo-token-plan-api';
+    process.env.MIMO_TOKEN_PLAN_API_KEY = '';
+    process.env.CLAUDE_MODEL = 'sonnet';
+    process.env.CODEX_MODEL = 'gpt-5.6-sol';
+    process.env.FALLBACK_PROVIDERS = 'claude/sonnet';
+
+    expect(() => ConfigLoader.load()).toThrow(
+      'MIMO_TOKEN_PLAN_API_KEY is required for REVIEW_AUTH_MODE=mimo-token-plan-api'
+    );
+  });
+
   it('defaults failure policy to critical-only', () => {
     const config = ConfigLoader.load();
 

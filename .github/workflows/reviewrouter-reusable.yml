@@ -100,6 +100,8 @@ on:
         required: false
       OPENROUTER_API_KEY:
         required: false
+      MIMO_TOKEN_PLAN_API_KEY:
+        required: false
 
 jobs:
   validate-mode:
@@ -209,3 +211,4 @@ jobs:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      MIMO_TOKEN_PLAN_API_KEY: ${{ secrets.MIMO_TOKEN_PLAN_API_KEY }}

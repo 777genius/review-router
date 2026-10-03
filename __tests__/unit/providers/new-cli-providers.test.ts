@@ -28,6 +28,11 @@ describe('New CLI Providers', () => {
       expect(Provider.validate('codex-openrouter/')).toBe(false);
     });
 
+    it('should validate codex-mimo/ provider names', () => {
+      expect(Provider.validate('codex-mimo/mimo-v2.6-pro')).toBe(true);
+      expect(Provider.validate('codex-mimo/')).toBe(false);
+    });
+
     it('should validate gemini/ provider names', () => {
       expect(Provider.validate('gemini/gemini-2.0-flash')).toBe(true);
       expect(Provider.validate('gemini/gemini-1.5-pro')).toBe(true);

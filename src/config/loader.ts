@@ -87,6 +87,15 @@ export class ConfigLoader {
         : inferredProvider
           ? [inferredProvider]
           : undefined;
+    if (
+      (env.REVIEW_AUTH_MODE?.trim() === 'mimo-token-plan-api' ||
+        providers?.some((provider) => provider.startsWith('codex-mimo/'))) &&
+      !env.MIMO_TOKEN_PLAN_API_KEY?.trim()
+    ) {
+      throw new Error(
+        'MIMO_TOKEN_PLAN_API_KEY is required for REVIEW_AUTH_MODE=mimo-token-plan-api'
+      );
+    }
 
     return {
       reviewDepth: this.parseReviewDepth(env.REVIEW_DEPTH),
@@ -371,6 +380,8 @@ export class ConfigLoader {
     codexProvider: string | undefined
   ): string | undefined {
     switch ((authMode || '').trim()) {
+      case 'mimo-token-plan-api':
+        return 'codex-mimo/mimo-v2.6-pro';
       case 'claude-oauth':
         return claudeProvider || 'claude/sonnet';
       case 'codex-oauth':

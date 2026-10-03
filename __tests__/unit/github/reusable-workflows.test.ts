@@ -154,6 +154,10 @@ describe('production reusable workflows', () => {
       expect(runStep?.env?.REVIEW_AUTH_MODE).toBe(
         '${{ inputs.discussion_auth_mode }}'
       );
+      expect(runStep?.env?.DISCUSSION_MODEL).toBe(
+        '${{ inputs.discussion_model }}'
+      );
+      expect(runStep?.env).not.toHaveProperty('CODEX_MODEL');
       const restoreStep = workflow.jobs?.interaction?.steps?.find(
         (step) =>
           step.name === 'Restore Codex subscription auth for discussion replies'
@@ -884,5 +888,54 @@ describe('production reusable workflows', () => {
     expect(
       workflow.jobs?.['conflict-review']?.env?.REVIEWROUTER_CONTROL_PLANE_URL
     ).toBe('${{ inputs.control_plane_url || inputs.api_url }}');
+  });
+
+  it('rejects an older accepted ref without a conflict bundle before preflight', () => {
+    const steps =
+      parseWorkflow('.github/workflows/reviewrouter-conflict-reusable.yml')
+        .jobs?.['conflict-review']?.steps ?? [];
+    const validateRef = steps.find(
+      (step) => step.name === 'Validate conflict runtime ref'
+    );
+    const validateBundle = steps.find(
+      (step) => step.name === 'Validate bundled conflict runtime'
+    );
+    expect(validateRef?.run).toBeDefined();
+    expect(validateBundle?.run).toBeDefined();
+    const cwd = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'rr-conflict-ref-NEWTEST-')
+    );
+    try {
+      const options = {
+        cwd,
+        encoding: 'utf8' as const,
+        env: {
+          PATH: process.env.PATH,
+          REVIEWROUTER_RUNTIME_REF: 'v1',
+        },
+      };
+      expect(spawnSync('bash', ['-c', validateRef!.run!], options).status).toBe(
+        0
+      );
+      const missingBundle = spawnSync(
+        'bash',
+        ['-c', validateBundle!.run!],
+        options
+      );
+      expect(missingBundle.status).toBe(1);
+      expect(missingBundle.stdout).toContain(
+        'Selected runtime_ref does not provide the bundled conflict runtime'
+      );
+      fs.mkdirSync(path.join(cwd, 'action-dist'));
+      fs.copyFileSync(
+        path.join(repoRoot, 'action-dist/conflict-runtime.cjs'),
+        path.join(cwd, 'action-dist/conflict-runtime.cjs')
+      );
+      expect(
+        spawnSync('bash', ['-c', validateBundle!.run!], options).status
+      ).toBe(0);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });

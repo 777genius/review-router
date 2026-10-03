@@ -51088,10 +51088,11 @@ var SUGGESTED_ACTIONS = [
 var execFileAsync = (0, import_util5.promisify)(import_child_process9.execFile);
 function resolveDiscussionCodexConfiguration(env) {
   const authMode = env.REVIEW_AUTH_MODE?.trim() || "codex-oauth";
+  const modelOverride = (env.DISCUSSION_MODEL ?? env.CODEX_MODEL)?.trim();
   if (authMode === "mimo-token-plan-api") {
     return {
       authMode,
-      model: env.CODEX_MODEL?.trim().replace(/^codex-mimo\//, "") || "mimo-v2.6-pro",
+      model: modelOverride?.replace(/^codex-mimo\//, "") || "mimo-v2.6-pro",
       providerOptions: {
         modelProvider: "mimo",
         providerNamePrefix: "codex-mimo"
@@ -51100,7 +51101,7 @@ function resolveDiscussionCodexConfiguration(env) {
   }
   return {
     authMode,
-    model: env.CODEX_MODEL || "gpt-5.6-sol",
+    model: modelOverride || "gpt-5.6-sol",
     providerOptions: {}
   };
 }

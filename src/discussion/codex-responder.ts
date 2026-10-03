@@ -33,11 +33,13 @@ export function resolveDiscussionCodexConfiguration(env: NodeJS.ProcessEnv): {
   providerOptions: CodexProviderOptions;
 } {
   const authMode = env.REVIEW_AUTH_MODE?.trim() || 'codex-oauth';
+  // An empty discussion override deliberately selects the backend default.
+  // Only legacy direct callers without this key inherit CODEX_MODEL.
+  const modelOverride = (env.DISCUSSION_MODEL ?? env.CODEX_MODEL)?.trim();
   if (authMode === 'mimo-token-plan-api') {
     return {
       authMode,
-      model:
-        env.CODEX_MODEL?.trim().replace(/^codex-mimo\//, '') || 'mimo-v2.6-pro',
+      model: modelOverride?.replace(/^codex-mimo\//, '') || 'mimo-v2.6-pro',
       providerOptions: {
         modelProvider: 'mimo',
         providerNamePrefix: 'codex-mimo',
@@ -46,7 +48,7 @@ export function resolveDiscussionCodexConfiguration(env: NodeJS.ProcessEnv): {
   }
   return {
     authMode,
-    model: env.CODEX_MODEL || 'gpt-5.6-sol',
+    model: modelOverride || 'gpt-5.6-sol',
     providerOptions: {},
   };
 }

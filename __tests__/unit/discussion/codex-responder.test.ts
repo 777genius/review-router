@@ -76,6 +76,35 @@ describe('CodexDiscussionResponder', () => {
     expect(names).toEqual(['codex-mimo/mimo-v2.6-pro']);
   });
 
+  it.each([
+    ['mimo-token-plan-api', 'gpt-5.6-sol', 'mimo-v2.6-pro'],
+    ['codex-oauth', 'codex-mimo/mimo-v2.6-pro', 'gpt-5.6-sol'],
+  ])(
+    'does not inherit the review model for %s discussions',
+    (authMode, reviewModel, expectedModel) => {
+      expect(
+        resolveDiscussionCodexConfiguration({
+          REVIEW_AUTH_MODE: authMode,
+          CODEX_MODEL: reviewModel,
+          DISCUSSION_MODEL: '',
+        }).model
+      ).toBe(expectedModel);
+    }
+  );
+
+  it('prefers an explicit discussion model and preserves legacy direct callers', () => {
+    expect(
+      resolveDiscussionCodexConfiguration({
+        REVIEW_AUTH_MODE: 'mimo-token-plan-api',
+        CODEX_MODEL: 'gpt-5.6-sol',
+        DISCUSSION_MODEL: 'codex-mimo/mimo-v2.6-pro',
+      }).model
+    ).toBe('mimo-v2.6-pro');
+    expect(
+      resolveDiscussionCodexConfiguration({ CODEX_MODEL: 'gpt-5.5' }).model
+    ).toBe('gpt-5.5');
+  });
+
   it('runs Codex in isolated structured-output mode and parses the response', async () => {
     const runStructuredPrompt = jest
       .spyOn(CodexProvider.prototype, 'runStructuredPrompt')

@@ -244,7 +244,7 @@ jobs:
           REVIEW_ROUTER_DISCUSSION_MAX_PER_PR: ${{ inputs.discussion_max_per_pr }}
           REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD: ${{ inputs.discussion_max_per_thread }}
           REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS: ${{ inputs.discussion_timeout_seconds }}
-          CODEX_MODEL: ${{ inputs.discussion_model }}
+          DISCUSSION_MODEL: ${{ inputs.discussion_model }}
           REVIEW_AUTH_MODE: ${{ inputs.discussion_auth_mode }}
           CODEX_REASONING_EFFORT: ${{ inputs.discussion_reasoning_effort }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

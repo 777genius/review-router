@@ -44,10 +44,15 @@ on:
         type: string
         default: off
       discussion_model:
-        description: 'Codex model used for discussion replies'
+        description: 'Optional discussion model override; empty uses the selected provider default'
         required: false
         type: string
-        default: gpt-5.6-sol
+        default: ''
+      discussion_auth_mode:
+        description: 'Explicit discussion backend: codex-oauth, openai-api, or mimo-token-plan-api; empty uses runtime configuration'
+        required: false
+        type: string
+        default: ''
       discussion_reasoning_effort:
         description: 'Codex reasoning effort used for discussion replies'
         required: false
@@ -79,6 +84,8 @@ on:
         required: false
       OPENAI_API_KEY:
         required: false
+      MIMO_TOKEN_PLAN_API_KEY:
+        required: false
 
 jobs:
   interaction:
@@ -98,9 +105,11 @@ jobs:
       REVIEWROUTER_RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
       REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'true'
       RR_REVIEW_WORKFLOW_FILE: ${{ inputs.review_workflow_file }}
+      RR_DISCUSSION_AUTH_MODE: ${{ inputs.discussion_auth_mode }}
       REVIEW_APP_PRIVATE_KEY_PRESENT: ${{ secrets.REVIEW_APP_PRIVATE_KEY != '' && '1' || '0' }}
       CODEX_AUTH_JSON_PRESENT: ${{ secrets.CODEX_AUTH_JSON != '' && '1' || '0' }}
       OPENAI_API_KEY_PRESENT: ${{ secrets.OPENAI_API_KEY != '' && '1' || '0' }}
+      MIMO_TOKEN_PLAN_API_KEY_PRESENT: ${{ secrets.MIMO_TOKEN_PLAN_API_KEY != '' && '1' || '0' }}
       REVIEW_ROUTER_MEMORY_ENABLED: 'true'
       REVIEW_ROUTER_MEMORY_PROTOCOL_VERSION: '1'
       REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT: /api/action/v1/memory
@@ -127,6 +136,10 @@ jobs:
             fail('Invalid ReviewRouter runtime_config_mode. Use oidc or static.');
           }
           const reviewWorkflowFile = (process.env.RR_REVIEW_WORKFLOW_FILE || '').trim();
+          const discussionAuthMode = process.env.RR_DISCUSSION_AUTH_MODE || '';
+          if (!['', 'codex-oauth', 'openai-api', 'mimo-token-plan-api'].includes(discussionAuthMode)) {
+            fail('Invalid discussion_auth_mode. Use codex-oauth, openai-api, mimo-token-plan-api, or empty.');
+          }
           const allowedReviewWorkflowFiles = new Set([
             'reviewrouter.yml',
             'reviewrouter.yaml',
@@ -190,15 +203,16 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
           REVIEW_ROUTER_MODE: interaction-preflight
           REVIEW_ROUTER_DISCUSSION_MODE: ${{ inputs.discussion_mode }}
+          REVIEW_AUTH_MODE: ${{ inputs.discussion_auth_mode }}
         run: node .reviewrouter-runtime/dist/index.js
 
       - name: Install Codex CLI for discussion replies
-        if: ${{ steps.preflight.outputs.needs_discussion == 'true' && (env.CODEX_AUTH_JSON_PRESENT == '1' || env.OPENAI_API_KEY_PRESENT == '1') }}
+        if: ${{ steps.preflight.outputs.needs_discussion == 'true' && (env.CODEX_AUTH_JSON_PRESENT == '1' || env.OPENAI_API_KEY_PRESENT == '1' || env.MIMO_TOKEN_PLAN_API_KEY_PRESENT == '1') }}
         shell: bash
         run: npm install -g @openai/codex@0.147.0
 
       - name: Restore Codex subscription auth for discussion replies
-        if: ${{ steps.preflight.outputs.needs_discussion == 'true' && env.CODEX_AUTH_JSON_PRESENT == '1' }}
+        if: ${{ steps.preflight.outputs.needs_discussion == 'true' && env.CODEX_AUTH_JSON_PRESENT == '1' && steps.preflight.outputs.discussion_auth_mode == 'codex-oauth' }}
         shell: bash
         env:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
@@ -231,6 +245,8 @@ jobs:
           REVIEW_ROUTER_DISCUSSION_MAX_PER_THREAD: ${{ inputs.discussion_max_per_thread }}
           REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS: ${{ inputs.discussion_timeout_seconds }}
           CODEX_MODEL: ${{ inputs.discussion_model }}
+          REVIEW_AUTH_MODE: ${{ inputs.discussion_auth_mode }}
           CODEX_REASONING_EFFORT: ${{ inputs.discussion_reasoning_effort }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MIMO_TOKEN_PLAN_API_KEY: ${{ secrets.MIMO_TOKEN_PLAN_API_KEY }}
         run: node .reviewrouter-runtime/dist/index.js

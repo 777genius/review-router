@@ -51086,13 +51086,33 @@ var SUGGESTED_ACTIONS = [
   "ask_for_details"
 ];
 var execFileAsync = (0, import_util5.promisify)(import_child_process9.execFile);
+function resolveDiscussionCodexConfiguration(env) {
+  const authMode = env.REVIEW_AUTH_MODE?.trim() || "codex-oauth";
+  if (authMode === "mimo-token-plan-api") {
+    return {
+      authMode,
+      model: env.CODEX_MODEL?.trim().replace(/^codex-mimo\//, "") || "mimo-v2.6-pro",
+      providerOptions: {
+        modelProvider: "mimo",
+        providerNamePrefix: "codex-mimo"
+      }
+    };
+  }
+  return {
+    authMode,
+    model: env.CODEX_MODEL || "gpt-5.6-sol",
+    providerOptions: {}
+  };
+}
 var CodexDiscussionResponder = class {
-  constructor(model, timeoutMs) {
+  constructor(model, timeoutMs, providerOptions = {}) {
     this.model = model;
     this.timeoutMs = timeoutMs;
+    this.providerOptions = providerOptions;
   }
   async respond(context) {
     const provider = new CodexProvider(this.model, {
+      ...this.providerOptions,
       agenticContext: false,
       eventAudit: false
     });
@@ -116042,6 +116062,10 @@ async function runInteractionPreflight(token) {
   } : await discussionHandler.preflight(payload);
   setOutput("should_run", result2.shouldRun ? "true" : "false");
   setOutput("needs_discussion", result2.needsDiscussion ? "true" : "false");
+  setOutput(
+    "discussion_auth_mode",
+    resolveDiscussionCodexConfiguration(process.env).authMode
+  );
   setOutput("reason", result2.reason);
   info(
     `Interaction preflight: should_run=${result2.shouldRun}, needs_discussion=${result2.needsDiscussion}, reason=${result2.reason}`
@@ -116049,12 +116073,18 @@ async function runInteractionPreflight(token) {
 }
 function createDiscussionHandler(githubClient) {
   const options = loadDiscussionOptionsFromEnv();
-  const model = process.env.CODEX_MODEL || "gpt-5.6-sol";
+  const { model, providerOptions } = resolveDiscussionCodexConfiguration(
+    process.env
+  );
   const timeoutSeconds = parsePositiveInteger(
     process.env.REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS,
     60
   );
-  const responder = options.mode === "off" ? void 0 : new CodexDiscussionResponder(model, timeoutSeconds * 1e3);
+  const responder = options.mode === "off" ? void 0 : new CodexDiscussionResponder(
+    model,
+    timeoutSeconds * 1e3,
+    providerOptions
+  );
   return new ReviewDiscussionHandler(githubClient, responder, options);
 }
 function parsePositiveInteger(value, defaultValue) {

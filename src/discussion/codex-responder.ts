@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { CodexProvider } from '../providers/codex';
+import { CodexProvider, CodexProviderOptions } from '../providers/codex';
 import {
   DiscussionIntent,
   DiscussionResponder,
@@ -27,14 +27,40 @@ const SUGGESTED_ACTIONS: DiscussionSuggestedAction[] = [
 ];
 const execFileAsync = promisify(execFile);
 
+export function resolveDiscussionCodexConfiguration(env: NodeJS.ProcessEnv): {
+  authMode: string;
+  model: string;
+  providerOptions: CodexProviderOptions;
+} {
+  const authMode = env.REVIEW_AUTH_MODE?.trim() || 'codex-oauth';
+  if (authMode === 'mimo-token-plan-api') {
+    return {
+      authMode,
+      model:
+        env.CODEX_MODEL?.trim().replace(/^codex-mimo\//, '') || 'mimo-v2.6-pro',
+      providerOptions: {
+        modelProvider: 'mimo',
+        providerNamePrefix: 'codex-mimo',
+      },
+    };
+  }
+  return {
+    authMode,
+    model: env.CODEX_MODEL || 'gpt-5.6-sol',
+    providerOptions: {},
+  };
+}
+
 export class CodexDiscussionResponder implements DiscussionResponder {
   constructor(
     private readonly model: string,
-    private readonly timeoutMs: number
+    private readonly timeoutMs: number,
+    private readonly providerOptions: CodexProviderOptions = {}
   ) {}
 
   async respond(context: ReviewDiscussionContext): Promise<DiscussionResponse> {
     const provider = new CodexProvider(this.model, {
+      ...this.providerOptions,
       agenticContext: false,
       eventAudit: false,
     });

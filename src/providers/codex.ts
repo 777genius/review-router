@@ -13,6 +13,11 @@ import { buildCliSafeEnv } from './cli-env';
 import { CODEX_CONFINEMENT_DISABLED_FEATURES } from './codex-confinement-policy';
 import { prepareCodexCliBeforeAuthRead } from '../codex-oauth/codex-cli';
 import {
+  ACCOUNT_GATEWAY_BOUNDS,
+  LOCAL_MODEL_CAPABILITY_ENV,
+  type LocalGatewayModelTransport,
+} from '../review-orchestration/infrastructure/account-gateway-model-transport';
+import {
   buildReviewFindingsSchema,
   type ParsedReviewOutput,
   parseReviewOutputStrict,
@@ -38,6 +43,8 @@ import {
 } from '../context-gateway/context-gateway-v4-contract';
 
 export interface CodexProviderOptions {
+  /** Internal T0 composition only; no user URL/account/provider-key override. */
+  accountGateway?: LocalGatewayModelTransport;
   agenticContext?: boolean;
   eventAudit?: boolean;
   modelProvider?: 'openai' | 'openrouter';
@@ -186,7 +193,9 @@ export class CodexProvider extends Provider {
   // request and can exhaust limited OAuth usage before review starts.
   async healthCheck(_timeoutMs: number = 5000): Promise<boolean> {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5000);
-    const mode = (process.env.CODEX_HEALTHCHECK_MODE || 'binary').toLowerCase();
+    const mode = this.options.accountGateway
+      ? 'binary'
+      : (process.env.CODEX_HEALTHCHECK_MODE || 'binary').toLowerCase();
 
     if (mode === 'none' || mode === 'binary') {
       return true;
@@ -263,6 +272,7 @@ export class CodexProvider extends Provider {
       }
 
       if (
+        !this.options.accountGateway &&
         this.shouldRetryForMissingAgenticExploration(
           execution.parsed,
           execution.runResult.audit,
@@ -391,7 +401,9 @@ export class CodexProvider extends Provider {
     const auditMode =
       agenticContext && !contextGateway ? this.agenticAuditMode() : 'off';
     const eventAudit = contextGateway ? true : this.shouldUseEventAudit();
-    const forkSandbox = this.shouldUseForkSandboxCodexHomeConfig();
+    const forkSandbox =
+      !this.options.accountGateway &&
+      this.shouldUseForkSandboxCodexHomeConfig();
     const reasoningEffort = this.resolveReasoningEffort(false);
     const frozenCliConfig: CodexFrozenCliConfig = {
       model: this.model,
@@ -429,7 +441,7 @@ export class CodexProvider extends Provider {
       auditMode,
       optionalAgenticRetryMaxPromptTokens:
         MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
-      acceptReviewOutputOnNonZero: true,
+      acceptReviewOutputOnNonZero: !this.options.accountGateway,
       ...(contextGateway ? { contextGateway } : {}),
     };
     return createPreparedProviderInvocation({
@@ -506,6 +518,11 @@ export class CodexProvider extends Provider {
       this.name
     );
     const request = prepared.request;
+    if (
+      this.options.accountGateway &&
+      Buffer.byteLength(request.prompt) > ACCOUNT_GATEWAY_BOUNDS.requestBytes
+    )
+      throw new Error('account_gateway_prompt_bound');
     logger.info(
       `Running Codex CLI safely: ${request.binary} exec --model ${prepared.requestedModel} --sandbox read-only --ephemeral ...`
     );
@@ -528,10 +545,17 @@ export class CodexProvider extends Provider {
         cwd: request.cwd,
         environment: mergeCredentialEnvironment(
           request.environment,
-          credentialLease?.environment
+          this.options.accountGateway
+            ? {
+                ...credentialLease?.environment,
+                ...this.options.accountGateway.environment,
+              }
+            : credentialLease?.environment
         ),
       }
     );
+    if (this.options.accountGateway && !runResult.lastMessage.trim())
+      throw new Error('account_gateway_final_missing');
     const content = this.sanitizeReviewContent(
       (runResult.lastMessage || runResult.stdout).trim(),
       request.cwd
@@ -560,6 +584,9 @@ export class CodexProvider extends Provider {
   private captureCredentialLease(
     invocation: PreparedProviderInvocation<CodexPreparedRequest>
   ): ProviderCredentialLease {
+    if (this.options.accountGateway) {
+      return { environment: this.options.accountGateway.environment };
+    }
     const environment: NodeJS.ProcessEnv = {};
     const credentialKeys = ['OPENAI_API_KEY'];
     if (
@@ -582,6 +609,7 @@ export class CodexProvider extends Provider {
     delete sanitized.OPENAI_API_KEY;
     delete sanitized.OPENROUTER_API_KEY;
     delete sanitized.REVIEWROUTER_CONTEXT_GATEWAY_SECRET;
+    delete sanitized[LOCAL_MODEL_CAPABILITY_ENV];
     return Object.freeze(sanitized);
   }
 
@@ -724,7 +752,7 @@ export class CodexProvider extends Provider {
       }
     }
 
-    if (config.modelProvider === 'openrouter') {
+    if (!this.options.accountGateway && config.modelProvider === 'openrouter') {
       args.push(
         '-c',
         'model_provider="openrouter"',
@@ -735,6 +763,11 @@ export class CodexProvider extends Provider {
         '-c',
         'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
       );
+    }
+
+    if (this.options.accountGateway) {
+      for (const setting of this.options.accountGateway.configuration)
+        args.push('-c', setting);
     }
 
     args.push('-');
@@ -844,10 +877,25 @@ export class CodexProvider extends Provider {
         }, timeoutMs);
         options.signal?.addEventListener('abort', onAbort, { once: true });
 
+        let outputBytes = 0;
+        const withinOutputBound = (chunk: Buffer | string) => {
+          outputBytes += Buffer.byteLength(chunk);
+          if (
+            this.options.accountGateway &&
+            outputBytes > ACCOUNT_GATEWAY_BOUNDS.cliOutputBytes
+          ) {
+            terminate();
+            fail(new Error('account_gateway_cli_output_bound'));
+            return false;
+          }
+          return true;
+        };
         proc.stdout?.on('data', (chunk) => {
+          if (settled || !withinOutputBound(chunk)) return;
           stdout += chunk.toString();
         });
         proc.stderr?.on('data', (chunk) => {
+          if (settled || !withinOutputBound(chunk)) return;
           stderr += chunk.toString();
         });
         proc.on('error', (err) => {
@@ -1042,6 +1090,14 @@ export class CodexProvider extends Provider {
     const gateway = request.contextGateway;
     const environment = this.observablePreparedEnvironment(request);
     const replacements = [
+      ...(this.options.accountGateway
+        ? [
+            [
+              this.options.accountGateway.baseUrl,
+              '<account-gateway-loopback>',
+            ] as const,
+          ]
+        : []),
       ...(gateway
         ? [
             [gateway.command, '<context-gateway-command>'] as const,
@@ -1280,9 +1336,14 @@ export class CodexProvider extends Provider {
       includeWorkspaceEnv: includeWorkspaceEnv && !forkSandbox,
       extraAllowedKeys: [
         'CODEX_HOME',
-        'OPENAI_API_KEY',
-        ...(modelProvider === 'openrouter' ? ['OPENROUTER_API_KEY'] : []),
+        ...(this.options.accountGateway ? [] : ['OPENAI_API_KEY']),
+        ...(!this.options.accountGateway && modelProvider === 'openrouter'
+          ? ['OPENROUTER_API_KEY']
+          : []),
       ],
+      ...(this.options.accountGateway
+        ? { overrides: this.options.accountGateway.environment }
+        : {}),
     });
   }
 
@@ -1972,6 +2033,11 @@ export class CodexProvider extends Provider {
 
   private async readOptionalFile(file: string): Promise<string> {
     try {
+      if (
+        this.options.accountGateway &&
+        (await fs.stat(file)).size > ACCOUNT_GATEWAY_BOUNDS.outputBytes
+      )
+        return '';
       return await fs.readFile(file, 'utf8');
     } catch {
       return '';
@@ -2019,6 +2085,9 @@ export class CodexProvider extends Provider {
     observation: CodexActualModelObservation,
     requestedModel: string
   ): string | undefined {
+    // Session configuration proves the CLI pin, not the backend's executed model.
+    if (this.options.accountGateway)
+      return this.options.accountGateway.actualModel();
     if (observation.kind === CodexActualModelObservationKind.Observed) {
       return observation.model;
     }
@@ -2468,6 +2537,7 @@ export class CodexProvider extends Provider {
   }
 
   private withActionableAuthHint(message: string): string {
+    if (this.options.accountGateway) return message;
     if (!message) return message;
     if (
       !/(401|unauthorized|access token|refresh token|auth|login)/i.test(message)

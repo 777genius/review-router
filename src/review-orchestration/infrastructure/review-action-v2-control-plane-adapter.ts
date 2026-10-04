@@ -67,6 +67,11 @@ export class ReviewActionV2ControlPlaneAdapter
 
   constructor(private readonly client: ReviewActionV2Client) {}
 
+  /** Model relay/SCM/terminal close read this at call time, including after renewal. */
+  currentAuthorization(): ReviewRunAuthorization {
+    return this.requireActiveAuthorization();
+  }
+
   async authorize(input: {
     readonly oidcToken: string;
   }): Promise<ReviewRunAuthorization> {

@@ -139,6 +139,10 @@ export interface CodexOAuthV2ReviewRunnerPort {
     readonly workspacePath: string;
     readonly codexHome: string;
     readonly codexBinaryPath?: string;
+    readonly accountGateway?: {
+      readonly controlPlane: import('../review-orchestration/infrastructure/review-action-v2-control-plane-adapter').ReviewActionV2ControlPlaneAdapter;
+      readonly modelTransport: import('../review-orchestration/infrastructure/account-gateway-model-transport').LocalGatewayModelTransport;
+    };
     /**
      * Short-lived GitHub capability restricted by the control plane to
      * contents:read and pull_requests:read. The v2 runner may use it only to

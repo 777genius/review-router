@@ -76,6 +76,14 @@ import {
 } from './github-review-state-adapter';
 import { createProductionReviewProjectionBuilder } from './production-review-projection';
 import { ReviewActionV2ControlPlaneAdapter } from './review-action-v2-control-plane-adapter';
+import {
+  ACCOUNT_GATEWAY_BOUNDS,
+  type LocalGatewayModelTransport,
+} from './account-gateway-model-transport';
+import {
+  NodeCodexAppServerTurnRunner,
+  type CodexAppServerTurnRunnerPort,
+} from '../../review-investigation/infrastructure/codex-app-server-turn-runner';
 import { SystemReviewOrchestrationClock } from './system-review-orchestration-clock';
 import {
   CodexReviewAgentAdapter,
@@ -155,18 +163,30 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY] =
         authoritativeDeadlineEpochMs;
     }
-    const config = ConfigLoader.load();
+    const loadedConfig = ConfigLoader.load();
+    const config = input.accountGateway
+      ? { ...loadedConfig, providerRetries: 1 }
+      : loadedConfig;
     const executionDeadline = createExecutionDeadlineFromEnvironment();
+    const configuredTimeoutMs = Math.max(
+      1_000,
+      config.runTimeoutSeconds * 1_000
+    );
+    const providerTimeoutMs = input.accountGateway
+      ? Math.min(ACCOUNT_GATEWAY_BOUNDS.requestMs, configuredTimeoutMs)
+      : configuredTimeoutMs;
     const reviewActionClient = new ReviewActionV2Client({
       apiUrl: input.apiUrl,
       fetchImpl: this.fetchImpl,
     });
-    const controlPlane = new ReviewActionV2ControlPlaneAdapter(
-      reviewActionClient
-    );
-    const authorization = await controlPlane.authorize({
-      oidcToken: await oidc.requestToken(input.audience),
-    });
+    const controlPlane =
+      input.accountGateway?.controlPlane ??
+      new ReviewActionV2ControlPlaneAdapter(reviewActionClient);
+    const authorization = input.accountGateway
+      ? controlPlane.currentAuthorization()
+      : await controlPlane.authorize({
+          oidcToken: await oidc.requestToken(input.audience),
+        });
     validateAuthorizationInput(input, authorization);
 
     const scmReadTokenProvider = createScmReadTokenProvider({
@@ -246,6 +266,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const provider = new CodexProvider(model, {
       agenticContext,
       eventAudit: config.codexEventAudit,
+      ...(input.accountGateway
+        ? { accountGateway: input.accountGateway.modelTransport }
+        : {}),
     });
     const compatibilityKey = hashIncrementalCompatibility(
       config,
@@ -281,12 +304,13 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       compatibilityKey,
       lifecycleTargets: initialLifecycle.promptTargets,
       liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+      accountGateway: input.accountGateway !== undefined,
     });
     const invocationAdapter = new CodexReviewInvocationAdapter(
       provider,
       new PromptBuilder(config),
       planned.assignments,
-      Math.max(1_000, config.runTimeoutSeconds * 1_000),
+      providerTimeoutMs,
       agenticContext,
       contextGateway,
       false
@@ -299,7 +323,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             provider,
             new PromptBuilder(config),
             planned.assignments,
-            Math.max(1_000, config.runTimeoutSeconds * 1_000),
+            providerTimeoutMs,
             agenticContext,
             contextGateway,
             true
@@ -315,6 +339,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             (recordingInput) => {
               const legacyFallbackGate =
                 new ReviewInvestigationLegacyFallbackGate();
+              if (input.accountGateway) legacyFallbackGate.close();
               const investigationControlPlane =
                 new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
                   investigationProtocol,
@@ -362,6 +387,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                   codexModel: model,
                   codexBinaryPath: input.codexBinaryPath,
                   executionSessions: gateway,
+                  modelTransport: input.accountGateway?.modelTransport,
                 }),
               });
               return new RunInvestigationWorkSlot({
@@ -395,12 +421,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             },
             {
               workingDirectory: path.resolve(input.workspacePath),
-              leaseDurationMs:
-                Math.max(1_000, config.runTimeoutSeconds * 1_000) + 5 * 60_000,
-              providerTimeoutMs: Math.max(
-                1_000,
-                config.runTimeoutSeconds * 1_000
-              ),
+              leaseDurationMs: providerTimeoutMs + 5 * 60_000,
+              providerTimeoutMs: providerTimeoutMs,
               certificateTtlMs: 24 * 60 * 60_000,
               minimumCapacityParkMs: 60_000,
               actionBudget: reviewInvestigationActionBudgetForDepth(
@@ -675,15 +697,54 @@ function createConfiguredProductionInvestigationAgents(input: {
   readonly codexModel: string;
   readonly codexBinaryPath: string | undefined;
   readonly executionSessions: ReviewAgentExecutionSessionResolverPort;
+  readonly modelTransport?: LocalGatewayModelTransport;
 }): readonly ConfiguredProductionReviewAgent[] {
   const processRunner = new NodeReviewAgentProcessRunner();
+  const appServer = input.modelTransport
+    ? new NodeCodexAppServerTurnRunner()
+    : undefined;
   return Object.freeze([
     {
       providerKind: ReviewAgentProviderKind.Codex,
       requestedModel: input.codexModel,
       agent: new CodexReviewAgentAdapter(processRunner, {
         executionSessions: input.executionSessions,
-        providerCredentialEnvironment: codexCredentialEnvironment,
+        providerCredentialEnvironment: input.modelTransport
+          ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME })
+          : codexCredentialEnvironment,
+        ...(appServer && input.modelTransport
+          ? {
+              appServerRunner: {
+                executeTurn: async (
+                  request: Parameters<
+                    CodexAppServerTurnRunnerPort['executeTurn']
+                  >[0]
+                ) => {
+                  const result = await appServer.executeTurn({
+                    ...request,
+                    args: [
+                      ...request.args,
+                      ...input.modelTransport!.configuration.flatMap(
+                        (setting) => ['-c', setting]
+                      ),
+                    ],
+                    // Attach the local capability after the existing upstream credential allowlist.
+                    // MCP env_vars never include it; current RR token remains in the bridge.
+                    environment: {
+                      ...request.environment,
+                      ...input.modelTransport!.environment,
+                    },
+                  });
+                  const actualModel = input.modelTransport!.actualModel();
+                  if (!actualModel)
+                    throw new Error('review_agent_actual_model_unavailable');
+                  return { ...result, actualModel };
+                },
+                cancel: (invocationId: string, fencingToken: string) =>
+                  appServer.cancel(invocationId, fencingToken),
+              },
+            }
+          : {}),
         ...(input.codexBinaryPath ? { binary: input.codexBinaryPath } : {}),
         reasoningEffort: 'xhigh',
         processResultObserver: (result) => {
@@ -964,6 +1025,7 @@ export function createProductionT0ReviewRunner(
 }
 
 export function planAssignments(input: {
+  readonly accountGateway?: boolean;
   readonly authorization: ReviewRunAuthorization;
   readonly pr: PRContext;
   readonly config: ReviewConfig;
@@ -1045,7 +1107,8 @@ export function planAssignments(input: {
 
   const attemptBudget = resolveT0AttemptBudget(
     input.config.providerRetries,
-    input.authorization.limits.maxAttemptsPerSlot
+    input.authorization.limits.maxAttemptsPerSlot,
+    input.accountGateway
   );
   const plan = createStableReviewWorkPlan({
     reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
@@ -1057,7 +1120,9 @@ export function planAssignments(input: {
         providerVoteIdentityHash: codexLanes[0].providerVoteIdentityHash,
         required: true,
         attemptBudget,
-        retryPolicyVersion: CODEX_RETRY_POLICY_VERSION,
+        retryPolicyVersion: input.accountGateway
+          ? 'account-gateway-no-replay.v1'
+          : CODEX_RETRY_POLICY_VERSION,
       },
     ],
     batches: plannedBatches.map((batch, schedulingOrdinal) => ({
@@ -1098,11 +1163,13 @@ export function planAssignments(input: {
 
 export function resolveT0AttemptBudget(
   configuredTotalAttempts: number | undefined,
-  protocolMaximum: number
+  protocolMaximum: number,
+  accountGateway = false
 ): number {
   if (!Number.isSafeInteger(protocolMaximum) || protocolMaximum < 1) {
     throw new Error('review_action_v2_attempt_budget_limit_invalid');
   }
+  if (accountGateway) return 1;
   return Math.min(
     protocolMaximum,
     getProviderReviewTotalAttempts(configuredTotalAttempts)

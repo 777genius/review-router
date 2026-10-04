@@ -1,4 +1,8 @@
 import * as fs from 'fs';
+import {
+  ACCOUNT_GATEWAY_ACTION_MODE,
+  runAccountGatewayRuntime,
+} from './account-gateway-runtime';
 import * as path from 'path';
 import * as core from '../actions/core';
 import { ReviewOrchestrator } from '../core/orchestrator';
@@ -79,8 +83,9 @@ export function shouldEnterCodexOAuthRotatingAction(input: {
   env?: NodeJS.ProcessEnv;
 }): boolean {
   return (
-    input.requestedMode === CODEX_OAUTH_ROTATING_MODE &&
-    (input.env ?? process.env).REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'static'
+    input.requestedMode === ACCOUNT_GATEWAY_ACTION_MODE ||
+    (input.requestedMode === CODEX_OAUTH_ROTATING_MODE &&
+      (input.env ?? process.env).REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'static')
   );
 }
 
@@ -96,6 +101,10 @@ export async function runCodexOAuthRotatingAction(
   const reviewActionV2Activation =
     options.reviewActionV2Activation ??
     resolveReviewActionV2Activation({ env: process.env });
+  if (isAccountGatewayActionSelected()) {
+    await runAccountGatewayAction({ ...options, reviewActionV2Activation });
+    return;
+  }
   clearCodexRotatingProviderSecretEnv();
   if (
     shouldSkipCodexOAuthSetupPreviewWithoutAuth({
@@ -280,43 +289,12 @@ export async function runCodexOAuthRotatingAction(
       return;
     }
     if ('v2Review' in runtime) {
-      requireTerminalV2ReviewResult(runtime.v2Review);
-      core.setOutput('reviewrouter_v2_outcome', runtime.v2Review.outcome);
-      if (runtime.v2Review.outcome === CodexOAuthV2ReviewOutcome.Completed) {
-        await publishCompletedTerminalOutcomeCommitStatus(
-          terminalOutcomeReporter,
-          buildCompletedV2TerminalOutcomeCommitStatus(inputs, runtime.v2Review)
-        );
-        await clearTerminalOutcomeReportsSafely(terminalOutcomeReporter, {
-          reason: 'review_completed',
-        });
-      }
-      await ciProgressReporter?.finish(progressTerminal(runtime.v2Review));
-      const report = buildV2TerminalOutcomeReport(inputs, runtime.v2Review);
-      if (report) {
-        appendTerminalOutcomeStepSummary(report);
-        if (
-          runtime.v2Review.outcome ===
-          CodexOAuthV2ReviewOutcome.PartialCompleted
-        ) {
-          await clearTerminalOutcomeReportsSafely(terminalOutcomeReporter, {
-            reason: 'server_summary_published',
-          });
-          await publishTerminalOutcomeCommitStatusSafely(
-            terminalOutcomeReporter,
-            report.commitStatus
-          );
-        } else {
-          await publishTerminalOutcomeReportSafely(
-            terminalOutcomeReporter,
-            report
-          );
-        }
-      }
-      const terminalFailureCode = v2TerminalFailureCode(runtime.v2Review);
-      if (terminalFailureCode) {
-        core.setFailed(terminalFailureCode);
-      }
+      await finishV2ActionReview(
+        inputs,
+        runtime.v2Review,
+        terminalOutcomeReporter,
+        ciProgressReporter
+      );
       return;
     }
     if (runtime.review.blockingFailure) {
@@ -338,6 +316,186 @@ export async function runCodexOAuthRotatingAction(
     if (t0WorkspacePath) {
       fs.rmSync(t0WorkspacePath, { recursive: true, force: true });
     }
+  }
+}
+
+function isAccountGatewayActionSelected(): boolean {
+  return (
+    (core.getInput('mode') ||
+      process.env.REVIEW_ROUTER_MODE ||
+      core.getInput('REVIEW_ROUTER_MODE')) === ACCOUNT_GATEWAY_ACTION_MODE
+  );
+}
+
+export async function runAccountGatewayAction(
+  options: {
+    fetchImpl?: FetchLike;
+    reviewActionV2Activation?: ReviewActionV2Activation;
+    v2ReviewRunner?: CodexOAuthV2ReviewRunnerPort;
+    terminalOutcomeReporter?: CodexOAuthTerminalOutcomeReporterPort;
+  } = {}
+): Promise<void> {
+  const activation =
+    options.reviewActionV2Activation ??
+    resolveReviewActionV2Activation({ env: process.env });
+  if (
+    activation.mode !== ReviewActionV2RuntimeMode.T0 ||
+    process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE === 'static'
+  ) {
+    throw new Error('account_gateway_requires_authorized_t0');
+  }
+  clearCodexRotatingProviderSecretEnv();
+  clearCodexRotatingProcessAuthEnv();
+  const inputs = readCodexOAuthActionInputs();
+  const terminalOutcomeReporter =
+    options.terminalOutcomeReporter ??
+    createDefaultCodexOAuthTerminalOutcomeReporter({
+      context: {
+        repository: inputs.repository,
+        pullRequestNumber: inputs.pullRequestNumber,
+        headSha: inputs.headSha,
+      },
+      audience: inputs.audience,
+      controlPlane: new CodexOAuthControlPlaneClient({
+        apiUrl: inputs.apiUrl,
+        fetchImpl: options.fetchImpl,
+      }),
+      oidc: new GitHubActionsOidcTokenProvider({
+        env: snapshotCodexOAuthTerminalOutcomeOidcEnv(),
+        fetchImpl: options.fetchImpl,
+      }),
+    });
+  const ciProgressPublisher = createCiReviewProgressPublisher({
+    repository: inputs.repository,
+    pullRequestNumber: inputs.pullRequestNumber,
+  });
+  const ciProgressReporter = ciProgressPublisher
+    ? new CiOrchestrationProgressReporter(ciProgressPublisher)
+    : undefined;
+  await runAccountGatewayRuntime(inputs, {
+    fetchImpl: options.fetchImpl,
+    review:
+      options.v2ReviewRunner ??
+      createProductionT0ReviewRunner({
+        fetchImpl: options.fetchImpl,
+        progress: ciProgressReporter,
+      }),
+    terminalReview: async (review) => {
+      core.setOutput('reviewrouter_state', 'completed');
+      await finishV2ActionReview(
+        inputs,
+        review,
+        terminalOutcomeReporter,
+        ciProgressReporter ?? null
+      );
+    },
+    terminalFailure: async (error) => {
+      await ciProgressReporter?.finish('failed');
+      core.setOutput('reviewrouter_state', 'failed');
+      core.setOutput(
+        'reviewrouter_v2_outcome',
+        CodexOAuthV2ReviewOutcome.Failed
+      );
+      const failure = classifyV2ActionFailure(error);
+      const report = failure.report(inputs);
+      appendTerminalOutcomeStepSummary(report);
+      await publishTerminalOutcomeReportSafely(terminalOutcomeReporter, report);
+      core.setFailed(failure.code);
+    },
+    observeRelay: (fact) => {
+      if (!fact) return;
+      core.setOutput('reviewrouter_gateway_code', fact.code);
+      core.setOutput('reviewrouter_gateway_effect', fact.effect);
+      if (fact.requestRef)
+        core.setOutput('reviewrouter_gateway_request_ref', fact.requestRef);
+      const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+      if (summaryPath) {
+        try {
+          fs.appendFileSync(
+            summaryPath,
+            `\nGateway result: ${fact.code}; effect: ${fact.effect}.\n`,
+            'utf8'
+          );
+        } catch {
+          core.warning('Gateway result step summary unavailable');
+        }
+      }
+    },
+    observeClose: (result) => {
+      const value = result.value;
+      const state =
+        value &&
+        typeof value === 'object' &&
+        'state' in value &&
+        ['pending', 'applied', 'rejected', 'unknown'].includes(
+          String(value.state)
+        ) &&
+        result.httpStatus === 200
+          ? String(value.state)
+          : 'unknown';
+      core.setOutput('reviewrouter_gateway_close_operation', state);
+      core.info(`Gateway close operation: ${state}`);
+    },
+    observeReadback: (requestRef, result) => {
+      const value = result.value;
+      const effect =
+        result.httpStatus === 200 &&
+        value &&
+        typeof value === 'object' &&
+        'effect' in value &&
+        [
+          'not_dispatched',
+          'dispatch_started',
+          'response_started',
+          'completed',
+          'rejected_before_dispatch',
+          'effect_unknown',
+        ].includes(String(value.effect))
+          ? String(value.effect)
+          : 'effect_unknown';
+      core.setOutput('reviewrouter_gateway_request_ref', requestRef);
+      core.setOutput('reviewrouter_gateway_request_effect', effect);
+      core.info(`Gateway request readback: ${effect}`);
+    },
+  });
+}
+
+async function finishV2ActionReview(
+  inputs: ReturnType<typeof readCodexOAuthActionInputs>,
+  review: CodexOAuthV2ReviewResult,
+  terminalOutcomeReporter: CodexOAuthTerminalOutcomeReporterPort,
+  ciProgressReporter: CiOrchestrationProgressReporter | null
+): Promise<void> {
+  requireTerminalV2ReviewResult(review);
+  core.setOutput('reviewrouter_v2_outcome', review.outcome);
+  if (review.outcome === CodexOAuthV2ReviewOutcome.Completed) {
+    await publishCompletedTerminalOutcomeCommitStatus(
+      terminalOutcomeReporter,
+      buildCompletedV2TerminalOutcomeCommitStatus(inputs, review)
+    );
+    await clearTerminalOutcomeReportsSafely(terminalOutcomeReporter, {
+      reason: 'review_completed',
+    });
+  }
+  await ciProgressReporter?.finish(progressTerminal(review));
+  const report = buildV2TerminalOutcomeReport(inputs, review);
+  if (report) {
+    appendTerminalOutcomeStepSummary(report);
+    if (review.outcome === CodexOAuthV2ReviewOutcome.PartialCompleted) {
+      await clearTerminalOutcomeReportsSafely(terminalOutcomeReporter, {
+        reason: 'server_summary_published',
+      });
+      await publishTerminalOutcomeCommitStatusSafely(
+        terminalOutcomeReporter,
+        report.commitStatus
+      );
+    } else {
+      await publishTerminalOutcomeReportSafely(terminalOutcomeReporter, report);
+    }
+  }
+  const terminalFailureCode = v2TerminalFailureCode(review);
+  if (terminalFailureCode) {
+    core.setFailed(terminalFailureCode);
   }
 }
 

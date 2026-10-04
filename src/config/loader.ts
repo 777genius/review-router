@@ -19,7 +19,21 @@ export class ConfigLoader {
   static load(): ReviewConfig {
     const fileConfig = this.loadFromFile();
     const envConfig = this.loadFromEnv();
+    return this.resolve(fileConfig, envConfig);
+  }
 
+  /** Trusted native runtime configuration, without ambient env or checkout files.
+   * The same parser/defaults/validation apply; this is not a caller override. */
+  static loadRuntimeEnvironment(
+    env: Readonly<Record<string, string | undefined>>
+  ): ReviewConfig {
+    return this.resolve({}, this.loadFromEnv({ ...env }));
+  }
+
+  private static resolve(
+    fileConfig: Partial<ReviewConfig>,
+    envConfig: Partial<ReviewConfig>
+  ): ReviewConfig {
     const merged = this.merge(DEFAULT_CONFIG, fileConfig, envConfig);
     const resolved: ReviewConfig = {
       ...merged,
@@ -71,8 +85,9 @@ export class ConfigLoader {
     return {};
   }
 
-  private static loadFromEnv(): Partial<ReviewConfig> {
-    const env = process.env;
+  private static loadFromEnv(
+    env: Readonly<Record<string, string | undefined>> = process.env
+  ): Partial<ReviewConfig> {
     const codexProvider = this.codexProviderFromModel(env.CODEX_MODEL);
     const claudeProvider = this.claudeProviderFromModel(env.CLAUDE_MODEL);
     const explicitProviders = this.parseArray(env.REVIEW_PROVIDERS) || [];

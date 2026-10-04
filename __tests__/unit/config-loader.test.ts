@@ -14,6 +14,38 @@ describe('ConfigLoader', () => {
     process.chdir(originalCwd);
   });
 
+  it('resolves native runtime input without ambient env or checkout reads', () => {
+    process.env.REVIEW_DEPTH = 'unbounded';
+    process.env.REVIEW_AUTH_MODE = 'mimo-token-plan-api';
+    const tmp = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'rr-native-config-NEWTEST-')
+    );
+    fs.writeFileSync(
+      path.join(tmp, '.multi-review.yml'),
+      'inline_min_severity: critical\n'
+    );
+    process.chdir(tmp);
+    const env = Object.freeze({
+      REVIEW_DEPTH: 'balanced',
+      REVIEW_PROVIDERS: 'codex/gpt-5.5',
+      INLINE_MAX_COMMENTS: '5',
+      RUN_TIMEOUT_SECONDS: '90',
+    });
+    const config = ConfigLoader.loadRuntimeEnvironment(env);
+    expect(config.reviewDepth).toBe(ReviewDepth.Balanced);
+    expect(config.providers).toEqual(['codex/gpt-5.5']);
+    expect(config.runTimeoutSeconds).toBe(90);
+    expect(config.inlineMaxComments).toBe(50);
+    expect(config.inlineMinSeverity).toBe(DEFAULT_CONFIG.inlineMinSeverity);
+    expect(process.env.REVIEW_DEPTH).toBe('unbounded');
+  });
+
+  it('retains ordinary validation for explicit runtime values', () => {
+    expect(() =>
+      ConfigLoader.loadRuntimeEnvironment({ REVIEW_DEPTH: 'unbounded' })
+    ).toThrow('REVIEW_DEPTH has invalid value');
+  });
+
   it('merges environment overrides into defaults', () => {
     process.env.REVIEW_DEPTH = 'thorough';
     process.env.REVIEW_PROVIDERS = 'openrouter/a,opencode/b';

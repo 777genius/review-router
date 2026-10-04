@@ -5,8 +5,12 @@ import { promisify } from 'util';
 import * as core from '../../actions/core';
 import { PromptBuilder } from '../../analysis/llm/prompt-builder';
 import { getProviderReviewTotalAttempts } from '../../analysis/llm/retry-policy';
-import { hashIncrementalCompatibility } from '../../cache/key-builder';
+import {
+  hashIncrementalCompatibility,
+  incrementalCompatibilityPreimage,
+} from '../../cache/key-builder';
 import { ConfigLoader } from '../../config/loader';
+export { ConfigLoader } from '../../config/loader';
 import { applyControlPlaneRuntimeConfig } from '../../control-plane/runtime-config';
 import { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../context-gateway/context-gateway-release-contract';
@@ -62,6 +66,7 @@ import {
 import {
   ContextGatewayInvocationSessionFactory,
   SubprocessRequiredContextWitnessRunner,
+  type ContextGatewayInvocationSessionFactoryPort,
 } from './context-gateway-invocation-session';
 import { ContextAttestationReplayRunner } from './context-attestation-replay-runner';
 import { ProviderInvocationFailureClassifier } from './provider-invocation-failure-classifier';
@@ -75,7 +80,11 @@ import {
   GitHubReviewRevisionGuard,
 } from './github-review-state-adapter';
 import { createProductionReviewProjectionBuilder } from './production-review-projection';
-import { ReviewActionV2ControlPlaneAdapter } from './review-action-v2-control-plane-adapter';
+import {
+  ReviewActionV2ControlPlaneAdapter,
+  projectReviewRunAuthorization,
+} from './review-action-v2-control-plane-adapter';
+import type { ReviewRunAuthorizeResult } from '../../control-plane/generated/review-action-v2/review-action-v2';
 import { SystemReviewOrchestrationClock } from './system-review-orchestration-clock';
 import {
   CodexReviewAgentAdapter,
@@ -102,6 +111,7 @@ import {
   ReviewInvestigationRecordingAdapter,
   RevisionGuardInvestigationCurrencyAdapter,
   reviewInvestigationActionBudgetForDepth,
+  reviewInvestigationCoverageContract,
 } from './review-investigation-recording-adapter';
 import {
   createProductionReviewInvestigationAgentSelector,
@@ -961,6 +971,317 @@ export function createProductionT0ReviewRunner(
   } = {}
 ): CodexOAuthV2ReviewRunnerPort {
   return new ProductionT0ReviewRunner(input.fetchImpl, input.progress);
+}
+
+/** Trusted in-memory preparation after native authorization. This does not
+ * authorize, start an execution, open a session, or invoke the provider. It
+ * reuses ordinary planning and both ordinary invocation manifest paths. */
+export async function prepareSingleT0NativeInputs(
+  receipt: ReviewRunAuthorizeResult,
+  trusted: {
+    readonly runner: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0];
+    readonly config: ReviewConfig;
+    readonly client: ReviewActionV2Client;
+    readonly gatewayBundlePath: string;
+    /** Numeric identity already bound to this receipt by the trusted root. */
+    readonly repositoryNumericId: string;
+    readonly runtimeConfigVersion?: string;
+    readonly ledgerKey?: string;
+  }
+): Promise<Parameters<typeof prepareSingleT0ReviewPlan>[0]> {
+  // Capture trusted values before the first await, without changing process
+  // environment or issuing another authorization/provider operation.
+  const snapshot = structuredClone(receipt);
+  const config = structuredClone(trusted.config);
+  const runner = { ...trusted.runner };
+  const client = trusted.client;
+  const gatewayBundlePath = trusted.gatewayBundlePath;
+  const runtimeConfigVersion = trusted.runtimeConfigVersion;
+  const ledgerKey = trusted.ledgerKey;
+  const repositoryNumericId = trusted.repositoryNumericId;
+  validateInput(runner);
+  if (!/^[1-9][0-9]*$/.test(repositoryNumericId)) {
+    throw new Error('review_action_v2_single_plan_repository_invalid');
+  }
+  // Codex preparation still reads process cwd. This helper must run in its
+  // dedicated TEST checkout process, never by chdir inside a shared API host.
+  const validateProcessContext = () => {
+    if (
+      path.resolve(process.cwd()) !== path.resolve(runner.workspacePath) ||
+      process.env.CODEX_HOME !== runner.codexHome ||
+      (runner.codexBinaryPath !== undefined &&
+        process.env.REVIEWROUTER_CODEX_BINARY !== runner.codexBinaryPath)
+    ) {
+      throw new Error('review_action_v2_single_plan_checkout_process_required');
+    }
+  };
+  validateProcessContext();
+  if (!path.isAbsolute(gatewayBundlePath)) {
+    throw new Error('review_action_v2_gateway_bundle_path_invalid');
+  }
+  const controlPlane =
+    ReviewActionV2ControlPlaneAdapter.fromFreshAuthorizationReceipt(
+      client,
+      snapshot
+    );
+  const authorization = projectReviewRunAuthorization(snapshot);
+  validateAuthorizationInput(runner, authorization);
+  const tokenProvider = createScmReadTokenProvider({
+    token: runner.scmReadToken,
+    expiresAt: runner.scmReadTokenExpiresAt,
+    refresh: runner.refreshScmReadToken,
+  });
+  const github = new GitHubClient(runner.scmReadToken, {
+    tokenProvider,
+    repository: runner.repository,
+  });
+  const repositoryMetadata = await github.octokit.repos.get({
+    owner: github.owner,
+    repo: github.repo,
+  });
+  if (String(repositoryMetadata.data.id) !== repositoryNumericId) {
+    throw new Error('review_action_v2_single_plan_repository_mismatch');
+  }
+  const revisionGuard = new GitHubReviewRevisionGuard(github, {
+    workspaceId: authorization.facts.workspaceId,
+    repositoryConnectionId: authorization.facts.repositoryConnectionId,
+    scmRepositoryIdentityId: authorization.facts.scmRepositoryIdentityId,
+    pullRequestNumber: authorization.facts.pullRequestNumber,
+  });
+  if (
+    (await readCheckedOutHead(runner.workspacePath)) !==
+    authorization.facts.headSha
+  ) {
+    throw new Error('review_action_v2_checked_out_revision_mismatch');
+  }
+  const revision = await revisionGuard.loadCurrentRevision();
+  if (
+    revision.pullRequestState === 'closed' ||
+    !sameAuthorizedRevision(revision, authorization)
+  ) {
+    throw new Error('review_action_v2_single_plan_revision_not_current');
+  }
+  const pr = await new PullRequestLoader(github).load(
+    authorization.facts.pullRequestNumber
+  );
+  if (
+    pr.baseSha.toLowerCase() !== authorization.facts.baseSha ||
+    pr.headSha.toLowerCase() !== authorization.facts.headSha
+  ) {
+    throw new Error('review_action_v2_single_plan_revision_not_current');
+  }
+  const checkoutRoot = path.resolve(runner.workspacePath);
+  await new GitReviewRevisionMaterializer().ensureAvailable({
+    checkoutRoot,
+    repository: runner.repository,
+    scmReadToken: await tokenProvider.getToken(),
+    commitShas: [
+      authorization.facts.baseSha,
+      authorization.facts.mergeBaseSha,
+      authorization.facts.headSha,
+    ],
+  });
+  const lifecycle = await new FreshGitHubLifecycleInventory(
+    github,
+    new ReviewLedger(github, ledgerKey)
+  ).loadForPrompt(pr.number, authorization.facts.headSha);
+  const providerName = selectCodexProvider(config);
+  validateProcessContext();
+  const agenticContext = config.codexAgenticContext ?? true;
+  if (!agenticContext)
+    throw new Error('review_action_v2_single_plan_agentic_required');
+  const provider = new CodexProvider(providerName.slice('codex/'.length), {
+    agenticContext,
+    eventAudit: config.codexEventAudit,
+  });
+  const options = resolveProductionContextGatewaySessionFactoryOptions({
+    agenticContext,
+    investigationRecordingEnabled: true,
+    checkoutRoot,
+    gatewayBundlePath,
+  });
+  if (!options)
+    throw new Error('review_action_v2_single_plan_gateway_required');
+  return {
+    authorization,
+    pr,
+    config,
+    provider,
+    contextGateway: new ContextGatewayInvocationSessionFactory(
+      controlPlane,
+      options,
+      new SubprocessRequiredContextWitnessRunner()
+    ),
+    lifecycleTargets: lifecycle.promptTargets,
+    liveLifecycleStateHash: lifecycle.inventory.lifecycleStateHash,
+    ...(runtimeConfigVersion === undefined ? {} : { runtimeConfigVersion }),
+  };
+}
+
+export async function prepareSingleT0ReviewPlan(input: {
+  readonly authorization: ReviewRunAuthorization;
+  readonly pr: PRContext;
+  readonly config: ReviewConfig;
+  readonly provider: CodexProvider;
+  readonly contextGateway: ContextGatewayInvocationSessionFactoryPort;
+  readonly lifecycleTargets: readonly LifecycleTarget[];
+  readonly liveLifecycleStateHash: string;
+  readonly runtimeConfigVersion?: string;
+}) {
+  const config = structuredClone(input.config);
+  const authorization = structuredClone(input.authorization);
+  const pr = structuredClone(input.pr);
+  const provider = input.provider;
+  const contextGateway = input.contextGateway;
+  const runtimeConfigVersion = input.runtimeConfigVersion;
+  if (
+    !authorization.facts.workflowIdentityHash ||
+    !/^[a-f0-9]{64}$/u.test(authorization.facts.workflowIdentityHash) ||
+    pr.number !== authorization.facts.pullRequestNumber ||
+    pr.baseSha !== authorization.facts.baseSha ||
+    pr.headSha !== authorization.facts.headSha ||
+    provider.name !== selectCodexProvider(config) ||
+    config.codexAgenticContext === false
+  ) {
+    throw new Error('review_action_v2_single_plan_authority_mismatch');
+  }
+  const compatibilityKey = hashIncrementalCompatibility(
+    config,
+    runtimeConfigVersion
+  );
+  const planned = planAssignments({
+    authorization,
+    pr,
+    config,
+    providerName: provider.name,
+    compatibilityKey,
+    lifecycleTargets: input.lifecycleTargets,
+    liveLifecycleStateHash: input.liveLifecycleStateHash,
+  });
+  const assignment = planned.assignments[0];
+  if (
+    planned.assignments.length !== 1 ||
+    !assignment ||
+    assignment.workSlot.attemptBudget !== 1 ||
+    assignment.context.files.length < 1 ||
+    assignment.context.files.length > 8 ||
+    planned.uncoveredPaths.length ||
+    planned.uncoveredLifecycleTargetIds.length ||
+    assignment.lifecycleTargets.length
+  ) {
+    throw new Error('review_action_v2_single_plan_scope_incomplete');
+  }
+  const prepare = (investigation: boolean) =>
+    new CodexReviewInvocationAdapter(
+      provider,
+      new PromptBuilder(config),
+      planned.assignments,
+      Math.max(1_000, config.runTimeoutSeconds * 1_000),
+      true,
+      contextGateway,
+      investigation
+    ).prepare({ workSlot: assignment.workSlot, attemptOrdinal: 1 });
+  const invocation = await prepare(false);
+  const investigation = await prepare(true);
+  if (
+    !investigation.investigationSeedEnvelope ||
+    investigation.manifestFacts.executionProfile !== 'investigation_gateway_v1'
+  ) {
+    throw new Error('review_action_v2_single_plan_investigation_ineligible');
+  }
+  const assembler = new GeneratedProviderInvocationManifestAssembler(
+    authorization,
+    config,
+    compatibilityKey
+  );
+  const invocationManifest = await assembler.assemble(invocation);
+  const investigationManifest = await assembler.assemble(investigation);
+  const reviewConfigPreimage = canonicalJson(config);
+  const compatibilityPreimage = incrementalCompatibilityPreimage(
+    config,
+    runtimeConfigVersion
+  );
+  const components = (prepared: typeof invocation) =>
+    Object.freeze({
+      ...prepared.manifestPreimages,
+      reviewConfigHash: reviewConfigPreimage,
+      runtimeCompatibilityKey: compatibilityPreimage,
+      memoryBundleHash: null,
+      codeGraphProjectionHash: null,
+      liveLifecycleStateHash: null,
+    });
+  const { planHash: probePlanHash, ...probePayload } =
+    investigation.investigationProbePlan;
+  const probePlanPreimage = canonicalJson(probePayload);
+  const hash = (value: string) =>
+    createHash('sha256').update(value).digest('hex');
+  if (
+    hash(probePlanPreimage) !== probePlanHash ||
+    hash(investigation.investigationContextPrompt ?? '') !==
+      investigation.investigationSeedEnvelope.envelope.reviewPromptHash
+  ) {
+    throw new Error('review_action_v2_single_plan_seed_preimage_mismatch');
+  }
+  const facts = authorization.facts;
+  const handoff = Object.freeze({
+    authorizationId: authorization.authorizationId,
+    authorizationToken: authorization.authorizationToken,
+    scope: {
+      workspaceId: facts.workspaceId,
+      repositoryConnectionId: facts.repositoryConnectionId,
+      scmRepositoryIdentityId: facts.scmRepositoryIdentityId,
+      pullRequestNumber: facts.pullRequestNumber,
+    },
+    revision: {
+      baseSha: facts.baseSha,
+      mergeBaseSha: facts.mergeBaseSha,
+      headSha: facts.headSha,
+      reviewRevisionHash: facts.reviewRevisionHash,
+    },
+    executionId: new DeterministicReviewOrchestrationIdentity().deterministicId(
+      'execution',
+      [
+        authorization.authorizationId,
+        facts.reviewRevisionHash,
+        planned.plan.planHash,
+      ]
+    ),
+    sourceRunId: facts.sourceRunId,
+    sourceRunAttempt: facts.sourceRunAttempt,
+    compatibilityKey,
+    workSlot: assignment.workSlot,
+    assignmentManifestCanonicalJson:
+      planned.plan.assignmentManifestCanonicalJson,
+    invocationManifestCanonicalJson: invocationManifest.manifestCanonicalJson,
+    investigationManifestCanonicalJson:
+      investigationManifest.manifestCanonicalJson,
+    coverageContract: reviewInvestigationCoverageContract(
+      facts.producerReleaseId
+    ),
+    policy: REVIEW_INVESTIGATION_PRODUCTION_POLICY,
+    seedEnvelope: investigation.investigationSeedEnvelope.envelope,
+    components: {
+      invocation: components(invocation),
+      investigation: components(investigation),
+    },
+    invocationEnvelope:
+      invocation.manifestPreimages.providerRequestEnvelopeHash,
+    reviewPrompt: investigation.investigationContextPrompt!,
+    probePlan: probePlanPreimage,
+  });
+  return Object.freeze({
+    authorization,
+    planned,
+    compatibilityKey,
+    invocation,
+    investigation,
+    invocationManifest,
+    investigationManifest,
+    handoff,
+    // Exact ordinary hash preimages, trusted memory only: never persist/log.
+    reviewConfigPreimage,
+    compatibilityPreimage,
+  });
 }
 
 export function planAssignments(input: {

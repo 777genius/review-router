@@ -20065,6 +20065,14 @@ var ConfigLoader = class {
   static load() {
     const fileConfig = this.loadFromFile();
     const envConfig = this.loadFromEnv();
+    return this.resolve(fileConfig, envConfig);
+  }
+  /** Trusted native runtime configuration, without ambient env or checkout files.
+   * The same parser/defaults/validation apply; this is not a caller override. */
+  static loadRuntimeEnvironment(env) {
+    return this.resolve({}, this.loadFromEnv({ ...env }));
+  }
+  static resolve(fileConfig, envConfig) {
     const merged = this.merge(DEFAULT_CONFIG, fileConfig, envConfig);
     const resolved = {
       ...merged,
@@ -20109,8 +20117,7 @@ var ConfigLoader = class {
     }
     return {};
   }
-  static loadFromEnv() {
-    const env = process.env;
+  static loadFromEnv(env = process.env) {
     const codexProvider = this.codexProviderFromModel(env.CODEX_MODEL);
     const claudeProvider = this.claudeProviderFromModel(env.CLAUDE_MODEL);
     const explicitProviders = this.parseArray(env.REVIEW_PROVIDERS) || [];
@@ -30605,14 +30612,16 @@ function hashConfig(config) {
   return hash.slice(0, 16);
 }
 function hashIncrementalCompatibility(config, runtimeConfigVersion) {
-  const stableJson = JSON.stringify(
+  return (0, import_crypto5.createHash)("sha256").update(incrementalCompatibilityPreimage(config, runtimeConfigVersion)).digest("hex");
+}
+function incrementalCompatibilityPreimage(config, runtimeConfigVersion) {
+  return JSON.stringify(
     sortObject({
       cacheVersion: CACHE_VERSION,
       reviewConfig: config,
       runtimeConfigVersion: runtimeConfigVersion?.trim() || null
     })
   );
-  return (0, import_crypto5.createHash)("sha256").update(stableJson).digest("hex");
 }
 function sortObject(value) {
   if (Array.isArray(value)) return value.map(sortObject);
@@ -34426,7 +34435,7 @@ var GitHubClient = class {
       options.tokenProvider,
       options.sleep
     );
-    const repoEnv = process.env.GITHUB_REPOSITORY || getRepositoryFromEventPayload() || "/";
+    const repoEnv = options.repository || process.env.GITHUB_REPOSITORY || getRepositoryFromEventPayload() || "/";
     const [owner, repo] = repoEnv.split("/");
     this.owner = owner || "";
     this.repo = repo || "";
@@ -51280,13 +51289,15 @@ var package_default = {
   license: "MIT",
   scripts: {
     build: "npm run build:action && npm run build:cli",
-    "build:action": "npm run build:action:main && npm run build:context-gateway",
+    "build:action": "npm run build:action:main && npm run build:context-gateway && npm run build:newtest-job && npm run build:single-t0-plan",
+    "build:newtest-job": "esbuild src/newtest-one-shot-job.ts --bundle --platform=node --target=node24 --outfile=dist/newtest-one-shot-job.js",
+    "build:single-t0-plan": "esbuild src/review-orchestration/infrastructure/production-t0-review-runner.ts --bundle --platform=node --target=node24 --outfile=dist/single-t0-plan.js --external:tree-sitter --external:tree-sitter-*",
     "build:action:main": "esbuild src/main.ts --bundle --platform=node --target=node24 --outfile=dist/index.js --sourcemap --external:tree-sitter --external:tree-sitter-*",
     "build:context-gateway": "npm run build:context-gateway:bundle && node scripts/generate-context-gateway-release-metadata.mjs",
     "build:context-gateway:bundle": "esbuild src/context-gateway/stdio-entry.ts --bundle --platform=node --target=node24 --outfile=dist/context-gateway.js --sourcemap",
     "check:context-gateway-release-metadata": "node scripts/generate-context-gateway-release-metadata.mjs --check",
     "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --target=node24 --outfile=dist/cli/index.js --sourcemap --external:tree-sitter --external:tree-sitter-*",
-    "build:prod": "npm run build:action:main -- --minify && npm run build:context-gateway:bundle -- --minify && node scripts/generate-context-gateway-release-metadata.mjs && npm run build:cli -- --minify",
+    "build:prod": "npm run build:action:main -- --minify && npm run build:context-gateway:bundle -- --minify && node scripts/generate-context-gateway-release-metadata.mjs && npm run build:cli -- --minify && npm run build:newtest-job && npm run build:single-t0-plan",
     test: "jest",
     "test:coverage": "jest --coverage",
     "test:unit": "jest --testPathIgnorePatterns=integration --testPathIgnorePatterns=benchmarks",
@@ -100317,6 +100328,83 @@ function buildReviewInvestigationTurnPrompt(input) {
 }
 
 // src/review-orchestration/infrastructure/codex-review-invocation-adapter.ts
+async function prepareCodexReviewPrompt(promptBuilder, assignment, investigationManifestBindingEnabled) {
+  const effectiveLifecycleTargets = investigationManifestBindingEnabled ? [] : assignment.lifecycleTargets;
+  const preparedPrompt = await promptBuilder.buildPreparedV2(
+    assignment.context,
+    assignment.context.number,
+    [...effectiveLifecycleTargets]
+  );
+  const coverageManifest = createReviewPromptCoverageManifest({
+    workSlotId: assignment.workSlot.workSlotId,
+    reviewRevisionHash: assignment.reviewRevisionHash,
+    assignedPaths: assignment.context.files.map((file) => file.filename),
+    pathCoverage: preparedPrompt.pathCoverage
+  });
+  const providerVisibleCoverage = createProviderVisibleReviewCoverage(coverageManifest);
+  const coverageCanonicalJson = serializeProviderVisibleReviewCoverage(
+    providerVisibleCoverage
+  );
+  const prompt = `${preparedPrompt.prompt}
+
+REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
+    coverageCanonicalJson,
+    "utf8"
+  ).toString("base64url")}`;
+  const investigationContextPrompt = `${preparedPrompt.investigationContextPrompt}
+
+REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
+    coverageCanonicalJson,
+    "utf8"
+  ).toString("base64url")}`;
+  const revision = Object.freeze({
+    baseSha: assignment.context.baseSha,
+    mergeBaseSha: assignment.mergeBaseSha,
+    headSha: assignment.context.headSha
+  });
+  const manifestPreimages = Object.freeze({
+    filePatchManifestHash: canonicalJson10(
+      assignment.context.files.map((file) => ({
+        additions: file.additions,
+        changes: file.changes,
+        deletions: file.deletions,
+        filename: file.filename,
+        patch: file.patch ?? null,
+        previousFilename: file.previousFilename ?? null,
+        status: file.status
+      }))
+    ),
+    contextManifestHash: canonicalJson10({
+      author: assignment.context.author,
+      body: assignment.context.body,
+      coverageHash: providerVisibleCoverage.coverageHash,
+      lifecycleTargetIds: effectiveLifecycleTargets.map((target) => target.targetId).sort(),
+      investigationProbePlanHash: preparedPrompt.investigationProbePlan.planHash,
+      investigationProbePlanStatus: preparedPrompt.investigationProbePlan.status,
+      number: assignment.context.number,
+      title: assignment.context.title
+    }),
+    lifecycleTargetSetHash: effectiveLifecycleTargets.length > 0 ? canonicalJson10(
+      effectiveLifecycleTargets.map((target) => ({
+        fingerprint: target.fingerprint,
+        targetId: target.targetId
+      })).sort(
+        (left, right) => compareCodeUnits4(left.targetId, right.targetId)
+      )
+    ) : null
+  });
+  return Object.freeze({
+    effectiveLifecycleTargets,
+    preparedPrompt,
+    coverageManifest,
+    providerVisibleCoverage,
+    coverageCanonicalJson,
+    prompt,
+    investigationContextPrompt,
+    revision,
+    manifestPreimages
+  });
+}
 var CodexReviewInvocationAdapter = class {
   constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false) {
     this.provider = provider;
@@ -100339,39 +100427,19 @@ var CodexReviewInvocationAdapter = class {
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error("review_action_v2_assignment_missing");
     }
-    const effectiveLifecycleTargets = this.investigationManifestBindingEnabled ? [] : assignment.lifecycleTargets;
-    const preparedPrompt = await this.promptBuilder.buildPreparedV2(
-      assignment.context,
-      assignment.context.number,
-      [...effectiveLifecycleTargets]
+    const {
+      effectiveLifecycleTargets,
+      preparedPrompt,
+      coverageManifest,
+      prompt,
+      investigationContextPrompt,
+      revision,
+      manifestPreimages
+    } = await prepareCodexReviewPrompt(
+      this.promptBuilder,
+      assignment,
+      this.investigationManifestBindingEnabled
     );
-    const coverageManifest = createReviewPromptCoverageManifest({
-      workSlotId: input.workSlot.workSlotId,
-      reviewRevisionHash: assignment.reviewRevisionHash,
-      assignedPaths: assignment.context.files.map((file) => file.filename),
-      pathCoverage: preparedPrompt.pathCoverage
-    });
-    const providerVisibleCoverage = createProviderVisibleReviewCoverage(coverageManifest);
-    const coverageCanonicalJson = serializeProviderVisibleReviewCoverage(
-      providerVisibleCoverage
-    );
-    const prompt = `${preparedPrompt.prompt}
-
-REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
-      coverageCanonicalJson,
-      "utf8"
-    ).toString("base64url")}`;
-    const investigationContextPrompt = `${preparedPrompt.investigationContextPrompt}
-
-REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
-      coverageCanonicalJson,
-      "utf8"
-    ).toString("base64url")}`;
-    const revision = Object.freeze({
-      baseSha: assignment.context.baseSha,
-      mergeBaseSha: assignment.mergeBaseSha,
-      headSha: assignment.context.headSha
-    });
     const shouldPrepareInvestigationSeed = this.investigationManifestBindingEnabled && preparedPrompt.investigationProbePlan.status === "complete" /* Complete */;
     const [gatewayPlanningConfig, canonicalInventory] = this.contextGateway ? await Promise.all([
       this.contextGateway.planningConfig(revision),
@@ -100420,6 +100488,53 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
       reviewPrompt: investigationContextPrompt,
       requestedModel: prepared.requestedModel
     }) : null;
+    const invocationPreimages = Object.freeze({
+      ...manifestPreimages,
+      providerCapabilityHash: investigationContract ?? canonicalJson10({
+        agenticContext: this.agenticContext,
+        contextGateway: gatewayPlanningConfig ? {
+          gatewayBinaryHash: gatewayPlanningConfig.gatewayBinaryHash,
+          gatewayPolicyVersion: gatewayPlanningConfig.gatewayPolicyVersion,
+          enabledTools: [...gatewayPlanningConfig.enabledTools].sort()
+        } : null,
+        preparedInvocationContract: PROVIDER_EXECUTION_CONTRACT_VERSION,
+        providerKind: prepared.providerKind
+      }),
+      providerRequestEnvelopeHash: investigationSeedEnvelope?.canonicalJson ?? prepared.observableInputPreimage,
+      outputSchemaHash: canonicalJson10(
+        investigationEligible ? buildReviewAgentTurnOutputSchema() : request.outputSchema ?? null
+      ),
+      toolPolicyHash: canonicalJson10(
+        gatewayPlanningConfig ? {
+          sandbox: "read-only",
+          network: false,
+          workspaceMutation: false,
+          builtinTools: false,
+          mcpTransport: "stdio",
+          gatewayBinaryHash: gatewayPlanningConfig.gatewayBinaryHash,
+          gatewayPolicyVersion: gatewayPlanningConfig.gatewayPolicyVersion,
+          textSearchMatchMode: "fixed_string",
+          enabledTools: [...gatewayPlanningConfig.enabledTools].sort()
+        } : {
+          sandbox: "read-only",
+          network: "provider-controlled",
+          workspaceMutation: false
+        }
+      ),
+      baseTreeHash: gatewayPlanningConfig ? gatewayPlanningConfig.runtimeEnvironment.REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID : null,
+      environmentContractHash: investigationEligible ? canonicalJson10({
+        credentialKeys: [
+          "CODEX_HOME",
+          "OPENAI_API_KEY",
+          "OPENROUTER_API_KEY"
+        ],
+        gitConfigGlobal: "/dev/null",
+        gitConfigNoSystem: "1",
+        userConfig: "ignored"
+      }) : canonicalJson10(
+        this.provider.describePreparedEnvironmentContract(prepared)
+      )
+    });
     return Object.freeze({
       workSlotId: input.workSlot.workSlotId,
       attemptOrdinal: input.attemptOrdinal,
@@ -100431,101 +100546,26 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
       coverageManifest,
       investigationProbePlan: preparedPrompt.investigationProbePlan,
       investigationSeedEnvelope,
+      manifestPreimages: invocationPreimages,
       manifestFacts: Object.freeze({
         taskKindSet,
         providerKind: "codex" /* Codex */,
         providerCapabilityHash: sha25612(
-          investigationContract ?? canonicalJson10({
-            agenticContext: this.agenticContext,
-            contextGateway: gatewayPlanningConfig ? {
-              gatewayBinaryHash: gatewayPlanningConfig.gatewayBinaryHash,
-              gatewayPolicyVersion: gatewayPlanningConfig.gatewayPolicyVersion,
-              enabledTools: [
-                ...gatewayPlanningConfig.enabledTools
-              ].sort()
-            } : null,
-            preparedInvocationContract: PROVIDER_EXECUTION_CONTRACT_VERSION,
-            providerKind: prepared.providerKind
-          })
+          invocationPreimages.providerCapabilityHash
         ),
-        providerRequestEnvelopeHash: investigationSeedEnvelope ? investigationSeedEnvelope.hash : sha25612(prepared.observableInputPreimage),
-        outputSchemaHash: sha25612(
-          canonicalJson10(
-            investigationEligible ? buildReviewAgentTurnOutputSchema() : request.outputSchema ?? null
-          )
+        providerRequestEnvelopeHash: sha25612(
+          invocationPreimages.providerRequestEnvelopeHash
         ),
-        filePatchManifestHash: sha25612(
-          canonicalJson10(
-            assignment.context.files.map((file) => ({
-              additions: file.additions,
-              changes: file.changes,
-              deletions: file.deletions,
-              filename: file.filename,
-              patch: file.patch ?? null,
-              previousFilename: file.previousFilename ?? null,
-              status: file.status
-            }))
-          )
-        ),
-        contextManifestHash: sha25612(
-          canonicalJson10({
-            author: assignment.context.author,
-            body: assignment.context.body,
-            coverageHash: providerVisibleCoverage.coverageHash,
-            lifecycleTargetIds: effectiveLifecycleTargets.map((target) => target.targetId).sort(),
-            investigationProbePlanHash: preparedPrompt.investigationProbePlan.planHash,
-            investigationProbePlanStatus: preparedPrompt.investigationProbePlan.status,
-            number: assignment.context.number,
-            title: assignment.context.title
-          })
-        ),
-        lifecycleTargetSetHash: effectiveLifecycleTargets.length > 0 ? sha25612(
-          canonicalJson10(
-            effectiveLifecycleTargets.map((target) => ({
-              fingerprint: target.fingerprint,
-              targetId: target.targetId
-            })).sort(
-              (left, right) => compareCodeUnits4(left.targetId, right.targetId)
-            )
-          )
-        ) : null,
+        outputSchemaHash: sha25612(invocationPreimages.outputSchemaHash),
+        filePatchManifestHash: sha25612(manifestPreimages.filePatchManifestHash),
+        contextManifestHash: sha25612(manifestPreimages.contextManifestHash),
+        lifecycleTargetSetHash: manifestPreimages.lifecycleTargetSetHash !== null ? sha25612(manifestPreimages.lifecycleTargetSetHash) : null,
         liveLifecycleStateHash: effectiveLifecycleTargets.length > 0 ? assignment.liveLifecycleStateHash : null,
-        toolPolicyHash: sha25612(
-          canonicalJson10(
-            gatewayPlanningConfig ? {
-              sandbox: "read-only",
-              network: false,
-              workspaceMutation: false,
-              builtinTools: false,
-              mcpTransport: "stdio",
-              gatewayBinaryHash: gatewayPlanningConfig.gatewayBinaryHash,
-              gatewayPolicyVersion: gatewayPlanningConfig.gatewayPolicyVersion,
-              textSearchMatchMode: "fixed_string",
-              enabledTools: [...gatewayPlanningConfig.enabledTools].sort()
-            } : {
-              sandbox: "read-only",
-              network: "provider-controlled",
-              workspaceMutation: false
-            }
-          )
-        ),
+        toolPolicyHash: sha25612(invocationPreimages.toolPolicyHash),
         executionProfile: gatewayPlanningConfig ? investigationEligible ? "investigation_gateway_v1" : "context_gateway_v1" : this.agenticContext ? "agentic_unbounded_v1" : "prompt_only_envelope_v1",
-        baseTreeHash: gatewayPlanningConfig ? sha25612(
-          gatewayPlanningConfig.runtimeEnvironment.REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID
-        ) : null,
+        baseTreeHash: invocationPreimages.baseTreeHash !== null ? sha25612(invocationPreimages.baseTreeHash) : null,
         environmentContractHash: sha25612(
-          investigationEligible ? canonicalJson10({
-            credentialKeys: [
-              "CODEX_HOME",
-              "OPENAI_API_KEY",
-              "OPENROUTER_API_KEY"
-            ],
-            gitConfigGlobal: "/dev/null",
-            gitConfigNoSystem: "1",
-            userConfig: "ignored"
-          }) : canonicalJson10(
-            this.provider.describePreparedEnvironmentContract(prepared)
-          )
+          invocationPreimages.environmentContractHash
         )
       })
     });
@@ -107003,11 +107043,52 @@ function digest(value) {
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
-var ReviewActionV2ControlPlaneAdapter = class {
+function projectReviewRunAuthorization(result2) {
+  if (result2.status !== "authorized" /* Authorized */ && result2.status !== "restored" /* Restored */) {
+    throw new Error("review_action_v2_authorization_denied");
+  }
+  return {
+    authorizationId: requireString3(result2.authorizationId, "authorization_id"),
+    authorizationToken: requireString3(
+      result2.authorizationToken,
+      "authorization_token"
+    ),
+    producerReleaseId: requireString3(
+      result2.producerReleaseId,
+      "producer_release_id"
+    ),
+    protocolLimitsProfileId: requireString3(
+      result2.protocolLimitsProfileId,
+      "protocol_limits_profile_id"
+    ),
+    operationalSloProfileId: requireString3(
+      result2.operationalSloProfileId,
+      "operational_slo_profile_id"
+    ),
+    mutationEpoch: requireDecimal(result2.mutationEpoch, "mutation_epoch"),
+    expiresAt: requireTimestamp2(result2.expiresAt, "expires_at"),
+    limits: parseProtocolLimits(result2.protocolLimitsCanonicalJson),
+    facts: parseAuthorizationFacts(result2.authorizationFactsCanonicalJson)
+  };
+}
+var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter {
   constructor(client) {
     this.client = client;
   }
   activeAuthorization = null;
+  /** Trusted continuation of an actual fresh native receipt. This does not
+   * authorize, renew, restore or perform any remote operation. The server still
+   * validates the receipt's capability on every subsequent mutation. */
+  static fromFreshAuthorizationReceipt(client, receipt) {
+    const snapshot = structuredClone(receipt);
+    if (snapshot.status !== "authorized" /* Authorized */) {
+      throw new Error("review_action_v2_fresh_authorization_required");
+    }
+    const authorization = projectReviewRunAuthorization(snapshot);
+    const adapter = new _ReviewActionV2ControlPlaneAdapter(client);
+    adapter.activeAuthorization = authorization;
+    return adapter;
+  }
   async authorize(input) {
     const result2 = await this.client.execute(
       "review_run_authorize" /* ReviewRunAuthorize */,
@@ -107021,35 +107102,7 @@ var ReviewActionV2ControlPlaneAdapter = class {
         ]
       }
     );
-    if (result2.status !== "authorized" /* Authorized */ && result2.status !== "restored" /* Restored */) {
-      throw new Error("review_action_v2_authorization_denied");
-    }
-    const authorization = {
-      authorizationId: requireString3(
-        result2.authorizationId,
-        "authorization_id"
-      ),
-      authorizationToken: requireString3(
-        result2.authorizationToken,
-        "authorization_token"
-      ),
-      producerReleaseId: requireString3(
-        result2.producerReleaseId,
-        "producer_release_id"
-      ),
-      protocolLimitsProfileId: requireString3(
-        result2.protocolLimitsProfileId,
-        "protocol_limits_profile_id"
-      ),
-      operationalSloProfileId: requireString3(
-        result2.operationalSloProfileId,
-        "operational_slo_profile_id"
-      ),
-      mutationEpoch: requireDecimal(result2.mutationEpoch, "mutation_epoch"),
-      expiresAt: requireTimestamp2(result2.expiresAt, "expires_at"),
-      limits: parseProtocolLimits(result2.protocolLimitsCanonicalJson),
-      facts: parseAuthorizationFacts(result2.authorizationFactsCanonicalJson)
-    };
+    const authorization = projectReviewRunAuthorization(result2);
     this.activeAuthorization = authorization;
     return authorization;
   }
@@ -108142,6 +108195,10 @@ function parseRestoredWorkSlotState(value) {
 function parseAuthorizationFacts(value) {
   const parsed = parseCanonicalObject2(value);
   const providerVoteLanes = parseProviderVoteLanes(parsed.providerVoteLanes);
+  const hasWorkflowIdentityHash = Object.prototype.hasOwnProperty.call(
+    parsed,
+    "workflowIdentityHash"
+  );
   const hasReviewInvestigation = Object.prototype.hasOwnProperty.call(
     parsed,
     "reviewInvestigation"
@@ -108186,6 +108243,12 @@ function parseAuthorizationFacts(value) {
       "selected_protocol_version"
     ),
     schemaDigest: requireDigest4(parsed.schemaDigest, "schema_digest"),
+    ...hasWorkflowIdentityHash ? {
+      workflowIdentityHash: requireDigest4(
+        parsed.workflowIdentityHash,
+        "workflow_identity_hash"
+      )
+    } : {},
     ...reviewInvestigation === void 0 ? {} : { reviewInvestigation },
     providerVoteLanes
   };
@@ -108205,7 +108268,8 @@ function parseAuthorizationFacts(value) {
     "sourceRunAttempt",
     "sourceRunId",
     "trustDomain",
-    "workspaceId"
+    "workspaceId",
+    ...hasWorkflowIdentityHash ? ["workflowIdentityHash"] : []
   ];
   if (Object.keys(parsed).sort().join(",") !== expectedKeys.sort().join(",")) {
     throw new Error("review_action_v2_authorization_facts_fields_invalid");

@@ -8,7 +8,7 @@ import {
   ProviderKind,
 } from '../../../src/providers/prepared-invocation';
 import type { CodexProvider } from '../../../src/providers/codex';
-import type { PromptBuilder } from '../../../src/analysis/llm/prompt-builder';
+import { PromptBuilder } from '../../../src/analysis/llm/prompt-builder';
 import type { ReviewConfig } from '../../../src/types';
 import type { ContextGatewayInvocationSessionFactoryPort } from '../../../src/review-orchestration/infrastructure/context-gateway-invocation-session';
 import { logger } from '../../../src/utils/logger';
@@ -26,8 +26,13 @@ import {
   CodexReviewInvocationAdapter,
   CooperativeReviewLeaseSupervisor,
   GeneratedProviderInvocationManifestAssembler,
+  prepareCodexReviewPrompt,
 } from '../../../src/review-orchestration/infrastructure';
-import { createReviewPromptCoverageManifest } from '../../../src/review-orchestration/domain';
+import {
+  createReviewPromptCoverageManifest,
+  createProviderVisibleReviewCoverage,
+  serializeProviderVisibleReviewCoverage,
+} from '../../../src/review-orchestration/domain';
 import {
   ReviewInvestigationChangedFileStatus,
   ReviewInvestigationProbePlanStatus,
@@ -35,6 +40,11 @@ import {
 } from '../../../src/review-investigation/domain/deterministic-context-probe-plan';
 import { buildReviewAgentTurnOutputSchema } from '../../../src/review-investigation/domain/turn-observation';
 import { canonicalJson } from '../../../src/context-gateway/context-gateway-contract';
+import {
+  prepareSingleT0ReviewPlan,
+  planAssignments,
+} from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
+import { hashIncrementalCompatibility } from '../../../src/cache/key-builder';
 
 const emptyProbePlan = createReviewInvestigationProbePlan({
   files: [],
@@ -42,6 +52,332 @@ const emptyProbePlan = createReviewInvestigationProbePlan({
 });
 
 describe('Codex T0 prepared invocation', () => {
+  it('composes the native single plan and two manifests without executing a provider', async () => {
+    const config = {
+      providers: ['codex/gpt-test'],
+      providerRetries: 1,
+      runTimeoutSeconds: 10,
+      diffMaxBytes: 50_000,
+      smartDiffCompaction: true,
+    } as ReviewConfig;
+    const auth = {
+      ...authorization,
+      facts: { ...authorization.facts, workflowIdentityHash: hash('workflow') },
+    };
+    const patch = '@@ -0,0 +1 @@\n+return price + taxRatePercent;';
+    const pr = {
+      ...assignment.context,
+      files: [
+        {
+          filename: 'tax.js',
+          status: 'added' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch,
+        },
+      ],
+      diff: patch,
+      additions: 1,
+    };
+    const prepareProvider = jest.fn(async () => preparedInvocation('request'));
+    const provider = {
+      name: 'codex/gpt-test',
+      describePreparedEnvironmentContract: jest.fn().mockReturnValue({}),
+      prepareInvocation: prepareProvider,
+      executePreparedInvocation: jest.fn(),
+    } as unknown as CodexProvider;
+    const inventoryValue = {
+      inventoryVersion: 2 as const,
+      mergeBaseTreeOid: '5'.repeat(40),
+      headTreeOid: '4'.repeat(40),
+      entries: [
+        {
+          status: 'added' as const,
+          beforePath: null,
+          afterPath: 'tax.js',
+          beforeMode: '000000',
+          afterMode: '100644',
+          beforeOid: '0'.repeat(40),
+          afterOid: '6'.repeat(40),
+          beforeContentKind: 'absent' as const,
+          beforeByteCount: null,
+          beforeLineCount: null,
+          afterContentKind: 'text' as const,
+          afterByteCount: 32,
+          afterLineCount: 1,
+          contentKind: 'text' as const,
+          byteCount: 32,
+          lineCount: 1,
+          generated: false,
+          generatedPolicySource: null,
+        },
+      ],
+    };
+    const gateway = {
+      planningConfig: jest.fn().mockResolvedValue(gatewayConfig),
+      canonicalInventory: jest.fn().mockResolvedValue({
+        ...inventoryValue,
+        itemCount: 1,
+        inventoryHash: hash(canonicalJson(inventoryValue)),
+      }),
+      open: jest.fn(),
+    } as unknown as ContextGatewayInvocationSessionFactoryPort;
+    const input = {
+      authorization: auth,
+      pr,
+      config,
+      provider,
+      contextGateway: gateway,
+      lifecycleTargets: [],
+      liveLifecycleStateHash: hash('lifecycle'),
+      runtimeConfigVersion: ' test ',
+    };
+    prepareProvider.mockImplementationOnce(async () => {
+      // Simulate replacement while the first native preparation is awaiting.
+      input.runtimeConfigVersion = 'changed-during-preparation';
+      input.provider = {
+        name: 'codex/replaced',
+        prepareInvocation: async () => {
+          throw new Error('replaced provider');
+        },
+      } as unknown as CodexProvider;
+      input.contextGateway = {
+        planningConfig: async () => {
+          throw new Error('replaced gateway');
+        },
+      } as unknown as ContextGatewayInvocationSessionFactoryPort;
+      return preparedInvocation('request');
+    });
+    const result = await prepareSingleT0ReviewPlan(input);
+    input.runtimeConfigVersion = ' test ';
+    input.provider = provider;
+    input.contextGateway = gateway;
+    const compatibilityKey = hashIncrementalCompatibility(config, ' test ');
+    expect(result.planned).toEqual(
+      planAssignments({
+        ...input,
+        providerName: provider.name,
+        compatibilityKey,
+      })
+    );
+    expect(result.compatibilityKey).toBe(hash(result.compatibilityPreimage));
+    const ordinary = new GeneratedProviderInvocationManifestAssembler(
+      auth,
+      config,
+      compatibilityKey
+    );
+    expect(result.invocationManifest).toEqual(
+      await ordinary.assemble(result.invocation)
+    );
+    expect(result.investigationManifest).toEqual(
+      await ordinary.assemble(result.investigation)
+    );
+    expect(
+      JSON.parse(result.invocationManifest.manifestCanonicalJson)
+        .reviewConfigHash
+    ).toBe(hash(result.reviewConfigPreimage));
+    expect(result.investigation.investigationSeedEnvelope).not.toBeNull();
+    expect(result.handoff.assignmentManifestCanonicalJson).toBe(
+      result.planned.plan.assignmentManifestCanonicalJson
+    );
+    expect(result.handoff.invocationManifestCanonicalJson).toBe(
+      result.invocationManifest.manifestCanonicalJson
+    );
+    expect(result.handoff.investigationManifestCanonicalJson).toBe(
+      result.investigationManifest.manifestCanonicalJson
+    );
+    expect(hash(result.handoff.probePlan)).toBe(
+      result.handoff.seedEnvelope.probePlanHash
+    );
+    expect(JSON.parse(result.handoff.probePlan)).not.toHaveProperty('planHash');
+    expect(hash(result.handoff.reviewPrompt)).toBe(
+      result.handoff.seedEnvelope.reviewPromptHash
+    );
+    expect(result.handoff.scope.workspaceId).toBe(auth.facts.workspaceId);
+    expect(result.handoff.revision.headSha).toBe(auth.facts.headSha);
+    expect(result.handoff.sourceRunId).toBe(auth.facts.sourceRunId);
+    for (const kind of ['invocation', 'investigation'] as const) {
+      const manifest = JSON.parse(
+        result.handoff[`${kind}ManifestCanonicalJson`]
+      );
+      for (const [key, preimage] of Object.entries(
+        result.handoff.components[kind]
+      )) {
+        expect(manifest[key]).toBe(preimage === null ? null : hash(preimage));
+      }
+    }
+    expect(
+      result.planned.assignments[0]!.workSlot.providerVoteIdentityHash
+    ).toBe(hash('vote'));
+    expect(provider.prepareInvocation).toHaveBeenCalledTimes(2);
+    expect(provider.executePreparedInvocation).not.toHaveBeenCalled();
+    expect(gateway.open).not.toHaveBeenCalled();
+    await expect(
+      prepareSingleT0ReviewPlan({
+        ...input,
+        pr: { ...pr, headSha: 'f'.repeat(40) },
+      })
+    ).rejects.toThrow('single_plan_authority_mismatch');
+    await expect(
+      prepareSingleT0ReviewPlan({
+        ...input,
+        config: { ...config, providerRetries: 2 },
+      })
+    ).rejects.toThrow('single_plan_scope_incomplete');
+    expect(provider.prepareInvocation).toHaveBeenCalledTimes(2);
+  });
+  it.each([false, true])(
+    'shares real prompt/coverage bytes before provider preparation (investigation=%s)',
+    async (investigationEnabled) => {
+      const patch = '@@ -0,0 +1 @@\n+return price + taxRatePercent;';
+      const plannedAssignment = {
+        ...assignment,
+        context: {
+          ...assignment.context,
+          files: [
+            {
+              filename: 'tax.js',
+              status: 'added' as const,
+              additions: 1,
+              deletions: 0,
+              changes: 1,
+              patch,
+            },
+          ],
+          diff: patch,
+          additions: 1,
+        },
+      };
+      const builder = new PromptBuilder({
+        diffMaxBytes: 50_000,
+        smartDiffCompaction: true,
+      } as ReviewConfig);
+      const provider = {
+        name: 'codex/gpt-test',
+        describePreparedEnvironmentContract: jest.fn().mockReturnValue({}),
+        prepareInvocation: jest
+          .fn()
+          .mockResolvedValue(preparedInvocation('request')),
+      } as unknown as CodexProvider;
+      const preview = await prepareCodexReviewPrompt(
+        builder,
+        plannedAssignment,
+        investigationEnabled
+      );
+      expect(provider.prepareInvocation).not.toHaveBeenCalled();
+      const raw = await builder.buildPreparedV2(
+        plannedAssignment.context,
+        252,
+        []
+      );
+      const coverage = createReviewPromptCoverageManifest({
+        workSlotId: workSlot.workSlotId,
+        reviewRevisionHash: assignment.reviewRevisionHash,
+        assignedPaths: ['tax.js'],
+        pathCoverage: raw.pathCoverage,
+      });
+      const wire = serializeProviderVisibleReviewCoverage(
+        createProviderVisibleReviewCoverage(coverage)
+      );
+      const suffix = `\n\nREVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(wire, 'utf8').toString('base64url')}`;
+      expect(preview.prompt).toBe(raw.prompt + suffix);
+      expect(preview.investigationContextPrompt).toBe(
+        raw.investigationContextPrompt + suffix
+      );
+      expect(preview.coverageCanonicalJson).toBe(wire);
+      expect(preview.preparedPrompt.investigationProbePlan).toEqual(
+        raw.investigationProbePlan
+      );
+      expect(preview.revision).toEqual({
+        baseSha: '1'.repeat(40),
+        mergeBaseSha: '2'.repeat(40),
+        headSha: '3'.repeat(40),
+      });
+      const adapter = new CodexReviewInvocationAdapter(
+        provider,
+        builder,
+        [plannedAssignment],
+        10_000,
+        true,
+        undefined,
+        investigationEnabled
+      );
+      const invocation = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+      expect(provider.prepareInvocation).toHaveBeenCalledTimes(1);
+      expect(provider.prepareInvocation).toHaveBeenCalledWith(
+        preview.prompt,
+        10_000,
+        undefined,
+        undefined
+      );
+      expect(invocation.reviewPrompt).toBe(preview.prompt);
+      expect(invocation.coverageManifest).toEqual(preview.coverageManifest);
+      expect(invocation.investigationProbePlan).toEqual(
+        preview.preparedPrompt.investigationProbePlan
+      );
+      expect(preview.manifestPreimages.filePatchManifestHash).toBe(
+        canonicalJson([
+          {
+            additions: 1,
+            changes: 1,
+            deletions: 0,
+            filename: 'tax.js',
+            patch,
+            previousFilename: null,
+            status: 'added',
+          },
+        ])
+      );
+      expect(preview.manifestPreimages.contextManifestHash).toBe(
+        canonicalJson({
+          author: 'author',
+          body: '',
+          coverageHash:
+            createProviderVisibleReviewCoverage(coverage).coverageHash,
+          lifecycleTargetIds: [],
+          investigationProbePlanHash: raw.investigationProbePlan.planHash,
+          investigationProbePlanStatus: raw.investigationProbePlan.status,
+          number: 252,
+          title: 'PR',
+        })
+      );
+      expect(invocation.manifestFacts.filePatchManifestHash).toBe(
+        hash(preview.manifestPreimages.filePatchManifestHash)
+      );
+      expect(invocation.manifestFacts.contextManifestHash).toBe(
+        hash(preview.manifestPreimages.contextManifestHash)
+      );
+      expect(preview.manifestPreimages.lifecycleTargetSetHash).toBeNull();
+      for (const [field, bytes] of Object.entries(
+        invocation.manifestPreimages
+      )) {
+        expect(
+          invocation.manifestFacts[
+            field as keyof typeof invocation.manifestPreimages
+          ]
+        ).toBe(bytes === null ? null : hash(bytes));
+      }
+      expect(Object.isFrozen(invocation.manifestPreimages)).toBe(true);
+      expect(invocation.manifestPreimages.providerCapabilityHash).toBe(
+        canonicalJson({
+          agenticContext: true,
+          contextGateway: null,
+          preparedInvocationContract: 'review-provider-prepared-invocation.v1',
+          providerKind: ProviderKind.CodexCli,
+        })
+      );
+      expect(invocation.manifestPreimages.toolPolicyHash).toBe(
+        canonicalJson({
+          sandbox: 'read-only',
+          network: 'provider-controlled',
+          workspaceMutation: false,
+        })
+      );
+      expect(invocation.manifestPreimages.environmentContractHash).toBe('{}');
+    }
+  );
+
   it('executes the exact branded object that was prepared', async () => {
     const prepared = createPreparedProviderInvocation({
       providerKind: ProviderKind.CodexCli,
@@ -221,6 +557,27 @@ describe('Codex T0 prepared invocation', () => {
     expect(invocation.manifestFacts.providerRequestEnvelopeHash).toBe(
       seed!.hash
     );
+    expect(invocation.manifestPreimages.providerRequestEnvelopeHash).toBe(
+      seed!.canonicalJson
+    );
+    for (const [field, bytes] of Object.entries(invocation.manifestPreimages)) {
+      expect(
+        invocation.manifestFacts[
+          field as keyof typeof invocation.manifestPreimages
+        ]
+      ).toBe(bytes === null ? null : hash(bytes));
+    }
+    expect(invocation.manifestPreimages.baseTreeHash).toBe(
+      gatewayConfig.runtimeEnvironment.REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID
+    );
+    expect(invocation.manifestPreimages.environmentContractHash).toBe(
+      canonicalJson({
+        credentialKeys: ['CODEX_HOME', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY'],
+        gitConfigGlobal: '/dev/null',
+        gitConfigNoSystem: '1',
+        userConfig: 'ignored',
+      })
+    );
     expect(invocation.manifestFacts.executionProfile).toBe(
       'investigation_gateway_v1'
     );
@@ -324,6 +681,25 @@ describe('Codex T0 prepared invocation', () => {
       workSlot,
       attemptOrdinal: 1,
     });
+    const lifecyclePreview = await prepareCodexReviewPrompt(
+      promptBuilder,
+      lifecycleAssignment,
+      false
+    );
+    const findingOnlyPreview = await prepareCodexReviewPrompt(
+      promptBuilder,
+      lifecycleAssignment,
+      true
+    );
+    expect(lifecyclePreview.manifestPreimages.lifecycleTargetSetHash).toBe(
+      canonicalJson([{ fingerprint: hash('finding-1'), targetId: 'target-1' }])
+    );
+    expect(authoritative.manifestFacts.lifecycleTargetSetHash).toBe(
+      hash(lifecyclePreview.manifestPreimages.lifecycleTargetSetHash!)
+    );
+    expect(
+      findingOnlyPreview.manifestPreimages.lifecycleTargetSetHash
+    ).toBeNull();
     const manifestAssembler = new GeneratedProviderInvocationManifestAssembler(
       authorization,
       {} as ReviewConfig,

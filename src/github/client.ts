@@ -13,6 +13,7 @@ export class GitHubClient {
   constructor(
     token: string,
     options: {
+      readonly repository?: string;
       readonly tokenProvider?: GitHubTokenProvider;
       readonly sleep?: (delayMs: number) => Promise<void>;
     } = {}
@@ -25,7 +26,10 @@ export class GitHubClient {
 
     // Prefer the explicit Actions env var, then fall back to the event payload.
     const repoEnv =
-      process.env.GITHUB_REPOSITORY || getRepositoryFromEventPayload() || '/';
+      options.repository ||
+      process.env.GITHUB_REPOSITORY ||
+      getRepositoryFromEventPayload() ||
+      '/';
 
     const [owner, repo] = repoEnv.split('/');
     this.owner = owner || '';

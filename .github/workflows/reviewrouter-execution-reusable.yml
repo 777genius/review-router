@@ -94,14 +94,15 @@ jobs:
       contents: read
       id-token: write
     env:
-      RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
-      RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
       RR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || '' }}
       RR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
       RR_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
     steps:
       - name: Reject non-TEST or mutable transport source
         shell: bash
+        env:
+          RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
         run: |
           node <<'NODE'
           const e = process.env;
@@ -127,6 +128,9 @@ jobs:
         with:
           node-version: '24'
       - name: Transfer ONE authenticated TEST request
+        env:
+          RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
         run: node dist/newtest-one-shot-job.js
 
   review:

@@ -13,6 +13,7 @@ import { ConfigLoader } from '../../config/loader';
 export { ConfigLoader } from '../../config/loader';
 import { applyControlPlaneRuntimeConfig } from '../../control-plane/runtime-config';
 import { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
+export { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../context-gateway/context-gateway-release-contract';
 import { BatchOrchestrator } from '../../core/batch-orchestrator';
 import { prioritizeFilesByRisk } from '../../review-execution/domain/file-risk-priority';
@@ -979,7 +980,16 @@ export function createProductionT0ReviewRunner(
 export async function prepareSingleT0NativeInputs(
   receipt: ReviewRunAuthorizeResult,
   trusted: {
-    readonly runner: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0];
+    readonly runner: Omit<
+      Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0],
+      'providerInstanceId' | 'workflowSchemaVersion'
+    > &
+      Partial<
+        Pick<
+          Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0],
+          'providerInstanceId' | 'workflowSchemaVersion'
+        >
+      >;
     readonly config: ReviewConfig;
     readonly client: ReviewActionV2Client;
     readonly gatewayBundlePath: string;
@@ -1505,7 +1515,10 @@ async function withRunnerEnvironment<T>(
 }
 
 function validateInput(
-  input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]
+  input: Pick<
+    Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0],
+    'repository' | 'scmReadToken' | 'scmReadTokenExpiresAt'
+  >
 ): void {
   validateScmReadCapability({
     token: input.scmReadToken,
@@ -1517,7 +1530,10 @@ function validateInput(
 }
 
 function validateAuthorizationInput(
-  input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0],
+  input: Pick<
+    Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0],
+    'pullRequestNumber' | 'headSha'
+  >,
   authorization: ReviewRunAuthorization
 ): void {
   if (

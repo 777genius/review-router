@@ -98,22 +98,28 @@ jobs:
       REVIEWROUTER_CONTROL_PLANE_URL: ${{ inputs.control_plane_url || inputs.api_url }}
       REVIEWROUTER_OIDC_AUDIENCE: reviewrouter
       REVIEWROUTER_RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
-      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'true'
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: ${{ inputs.codex_session_mode == 'account-gateway' && 'false' || 'true' }}
       CODEX_AUTH_JSON_PRESENT: ${{ secrets.CODEX_AUTH_JSON != '' && '1' || '0' }}
       CLAUDE_CODE_OAUTH_TOKEN_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && '1' || '0' }}
       OPENAI_API_KEY_PRESENT: ${{ secrets.OPENAI_API_KEY != '' && '1' || '0' }}
       REVIEW_APP_PRIVATE_KEY_PRESENT: ${{ secrets.REVIEW_APP_PRIVATE_KEY != '' && '1' || '0' }}
     steps:
+      # Preparation uses TypeScript stdin and must run on the pinned Node major.
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+
       - name: Prepare ReviewRouter runtime settings
         id: runtime
         shell: bash
         run: |
           set -euo pipefail
-          node <<'NODE'
-          const crypto = require('node:crypto');
-          const fs = require('node:fs');
+          node --input-type=module-typescript <<'NODE'
+          import crypto from 'node:crypto';
+          import fs from 'node:fs';
 
-          const fail = (message) => {
+          const fail = (message: string): never => {
             console.error(`::error::${message}`);
             process.exit(1);
           };
@@ -124,10 +130,23 @@ jobs:
           }
 
           const eventName = process.env.GITHUB_EVENT_NAME || '';
-          const codexSessionMode = (process.env.RR_CODEX_SESSION_MODE || '').trim();
+          const rawCodexSessionMode = process.env.RR_CODEX_SESSION_MODE || '';
+          const codexSessionMode = rawCodexSessionMode.trim();
           const hostedPoolSessionMode = 'codex_subscription_oauth_hosted_pool';
-          if (codexSessionMode !== '' && codexSessionMode !== hostedPoolSessionMode) {
+          const accountGateway = codexSessionMode === 'account-gateway';
+          if (accountGateway && rawCodexSessionMode !== codexSessionMode) {
             fail('Invalid codex_session_mode.');
+          }
+          if (!['', hostedPoolSessionMode, 'account-gateway'].includes(codexSessionMode)) {
+            fail('Invalid codex_session_mode.');
+          }
+          if (accountGateway) {
+            if (reviewActionLane !== 't0') {
+              fail('Account gateway execution requires the T0 lane.');
+            }
+            if (!['pull_request', 'pull_request_target', 'workflow_dispatch', 'merge_group'].includes(eventName)) {
+              fail('Account gateway execution requires a PR event or explicit dispatch; merge_group only skips.');
+            }
           }
           const sessionBindingId = (process.env.RR_SESSION_BINDING_ID || '').trim();
           const sessionBindingVersion = Number(
@@ -184,14 +203,14 @@ jobs:
           if (!['oidc', 'static'].includes(runtimeConfigMode)) {
             fail('Invalid ReviewRouter runtime_config_mode. Use oidc or static.');
           }
-
-          const githubEnv = process.env.GITHUB_ENV;
-          const githubOutput = process.env.GITHUB_OUTPUT;
-          if (!githubEnv || !githubOutput) {
-            fail('GitHub environment files are unavailable.');
+          if (accountGateway && runtimeConfigMode !== 'oidc') {
+            fail('Account gateway execution requires OIDC runtime config.');
           }
 
-          const appendEnv = (key, value) => {
+          const githubEnv = process.env.GITHUB_ENV || fail('GitHub environment files are unavailable.');
+          const githubOutput = process.env.GITHUB_OUTPUT || fail('GitHub environment files are unavailable.');
+
+          const appendEnv = (key: string, value: string | number): void => {
             if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
               fail(`Invalid static runtime env key: ${key}`);
             }
@@ -204,6 +223,9 @@ jobs:
           };
 
           appendEnv('REVIEWROUTER_ACTION_VERSION', runtimeRef);
+          if (accountGateway) {
+            appendEnv('REVIEWROUTER_STATIC_CONFIG_FALLBACK', 'false');
+          }
           appendEnv(
             'REVIEWROUTER_COMMENT_TOKEN_MODE',
             runtimeConfigMode === 'oidc' ? 'app-oidc' : 'github-token'
@@ -223,20 +245,24 @@ jobs:
             Date.now() + (reviewTimeoutMinutes - 5) * 60_000
           );
 
-          let staticEnv;
+          let parsedStaticEnv: unknown;
           try {
-            staticEnv = JSON.parse(process.env.RR_STATIC_RUNTIME_ENV_JSON || '{}');
+            parsedStaticEnv = JSON.parse(process.env.RR_STATIC_RUNTIME_ENV_JSON || '{}');
           } catch (error) {
-            fail(`static_runtime_env_json is not valid JSON: ${error.message}`);
+            fail(`static_runtime_env_json is not valid JSON: ${error instanceof Error ? error.message : 'unknown_error'}`);
           }
-          if (!staticEnv || typeof staticEnv !== 'object' || Array.isArray(staticEnv)) {
+          if (!parsedStaticEnv || typeof parsedStaticEnv !== 'object' || Array.isArray(parsedStaticEnv)) {
             fail('static_runtime_env_json must be a JSON object.');
           }
-          if (staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS === undefined) {
+          const staticEnv = parsedStaticEnv as Record<string, unknown>;
+          if (accountGateway && Object.keys(staticEnv).length > 0) {
+            fail('Account gateway execution does not accept static runtime env.');
+          }
+          if (!accountGateway && staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS === undefined) {
             staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';
           }
           const staticRuntimeEnvAllowlist = new Set(['TARGET_TOKENS_PER_BATCH']);
-          const isSecretLikeStaticRuntimeEnvKey = (key) =>
+          const isSecretLikeStaticRuntimeEnvKey = (key: string): boolean =>
             !staticRuntimeEnvAllowlist.has(key) &&
             /(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|API_KEY|AUTH_JSON)/.test(key);
           for (const [key, value] of Object.entries(staticEnv)) {
@@ -252,10 +278,12 @@ jobs:
             if (isSecretLikeStaticRuntimeEnvKey(key)) {
               fail(`Static runtime env cannot contain secret-like key: ${key}`);
             }
-            if (typeof value !== 'string') {
-              fail(`Static runtime env value must be a string: ${key}`);
-            }
-            appendEnv(key, value);
+            appendEnv(
+              key,
+              typeof value === 'string'
+                ? value
+                : fail(`Static runtime env value must be a string: ${key}`)
+            );
           }
 
           const appTokenNeeded =
@@ -267,10 +295,12 @@ jobs:
             eventName === 'pull_request' &&
             process.env.GITHUB_HEAD_REPO_FULL_NAME !== process.env.GITHUB_REPOSITORY;
           const isMergeGroup = eventName === 'merge_group';
+          // Fork eligibility is not a grant: gateway server policy admits the run.
+          const forkBlocked = isForkPullRequest && !accountGateway;
           fs.appendFileSync(githubOutput, `runtime_ref=${runtimeRef}\n`);
           fs.appendFileSync(githubOutput, `runtime_repository=${runtimeRepository}\n`);
-          fs.appendFileSync(githubOutput, `can_run=${!isForkPullRequest && !isMergeGroup ? 'true' : 'false'}\n`);
-          fs.appendFileSync(githubOutput, `skip_reason=${isMergeGroup ? 'merge_group' : isForkPullRequest ? 'fork' : ''}\n`);
+          fs.appendFileSync(githubOutput, `can_run=${!forkBlocked && !isMergeGroup ? 'true' : 'false'}\n`);
+          fs.appendFileSync(githubOutput, `skip_reason=${isMergeGroup ? 'merge_group' : forkBlocked ? 'fork' : ''}\n`);
           fs.appendFileSync(githubOutput, `app_token_needed=${appTokenNeeded ? 'true' : 'false'}\n`);
           NODE
         env:
@@ -320,12 +350,6 @@ jobs:
           ref: ${{ steps.runtime.outputs.runtime_ref }}
           path: .reviewrouter-runtime
           persist-credentials: false
-
-      - name: Setup Node.js
-        if: ${{ steps.runtime.outputs.can_run == 'true' }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: '24'
 
       - name: Resolve ReviewRouter runtime provider tooling
         id: provider-tooling
@@ -424,6 +448,23 @@ jobs:
           REVIEW_ROUTER_MEMORY_PROTOCOL_VERSION: '1'
           REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT: /api/action/v1/memory
           CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+        run: node .reviewrouter-runtime/dist/index.js
+
+      # Server checkout capability materializes the exact head in isolation.
+      # No PR checkout, auth restoration, rotating prelease or writeback here.
+      - name: Run ReviewRouter T0 account gateway
+        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway' && steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.runtime_config_status == 'applied' && steps.provider-tooling.outputs.account_gateway_needed == 'true' }}
+        shell: bash
+        env:
+          REVIEWROUTER_ACTION_V2_MODE: t0
+          REVIEW_ROUTER_MODE: account-gateway
+          INPUT_API_URL: ${{ inputs.api_url }}
+          INPUT_CONTROL_PLANE_URL: ${{ inputs.control_plane_url }}
+          INPUT_PROVIDER_INSTANCE_ID: ${{ inputs.provider_instance_id }}
+          INPUT_WORKFLOW_SCHEMA_VERSION: ${{ inputs.workflow_schema_version }}
+          INPUT_MAX_CHANGED_LINES: ${{ inputs.max_changed_lines }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.review_head_sha }}
         run: node .reviewrouter-runtime/dist/index.js
 
       - name: Run ReviewRouter T0 hosted pool

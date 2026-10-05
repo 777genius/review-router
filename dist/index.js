@@ -28620,7 +28620,7 @@ async function withRetry(fn, options) {
     const maxAttempts = options.retries + 1;
     const minTimeout = options.minTimeout ?? 500;
     const factor = options.factor ?? 2;
-    let delay2 = minTimeout;
+    let delay3 = minTimeout;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await fn();
@@ -28633,8 +28633,8 @@ async function withRetry(fn, options) {
           `Retryable error: attempt ${attempt} of ${maxAttempts}`,
           err.message
         );
-        await new Promise((resolve5) => setTimeout(resolve5, delay2));
-        delay2 = Math.min(delay2 * factor, options.maxTimeout ?? 4e3);
+        await new Promise((resolve5) => setTimeout(resolve5, delay3));
+        delay3 = Math.min(delay3 * factor, options.maxTimeout ?? 4e3);
       }
     }
   }
@@ -34962,13 +34962,13 @@ var GitHubClient = class {
    * Throttle requests when approaching rate limit
    */
   async throttleIfNeeded() {
-    const delay2 = this.calculateBackoffDelay();
-    if (delay2 > 0) {
+    const delay3 = this.calculateBackoffDelay();
+    if (delay3 > 0) {
       const status = this.rateLimitTracker.getStatus();
       debug(
-        `Throttling GitHub API request (${delay2}ms delay, ${status?.remaining} requests remaining)`
+        `Throttling GitHub API request (${delay3}ms delay, ${status?.remaining} requests remaining)`
       );
-      await new Promise((resolve5) => setTimeout(resolve5, delay2));
+      await new Promise((resolve5) => setTimeout(resolve5, delay3));
     }
   }
   /**
@@ -92513,11 +92513,11 @@ var RunInvestigationTurn = class {
       "review_agent_unclassified_failure"
     );
     const reason = abortReason(failure.failureClass);
-    const delay2 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
+    const delay3 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
       failure.retryAfterMs ?? input.minimumCapacityParkMs,
       input.minimumCapacityParkMs
     );
-    const nextEligibleAt = delay2 === null ? null : new Date(this.dependencies.now().getTime() + delay2).toISOString();
+    const nextEligibleAt = delay3 === null ? null : new Date(this.dependencies.now().getTime() + delay3).toISOString();
     return this.abort(
       input,
       reason,
@@ -93795,10 +93795,14 @@ var RunT0ReviewOrchestration = class {
               exhaustionReason: "deadline_reached" /* DeadlineReached */
             };
           }
-          await this.dependencies.delay.sleep(
-            delayMs,
-            this.dependencies.signal
-          );
+          if (this.dependencies.signal) {
+            await this.dependencies.delay.sleep(
+              delayMs,
+              this.dependencies.signal
+            );
+          } else {
+            await this.dependencies.delay.sleep(delayMs);
+          }
           await this.assertRevisionCurrent(input.revision);
           const joined = await this.trySatisfyFromLookup({
             ...input,
@@ -94082,7 +94086,14 @@ var RunT0ReviewOrchestration = class {
           Math.min(5e3, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        await this.dependencies.delay.sleep(delayMs, this.dependencies.signal);
+        if (this.dependencies.signal) {
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
+        } else {
+          await this.dependencies.delay.sleep(delayMs);
+        }
         continue;
       }
       if (acquire.status !== "acquired" /* Acquired */) {
@@ -94281,6 +94292,8 @@ var RunT0ReviewOrchestration = class {
   }
   async executeInvocationWithRevisionWatch(input) {
     const abort = new AbortController();
+    const monitorStop = new AbortController();
+    const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
     let stopped = false;
     const invocationSignal = this.dependencies.signal ? AbortSignal.any([input.signal, this.dependencies.signal]) : input.signal;
     const relayLeaseAbort = () => abort.abort(invocationSignal.reason);
@@ -94297,7 +94310,7 @@ var RunT0ReviewOrchestration = class {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
           return;
         }
-        await this.dependencies.delay.sleep(delayMs, abort.signal);
+        await this.dependencies.delay.sleep(delayMs, monitorSignal);
         if (stopped || abort.signal.aborted) return;
         if (this.providerOperationRemainingMs() <= 0) {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -94313,7 +94326,9 @@ var RunT0ReviewOrchestration = class {
         }
       }
     };
-    const monitorPromise = monitor().catch((error2) => abort.abort(error2));
+    const monitorPromise = monitor().catch((error2) => {
+      if (!stopped) abort.abort(error2);
+    });
     try {
       const observation = await this.executeLegacyInvocation(
         input,
@@ -94331,7 +94346,7 @@ var RunT0ReviewOrchestration = class {
       throw error2;
     } finally {
       stopped = true;
-      abort.abort();
+      monitorStop.abort();
       await monitorPromise;
       invocationSignal.removeEventListener("abort", relayLeaseAbort);
     }
@@ -94357,6 +94372,8 @@ var RunT0ReviewOrchestration = class {
       }
       this.dependencies.signal?.throwIfAborted();
       const abort = new AbortController();
+      const monitorStop = new AbortController();
+      const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
       const cancel = () => abort.abort(this.dependencies.signal?.reason);
       this.dependencies.signal?.addEventListener("abort", cancel, {
         once: true
@@ -94370,7 +94387,7 @@ var RunT0ReviewOrchestration = class {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
             return;
           }
-          await this.dependencies.delay.sleep(delayMs, abort.signal);
+          await this.dependencies.delay.sleep(delayMs, monitorSignal);
           if (stopped || abort.signal.aborted) return;
           if (this.providerOperationRemainingMs() <= 0) {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -94386,7 +94403,9 @@ var RunT0ReviewOrchestration = class {
           }
         }
       };
-      const monitorPromise = monitor().catch((error2) => abort.abort(error2));
+      const monitorPromise = monitor().catch((error2) => {
+        if (!stopped) abort.abort(error2);
+      });
       try {
         const observation = await recording.execute({
           authorization: input.authorization,
@@ -94410,7 +94429,7 @@ var RunT0ReviewOrchestration = class {
         throw error2;
       } finally {
         stopped = true;
-        abort.abort();
+        monitorStop.abort();
         await monitorPromise;
         this.dependencies.signal?.removeEventListener("abort", cancel);
       }
@@ -101640,6 +101659,7 @@ var import_crypto42 = require("crypto");
 var import_child_process20 = require("child_process");
 var path28 = __toESM(require("path"));
 var import_util14 = require("util");
+var import_promises10 = require("node:timers/promises");
 
 // src/review-investigation/fixtures/review-investigation-capability-v1.golden.json
 var review_investigation_capability_v1_golden_default = {
@@ -114539,22 +114559,13 @@ var ProductionT0ReviewRunner = class {
       expiresAt: input.scmReadTokenExpiresAt,
       refresh: input.refreshScmReadToken
     });
-    const github = new GitHubClient(input.scmReadToken, {
-      tokenProvider: scmReadTokenProvider
+    const github = createScmReadGitHubClient({
+      tokenProvider: scmReadTokenProvider,
+      token: input.scmReadToken,
+      expiresAt: input.scmReadTokenExpiresAt,
+      refresh: input.refreshScmReadToken,
+      signal
     });
-    if (signal) {
-      github.octokit.hook.wrap("request", (request, options) => {
-        signal.throwIfAborted();
-        return request({
-          ...options,
-          request: {
-            ...options.request,
-            signal: AbortSignal.any([signal, AbortSignal.timeout(3e4)]),
-            timeout: 3e4
-          }
-        });
-      });
-    }
     const revisionGuard = new GitHubReviewRevisionGuard(github, {
       workspaceId: authorization.facts.workspaceId,
       repositoryConnectionId: authorization.facts.repositoryConnectionId,
@@ -115109,6 +115120,38 @@ function mapExecutionFailureReason(failureCode2) {
     return "provider_capacity_unavailable" /* ProviderCapacityUnavailable */;
   }
   return failureCode2 ? "execution_failed" /* ExecutionFailed */ : "unknown" /* Unknown */;
+}
+function createScmReadGitHubClient(input) {
+  const { signal, timeoutMs = 3e4 } = input;
+  const github = new GitHubClient(input.token, {
+    tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
+    ...signal ? {
+      sleep: async (ms) => {
+        await (0, import_promises10.setTimeout)(ms, void 0, { signal });
+      }
+    } : {}
+  });
+  if (signal) {
+    github.octokit.hook.wrap("request", (request, options) => {
+      signal.throwIfAborted();
+      const requestSignal = AbortSignal.any([
+        signal,
+        AbortSignal.timeout(timeoutMs)
+      ]);
+      const fetchImpl = options.request?.fetch ?? fetch;
+      options.request = {
+        ...options.request,
+        signal: requestSignal,
+        timeout: timeoutMs,
+        fetch: (url, init) => {
+          requestSignal.throwIfAborted();
+          return fetchImpl(url, { ...init, signal: requestSignal });
+        }
+      };
+      return request(options);
+    });
+  }
+  return github;
 }
 function createScmReadTokenProvider(input) {
   let capability = validateScmReadCapability({

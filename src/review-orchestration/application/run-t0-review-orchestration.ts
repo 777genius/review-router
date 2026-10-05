@@ -1048,10 +1048,14 @@ export class RunT0ReviewOrchestration {
               exhaustionReason: ReviewWorkSlotExhaustionReason.DeadlineReached,
             };
           }
-          await this.dependencies.delay.sleep(
-            delayMs,
-            this.dependencies.signal
-          );
+          if (this.dependencies.signal) {
+            await this.dependencies.delay.sleep(
+              delayMs,
+              this.dependencies.signal
+            );
+          } else {
+            await this.dependencies.delay.sleep(delayMs);
+          }
           await this.assertRevisionCurrent(input.revision);
           const joined = await this.trySatisfyFromLookup({
             ...input,
@@ -1391,7 +1395,14 @@ export class RunT0ReviewOrchestration {
           Math.min(5_000, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        await this.dependencies.delay.sleep(delayMs, this.dependencies.signal);
+        if (this.dependencies.signal) {
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
+        } else {
+          await this.dependencies.delay.sleep(delayMs);
+        }
         continue;
       }
       if (
@@ -1662,6 +1673,9 @@ export class RunT0ReviewOrchestration {
     readonly revision: ReviewRevisionFacts;
   }): Promise<ReviewObservationPayload> {
     const abort = new AbortController();
+    // Joining a stopped monitor must not cancel a completed provider invocation.
+    const monitorStop = new AbortController();
+    const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
     let stopped = false;
     const invocationSignal = this.dependencies.signal
       ? AbortSignal.any([input.signal, this.dependencies.signal])
@@ -1681,7 +1695,7 @@ export class RunT0ReviewOrchestration {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
           return;
         }
-        await this.dependencies.delay.sleep(delayMs, abort.signal);
+        await this.dependencies.delay.sleep(delayMs, monitorSignal);
         if (stopped || abort.signal.aborted) return;
         if (this.providerOperationRemainingMs() <= 0) {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -1701,7 +1715,9 @@ export class RunT0ReviewOrchestration {
         }
       }
     };
-    const monitorPromise = monitor().catch((error) => abort.abort(error));
+    const monitorPromise = monitor().catch((error) => {
+      if (!stopped) abort.abort(error);
+    });
     try {
       const observation = await this.executeLegacyInvocation(
         input,
@@ -1726,7 +1742,7 @@ export class RunT0ReviewOrchestration {
       throw error;
     } finally {
       stopped = true;
-      abort.abort();
+      monitorStop.abort();
       await monitorPromise;
       invocationSignal.removeEventListener('abort', relayLeaseAbort);
     }
@@ -1771,6 +1787,8 @@ export class RunT0ReviewOrchestration {
 
       this.dependencies.signal?.throwIfAborted();
       const abort = new AbortController();
+      const monitorStop = new AbortController();
+      const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
       const cancel = () => abort.abort(this.dependencies.signal?.reason);
       this.dependencies.signal?.addEventListener('abort', cancel, {
         once: true,
@@ -1784,7 +1802,7 @@ export class RunT0ReviewOrchestration {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
             return;
           }
-          await this.dependencies.delay.sleep(delayMs, abort.signal);
+          await this.dependencies.delay.sleep(delayMs, monitorSignal);
           if (stopped || abort.signal.aborted) return;
           if (this.providerOperationRemainingMs() <= 0) {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -1803,7 +1821,9 @@ export class RunT0ReviewOrchestration {
           }
         }
       };
-      const monitorPromise = monitor().catch((error) => abort.abort(error));
+      const monitorPromise = monitor().catch((error) => {
+        if (!stopped) abort.abort(error);
+      });
       try {
         const observation = await recording.execute({
           authorization: input.authorization,
@@ -1833,7 +1853,7 @@ export class RunT0ReviewOrchestration {
         throw error;
       } finally {
         stopped = true;
-        abort.abort();
+        monitorStop.abort();
         await monitorPromise;
         this.dependencies.signal?.removeEventListener('abort', cancel);
       }

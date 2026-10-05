@@ -8,6 +8,7 @@ Observed relay SHA256: `7d267013ab276efafe48962fc40839ca472f65c52e8a02be9578eb20
 Git identity/status could not be independently inspected: the linked `.git` target is unavailable in this sandbox. No git mutations.
 
 Changed paths (only manifest-owned paths):
+
 - `src/providers/codex.ts`
 - `src/codex-oauth/action.ts`
 - `src/codex-oauth/runtime.ts`
@@ -37,6 +38,7 @@ Close/readback use the adapter's renewed current token. Unknown/404/error never 
 SIGINT/SIGTERM deny further inference and abort held streams. Existing execution/lease/revision orchestration remains authoritative.
 
 Required backend companion (not present in frozen relay/preparation; legacy checkout requires rotating leaseId):
+
 - Add exactly `POST /api/action/v2/account-gateway/checkout`, JSON `{}`, Bearer = current ReviewActionV2 run token.
 - Request/response types: AccountGatewayCheckoutRequest / AccountGatewayCheckoutCapability in account-gateway-runtime.ts.
 - 200 response: `{protocolVersion:1, repository, headSha, token, expiresAt, permissions:{contents:"read",pullRequests:"read"}}`.
@@ -45,8 +47,8 @@ Required backend companion (not present in frozen relay/preparation; legacy chec
 - Do not trust caller job headers, repository/head/account fields or fabricated expiry. The request has no such fields.
 - Refresh uses this same route and current renewed token. Client requires exact repository/head, read-only permissions and >30 seconds remaining validity.
 - Route absence/invalid response is terminal failure and attempted gateway close; never rotating-pool fallback.
-Primary must separately select this entry in generated/reusable workflows and supply the server's gateway configuration through existing runtime-config composition.
-Workflow/release/generated/backend files are outside this packet's ownership.
+  Primary must separately select this entry in generated/reusable workflows and supply the server's gateway configuration through existing runtime-config composition.
+  Workflow/release/generated/backend files are outside this packet's ownership.
 
 Codex pin inspected: `@openai/codex@0.147.0`, upstream tag commit `be6e8eac029b183056b7e4402879f15d2c85f61b`.
 [Provider fields](https://github.com/openai/codex/blob/be6e8eac029b183056b7e4402879f15d2c85f61b/codex-rs/model-provider-info/src/lib.rs), [HTTP retry loop](https://github.com/openai/codex/blob/be6e8eac029b183056b7e4402879f15d2c85f61b/codex-rs/codex-client/src/retry.rs), [stream retry handling](https://github.com/openai/codex/blob/be6e8eac029b183056b7e4402879f15d2c85f61b/codex-rs/core/src/responses_retry.rs).
@@ -72,6 +74,7 @@ Primary qualifies these on explicitly disposable GitHub fixtures; H sharing is d
 No product E2E, release, approval, deployment, paid-provider or independent-review acceptance is claimed. Primary identity applies/commits and arranges separate 6.1/xhigh review.
 
 ## Primary source-only export correction
+
 The runtime whole-blob guard rejected legacy public synthetic redaction fixtures in the preimage of the existing provider unit file (base Git blob801b17ee30593071c231e5de7595b8af6b738584, independently equal to GitHub tree00578). Runtime also flagged newly added static loopback capability literals. No real credential files were supplied or read.
 The unqualified worker changes in both unit files are retained privately on the host with exact SHA256 and excluded from this source-only candidate. Existing committed unit files remain byte-for-byte unchanged. This candidate must still pass the normal whole-blob export guard, meaningful types/build and independent source review.
 No unit-result or full E2E acceptance is claimed. The same observable gateway behaviors remain required at the actual process/HTTP/provider/App boundary. Production source scope and full contract53 are unchanged.
@@ -84,23 +87,22 @@ Pinned Node24.21 / TypeScript5.9.3: meaningful full project typecheck exit0, Act
 
 Backend checkout integration, real process/HTTP refusal and keylessness checks, real MiMo tools/nonempty final/parser/same-head App publication, cancellation and memory/long-run gates remain NOT_RUN. No full product E2E, readiness or release claim.
 
-
 ## P62 finite P58 P1/P2 source correction — 2026-10-04
 
 Supplied paired Action source: `2891a89279db580477c7f4325544838db6df2a2a` (exact289), following supplied original base `00578a65ab90563a3f4e35ae2366494eb1f757f9`. All nine initial owned-path SHA256 values matched the immutable `.spike-inputs/manifest.json`; exact commit/ancestry remains primary-supplied because linked gitdir inspection failed. Existing outside edits were not reverted. Contract53 remains the sole full normative authority, unchanged SHA256 `66a2393e7a55f76df1a78281af44379d0b455a0770d82f34e587dcca284157b0`. The frozen P58 report remains byte-for-byte unchanged, SHA256 `7fe2167d9da059c4d79f46d986625690cde9b8613365bf8269f7c9e0c2f2ee8d`; its original disposition is **CHANGES_REQUIRED**. This candidate addresses its two findings; primary qualification and independent review remain outstanding.
 
 Actual scope: eight existing TypeScript source paths, **400 additions + 100 deletions = 500 source A+D**, plus this existing handoff. All nine changed paths belong to the immutable ownership manifest. No SDK/kernel/backend/UI/workflow/generated bundle, provider implementation, existing test, test hook, corpus or coverage changes. Account-v, noFAST. No source work beyond P58 P1/P2 is requested by this packet.
 
-| Source path | A | D |
-| --- | ---: | ---: |
-| `src/codex-oauth/account-gateway-runtime.ts` | 75 | 28 |
-| `src/codex-oauth/runtime.ts` | 1 | 0 |
-| `src/codex-oauth/action.ts` | 81 | 21 |
-| `src/codex-oauth/safe-checkout.ts` | 59 | 13 |
-| `src/codex-oauth/codex-cli.ts` | 62 | 22 |
-| `src/review-orchestration/infrastructure/production-t0-review-runner.ts` | 43 | 6 |
-| `src/review-orchestration/application/run-t0-review-orchestration.ts` | 39 | 7 |
-| `src/review-orchestration/infrastructure/account-gateway-model-transport.ts` | 40 | 3 |
+| Source path                                                                  |   A |   D |
+| ---------------------------------------------------------------------------- | --: | --: |
+| `src/codex-oauth/account-gateway-runtime.ts`                                 |  75 |  28 |
+| `src/codex-oauth/runtime.ts`                                                 |   1 |   0 |
+| `src/codex-oauth/action.ts`                                                  |  81 |  21 |
+| `src/codex-oauth/safe-checkout.ts`                                           |  59 |  13 |
+| `src/codex-oauth/codex-cli.ts`                                               |  62 |  22 |
+| `src/review-orchestration/infrastructure/production-t0-review-runner.ts`     |  43 |   6 |
+| `src/review-orchestration/application/run-t0-review-orchestration.ts`        |  39 |   7 |
+| `src/review-orchestration/infrastructure/account-gateway-model-transport.ts` |  40 |   3 |
 
 P1 composition: one run AbortController receives SIGINT/SIGTERM throughout runtime and cleanup. Its signal travels in the existing gateway runner input into T0 dependencies and the existing lease/invocation signal; CodexProvider's existing prepared execution cancellation and investigation recording/app-server cancellation are reused. Cancellation denies inference immediately. Normal OIDC/config/control HTTP attempts, including existing retries, receive native composed AbortSignals and a 30,000 ms deadline. Normal authorization/lease renewal, finalization, App publication and publication polling are stopped at cancellation boundaries. A lease-supervisor failure drains its invocation promise before resource cleanup proceeds. The runner and runtime check cancellation after awaited work, including after the last model response; cancellation bypasses normal terminal completion. Completed status uses the cancellable grant channel and terminal checks. Queued normal/complete CI progress snapshots check the same run signal when their publisher starts. Cancellation terminal reporting uses a separate bounded grant channel and the existing saved OIDC snapshot; it never fabricates pull-request closure.
 
@@ -154,9 +156,9 @@ All commands used cwd /srv/workers/jobs/review-router/mimo-openrouter-v1/repos/g
 Runtime prefix below: /opt/nodejs/node-v24.21.0-linux-x64/bin/node (Node 24.21.0).
 Executed npm run typecheck: launcher exit 127, npm absent. No installation attempted.
 Executed node node_modules/typescript/bin/tsc --noEmit: launcher exit 1, MODULE_NOT_FOUND; meaningful contract typecheck NOT_RUN.
-Executed node node_modules/jest/bin/jest.js --runInBand __tests__/integration/account-gateway-lifecycle.test.ts: launcher exit 1, MODULE_NOT_FOUND; actual regressions NOT_RUN.
+Executed node node_modules/jest/bin/jest.js --runInBand **tests**/integration/account-gateway-lifecycle.test.ts: launcher exit 1, MODULE_NOT_FOUND; actual regressions NOT_RUN.
 Executed node node_modules/prettier/bin/prettier.cjs --check [the seven changed source paths plus the test]: launcher exit 1, MODULE_NOT_FOUND; format NOT_RUN.
-Executed node node_modules/esbuild/bin/esbuild src/main.ts --bundle --platform=node --target=node24 --external:tree-sitter --external:tree-sitter-* --outfile=/tmp/p70-lifecycle-fix-artifacts/main.cjs: launcher exit 1, MODULE_NOT_FOUND; build NOT_RUN.
+Executed node node_modules/esbuild/bin/esbuild src/main.ts --bundle --platform=node --target=node24 --external:tree-sitter --external:tree-sitter-\* --outfile=/tmp/p70-lifecycle-fix-artifacts/main.cjs: launcher exit 1, MODULE_NOT_FOUND; build NOT_RUN.
 Full exact command arrays, initial/current hashes and scope counts are retained in p70-lifecycle-fix-receipt.json beside the raw guarded patch.
 Source SHA256 src/main.ts: 0a97be3b26412646cf0fa0454650f7890724ab6ce1f54cce1bbdcc72f4b6f66d
 Source SHA256 src/providers/codex.ts: 74d74f162e1e6712ad33bf029fb85848be9fe0034cba7d910c77f96e45dcff24
@@ -184,3 +186,52 @@ process, and native DOMException assertions use their stable names. Initial
 failures retained. Source and committed runtime rebuilt together. Independent
 current source review pending; no actual provider/App/full workflow or complete
 orchestration lease/materializer/monitor lifecycle qualification is claimed.
+
+P76 bounded SCM cancellation / CI remediation — 2026-10-05
+Supplied Action source: 2c624b06a63fed7137bbf46e527b47a9525e14ac; observed commit/ancestry unavailable because the linked gitdir is absent.
+Read frozen P75 CHANGES_REQUIRED, SHA256 420ed08810c4d9ba6152112ba12de5d567851ae04c0605670b07d185313ab9c3.
+Read full Contract53; unchanged SHA256 66a2393e7a55f76df1a78281af44379d0b455a0770d82f34e587dcca284157b0; both manifest input hashes MATCH.
+Ownership: production-t0-review-runner.ts, run-t0-review-orchestration.ts, its existing unit test, existing account-gateway-lifecycle.test.ts, this append.
+No outside source, workflow/main/publication factory, SDK/kernel/engine/dependency/generated changes or other-worker reverts.
+P75 P1 risk: bound inner token/retry hook loses cloned options, leaving joined monitors waiting on uncancellable SCM HTTP and retry sleep.
+Minimal SCM composition seam createScmReadGitHubClient is used by the actual runner, retaining createScmReadTokenProvider and 401 refresh.
+Gateway hook mutates original request options and passes that SAME object; actual fetch gets run cancellation plus a 30,000 ms deadline.
+Gateway retry delay uses native signal-aware sleep. Unsignalled clients retain their existing token hook, default transport and retry sleep.
+Both revision monitors use dedicated monitor-stop signals composed with actual invocation cancellation; finally wakes and joins only the monitor.
+Run/lease, closure, applicable supersession and deadline still abort providers; confined supersession still drains and commits historical-only evidence.
+CI 37291815118 diagnosis uses the supplied three failures; gh is absent, so no independent CI retrieval is claimed.
+Held unit delay now observes AbortSignal and removes its listener on settlement; the existing lease/supersession assertions remain unchanged.
+Confined invocation signal must still be unaborted; existing successful shadow-investigation case also checks both provider signals remain unaborted.
+Busy lease sleeps retain their one-argument default call; gateway calls retain their cancellation argument. No longer Jest timeout or weakened assertions.
+Nearest real SCM probes added only to existing lifecycle test: 401 refresh then held localhost pull read, abort after HTTP entry, independent configured 500 ms deadline.
+Both must reject within 2,000 ms WITHOUT ending the held response. Server is disconnected only in finally, which also joins the request promise.
+One adjacent real 503/retry-after=10 s probe requires abort to interrupt retry delay within 2,000 ms and prevents a third HTTP entry.
+Expected old2c RED / fixed GREEN remain NOT_RUN here. Old transport comparison must retain the token-provider inner hook and exact old cloned hook/default sleep.
+For old2c hosting, mechanically extract that unchanged construction into the same SCM seam; import/typecheck failure does not count as behavioral RED.
+Primary must execute RED/GREEN on disposable hosting and retain initial failures; the existing publication-client transport probe does not qualify SCM.
+Executed pinned Node24.21 syntax checks on all four changed TS paths: exit 0, syntax only; meaningful contract typechecking is NOT_RUN.
+Attempted node node_modules/typescript/bin/tsc --noEmit: launcher exit 1, MODULE_NOT_FOUND; no compiler/project dependency types available.
+Attempted node node_modules/jest/bin/jest.js --runInBand **tests**/unit/review-orchestration/run-t0-review-orchestration.test.ts **tests**/integration/account-gateway-lifecycle.test.ts **tests**/unit/review-orchestration/production-t0-review-runner.test.ts: launcher exit 1, MODULE_NOT_FOUND.
+Attempted pinned node node_modules/prettier/bin/prettier.cjs --check [four TS paths]: launcher exit 1, MODULE_NOT_FOUND.
+Attempted pinned node node_modules/esbuild/bin/esbuild src/main.ts --bundle --platform=node --target=node24 --external:tree-sitter --external:tree-sitter-\* --outfile=[artifact root]/main.cjs: launcher exit 1, MODULE_NOT_FOUND.
+Exact commands/results, supplied identity, observed preimage/final hashes and scope guard are retained in the artifact receipt; no installations attempted.
+Writer Git lock preflight attempted exclusive index.lock creation once: unavailable, linked gitdir absent; no read-only Git retries or git add/commit/push.
+Raw patch and receipt: /srv/worker-state/jobs/review-router/mimo-openrouter-v1/gateway-action-v/jobs/review-router-mimo-openrouter-v1-v-p76-scm-cancel-fix/tmp/agent/p76-scm-cancel-fix-artifacts/{p76-scm-cancel-fix.patch,p76-scm-cancel-fix-receipt.json}.
+Scope/preimage/input guard and reverse patch dry-run are local artifact checks, not the primary whole-blob export guard or behavioral acceptance.
+Required primary gates: pinned full types, nearest suites, full CI, build/format, guarded export, separate exact-source gpt-6.1-sol/xhigh/default review; account-v, NO FAST.
+In-flight revision reads still join their actual HTTP settlement; up to the configured transport bound is possible. Total lease/resource cleanup SLO is not qualified.
+No provider/App/agent/runtime/smoke/credential/GitHub/deployment actions, release or readiness claim. SaaS/server-entry ownership remains separate.
+Full D-min/D-final/S/E/F/G remain required; H deferred. Workspace changes remain for Project Integration apply/commit/push.
+
+
+Primary qualification, 2026-10-05: pinned full TypeScript, build and genuine
+release metadata check PASS. Both nearest suites PASS 84 tests, zero skips,
+including nine actual lifecycle cases. Three SCM probes RED with exact2c SCM
+constructor/cloned-hook/default-sleep semantics extracted into the current seam;
+GREEN after correction. This is not a full old2c checkout comparison.
+Initial full types caught a missing shared scmReadTokenProvider reference after
+factory extraction; primary restores one shared provider for SCM and Git reads.
+Initial failed receipt retained. Successful/confined invocation cancellation is
+separate from monitor-stop; existing historical and lease assertions retained.
+No actual provider/App workflow or total cleanup SLO acceptance claimed.
+Independent current-source review and full CI remain required.

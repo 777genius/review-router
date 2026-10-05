@@ -607,7 +607,14 @@ describe('RunT0ReviewOrchestration', () => {
 
     expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
     expect(fixture.investigationRecording?.execute).toHaveBeenCalledTimes(1);
+    expect(
+      fixture.investigationRecording?.execute.mock.calls[0][0].signal.aborted
+    ).toBe(false);
     expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(
+      jest.mocked(fixture.dependencies.invocations.execute).mock.calls[0][0]
+        .signal.aborted
+    ).toBe(false);
     expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledWith(
       expect.objectContaining({
         observation: expect.objectContaining({
@@ -1444,9 +1451,18 @@ describe('RunT0ReviewOrchestration', () => {
 
   it('releases the lease and supersedes when revision moves after provider execution', async () => {
     const fixture = createFixture();
-    jest
-      .mocked(fixture.dependencies.delay.sleep)
-      .mockImplementation(() => new Promise<void>(() => undefined));
+    jest.mocked(fixture.dependencies.delay.sleep).mockImplementation(
+      (_delayMs, signal) =>
+        new Promise<void>((resolve) => {
+          if (!signal) throw new Error('held_revision_sleep_requires_signal');
+          const finish = () => {
+            signal.removeEventListener('abort', finish);
+            resolve();
+          };
+          signal.addEventListener('abort', finish, { once: true });
+          if (signal.aborted) finish();
+        })
+    );
     const revisionGuard = jest.mocked(
       fixture.dependencies.revisionGuard.loadCurrentRevision
     );

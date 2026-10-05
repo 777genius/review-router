@@ -10,6 +10,7 @@ import * as os from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { buildSync } from 'esbuild';
 import { GitHubClient } from '../../src/github/client';
+import { createScmReadGitHubClient } from '../../src/review-orchestration/infrastructure/production-t0-review-runner';
 import {
   CiReviewProgressPublisher,
   CiOrchestrationProgressReporter,
@@ -83,6 +84,107 @@ if (process.argv[2] === '--source-main') {
   };
 
   describe('account gateway lifecycle at HTTP and owned process boundaries', () => {
+    test.each(['abort', 'deadline', 'retry sleep'] as const)(
+      'runner SCM token-provider transport rejects boundedly on %s',
+      async (scenario) => {
+        const initialToken = `nonsecret-fixture-${randomUUID()}`;
+        const refreshedToken = `nonsecret-fixture-${randomUUID()}`;
+        const authorizations: string[] = [];
+        const held: ServerResponse[] = [];
+        const server = createServer((req, res) => {
+          authorizations.push(String(req.headers.authorization));
+          res.setHeader('content-type', 'application/json');
+          if (authorizations.length === 1) {
+            res.statusCode = 401;
+            res.end(JSON.stringify({ message: 'fixture refresh required' }));
+          } else if (scenario === 'retry sleep') {
+            res.statusCode = 503;
+            res.setHeader('retry-after', '10');
+            res.end(
+              JSON.stringify({ message: 'fixture temporarily unavailable' })
+            );
+          } else {
+            // No response bytes or release: settlement must come from the client.
+            held.push(res);
+          }
+        });
+        await new Promise<void>((resolve) =>
+          server.listen(0, '127.0.0.1', resolve)
+        );
+        const stopped = new AbortController();
+        let pending: Promise<void> | undefined;
+        try {
+          const address = server.address();
+          if (!address || typeof address === 'string')
+            throw new Error('fixture_address');
+          const origin = `http://127.0.0.1:${address.port}`;
+          const expiresAt = new Date(Date.now() + 60_000).toISOString();
+          const refresh = jest.fn(async () => ({
+            token: refreshedToken,
+            expiresAt,
+          }));
+          // Same composition used by runInWorkspace, including its inner token hook.
+          const actual = createScmReadGitHubClient({
+            token: initialToken,
+            expiresAt,
+            refresh,
+            signal: stopped.signal,
+            timeoutMs: scenario === 'deadline' ? 500 : 30_000,
+          });
+          actual.octokit.hook.before('request', (options) => {
+            options.baseUrl = origin;
+            options.url = String(options.url).replace(
+              /^https:\/\/api\.github\.com/,
+              origin
+            );
+          });
+          let settled = false;
+          let observed: unknown;
+          const startedAt = Date.now();
+          pending = actual.octokit.rest.pulls
+            .get({ owner: 'fixture', repo: 'repo', pull_number: 1 })
+            .then(
+              (value) => {
+                observed = value;
+                settled = true;
+              },
+              (error: unknown) => {
+                observed = error;
+                settled = true;
+              }
+            );
+          await until(() => authorizations.length === 2);
+          expect(refresh).toHaveBeenCalledTimes(1);
+          expect(authorizations).toEqual([
+            `Bearer ${initialToken}`,
+            `Bearer ${refreshedToken}`,
+          ]);
+          if (scenario === 'retry sleep') await delay(50);
+          const abortAt = Date.now();
+          if (scenario !== 'deadline') stopped.abort();
+          await until(() => settled);
+          await pending;
+          expect(
+            Date.now() - (scenario === 'deadline' ? startedAt : abortAt)
+          ).toBeLessThan(2_000);
+          expect(observed).toEqual(
+            expect.objectContaining({
+              name: expect.stringMatching(/^(AbortError|TimeoutError)$/),
+            })
+          );
+          expect(stopped.signal.aborted).toBe(scenario !== 'deadline');
+          expect(authorizations).toHaveLength(2);
+          expect(held).toHaveLength(scenario === 'retry sleep' ? 0 : 1);
+          expect(held.every((response) => !response.writableEnded)).toBe(true);
+        } finally {
+          stopped.abort();
+          server.closeAllConnections();
+          await new Promise<void>((resolve) => server.close(() => resolve()));
+          await pending;
+        }
+      }
+    );
+
     test.each(['active completion', 'queued completion'])(
       '%s cannot mutate after abort; cancellation drains',
       async (scenario) => {

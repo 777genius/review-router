@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { execFile, spawn } from 'child_process';
 import * as path from 'path';
 import { promisify } from 'util';
+import { setTimeout as delay } from 'node:timers/promises';
 import * as core from '../../actions/core';
 import { PromptBuilder } from '../../analysis/llm/prompt-builder';
 import { getProviderReviewTotalAttempts } from '../../analysis/llm/retry-policy';
@@ -201,22 +202,13 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       expiresAt: input.scmReadTokenExpiresAt,
       refresh: input.refreshScmReadToken,
     });
-    const github = new GitHubClient(input.scmReadToken, {
+    const github = createScmReadGitHubClient({
       tokenProvider: scmReadTokenProvider,
+      token: input.scmReadToken,
+      expiresAt: input.scmReadTokenExpiresAt,
+      refresh: input.refreshScmReadToken,
+      signal,
     });
-    if (signal) {
-      github.octokit.hook.wrap('request', (request, options) => {
-        signal.throwIfAborted();
-        return request({
-          ...options,
-          request: {
-            ...options.request,
-            signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-            timeout: 30_000,
-          },
-        });
-      });
-    }
     const revisionGuard = new GitHubReviewRevisionGuard(github, {
       workspaceId: authorization.facts.workspaceId,
       repositoryConnectionId: authorization.facts.repositoryConnectionId,
@@ -943,6 +935,53 @@ function mapExecutionFailureReason(
   return failureCode
     ? CodexOAuthV2TerminalReason.ExecutionFailed
     : CodexOAuthV2TerminalReason.Unknown;
+}
+
+// The runner's SCM client keeps capability refresh and gateway transport bounds together.
+export function createScmReadGitHubClient(input: {
+  readonly tokenProvider?: ReturnType<typeof createScmReadTokenProvider>;
+  readonly token: string;
+  readonly expiresAt: string;
+  readonly refresh: Parameters<typeof createScmReadTokenProvider>[0]['refresh'];
+  readonly signal?: AbortSignal;
+  readonly timeoutMs?: number;
+}): GitHubClient {
+  const { signal, timeoutMs = 30_000 } = input;
+  const github = new GitHubClient(input.token, {
+    tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
+    ...(signal
+      ? {
+          sleep: async (ms: number) => {
+            await delay(ms, undefined, { signal });
+          },
+        }
+      : {}),
+  });
+  if (signal) {
+    github.octokit.hook.wrap('request', (request, options) => {
+      signal.throwIfAborted();
+      const requestSignal = AbortSignal.any([
+        signal,
+        AbortSignal.timeout(timeoutMs),
+      ]);
+      const fetchImpl = options.request?.fetch ?? fetch;
+      // Inner Octokit hooks bind this object; a clone loses these controls.
+      options.request = {
+        ...options.request,
+        signal: requestSignal,
+        timeout: timeoutMs,
+        fetch: (
+          url: Parameters<typeof fetch>[0],
+          init?: Parameters<typeof fetch>[1]
+        ) => {
+          requestSignal.throwIfAborted();
+          return fetchImpl(url, { ...init, signal: requestSignal });
+        },
+      };
+      return request(options);
+    });
+  }
+  return github;
 }
 
 export function createScmReadTokenProvider(input: {

@@ -150,6 +150,115 @@ function safeOidcErrorCode(payload) {
   return "unknown_oidc_error";
 }
 
+// src/control-plane/newtest-root-rendezvous.ts
+var import_promises = require("node:timers/promises");
+var WAIT_MS = 12e4;
+var ATTEMPTS = 24;
+var CONNECTION_CODES = /* @__PURE__ */ new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ETIMEDOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_SOCKET",
+  "UND_ERR_HEADERS_TIMEOUT"
+]);
+async function withNewtestAbort(operation, signal) {
+  if (signal.aborted) {
+    void operation.catch(() => void 0);
+    throw new Error("newtest_readiness_timeout");
+  }
+  let abort;
+  const interrupted = new Promise((_, reject) => {
+    abort = () => reject(new Error("newtest_readiness_timeout"));
+    signal.addEventListener("abort", abort, { once: true });
+  });
+  try {
+    return await Promise.race([operation, interrupted]);
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+}
+function connectionFailure(error2, signal) {
+  if (!(error2 instanceof Error)) return false;
+  const cause = error2.cause;
+  const code = cause && typeof cause === "object" && "code" in cause ? cause.code : void 0;
+  if (typeof code === "string") return CONNECTION_CODES.has(code);
+  return signal.aborted && (error2.message === "newtest_readiness_timeout" || error2.name === "AbortError" || error2.name === "TimeoutError");
+}
+async function waitForNewtestRootChallenge(input) {
+  if (!/^[1-9][0-9]*$/.test(input.runId))
+    throw new Error("newtest_readiness_identity_rejected");
+  const url = new URL("https://api.reviewrouter.site/__newtest_v4/challenge");
+  url.searchParams.set("runId", input.runId);
+  const clock = input.monotonicNow ?? (() => performance.now());
+  const sleep = input.wait ?? ((ms, signal) => (0, import_promises.setTimeout)(ms, void 0, { signal }));
+  const started = clock();
+  let last = started;
+  const remaining = () => {
+    const current = clock();
+    if (!Number.isFinite(current) || !Number.isFinite(started) || current < last)
+      throw new Error("newtest_readiness_clock_rejected");
+    last = current;
+    return WAIT_MS - (current - started);
+  };
+  const total = new AbortController();
+  const totalTimer = setTimeout(() => total.abort(), WAIT_MS);
+  try {
+    for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+      const left = remaining();
+      if (total.signal.aborted || left <= 0) break;
+      const request = new AbortController();
+      const abort = () => request.abort();
+      total.signal.addEventListener("abort", abort, { once: true });
+      const timer = setTimeout(abort, Math.min(1e4, left));
+      let response;
+      try {
+        try {
+          const fetched = input.fetch(url, {
+            method: "GET",
+            redirect: "error",
+            signal: request.signal
+          }).then((value) => {
+            if (request.signal.aborted)
+              void value.body?.cancel().catch(() => void 0);
+            return value;
+          });
+          response = await withNewtestAbort(fetched, request.signal);
+        } catch (error2) {
+          if (total.signal.aborted || !connectionFailure(error2, request.signal))
+            throw error2;
+        }
+        if (response?.status === 200) {
+          return await withNewtestAbort(
+            input.read(response, request.signal),
+            request.signal
+          );
+        }
+        void response?.body?.cancel().catch(() => void 0);
+        if (response && response.status !== 502 && response.status !== 503)
+          throw new Error("newtest_root_response_rejected");
+      } finally {
+        clearTimeout(timer);
+        total.signal.removeEventListener("abort", abort);
+        request.abort();
+      }
+      if (!total.signal.aborted && attempt + 1 < ATTEMPTS) {
+        const left2 = remaining();
+        if (left2 > 0)
+          await withNewtestAbort(
+            sleep(Math.min(5e3, left2), total.signal),
+            total.signal
+          );
+      }
+    }
+    throw new Error("newtest_readiness_timeout");
+  } finally {
+    clearTimeout(totalTimer);
+  }
+}
+
 // src/control-plane/newtest-one-shot-job-transport.ts
 var ROOT = "https://api.reviewrouter.site/__newtest_v4/";
 var TEST_REPOSITORY = "777genius/reviewrouter-e2e-prod-20260529-000305";
@@ -160,7 +269,7 @@ function validateNewtestJobIdentity(identity) {
   if (identity.repository !== TEST_REPOSITORY || identity.repositoryId !== TEST_REPOSITORY_ID || identity.headRepository !== TEST_REPOSITORY || identity.eventName !== "pull_request" || identity.runAttempt !== "1" || !/^[1-9][0-9]*$/.test(identity.runId) || !/^[1-9][0-9]*$/.test(identity.pullRequestNumber) || !SHA.test(identity.headSha) || identity.workflowRepository !== "777genius/review-router" || !SHA.test(identity.workflowSha))
     throw new Error("newtest_job_identity_rejected");
 }
-async function boundedJson(response) {
+async function boundedJson(response, signal) {
   if (response.status !== 200 || !response.body)
     throw new Error("newtest_root_response_rejected");
   const reader = response.body.getReader();
@@ -168,7 +277,7 @@ async function boundedJson(response) {
   let length = 0;
   try {
     for (; ; ) {
-      const chunk = await reader.read();
+      const chunk = await (signal ? withNewtestAbort(reader.read(), signal) : reader.read());
       if (chunk.done) break;
       length += chunk.value.length;
       if (length > 4096) throw new Error("newtest_root_response_oversized");
@@ -176,7 +285,7 @@ async function boundedJson(response) {
     }
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } finally {
-    await reader.cancel().catch(() => void 0);
+    void reader.cancel().catch(() => void 0);
     reader.releaseLock();
   }
 }
@@ -196,16 +305,13 @@ function createNewtestJobTransport(input) {
     async runOnce() {
       if (consumed) throw new Error("newtest_job_already_consumed");
       consumed = true;
-      const challengeUrl = new URL("challenge", ROOT);
-      challengeUrl.searchParams.set("runId", identity.runId);
       const challenge = record(
-        await boundedJson(
-          await fetchImpl(challengeUrl, {
-            method: "GET",
-            redirect: "error",
-            signal: AbortSignal.timeout(1e4)
-          })
-        )
+        await waitForNewtestRootChallenge({
+          runId: identity.runId,
+          fetch: fetchImpl,
+          read: boundedJson,
+          ...input.readiness
+        })
       );
       if (challenge.schema !== "newtest-v4-root-challenge-v1" || challenge.repositoryId !== TEST_REPOSITORY_ID || challenge.runId !== identity.runId || challenge.sourceSha !== identity.workflowSha || challenge.headSha !== identity.headSha || typeof challenge.nonce !== "string" || !HASH.test(challenge.nonce) || typeof challenge.expiresAt !== "number" || challenge.expiresAt <= now() || challenge.expiresAt > now() + 3e5)
         throw new Error("newtest_root_challenge_rejected");

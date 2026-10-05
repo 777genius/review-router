@@ -12,6 +12,7 @@ import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
 import { CODEX_CONFINEMENT_DISABLED_FEATURES } from './codex-confinement-policy';
 import { prepareCodexCliBeforeAuthRead } from '../codex-oauth/codex-cli';
+import { prepareAccountGatewayModelCatalog } from '../codex-oauth/account-gateway-mimo-catalog';
 import {
   ACCOUNT_GATEWAY_BOUNDS,
   LOCAL_MODEL_CAPABILITY_ENV,
@@ -150,6 +151,7 @@ type CodexFrozenCliConfig = {
   readonly modelProvider: CodexProviderOptions['modelProvider'];
   readonly forkSandbox: boolean;
   readonly reasoningEffort?: string;
+  readonly modelCatalogSetting?: string;
 };
 
 const CODEX_OUTPUT_FILE_PLACEHOLDER = '{reviewrouter_output_file}';
@@ -405,11 +407,20 @@ export class CodexProvider extends Provider {
       !this.options.accountGateway &&
       this.shouldUseForkSandboxCodexHomeConfig();
     const reasoningEffort = this.resolveReasoningEffort(false);
+    const gateway = this.options.accountGateway;
+    const modelCatalogSetting = gateway
+      ? await prepareAccountGatewayModelCatalog(
+          this.model,
+          gateway.environment.CODEX_HOME,
+          gateway.configuration
+        )
+      : undefined;
     const frozenCliConfig: CodexFrozenCliConfig = {
       model: this.model,
       modelProvider: this.options.modelProvider,
       forkSandbox,
       reasoningEffort,
+      modelCatalogSetting,
     };
     const fullEnvironment = {
       ...this.buildSafeEnv(true, frozenCliConfig),
@@ -768,6 +779,8 @@ export class CodexProvider extends Provider {
     if (this.options.accountGateway) {
       for (const setting of this.options.accountGateway.configuration)
         args.push('-c', setting);
+      if (config.modelCatalogSetting)
+        args.push('-c', config.modelCatalogSetting);
     }
 
     args.push('-');
@@ -1106,6 +1119,10 @@ export class CodexProvider extends Provider {
     const replacements = [
       ...(this.options.accountGateway
         ? [
+            [
+              request.environment.CODEX_HOME ?? '',
+              '<codex-home>',
+            ] as const,
             [
               this.options.accountGateway.baseUrl,
               '<account-gateway-loopback>',

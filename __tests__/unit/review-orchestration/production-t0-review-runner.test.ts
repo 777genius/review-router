@@ -1,4 +1,22 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { ConfigLoader } from '../../../src/config/loader';
+import { DEFAULT_CONFIG } from '../../../src/config/defaults';
+import { ReviewActionV2Client } from '../../../src/control-plane/review-action-v2-client';
+import { applyControlPlaneRuntimeConfig } from '../../../src/control-plane/runtime-config';
+import { GitHubActionsOidcTokenProvider } from '../../../src/codex-oauth/github-actions-oidc';
+import { ReviewActionV2ControlPlaneAdapter } from '../../../src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
+import { CodexProvider } from '../../../src/providers/codex';
+import { NodeCodexAppServerTurnRunner } from '../../../src/review-investigation/infrastructure/codex-app-server-turn-runner';
 import {
+  REVIEW_INVESTIGATION_GATEWAY_TOOLS,
+  ReviewAgentExecutionSessionKind,
+  type ReviewTurnRequest,
+} from '../../../src/review-investigation/application/review-agent-port';
+import {
+  createConfiguredProductionInvestigationAgents,
+  ProductionT0ReviewRunner,
   LegacyFallbackBeforeInvestigationAuthorityControlPlane,
   createScmReadTokenProvider,
   mapOrchestrationResultToCodexOutcome,
@@ -67,6 +85,239 @@ describe('ProductionT0ReviewRunner policy', () => {
   afterEach(() => {
     jest.useRealTimers();
   });
+
+  it.each([
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'high'],
+    ['mimo-v2.6-pro', 'gpt-caller', true, undefined],
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'medium'],
+    ['gpt-selected', 'mimo-v2.6-pro', false, undefined],
+    ['gpt-selected', 'mimo-v2.6-pro', false, 'high'],
+  ] as const)(
+    'pins AppServer catalog and effort from selected %s independently of caller %s (gateway %s, effort %s)',
+    async (selectedModel, callerModel, enabled, reasoningEffort) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mimo-appserver-test-'));
+      const home = path.join(root, 'fresh-home');
+      fs.mkdirSync(home);
+      fs.mkdirSync(path.join(root, '.codex'));
+      const callerConfig = 'model_catalog_json="/caller/untrusted.json"\n';
+      fs.writeFileSync(path.join(root, '.codex/config.toml'), callerConfig);
+      const stoppedAtBoundary = new Error('mock subprocess boundary');
+      const previousEnv = { ...process.env };
+      process.env.CODEX_REASONING_EFFORT = 'xhigh';
+      const execute = jest
+        .spyOn(NodeCodexAppServerTurnRunner.prototype, 'executeTurn')
+        .mockRejectedValue(stoppedAtBoundary);
+      try {
+        const configuration = ['model_provider="reviewrouter_account_gateway"'];
+        const runtimeResult = await applyControlPlaneRuntimeConfig({
+          env: {
+            REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+            REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+            REVIEWROUTER_API_URL: 'https://fixture.invalid',
+            CODEX_REASONING_EFFORT: 'xhigh',
+          },
+          oidc: { requestToken: async () => 'fixture-oidc' },
+          fetchImpl: jest.fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+            .mockResolvedValueOnce(new Response(JSON.stringify({ sessionToken: 'fixture-session' })))
+            .mockResolvedValueOnce(new Response(JSON.stringify({
+              protocolVersion: 1,
+              configVersion: 7,
+              runtimeEnv: reasoningEffort === undefined ? {} : { CODEX_REASONING_EFFORT: reasoningEffort },
+            }))),
+        });
+        if (runtimeResult.status !== 'applied') throw new Error('expected applied runtime config');
+        if (runtimeResult.reasoningEffort !== undefined && runtimeResult.reasoningEffort !== 'high' && runtimeResult.reasoningEffort !== 'medium') {
+          throw new Error('unexpected fixture effort');
+        }
+        const agents = createConfiguredProductionInvestigationAgents({
+          codexModel: selectedModel,
+          reasoningEffort: runtimeResult.reasoningEffort,
+          codexBinaryPath: '/mock/codex',
+          modelTransport: {
+            baseUrl: 'http://127.0.0.1:1/v1',
+            configuration,
+            environment: {
+              CODEX_HOME: home,
+              REVIEWROUTER_LOCAL_MODEL_TOKEN: 'fixture-capability',
+            },
+            actualModel: () => selectedModel,
+            dispose: async () => {},
+          },
+          executionSessions: {
+            resolve: () => ({
+              policyVersion: 'context-gateway-v4',
+              binaryHash: 'a'.repeat(64),
+              command: process.execPath,
+              args: [path.join(root, 'mock-context-gateway.cjs')],
+              cwd: root,
+              enabledTools: REVIEW_INVESTIGATION_GATEWAY_TOOLS,
+              runtimeEnvironment: {
+                REVIEWROUTER_CONTEXT_SESSION_ID: 'session-fixture',
+              },
+              credentialEnvironment: {
+                REVIEWROUTER_CONTEXT_GATEWAY_SECRET: 'fixture-gateway',
+              },
+            }),
+          },
+        });
+        const request: ReviewTurnRequest = {
+          invocationId: 'invocation-fixture',
+          fencingToken: 'fence-fixture',
+          turnId: 'turn-fixture',
+          dossierVersion: 1,
+          dossierDigest: 'b'.repeat(64),
+          purpose: ReviewTurnPurpose.Discovery,
+          allowedObligationIds: ['c'.repeat(64)],
+          prompt: 'Review fixture',
+          workspaceRoot: root,
+          requestedModel: callerModel,
+          timeoutMs: 1_000,
+          maxTurns: 1,
+          executionSession: { kind: ReviewAgentExecutionSessionKind.ContextGatewayV4 },
+        };
+        // Real adapter/session/config preparation, stopped before any subprocess.
+        await expect(agents[0].agent.executeTurn(request)).rejects.toBe(stoppedAtBoundary);
+        await expect(agents[0].agent.executeTurn(request)).rejects.toBe(stoppedAtBoundary);
+        expect(execute).toHaveBeenCalledTimes(2);
+        const launch = execute.mock.calls[0][0];
+        expect(launch.protocol.reasoningEffort).toBe(enabled ? (reasoningEffort ?? 'high') : 'xhigh');
+        expect(launch.environment.CODEX_HOME).toBe(home);
+        expect(launch.environment.REVIEWROUTER_LOCAL_MODEL_TOKEN).toBe('fixture-capability');
+        expect(launch.args).toContain('app-server');
+        expect(launch.args).toContain(configuration[0]);
+        const catalogSettings = launch.args.filter((arg) => arg.startsWith('model_catalog_json='));
+        if (enabled) {
+          const catalogPath = path.join(home, 'reviewrouter-model-catalog.json');
+          const setting = `model_catalog_json=${JSON.stringify(catalogPath)}`;
+          expect(catalogSettings).toEqual([setting]);
+          expect(launch.args.slice(-2)).toEqual(['-c', setting]);
+          expect(JSON.parse(fs.readFileSync(catalogPath, 'utf8')).models[0]).toMatchObject({
+            slug: selectedModel,
+            use_responses_lite: true,
+            apply_patch_tool_type: 'freeform',
+          });
+          expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe([...configuration, setting].join('\n') + '\n');
+          expect(fs.statSync(catalogPath).mode & 0o777).toBe(0o600);
+        } else {
+          expect(catalogSettings).toEqual([]);
+          expect(fs.readdirSync(home)).toEqual([]);
+        }
+        expect(execute.mock.calls[1][0].args).toEqual(launch.args);
+        expect(fs.readFileSync(path.join(root, '.codex/config.toml'), 'utf8')).toBe(callerConfig);
+      } finally {
+        process.env = previousEnv;
+        execute.mockRestore();
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it.each([
+    ['mimo-v2.6-pro', true, 'high', 'high', false, 'xhigh'],
+    ['mimo-v2.6-pro', true, undefined, 'high', false, 'xhigh'],
+    ['mimo-v2.6-pro', true, 'low', 'low', false, 'xhigh'],
+    ['mimo-v2.6-pro', true, 'medium', 'medium', false, 'xhigh'],
+    ['mimo-v2.6-pro', true, 'xhigh', 'xhigh', true, 'xhigh'],
+    ['mimo-v2.6-pro', true, 'ultra', 'ultra', true, 'xhigh'],
+    ['mimo-v2.6-pro', true, 'arbitrary', 'arbitrary', true, 'xhigh'],
+    ['mimo-v2.6-pro', true, '', '', true, 'xhigh'],
+    ['mimo-v2.6-pro', true, 'none', 'none', true, 'xhigh'],
+    ['gpt-selected', true, undefined, 'xhigh', false, 'xhigh'],
+    ['gpt-selected', true, 'ultra', 'ultra', false, 'xhigh'],
+    ['mimo-v2.6-pro', false, undefined, 'xhigh', false, 'xhigh'],
+    ['gpt-selected', true, undefined, undefined, false, undefined],
+    ['mimo-v2.6-pro', false, undefined, undefined, false, undefined],
+    ['gpt-selected', true, undefined, 'custom-caller-effort', false, 'custom-caller-effort'],
+    ['mimo-v2.6-pro', true, undefined, 'high', false, undefined],
+  ] as const)(
+    'resolves effort for selected %s, gateway %s, server %s (expected %s, denied %s, caller %s) before effects',
+    async (model, accountGateway, serverEffort, expectedEffort, denied, callerEffort) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mimo-runner-effort-'));
+      const previousEnv = { ...process.env };
+      const stoppedAtBoundary = new Error('mock authorization boundary');
+      const configuration = jest.spyOn(ConfigLoader, 'load').mockImplementation(() => ({
+        ...DEFAULT_CONFIG,
+        providers: [`codex/${process.env.CODEX_MODEL}`],
+      }));
+      const oidc = jest.spyOn(GitHubActionsOidcTokenProvider.prototype, 'requestToken')
+        .mockResolvedValue('fixture-oidc');
+      const authorize = jest.spyOn(ReviewActionV2ControlPlaneAdapter.prototype, 'authorize')
+        .mockRejectedValue(stoppedAtBoundary);
+      const current = jest.spyOn(ReviewActionV2ControlPlaneAdapter.prototype, 'currentAuthorization')
+        .mockImplementation(() => { throw stoppedAtBoundary; });
+      const execute = jest.spyOn(NodeCodexAppServerTurnRunner.prototype, 'executeTurn')
+        .mockRejectedValue(new Error('unexpected AppServer call'));
+      const review = jest.spyOn(CodexProvider.prototype, 'review')
+        .mockRejectedValue(new Error('unexpected provider call'));
+      const fetchImpl = jest.fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ sessionToken: 'fixture-session' })))
+        .mockResolvedValueOnce(new Response(JSON.stringify({
+          protocolVersion: 1,
+          configVersion: 7,
+          runtimeEnv: {
+            CODEX_MODEL: model,
+            ...(serverEffort === undefined ? {} : { CODEX_REASONING_EFFORT: serverEffort }),
+          },
+        })));
+      try {
+        process.env.CODEX_MODEL = 'caller-model';
+        if (callerEffort === undefined) {
+          delete process.env.CODEX_REASONING_EFFORT;
+        } else {
+          process.env.CODEX_REASONING_EFFORT = callerEffort;
+        }
+        const controlPlane = new ReviewActionV2ControlPlaneAdapter(new ReviewActionV2Client({
+          apiUrl: 'https://fixture.invalid',
+          fetchImpl,
+        }));
+        const operation = new ProductionT0ReviewRunner(fetchImpl).run({
+          apiUrl: 'https://fixture.invalid',
+          audience: 'reviewrouter',
+          providerInstanceId: 'fixture-provider',
+          workflowSchemaVersion: 1,
+          repository: 'fixture/repository',
+          pullRequestNumber: 1,
+          headSha: 'a'.repeat(40),
+          workspacePath: root,
+          codexHome: path.join(root, 'home'),
+          scmReadToken: 'fixture-scm',
+          scmReadTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          refreshScmReadToken: async () => { throw new Error('unexpected refresh'); },
+          ...(accountGateway ? { accountGateway: {
+            controlPlane,
+            modelTransport: {
+              baseUrl: 'http://127.0.0.1:1/v1',
+              configuration: [],
+              environment: { CODEX_HOME: path.join(root, 'home') },
+              actualModel: () => model,
+              dispose: async () => {},
+            },
+          } } : {}),
+        });
+        if (denied) {
+          await expect(operation).rejects.toThrow('account_gateway_mimo_reasoning_effort_unsupported');
+          expect(current).not.toHaveBeenCalled();
+          expect(authorize).not.toHaveBeenCalled();
+        } else {
+          await expect(operation).rejects.toBe(stoppedAtBoundary);
+          expect(accountGateway ? current : authorize).toHaveBeenCalledTimes(1);
+        }
+        expect(process.env.CODEX_REASONING_EFFORT).toBe(expectedEffort);
+        expect(fetchImpl).toHaveBeenCalledTimes(2);
+        expect(execute).not.toHaveBeenCalled();
+        expect(review).not.toHaveBeenCalled();
+      } finally {
+        process.env = previousEnv;
+        configuration.mockRestore();
+        oidc.mockRestore();
+        authorize.mockRestore();
+        current.mockRestore();
+        execute.mockRestore();
+        review.mockRestore();
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
 
   it('treats providerRetries as the total provider attempt budget', () => {
     expect(resolveT0AttemptBudget(3, 10)).toBe(3);

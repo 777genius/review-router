@@ -26,6 +26,7 @@ export type RuntimeConfigResult =
       readonly actionVersion: string;
       readonly configVersion: number;
       readonly sessionToken: string;
+      readonly reasoningEffort?: string;
     }
   | { readonly status: 'fallback'; readonly reason: string };
 
@@ -85,6 +86,9 @@ export async function applyControlPlaneRuntimeConfig(
       actionVersion,
       configVersion: config.configVersion,
       sessionToken: session.sessionToken,
+      ...(config.runtimeEnv.CODEX_REASONING_EFFORT !== undefined
+        ? { reasoningEffort: config.runtimeEnv.CODEX_REASONING_EFFORT }
+        : {}),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown_error';

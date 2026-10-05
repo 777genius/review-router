@@ -58,6 +58,7 @@ describe('applyControlPlaneRuntimeConfig', () => {
       actionVersion: 'v1.0.6',
       configVersion: 7,
       sessionToken: 'rr-session',
+      reasoningEffort: 'medium',
     });
     expect(env.CODEX_MODEL).toBe('gpt-5.5');
     expect(env.CODEX_REASONING_EFFORT).toBe('medium');
@@ -80,6 +81,40 @@ describe('applyControlPlaneRuntimeConfig', () => {
       Authorization: 'Bearer rr-session',
       'x-reviewrouter-action-version': 'v1.0.6',
     });
+  });
+
+  it.each([
+    [undefined, undefined],
+    ['high', 'high'],
+    ['xhigh', 'xhigh'],
+    ['ultra', 'ultra'],
+    ['arbitrary', 'arbitrary'],
+    ['', ''],
+    [123, undefined],
+  ])('returns only the validated server effort %p, never inherited xhigh', async (serverEffort, expected) => {
+    const env: NodeJS.ProcessEnv = { ...baseEnv, CODEX_REASONING_EFFORT: 'xhigh' };
+    const fetchImpl = jest
+      .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+      .mockResolvedValueOnce(jsonResponse({ sessionToken: 'rr-session' }))
+      .mockResolvedValueOnce(jsonResponse({
+        protocolVersion: 1,
+        configVersion: 7,
+        runtimeEnv: serverEffort === undefined ? {} : { CODEX_REASONING_EFFORT: serverEffort },
+      }));
+
+    const result = await applyControlPlaneRuntimeConfig({
+      env,
+      fetchImpl,
+      oidc: { requestToken: async () => 'fixture-oidc' },
+    });
+
+    expect(result.status).toBe('applied');
+    if (result.status !== 'applied') throw new Error('expected applied config');
+    expect(result.reasoningEffort).toBe(expected);
+    if (expected === undefined) {
+      expect(result).not.toHaveProperty('reasoningEffort');
+      expect(env.CODEX_REASONING_EFFORT).toBe('xhigh');
+    }
   });
 
   it('applies the ultra timeout fallback after dynamic config resolution', async () => {

@@ -202,7 +202,13 @@ async function runAccountGatewayRuntimeInternal(
       refreshScmReadToken: readCapability,
       accountGateway: {
         controlPlane,
-        modelTransport: bridge,
+        modelTransport: {
+          ...bridge,
+          environment: Object.freeze({
+            ...bridge.environment,
+            CODEX_HOME: codexHome,
+          }),
+        },
         signal: run.signal,
       },
     });

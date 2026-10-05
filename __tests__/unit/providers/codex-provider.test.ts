@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { randomBytes } from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -9,6 +10,7 @@ import {
 } from '../../../src/providers/codex';
 import { RateLimitError } from '../../../src/providers/base';
 import { logger } from '../../../src/utils/logger';
+import type { LocalGatewayModelTransport } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
@@ -105,6 +107,138 @@ describe('CodexProvider', () => {
   afterAll(() => {
     process.env = originalEnv;
   });
+
+  it('pins bounded MiMo metadata to the fresh gateway home on repeated preparations', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mimo-catalog-test-'));
+    const cwd = process.cwd();
+    // Frozen official MiMo metadata; independent of the production helper.
+    const bounded = {
+      models: [
+        {
+          "slug": "mimo-v2.6-pro",
+          "display_name": "MiMo-V2.6-Pro",
+          "description": "Xiaomi MiMo: MiMo-V2.6-Pro",
+          "default_reasoning_level": "low",
+          "supported_reasoning_levels": [{"effort":"none","description":"No extra reasoning for faster responses"},{"effort":"low","description":"Fast responses with lighter reasoning"},{"effort":"medium","description":"Balances speed and reasoning depth for everyday tasks"},{"effort":"high","description":"Greater reasoning depth for complex problems"}],
+          "shell_type": "unified_exec",
+          "visibility": "list",
+          "supported_in_api": true,
+          "priority": 0,
+          "support_verbosity": false,
+          "apply_patch_tool_type": "freeform",
+          "truncation_policy": {"mode":"tokens","limit":10000},
+          "supports_parallel_tool_calls": false,
+          "context_window": 1048576,
+          "max_context_window": 1048576,
+          "auto_compact_token_limit": null,
+          "comp_hash": "3000",
+          "default_reasoning_summary": "none",
+          "input_modalities": ["text","image"],
+          "supports_image_detail_original": true,
+          "experimental_supported_tools": ["send_user_message_async","clock"],
+          "use_responses_lite": true,
+          "tool_mode": "code_mode_only",
+          "multi_agent_version": "v2",
+          "include_skills_usage_instructions": false,
+          "include_apps_usage_instructions": false,
+          "include_plugin_usage_instructions": false,
+          "auto_review_model_override": null,
+          "model_specialty": null,
+        },
+      ],
+    };
+    try {
+      const home = path.join(root, 'fresh-home');
+      const checkout = path.join(root, 'checkout');
+      const callerHome = path.join(root, 'caller-home');
+      fs.mkdirSync(home);
+      fs.mkdirSync(callerHome);
+      fs.mkdirSync(path.join(checkout, '.codex'), { recursive: true });
+      const callerCatalog = path.join(callerHome, 'untrusted.json');
+      fs.writeFileSync(callerCatalog, 'caller sentinel');
+      const checkoutConfig = path.join(checkout, '.codex/config.toml');
+      const untrustedConfig = `model_catalog_json=${JSON.stringify(callerCatalog)}\n`;
+      fs.writeFileSync(checkoutConfig, untrustedConfig);
+      process.env.CODEX_HOME = callerHome;
+      process.env.CODEX_CONFIG_TOML = untrustedConfig;
+      process.chdir(checkout);
+      const gateway: LocalGatewayModelTransport = {
+        baseUrl: 'http://127.0.0.1:1/v1',
+        environment: { CODEX_HOME: home },
+        configuration: ['model_provider="reviewrouter_account_gateway"'],
+        actualModel: () => 'mimo-v2.6-pro',
+        dispose: async () => {},
+      };
+      const provider = new CodexProvider('mimo-v2.6-pro', {
+        agenticContext: false,
+        accountGateway: gateway,
+      });
+      overridePrivate(provider, 'resolveBinary', jest.fn().mockResolvedValue('/mock/codex'));
+      const first = await provider.prepareInvocation('review input', 1_000);
+      const catalogPath = path.join(home, 'reviewrouter-model-catalog.json');
+      const catalogBytes = fs.readFileSync(catalogPath, 'utf8');
+      const catalog = JSON.parse(catalogBytes);
+      expect(Object.keys(catalog)).toEqual(['models']);
+      expect(catalog.models).toEqual(bounded.models);
+      expect(catalog.models).toHaveLength(1);
+      expect(catalog.models[0]).toMatchObject({
+        use_responses_lite: true,
+        apply_patch_tool_type: 'freeform',
+        tool_mode: 'code_mode_only',
+        supports_parallel_tool_calls: false,
+      });
+      const setting = `model_catalog_json=${JSON.stringify(catalogPath)}`;
+      const configBytes = [...gateway.configuration, setting].join('\n') + '\n';
+      expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(configBytes);
+      expect(fs.statSync(catalogPath).mode & 0o777).toBe(0o600);
+      expect(fs.statSync(path.join(home, 'config.toml')).mode & 0o777).toBe(0o600);
+      expect(first.request.argsTemplate.slice(-3)).toEqual(['-c', setting, '-']);
+      expect(first.request.environment.CODEX_HOME).toBe(home);
+      const second = await provider.prepareInvocation('review input', 1_000);
+      expect(second.request.argsTemplate).toEqual(first.request.argsTemplate);
+      expect(fs.readFileSync(catalogPath, 'utf8')).toBe(catalogBytes);
+      expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(configBytes);
+      expect(fs.readFileSync(checkoutConfig, 'utf8')).toBe(untrustedConfig);
+      expect(fs.readFileSync(callerCatalog, 'utf8')).toBe('caller sentinel');
+      expect(fs.readdirSync(callerHome)).toEqual(['untrusted.json']);
+      expect(spawnMock).not.toHaveBeenCalled();
+      expect(spawnSyncMock).not.toHaveBeenCalled();
+    } finally {
+      process.chdir(cwd);
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['codex', 'openrouter', 'unmapped-gateway'] as const)(
+    'leaves %s catalog and home behavior unchanged',
+    async (mode) => {
+      const home = fs.mkdtempSync(path.join(os.tmpdir(), 'generic-catalog-test-'));
+      try {
+        process.env.CODEX_HOME = home;
+        process.env.CODEX_CONFIG_TOML = 'model_catalog_json="/caller/untrusted.json"';
+        const provider = new CodexProvider(mode === 'unmapped-gateway' ? 'gpt-test' : 'mimo-v2.6-pro', {
+          agenticContext: false,
+          ...(mode === 'openrouter' ? { modelProvider: 'openrouter' as const } : {}),
+          ...(mode === 'unmapped-gateway' ? {
+            accountGateway: {
+              baseUrl: 'http://127.0.0.1:1/v1',
+              environment: { CODEX_HOME: home },
+              configuration: ['model_provider="reviewrouter_account_gateway"'],
+              actualModel: () => 'gpt-test',
+              dispose: async () => {},
+            },
+          } : {}),
+        });
+        overridePrivate(provider, 'resolveBinary', jest.fn().mockResolvedValue('/mock/codex'));
+        const invocation = await provider.prepareInvocation('review input', 1_000);
+        expect(fs.readdirSync(home)).toEqual([]);
+        expect(invocation.request.argsTemplate.some((arg) => arg.startsWith('model_catalog_json='))).toBe(false);
+        expect(spawnMock).not.toHaveBeenCalled();
+      } finally {
+        fs.rmSync(home, { recursive: true, force: true });
+      }
+    }
+  );
 
   it('builds read-only agentic exec args without dangerous sandbox bypass', () => {
     const provider = new CodexProvider('gpt-5.4-mini');
@@ -1718,6 +1852,7 @@ describe('CodexProvider', () => {
   });
 
   it('sanitizes Codex CLI failure messages before surfacing them', async () => {
+    const syntheticKey = ['sk', 'proj', randomBytes(24).toString('hex')].join('-');
     spawnMock.mockImplementation((_cmd: string, args: string[]) => {
       if (args.includes('--version')) {
         return createMockProcess();
@@ -1729,7 +1864,7 @@ describe('CodexProvider', () => {
           [
             'invalid_request_error: auth failed',
             'https://auth.openai.com/device?user_code=secret',
-            'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+            syntheticKey,
             '"refresh_token":"refresh-secret"',
           ].join('\n')
         );
@@ -1749,9 +1884,7 @@ describe('CodexProvider', () => {
 
     expect(thrown?.message).toContain('Codex CLI failed with exit code 1');
     expect(thrown?.message).not.toContain('auth.openai.com');
-    expect(thrown?.message).not.toContain(
-      'sk-proj-abcdefghijklmnopqrstuvwxyz123456'
-    );
+    expect(thrown?.message).not.toContain(syntheticKey);
     expect(thrown?.message).not.toContain('refresh-secret');
   });
 
@@ -1875,11 +2008,12 @@ describe('CodexProvider', () => {
   });
 
   it('redacts secrets from raw Codex CLI error text', () => {
+    const syntheticKey = ['sk', 'proj', randomBytes(24).toString('hex')].join('-');
     const provider = new CodexProvider('gpt-5.4-mini');
     const formatted = (provider as any).formatCliError(
       [
         'https://auth.openai.com/device?user_code=secret',
-        'sk-proj-abcdefghijklmnopqrstuvwxyz123456',
+        syntheticKey,
         '"refresh_token":"refresh-secret"',
       ].join('\n'),
       ''
@@ -1889,7 +2023,7 @@ describe('CodexProvider', () => {
     expect(formatted).toContain('sk-***');
     expect(formatted).toContain('"refresh_token":"[redacted]"');
     expect(formatted).not.toContain('auth.openai.com');
-    expect(formatted).not.toContain('sk-proj-abcdefghijklmnopqrstuvwxyz123456');
+    expect(formatted).not.toContain(syntheticKey);
     expect(formatted).not.toContain('refresh-secret');
   });
 

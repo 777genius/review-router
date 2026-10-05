@@ -22,6 +22,7 @@ import type { GitHubTokenProvider } from '../../github/token-provider';
 import { ReviewLedger } from '../../github/ledger';
 import { PullRequestLoader } from '../../github/pr-loader';
 import { CodexProvider } from '../../providers/codex';
+import { prepareAccountGatewayModelCatalog } from '../../codex-oauth/account-gateway-mimo-catalog';
 import { recoverDiffForFiles } from '../../utils/diff';
 import { logger } from '../../utils/logger';
 import { emitReviewInvestigationTelemetry } from './review-investigation-telemetry';
@@ -124,6 +125,7 @@ import {
   type ConfiguredProductionReviewAgent,
 } from './production-review-investigation-composition';
 import { ReviewActionV2InvestigationContextAttestationAdapter } from './review-action-v2-investigation-context-attestation-adapter';
+import type { CodexReviewAgentAdapterOptions } from '../../review-investigation/infrastructure/codex-review-agent-adapter';
 
 const execFileAsync = promisify(execFile);
 const CODEX_RETRY_POLICY_VERSION = 'codex-semantic-retry.v1';
@@ -163,7 +165,11 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const oidc = new GitHubActionsOidcTokenProvider({
       fetchImpl,
     });
-    await applyReviewRuntimeConfig(input, fetchImpl, oidc);
+    const serverReasoningEffort = await applyReviewRuntimeConfig(
+      input,
+      fetchImpl,
+      oidc
+    );
     if (authoritativeDeadlineEpochMs === undefined) {
       delete process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
     } else {
@@ -175,6 +181,23 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const config = input.accountGateway
       ? { ...loadedConfig, providerRetries: 1 }
       : loadedConfig;
+    const codexProviderName = selectCodexProvider(config);
+    const model = codexProviderName.slice('codex/'.length);
+    let reasoningEffort: Exclude<
+      CodexReviewAgentAdapterOptions['reasoningEffort'],
+      'xhigh'
+    >;
+    if (input.accountGateway && model === 'mimo-v2.6-pro') {
+      // Only the applied server field authorizes effort; caller env can survive
+      // an omitted runtime value. The approved MiMo default is high.
+      // Fail closed for values outside the existing AppServer effort contract.
+      const effort = serverReasoningEffort ?? 'high';
+      if (effort !== 'low' && effort !== 'medium' && effort !== 'high') {
+        throw new Error('account_gateway_mimo_reasoning_effort_unsupported');
+      }
+      reasoningEffort = effort;
+      process.env.CODEX_REASONING_EFFORT = effort;
+    }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
     const configuredTimeoutMs = Math.max(
       1_000,
@@ -270,8 +293,6 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       authorization.facts.headSha
     );
     signal?.throwIfAborted();
-    const codexProviderName = selectCodexProvider(config);
-    const model = codexProviderName.slice('codex/'.length);
     const agenticContext = config.codexAgenticContext ?? true;
     const investigationRolloutResolution =
       resolveProductionReviewInvestigationRolloutResolution({
@@ -413,6 +434,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                   codexBinaryPath: input.codexBinaryPath,
                   executionSessions: gateway,
                   modelTransport: input.accountGateway?.modelTransport,
+                  reasoningEffort,
                 }),
               });
               return new RunInvestigationWorkSlot({
@@ -720,11 +742,16 @@ function publicInvestigationProcessDiagnostic(stderr: string): Readonly<{
   });
 }
 
-function createConfiguredProductionInvestigationAgents(input: {
+/** Internal production composition; model is selected after runtime config and revision checks. */
+export function createConfiguredProductionInvestigationAgents(input: {
   readonly codexModel: string;
   readonly codexBinaryPath: string | undefined;
   readonly executionSessions: ReviewAgentExecutionSessionResolverPort;
   readonly modelTransport?: LocalGatewayModelTransport;
+  readonly reasoningEffort?: Exclude<
+    CodexReviewAgentAdapterOptions['reasoningEffort'],
+    'xhigh'
+  >;
 }): readonly ConfiguredProductionReviewAgent[] {
   const processRunner = new NodeReviewAgentProcessRunner();
   const appServer = input.modelTransport
@@ -747,6 +774,13 @@ function createConfiguredProductionInvestigationAgents(input: {
                     CodexAppServerTurnRunnerPort['executeTurn']
                   >[0]
                 ) => {
+                  // Use the selected production model, never the turn's caller model.
+                  // Pin the same fresh-home catalog as exec, above checkout config.
+                  const catalogSetting = await prepareAccountGatewayModelCatalog(
+                    input.codexModel,
+                    input.modelTransport!.environment.CODEX_HOME,
+                    input.modelTransport!.configuration
+                  );
                   const result = await appServer.executeTurn({
                     ...request,
                     args: [
@@ -754,6 +788,7 @@ function createConfiguredProductionInvestigationAgents(input: {
                       ...input.modelTransport!.configuration.flatMap(
                         (setting) => ['-c', setting]
                       ),
+                      ...(catalogSetting ? ['-c', catalogSetting] : []),
                     ],
                     // Attach the local capability after the existing upstream credential allowlist.
                     // MCP env_vars never include it; current RR token remains in the bridge.
@@ -773,7 +808,10 @@ function createConfiguredProductionInvestigationAgents(input: {
             }
           : {}),
         ...(input.codexBinaryPath ? { binary: input.codexBinaryPath } : {}),
-        reasoningEffort: 'xhigh',
+        reasoningEffort:
+          input.modelTransport && input.codexModel === 'mimo-v2.6-pro'
+            ? (input.reasoningEffort ?? 'high')
+            : 'xhigh',
         processResultObserver: (result) => {
           if (
             result.termination === ReviewAgentProcessTermination.Exited &&
@@ -1275,12 +1313,12 @@ async function applyReviewRuntimeConfig(
   input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0],
   fetchImpl: typeof fetch,
   oidc: GitHubActionsOidcTokenProvider
-): Promise<void> {
+): Promise<string | undefined> {
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = 'oidc';
   process.env.REVIEWROUTER_API_URL = input.apiUrl;
   process.env.REVIEWROUTER_OIDC_AUDIENCE = input.audience;
   process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK = 'false';
-  await applyControlPlaneRuntimeConfig({
+  const result = await applyControlPlaneRuntimeConfig({
     fetchImpl,
     oidc,
     logger: {
@@ -1288,6 +1326,7 @@ async function applyReviewRuntimeConfig(
       warn: (message) => core.warning(message),
     },
   });
+  return result.status === 'applied' ? result.reasoningEffort : undefined;
 }
 
 async function withRunnerEnvironment<T>(

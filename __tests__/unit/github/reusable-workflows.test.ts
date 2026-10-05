@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { runInNewContext } from 'node:vm';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,6 +25,7 @@ type WorkflowJob = {
     if?: string;
     uses?: string;
     with?: Record<string, unknown>;
+    run?: string;
   }>;
 };
 
@@ -58,6 +60,39 @@ function permissionEscalations(
       ? [`${scope}: ${granted} -> ${requested}`]
       : [];
   });
+}
+
+function runExecutionPreparation(env: NodeJS.ProcessEnv) {
+  const step = parseWorkflow(
+    '.github/workflows/reviewrouter-execution-reusable.yml'
+  ).jobs?.review?.steps?.find(
+    (item) => item.name === 'Prepare ReviewRouter runtime settings'
+  );
+  const script = step?.run?.match(/<<'NODE'\n([\s\S]*?)\nNODE/u)?.[1];
+  if (!script) throw new Error('Execution preparation script missing');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-entry-'));
+  try {
+    const output = path.join(tempDir, 'output');
+    const githubEnv = path.join(tempDir, 'env');
+    fs.writeFileSync(output, '');
+    fs.writeFileSync(githubEnv, '');
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module-typescript'],
+      {
+        input: script,
+        encoding: 'utf8',
+        env: { ...env, GITHUB_ENV: githubEnv, GITHUB_OUTPUT: output },
+      }
+    );
+    return {
+      ...result,
+      output: fs.readFileSync(output, 'utf8'),
+      githubEnv: fs.readFileSync(githubEnv, 'utf8'),
+    };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 function runInteractionRuntimePreparation(reviewWorkflowFile: string) {
@@ -100,6 +135,59 @@ function runInteractionRuntimePreparation(reviewWorkflowFile: string) {
 }
 
 describe('production reusable workflows', () => {
+  it('executes gateway fork eligibility, immutable source, static denial and queue skip', () => {
+    const env: NodeJS.ProcessEnv = {
+      RR_REVIEW_ACTION_LANE: 't0',
+      RR_CODEX_SESSION_MODE: 'account-gateway',
+      RR_RUNTIME_REF: 'main',
+      RR_WORKFLOW_REPOSITORY: '777genius/review-router',
+      RR_WORKFLOW_SHA: '0123456789abcdef0123456789abcdef01234567',
+      RR_REVIEW_TIMEOUT_MINUTES: '240',
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+      GITHUB_EVENT_NAME: 'pull_request',
+      GITHUB_REPOSITORY: 'owner/repo',
+      GITHUB_HEAD_REPO_FULL_NAME: 'fork/repo',
+    };
+    const fork = runExecutionPreparation(env);
+    expect(fork.status).toBe(0);
+    expect(fork.output).toContain('can_run=true\n');
+    expect(fork.output).toContain(`runtime_ref=${env.RR_WORKFLOW_SHA}\n`);
+    expect(fork.githubEnv).toMatch(
+      /REVIEWROUTER_STATIC_CONFIG_FALLBACK<<[^\n]+\nfalse\n/u
+    );
+    const steps =
+      parseWorkflow('.github/workflows/reviewrouter-execution-reusable.yml')
+        .jobs?.review?.steps ?? [];
+    const selectedCheckouts = steps.filter(
+      (step) =>
+        step.uses?.startsWith('actions/checkout@') &&
+        runInNewContext((step.if ?? '${{ true }}').slice(3, -2), {
+          inputs: {
+            review_action_lane: 't0',
+            codex_session_mode: 'account-gateway',
+          },
+          steps: { runtime: { outputs: { can_run: 'true' } } },
+        })
+    );
+    expect(selectedCheckouts.map((step) => step.name)).toEqual([
+      'Checkout ReviewRouter runtime',
+    ]);
+    expect(steps[0]?.name).toBe('Setup Node.js');
+    expect(
+      runExecutionPreparation({ ...env, GITHUB_EVENT_NAME: 'merge_group' })
+        .output
+    ).toContain('can_run=false\nskip_reason=merge_group\n');
+    expect(
+      runExecutionPreparation({ ...env, RR_CODEX_SESSION_MODE: '' }).output
+    ).toContain('can_run=false\nskip_reason=fork\n');
+    expect(
+      runExecutionPreparation({
+        ...env,
+        REVIEWROUTER_RUNTIME_CONFIG_MODE: 'static',
+      }).status
+    ).toBe(1);
+  });
+
   it('distinguishes same-repository PRs when the repository itself is a fork', () => {
     const workflowSource = readRepoFile('.github/workflows/reviewrouter.yml');
 
@@ -133,6 +221,7 @@ describe('production reusable workflows', () => {
     const workflow = parseWorkflow(workflowPath);
     const review = workflow.jobs?.['repository-secret-review'];
     const hostedPoolReview = workflow.jobs?.['review-hosted-pool'];
+    const gatewayReview = workflow.jobs?.['review-account-gateway'];
     const inputs = workflow.on?.workflow_call?.inputs;
 
     expect(review?.permissions).toEqual({
@@ -159,6 +248,18 @@ describe('production reusable workflows', () => {
     expect(review?.if).toContain(
       "inputs.codex_session_mode != 'codex_subscription_oauth_hosted_pool'"
     );
+    expect(review?.if).toContain(
+      "inputs.codex_session_mode != 'account-gateway'"
+    );
+    expect(gatewayReview?.if).toContain(
+      "inputs.codex_session_mode == 'account-gateway'"
+    );
+    expect(gatewayReview?.with?.codex_session_mode).toBe(
+      '${{ inputs.codex_session_mode }}'
+    );
+    expect(gatewayReview?.with?.static_runtime_env_json).toBe('{}');
+    expect(gatewayReview?.permissions).toEqual(review?.permissions);
+    expect(gatewayReview?.secrets).toBeUndefined();
     expect(review?.with).toMatchObject({
       codex_session_mode: '${{ inputs.codex_session_mode }}',
       session_binding_id: '${{ inputs.session_binding_id }}',
@@ -260,6 +361,22 @@ describe('production reusable workflows', () => {
     const hostedPoolRun = steps.find(
       (step) => step.name === 'Run ReviewRouter T0 hosted pool'
     );
+    const gatewayRun = steps.find(
+      (step) => step.name === 'Run ReviewRouter T0 account gateway'
+    );
+    expect(gatewayRun?.run).toBe('node .reviewrouter-runtime/dist/index.js');
+    expect(gatewayRun?.if).toContain(
+      "steps.provider-tooling.outputs.account_gateway_needed == 'true'"
+    );
+    expect(gatewayRun?.env).toMatchObject({
+      REVIEW_ROUTER_MODE: 'account-gateway',
+      REVIEWROUTER_ACTION_V2_MODE: 't0',
+    });
+    expect(
+      Object.keys(gatewayRun?.env ?? {}).filter((key) =>
+        /AUTH|TOKEN|KEY|CONFIG_TOML/u.test(key)
+      )
+    ).toEqual([]);
     const hostedPoolCheckout = steps.find(
       (step) => step.name === 'Checkout exact hosted pool review revision'
     );
@@ -370,7 +487,7 @@ describe('production reusable workflows', () => {
     for (const actionUses of externalActionUses) {
       expect(actionUses).toMatch(/@[0-9a-f]{40}$/u);
     }
-    expect(workflowSource).toContain("const crypto = require('node:crypto');");
+    expect(workflowSource).toContain("import crypto from 'node:crypto';");
     expect(workflowSource).toContain(
       "staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';"
     );

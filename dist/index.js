@@ -52477,8 +52477,42 @@ function ensureTrailingSlash4(value) {
 }
 
 // src/control-plane/provider-cli-plan.ts
+var gatewaySessionMode = "account-gateway";
+var gatewayAuthMode = "codex-account-gateway";
+function prepareRuntimePreflight(env = process.env) {
+  if (env.RR_CODEX_SESSION_MODE !== gatewaySessionMode && env.REVIEW_AUTH_MODE !== gatewayAuthMode) {
+    return;
+  }
+  if (env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== "oidc" || env.REVIEWROUTER_STATIC_CONFIG_FALLBACK !== "false") {
+    throw new Error("account_gateway_requires_oidc_without_static_fallback");
+  }
+  delete env.REVIEW_AUTH_MODE;
+}
+function resolveRuntimePreflightPlan(runtimeConfig, env = process.env) {
+  const gatewayRequested = env.RR_CODEX_SESSION_MODE === gatewaySessionMode;
+  const gatewayConfigured = env.REVIEW_AUTH_MODE === gatewayAuthMode;
+  if (gatewayRequested || gatewayConfigured) {
+    if (env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== "oidc" || env.REVIEWROUTER_STATIC_CONFIG_FALLBACK !== "false" || runtimeConfig?.status !== "applied" || !gatewayConfigured) {
+      throw new Error("account_gateway_requires_authenticated_applied_config");
+    }
+    if (!gatewayRequested) {
+      throw new Error("account_gateway_workflow_mode_mismatch");
+    }
+  }
+  return {
+    ...resolveProviderCliPlan(env),
+    accountGatewayNeeded: gatewayConfigured
+  };
+}
 function resolveProviderCliPlan(env = process.env) {
   const authMode = (env.REVIEW_AUTH_MODE || "").trim();
+  if (authMode === gatewayAuthMode) {
+    return {
+      codexCliNeeded: true,
+      codexOauthNeeded: false,
+      claudeCliNeeded: false
+    };
+  }
   const explicitProviders = parseProviderList(env.REVIEW_PROVIDERS);
   const inferredProvider = explicitProviders.length === 0 ? inferredProviderFromEnv(authMode, env) : void 0;
   const providerHints = [
@@ -117010,6 +117044,9 @@ async function run() {
       await runCodexOAuthRotatingAction({ reviewActionV2Activation });
       return;
     }
+    if (requestedMode === "runtime-preflight") {
+      prepareRuntimePreflight(process.env);
+    }
     runtimeConfig = await applyControlPlaneRuntimeConfig({
       logger: {
         info,
@@ -117172,8 +117209,12 @@ async function currentGitHubToken(fallbackToken, tokenProvider) {
   }
 }
 function runRuntimePreflight(runtimeConfig) {
-  const plan = resolveProviderCliPlan(process.env);
+  const plan = resolveRuntimePreflightPlan(runtimeConfig, process.env);
   setOutput("runtime_config_status", runtimeConfig?.status || "unknown");
+  setOutput(
+    "account_gateway_needed",
+    plan.accountGatewayNeeded ? "true" : "false"
+  );
   setOutput("codex_cli_needed", plan.codexCliNeeded ? "true" : "false");
   setOutput(
     "codex_oauth_needed",
@@ -117181,7 +117222,7 @@ function runRuntimePreflight(runtimeConfig) {
   );
   setOutput("claude_cli_needed", plan.claudeCliNeeded ? "true" : "false");
   info(
-    `ReviewRouter runtime preflight: status=${runtimeConfig?.status || "unknown"}, codex_cli_needed=${plan.codexCliNeeded}, codex_oauth_needed=${plan.codexOauthNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
+    `ReviewRouter runtime preflight: status=${runtimeConfig?.status || "unknown"}, account_gateway_needed=${plan.accountGatewayNeeded}, codex_cli_needed=${plan.codexCliNeeded}, codex_oauth_needed=${plan.codexOauthNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
   );
 }
 async function runInteraction(token, actionsToken, runtimeConfig) {

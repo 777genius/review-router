@@ -26,6 +26,11 @@ export const ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
 });
 
 export type GatewayReadback = Readonly<{ httpStatus: number; value: unknown }>;
+/** RR-specific selectors are checked against the authorized run by the server. */
+export type AccountGatewayCheckoutRequest = Readonly<{
+  providerInstanceId: string;
+  workflowSchemaVersion: number;
+}>;
 export type GatewayCloseReason = 'completed' | 'failed' | 'cancelled';
 export type GatewayFailureFact = Readonly<{
   code: string;
@@ -276,7 +281,7 @@ export class AccountGatewayModelTransport {
   /** Required companion endpoint: current authorized run -> scoped SCM read only.
    * This is deliberately a product adapter request, not a new gateway protocol. */
   checkoutCapability(
-    request: Readonly<Record<string, never>>,
+    request: AccountGatewayCheckoutRequest,
     signal?: AbortSignal
   ): Promise<GatewayReadback> {
     return this.json('POST', `${BASE}/checkout`, request, signal);

@@ -10,6 +10,7 @@ import {
   AccountGatewayModelTransport,
   createAccountGatewayRunFetch,
   startLocalGatewayModelTransport,
+  type AccountGatewayCheckoutRequest,
   type GatewayCloseReason,
   type GatewayReadback,
   type GatewayFailureFact,
@@ -39,8 +40,8 @@ import {
 export const ACCOUNT_GATEWAY_ACTION_MODE = 'account-gateway';
 
 /** Explicit required backend companion seam. POST /account-gateway/checkout,
- * body {}, bearer=current ReviewActionV2 authorization. No job header authority. */
-export type AccountGatewayCheckoutRequest = Readonly<Record<string, never>>;
+ * explicit selectors, bearer=current ReviewActionV2 authorization. No job header authority. */
+export type { AccountGatewayCheckoutRequest } from '../review-orchestration/infrastructure/account-gateway-model-transport';
 export type AccountGatewayCheckoutCapability = Readonly<{
   protocolVersion: 1;
   repository: string;
@@ -131,7 +132,10 @@ async function runAccountGatewayRuntimeInternal(
       throw new Error('account_gateway_authorization_input_mismatch');
     const readCapability =
       async (): Promise<AccountGatewayCheckoutCapability> => {
-        const request: AccountGatewayCheckoutRequest = {};
+        const request: AccountGatewayCheckoutRequest = {
+          providerInstanceId: input.providerInstanceId,
+          workflowSchemaVersion: input.workflowSchemaVersion,
+        };
         run.signal.throwIfAborted();
         const result = await transport.checkoutCapability(request, run.signal);
         run.signal.throwIfAborted();

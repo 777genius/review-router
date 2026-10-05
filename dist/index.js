@@ -100765,7 +100765,10 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     if (authorization.facts.headSha !== input.headSha.toLowerCase() || authorization.facts.pullRequestNumber !== input.pullRequestNumber)
       throw new Error("account_gateway_authorization_input_mismatch");
     const readCapability = async () => {
-      const request = {};
+      const request = {
+        providerInstanceId: input.providerInstanceId,
+        workflowSchemaVersion: input.workflowSchemaVersion
+      };
       run2.signal.throwIfAborted();
       const result2 = await transport.checkoutCapability(request, run2.signal);
       run2.signal.throwIfAborted();

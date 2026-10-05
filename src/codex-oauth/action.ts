@@ -4,6 +4,7 @@ import {
   runAccountGatewayRuntime,
 } from './account-gateway-runtime';
 import * as path from 'path';
+import { createAccountGatewayRunFetch } from '../review-orchestration/infrastructure/account-gateway-model-transport';
 import * as core from '../actions/core';
 import { ReviewOrchestrator } from '../core/orchestrator';
 import { ConfigLoader } from '../config/loader';
@@ -97,14 +98,14 @@ export async function runCodexOAuthRotatingAction(
     terminalOutcomeReporter?: CodexOAuthTerminalOutcomeReporterPort;
   } = {}
 ): Promise<void> {
+  if (isAccountGatewayActionSelected()) {
+    await runAccountGatewayAction(options);
+    return;
+  }
   const inputs = readCodexOAuthActionInputs();
   const reviewActionV2Activation =
     options.reviewActionV2Activation ??
     resolveReviewActionV2Activation({ env: process.env });
-  if (isAccountGatewayActionSelected()) {
-    await runAccountGatewayAction({ ...options, reviewActionV2Activation });
-    return;
-  }
   clearCodexRotatingProviderSecretEnv();
   if (
     shouldSkipCodexOAuthSetupPreviewWithoutAuth({
@@ -328,6 +329,20 @@ function isAccountGatewayActionSelected(): boolean {
 }
 
 export async function runAccountGatewayAction(
+  options: Parameters<typeof runAccountGatewayActionInternal>[0] = {}
+): Promise<void> {
+  try {
+    await runAccountGatewayActionInternal(options);
+  } finally {
+    try {
+      clearCodexRotatingOidcRequestEnv();
+    } finally {
+      clearCodexRotatingProcessAuthEnv();
+    }
+  }
+}
+
+async function runAccountGatewayActionInternal(
   options: {
     fetchImpl?: FetchLike;
     reviewActionV2Activation?: ReviewActionV2Activation;
@@ -347,7 +362,8 @@ export async function runAccountGatewayAction(
   clearCodexRotatingProviderSecretEnv();
   clearCodexRotatingProcessAuthEnv();
   const inputs = readCodexOAuthActionInputs();
-  const terminalOutcomeReporter =
+  const terminalOidcEnv = snapshotCodexOAuthTerminalOutcomeOidcEnv();
+  const createReporter = (fetchImpl: typeof fetch) =>
     options.terminalOutcomeReporter ??
     createDefaultCodexOAuthTerminalOutcomeReporter({
       context: {
@@ -358,40 +374,70 @@ export async function runAccountGatewayAction(
       audience: inputs.audience,
       controlPlane: new CodexOAuthControlPlaneClient({
         apiUrl: inputs.apiUrl,
-        fetchImpl: options.fetchImpl,
+        fetchImpl,
       }),
       oidc: new GitHubActionsOidcTokenProvider({
-        env: snapshotCodexOAuthTerminalOutcomeOidcEnv(),
-        fetchImpl: options.fetchImpl,
+        env: terminalOidcEnv,
+        fetchImpl,
       }),
     });
+  const terminalOutcomeReporter = createReporter(
+    createAccountGatewayRunFetch(
+      options.fetchImpl ?? fetch,
+      new AbortController().signal
+    )
+  );
   const ciProgressPublisher = createCiReviewProgressPublisher({
     repository: inputs.repository,
     pullRequestNumber: inputs.pullRequestNumber,
   });
+  let runSignal: AbortSignal | undefined;
+  if (ciProgressPublisher) {
+    const publish = ciProgressPublisher.publish.bind(ciProgressPublisher);
+    ciProgressPublisher.publish = (snapshot) => {
+      if (
+        ['none', 'complete', 'complete_with_gaps'].includes(snapshot.terminal)
+      )
+        runSignal?.throwIfAborted();
+      return publish(snapshot);
+    };
+  }
   const ciProgressReporter = ciProgressPublisher
     ? new CiOrchestrationProgressReporter(ciProgressPublisher)
     : undefined;
   await runAccountGatewayRuntime(inputs, {
     fetchImpl: options.fetchImpl,
-    review:
-      options.v2ReviewRunner ??
-      createProductionT0ReviewRunner({
-        fetchImpl: options.fetchImpl,
-        progress: ciProgressReporter,
-      }),
-    terminalReview: async (review) => {
-      core.setOutput('reviewrouter_state', 'completed');
+    review: {
+      run: (input) => {
+        runSignal = input.accountGateway?.signal;
+        return (
+          options.v2ReviewRunner ??
+          createProductionT0ReviewRunner({
+            fetchImpl: options.fetchImpl,
+            progress: ciProgressReporter,
+          })
+        ).run(input);
+      },
+    },
+    terminalReview: async (review, signal) => {
+      signal.throwIfAborted();
       await finishV2ActionReview(
         inputs,
         review,
-        terminalOutcomeReporter,
-        ciProgressReporter ?? null
+        createReporter(
+          createAccountGatewayRunFetch(options.fetchImpl ?? fetch, signal)
+        ),
+        ciProgressReporter ?? null,
+        signal
       );
+      signal.throwIfAborted();
+      core.setOutput('reviewrouter_state', 'completed');
     },
     terminalFailure: async (error) => {
-      await ciProgressReporter?.finish('failed');
-      core.setOutput('reviewrouter_state', 'failed');
+      const cancelled =
+        error instanceof Error && error.message === 'account_gateway_cancelled';
+      await ciProgressReporter?.finish(cancelled ? 'cancelled' : 'failed');
+      core.setOutput('reviewrouter_state', cancelled ? 'cancelled' : 'failed');
       core.setOutput(
         'reviewrouter_v2_outcome',
         CodexOAuthV2ReviewOutcome.Failed
@@ -464,8 +510,10 @@ async function finishV2ActionReview(
   inputs: ReturnType<typeof readCodexOAuthActionInputs>,
   review: CodexOAuthV2ReviewResult,
   terminalOutcomeReporter: CodexOAuthTerminalOutcomeReporterPort,
-  ciProgressReporter: CiOrchestrationProgressReporter | null
+  ciProgressReporter: CiOrchestrationProgressReporter | null,
+  signal?: AbortSignal
 ): Promise<void> {
+  signal?.throwIfAborted();
   requireTerminalV2ReviewResult(review);
   core.setOutput('reviewrouter_v2_outcome', review.outcome);
   if (review.outcome === CodexOAuthV2ReviewOutcome.Completed) {
@@ -473,11 +521,14 @@ async function finishV2ActionReview(
       terminalOutcomeReporter,
       buildCompletedV2TerminalOutcomeCommitStatus(inputs, review)
     );
+    signal?.throwIfAborted();
     await clearTerminalOutcomeReportsSafely(terminalOutcomeReporter, {
       reason: 'review_completed',
     });
   }
+  signal?.throwIfAborted();
   await ciProgressReporter?.finish(progressTerminal(review));
+  signal?.throwIfAborted();
   const report = buildV2TerminalOutcomeReport(inputs, review);
   if (report) {
     appendTerminalOutcomeStepSummary(report);
@@ -485,6 +536,7 @@ async function finishV2ActionReview(
       await clearTerminalOutcomeReportsSafely(terminalOutcomeReporter, {
         reason: 'server_summary_published',
       });
+      signal?.throwIfAborted();
       await publishTerminalOutcomeCommitStatusSafely(
         terminalOutcomeReporter,
         report.commitStatus
@@ -550,6 +602,24 @@ type V2ActionFailure = Readonly<{
 }>;
 
 function classifyV2ActionFailure(error: unknown): V2ActionFailure {
+  if (error instanceof Error && error.message === 'account_gateway_cancelled') {
+    return {
+      code: error.message,
+      report: (inputs) =>
+        terminalOutcomeReport({
+          inputs,
+          kind: CodexOAuthTerminalOutcomeKind.Failed,
+          title: 'Review cancelled',
+          summary:
+            'ReviewRouter received run cancellation and stopped starting normal review work.',
+          rows: [['Outcome', 'cancelled']],
+          note: 'An external effect already entered may have applied. Its outcome remains unconfirmed; no rollback or replay is claimed.',
+          statusState: 'error',
+          statusDescription:
+            'Review cancelled: external effects may be unconfirmed.',
+        }),
+    };
+  }
   if (
     error instanceof Error &&
     error.message === 'review_action_v2_success_status_publication_failed'

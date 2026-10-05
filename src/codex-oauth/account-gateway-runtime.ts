@@ -1,4 +1,5 @@
 import { execFile } from 'child_process';
+import * as core from '../actions/core';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -7,6 +8,7 @@ import { ReviewActionV2Client } from '../control-plane/review-action-v2-client';
 import { ReviewActionV2ControlPlaneAdapter } from '../review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
 import {
   AccountGatewayModelTransport,
+  createAccountGatewayRunFetch,
   startLocalGatewayModelTransport,
   type GatewayCloseReason,
   type GatewayReadback,
@@ -24,6 +26,7 @@ import {
 } from './safe-checkout';
 import {
   clearCodexRotatingProcessAuthEnv,
+  clearCodexRotatingOidcRequestEnv,
   clearCodexRotatingProviderSecretEnv,
 } from './auth-input';
 import {
@@ -51,11 +54,27 @@ export type AccountGatewayCheckoutCapability = Readonly<{
  * There is no prelease, upstream auth read/refresh or credential writeback. */
 export async function runAccountGatewayRuntime(
   input: CodexOAuthRuntimeInputs,
+  ports: Parameters<typeof runAccountGatewayRuntimeInternal>[1]
+): Promise<void> {
+  try {
+    await runAccountGatewayRuntimeInternal(input, ports);
+  } finally {
+    try {
+      clearCodexRotatingOidcRequestEnv();
+    } finally {
+      clearCodexRotatingProcessAuthEnv();
+    }
+  }
+}
+
+async function runAccountGatewayRuntimeInternal(
+  input: CodexOAuthRuntimeInputs,
   ports: {
     readonly review: CodexOAuthV2ReviewRunnerPort;
     readonly fetchImpl?: typeof fetch;
     readonly terminalReview: (
-      review: CodexOAuthV2ReviewResult
+      review: CodexOAuthV2ReviewResult,
+      signal: AbortSignal
     ) => Promise<void>;
     readonly terminalFailure: (error: unknown) => Promise<void>;
     readonly observeClose: (result: GatewayReadback) => void;
@@ -68,10 +87,15 @@ export async function runAccountGatewayRuntime(
 ): Promise<void> {
   clearCodexRotatingProviderSecretEnv();
   clearCodexRotatingProcessAuthEnv();
+  const run = new AbortController();
+  const fetchImpl = createAccountGatewayRunFetch(
+    ports.fetchImpl ?? fetch,
+    run.signal
+  );
   const controlPlane = new ReviewActionV2ControlPlaneAdapter(
     new ReviewActionV2Client({
       apiUrl: input.apiUrl,
-      fetchImpl: ports.fetchImpl,
+      fetchImpl,
     })
   );
   const transport = new AccountGatewayModelTransport(
@@ -79,25 +103,22 @@ export async function runAccountGatewayRuntime(
     () => controlPlane.currentAuthorization().authorizationToken
   );
   let authorized = false;
+  let failed = false;
   let workspacePath: string | undefined;
   let codexHome: string | undefined;
   let cli: PreparedCodexCli | undefined;
   let bridge: LocalGatewayModelTransport | undefined;
   let reason: GatewayCloseReason = 'failed';
-  const cancel = () => {
+  const onSignal = () => {
     reason = 'cancelled';
+    run.abort(new Error('account_gateway_cancelled'));
     transport.cancelInference();
   };
-  let cancelled = false;
-  const onSignal = () => {
-    cancelled = true;
-    cancel();
-  };
-  process.once('SIGTERM', onSignal);
-  process.once('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  process.on('SIGINT', onSignal);
   try {
     const oidc = new GitHubActionsOidcTokenProvider({
-      fetchImpl: ports.fetchImpl,
+      fetchImpl,
     });
     const authorization = await controlPlane.authorize({
       oidcToken: await oidc.requestToken(input.audience),
@@ -111,7 +132,9 @@ export async function runAccountGatewayRuntime(
     const readCapability =
       async (): Promise<AccountGatewayCheckoutCapability> => {
         const request: AccountGatewayCheckoutRequest = {};
-        const result = await transport.checkoutCapability(request);
+        run.signal.throwIfAborted();
+        const result = await transport.checkoutCapability(request, run.signal);
+        run.signal.throwIfAborted();
         return validateAccountGatewayCheckout(
           result,
           input.repository,
@@ -119,7 +142,7 @@ export async function runAccountGatewayRuntime(
         );
       };
     const capability = await readCapability();
-    if (cancelled) throw new Error('account_gateway_cancelled');
+    run.signal.throwIfAborted();
     workspacePath = await createIsolatedCheckoutWorkspace({
       runnerTempPath: process.env.RUNNER_TEMP,
       githubWorkspacePath: input.workspacePath,
@@ -129,16 +152,24 @@ export async function runAccountGatewayRuntime(
       headSha: capability.headSha,
       workspacePath,
       token: capability.token,
+      signal: run.signal,
     });
-    cli = await prepareCodexCliBeforeAuthRead();
+    run.signal.throwIfAborted();
+    cli = await prepareCodexCliBeforeAuthRead({
+      signal: run.signal,
+      logger: { info: core.info, warn: core.warning },
+    });
     // A binary-only version check; alternate installed versions do not inherit retry qualification.
     const version = await promisify(execFile)(cli.binaryPath, ['--version'], {
+      signal: run.signal,
+      killSignal: 'SIGKILL',
       timeout: 10_000,
       maxBuffer: 16_384,
       env: { PATH: process.env.PATH, HOME: os.tmpdir() },
     });
     if (!/^codex-cli 0\.147\.0\s*$/.test(version.stdout))
       throw new Error('account_gateway_codex_version_unqualified');
+    run.signal.throwIfAborted();
     codexHome = await fs.mkdtemp(
       path.join(
         process.env.RUNNER_TEMP || os.tmpdir(),
@@ -154,7 +185,7 @@ export async function runAccountGatewayRuntime(
       bridge.configuration.join('\n') + '\n',
       { mode: 0o600 }
     );
-    if (cancelled) throw new Error('account_gateway_cancelled');
+    run.signal.throwIfAborted();
     const review = await ports.review.run({
       ...input,
       repository: capability.repository,
@@ -165,13 +196,18 @@ export async function runAccountGatewayRuntime(
       scmReadToken: capability.token,
       scmReadTokenExpiresAt: capability.expiresAt,
       refreshScmReadToken: readCapability,
-      accountGateway: { controlPlane, modelTransport: bridge },
+      accountGateway: {
+        controlPlane,
+        modelTransport: bridge,
+        signal: run.signal,
+      },
     });
     // Runner has awaited App publication. Terminal status/advisory finishes before close.
     ports.observeRelay(transport.lastFailure);
-    await ports.terminalReview(review);
+    run.signal.throwIfAborted();
+    await ports.terminalReview(review, run.signal);
+    run.signal.throwIfAborted();
     reason =
-      cancelled ||
       review.outcome === CodexOAuthV2ReviewOutcome.Cancelled ||
       review.outcome === CodexOAuthV2ReviewOutcome.Superseded
         ? 'cancelled'
@@ -179,8 +215,9 @@ export async function runAccountGatewayRuntime(
           ? 'completed'
           : 'failed';
   } catch (error) {
+    failed = true;
     ports.observeRelay(transport.lastFailure);
-    await ports.terminalFailure(error);
+    await ports.terminalFailure(run.signal.aborted ? run.signal.reason : error);
   } finally {
     transport.cancelInference();
     // Every post-authorization exit (bootstrap failure/early return included).
@@ -201,15 +238,38 @@ export async function runAccountGatewayRuntime(
           ports.observeClose(await transport.close(reason));
         }
       }
+    } catch {
+      core.warning('Gateway cleanup reporting failed; outcome unconfirmed');
+      if (!failed) core.setFailed('account_gateway_cleanup_failed');
     } finally {
-      await bridge?.dispose();
-      process.removeListener('SIGTERM', onSignal);
-      process.removeListener('SIGINT', onSignal);
-      if (codexHome) await fs.rm(codexHome, { recursive: true, force: true });
-      if (workspacePath)
-        await fs.rm(workspacePath, { recursive: true, force: true });
-      await cli?.clear?.();
-      clearCodexRotatingProcessAuthEnv();
+      try {
+        const cleanup = async (
+          name: string,
+          operation: () => Promise<unknown>
+        ) => {
+          try {
+            await operation();
+          } catch {
+            core.warning(
+              `Account gateway ${name} cleanup failed; removal unconfirmed`
+            );
+            if (!failed) core.setFailed('account_gateway_cleanup_failed');
+          }
+        };
+        await cleanup('bridge', async () => bridge?.dispose());
+        if (codexHome)
+          await cleanup('CODEX_HOME', () =>
+            fs.rm(codexHome!, { recursive: true, force: true })
+          );
+        if (workspacePath)
+          await cleanup('checkout', () =>
+            fs.rm(workspacePath!, { recursive: true, force: true })
+          );
+        await cleanup('CLI', async () => cli?.clear?.());
+      } finally {
+        process.removeListener('SIGTERM', onSignal);
+        process.removeListener('SIGINT', onSignal);
+      }
     }
   }
 }

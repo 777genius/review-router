@@ -78,6 +78,7 @@ import { createProductionReviewProjectionBuilder } from './production-review-pro
 import { ReviewActionV2ControlPlaneAdapter } from './review-action-v2-control-plane-adapter';
 import {
   ACCOUNT_GATEWAY_BOUNDS,
+  createAccountGatewayRunFetch,
   type LocalGatewayModelTransport,
 } from './account-gateway-model-transport';
 import {
@@ -150,19 +151,25 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
   private async runInWorkspace(
     input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]
   ): Promise<CodexOAuthV2ReviewResult> {
+    const signal = input.accountGateway?.signal;
+    signal?.throwIfAborted();
+    const fetchImpl = signal
+      ? createAccountGatewayRunFetch(this.fetchImpl, signal)
+      : this.fetchImpl;
     validateInput(input);
     const authoritativeDeadlineEpochMs =
       process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
     const oidc = new GitHubActionsOidcTokenProvider({
-      fetchImpl: this.fetchImpl,
+      fetchImpl,
     });
-    await applyReviewRuntimeConfig(input, this.fetchImpl, oidc);
+    await applyReviewRuntimeConfig(input, fetchImpl, oidc);
     if (authoritativeDeadlineEpochMs === undefined) {
       delete process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
     } else {
       process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY] =
         authoritativeDeadlineEpochMs;
     }
+    signal?.throwIfAborted();
     const loadedConfig = ConfigLoader.load();
     const config = input.accountGateway
       ? { ...loadedConfig, providerRetries: 1 }
@@ -177,7 +184,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       : configuredTimeoutMs;
     const reviewActionClient = new ReviewActionV2Client({
       apiUrl: input.apiUrl,
-      fetchImpl: this.fetchImpl,
+      fetchImpl,
     });
     const controlPlane =
       input.accountGateway?.controlPlane ??
@@ -197,13 +204,29 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const github = new GitHubClient(input.scmReadToken, {
       tokenProvider: scmReadTokenProvider,
     });
+    if (signal) {
+      github.octokit.hook.wrap('request', (request, options) => {
+        signal.throwIfAborted();
+        return request({
+          ...options,
+          request: {
+            ...options.request,
+            signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+            timeout: 30_000,
+          },
+        });
+      });
+    }
     const revisionGuard = new GitHubReviewRevisionGuard(github, {
       workspaceId: authorization.facts.workspaceId,
       repositoryConnectionId: authorization.facts.repositoryConnectionId,
       scmRepositoryIdentityId: authorization.facts.scmRepositoryIdentityId,
       pullRequestNumber: authorization.facts.pullRequestNumber,
     });
-    const checkedOutHead = await readCheckedOutHead(input.workspacePath);
+    const checkedOutHead = await readCheckedOutHead(
+      input.workspacePath,
+      signal
+    );
     if (checkedOutHead !== authorization.facts.headSha) {
       throw new Error('review_action_v2_checked_out_revision_mismatch');
     }
@@ -227,7 +250,22 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     ) {
       return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
     }
-    await new GitReviewRevisionMaterializer().ensureAvailable({
+    signal?.throwIfAborted();
+    const materializer = new GitReviewRevisionMaterializer(
+      signal
+        ? async (args, options) => {
+            signal.throwIfAborted();
+            await execFileAsync('git', args, {
+              ...options,
+              signal,
+              killSignal: 'SIGKILL',
+              timeout: 60_000,
+              maxBuffer: 256 * 1_024,
+            });
+          }
+        : undefined
+    );
+    await materializer.ensureAvailable({
       checkoutRoot: path.resolve(input.workspacePath),
       repository: input.repository,
       scmReadToken: await scmReadTokenProvider.getToken(),
@@ -245,6 +283,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       pr.number,
       authorization.facts.headSha
     );
+    signal?.throwIfAborted();
     const codexProviderName = selectCodexProvider(config);
     const model = codexProviderName.slice('codex/'.length);
     const agenticContext = config.codexAgenticContext ?? true;
@@ -483,6 +522,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       clock: new SystemReviewOrchestrationClock(),
       delay: new SystemReviewOrchestrationDelay(),
       executionDeadline,
+      signal,
       ...(this.progress ? { progress: this.progress } : {}),
     });
     const result = await useCase.executeAuthorized(
@@ -519,6 +559,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       },
       authorization
     );
+    signal?.throwIfAborted();
     return mapOrchestrationResultToCodexOutcome(result);
   }
 }
@@ -1292,8 +1333,15 @@ function sameAuthorizedRevision(
   );
 }
 
-async function readCheckedOutHead(workspacePath: string): Promise<string> {
+async function readCheckedOutHead(
+  workspacePath: string,
+  signal?: AbortSignal
+): Promise<string> {
+  signal?.throwIfAborted();
   const result = await execFileAsync('git', ['rev-parse', 'HEAD'], {
+    ...(signal
+      ? { signal, killSignal: 'SIGKILL' as const, timeout: 10_000 }
+      : {}),
     cwd: workspacePath,
     env: {
       PATH: process.env.PATH,

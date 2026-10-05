@@ -47,6 +47,38 @@ export type LocalGatewayModelTransport = Readonly<{
   dispose(): Promise<void>;
 }>;
 
+/** Gateway lifecycle HTTP only. Failed seals/releases retain a bounded cleanup
+ * channel; every normal attempt (including client retries) observes run abort. */
+export function createAccountGatewayRunFetch(
+  fetchImpl: typeof fetch,
+  signal: AbortSignal
+): typeof fetch {
+  return (input, init) => {
+    const route = new URL(input instanceof Request ? input.url : String(input))
+      .pathname;
+    const cleanup =
+      [
+        '/api/action/v2/review-invocation-leases/release',
+        '/api/action/v2/review-investigations/leases/release',
+        '/api/action/v2/review-investigations/turns/abort',
+      ].includes(route) ||
+      ([
+        '/api/action/v2/review-context/gateway/seal',
+        '/api/action/v2/review-investigations/context-gateway/seal',
+      ].includes(route) &&
+        typeof init?.body === 'string' &&
+        (JSON.parse(init.body) as { providerSucceeded?: unknown })
+          .providerSucceeded === false);
+    if (!cleanup) signal.throwIfAborted();
+    const signals = [AbortSignal.timeout(ACCOUNT_GATEWAY_BOUNDS.controlMs)];
+    if (!cleanup) signals.push(signal);
+    const requestSignal =
+      init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    if (requestSignal) signals.push(requestSignal);
+    return fetchImpl(input, { ...init, signal: AbortSignal.any(signals) });
+  };
+}
+
 /** One fixed RR origin, current v2 run authorization, ordinary Responses bytes.
  * No SDK/control bearer, account selection, protocol conversion or replay. */
 export class AccountGatewayModelTransport {
@@ -244,17 +276,22 @@ export class AccountGatewayModelTransport {
   /** Required companion endpoint: current authorized run -> scoped SCM read only.
    * This is deliberately a product adapter request, not a new gateway protocol. */
   checkoutCapability(
-    request: Readonly<Record<string, never>>
+    request: Readonly<Record<string, never>>,
+    signal?: AbortSignal
   ): Promise<GatewayReadback> {
-    return this.json('POST', `${BASE}/checkout`, request);
+    return this.json('POST', `${BASE}/checkout`, request, signal);
   }
 
   private async json(
     method: string,
     route: string,
-    payload?: unknown
+    payload?: unknown,
+    signal?: AbortSignal
   ): Promise<GatewayReadback> {
     const controller = new AbortController();
+    const abort = () => controller.abort(signal?.reason);
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
     const timer = setTimeout(
       () => controller.abort(),
       ACCOUNT_GATEWAY_BOUNDS.controlMs
@@ -287,6 +324,7 @@ export class AccountGatewayModelTransport {
     } catch {
       throw new Error('account_gateway_readback_unknown');
     } finally {
+      signal?.removeEventListener('abort', abort);
       clearTimeout(timer);
       controller.abort();
     }

@@ -134,7 +134,9 @@ export type RunT0ReviewOrchestrationDependencies = {
   readonly contextAttestations?: ReviewContextAttestationPort;
   readonly identities: ReviewOrchestrationIdentityPort;
   readonly clock: ReviewOrchestrationClockPort;
-  readonly delay: ReviewOrchestrationDelayPort;
+  readonly delay: ReviewOrchestrationDelayPort & {
+    sleep(delayMs: number, signal?: AbortSignal): Promise<void>;
+  };
   readonly executionDeadline?: ExecutionDeadline;
   readonly signal?: AbortSignal;
   readonly progress?: ReviewOrchestrationProgressPort;
@@ -666,7 +668,11 @@ export class RunT0ReviewOrchestration {
           clampPollDelay(pollAfterMs),
           Math.max(0, remainingMs - FINAL_PUBLICATION_STATUS_RESERVE_MS)
         );
-        if (delayMs > 0) await this.dependencies.delay.sleep(delayMs);
+        if (delayMs > 0)
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
         this.dependencies.signal?.throwIfAborted();
         const requestBudgetMs = Math.floor(
           publicationDeadlineMs - readMonotonicClockMs(this.dependencies.clock)
@@ -1042,7 +1048,10 @@ export class RunT0ReviewOrchestration {
               exhaustionReason: ReviewWorkSlotExhaustionReason.DeadlineReached,
             };
           }
-          await this.dependencies.delay.sleep(delayMs);
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
           await this.assertRevisionCurrent(input.revision);
           const joined = await this.trySatisfyFromLookup({
             ...input,
@@ -1382,7 +1391,7 @@ export class RunT0ReviewOrchestration {
           Math.min(5_000, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        await this.dependencies.delay.sleep(delayMs);
+        await this.dependencies.delay.sleep(delayMs, this.dependencies.signal);
         continue;
       }
       if (
@@ -1672,7 +1681,7 @@ export class RunT0ReviewOrchestration {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
           return;
         }
-        await this.dependencies.delay.sleep(delayMs);
+        await this.dependencies.delay.sleep(delayMs, abort.signal);
         if (stopped || abort.signal.aborted) return;
         if (this.providerOperationRemainingMs() <= 0) {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -1692,7 +1701,7 @@ export class RunT0ReviewOrchestration {
         }
       }
     };
-    void monitor();
+    const monitorPromise = monitor().catch((error) => abort.abort(error));
     try {
       const observation = await this.executeLegacyInvocation(
         input,
@@ -1717,6 +1726,8 @@ export class RunT0ReviewOrchestration {
       throw error;
     } finally {
       stopped = true;
+      abort.abort();
+      await monitorPromise;
       invocationSignal.removeEventListener('abort', relayLeaseAbort);
     }
   }
@@ -1773,7 +1784,7 @@ export class RunT0ReviewOrchestration {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
             return;
           }
-          await this.dependencies.delay.sleep(delayMs);
+          await this.dependencies.delay.sleep(delayMs, abort.signal);
           if (stopped || abort.signal.aborted) return;
           if (this.providerOperationRemainingMs() <= 0) {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -1792,7 +1803,7 @@ export class RunT0ReviewOrchestration {
           }
         }
       };
-      void monitor();
+      const monitorPromise = monitor().catch((error) => abort.abort(error));
       try {
         const observation = await recording.execute({
           authorization: input.authorization,
@@ -1822,6 +1833,8 @@ export class RunT0ReviewOrchestration {
         throw error;
       } finally {
         stopped = true;
+        abort.abort();
+        await monitorPromise;
         this.dependencies.signal?.removeEventListener('abort', cancel);
       }
     } catch (error) {

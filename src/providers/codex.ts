@@ -845,6 +845,8 @@ export class CodexProvider extends Provider {
         let stdout = '';
         let stderr = '';
         let settled = false;
+        let pendingFailure: unknown;
+        let failed = false;
 
         const terminate = () => {
           try {
@@ -859,6 +861,14 @@ export class CodexProvider extends Provider {
         };
         const fail = (error: unknown) => {
           if (settled) return;
+          if (this.options.accountGateway) {
+            if (!failed) {
+              pendingFailure = error;
+              failed = true;
+              cleanup();
+            }
+            return;
+          }
           settled = true;
           cleanup();
           reject(error);
@@ -876,6 +886,7 @@ export class CodexProvider extends Provider {
           fail(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
         }, timeoutMs);
         options.signal?.addEventListener('abort', onAbort, { once: true });
+        if (options.signal?.aborted) onAbort();
 
         let outputBytes = 0;
         const withinOutputBound = (chunk: Buffer | string) => {
@@ -891,21 +902,24 @@ export class CodexProvider extends Provider {
           return true;
         };
         proc.stdout?.on('data', (chunk) => {
-          if (settled || !withinOutputBound(chunk)) return;
+          if (settled || failed || !withinOutputBound(chunk)) return;
           stdout += chunk.toString();
         });
         proc.stderr?.on('data', (chunk) => {
-          if (settled || !withinOutputBound(chunk)) return;
+          if (settled || failed || !withinOutputBound(chunk)) return;
           stderr += chunk.toString();
         });
         proc.on('error', (err) => {
+          if (this.options.accountGateway && proc.pid) terminate();
           fail(err);
         });
         proc.on('close', (code) => {
           if (settled) return;
           settled = true;
           cleanup();
-          if (code !== 0) {
+          if (failed) {
+            reject(pendingFailure);
+          } else if (code !== 0) {
             const message = `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr, stdout)}`;
             reject(new CodexCliExitError(code, stdout, stderr, message));
           } else {
@@ -913,7 +927,7 @@ export class CodexProvider extends Provider {
           }
         });
       }).catch(async (error) => {
-        if (options.signal?.aborted) throw error;
+        if (this.options.accountGateway || options.signal?.aborted) throw error;
         const lastMessage = await this.readOptionalFile(outputFile);
         if (
           options.acceptReviewOutputOnNonZero &&

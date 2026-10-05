@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import * as path from 'path';
 import { promisify } from 'util';
 import * as core from '../../actions/core';
@@ -255,13 +255,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       signal
         ? async (args, options) => {
             signal.throwIfAborted();
-            await execFileAsync('git', args, {
-              ...options,
-              signal,
-              killSignal: 'SIGKILL',
-              timeout: 60_000,
-              maxBuffer: 256 * 1_024,
-            });
+            await runAccountGatewayGit(args, options, signal);
           }
         : undefined
     );
@@ -432,7 +426,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               return new RunInvestigationWorkSlot({
                 controlPlane: investigationControlPlane,
                 legacyFallbackGate,
-                delay: new SystemReviewOrchestrationDelay(),
+                delay: new CancellableReviewOrchestrationDelay(),
                 leases: new ReviewActionV2InvestigationLeaseAdapter(
                   reviewActionClient
                 ),
@@ -520,7 +514,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         : {}),
       identities,
       clock: new SystemReviewOrchestrationClock(),
-      delay: new SystemReviewOrchestrationDelay(),
+      delay: new CancellableReviewOrchestrationDelay(),
       executionDeadline,
       signal,
       ...(this.progress ? { progress: this.progress } : {}),
@@ -1338,18 +1332,18 @@ async function readCheckedOutHead(
   signal?: AbortSignal
 ): Promise<string> {
   signal?.throwIfAborted();
-  const result = await execFileAsync('git', ['rev-parse', 'HEAD'], {
-    ...(signal
-      ? { signal, killSignal: 'SIGKILL' as const, timeout: 10_000 }
-      : {}),
+  const options = {
     cwd: workspacePath,
     env: {
       PATH: process.env.PATH,
       GIT_CONFIG_NOSYSTEM: '1',
       GIT_CONFIG_GLOBAL: '/dev/null',
     },
-  });
-  const head = result.stdout.trim().toLowerCase();
+  };
+  const stdout = signal
+    ? await runAccountGatewayGit(['rev-parse', 'HEAD'], options, signal, 10_000)
+    : (await execFileAsync('git', ['rev-parse', 'HEAD'], options)).stdout;
+  const head = stdout.trim().toLowerCase();
   if (!/^[a-f0-9]{40}$/.test(head)) {
     throw new Error('review_action_v2_checked_out_head_invalid');
   }
@@ -1373,4 +1367,78 @@ function canonicalJson(value: unknown): string {
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+// Owned gateway Git helpers use the same group-kill/close drain as bootstrap checkout.
+function runAccountGatewayGit(
+  args: readonly string[],
+  options: { readonly cwd: string; readonly env: NodeJS.ProcessEnv },
+  signal: AbortSignal,
+  timeoutMs = 60_000
+): Promise<string> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, {
+      ...options,
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let failure: unknown;
+    let failed = false;
+    const stop = (error: unknown) => {
+      if (failed) return;
+      failure = error;
+      failed = true;
+      clearTimeout(timer);
+      signal.removeEventListener('abort', cancel);
+      try {
+        if (process.platform !== 'win32' && child.pid)
+          process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    };
+    const cancel = () => stop(signal.reason);
+    const timer = setTimeout(
+      () => stop(new Error('account_gateway_git_timeout')),
+      timeoutMs
+    );
+    signal.addEventListener('abort', cancel, { once: true });
+    if (signal.aborted) cancel();
+    let stdout = '';
+    let bytes = 0;
+    const collect = (chunk: Buffer, output: boolean) => {
+      if (failed) return;
+      bytes += chunk.length;
+      if (bytes > 256 * 1_024)
+        stop(new Error('account_gateway_git_output_bound'));
+      else if (!failed && output) stdout += chunk.toString();
+    };
+    child.stdout.on('data', (chunk: Buffer) => collect(chunk, true));
+    child.stderr.on('data', (chunk: Buffer) => collect(chunk, false));
+    child.on('error', (error) => stop(error));
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', cancel);
+      if (failed) reject(failure);
+      else if (code !== 0) reject(new Error('account_gateway_git_failed'));
+      else resolve(stdout);
+    });
+  });
+}
+
+class CancellableReviewOrchestrationDelay extends SystemReviewOrchestrationDelay {
+  override sleep(delayMs: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, delayMs);
+      signal?.addEventListener('abort', finish, { once: true });
+      if (signal?.aborted) finish();
+    });
+  }
 }

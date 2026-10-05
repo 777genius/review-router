@@ -49,6 +49,7 @@ import {
   type CodexOAuthTerminalOutcomeDedupeKey,
   type CodexOAuthTerminalOutcomeReporterPort,
   type CodexOAuthTerminalOutcomeReport,
+  type PublicationRequestOptions,
 } from './terminal-outcome-publication';
 export type {
   CodexOAuthTerminalOutcomeClearRequest,
@@ -363,7 +364,10 @@ async function runAccountGatewayActionInternal(
   clearCodexRotatingProcessAuthEnv();
   const inputs = readCodexOAuthActionInputs();
   const terminalOidcEnv = snapshotCodexOAuthTerminalOutcomeOidcEnv();
-  const createReporter = (fetchImpl: typeof fetch) =>
+  const createReporter = (
+    fetchImpl: typeof fetch,
+    requestOptions: PublicationRequestOptions
+  ) =>
     options.terminalOutcomeReporter ??
     createDefaultCodexOAuthTerminalOutcomeReporter({
       context: {
@@ -372,6 +376,7 @@ async function runAccountGatewayActionInternal(
         headSha: inputs.headSha,
       },
       audience: inputs.audience,
+      requestOptions,
       controlPlane: new CodexOAuthControlPlaneClient({
         apiUrl: inputs.apiUrl,
         fetchImpl,
@@ -381,35 +386,21 @@ async function runAccountGatewayActionInternal(
         fetchImpl,
       }),
     });
-  const terminalOutcomeReporter = createReporter(
-    createAccountGatewayRunFetch(
-      options.fetchImpl ?? fetch,
-      new AbortController().signal
-    )
-  );
-  const ciProgressPublisher = createCiReviewProgressPublisher({
-    repository: inputs.repository,
-    pullRequestNumber: inputs.pullRequestNumber,
-  });
-  let runSignal: AbortSignal | undefined;
-  if (ciProgressPublisher) {
-    const publish = ciProgressPublisher.publish.bind(ciProgressPublisher);
-    ciProgressPublisher.publish = (snapshot) => {
-      if (
-        ['none', 'complete', 'complete_with_gaps'].includes(snapshot.terminal)
-      )
-        runSignal?.throwIfAborted();
-      return publish(snapshot);
-    };
-  }
-  const ciProgressReporter = ciProgressPublisher
-    ? new CiOrchestrationProgressReporter(ciProgressPublisher)
-    : undefined;
+  const createProgressPublisher = (signal: AbortSignal) =>
+    createCiReviewProgressPublisher({
+      repository: inputs.repository,
+      pullRequestNumber: inputs.pullRequestNumber,
+      requestOptions: { signal, timeoutMs: 10_000 },
+    });
+  let ciProgressReporter: CiOrchestrationProgressReporter | undefined;
   await runAccountGatewayRuntime(inputs, {
     fetchImpl: options.fetchImpl,
     review: {
       run: (input) => {
-        runSignal = input.accountGateway?.signal;
+        const signal = input.accountGateway?.signal;
+        const publisher = signal && createProgressPublisher(signal);
+        if (publisher)
+          ciProgressReporter = new CiOrchestrationProgressReporter(publisher);
         return (
           options.v2ReviewRunner ??
           createProductionT0ReviewRunner({
@@ -425,7 +416,8 @@ async function runAccountGatewayActionInternal(
         inputs,
         review,
         createReporter(
-          createAccountGatewayRunFetch(options.fetchImpl ?? fetch, signal)
+          createAccountGatewayRunFetch(options.fetchImpl ?? fetch, signal),
+          { signal, timeoutMs: 10_000 }
         ),
         ciProgressReporter ?? null,
         signal
@@ -436,7 +428,13 @@ async function runAccountGatewayActionInternal(
     terminalFailure: async (error) => {
       const cancelled =
         error instanceof Error && error.message === 'account_gateway_cancelled';
-      await ciProgressReporter?.finish(cancelled ? 'cancelled' : 'failed');
+      // Reporting retains its own deadline after normal work is cancelled.
+      const reportingSignal = AbortSignal.timeout(10_000);
+      const reportingPublisher = createProgressPublisher(reportingSignal);
+      await ciProgressReporter?.finish(
+        cancelled ? 'cancelled' : 'failed',
+        reportingPublisher ?? undefined
+      );
       core.setOutput('reviewrouter_state', cancelled ? 'cancelled' : 'failed');
       core.setOutput(
         'reviewrouter_v2_outcome',
@@ -445,7 +443,16 @@ async function runAccountGatewayActionInternal(
       const failure = classifyV2ActionFailure(error);
       const report = failure.report(inputs);
       appendTerminalOutcomeStepSummary(report);
-      await publishTerminalOutcomeReportSafely(terminalOutcomeReporter, report);
+      await publishTerminalOutcomeReportSafely(
+        createReporter(
+          createAccountGatewayRunFetch(
+            options.fetchImpl ?? fetch,
+            reportingSignal
+          ),
+          { signal: reportingSignal, timeoutMs: 10_000 }
+        ),
+        report
+      );
       core.setFailed(failure.code);
     },
     observeRelay: (fact) => {

@@ -23707,6 +23707,8 @@ var CodexProvider = class _CodexProvider extends Provider {
         let stdout2 = "";
         let stderr2 = "";
         let settled = false;
+        let pendingFailure;
+        let failed = false;
         const terminate = () => {
           try {
             if (proc.pid) process.kill(-proc.pid, "SIGKILL");
@@ -23720,6 +23722,14 @@ var CodexProvider = class _CodexProvider extends Provider {
         };
         const fail = (error2) => {
           if (settled) return;
+          if (this.options.accountGateway) {
+            if (!failed) {
+              pendingFailure = error2;
+              failed = true;
+              cleanup();
+            }
+            return;
+          }
           settled = true;
           cleanup();
           reject(error2);
@@ -23736,6 +23746,7 @@ var CodexProvider = class _CodexProvider extends Provider {
           fail(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
         }, timeoutMs);
         options.signal?.addEventListener("abort", onAbort, { once: true });
+        if (options.signal?.aborted) onAbort();
         let outputBytes = 0;
         const withinOutputBound = (chunk) => {
           outputBytes += Buffer.byteLength(chunk);
@@ -23747,21 +23758,24 @@ var CodexProvider = class _CodexProvider extends Provider {
           return true;
         };
         proc.stdout?.on("data", (chunk) => {
-          if (settled || !withinOutputBound(chunk)) return;
+          if (settled || failed || !withinOutputBound(chunk)) return;
           stdout2 += chunk.toString();
         });
         proc.stderr?.on("data", (chunk) => {
-          if (settled || !withinOutputBound(chunk)) return;
+          if (settled || failed || !withinOutputBound(chunk)) return;
           stderr2 += chunk.toString();
         });
         proc.on("error", (err) => {
+          if (this.options.accountGateway && proc.pid) terminate();
           fail(err);
         });
         proc.on("close", (code) => {
           if (settled) return;
           settled = true;
           cleanup();
-          if (code !== 0) {
+          if (failed) {
+            reject(pendingFailure);
+          } else if (code !== 0) {
             const message = `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr2, stdout2)}`;
             reject(new CodexCliExitError(code, stdout2, stderr2, message));
           } else {
@@ -23769,7 +23783,7 @@ var CodexProvider = class _CodexProvider extends Provider {
           }
         });
       }).catch(async (error2) => {
-        if (options.signal?.aborted) throw error2;
+        if (this.options.accountGateway || options.signal?.aborted) throw error2;
         const lastMessage2 = await this.readOptionalFile(outputFile);
         if (options.acceptReviewOutputOnNonZero && this.isUsableReviewOutput(lastMessage2)) {
           const exitError = error2 instanceof CodexCliExitError ? error2 : void 0;
@@ -28606,7 +28620,7 @@ async function withRetry(fn, options) {
     const maxAttempts = options.retries + 1;
     const minTimeout = options.minTimeout ?? 500;
     const factor = options.factor ?? 2;
-    let delay = minTimeout;
+    let delay2 = minTimeout;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await fn();
@@ -28619,8 +28633,8 @@ async function withRetry(fn, options) {
           `Retryable error: attempt ${attempt} of ${maxAttempts}`,
           err.message
         );
-        await new Promise((resolve5) => setTimeout(resolve5, delay));
-        delay = Math.min(delay * factor, options.maxTimeout ?? 4e3);
+        await new Promise((resolve5) => setTimeout(resolve5, delay2));
+        delay2 = Math.min(delay2 * factor, options.maxTimeout ?? 4e3);
       }
     }
   }
@@ -34948,13 +34962,13 @@ var GitHubClient = class {
    * Throttle requests when approaching rate limit
    */
   async throttleIfNeeded() {
-    const delay = this.calculateBackoffDelay();
-    if (delay > 0) {
+    const delay2 = this.calculateBackoffDelay();
+    if (delay2 > 0) {
       const status = this.rateLimitTracker.getStatus();
       debug(
-        `Throttling GitHub API request (${delay}ms delay, ${status?.remaining} requests remaining)`
+        `Throttling GitHub API request (${delay2}ms delay, ${status?.remaining} requests remaining)`
       );
-      await new Promise((resolve5) => setTimeout(resolve5, delay));
+      await new Promise((resolve5) => setTimeout(resolve5, delay2));
     }
   }
   /**
@@ -92499,11 +92513,11 @@ var RunInvestigationTurn = class {
       "review_agent_unclassified_failure"
     );
     const reason = abortReason(failure.failureClass);
-    const delay = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
+    const delay2 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
       failure.retryAfterMs ?? input.minimumCapacityParkMs,
       input.minimumCapacityParkMs
     );
-    const nextEligibleAt = delay === null ? null : new Date(this.dependencies.now().getTime() + delay).toISOString();
+    const nextEligibleAt = delay2 === null ? null : new Date(this.dependencies.now().getTime() + delay2).toISOString();
     return this.abort(
       input,
       reason,
@@ -93475,7 +93489,11 @@ var RunT0ReviewOrchestration = class {
           clampPollDelay(pollAfterMs),
           Math.max(0, remainingMs - FINAL_PUBLICATION_STATUS_RESERVE_MS)
         );
-        if (delayMs > 0) await this.dependencies.delay.sleep(delayMs);
+        if (delayMs > 0)
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
         this.dependencies.signal?.throwIfAborted();
         const requestBudgetMs = Math.floor(
           publicationDeadlineMs - readMonotonicClockMs(this.dependencies.clock)
@@ -93777,7 +93795,10 @@ var RunT0ReviewOrchestration = class {
               exhaustionReason: "deadline_reached" /* DeadlineReached */
             };
           }
-          await this.dependencies.delay.sleep(delayMs);
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
           await this.assertRevisionCurrent(input.revision);
           const joined = await this.trySatisfyFromLookup({
             ...input,
@@ -94061,7 +94082,7 @@ var RunT0ReviewOrchestration = class {
           Math.min(5e3, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        await this.dependencies.delay.sleep(delayMs);
+        await this.dependencies.delay.sleep(delayMs, this.dependencies.signal);
         continue;
       }
       if (acquire.status !== "acquired" /* Acquired */) {
@@ -94276,7 +94297,7 @@ var RunT0ReviewOrchestration = class {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
           return;
         }
-        await this.dependencies.delay.sleep(delayMs);
+        await this.dependencies.delay.sleep(delayMs, abort.signal);
         if (stopped || abort.signal.aborted) return;
         if (this.providerOperationRemainingMs() <= 0) {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -94292,7 +94313,7 @@ var RunT0ReviewOrchestration = class {
         }
       }
     };
-    void monitor();
+    const monitorPromise = monitor().catch((error2) => abort.abort(error2));
     try {
       const observation = await this.executeLegacyInvocation(
         input,
@@ -94310,6 +94331,8 @@ var RunT0ReviewOrchestration = class {
       throw error2;
     } finally {
       stopped = true;
+      abort.abort();
+      await monitorPromise;
       invocationSignal.removeEventListener("abort", relayLeaseAbort);
     }
   }
@@ -94347,7 +94370,7 @@ var RunT0ReviewOrchestration = class {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
             return;
           }
-          await this.dependencies.delay.sleep(delayMs);
+          await this.dependencies.delay.sleep(delayMs, abort.signal);
           if (stopped || abort.signal.aborted) return;
           if (this.providerOperationRemainingMs() <= 0) {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -94363,7 +94386,7 @@ var RunT0ReviewOrchestration = class {
           }
         }
       };
-      void monitor();
+      const monitorPromise = monitor().catch((error2) => abort.abort(error2));
       try {
         const observation = await recording.execute({
           authorization: input.authorization,
@@ -94387,6 +94410,8 @@ var RunT0ReviewOrchestration = class {
         throw error2;
       } finally {
         stopped = true;
+        abort.abort();
+        await monitorPromise;
         this.dependencies.signal?.removeEventListener("abort", cancel);
       }
     } catch (error2) {
@@ -101204,6 +101229,35 @@ function assertSafeOwnerRepoPart(value, label) {
 }
 
 // src/codex-oauth/terminal-outcome-publication.ts
+var import_promises2 = require("node:timers/promises");
+function createPublicationGitHubClient(token, options = {}) {
+  const client = new GitHubClient(token, {
+    sleep: async (ms) => {
+      await (0, import_promises2.setTimeout)(ms, void 0, { signal: options.signal });
+    }
+  });
+  if (options.signal || options.timeoutMs) {
+    client.octokit.hook.wrap("request", (request, parameters) => {
+      options.signal?.throwIfAborted();
+      const signal = options.timeoutMs ? AbortSignal.any([
+        ...options.signal ? [options.signal] : [],
+        AbortSignal.timeout(options.timeoutMs)
+      ]) : options.signal;
+      const fetchImpl = parameters.request?.fetch ?? fetch;
+      parameters.request = {
+        ...parameters.request,
+        signal,
+        ...options.timeoutMs ? { timeout: options.timeoutMs } : {},
+        fetch: (url, init) => {
+          signal?.throwIfAborted();
+          return fetchImpl(url, { ...init, signal });
+        }
+      };
+      return request(parameters);
+    });
+  }
+  return client;
+}
 var TerminalOutcomePublicationUseCase = class {
   constructor(input) {
     this.input = input;
@@ -101229,6 +101283,7 @@ var TerminalOutcomePublicationUseCase = class {
     if (statusFailed) throw statusFailure;
   }
   async clear(_request) {
+    this.input.signal?.throwIfAborted();
     const comments = await this.input.github.listPullRequestComments({
       repository: this.input.context.repository,
       pullRequestNumber: this.input.context.pullRequestNumber
@@ -101238,6 +101293,7 @@ var TerminalOutcomePublicationUseCase = class {
       (comment) => (comment.body ?? "").includes(currentRevisionMarker)
     );
     for (const comment of terminalComments) {
+      this.input.signal?.throwIfAborted();
       await this.input.github.deletePullRequestComment({
         repository: this.input.context.repository,
         commentId: comment.id
@@ -101248,6 +101304,7 @@ var TerminalOutcomePublicationUseCase = class {
     await this.createCommitStatus(status);
   }
   async upsertPullRequestComment(report) {
+    this.input.signal?.throwIfAborted();
     const comments = await this.input.github.listPullRequestComments({
       repository: this.input.context.repository,
       pullRequestNumber: this.input.context.pullRequestNumber
@@ -101259,6 +101316,7 @@ var TerminalOutcomePublicationUseCase = class {
     if (existing) {
       for (const duplicate of duplicates) {
         try {
+          this.input.signal?.throwIfAborted();
           await this.input.github.deletePullRequestComment({
             repository: this.input.context.repository,
             commentId: duplicate.id
@@ -101275,6 +101333,7 @@ var TerminalOutcomePublicationUseCase = class {
         );
         return;
       }
+      this.input.signal?.throwIfAborted();
       await this.input.github.updatePullRequestComment({
         repository: this.input.context.repository,
         commentId: existing.id,
@@ -101282,6 +101341,7 @@ var TerminalOutcomePublicationUseCase = class {
       });
       return;
     }
+    this.input.signal?.throwIfAborted();
     await this.input.github.createPullRequestComment({
       repository: this.input.context.repository,
       pullRequestNumber: this.input.context.pullRequestNumber,
@@ -101290,6 +101350,7 @@ var TerminalOutcomePublicationUseCase = class {
   }
   async createCommitStatus(status) {
     try {
+      this.input.signal?.throwIfAborted();
       await this.input.github.createCommitStatus({
         repository: this.input.context.repository,
         headSha: this.input.context.headSha,
@@ -101312,8 +101373,8 @@ var TerminalOutcomePublicationUseCase = class {
 };
 var GitHubTerminalOutcomePublicationAdapter = class {
   client;
-  constructor(token) {
-    this.client = new GitHubClient(token);
+  constructor(token, options = {}) {
+    this.client = createPublicationGitHubClient(token, options);
   }
   async listPullRequestComments(input) {
     const repository = this.resolveRepository(input.repository);
@@ -101370,20 +101431,26 @@ var GitHubTerminalOutcomePublicationAdapter = class {
 };
 function createDefaultCodexOAuthTerminalOutcomeReporter(input) {
   const requestActionCommentToken = async () => {
+    input.requestOptions?.signal?.throwIfAborted();
     const oidcToken = await input.oidc.requestToken(input.audience);
+    input.requestOptions?.signal?.throwIfAborted();
     const session = await input.controlPlane.actionSession({
       oidcToken,
       audience: input.audience
     });
+    input.requestOptions?.signal?.throwIfAborted();
     const commentToken = await input.controlPlane.actionCommentToken({
       sessionToken: session.sessionToken
     });
+    input.requestOptions?.signal?.throwIfAborted();
     return commentToken.token;
   };
   const createUseCase = async () => new TerminalOutcomePublicationUseCase({
     context: input.context,
+    signal: input.requestOptions?.signal,
     github: new GitHubTerminalOutcomePublicationAdapter(
-      await requestActionCommentToken()
+      await requestActionCommentToken(),
+      input.requestOptions
     )
   });
   return {
@@ -103324,7 +103391,7 @@ function compareCodeUnits4(left, right) {
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
 var import_child_process14 = require("child_process");
 var import_crypto33 = require("crypto");
-var import_promises4 = require("fs/promises");
+var import_promises5 = require("fs/promises");
 var os10 = __toESM(require("os"));
 var path22 = __toESM(require("path"));
 var import_util9 = require("util");
@@ -103684,7 +103751,7 @@ function gitOptions(root, encoding) {
 
 // src/context-gateway/context-gateway-v4-replay-material.ts
 var import_crypto31 = require("crypto");
-var import_promises2 = require("fs/promises");
+var import_promises3 = require("fs/promises");
 var import_path3 = __toESM(require("path"));
 var MAX_ENTRIES = 2e3;
 var MAX_STATE_BYTES = 2 * 1024 * 1024;
@@ -103699,12 +103766,12 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
   entries = [];
   mutationTail = Promise.resolve();
   async initialize() {
-    await (0, import_promises2.mkdir)(import_path3.default.dirname(this.config.replayMaterialPath), {
+    await (0, import_promises3.mkdir)(import_path3.default.dirname(this.config.replayMaterialPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises2.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises3.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -103718,7 +103785,7 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
     if (this.entries.length > 0) {
       throw new Error("context_gateway_v4_replay_already_active");
     }
-    const encrypted = await (0, import_promises2.readFile)(this.config.replayMaterialPath, "utf8");
+    const encrypted = await (0, import_promises3.readFile)(this.config.replayMaterialPath, "utf8");
     const raw = decryptContextGatewayV4ReplayMaterial({
       encryptedCanonicalJson: encrypted,
       secret: this.config.secret,
@@ -103935,15 +104002,15 @@ function isRecord6(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 async function atomicPrivateWrite(target, content) {
-  await (0, import_promises2.mkdir)(import_path3.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises3.mkdir)(import_path3.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto31.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises2.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises2.rename)(temporary, target);
+  await (0, import_promises3.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises3.rename)(temporary, target);
 }
 
 // src/context-gateway/context-gateway-v4-recorder.ts
 var import_crypto32 = require("crypto");
-var import_promises3 = require("fs/promises");
+var import_promises4 = require("fs/promises");
 var import_path4 = __toESM(require("path"));
 var MAX_EVENTS = 2e3;
 var CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
@@ -103964,12 +104031,12 @@ var ContextGatewayV4Recorder = class {
   terminalFailureClass = null;
   now;
   async initialize() {
-    await (0, import_promises3.mkdir)(import_path4.default.dirname(this.config.transcriptPath), {
+    await (0, import_promises4.mkdir)(import_path4.default.dirname(this.config.transcriptPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises3.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises4.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -103983,7 +104050,7 @@ var ContextGatewayV4Recorder = class {
     if (this.events.length > 0) {
       throw new Error("context_gateway_v4_recorder_already_active");
     }
-    const raw = await (0, import_promises3.readFile)(this.config.transcriptPath, "utf8");
+    const raw = await (0, import_promises4.readFile)(this.config.transcriptPath, "utf8");
     if (raw.length < 2 || Buffer.byteLength(raw, "utf8") > CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES) {
       throw new Error("context_gateway_v4_recorder_state_size_invalid");
     }
@@ -104173,10 +104240,10 @@ function sanitizeReason(value) {
   return value;
 }
 async function atomicPrivateWrite2(target, content) {
-  await (0, import_promises3.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises4.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto32.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises3.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises3.rename)(temporary, target);
+  await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises4.rename)(temporary, target);
 }
 
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
@@ -104255,7 +104322,7 @@ var ContextGatewayInvocationSessionFactory = class {
     const { checkoutTreeOid } = revisionTreeOids;
     const gatewayBinaryHash = sha25613(gatewayBundleSnapshot);
     const gatewayPolicyVersion = this.policyVersion();
-    const directory = await (0, import_promises4.mkdtemp)(
+    const directory = await (0, import_promises5.mkdtemp)(
       path22.join(os10.tmpdir(), "reviewrouter-context-gateway-")
     );
     const gatewayBundlePath = path22.join(directory, "context-gateway.cjs");
@@ -104263,12 +104330,12 @@ var ContextGatewayInvocationSessionFactory = class {
     const replayMaterialPath = path22.join(directory, "replay-material.json");
     let requiredWitness = null;
     try {
-      await (0, import_promises4.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
+      await (0, import_promises5.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
         flag: "wx",
         mode: 448
       });
     } catch (error2) {
-      await (0, import_promises4.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises5.rm)(directory, { recursive: true, force: true });
       throw error2;
     }
     const confinementEvidenceHash = sha25613(
@@ -104305,7 +104372,7 @@ var ContextGatewayInvocationSessionFactory = class {
         }
       });
     } catch (error2) {
-      await (0, import_promises4.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises5.rm)(directory, { recursive: true, force: true });
       throw error2;
     }
     const secret = Buffer.from(serverSession.gatewaySessionSecret, "base64url");
@@ -104392,7 +104459,7 @@ var ContextGatewayInvocationSessionFactory = class {
     return this.options.policyVersion ?? CONTEXT_GATEWAY_POLICY_VERSION;
   }
   async gatewayBundleSnapshot() {
-    this.gatewayBundleSnapshotPromise ??= (0, import_promises4.readFile)(
+    this.gatewayBundleSnapshotPromise ??= (0, import_promises5.readFile)(
       this.options.gatewayBundlePath
     );
     return Buffer.from(await this.gatewayBundleSnapshotPromise);
@@ -104516,7 +104583,7 @@ var ContextGatewayInvocationSession = class {
       );
     }
     const { transcriptCanonicalJson, replayMaterialCanonicalJson } = createWireSealPayload(transcript, replayMaterial);
-    await (0, import_promises4.rm)(this.replayMaterialPath);
+    await (0, import_promises5.rm)(this.replayMaterialPath);
     const attestation = await this.attestations.sealGatewaySession({
       invocationLease: this.currentInvocationLease(),
       session: this.serverSession,
@@ -104649,7 +104716,7 @@ var ContextGatewayInvocationSession = class {
     }
     this.secret.fill(0);
     try {
-      await (0, import_promises4.rm)(this.directory, { recursive: true, force: true });
+      await (0, import_promises5.rm)(this.directory, { recursive: true, force: true });
     } catch (error2) {
       failures.push(error2);
     }
@@ -104800,7 +104867,7 @@ async function cleanupOpenedGatewaySession(input) {
   }
   input.secret.fill(0);
   try {
-    await (0, import_promises4.rm)(input.directory, { recursive: true, force: true });
+    await (0, import_promises5.rm)(input.directory, { recursive: true, force: true });
   } catch (error2) {
     failures.push(error2);
   }
@@ -104815,19 +104882,19 @@ function throwCleanupFailures(failures) {
   throw new AggregateError(failures, "context_gateway_dispose_failed");
 }
 async function readBoundedCanonicalJson(file, maximumBytes) {
-  const metadata = await (0, import_promises4.stat)(file);
+  const metadata = await (0, import_promises5.stat)(file);
   if (!metadata.isFile() || metadata.size < 2 || metadata.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const parsed = JSON.parse(await (0, import_promises4.readFile)(file, "utf8"));
+  const parsed = JSON.parse(await (0, import_promises5.readFile)(file, "utf8"));
   return canonicalJson(parsed);
 }
 async function readBoundedText(file, maximumBytes) {
-  const metadata = await (0, import_promises4.stat)(file);
+  const metadata = await (0, import_promises5.stat)(file);
   if (!metadata.isFile() || metadata.size < 2 || metadata.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const value = await (0, import_promises4.readFile)(file, "utf8");
+  const value = await (0, import_promises5.readFile)(file, "utf8");
   if (Buffer.byteLength(value, "utf8") !== metadata.size) {
     throw new Error("context_gateway_output_size_invalid");
   }
@@ -104983,14 +105050,14 @@ function sha25613(value) {
 // src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
 var import_child_process17 = require("child_process");
 var import_crypto35 = require("crypto");
-var import_promises8 = require("fs/promises");
+var import_promises9 = require("fs/promises");
 var os11 = __toESM(require("os"));
 var path26 = __toESM(require("path"));
 var import_util12 = require("util");
 
 // src/context-gateway/context-gateway-recorder.ts
 var import_crypto34 = require("crypto");
-var import_promises5 = require("fs/promises");
+var import_promises6 = require("fs/promises");
 var path23 = __toESM(require("path"));
 var MAX_RECORDER_STATE_BYTES = 2 * 1024 * 1024;
 var ContextGatewayRecorder = class {
@@ -105006,22 +105073,22 @@ var ContextGatewayRecorder = class {
   hadFailure = false;
   async initialize() {
     await Promise.all([
-      (0, import_promises5.mkdir)(path23.dirname(this.config.transcriptPath), {
+      (0, import_promises6.mkdir)(path23.dirname(this.config.transcriptPath), {
         recursive: true,
         mode: 448
       }),
-      (0, import_promises5.mkdir)(path23.dirname(this.config.replayMaterialPath), {
+      (0, import_promises6.mkdir)(path23.dirname(this.config.replayMaterialPath), {
         recursive: true,
         mode: 448
       })
     ]);
     try {
-      await (0, import_promises5.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises6.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
       });
-      await (0, import_promises5.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises6.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -105216,7 +105283,7 @@ var ContextGatewayRecorder = class {
   }
 };
 async function readBoundedState(file) {
-  const value = await (0, import_promises5.readFile)(file, "utf8");
+  const value = await (0, import_promises6.readFile)(file, "utf8");
   if (value.length < 2 || Buffer.byteLength(value, "utf8") > MAX_RECORDER_STATE_BYTES) {
     throw new Error("context_gateway_recorder_state_size_invalid");
   }
@@ -105235,15 +105302,15 @@ function parseCanonicalState(raw, kind) {
   return parsed;
 }
 async function atomicPrivateWrite3(target, content) {
-  await (0, import_promises5.mkdir)(path23.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises6.mkdir)(path23.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto34.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises5.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises5.rename)(temporary, target);
+  await (0, import_promises6.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises6.rename)(temporary, target);
 }
 
 // src/context-gateway/filesystem-context-gateway.ts
 var import_child_process15 = require("child_process");
-var import_promises6 = require("fs/promises");
+var import_promises7 = require("fs/promises");
 var import_os = require("os");
 var path24 = __toESM(require("path"));
 var import_util10 = require("util");
@@ -105272,7 +105339,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
   revisionTreeOidPromises = /* @__PURE__ */ new Map();
   static async create(input) {
-    const root = await (0, import_promises6.realpath)(input.root);
+    const root = await (0, import_promises7.realpath)(input.root);
     requireGitOid(input.checkoutTreeOid, "checkout_tree_oid");
     requireGitOid(input.baseSha, "base_sha");
     requireGitOid(input.mergeBaseSha, "merge_base_sha");
@@ -105524,7 +105591,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
               }
             )).sort();
           } finally {
-            await (0, import_promises6.rm)(isolatedGit.gitDirectory, {
+            await (0, import_promises7.rm)(isolatedGit.gitDirectory, {
               recursive: true,
               force: true
             });
@@ -105656,7 +105723,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     const attributesPath = path24.isAbsolute(gitPath) ? gitPath : path24.resolve(this.root, gitPath);
     let infoAttributes;
     try {
-      infoAttributes = await (0, import_promises6.readFile)(attributesPath);
+      infoAttributes = await (0, import_promises7.readFile)(attributesPath);
     } catch (error2) {
       if (error2.code !== "ENOENT") throw error2;
       infoAttributes = null;
@@ -105694,23 +105761,23 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     ]);
   }
   async createIsolatedGitDirectory(policy) {
-    const gitDirectory = await (0, import_promises6.mkdtemp)(
+    const gitDirectory = await (0, import_promises7.mkdtemp)(
       path24.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
     );
     try {
       const [objectsPathOutput, objectFormatOutput] = await Promise.all([
         this.gitText(["rev-parse", "--git-path", "objects"]),
         this.gitText(["rev-parse", "--show-object-format=storage"]),
-        (0, import_promises6.mkdir)(path24.join(gitDirectory, "objects", "info"), { recursive: true }),
-        (0, import_promises6.mkdir)(path24.join(gitDirectory, "refs", "heads"), { recursive: true }),
-        (0, import_promises6.mkdir)(path24.join(gitDirectory, "info"), { recursive: true }),
-        (0, import_promises6.mkdir)(path24.join(gitDirectory, "worktree"), { recursive: true })
+        (0, import_promises7.mkdir)(path24.join(gitDirectory, "objects", "info"), { recursive: true }),
+        (0, import_promises7.mkdir)(path24.join(gitDirectory, "refs", "heads"), { recursive: true }),
+        (0, import_promises7.mkdir)(path24.join(gitDirectory, "info"), { recursive: true }),
+        (0, import_promises7.mkdir)(path24.join(gitDirectory, "worktree"), { recursive: true })
       ]);
       const rawObjectsPath = objectsPathOutput.trim();
       if (rawObjectsPath.length === 0) {
         throw new Error("context_gateway_git_objects_path_invalid");
       }
-      const objectsPath = await (0, import_promises6.realpath)(
+      const objectsPath = await (0, import_promises7.realpath)(
         path24.isAbsolute(rawObjectsPath) ? rawObjectsPath : path24.resolve(this.root, rawObjectsPath)
       );
       if (objectsPath.includes("\0") || objectsPath.includes("\n")) {
@@ -105722,14 +105789,14 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       }
       const config = objectFormat === "sha256" ? "[core]\n	repositoryformatversion = 1\n	bare = false\n[extensions]\n	objectformat = sha256\n" : "[core]\n	repositoryformatversion = 0\n	bare = false\n";
       await Promise.all([
-        (0, import_promises6.writeFile)(path24.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
-        (0, import_promises6.writeFile)(path24.join(gitDirectory, "config"), config),
-        (0, import_promises6.writeFile)(
+        (0, import_promises7.writeFile)(path24.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
+        (0, import_promises7.writeFile)(path24.join(gitDirectory, "config"), config),
+        (0, import_promises7.writeFile)(
           path24.join(gitDirectory, "objects", "info", "alternates"),
           `${objectsPath}
 `
         ),
-        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises6.writeFile)(
+        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises7.writeFile)(
           path24.join(gitDirectory, "info", "attributes"),
           policy.infoAttributes
         )
@@ -105743,7 +105810,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       });
       return Object.freeze({ gitDirectory, indexPath, workTreePath });
     } catch (error2) {
-      await (0, import_promises6.rm)(gitDirectory, { recursive: true, force: true });
+      await (0, import_promises7.rm)(gitDirectory, { recursive: true, force: true });
       throw error2;
     }
   }
@@ -105833,7 +105900,7 @@ function boundedInteger(value, minimum, maximum, field) {
 
 // src/context-gateway/filesystem-context-gateway-v4.ts
 var import_child_process16 = require("child_process");
-var import_promises7 = require("fs/promises");
+var import_promises8 = require("fs/promises");
 var import_path5 = __toESM(require("path"));
 var import_util11 = require("util");
 var execFileAsync5 = (0, import_util11.promisify)(import_child_process16.execFile);
@@ -105860,7 +105927,7 @@ var FilesystemContextGatewayV4 = class _FilesystemContextGatewayV4 {
   operationsStarted = 0;
   budgetExhaustionRecorded = false;
   static async create(input) {
-    const root = await (0, import_promises7.realpath)(input.root);
+    const root = await (0, import_promises8.realpath)(input.root);
     requireGitOid(
       input.checkoutTreeOid,
       "context_gateway_v4_checkout_tree_oid"
@@ -106670,7 +106737,7 @@ var ContextAttestationReplayRunner = class {
     const plan = parseReplayPlan(candidate);
     const [targetCheckoutTreeOid, gatewayBinaryHash] = await Promise.all([
       this.checkoutTreeOid(targetRevision.headSha),
-      (0, import_promises8.readFile)(this.options.gatewayBundlePath).then(sha256)
+      (0, import_promises9.readFile)(this.options.gatewayBundlePath).then(sha256)
     ]);
     if (plan.gatewayBinaryHash !== gatewayBinaryHash) {
       return null;
@@ -106687,7 +106754,7 @@ var ContextAttestationReplayRunner = class {
     if (plan.gatewayPolicyVersion !== CONTEXT_GATEWAY_POLICY_VERSION) {
       return null;
     }
-    const directory = await (0, import_promises8.mkdtemp)(
+    const directory = await (0, import_promises9.mkdtemp)(
       path26.join(os11.tmpdir(), "reviewrouter-context-replay-")
     );
     const secret = (0, import_crypto35.randomBytes)(32);
@@ -106765,11 +106832,11 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises8.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
     }
   }
   async replayV4(input) {
-    const directory = await (0, import_promises8.mkdtemp)(
+    const directory = await (0, import_promises9.mkdtemp)(
       path26.join(os11.tmpdir(), "reviewrouter-context-replay-v4-")
     );
     const secret = (0, import_crypto35.randomBytes)(32);
@@ -106863,7 +106930,7 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises8.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
     }
   }
   async checkoutTreeOid(expectedHeadSha) {
@@ -114521,13 +114588,7 @@ var ProductionT0ReviewRunner = class {
     const materializer = new GitReviewRevisionMaterializer(
       signal ? async (args, options) => {
         signal.throwIfAborted();
-        await execFileAsync8("git", args, {
-          ...options,
-          signal,
-          killSignal: "SIGKILL",
-          timeout: 6e4,
-          maxBuffer: 256 * 1024
-        });
+        await runAccountGatewayGit(args, options, signal);
       } : void 0
     );
     await materializer.ensureAvailable({
@@ -114676,7 +114737,7 @@ var ProductionT0ReviewRunner = class {
         return new RunInvestigationWorkSlot({
           controlPlane: investigationControlPlane,
           legacyFallbackGate,
-          delay: new SystemReviewOrchestrationDelay(),
+          delay: new CancellableReviewOrchestrationDelay(),
           leases: new ReviewActionV2InvestigationLeaseAdapter(
             reviewActionClient
           ),
@@ -114755,7 +114816,7 @@ var ProductionT0ReviewRunner = class {
       } : {},
       identities,
       clock: new SystemReviewOrchestrationClock(),
-      delay: new SystemReviewOrchestrationDelay(),
+      delay: new CancellableReviewOrchestrationDelay(),
       executionDeadline,
       signal,
       ...this.progress ? { progress: this.progress } : {}
@@ -115325,16 +115386,16 @@ function sameAuthorizedRevision(revision, authorization) {
 }
 async function readCheckedOutHead(workspacePath, signal) {
   signal?.throwIfAborted();
-  const result2 = await execFileAsync8("git", ["rev-parse", "HEAD"], {
-    ...signal ? { signal, killSignal: "SIGKILL", timeout: 1e4 } : {},
+  const options = {
     cwd: workspacePath,
     env: {
       PATH: process.env.PATH,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/dev/null"
     }
-  });
-  const head = result2.stdout.trim().toLowerCase();
+  };
+  const stdout = signal ? await runAccountGatewayGit(["rev-parse", "HEAD"], options, signal, 1e4) : (await execFileAsync8("git", ["rev-parse", "HEAD"], options)).stdout;
+  const head = stdout.trim().toLowerCase();
   if (!/^[a-f0-9]{40}$/.test(head)) {
     throw new Error("review_action_v2_checked_out_head_invalid");
   }
@@ -115353,6 +115414,72 @@ function canonicalJson13(value) {
 function sha25617(value) {
   return (0, import_crypto42.createHash)("sha256").update(value).digest("hex");
 }
+function runAccountGatewayGit(args, options, signal, timeoutMs = 6e4) {
+  signal.throwIfAborted();
+  return new Promise((resolve5, reject) => {
+    const child = (0, import_child_process20.spawn)("git", args, {
+      ...options,
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let failure;
+    let failed = false;
+    const stop = (error2) => {
+      if (failed) return;
+      failure = error2;
+      failed = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", cancel);
+      try {
+        if (process.platform !== "win32" && child.pid)
+          process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    const cancel = () => stop(signal.reason);
+    const timer = setTimeout(
+      () => stop(new Error("account_gateway_git_timeout")),
+      timeoutMs
+    );
+    signal.addEventListener("abort", cancel, { once: true });
+    if (signal.aborted) cancel();
+    let stdout = "";
+    let bytes = 0;
+    const collect = (chunk, output) => {
+      if (failed) return;
+      bytes += chunk.length;
+      if (bytes > 256 * 1024)
+        stop(new Error("account_gateway_git_output_bound"));
+      else if (!failed && output) stdout += chunk.toString();
+    };
+    child.stdout.on("data", (chunk) => collect(chunk, true));
+    child.stderr.on("data", (chunk) => collect(chunk, false));
+    child.on("error", (error2) => stop(error2));
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", cancel);
+      if (failed) reject(failure);
+      else if (code !== 0) reject(new Error("account_gateway_git_failed"));
+      else resolve5(stdout);
+    });
+  });
+}
+var CancellableReviewOrchestrationDelay = class extends SystemReviewOrchestrationDelay {
+  sleep(delayMs, signal) {
+    return new Promise((resolve5) => {
+      const finish = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", finish);
+        resolve5();
+      };
+      const timer = setTimeout(finish, delayMs);
+      signal?.addEventListener("abort", finish, { once: true });
+      if (signal?.aborted) finish();
+    });
+  }
+};
 
 // src/codex-oauth/ci-review-progress.ts
 var fs21 = __toESM(require("fs"));
@@ -115387,6 +115514,7 @@ var CiReviewProgressPublisher = class {
     this.input = input;
   }
   async publish(snapshot) {
+    this.input.signal?.throwIfAborted();
     const body = formatCiReviewProgress(snapshot);
     if (this.input.commentEligible && this.input.github) {
       try {
@@ -115394,6 +115522,7 @@ var CiReviewProgressPublisher = class {
           repository: this.input.repository,
           pullRequestNumber: this.input.pullRequestNumber
         });
+        this.input.signal?.throwIfAborted();
         const existing = comments.find(
           (comment) => (comment.body ?? "").includes(CI_PROGRESS_MARKER)
         );
@@ -115412,6 +115541,7 @@ var CiReviewProgressPublisher = class {
         }
         return "comment";
       } catch (error2) {
+        this.input.signal?.throwIfAborted();
         this.warning(
           `ReviewRouter CI progress comment is unavailable; using job summary: ${safeError3(error2)}`
         );
@@ -115421,6 +115551,7 @@ var CiReviewProgressPublisher = class {
         "ReviewRouter CI progress comment is unavailable; using job summary/log."
       );
     }
+    this.input.signal?.throwIfAborted();
     this.appendSummary(
       `${body}
 
@@ -115492,22 +115623,27 @@ var CiOrchestrationProgressReporter = class {
     }
     this.queuePublish(force);
   }
-  async finish(terminal) {
-    if (this.terminal !== "none") {
+  async finish(terminal, publisher = this.publisher) {
+    const replacesCompletion = terminal === "cancelled" || publisher !== this.publisher && terminal === "failed" && ["complete", "complete_with_gaps"].includes(this.terminal);
+    if (this.terminal !== "none" && (!replacesCompletion || this.terminal === terminal)) {
       await this.publishChain;
       return;
     }
     this.phase = "terminal";
     this.terminal = terminal;
-    this.queuePublish(true);
+    this.queuePublish(true, publisher);
     await this.publishChain;
   }
-  queuePublish(force) {
+  queuePublish(force, publisher = this.publisher) {
     const now = this.now();
     if (!force && now - this.lastPublishedAt < this.minimumIntervalMs) return;
     this.lastPublishedAt = now;
     const snapshot = this.snapshot(now);
-    this.publishChain = this.publishChain.then(() => this.publisher.publish(snapshot)).catch(() => void 0);
+    this.publishChain = this.publishChain.then(() => {
+      if (this.terminal === "cancelled" && snapshot.terminal !== "cancelled")
+        return;
+      return publisher.publish(snapshot);
+    }).catch(() => void 0);
   }
   initialize(workSlots) {
     this.slots.clear();
@@ -115555,14 +115691,15 @@ function createCiReviewProgressPublisher(input) {
     repository: input.repository,
     pullRequestNumber: input.pullRequestNumber,
     commentEligible: Boolean(token) && !fork,
-    ...token && !fork ? { github: new GitHubCiProgressAdapter(token) } : {},
+    signal: input.requestOptions?.signal,
+    ...token && !fork ? { github: new GitHubCiProgressAdapter(token, input.requestOptions) } : {},
     summaryPath: env.GITHUB_STEP_SUMMARY
   });
 }
 var GitHubCiProgressAdapter = class {
   client;
-  constructor(token) {
-    this.client = new GitHubClient(token);
+  constructor(token, options = {}) {
+    this.client = createPublicationGitHubClient(token, options);
   }
   async listComments(input) {
     const [owner, repo] = splitRepository(input.repository);
@@ -115848,13 +115985,14 @@ async function runAccountGatewayActionInternal(options = {}) {
   clearCodexRotatingProcessAuthEnv();
   const inputs = readCodexOAuthActionInputs();
   const terminalOidcEnv = snapshotCodexOAuthTerminalOutcomeOidcEnv();
-  const createReporter = (fetchImpl) => options.terminalOutcomeReporter ?? createDefaultCodexOAuthTerminalOutcomeReporter({
+  const createReporter = (fetchImpl, requestOptions) => options.terminalOutcomeReporter ?? createDefaultCodexOAuthTerminalOutcomeReporter({
     context: {
       repository: inputs.repository,
       pullRequestNumber: inputs.pullRequestNumber,
       headSha: inputs.headSha
     },
     audience: inputs.audience,
+    requestOptions,
     controlPlane: new CodexOAuthControlPlaneClient({
       apiUrl: inputs.apiUrl,
       fetchImpl
@@ -115864,31 +116002,20 @@ async function runAccountGatewayActionInternal(options = {}) {
       fetchImpl
     })
   });
-  const terminalOutcomeReporter = createReporter(
-    createAccountGatewayRunFetch(
-      options.fetchImpl ?? fetch,
-      new AbortController().signal
-    )
-  );
-  const ciProgressPublisher = createCiReviewProgressPublisher({
+  const createProgressPublisher = (signal) => createCiReviewProgressPublisher({
     repository: inputs.repository,
-    pullRequestNumber: inputs.pullRequestNumber
+    pullRequestNumber: inputs.pullRequestNumber,
+    requestOptions: { signal, timeoutMs: 1e4 }
   });
-  let runSignal;
-  if (ciProgressPublisher) {
-    const publish = ciProgressPublisher.publish.bind(ciProgressPublisher);
-    ciProgressPublisher.publish = (snapshot) => {
-      if (["none", "complete", "complete_with_gaps"].includes(snapshot.terminal))
-        runSignal?.throwIfAborted();
-      return publish(snapshot);
-    };
-  }
-  const ciProgressReporter = ciProgressPublisher ? new CiOrchestrationProgressReporter(ciProgressPublisher) : void 0;
+  let ciProgressReporter;
   await runAccountGatewayRuntime(inputs, {
     fetchImpl: options.fetchImpl,
     review: {
       run: (input) => {
-        runSignal = input.accountGateway?.signal;
+        const signal = input.accountGateway?.signal;
+        const publisher = signal && createProgressPublisher(signal);
+        if (publisher)
+          ciProgressReporter = new CiOrchestrationProgressReporter(publisher);
         return (options.v2ReviewRunner ?? createProductionT0ReviewRunner({
           fetchImpl: options.fetchImpl,
           progress: ciProgressReporter
@@ -115901,7 +116028,8 @@ async function runAccountGatewayActionInternal(options = {}) {
         inputs,
         review,
         createReporter(
-          createAccountGatewayRunFetch(options.fetchImpl ?? fetch, signal)
+          createAccountGatewayRunFetch(options.fetchImpl ?? fetch, signal),
+          { signal, timeoutMs: 1e4 }
         ),
         ciProgressReporter ?? null,
         signal
@@ -115911,7 +116039,12 @@ async function runAccountGatewayActionInternal(options = {}) {
     },
     terminalFailure: async (error2) => {
       const cancelled = error2 instanceof Error && error2.message === "account_gateway_cancelled";
-      await ciProgressReporter?.finish(cancelled ? "cancelled" : "failed");
+      const reportingSignal = AbortSignal.timeout(1e4);
+      const reportingPublisher = createProgressPublisher(reportingSignal);
+      await ciProgressReporter?.finish(
+        cancelled ? "cancelled" : "failed",
+        reportingPublisher ?? void 0
+      );
       setOutput("reviewrouter_state", cancelled ? "cancelled" : "failed");
       setOutput(
         "reviewrouter_v2_outcome",
@@ -115920,7 +116053,16 @@ async function runAccountGatewayActionInternal(options = {}) {
       const failure = classifyV2ActionFailure(error2);
       const report = failure.report(inputs);
       appendTerminalOutcomeStepSummary(report);
-      await publishTerminalOutcomeReportSafely(terminalOutcomeReporter, report);
+      await publishTerminalOutcomeReportSafely(
+        createReporter(
+          createAccountGatewayRunFetch(
+            options.fetchImpl ?? fetch,
+            reportingSignal
+          ),
+          { signal: reportingSignal, timeoutMs: 1e4 }
+        ),
+        report
+      );
       setFailed(failure.code);
     },
     observeRelay: (fact) => {
@@ -116798,15 +116940,17 @@ async function run() {
   let prNumber;
   let runtimeConfig;
   const startedAt = /* @__PURE__ */ new Date();
+  let gatewaySelected = false;
   try {
     syncEnvFromInputs();
+    const requestedMode = getInput("mode") || process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE");
+    gatewaySelected = requestedMode === ACCOUNT_GATEWAY_ACTION_MODE;
     const reviewActionV2Activation = resolveReviewActionV2Activation({
       env: process.env
     });
     if (reviewActionV2Activation.mode === "t0" /* T0 */) {
       scrubAndAssertReviewActionV2ScmMutationEnv(process.env);
     }
-    const requestedMode = getInput("mode") || process.env.REVIEW_ROUTER_MODE || getInput("REVIEW_ROUTER_MODE");
     const lifecycleResolveTokenFromEnv = process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN?.trim() || void 0;
     if (lifecycleResolveTokenFromEnv) {
       setSecret(lifecycleResolveTokenFromEnv);
@@ -116966,6 +117110,14 @@ ${formatValidationError(error2)}`) : error2;
         warn: (message) => warning(message)
       }
     });
+  } finally {
+    if (gatewaySelected) {
+      try {
+        clearCodexRotatingOidcRequestEnv();
+      } finally {
+        clearCodexRotatingProcessAuthEnv();
+      }
+    }
   }
 }
 async function currentGitHubToken(fallbackToken, tokenProvider) {

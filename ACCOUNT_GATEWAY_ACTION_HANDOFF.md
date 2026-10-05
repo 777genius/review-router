@@ -124,3 +124,63 @@ The supplied p56 pinned Node24.21/TS5.9.3 fulltypes/build/format PASS receipt ap
 Full D-min, D-final, S, E, F and G remain required; H sharing is deferred. No readiness, workflow integration, release or deployment acceptance. Finite worker output is the manifest-scoped source diff and this handoff; primary applies/commits with iliya owner identity after checks and independent review.
 
 Manifest/preimage/input guard: PASS, exit 0. Scope-guarded patch: `/srv/worker-state/jobs/review-router/mimo-openrouter-v1/gateway-action-v/jobs/review-router-mimo-openrouter-v1-v-p62-action-cancellation/tmp/agent/p62-action-cancellation.patch`; SHA256 and exact path counts are in `/srv/worker-state/jobs/review-router/mimo-openrouter-v1/gateway-action-v/jobs/review-router-mimo-openrouter-v1-v-p62-action-cancellation/tmp/agent/p62-action-cancellation-receipt.json`. This guard checks exported diff ownership and immutable preimages/inputs; the primary whole-blob export guard remains NOT_RUN here.
+
+P70 finite P67 remediation handoff (2026-10-05)
+Supplied exact source/runtime candidate: 348527d7e62dd29418b9805c930c0ce56a0fe911; source is the supplied d51 preimage.
+Observed: every initial owned source/input digest matched the frozen manifest; linked gitdir unavailable (git status exit 128), so commit/ancestry are supplied.
+Contract53 unchanged: 66a2393e7a55f76df1a78281af44379d0b455a0770d82f34e587dcca284157b0. Whole P67 and existing production ports were read.
+Scope: seven source files, one 180-line Jest integration/typed compiled-main observer, this handoff; source patch 271 A + 75 D = 346.
+Unneeded owned paths unchanged: account-gateway-runtime.ts, runtime.ts, safe-checkout.ts, codex-cli.ts.
+No workflow/generated/backend/UI/SDK/kernel/native/platform/dependency/DI/outbox/scheduler or legacy-retirement changes; no release.
+GitHub: optional run signal/request timeout reaches both production Octokit adapters, fetch/retry boundaries and each list-to-mutation gate.
+Failure/cancellation uses its own 10-second reporting signal; actual GitHub requests are bounded separately from OIDC/session acquisition.
+Normal cancelled work cannot begin another mutation or append a completed summary; entered writes are not rolled back or declared absent.
+Progress cancellation replaces queued/suppressed completion and drains an ordered cancellation snapshot through the independent publisher.
+Gateway Codex abort/timeout/output cap retains the first error, kills its owned group and settles on child close before temporary-file cleanup.
+Runner Git materialization (ordinary fetch helpers included) and head inspection use owned group kill and close drain.
+Both revision monitors retain/join their promises and wake cancellable existing delays; in-flight bounded revision reads are joined.
+Main selects the gateway scrub boundary before activation/handoff validation, after reporting; T0 SCM checks and authorization remain.
+New nearest probe: actual localhost HTTP through existing GitHub/Octokit ports; late held lists for active/queued completion and terminal clear.
+Assertions: zero normal mutations after abort, cancelled progress and terminal status on the independent channel, no late completed summary.
+Owned shell leader/tool and separately owned pipe holder prove public Codex promise/tempfile/resource ordering for abort, timeout and output cap.
+The holder is explicitly released/terminated by the test; no escaped-child termination or Windows group certification is claimed.
+Compiled src/main.ts executes in a bounded fresh child; the typed observer creates nonsecret sentinels at runtime and observes same-process cleanup.
+Expected old-source failures: late list starts normal create/delete; terminal latch suppresses cancelled progress; immediate rejection removes prompt/resource before close; main retains activation-failure auth names.
+The tests deliberately allow the normal late list to return, so transport abort alone cannot satisfy the mutation-boundary assertions.
+Limits: this nearest probe does not certify the production Octokit timeout wiring, actual orchestration lease release, Git-fetch teardown, monitor drain or whole gateway lifecycle.
+Frozen P62 proves only real HTTP normal abort/cleanup and early public-entry scrub (P2 exact289 RED left four keys; GREEN cleared them).
+P62 does not prove source-main/CLI/terminal GitHub; its prior exact-d51 type/build/metadata exits 0 are historical, not validation of this patch.
+All commands used cwd /srv/workers/jobs/review-router/mimo-openrouter-v1/repos/gateway-action-v/workspaces/p70-lifecycle-fix.
+Runtime prefix below: /opt/nodejs/node-v24.21.0-linux-x64/bin/node (Node 24.21.0).
+Executed npm run typecheck: launcher exit 127, npm absent. No installation attempted.
+Executed node node_modules/typescript/bin/tsc --noEmit: launcher exit 1, MODULE_NOT_FOUND; meaningful contract typecheck NOT_RUN.
+Executed node node_modules/jest/bin/jest.js --runInBand __tests__/integration/account-gateway-lifecycle.test.ts: launcher exit 1, MODULE_NOT_FOUND; actual regressions NOT_RUN.
+Executed node node_modules/prettier/bin/prettier.cjs --check [the seven changed source paths plus the test]: launcher exit 1, MODULE_NOT_FOUND; format NOT_RUN.
+Executed node node_modules/esbuild/bin/esbuild src/main.ts --bundle --platform=node --target=node24 --external:tree-sitter --external:tree-sitter-* --outfile=/tmp/p70-lifecycle-fix-artifacts/main.cjs: launcher exit 1, MODULE_NOT_FOUND; build NOT_RUN.
+Full exact command arrays, initial/current hashes and scope counts are retained in p70-lifecycle-fix-receipt.json beside the raw guarded patch.
+Source SHA256 src/main.ts: 0a97be3b26412646cf0fa0454650f7890724ab6ce1f54cce1bbdcc72f4b6f66d
+Source SHA256 src/providers/codex.ts: 74d74f162e1e6712ad33bf029fb85848be9fe0034cba7d910c77f96e45dcff24
+Source SHA256 src/codex-oauth/action.ts: 85cd885e6b37eb62361db8bbf9d83f8ba0fc94c5c736cb71e2dec083960e43a1
+Source SHA256 src/codex-oauth/ci-review-progress.ts: c2b8962a5d39fc6204f5203bd357bb9b2ac7f9acca313764976ecf43d7c3c208
+Source SHA256 src/codex-oauth/terminal-outcome-publication.ts: 6d5c30687892d6c9e47d23442313668e69841922ca6940ebf67cb8f10f989521
+Source SHA256 src/review-orchestration/application/run-t0-review-orchestration.ts: 4a14f77dd63f2d7c20f5c15a2883bf0ffca747b43bb3c0eca5d7e9367797b922
+Source SHA256 src/review-orchestration/infrastructure/production-t0-review-runner.ts: 6c311e480e6cd8605d3b3d3f77f8f7e728b2f2ad65cd091e304a0ec4c5634efc
+Probe SHA256: c000febd16612eddb75a84863ae2677236999968e515740881e976845df0ddb6
+Primary owns hosting RED-old/GREEN-new, full meaningful types/build/format/metadata and independent 6.1/xhigh review; no PASS/E2E acceptance claimed here.
+Full D-min/D-final/S/E/F/G remain required, H deferred; Accounts P68 and backend checkout remain separate.
+Artifacts: /srv/worker-state/jobs/review-router/mimo-openrouter-v1/gateway-action-v/jobs/review-router-mimo-openrouter-v1-v-p70-lifecycle-fix/tmp/agent/p70-lifecycle-fix-artifacts/{p70-lifecycle-fix.patch,p70-lifecycle-fix-receipt.json}.
+Workspace diff remains intact for Project Integration; no git add/commit/push, credential/GitHub/provider/deploy action or other-worker revert.
+
+Primary qualification 2026-10-05: full pinned TypeScript, build and actual release
+metadata check PASS. Six nearest real HTTP/owned-process/compiled-main scenarios
+PASS, zero skips. Abort/timeout/output-cap wait for child close before prompt/resource
+cleanup; late normal lists cannot mutate, independent cancellation publishes, and
+source main invalid activation clears same-process auth names. Primary found and
+fixed a real bound-argument hook defect: mutate original Octokit request options
+instead of passing a clone ignored by the inner hook. Real transport abort and
+request deadline are exercised; raw P70 factory with the new test RED, fixed GREEN.
+Fixture routing now mutates the bound request object, ESRCH is an exited /proc
+process, and native DOMException assertions use their stable names. Initial
+failures retained. Source and committed runtime rebuilt together. Independent
+current source review pending; no actual provider/App/full workflow or complete
+orchestration lease/materializer/monitor lifecycle qualification is claimed.

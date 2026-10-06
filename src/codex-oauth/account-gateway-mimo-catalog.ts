@@ -10,6 +10,7 @@ type MiMoModelInfo = Readonly<{
   slug: 'mimo-v2.6-pro';
   display_name: string;
   description: string;
+  base_instructions: '';
   default_reasoning_level: 'low';
   supported_reasoning_levels: readonly Readonly<{
     effort: 'none' | 'low' | 'medium' | 'high';
@@ -45,6 +46,7 @@ const mimoModel: MiMoModelInfo = {
   slug: 'mimo-v2.6-pro',
   display_name: 'MiMo-V2.6-Pro',
   description: 'Xiaomi MiMo: MiMo-V2.6-Pro',
+  base_instructions: '',
   default_reasoning_level: 'low',
   supported_reasoning_levels: [
     { effort: 'none', description: 'No extra reasoning for faster responses' },

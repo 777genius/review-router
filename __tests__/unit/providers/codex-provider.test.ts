@@ -209,6 +209,109 @@ describe('CodexProvider', () => {
     }
   });
 
+  // Regression: the gateway home was passed as a credential, so the lease
+  // runtime_config guard rejected a valid review before the exec spawn.
+  it('executes gateway reviews with frozen runtime home and credential-only leases', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-lease-test-'));
+    const token = 'local-model-test-token';
+    const final = JSON.stringify({
+      findings: [
+        {
+          file: 'src/example.ts',
+          startLine: null,
+          line: 7,
+          endLine: null,
+          severity: 'major',
+          title: 'Missing bounds check',
+          message: 'The changed lookup can read past the end of the array.',
+          suggestion: null,
+        },
+      ],
+      revalidations: [],
+    });
+    const gateway: LocalGatewayModelTransport = {
+      baseUrl: 'http://127.0.0.1:1/v1',
+      environment: {
+        CODEX_HOME: home,
+        REVIEWROUTER_LOCAL_MODEL_TOKEN: token,
+      },
+      configuration: [
+        'model_provider="reviewrouter_account_gateway"',
+        'model_providers.reviewrouter_account_gateway.env_key="REVIEWROUTER_LOCAL_MODEL_TOKEN"',
+      ],
+      actualModel: () => 'mimo-v2.6-pro',
+      dispose: async () => {},
+    };
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      agenticContext: false,
+      accountGateway: gateway,
+    });
+    overridePrivate(
+      provider,
+      'resolveBinary',
+      jest.fn().mockResolvedValue('/mock/codex')
+    );
+    const setting = `model_catalog_json=${JSON.stringify(
+      path.join(home, 'reviewrouter-model-catalog.json')
+    )}`;
+    const config = [...gateway.configuration, setting].join('\n') + '\n';
+    spawnMock.mockImplementation((_cmd: string, args: string[]) =>
+      createMockProcess(() => {
+        fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], final);
+      })
+    );
+    try {
+      const invocation = await provider.prepareInvocation('review input', 1_000);
+      expect(Object.isFrozen(invocation.request.environment)).toBe(true);
+      expect(invocation.request.environment.CODEX_HOME).toBe(home);
+      expect(
+        invocation.request.environment.REVIEWROUTER_LOCAL_MODEL_TOKEN
+      ).toBeUndefined();
+      expect(JSON.stringify(invocation.request)).not.toContain(token);
+      expect(invocation.observableInputPreimage).not.toContain(token);
+      await expect(
+        provider.executePreparedInvocation(invocation, {
+          environment: { CODEX_HOME: path.join(home, 'caller-override') },
+        })
+      ).rejects.toThrow('provider_credential_lease_contains_runtime_config');
+      expect(spawnMock).not.toHaveBeenCalled();
+
+      const preparedResult = await provider.executePreparedInvocation(invocation);
+      expect(preparedResult.content).toBe(final);
+      expect(preparedResult.findings).toEqual(JSON.parse(final).findings);
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+      expect(spawnMock.mock.calls[0][0]).toBe('/mock/codex');
+      expect(spawnMock.mock.calls[0][1][0]).toBe('exec');
+      expect(spawnMock.mock.calls[0][1]).toEqual(
+        expect.arrayContaining([...gateway.configuration, setting])
+      );
+      expect(spawnMock.mock.calls[0][2].env).toMatchObject({
+        CODEX_HOME: home,
+        REVIEWROUTER_LOCAL_MODEL_TOKEN: token,
+      });
+      expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(config);
+
+      spawnMock.mockClear();
+      const directResult = await provider.review('review input', 1_000);
+      expect(directResult.content).toBe(final);
+      expect(directResult.findings).toEqual(preparedResult.findings);
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+      expect(spawnMock.mock.calls[0][0]).toBe('/mock/codex');
+      expect(spawnMock.mock.calls[0][1][0]).toBe('exec');
+      expect(spawnMock.mock.calls[0][1]).toEqual(
+        expect.arrayContaining([...gateway.configuration, setting])
+      );
+      expect(spawnMock.mock.calls[0][2].env).toMatchObject({
+        CODEX_HOME: home,
+        REVIEWROUTER_LOCAL_MODEL_TOKEN: token,
+      });
+      expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(config);
+      expect(spawnSyncMock).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it.each(['codex', 'openrouter', 'unmapped-gateway'] as const)(
     'leaves %s catalog and home behavior unchanged',
     async (mode) => {

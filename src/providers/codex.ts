@@ -32,6 +32,7 @@ import {
   type ProviderCredentialLease,
   ProviderKind,
   requirePreparedProviderInvocation,
+  splitProviderEnvironment,
 } from './prepared-invocation';
 import {
   CONTEXT_GATEWAY_POLICY_VERSION,
@@ -559,7 +560,9 @@ export class CodexProvider extends Provider {
           this.options.accountGateway
             ? {
                 ...credentialLease?.environment,
-                ...this.options.accountGateway.environment,
+                ...splitProviderEnvironment(
+                  this.options.accountGateway.environment
+                ).credentialEnvironment,
               }
             : credentialLease?.environment
         ),
@@ -596,7 +599,11 @@ export class CodexProvider extends Provider {
     invocation: PreparedProviderInvocation<CodexPreparedRequest>
   ): ProviderCredentialLease {
     if (this.options.accountGateway) {
-      return { environment: this.options.accountGateway.environment };
+      return {
+        environment: splitProviderEnvironment(
+          this.options.accountGateway.environment
+        ).credentialEnvironment,
+      };
     }
     const environment: NodeJS.ProcessEnv = {};
     const credentialKeys = ['OPENAI_API_KEY'];

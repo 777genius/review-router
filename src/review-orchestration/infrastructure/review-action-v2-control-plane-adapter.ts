@@ -67,9 +67,13 @@ export class ReviewActionV2ControlPlaneAdapter
 
   constructor(private readonly client: ReviewActionV2Client) {}
 
-  async authorize(input: {
-    readonly oidcToken: string;
-  }): Promise<ReviewRunAuthorization> {
+  async authorize(
+    input: {
+      readonly oidcToken: string;
+    },
+    options?: { readonly timeoutMs: number; readonly signal?: AbortSignal }
+  ): Promise<ReviewRunAuthorization> {
+    if (options?.signal?.aborted) throw new Error('hosted_v4_deadline_expired');
     const result = await this.client.execute(
       ReviewActionV2OperationId.ReviewRunAuthorize,
       {
@@ -80,8 +84,10 @@ export class ReviewActionV2ControlPlaneAdapter
             schemaDigest: reviewActionV2PublishedSchemaDigest,
           },
         ],
-      }
+      },
+      options ? { timeoutMs: options.timeoutMs, maxAttempts: 1 } : undefined
     );
+    if (options?.signal?.aborted) throw new Error('hosted_v4_deadline_expired');
     if (
       result.status !== ReviewRunAuthorizationResultStatus.Authorized &&
       result.status !== ReviewRunAuthorizationResultStatus.Restored

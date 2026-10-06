@@ -1126,10 +1126,7 @@ export class CodexProvider extends Provider {
     const replacements = [
       ...(this.options.accountGateway
         ? [
-            [
-              request.environment.CODEX_HOME ?? '',
-              '<codex-home>',
-            ] as const,
+            [request.environment.CODEX_HOME ?? '', '<codex-home>'] as const,
             [
               this.options.accountGateway.baseUrl,
               '<account-gateway-loopback>',

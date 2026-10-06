@@ -32,7 +32,10 @@ import {
   ReviewInvestigationChangedFileStatus,
   ReviewInvestigationProbePlanStatus,
   createReviewInvestigationProbePlan,
+  REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
+  REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
 } from '../../../src/review-investigation/domain/deterministic-context-probe-plan';
+import { REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH } from '../../../src/review-investigation/application/review-investigation-turn-prompt';
 import { buildReviewAgentTurnOutputSchema } from '../../../src/review-investigation/domain/turn-observation';
 import { canonicalJson } from '../../../src/context-gateway/context-gateway-contract';
 
@@ -177,7 +180,7 @@ describe('Codex T0 prepared invocation', () => {
     );
   });
 
-  it('binds the exact investigation seed envelope into the prepared manifest facts', async () => {
+  it('binds the investigation seed and effective effort into assembled capability and strategy identity', async () => {
     const provider = {
       name: 'codex/gpt-test',
       describePreparedEnvironmentContract: jest
@@ -187,33 +190,32 @@ describe('Codex T0 prepared invocation', () => {
         .fn()
         .mockResolvedValue(preparedInvocation('prepared prompt')),
     } as unknown as CodexProvider;
-    const adapter = new CodexReviewInvocationAdapter(
-      provider,
-      {
-        buildPreparedV2: jest.fn().mockResolvedValue({
-          version: 'prepared_review_prompt.v3',
-          investigationContextPrompt: 'investigation context',
-          prompt: 'prepared prompt',
-          pathCoverage: [],
-          investigationProbePlan: emptyProbePlan,
-        }),
-      } as unknown as PromptBuilder,
-      [assignment],
-      10_000,
-      true,
-      {
-        planningConfig: jest.fn().mockResolvedValue(gatewayConfig),
-        canonicalInventory: jest
-          .fn()
-          .mockResolvedValue(emptyCanonicalInventory),
-      } as unknown as ContextGatewayInvocationSessionFactoryPort,
-      true
-    );
+    const prepare = (effort?: 'low' | 'medium' | 'high' | 'xhigh') =>
+      new CodexReviewInvocationAdapter(
+        provider,
+        {
+          buildPreparedV2: jest.fn().mockResolvedValue({
+            version: 'prepared_review_prompt.v3',
+            investigationContextPrompt: 'investigation context',
+            prompt: 'prepared prompt',
+            pathCoverage: [],
+            investigationProbePlan: emptyProbePlan,
+          }),
+        } as unknown as PromptBuilder,
+        [assignment],
+        10_000,
+        true,
+        {
+          planningConfig: jest.fn().mockResolvedValue(gatewayConfig),
+          canonicalInventory: jest
+            .fn()
+            .mockResolvedValue(emptyCanonicalInventory),
+        } as unknown as ContextGatewayInvocationSessionFactoryPort,
+        true,
+        effort
+      ).prepare({ workSlot: assignment.workSlot, attemptOrdinal: 1 });
 
-    const invocation = await adapter.prepare({
-      workSlot: assignment.workSlot,
-      attemptOrdinal: 1,
-    });
+    const invocation = await prepare();
     const seed = invocation.investigationSeedEnvelope;
 
     expect(seed).not.toBeNull();
@@ -244,6 +246,75 @@ describe('Codex T0 prepared invocation', () => {
       requestedModel: 'gpt-test',
       obligations: [expect.objectContaining({ kind: 'inventory_witness' })],
     });
+
+    // Keep every other identity input fixed, including compatibility/config.
+    // The expected contract is independent of the adapter's implementation.
+    const assembler = new GeneratedProviderInvocationManifestAssembler(
+      authorization,
+      {} as ReviewConfig,
+      hash('compatibility')
+    );
+    const legacyManifest = await assembler.assemble(invocation);
+    const capabilityHashes = new Set<string>();
+    const strategyIds = new Set<string>();
+    const manifestKeys = new Set<string>();
+    for (const effort of ['low', 'medium', 'high', 'xhigh'] as const) {
+      const prepared = await prepare(effort);
+      const expectedCapabilityHash = hash(
+        canonicalJson({
+          adapterVersion: 'review-investigation-codex.v3',
+          actualModelAttribution: 'observed',
+          confinement: 'gateway_only',
+          continuation: 'durable_dossier',
+          gatewayBinaryHash: gatewayConfig.gatewayBinaryHash,
+          gatewayPolicyVersion: gatewayConfig.gatewayPolicyVersion,
+          enabledTools: [...gatewayConfig.enabledTools].sort(),
+          probeLimits: emptyProbePlan.limits,
+          probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
+          reasoningEffort: effort,
+          requestedModel: 'gpt-test',
+          searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
+          turnPromptContractHash:
+            REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH,
+        })
+      );
+      expect(prepared.manifestFacts.providerCapabilityHash).toBe(
+        expectedCapabilityHash
+      );
+      expect(prepared.investigationSeedEnvelope).toEqual(seed);
+      expect(prepared.manifestFacts).toEqual({
+        ...invocation.manifestFacts,
+        providerCapabilityHash: expectedCapabilityHash,
+      });
+      const manifest = await assembler.assemble(prepared);
+      const expectedInput = {
+        ...JSON.parse(legacyManifest.manifestCanonicalJson),
+        providerCapabilityHash: expectedCapabilityHash,
+      };
+      const expectedManifestKey = hashBytes(
+        canonicalizeProviderInvocationManifestV1(expectedInput)
+      );
+      expect(manifest.manifestKey).toBe(expectedManifestKey);
+      expect(manifest.providerInvocationKey).toBe(
+        hashBytes(
+          providerInvocationIdentityPreimageV1(
+            expectedManifestKey,
+            workSlot.providerVoteIdentityHash
+          )
+        )
+      );
+      capabilityHashes.add(prepared.manifestFacts.providerCapabilityHash);
+      manifestKeys.add(manifest.manifestKey);
+      // Recording sends providerInvocationKey as providerStrategyId.
+      strategyIds.add(manifest.providerInvocationKey);
+      if (effort === 'xhigh') {
+        expect(prepared).toEqual(invocation);
+        expect(manifest).toEqual(legacyManifest);
+      }
+    }
+    expect(capabilityHashes.size).toBe(4);
+    expect(manifestKeys.size).toBe(4);
+    expect(strategyIds.size).toBe(4);
   });
 
   it('projects lifecycle-bearing assignments to finding-only investigation manifests', async () => {

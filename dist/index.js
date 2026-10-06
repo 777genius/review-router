@@ -102911,13 +102911,14 @@ function buildReviewInvestigationTurnPrompt(input) {
 
 // src/review-orchestration/infrastructure/codex-review-invocation-adapter.ts
 var CodexReviewInvocationAdapter = class {
-  constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false) {
+  constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false, investigationReasoningEffort = "xhigh") {
     this.provider = provider;
     this.promptBuilder = promptBuilder;
     this.timeoutMs = timeoutMs;
     this.agenticContext = agenticContext;
     this.contextGateway = contextGateway;
     this.investigationManifestBindingEnabled = investigationManifestBindingEnabled;
+    this.investigationReasoningEffort = investigationReasoningEffort;
     for (const assignment of assignments) {
       if (this.assignments.has(assignment.workSlot.workSlotId)) {
         throw new Error("review_action_v2_assignment_duplicate");
@@ -103001,7 +103002,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
       enabledTools: [...gatewayPlanningConfig.enabledTools].sort(),
       probeLimits: preparedPrompt.investigationProbePlan.limits,
       probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
-      reasoningEffort: "xhigh",
+      reasoningEffort: this.investigationReasoningEffort,
       requestedModel: prepared.requestedModel,
       searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
       turnPromptContractHash: REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH
@@ -114673,14 +114674,13 @@ var ProductionT0ReviewRunner = class {
     const config = input.accountGateway ? { ...loadedConfig, providerRetries: 1 } : loadedConfig;
     const codexProviderName = selectCodexProvider(config);
     const model = codexProviderName.slice("codex/".length);
-    let reasoningEffort;
+    const reasoningEffort = resolveProductionInvestigationReasoningEffort({
+      codexModel: model,
+      accountGateway: input.accountGateway !== void 0,
+      serverReasoningEffort
+    });
     if (input.accountGateway && model === "mimo-v2.6-pro") {
-      const effort = serverReasoningEffort ?? "high";
-      if (effort !== "low" && effort !== "medium" && effort !== "high") {
-        throw new Error("account_gateway_mimo_reasoning_effort_unsupported");
-      }
-      reasoningEffort = effort;
-      process.env.CODEX_REASONING_EFFORT = effort;
+      process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
     const configuredTimeoutMs = Math.max(
@@ -114833,7 +114833,8 @@ var ProductionT0ReviewRunner = class {
         providerTimeoutMs,
         agenticContext,
         contextGateway,
-        true
+        true,
+        reasoningEffort
       )
     });
     const identities = new DeterministicReviewOrchestrationIdentity();
@@ -115113,7 +115114,18 @@ function publicInvestigationProcessDiagnostic(stderr) {
     )
   });
 }
+function resolveProductionInvestigationReasoningEffort(input) {
+  if (!input.accountGateway || input.codexModel !== "mimo-v2.6-pro") {
+    return "xhigh";
+  }
+  const effort = input.serverReasoningEffort ?? "high";
+  if (effort !== "low" && effort !== "medium" && effort !== "high") {
+    throw new Error("account_gateway_mimo_reasoning_effort_unsupported");
+  }
+  return effort;
+}
 function createConfiguredProductionInvestigationAgents(input) {
+  const reasoningEffort = input.reasoningEffort;
   const processRunner = new NodeReviewAgentProcessRunner();
   const appServer = input.modelTransport ? new NodeCodexAppServerTurnRunner() : void 0;
   return Object.freeze([
@@ -115156,7 +115168,7 @@ function createConfiguredProductionInvestigationAgents(input) {
           }
         } : {},
         ...input.codexBinaryPath ? { binary: input.codexBinaryPath } : {},
-        reasoningEffort: input.modelTransport && input.codexModel === "mimo-v2.6-pro" ? input.reasoningEffort ?? "high" : "xhigh",
+        reasoningEffort,
         processResultObserver: (result2) => {
           if (result2.termination === "exited" /* Exited */ && result2.exitCode === 0) {
             return;

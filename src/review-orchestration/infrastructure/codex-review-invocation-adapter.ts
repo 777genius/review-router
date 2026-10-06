@@ -46,6 +46,7 @@ import {
 } from '../../review-investigation/domain/deterministic-context-probe-plan';
 import { buildReviewInvestigationSeedEnvelope } from '../../review-investigation/domain/review-investigation-seed-envelope';
 import { REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH } from '../../review-investigation/application/review-investigation-turn-prompt';
+import type { CodexAppServerReasoningEffort } from '../../review-investigation/infrastructure/codex-app-server-protocol';
 
 export type CodexReviewAssignment = {
   readonly workSlot: ReviewWorkSlotPlan;
@@ -73,7 +74,8 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     private readonly timeoutMs: number,
     private readonly agenticContext: boolean,
     private readonly contextGateway?: ContextGatewayInvocationSessionFactoryPort,
-    private readonly investigationManifestBindingEnabled = false
+    private readonly investigationManifestBindingEnabled = false,
+    private readonly investigationReasoningEffort: CodexAppServerReasoningEffort = 'xhigh'
   ) {
     for (const assignment of assignments) {
       if (this.assignments.has(assignment.workSlot.workSlotId)) {
@@ -175,7 +177,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
           enabledTools: [...gatewayPlanningConfig.enabledTools].sort(),
           probeLimits: preparedPrompt.investigationProbePlan.limits,
           probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
-          reasoningEffort: 'xhigh',
+          reasoningEffort: this.investigationReasoningEffort,
           requestedModel: prepared.requestedModel,
           searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
           turnPromptContractHash:

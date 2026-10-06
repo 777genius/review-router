@@ -1,6 +1,23 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createHash } from 'crypto';
+import { PromptBuilder } from '../../../src/analysis/llm/prompt-builder';
+import {
+  createPreparedProviderInvocation,
+  ProviderKind,
+} from '../../../src/providers/prepared-invocation';
+import {
+  CodexReviewInvocationAdapter,
+  GeneratedProviderInvocationManifestAssembler,
+} from '../../../src/review-orchestration/infrastructure/codex-review-invocation-adapter';
+import type { ContextGatewayInvocationSessionFactoryPort } from '../../../src/review-orchestration/infrastructure/context-gateway-invocation-session';
+import { canonicalJson } from '../../../src/context-gateway/context-gateway-contract';
+import {
+  REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
+  REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
+} from '../../../src/review-investigation/domain/deterministic-context-probe-plan';
+import { REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH } from '../../../src/review-investigation/application/review-investigation-turn-prompt';
 import { ConfigLoader } from '../../../src/config/loader';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import { ReviewActionV2Client } from '../../../src/control-plane/review-action-v2-client';
@@ -25,6 +42,7 @@ import {
   resolveProductionContextGatewayPolicyVersion,
   resolveProductionContextGatewaySessionFactoryOptions,
   resolveT0AttemptBudget,
+  resolveProductionInvestigationReasoningEffort,
 } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../../src/context-gateway/context-gateway-release-contract';
 import {
@@ -36,6 +54,7 @@ import {
   ReviewInvestigationRolloutCapability,
   ReviewOrchestrationResultStatus,
   ReviewPublicationUnavailableFact,
+  ReviewTaskKind,
   type ReviewRunAuthorization,
 } from '../../../src/review-orchestration/application';
 import {
@@ -90,12 +109,15 @@ describe('ProductionT0ReviewRunner policy', () => {
     ['mimo-v2.6-pro', 'gpt-caller', true, 'high'],
     ['mimo-v2.6-pro', 'gpt-caller', true, undefined],
     ['mimo-v2.6-pro', 'gpt-caller', true, 'medium'],
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'low'],
     ['gpt-selected', 'mimo-v2.6-pro', false, undefined],
     ['gpt-selected', 'mimo-v2.6-pro', false, 'high'],
   ] as const)(
     'pins AppServer catalog and effort from selected %s independently of caller %s (gateway %s, effort %s)',
     async (selectedModel, callerModel, enabled, reasoningEffort) => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mimo-appserver-test-'));
+      const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'mimo-appserver-test-')
+      );
       const home = path.join(root, 'fresh-home');
       fs.mkdirSync(home);
       fs.mkdirSync(path.join(root, '.codex'));
@@ -117,21 +139,34 @@ describe('ProductionT0ReviewRunner policy', () => {
             CODEX_REASONING_EFFORT: 'xhigh',
           },
           oidc: { requestToken: async () => 'fixture-oidc' },
-          fetchImpl: jest.fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
-            .mockResolvedValueOnce(new Response(JSON.stringify({ sessionToken: 'fixture-session' })))
-            .mockResolvedValueOnce(new Response(JSON.stringify({
-              protocolVersion: 1,
-              configVersion: 7,
-              runtimeEnv: reasoningEffort === undefined ? {} : { CODEX_REASONING_EFFORT: reasoningEffort },
-            }))),
+          fetchImpl: jest
+            .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+            .mockResolvedValueOnce(
+              new Response(JSON.stringify({ sessionToken: 'fixture-session' }))
+            )
+            .mockResolvedValueOnce(
+              new Response(
+                JSON.stringify({
+                  protocolVersion: 1,
+                  configVersion: 7,
+                  runtimeEnv:
+                    reasoningEffort === undefined
+                      ? {}
+                      : { CODEX_REASONING_EFFORT: reasoningEffort },
+                })
+              )
+            ),
         });
-        if (runtimeResult.status !== 'applied') throw new Error('expected applied runtime config');
-        if (runtimeResult.reasoningEffort !== undefined && runtimeResult.reasoningEffort !== 'high' && runtimeResult.reasoningEffort !== 'medium') {
-          throw new Error('unexpected fixture effort');
-        }
+        if (runtimeResult.status !== 'applied')
+          throw new Error('expected applied runtime config');
+        const effectiveEffort = resolveProductionInvestigationReasoningEffort({
+          codexModel: selectedModel,
+          accountGateway: true,
+          serverReasoningEffort: runtimeResult.reasoningEffort,
+        });
         const agents = createConfiguredProductionInvestigationAgents({
           codexModel: selectedModel,
-          reasoningEffort: runtimeResult.reasoningEffort,
+          reasoningEffort: effectiveEffort,
           codexBinaryPath: '/mock/codex',
           modelTransport: {
             baseUrl: 'http://127.0.0.1:1/v1',
@@ -173,37 +208,162 @@ describe('ProductionT0ReviewRunner policy', () => {
           requestedModel: callerModel,
           timeoutMs: 1_000,
           maxTurns: 1,
-          executionSession: { kind: ReviewAgentExecutionSessionKind.ContextGatewayV4 },
+          executionSession: {
+            kind: ReviewAgentExecutionSessionKind.ContextGatewayV4,
+          },
         };
+        const digest = (value: string) =>
+          createHash('sha256').update(value).digest('hex');
+        const workSlot = Object.freeze({
+          workSlotId: 'slot-fixture',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Codex,
+          providerVoteIdentityHash: '6'.repeat(64),
+          shardKey: 'batch-fixture',
+          required: true,
+          attemptBudget: 1,
+          retryPolicyVersion: 'retry-fixture',
+        });
+        const planningConfig = {
+          command: process.execPath,
+          args: [path.join(root, 'mock-context-gateway.cjs')],
+          cwd: root,
+          gatewayBinaryHash: 'a'.repeat(64),
+          gatewayPolicyVersion: 'context-gateway-v4',
+          enabledTools: REVIEW_INVESTIGATION_GATEWAY_TOOLS,
+          runtimeEnvironment: {
+            REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID: '4'.repeat(40),
+          },
+        };
+        const inventory = {
+          inventoryVersion: 2 as const,
+          mergeBaseTreeOid: '2'.repeat(40),
+          headTreeOid: '4'.repeat(40),
+          entries: [],
+        };
+        const invocation = await new CodexReviewInvocationAdapter(
+          {
+            prepareInvocation: async (prompt: string) =>
+              createPreparedProviderInvocation({
+                providerKind: ProviderKind.CodexCli,
+                providerName: `codex/${selectedModel}`,
+                requestedModel: selectedModel,
+                timeoutMs: 1_000,
+                request: { prompt },
+                observableRequest: { prompt },
+              }),
+          } as unknown as CodexProvider,
+          new PromptBuilder(DEFAULT_CONFIG),
+          [
+            {
+              workSlot,
+              reviewRevisionHash: '4'.repeat(64),
+              mergeBaseSha: '2'.repeat(40),
+              context: pullRequest([]),
+              lifecycleTargets: [],
+              liveLifecycleStateHash: '8'.repeat(64),
+            },
+          ],
+          1_000,
+          true,
+          {
+            planningConfig: async () => planningConfig,
+            canonicalInventory: async () => ({
+              ...inventory,
+              itemCount: 0,
+              inventoryHash: digest(canonicalJson(inventory)),
+            }),
+          } as unknown as ContextGatewayInvocationSessionFactoryPort,
+          true,
+          effectiveEffort
+        ).prepare({ workSlot, attemptOrdinal: 1 });
+        const manifest = await new GeneratedProviderInvocationManifestAssembler(
+          authorization(1),
+          DEFAULT_CONFIG,
+          '7'.repeat(64)
+        ).assemble(invocation);
+        // Ambient effort changes after preparation cannot change the launch.
+        process.env.CODEX_REASONING_EFFORT = 'low';
         // Real adapter/session/config preparation, stopped before any subprocess.
-        await expect(agents[0].agent.executeTurn(request)).rejects.toBe(stoppedAtBoundary);
-        await expect(agents[0].agent.executeTurn(request)).rejects.toBe(stoppedAtBoundary);
+        await expect(agents[0].agent.executeTurn(request)).rejects.toBe(
+          stoppedAtBoundary
+        );
+        await expect(
+          agents[0].agent.executeTurn({
+            ...request,
+            requestedModel: invocation.requestedModel,
+          })
+        ).rejects.toBe(stoppedAtBoundary);
         expect(execute).toHaveBeenCalledTimes(2);
         const launch = execute.mock.calls[0][0];
-        expect(launch.protocol.reasoningEffort).toBe(enabled ? (reasoningEffort ?? 'high') : 'xhigh');
+        const investigationLaunch = execute.mock.calls[1][0];
+        expect(launch.protocol.reasoningEffort).toBe(
+          enabled ? (reasoningEffort ?? 'high') : 'xhigh'
+        );
+        expect(investigationLaunch.protocol.requestedModel).toBe(
+          invocation.requestedModel
+        );
+        expect(investigationLaunch.protocol.reasoningEffort).toBe(
+          launch.protocol.reasoningEffort
+        );
+        expect(
+          JSON.parse(manifest.manifestCanonicalJson).providerCapabilityHash
+        ).toBe(
+          digest(
+            canonicalJson({
+              adapterVersion: 'review-investigation-codex.v3',
+              actualModelAttribution: 'observed',
+              confinement: 'gateway_only',
+              continuation: 'durable_dossier',
+              gatewayBinaryHash: planningConfig.gatewayBinaryHash,
+              gatewayPolicyVersion: planningConfig.gatewayPolicyVersion,
+              enabledTools: [...planningConfig.enabledTools].sort(),
+              probeLimits: invocation.investigationProbePlan.limits,
+              probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
+              reasoningEffort: investigationLaunch.protocol.reasoningEffort,
+              requestedModel: investigationLaunch.protocol.requestedModel,
+              searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
+              turnPromptContractHash:
+                REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH,
+            })
+          )
+        );
         expect(launch.environment.CODEX_HOME).toBe(home);
-        expect(launch.environment.REVIEWROUTER_LOCAL_MODEL_TOKEN).toBe('fixture-capability');
+        expect(launch.environment.REVIEWROUTER_LOCAL_MODEL_TOKEN).toBe(
+          'fixture-capability'
+        );
         expect(launch.args).toContain('app-server');
         expect(launch.args).toContain(configuration[0]);
-        const catalogSettings = launch.args.filter((arg) => arg.startsWith('model_catalog_json='));
+        const catalogSettings = launch.args.filter((arg) =>
+          arg.startsWith('model_catalog_json=')
+        );
         if (enabled) {
-          const catalogPath = path.join(home, 'reviewrouter-model-catalog.json');
+          const catalogPath = path.join(
+            home,
+            'reviewrouter-model-catalog.json'
+          );
           const setting = `model_catalog_json=${JSON.stringify(catalogPath)}`;
           expect(catalogSettings).toEqual([setting]);
           expect(launch.args.slice(-2)).toEqual(['-c', setting]);
-          expect(JSON.parse(fs.readFileSync(catalogPath, 'utf8')).models[0]).toMatchObject({
+          expect(
+            JSON.parse(fs.readFileSync(catalogPath, 'utf8')).models[0]
+          ).toMatchObject({
             slug: selectedModel,
             use_responses_lite: true,
             apply_patch_tool_type: 'freeform',
           });
-          expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe([...configuration, setting].join('\n') + '\n');
+          expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(
+            [...configuration, setting].join('\n') + '\n'
+          );
           expect(fs.statSync(catalogPath).mode & 0o777).toBe(0o600);
         } else {
           expect(catalogSettings).toEqual([]);
           expect(fs.readdirSync(home)).toEqual([]);
         }
         expect(execute.mock.calls[1][0].args).toEqual(launch.args);
-        expect(fs.readFileSync(path.join(root, '.codex/config.toml'), 'utf8')).toBe(callerConfig);
+        expect(
+          fs.readFileSync(path.join(root, '.codex/config.toml'), 'utf8')
+        ).toBe(callerConfig);
       } finally {
         process.env = previousEnv;
         execute.mockRestore();
@@ -227,38 +387,75 @@ describe('ProductionT0ReviewRunner policy', () => {
     ['mimo-v2.6-pro', false, undefined, 'xhigh', false, 'xhigh'],
     ['gpt-selected', true, undefined, undefined, false, undefined],
     ['mimo-v2.6-pro', false, undefined, undefined, false, undefined],
-    ['gpt-selected', true, undefined, 'custom-caller-effort', false, 'custom-caller-effort'],
+    [
+      'gpt-selected',
+      true,
+      undefined,
+      'custom-caller-effort',
+      false,
+      'custom-caller-effort',
+    ],
     ['mimo-v2.6-pro', true, undefined, 'high', false, undefined],
   ] as const)(
     'resolves effort for selected %s, gateway %s, server %s (expected %s, denied %s, caller %s) before effects',
-    async (model, accountGateway, serverEffort, expectedEffort, denied, callerEffort) => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mimo-runner-effort-'));
+    async (
+      model,
+      accountGateway,
+      serverEffort,
+      expectedEffort,
+      denied,
+      callerEffort
+    ) => {
+      const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'mimo-runner-effort-')
+      );
       const previousEnv = { ...process.env };
       const stoppedAtBoundary = new Error('mock authorization boundary');
-      const configuration = jest.spyOn(ConfigLoader, 'load').mockImplementation(() => ({
-        ...DEFAULT_CONFIG,
-        providers: [`codex/${process.env.CODEX_MODEL}`],
-      }));
-      const oidc = jest.spyOn(GitHubActionsOidcTokenProvider.prototype, 'requestToken')
+      const configuration = jest
+        .spyOn(ConfigLoader, 'load')
+        .mockImplementation(() => ({
+          ...DEFAULT_CONFIG,
+          providers: [`codex/${process.env.CODEX_MODEL}`],
+        }));
+      const oidc = jest
+        .spyOn(GitHubActionsOidcTokenProvider.prototype, 'requestToken')
         .mockResolvedValue('fixture-oidc');
-      const authorize = jest.spyOn(ReviewActionV2ControlPlaneAdapter.prototype, 'authorize')
+      const authorize = jest
+        .spyOn(ReviewActionV2ControlPlaneAdapter.prototype, 'authorize')
         .mockRejectedValue(stoppedAtBoundary);
-      const current = jest.spyOn(ReviewActionV2ControlPlaneAdapter.prototype, 'currentAuthorization')
-        .mockImplementation(() => { throw stoppedAtBoundary; });
-      const execute = jest.spyOn(NodeCodexAppServerTurnRunner.prototype, 'executeTurn')
+      const current = jest
+        .spyOn(
+          ReviewActionV2ControlPlaneAdapter.prototype,
+          'currentAuthorization'
+        )
+        .mockImplementation(() => {
+          throw stoppedAtBoundary;
+        });
+      const execute = jest
+        .spyOn(NodeCodexAppServerTurnRunner.prototype, 'executeTurn')
         .mockRejectedValue(new Error('unexpected AppServer call'));
-      const review = jest.spyOn(CodexProvider.prototype, 'review')
+      const review = jest
+        .spyOn(CodexProvider.prototype, 'review')
         .mockRejectedValue(new Error('unexpected provider call'));
-      const fetchImpl = jest.fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
-        .mockResolvedValueOnce(new Response(JSON.stringify({ sessionToken: 'fixture-session' })))
-        .mockResolvedValueOnce(new Response(JSON.stringify({
-          protocolVersion: 1,
-          configVersion: 7,
-          runtimeEnv: {
-            CODEX_MODEL: model,
-            ...(serverEffort === undefined ? {} : { CODEX_REASONING_EFFORT: serverEffort }),
-          },
-        })));
+      const fetchImpl = jest
+        .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ sessionToken: 'fixture-session' }))
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              configVersion: 7,
+              runtimeEnv: {
+                CODEX_MODEL: model,
+                ...(serverEffort === undefined
+                  ? {}
+                  : { CODEX_REASONING_EFFORT: serverEffort }),
+              },
+            })
+          )
+        );
       try {
         process.env.CODEX_MODEL = 'caller-model';
         if (callerEffort === undefined) {
@@ -266,10 +463,12 @@ describe('ProductionT0ReviewRunner policy', () => {
         } else {
           process.env.CODEX_REASONING_EFFORT = callerEffort;
         }
-        const controlPlane = new ReviewActionV2ControlPlaneAdapter(new ReviewActionV2Client({
-          apiUrl: 'https://fixture.invalid',
-          fetchImpl,
-        }));
+        const controlPlane = new ReviewActionV2ControlPlaneAdapter(
+          new ReviewActionV2Client({
+            apiUrl: 'https://fixture.invalid',
+            fetchImpl,
+          })
+        );
         const operation = new ProductionT0ReviewRunner(fetchImpl).run({
           apiUrl: 'https://fixture.invalid',
           audience: 'reviewrouter',
@@ -282,20 +481,28 @@ describe('ProductionT0ReviewRunner policy', () => {
           codexHome: path.join(root, 'home'),
           scmReadToken: 'fixture-scm',
           scmReadTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-          refreshScmReadToken: async () => { throw new Error('unexpected refresh'); },
-          ...(accountGateway ? { accountGateway: {
-            controlPlane,
-            modelTransport: {
-              baseUrl: 'http://127.0.0.1:1/v1',
-              configuration: [],
-              environment: { CODEX_HOME: path.join(root, 'home') },
-              actualModel: () => model,
-              dispose: async () => {},
-            },
-          } } : {}),
+          refreshScmReadToken: async () => {
+            throw new Error('unexpected refresh');
+          },
+          ...(accountGateway
+            ? {
+                accountGateway: {
+                  controlPlane,
+                  modelTransport: {
+                    baseUrl: 'http://127.0.0.1:1/v1',
+                    configuration: [],
+                    environment: { CODEX_HOME: path.join(root, 'home') },
+                    actualModel: () => model,
+                    dispose: async () => {},
+                  },
+                },
+              }
+            : {}),
         });
         if (denied) {
-          await expect(operation).rejects.toThrow('account_gateway_mimo_reasoning_effort_unsupported');
+          await expect(operation).rejects.toThrow(
+            'account_gateway_mimo_reasoning_effort_unsupported'
+          );
           expect(current).not.toHaveBeenCalled();
           expect(authorize).not.toHaveBeenCalled();
         } else {

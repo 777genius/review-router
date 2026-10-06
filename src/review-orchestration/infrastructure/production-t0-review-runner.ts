@@ -183,20 +183,13 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       : loadedConfig;
     const codexProviderName = selectCodexProvider(config);
     const model = codexProviderName.slice('codex/'.length);
-    let reasoningEffort: Exclude<
-      CodexReviewAgentAdapterOptions['reasoningEffort'],
-      'xhigh'
-    >;
+    const reasoningEffort = resolveProductionInvestigationReasoningEffort({
+      codexModel: model,
+      accountGateway: input.accountGateway !== undefined,
+      serverReasoningEffort,
+    });
     if (input.accountGateway && model === 'mimo-v2.6-pro') {
-      // Only the applied server field authorizes effort; caller env can survive
-      // an omitted runtime value. The approved MiMo default is high.
-      // Fail closed for values outside the existing AppServer effort contract.
-      const effort = serverReasoningEffort ?? 'high';
-      if (effort !== 'low' && effort !== 'medium' && effort !== 'high') {
-        throw new Error('account_gateway_mimo_reasoning_effort_unsupported');
-      }
-      reasoningEffort = effort;
-      process.env.CODEX_REASONING_EFFORT = effort;
+      process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
     const configuredTimeoutMs = Math.max(
@@ -372,7 +365,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             providerTimeoutMs,
             agenticContext,
             contextGateway,
-            true
+            true,
+            reasoningEffort
           ),
       });
     const identities = new DeterministicReviewOrchestrationIdentity();
@@ -742,17 +736,34 @@ function publicInvestigationProcessDiagnostic(stderr: string): Readonly<{
   });
 }
 
+export function resolveProductionInvestigationReasoningEffort(input: {
+  readonly codexModel: string;
+  readonly accountGateway: boolean;
+  readonly serverReasoningEffort?: string;
+}): NonNullable<CodexReviewAgentAdapterOptions['reasoningEffort']> {
+  if (!input.accountGateway || input.codexModel !== 'mimo-v2.6-pro') {
+    return 'xhigh';
+  }
+  // Only the applied server field authorizes effort; caller env can survive
+  // an omitted runtime value. The approved MiMo default is high.
+  const effort = input.serverReasoningEffort ?? 'high';
+  if (effort !== 'low' && effort !== 'medium' && effort !== 'high') {
+    throw new Error('account_gateway_mimo_reasoning_effort_unsupported');
+  }
+  return effort;
+}
+
 /** Internal production composition; model is selected after runtime config and revision checks. */
 export function createConfiguredProductionInvestigationAgents(input: {
   readonly codexModel: string;
   readonly codexBinaryPath: string | undefined;
   readonly executionSessions: ReviewAgentExecutionSessionResolverPort;
   readonly modelTransport?: LocalGatewayModelTransport;
-  readonly reasoningEffort?: Exclude<
-    CodexReviewAgentAdapterOptions['reasoningEffort'],
-    'xhigh'
+  readonly reasoningEffort: NonNullable<
+    CodexReviewAgentAdapterOptions['reasoningEffort']
   >;
 }): readonly ConfiguredProductionReviewAgent[] {
+  const reasoningEffort = input.reasoningEffort;
   const processRunner = new NodeReviewAgentProcessRunner();
   const appServer = input.modelTransport
     ? new NodeCodexAppServerTurnRunner()
@@ -776,11 +787,12 @@ export function createConfiguredProductionInvestigationAgents(input: {
                 ) => {
                   // Use the selected production model, never the turn's caller model.
                   // Pin the same fresh-home catalog as exec, above checkout config.
-                  const catalogSetting = await prepareAccountGatewayModelCatalog(
-                    input.codexModel,
-                    input.modelTransport!.environment.CODEX_HOME,
-                    input.modelTransport!.configuration
-                  );
+                  const catalogSetting =
+                    await prepareAccountGatewayModelCatalog(
+                      input.codexModel,
+                      input.modelTransport!.environment.CODEX_HOME,
+                      input.modelTransport!.configuration
+                    );
                   const result = await appServer.executeTurn({
                     ...request,
                     args: [
@@ -808,10 +820,7 @@ export function createConfiguredProductionInvestigationAgents(input: {
             }
           : {}),
         ...(input.codexBinaryPath ? { binary: input.codexBinaryPath } : {}),
-        reasoningEffort:
-          input.modelTransport && input.codexModel === 'mimo-v2.6-pro'
-            ? (input.reasoningEffort ?? 'high')
-            : 'xhigh',
+        reasoningEffort,
         processResultObserver: (result) => {
           if (
             result.termination === ReviewAgentProcessTermination.Exited &&

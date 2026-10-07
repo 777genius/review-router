@@ -199,7 +199,23 @@ export class AccountGatewayModelTransport {
         },
       });
       response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, abort);
-      const fail = () => {
+      let terminalCancellation = false;
+      const fail = (error: unknown) => {
+        // Codex ends a turn at response.completed, before the HTTP EOF.
+        // Ignore only the propagated Node cancellation of that audited turn.
+        if (
+          audit?.hasCompleted() &&
+          controller.signal.aborted &&
+          signal?.aborted &&
+          error instanceof Error &&
+          error.name === 'AbortError' &&
+          'code' in error &&
+          error.code === 'ABORT_ERR' &&
+          error.cause === controller.signal.reason
+        ) {
+          terminalCancellation = true;
+          return;
+        }
         this.inferenceDenied = true;
         this.failure ??= {
           code: 'transport',
@@ -229,7 +245,20 @@ export class AccountGatewayModelTransport {
               this.requestRef = this.failure.requestRef;
           }
         },
-        fail
+        (error) => {
+          // HTTP teardown can reset upstream after the proven terminal abort.
+          if (
+            terminalCancellation &&
+            audit?.hasCompleted() &&
+            controller.signal.aborted &&
+            signal?.aborted &&
+            error instanceof Error &&
+            'code' in error &&
+            error.code === 'ECONNRESET'
+          )
+            return;
+          fail(error);
+        }
       );
       return {
         httpStatus: status,
@@ -649,6 +678,7 @@ function responsesStreamAudit(observe: (model: string | undefined) => void) {
     }
   }
   return {
+    hasCompleted: () => completed,
     accept(bytes: Uint8Array) {
       consume(decoder.decode(bytes, { stream: true }));
     },

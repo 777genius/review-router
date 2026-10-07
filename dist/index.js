@@ -22537,7 +22537,12 @@ var AccountGatewayModelTransport = class {
         }
       });
       response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, abort);
-      const fail = () => {
+      let terminalCancellation = false;
+      const fail = (error2) => {
+        if (audit?.hasCompleted() && controller.signal.aborted && signal?.aborted && error2 instanceof Error && error2.name === "AbortError" && "code" in error2 && error2.code === "ABORT_ERR" && error2.cause === controller.signal.reason) {
+          terminalCancellation = true;
+          return;
+        }
         this.inferenceDenied = true;
         this.failure ??= {
           code: "transport",
@@ -22564,7 +22569,11 @@ var AccountGatewayModelTransport = class {
               this.requestRef = this.failure.requestRef;
           }
         },
-        fail
+        (error2) => {
+          if (terminalCancellation && audit?.hasCompleted() && controller.signal.aborted && signal?.aborted && error2 instanceof Error && "code" in error2 && error2.code === "ECONNRESET")
+            return;
+          fail(error2);
+        }
       );
       return {
         httpStatus: status,
@@ -22888,6 +22897,7 @@ function responsesStreamAudit(observe) {
     }
   }
   return {
+    hasCompleted: () => completed,
     accept(bytes) {
       consume(decoder.decode(bytes, { stream: true }));
     },

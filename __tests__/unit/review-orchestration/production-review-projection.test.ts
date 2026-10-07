@@ -29,8 +29,8 @@ describe('production review projection coverage', () => {
     expect(envelope.authoritativeObservationIds).toEqual([
       'observation-required-slot',
     ]);
-    expect(summary).toContain('| Providers | 1/1 succeeded |');
-    expect(summary).not.toContain('1 failed');
+    expect(summary).toContain('## No findings');
+    expect(summary).not.toContain('failed');
   });
 
   it('records every accepted clean observation in deterministic authoritative lineage', async () => {
@@ -77,7 +77,7 @@ describe('production review projection coverage', () => {
 
     expect(envelope.coverage.state).toBe('partial');
     expect(envelope.publishing.summary.body).toContain(
-      '| Providers | 0/1 succeeded, 1 failed |'
+      '1 of 1 review providers failed.'
     );
   });
 
@@ -100,8 +100,8 @@ describe('production review projection coverage', () => {
     const summary = JSON.parse(projection.projectionEnvelopeCanonicalJson)
       .publishing.summary.body;
 
-    expect(summary).toContain('| Providers | 0/1 succeeded, 1 failed |');
-    expect(summary).not.toContain('| Providers | 1/2');
+    expect(summary).toContain('1 of 1 review providers failed.');
+    expect(summary).not.toContain('2 of');
   });
 
   it('reports 0/0 only when no required provider slots were planned', async () => {
@@ -116,7 +116,7 @@ describe('production review projection coverage', () => {
       .publishing.summary.body;
     const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
 
-    expect(summary).toContain('| Providers | 0/0 succeeded |');
+    expect(summary).toContain('## No findings');
     expect(envelope.authoritativeObservationIds).toEqual([]);
   });
 
@@ -247,9 +247,7 @@ describe('production review projection coverage', () => {
       state: 'complete',
       limitations: [],
     });
-    expect(envelope.publishing.summary.body).toContain(
-      '| Providers | 1/1 succeeded |'
-    );
+    expect(envelope.publishing.summary.body).toContain('## No findings');
   });
 
   it('publishes only neutral coverage output when an assigned path lacks full patch proof', async () => {

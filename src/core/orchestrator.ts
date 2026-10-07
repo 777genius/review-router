@@ -296,19 +296,13 @@ export class ReviewOrchestrator {
               mode: 'full',
             }
           );
-          if (this.shouldPostReviewOutput(trivialReview, [])) {
-            const markdown = this.components.formatter.format(trivialReview);
-            await this.components.commentPoster.postSummary(
-              pr.number,
-              markdown,
-              true,
-              summaryMetadata
-            );
-          } else {
-            logger.info(
-              'Skipping ReviewRouter summary comment because no reportable findings were found'
-            );
-          }
+          const markdown = this.components.formatter.format(trivialReview);
+          await this.components.commentPoster.postSummary(
+            pr.number,
+            markdown,
+            true,
+            summaryMetadata
+          );
 
           // Record metrics for trivial review (shows cost/time saved)
           if (config.analyticsEnabled && this.components.metricsCollector) {
@@ -480,7 +474,7 @@ export class ReviewOrchestrator {
           await progressTracker.replaceWith(
             this.markReviewRouterSummary(reusedMarkdown)
           );
-        } else if (this.shouldPostReviewOutput(reusedReview, [])) {
+        } else {
           await this.components.commentPoster.postSummary(
             pr.number,
             reusedMarkdown,
@@ -1695,64 +1689,46 @@ export class ReviewOrchestrator {
         this.components.feedbackFilter.shouldPost(c, reviewCommentState)
       );
 
-      let shouldReplaceProgressWithCleanSummary = false;
-      if (this.shouldPostReviewOutput(review, inlineFiltered)) {
-        let summaryPostedViaProgress = false;
-        if (progressTracker) {
-          summaryPostedViaProgress = await progressTracker.replaceWith(
-            this.markReviewRouterSummary(markdown)
-          );
-          if (summaryPostedViaProgress) {
-            logger.info(
-              'Replaced ReviewRouter progress comment with final review summary'
-            );
-          }
-        }
-        if (!summaryPostedViaProgress) {
-          await this.components.commentPoster.postSummary(
-            pr.number,
-            markdown,
-            true,
-            summaryMetadata
-          );
-        }
-        await this.components.commentPoster.postInline(
-          pr.number,
-          inlineFiltered,
-          pr.files,
-          pr.headSha,
-          lifecycleMode !== 'off' ? lifecycleDedupeComments : undefined
-        );
-      } else {
+      const hasReportableFindings = this.shouldPostReviewOutput(
+        review,
+        inlineFiltered
+      );
+      if (!hasReportableFindings) {
         logger.info(
-          'Skipping ReviewRouter GitHub comments because no reportable findings were found'
+          'Posting ReviewRouter no-findings summary because the review completed without reportable findings'
         );
-        await this.components.commentPoster.deleteSummaryComments(
-          pr.number,
-          summaryMetadata,
-          'no reportable findings were found'
-        );
-        await this.components.commentPoster.postInline(
-          pr.number,
-          [],
-          pr.files,
-          pr.headSha
-        );
-        shouldReplaceProgressWithCleanSummary = true;
       }
+      let summaryPostedViaProgress = false;
+      if (progressTracker) {
+        summaryPostedViaProgress = await progressTracker.replaceWith(
+          this.markReviewRouterSummary(markdown)
+        );
+        if (summaryPostedViaProgress) {
+          logger.info(
+            'Replaced ReviewRouter progress comment with final review summary'
+          );
+        }
+      }
+      if (!summaryPostedViaProgress) {
+        await this.components.commentPoster.postSummary(
+          pr.number,
+          markdown,
+          true,
+          summaryMetadata
+        );
+      }
+      await this.components.commentPoster.postInline(
+        pr.number,
+        hasReportableFindings ? inlineFiltered : [],
+        pr.files,
+        pr.headSha,
+        hasReportableFindings && lifecycleMode !== 'off'
+          ? lifecycleDedupeComments
+          : undefined
+      );
 
       await this.writeReports(review);
       await progressTracker?.updateProgress('synthesis', 'completed');
-      if (shouldReplaceProgressWithCleanSummary && progressTracker) {
-        const replaced = await progressTracker.replaceWith(
-          this.markReviewRouterSummary(markdown)
-        );
-        if (replaced) {
-          logger.info(
-            'Replaced ReviewRouter progress comment with final no-findings summary'
-          );
-        }
-      }
       if (config.incrementalEnabled) {
         if (llmCoverageComplete) {
           if (await this.canAdvanceIncrementalSnapshot(pr)) {

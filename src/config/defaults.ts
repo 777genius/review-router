@@ -29,8 +29,8 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   learningMinFeedbackCount: 5,
   learningLookbackDays: 30,
 
-  inlineMaxComments: 5,
-  inlineMinSeverity: 'major',
+  inlineMaxComments: 50,
+  inlineMinSeverity: 'minor',
   inlineMinAgreement: 1,
 
   skipLabels: [],

@@ -1,7 +1,209 @@
 /*! ReviewRouter Action third-party notices
 Bundled dependency identity:
 @vioxen/subscription-runtime 0.1.0-main.28
-777genius/ar@6467c59a06a2ac26e3874cf0d104073e7a6c8a2b
+777genius/ar@83a7329f4383b05ac5c39356b79f82f029182d42
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright 2026 777genius
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 
 zod 4.4.2
 MIT License
@@ -89,10 +291,12 @@ __export(github_action_exports, {
   formatTopLevelActionErrorMessage: () => formatTopLevelActionErrorMessage,
   hasHostedPoolRetryBudget: () => hasHostedPoolRetryBudget,
   hostedPoolAccountFailureReason: () => hostedPoolAccountFailureReason,
+  isHostedPoolQuotaFailureText: () => isHostedPoolQuotaFailureText,
   isReviewRouterTargetRevisionMismatchFailure: () => isReviewRouterTargetRevisionMismatchFailure,
   postPullRequestComment: () => postPullRequestComment,
   readActionAuthJson: () => readActionAuthJson,
   readActionInputs: () => readActionInputs,
+  readCertifiedForkApiResponse: () => readCertifiedForkApiResponse,
   requestHostedRelayGrantWithFreshGitHubOidc: () => requestHostedRelayGrantWithFreshGitHubOidc,
   requireRemainingReviewExecutionBudgetMs: () => requireRemainingReviewExecutionBudgetMs,
   resolveCodexBinary: () => resolveCodexBinary,
@@ -113,9 +317,170 @@ __export(github_action_exports, {
   startHostedCodexRelayProxy: () => startHostedCodexRelayProxy
 });
 module.exports = __toCommonJS(github_action_exports);
+
+// packages/features/codex-oauth-rotating/src/action/certified-fork-lifecycle.ts
+var import_node_fs = require("node:fs");
+var import_types = require("node:util/types");
+var bindingFieldNames = [
+  "sourceRepository",
+  "sourceRepositoryId",
+  "baseRepository",
+  "baseRepositoryId",
+  "pullRequestNumber",
+  "reviewHeadSha",
+  "baseSha",
+  "trustDomain"
+];
+var repositoryFullNamePattern = /^[^\s/\p{Cc}]+\/[^\s/\p{Cc}]+$/u;
+var repositoryIdPattern = /^[1-9][0-9]*$/;
+var shaPattern = /^[a-f0-9]{40}$/;
+function parseCertifiedForkReviewBinding(input) {
+  if (typeof input !== "object" || input === null || (0, import_types.isProxy)(input) || Array.isArray(input)) {
+    unavailable();
+  }
+  const prototype = Object.getPrototypeOf(input);
+  if (prototype !== Object.prototype && prototype !== null) {
+    unavailable();
+  }
+  const ownKeys = Reflect.ownKeys(input);
+  if (ownKeys.length !== bindingFieldNames.length || ownKeys.some((key) => typeof key !== "string") || bindingFieldNames.some((fieldName) => !ownKeys.includes(fieldName))) {
+    unavailable();
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  const values = {};
+  for (const fieldName of bindingFieldNames) {
+    const descriptor = descriptors[fieldName];
+    if (descriptor === void 0 || descriptor.enumerable !== true || !("value" in descriptor)) {
+      unavailable();
+    }
+    values[fieldName] = descriptor.value;
+  }
+  if (typeof values.sourceRepository !== "string" || !repositoryFullNamePattern.test(values.sourceRepository) || typeof values.sourceRepositoryId !== "string" || !repositoryIdPattern.test(values.sourceRepositoryId) || typeof values.baseRepository !== "string" || !repositoryFullNamePattern.test(values.baseRepository) || typeof values.baseRepositoryId !== "string" || !repositoryIdPattern.test(values.baseRepositoryId) || typeof values.pullRequestNumber !== "number" || !Number.isSafeInteger(values.pullRequestNumber) || values.pullRequestNumber <= 0 || typeof values.reviewHeadSha !== "string" || !shaPattern.test(values.reviewHeadSha) || typeof values.baseSha !== "string" || !shaPattern.test(values.baseSha) || values.trustDomain !== "fork" || values.sourceRepositoryId === values.baseRepositoryId || values.sourceRepository === values.baseRepository) {
+    unavailable();
+  }
+  return Object.freeze({
+    sourceRepository: values.sourceRepository,
+    sourceRepositoryId: values.sourceRepositoryId,
+    baseRepository: values.baseRepository,
+    baseRepositoryId: values.baseRepositoryId,
+    pullRequestNumber: values.pullRequestNumber,
+    reviewHeadSha: values.reviewHeadSha,
+    baseSha: values.baseSha,
+    trustDomain: values.trustDomain
+  });
+}
+var certifiedForkActionMode = "fork_prompt_only_v2";
+var certifiedForkAdmissionUnavailable = "certified-fork-admission-unavailable: certified fork admission unavailable; no review performed";
+var certifiedForkEventMaxBytes = 1024 * 1024;
+function unavailable() {
+  throw new Error(certifiedForkAdmissionUnavailable);
+}
+function assertCertifiedForkModeSchema(env) {
+  if (env.INPUT_MODE !== certifiedForkActionMode || (env["INPUT_WORKFLOW-SCHEMA-VERSION"] ?? env.INPUT_WORKFLOW_SCHEMA_VERSION) !== "6" || env["INPUT_WORKFLOW-SCHEMA-VERSION"] !== void 0 && env.INPUT_WORKFLOW_SCHEMA_VERSION !== void 0 && env["INPUT_WORKFLOW-SCHEMA-VERSION"] !== env.INPUT_WORKFLOW_SCHEMA_VERSION)
+    unavailable();
+}
+function record(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    unavailable();
+  }
+  return value;
+}
+function positiveId(value) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    unavailable();
+  }
+  return value;
+}
+function repository(value) {
+  const repo = record(value);
+  if (typeof repo.full_name !== "string" || !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9_.-]{1,100}$/.test(
+    repo.full_name
+  ) || [".", ".."].includes(repo.full_name.split("/")[1]) || repo.private !== false) {
+    unavailable();
+  }
+  return { name: repo.full_name, id: positiveId(repo.id), fork: repo.fork };
+}
+function readCertifiedForkInvocation(eventJson, env) {
+  try {
+    assertCertifiedForkModeSchema(env);
+    if (env.GITHUB_EVENT_NAME !== "pull_request_target" || Buffer.byteLength(eventJson, "utf8") > certifiedForkEventMaxBytes)
+      unavailable();
+    const event = record(JSON.parse(eventJson));
+    if (typeof event.action !== "string" || !["opened", "reopened", "synchronize", "ready_for_review"].includes(
+      event.action
+    )) {
+      unavailable();
+    }
+    const pr2 = record(event.pull_request);
+    if (pr2.draft !== false || pr2.state !== "open") unavailable();
+    const base = record(pr2.base);
+    const head = record(pr2.head);
+    const baseRepo = repository(base.repo);
+    const headRepo = repository(head.repo);
+    const eventRepo = repository(event.repository);
+    if (headRepo.fork !== true || headRepo.id === baseRepo.id || headRepo.name.toLowerCase() === baseRepo.name.toLowerCase() || baseRepo.name !== eventRepo.name || baseRepo.id !== eventRepo.id || baseRepo.name !== env.GITHUB_REPOSITORY || String(baseRepo.id) !== env.GITHUB_REPOSITORY_ID || positiveId(event.number) !== positiveId(pr2.number) || head.sha === pr2.merge_commit_sha || base.sha === pr2.merge_commit_sha) {
+      unavailable();
+    }
+    return parseCertifiedForkReviewBinding({
+      sourceRepository: headRepo.name,
+      sourceRepositoryId: String(headRepo.id),
+      baseRepository: baseRepo.name,
+      baseRepositoryId: String(baseRepo.id),
+      pullRequestNumber: positiveId(pr2.number),
+      reviewHeadSha: head.sha,
+      baseSha: base.sha,
+      trustDomain: "fork"
+    });
+  } catch {
+    unavailable();
+  }
+}
+function captureCertifiedForkInvocation(env) {
+  let fd;
+  let binding;
+  try {
+    assertCertifiedForkModeSchema(env);
+    if (env.GITHUB_EVENT_NAME !== "pull_request_target" || !env.GITHUB_EVENT_PATH)
+      unavailable();
+    fd = (0, import_node_fs.openSync)(
+      env.GITHUB_EVENT_PATH,
+      import_node_fs.constants.O_RDONLY | import_node_fs.constants.O_NOFOLLOW | import_node_fs.constants.O_NONBLOCK
+    );
+    const stat2 = (0, import_node_fs.fstatSync)(fd);
+    if (!stat2.isFile() || stat2.size > certifiedForkEventMaxBytes) unavailable();
+    const bytes = Buffer.alloc(certifiedForkEventMaxBytes + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = (0, import_node_fs.readSync)(fd, bytes, length, bytes.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length > certifiedForkEventMaxBytes) unavailable();
+    binding = readCertifiedForkInvocation(
+      new TextDecoder("utf-8", { fatal: true }).decode(
+        bytes.subarray(0, length)
+      ),
+      env
+    );
+  } catch {
+    unavailable();
+  } finally {
+    if (fd !== void 0) {
+      try {
+        (0, import_node_fs.closeSync)(fd);
+      } catch {
+        unavailable();
+      }
+    }
+  }
+  if (!binding) unavailable();
+  return binding;
+}
+
+// packages/features/codex-oauth-rotating/src/action/github-action.ts
 var import_node_child_process2 = require("node:child_process");
 var import_node_crypto7 = require("node:crypto");
-var import_node_fs2 = require("node:fs");
+var import_node_fs3 = require("node:fs");
 var import_node_http2 = __toESM(require("node:http"), 1);
 
 var RuntimeConfigurationError = class extends Error {
@@ -1507,7 +1872,7 @@ var codexJsonAgentCapabilities = {
   agentId: codexJsonAgentId
 };
 
-var import_node_fs = require("node:fs");
+var import_node_fs2 = require("node:fs");
 var import_node_crypto2 = require("node:crypto");
 var import_node_path2 = require("node:path");
 
@@ -1855,7 +2220,7 @@ function availableExecutableDirs(env) {
 }
 function isExecutable(path) {
   try {
-    (0, import_node_fs.accessSync)(path, import_node_fs.constants.X_OK);
+    (0, import_node_fs2.accessSync)(path, import_node_fs2.constants.X_OK);
     return true;
   } catch {
     return false;
@@ -2278,10 +2643,10 @@ function safeMessage(error51) {
     return error51.message.slice(-1e3);
   if (typeof error51 === "string")
     return error51.slice(-1e3);
-  const record2 = readRecord(error51);
-  if (typeof record2?.message === "string")
-    return record2.message.slice(-1e3);
-  const nested = record2 ? readRecord(record2.error) : null;
+  const record4 = readRecord(error51);
+  if (typeof record4?.message === "string")
+    return record4.message.slice(-1e3);
+  const nested = record4 ? readRecord(record4.error) : null;
   if (typeof nested?.message === "string")
     return nested.message.slice(-1e3);
   return "unknown";
@@ -2565,10 +2930,10 @@ function lastOutputTextFromError(error51) {
 function processFailureLike(error51) {
   if (typeof error51 !== "object" || error51 === null)
     return null;
-  const record2 = error51;
-  const exitCode = typeof record2.exitCode === "number" && Number.isInteger(record2.exitCode) ? record2.exitCode : void 0;
-  const stdout = typeof record2.stdout === "string" ? record2.stdout : void 0;
-  const stderr = typeof record2.stderr === "string" ? record2.stderr : void 0;
+  const record4 = error51;
+  const exitCode = typeof record4.exitCode === "number" && Number.isInteger(record4.exitCode) ? record4.exitCode : void 0;
+  const stdout = typeof record4.stdout === "string" ? record4.stdout : void 0;
+  const stderr = typeof record4.stderr === "string" ? record4.stderr : void 0;
   if (exitCode === void 0 && stdout === void 0 && stderr === void 0) {
     return null;
   }
@@ -2835,13 +3200,13 @@ function extractTurnCompletedUsage(stdout) {
     }
     if (!event || typeof event !== "object")
       continue;
-    const record2 = event;
-    if (record2.type !== "turn.completed")
+    const record4 = event;
+    if (record4.type !== "turn.completed")
       continue;
     if (completedUsage !== void 0) {
       throw new Error("codex_json_turn_usage_invalid:multiple_turns");
     }
-    completedUsage = parseTurnUsage(record2.usage);
+    completedUsage = parseTurnUsage(record4.usage);
   }
   return completedUsage;
 }
@@ -2849,12 +3214,12 @@ function parseTurnUsage(value) {
   if (!value || typeof value !== "object") {
     throw new Error("codex_json_turn_usage_invalid:missing");
   }
-  const record2 = value;
-  const inputTokens = parseUsageCount(record2.input_tokens, "input_tokens");
-  const outputTokens = parseUsageCount(record2.output_tokens, "output_tokens");
-  const cachedInputTokens = parseUsageCount(record2.cached_input_tokens, "cached_input_tokens");
-  const cacheWriteInputTokens = parseUsageCount(record2.cache_write_input_tokens ?? 0, "cache_write_input_tokens");
-  const reasoningOutputTokens = parseUsageCount(record2.reasoning_output_tokens, "reasoning_output_tokens");
+  const record4 = value;
+  const inputTokens = parseUsageCount(record4.input_tokens, "input_tokens");
+  const outputTokens = parseUsageCount(record4.output_tokens, "output_tokens");
+  const cachedInputTokens = parseUsageCount(record4.cached_input_tokens, "cached_input_tokens");
+  const cacheWriteInputTokens = parseUsageCount(record4.cache_write_input_tokens ?? 0, "cache_write_input_tokens");
+  const reasoningOutputTokens = parseUsageCount(record4.reasoning_output_tokens, "reasoning_output_tokens");
   if (cachedInputTokens > inputTokens) {
     throw new Error("codex_json_turn_usage_invalid:cached_exceeds_input");
   }
@@ -2886,26 +3251,26 @@ function looksLikeJsonLine(value) {
 function extractTextFromEvent(event) {
   if (!event || typeof event !== "object")
     return null;
-  const record2 = event;
-  const type = typeof record2.type === "string" ? record2.type : null;
-  if (!hasAssistantRole(record2))
+  const record4 = event;
+  const type = typeof record4.type === "string" ? record4.type : null;
+  if (!hasAssistantRole(record4))
     return null;
   if (type === "item.completed") {
-    const item = record2.item;
+    const item = record4.item;
     return item && typeof item === "object" ? extractTextFromRecord(item) : null;
   }
   if (type === "response.completed") {
-    const response = record2.response;
+    const response = record4.response;
     return response && typeof response === "object" ? extractTextFromRecord(response) : null;
   }
   if (type && !isAssistantTextEventType(type))
     return null;
-  return extractTextFromRecord(record2);
+  return extractTextFromRecord(record4);
 }
 function isAssistantTextEventType(type) {
   return type === "agent_message" || type === "assistant_message" || type === "message" || type === "result";
 }
-function extractTextFromRecord(record2) {
+function extractTextFromRecord(record4) {
   for (const key of [
     "message",
     "text",
@@ -2914,13 +3279,13 @@ function extractTextFromRecord(record2) {
     "content",
     "output"
   ]) {
-    const value = record2[key];
+    const value = record4[key];
     const text = stringifyContent(value);
     if (text)
       return text;
   }
   for (const key of ["data", "item", "delta", "response"]) {
-    const nested = extractTextFromEvent(record2[key]);
+    const nested = extractTextFromEvent(record4[key]);
     if (nested)
       return nested;
   }
@@ -2934,10 +3299,10 @@ function stringifyContent(value) {
     return parts.length > 0 ? parts.join("") : null;
   }
   if (value && typeof value === "object") {
-    const record2 = value;
-    if (!isAssistantContentRecord(record2))
+    const record4 = value;
+    if (!isAssistantContentRecord(record4))
       return null;
-    return stringifyContent(record2.text ?? record2.output_text ?? record2.content ?? record2.output);
+    return stringifyContent(record4.text ?? record4.output_text ?? record4.content ?? record4.output);
   }
   return null;
 }
@@ -2946,19 +3311,19 @@ function stringifyContentEntry(entry) {
     return entry;
   if (!entry || typeof entry !== "object")
     return null;
-  const record2 = entry;
-  if (!isAssistantContentRecord(record2))
+  const record4 = entry;
+  if (!isAssistantContentRecord(record4))
     return null;
-  return stringifyContent(record2.text ?? record2.output_text ?? record2.content ?? record2.output);
+  return stringifyContent(record4.text ?? record4.output_text ?? record4.content ?? record4.output);
 }
-function isAssistantContentRecord(record2) {
-  const type = typeof record2.type === "string" ? record2.type : null;
-  if (!hasAssistantRole(record2))
+function isAssistantContentRecord(record4) {
+  const type = typeof record4.type === "string" ? record4.type : null;
+  if (!hasAssistantRole(record4))
     return false;
   return !type || type === "agentMessage" || type === "agent_message" || type === "assistant_message" || type === "message" || type === "output_text" || type === "text";
 }
-function hasAssistantRole(record2) {
-  const role = record2.role;
+function hasAssistantRole(record4) {
+  const role = record4.role;
   return typeof role !== "string" || role === "assistant";
 }
 function parseStructuredOutput(outputText) {
@@ -4139,7 +4504,7 @@ __export(external_exports, {
   promise: () => promise,
   property: () => _property,
   readonly: () => readonly,
-  record: () => record,
+  record: () => record2,
   refine: () => refine,
   regex: () => _regex,
   regexes: () => regexes_exports,
@@ -16403,7 +16768,7 @@ __export(schemas_exports2, {
   preprocess: () => preprocess,
   promise: () => promise,
   readonly: () => readonly,
-  record: () => record,
+  record: () => record2,
   refine: () => refine,
   set: () => set,
   strictObject: () => strictObject,
@@ -17367,7 +17732,7 @@ var ZodRecord = /* @__PURE__ */ $constructor("ZodRecord", (inst, def) => {
   inst.keyType = def.keyType;
   inst.valueType = def.valueType;
 });
-function record(keyType, valueType, params) {
+function record2(keyType, valueType, params) {
   if (!valueType || !valueType._zod) {
     return new ZodRecord({
       type: "record",
@@ -17832,7 +18197,7 @@ var stringbool = (...args) => _stringbool({
 }, ...args);
 function json(params) {
   const jsonSchema = lazy(() => {
-    return union([string2(params), number2(), boolean2(), _null3(), array(jsonSchema), record(string2(), jsonSchema)]);
+    return union([string2(params), number2(), boolean2(), _null3(), array(jsonSchema), record2(string2(), jsonSchema)]);
   });
   return jsonSchema;
 }
@@ -21958,6 +22323,7 @@ var codexRotatingSetupManifestSchema = external_exports.object({
   protocolVersion: external_exports.literal(codexRotatingProtocolVersion),
   repositoryFullName: external_exports.string().regex(repoFullNamePattern),
   repositoryId: external_exports.string().regex(/^[0-9]+$/),
+  repositoryIdentityVersion: external_exports.number().int().positive(),
   providerInstanceId: external_exports.string().regex(safeOpaqueIdPattern),
   setupNonce: external_exports.string().regex(safeOpaqueIdPattern),
   authMode: external_exports.literal(codexRotatingAuthMode),
@@ -22222,6 +22588,139 @@ function isStalePullRequestHeadError(error51) {
 // packages/features/codex-oauth-rotating/src/action/hosted-codex-relay.ts
 var import_node_crypto6 = require("node:crypto");
 var import_node_http = __toESM(require("node:http"), 1);
+
+// packages/features/codex-oauth-rotating/src/action/hosted-sse-completion.ts
+var maxFrameCharacters = 2e6;
+var HostedSseCompletion = class {
+  decoder = new TextDecoder("utf-8", { fatal: true });
+  line = "";
+  data = [];
+  event = "";
+  characters = 0;
+  afterCr = false;
+  invalid = false;
+  terminal = false;
+  done = false;
+  responseId;
+  get completed() {
+    return this.terminal && !this.invalid;
+  }
+  push(bytes) {
+    try {
+      this.consume(this.decoder.decode(bytes, { stream: true }));
+    } catch {
+      this.reject();
+    }
+  }
+  finish() {
+    try {
+      this.consume(this.decoder.decode());
+    } catch {
+      this.reject();
+    }
+    if (this.line || this.data.length || this.event) this.reject();
+    return this.completed;
+  }
+  reject() {
+    this.invalid = true;
+    this.line = "";
+    this.data = [];
+    this.event = "";
+  }
+  consume(text) {
+    for (const character of text) {
+      if (this.invalid) return;
+      if (this.afterCr && character === "\n") {
+        this.afterCr = false;
+        continue;
+      }
+      this.afterCr = character === "\r";
+      if (++this.characters > maxFrameCharacters) {
+        this.reject();
+        return;
+      }
+      if (character === "\r" || character === "\n") {
+        this.consumeLine();
+      } else {
+        this.line += character;
+      }
+    }
+  }
+  consumeLine() {
+    const line = this.line;
+    this.line = "";
+    if (line === "") {
+      this.consumeFrame();
+      this.characters = 0;
+      this.data = [];
+      this.event = "";
+      return;
+    }
+    if (line.startsWith(":")) return;
+    const colon = line.indexOf(":");
+    const name = colon < 0 ? line : line.slice(0, colon);
+    let value = colon < 0 ? "" : line.slice(colon + 1);
+    if (value.startsWith(" ")) value = value.slice(1);
+    if (name === "data") this.data.push(value);
+    if (name === "event") this.event = value;
+  }
+  consumeFrame() {
+    if (!this.data.length) {
+      if (this.event) this.reject();
+      return;
+    }
+    const data = this.data.join("\n");
+    if (data === "[DONE]") {
+      if (!this.completed || this.done || this.event) this.reject();
+      this.done = true;
+      return;
+    }
+    if (this.terminal || this.done) {
+      this.reject();
+      return;
+    }
+    let value;
+    try {
+      value = JSON.parse(data);
+    } catch {
+      this.reject();
+      return;
+    }
+    if (!record3(value) || typeof value.type !== "string" || !value.type || this.event && this.event !== value.type) {
+      this.reject();
+      return;
+    }
+    if ([
+      "response.failed",
+      "response.incomplete",
+      "response.error",
+      "error"
+    ].includes(value.type)) {
+      this.reject();
+      return;
+    }
+    const response = value.response;
+    if (record3(response) && typeof response.id === "string") {
+      if (!response.id || this.responseId !== void 0 && response.id !== this.responseId) {
+        this.reject();
+        return;
+      }
+      this.responseId = response.id;
+    }
+    if (value.type === "response.completed") {
+      if (!record3(response) || typeof response.id !== "string" || !response.id || response.status !== "completed" || response.error != null || response.incomplete_details != null) {
+        this.reject();
+        return;
+      }
+      this.terminal = true;
+    }
+  }
+};
+function record3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// packages/features/codex-oauth-rotating/src/action/hosted-codex-relay.ts
 var defaultOidcAudience = "reviewrouter";
 var forkAgenticSandboxHostedPoolActionMode = "fork-agentic-sandbox-hosted-pool";
 var defaultMaxRequestBodyBytes = 2e6;
@@ -22231,6 +22730,8 @@ var maxCommentTokenRefreshes = 8;
 var oidcRequestTimeoutMs = 2e4;
 var grantRequestTimeoutMs = 3e4;
 var grantExchangeTotalTimeoutMs = 75e3;
+var completionDrainTimeoutMs = 1e4;
+var maxCompletionDrainBytes = 2e6;
 var RetryableHostedRelayExchangeError = class extends Error {
 };
 var hostedRelayGrantSchema = external_exports.object({
@@ -22279,8 +22780,10 @@ async function runHostedCodexRelayTransport(input) {
         commentTokenRefreshUrl: proxy.commentTokenRefreshUrl
       });
     } catch (error51) {
+      await proxy.settle();
       throwHostedRelayFailover(proxy.failoverReason(), error51);
     }
+    await proxy.settle();
     throwHostedRelayFailover(proxy.failoverReason());
   } finally {
     await proxy.close();
@@ -22375,10 +22878,15 @@ async function startHostedCodexRelayProxy(input) {
   let commentTokenRefreshCount = 0;
   let inFlightRelayRequests = 0;
   let closing = false;
-  let failoverReason;
+  let fencedReason;
+  const fenceFurtherResponses = (reason) => {
+    if (fencedReason === void 0 || reason === "ambiguous") {
+      fencedReason = reason;
+    }
+  };
   let replayFenced = false;
-  let successfulRelayRequests = 0;
   const activeUpstreamRequests = /* @__PURE__ */ new Set();
+  const settlementWaiters = /* @__PURE__ */ new Set();
   const relaySlotWaiters = [];
   const notifyRelaySlot = () => {
     const waiter = relaySlotWaiters.shift();
@@ -22389,15 +22897,20 @@ async function startHostedCodexRelayProxy(input) {
   });
   const isDownstreamCloseError = (error51) => {
     const message = error51 instanceof Error ? error51.message : "";
-    return message === "downstream_closed" || message === "aborted" || /EPIPE|ECONNRESET|ERR_STREAM_DESTROYED|ERR_STREAM_PREMATURE_CLOSE/i.test(message);
+    return message === "downstream_closed" || message === "aborted" || /EPIPE|ECONNRESET|ERR_STREAM_DESTROYED|ERR_STREAM_PREMATURE_CLOSE/i.test(
+      message
+    );
   };
   const server = import_node_http.default.createServer((req, res) => {
     void (async () => {
       let downstreamClosed = false;
+      let terminalForwarded = false;
       let upstreamController;
       const abortUpstream = () => {
         downstreamClosed = true;
-        upstreamController?.abort(new Error("downstream_closed"));
+        if (!terminalForwarded && !res.writableFinished) {
+          upstreamController?.abort(new Error("downstream_closed"));
+        }
       };
       req.once("aborted", abortUpstream);
       res.once("close", abortUpstream);
@@ -22457,23 +22970,59 @@ async function startHostedCodexRelayProxy(input) {
           writeProxyError(res, 404, "proxy_route_denied");
           return;
         }
-        while (inFlightRelayRequests >= maxConcurrentRelayRequests) {
+        while (true) {
           if (closing) {
             writeProxyError(res, 503, "proxy_closing");
             return;
           }
+          if (replayFenced || fencedReason !== void 0) {
+            writeProxyError(res, 409, "proxy_replay_fenced");
+            return;
+          }
+          if (inFlightRelayRequests < maxConcurrentRelayRequests) {
+            replayFenced = true;
+            break;
+          }
           await waitForRelaySlot();
         }
-        requestCount += 1;
-        if (requestCount > input.policy.maxRequests) {
+        let body;
+        try {
+          body = await readRequestBody(req, maxBodyBytes);
+        } catch (error51) {
+          replayFenced = false;
+          notifyRelaySlot();
+          if (!downstreamClosed) {
+            const bodyTooLarge = error51 instanceof Error && error51.message === "proxy_request_body_too_large";
+            writeProxyError(
+              res,
+              bodyTooLarge ? 413 : 502,
+              bodyTooLarge ? "proxy_request_body_too_large" : "proxy_upstream_failed"
+            );
+          }
+          return;
+        }
+        if (fencedReason !== void 0) {
+          body.fill(0);
+          replayFenced = false;
+          notifyRelaySlot();
+          writeProxyError(res, 409, "proxy_replay_fenced");
+          return;
+        }
+        if (requestCount >= input.policy.maxRequests) {
+          body.fill(0);
+          replayFenced = false;
+          notifyRelaySlot();
           writeProxyError(res, 429, "proxy_request_budget_exceeded");
           return;
         }
+        requestCount += 1;
         const ordinal = requestCount;
         inFlightRelayRequests += 1;
-        failoverReason = "ambiguous";
+        replayFenced = false;
+        if (inFlightRelayRequests < maxConcurrentRelayRequests) {
+          notifyRelaySlot();
+        }
         try {
-          const body = await readRequestBody(req, maxBodyBytes);
           upstreamController = new AbortController();
           activeUpstreamRequests.add(upstreamController);
           const upstream = await fetchWithZeroizedBody(
@@ -22495,46 +23044,38 @@ async function startHostedCodexRelayProxy(input) {
           if (!downstreamClosed) {
             let responseCompletion;
             try {
-              responseCompletion = await writeUpstreamResponse(res, upstream);
+              responseCompletion = await writeUpstreamResponse(
+                res,
+                upstream,
+                () => {
+                  terminalForwarded = true;
+                }
+              );
             } catch (writeError) {
               if ((isDownstreamCloseError(writeError) || downstreamClosed) && upstream.status >= 200 && upstream.status < 300) {
-                successfulRelayRequests += 1;
-                failoverReason = void 0;
-                replayFenced = false;
+                fenceFurtherResponses("ambiguous");
                 return;
               }
               throw writeError;
             }
-            if ((upstream.status === 401 || upstream.status === 429) && successfulRelayRequests === 0 && ordinal === 1) {
-              failoverReason = upstream.status === 401 ? "authentication_failed" : "quota_exhausted";
-              replayFenced = false;
-            } else if (responseCompletion === "successful") {
-              successfulRelayRequests += 1;
-              failoverReason = void 0;
-              replayFenced = false;
-            } else if (upstream.status >= 200 && upstream.status < 300) {
-              successfulRelayRequests += 1;
-              failoverReason = void 0;
-              replayFenced = false;
-            } else {
-              replayFenced = true;
+            if (responseCompletion !== "successful") {
+              fenceFurtherResponses("ambiguous");
             }
           } else {
             await upstream.body?.cancel().catch(() => void 0);
-            if (upstream.status >= 200 && upstream.status < 300) {
-              successfulRelayRequests += 1;
-              failoverReason = void 0;
-              replayFenced = false;
-            }
+            fenceFurtherResponses("ambiguous");
           }
+        } catch (error51) {
+          fenceFurtherResponses("ambiguous");
+          throw error51;
         } finally {
           inFlightRelayRequests -= 1;
+          if (inFlightRelayRequests === 0) {
+            for (const waiter of settlementWaiters) waiter();
+          }
           notifyRelaySlot();
         }
       } catch (error51) {
-        if (!isDownstreamCloseError(error51) && !downstreamClosed) {
-          replayFenced = true;
-        }
         if (!downstreamClosed) {
           const code = error51 instanceof Error && error51.message === "proxy_request_body_too_large" ? "proxy_request_body_too_large" : "proxy_upstream_failed";
           if (res.headersSent) {
@@ -22571,7 +23112,25 @@ async function startHostedCodexRelayProxy(input) {
   return {
     baseUrl: `http://127.0.0.1:${address.port}/${nonce}/v1`,
     commentTokenRefreshUrl: `http://127.0.0.1:${address.port}/${nonce}/control/comment-token`,
-    failoverReason: () => failoverReason,
+    failoverReason: () => fencedReason ?? (inFlightRelayRequests > 0 ? "ambiguous" : void 0),
+    settle: async () => {
+      if (inFlightRelayRequests === 0) return;
+      await new Promise((resolve3) => {
+        const settled = () => {
+          clearTimeout(timer);
+          settlementWaiters.delete(settled);
+          resolve3();
+        };
+        const timer = setTimeout(() => {
+          fenceFurtherResponses("ambiguous");
+          for (const controller of activeUpstreamRequests) {
+            controller.abort(new Error("relay_settlement_timeout"));
+          }
+          settled();
+        }, completionDrainTimeoutMs);
+        settlementWaiters.add(settled);
+      });
+    },
     close: async () => {
       if (closing) return;
       closing = true;
@@ -22753,7 +23312,7 @@ async function fetchWithZeroizedBody(fetchImpl, url2, init, plaintextBody) {
     fetchBody.fill(0);
   }
 }
-async function writeUpstreamResponse(res, upstream) {
+async function writeUpstreamResponse(res, upstream, terminalWritten) {
   const headers = {};
   for (const name of ["content-type", "cache-control", "x-request-id"]) {
     const value = upstream.headers.get(name);
@@ -22767,12 +23326,28 @@ async function writeUpstreamResponse(res, upstream) {
   const reader = upstream.body.getReader();
   const mediaType = upstream.headers.get("content-type")?.toLowerCase().split(";", 1)[0]?.trim() ?? "";
   let completionTail = "";
+  const sse = mediaType === "text/event-stream" ? new HostedSseCompletion() : void 0;
+  let terminalForwarded = false;
+  let drainBytes = 0;
+  let drainTimer;
+  let drainDeadline;
   const jsonCompletionChunks = [];
   let readerDone = false;
   let combinedJson;
   try {
     for (; ; ) {
-      const { done, value } = await reader.read();
+      const reading = reader.read();
+      let abandoned = false;
+      void reading.then(
+        (result) => {
+          if (abandoned && !result.done) result.value.fill(0);
+        },
+        () => void 0
+      );
+      const { done, value } = await (drainDeadline ? Promise.race([reading, drainDeadline]).catch((error51) => {
+        abandoned = true;
+        throw error51;
+      }) : reading);
       if (done) {
         readerDone = true;
         break;
@@ -22786,23 +23361,44 @@ async function writeUpstreamResponse(res, upstream) {
       try {
         if (mediaType === "application/json") {
           jsonCompletionChunks.push(buffer);
-        } else {
-          completionTail = `${completionTail}${buffer.toString("utf8")}`.slice(
-            -8192
-          );
+        } else if (sse) {
+          sse.push(buffer);
         }
-        await writeResponseBuffer(res, buffer);
+        if (terminalForwarded) {
+          drainBytes += buffer.byteLength;
+          if (drainBytes > maxCompletionDrainBytes)
+            throw new Error("relay_completion_drain_limit");
+        }
+        if (!terminalForwarded && !res.destroyed) {
+          await writeResponseBuffer(res, buffer, () => {
+            if (!terminalForwarded && sse?.completed && upstream.ok) {
+              terminalForwarded = true;
+              terminalWritten?.();
+              drainDeadline = new Promise((_resolve, reject) => {
+                drainTimer = setTimeout(
+                  () => reject(new Error("relay_completion_drain_timeout")),
+                  completionDrainTimeoutMs
+                );
+              });
+            }
+          });
+        } else if (!terminalForwarded) {
+          throw new Error("downstream_closed");
+        }
       } finally {
         if (mediaType !== "application/json") buffer.fill(0);
       }
     }
-    res.end();
+    if (!res.destroyed) res.end();
     if (mediaType === "application/json") {
       combinedJson = Buffer.concat(jsonCompletionChunks);
       completionTail = combinedJson.toString("utf8");
     }
+    if (sse)
+      return upstream.ok && terminalForwarded && sse.finish() ? "successful" : "non_successful";
     return isProvablySuccessfulRelayResponse(upstream, completionTail);
   } finally {
+    clearTimeout(drainTimer);
     if (!readerDone) await reader.cancel().catch(() => void 0);
     reader.releaseLock();
     combinedJson?.fill(0);
@@ -22815,9 +23411,6 @@ function isProvablySuccessfulRelayResponse(upstream, completionTail) {
   }
   const contentType = upstream.headers.get("content-type")?.toLowerCase() ?? "";
   const mediaType = contentType.split(";", 1)[0]?.trim();
-  if (mediaType === "text/event-stream") {
-    return isSuccessfulHostedSseTail(completionTail) ? "successful" : "non_successful";
-  }
   if (mediaType === "application/json") {
     try {
       JSON.parse(completionTail);
@@ -22827,12 +23420,6 @@ function isProvablySuccessfulRelayResponse(upstream, completionTail) {
     }
   }
   return "non_successful";
-}
-function isSuccessfulHostedSseTail(completionTail) {
-  const normalized = completionTail.replace(/\r\n/g, "\n").trimEnd();
-  const lastLine = normalized.split("\n").at(-1)?.trim();
-  if (lastLine === "data: [DONE]") return true;
-  return /"type"\s*:\s*"response\.completed"/.test(normalized);
 }
 function throwHostedRelayFailover(reason, cause) {
   if (reason === "authentication_failed") {
@@ -22846,7 +23433,7 @@ function throwHostedRelayFailover(reason, cause) {
   }
   if (cause !== void 0) throw cause;
 }
-async function writeResponseBuffer(res, buffer) {
+async function writeResponseBuffer(res, buffer, written) {
   await new Promise((resolve3, reject) => {
     const cleanup = () => {
       res.off("close", onClose);
@@ -22866,7 +23453,10 @@ async function writeResponseBuffer(res, buffer) {
       res.write(buffer, (error51) => {
         cleanup();
         if (error51) reject(error51);
-        else resolve3();
+        else {
+          written?.();
+          resolve3();
+        }
       });
     } catch (error51) {
       cleanup();
@@ -23048,11 +23638,35 @@ var reviewCheckpointClearResponseSchema = external_exports.discriminatedUnion("s
   }).strict()
 ]);
 async function runCodexRotatingGitHubAction(runtime = {}) {
-  const now = runtime.now ?? Date.now;
-  const executionStartedAtEpochMs = now();
-  const env = runtime.env ?? process.env;
+  const ingressEnv = runtime.env ?? process.env;
+  const env = ingressEnv;
   const io = runtime.io ?? { stdout: process.stdout, stderr: process.stderr };
   const fetchImpl = runtime.fetchImpl ?? fetch;
+  if (readInput(ingressEnv, "mode") === certifiedForkActionMode || Number(ingressEnv["INPUT_WORKFLOW-SCHEMA-VERSION"]) === 6 || Number(ingressEnv.INPUT_WORKFLOW_SCHEMA_VERSION) === 6) {
+    try {
+      const binding = captureCertifiedForkInvocation(ingressEnv);
+      const oidcToken = await requestGitHubActionsOidcToken2({
+        env: ingressEnv,
+        fetchImpl,
+        audience: defaultOidcAudience2
+      });
+      mask(io, oidcToken);
+      const apiUrl = (readInput(ingressEnv, "control-plane-url") || requireInput(ingressEnv, "api-url")).replace(/\/+$/u, "");
+      await requestCertifiedForkLiveReview({
+        fetchImpl,
+        apiUrl,
+        oidcToken,
+        binding
+      });
+      notice(io, "ReviewRouter certified fork review published.");
+    } finally {
+      clearActionAuthEnv(ingressEnv);
+      clearOidcRequestEnv2(ingressEnv);
+    }
+    return;
+  }
+  const now = runtime.now ?? Date.now;
+  const executionStartedAtEpochMs = now();
   const fullReviewRuntimeRunner = runtime.fullReviewRuntimeRunner ?? runFullReviewRouterRuntime;
   const inputs = readActionInputs(env);
   maskProviderSecretInputs(io, inputs.providerSecrets);
@@ -23655,116 +24269,180 @@ async function runHostedForkAgenticSandboxGitHubAction(input) {
           `ReviewRouter released a ${reason === "quota_exhausted" ? "quota-exhausted" : "authentication-failed"} hosted account lease and will resume from the durable checkpoint with the next eligible account (${attempt + 1}/${maxAttempts}).`
         );
       },
-      runAttempt: async () => runHostedCodexRelayTransport({
-        env: input.env,
-        fetchImpl: input.fetchImpl,
-        apiUrl: input.inputs.apiUrl,
-        providerInstanceId: input.inputs.providerInstanceId,
-        workflowSchemaVersion: input.inputs.workflowSchemaVersion,
-        bindingId,
-        bindingVersion,
-        deferOidcRequestEnvCleanup: true,
-        maskSecret: (secret) => mask(input.io, secret),
-        run: async ({
-          baseUrl,
-          invocationLeaseId,
-          runtimeConfigVersion,
-          runtimeEnv: grantedRuntimeEnv,
-          repository,
-          commentToken,
-          commentTokenExpiresAt,
-          commentTokenRefreshUrl
-        }) => {
-          if (repository !== event.repository) {
-            throw new Error("comment_token_repository_mismatch");
-          }
-          mask(input.io, commentToken);
-          const runtimeEnv = forkAgenticSandboxRuntimeEnv(grantedRuntimeEnv);
-          await deleteStaleCodexRotatingSummaryComments({
-            fetchImpl: input.fetchImpl,
-            token: commentToken,
-            owner: event.owner,
-            repo: event.repo,
-            issueNumber: event.number
-          });
-          await writeCodexProxySnapshot({
-            codexHome: tempCodexHome,
-            baseUrl,
-            model: codexModelForForkRuntime(runtimeEnv)
-          });
-          const reviewHome = await makeTempDirectory(
-            "reviewrouter-review-home-"
-          );
-          try {
-            let cleanupCommentToken = commentToken;
-            let reviewRuntimeFailure;
-            try {
-              await runReviewRuntimeWithinExecutionBudget({
-                executionDeadlineEpochMs: input.executionDeadlineEpochMs,
-                now: input.now,
-                run: () => input.fullReviewRuntimeRunner({
-                  inputs: input.inputs,
-                  leaseId: invocationLeaseId,
-                  codexBinaryPath,
-                  env: input.env,
-                  io: input.io,
-                  fetchImpl: input.fetchImpl,
-                  workspace,
-                  tempHome: reviewHome,
-                  tempCodexHome,
-                  event,
-                  commentToken,
-                  commentTokenExpiresAt,
-                  runtimeConfigVersion,
-                  runtimeEnv,
-                  executionDeadlineEpochMs: input.executionDeadlineEpochMs,
-                  commentTokenRefreshUrl,
-                  commentTokenRefreshMode: "hosted-relay",
-                  sessionBindingId: bindingId,
-                  sessionBindingVersion: bindingVersion,
-                  onCommentTokenUpdated: (token) => {
-                    cleanupCommentToken = token;
-                  }
-                })
-              });
-            } catch (error51) {
-              reviewRuntimeFailure = error51;
-            }
-            try {
-              await deleteFullRuntimeProgressCommentsWithTokenRefresh({
-                fetchImpl: input.fetchImpl,
-                token: cleanupCommentToken,
-                owner: event.owner,
-                repo: event.repo,
-                issueNumber: event.number,
-                refreshToken: () => refreshCleanupCommentToken({
-                  fetchImpl: input.fetchImpl,
-                  inputs: input.inputs,
-                  leaseId: invocationLeaseId,
-                  event,
-                  io: input.io,
-                  commentTokenRefreshUrl
-                })
-              });
-            } catch {
-              notice(
-                input.io,
-                "ReviewRouter could not clean up progress comments."
-              );
-            }
-            if (isStalePullRequestHeadError(reviewRuntimeFailure)) {
-              notice(
-                input.io,
-                "ReviewRouter stopped a stale review because the PR head changed; the newer run will review the current head."
-              );
-              return;
-            }
-            if (reviewRuntimeFailure) throw reviewRuntimeFailure;
-          } finally {
-            await removeTree(reviewHome);
-          }
+      runAttempt: async ({ attempt, maxAttempts }) => {
+        if (attempt < maxAttempts) {
+          input.env.REVIEW_ROUTER_SUPPRESS_FAILURE_COMMENT = "1";
+        } else {
+          delete input.env.REVIEW_ROUTER_SUPPRESS_FAILURE_COMMENT;
         }
-      })
+        return runHostedCodexRelayTransport({
+          env: input.env,
+          fetchImpl: input.fetchImpl,
+          apiUrl: input.inputs.apiUrl,
+          providerInstanceId: input.inputs.providerInstanceId,
+          workflowSchemaVersion: input.inputs.workflowSchemaVersion,
+          bindingId,
+          bindingVersion,
+          deferOidcRequestEnvCleanup: true,
+          maskSecret: (secret) => mask(input.io, secret),
+          run: async ({
+            baseUrl,
+            invocationLeaseId,
+            runtimeConfigVersion,
+            runtimeEnv: grantedRuntimeEnv,
+            repository: repository2,
+            commentToken,
+            commentTokenExpiresAt,
+            commentTokenRefreshUrl
+          }) => {
+            if (repository2 !== event.repository) {
+              throw new Error("comment_token_repository_mismatch");
+            }
+            mask(input.io, commentToken);
+            const runtimeEnv = forkAgenticSandboxRuntimeEnv(grantedRuntimeEnv);
+            await deleteStaleCodexRotatingSummaryComments({
+              fetchImpl: input.fetchImpl,
+              token: commentToken,
+              owner: event.owner,
+              repo: event.repo,
+              issueNumber: event.number
+            });
+            await writeCodexProxySnapshot({
+              codexHome: tempCodexHome,
+              baseUrl,
+              model: codexModelForForkRuntime(runtimeEnv)
+            });
+            const restoredReviewSnapshot = await tryRestoreReviewSnapshot({
+              fetchImpl: input.fetchImpl,
+              inputs: input.inputs,
+              leaseId: invocationLeaseId,
+              event,
+              io: input.io
+            });
+            const reviewSnapshotForRuntime = restoredReviewSnapshot ?? {
+              protocolVersion: 1,
+              status: "missing",
+              expectedVersion: 0
+            };
+            const reviewHome = await makeTempDirectory(
+              "reviewrouter-review-home-"
+            );
+            try {
+              const reviewSnapshotInputPath = (0, import_node_path8.join)(
+                reviewHome,
+                reviewSnapshotInputFileName
+              );
+              const reviewSnapshotOutputPath = (0, import_node_path8.join)(
+                reviewHome,
+                reviewSnapshotOutputFileName
+              );
+              const reviewCheckpointFinalizationPath = (0, import_node_path8.join)(
+                reviewHome,
+                reviewCheckpointFinalizationFileName
+              );
+              await (0, import_promises6.writeFile)(
+                reviewSnapshotInputPath,
+                JSON.stringify(reviewSnapshotForRuntime),
+                { encoding: "utf8", mode: 384 }
+              );
+              let cleanupCommentToken = commentToken;
+              let reviewRuntimeFailure;
+              try {
+                await runReviewRuntimeWithinExecutionBudget({
+                  executionDeadlineEpochMs: input.executionDeadlineEpochMs,
+                  now: input.now,
+                  run: () => input.fullReviewRuntimeRunner({
+                    inputs: input.inputs,
+                    leaseId: invocationLeaseId,
+                    codexBinaryPath,
+                    env: input.env,
+                    io: input.io,
+                    fetchImpl: input.fetchImpl,
+                    workspace,
+                    tempHome: reviewHome,
+                    tempCodexHome,
+                    event,
+                    commentToken,
+                    commentTokenExpiresAt,
+                    runtimeConfigVersion,
+                    runtimeEnv,
+                    reviewSnapshotInputPath,
+                    reviewSnapshotOutputPath,
+                    reviewCheckpointFinalizationPath,
+                    executionDeadlineEpochMs: input.executionDeadlineEpochMs,
+                    commentTokenRefreshUrl,
+                    commentTokenRefreshMode: "hosted-relay",
+                    sessionBindingId: bindingId,
+                    sessionBindingVersion: bindingVersion,
+                    onCommentTokenUpdated: (token) => {
+                      cleanupCommentToken = token;
+                    }
+                  })
+                });
+              } catch (error51) {
+                reviewRuntimeFailure = error51;
+              }
+              const finalizedCheckpointMarkerRead = await tryReadFinalizedReviewCheckpointMarker({
+                markerPath: reviewCheckpointFinalizationPath,
+                event,
+                io: input.io
+              });
+              await settleFinalizedReviewCheckpoint({
+                markerRead: finalizedCheckpointMarkerRead,
+                runtimeCompleted: didReviewRuntimeComplete(reviewRuntimeFailure),
+                commitSnapshot: () => tryCommitReviewSnapshot({
+                  fetchImpl: input.fetchImpl,
+                  inputs: input.inputs,
+                  leaseId: invocationLeaseId,
+                  event,
+                  candidatePath: reviewSnapshotOutputPath,
+                  headToken: cleanupCommentToken,
+                  io: input.io
+                }),
+                clearCheckpoint: (marker) => tryClearFinalizedReviewCheckpoint({
+                  fetchImpl: input.fetchImpl,
+                  inputs: input.inputs,
+                  leaseId: invocationLeaseId,
+                  marker,
+                  io: input.io
+                })
+              });
+              try {
+                await deleteFullRuntimeProgressCommentsWithTokenRefresh({
+                  fetchImpl: input.fetchImpl,
+                  token: cleanupCommentToken,
+                  owner: event.owner,
+                  repo: event.repo,
+                  issueNumber: event.number,
+                  refreshToken: () => refreshCleanupCommentToken({
+                    fetchImpl: input.fetchImpl,
+                    inputs: input.inputs,
+                    leaseId: invocationLeaseId,
+                    event,
+                    io: input.io,
+                    commentTokenRefreshUrl
+                  })
+                });
+              } catch {
+                notice(
+                  input.io,
+                  "ReviewRouter could not clean up progress comments."
+                );
+              }
+              if (isStalePullRequestHeadError(reviewRuntimeFailure)) {
+                notice(
+                  input.io,
+                  "ReviewRouter stopped a stale review because the PR head changed; the newer run will review the current head."
+                );
+                return;
+              }
+              if (reviewRuntimeFailure) throw reviewRuntimeFailure;
+            } finally {
+              await removeTree(reviewHome);
+            }
+          }
+        });
+      }
     });
   } finally {
     clearActionAuthEnv(input.env);
@@ -23801,7 +24479,7 @@ function hostedPoolAccountFailureReason(error51) {
   const normalized = String(
     error51 instanceof Error ? error51.message : error51
   ).toLowerCase();
-  if (normalized === "hosted_pool_quota_exhausted" || normalized === "hosted_relay_grant_failed:429") {
+  if (isHostedPoolQuotaFailureText(normalized)) {
     return "quota_exhausted";
   }
   if (normalized === "hosted_pool_authentication_failed" || normalized === "hosted_relay_grant_failed:401") {
@@ -23809,13 +24487,24 @@ function hostedPoolAccountFailureReason(error51) {
   }
   return void 0;
 }
+function isHostedPoolQuotaFailureText(text) {
+  const normalized = text.toLowerCase();
+  return normalized === "hosted_pool_quota_exhausted" || normalized === "hosted_relay_grant_failed:429" || normalized === "quota_limited" || normalized.includes("provider_capacity_limited") || /exceeded retry limit, last status: 429/.test(normalized) || /you(?:'|’)ve hit your usage limit/.test(normalized);
+}
 function readActionInputs(env) {
   const mode = readInput(env, "mode") || codexRotatingRuntimeAuthMode;
+  if (mode === certifiedForkActionMode || Number(env["INPUT_WORKFLOW-SCHEMA-VERSION"]) === 6 || Number(env.INPUT_WORKFLOW_SCHEMA_VERSION) === 6) {
+    assertCertifiedForkModeSchema(env);
+  }
   const claudeCodeOAuthToken = optionalSecretInput(
     env,
     "claude-code-oauth-token"
   );
   const openRouterApiKey = optionalSecretInput(env, "openrouter-api-key");
+  const mimoTokenPlanApiKey = optionalSecretInput(
+    env,
+    "mimo-token-plan-api-key"
+  );
   const workflowSchemaVersion = Number(
     readInput(env, "workflow-schema-version") || "1"
   );
@@ -23840,7 +24529,8 @@ function readActionInputs(env) {
     reviewTimeoutMinutes: readReviewTimeoutMinutesInput(env),
     providerSecrets: {
       ...claudeCodeOAuthToken ? { claudeCodeOAuthToken } : {},
-      ...openRouterApiKey ? { openRouterApiKey } : {}
+      ...openRouterApiKey ? { openRouterApiKey } : {},
+      ...mimoTokenPlanApiKey ? { mimoTokenPlanApiKey } : {}
     },
     ...hostedBinding
   };
@@ -23990,7 +24680,7 @@ async function readPullRequestEvent(env, reviewDrafts) {
     throw new Error("missing_github_event_path");
   }
   const event = JSON.parse(await (0, import_promises6.readFile)(eventPath, "utf8"));
-  const repository = requireString(event.repository?.full_name, "event_repo");
+  const repository2 = requireString(event.repository?.full_name, "event_repo");
   const headRepo = requireString(
     event.pull_request?.head?.repo?.full_name,
     "head_repo"
@@ -24005,10 +24695,10 @@ async function readPullRequestEvent(env, reviewDrafts) {
   if (!draft && eventName !== "pull_request") {
     throw new Error("ready_pull_request_event_required");
   }
-  if (repository !== headRepo) {
+  if (repository2 !== headRepo) {
     throw new Error("fork_pull_request_unsupported");
   }
-  const [owner, repo] = repository.split("/");
+  const [owner, repo] = repository2.split("/");
   if (!owner || !repo) {
     throw new Error("invalid_github_repository");
   }
@@ -24019,7 +24709,7 @@ async function readPullRequestEvent(env, reviewDrafts) {
   return {
     number: requireNumber(event.number, "pr_number"),
     ...isSafeGitHubNumericId(event.repository?.id) ? { repositoryId: String(event.repository.id) } : {},
-    repository,
+    repository: repository2,
     owner,
     repo,
     headSha: requireSha(event.pull_request?.head?.sha, "head_sha"),
@@ -24055,7 +24745,7 @@ async function readForkPullRequestTargetEvent(env) {
     throw new Error("missing_github_event_path");
   }
   const event = JSON.parse(await (0, import_promises6.readFile)(eventPath, "utf8"));
-  const repository = requireString(event.repository?.full_name, "event_repo");
+  const repository2 = requireString(event.repository?.full_name, "event_repo");
   const headRepo = requireString(
     event.pull_request?.head?.repo?.full_name,
     "head_repo"
@@ -24063,17 +24753,17 @@ async function readForkPullRequestTargetEvent(env) {
   if (event.pull_request?.draft === true) {
     throw new Error("draft_pull_request_unsupported");
   }
-  if (repository === headRepo) {
+  if (repository2 === headRepo) {
     throw new Error("fork_pull_request_required");
   }
-  const [owner, repo] = repository.split("/");
+  const [owner, repo] = repository2.split("/");
   if (!owner || !repo) {
     throw new Error("invalid_github_repository");
   }
   return {
     number: requireNumber(event.number, "pr_number"),
     ...isSafeGitHubNumericId(event.repository?.id) ? { repositoryId: String(event.repository.id) } : {},
-    repository,
+    repository: repository2,
     owner,
     repo,
     headSha: requireSha(event.pull_request?.head?.sha, "head_sha"),
@@ -24090,22 +24780,22 @@ async function readTrustedSameRepositoryPullRequestTargetEvent(env) {
     throw new Error("missing_github_event_path");
   }
   const event = JSON.parse(await (0, import_promises6.readFile)(eventPath, "utf8"));
-  const repository = requireString(event.repository?.full_name, "event_repo");
+  const repository2 = requireString(event.repository?.full_name, "event_repo");
   const headRepo = requireString(
     event.pull_request?.head?.repo?.full_name,
     "head_repo"
   );
-  if (repository !== headRepo) {
+  if (repository2 !== headRepo) {
     throw new Error("hosted_fork_pull_request_unsupported");
   }
-  const [owner, repo] = repository.split("/");
+  const [owner, repo] = repository2.split("/");
   if (!owner || !repo) {
     throw new Error("invalid_github_repository");
   }
   return {
     number: requireNumber(event.number, "pr_number"),
     ...isSafeGitHubNumericId(event.repository?.id) ? { repositoryId: String(event.repository.id) } : {},
-    repository,
+    repository: repository2,
     owner,
     repo,
     headSha: requireSha(event.pull_request?.head?.sha, "head_sha"),
@@ -24143,6 +24833,106 @@ async function requestGitHubActionsOidcToken2(input) {
     throw new Error("github_oidc_request_failed");
   }
   return body.value;
+}
+async function requestCertifiedForkLiveReview(input) {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new Error("certified_fork_request_timeout")),
+    18 * 6e4
+  );
+  try {
+    const response = await input.fetchImpl(
+      `${input.apiUrl}/api/action/v1/certified-fork/review`,
+      {
+        method: "POST",
+        redirect: "error",
+        credentials: "omit",
+        signal: controller.signal,
+        headers: {
+          accept: "text/event-stream",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          oidcToken: input.oidcToken,
+          binding: input.binding
+        })
+      }
+    );
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok || response.redirected || !/^text\/event-stream(?:\s*;\s*charset=utf-8)?$/iu.test(contentType)) {
+      void response.body?.cancel().catch(() => void 0);
+      throw new Error("certified_fork_api_rejected");
+    }
+    const declaredLength = response.headers.get("content-length");
+    if (declaredLength !== null && (!/^[0-9]+$/u.test(declaredLength) || Number(declaredLength) > 1024 * 1024)) {
+      void response.body?.cancel().catch(() => void 0);
+      throw new Error("certified_fork_api_response_too_large");
+    }
+    const text = await readCertifiedForkApiResponse(response, 1024 * 1024);
+    parseCertifiedForkLiveReviewEvents(text);
+  } catch (error51) {
+    if (controller.signal.aborted) {
+      throw new Error("certified_fork_api_timeout_or_disconnected", {
+        cause: error51
+      });
+    }
+    throw error51;
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
+}
+async function readCertifiedForkApiResponse(response, maxBytes) {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks = [];
+  let bytes = 0;
+  try {
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) {
+        await reader.cancel().catch(() => void 0);
+        throw new Error("certified_fork_api_response_too_large");
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, bytes).toString("utf8");
+}
+function parseCertifiedForkLiveReviewEvents(text) {
+  const normalized = text.replace(/\r\n?/gu, "\n");
+  if (!normalized.endsWith("\n\n")) {
+    throw new Error("certified_fork_api_stream_truncated");
+  }
+  let resultCount = 0;
+  for (const frame of normalized.split("\n\n")) {
+    if (frame === "" || frame.startsWith(":")) continue;
+    let event = "";
+    const data = [];
+    for (const line of frame.split("\n")) {
+      if (line.startsWith("event: ")) event = line.slice(7);
+      else if (line.startsWith("data: ")) data.push(line.slice(6));
+      else throw new Error("certified_fork_api_stream_invalid");
+    }
+    if (event === "error") {
+      throw new Error("certified_fork_live_review_rejected");
+    }
+    if (event !== "result" || data.length !== 1) {
+      throw new Error("certified_fork_api_stream_invalid");
+    }
+    const value = JSON.parse(data[0]);
+    if (typeof value !== "object" || value === null || Array.isArray(value) || value.status !== "published") {
+      throw new Error("certified_fork_api_result_invalid");
+    }
+    resultCount += 1;
+  }
+  if (resultCount !== 1) {
+    throw new Error("certified_fork_api_result_invalid");
+  }
 }
 async function requestCodexRotatingPreleaseWithFreshOidc(input) {
   let lastError;
@@ -24306,22 +25096,26 @@ async function tryCommitReviewSnapshot(input) {
     if (candidate.pullRequestNumber !== input.event.number || candidate.reviewedHeadSha !== input.event.headSha || candidate.baseSha !== input.event.baseSha) {
       throw new Error("review_snapshot_candidate_context_mismatch");
     }
-    const headToken = await postJson({
-      fetchImpl: input.fetchImpl,
-      label: "api_review_snapshot_head_token",
-      url: `${input.inputs.apiUrl}/api/action/v1/codex-oauth/review-snapshot/head-token`,
-      body: {
-        leaseId: input.leaseId,
-        providerInstanceId: input.inputs.providerInstanceId
+    let headToken = input.headToken;
+    if (!headToken) {
+      const issuedHeadToken = await postJson({
+        fetchImpl: input.fetchImpl,
+        label: "api_review_snapshot_head_token",
+        url: `${input.inputs.apiUrl}/api/action/v1/codex-oauth/review-snapshot/head-token`,
+        body: {
+          leaseId: input.leaseId,
+          providerInstanceId: input.inputs.providerInstanceId
+        }
+      });
+      if (issuedHeadToken.repository !== input.event.repository) {
+        throw new Error("review_snapshot_head_token_repository_mismatch");
       }
-    });
-    if (headToken.repository !== input.event.repository) {
-      throw new Error("review_snapshot_head_token_repository_mismatch");
+      headToken = issuedHeadToken.token;
+      mask(input.io, headToken);
     }
-    mask(input.io, headToken.token);
     const currentHeadSha = await fetchCurrentPullRequestHeadSha({
       fetchImpl: input.fetchImpl,
-      token: headToken.token,
+      token: headToken,
       event: input.event
     });
     if (currentHeadSha !== input.event.headSha) {
@@ -24353,7 +25147,7 @@ async function tryCommitReviewSnapshot(input) {
     if (commitResult.status === "conflict" && commitResult.currentHeadSha !== candidate.reviewedHeadSha) {
       const recheckedHeadSha = await fetchCurrentPullRequestHeadSha({
         fetchImpl: input.fetchImpl,
-        token: headToken.token,
+        token: headToken,
         event: input.event
       });
       if (recheckedHeadSha !== candidate.reviewedHeadSha) {
@@ -24845,7 +25639,7 @@ async function resolveCodexBinary(env) {
     throw new Error("codex_bundled_binary_hash_mismatch");
   }
   await (0, import_promises6.chmod)(resolvedBinaryPath, 493);
-  await (0, import_promises6.access)(resolvedBinaryPath, import_node_fs2.constants.X_OK);
+  await (0, import_promises6.access)(resolvedBinaryPath, import_node_fs3.constants.X_OK);
   return resolvedBinaryPath;
 }
 function resolveGitHubActionPath(env) {
@@ -24879,7 +25673,7 @@ function validateCodexBinaryManifest(manifest, archiveSize) {
 function sha256File(path) {
   return new Promise((resolve3, reject) => {
     const hash2 = (0, import_node_crypto7.createHash)("sha256");
-    const stream = (0, import_node_fs2.createReadStream)(path);
+    const stream = (0, import_node_fs3.createReadStream)(path);
     stream.on("data", (chunk) => hash2.update(chunk));
     stream.on("error", reject);
     stream.on("end", () => resolve3(hash2.digest("hex")));
@@ -25523,9 +26317,13 @@ async function runReviewRuntimeWithinExecutionBudget(input) {
   await input.run();
 }
 async function runFullReviewRouterRuntime(input) {
+  assertProviderSecretInputsForRuntime({
+    runtimeEnv: input.runtimeEnv,
+    providerSecrets: input.inputs.providerSecrets
+  });
   const actionPath = resolveGitHubActionPath(input.env);
   const runtimePath = (0, import_node_path8.join)(actionPath, "dist", "index.js");
-  await (0, import_promises6.access)(runtimePath, import_node_fs2.constants.R_OK);
+  await (0, import_promises6.access)(runtimePath, import_node_fs3.constants.R_OK);
   const reviewThreadLifecycleResolveToken = input.env[reviewThreadLifecycleResolveTokenEnvKey]?.trim() || void 0;
   if (reviewThreadLifecycleResolveToken) {
     mask(input.io, reviewThreadLifecycleResolveToken);
@@ -25717,6 +26515,7 @@ function buildFullReviewRuntimeEnv(input) {
   };
 }
 function buildProviderSecretEnvForRuntime(input) {
+  assertProviderSecretInputsForRuntime(input);
   const env = {};
   if (runtimeProvidersInclude(input.runtimeEnv, "claude/") && input.providerSecrets.claudeCodeOAuthToken) {
     env.CLAUDE_CODE_OAUTH_TOKEN = input.providerSecrets.claudeCodeOAuthToken;
@@ -25724,7 +26523,15 @@ function buildProviderSecretEnvForRuntime(input) {
   if (runtimeProvidersInclude(input.runtimeEnv, "openrouter/") && input.providerSecrets.openRouterApiKey) {
     env.OPENROUTER_API_KEY = input.providerSecrets.openRouterApiKey;
   }
+  if (runtimeProvidersInclude(input.runtimeEnv, "codex-mimo/") && input.providerSecrets.mimoTokenPlanApiKey) {
+    env.MIMO_TOKEN_PLAN_API_KEY = input.providerSecrets.mimoTokenPlanApiKey;
+  }
   return env;
+}
+function assertProviderSecretInputsForRuntime(input) {
+  if (runtimeProvidersInclude(input.runtimeEnv, "codex-mimo/") && !input.providerSecrets.mimoTokenPlanApiKey) {
+    throw new Error("missing_mimo_token_plan_api_key");
+  }
 }
 async function ensureFullReviewRuntimeTools(input) {
   if (!runtimeProvidersInclude(input.runtimeEnv, "claude/")) {
@@ -25765,6 +26572,7 @@ var forkRuntimeEnvAllowedKeys = /* @__PURE__ */ new Set([
   "REVIEWROUTER_CONFIG_SCHEMA_VERSION",
   "REVIEW_AUTH_MODE",
   "INLINE_MAX_COMMENTS",
+  "INLINE_MIN_SEVERITY",
   "TARGET_TOKENS_PER_BATCH",
   "FAIL_ON_SEVERITY",
   "REVIEW_OUTPUT_LANGUAGE",
@@ -26334,9 +27142,12 @@ function classifyPostWritebackCodexFailure(error51) {
   if (isReviewRouterTargetRevisionMismatchFailure(output)) {
     return new Error(stalePullRequestHeadErrorCode);
   }
+  if (isHostedPoolQuotaFailureText(output)) {
+    return new Error("hosted_pool_quota_exhausted");
+  }
   const hostedPoolFailure = hostedPoolAccountFailureReason(output);
   if (hostedPoolFailure === "quota_exhausted") {
-    return new Error("quota_limited");
+    return new Error("hosted_pool_quota_exhausted");
   }
   if (hostedPoolFailure === "authentication_failed") {
     return new Error("hosted_pool_account_failed");
@@ -26347,7 +27158,7 @@ function classifyPostWritebackCodexFailure(error51) {
   }
   const state = classifyCodexRuntimeFailure2(output);
   if (state === "quota_limited") {
-    return new Error("quota_limited");
+    return new Error("hosted_pool_quota_exhausted");
   }
   return new Error(
     `unknown_auth_state:${sanitizeProcessFailureOutput(output)}`
@@ -26380,6 +27191,8 @@ function formatTopLevelActionErrorMessage(error51) {
       return "review_runtime_budget_exhausted_before_launch: ReviewRouter prework consumed the runtime budget; the review was not launched so cleanup can finish safely.";
     case "review_runtime_timeout":
       return "review_runtime_timeout: ReviewRouter stopped the review at its cleanup deadline; resumable progress remains available for the next run.";
+    case "missing_mimo_token_plan_api_key":
+      return "missing_mimo_token_plan_api_key: The mimo-token-plan-api-key Action input is required for codex-mimo/ reviews. Add secrets.MIMO_TOKEN_PLAN_API_KEY to the workflow input; ChatGPT and OpenRouter credentials are not substitutes.";
     default:
       return message;
   }
@@ -26438,8 +27251,11 @@ function clearActionProviderSecretEnv(env) {
   delete env.INPUT_CLAUDE_CODE_OAUTH_TOKEN;
   delete env["INPUT_OPENROUTER-API-KEY"];
   delete env.INPUT_OPENROUTER_API_KEY;
+  delete env["INPUT_MIMO-TOKEN-PLAN-API-KEY"];
+  delete env.INPUT_MIMO_TOKEN_PLAN_API_KEY;
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
   delete env.OPENROUTER_API_KEY;
+  delete env.MIMO_TOKEN_PLAN_API_KEY;
 }
 function maskProviderSecretInputs(io, providerSecrets) {
   if (providerSecrets.claudeCodeOAuthToken) {
@@ -26447,6 +27263,9 @@ function maskProviderSecretInputs(io, providerSecrets) {
   }
   if (providerSecrets.openRouterApiKey) {
     mask(io, providerSecrets.openRouterApiKey);
+  }
+  if (providerSecrets.mimoTokenPlanApiKey) {
+    mask(io, providerSecrets.mimoTokenPlanApiKey);
   }
 }
 function clearOidcRequestEnv2(env) {
@@ -26548,10 +27367,12 @@ if (shouldAutoRunCodexRotatingAction({ env: process.env, argv: process.argv })) 
   formatTopLevelActionErrorMessage,
   hasHostedPoolRetryBudget,
   hostedPoolAccountFailureReason,
+  isHostedPoolQuotaFailureText,
   isReviewRouterTargetRevisionMismatchFailure,
   postPullRequestComment,
   readActionAuthJson,
   readActionInputs,
+  readCertifiedForkApiResponse,
   requestHostedRelayGrantWithFreshGitHubOidc,
   requireRemainingReviewExecutionBudgetMs,
   resolveCodexBinary,

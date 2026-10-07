@@ -84,6 +84,7 @@ import {
   NodeReviewAgentProcessRunner,
   ReviewInvestigationControlPlaneError,
   ReviewInvestigationControlPlaneFailureClass,
+  ReviewInvestigationLegacyFallbackGate,
   ReviewInvestigationLegacyFallbackSignal,
   ReviewAgentProviderKind,
   ReviewAgentProcessTermination,
@@ -308,15 +309,17 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const investigationProtocol = investigationRecordingEnabled
       ? new ReviewActionV2InvestigationAdapter(reviewActionClient)
       : undefined;
-    const investigationControlPlane = investigationProtocol
-      ? new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
-          investigationProtocol
-        )
-      : undefined;
     const investigationRecording =
-      investigationControlPlane && contextGatewayOptions
+      investigationProtocol && contextGatewayOptions
         ? new ReviewInvestigationRecordingAdapter(
             (recordingInput) => {
+              const legacyFallbackGate =
+                new ReviewInvestigationLegacyFallbackGate();
+              const investigationControlPlane =
+                new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
+                  investigationProtocol,
+                  legacyFallbackGate
+                );
               const currency = new RevisionGuardInvestigationCurrencyAdapter(
                 revisionGuard
               );
@@ -363,6 +366,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
               });
               return new RunInvestigationWorkSlot({
                 controlPlane: investigationControlPlane,
+                legacyFallbackGate,
                 delay: new SystemReviewOrchestrationDelay(),
                 leases: new ReviewActionV2InvestigationLeaseAdapter(
                   reviewActionClient
@@ -528,7 +532,8 @@ type ProductionInvestigationControlPlanePort =
 
 export class LegacyFallbackBeforeInvestigationAuthorityControlPlane implements ProductionInvestigationControlPlanePort {
   constructor(
-    private readonly delegate: ProductionInvestigationControlPlanePort
+    private readonly delegate: ProductionInvestigationControlPlanePort,
+    private readonly legacyFallbackGate = new ReviewInvestigationLegacyFallbackGate()
   ) {}
 
   open(input: Parameters<ReviewInvestigationControlPlanePort['open']>[0]) {
@@ -538,30 +543,35 @@ export class LegacyFallbackBeforeInvestigationAuthorityControlPlane implements P
   restore(
     input: Parameters<ReviewInvestigationControlPlanePort['restore']>[0]
   ) {
+    this.legacyFallbackGate.close();
     return this.delegate.restore(input);
   }
 
   planTurn(
     input: Parameters<ReviewInvestigationControlPlanePort['planTurn']>[0]
   ) {
+    this.legacyFallbackGate.close();
     return this.delegate.planTurn(input);
   }
 
   commitTurn(
     input: Parameters<ReviewInvestigationControlPlanePort['commitTurn']>[0]
   ) {
+    this.legacyFallbackGate.close();
     return this.delegate.commitTurn(input);
   }
 
   abortTurn(
     input: Parameters<ReviewInvestigationControlPlanePort['abortTurn']>[0]
   ) {
+    this.legacyFallbackGate.close();
     return this.delegate.abortTurn(input);
   }
 
   conclude(
     input: Parameters<ReviewInvestigationControlPlanePort['conclude']>[0]
   ) {
+    this.legacyFallbackGate.close();
     return this.delegate.conclude(input);
   }
 
@@ -570,6 +580,7 @@ export class LegacyFallbackBeforeInvestigationAuthorityControlPlane implements P
       ReviewInvestigationReplayControlPlanePort['prepareReplay']
     >[0]
   ) {
+    this.legacyFallbackGate.close();
     return this.delegate.prepareReplay(input);
   }
 
@@ -578,12 +589,14 @@ export class LegacyFallbackBeforeInvestigationAuthorityControlPlane implements P
       ReviewInvestigationReplayControlPlanePort['commitReceiptReplay']
     >[0]
   ) {
+    this.legacyFallbackGate.close();
     return this.delegate.commitReceiptReplay(input);
   }
 
   replay(
     input: Parameters<ReviewInvestigationReplayControlPlanePort['replay']>[0]
   ) {
+    this.legacyFallbackGate.close();
     return this.delegate.replay(input);
   }
 
@@ -591,9 +604,12 @@ export class LegacyFallbackBeforeInvestigationAuthorityControlPlane implements P
     execute: () => Promise<T>
   ): Promise<T> {
     try {
-      return await execute();
+      const result = await execute();
+      this.legacyFallbackGate.close();
+      return result;
     } catch (error) {
       if (
+        this.legacyFallbackGate.isAvailable() &&
         error instanceof ReviewInvestigationControlPlaneError &&
         error.failureClass ===
           ReviewInvestigationControlPlaneFailureClass.CapabilityDisabled

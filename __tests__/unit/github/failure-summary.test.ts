@@ -33,9 +33,9 @@ describe('formatReviewFailureSummary', () => {
     expect(body).toContain('`CODEX_AUTH_JSON`');
     expect(body).toContain('Reseed with the ReviewRouter Codex auth command');
     expect(body).toContain('PR: #123');
-    expect(body).toContain('## What failed');
-    expect(body).toContain('## Why it matters');
-    expect(body).toContain('## How to fix');
+    expect(body).not.toContain('## What failed');
+    expect(body).not.toContain('## Why it matters');
+    expect(body).not.toContain('## How to fix');
     expect(body).toContain(
       'Run this from a trusted machine after `codex login`'
     );
@@ -70,11 +70,12 @@ describe('formatReviewFailureSummary', () => {
       123
     );
 
+    expect(body).toContain('Usage limit reached (no remaining tokens)');
+    expect(body).toContain('Wait for the usage limit to reset');
     expect(body).toContain(
-      'A review provider reached its quota or capacity limit'
+      'If this is hosted Codex, add another ChatGPT account'
     );
-    expect(body).toContain('Wait for the provider limit to reset');
-    expect(body).toContain('Switch to another configured provider');
+    expect(body).not.toContain('## Why it matters');
     expect(body).toContain('Code: provider_capacity_limited');
     expect(body.toLowerCase()).not.toContain('reseed');
     expect(body).not.toContain('reviewrouter.site/install/codex');

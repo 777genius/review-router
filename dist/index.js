@@ -7329,7 +7329,25 @@ var require_utils = __commonJS({
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
     var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
     var isUnreserved = RegExp.prototype.test.bind(/^[\da-z\-._~]$/iu);
-    var isPathCharacter = RegExp.prototype.test.bind(/^[\da-z\-._~!$&'()*+,;=:@/]$/iu);
+    var isPathCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:@/]$/u);
+    var isQueryFragmentCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:@/?]$/u);
+    var isUserinfoCharacter = RegExp.prototype.test.bind(/^[A-Za-z0-9\-._~!$&'()*+,;=:]$/u);
+    var BYTE_HEX = new Array(256);
+    {
+      const HEX_DIGITS = "0123456789ABCDEF";
+      for (let i2 = 0; i2 < 256; i2++) {
+        BYTE_HEX[i2] = "%" + HEX_DIGITS[i2 >> 4] + HEX_DIGITS[i2 & 15];
+      }
+    }
+    function percentEncodeNonAscii(cp) {
+      if (cp < 2048) {
+        return BYTE_HEX[192 | cp >> 6] + BYTE_HEX[128 | cp & 63];
+      }
+      if (cp < 65536) {
+        return BYTE_HEX[224 | cp >> 12] + BYTE_HEX[128 | cp >> 6 & 63] + BYTE_HEX[128 | cp & 63];
+      }
+      return BYTE_HEX[240 | cp >> 18] + BYTE_HEX[128 | cp >> 12 & 63] + BYTE_HEX[128 | cp >> 6 & 63] + BYTE_HEX[128 | cp & 63];
+    }
     function stringArrayToHexStripped(input) {
       let acc = "";
       let code = 0;
@@ -7354,91 +7372,105 @@ var require_utils = __commonJS({
       }
       return acc;
     }
+    var isHextet = RegExp.prototype.test.bind(/^[\dA-Fa-f]{1,4}$/);
+    var isIPvFuture = RegExp.prototype.test.bind(/^[vV][\dA-Fa-f]+\.[A-Za-z\d\-._~!$&'()*+,;=:]+$/);
+    var isZoneCharacter = RegExp.prototype.test.bind(/^[A-Za-z\d\-._~]$/);
     var nonSimpleDomain = RegExp.prototype.test.bind(/[^!"$&'()*+,\-.;=_`a-z{}~]/u);
-    function consumeIsZone(buffer) {
-      buffer.length = 0;
-      return true;
-    }
-    function consumeHextets(buffer, address, output) {
-      if (buffer.length) {
-        const hex = stringArrayToHexStripped(buffer);
-        if (hex !== "") {
-          address.push(hex);
-        } else {
-          output.error = true;
-          return false;
+    function isZoneIdentifier(zone) {
+      if (zone.length === 0) return false;
+      for (let i2 = 0; i2 < zone.length; i2++) {
+        if (isZoneCharacter(zone[i2])) continue;
+        if (zone[i2] === "%" && i2 + 2 < zone.length && isHexPair(zone.slice(i2 + 1, i2 + 3))) {
+          i2 += 2;
+          continue;
         }
-        buffer.length = 0;
+        return false;
       }
       return true;
     }
-    function getIPV6(input) {
-      let tokenCount = 0;
-      const output = { error: false, address: "", zone: "" };
-      const address = [];
-      const buffer = [];
-      let endipv6Encountered = false;
-      let endIpv6 = false;
-      let consume = consumeHextets;
-      for (let i2 = 0; i2 < input.length; i2++) {
-        const cursor = input[i2];
-        if (cursor === "[" || cursor === "]") {
-          continue;
-        }
-        if (cursor === ":") {
-          if (endipv6Encountered === true) {
-            endIpv6 = true;
+    function compressIPv6ZeroRun(hextets) {
+      let bestStart = -1;
+      let bestLength = 0;
+      let runStart = -1;
+      let runLength = 0;
+      for (let i2 = 0; i2 < hextets.length; i2++) {
+        if (hextets[i2] === "0") {
+          if (runStart === -1) runStart = i2;
+          runLength++;
+          if (runLength > bestLength) {
+            bestLength = runLength;
+            bestStart = runStart;
           }
-          if (!consume(buffer, address, output)) {
-            break;
-          }
-          if (++tokenCount > 7) {
-            output.error = true;
-            break;
-          }
-          if (i2 > 0 && input[i2 - 1] === ":") {
-            endipv6Encountered = true;
-          }
-          address.push(":");
-          continue;
-        } else if (cursor === "%") {
-          if (!consume(buffer, address, output)) {
-            break;
-          }
-          consume = consumeIsZone;
         } else {
-          buffer.push(cursor);
-          continue;
+          runStart = -1;
+          runLength = 0;
         }
       }
-      if (buffer.length) {
-        if (consume === consumeIsZone) {
-          output.zone = buffer.join("");
-        } else if (endIpv6) {
-          address.push(buffer.join(""));
-        } else {
-          address.push(stringArrayToHexStripped(buffer));
-        }
+      if (bestLength < 2) return hextets.join(":");
+      const head = hextets.slice(0, bestStart).join(":");
+      const tail = hextets.slice(bestStart + bestLength).join(":");
+      return head + "::" + tail;
+    }
+    function normalizeIPv6Address(input) {
+      const compression = input.indexOf("::");
+      if (compression !== -1 && input.indexOf("::", compression + 1) !== -1) return void 0;
+      const left = compression === -1 ? input.split(":") : input.slice(0, compression).split(":");
+      const right = compression === -1 ? [] : input.slice(compression + 2).split(":");
+      if (compression !== -1) {
+        if (left.length === 1 && left[0] === "") left.length = 0;
+        if (right.length === 1 && right[0] === "") right.length = 0;
       }
-      output.address = address.join("");
-      return output;
+      const parts = left.concat(right);
+      let hextetCount = 0;
+      for (let i2 = 0; i2 < parts.length; i2++) {
+        const part = parts[i2];
+        if (part === "") return void 0;
+        if (part.indexOf(".") !== -1) {
+          if (i2 !== parts.length - 1 || compression !== -1 && right.length === 0 || !isIPv4(part)) return void 0;
+          hextetCount += 2;
+          continue;
+        }
+        if (!isHextet(part)) return void 0;
+        parts[i2] = parseInt(part, 16).toString(16);
+        hextetCount++;
+      }
+      if (compression === -1) {
+        if (hextetCount !== 8) return void 0;
+        return compressIPv6ZeroRun(parts);
+      }
+      if (hextetCount >= 8) return void 0;
+      const expanded = parts.slice(0, left.length);
+      for (let i2 = hextetCount; i2 < 8; i2++) expanded.push("0");
+      for (let i2 = left.length; i2 < parts.length; i2++) expanded.push(parts[i2]);
+      return compressIPv6ZeroRun(expanded);
     }
     function normalizeIPv6(host) {
-      if (findToken(host, ":") < 2) {
-        return { host, isIPV6: false };
+      const bracketed = host[0] === "[" && host[host.length - 1] === "]";
+      const hasBracket = host[0] === "[" || host[host.length - 1] === "]";
+      if (hasBracket && !bracketed) return { host, isIPV6: false, error: true };
+      let input = bracketed ? host.slice(1, -1) : host;
+      if (bracketed && isIPvFuture(input)) {
+        input = input.toLowerCase();
+        return { host: `[${input}]`, escapedHost: input, isIPV6: false, isIPVFuture: true };
       }
-      const ipv6 = getIPV6(host);
-      if (!ipv6.error) {
-        let newHost = ipv6.address;
-        let escapedHost = ipv6.address;
-        if (ipv6.zone) {
-          newHost += "%" + ipv6.zone;
-          escapedHost += "%25" + ipv6.zone;
-        }
-        return { host: newHost, isIPV6: true, escapedHost };
-      } else {
-        return { host, isIPV6: false };
+      if (findToken(input, ":") < 2) {
+        return { host, isIPV6: false, error: bracketed };
       }
+      let zoneIdentifier = "";
+      const zoneSeparator = input.indexOf("%");
+      if (zoneSeparator !== -1) {
+        const separatorLength = input.slice(zoneSeparator, zoneSeparator + 3).toLowerCase() === "%25" ? 3 : 1;
+        zoneIdentifier = input.slice(zoneSeparator + separatorLength);
+        if (!isZoneIdentifier(zoneIdentifier)) return { host, isIPV6: false, error: true };
+        input = input.slice(0, zoneSeparator);
+      }
+      const address = normalizeIPv6Address(input);
+      if (address === void 0) return { host, isIPV6: false, error: true };
+      return {
+        host: address + (zoneIdentifier ? "%" + zoneIdentifier : ""),
+        escapedHost: address + (zoneIdentifier ? "%25" + zoneIdentifier : ""),
+        isIPV6: true
+      };
     }
     function findToken(str2, token) {
       let ind = 0;
@@ -7557,7 +7589,8 @@ var require_utils = __commonJS({
     function normalizePathEncoding(input) {
       let output = "";
       for (let i2 = 0; i2 < input.length; i2++) {
-        if (input[i2] === "%" && i2 + 2 < input.length) {
+        const ch = input[i2];
+        if (ch === "%" && i2 + 2 < input.length) {
           const hex = input.slice(i2 + 1, i2 + 3);
           if (isHexPair(hex)) {
             const normalizedHex = hex.toUpperCase();
@@ -7571,10 +7604,152 @@ var require_utils = __commonJS({
             continue;
           }
         }
-        if (isPathCharacter(input[i2])) {
-          output += input[i2];
+        if (isPathCharacter(ch)) {
+          output += ch;
         } else {
-          output += escape(input[i2]);
+          const code = input.charCodeAt(i2);
+          if (code < 128) {
+            output += isEscapeSafe(code) ? ch : BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i2 + 1 < input.length) {
+            const low = input.charCodeAt(i2 + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i2++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function serializePathEncoding(input, pathNoScheme = false) {
+      let output = "";
+      let firstSegment = pathNoScheme && input[0] !== "/";
+      for (let i2 = 0; i2 < input.length; i2++) {
+        const ch = input[i2];
+        if (ch === "%" && i2 + 2 < input.length) {
+          const hex = input.slice(i2 + 1, i2 + 3);
+          if (isHexPair(hex)) {
+            output += "%" + hex.toUpperCase();
+            i2 += 2;
+            continue;
+          }
+        }
+        if (ch === "/") {
+          firstSegment = false;
+        }
+        if (isPathCharacter(ch) && (ch !== ":" || !firstSegment)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i2);
+          if (code < 128) {
+            output += BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i2 + 1 < input.length) {
+            const low = input.charCodeAt(i2 + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i2++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function encodeComponent(input, isAllowed) {
+      let output = "";
+      for (let i2 = 0; i2 < input.length; i2++) {
+        const ch = input[i2];
+        if (ch === "%" && i2 + 2 < input.length) {
+          const hex = input.slice(i2 + 1, i2 + 3);
+          if (isHexPair(hex)) {
+            output += "%" + hex.toUpperCase();
+            i2 += 2;
+            continue;
+          }
+        }
+        if (isAllowed(ch)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i2);
+          if (code < 128) {
+            output += BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i2 + 1 < input.length) {
+            const low = input.charCodeAt(i2 + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i2++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
+        }
+      }
+      return output;
+    }
+    function encodeUserinfo(input) {
+      return encodeComponent(input, isUserinfoCharacter);
+    }
+    function encodeQuery(input) {
+      return encodeComponent(input, isQueryFragmentCharacter);
+    }
+    function encodeFragment(input) {
+      return encodeComponent(input, isQueryFragmentCharacter);
+    }
+    function isEscapeSafe(cp) {
+      return cp >= 48 && cp <= 57 || cp >= 65 && cp <= 90 || cp >= 97 && cp <= 122 || cp === 42 || cp === 43 || cp === 45 || cp === 46 || cp === 47 || cp === 64 || cp === 95;
+    }
+    function normalizeQueryFragmentEncoding(input) {
+      let output = "";
+      for (let i2 = 0; i2 < input.length; i2++) {
+        const ch = input[i2];
+        if (ch === "%" && i2 + 2 < input.length) {
+          const hex = input.slice(i2 + 1, i2 + 3);
+          if (isHexPair(hex)) {
+            const normalizedHex = hex.toUpperCase();
+            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
+            if (isUnreserved(decoded)) {
+              output += decoded;
+            } else {
+              output += "%" + normalizedHex;
+            }
+            i2 += 2;
+            continue;
+          }
+        }
+        if (isQueryFragmentCharacter(ch)) {
+          output += ch;
+        } else {
+          const code = input.charCodeAt(i2);
+          if (code < 128) {
+            output += isEscapeSafe(code) ? ch : BYTE_HEX[code];
+          } else if (code < 55296 || code > 57343) {
+            output += percentEncodeNonAscii(code);
+          } else if (code <= 56319 && i2 + 1 < input.length) {
+            const low = input.charCodeAt(i2 + 1);
+            if (low >= 56320 && low <= 57343) {
+              output += percentEncodeNonAscii(65536 + (code - 55296 << 10) + (low - 56320));
+              i2++;
+            } else {
+              output += percentEncodeNonAscii(65533);
+            }
+          } else {
+            output += percentEncodeNonAscii(65533);
+          }
         }
       }
       return output;
@@ -7597,14 +7772,18 @@ var require_utils = __commonJS({
     function recomposeAuthority(component) {
       const uriTokens = [];
       if (component.userinfo !== void 0) {
-        uriTokens.push(component.userinfo);
+        uriTokens.push(encodeUserinfo(component.userinfo));
         uriTokens.push("@");
       }
       if (component.host !== void 0) {
-        let host = unescape(component.host);
+        let host = component.host;
         if (!isIPv4(host)) {
-          const ipV6res = normalizeIPv6(host);
-          if (ipV6res.isIPV6 === true) {
+          let ipV6res = normalizeIPv6(host);
+          if (ipV6res.isIPV6 !== true && ipV6res.isIPVFuture !== true) {
+            host = normalizePercentEncoding(host, true);
+            ipV6res = normalizeIPv6(host);
+          }
+          if (ipV6res.isIPV6 === true || ipV6res.isIPVFuture === true) {
             host = `[${ipV6res.escapedHost}]`;
           } else {
             host = reescapeHostDelimiters(host, false);
@@ -7624,6 +7803,11 @@ var require_utils = __commonJS({
       reescapeHostDelimiters,
       normalizePercentEncoding,
       normalizePathEncoding,
+      serializePathEncoding,
+      normalizeQueryFragmentEncoding,
+      encodeUserinfo,
+      encodeQuery,
+      encodeFragment,
       escapePreservingEscapes,
       removeDotSegments,
       isIPv4,
@@ -7639,7 +7823,7 @@ var require_schemes = __commonJS({
   "node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
     "use strict";
     var { isUUID } = require_utils();
-    var URN_REG = /([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-.:;=@]|%[\da-f]{2})+)/iu;
+    var URN_REG = /^([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-./:;=@]|%[\da-f]{2})+)$/iu;
     var supportedSchemeNames = (
       /** @type {const} */
       [
@@ -7700,9 +7884,10 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path29, query] = wsComponent.resourceName.split("?");
+        const queryIndex = wsComponent.resourceName.indexOf("?");
+        const path29 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
         wsComponent.path = path29 && path29 !== "/" ? path29 : void 0;
-        wsComponent.query = query;
+        wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
       wsComponent.fragment = void 0;
@@ -7714,7 +7899,7 @@ var require_schemes = __commonJS({
         return urnComponent;
       }
       const matches = urnComponent.path.match(URN_REG);
-      if (matches) {
+      if (matches && matches[0] === urnComponent.path) {
         const scheme = options.scheme || urnComponent.scheme || "urn";
         urnComponent.nid = matches[1].toLowerCase();
         urnComponent.nss = matches[2];
@@ -7848,8 +8033,17 @@ var require_schemes = __commonJS({
 var require_fast_uri = __commonJS({
   "node_modules/fast-uri/index.js"(exports2, module2) {
     "use strict";
-    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
+    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
+    var VALID_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*$/u;
+    var MALFORMED_SCHEME_ERROR = "URI scheme is malformed.";
+    function decodeValidScheme(scheme) {
+      const decodedScheme = unescape(String(scheme));
+      if (!VALID_SCHEME.test(decodedScheme)) {
+        throw new TypeError(MALFORMED_SCHEME_ERROR);
+      }
+      return decodedScheme;
+    }
     function normalize2(uri, options) {
       if (typeof uri === "string") {
         uri = /** @type {T} */
@@ -7862,12 +8056,34 @@ var require_fast_uri = __commonJS({
     }
     function resolve5(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
-      const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
-      const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
-      if (baseMalformed || relativeMalformed) {
+      const {
+        parsed: baseParsed,
+        malformedAuthorityOrPort: baseMalformed,
+        malformedPercentEncoding: baseMalformedPercentEncoding,
+        malformedSchemeSpecific: baseMalformedSchemeSpecific,
+        malformedHost: baseMalformedHost,
+        malformedScheme: baseMalformedScheme
+      } = parseWithStatus(baseURI, schemelessOptions);
+      const {
+        parsed: relativeParsed,
+        malformedAuthorityOrPort: relativeMalformed,
+        malformedPercentEncoding: relativeMalformedPercentEncoding,
+        malformedSchemeSpecific: relativeMalformedSchemeSpecific,
+        malformedHost: relativeMalformedHost,
+        malformedScheme: relativeMalformedScheme
+      } = parseWithStatus(relativeURI, schemelessOptions);
+      if (baseMalformed || relativeMalformed || baseMalformedPercentEncoding || relativeMalformedPercentEncoding || baseMalformedSchemeSpecific || relativeMalformedSchemeSpecific || baseMalformedHost || relativeMalformedHost || baseMalformedScheme || relativeMalformedScheme) {
         throw new Error(baseParsed.error || relativeParsed.error || "URI is malformed.");
       }
       const resolved = resolveComponent(baseParsed, relativeParsed, schemelessOptions, true);
+      const resolvedSchemeHandler = getSchemeHandler(options && options.scheme || resolved.scheme);
+      const resolvedHost = resolved.host;
+      const resolvedHostIsIP = resolvedHost !== void 0 && resolvedHost !== "" && (isIPv4(resolvedHost) || normalizeIPv6(resolvedHost).isIPV6);
+      canonicalizeHost(resolved, options || {}, resolvedSchemeHandler, resolvedHostIsIP);
+      const encodedASCIIHost = resolvedHost && resolvedHost.indexOf("%") !== -1 && !/\P{ASCII}/u.test(resolvedHost);
+      if (resolved.error && !encodedASCIIHost) {
+        throw new Error(resolved.error);
+      }
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
@@ -7927,7 +8143,7 @@ var require_fast_uri = __commonJS({
     function equal(uriA, uriB, options) {
       const normalizedA = normalizeComparableURI(uriA, options);
       const normalizedB = normalizeComparableURI(uriB, options);
-      return normalizedA !== void 0 && normalizedB !== void 0 && normalizedA.toLowerCase() === normalizedB.toLowerCase();
+      return normalizedA !== void 0 && normalizedB !== void 0 && normalizedA === normalizedB;
     }
     function serialize(cmpts, opts) {
       const component = {
@@ -7948,19 +8164,22 @@ var require_fast_uri = __commonJS({
       };
       const options = Object.assign({}, opts);
       const uriTokens = [];
+      if (component.scheme) {
+        component.scheme = decodeValidScheme(component.scheme);
+      }
       const schemeHandler = getSchemeHandler(options.scheme || component.scheme);
       if (schemeHandler && schemeHandler.serialize) schemeHandler.serialize(component, options);
+      const hasAuthority = component.userinfo !== void 0 || component.host !== void 0 || component.port !== void 0;
+      const pathNoScheme = !options.skipEscape && component.scheme === void 0 && !hasAuthority;
       if (component.path !== void 0) {
         if (!options.skipEscape) {
-          component.path = escapePreservingEscapes(component.path);
-          if (component.scheme !== void 0) {
-            component.path = component.path.split("%3A").join(":");
-          }
+          component.path = serializePathEncoding(component.path, pathNoScheme);
         } else {
           component.path = normalizePercentEncoding(component.path);
         }
       }
       if (options.reference !== "suffix" && component.scheme) {
+        component.scheme = decodeValidScheme(component.scheme);
         uriTokens.push(component.scheme, ":");
       }
       const authority = recomposeAuthority(component);
@@ -7978,16 +8197,19 @@ var require_fast_uri = __commonJS({
         if (!options.absolutePath && (!schemeHandler || !schemeHandler.absolutePath)) {
           s2 = removeDotSegments(s2);
         }
+        if (pathNoScheme) {
+          s2 = serializePathEncoding(s2, true);
+        }
         if (authority === void 0 && s2[0] === "/" && s2[1] === "/") {
           s2 = "/%2F" + s2.slice(2);
         }
         uriTokens.push(s2);
       }
       if (component.query !== void 0) {
-        uriTokens.push("?", component.query);
+        uriTokens.push("?", encodeQuery(component.query));
       }
       if (component.fragment !== void 0) {
-        uriTokens.push("#", component.fragment);
+        uriTokens.push("#", encodeFragment(component.fragment));
       }
       return uriTokens.join("");
     }
@@ -8003,6 +8225,32 @@ var require_fast_uri = __commonJS({
       }
       return void 0;
     }
+    function hasMalformedPercentEncoding(component) {
+      if (component === void 0) return false;
+      let percent = component.indexOf("%");
+      while (percent !== -1) {
+        if (percent + 2 >= component.length || !/^[\da-f]{2}$/iu.test(component.slice(percent + 1, percent + 3))) {
+          return true;
+        }
+        percent = component.indexOf("%", percent + 3);
+      }
+      return false;
+    }
+    function hasMalformedComponentPercentEncoding(matches) {
+      const host = matches[4];
+      return hasMalformedPercentEncoding(matches[3]) || host !== void 0 && !(host[0] === "[" && host[host.length - 1] === "]") && hasMalformedPercentEncoding(host) || hasMalformedPercentEncoding(matches[6]) || hasMalformedPercentEncoding(matches[7]) || hasMalformedPercentEncoding(matches[8]);
+    }
+    function canonicalizeHost(parsed, options, schemeHandler, isIP) {
+      if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && parsed.host[0] !== "[" && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
+        try {
+          parsed.host = new URL("http://" + parsed.host).hostname;
+        } catch (e) {
+          parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
+          return true;
+        }
+      }
+      return false;
+    }
     function parseWithStatus(uri, opts) {
       const options = Object.assign({}, opts);
       const parsed = {
@@ -8015,6 +8263,11 @@ var require_fast_uri = __commonJS({
         fragment: void 0
       };
       let malformedAuthorityOrPort = false;
+      let malformedPercentEncoding = false;
+      let malformedSchemeSpecific = false;
+      let malformedHost = false;
+      let malformedIPLiteral = false;
+      let malformedScheme = false;
       let isIP = false;
       if (options.reference === "suffix") {
         if (options.scheme) {
@@ -8051,6 +8304,19 @@ var require_fast_uri = __commonJS({
         parsed.path = matches[6] || "";
         parsed.query = matches[7];
         parsed.fragment = matches[8];
+        if (parsed.scheme !== void 0) {
+          const decodedScheme = unescape(parsed.scheme);
+          if (VALID_SCHEME.test(decodedScheme)) {
+            parsed.scheme = decodedScheme.toLowerCase();
+          } else {
+            parsed.error = parsed.error || MALFORMED_SCHEME_ERROR;
+            malformedScheme = true;
+          }
+        }
+        malformedPercentEncoding = hasMalformedComponentPercentEncoding(matches);
+        if (malformedPercentEncoding) {
+          parsed.error = parsed.error || "URI contains malformed percent-encoding.";
+        }
         if (isNaN(parsed.port)) {
           parsed.port = matches[5];
         }
@@ -8062,9 +8328,15 @@ var require_fast_uri = __commonJS({
         if (parsed.host) {
           const ipv4result = isIPv4(parsed.host);
           if (ipv4result === false) {
+            const bracketedIPLiteral = parsed.host[0] === "[" && parsed.host[parsed.host.length - 1] === "]";
             const ipv6result = normalizeIPv6(parsed.host);
-            parsed.host = ipv6result.host.toLowerCase();
-            isIP = ipv6result.isIPV6;
+            isIP = ipv6result.isIPV6 || ipv6result.isIPVFuture === true;
+            malformedIPLiteral = bracketedIPLiteral && ipv6result.error === true;
+            parsed.host = isIP ? ipv6result.host : ipv6result.host.toLowerCase();
+            if (malformedIPLiteral) {
+              parsed.error = parsed.error || "URI host is malformed.";
+              malformedAuthorityOrPort = true;
+            }
           } else {
             isIP = true;
           }
@@ -8082,42 +8354,34 @@ var require_fast_uri = __commonJS({
           parsed.error = parsed.error || "URI is not a " + options.reference + " reference.";
         }
         const schemeHandler = getSchemeHandler(options.scheme || parsed.scheme);
-        if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport)) {
-          if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
-            try {
-              parsed.host = new URL("http://" + parsed.host).hostname;
-            } catch (e) {
-              parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
-            }
-          }
-        }
+        malformedHost = canonicalizeHost(parsed, options, schemeHandler, isIP);
         if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
           if (uri.indexOf("%") !== -1) {
-            if (parsed.scheme !== void 0) {
-              parsed.scheme = unescape(parsed.scheme);
-            }
-            if (parsed.host !== void 0) {
-              parsed.host = reescapeHostDelimiters(unescape(parsed.host), isIP);
+            if (parsed.host !== void 0 && !malformedIPLiteral) {
+              const host = isIP ? parsed.host : normalizePercentEncoding(parsed.host, true);
+              parsed.host = reescapeHostDelimiters(host, isIP);
             }
           }
           if (parsed.path) {
             parsed.path = normalizePathEncoding(parsed.path);
           }
+          if (parsed.query) {
+            parsed.query = normalizeQueryFragmentEncoding(parsed.query);
+          }
           if (parsed.fragment) {
-            try {
-              parsed.fragment = encodeURI(decodeURIComponent(parsed.fragment));
-            } catch {
-              parsed.error = parsed.error || "URI malformed";
-            }
+            parsed.fragment = normalizeQueryFragmentEncoding(parsed.fragment);
           }
         }
         if (schemeHandler && schemeHandler.parse) {
           schemeHandler.parse(parsed, options);
+          if (schemeHandler === SCHEMES.urn && parsed.nid === void 0) {
+            malformedSchemeSpecific = true;
+          }
         }
       } else {
         parsed.error = parsed.error || "URI can not be parsed.";
       }
-      return { parsed, malformedAuthorityOrPort };
+      return { parsed, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme };
     }
     function parse(uri, opts) {
       return parseWithStatus(uri, opts).parsed;
@@ -8126,20 +8390,28 @@ var require_fast_uri = __commonJS({
       return normalizeStringWithStatus(uri, opts).normalized;
     }
     function normalizeStringWithStatus(uri, opts) {
-      const { parsed, malformedAuthorityOrPort } = parseWithStatus(uri, opts);
+      const { parsed, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme } = parseWithStatus(uri, opts);
       return {
-        normalized: malformedAuthorityOrPort ? uri : serialize(parsed, opts),
-        malformedAuthorityOrPort
+        normalized: malformedAuthorityOrPort || malformedPercentEncoding || malformedSchemeSpecific || malformedHost || malformedScheme ? uri : serialize(parsed, opts),
+        malformedAuthorityOrPort,
+        malformedPercentEncoding,
+        malformedSchemeSpecific,
+        malformedHost,
+        malformedScheme
       };
     }
     function normalizeComparableURI(uri, opts) {
-      if (typeof uri === "string") {
-        const { normalized, malformedAuthorityOrPort } = normalizeStringWithStatus(uri, opts);
-        return malformedAuthorityOrPort ? void 0 : normalized;
+      if (typeof uri !== "string" && typeof uri !== "object") {
+        return void 0;
       }
-      if (typeof uri === "object") {
-        return serialize(uri, opts);
+      let value;
+      try {
+        value = typeof uri === "string" ? uri : serialize(uri, opts);
+      } catch {
+        return void 0;
       }
+      const { normalized, malformedAuthorityOrPort, malformedPercentEncoding, malformedSchemeSpecific, malformedHost, malformedScheme } = normalizeStringWithStatus(value, opts);
+      return malformedAuthorityOrPort || malformedPercentEncoding || malformedSchemeSpecific || malformedHost || malformedScheme ? void 0 : normalized;
     }
     var fastUri = {
       SCHEMES,
@@ -13325,16 +13597,21 @@ function requireLoader() {
       state.result += _result;
     }
   }
+  function chargeMergeWork(state) {
+    state.totalMergeKeys++;
+    if (state.maxTotalMergeKeys !== -1 && state.totalMergeKeys > state.maxTotalMergeKeys) {
+      throwError(state, "merge keys exceeded maxTotalMergeKeys (" + state.maxTotalMergeKeys + ")");
+    }
+  }
   function mergeMappings(state, destination, source, overridableKeys) {
     if (!common2.isObject(source)) {
       throwError(state, "cannot merge mappings; the provided source object is unacceptable");
     }
+    chargeMergeWork(state);
     const sourceKeys = Object.keys(source);
     for (let index = 0, quantity = sourceKeys.length; index < quantity; index += 1) {
       const key = sourceKeys[index];
-      if (state.maxTotalMergeKeys !== -1 && ++state.totalMergeKeys > state.maxTotalMergeKeys) {
-        throwError(state, "merge keys exceeded maxTotalMergeKeys (" + state.maxTotalMergeKeys + ")");
-      }
+      chargeMergeWork(state);
       if (!_hasOwnProperty.call(destination, key)) {
         setProperty(destination, key, source[key]);
         overridableKeys[key] = true;
@@ -13362,6 +13639,9 @@ function requireLoader() {
     }
     if (keyTag === "tag:yaml.org,2002:merge") {
       if (Array.isArray(valueNode)) {
+        if (valueNode.length > 100) {
+          throwError(state, "abnormal merge sequence size");
+        }
         for (let index = 0, quantity = valueNode.length; index < quantity; index += 1) {
           mergeMappings(state, _result, valueNode[index], overridableKeys);
         }
@@ -15237,8 +15517,8 @@ var DEFAULT_CONFIG = {
   learningEnabled: false,
   learningMinFeedbackCount: 5,
   learningLookbackDays: 30,
-  inlineMaxComments: 5,
-  inlineMinSeverity: "major",
+  inlineMaxComments: 50,
+  inlineMinSeverity: "minor",
   inlineMinAgreement: 1,
   skipLabels: [],
   skipDrafts: false,
@@ -15336,6 +15616,19 @@ var DEFAULT_CONFIG = {
   outputLanguage: "English"
 };
 var FALLBACK_STATIC_PROVIDERS = [...PREFERRED_OPENROUTER_FREE_MODELS];
+
+// src/config/inline-limits.ts
+var DEFAULT_INLINE_MAX_COMMENTS = 50;
+var LEGACY_DEFAULT_INLINE_MAX_COMMENTS = 5;
+function effectiveInlineMaxComments(value) {
+  if (value === 0) {
+    return 0;
+  }
+  if (value === LEGACY_DEFAULT_INLINE_MAX_COMMENTS) {
+    return DEFAULT_INLINE_MAX_COMMENTS;
+  }
+  return value;
+}
 
 // node_modules/zod/v3/external.js
 var external_exports = {};
@@ -19773,8 +20066,12 @@ var ConfigLoader = class {
     const fileConfig = this.loadFromFile();
     const envConfig = this.loadFromEnv();
     const merged = this.merge(DEFAULT_CONFIG, fileConfig, envConfig);
+    const resolved = {
+      ...merged,
+      inlineMaxComments: effectiveInlineMaxComments(merged.inlineMaxComments)
+    };
     try {
-      validateConfig(merged);
+      validateConfig(resolved);
     } catch (error2) {
       if (error2 instanceof ValidationError) {
         throw new ValidationError(
@@ -19785,7 +20082,7 @@ var ConfigLoader = class {
       }
       throw error2;
     }
-    return merged;
+    return resolved;
   }
   static loadFromFile() {
     for (const relPath of this.CONFIG_PATHS) {
@@ -27260,6 +27557,7 @@ var PromptBuilder = class {
         "OUTPUT LANGUAGE:",
         `Write the title and human-readable text of every finding in ${outputLanguage}.`,
         "Translate only that human-readable text. Keep every schema field name, severity value, file path, identifier, and code value unchanged; never translate code or JSON keys.",
+        "The published PR summary quotes each finding title and message, so write those in this language too.",
         "This directive controls wording only and does not relax any rule above.",
         ""
       );
@@ -27272,6 +27570,11 @@ var PromptBuilder = class {
         ""
       );
     }
+    pushShared(
+      "FINDING TEXT:",
+      "Each finding message must be complete enough to understand and fix the issue from the PR summary alone: what is wrong, why it matters, and how to fix it.",
+      ""
+    );
     if (skipSuggestions) {
       pushLegacy(
         'Return JSON object: {"findings":[{file, startLine, line, endLine, severity, title, message}],"revalidations":[{targetId, fingerprint, verdict, confidence, evidence, rationale}]}',
@@ -28991,6 +29294,496 @@ function uniqueSuggestionsByVoteKey(suggestions) {
   return unique3;
 }
 
+// src/utils/suggestion-formatter.ts
+function countMaxConsecutiveBackticks(str2) {
+  const backtickSequences = str2.match(/`+/g);
+  if (!backtickSequences) {
+    return 0;
+  }
+  return Math.max(...backtickSequences.map((seq2) => seq2.length));
+}
+function formatSuggestionBlock(content) {
+  if (!content || content.trim() === "") {
+    return "";
+  }
+  const maxBackticks = countMaxConsecutiveBackticks(content);
+  const fenceCount = Math.max(3, maxBackticks + 1);
+  const fence = "`".repeat(fenceCount);
+  return `${fence}suggestion
+${content}
+${fence}`;
+}
+
+// src/output/reviewer-summary.ts
+var REVIEW_SUMMARY_STATUS_COMPLETE_MARKER = "<!-- reviewrouter:review-status:complete -->";
+var REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER = "<!-- reviewrouter:review-status:incomplete -->";
+var maxSummaryBytes = 6e4;
+var maxFindingBodyChars = 2500;
+function resolveReviewerSummaryLocale(language) {
+  const normalized = language?.trim().toLowerCase() ?? "";
+  if (!normalized) {
+    return "en";
+  }
+  if (normalized === "en" || normalized.startsWith("en-") || normalized === "english") {
+    return "en";
+  }
+  if (normalized.startsWith("ru") || normalized.includes("\u0440\u0443\u0441") || normalized === "russian") {
+    return "ru";
+  }
+  if (normalized.startsWith("uk") || normalized.includes("\u0443\u043A\u0440") || normalized === "ukrainian") {
+    return "uk";
+  }
+  if (normalized.startsWith("es") || normalized === "spanish" || normalized.includes("espa\xF1ol")) {
+    return "es";
+  }
+  if (normalized.startsWith("pt") || normalized === "portuguese" || normalized.includes("portugu")) {
+    return "pt";
+  }
+  if (normalized.startsWith("fr") || normalized === "french" || normalized.includes("fran\xE7ais")) {
+    return "fr";
+  }
+  if (normalized.startsWith("de") || normalized === "german" || normalized.includes("deutsch")) {
+    return "de";
+  }
+  if (normalized.startsWith("it") || normalized === "italian" || normalized.includes("italiano")) {
+    return "it";
+  }
+  if (normalized.startsWith("zh") || normalized === "chinese" || normalized.includes("\u4E2D\u6587") || normalized.includes("\u6C49\u8BED") || normalized.includes("\u6F22\u8A9E")) {
+    return "zh";
+  }
+  if (normalized.startsWith("ja") || normalized === "japanese" || normalized.includes("\u65E5\u672C")) {
+    return "ja";
+  }
+  if (normalized.startsWith("ko") || normalized === "korean" || normalized.includes("\uD55C\uAD6D") || normalized.includes("\uC870\uC120")) {
+    return "ko";
+  }
+  return "en";
+}
+function reviewerSummaryCopy(language) {
+  return copies[resolveReviewerSummaryLocale(language)];
+}
+function limitReviewerPostedMarkdown(value, maxChars = 65e3) {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const suffix = "\n\n[truncated]";
+  const budget = Math.max(0, maxChars - suffix.length);
+  return `${dropIncompleteDetails(value.slice(0, budget)).trimEnd()}${suffix}`;
+}
+function neutralizeDetailsMarkup(value) {
+  return value.replace(
+    /<\/?(?:details|summary)\b[^>]*>/gi,
+    (tag) => tag.replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  );
+}
+function renderReviewerSummaryMarkdown(input) {
+  const copy = reviewerSummaryCopy(input.language);
+  const counts = {
+    total: input.metrics.totalFindings,
+    critical: input.metrics.critical,
+    major: input.metrics.major,
+    minor: input.metrics.minor
+  };
+  const failedProviders = Math.max(
+    0,
+    input.metrics.providersUsed - input.metrics.providersSuccess
+  );
+  const heading = input.incomplete ? copy.incompleteHeading(counts.total) : counts.total === 0 ? copy.noFindingsHeading : copy.findingsHeading(counts);
+  const lines = [
+    input.incomplete ? REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER : REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
+    heading
+  ];
+  if (input.incomplete) {
+    lines.push("", copy.incompleteNote);
+  }
+  if (failedProviders > 0) {
+    lines.push(
+      "",
+      copy.providerFailures(failedProviders, input.metrics.providersUsed)
+    );
+  }
+  const sorted = [...input.findings].sort(compareSummaryFindings);
+  const remaining = [];
+  for (const finding of sorted) {
+    const block = renderFindingDetails(copy, finding);
+    const candidate = [...lines, "", block];
+    if (utf8Bytes(candidate.join("\n")) > maxSummaryBytes) {
+      remaining.push(compactFindingLine(finding));
+      continue;
+    }
+    lines.push("", block);
+  }
+  if (remaining.length > 0) {
+    const header = ["", copy.moreFindings(remaining.length)];
+    if (utf8Bytes([...lines, ...header].join("\n")) <= maxSummaryBytes) {
+      lines.push(...header);
+      for (const compact of remaining) {
+        const candidate = [...lines, compact];
+        if (utf8Bytes(candidate.join("\n")) > maxSummaryBytes) {
+          break;
+        }
+        lines.push(compact);
+      }
+    }
+  }
+  return limitUtf8(lines.join("\n"), maxSummaryBytes);
+}
+function renderReviewerLifecycleMarkdown(input) {
+  if (input.lines.length === 0) {
+    return "";
+  }
+  const copy = reviewerSummaryCopy(input.language);
+  const blocks = input.lines.map((line) => {
+    const label = copy.lifecycle[line.kind];
+    const summary = escapeHtml(
+      `${label} \xB7 ${line.locationLabel} \xB7 ${line.title}`.trim()
+    );
+    const body = [
+      neutralizeDetailsMarkup(line.message.trim()),
+      line.locationLabel
+    ].filter(Boolean).join("\n\n");
+    return [
+      "<details>",
+      `<summary>${summary}</summary>`,
+      "",
+      neutralizeDetailsMarkup(body),
+      "",
+      "</details>"
+    ].join("\n");
+  });
+  return limitUtf8(blocks.join("\n\n"), maxSummaryBytes);
+}
+function markReviewSummaryIncomplete(input) {
+  const copy = reviewerSummaryCopy(input.language);
+  if (!input.summary.includes(REVIEW_SUMMARY_STATUS_COMPLETE_MARKER)) {
+    throw new Error("legacy_partial_review_summary_contract_invalid");
+  }
+  const heading = copy.incompleteHeading(input.preliminaryFindingCount);
+  const rewritten = input.summary.replace(
+    REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
+    REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER
+  ).replace(/^## .+$/m, heading);
+  if (rewritten.includes(copy.incompleteNote)) {
+    return rewritten;
+  }
+  return rewritten.replace(heading, `${heading}
+
+${copy.incompleteNote}`);
+}
+function toReviewerSummaryFinding(finding) {
+  return {
+    severity: finding.severity,
+    title: finding.title,
+    message: finding.message,
+    file: finding.file,
+    line: finding.line,
+    ...finding.startLine !== void 0 ? { startLine: finding.startLine } : {},
+    ...finding.endLine !== void 0 ? { endLine: finding.endLine } : {},
+    ...finding.suggestion ? { suggestion: finding.suggestion } : {}
+  };
+}
+function findingLocationLabel(finding) {
+  return finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `${finding.file}:${finding.startLine}-${finding.endLine}` : `${finding.file}:${finding.line}`;
+}
+function renderFindingDetails(copy, finding) {
+  const location = findingLocationLabel(finding);
+  const summary = escapeHtml(
+    `${finding.severity} \xB7 ${location} \xB7 ${finding.title.trim()}`
+  );
+  const message = truncateChars(
+    neutralizeDetailsMarkup(finding.message.trim()),
+    maxFindingBodyChars
+  );
+  const parts = [
+    "<details>",
+    `<summary>${summary}</summary>`,
+    "",
+    message,
+    "",
+    `**${copy.location}:** \`${escapeMarkdownInline(location)}\``
+  ];
+  if (finding.suggestion?.trim()) {
+    parts.push(
+      "",
+      `**${copy.fix}**`,
+      "",
+      formatCodeFence(finding.suggestion.trim())
+    );
+  }
+  parts.push("", "</details>");
+  return parts.join("\n");
+}
+function compactFindingLine(finding) {
+  return `- **${finding.severity}** \`${escapeMarkdownInline(findingLocationLabel(finding))}\` ${escapeMarkdownInline(finding.title.trim())}`;
+}
+function compareSummaryFindings(left, right) {
+  const rank = { critical: 3, major: 2, minor: 1 };
+  return rank[right.severity] - rank[left.severity] || left.file.localeCompare(right.file) || left.line - right.line;
+}
+function formatCodeFence(content) {
+  const fence = "`".repeat(
+    Math.max(3, countMaxConsecutiveBackticks(content) + 1)
+  );
+  return `${fence}
+${content.trimEnd()}
+${fence}`;
+}
+function formatSeverityCounts(counts) {
+  const parts = [
+    ["critical", counts.critical],
+    ["major", counts.major],
+    ["minor", counts.minor]
+  ].filter(([, count]) => count > 0).map(([label, count]) => `${count} ${label}`);
+  return parts.length > 0 ? parts.join(", ") : "0";
+}
+function slavicFindingWord(count, forms) {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  if (mod100 >= 11 && mod100 <= 14) {
+    return forms[2];
+  }
+  if (mod10 === 1) {
+    return forms[0];
+  }
+  if (mod10 >= 2 && mod10 <= 4) {
+    return forms[1];
+  }
+  return forms[2];
+}
+function englishFindingWord(count) {
+  return count === 1 ? "finding" : "findings";
+}
+var copies = {
+  en: {
+    noFindingsHeading: "## No findings",
+    findingsHeading: (counts) => `## ${counts.total} ${englishFindingWord(counts.total)} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `${failed} of ${planned} review providers failed.`,
+    location: "Location",
+    fix: "Fix",
+    incompleteHeading: (count) => `## Review incomplete \u2014 ${count} preliminary ${englishFindingWord(count)}`,
+    incompleteNote: "Inline comments and lifecycle changes were withheld because required coverage did not complete.",
+    coverageHeading: "### Coverage not completed",
+    moreFindings: (count) => `**${count} more ${englishFindingWord(count)} omitted from this summary because of size limits.**`,
+    lifecycle: {
+      resolved: "resolved",
+      carried: "carried, not revalidated",
+      uncertain: "needs attention",
+      suppressed: "suppressed"
+    }
+  },
+  ru: {
+    noFindingsHeading: "## \u0417\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439 \u043D\u0435\u0442",
+    findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `\u041D\u0435 \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B\u0438 ${failed} \u0438\u0437 ${planned} \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u043E\u0432 \u0440\u0435\u0432\u044C\u044E.`,
+    location: "\u041C\u0435\u0441\u0442\u043E",
+    fix: "\u0418\u0441\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435",
+    incompleteHeading: (count) => `## \u0420\u0435\u0432\u044C\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E \u2014 ${count} ${slavicFindingWord(count, ["\u043F\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0435 \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u043F\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u043F\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0445 \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])}`,
+    incompleteNote: "\u0418\u043D\u043B\u0430\u0439\u043D-\u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0438 \u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F lifecycle \u043D\u0435 \u043F\u0443\u0431\u043B\u0438\u043A\u043E\u0432\u0430\u043B\u0438\u0441\u044C: \u043F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E.",
+    coverageHeading: "### \u041F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
+    moreFindings: (count) => `**\u0415\u0449\u0451 ${count} ${slavicFindingWord(count, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} \u043D\u0435 \u0432\u043B\u0435\u0437\u043B\u0438 \u0432 \u044D\u0442\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435 \u0438\u0437\u2011\u0437\u0430 \u043B\u0438\u043C\u0438\u0442\u0430 \u0440\u0430\u0437\u043C\u0435\u0440\u0430.**`,
+    lifecycle: {
+      resolved: "\u0441\u043D\u044F\u0442\u043E",
+      carried: "\u043F\u0435\u0440\u0435\u043D\u0435\u0441\u0435\u043D\u043E, \u043D\u0435 \u043F\u0435\u0440\u0435\u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E",
+      uncertain: "\u043D\u0443\u0436\u043D\u043E \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435",
+      suppressed: "\u0441\u043A\u0440\u044B\u0442\u043E"
+    }
+  },
+  uk: {
+    noFindingsHeading: "## \u0417\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C \u043D\u0435\u043C\u0430\u0454",
+    findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `\u041D\u0435 \u0441\u043F\u0440\u0430\u0446\u044E\u0432\u0430\u043B\u0438 ${failed} \u0437 ${planned} \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u0456\u0432 \u0440\u0435\u0432\u2019\u044E.`,
+    location: "\u041C\u0456\u0441\u0446\u0435",
+    fix: "\u0412\u0438\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043D\u044F",
+    incompleteHeading: (count) => `## \u0420\u0435\u0432\u2019\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E \u2014 ${count} ${slavicFindingWord(count, ["\u043F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0454 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u043F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0456 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u043F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0456\u0445 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])}`,
+    incompleteNote: "\u0406\u043D\u043B\u0430\u0439\u043D-\u043A\u043E\u043C\u0435\u043D\u0442\u0430\u0440\u0456 \u0442\u0430 \u0437\u043C\u0456\u043D\u0438 lifecycle \u043D\u0435 \u043F\u0443\u0431\u043B\u0456\u043A\u0443\u0432\u0430\u043B\u0438\u0441\u044F: \u043F\u043E\u043A\u0440\u0438\u0442\u0442\u044F \u0440\u0435\u0432\u2019\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E.",
+    coverageHeading: "### \u041F\u043E\u043A\u0440\u0438\u0442\u0442\u044F \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
+    moreFindings: (count) => `**\u0429\u0435 ${count} ${slavicFindingWord(count, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} \u043D\u0435 \u0432\u043C\u0456\u0441\u0442\u0438\u043B\u0438\u0441\u044F \u0432 \u0446\u0435 \u043F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u043D\u044F \u0447\u0435\u0440\u0435\u0437 \u043B\u0456\u043C\u0456\u0442 \u0440\u043E\u0437\u043C\u0456\u0440\u0443.**`,
+    lifecycle: {
+      resolved: "\u0437\u043D\u044F\u0442\u043E",
+      carried: "\u043F\u0435\u0440\u0435\u043D\u0435\u0441\u0435\u043D\u043E, \u043D\u0435 \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u0435\u043D\u043E \u0437\u043D\u043E\u0432\u0443",
+      uncertain: "\u043F\u043E\u0442\u0440\u0456\u0431\u043D\u0430 \u0443\u0432\u0430\u0433\u0430",
+      suppressed: "\u043F\u0440\u0438\u0445\u043E\u0432\u0430\u043D\u043E"
+    }
+  },
+  es: {
+    noFindingsHeading: "## Sin hallazgos",
+    findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "hallazgo" : "hallazgos"} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `Fallaron ${failed} de ${planned} proveedores de revisi\xF3n.`,
+    location: "Ubicaci\xF3n",
+    fix: "Correcci\xF3n",
+    incompleteHeading: (count) => `## Revisi\xF3n incompleta \u2014 ${count} ${count === 1 ? "hallazgo preliminar" : "hallazgos preliminares"}`,
+    incompleteNote: "No se publicaron comentarios en l\xEDnea ni cambios de ciclo de vida porque la cobertura no se complet\xF3.",
+    coverageHeading: "### Cobertura incompleta",
+    moreFindings: (count) => `**${count} ${count === 1 ? "hallazgo m\xE1s omitido" : "hallazgos m\xE1s omitidos"} de este resumen por el l\xEDmite de tama\xF1o.**`,
+    lifecycle: {
+      resolved: "resuelto",
+      carried: "arrastrado, no revalidado",
+      uncertain: "requiere atenci\xF3n",
+      suppressed: "omitido"
+    }
+  },
+  pt: {
+    noFindingsHeading: "## Nenhum achado",
+    findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "achado" : "achados"} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `${failed} de ${planned} provedores de revis\xE3o falharam.`,
+    location: "Local",
+    fix: "Corre\xE7\xE3o",
+    incompleteHeading: (count) => `## Revis\xE3o incompleta \u2014 ${count} ${count === 1 ? "achado preliminar" : "achados preliminares"}`,
+    incompleteNote: "Coment\xE1rios inline e mudan\xE7as de ciclo de vida n\xE3o foram publicados porque a cobertura n\xE3o foi conclu\xEDda.",
+    coverageHeading: "### Cobertura n\xE3o conclu\xEDda",
+    moreFindings: (count) => `**Mais ${count} ${count === 1 ? "achado omitido" : "achados omitidos"} deste resumo por limite de tamanho.**`,
+    lifecycle: {
+      resolved: "resolvido",
+      carried: "carregado, n\xE3o revalidado",
+      uncertain: "precisa de aten\xE7\xE3o",
+      suppressed: "suprimido"
+    }
+  },
+  fr: {
+    noFindingsHeading: "## Aucune anomalie",
+    findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "anomalie" : "anomalies"} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `${failed} fournisseur(s) de revue sur ${planned} ont \xE9chou\xE9.`,
+    location: "Emplacement",
+    fix: "Correctif",
+    incompleteHeading: (count) => `## Revue incompl\xE8te \u2014 ${count} ${count === 1 ? "anomalie pr\xE9liminaire" : "anomalies pr\xE9liminaires"}`,
+    incompleteNote: "Les commentaires inline et les changements de cycle de vie n\u2019ont pas \xE9t\xE9 publi\xE9s car la couverture est incompl\xE8te.",
+    coverageHeading: "### Couverture incompl\xE8te",
+    moreFindings: (count) => `**${count} ${count === 1 ? "anomalie suppl\xE9mentaire omise" : "anomalies suppl\xE9mentaires omises"} de ce r\xE9sum\xE9 \xE0 cause de la limite de taille.**`,
+    lifecycle: {
+      resolved: "r\xE9solu",
+      carried: "report\xE9, non revalid\xE9",
+      uncertain: "n\xE9cessite une attention",
+      suppressed: "masqu\xE9"
+    }
+  },
+  de: {
+    noFindingsHeading: "## Keine Befunde",
+    findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "Befund" : "Befunde"} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `${failed} von ${planned} Review-Providern sind fehlgeschlagen.`,
+    location: "Stelle",
+    fix: "Fix",
+    incompleteHeading: (count) => `## Review unvollst\xE4ndig \u2014 ${count} vorl\xE4ufige ${count === 1 ? "Befund" : "Befunde"}`,
+    incompleteNote: "Inline-Kommentare und Lifecycle-\xC4nderungen wurden nicht ver\xF6ffentlicht, weil die Abdeckung unvollst\xE4ndig ist.",
+    coverageHeading: "### Abdeckung unvollst\xE4ndig",
+    moreFindings: (count) => `**${count} weitere ${count === 1 ? "Befund" : "Befunde"} fehlen in dieser Zusammenfassung wegen des Gr\xF6\xDFenlimits.**`,
+    lifecycle: {
+      resolved: "erledigt",
+      carried: "\xFCbernommen, nicht erneut gepr\xFCft",
+      uncertain: "braucht Aufmerksamkeit",
+      suppressed: "unterdr\xFCckt"
+    }
+  },
+  it: {
+    noFindingsHeading: "## Nessun rilievo",
+    findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "rilievo" : "rilievi"} (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `${failed} di ${planned} provider di review non sono riusciti.`,
+    location: "Posizione",
+    fix: "Correzione",
+    incompleteHeading: (count) => `## Review incompleta \u2014 ${count} ${count === 1 ? "rilievo preliminare" : "rilievi preliminari"}`,
+    incompleteNote: "I commenti inline e le modifiche di lifecycle non sono stati pubblicati perch\xE9 la copertura non \xE8 completa.",
+    coverageHeading: "### Copertura non completata",
+    moreFindings: (count) => `**Altri ${count} ${count === 1 ? "rilievo omesso" : "rilievi omessi"} da questo riassunto per il limite di dimensione.**`,
+    lifecycle: {
+      resolved: "risolto",
+      carried: "riportato, non rivalidato",
+      uncertain: "richiede attenzione",
+      suppressed: "soppresso"
+    }
+  },
+  zh: {
+    noFindingsHeading: "## \u65E0\u95EE\u9898",
+    findingsHeading: (counts) => `## ${counts.total} \u4E2A\u95EE\u9898\uFF08${formatSeverityCounts(counts)}\uFF09`,
+    providerFailures: (failed, planned) => `${planned} \u4E2A\u5BA1\u67E5\u63D0\u4F9B\u65B9\u4E2D\u6709 ${failed} \u4E2A\u5931\u8D25\u3002`,
+    location: "\u4F4D\u7F6E",
+    fix: "\u4FEE\u590D",
+    incompleteHeading: (count) => `## \u5BA1\u67E5\u672A\u5B8C\u6210 \u2014 \u4FDD\u7559 ${count} \u6761\u521D\u6B65\u95EE\u9898`,
+    incompleteNote: "\u56E0\u8986\u76D6\u672A\u5B8C\u6210\uFF0C\u672A\u53D1\u5E03\u884C\u5185\u8BC4\u8BBA\u548C\u751F\u547D\u5468\u671F\u53D8\u66F4\u3002",
+    coverageHeading: "### \u8986\u76D6\u672A\u5B8C\u6210",
+    moreFindings: (count) => `**\u53D7\u7BC7\u5E45\u9650\u5236\uFF0C\u672C\u6458\u8981\u8FD8\u7701\u7565\u4E86 ${count} \u6761\u95EE\u9898\u3002**`,
+    lifecycle: {
+      resolved: "\u5DF2\u89E3\u51B3",
+      carried: "\u6CBF\u7528\uFF0C\u672A\u590D\u9A8C",
+      uncertain: "\u9700\u8981\u5173\u6CE8",
+      suppressed: "\u5DF2\u6291\u5236"
+    }
+  },
+  ja: {
+    noFindingsHeading: "## \u6307\u6458\u306A\u3057",
+    findingsHeading: (counts) => `## \u6307\u6458 ${counts.total} \u4EF6\uFF08${formatSeverityCounts(counts)}\uFF09`,
+    providerFailures: (failed, planned) => `\u30EC\u30D3\u30E5\u30FC\u30D7\u30ED\u30D0\u30A4\u30C0\u30FC ${planned} \u4EF6\u4E2D ${failed} \u4EF6\u304C\u5931\u6557\u3057\u307E\u3057\u305F\u3002`,
+    location: "\u5834\u6240",
+    fix: "\u4FEE\u6B63",
+    incompleteHeading: (count) => `## \u30EC\u30D3\u30E5\u30FC\u672A\u5B8C\u4E86 \u2014 \u66AB\u5B9A\u306E\u6307\u6458 ${count} \u4EF6`,
+    incompleteNote: "\u30AB\u30D0\u30EC\u30C3\u30B8\u304C\u5B8C\u4E86\u3057\u3066\u3044\u306A\u3044\u305F\u3081\u3001\u30A4\u30F3\u30E9\u30A4\u30F3\u30B3\u30E1\u30F3\u30C8\u3068\u30E9\u30A4\u30D5\u30B5\u30A4\u30AF\u30EB\u5909\u66F4\u306F\u6295\u7A3F\u3057\u3066\u3044\u307E\u305B\u3093\u3002",
+    coverageHeading: "### \u30AB\u30D0\u30EC\u30C3\u30B8\u672A\u5B8C\u4E86",
+    moreFindings: (count) => `**\u30B5\u30A4\u30BA\u5236\u9650\u306E\u305F\u3081\u3001\u3053\u306E\u8981\u7D04\u304B\u3089\u6307\u6458\u304C\u3055\u3089\u306B ${count} \u4EF6\u7701\u7565\u3055\u308C\u3066\u3044\u307E\u3059\u3002**`,
+    lifecycle: {
+      resolved: "\u89E3\u6C7A\u6E08\u307F",
+      carried: "\u6301\u3061\u8D8A\u3057\u3001\u518D\u691C\u8A3C\u306A\u3057",
+      uncertain: "\u8981\u78BA\u8A8D",
+      suppressed: "\u6291\u5236\u6E08\u307F"
+    }
+  },
+  ko: {
+    noFindingsHeading: "## \uC774\uC288 \uC5C6\uC74C",
+    findingsHeading: (counts) => `## \uC774\uC288 ${counts.total}\uAC1C (${formatSeverityCounts(counts)})`,
+    providerFailures: (failed, planned) => `\uB9AC\uBDF0 \uC81C\uACF5\uC790 ${planned}\uAC1C \uC911 ${failed}\uAC1C\uAC00 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.`,
+    location: "\uC704\uCE58",
+    fix: "\uC218\uC815",
+    incompleteHeading: (count) => `## \uB9AC\uBDF0 \uBBF8\uC644\uB8CC \u2014 \uC608\uBE44 \uC774\uC288 ${count}\uAC1C`,
+    incompleteNote: "\uCEE4\uBC84\uB9AC\uC9C0\uAC00 \uB05D\uB098\uC9C0 \uC54A\uC544 \uC778\uB77C\uC778 \uB313\uAE00\uACFC \uB77C\uC774\uD504\uC0AC\uC774\uD074 \uBCC0\uACBD\uC744 \uAC8C\uC2DC\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+    coverageHeading: "### \uCEE4\uBC84\uB9AC\uC9C0 \uBBF8\uC644\uB8CC",
+    moreFindings: (count) => `**\uD06C\uAE30 \uC81C\uD55C \uB54C\uBB38\uC5D0 \uC774 \uC694\uC57D\uC5D0\uC11C \uC774\uC288 ${count}\uAC1C\uAC00 \uB354 \uC0DD\uB7B5\uB418\uC5C8\uC2B5\uB2C8\uB2E4.**`,
+    lifecycle: {
+      resolved: "\uD574\uACB0\uB428",
+      carried: "\uC774\uC6D4\uB428, \uC7AC\uAC80\uC99D \uC548 \uD568",
+      uncertain: "\uD655\uC778 \uD544\uC694",
+      suppressed: "\uC228\uAE40"
+    }
+  }
+};
+function escapeHtml(value) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+function escapeMarkdownInline(value) {
+  return value.replaceAll("\\", "\\\\").replaceAll("`", "\\`");
+}
+function dropIncompleteDetails(value) {
+  const openTags = Array.from(value.matchAll(/<details\b[^>]*>/gi));
+  const closeTags = Array.from(value.matchAll(/<\/details>/gi));
+  if (openTags.length <= closeTags.length) {
+    return value;
+  }
+  const lastOpen = openTags[openTags.length - 1];
+  if (lastOpen?.index === void 0) {
+    return value;
+  }
+  return value.slice(0, lastOpen.index).trimEnd();
+}
+function limitUtf8(value, maxBytes) {
+  if (utf8Bytes(value) <= maxBytes) {
+    return value;
+  }
+  const suffix = "\n\n[truncated]";
+  const budget = Math.max(0, maxBytes - utf8Bytes(suffix));
+  let cut = Buffer.from(value, "utf8").subarray(0, budget).toString("utf8");
+  if (cut.endsWith("\uFFFD")) {
+    cut = cut.slice(0, -1);
+  }
+  return `${dropIncompleteDetails(cut).trimEnd()}${suffix}`;
+}
+function truncateChars(value, maxChars) {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, maxChars - 12).trimEnd()}
+
+[truncated]`;
+}
+function utf8Bytes(value) {
+  return Buffer.byteLength(value, "utf8");
+}
+
 // src/utils/severity.ts
 var DISPLAYS = {
   critical: {
@@ -29027,26 +29820,6 @@ function severityLine(severity) {
   return `**Severity:** ${display.emoji} **${display.label}** - ${display.description}.`;
 }
 
-// src/utils/suggestion-formatter.ts
-function countMaxConsecutiveBackticks(str2) {
-  const backtickSequences = str2.match(/`+/g);
-  if (!backtickSequences) {
-    return 0;
-  }
-  return Math.max(...backtickSequences.map((seq2) => seq2.length));
-}
-function formatSuggestionBlock(content) {
-  if (!content || content.trim() === "") {
-    return "";
-  }
-  const maxBackticks = countMaxConsecutiveBackticks(content);
-  const fenceCount = Math.max(3, maxBackticks + 1);
-  const fence = "`".repeat(fenceCount);
-  return `${fence}suggestion
-${content}
-${fence}`;
-}
-
 // src/analysis/synthesis.ts
 var SynthesisEngine = class {
   constructor(config) {
@@ -29076,14 +29849,7 @@ var SynthesisEngine = class {
     return this.buildReview({ findings, pr: pr2, metrics });
   }
   buildReview(input) {
-    const summary = this.buildSummary(
-      input.pr,
-      input.findings,
-      input.metrics,
-      input.testHints,
-      input.aiAnalysis,
-      input.impactAnalysis
-    );
+    const summary = this.buildSummary(input.findings, input.metrics);
     const inlineComments = this.buildInlineComments(input.findings);
     const actionItems = this.buildActionItems(input.findings);
     return {
@@ -29155,31 +29921,12 @@ var SynthesisEngine = class {
       durationSeconds
     };
   }
-  buildSummary(pr2, findings, metrics, testHints, aiAnalysis, impactAnalysis) {
-    const totalProviders = metrics.providersUsed;
-    const successes = metrics.providersSuccess;
-    const failures = totalProviders - successes;
-    const impactText = impactAnalysis ? `
-| Impact | ${impactAnalysis.impactLevel} |` : "";
-    const aiText = aiAnalysis ? `
-| AI-likelihood | ${(aiAnalysis.averageLikelihood * 100).toFixed(1)}% |` : "";
-    const status = metrics.totalFindings === 0 && failures === 0 ? "Review complete \u2705" : failures > 0 ? "Review complete with warnings \u26A0\uFE0F" : "Review complete with findings \u26A0\uFE0F";
-    const findingsText = `${formatInteger(metrics.totalFindings)} total (critical ${formatInteger(metrics.critical)}, major ${formatInteger(metrics.major)}, minor ${formatInteger(metrics.minor)})`;
-    const providerText = `${successes}/${totalProviders} succeeded${failures > 0 ? `, ${failures} failed` : ""}`;
-    const note = metrics.totalFindings === 0 ? "No critical, major, or minor findings were reported for this revision." : "Inline comments were posted for actionable findings when GitHub accepted their diff positions.";
-    return [
-      `## ${status}`,
-      "",
-      `PR #${pr2.number}: ${pr2.title}`,
-      "",
-      "| Item | Result |",
-      "|---|---:|",
-      `| Findings | ${findingsText} |`,
-      `| Reviewed diff | ${formatInteger(pr2.files.length)} files, +${formatInteger(pr2.additions)} / -${formatInteger(pr2.deletions)} |`,
-      `| Providers | ${providerText} |${impactText}${aiText}`,
-      "",
-      `<sub>${note}</sub>`
-    ].join("\n");
+  buildSummary(findings, metrics) {
+    return renderReviewerSummaryMarkdown({
+      language: this.config.outputLanguage,
+      findings: findings.map(toReviewerSummaryFinding),
+      metrics
+    });
   }
   buildInlineComments(findings) {
     const minSeverity = this.config.inlineMinSeverity;
@@ -29209,7 +29956,7 @@ var SynthesisEngine = class {
       "",
       `**${finding.title}**`,
       "",
-      finding.message.trim()
+      neutralizeDetailsMarkup(finding.message.trim())
     ];
     if (finding.suggestion) {
       parts.push("", this.suggestedFixDetails(finding.suggestion));
@@ -29327,9 +30074,6 @@ ${fence}`;
     return finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `${finding.file}:${finding.startLine}-${finding.endLine}` : `${finding.file}:${finding.line}`;
   }
 };
-function formatInteger(value) {
-  return Math.trunc(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
 function suggestionToDiff(suggestion) {
   return suggestion.trimEnd().split("\n").map((line) => `+${line}`).join("\n");
 }
@@ -31580,15 +32324,17 @@ function isLikelySameInlineFinding(existing, candidate) {
   const existingTokens = tokenize2(semanticText(existingBody));
   const candidateTokens = tokenize2(semanticText(candidateBody));
   const bodySimilarity = diceSimilarity(existingTokens, candidateTokens);
-  const existingCodeTokens = extractCodeTokens(existingBody);
-  const candidateCodeTokens = extractCodeTokens(candidateBody);
-  const sharedCodeTokens = intersectionSize(
-    existingCodeTokens,
-    candidateCodeTokens
+  const sharedDistinctiveCodeTokens = intersectionSize(
+    distinctiveCodeTokens(semanticText(existingBody)),
+    distinctiveCodeTokens(semanticText(candidateBody))
   );
   if (nearbyLine && titleSimilarity >= 0.45) return true;
-  if (nearbyLine && bodySimilarity >= 0.38) return true;
-  if (nearbyLine && sharedCodeTokens > 0 && bodySimilarity >= 0.24) return true;
+  if (nearbyLine && sharedDistinctiveCodeTokens > 0 && bodySimilarity >= 0.24) {
+    return true;
+  }
+  if (nearbyLine && titleSimilarity >= 0.2 && bodySimilarity >= 0.38) {
+    return true;
+  }
   return titleSimilarity >= 0.6 && bodySimilarity >= 0.55;
 }
 function normalizeForSignature(value) {
@@ -31622,7 +32368,7 @@ function stableFindingFingerprint(input) {
   return (0, import_crypto6.createHash)("sha256").update(canonical).digest("hex").slice(0, 32);
 }
 function semanticText(body) {
-  return body.replace(/```[\s\S]*?```/g, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/\*\*Severity:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Suggestion:\*\*[\s\S]*?(?:\n\n|$)/gi, " ");
+  return body.replace(/```[\s\S]*?```/g, " ").replace(/<details[\s\S]*?<\/details>/gi, " ").replace(/<sub[\s\S]*?<\/sub>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]+>/g, " ").replace(/\*\*Severity:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Suggestion:\*\*[\s\S]*?(?:\n\n|$)/gi, " ");
 }
 function tokenize2(value) {
   const normalized = splitIdentifiers(value).toLowerCase().replace(/[^a-z0-9_]+/g, " ");
@@ -31635,6 +32381,13 @@ function extractCodeTokens(body) {
     for (const token of tokenize2(match2[1])) {
       tokens.add(token);
     }
+  }
+  return tokens;
+}
+function distinctiveCodeTokens(body) {
+  const tokens = extractCodeTokens(body);
+  for (const token of GENERIC_CODE_TOKENS) {
+    tokens.delete(token);
   }
   return tokens;
 }
@@ -31652,6 +32405,37 @@ function intersectionSize(a2, b2) {
   }
   return count;
 }
+var GENERIC_CODE_TOKENS = /* @__PURE__ */ new Set([
+  "api",
+  "arg",
+  "args",
+  "body",
+  "config",
+  "context",
+  "cookie",
+  "cookies",
+  "ctx",
+  "data",
+  "env",
+  "err",
+  "error",
+  "header",
+  "headers",
+  "http",
+  "https",
+  "input",
+  "json",
+  "options",
+  "output",
+  "param",
+  "params",
+  "query",
+  "req",
+  "request",
+  "res",
+  "response",
+  "value"
+]);
 var STOPWORDS = /* @__PURE__ */ new Set([
   "about",
   "after",
@@ -45079,17 +45863,11 @@ function normalizeReviewError(error2) {
 }
 function formatActionError(error2) {
   const normalized = normalizeReviewError(error2);
-  const retryText = normalized.isRetryable ? "yes" : "no";
-  const actionText = normalized.isUserActionable ? "yes" : "no";
   return [
     `Review failed [${normalized.code}]: ${normalized.summary}`,
     "",
-    normalized.whyItMatters,
-    "",
-    "How to fix:",
     ...normalized.nextSteps.map((step) => `- ${step}`),
     "",
-    `Retryable: ${retryText}. User action required: ${actionText}.`,
     `Details: ${normalized.safeMessage}`
   ].join("\n");
 }
@@ -45304,12 +46082,11 @@ var descriptors = {
   provider_capacity_limited: {
     code: "provider_capacity_limited",
     category: "provider_runtime",
-    summary: "A review provider reached its quota or capacity limit.",
-    whyItMatters: "The required LLM review did not complete, so ReviewRouter marked the run as failed instead of reporting incomplete coverage as a successful review.",
+    summary: "Usage limit reached (no remaining tokens).",
+    whyItMatters: "The review provider has no remaining quota, so the review stopped.",
     nextSteps: [
-      "Wait for the provider limit to reset, then re-run the workflow.",
-      "Switch to another configured provider with available quota or capacity.",
-      "Check the provider usage or billing page if the limit is unexpected."
+      "Wait for the usage limit to reset, then re-run.",
+      "If this is hosted Codex, add another ChatGPT account so the next run can switch."
     ],
     isRetryable: true,
     isUserActionable: true
@@ -45607,11 +46384,7 @@ var ProgressTracker = class _ProgressTracker {
     }
     if (this.failure) {
       lines.push("");
-      lines.push("### Review needs attention");
-      lines.push("");
-      lines.push(`**What failed:** ${this.failure.summary}`);
-      lines.push("");
-      lines.push("**How to fix**");
+      lines.push(`\u{1F534} **${this.failure.summary}**`);
       for (const step of this.failure.nextSteps) {
         lines.push(`- ${step}`);
       }
@@ -46276,19 +47049,13 @@ var ReviewOrchestrator = class {
               mode: "full"
             }
           );
-          if (this.shouldPostReviewOutput(trivialReview, [])) {
-            const markdown2 = this.components.formatter.format(trivialReview);
-            await this.components.commentPoster.postSummary(
-              pr2.number,
-              markdown2,
-              true,
-              summaryMetadata
-            );
-          } else {
-            logger.info(
-              "Skipping ReviewRouter summary comment because no reportable findings were found"
-            );
-          }
+          const markdown2 = this.components.formatter.format(trivialReview);
+          await this.components.commentPoster.postSummary(
+            pr2.number,
+            markdown2,
+            true,
+            summaryMetadata
+          );
           if (config.analyticsEnabled && this.components.metricsCollector) {
             try {
               await this.components.metricsCollector.recordReview(
@@ -46427,7 +47194,7 @@ var ReviewOrchestrator = class {
           await progressTracker.replaceWith(
             this.markReviewRouterSummary(reusedMarkdown)
           );
-        } else if (this.shouldPostReviewOutput(reusedReview, [])) {
+        } else {
           await this.components.commentPoster.postSummary(
             pr2.number,
             reusedMarkdown,
@@ -47409,63 +48176,43 @@ var ReviewOrchestrator = class {
       const inlineFiltered = review.inlineComments.filter(
         (c2) => this.components.feedbackFilter.shouldPost(c2, reviewCommentState)
       );
-      let shouldReplaceProgressWithCleanSummary = false;
-      if (this.shouldPostReviewOutput(review, inlineFiltered)) {
-        let summaryPostedViaProgress = false;
-        if (progressTracker) {
-          summaryPostedViaProgress = await progressTracker.replaceWith(
-            this.markReviewRouterSummary(markdown)
-          );
-          if (summaryPostedViaProgress) {
-            logger.info(
-              "Replaced ReviewRouter progress comment with final review summary"
-            );
-          }
-        }
-        if (!summaryPostedViaProgress) {
-          await this.components.commentPoster.postSummary(
-            pr2.number,
-            markdown,
-            true,
-            summaryMetadata
-          );
-        }
-        await this.components.commentPoster.postInline(
-          pr2.number,
-          inlineFiltered,
-          pr2.files,
-          pr2.headSha,
-          lifecycleMode !== "off" ? lifecycleDedupeComments : void 0
-        );
-      } else {
+      const hasReportableFindings = this.shouldPostReviewOutput(
+        review,
+        inlineFiltered
+      );
+      if (!hasReportableFindings) {
         logger.info(
-          "Skipping ReviewRouter GitHub comments because no reportable findings were found"
+          "Posting ReviewRouter no-findings summary because the review completed without reportable findings"
         );
-        await this.components.commentPoster.deleteSummaryComments(
-          pr2.number,
-          summaryMetadata,
-          "no reportable findings were found"
-        );
-        await this.components.commentPoster.postInline(
-          pr2.number,
-          [],
-          pr2.files,
-          pr2.headSha
-        );
-        shouldReplaceProgressWithCleanSummary = true;
       }
-      await this.writeReports(review);
-      await progressTracker?.updateProgress("synthesis", "completed");
-      if (shouldReplaceProgressWithCleanSummary && progressTracker) {
-        const replaced = await progressTracker.replaceWith(
+      let summaryPostedViaProgress = false;
+      if (progressTracker) {
+        summaryPostedViaProgress = await progressTracker.replaceWith(
           this.markReviewRouterSummary(markdown)
         );
-        if (replaced) {
+        if (summaryPostedViaProgress) {
           logger.info(
-            "Replaced ReviewRouter progress comment with final no-findings summary"
+            "Replaced ReviewRouter progress comment with final review summary"
           );
         }
       }
+      if (!summaryPostedViaProgress) {
+        await this.components.commentPoster.postSummary(
+          pr2.number,
+          markdown,
+          true,
+          summaryMetadata
+        );
+      }
+      await this.components.commentPoster.postInline(
+        pr2.number,
+        hasReportableFindings ? inlineFiltered : [],
+        pr2.files,
+        pr2.headSha,
+        hasReportableFindings && lifecycleMode !== "off" ? lifecycleDedupeComments : void 0
+      );
+      await this.writeReports(review);
+      await progressTracker?.updateProgress("synthesis", "completed");
       if (config.incrementalEnabled) {
         if (llmCoverageComplete) {
           if (await this.canAdvanceIncrementalSnapshot(pr2)) {
@@ -48761,6 +49508,7 @@ function emptyFindingCounts() {
 
 // src/github/failure-summary.ts
 var REVIEW_ROUTER_BOT_MARKER = "<!-- review-router-bot -->";
+var REVIEW_ROUTER_FAILURE_MARKER = "<!-- review-router-failure -->";
 var LEGACY_BOT_MARKERS = [
   "<!-- ai-robot-review-bot -->",
   "<!-- multi-provider-code-review-bot -->"
@@ -48774,7 +49522,11 @@ var PROGRESS_TRACKER_MARKERS = [
   "<!-- review-router-progress-tracker -->",
   "<!-- ai-robot-review-progress-tracker -->"
 ];
-var FAILED_PROGRESS_TEXT = ["\u274C Failed", "### Review needs attention"];
+var FAILED_PROGRESS_TEXT = [
+  "\u274C Failed",
+  "### Review needs attention",
+  "\u{1F534} **"
+];
 var CODEX_SEED_SCRIPT_URL = "https://reviewrouter.site/install/codex";
 function formatReviewFailureSummary(error2, prNumber) {
   const normalized = normalizeReviewError(error2);
@@ -48783,21 +49535,14 @@ function formatReviewFailureSummary(error2, prNumber) {
   );
   const reseedCommand = codexOAuthReseedCommand(normalized.code);
   return [
+    REVIEW_ROUTER_BOT_MARKER,
+    REVIEW_ROUTER_FAILURE_MARKER,
+    "",
     "# ReviewRouter",
     "",
-    "\u{1F534} **Review failed before comments could be completed.**",
+    `\u{1F534} **${normalized.summary}**`,
     "",
     prNumber ? `PR: #${prNumber}` : void 0,
-    "",
-    "## What failed",
-    "",
-    normalized.summary,
-    "",
-    "## Why it matters",
-    "",
-    normalized.whyItMatters,
-    "",
-    "## How to fix",
     "",
     ...normalized.nextSteps.map((step) => `- ${step}`),
     reseedCommand ? "" : void 0,
@@ -48812,9 +49557,6 @@ function formatReviewFailureSummary(error2, prNumber) {
     "",
     "```text",
     `Code: ${normalized.code}`,
-    `Category: ${normalized.category}`,
-    `Retryable: ${normalized.isRetryable ? "yes" : "no"}`,
-    `User action required: ${normalized.isUserActionable ? "yes" : "no"}`,
     "",
     safeDetails,
     "```",
@@ -48903,7 +49645,7 @@ async function listIssueComments(client, prNumber) {
 }
 function isReviewFailureSummary(body) {
   if (!body) return false;
-  return hasReviewRouterBotMarker(body) && body.includes(FAILURE_SUMMARY_TEXT);
+  return hasReviewRouterBotMarker(body) && (body.includes(FAILURE_SUMMARY_TEXT) || body.includes(REVIEW_ROUTER_FAILURE_MARKER));
 }
 function isReviewFailureComment(body) {
   if (!body) return false;
@@ -50390,7 +51132,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.144",
+  version: "1.0.156",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -50443,7 +51185,7 @@ var package_default = {
     "@octokit/rest": "^20.1.2",
     ajv: "8.20.0",
     "ajv-formats": "3.0.1",
-    "js-yaml": "4.3.1",
+    "js-yaml": "4.3.2",
     "libsodium-wrappers": "^0.8.4",
     minimatch: "^10.2.5",
     "p-queue": "^8.1.1",
@@ -50475,11 +51217,14 @@ var package_default = {
   overrides: {
     "@babel/core": "7.29.7",
     "@hono/node-server": "2.0.11",
+    "fast-uri": "3.1.6",
+    hono: "4.13.8",
     "@istanbuljs/load-nyc-config": {
-      "js-yaml": "3.15.1"
+      "js-yaml": "3.15.2"
     },
     "brace-expansion@<=1.1.17": "1.1.18",
-    "brace-expansion@>=3.0.0 <5.0.9": "5.0.9"
+    "brace-expansion@>=3.0.0 <5.0.9": "5.0.9",
+    qs: "6.16.0"
   }
 };
 
@@ -96327,6 +97072,15 @@ var ReviewInvestigationLegacyFallbackSignal = class extends Error {
     this.name = "ReviewInvestigationLegacyFallbackSignal";
   }
 };
+var ReviewInvestigationLegacyFallbackGate = class {
+  available = true;
+  isAvailable() {
+    return this.available;
+  }
+  close() {
+    this.available = false;
+  }
+};
 var ReviewInvestigationDeferredSignal = class extends Error {
   constructor(status, nextEligibleAt = null) {
     super(`review_investigation_deferred:${status}`);
@@ -96342,10 +97096,12 @@ var RunInvestigationWorkSlot = class {
   async execute(input) {
     throwIfAborted(input.signal);
     let replayed = null;
+    const legacyFallbackGate = this.dependencies.legacyFallbackGate ?? new ReviewInvestigationLegacyFallbackGate();
     if (this.dependencies.replay) {
       if (!input.targetRevision || !input.targetScope || !input.providerManifestCanonicalJson || !input.providerManifestHash) {
         throw new Error("review_investigation_replay_input_missing");
       }
+      legacyFallbackGate.close();
       replayed = await this.dependencies.replay.execute({
         open: input,
         scope: input.targetScope,
@@ -96361,12 +97117,20 @@ var RunInvestigationWorkSlot = class {
       try {
         snapshot = await this.dependencies.controlPlane.open(input);
       } catch (error2) {
-        if (error2 instanceof ReviewInvestigationControlPlaneError && error2.failureClass === "capability_disabled" /* CapabilityDisabled */) {
-          throw new ReviewInvestigationLegacyFallbackSignal();
+        if (legacyFallbackGate.isAvailable() && error2 instanceof ReviewInvestigationControlPlaneError) {
+          if (error2.failureClass === "capability_disabled" /* CapabilityDisabled */) {
+            throw new ReviewInvestigationLegacyFallbackSignal();
+          }
+          if (error2.failureClass === "unavailable" /* Unavailable */ || error2.failureClass === "capacity_limited" /* CapacityLimited */) {
+            throw new ReviewInvestigationLegacyFallbackSignal(
+              "infrastructure_unavailable_before_open" /* InfrastructureUnavailableBeforeOpen */
+            );
+          }
         }
         throw error2;
       }
     }
+    legacyFallbackGate.close();
     for (let transition = 0; transition < input.maxStateTransitions; transition += 1) {
       throwIfAborted(input.signal);
       if (isSuperseded(snapshot)) {
@@ -97261,44 +98025,50 @@ var RunT0ReviewOrchestration = class {
           exhaustionReason: "deadline_reached" /* DeadlineReached */
         };
       }
-      let investigationCandidate;
-      try {
-        investigationCandidate = await this.prepareInvestigationCandidate({
-          authorization: input.authorization,
-          execution: input.execution,
-          workSlot: input.workSlot,
-          attemptOrdinal,
-          ownerIdHash: input.ownerIdHash,
-          revision: input.revision
-        });
-      } catch (error2) {
-        if (error2 instanceof ReviewExecutionDeadlineReachedSignal) {
+      let investigationCandidate = null;
+      if (!authoritativeInvocation.manifestFacts.taskKindSet.includes(
+        "lifecycle_revalidation" /* LifecycleRevalidation */
+      )) {
+        try {
+          investigationCandidate = await this.prepareInvestigationCandidate({
+            authorization: input.authorization,
+            execution: input.execution,
+            workSlot: input.workSlot,
+            attemptOrdinal,
+            ownerIdHash: input.ownerIdHash,
+            revision: input.revision
+          });
+        } catch (error2) {
+          if (error2 instanceof ReviewExecutionDeadlineReachedSignal) {
+            input.onEvent({
+              type: "slot_exhausted" /* SlotExhausted */,
+              workSlotId: input.workSlot.workSlotId
+            });
+            return {
+              streamVersion,
+              exhaustionReason: "deadline_reached" /* DeadlineReached */
+            };
+          }
+          if (!(error2 instanceof ReviewInvestigationDeferredSignal)) throw error2;
+          this.recordInvestigationDiagnostic({
+            outcome: "authoritative_deferred" /* AuthoritativeDeferred */,
+            workSlot: input.workSlot,
+            attemptOrdinal,
+            error: error2
+          });
           input.onEvent({
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: input.workSlot.workSlotId
           });
           return {
             streamVersion,
-            exhaustionReason: "deadline_reached" /* DeadlineReached */
+            exhaustionReason: "investigation_deferred" /* InvestigationDeferred */
           };
         }
-        if (!(error2 instanceof ReviewInvestigationDeferredSignal)) throw error2;
-        this.recordInvestigationDiagnostic({
-          outcome: "authoritative_deferred" /* AuthoritativeDeferred */,
-          workSlot: input.workSlot,
-          attemptOrdinal,
-          error: error2
-        });
-        input.onEvent({
-          type: "slot_exhausted" /* SlotExhausted */,
-          workSlotId: input.workSlot.workSlotId
-        });
-        return {
-          streamVersion,
-          exhaustionReason: "investigation_deferred" /* InvestigationDeferred */
-        };
       }
-      const selectedInvestigationCandidate = investigationCandidate !== null && this.dependencies.investigationRecording?.mode === "authoritative" /* Authoritative */ && (investigationCandidate.observation.findingCount > 0 || investigationCandidate.observation.qualityFlags.includes(
+      const selectedInvestigationCandidate = investigationCandidate !== null && this.dependencies.investigationRecording?.mode === "authoritative" /* Authoritative */ && !authoritativeInvocation.manifestFacts.taskKindSet.includes(
+        "lifecycle_revalidation" /* LifecycleRevalidation */
+      ) && (investigationCandidate.observation.findingCount > 0 || investigationCandidate.observation.qualityFlags.includes(
         "investigation_verified_clean"
       ) && this.dependencies.investigationRecording.verifiedCleanEffectsEnabled === true) ? investigationCandidate : null;
       const invocation = selectedInvestigationCandidate ? selectedInvestigationCandidate.invocation : authoritativeInvocation;
@@ -99429,10 +100199,11 @@ var CodexReviewInvocationAdapter = class {
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error("review_action_v2_assignment_missing");
     }
+    const effectiveLifecycleTargets = this.investigationManifestBindingEnabled ? [] : assignment.lifecycleTargets;
     const preparedPrompt = await this.promptBuilder.buildPreparedV2(
       assignment.context,
       assignment.context.number,
-      [...assignment.lifecycleTargets]
+      [...effectiveLifecycleTargets]
     );
     const coverageManifest = createReviewPromptCoverageManifest({
       workSlotId: input.workSlot.workSlotId,
@@ -99461,7 +100232,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
       mergeBaseSha: assignment.mergeBaseSha,
       headSha: assignment.context.headSha
     });
-    const shouldPrepareInvestigationSeed = this.investigationManifestBindingEnabled && preparedPrompt.investigationProbePlan.status === "complete" /* Complete */ && assignment.lifecycleTargets.length === 0;
+    const shouldPrepareInvestigationSeed = this.investigationManifestBindingEnabled && preparedPrompt.investigationProbePlan.status === "complete" /* Complete */;
     const [gatewayPlanningConfig, canonicalInventory] = this.contextGateway ? await Promise.all([
       this.contextGateway.planningConfig(revision),
       shouldPrepareInvestigationSeed ? this.contextGateway.canonicalInventory(revision) : Promise.resolve(void 0)
@@ -99481,7 +100252,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
       Array.from(
         /* @__PURE__ */ new Set([
           input.workSlot.taskKind,
-          ...assignment.lifecycleTargets.length > 0 ? ["lifecycle_revalidation" /* LifecycleRevalidation */] : []
+          ...effectiveLifecycleTargets.length > 0 ? ["lifecycle_revalidation" /* LifecycleRevalidation */] : []
         ])
       ).sort()
     );
@@ -99561,16 +100332,16 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
             author: assignment.context.author,
             body: assignment.context.body,
             coverageHash: providerVisibleCoverage.coverageHash,
-            lifecycleTargetIds: assignment.lifecycleTargets.map((target) => target.targetId).sort(),
+            lifecycleTargetIds: effectiveLifecycleTargets.map((target) => target.targetId).sort(),
             investigationProbePlanHash: preparedPrompt.investigationProbePlan.planHash,
             investigationProbePlanStatus: preparedPrompt.investigationProbePlan.status,
             number: assignment.context.number,
             title: assignment.context.title
           })
         ),
-        lifecycleTargetSetHash: assignment.lifecycleTargets.length > 0 ? sha25612(
+        lifecycleTargetSetHash: effectiveLifecycleTargets.length > 0 ? sha25612(
           canonicalJson10(
-            assignment.lifecycleTargets.map((target) => ({
+            effectiveLifecycleTargets.map((target) => ({
               fingerprint: target.fingerprint,
               targetId: target.targetId
             })).sort(
@@ -99578,7 +100349,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
             )
           )
         ) : null,
-        liveLifecycleStateHash: assignment.lifecycleTargets.length > 0 ? assignment.liveLifecycleStateHash : null,
+        liveLifecycleStateHash: effectiveLifecycleTargets.length > 0 ? assignment.liveLifecycleStateHash : null,
         toolPolicyHash: sha25612(
           canonicalJson10(
             gatewayPlanningConfig ? {
@@ -104079,6 +104850,9 @@ function classifySafeInvestigationFailureReason(error2) {
     if (error2.reason === "capability_disabled_before_open" /* CapabilityDisabledBeforeOpen */) {
       return "capability_disabled_before_open";
     }
+    if (error2.reason === "infrastructure_unavailable_before_open" /* InfrastructureUnavailableBeforeOpen */) {
+      return "infrastructure_unavailable_before_open";
+    }
     if (error2.reason === "record_only_budget_exhausted" /* RecordOnlyBudgetExhausted */) {
       return "investigation_budget_exhausted";
     }
@@ -105313,23 +106087,30 @@ var LegacyReviewProjectionPolicyAdapter = class {
     const placements = query.occurrences.map(
       (occurrence) => this.placeOccurrence(occurrence, review, query.revisionFiles)
     );
-    const lifecycleLines = formatLifecycleLines(
-      query.scope.reviewedHeadSha,
-      query.occurrences
-    );
+    const lifecycleMarkdown = renderReviewerLifecycleMarkdown({
+      language: this.config.outputLanguage,
+      lines: lifecycleLinesForSummary(query.occurrences)
+    });
+    const copy = reviewerSummaryCopy(this.config.outputLanguage);
     const coverageLines = query.coverage.state === "partial" /* Partial */ ? [
       "",
-      "### Coverage not completed",
+      copy.coverageHeading,
       ...query.coverage.limitations.map(
         (limitation) => `- ${limitation}`
       )
     ] : [];
-    const reviewSummary = query.coverage.state === "partial" /* Partial */ ? formatPartialReviewSummary(review.summary, currentOccurrences.length) : review.summary;
-    const summaryBody = [
-      reviewSummary,
-      ...lifecycleLines.length > 0 ? ["", ...lifecycleLines] : [],
-      ...coverageLines
-    ].join("\n");
+    const reviewSummary = query.coverage.state === "partial" /* Partial */ ? markReviewSummaryIncomplete({
+      summary: review.summary,
+      language: this.config.outputLanguage,
+      preliminaryFindingCount: currentOccurrences.length
+    }) : review.summary;
+    const summaryBody = limitReviewerPostedMarkdown(
+      [
+        reviewSummary,
+        ...lifecycleMarkdown ? ["", lifecycleMarkdown] : [],
+        ...coverageLines
+      ].join("\n")
+    );
     return {
       summaryBody,
       checkName: "ReviewRouter",
@@ -105428,16 +106209,40 @@ var LegacyReviewProjectionPolicyAdapter = class {
     };
   }
 };
-function formatPartialReviewSummary(summary, preliminaryFindingCount) {
-  const findingLabel = preliminaryFindingCount === 1 ? "finding" : "findings";
-  const partialHeading = `## Review incomplete - ${preliminaryFindingCount} preliminary ${findingLabel} preserved \u26A0\uFE0F`;
-  const partialNote = "<sub>These preliminary findings were preserved in this summary. Inline comments and lifecycle changes were withheld because required coverage did not complete.</sub>";
-  const completeHeading = /^## Review complete[^\n]*$/m;
-  const synthesisNote = /^<sub>[^\n]*<\/sub>$/m;
-  if (!completeHeading.test(summary) || !synthesisNote.test(summary)) {
-    throw new Error("legacy_partial_review_summary_contract_invalid");
+function lifecycleLinesForSummary(occurrences) {
+  const lines = [];
+  for (const occurrence of occurrences) {
+    const kind = lifecycleKindForSummary(occurrence.state);
+    if (!kind) {
+      continue;
+    }
+    lines.push({
+      kind,
+      title: occurrence.title,
+      message: occurrence.message,
+      locationLabel: findingLocationLabel({
+        file: occurrence.filePath,
+        line: occurrence.line ?? occurrence.endLine ?? 1,
+        ...occurrence.startLine !== void 0 ? { startLine: occurrence.startLine } : {},
+        ...occurrence.endLine !== void 0 ? { endLine: occurrence.endLine } : {}
+      })
+    });
   }
-  return summary.replace(completeHeading, partialHeading).replace(synthesisNote, partialNote);
+  return lines;
+}
+function lifecycleKindForSummary(state) {
+  switch (state) {
+    case "resolved" /* Resolved */:
+      return "resolved";
+    case "carried_unverified" /* CarriedUnverified */:
+      return "carried";
+    case "uncertain" /* Uncertain */:
+      return "uncertain";
+    case "suppressed_by_human" /* SuppressedByHuman */:
+      return "suppressed";
+    default:
+      return null;
+  }
 }
 function toLegacyFinding(finding) {
   const occurrence = "lineageId" in finding ? finding : void 0;
@@ -105560,26 +106365,6 @@ function minimalLegacyReview(findings) {
       durationSeconds: 0
     }
   };
-}
-function formatLifecycleLines(headSha, occurrences) {
-  return occurrences.map((occurrence) => {
-    switch (occurrence.state) {
-      case "new" /* New */:
-        return `New on ${headSha}: ${occurrence.title}`;
-      case "reconfirmed" /* Reconfirmed */:
-        return `Reconfirmed on ${headSha}: ${occurrence.title}`;
-      case "changed" /* Changed */:
-        return `Severity changed: ${occurrence.previousSeverity ?? "unknown"} -> ${occurrence.severity} on ${headSha}: ${occurrence.title}`;
-      case "carried_unverified" /* CarriedUnverified */:
-        return `Carried from ${occurrence.firstSeenHeadSha} - not revalidated: ${occurrence.title}`;
-      case "resolved" /* Resolved */:
-        return `Resolved on ${headSha} after revalidation: ${occurrence.title}`;
-      case "uncertain" /* Uncertain */:
-        return `Needs lifecycle attention on ${headSha}: ${occurrence.title}`;
-      case "suppressed_by_human" /* SuppressedByHuman */:
-        return `Suppressed by current human command: ${occurrence.title}`;
-    }
-  });
 }
 function findRevisionFile(path29, revisionFiles) {
   const normalized = normalizePath3(path29);
@@ -112929,11 +113714,13 @@ var ProductionT0ReviewRunner = class {
     });
     const identities = new DeterministicReviewOrchestrationIdentity();
     const investigationProtocol = investigationRecordingEnabled ? new ReviewActionV2InvestigationAdapter(reviewActionClient) : void 0;
-    const investigationControlPlane = investigationProtocol ? new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
-      investigationProtocol
-    ) : void 0;
-    const investigationRecording = investigationControlPlane && contextGatewayOptions ? new ReviewInvestigationRecordingAdapter(
+    const investigationRecording = investigationProtocol && contextGatewayOptions ? new ReviewInvestigationRecordingAdapter(
       (recordingInput) => {
+        const legacyFallbackGate = new ReviewInvestigationLegacyFallbackGate();
+        const investigationControlPlane = new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
+          investigationProtocol,
+          legacyFallbackGate
+        );
         const currency = new RevisionGuardInvestigationCurrencyAdapter(
           revisionGuard
         );
@@ -112975,6 +113762,7 @@ var ProductionT0ReviewRunner = class {
         });
         return new RunInvestigationWorkSlot({
           controlPlane: investigationControlPlane,
+          legacyFallbackGate,
           delay: new SystemReviewOrchestrationDelay(),
           leases: new ReviewActionV2InvestigationLeaseAdapter(
             reviewActionClient
@@ -113110,41 +113898,52 @@ function resolveProductionContextGatewaySessionFactoryOptions(input) {
   });
 }
 var LegacyFallbackBeforeInvestigationAuthorityControlPlane = class {
-  constructor(delegate) {
+  constructor(delegate, legacyFallbackGate = new ReviewInvestigationLegacyFallbackGate()) {
     this.delegate = delegate;
+    this.legacyFallbackGate = legacyFallbackGate;
   }
   open(input) {
     return this.openWithLegacyFallback(() => this.delegate.open(input));
   }
   restore(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.restore(input);
   }
   planTurn(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.planTurn(input);
   }
   commitTurn(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.commitTurn(input);
   }
   abortTurn(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.abortTurn(input);
   }
   conclude(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.conclude(input);
   }
   prepareReplay(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.prepareReplay(input);
   }
   commitReceiptReplay(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.commitReceiptReplay(input);
   }
   replay(input) {
+    this.legacyFallbackGate.close();
     return this.delegate.replay(input);
   }
   async openWithLegacyFallback(execute) {
     try {
-      return await execute();
+      const result2 = await execute();
+      this.legacyFallbackGate.close();
+      return result2;
     } catch (error2) {
-      if (error2 instanceof ReviewInvestigationControlPlaneError && error2.failureClass === "capability_disabled" /* CapabilityDisabled */) {
+      if (this.legacyFallbackGate.isAvailable() && error2 instanceof ReviewInvestigationControlPlaneError && error2.failureClass === "capability_disabled" /* CapabilityDisabled */) {
         throw new ReviewInvestigationLegacyFallbackSignal();
       }
       throw error2;
@@ -115036,11 +115835,13 @@ async function run() {
 ${formatValidationError(error2)}`) : error2;
     const normalizedError = normalizeReviewError(presentableError);
     setFailed(formatActionError(normalizedError));
-    await postReviewFailureSummary(
-      normalizedError,
-      await currentGitHubToken(token, githubTokenProvider),
-      prNumber
-    );
+    if (process.env.REVIEW_ROUTER_SUPPRESS_FAILURE_COMMENT !== "1") {
+      await postReviewFailureSummary(
+        normalizedError,
+        await currentGitHubToken(token, githubTokenProvider),
+        prNumber
+      );
+    }
     await reportControlPlaneActionHealth({
       runtimeConfig,
       error: normalizedError,

@@ -703,6 +703,73 @@ describe('CommentPoster', () => {
       expect(mockOctokit.rest.pulls.createReview).toHaveBeenCalledTimes(1);
     });
 
+    it('posts distinct nearby findings in the same added file', async () => {
+      const poster = new CommentPoster(mockClient, false);
+      const comments: InlineComment[] = [
+        {
+          path: 'payments.js',
+          line: 7,
+          side: 'RIGHT' as const,
+          body: [
+            '_🔴 Critical_',
+            '',
+            '**Параметр запроса выполняется как JavaScript**',
+            '',
+            '`eval(req.query.callback)` выполняет полностью контролируемую клиентом строку в процессе приложения. Любой вызывающий `charge` может исполнить произвольный JavaScript.',
+          ].join('\n'),
+        },
+        {
+          path: 'payments.js',
+          line: 17,
+          side: 'RIGHT' as const,
+          body: [
+            '_🔴 Critical_',
+            '',
+            '**Идентификатор заказа допускает SQL-инъекцию**',
+            '',
+            '`req.query.id` напрямую вставляется в SQL-строку, поэтому специально сформированный идентификатор может изменить условие запроса.',
+          ].join('\n'),
+        },
+      ];
+      const files: FileChange[] = [
+        {
+          filename: 'payments.js',
+          status: 'added',
+          additions: 18,
+          deletions: 0,
+          changes: 18,
+          patch: [
+            '@@ -0,0 +1,18 @@',
+            '+const STRIPE_SECRET_KEY = "sk_live_reviewrouter_e2e_not_a_real_key_123456";',
+            '+',
+            '+export function charge(req) {',
+            '+  const amount = req.query.amount;',
+            '+  const userId = req.query.userId;',
+            '+  // Intentional ReviewRouter e2e fixture: remote code execution via eval.',
+            '+  eval(req.query.callback);',
+            '+  return fetch("https://api.stripe.com/v1/charges", {',
+            '+    method: "POST",',
+            '+    headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}` },',
+            '+    body: `amount=${amount}&customer=${userId}`,',
+            '+  });',
+            '+}',
+            '+',
+            '+export function lookupOrder(req, db) {',
+            '+  // Intentional ReviewRouter e2e fixture: SQL injection.',
+            "+  return db.query(`SELECT * FROM orders WHERE id = '${req.query.id}'`);",
+            '+}',
+          ].join('\n'),
+        },
+      ];
+
+      await poster.postInline(123, comments, files);
+
+      const reviewCall = mockOctokit.rest.pulls.createReview.mock.calls[0][0];
+      expect(
+        reviewCall.comments.map((comment: { line: number }) => comment.line)
+      ).toEqual([7, 17]);
+    });
+
     it('uses lifecycle GraphQL dedupe refs instead of REST comments when refs are provided', async () => {
       mockOctokit.paginate.mockResolvedValue([
         {

@@ -15,7 +15,11 @@ import {
 } from './pr-head-guard';
 
 export type ProgressStatus =
-  'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'skipped';
 
 export interface ProgressItem {
   id: string;
@@ -237,11 +241,7 @@ export class ProgressTracker {
 
     if (this.failure) {
       lines.push('');
-      lines.push('### Review needs attention');
-      lines.push('');
-      lines.push(`**What failed:** ${this.failure.summary}`);
-      lines.push('');
-      lines.push('**How to fix**');
+      lines.push(`🔴 **${this.failure.summary}**`);
       for (const step of this.failure.nextSteps) {
         lines.push(`- ${step}`);
       }

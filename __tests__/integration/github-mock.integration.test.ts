@@ -400,7 +400,7 @@ describe('GitHub integration mock (no network)', () => {
     expect(fakeOctokit.pulls.createReview).toHaveBeenCalledTimes(1);
   });
 
-  it('does not write GitHub comments for a clean review even when an old summary exists', async () => {
+  it('posts a visible no-findings summary even when an old summary exists', async () => {
     const fakeOctokit: any = {
       rest: {
         pulls: {
@@ -524,12 +524,20 @@ describe('GitHub integration mock (no network)', () => {
 
     expect(review?.findings).toHaveLength(0);
     expect(fakeOctokit.issues.createComment).not.toHaveBeenCalled();
-    expect(fakeOctokit.issues.updateComment).not.toHaveBeenCalled();
-    expect(fakeOctokit.issues.deleteComment).toHaveBeenCalledWith({
-      owner: 'owner',
-      repo: 'repo',
-      comment_id: 99,
-    });
+    expect(fakeOctokit.issues.updateComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: 'owner',
+        repo: 'repo',
+        comment_id: 99,
+        body: expect.stringContaining('## No findings'),
+      })
+    );
+    expect(fakeOctokit.issues.updateComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining('<!-- reviewrouter:review-status:complete -->')
+      })
+    );
+    expect(fakeOctokit.issues.deleteComment).not.toHaveBeenCalled();
     expect(fakeOctokit.pulls.createReview).not.toHaveBeenCalled();
   });
 });

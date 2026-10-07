@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { ReviewConfig, ReviewDepth } from '../types';
 import { DEFAULT_CONFIG } from './defaults';
+import { effectiveInlineMaxComments } from './inline-limits';
 import { ReviewConfigSchema, ReviewConfigFile } from './schema';
 import { validateConfig, ValidationError } from '../utils/validation';
 import { logger } from '../utils/logger';
@@ -20,10 +21,14 @@ export class ConfigLoader {
     const envConfig = this.loadFromEnv();
 
     const merged = this.merge(DEFAULT_CONFIG, fileConfig, envConfig);
+    const resolved: ReviewConfig = {
+      ...merged,
+      inlineMaxComments: effectiveInlineMaxComments(merged.inlineMaxComments),
+    };
 
     // Validate final configuration
     try {
-      validateConfig(merged as unknown as Record<string, unknown>);
+      validateConfig(resolved as unknown as Record<string, unknown>);
     } catch (error) {
       if (error instanceof ValidationError) {
         throw new ValidationError(
@@ -35,7 +40,7 @@ export class ConfigLoader {
       throw error;
     }
 
-    return merged;
+    return resolved;
   }
 
   private static loadFromFile(): Partial<ReviewConfig> {

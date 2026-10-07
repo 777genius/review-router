@@ -107,18 +107,12 @@ export function normalizeReviewError(error: unknown): ReviewRouterError {
 
 export function formatActionError(error: unknown): string {
   const normalized = normalizeReviewError(error);
-  const retryText = normalized.isRetryable ? 'yes' : 'no';
-  const actionText = normalized.isUserActionable ? 'yes' : 'no';
 
   return [
     `Review failed [${normalized.code}]: ${normalized.summary}`,
     '',
-    normalized.whyItMatters,
-    '',
-    'How to fix:',
     ...normalized.nextSteps.map((step) => `- ${step}`),
     '',
-    `Retryable: ${retryText}. User action required: ${actionText}.`,
     `Details: ${normalized.safeMessage}`,
   ].join('\n');
 }
@@ -457,13 +451,12 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
   provider_capacity_limited: {
     code: 'provider_capacity_limited',
     category: 'provider_runtime',
-    summary: 'A review provider reached its quota or capacity limit.',
+    summary: 'Usage limit reached (no remaining tokens).',
     whyItMatters:
-      'The required LLM review did not complete, so ReviewRouter marked the run as failed instead of reporting incomplete coverage as a successful review.',
+      'The review provider has no remaining quota, so the review stopped.',
     nextSteps: [
-      'Wait for the provider limit to reset, then re-run the workflow.',
-      'Switch to another configured provider with available quota or capacity.',
-      'Check the provider usage or billing page if the limit is unexpected.',
+      'Wait for the usage limit to reset, then re-run.',
+      'If this is hosted Codex, add another ChatGPT account so the next run can switch.',
     ],
     isRetryable: true,
     isUserActionable: true,

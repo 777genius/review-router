@@ -14,6 +14,7 @@ import {
   type ReviewInvestigationDelayPort,
   type ReviewInvestigationLease,
   type ReviewInvestigationLeasePort,
+  type ReviewInvestigationReplayUseCasePort,
 } from '../../../src/review-investigation/application/investigation-control-plane-port';
 import {
   ReviewInvestigationGatewayConfigurationError,
@@ -28,6 +29,7 @@ import {
   type ReviewInvestigationOperationalDiagnosticPort,
 } from '../../../src/review-investigation/application/investigation-operational-diagnostic-port';
 import {
+  ReviewInvestigationLegacyFallbackReason,
   ReviewInvestigationLegacyFallbackSignal,
   RunInvestigationWorkSlot,
 } from '../../../src/review-investigation/application/run-investigation-work-slot';
@@ -1211,7 +1213,111 @@ describe('RunInvestigationWorkSlot', () => {
     expect(controlPlane.planTurn).not.toHaveBeenCalled();
   });
 
-  it('preserves capability-disabled failures after open for recovery', async () => {
+  it.each([
+    ReviewInvestigationControlPlaneFailureClass.Unavailable,
+    ReviewInvestigationControlPlaneFailureClass.CapacityLimited,
+  ])(
+    'allows legacy fallback for proven %s infrastructure failure before open',
+    async (failureClass) => {
+      const controlPlane = controlPlaneFixture(plannedSnapshot());
+      controlPlane.open.mockRejectedValue(
+        new ReviewInvestigationControlPlaneError(
+          failureClass,
+          'infrastructure_unavailable_before_open'
+        )
+      );
+
+      await expect(
+        runnerFixture(controlPlane, agentFixture(observation())).execute(
+          runInput()
+        )
+      ).rejects.toMatchObject({
+        reason:
+          ReviewInvestigationLegacyFallbackReason.InfrastructureUnavailableBeforeOpen,
+      });
+      expect(controlPlane.planTurn).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ReviewInvestigationControlPlaneFailureClass.CapabilityDisabled,
+    ReviewInvestigationControlPlaneFailureClass.Unavailable,
+    ReviewInvestigationControlPlaneFailureClass.CapacityLimited,
+  ])(
+    'fails closed for %s when replay returns null after a durable effect may exist',
+    async (failureClass) => {
+      const controlPlane = controlPlaneFixture(plannedSnapshot());
+      const openFailure = new ReviewInvestigationControlPlaneError(
+        failureClass,
+        'open_failure_after_replay'
+      );
+      controlPlane.open.mockRejectedValue(openFailure);
+      let durableProofCommitted = false;
+      const replay: ReviewInvestigationReplayUseCasePort = {
+        execute: jest.fn(async () => {
+          durableProofCommitted = true;
+          return null;
+        }),
+      };
+
+      await expect(
+        runnerFixture(controlPlane, agentFixture(observation()), {
+          replay,
+        }).execute({
+          ...runInput(),
+          targetRevision: {
+            baseSha: '1'.repeat(40),
+            mergeBaseSha: '2'.repeat(40),
+            headSha: '3'.repeat(40),
+            reviewRevisionHash: revisionHash,
+          },
+          targetScope: {
+            workspaceId: 'workspace-1',
+            repositoryConnectionId: 'connection-1',
+            scmRepositoryIdentityId: 'repository-1',
+            pullRequestNumber: 7,
+            trustDomain: 'trusted',
+            authorizationScopeHash: digest,
+          },
+        })
+      ).rejects.toBe(openFailure);
+      expect(durableProofCommitted).toBe(true);
+      expect(replay.execute).toHaveBeenCalledTimes(1);
+      expect(controlPlane.open).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it.each([
+    ReviewInvestigationControlPlaneFailureClass.AmbiguousOutcome,
+    ReviewInvestigationControlPlaneFailureClass.InvalidResponse,
+    ReviewInvestigationControlPlaneFailureClass.Conflict,
+    ReviewInvestigationControlPlaneFailureClass.StalePrecondition,
+    ReviewInvestigationControlPlaneFailureClass.ProviderOutputInvalid,
+    ReviewInvestigationControlPlaneFailureClass.Rejected,
+  ])(
+    'fails closed for %s at the initial open boundary',
+    async (failureClass) => {
+      const controlPlane = controlPlaneFixture(plannedSnapshot());
+      const failure = new ReviewInvestigationControlPlaneError(
+        failureClass,
+        'unsafe_initial_open_failure'
+      );
+      controlPlane.open.mockRejectedValue(failure);
+
+      await expect(
+        runnerFixture(controlPlane, agentFixture(observation())).execute(
+          runInput()
+        )
+      ).rejects.toBe(failure);
+    }
+  );
+
+  it.each([
+    ReviewInvestigationControlPlaneFailureClass.CapabilityDisabled,
+    ReviewInvestigationControlPlaneFailureClass.Unavailable,
+    ReviewInvestigationControlPlaneFailureClass.CapacityLimited,
+    ReviewInvestigationControlPlaneFailureClass.AmbiguousOutcome,
+  ])('preserves %s failures after open for recovery', async (failureClass) => {
     const opened = Object.freeze({
       ...plannedSnapshot(),
       state: ReviewInvestigationState.AwaitingTurn,
@@ -1219,8 +1325,8 @@ describe('RunInvestigationWorkSlot', () => {
     });
     const controlPlane = controlPlaneFixture(opened);
     const postOpenError = new ReviewInvestigationControlPlaneError(
-      ReviewInvestigationControlPlaneFailureClass.CapabilityDisabled,
-      'capability_disabled_after_open'
+      failureClass,
+      'control_plane_failure_after_open'
     );
     controlPlane.planTurn.mockRejectedValue(postOpenError);
 
@@ -1553,6 +1659,7 @@ function runnerFixture(
     diagnostics?: ReviewInvestigationOperationalDiagnosticPort;
     delay?: ReviewInvestigationDelayPort;
     leases?: ReviewInvestigationLeasePort;
+    replay?: ReviewInvestigationReplayUseCasePort;
     agents?: ReviewAgentSelectionPort;
     now?: () => Date;
   } = {}
@@ -1590,6 +1697,7 @@ function runnerFixture(
     controlPlane,
     delay: overrides.delay ?? { sleep: jest.fn(async () => undefined) },
     leases,
+    ...(overrides.replay === undefined ? {} : { replay: overrides.replay }),
     turnRunner,
     now: overrides.now ?? (() => new Date('2026-08-02T10:00:00.000Z')),
   });

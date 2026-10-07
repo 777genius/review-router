@@ -246,6 +246,154 @@ describe('Codex T0 prepared invocation', () => {
     });
   });
 
+  it('projects lifecycle-bearing assignments to finding-only investigation manifests', async () => {
+    const provider = {
+      name: 'codex/gpt-test',
+      describePreparedEnvironmentContract: jest
+        .fn()
+        .mockReturnValue({ PATH: '/usr/bin' }),
+      prepareInvocation: jest.fn(async (prompt: string) =>
+        preparedInvocation(prompt)
+      ),
+    } as unknown as CodexProvider;
+    const promptBuilder = {
+      buildPreparedV2: jest.fn(
+        async (
+          _context: unknown,
+          _number: number,
+          lifecycleTargets: readonly unknown[]
+        ) => ({
+          version: 'prepared_review_prompt.v3',
+          investigationContextPrompt: 'investigation context',
+          prompt:
+            lifecycleTargets.length > 0
+              ? 'prepared prompt with lifecycle target'
+              : 'prepared finding-only prompt',
+          pathCoverage: [],
+          investigationProbePlan: emptyProbePlan,
+        })
+      ),
+    } as unknown as PromptBuilder;
+    const gatewayFactory = {
+      planningConfig: jest.fn().mockResolvedValue(gatewayConfig),
+      canonicalInventory: jest.fn().mockResolvedValue(emptyCanonicalInventory),
+    } as unknown as ContextGatewayInvocationSessionFactoryPort;
+    const lifecycleAssignment = Object.freeze({
+      ...assignment,
+      lifecycleTargets: [
+        Object.freeze({
+          targetId: 'target-1',
+          threadId: 'thread-1',
+          fingerprint: hash('finding-1'),
+          severity: 'major' as const,
+          title: 'Existing finding',
+          message: 'The existing failure remains to be revalidated.',
+          originalPath: 'src/service.ts',
+          parentCommentId: 'comment-1',
+          parentCommentUpdatedAt: '2026-07-23T10:00:00.000Z',
+          threadCommentCount: 1,
+          viewerCanResolve: true,
+          hasHumanReply: false,
+          trustedAuthor: true,
+        }),
+      ],
+    });
+    const authoritativeAdapter = new CodexReviewInvocationAdapter(
+      provider,
+      promptBuilder,
+      [lifecycleAssignment],
+      10_000,
+      true,
+      gatewayFactory
+    );
+    const investigationAdapter = new CodexReviewInvocationAdapter(
+      provider,
+      promptBuilder,
+      [lifecycleAssignment],
+      10_000,
+      true,
+      gatewayFactory,
+      true
+    );
+
+    const authoritative = await authoritativeAdapter.prepare({
+      workSlot,
+      attemptOrdinal: 1,
+    });
+    const investigation = await investigationAdapter.prepare({
+      workSlot,
+      attemptOrdinal: 1,
+    });
+    const manifestAssembler = new GeneratedProviderInvocationManifestAssembler(
+      authorization,
+      {} as ReviewConfig,
+      hash('compatibility')
+    );
+    const [authoritativeManifest, investigationManifest] = await Promise.all([
+      manifestAssembler.assemble(authoritative),
+      manifestAssembler.assemble(investigation),
+    ]);
+    const authoritativeManifestInput = JSON.parse(
+      authoritativeManifest.manifestCanonicalJson
+    );
+    const investigationManifestInput = JSON.parse(
+      investigationManifest.manifestCanonicalJson
+    );
+
+    expect(authoritative.reviewPrompt).toContain('with lifecycle target');
+    expect(authoritative.manifestFacts).toMatchObject({
+      taskKindSet: [
+        ReviewTaskKind.FindingDiscovery,
+        ReviewTaskKind.LifecycleRevalidation,
+      ],
+      executionProfile: 'context_gateway_v1',
+      liveLifecycleStateHash: lifecycleAssignment.liveLifecycleStateHash,
+    });
+    expect(authoritative.manifestFacts.lifecycleTargetSetHash).not.toBeNull();
+    expect(authoritative.investigationSeedEnvelope).toBeNull();
+    expect(authoritativeManifestInput).toMatchObject({
+      taskKindSet: [
+        ReviewTaskKind.FindingDiscovery,
+        ReviewTaskKind.LifecycleRevalidation,
+      ],
+      executionProfile: 'context_gateway_v1',
+      lifecycleTargetSetHash:
+        authoritative.manifestFacts.lifecycleTargetSetHash,
+      liveLifecycleStateHash: lifecycleAssignment.liveLifecycleStateHash,
+    });
+    expect(investigation.reviewPrompt).toContain('finding-only');
+    expect(investigation.manifestFacts).toMatchObject({
+      taskKindSet: [ReviewTaskKind.FindingDiscovery],
+      executionProfile: 'investigation_gateway_v1',
+      lifecycleTargetSetHash: null,
+      liveLifecycleStateHash: null,
+    });
+    expect(investigation.investigationSeedEnvelope).not.toBeNull();
+    expect(investigation.manifestFacts.providerRequestEnvelopeHash).toBe(
+      investigation.investigationSeedEnvelope!.hash
+    );
+    expect(investigationManifestInput).toMatchObject({
+      taskKindSet: [ReviewTaskKind.FindingDiscovery],
+      executionProfile: 'investigation_gateway_v1',
+      providerRequestEnvelopeHash:
+        investigation.investigationSeedEnvelope!.hash,
+      lifecycleTargetSetHash: null,
+      liveLifecycleStateHash: null,
+    });
+    expect(promptBuilder.buildPreparedV2).toHaveBeenNthCalledWith(
+      1,
+      lifecycleAssignment.context,
+      lifecycleAssignment.context.number,
+      lifecycleAssignment.lifecycleTargets
+    );
+    expect(promptBuilder.buildPreparedV2).toHaveBeenNthCalledWith(
+      2,
+      lifecycleAssignment.context,
+      lifecycleAssignment.context.number,
+      []
+    );
+  });
+
   it('materializes a lease-bound gateway session without changing semantic identity', async () => {
     const planningPrepared = createPreparedProviderInvocation({
       providerKind: ProviderKind.CodexCli,

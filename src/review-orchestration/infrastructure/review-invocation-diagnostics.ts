@@ -70,6 +70,12 @@ export function classifySafeInvestigationFailureReason(error: unknown): string {
     }
     if (
       error.reason ===
+      ReviewInvestigationLegacyFallbackReason.InfrastructureUnavailableBeforeOpen
+    ) {
+      return 'infrastructure_unavailable_before_open';
+    }
+    if (
+      error.reason ===
       ReviewInvestigationLegacyFallbackReason.RecordOnlyBudgetExhausted
     ) {
       return 'investigation_budget_exhausted';

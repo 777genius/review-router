@@ -83,8 +83,8 @@ on:
         required: false
 
 jobs:
-  review:
-    name: review
+  repository-secret-review:
+    name: repository-secret-review
     if: ${{ inputs.codex_session_mode != 'codex_subscription_oauth_hosted_pool' }}
     permissions:
       contents: read

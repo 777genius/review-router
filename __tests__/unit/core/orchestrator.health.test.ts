@@ -1069,7 +1069,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
     );
   });
 
-  it('does not post GitHub comments for a clean review', async () => {
+  it('posts a visible summary comment for a clean review', async () => {
     const provider = {
       name: 'p1',
       review: jest.fn(),
@@ -1133,13 +1133,14 @@ describe('ReviewOrchestrator health check guard rails', () => {
     const review = await orchestrator.executeReview(pr);
 
     expect(review.findings).toHaveLength(0);
-    expect(postSummary).not.toHaveBeenCalled();
-    expect(deleteSummaryComments).toHaveBeenCalledWith(
+    expect(postSummary).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({ reviewedHeadSha: 'h' }),
-      'no reportable findings were found'
+      '## All Clear!',
+      true,
+      expect.objectContaining({ reviewedHeadSha: 'h' })
     );
-    expect(postInline).toHaveBeenCalledWith(1, [], pr.files, 'h');
+    expect(deleteSummaryComments).not.toHaveBeenCalled();
+    expect(postInline).toHaveBeenCalledWith(1, [], pr.files, 'h', undefined);
   });
 
   it('creates a progress comment by default for the first GitHub review', async () => {

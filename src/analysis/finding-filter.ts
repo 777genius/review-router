@@ -1157,9 +1157,19 @@ export class FindingFilter {
         const existingSeverity = severityOrder[existing.severity];
         const newSeverity = severityOrder[finding.severity];
 
-        if (newSeverity > existingSeverity) {
-          seen.set(key, finding);
-        }
+        const winner = newSeverity > existingSeverity ? finding : existing;
+        const sourceFindingIds = Array.from(
+          new Set([
+            ...(existing.sourceFindingIds ?? []),
+            ...(finding.sourceFindingIds ?? []),
+          ])
+        ).sort();
+        seen.set(
+          key,
+          sourceFindingIds.length > 0
+            ? { ...winner, sourceFindingIds }
+            : winner
+        );
       }
     }
 

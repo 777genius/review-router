@@ -626,9 +626,15 @@ export class CodexProvider extends Provider {
   ): Promise<string> {
     this.requireModelProviderCredential();
     const binary = await this.resolveBinary();
+    const validateOutputLocally = !this.supportsCliOutputSchema(
+      this.options.modelProvider
+    );
+    const finalPrompt = validateOutputLocally
+      ? `${prompt}\n\nOUTPUT JSON SCHEMA:\n${JSON.stringify(outputSchema)}`
+      : prompt;
     const { stdout, stderr, lastMessage } = await this.runCliWithStdin(
       binary,
-      prompt,
+      finalPrompt,
       timeoutMs,
       {
         healthCheck: false,
@@ -646,7 +652,7 @@ export class CodexProvider extends Provider {
         `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
       );
     }
-    if (!this.supportsCliOutputSchema(this.options.modelProvider)) {
+    if (validateOutputLocally) {
       this.assertJsonMatchesSchema(content, outputSchema, 'structured');
     }
     return content;

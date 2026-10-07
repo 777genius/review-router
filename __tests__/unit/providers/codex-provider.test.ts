@@ -298,13 +298,21 @@ describe('CodexProvider', () => {
     });
     overridePrivate(provider, 'resolveBinary', async () => '/tmp/fake-codex');
     let response = '{"ok":true}';
-    spawnMock.mockImplementation((_cmd: string, args: string[]) =>
-      createMockProcess(() => {
-        fs.writeFileSync(
-          args[args.indexOf('--output-last-message') + 1],
-          response
-        );
-      })
+    let providerInput = '';
+    spawnMock.mockImplementation(
+      (
+        _cmd: string,
+        args: string[],
+        options: { stdio: [number, string, string] }
+      ) => {
+        providerInput = fs.readFileSync(options.stdio[0], 'utf8');
+        return createMockProcess(() => {
+          fs.writeFileSync(
+            args[args.indexOf('--output-last-message') + 1],
+            response
+          );
+        });
+      }
     );
     const schema = {
       type: 'object',
@@ -317,6 +325,10 @@ describe('CodexProvider', () => {
       provider.runStructuredPrompt('Return JSON', schema, 1000)
     ).resolves.toBe(response);
     expect(spawnMock.mock.calls[0][1]).not.toContain('--output-schema');
+    expect(providerInput).toContain('Return JSON');
+    expect(providerInput).toContain('"required":["ok"]');
+    expect(providerInput).toContain('"properties":{"ok":{"type":"boolean"}}');
+    expect(providerInput).toContain('"additionalProperties":false');
     response = '{"ok":"true"}';
     await expect(
       provider.runStructuredPrompt('Return JSON', schema, 1000)

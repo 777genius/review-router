@@ -32,7 +32,10 @@ export function resolveDiscussionCodexConfiguration(env: NodeJS.ProcessEnv): {
   model: string;
   providerOptions: CodexProviderOptions;
 } {
-  const authMode = env.REVIEW_AUTH_MODE?.trim() || 'codex-oauth';
+  const authMode =
+    env.RR_DISCUSSION_AUTH_MODE?.trim() ||
+    env.REVIEW_AUTH_MODE?.trim() ||
+    'codex-oauth';
   // An empty discussion override deliberately selects the backend default.
   // Only legacy direct callers without this key inherit CODEX_MODEL.
   const modelOverride = (env.DISCUSSION_MODEL ?? env.CODEX_MODEL)?.trim();

@@ -34,6 +34,61 @@ describe('CodexDiscussionResponder', () => {
     });
   });
 
+  it.each([
+    {
+      discussionAuthMode: 'mimo-token-plan-api',
+      runtimeAuthMode: 'codex-oauth',
+      expected: {
+        authMode: 'mimo-token-plan-api',
+        model: 'mimo-v2.6-pro',
+        providerOptions: {
+          modelProvider: 'mimo',
+          providerNamePrefix: 'codex-mimo',
+        },
+      },
+    },
+    {
+      discussionAuthMode: 'codex-oauth',
+      runtimeAuthMode: 'mimo-token-plan-api',
+      expected: {
+        authMode: 'codex-oauth',
+        model: 'gpt-5.6-sol',
+        providerOptions: {},
+      },
+    },
+  ])(
+    'prefers explicit discussion mode $discussionAuthMode over runtime $runtimeAuthMode',
+    ({ discussionAuthMode, runtimeAuthMode, expected }) => {
+      expect(
+        resolveDiscussionCodexConfiguration({
+          RR_DISCUSSION_AUTH_MODE: discussionAuthMode,
+          REVIEW_AUTH_MODE: runtimeAuthMode,
+          DISCUSSION_MODEL: '',
+        })
+      ).toEqual(expected);
+    }
+  );
+
+  it.each(['', '   '])(
+    'inherits runtime auth mode when the discussion override is %j',
+    (discussionAuthMode) => {
+      expect(
+        resolveDiscussionCodexConfiguration({
+          RR_DISCUSSION_AUTH_MODE: discussionAuthMode,
+          REVIEW_AUTH_MODE: 'mimo-token-plan-api',
+          DISCUSSION_MODEL: '',
+        })
+      ).toEqual({
+        authMode: 'mimo-token-plan-api',
+        model: 'mimo-v2.6-pro',
+        providerOptions: {
+          modelProvider: 'mimo',
+          providerNamePrefix: 'codex-mimo',
+        },
+      });
+    }
+  );
+
   it.each(['codex-oauth', 'openai-api', 'mimo-token-plan-api'])(
     'retains the effective runtime mode %s even with stale subscription secrets',
     (authMode) => {

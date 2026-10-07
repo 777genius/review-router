@@ -28588,6 +28588,12 @@ function mergeFindings(existing, incoming) {
   const betterTitle = chooseBetterTitle(existing.title, incoming.title);
   return {
     ...existing,
+    ...existing.sourceFindingIds || incoming.sourceFindingIds ? {
+      sourceFindingIds: Array.from(/* @__PURE__ */ new Set([
+        ...existing.sourceFindingIds ?? [],
+        ...incoming.sourceFindingIds ?? []
+      ])).sort()
+    } : {},
     startLine: mergeStartLine(existing, incoming),
     line: Math.max(existing.line, incoming.line),
     endLine: mergeEndLine(existing, incoming),
@@ -29164,6 +29170,14 @@ var ConsensusEngine = class {
       ];
       grouped.set(key, {
         ...existing,
+        ...existing.sourceFindingIds || finding.sourceFindingIds ? {
+          sourceFindingIds: Array.from(
+            /* @__PURE__ */ new Set([
+              ...existing.sourceFindingIds ?? [],
+              ...finding.sourceFindingIds ?? []
+            ])
+          ).sort()
+        } : {},
         providers: Array.from(
           /* @__PURE__ */ new Set([...existing.providers || [], ...providers])
         ),
@@ -43093,9 +43107,17 @@ var FindingFilter = class {
         const severityOrder = { critical: 3, major: 2, minor: 1 };
         const existingSeverity = severityOrder[existing.severity];
         const newSeverity = severityOrder[finding.severity];
-        if (newSeverity > existingSeverity) {
-          seen.set(key, finding);
-        }
+        const winner = newSeverity > existingSeverity ? finding : existing;
+        const sourceFindingIds = Array.from(
+          /* @__PURE__ */ new Set([
+            ...existing.sourceFindingIds ?? [],
+            ...finding.sourceFindingIds ?? []
+          ])
+        ).sort();
+        seen.set(
+          key,
+          sourceFindingIds.length > 0 ? { ...winner, sourceFindingIds } : winner
+        );
       }
     }
     return Array.from(seen.values());
@@ -105974,8 +105996,9 @@ var LegacyReviewProjectionPolicyAdapter = class {
     const filtered = new FindingFilter().filter(consensus, query.diff).findings;
     return filtered.map((finding) => {
       const metadata = finding;
+      const memberIds = new Set(finding.sourceFindingIds);
       const contributors = query.findings.filter(
-        (candidate) => candidateContributedToFinding(candidate, finding)
+        (candidate) => memberIds.has(candidate.sourceFindingId)
       );
       const representative = contributors.find(
         (candidate) => candidate.sourceFindingId === metadata.projectionSourceFindingId
@@ -105998,10 +106021,9 @@ var LegacyReviewProjectionPolicyAdapter = class {
         line: finding.line,
         ...finding.endLine !== void 0 ? { endLine: finding.endLine } : {},
         ...finding.confidence !== void 0 ? { confidence: finding.confidence } : {},
-        providerIds: sortedUnique3([
-          ...finding.providers ?? [],
-          ...finding.provider ? [finding.provider] : []
-        ]),
+        providerIds: sortedUnique3(
+          contributors.flatMap((candidate) => candidate.providerIds)
+        ),
         providerVoteKeys: sortedUnique3(
           contributors.flatMap((candidate) => candidate.providerVoteKeys)
         ),
@@ -106261,6 +106283,7 @@ function toLegacyFinding(finding) {
     providerVoteKeys: [...finding.providerVoteKeys],
     confidence: "confidence" in finding ? finding.confidence : void 0,
     category: finding.category,
+    sourceFindingIds: "sourceFindingIds" in finding ? [...finding.sourceFindingIds] : [sourceFindingId],
     projectionSourceFindingId: sourceFindingId,
     projectionCategory: finding.category,
     projectionFailureModeHash: finding.normalizedFailureModeHash,
@@ -106268,9 +106291,6 @@ function toLegacyFinding(finding) {
     ...finding.trustedMarker ? { projectionTrustedMarker: finding.trustedMarker } : {},
     projectionObservationIds: [...finding.observationIds]
   };
-}
-function candidateContributedToFinding(candidate, finding) {
-  return normalizePath3(candidate.filePath) === normalizePath3(finding.file) && Math.abs((candidate.line ?? candidate.endLine ?? 1) - finding.line) <= 2 && (candidate.normalizedFailureModeHash === finding.projectionFailureModeHash || normalizeText4(candidate.title) === normalizeText4(finding.title));
 }
 function lifecycleProviderResults(query) {
   const byProvider = /* @__PURE__ */ new Map();
@@ -106391,9 +106411,6 @@ function toLegacySeverity(severity) {
 }
 function normalizePath3(path29) {
   return path29.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
-}
-function normalizeText4(value) {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 function sortedUnique3(values) {
   return Array.from(new Set(values)).sort(

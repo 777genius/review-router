@@ -21,6 +21,7 @@ export type ReviewErrorCode =
   | 'codex_api_key_invalid'
   | 'claude_oauth_invalid_secret'
   | 'openrouter_api_key_invalid'
+  | 'mimo_api_key_invalid'
   | 'codex_cli_missing'
   | 'required_provider_unhealthy'
   | 'no_healthy_providers'
@@ -151,6 +152,17 @@ function descriptorFor(
     message.includes('tokens.refresh_token')
   ) {
     return descriptors.codex_oauth_invalid_secret;
+  }
+
+  if (
+    (message.includes('mimo') || message.includes('mimo_token_plan_api_key')) &&
+    (message.includes('api key') ||
+      message.includes('api_key') ||
+      message.includes('401') ||
+      message.includes('unauthorized') ||
+      message.includes('403'))
+  ) {
+    return descriptors.mimo_api_key_invalid;
   }
 
   if (
@@ -401,6 +413,19 @@ const descriptors: Record<ReviewErrorCode, ReviewErrorDescriptor> = {
     nextSteps: [
       'Verify `OPENROUTER_API_KEY` is available to this workflow.',
       'Verify the key has quota and access to the configured model.',
+      'Re-run the workflow after updating the secret.',
+    ],
+    isRetryable: false,
+    isUserActionable: true,
+  },
+  mimo_api_key_invalid: {
+    code: 'mimo_api_key_invalid',
+    category: 'provider_auth',
+    summary: 'MiMo Token Plan API key is missing or invalid.',
+    whyItMatters: 'ReviewRouter cannot call the configured MiMo model.',
+    nextSteps: [
+      'Verify `MIMO_TOKEN_PLAN_API_KEY` is available to this workflow.',
+      'Verify the MiMo Token Plan key has quota and access to the configured model.',
       'Re-run the workflow after updating the secret.',
     ],
     isRetryable: false,

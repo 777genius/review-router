@@ -133,6 +133,8 @@ export type ReviewRunAuthorizationFacts = {
   readonly producerReleaseId: string;
   readonly selectedProtocolVersion: string;
   readonly schemaDigest: string;
+  /** Native OIDC workflow identity when supplied by the current authority. */
+  readonly workflowIdentityHash?: string;
   readonly reviewInvestigation?: ReviewInvestigationCapabilityDescriptor;
   readonly providerVoteLanes: readonly {
     readonly providerKind: ReviewExecutionProviderKind;

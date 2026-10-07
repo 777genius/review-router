@@ -8,6 +8,7 @@ import {
   type CodexContextGatewayInvocationConfig,
 } from '../../../src/providers/codex';
 import { RateLimitError } from '../../../src/providers/base';
+import { buildReviewFindingsSchema } from '../../../src/providers/review-output';
 import { logger } from '../../../src/utils/logger';
 
 jest.mock('child_process', () => ({
@@ -179,6 +180,221 @@ describe('CodexProvider', () => {
       ])
     );
     expect(args).toContain('--ignore-user-config');
+    expect(args).toContain('--output-schema');
+  });
+
+  it('can route Codex CLI through MiMo Token Plan without user config', () => {
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+      outputSchemaFile: '/tmp/codex-schema.json',
+    });
+
+    expect(provider.name).toBe('codex-mimo/mimo-v2.6-pro');
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '-c',
+        'model_provider="mimo"',
+        'model_providers.mimo.name="MiMo Token Plan"',
+        'model_providers.mimo.base_url="https://token-plan-sgp.xiaomimimo.com/v1"',
+        'model_providers.mimo.wire_api="responses"',
+        'model_providers.mimo.env_key="MIMO_TOKEN_PLAN_API_KEY"',
+        'web_search="disabled"',
+      ])
+    );
+    expect(args).toContain('--ignore-user-config');
+    expect(args).not.toContain('--output-schema');
+    expect(args).not.toContain('/tmp/codex-schema.json');
+  });
+
+  it('prepares MiMo review without a CLI schema while keeping read-only exploration', async () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      agenticContext: true,
+    });
+    overridePrivate(provider, 'resolveBinary', async () => '/tmp/fake-codex');
+    const invocation = await provider.prepareInvocation('review prompt', 1000);
+    const { request } = invocation;
+    const args = request.argsTemplate;
+
+    expect(args).not.toContain('--output-schema');
+    expect(args).toEqual(expect.arrayContaining(['--sandbox', 'read-only']));
+    expect(request.prompt).toContain('run read-only exploration commands');
+    expect(request.outputSchema).toEqual(buildReviewFindingsSchema());
+    expect(request.environment.MIMO_TOKEN_PLAN_API_KEY).toBeUndefined();
+  });
+
+  it('validates MiMo review output locally after a prepared invocation', async () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      agenticContext: false,
+    });
+    overridePrivate(provider, 'resolveBinary', async () => '/tmp/fake-codex');
+    const invocation = await provider.prepareInvocation('review prompt', 1000);
+    const validFinding = {
+      file: 'src/app.ts',
+      startLine: null,
+      line: 1,
+      endLine: null,
+      severity: 'major',
+      title: 'Crash',
+      message: 'Evidence',
+      suggestion: null,
+    };
+    let response = JSON.stringify({
+      findings: [validFinding],
+      revalidations: [],
+    });
+    spawnMock.mockImplementation((_cmd: string, args: string[]) =>
+      createMockProcess(() => {
+        fs.writeFileSync(
+          args[args.indexOf('--output-last-message') + 1],
+          response
+        );
+      })
+    );
+
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).resolves.toMatchObject({
+      findings: [{ file: 'src/app.ts', line: 1, severity: 'major' }],
+      revalidations: [],
+    });
+    expect(spawnMock.mock.calls[0][1]).not.toContain('--output-schema');
+    response = JSON.stringify({
+      findings: [{ ...validFinding, suggestion: undefined }],
+      revalidations: [],
+    });
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).rejects.toThrow('Codex CLI returned invalid review JSON');
+    response = JSON.stringify({
+      findings: [validFinding],
+      revalidations: [{ targetId: 'target', verdict: 'invalid' }],
+    });
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).rejects.toThrow('Codex CLI returned invalid review JSON');
+    response = JSON.stringify({
+      findings: [validFinding],
+      revalidations: [],
+      extra: true,
+    });
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).rejects.toThrow('Codex CLI returned invalid review JSON');
+  });
+
+  it('validates MiMo structured prompts locally without a CLI schema', async () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+    });
+    overridePrivate(provider, 'resolveBinary', async () => '/tmp/fake-codex');
+    let response = '{"ok":true}';
+    let providerInput = '';
+    spawnMock.mockImplementation(
+      (
+        _cmd: string,
+        args: string[],
+        options: { stdio: [number, string, string] }
+      ) => {
+        providerInput = fs.readFileSync(options.stdio[0], 'utf8');
+        return createMockProcess(() => {
+          fs.writeFileSync(
+            args[args.indexOf('--output-last-message') + 1],
+            response
+          );
+        });
+      }
+    );
+    const schema = {
+      type: 'object',
+      additionalProperties: false,
+      required: ['ok'],
+      properties: { ok: { type: 'boolean' } },
+    };
+
+    await expect(
+      provider.runStructuredPrompt('Return JSON', schema, 1000)
+    ).resolves.toBe(response);
+    expect(spawnMock.mock.calls[0][1]).not.toContain('--output-schema');
+    expect(providerInput).toContain('Return JSON');
+    expect(providerInput).toContain('"required":["ok"]');
+    expect(providerInput).toContain('"properties":{"ok":{"type":"boolean"}}');
+    expect(providerInput).toContain('"additionalProperties":false');
+    response = '{"ok":"true"}';
+    await expect(
+      provider.runStructuredPrompt('Return JSON', schema, 1000)
+    ).rejects.toThrow('Codex CLI returned invalid structured JSON');
+  });
+
+  it('keeps shell tools available while excluding provider credentials from their environment', () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+    });
+
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '-c',
+        'shell_environment_policy.ignore_default_excludes=false',
+        'shell_environment_policy.filters={OPENAI_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}',
+      ])
+    );
+    expect(args).not.toContain('shell_tool');
+    expect(
+      (provider as any).buildSafeEnv(false, {
+        forkSandbox: false,
+        modelProvider: 'mimo',
+      }).MIMO_TOKEN_PLAN_API_KEY
+    ).toBe('mimo-provider-test');
+  });
+
+  it('directs MiMo authentication failures to the MiMo credential', () => {
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+    const message = (provider as any).withActionableAuthHint(
+      '401 unauthorized from MiMo Token Plan'
+    );
+
+    expect(message).toContain('Verify MIMO_TOKEN_PLAN_API_KEY');
+    expect(message).not.toContain('codex login');
+    expect(message).not.toContain('OPENAI_API_KEY');
+
+    expect((provider as any).withActionableAuthHint(message)).toBe(message);
+  });
+
+  it('fails before Codex CLI preparation when the MiMo Token Plan key is absent', async () => {
+    delete process.env.MIMO_TOKEN_PLAN_API_KEY;
+    spawnMock.mockImplementation(() => {
+      throw new Error(
+        'Codex CLI resolution must not start without credentials'
+      );
+    });
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+
+    await expect(
+      provider.prepareInvocation('review prompt', 1000)
+    ).rejects.toThrow(
+      'codex_mimo_api_key_missing: MIMO_TOKEN_PLAN_API_KEY is required for codex-mimo/mimo-v2.6-pro'
+    );
   });
 
   it('can keep public OpenRouter provider identity while stripping instance suffix from Codex model', () => {

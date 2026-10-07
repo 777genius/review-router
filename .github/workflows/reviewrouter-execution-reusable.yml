@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       review_action_lane:
-        description: 'Internal execution lane: legacy or t0'
+        description: 'Internal execution lane: legacy, t0, or newtest-one-shot'
         required: true
         type: string
       runtime_ref:
@@ -81,9 +81,60 @@ on:
         required: false
       OPENROUTER_API_KEY:
         required: false
+      MIMO_TOKEN_PLAN_API_KEY:
+        required: false
 
 jobs:
+  newtest-one-shot:
+    if: ${{ inputs.review_action_lane == 'newtest-one-shot' }}
+    name: one-shot TEST125 transport
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || '' }}
+      RR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+      RR_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+    steps:
+      - name: Reject non-TEST or mutable transport source
+        shell: bash
+        env:
+          RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          node <<'NODE'
+          const e = process.env;
+          if (e.GITHUB_REPOSITORY_ID !== '1252762369' ||
+              e.GITHUB_REPOSITORY !== '777genius/reviewrouter-e2e-prod-20260529-000305' ||
+              e.RR_HEAD_REPOSITORY !== e.GITHUB_REPOSITORY ||
+              e.GITHUB_EVENT_NAME !== 'pull_request' || e.GITHUB_RUN_ATTEMPT !== '1' ||
+              e.RR_WORKFLOW_REPOSITORY !== '777genius/review-router' ||
+              !/^[a-f0-9]{40}$/.test(e.RR_WORKFLOW_SHA || '') ||
+              !/^[a-f0-9]{40}$/.test(e.RR_HEAD_SHA || '')) {
+            console.error('One-shot TEST identity rejected.');
+            process.exit(1);
+          }
+          NODE
+      - name: Checkout immutable transport runtime only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: 777genius/review-router
+          ref: ${{ job.workflow_sha }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Transfer ONE authenticated TEST request
+        env:
+          RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: node dist/newtest-one-shot-job.js
+
   review:
+    if: ${{ inputs.review_action_lane != 'newtest-one-shot' }}
     name: review
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.review_timeout_minutes }}
@@ -460,4 +511,5 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          MIMO_TOKEN_PLAN_API_KEY: ${{ secrets.MIMO_TOKEN_PLAN_API_KEY }}
         run: node .reviewrouter-runtime/dist/index.js

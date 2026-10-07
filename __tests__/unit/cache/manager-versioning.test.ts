@@ -2,9 +2,11 @@ import { CacheManager, DEFAULT_CACHE_TTL_MS } from '../../../src/cache/manager';
 import { CacheStorage } from '../../../src/cache/storage';
 import { PRContext, Review, ReviewConfig, Finding } from '../../../src/types';
 import { CACHE_VERSION } from '../../../src/cache/version';
+import { createHash } from 'crypto';
 import {
   hashConfig,
   hashIncrementalCompatibility,
+  incrementalCompatibilityPreimage,
 } from '../../../src/cache/key-builder';
 
 // Mock the storage
@@ -278,6 +280,29 @@ describe('CacheManager Versioning', () => {
         /^[a-f0-9]{64}$/
       );
     });
+
+    it.each([
+      [' 7 ', '"7"'],
+      [undefined, 'null'],
+      ['   ', 'null'],
+    ])(
+      'exposes the exact ordinary compatibility preimage for %s',
+      (version, wireVersion) => {
+        const config = {
+          providerBatchOverrides: { z: 2, a: 1 },
+          outputLanguage: 'English',
+        } as unknown as ReviewConfig;
+        const before = structuredClone(config);
+        const expected = `{"cacheVersion":8,"reviewConfig":{"outputLanguage":"English","providerBatchOverrides":{"a":1,"z":2}},"runtimeConfigVersion":${wireVersion}}`;
+        expect(incrementalCompatibilityPreimage(config, version)).toBe(
+          expected
+        );
+        expect(hashIncrementalCompatibility(config, version)).toBe(
+          createHash('sha256').update(expected).digest('hex')
+        );
+        expect(config).toEqual(before);
+      }
+    );
   });
 
   describe('Save with Versioning', () => {

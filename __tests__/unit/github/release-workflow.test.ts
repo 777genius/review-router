@@ -12,9 +12,9 @@ const auditedActionShas: Readonly<Record<string, string>> = {
   'actions/setup-node': '820762786026740c76f36085b0efc47a31fe5020',
 };
 const auditedExternalUseCounts: Readonly<Record<string, number>> = {
-  [checkoutActionReference]: 10,
+  [checkoutActionReference]: 11,
   'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1': 2,
-  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020': 6,
+  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020': 7,
 };
 const checkoutCredentialException = {
   workflow: 'release.yml',
@@ -140,7 +140,7 @@ describe('workflow security and release', () => {
         (total, count) => total + count,
         0
       )
-    ).toBe(18);
+    ).toBe(20);
   });
 
   it('finds semantic uses keys without scanning block scalar text', () => {

@@ -27,6 +27,7 @@ import {
   type ReviewEvidenceLookupResult,
   type ReviewExecutionStartResult,
   type ReviewPublicationRequestResult,
+  type ReviewRunAuthorizeResult,
 } from '../../control-plane/generated/review-action-v2/review-action-v2';
 import {
   ReviewEvidenceLookupKind,
@@ -60,12 +61,64 @@ import { logger } from '../../utils/logger';
 import { emitReviewInvestigationTelemetry } from './review-investigation-telemetry';
 import { createFailedContextGatewaySealPayload } from './context-gateway-failed-seal';
 
+/** Projects an actual native receipt without issuing a second authorize call. */
+export function projectReviewRunAuthorization(
+  result: ReviewRunAuthorizeResult
+): ReviewRunAuthorization {
+  if (
+    result.status !== ReviewRunAuthorizationResultStatus.Authorized &&
+    result.status !== ReviewRunAuthorizationResultStatus.Restored
+  ) {
+    throw new Error('review_action_v2_authorization_denied');
+  }
+  return {
+    authorizationId: requireString(result.authorizationId, 'authorization_id'),
+    authorizationToken: requireString(
+      result.authorizationToken,
+      'authorization_token'
+    ),
+    producerReleaseId: requireString(
+      result.producerReleaseId,
+      'producer_release_id'
+    ),
+    protocolLimitsProfileId: requireString(
+      result.protocolLimitsProfileId,
+      'protocol_limits_profile_id'
+    ),
+    operationalSloProfileId: requireString(
+      result.operationalSloProfileId,
+      'operational_slo_profile_id'
+    ),
+    mutationEpoch: requireDecimal(result.mutationEpoch, 'mutation_epoch'),
+    expiresAt: requireTimestamp(result.expiresAt, 'expires_at'),
+    limits: parseProtocolLimits(result.protocolLimitsCanonicalJson),
+    facts: parseAuthorizationFacts(result.authorizationFactsCanonicalJson),
+  };
+}
+
 export class ReviewActionV2ControlPlaneAdapter
   implements ReviewActionV2ControlPlanePort, ReviewContextAttestationPort
 {
   private activeAuthorization: ReviewRunAuthorization | null = null;
 
   constructor(private readonly client: ReviewActionV2Client) {}
+
+  /** Trusted continuation of an actual fresh native receipt. This does not
+   * authorize, renew, restore or perform any remote operation. The server still
+   * validates the receipt's capability on every subsequent mutation. */
+  static fromFreshAuthorizationReceipt(
+    client: ReviewActionV2Client,
+    receipt: ReviewRunAuthorizeResult
+  ): ReviewActionV2ControlPlaneAdapter {
+    const snapshot = structuredClone(receipt);
+    if (snapshot.status !== ReviewRunAuthorizationResultStatus.Authorized) {
+      throw new Error('review_action_v2_fresh_authorization_required');
+    }
+    const authorization = projectReviewRunAuthorization(snapshot);
+    const adapter = new ReviewActionV2ControlPlaneAdapter(client);
+    adapter.activeAuthorization = authorization;
+    return adapter;
+  }
 
   async authorize(input: {
     readonly oidcToken: string;
@@ -82,38 +135,7 @@ export class ReviewActionV2ControlPlaneAdapter
         ],
       }
     );
-    if (
-      result.status !== ReviewRunAuthorizationResultStatus.Authorized &&
-      result.status !== ReviewRunAuthorizationResultStatus.Restored
-    ) {
-      throw new Error('review_action_v2_authorization_denied');
-    }
-    const authorization = {
-      authorizationId: requireString(
-        result.authorizationId,
-        'authorization_id'
-      ),
-      authorizationToken: requireString(
-        result.authorizationToken,
-        'authorization_token'
-      ),
-      producerReleaseId: requireString(
-        result.producerReleaseId,
-        'producer_release_id'
-      ),
-      protocolLimitsProfileId: requireString(
-        result.protocolLimitsProfileId,
-        'protocol_limits_profile_id'
-      ),
-      operationalSloProfileId: requireString(
-        result.operationalSloProfileId,
-        'operational_slo_profile_id'
-      ),
-      mutationEpoch: requireDecimal(result.mutationEpoch, 'mutation_epoch'),
-      expiresAt: requireTimestamp(result.expiresAt, 'expires_at'),
-      limits: parseProtocolLimits(result.protocolLimitsCanonicalJson),
-      facts: parseAuthorizationFacts(result.authorizationFactsCanonicalJson),
-    };
+    const authorization = projectReviewRunAuthorization(result);
     this.activeAuthorization = authorization;
     return authorization;
   }
@@ -1522,6 +1544,10 @@ function parseRestoredWorkSlotState(
 function parseAuthorizationFacts(value: string | undefined) {
   const parsed = parseCanonicalObject(value);
   const providerVoteLanes = parseProviderVoteLanes(parsed.providerVoteLanes);
+  const hasWorkflowIdentityHash = Object.prototype.hasOwnProperty.call(
+    parsed,
+    'workflowIdentityHash'
+  );
   const hasReviewInvestigation = Object.prototype.hasOwnProperty.call(
     parsed,
     'reviewInvestigation'
@@ -1568,6 +1594,14 @@ function parseAuthorizationFacts(value: string | undefined) {
       'selected_protocol_version'
     ),
     schemaDigest: requireDigest(parsed.schemaDigest, 'schema_digest'),
+    ...(hasWorkflowIdentityHash
+      ? {
+          workflowIdentityHash: requireDigest(
+            parsed.workflowIdentityHash,
+            'workflow_identity_hash'
+          ),
+        }
+      : {}),
     ...(reviewInvestigation === undefined ? {} : { reviewInvestigation }),
     providerVoteLanes,
   };
@@ -1588,6 +1622,7 @@ function parseAuthorizationFacts(value: string | undefined) {
     'sourceRunId',
     'trustDomain',
     'workspaceId',
+    ...(hasWorkflowIdentityHash ? ['workflowIdentityHash'] : []),
   ];
   if (Object.keys(parsed).sort().join(',') !== expectedKeys.sort().join(',')) {
     throw new Error('review_action_v2_authorization_facts_fields_invalid');

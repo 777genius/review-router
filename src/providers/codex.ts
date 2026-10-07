@@ -8,6 +8,7 @@ import * as fsSync from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import Ajv2020, { type AnySchema } from 'ajv/dist/2020';
 import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
 import { CODEX_CONFINEMENT_DISABLED_FEATURES } from './codex-confinement-policy';
@@ -40,8 +41,12 @@ import {
 export interface CodexProviderOptions {
   agenticContext?: boolean;
   eventAudit?: boolean;
-  modelProvider?: 'openai' | 'openrouter';
-  providerNamePrefix?: 'codex' | 'codex-openrouter' | 'openrouter';
+  modelProvider?: 'openai' | 'openrouter' | 'mimo';
+  providerNamePrefix?:
+    | 'codex'
+    | 'codex-openrouter'
+    | 'openrouter'
+    | 'codex-mimo';
   providerNameModel?: string;
 }
 
@@ -94,6 +99,11 @@ type CodexAgenticAuditMode = 'off' | 'rerun' | 'strict';
 
 const MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS = 24_000;
 
+const SHELL_ENVIRONMENT_POLICY_ARGS = [
+  'shell_environment_policy.ignore_default_excludes=false',
+  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}',
+] as const;
+
 const REVIEW_OUTPUT_CONTRACT = [
   'FINAL OUTPUT CONTRACT:',
   'Return exactly one JSON object with exactly two top-level arrays: "findings" and "revalidations".',
@@ -122,6 +132,7 @@ type CodexPreparedRequest = {
   readonly cwd: string;
   readonly argsTemplate: readonly string[];
   readonly outputSchema: unknown;
+  readonly validateOutputLocally: boolean;
   readonly environment: Readonly<NodeJS.ProcessEnv>;
   readonly eventAudit: boolean;
   readonly jsonEvents: boolean;
@@ -147,6 +158,7 @@ type CodexFrozenCliConfig = {
 
 const CODEX_OUTPUT_FILE_PLACEHOLDER = '{reviewrouter_output_file}';
 const CODEX_SCHEMA_FILE_PLACEHOLDER = '{reviewrouter_schema_file}';
+const MIMO_TOKEN_PLAN_API_KEY = 'MIMO_TOKEN_PLAN_API_KEY';
 const CONTEXT_GATEWAY_RUNTIME_ENV_KEY_SET = new Set(
   CONTEXT_GATEWAY_RUNTIME_ENV_KEYS
 );
@@ -362,6 +374,7 @@ export class CodexProvider extends Provider {
     executionPolicy?: ProviderExecutionPolicy,
     contextGateway?: CodexContextGatewayInvocationConfig
   ): Promise<PreparedProviderInvocation<CodexPreparedRequest>> {
+    this.requireModelProviderCredential();
     if (contextGateway) this.validateContextGatewayConfig(contextGateway);
     const effectiveTimeoutMs =
       executionPolicy?.clampTimeoutMs(timeoutMs) ?? timeoutMs;
@@ -405,6 +418,9 @@ export class CodexProvider extends Provider {
     };
     const environment = this.withoutCredentialEnvironment(fullEnvironment);
     const outputSchema = this.buildFindingsSchema();
+    const validateOutputLocally = !this.supportsCliOutputSchema(
+      frozenCliConfig.modelProvider
+    );
     const argsTemplate = this.buildExecArgs(
       {
         healthCheck: false,
@@ -423,6 +439,7 @@ export class CodexProvider extends Provider {
       cwd,
       argsTemplate,
       outputSchema,
+      validateOutputLocally,
       environment,
       eventAudit,
       jsonEvents: auditMode !== 'off' || contextGateway !== undefined,
@@ -536,6 +553,9 @@ export class CodexProvider extends Provider {
       (runResult.lastMessage || runResult.stdout).trim(),
       request.cwd
     );
+    if (request.validateOutputLocally) {
+      this.assertJsonMatchesSchema(content, request.outputSchema, 'review');
+    }
     const parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
     this.assertNoPlaceholderFindings(parsed.findings);
     const actualModel = this.resolveEffectiveActualModel(
@@ -569,6 +589,13 @@ export class CodexProvider extends Provider {
     ) {
       credentialKeys.push('OPENROUTER_API_KEY');
     }
+    if (
+      invocation.request.argsTemplate.includes(
+        `model_providers.mimo.env_key="${MIMO_TOKEN_PLAN_API_KEY}"`
+      )
+    ) {
+      credentialKeys.push(MIMO_TOKEN_PLAN_API_KEY);
+    }
     for (const key of credentialKeys) {
       if (process.env[key] !== undefined) environment[key] = process.env[key];
     }
@@ -581,6 +608,7 @@ export class CodexProvider extends Provider {
     const sanitized = { ...environment };
     delete sanitized.OPENAI_API_KEY;
     delete sanitized.OPENROUTER_API_KEY;
+    delete sanitized[MIMO_TOKEN_PLAN_API_KEY];
     delete sanitized.REVIEWROUTER_CONTEXT_GATEWAY_SECRET;
     return Object.freeze(sanitized);
   }
@@ -596,10 +624,17 @@ export class CodexProvider extends Provider {
       skipGitRepoCheck?: boolean;
     } = {}
   ): Promise<string> {
+    this.requireModelProviderCredential();
     const binary = await this.resolveBinary();
+    const validateOutputLocally = !this.supportsCliOutputSchema(
+      this.options.modelProvider
+    );
+    const finalPrompt = validateOutputLocally
+      ? `${prompt}\n\nOUTPUT JSON SCHEMA:\n${JSON.stringify(outputSchema)}`
+      : prompt;
     const { stdout, stderr, lastMessage } = await this.runCliWithStdin(
       binary,
-      prompt,
+      finalPrompt,
       timeoutMs,
       {
         healthCheck: false,
@@ -617,7 +652,50 @@ export class CodexProvider extends Provider {
         `Codex CLI returned no output${stderr ? `; stderr: ${stderr.slice(0, 200)}` : ''}`
       );
     }
+    if (validateOutputLocally) {
+      this.assertJsonMatchesSchema(content, outputSchema, 'structured');
+    }
     return content;
+  }
+
+  private supportsCliOutputSchema(
+    modelProvider: CodexProviderOptions['modelProvider']
+  ): boolean {
+    // MiMo's Responses endpoint rejects text.format=json_schema. Other
+    // providers retain Codex's native structured output enforcement.
+    return modelProvider !== 'mimo';
+  }
+
+  private assertJsonMatchesSchema(
+    content: string,
+    schema: unknown,
+    kind: 'review' | 'structured'
+  ): void {
+    let value: unknown;
+    try {
+      value = JSON.parse(content);
+    } catch {
+      throw new Error(
+        `Codex CLI returned invalid ${kind} JSON: response was not valid JSON`
+      );
+    }
+    try {
+      const validate = new Ajv2020({
+        strict: true,
+        allowUnionTypes: true,
+      }).compile(schema as AnySchema);
+      if ('$async' in validate) {
+        throw new Error('Asynchronous output schemas are unsupported');
+      }
+      if (validate(value)) return;
+    } catch {
+      throw new Error(
+        `Codex CLI returned invalid ${kind} JSON: output schema could not be validated`
+      );
+    }
+    throw new Error(
+      `Codex CLI returned invalid ${kind} JSON: output does not match schema`
+    );
   }
 
   private estimateUsage(prompt: string, content: string) {
@@ -709,7 +787,10 @@ export class CodexProvider extends Provider {
       );
     }
 
-    if (options.outputSchemaFile) {
+    if (
+      options.outputSchemaFile &&
+      this.supportsCliOutputSchema(config.modelProvider)
+    ) {
       args.push('--output-schema', options.outputSchemaFile);
     }
 
@@ -737,6 +818,30 @@ export class CodexProvider extends Provider {
       );
     }
 
+    if (config.modelProvider === 'mimo') {
+      args.push(
+        '-c',
+        'model_provider="mimo"',
+        '-c',
+        'model_providers.mimo.name="MiMo Token Plan"',
+        '-c',
+        'model_providers.mimo.base_url="https://token-plan-sgp.xiaomimimo.com/v1"',
+        '-c',
+        'model_providers.mimo.wire_api="responses"',
+        '-c',
+        `model_providers.mimo.env_key="${MIMO_TOKEN_PLAN_API_KEY}"`,
+        // MiMo's gateway 400s on the web_search tool Codex sends by default
+        // (responses_feature_not_supported); confirmed empirically against
+        // the live endpoint, not documented anywhere.
+        '-c',
+        'web_search="disabled"'
+      );
+    }
+
+    for (const configOverride of SHELL_ENVIRONMENT_POLICY_ARGS) {
+      args.push('-c', configOverride);
+    }
+
     args.push('-');
     return args;
   }
@@ -757,9 +862,13 @@ export class CodexProvider extends Provider {
     const runId = crypto.randomBytes(8).toString('hex');
     const tmpFile = path.join(os.tmpdir(), `codex-prompt-${runId}.txt`);
     const outputFile = path.join(os.tmpdir(), `codex-output-${runId}.txt`);
-    const schemaFile = options.outputSchema
-      ? path.join(os.tmpdir(), `codex-schema-${runId}.json`)
-      : undefined;
+    const cliSchemaEnabled = prepared
+      ? prepared.argsTemplate.includes('--output-schema')
+      : this.supportsCliOutputSchema(this.options.modelProvider);
+    const schemaFile =
+      options.outputSchema && cliSchemaEnabled
+        ? path.join(os.tmpdir(), `codex-schema-${runId}.json`)
+        : undefined;
     let fd: fs.FileHandle | undefined;
     try {
       await fs.writeFile(tmpFile, stdin, { encoding: 'utf8', mode: 0o600 });
@@ -1282,8 +1391,20 @@ export class CodexProvider extends Provider {
         'CODEX_HOME',
         'OPENAI_API_KEY',
         ...(modelProvider === 'openrouter' ? ['OPENROUTER_API_KEY'] : []),
+        ...(modelProvider === 'mimo' ? [MIMO_TOKEN_PLAN_API_KEY] : []),
       ],
     });
+  }
+
+  private requireModelProviderCredential(): void {
+    if (this.options.modelProvider !== 'mimo') return;
+    if (!process.env[MIMO_TOKEN_PLAN_API_KEY]?.trim()) {
+      const error = new Error(
+        `codex_mimo_api_key_missing: ${MIMO_TOKEN_PLAN_API_KEY} is required for ${this.name}`
+      );
+      error.name = 'CodexProviderError';
+      throw error;
+    }
   }
 
   private shouldUseForkSandboxCodexHomeConfig(): boolean {
@@ -2476,9 +2597,11 @@ export class CodexProvider extends Provider {
     }
 
     const hint =
-      'Codex authentication failed. If using ChatGPT subscription OAuth, reseed auth.json by running `codex login` on a trusted machine and updating CODEX_AUTH_JSON. If using API-key mode, verify OPENAI_API_KEY.';
+      this.options.modelProvider === 'mimo'
+        ? 'Codex MiMo authentication failed. Verify MIMO_TOKEN_PLAN_API_KEY and ensure the MiMo Token Plan credential is valid.'
+        : 'Codex authentication failed. If using ChatGPT subscription OAuth, reseed auth.json by running `codex login` on a trusted machine and updating CODEX_AUTH_JSON. If using API-key mode, verify OPENAI_API_KEY.';
 
-    return message.includes('reseed auth.json')
+    return message.includes(hint)
       ? message
       : this.truncateCliError(`${message} ${hint}`);
   }

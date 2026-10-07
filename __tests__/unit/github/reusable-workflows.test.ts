@@ -23,6 +23,7 @@ type WorkflowJob = {
     env?: Record<string, unknown>;
     if?: string;
     uses?: string;
+    run?: string;
     with?: Record<string, unknown>;
   }>;
 };
@@ -35,6 +36,7 @@ type WorkflowDocument = {
     workflow_dispatch?: unknown;
     workflow_call?: {
       inputs?: Record<string, { default?: unknown }>;
+      secrets?: Record<string, { required?: boolean }>;
     };
   };
   jobs?: Record<string, WorkflowJob>;
@@ -44,6 +46,34 @@ function parseWorkflow(filePath: string): WorkflowDocument {
   return yaml.load(readRepoFile(filePath), {
     schema: yaml.JSON_SCHEMA,
   }) as WorkflowDocument;
+}
+
+function traceSecretEnvBindings(
+  workflow: WorkflowDocument,
+  secretName: string
+): Array<{
+  job: string;
+  step: string;
+  environmentVariable: string;
+  value: string;
+}> {
+  const secretReference = `secrets.${secretName}`;
+  return Object.entries(workflow.jobs ?? {}).flatMap(([jobName, job]) =>
+    (job.steps ?? []).flatMap((step) =>
+      Object.entries(step.env ?? {})
+        .filter(
+          (binding): binding is [string, string] =>
+            typeof binding[1] === 'string' &&
+            binding[1].includes(secretReference)
+        )
+        .map(([environmentVariable, value]) => ({
+          job: jobName,
+          step: step.name ?? '<unnamed>',
+          environmentVariable,
+          value,
+        }))
+    )
+  );
 }
 
 function permissionEscalations(
@@ -60,7 +90,10 @@ function permissionEscalations(
   });
 }
 
-function runInteractionRuntimePreparation(reviewWorkflowFile: string) {
+function runInteractionRuntimePreparation(
+  reviewWorkflowFile: string,
+  discussionAuthMode = ''
+) {
   const workflow = readRepoFile(
     '.github/workflows/reviewrouter-interaction-reusable.yml'
   );
@@ -84,6 +117,7 @@ function runInteractionRuntimePreparation(reviewWorkflowFile: string) {
         ...process.env,
         RR_RUNTIME_REF: '0123456789abcdef0123456789abcdef01234567',
         RR_REVIEW_WORKFLOW_FILE: reviewWorkflowFile,
+        RR_DISCUSSION_AUTH_MODE: discussionAuthMode,
         REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
         REVIEW_APP_PRIVATE_KEY_PRESENT: '0',
         RR_REVIEW_APP_CLIENT_ID: '',
@@ -100,6 +134,66 @@ function runInteractionRuntimePreparation(reviewWorkflowFile: string) {
 }
 
 describe('production reusable workflows', () => {
+  it.each(['', 'codex-oauth', 'openai-api', 'mimo-token-plan-api'])(
+    'validates the explicit discussion backend %s before checkout',
+    (authMode) => {
+      const result = runInteractionRuntimePreparation(
+        'reviewrouter.yml',
+        authMode
+      );
+      expect(result.status).toBe(0);
+      const workflow = parseWorkflow(
+        '.github/workflows/reviewrouter-interaction-reusable.yml'
+      );
+      expect(
+        workflow.on?.workflow_call?.inputs?.discussion_auth_mode?.default
+      ).toBe('');
+      const runStep = workflow.jobs?.interaction?.steps?.find(
+        (step) => step.name === 'Run ReviewRouter interaction'
+      );
+      expect(runStep?.env?.REVIEW_AUTH_MODE).toBe(
+        '${{ inputs.discussion_auth_mode }}'
+      );
+      expect(runStep?.env?.DISCUSSION_MODEL).toBe(
+        '${{ inputs.discussion_model }}'
+      );
+      expect(runStep?.env).not.toHaveProperty('CODEX_MODEL');
+      const restoreStep = workflow.jobs?.interaction?.steps?.find(
+        (step) =>
+          step.name === 'Restore Codex subscription auth for discussion replies'
+      );
+      expect(restoreStep?.if).toContain(
+        "steps.preflight.outputs.discussion_auth_mode == 'codex-oauth'"
+      );
+      expect(
+        workflow.on?.workflow_call?.inputs?.discussion_model?.default
+      ).toBe('');
+      const preflightStep = workflow.jobs?.interaction?.steps?.find(
+        (step) => step.name === 'Preflight ReviewRouter interaction'
+      );
+      expect(preflightStep?.env?.REVIEW_AUTH_MODE).toBe(
+        '${{ inputs.discussion_auth_mode }}'
+      );
+    }
+  );
+
+  it.each([
+    'fallback-anywhere',
+    ' mimo-token-plan-api ',
+    'mimo-token-plan-api\nINJECTED=true',
+  ])(
+    'rejects an unknown discussion backend %j before runtime checkout',
+    (authMode) => {
+      const result = runInteractionRuntimePreparation(
+        'reviewrouter.yml',
+        authMode
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Invalid discussion_auth_mode');
+      expect(result.githubEnvContents).toBe('');
+    }
+  );
+
   it('distinguishes same-repository PRs when the repository itself is a fork', () => {
     const workflowSource = readRepoFile('.github/workflows/reviewrouter.yml');
 
@@ -244,6 +338,121 @@ describe('production reusable workflows', () => {
       'REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN'
     );
     expect(legacy?.secrets).toHaveProperty('REVIEW_APP_PRIVATE_KEY');
+  });
+
+  it.each([
+    [
+      'interaction',
+      'Run ReviewRouter interaction',
+      'Install Codex CLI for discussion replies',
+    ],
+    ['conflict', 'Run conflict review runtime', 'Install Codex CLI'],
+  ])(
+    'passes the MiMo secret only to the %s execution boundary',
+    (kind, runStepName, installStepName) => {
+      const workflow = parseWorkflow(
+        `.github/workflows/reviewrouter-${kind}-reusable.yml`
+      );
+      const secretName = 'MIMO_TOKEN_PLAN_API_KEY';
+      const jobName =
+        kind === 'interaction' ? 'interaction' : 'conflict-review';
+      const job = workflow.jobs?.[jobName];
+      expect(workflow.on?.workflow_call?.secrets?.[secretName]).toEqual({
+        required: false,
+      });
+      expect(workflow.on?.workflow_call?.inputs).not.toHaveProperty(secretName);
+      expect(job?.env).not.toHaveProperty(secretName);
+      expect(traceSecretEnvBindings(workflow, secretName)).toEqual([
+        {
+          job: jobName,
+          step: runStepName,
+          environmentVariable: secretName,
+          value: '${{ secrets.MIMO_TOKEN_PLAN_API_KEY }}',
+        },
+      ]);
+      expect(job?.env?.MIMO_TOKEN_PLAN_API_KEY_PRESENT).toBe(
+        "${{ secrets.MIMO_TOKEN_PLAN_API_KEY != '' && '1' || '0' }}"
+      );
+      expect(
+        job?.steps?.find((step) => step.name === installStepName)?.if
+      ).toContain("env.MIMO_TOKEN_PLAN_API_KEY_PRESENT == '1'");
+    }
+  );
+
+  it('traces the MiMo token secret through the legacy-only workflow contract', () => {
+    const secretName = 'MIMO_TOKEN_PLAN_API_KEY';
+    const secretExpression = '${{ secrets.MIMO_TOKEN_PLAN_API_KEY }}';
+    const parentWorkflow = parseWorkflow(
+      '.github/workflows/reviewrouter-reusable.yml'
+    );
+    const childWorkflow = parseWorkflow(
+      '.github/workflows/reviewrouter-execution-reusable.yml'
+    );
+    const parentInputs = parentWorkflow.jobs?.['review-legacy']?.with ?? {};
+    const childSteps = childWorkflow.jobs?.review?.steps ?? [];
+    const legacyRun = childSteps.find(
+      (step) => step.name === 'Run ReviewRouter legacy'
+    );
+    const t0Run = childSteps.find(
+      (step) => step.name === 'Run ReviewRouter T0'
+    );
+    const hostedPoolRun = childSteps.find(
+      (step) => step.name === 'Run ReviewRouter T0 hosted pool'
+    );
+
+    expect(parentWorkflow.on?.workflow_call?.secrets?.[secretName]).toEqual({
+      required: false,
+    });
+    expect(childWorkflow.on?.workflow_call?.secrets?.[secretName]).toEqual({
+      required: false,
+    });
+    expect(parentWorkflow.jobs?.['review-legacy']?.secrets?.[secretName]).toBe(
+      secretExpression
+    );
+    expect(parentWorkflow.jobs?.['review-t0']?.secrets).not.toHaveProperty(
+      secretName
+    );
+    expect(
+      Object.values(parentInputs).some((value) =>
+        String(value).includes(secretName)
+      )
+    ).toBe(false);
+    expect(parentWorkflow.on?.workflow_call?.inputs).not.toHaveProperty(
+      secretName
+    );
+    expect(childWorkflow.on?.workflow_call?.inputs).not.toHaveProperty(
+      secretName
+    );
+    expect(childWorkflow.jobs?.review?.env).not.toHaveProperty(secretName);
+    expect(traceSecretEnvBindings(childWorkflow, secretName)).toEqual([
+      {
+        job: 'review',
+        step: 'Run ReviewRouter legacy',
+        environmentVariable: secretName,
+        value: secretExpression,
+      },
+    ]);
+    expect(legacyRun?.env?.[secretName]).toBe(secretExpression);
+    expect(t0Run?.env).not.toHaveProperty(secretName);
+    expect(hostedPoolRun?.env).not.toHaveProperty(secretName);
+  });
+
+  it('uses only the provider preflight for the parsed Codex install condition', () => {
+    const workflowPath =
+      '.github/workflows/reviewrouter-execution-reusable.yml';
+    const workflowSource = readRepoFile(workflowPath);
+    const workflow = parseWorkflow(workflowPath);
+    const codexInstall = workflow.jobs?.review?.steps?.find(
+      (step) => step.name === 'Install Codex CLI'
+    );
+
+    expect(codexInstall?.if).toBe(
+      "${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}"
+    );
+    expect(workflow.jobs?.review?.env).not.toHaveProperty(
+      'MIMO_TOKEN_PLAN_API_KEY_PRESENT'
+    );
+    expect(workflowSource).not.toContain('MIMO_TOKEN_PLAN_API_KEY_PRESENT');
   });
 
   it('keeps the shared execution workflow sandbox-safe in both lanes', () => {
@@ -647,6 +856,28 @@ describe('production reusable workflows', () => {
     const workflow = parseWorkflow(
       '.github/workflows/reviewrouter-conflict-reusable.yml'
     );
+    const steps = workflow.jobs?.['conflict-review']?.steps ?? [];
+    expect(
+      steps.find(
+        (step) => step.name === 'Checkout trusted ReviewRouter runtime'
+      )?.with
+    ).toMatchObject({
+      repository: '777genius/review-router',
+      ref: '${{ inputs.runtime_ref }}',
+      'persist-credentials': false,
+    });
+    expect(
+      steps.find((step) => step.name === 'Validate bundled conflict runtime')
+        ?.run
+    ).toContain('node --check action-dist/conflict-runtime.cjs');
+    expect(
+      steps.find(
+        (step) => step.name === 'Preflight conflict runtime before PR checkout'
+      )?.run
+    ).toContain('node action-dist/conflict-runtime.cjs preflight');
+    expect(
+      steps.find((step) => step.name === 'Run conflict review runtime')?.run
+    ).toContain('node action-dist/conflict-runtime.cjs run');
 
     expect(workflow.on?.workflow_call?.inputs?.control_plane_url?.default).toBe(
       ''
@@ -657,5 +888,54 @@ describe('production reusable workflows', () => {
     expect(
       workflow.jobs?.['conflict-review']?.env?.REVIEWROUTER_CONTROL_PLANE_URL
     ).toBe('${{ inputs.control_plane_url || inputs.api_url }}');
+  });
+
+  it('rejects an older accepted ref without a conflict bundle before preflight', () => {
+    const steps =
+      parseWorkflow('.github/workflows/reviewrouter-conflict-reusable.yml')
+        .jobs?.['conflict-review']?.steps ?? [];
+    const validateRef = steps.find(
+      (step) => step.name === 'Validate conflict runtime ref'
+    );
+    const validateBundle = steps.find(
+      (step) => step.name === 'Validate bundled conflict runtime'
+    );
+    expect(validateRef?.run).toBeDefined();
+    expect(validateBundle?.run).toBeDefined();
+    const cwd = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'rr-conflict-ref-NEWTEST-')
+    );
+    try {
+      const options = {
+        cwd,
+        encoding: 'utf8' as const,
+        env: {
+          PATH: process.env.PATH,
+          REVIEWROUTER_RUNTIME_REF: 'v1',
+        },
+      };
+      expect(spawnSync('bash', ['-c', validateRef!.run!], options).status).toBe(
+        0
+      );
+      const missingBundle = spawnSync(
+        'bash',
+        ['-c', validateBundle!.run!],
+        options
+      );
+      expect(missingBundle.status).toBe(1);
+      expect(missingBundle.stdout).toContain(
+        'Selected runtime_ref does not provide the bundled conflict runtime'
+      );
+      fs.mkdirSync(path.join(cwd, 'action-dist'));
+      fs.copyFileSync(
+        path.join(repoRoot, 'action-dist/conflict-runtime.cjs'),
+        path.join(cwd, 'action-dist/conflict-runtime.cjs')
+      );
+      expect(
+        spawnSync('bash', ['-c', validateBundle!.run!], options).status
+      ).toBe(0);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });

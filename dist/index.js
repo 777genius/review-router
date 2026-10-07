@@ -28592,7 +28592,7 @@ function mergeFindings(existing, incoming) {
       sourceFindingIds: Array.from(/* @__PURE__ */ new Set([
         ...existing.sourceFindingIds ?? [],
         ...incoming.sourceFindingIds ?? []
-      ]))
+      ])).sort()
     } : {},
     startLine: mergeStartLine(existing, incoming),
     line: Math.max(existing.line, incoming.line),

@@ -95079,7 +95079,8 @@ var ReviewActionV2ControlPlaneAdapter = class {
           renewalRequestId: input.renewalRequestId,
           oidcToken: input.oidcToken,
           requestedTtlMs: input.requestedTtlMs
-        }
+        },
+        { maxAttempts: 5, retryBaseDelayMs: 5e3 }
       );
     } catch (error2) {
       throw controlPlaneFailure(error2);

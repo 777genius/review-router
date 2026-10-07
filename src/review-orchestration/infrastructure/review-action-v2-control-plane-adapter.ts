@@ -137,7 +137,8 @@ export class ReviewActionV2ControlPlaneAdapter
           renewalRequestId: input.renewalRequestId,
           oidcToken: input.oidcToken,
           requestedTtlMs: input.requestedTtlMs,
-        }
+        },
+        { maxAttempts: 5, retryBaseDelayMs: 5_000 }
       );
     } catch (error) {
       throw controlPlaneFailure(error);

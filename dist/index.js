@@ -43107,9 +43107,17 @@ var FindingFilter = class {
         const severityOrder = { critical: 3, major: 2, minor: 1 };
         const existingSeverity = severityOrder[existing.severity];
         const newSeverity = severityOrder[finding.severity];
-        if (newSeverity > existingSeverity) {
-          seen.set(key, finding);
-        }
+        const winner = newSeverity > existingSeverity ? finding : existing;
+        const sourceFindingIds = Array.from(
+          /* @__PURE__ */ new Set([
+            ...existing.sourceFindingIds ?? [],
+            ...finding.sourceFindingIds ?? []
+          ])
+        ).sort();
+        seen.set(
+          key,
+          sourceFindingIds.length > 0 ? { ...winner, sourceFindingIds } : winner
+        );
       }
     }
     return Array.from(seen.values());

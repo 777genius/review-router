@@ -93227,7 +93227,16 @@ var RunT0ReviewOrchestration = class {
         requestedTtlMs: MAX_PRE_EXECUTION_AUTHORIZATION_TTL_MS
       });
       authorization = preExecutionRenewal.authorization;
-      if (preExecutionRenewal.validForMsAtResponse < MIN_PRE_EXECUTION_AUTHORIZATION_VALIDITY_MS) {
+      this.assertExecutionDeadlineAvailable();
+      const preExecutionRemainingMs = this.executionDeadlineRemainingMs();
+      const preExecutionRequiredValidityMs = Math.min(
+        MIN_PRE_EXECUTION_AUTHORIZATION_VALIDITY_MS,
+        preExecutionRemainingMs === Infinity ? Infinity : safeAddMilliseconds(
+          preExecutionRemainingMs,
+          PUBLICATION_AUTHORIZATION_RESERVE_MS
+        )
+      );
+      if (preExecutionRenewal.validForMsAtResponse < preExecutionRequiredValidityMs) {
         throw new Error(
           "review_orchestration_execution_authorization_window_insufficient"
         );
@@ -93448,9 +93457,16 @@ var RunT0ReviewOrchestration = class {
         };
       }
       await this.assertRevisionCurrent(command);
-      const publicationHorizonMs = safeMultiplyMilliseconds(
-        authorization.limits.maxReconciliationDurationMs,
-        PUBLICATION_HORIZON_MULTIPLIER
+      this.assertExecutionDeadlineAvailable(
+        FINAL_PUBLICATION_STATUS_RESERVE_MS
+      );
+      const publicationRemainingMs = this.executionDeadlineRemainingMs();
+      const publicationHorizonMs = Math.min(
+        safeMultiplyMilliseconds(
+          authorization.limits.maxReconciliationDurationMs,
+          PUBLICATION_HORIZON_MULTIPLIER
+        ),
+        publicationRemainingMs === Infinity ? Infinity : safeAddMilliseconds(publicationRemainingMs, 0) - FINAL_PUBLICATION_STATUS_RESERVE_MS
       );
       const publicationRequiredValidityMs = safeAddMilliseconds(
         publicationHorizonMs,
@@ -93481,7 +93497,9 @@ var RunT0ReviewOrchestration = class {
       });
       execution = refreshExecutionAdmission(execution, latestExecution);
       validateProjectionAgainstLimits(projection, authorization.limits);
-      this.assertExecutionDeadlineAvailable();
+      this.assertExecutionDeadlineAvailable(
+        FINAL_PUBLICATION_STATUS_RESERVE_MS
+      );
       state = evolveReviewOrchestration(state, {
         type: "finalization_started" /* FinalizationStarted */
       });
@@ -93496,7 +93514,9 @@ var RunT0ReviewOrchestration = class {
         allowPartial: partial
       });
       await this.assertRevisionCurrent(command);
-      this.assertExecutionDeadlineAvailable();
+      this.assertExecutionDeadlineAvailable(
+        FINAL_PUBLICATION_STATUS_RESERVE_MS
+      );
       assertPublicationAuthorizationWindow({
         validForMsAtResponse: publicationRenewal.validForMsAtResponse,
         elapsedMs: elapsedMonotonicMs(
@@ -94607,9 +94627,9 @@ var RunT0ReviewOrchestration = class {
   executionDeadlineRemainingMs() {
     return this.dependencies.executionDeadline?.remainingMs() ?? Infinity;
   }
-  assertExecutionDeadlineAvailable() {
+  assertExecutionDeadlineAvailable(reserveMs = 0) {
     this.dependencies.signal?.throwIfAborted();
-    if (this.executionDeadlineRemainingMs() <= 0) {
+    if (this.executionDeadlineRemainingMs() <= reserveMs) {
       throw new ReviewExecutionDeadlineReachedSignal();
     }
   }

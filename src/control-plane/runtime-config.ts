@@ -18,6 +18,55 @@ type RuntimeConfigResponse = {
   readonly ignoredRuntimeEnvKeys: readonly string[];
 };
 
+/** Immutable admitted C2 configuration; never carries session or provider credentials. */
+export type AdmittedRuntimeConfig = Readonly<{
+  protocolVersion: 1;
+  configVersion: number;
+  runtimeEnv: Readonly<Record<string, string>>;
+}>;
+
+export function parseAdmittedRuntimeConfig(
+  value: unknown
+): AdmittedRuntimeConfig {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(',') !==
+      'configVersion,protocolVersion,runtimeEnv'
+  ) {
+    throw new Error('runtime_config_invalid_response');
+  }
+  const input = value as { configVersion?: unknown; runtimeEnv?: unknown };
+  if (
+    typeof input.configVersion !== 'number' ||
+    !Number.isSafeInteger(input.configVersion) ||
+    input.configVersion < 1 ||
+    Array.isArray(input.runtimeEnv)
+  ) {
+    throw new Error('runtime_config_invalid_response');
+  }
+  const parsed = parseRuntimeConfig(value);
+  if (parsed.ignoredRuntimeEnvKeys.length > 0) {
+    throw new Error('runtime_config_unsafe_admitted_env');
+  }
+  return Object.freeze({
+    protocolVersion: 1,
+    configVersion: parsed.configVersion,
+    runtimeEnv: Object.freeze(parsed.runtimeEnv),
+  });
+}
+
+export function applyAdmittedRuntimeConfig(
+  value: AdmittedRuntimeConfig,
+  env: NodeJS.ProcessEnv = process.env
+): string | undefined {
+  const config = parseAdmittedRuntimeConfig(value);
+  applyRuntimeEnv(config.runtimeEnv, env);
+  applyUltraRuntimeTimeoutFallback(config.runtimeEnv, env);
+  return config.runtimeEnv.CODEX_REASONING_EFFORT;
+}
+
 export type RuntimeConfigResult =
   | { readonly status: 'skipped' }
   | {
@@ -223,7 +272,7 @@ function parseRuntimeConfig(value: unknown): RuntimeConfigResponse {
 }
 
 function applyRuntimeEnv(
-  runtimeEnv: Record<string, string>,
+  runtimeEnv: Readonly<Record<string, string>>,
   env: NodeJS.ProcessEnv
 ): void {
   for (const [key, value] of Object.entries(runtimeEnv)) {

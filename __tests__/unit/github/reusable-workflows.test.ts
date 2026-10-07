@@ -537,7 +537,7 @@ describe('production reusable workflows', () => {
     expect(hostedPoolRun?.env).not.toHaveProperty(secretName);
   });
 
-  it('uses only the provider preflight for the parsed Codex install condition', () => {
+  it('selects gateway tooling directly and preserves other provider preflight paths', () => {
     const workflowPath =
       '.github/workflows/reviewrouter-execution-reusable.yml';
     const workflowSource = readRepoFile(workflowPath);
@@ -547,8 +547,57 @@ describe('production reusable workflows', () => {
     );
 
     expect(codexInstall?.if).toBe(
-      "${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}"
+      "${{ steps.runtime.outputs.can_run == 'true' && ((inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') || steps.provider-tooling.outputs.codex_cli_needed == 'true') }}"
     );
+    const steps = workflow.jobs?.review?.steps ?? [];
+    const preflight = steps.find(
+      (step) => step.name === 'Resolve ReviewRouter runtime provider tooling'
+    );
+    const gatewayRun = steps.find(
+      (step) => step.name === 'Run ReviewRouter T0 account gateway'
+    );
+    const cases: Array<[string, string, string, string, boolean[]]> = [
+      ['t0', 'account-gateway', 'true', '', [false, true, true]],
+      ['t0', 'account-gateway', 'false', 'true', [false, false, false]],
+      ['t0', '', 'true', 'true', [true, true, false]],
+      ['t0', '', 'true', '', [true, false, false]],
+      ['legacy', '', 'true', 'true', [true, true, false]],
+      ['legacy', '', 'true', '', [true, false, false]],
+      ['legacy', '', 'false', 'true', [false, false, false]],
+      [
+        't0',
+        'codex_subscription_oauth_hosted_pool',
+        'true',
+        '',
+        [false, false, false],
+      ],
+    ];
+    for (const [lane, mode, canRun, codexNeeded, expected] of cases) {
+      const selected = [preflight, codexInstall, gatewayRun].map((step) => {
+        if (!step?.if) throw new Error('Tooling selection condition missing');
+        return runInNewContext(
+          step.if
+            .slice(3, -2)
+            .replaceAll('steps.provider-tooling', 'steps["provider-tooling"]'),
+          {
+            inputs: { review_action_lane: lane, codex_session_mode: mode },
+            steps: {
+              runtime: { outputs: { can_run: canRun } },
+              'provider-tooling': {
+                outputs: { codex_cli_needed: codexNeeded },
+              },
+            },
+          }
+        );
+      });
+      expect({ lane, mode, canRun, codexNeeded, selected }).toEqual({
+        lane,
+        mode,
+        canRun,
+        codexNeeded,
+        selected: expected,
+      });
+    }
     expect(workflow.jobs?.review?.env).not.toHaveProperty(
       'MIMO_TOKEN_PLAN_API_KEY_PRESENT'
     );
@@ -573,8 +622,8 @@ describe('production reusable workflows', () => {
       (step) => step.name === 'Run ReviewRouter T0 account gateway'
     );
     expect(gatewayRun?.run).toBe('node .reviewrouter-runtime/dist/index.js');
-    expect(gatewayRun?.if).toContain(
-      "steps.provider-tooling.outputs.account_gateway_needed == 'true'"
+    expect(gatewayRun?.if).toBe(
+      "${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway' && steps.runtime.outputs.can_run == 'true' }}"
     );
     expect(gatewayRun?.env).toMatchObject({
       REVIEW_ROUTER_MODE: 'account-gateway',
@@ -732,7 +781,7 @@ describe('production reusable workflows', () => {
     expect(t0Run?.if).toContain("inputs.review_action_lane == 't0'");
     expect(t0Run?.if).toContain("inputs.codex_session_mode == ''");
     expect(codexInstall?.if).toBe(
-      "${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}"
+      "${{ steps.runtime.outputs.can_run == 'true' && ((inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') || steps.provider-tooling.outputs.codex_cli_needed == 'true') }}"
     );
     expect(codexInstall?.if).not.toContain(
       "inputs.review_action_lane == 'legacy'"

@@ -52166,6 +52166,30 @@ function safeOidcErrorCode(payload) {
 }
 
 // src/control-plane/runtime-config.ts
+function parseAdmittedRuntimeConfig(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join(",") !== "configVersion,protocolVersion,runtimeEnv") {
+    throw new Error("runtime_config_invalid_response");
+  }
+  const input = value;
+  if (typeof input.configVersion !== "number" || !Number.isSafeInteger(input.configVersion) || input.configVersion < 1 || Array.isArray(input.runtimeEnv)) {
+    throw new Error("runtime_config_invalid_response");
+  }
+  const parsed = parseRuntimeConfig(value);
+  if (parsed.ignoredRuntimeEnvKeys.length > 0) {
+    throw new Error("runtime_config_unsafe_admitted_env");
+  }
+  return Object.freeze({
+    protocolVersion: 1,
+    configVersion: parsed.configVersion,
+    runtimeEnv: Object.freeze(parsed.runtimeEnv)
+  });
+}
+function applyAdmittedRuntimeConfig(value, env = process.env) {
+  const config = parseAdmittedRuntimeConfig(value);
+  applyRuntimeEnv(config.runtimeEnv, env);
+  applyUltraRuntimeTimeoutFallback(config.runtimeEnv, env);
+  return config.runtimeEnv.CODEX_REASONING_EFFORT;
+}
 async function applyControlPlaneRuntimeConfig(input = {}) {
   const env = input.env ?? process.env;
   if (env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== "oidc") {
@@ -101085,6 +101109,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     authorized = true;
     if (authorization.facts.headSha !== input.headSha.toLowerCase() || authorization.facts.pullRequestNumber !== input.pullRequestNumber)
       throw new Error("account_gateway_authorization_input_mismatch");
+    let admittedRuntimeConfig;
     const readCapability = async () => {
       const request = {
         providerInstanceId: input.providerInstanceId,
@@ -101093,11 +101118,24 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       run2.signal.throwIfAborted();
       const result2 = await transport.checkoutCapability(request, run2.signal);
       run2.signal.throwIfAborted();
-      return validateAccountGatewayCheckout(
+      const capability2 = validateAccountGatewayCheckout(
         result2,
         input.repository,
         authorization.facts.headSha
       );
+      if (admittedRuntimeConfig) {
+        const canonicalEnv = (config) => JSON.stringify(
+          Object.entries(config.runtimeEnv).sort(
+            ([a2], [b2]) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0
+          )
+        );
+        if (capability2.runtimeConfig.configVersion !== admittedRuntimeConfig.configVersion || canonicalEnv(capability2.runtimeConfig) !== canonicalEnv(admittedRuntimeConfig)) {
+          throw new Error("account_gateway_runtime_config_changed");
+        }
+      } else {
+        admittedRuntimeConfig = capability2.runtimeConfig;
+      }
+      return capability2;
     };
     const capability = await readCapability();
     run2.signal.throwIfAborted();
@@ -101152,6 +101190,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       scmReadTokenExpiresAt: capability.expiresAt,
       refreshScmReadToken: readCapability,
       accountGateway: {
+        runtimeConfig: capability.runtimeConfig,
         controlPlane,
         modelTransport: {
           ...bridge,
@@ -101230,7 +101269,7 @@ function validateAccountGatewayCheckout(result2, repository, headSha) {
     throw new Error("account_gateway_checkout_capability_unavailable");
   const body = value;
   const permissions = body.permissions;
-  if (Object.keys(body).sort().join(",") !== "expiresAt,headSha,permissions,protocolVersion,repository,token" || body.protocolVersion !== 1 || body.repository !== repository || body.headSha !== headSha || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(headSha) || typeof body.token !== "string" || !/^[A-Za-z0-9._~-]{1,16384}$/.test(body.token) || typeof body.expiresAt !== "string" || !Number.isFinite(Date.parse(body.expiresAt)) || Date.parse(body.expiresAt) <= Date.now() + 3e4 || !permissions || Object.keys(permissions).sort().join(",") !== "contents,pullRequests" || permissions.contents !== "read" || permissions.pullRequests !== "read") {
+  if (Object.keys(body).sort().join(",") !== "expiresAt,headSha,permissions,protocolVersion,repository,runtimeConfig,token" || body.protocolVersion !== 1 || body.repository !== repository || body.headSha !== headSha || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(headSha) || typeof body.token !== "string" || !/^[A-Za-z0-9._~-]{1,16384}$/.test(body.token) || typeof body.expiresAt !== "string" || !Number.isFinite(Date.parse(body.expiresAt)) || Date.parse(body.expiresAt) <= Date.now() + 3e4 || !permissions || Object.keys(permissions).sort().join(",") !== "contents,pullRequests" || permissions.contents !== "read" || permissions.pullRequests !== "read") {
     throw new Error("account_gateway_checkout_capability_invalid");
   }
   return Object.freeze({
@@ -101239,7 +101278,8 @@ function validateAccountGatewayCheckout(result2, repository, headSha) {
     headSha,
     token: body.token,
     expiresAt: body.expiresAt,
-    permissions: Object.freeze({ contents: "read", pullRequests: "read" })
+    permissions: Object.freeze({ contents: "read", pullRequests: "read" }),
+    runtimeConfig: parseAdmittedRuntimeConfig(body.runtimeConfig)
   });
 }
 
@@ -115787,6 +115827,9 @@ function selectCodexProvider(config) {
   return selected;
 }
 async function applyReviewRuntimeConfig(input, fetchImpl, oidc) {
+  if (input.accountGateway) {
+    return applyAdmittedRuntimeConfig(input.accountGateway.runtimeConfig);
+  }
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = "oidc";
   process.env.REVIEWROUTER_API_URL = input.apiUrl;
   process.env.REVIEWROUTER_OIDC_AUDIENCE = input.audience;

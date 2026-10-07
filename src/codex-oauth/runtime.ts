@@ -140,6 +140,7 @@ export interface CodexOAuthV2ReviewRunnerPort {
     readonly codexHome: string;
     readonly codexBinaryPath?: string;
     readonly accountGateway?: {
+      readonly runtimeConfig: import('../control-plane/runtime-config').AdmittedRuntimeConfig;
       readonly signal?: AbortSignal;
       readonly controlPlane: import('../review-orchestration/infrastructure/review-action-v2-control-plane-adapter').ReviewActionV2ControlPlaneAdapter;
       readonly modelTransport: import('../review-orchestration/infrastructure/account-gateway-model-transport').LocalGatewayModelTransport;

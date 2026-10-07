@@ -1,3 +1,7 @@
+import {
+  parseAdmittedRuntimeConfig,
+  type AdmittedRuntimeConfig,
+} from '../control-plane/runtime-config';
 import { execFile } from 'child_process';
 import * as core from '../actions/core';
 import { promisify } from 'util';
@@ -49,6 +53,7 @@ export type AccountGatewayCheckoutCapability = Readonly<{
   token: string;
   expiresAt: string;
   permissions: Readonly<{ contents: 'read'; pullRequests: 'read' }>;
+  runtimeConfig: AdmittedRuntimeConfig;
 }>;
 
 /** Reuses existing v2 admission/renewal, isolated checkout and prepared CLI.
@@ -130,6 +135,7 @@ async function runAccountGatewayRuntimeInternal(
       authorization.facts.pullRequestNumber !== input.pullRequestNumber
     )
       throw new Error('account_gateway_authorization_input_mismatch');
+    let admittedRuntimeConfig: AdmittedRuntimeConfig | undefined;
     const readCapability =
       async (): Promise<AccountGatewayCheckoutCapability> => {
         const request: AccountGatewayCheckoutRequest = {
@@ -139,11 +145,30 @@ async function runAccountGatewayRuntimeInternal(
         run.signal.throwIfAborted();
         const result = await transport.checkoutCapability(request, run.signal);
         run.signal.throwIfAborted();
-        return validateAccountGatewayCheckout(
+        const capability = validateAccountGatewayCheckout(
           result,
           input.repository,
           authorization.facts.headSha
         );
+        if (admittedRuntimeConfig) {
+          const canonicalEnv = (config: AdmittedRuntimeConfig) =>
+            JSON.stringify(
+              Object.entries(config.runtimeEnv).sort(([a], [b]) =>
+                a < b ? -1 : a > b ? 1 : 0
+              )
+            );
+          if (
+            capability.runtimeConfig.configVersion !==
+              admittedRuntimeConfig.configVersion ||
+            canonicalEnv(capability.runtimeConfig) !==
+              canonicalEnv(admittedRuntimeConfig)
+          ) {
+            throw new Error('account_gateway_runtime_config_changed');
+          }
+        } else {
+          admittedRuntimeConfig = capability.runtimeConfig;
+        }
+        return capability;
       };
     const capability = await readCapability();
     run.signal.throwIfAborted();
@@ -201,6 +226,7 @@ async function runAccountGatewayRuntimeInternal(
       scmReadTokenExpiresAt: capability.expiresAt,
       refreshScmReadToken: readCapability,
       accountGateway: {
+        runtimeConfig: capability.runtimeConfig,
         controlPlane,
         modelTransport: {
           ...bridge,
@@ -301,7 +327,7 @@ export function validateAccountGatewayCheckout(
   const permissions = body.permissions as Record<string, unknown> | undefined;
   if (
     Object.keys(body).sort().join(',') !==
-      'expiresAt,headSha,permissions,protocolVersion,repository,token' ||
+      'expiresAt,headSha,permissions,protocolVersion,repository,runtimeConfig,token' ||
     body.protocolVersion !== 1 ||
     body.repository !== repository ||
     body.headSha !== headSha ||
@@ -326,5 +352,6 @@ export function validateAccountGatewayCheckout(
     token: body.token,
     expiresAt: body.expiresAt,
     permissions: Object.freeze({ contents: 'read', pullRequests: 'read' }),
+    runtimeConfig: parseAdmittedRuntimeConfig(body.runtimeConfig),
   });
 }

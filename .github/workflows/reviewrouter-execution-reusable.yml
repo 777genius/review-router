@@ -404,7 +404,7 @@ jobs:
 
       - name: Resolve ReviewRouter runtime provider tooling
         id: provider-tooling
-        if: ${{ inputs.codex_session_mode != 'codex_subscription_oauth_hosted_pool' && steps.runtime.outputs.can_run == 'true' }}
+        if: ${{ inputs.codex_session_mode != 'codex_subscription_oauth_hosted_pool' && !(inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') && steps.runtime.outputs.can_run == 'true' }}
         shell: bash
         env:
           REVIEW_ROUTER_MODE: runtime-preflight
@@ -424,7 +424,7 @@ jobs:
           permission-pull-requests: write
 
       - name: Install Codex CLI
-        if: ${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}
+        if: ${{ steps.runtime.outputs.can_run == 'true' && ((inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') || steps.provider-tooling.outputs.codex_cli_needed == 'true') }}
         shell: bash
         run: npm install -g @openai/codex@0.147.0
 
@@ -504,7 +504,7 @@ jobs:
       # Server checkout capability materializes the exact head in isolation.
       # No PR checkout, auth restoration, rotating prelease or writeback here.
       - name: Run ReviewRouter T0 account gateway
-        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway' && steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.runtime_config_status == 'applied' && steps.provider-tooling.outputs.account_gateway_needed == 'true' }}
+        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway' && steps.runtime.outputs.can_run == 'true' }}
         shell: bash
         env:
           REVIEWROUTER_ACTION_V2_MODE: t0

@@ -21,7 +21,10 @@ import { REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH } from '../../../src/rev
 import { ConfigLoader } from '../../../src/config/loader';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import { ReviewActionV2Client } from '../../../src/control-plane/review-action-v2-client';
-import { applyControlPlaneRuntimeConfig } from '../../../src/control-plane/runtime-config';
+import {
+  applyControlPlaneRuntimeConfig,
+  parseAdmittedRuntimeConfig,
+} from '../../../src/control-plane/runtime-config';
 import { GitHubActionsOidcTokenProvider } from '../../../src/codex-oauth/github-actions-oidc';
 import { ReviewActionV2ControlPlaneAdapter } from '../../../src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
 import { CodexProvider } from '../../../src/providers/codex';
@@ -487,6 +490,16 @@ describe('ProductionT0ReviewRunner policy', () => {
           ...(accountGateway
             ? {
                 accountGateway: {
+                  runtimeConfig: parseAdmittedRuntimeConfig({
+                    protocolVersion: 1,
+                    configVersion: 7,
+                    runtimeEnv: {
+                      CODEX_MODEL: model,
+                      ...(serverEffort === undefined
+                        ? {}
+                        : { CODEX_REASONING_EFFORT: serverEffort }),
+                    },
+                  }),
                   controlPlane,
                   modelTransport: {
                     baseUrl: 'http://127.0.0.1:1/v1',
@@ -509,8 +522,10 @@ describe('ProductionT0ReviewRunner policy', () => {
           await expect(operation).rejects.toBe(stoppedAtBoundary);
           expect(accountGateway ? current : authorize).toHaveBeenCalledTimes(1);
         }
+        expect(process.env.CODEX_MODEL).toBe(model);
         expect(process.env.CODEX_REASONING_EFFORT).toBe(expectedEffort);
-        expect(fetchImpl).toHaveBeenCalledTimes(2);
+        expect(fetchImpl).toHaveBeenCalledTimes(accountGateway ? 0 : 2);
+        expect(oidc).toHaveBeenCalledTimes(accountGateway ? 0 : 2);
         expect(execute).not.toHaveBeenCalled();
         expect(review).not.toHaveBeenCalled();
       } finally {

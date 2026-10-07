@@ -23481,6 +23481,30 @@ function safeOidcErrorCode(payload) {
 }
 
 // src/control-plane/runtime-config.ts
+function parseAdmittedRuntimeConfig(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join(",") !== "configVersion,protocolVersion,runtimeEnv") {
+    throw new Error("runtime_config_invalid_response");
+  }
+  const input = value;
+  if (typeof input.configVersion !== "number" || !Number.isSafeInteger(input.configVersion) || input.configVersion < 1 || Array.isArray(input.runtimeEnv)) {
+    throw new Error("runtime_config_invalid_response");
+  }
+  const parsed = parseRuntimeConfig(value);
+  if (parsed.ignoredRuntimeEnvKeys.length > 0) {
+    throw new Error("runtime_config_unsafe_admitted_env");
+  }
+  return Object.freeze({
+    protocolVersion: 1,
+    configVersion: parsed.configVersion,
+    runtimeEnv: Object.freeze(parsed.runtimeEnv)
+  });
+}
+function applyAdmittedRuntimeConfig(value, env = process.env) {
+  const config = parseAdmittedRuntimeConfig(value);
+  applyRuntimeEnv(config.runtimeEnv, env);
+  applyUltraRuntimeTimeoutFallback(config.runtimeEnv, env);
+  return config.runtimeEnv.CODEX_REASONING_EFFORT;
+}
 async function applyControlPlaneRuntimeConfig(input = {}) {
   const env = input.env ?? process.env;
   if (env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== "oidc") {
@@ -90293,6 +90317,9 @@ function selectCodexProvider(config) {
   return selected;
 }
 async function applyReviewRuntimeConfig(input, fetchImpl, oidc) {
+  if (input.accountGateway) {
+    return applyAdmittedRuntimeConfig(input.accountGateway.runtimeConfig);
+  }
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = "oidc";
   process.env.REVIEWROUTER_API_URL = input.apiUrl;
   process.env.REVIEWROUTER_OIDC_AUDIENCE = input.audience;

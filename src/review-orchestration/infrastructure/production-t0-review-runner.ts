@@ -12,7 +12,10 @@ import {
 } from '../../cache/key-builder';
 import { ConfigLoader } from '../../config/loader';
 export { ConfigLoader } from '../../config/loader';
-import { applyControlPlaneRuntimeConfig } from '../../control-plane/runtime-config';
+import {
+  applyAdmittedRuntimeConfig,
+  applyControlPlaneRuntimeConfig,
+} from '../../control-plane/runtime-config';
 import { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
 export { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../context-gateway/context-gateway-release-contract';
@@ -1654,6 +1657,9 @@ async function applyReviewRuntimeConfig(
   fetchImpl: typeof fetch,
   oidc: GitHubActionsOidcTokenProvider
 ): Promise<string | undefined> {
+  if (input.accountGateway) {
+    return applyAdmittedRuntimeConfig(input.accountGateway.runtimeConfig);
+  }
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = 'oidc';
   process.env.REVIEWROUTER_API_URL = input.apiUrl;
   process.env.REVIEWROUTER_OIDC_AUDIENCE = input.audience;

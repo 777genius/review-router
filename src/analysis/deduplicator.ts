@@ -89,7 +89,7 @@ function mergeFindings(existing: Finding, incoming: Finding): Finding {
           sourceFindingIds: Array.from(new Set([
             ...(existing.sourceFindingIds ?? []),
             ...(incoming.sourceFindingIds ?? []),
-          ])),
+          ])).sort(),
         }
       : {}),
     startLine: mergeStartLine(existing, incoming),

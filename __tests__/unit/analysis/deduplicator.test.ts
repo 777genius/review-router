@@ -24,8 +24,13 @@ describe('Deduplicator', () => {
     const snapshot = JSON.stringify(findings);
     const deduped = new Deduplicator().dedupe(findings);
     expect(deduped).toHaveLength(2);
-    expect(deduped[0].sourceFindingIds).toEqual(['a', 'shared', 'b', 'c']);
+    expect(deduped[0].sourceFindingIds).toEqual(['a', 'b', 'c', 'shared']);
     expect(deduped[1].sourceFindingIds).toEqual(['d']);
+    const reversed = new Deduplicator().dedupe([...findings].reverse());
+    expect(
+      reversed.find((finding) => finding.sourceFindingIds?.includes('a'))
+        ?.sourceFindingIds
+    ).toEqual(['a', 'b', 'c', 'shared']);
     expect(new Deduplicator().dedupe(deduped)).toEqual(deduped);
     expect(JSON.stringify(findings)).toBe(snapshot);
   });

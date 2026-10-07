@@ -924,39 +924,51 @@ index 51097d9..d0723db 100644
       expect(stats.filtered).toBe(1);
     });
 
-    test('deduplicates similar findings', () => {
-      const findings: Finding[] = [
-        {
-          file: 'src/app.ts',
-          line: 10,
-          severity: 'major',
-          title: 'Security Risk: Fork PR Secret Exposure',
-          message: 'First occurrence',
-        },
-        {
-          file: 'src/app.ts',
-          line: 20,
-          severity: 'critical',
-          title: 'Security Risk: Fork PR Secret Exposure!',
-          message: 'Second occurrence',
-        },
-        {
-          file: 'src/app.ts',
-          line: 30,
-          severity: 'major',
-          title: 'Security Risk Fork PR Secret Exposure',
-          message: 'Third occurrence',
-        },
-      ];
+    test.each([false, true])(
+      'deduplicates similar findings without losing sources (reversed=%s)',
+      (reversed) => {
+        const findings: Finding[] = [
+          {
+            file: 'src/app.ts',
+            line: 10,
+            severity: 'major',
+            title: 'Security Risk: Fork PR Secret Exposure',
+            message: 'First occurrence',
+            sourceFindingIds: ['a', 'shared'],
+          },
+          {
+            file: 'src/app.ts',
+            line: 20,
+            severity: 'critical',
+            title: 'Security Risk: Fork PR Secret Exposure!',
+            message: 'Second occurrence',
+            sourceFindingIds: ['b', 'shared'],
+          },
+          {
+            file: 'src/app.ts',
+            line: 30,
+            severity: 'major',
+            title: 'Security Risk Fork PR Secret Exposure',
+            message: 'Third occurrence',
+            sourceFindingIds: ['c'],
+          },
+        ];
+        const snapshot = JSON.stringify(findings);
+        const input = reversed ? [...findings].reverse() : findings;
 
-      const { findings: filtered, stats } = filter.filter(findings, '');
+        const { findings: filtered, stats } = filter.filter(input, '');
 
-      // Should keep only one (the most severe)
-      expect(filtered).toHaveLength(1);
-      expect(filtered[0].severity).toBe('critical');
-      expect(stats.filtered).toBe(2);
-      expect(stats.reasons['duplicate finding']).toBe(2);
-    });
+        // Should keep only one (the most severe)
+        expect(filtered).toHaveLength(1);
+        expect(filtered[0]).toEqual({
+          ...findings[1],
+          sourceFindingIds: ['a', 'b', 'c', 'shared'],
+        });
+        expect(JSON.stringify(findings)).toBe(snapshot);
+        expect(stats.filtered).toBe(2);
+        expect(stats.reasons['duplicate finding']).toBe(2);
+      }
+    );
 
     test('filters jest.setup.ts issues', () => {
       const findings: Finding[] = [

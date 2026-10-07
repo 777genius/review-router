@@ -18,6 +18,16 @@ describe('GitHubClient', () => {
   });
 
   describe('Initialization', () => {
+    it('uses an explicit repository without changing the shared Actions environment', () => {
+      const client = new GitHubClient(mockToken, {
+        repository: 'disposable-test/canary',
+      });
+
+      expect(client.owner).toBe('disposable-test');
+      expect(client.repo).toBe('canary');
+      expect(process.env.GITHUB_REPOSITORY).toBe('owner/repo');
+    });
+
     it('creates client with token', () => {
       const client = new GitHubClient(mockToken);
 

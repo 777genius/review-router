@@ -506,6 +506,7 @@ if (process.argv[2] === '--source-main') {
             '{reviewrouter_output_file}',
           ],
           outputSchema: {},
+          validateOutputLocally: false,
           environment: { PATH: '/usr/bin:/bin', HOME: root },
           eventAudit: false,
           jsonEvents: false,

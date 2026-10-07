@@ -9,6 +9,7 @@ import {
   type CodexContextGatewayInvocationConfig,
 } from '../../../src/providers/codex';
 import { RateLimitError } from '../../../src/providers/base';
+import { buildReviewFindingsSchema } from '../../../src/providers/review-output';
 import { logger } from '../../../src/utils/logger';
 import type { LocalGatewayModelTransport } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 
@@ -108,139 +109,161 @@ describe('CodexProvider', () => {
     process.env = originalEnv;
   });
 
-  it('pins bounded MiMo metadata to the fresh gateway home on repeated preparations', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mimo-catalog-test-'));
-    const cwd = process.cwd();
-    // Frozen official MiMo metadata; independent of the production helper.
-    const bounded = {
-      models: [
-        {
-          slug: 'mimo-v2.6-pro',
-          display_name: 'MiMo-V2.6-Pro',
-          description: 'Xiaomi MiMo: MiMo-V2.6-Pro',
-          base_instructions: '',
-          default_reasoning_level: 'low',
-          supported_reasoning_levels: [
-            {
-              effort: 'none',
-              description: 'No extra reasoning for faster responses',
-            },
-            {
-              effort: 'low',
-              description: 'Fast responses with lighter reasoning',
-            },
-            {
-              effort: 'medium',
-              description:
-                'Balances speed and reasoning depth for everyday tasks',
-            },
-            {
-              effort: 'high',
-              description: 'Greater reasoning depth for complex problems',
-            },
-          ],
-          shell_type: 'unified_exec',
-          visibility: 'list',
-          supported_in_api: true,
-          priority: 0,
-          support_verbosity: false,
-          apply_patch_tool_type: 'freeform',
-          truncation_policy: { mode: 'tokens', limit: 10000 },
-          supports_parallel_tool_calls: false,
-          context_window: 1048576,
-          max_context_window: 1048576,
-          auto_compact_token_limit: null,
-          comp_hash: '3000',
-          default_reasoning_summary: 'none',
-          input_modalities: ['text', 'image'],
-          supports_image_detail_original: true,
-          experimental_supported_tools: ['send_user_message_async', 'clock'],
-          use_responses_lite: true,
-          tool_mode: 'code_mode_only',
-          multi_agent_version: 'v2',
-          include_skills_usage_instructions: false,
-          include_apps_usage_instructions: false,
-          include_plugin_usage_instructions: false,
-          auto_review_model_override: null,
-          model_specialty: null,
-        },
-      ],
-    };
-    try {
-      const home = path.join(root, 'fresh-home');
-      const checkout = path.join(root, 'checkout');
-      const callerHome = path.join(root, 'caller-home');
-      fs.mkdirSync(home);
-      fs.mkdirSync(callerHome);
-      fs.mkdirSync(path.join(checkout, '.codex'), { recursive: true });
-      const callerCatalog = path.join(callerHome, 'untrusted.json');
-      fs.writeFileSync(callerCatalog, 'caller sentinel');
-      const checkoutConfig = path.join(checkout, '.codex/config.toml');
-      const untrustedConfig = `model_catalog_json=${JSON.stringify(callerCatalog)}\n`;
-      fs.writeFileSync(checkoutConfig, untrustedConfig);
-      process.env.CODEX_HOME = callerHome;
-      process.env.CODEX_CONFIG_TOML = untrustedConfig;
-      process.chdir(checkout);
-      const gateway: LocalGatewayModelTransport = {
-        baseUrl: 'http://127.0.0.1:1/v1',
-        environment: { CODEX_HOME: home },
-        configuration: ['model_provider="reviewrouter_account_gateway"'],
-        actualModel: () => 'mimo-v2.6-pro',
-        dispose: async () => {},
+  it.each([undefined, 'mimo'] as const)(
+    'pins bounded MiMo metadata to the fresh gateway home on repeated preparations (modelProvider=%s)',
+    async (modelProvider) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mimo-catalog-test-'));
+      const cwd = process.cwd();
+      // Frozen official MiMo metadata; independent of the production helper.
+      const bounded = {
+        models: [
+          {
+            slug: 'mimo-v2.6-pro',
+            display_name: 'MiMo-V2.6-Pro',
+            description: 'Xiaomi MiMo: MiMo-V2.6-Pro',
+            base_instructions: '',
+            default_reasoning_level: 'low',
+            supported_reasoning_levels: [
+              {
+                effort: 'none',
+                description: 'No extra reasoning for faster responses',
+              },
+              {
+                effort: 'low',
+                description: 'Fast responses with lighter reasoning',
+              },
+              {
+                effort: 'medium',
+                description:
+                  'Balances speed and reasoning depth for everyday tasks',
+              },
+              {
+                effort: 'high',
+                description: 'Greater reasoning depth for complex problems',
+              },
+            ],
+            shell_type: 'unified_exec',
+            visibility: 'list',
+            supported_in_api: true,
+            priority: 0,
+            support_verbosity: false,
+            apply_patch_tool_type: 'freeform',
+            truncation_policy: { mode: 'tokens', limit: 10000 },
+            supports_parallel_tool_calls: false,
+            context_window: 1048576,
+            max_context_window: 1048576,
+            auto_compact_token_limit: null,
+            comp_hash: '3000',
+            default_reasoning_summary: 'none',
+            input_modalities: ['text', 'image'],
+            supports_image_detail_original: true,
+            experimental_supported_tools: ['send_user_message_async', 'clock'],
+            use_responses_lite: true,
+            tool_mode: 'code_mode_only',
+            multi_agent_version: 'v2',
+            include_skills_usage_instructions: false,
+            include_apps_usage_instructions: false,
+            include_plugin_usage_instructions: false,
+            auto_review_model_override: null,
+            model_specialty: null,
+          },
+        ],
       };
-      const provider = new CodexProvider('mimo-v2.6-pro', {
-        agenticContext: false,
-        accountGateway: gateway,
-      });
-      overridePrivate(
-        provider,
-        'resolveBinary',
-        jest.fn().mockResolvedValue('/mock/codex')
-      );
-      const first = await provider.prepareInvocation('review input', 1_000);
-      const catalogPath = path.join(home, 'reviewrouter-model-catalog.json');
-      const catalogBytes = fs.readFileSync(catalogPath, 'utf8');
-      const catalog = JSON.parse(catalogBytes);
-      expect(Object.keys(catalog)).toEqual(['models']);
-      expect(catalog.models).toEqual(bounded.models);
-      expect(catalog.models).toHaveLength(1);
-      expect(catalog.models[0]).toMatchObject({
-        use_responses_lite: true,
-        apply_patch_tool_type: 'freeform',
-        tool_mode: 'code_mode_only',
-        supports_parallel_tool_calls: false,
-      });
-      const setting = `model_catalog_json=${JSON.stringify(catalogPath)}`;
-      const configBytes = [...gateway.configuration, setting].join('\n') + '\n';
-      expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(
-        configBytes
-      );
-      expect(fs.statSync(catalogPath).mode & 0o777).toBe(0o600);
-      expect(fs.statSync(path.join(home, 'config.toml')).mode & 0o777).toBe(
-        0o600
-      );
-      expect(first.request.argsTemplate.slice(-3)).toEqual([
-        '-c',
-        setting,
-        '-',
-      ]);
-      expect(first.request.environment.CODEX_HOME).toBe(home);
-      const second = await provider.prepareInvocation('review input', 1_000);
-      expect(second.request.argsTemplate).toEqual(first.request.argsTemplate);
-      expect(fs.readFileSync(catalogPath, 'utf8')).toBe(catalogBytes);
-      expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(
-        configBytes
-      );
-      expect(fs.readFileSync(checkoutConfig, 'utf8')).toBe(untrustedConfig);
-      expect(fs.readFileSync(callerCatalog, 'utf8')).toBe('caller sentinel');
-      expect(fs.readdirSync(callerHome)).toEqual(['untrusted.json']);
-      expect(spawnMock).not.toHaveBeenCalled();
-      expect(spawnSyncMock).not.toHaveBeenCalled();
-    } finally {
-      process.chdir(cwd);
-      fs.rmSync(root, { recursive: true, force: true });
+      try {
+        const home = path.join(root, 'fresh-home');
+        const checkout = path.join(root, 'checkout');
+        const callerHome = path.join(root, 'caller-home');
+        fs.mkdirSync(home);
+        fs.mkdirSync(callerHome);
+        fs.mkdirSync(path.join(checkout, '.codex'), { recursive: true });
+        const callerCatalog = path.join(callerHome, 'untrusted.json');
+        fs.writeFileSync(callerCatalog, 'caller sentinel');
+        const checkoutConfig = path.join(checkout, '.codex/config.toml');
+        const untrustedConfig = `model_catalog_json=${JSON.stringify(callerCatalog)}\n`;
+        fs.writeFileSync(checkoutConfig, untrustedConfig);
+        process.env.CODEX_HOME = callerHome;
+        process.env.CODEX_CONFIG_TOML = untrustedConfig;
+        delete process.env.MIMO_TOKEN_PLAN_API_KEY;
+        process.chdir(checkout);
+        const gateway: LocalGatewayModelTransport = {
+          baseUrl: 'http://127.0.0.1:1/v1',
+          environment: { CODEX_HOME: home },
+          configuration: ['model_provider="reviewrouter_account_gateway"'],
+          actualModel: () => 'mimo-v2.6-pro',
+          dispose: async () => {},
+        };
+        const provider = new CodexProvider('mimo-v2.6-pro', {
+          agenticContext: false,
+          accountGateway: gateway,
+          ...(modelProvider ? { modelProvider } : {}),
+        });
+        overridePrivate(
+          provider,
+          'resolveBinary',
+          jest.fn().mockResolvedValue('/mock/codex')
+        );
+        const first = await provider.prepareInvocation('review input', 1_000);
+        const catalogPath = path.join(home, 'reviewrouter-model-catalog.json');
+        const catalogBytes = fs.readFileSync(catalogPath, 'utf8');
+        const catalog = JSON.parse(catalogBytes);
+        expect(Object.keys(catalog)).toEqual(['models']);
+        expect(catalog.models).toEqual(bounded.models);
+        expect(catalog.models).toHaveLength(1);
+        expect(catalog.models[0]).toMatchObject({
+          use_responses_lite: true,
+          apply_patch_tool_type: 'freeform',
+          tool_mode: 'code_mode_only',
+          supports_parallel_tool_calls: false,
+        });
+        const setting = `model_catalog_json=${JSON.stringify(catalogPath)}`;
+        const configBytes =
+          [...gateway.configuration, setting].join('\n') + '\n';
+        const gatewayConfig = fs.readFileSync(
+          path.join(home, 'config.toml'),
+          'utf8'
+        );
+        expect(gatewayConfig).toBe(configBytes);
+        expect(gatewayConfig).not.toContain('MIMO_TOKEN_PLAN_API_KEY');
+        expect(gatewayConfig).not.toContain('model_providers.mimo.');
+        expect(first.request.argsTemplate).not.toContain(
+          'model_provider="mimo"'
+        );
+        expect(first.request.argsTemplate).not.toContain(
+          'model_providers.mimo.env_key="MIMO_TOKEN_PLAN_API_KEY"'
+        );
+        expect(first.request.argsTemplate.join('\n')).not.toContain(
+          'token-plan-sgp.xiaomimimo.com'
+        );
+        expect(fs.statSync(catalogPath).mode & 0o777).toBe(0o600);
+        expect(fs.statSync(path.join(home, 'config.toml')).mode & 0o777).toBe(
+          0o600
+        );
+        expect(first.request.argsTemplate.slice(-3)).toEqual([
+          '-c',
+          setting,
+          '-',
+        ]);
+        expect(first.request.environment.CODEX_HOME).toBe(home);
+        expect(first.request.environment).not.toHaveProperty(
+          'MIMO_TOKEN_PLAN_API_KEY'
+        );
+        const second = await provider.prepareInvocation('review input', 1_000);
+        expect(second.request.argsTemplate).toEqual(first.request.argsTemplate);
+        expect(fs.readFileSync(catalogPath, 'utf8')).toBe(catalogBytes);
+        expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(
+          configBytes
+        );
+        expect(fs.readFileSync(checkoutConfig, 'utf8')).toBe(untrustedConfig);
+        expect(fs.readFileSync(callerCatalog, 'utf8')).toBe('caller sentinel');
+        expect(fs.readdirSync(callerHome)).toEqual(['untrusted.json']);
+        expect(spawnMock).not.toHaveBeenCalled();
+        expect(spawnSyncMock).not.toHaveBeenCalled();
+      } finally {
+        process.chdir(cwd);
+        fs.rmSync(root, { recursive: true, force: true });
+      }
     }
-  });
+  );
 
   // Regression: the gateway home was passed as a credential, so the lease
   // runtime_config guard rejected a valid review before the exec spawn.
@@ -505,6 +528,221 @@ describe('CodexProvider', () => {
       ])
     );
     expect(args).toContain('--ignore-user-config');
+    expect(args).toContain('--output-schema');
+  });
+
+  it('can route Codex CLI through MiMo Token Plan without user config', () => {
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+      outputSchemaFile: '/tmp/codex-schema.json',
+    });
+
+    expect(provider.name).toBe('codex-mimo/mimo-v2.6-pro');
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '-c',
+        'model_provider="mimo"',
+        'model_providers.mimo.name="MiMo Token Plan"',
+        'model_providers.mimo.base_url="https://token-plan-sgp.xiaomimimo.com/v1"',
+        'model_providers.mimo.wire_api="responses"',
+        'model_providers.mimo.env_key="MIMO_TOKEN_PLAN_API_KEY"',
+        'web_search="disabled"',
+      ])
+    );
+    expect(args).toContain('--ignore-user-config');
+    expect(args).not.toContain('--output-schema');
+    expect(args).not.toContain('/tmp/codex-schema.json');
+  });
+
+  it('prepares MiMo review without a CLI schema while keeping read-only exploration', async () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      agenticContext: true,
+    });
+    overridePrivate(provider, 'resolveBinary', async () => '/tmp/fake-codex');
+    const invocation = await provider.prepareInvocation('review prompt', 1000);
+    const { request } = invocation;
+    const args = request.argsTemplate;
+
+    expect(args).not.toContain('--output-schema');
+    expect(args).toEqual(expect.arrayContaining(['--sandbox', 'read-only']));
+    expect(request.prompt).toContain('run read-only exploration commands');
+    expect(request.outputSchema).toEqual(buildReviewFindingsSchema());
+    expect(request.environment.MIMO_TOKEN_PLAN_API_KEY).toBeUndefined();
+  });
+
+  it('validates MiMo review output locally after a prepared invocation', async () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      agenticContext: false,
+    });
+    overridePrivate(provider, 'resolveBinary', async () => '/tmp/fake-codex');
+    const invocation = await provider.prepareInvocation('review prompt', 1000);
+    const validFinding = {
+      file: 'src/app.ts',
+      startLine: null,
+      line: 1,
+      endLine: null,
+      severity: 'major',
+      title: 'Crash',
+      message: 'Evidence',
+      suggestion: null,
+    };
+    let response = JSON.stringify({
+      findings: [validFinding],
+      revalidations: [],
+    });
+    spawnMock.mockImplementation((_cmd: string, args: string[]) =>
+      createMockProcess(() => {
+        fs.writeFileSync(
+          args[args.indexOf('--output-last-message') + 1],
+          response
+        );
+      })
+    );
+
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).resolves.toMatchObject({
+      findings: [{ file: 'src/app.ts', line: 1, severity: 'major' }],
+      revalidations: [],
+    });
+    expect(spawnMock.mock.calls[0][1]).not.toContain('--output-schema');
+    response = JSON.stringify({
+      findings: [{ ...validFinding, suggestion: undefined }],
+      revalidations: [],
+    });
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).rejects.toThrow('Codex CLI returned invalid review JSON');
+    response = JSON.stringify({
+      findings: [validFinding],
+      revalidations: [{ targetId: 'target', verdict: 'invalid' }],
+    });
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).rejects.toThrow('Codex CLI returned invalid review JSON');
+    response = JSON.stringify({
+      findings: [validFinding],
+      revalidations: [],
+      extra: true,
+    });
+    await expect(
+      provider.executePreparedInvocation(invocation)
+    ).rejects.toThrow('Codex CLI returned invalid review JSON');
+  });
+
+  it('validates MiMo structured prompts locally without a CLI schema', async () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+    });
+    overridePrivate(provider, 'resolveBinary', async () => '/tmp/fake-codex');
+    let response = '{"ok":true}';
+    let providerInput = '';
+    spawnMock.mockImplementation(
+      (
+        _cmd: string,
+        args: string[],
+        options: { stdio: [number, string, string] }
+      ) => {
+        providerInput = fs.readFileSync(options.stdio[0], 'utf8');
+        return createMockProcess(() => {
+          fs.writeFileSync(
+            args[args.indexOf('--output-last-message') + 1],
+            response
+          );
+        });
+      }
+    );
+    const schema = {
+      type: 'object',
+      additionalProperties: false,
+      required: ['ok'],
+      properties: { ok: { type: 'boolean' } },
+    };
+
+    await expect(
+      provider.runStructuredPrompt('Return JSON', schema, 1000)
+    ).resolves.toBe(response);
+    expect(spawnMock.mock.calls[0][1]).not.toContain('--output-schema');
+    expect(providerInput).toContain('Return JSON');
+    expect(providerInput).toContain('"required":["ok"]');
+    expect(providerInput).toContain('"properties":{"ok":{"type":"boolean"}}');
+    expect(providerInput).toContain('"additionalProperties":false');
+    response = '{"ok":"true"}';
+    await expect(
+      provider.runStructuredPrompt('Return JSON', schema, 1000)
+    ).rejects.toThrow('Codex CLI returned invalid structured JSON');
+  });
+
+  it('keeps shell tools available while excluding provider credentials from their environment', () => {
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-provider-test';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+    const args = (provider as any).buildExecArgs({
+      healthCheck: false,
+      outputLastMessageFile: '/tmp/codex-output.txt',
+    });
+
+    expect(args).toEqual(
+      expect.arrayContaining([
+        '-c',
+        'shell_environment_policy.ignore_default_excludes=false',
+        'shell_environment_policy.filters={OPENAI_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}',
+      ])
+    );
+    expect(args).not.toContain('shell_tool');
+    expect(
+      (provider as any).buildSafeEnv(false, {
+        forkSandbox: false,
+        modelProvider: 'mimo',
+      }).MIMO_TOKEN_PLAN_API_KEY
+    ).toBe('mimo-provider-test');
+  });
+
+  it('directs MiMo authentication failures to the MiMo credential', () => {
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+    const message = (provider as any).withActionableAuthHint(
+      '401 unauthorized from MiMo Token Plan'
+    );
+
+    expect(message).toContain('Verify MIMO_TOKEN_PLAN_API_KEY');
+    expect(message).not.toContain('codex login');
+    expect(message).not.toContain('OPENAI_API_KEY');
+
+    expect((provider as any).withActionableAuthHint(message)).toBe(message);
+  });
+
+  it('fails before Codex CLI preparation when the MiMo Token Plan key is absent', async () => {
+    delete process.env.MIMO_TOKEN_PLAN_API_KEY;
+    spawnMock.mockImplementation(() => {
+      throw new Error(
+        'Codex CLI resolution must not start without credentials'
+      );
+    });
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+
+    await expect(
+      provider.prepareInvocation('review prompt', 1000)
+    ).rejects.toThrow(
+      'codex_mimo_api_key_missing: MIMO_TOKEN_PLAN_API_KEY is required for codex-mimo/mimo-v2.6-pro'
+    );
   });
 
   it('can keep public OpenRouter provider identity while stripping instance suffix from Codex model', () => {

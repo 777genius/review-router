@@ -46,6 +46,21 @@ describe('normalizeReviewError', () => {
     ).toBe('openrouter_api_key_invalid');
   });
 
+  it.each([
+    'Codex MiMo authentication failed: 401 Unauthorized',
+    'codex_mimo_api_key_missing: MIMO_TOKEN_PLAN_API_KEY is required',
+  ])(
+    'classifies MiMo authentication failures with MiMo guidance (%s)',
+    (message) => {
+      const error = normalizeReviewError(new Error(message));
+
+      expect(error.code).toBe('mimo_api_key_invalid');
+      expect(error.category).toBe('provider_auth');
+      expect(formatActionError(error)).toContain('MIMO_TOKEN_PLAN_API_KEY');
+      expect(formatActionError(error)).not.toContain('OPENAI_API_KEY');
+    }
+  );
+
   it('classifies GitHub permission and inline comment failures', () => {
     expect(
       normalizeReviewError(new Error('Resource not accessible by integration'))

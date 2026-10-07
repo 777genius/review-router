@@ -57,6 +57,112 @@ export type CodexReviewAssignment = {
   readonly liveLifecycleStateHash: string;
 };
 
+export type CodexPreparedReviewInvocation = PreparedReviewInvocation & {
+  /** In-memory only: contains review context; never log or persist these bytes. */
+  readonly manifestPreimages: Readonly<{
+    providerCapabilityHash: string;
+    providerRequestEnvelopeHash: string;
+    outputSchemaHash: string;
+    filePatchManifestHash: string;
+    contextManifestHash: string;
+    lifecycleTargetSetHash: string | null;
+    toolPolicyHash: string;
+    baseTreeHash: string | null;
+    environmentContractHash: string;
+  }>;
+};
+
+/** Shared prompt/coverage preparation, before any provider or gateway preparation. */
+export async function prepareCodexReviewPrompt(
+  promptBuilder: Pick<PromptBuilder, 'buildPreparedV2'>,
+  assignment: CodexReviewAssignment,
+  investigationManifestBindingEnabled: boolean
+) {
+  const effectiveLifecycleTargets = investigationManifestBindingEnabled
+    ? []
+    : assignment.lifecycleTargets;
+  const preparedPrompt = await promptBuilder.buildPreparedV2(
+    assignment.context,
+    assignment.context.number,
+    [...effectiveLifecycleTargets]
+  );
+  const coverageManifest = createReviewPromptCoverageManifest({
+    workSlotId: assignment.workSlot.workSlotId,
+    reviewRevisionHash: assignment.reviewRevisionHash,
+    assignedPaths: assignment.context.files.map((file) => file.filename),
+    pathCoverage: preparedPrompt.pathCoverage,
+  });
+  const providerVisibleCoverage =
+    createProviderVisibleReviewCoverage(coverageManifest);
+  const coverageCanonicalJson = serializeProviderVisibleReviewCoverage(
+    providerVisibleCoverage
+  );
+  const prompt = `${preparedPrompt.prompt}\n\nREVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
+    coverageCanonicalJson,
+    'utf8'
+  ).toString('base64url')}`;
+  const investigationContextPrompt = `${preparedPrompt.investigationContextPrompt}\n\nREVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
+    coverageCanonicalJson,
+    'utf8'
+  ).toString('base64url')}`;
+  const revision = Object.freeze({
+    baseSha: assignment.context.baseSha,
+    mergeBaseSha: assignment.mergeBaseSha,
+    headSha: assignment.context.headSha,
+  });
+  const manifestPreimages = Object.freeze({
+    filePatchManifestHash: canonicalJson(
+      assignment.context.files.map((file) => ({
+        additions: file.additions,
+        changes: file.changes,
+        deletions: file.deletions,
+        filename: file.filename,
+        patch: file.patch ?? null,
+        previousFilename: file.previousFilename ?? null,
+        status: file.status,
+      }))
+    ),
+    contextManifestHash: canonicalJson({
+      author: assignment.context.author,
+      body: assignment.context.body,
+      coverageHash: providerVisibleCoverage.coverageHash,
+      lifecycleTargetIds: effectiveLifecycleTargets
+        .map((target) => target.targetId)
+        .sort(),
+      investigationProbePlanHash:
+        preparedPrompt.investigationProbePlan.planHash,
+      investigationProbePlanStatus:
+        preparedPrompt.investigationProbePlan.status,
+      number: assignment.context.number,
+      title: assignment.context.title,
+    }),
+    lifecycleTargetSetHash:
+      effectiveLifecycleTargets.length > 0
+        ? canonicalJson(
+            effectiveLifecycleTargets
+              .map((target) => ({
+                fingerprint: target.fingerprint,
+                targetId: target.targetId,
+              }))
+              .sort((left, right) =>
+                compareCodeUnits(left.targetId, right.targetId)
+              )
+          )
+        : null,
+  });
+  return Object.freeze({
+    effectiveLifecycleTargets,
+    preparedPrompt,
+    coverageManifest,
+    providerVisibleCoverage,
+    coverageCanonicalJson,
+    prompt,
+    investigationContextPrompt,
+    revision,
+    manifestPreimages,
+  });
+}
+
 export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPort {
   private readonly assignments = new Map<string, CodexReviewAssignment>();
   private readonly prepared = new WeakMap<
@@ -88,43 +194,24 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
   async prepare(input: {
     readonly workSlot: ReviewWorkSlotPlan;
     readonly attemptOrdinal: number;
-  }): Promise<PreparedReviewInvocation> {
+  }): Promise<CodexPreparedReviewInvocation> {
     const assignment = this.assignments.get(input.workSlot.workSlotId);
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error('review_action_v2_assignment_missing');
     }
-    const effectiveLifecycleTargets = this.investigationManifestBindingEnabled
-      ? []
-      : assignment.lifecycleTargets;
-    const preparedPrompt = await this.promptBuilder.buildPreparedV2(
-      assignment.context,
-      assignment.context.number,
-      [...effectiveLifecycleTargets]
+    const {
+      effectiveLifecycleTargets,
+      preparedPrompt,
+      coverageManifest,
+      prompt,
+      investigationContextPrompt,
+      revision,
+      manifestPreimages,
+    } = await prepareCodexReviewPrompt(
+      this.promptBuilder,
+      assignment,
+      this.investigationManifestBindingEnabled
     );
-    const coverageManifest = createReviewPromptCoverageManifest({
-      workSlotId: input.workSlot.workSlotId,
-      reviewRevisionHash: assignment.reviewRevisionHash,
-      assignedPaths: assignment.context.files.map((file) => file.filename),
-      pathCoverage: preparedPrompt.pathCoverage,
-    });
-    const providerVisibleCoverage =
-      createProviderVisibleReviewCoverage(coverageManifest);
-    const coverageCanonicalJson = serializeProviderVisibleReviewCoverage(
-      providerVisibleCoverage
-    );
-    const prompt = `${preparedPrompt.prompt}\n\nREVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
-      coverageCanonicalJson,
-      'utf8'
-    ).toString('base64url')}`;
-    const investigationContextPrompt = `${preparedPrompt.investigationContextPrompt}\n\nREVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
-      coverageCanonicalJson,
-      'utf8'
-    ).toString('base64url')}`;
-    const revision = Object.freeze({
-      baseSha: assignment.context.baseSha,
-      mergeBaseSha: assignment.mergeBaseSha,
-      headSha: assignment.context.headSha,
-    });
     const shouldPrepareInvestigationSeed =
       this.investigationManifestBindingEnabled &&
       preparedPrompt.investigationProbePlan.status ===
@@ -193,6 +280,69 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
           requestedModel: prepared.requestedModel,
         })
       : null;
+    const invocationPreimages = Object.freeze({
+      ...manifestPreimages,
+      providerCapabilityHash:
+        investigationContract ??
+        canonicalJson({
+          agenticContext: this.agenticContext,
+          contextGateway: gatewayPlanningConfig
+            ? {
+                gatewayBinaryHash: gatewayPlanningConfig.gatewayBinaryHash,
+                gatewayPolicyVersion:
+                  gatewayPlanningConfig.gatewayPolicyVersion,
+                enabledTools: [...gatewayPlanningConfig.enabledTools].sort(),
+              }
+            : null,
+          preparedInvocationContract: PROVIDER_EXECUTION_CONTRACT_VERSION,
+          providerKind: prepared.providerKind,
+        }),
+      providerRequestEnvelopeHash:
+        investigationSeedEnvelope?.canonicalJson ??
+        prepared.observableInputPreimage,
+      outputSchemaHash: canonicalJson(
+        investigationEligible
+          ? buildReviewAgentTurnOutputSchema()
+          : (request.outputSchema ?? null)
+      ),
+      toolPolicyHash: canonicalJson(
+        gatewayPlanningConfig
+          ? {
+              sandbox: 'read-only',
+              network: false,
+              workspaceMutation: false,
+              builtinTools: false,
+              mcpTransport: 'stdio',
+              gatewayBinaryHash: gatewayPlanningConfig.gatewayBinaryHash,
+              gatewayPolicyVersion: gatewayPlanningConfig.gatewayPolicyVersion,
+              textSearchMatchMode: 'fixed_string',
+              enabledTools: [...gatewayPlanningConfig.enabledTools].sort(),
+            }
+          : {
+              sandbox: 'read-only',
+              network: 'provider-controlled',
+              workspaceMutation: false,
+            }
+      ),
+      baseTreeHash: gatewayPlanningConfig
+        ? gatewayPlanningConfig.runtimeEnvironment
+            .REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID!
+        : null,
+      environmentContractHash: investigationEligible
+        ? canonicalJson({
+            credentialKeys: [
+              'CODEX_HOME',
+              'OPENAI_API_KEY',
+              'OPENROUTER_API_KEY',
+            ],
+            gitConfigGlobal: '/dev/null',
+            gitConfigNoSystem: '1',
+            userConfig: 'ignored',
+          })
+        : canonicalJson(
+            this.provider.describePreparedEnvironmentContract(prepared)
+          ),
+    });
     return Object.freeze({
       workSlotId: input.workSlot.workSlotId,
       attemptOrdinal: input.attemptOrdinal,
@@ -206,107 +356,28 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
       coverageManifest,
       investigationProbePlan: preparedPrompt.investigationProbePlan,
       investigationSeedEnvelope,
+      manifestPreimages: invocationPreimages,
       manifestFacts: Object.freeze({
         taskKindSet,
         providerKind: ReviewExecutionProviderKind.Codex,
         providerCapabilityHash: sha256(
-          investigationContract ??
-            canonicalJson({
-              agenticContext: this.agenticContext,
-              contextGateway: gatewayPlanningConfig
-                ? {
-                    gatewayBinaryHash: gatewayPlanningConfig.gatewayBinaryHash,
-                    gatewayPolicyVersion:
-                      gatewayPlanningConfig.gatewayPolicyVersion,
-                    enabledTools: [
-                      ...gatewayPlanningConfig.enabledTools,
-                    ].sort(),
-                  }
-                : null,
-              preparedInvocationContract: PROVIDER_EXECUTION_CONTRACT_VERSION,
-              providerKind: prepared.providerKind,
-            })
+          invocationPreimages.providerCapabilityHash
         ),
-        providerRequestEnvelopeHash: investigationSeedEnvelope
-          ? investigationSeedEnvelope.hash
-          : sha256(prepared.observableInputPreimage),
-        outputSchemaHash: sha256(
-          canonicalJson(
-            investigationEligible
-              ? buildReviewAgentTurnOutputSchema()
-              : (request.outputSchema ?? null)
-          )
+        providerRequestEnvelopeHash: sha256(
+          invocationPreimages.providerRequestEnvelopeHash
         ),
-        filePatchManifestHash: sha256(
-          canonicalJson(
-            assignment.context.files.map((file) => ({
-              additions: file.additions,
-              changes: file.changes,
-              deletions: file.deletions,
-              filename: file.filename,
-              patch: file.patch ?? null,
-              previousFilename: file.previousFilename ?? null,
-              status: file.status,
-            }))
-          )
-        ),
-        contextManifestHash: sha256(
-          canonicalJson({
-            author: assignment.context.author,
-            body: assignment.context.body,
-            coverageHash: providerVisibleCoverage.coverageHash,
-            lifecycleTargetIds: effectiveLifecycleTargets
-              .map((target) => target.targetId)
-              .sort(),
-            investigationProbePlanHash:
-              preparedPrompt.investigationProbePlan.planHash,
-            investigationProbePlanStatus:
-              preparedPrompt.investigationProbePlan.status,
-            number: assignment.context.number,
-            title: assignment.context.title,
-          })
-        ),
+        outputSchemaHash: sha256(invocationPreimages.outputSchemaHash),
+        filePatchManifestHash: sha256(manifestPreimages.filePatchManifestHash),
+        contextManifestHash: sha256(manifestPreimages.contextManifestHash),
         lifecycleTargetSetHash:
-          effectiveLifecycleTargets.length > 0
-            ? sha256(
-                canonicalJson(
-                  effectiveLifecycleTargets
-                    .map((target) => ({
-                      fingerprint: target.fingerprint,
-                      targetId: target.targetId,
-                    }))
-                    .sort((left, right) =>
-                      compareCodeUnits(left.targetId, right.targetId)
-                    )
-                )
-              )
+          manifestPreimages.lifecycleTargetSetHash !== null
+            ? sha256(manifestPreimages.lifecycleTargetSetHash)
             : null,
         liveLifecycleStateHash:
           effectiveLifecycleTargets.length > 0
             ? assignment.liveLifecycleStateHash
             : null,
-        toolPolicyHash: sha256(
-          canonicalJson(
-            gatewayPlanningConfig
-              ? {
-                  sandbox: 'read-only',
-                  network: false,
-                  workspaceMutation: false,
-                  builtinTools: false,
-                  mcpTransport: 'stdio',
-                  gatewayBinaryHash: gatewayPlanningConfig.gatewayBinaryHash,
-                  gatewayPolicyVersion:
-                    gatewayPlanningConfig.gatewayPolicyVersion,
-                  textSearchMatchMode: 'fixed_string',
-                  enabledTools: [...gatewayPlanningConfig.enabledTools].sort(),
-                }
-              : {
-                  sandbox: 'read-only',
-                  network: 'provider-controlled',
-                  workspaceMutation: false,
-                }
-          )
-        ),
+        toolPolicyHash: sha256(invocationPreimages.toolPolicyHash),
         executionProfile: gatewayPlanningConfig
           ? investigationEligible
             ? 'investigation_gateway_v1'
@@ -314,27 +385,12 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
           : this.agenticContext
             ? 'agentic_unbounded_v1'
             : 'prompt_only_envelope_v1',
-        baseTreeHash: gatewayPlanningConfig
-          ? sha256(
-              gatewayPlanningConfig.runtimeEnvironment
-                .REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID!
-            )
-          : null,
+        baseTreeHash:
+          invocationPreimages.baseTreeHash !== null
+            ? sha256(invocationPreimages.baseTreeHash)
+            : null,
         environmentContractHash: sha256(
-          investigationEligible
-            ? canonicalJson({
-                credentialKeys: [
-                  'CODEX_HOME',
-                  'OPENAI_API_KEY',
-                  'OPENROUTER_API_KEY',
-                ],
-                gitConfigGlobal: '/dev/null',
-                gitConfigNoSystem: '1',
-                userConfig: 'ignored',
-              })
-            : canonicalJson(
-                this.provider.describePreparedEnvironmentContract(prepared)
-              )
+          invocationPreimages.environmentContractHash
         ),
       }),
     });

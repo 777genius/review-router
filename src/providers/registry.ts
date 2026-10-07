@@ -208,39 +208,8 @@ export class ProviderRegistry {
 
     providers = selected.length > 0 ? selected : providers;
 
-    // Add fallback providers if we haven't reached the selection limit
-    // Only add as many fallbacks as needed to avoid evicting primary providers
-    if (
-      providers.length < discoveryLimit &&
-      config.fallbackProviders.length > 0
-    ) {
-      const remainingSlots = discoveryLimit - providers.length;
-      logger.info(
-        `Adding fallback providers to fill ${remainingSlots} remaining slots (target: ${discoveryLimit})`
-      );
-
-      // Instantiate and filter fallbacks
-      const fallbacks = this.instantiate(config.fallbackProviders, config);
-      const filteredFallbacks = await this.filterRateLimited(fallbacks);
-
-      // Dedupe against existing providers
-      const dedupedFallbacks = this.dedupeProviders([
-        ...providers,
-        ...filteredFallbacks,
-      ]).filter((p) => !providers.some((existing) => existing.name === p.name));
-
-      // Only add up to remainingSlots fallbacks
-      const fallbacksToAdd = dedupedFallbacks.slice(0, remainingSlots);
-      providers = [...providers, ...fallbacksToAdd];
-
-      logger.info(
-        `Added ${fallbacksToAdd.length} fallback providers (filtered ${dedupedFallbacks.length} candidates, total now: ${providers.length})`
-      );
-    } else {
-      logger.info(
-        `Skipping fallback providers: providers.length=${providers.length}, discoveryLimit=${discoveryLimit}, fallbackProviders.length=${config.fallbackProviders.length}`
-      );
-    }
+    // Configured fallbacks are recovery candidates, never peers of healthy
+    // primaries during the initial review selection.
 
     // Final check: if still over limit, trim (shouldn't happen with proper remainingSlots logic)
     if (providers.length > discoveryLimit) {
@@ -282,6 +251,21 @@ export class ProviderRegistry {
   ): Promise<Provider[]> {
     const existingSet = new Set(existing);
     const discovered: string[] = [];
+
+    const configuredFallbacks = await this.filterRateLimited(
+      this.applyAllowBlock(
+        this.dedupeProviders(
+          this.instantiate(
+            config.fallbackProviders.filter((name) => !existingSet.has(name)),
+            config
+          )
+        ),
+        config
+      )
+    );
+    if (configuredFallbacks.length > 0) {
+      return configuredFallbacks.slice(0, max);
+    }
 
     if (process.env.OPENROUTER_API_KEY) {
       // Pull a larger candidate pool to increase diversity when earlier picks fail
@@ -405,6 +389,19 @@ export class ProviderRegistry {
             eventAudit: config.codexEventAudit,
             modelProvider: 'openrouter',
             providerNamePrefix: 'codex-openrouter',
+          })
+        );
+        continue;
+      }
+
+      if (name.startsWith('codex-mimo/')) {
+        const model = name.replace('codex-mimo/', '');
+        list.push(
+          new CodexProvider(model, {
+            agenticContext: config.codexAgenticContext,
+            eventAudit: config.codexEventAudit,
+            modelProvider: 'mimo',
+            providerNamePrefix: 'codex-mimo',
           })
         );
         continue;

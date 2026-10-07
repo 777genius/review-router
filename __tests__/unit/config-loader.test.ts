@@ -14,6 +14,38 @@ describe('ConfigLoader', () => {
     process.chdir(originalCwd);
   });
 
+  it('resolves native runtime input without ambient env or checkout reads', () => {
+    process.env.REVIEW_DEPTH = 'unbounded';
+    process.env.REVIEW_AUTH_MODE = 'mimo-token-plan-api';
+    const tmp = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'rr-native-config-NEWTEST-')
+    );
+    fs.writeFileSync(
+      path.join(tmp, '.multi-review.yml'),
+      'inline_min_severity: critical\n'
+    );
+    process.chdir(tmp);
+    const env = Object.freeze({
+      REVIEW_DEPTH: 'balanced',
+      REVIEW_PROVIDERS: 'codex/gpt-5.5',
+      INLINE_MAX_COMMENTS: '5',
+      RUN_TIMEOUT_SECONDS: '90',
+    });
+    const config = ConfigLoader.loadRuntimeEnvironment(env);
+    expect(config.reviewDepth).toBe(ReviewDepth.Balanced);
+    expect(config.providers).toEqual(['codex/gpt-5.5']);
+    expect(config.runTimeoutSeconds).toBe(90);
+    expect(config.inlineMaxComments).toBe(50);
+    expect(config.inlineMinSeverity).toBe(DEFAULT_CONFIG.inlineMinSeverity);
+    expect(process.env.REVIEW_DEPTH).toBe('unbounded');
+  });
+
+  it('retains ordinary validation for explicit runtime values', () => {
+    expect(() =>
+      ConfigLoader.loadRuntimeEnvironment({ REVIEW_DEPTH: 'unbounded' })
+    ).toThrow('REVIEW_DEPTH has invalid value');
+  });
+
   it('merges environment overrides into defaults', () => {
     process.env.REVIEW_DEPTH = 'thorough';
     process.env.REVIEW_PROVIDERS = 'openrouter/a,opencode/b';
@@ -98,6 +130,30 @@ describe('ConfigLoader', () => {
 
     expect(config.providers).toEqual(['claude/sonnet']);
     expect(config.synthesisModel).toBe('claude/sonnet');
+  });
+
+  it('infers the MiMo Token Plan provider for explicit MiMo auth', () => {
+    process.env.REVIEW_AUTH_MODE = 'mimo-token-plan-api';
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'test-only-mimo-key';
+    process.env.CLAUDE_MODEL = 'sonnet';
+    process.env.CODEX_MODEL = 'gpt-5.6-sol';
+
+    const config = ConfigLoader.load();
+
+    expect(config.providers).toEqual(['codex-mimo/mimo-v2.6-pro']);
+    expect(config.synthesisModel).toBe('codex-mimo/mimo-v2.6-pro');
+  });
+
+  it('fails closed before fallback discovery when MiMo auth has no key', () => {
+    process.env.REVIEW_AUTH_MODE = 'mimo-token-plan-api';
+    process.env.MIMO_TOKEN_PLAN_API_KEY = '';
+    process.env.CLAUDE_MODEL = 'sonnet';
+    process.env.CODEX_MODEL = 'gpt-5.6-sol';
+    process.env.FALLBACK_PROVIDERS = 'claude/sonnet';
+
+    expect(() => ConfigLoader.load()).toThrow(
+      'MIMO_TOKEN_PLAN_API_KEY is required for REVIEW_AUTH_MODE=mimo-token-plan-api'
+    );
   });
 
   it('defaults failure policy to critical-only', () => {

@@ -54,14 +54,24 @@ export function hashIncrementalCompatibility(
   config: ReviewConfig,
   runtimeConfigVersion?: string
 ): string {
-  const stableJson = JSON.stringify(
+  return createHash('sha256')
+    .update(incrementalCompatibilityPreimage(config, runtimeConfigVersion))
+    .digest('hex');
+}
+
+/** Exact ordinary-runtime preimage for trusted in-memory manifest measurement.
+ * No credential discovery, provider preparation, or side effects. */
+export function incrementalCompatibilityPreimage(
+  config: ReviewConfig,
+  runtimeConfigVersion?: string
+): string {
+  return JSON.stringify(
     sortObject({
       cacheVersion: CACHE_VERSION,
       reviewConfig: config,
       runtimeConfigVersion: runtimeConfigVersion?.trim() || null,
     })
   );
-  return createHash('sha256').update(stableJson).digest('hex');
 }
 
 function sortObject(value: unknown): unknown {

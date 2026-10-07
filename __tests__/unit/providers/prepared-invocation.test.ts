@@ -288,4 +288,48 @@ describe('prepared provider invocation contract', () => {
       OPENCODE_API_KEY: 'leased-opencode-secret',
     });
   });
+
+  it('keeps the MiMo Token Plan key in its credential lease and out of prepared input', async () => {
+    process.env.CODEX_AGENTIC_CONTEXT = 'false';
+    process.env.MIMO_TOKEN_PLAN_API_KEY = 'mimo-prepared-secret';
+    const provider = new CodexProvider('mimo-v2.6-pro', {
+      agenticContext: false,
+      eventAudit: false,
+      modelProvider: 'mimo',
+      providerNamePrefix: 'codex-mimo',
+    });
+    overridePrivate(
+      provider,
+      'resolveBinary',
+      jest.fn().mockResolvedValue('codex-mimo-bin')
+    );
+
+    const prepared = await provider.prepareInvocation('mimo prompt', 1200);
+    const credentialLease = (
+      provider as unknown as {
+        captureCredentialLease: (invocation: typeof prepared) => {
+          environment?: NodeJS.ProcessEnv;
+        };
+      }
+    ).captureCredentialLease(prepared);
+    const codexRun = jest.fn().mockResolvedValue({
+      stdout: '',
+      stderr: '',
+      lastMessage: JSON.stringify({ findings: [], revalidations: [] }),
+      actualModelObservation: { kind: 'missing' },
+    });
+    overridePrivate(provider, 'runCliWithStdin', codexRun);
+
+    await provider.executePreparedInvocation(prepared, credentialLease);
+
+    expect(prepared.observableInputPreimage).not.toContain(
+      'mimo-prepared-secret'
+    );
+    expect(credentialLease.environment?.MIMO_TOKEN_PLAN_API_KEY).toBe(
+      'mimo-prepared-secret'
+    );
+    expect(codexRun.mock.calls[0][4].environment.MIMO_TOKEN_PLAN_API_KEY).toBe(
+      'mimo-prepared-secret'
+    );
+  });
 });

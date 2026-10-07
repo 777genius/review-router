@@ -81,6 +81,47 @@ describe('resolveProviderCliPlan', () => {
     expect(plan.codexOauthNeeded).toBe(false);
   });
 
+  it('requires Codex CLI for MiMo auth without explicit provider hints', () => {
+    const plan = resolveProviderCliPlan({
+      REVIEW_AUTH_MODE: 'mimo-token-plan-api',
+      CLAUDE_MODEL: 'sonnet',
+    });
+
+    expect(plan.codexCliNeeded).toBe(true);
+    expect(plan.codexOauthNeeded).toBe(false);
+    expect(plan.claudeCliNeeded).toBe(false);
+  });
+
+  it.each([
+    ['explicit review providers', 'REVIEW_PROVIDERS'],
+    ['fallback providers', 'FALLBACK_PROVIDERS'],
+    ['synthesis model', 'SYNTHESIS_MODEL'],
+  ] as const)(
+    'requires Codex CLI for MiMo selected through %s',
+    (_description, variable) => {
+      const plan = resolveProviderCliPlan({
+        [variable]: 'codex-mimo/mimo-v2.6-pro',
+      });
+
+      expect(plan.codexCliNeeded).toBe(true);
+      expect(plan.codexOauthNeeded).toBe(false);
+      expect(plan.claudeCliNeeded).toBe(false);
+    }
+  );
+
+  it('does not require Codex CLI for Claude-only selection with a MiMo secret', () => {
+    const plan = resolveProviderCliPlan({
+      REVIEW_AUTH_MODE: 'claude-oauth',
+      REVIEW_PROVIDERS: 'claude/sonnet',
+      MIMO_TOKEN_PLAN_API_KEY: 'test-only-placeholder',
+      MIMO_TOKEN_PLAN_API_KEY_PRESENT: '1',
+    });
+
+    expect(plan.codexCliNeeded).toBe(false);
+    expect(plan.codexOauthNeeded).toBe(false);
+    expect(plan.claudeCliNeeded).toBe(true);
+  });
+
   it('detects explicit provider lists and synthesis models', () => {
     const plan = resolveProviderCliPlan({
       REVIEW_PROVIDERS: 'openrouter/free, claude/sonnet',

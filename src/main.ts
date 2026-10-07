@@ -27,7 +27,10 @@ import {
   loadDiscussionOptionsFromEnv,
   ReviewDiscussionHandler,
 } from './github/discussion';
-import { CodexDiscussionResponder } from './discussion/codex-responder';
+import {
+  CodexDiscussionResponder,
+  resolveDiscussionCodexConfiguration,
+} from './discussion/codex-responder';
 import {
   applyControlPlaneRuntimeConfig,
   RuntimeConfigResult,
@@ -495,6 +498,10 @@ async function runInteractionPreflight(token: string): Promise<void> {
 
   core.setOutput('should_run', result.shouldRun ? 'true' : 'false');
   core.setOutput('needs_discussion', result.needsDiscussion ? 'true' : 'false');
+  core.setOutput(
+    'discussion_auth_mode',
+    resolveDiscussionCodexConfiguration(process.env).authMode
+  );
   core.setOutput('reason', result.reason);
   core.info(
     `Interaction preflight: should_run=${result.shouldRun}, needs_discussion=${result.needsDiscussion}, reason=${result.reason}`
@@ -505,7 +512,9 @@ function createDiscussionHandler(
   githubClient: GitHubClient
 ): ReviewDiscussionHandler {
   const options = loadDiscussionOptionsFromEnv();
-  const model = process.env.CODEX_MODEL || 'gpt-5.6-sol';
+  const { model, providerOptions } = resolveDiscussionCodexConfiguration(
+    process.env
+  );
   const timeoutSeconds = parsePositiveInteger(
     process.env.REVIEW_ROUTER_DISCUSSION_TIMEOUT_SECONDS,
     60
@@ -513,7 +522,11 @@ function createDiscussionHandler(
   const responder =
     options.mode === 'off'
       ? undefined
-      : new CodexDiscussionResponder(model, timeoutSeconds * 1000);
+      : new CodexDiscussionResponder(
+          model,
+          timeoutSeconds * 1000,
+          providerOptions
+        );
 
   return new ReviewDiscussionHandler(githubClient, responder, options);
 }

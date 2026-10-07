@@ -1,4 +1,6 @@
 import { createHash } from 'crypto';
+import nock from 'nock';
+import { prepareSingleT0NativeInputs } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
 import {
   ReviewActionV2Client,
   ReviewActionV2ClientError,
@@ -44,7 +46,10 @@ import {
   RestoredReviewExecutionState,
   RestoredReviewWorkSlotState,
 } from '../../../src/review-orchestration/application';
-import { ReviewActionV2ControlPlaneAdapter } from '../../../src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
+import {
+  ReviewActionV2ControlPlaneAdapter,
+  projectReviewRunAuthorization,
+} from '../../../src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
 import {
   readProductionReviewInvestigationRolloutFlags,
   resolveProductionReviewInvestigationRolloutResolution,
@@ -83,6 +88,155 @@ function reviewInvestigationDescriptor(
 }
 
 describe('ReviewActionV2ControlPlaneAdapter', () => {
+  it('rejects a different numeric repository before git reads or control-plane effects', async () => {
+    const execute = jest.fn();
+    const previousHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = '/tmp/NEWTEST-codex-home';
+    const metadata = nock('https://api.github.com')
+      .get('/repos/disposable-test/canary')
+      .reply(200, { id: 999 });
+    try {
+      await expect(
+        prepareSingleT0NativeInputs(authorizationResponse(), {
+          runner: {
+            apiUrl: 'https://api.example.test',
+            audience: 'NEWTEST',
+            providerInstanceId: 'NEWTEST',
+            workflowSchemaVersion: 4,
+            repository: 'disposable-test/canary',
+            pullRequestNumber: authorizationFacts.pullRequestNumber,
+            headSha: authorizationFacts.headSha,
+            workspacePath: process.cwd(),
+            codexHome: '/tmp/NEWTEST-codex-home',
+            scmReadToken: 'TEST_ONLY_READ_TOKEN',
+            scmReadTokenExpiresAt: new Date(Date.now() + 600_000).toISOString(),
+            refreshScmReadToken: jest.fn(),
+          },
+          config: {} as Parameters<
+            typeof prepareSingleT0NativeInputs
+          >[1]['config'],
+          client: { execute } as unknown as ReviewActionV2Client,
+          gatewayBundlePath: '/tmp/NEWTEST-gateway.js',
+          repositoryNumericId: '1252762369',
+        })
+      ).rejects.toThrow('review_action_v2_single_plan_repository_mismatch');
+      expect(metadata.isDone()).toBe(true);
+      expect(execute).not.toHaveBeenCalled();
+    } finally {
+      nock.cleanAll();
+      if (previousHome === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previousHome;
+    }
+  });
+
+  it('continues a fresh native receipt without issuing another authorization', async () => {
+    const receipt = authorizationResponse();
+    const execute = jest.fn().mockResolvedValue({
+      status: ReviewContextGatewayOpenResultStatus.Opened,
+      sessionId: 'session-1',
+      eventChainSeedHash: hash('seed'),
+      gatewaySessionSecret: Buffer.alloc(32, 1).toString('base64url'),
+      sealCapability: 'seal.capability',
+      expiresAt: '2026-07-22T12:05:00.000Z',
+    });
+    const adapter =
+      ReviewActionV2ControlPlaneAdapter.fromFreshAuthorizationReceipt(
+        { execute } as unknown as ReviewActionV2Client,
+        receipt
+      );
+    expect(execute).not.toHaveBeenCalled();
+    receipt.authorizationToken = 'mutated-after-admission';
+    await adapter.openGatewaySession({
+      invocationLease: baseLease,
+      sourceExecutionId: execution.executionId,
+      sourceWorkSlotId: workSlot.workSlotId,
+      sourceReviewRevisionHash: authorization.facts.reviewRevisionHash,
+      checkoutTreeOid: '7'.repeat(40),
+      gatewayPolicyVersion: 'context-gateway-v2',
+      gatewayBinaryHash: hash('gateway'),
+      confinementEvidenceHash: hash('confinement'),
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith(
+      ReviewActionV2OperationId.ReviewContextGatewayOpen,
+      expect.objectContaining({
+        authorizationToken: authorization.authorizationToken,
+      })
+    );
+  });
+
+  it.each([
+    ReviewRunAuthorizationResultStatus.Restored,
+    ReviewRunAuthorizationResultStatus.Denied,
+  ])(
+    'rejects non-fresh native receipt status %s without an operation',
+    (status) => {
+      const execute = jest.fn();
+      expect(() =>
+        ReviewActionV2ControlPlaneAdapter.fromFreshAuthorizationReceipt(
+          { execute } as unknown as ReviewActionV2Client,
+          { ...authorizationResponse(), status }
+        )
+      ).toThrow('review_action_v2_fresh_authorization_required');
+      expect(execute).not.toHaveBeenCalled();
+    }
+  );
+
+  it('validates the complete native receipt before creating a continuation', () => {
+    expect(() =>
+      ReviewActionV2ControlPlaneAdapter.fromFreshAuthorizationReceipt(
+        { execute: jest.fn() } as unknown as ReviewActionV2Client,
+        { ...authorizationResponse(), authorizationFactsCanonicalJson: '{}' }
+      )
+    ).toThrow();
+  });
+
+  it('projects the same native workflow receipt without repeating authorize', async () => {
+    const receipt = {
+      status: ReviewRunAuthorizationResultStatus.Authorized,
+      authorizationId: 'authorization-1',
+      authorizationToken: 'authorization.token',
+      producerReleaseId: 'release-1',
+      protocolLimitsProfileId: 'limits-1',
+      operationalSloProfileId: 'slo-1',
+      mutationEpoch: '1',
+      expiresAt: '2026-07-22T13:00:00.000Z',
+      protocolLimitsCanonicalJson: JSON.stringify(protocolLimits),
+      authorizationFactsCanonicalJson: canonicalJson({
+        ...authorizationFacts,
+        workflowIdentityHash: hash('native-oidc-workflow'),
+      }),
+    };
+    const execute = jest.fn().mockResolvedValue(receipt);
+    const native = await createAdapter(execute).authorize({
+      oidcToken: 'oidc.token',
+    });
+    expect(projectReviewRunAuthorization(receipt)).toEqual(native);
+    expect(native.facts.workflowIdentityHash).toBe(
+      hash('native-oidc-workflow')
+    );
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(() =>
+      projectReviewRunAuthorization({
+        ...receipt,
+        authorizationFactsCanonicalJson: canonicalJson({
+          ...authorizationFacts,
+          workflowIdentityHash: 'invalid',
+        }),
+      })
+    ).toThrow();
+    expect(() =>
+      projectReviewRunAuthorization({
+        ...receipt,
+        authorizationFactsCanonicalJson: canonicalJson({
+          ...authorizationFacts,
+          workflowIdentityHash: hash('native-oidc-workflow'),
+          unknownField: true,
+        }),
+      })
+    ).toThrow('review_action_v2_authorization_facts_fields_invalid');
+  });
+
   it('normalizes a complete generated authorization and selected limits', async () => {
     const execute = jest.fn().mockResolvedValue({
       status: ReviewRunAuthorizationResultStatus.Authorized,

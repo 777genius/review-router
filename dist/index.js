@@ -108202,7 +108202,8 @@ function mapFreshInventory(raw, expectedHeadSha, ledger) {
   }
   const rawTargets = [
     ...raw.candidates.map((target) => ({ target, manual: false })),
-    ...raw.manualAttention.map((record) => ({
+    // The server excludes untrusted parents from managed lifecycle observations.
+    ...raw.manualAttention.filter((record) => record.target.trustedAuthor).map((record) => ({
       target: record.target,
       manual: true
     }))

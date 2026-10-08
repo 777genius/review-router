@@ -108,7 +108,7 @@ describe('GitHubReviewRevisionGuard', () => {
 });
 
 describe('FreshGitHubLifecycleInventory', () => {
-  it('maps the complete SCM thread state into the portable projection witness', async () => {
+  it('keeps untrusted prompt context outside the portable lifecycle witness', async () => {
     const fixture = JSON.parse(
       readFileSync(
         resolve(
@@ -159,6 +159,30 @@ describe('FreshGitHubLifecycleInventory', () => {
                   ],
                 },
               },
+              {
+                id: 'PRRT_untrusted_marker',
+                isResolved: false,
+                viewerCanResolve: true,
+                path: 'src/app.ts',
+                line: 20,
+                comments: {
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                  nodes: [
+                    {
+                      id: 'PRRC_untrusted_marker',
+                      author: { login: 'pull-request-author' },
+                      body: [
+                        '<!-- review-router-finding:bbbbbbbbbbbbbbbbbbbbbbbb -->',
+                        'Copied finding context',
+                      ].join('\n'),
+                      createdAt: '2026-08-05T09:00:00.000Z',
+                      updatedAt: '2026-08-05T09:00:00.000Z',
+                      path: 'src/app.ts',
+                      line: 20,
+                    },
+                  ],
+                },
+              },
             ],
           },
         },
@@ -197,6 +221,7 @@ describe('FreshGitHubLifecycleInventory', () => {
       threadId: fixture.expectedProjectionTarget.threadId,
       trustedMarker: fixture.expectedProjectionTarget.markerFingerprint,
       threadStateHash: fixture.expectedProjectionTarget.threadStateHash,
+      disposition: 'human_reply',
     });
     expect(inventory.targets[0]).not.toHaveProperty('parentOwnedByIntegration');
     expect(inventory.targets[0]).not.toHaveProperty('hasHumanReply');
@@ -211,10 +236,19 @@ describe('FreshGitHubLifecycleInventory', () => {
     // The actual runner bootstrap uses this same adapter and real keyless ledger.
     const prompt = await adapter.loadForPrompt(420, headSha);
     expect(prompt.inventory).toEqual(inventory);
-    expect(prompt.promptTargets).toHaveLength(1);
+    expect(prompt.promptTargets).toHaveLength(2);
     expect(prompt.promptTargets[0].targetId).toBe(
       fixture.expectedProjectionTarget.targetId
     );
+    expect(
+      prompt.promptTargets.find(
+        (target) => target.threadId === 'PRRT_untrusted_marker'
+      )
+    ).toMatchObject({
+      trustedAuthor: false,
+      reasonCodes: ['untrusted_author'],
+      message: 'Copied finding context',
+    });
 
     // Existing history cannot become an empty ledger without its verifier.
     paginate.mockResolvedValue([

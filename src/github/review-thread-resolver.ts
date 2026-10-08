@@ -39,7 +39,7 @@ interface GraphQLPageInfo {
 interface GraphQLComment {
   id: string;
   databaseId?: number | null;
-  author?: { login?: string | null } | null;
+  author?: { login?: string | null; __typename?: string | null } | null;
   body?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -76,7 +76,7 @@ query ReviewRouterResolveThreadGuard($threadId: ID!) {
         nodes {
           id
           databaseId
-          author { login }
+          author { login __typename }
           body
           createdAt
           updatedAt
@@ -402,7 +402,7 @@ export class ReviewThreadResolver {
         reasonCodes: ['thread_changed_before_mutation'],
       };
     }
-    if (!this.isTrustedAuthor(parent.author?.login)) {
+    if (!this.isTrustedAuthor(parent.author)) {
       return {
         kind: 'manual',
         reasonCodes: ['untrusted_author'],
@@ -431,7 +431,7 @@ export class ReviewThreadResolver {
         (comment, index) =>
           index > parentIndex &&
           comment.id !== candidate.target.parentCommentId &&
-          !this.isTrustedAuthor(comment.author?.login)
+          !this.isTrustedAuthor(comment.author)
       );
       return {
         kind: hasHumanReply ? 'manual' : 'skipped',
@@ -445,7 +445,7 @@ export class ReviewThreadResolver {
       (comment, index) =>
         index > parentIndex &&
         comment.id !== candidate.target.parentCommentId &&
-        !this.isTrustedAuthor(comment.author?.login)
+        !this.isTrustedAuthor(comment.author)
     );
     if (hasHumanReply) {
       return { kind: 'manual', reasonCodes: ['human_reply'] };
@@ -467,8 +467,12 @@ export class ReviewThreadResolver {
     };
   }
 
-  private isTrustedAuthor(login?: string | null): boolean {
-    return isTrustedReviewThreadAuthor(login, this.trustedAuthors);
+  private isTrustedAuthor(author: GraphQLComment['author']): boolean {
+    return isTrustedReviewThreadAuthor(
+      author?.login,
+      this.trustedAuthors,
+      author?.__typename
+    );
   }
 
   private async loadHeadSha(prNumber: number): Promise<string | undefined> {

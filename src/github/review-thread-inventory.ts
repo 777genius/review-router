@@ -74,7 +74,7 @@ interface GraphQLPageInfo {
 interface GraphQLComment {
   id: string;
   databaseId?: number | null;
-  author?: { login?: string | null } | null;
+  author?: { login?: string | null; __typename?: string | null } | null;
   body?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -133,7 +133,7 @@ query ReviewRouterThreadInventory(
             nodes {
               id
               databaseId
-              author { login }
+              author { login __typename }
               body
               createdAt
               updatedAt
@@ -159,7 +159,7 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
         nodes {
           id
           databaseId
-          author { login }
+          author { login __typename }
           body
           createdAt
           updatedAt
@@ -285,7 +285,7 @@ export class ReviewThreadInventoryLoader {
     if (!parent) {
       throw new Error(`thread ${thread.id} parent comment was missing`);
     }
-    const trustedAuthor = this.isTrustedAuthor(parent.author?.login);
+    const trustedAuthor = this.isTrustedAuthor(parent.author);
     const marker = parseFindingMarker(parent.body ?? '');
     if (
       marker.kind === FindingMarkerParseKind.Conflict ||
@@ -331,7 +331,7 @@ export class ReviewThreadInventoryLoader {
       (comment, index) =>
         index > 0 &&
         comment.id !== parent.id &&
-        !this.isTrustedAuthor(comment.author?.login)
+        !this.isTrustedAuthor(comment.author)
     );
     const cleanBody = stripLifecycleCommentBody(body);
     const parsedTitle = extractInlineTitle(cleanBody);
@@ -351,8 +351,8 @@ export class ReviewThreadInventoryLoader {
       comments,
       targetId,
       fingerprint,
-      expectedAuthorLogin: parent.author?.login,
-      isTrustedAuthor: (login) => this.isTrustedAuthor(login),
+      expectedAuthor: parent.author,
+      isTrustedAuthor: (author) => this.isTrustedAuthor(author),
     });
     const target: ReviewThreadLifecycleTarget = {
       targetId,
@@ -405,8 +405,12 @@ export class ReviewThreadInventoryLoader {
     inventory.candidates.push(target);
   }
 
-  private isTrustedAuthor(login?: string | null): boolean {
-    return isTrustedReviewThreadAuthor(login, this.trustedAuthors);
+  private isTrustedAuthor(author: GraphQLComment['author']): boolean {
+    return isTrustedReviewThreadAuthor(
+      author?.login,
+      this.trustedAuthors,
+      author?.__typename
+    );
   }
 
   private async loadRemainingThreadComments(
@@ -481,13 +485,18 @@ export class ReviewThreadInventoryLoader {
 
 export function isTrustedReviewThreadAuthor(
   login?: string | null,
-  trustedAuthors: readonly string[] = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS
+  trustedAuthors: readonly string[] = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS,
+  authorTypename?: string | null
 ): boolean {
-  const normalizedLogin = canonicalBotLogin(login);
+  const normalizedLogin = normalizeBotLogin(login);
   return Boolean(
     normalizedLogin &&
     trustedAuthors.some(
-      (author) => canonicalBotLogin(author) === normalizedLogin
+      (author) =>
+        normalizeBotLogin(author) === normalizedLogin ||
+        (authorTypename === 'Bot' &&
+          normalizeBotLogin(author) ===
+            canonicalBotLogin(login, authorTypename))
     )
   );
 }
@@ -544,18 +553,24 @@ function findTrustedResolutionMarker(input: {
   comments: readonly GraphQLComment[];
   targetId: string;
   fingerprint: string;
-  expectedAuthorLogin?: string | null;
-  isTrustedAuthor(login?: string | null): boolean;
+  expectedAuthor?: GraphQLComment['author'];
+  isTrustedAuthor(author: GraphQLComment['author']): boolean;
 }): LifecycleTarget['trustedResolutionMarker'] | undefined {
-  const expectedAuthor = canonicalBotLogin(input.expectedAuthorLogin);
+  const expectedAuthor = canonicalBotLogin(
+    input.expectedAuthor?.login,
+    input.expectedAuthor?.__typename
+  );
   if (!expectedAuthor || expectedAuthor === GITHUB_ACTIONS_BOT_AUTHOR) {
     return undefined;
   }
   for (const comment of input.comments.slice(1)) {
-    const markerAuthor = canonicalBotLogin(comment.author?.login);
+    const markerAuthor = canonicalBotLogin(
+      comment.author?.login,
+      comment.author?.__typename
+    );
     if (
       markerAuthor !== expectedAuthor ||
-      !input.isTrustedAuthor(comment.author?.login)
+      !input.isTrustedAuthor(comment.author)
     ) {
       continue;
     }
@@ -646,6 +661,13 @@ function normalizeBotLogin(value?: string | null): string | undefined {
   return login;
 }
 
-function canonicalBotLogin(value?: string | null): string | undefined {
-  return normalizeBotLogin(value);
+function canonicalBotLogin(
+  value?: string | null,
+  authorTypename?: string | null
+): string | undefined {
+  const login = normalizeBotLogin(value);
+  // GraphQL Bot logins omit [bot]; User and unknown Actors keep exact identity.
+  return login && authorTypename === 'Bot' && !login.endsWith('[bot]')
+    ? `${login}[bot]`
+    : login;
 }

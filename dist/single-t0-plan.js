@@ -77675,7 +77675,7 @@ query ReviewRouterThreadInventory(
             nodes {
               id
               databaseId
-              author { login }
+              author { login __typename }
               body
               createdAt
               updatedAt
@@ -77700,7 +77700,7 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
         nodes {
           id
           databaseId
-          author { login }
+          author { login __typename }
           body
           createdAt
           updatedAt
@@ -77805,7 +77805,7 @@ var ReviewThreadInventoryLoader = class {
     if (!parent) {
       throw new Error(`thread ${thread.id} parent comment was missing`);
     }
-    const trustedAuthor = this.isTrustedAuthor(parent.author?.login);
+    const trustedAuthor = this.isTrustedAuthor(parent.author);
     const marker = parseFindingMarker(parent.body ?? "");
     if (marker.kind === "conflict" /* Conflict */ || marker.kind === "malformed" /* Malformed */) {
       if (trustedAuthor) {
@@ -77839,7 +77839,7 @@ var ReviewThreadInventoryLoader = class {
     const body = parent.body || "";
     const fingerprint = marker.fingerprint;
     const humanReply = comments.some(
-      (comment, index) => index > 0 && comment.id !== parent.id && !this.isTrustedAuthor(comment.author?.login)
+      (comment, index) => index > 0 && comment.id !== parent.id && !this.isTrustedAuthor(comment.author)
     );
     const cleanBody = stripLifecycleCommentBody(body);
     const parsedTitle = extractInlineTitle(cleanBody);
@@ -77858,8 +77858,8 @@ var ReviewThreadInventoryLoader = class {
       comments,
       targetId,
       fingerprint,
-      expectedAuthorLogin: parent.author?.login,
-      isTrustedAuthor: (login) => this.isTrustedAuthor(login)
+      expectedAuthor: parent.author,
+      isTrustedAuthor: (author) => this.isTrustedAuthor(author)
     });
     const target = {
       targetId,
@@ -77903,8 +77903,12 @@ var ReviewThreadInventoryLoader = class {
     }
     inventory.candidates.push(target);
   }
-  isTrustedAuthor(login) {
-    return isTrustedReviewThreadAuthor(login, this.trustedAuthors);
+  isTrustedAuthor(author) {
+    return isTrustedReviewThreadAuthor(
+      author?.login,
+      this.trustedAuthors,
+      author?.__typename
+    );
   }
   async loadRemainingThreadComments(threadId, initialComments, initialCursor) {
     if (!initialCursor) {
@@ -77957,11 +77961,11 @@ var ReviewThreadInventoryLoader = class {
     return graphql(query, variables);
   }
 };
-function isTrustedReviewThreadAuthor(login, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS) {
-  const normalizedLogin = canonicalBotLogin(login);
+function isTrustedReviewThreadAuthor(login, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS, authorTypename) {
+  const normalizedLogin = normalizeBotLogin(login);
   return Boolean(
     normalizedLogin && trustedAuthors.some(
-      (author) => canonicalBotLogin(author) === normalizedLogin
+      (author) => normalizeBotLogin(author) === normalizedLogin || authorTypename === "Bot" && normalizeBotLogin(author) === canonicalBotLogin(login, authorTypename)
     )
   );
 }
@@ -77971,13 +77975,19 @@ ${parentCommentId}
 ${fingerprint}`).digest("hex").slice(0, 16)}`;
 }
 function findTrustedResolutionMarker(input) {
-  const expectedAuthor = canonicalBotLogin(input.expectedAuthorLogin);
+  const expectedAuthor = canonicalBotLogin(
+    input.expectedAuthor?.login,
+    input.expectedAuthor?.__typename
+  );
   if (!expectedAuthor || expectedAuthor === GITHUB_ACTIONS_BOT_AUTHOR) {
     return void 0;
   }
   for (const comment of input.comments.slice(1)) {
-    const markerAuthor = canonicalBotLogin(comment.author?.login);
-    if (markerAuthor !== expectedAuthor || !input.isTrustedAuthor(comment.author?.login)) {
+    const markerAuthor = canonicalBotLogin(
+      comment.author?.login,
+      comment.author?.__typename
+    );
+    if (markerAuthor !== expectedAuthor || !input.isTrustedAuthor(comment.author)) {
       continue;
     }
     const marker = parseResolutionMarker(comment.body ?? "");
@@ -78036,8 +78046,9 @@ function normalizeBotLogin(value) {
   }
   return login;
 }
-function canonicalBotLogin(value) {
-  return normalizeBotLogin(value);
+function canonicalBotLogin(value, authorTypename) {
+  const login = normalizeBotLogin(value);
+  return login && authorTypename === "Bot" && !login.endsWith("[bot]") ? `${login}[bot]` : login;
 }
 
 // src/review-orchestration/infrastructure/github-review-state-adapter.ts

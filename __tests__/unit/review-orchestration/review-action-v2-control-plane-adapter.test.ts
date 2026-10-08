@@ -7,6 +7,8 @@ import {
   ReviewActionV2ClientFailureCode,
 } from '../../../src/control-plane/review-action-v2-client';
 import {
+  parseReviewActionV2Request,
+  reviewActionV2GoldenFixtures,
   reviewInvestigationExtensionV1,
   reviewInvestigationRolloutAuthorizationV3Contract,
   ReviewActionV2ProtocolErrorCode,
@@ -296,8 +298,85 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
         renewalRequestId: 'renewal-1',
         oidcToken: 'oidc.token',
         requestedTtlMs: 3_900_000,
+      },
+      { maxAttempts: 5, retryBaseDelayMs: 5_000 }
+    );
+  });
+
+  it('recovers renewal after two HTML530 responses using the same request frame', async () => {
+    const input = renewalInput();
+    const fixture = reviewActionV2GoldenFixtures.review_run_renew;
+    const bodies: string[] = [];
+    const sleep = jest.fn(async (_delayMs: number) => undefined);
+    const requestIdFactory = jest.fn(() => fixture.request.requestId);
+    const fetchImpl = jest.fn(
+      async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        bodies.push(String(init?.body));
+        if (bodies.length <= 2) {
+          return new Response('<html><body>530</body></html>', {
+            status: 530,
+            headers: { 'content-type': 'text/html' },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            ...fixture.response,
+            serverTime: '2026-07-22T12:00:00.000Z',
+            result: {
+              status: ReviewRunAuthorizationResultStatus.Restored,
+              authorizationId: authorization.authorizationId,
+              authorizationToken: authorization.authorizationToken,
+              mutationEpoch: authorization.mutationEpoch,
+              expiresAt: authorization.expiresAt,
+            },
+          }),
+          { headers: { 'content-type': 'application/json' } }
+        );
       }
     );
+    const adapter = new ReviewActionV2ControlPlaneAdapter(
+      new ReviewActionV2Client({
+        apiUrl: 'http://127.0.0.1:3000',
+        allowInsecureLocalhost: true,
+        fetchImpl,
+        requestIdFactory,
+        sleep,
+        random: () => 0,
+      })
+    );
+
+    await expect(adapter.renewAuthorization(input)).resolves.toEqual({
+      authorization,
+      validForMsAtResponse: 3_600_000,
+    });
+    expect(adapter.currentAuthorization()).toEqual(authorization);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(bodies).toEqual([bodies[0], bodies[0], bodies[0]]);
+    expect(requestIdFactory).toHaveBeenCalledTimes(1);
+    const requests = bodies.map((body) => {
+      const parsed = parseReviewActionV2Request(
+        ReviewActionV2OperationId.ReviewRunRenew,
+        JSON.parse(body)
+      );
+      if (!parsed.ok) throw new Error(parsed.issues.join(','));
+      return parsed.value;
+    });
+    expect(requests[0].requestBodyHash).toMatch(/^[a-f0-9]{64}$/);
+    for (const request of requests) {
+      expect(request).toEqual({
+        protocolVersion: fixture.request.protocolVersion,
+        schemaDigest: fixture.request.schemaDigest,
+        requestId: fixture.request.requestId,
+        authorizationToken: authorization.authorizationToken,
+        authorizationId: authorization.authorizationId,
+        idempotencyKey: input.idempotencyKey,
+        renewalRequestId: input.renewalRequestId,
+        oidcToken: input.oidcToken,
+        requestedTtlMs: input.requestedTtlMs,
+        requestBodyHash: requests[0].requestBodyHash,
+      });
+    }
+    expect(sleep.mock.calls).toEqual([[5_000], [10_000]]);
   });
 
   it('rejects mutation epoch drift during authorization renewal', async () => {

@@ -3258,8 +3258,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path13) {
-      let input = path13;
+    function removeDotSegments(path14) {
+      let input = path14;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3664,8 +3664,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path13 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path13 && path13 !== "/" ? path13 : void 0;
+        const path14 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path14 && path14 !== "/" ? path14 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -7995,12 +7995,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats2(ajv, list, fs5, exportName) {
+    function addFormats2(ajv, list, fs6, exportName) {
       var _a;
       var _b;
       (_a = (_b = ajv.opts.code).formats) !== null && _a !== void 0 ? _a : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs5[f]);
+        ajv.addFormat(f, fs6[f]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -9315,15 +9315,15 @@ var require_dist_node9 = __commonJS({
         octokit.log.debug("request", options);
         const start = Date.now();
         const requestOptions = octokit.request.endpoint.parse(options);
-        const path13 = requestOptions.url.replace(options.baseUrl, "");
+        const path14 = requestOptions.url.replace(options.baseUrl, "");
         return request(options).then((response) => {
           octokit.log.info(
-            `${requestOptions.method} ${path13} - ${response.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path14} - ${response.status} in ${Date.now() - start}ms`
           );
           return response;
         }).catch((error) => {
           octokit.log.info(
-            `${requestOptions.method} ${path13} - ${error.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path14} - ${error.status} in ${Date.now() - start}ms`
           );
           throw error;
         });
@@ -12009,7 +12009,9 @@ __export(production_t0_review_runner_exports, {
   LegacyFallbackBeforeInvestigationAuthorityControlPlane: () => LegacyFallbackBeforeInvestigationAuthorityControlPlane,
   ProductionT0ReviewRunner: () => ProductionT0ReviewRunner,
   ReviewActionV2Client: () => ReviewActionV2Client,
+  createConfiguredProductionInvestigationAgents: () => createConfiguredProductionInvestigationAgents,
   createProductionT0ReviewRunner: () => createProductionT0ReviewRunner,
+  createScmReadGitHubClient: () => createScmReadGitHubClient,
   createScmReadTokenProvider: () => createScmReadTokenProvider,
   mapOrchestrationResultToCodexOutcome: () => mapOrchestrationResultToCodexOutcome,
   mapRevisionGuardErrorToCodexOutcome: () => mapRevisionGuardErrorToCodexOutcome,
@@ -12018,13 +12020,15 @@ __export(production_t0_review_runner_exports, {
   prepareSingleT0ReviewPlan: () => prepareSingleT0ReviewPlan,
   resolveProductionContextGatewayPolicyVersion: () => resolveProductionContextGatewayPolicyVersion,
   resolveProductionContextGatewaySessionFactoryOptions: () => resolveProductionContextGatewaySessionFactoryOptions,
+  resolveProductionInvestigationReasoningEffort: () => resolveProductionInvestigationReasoningEffort,
   resolveT0AttemptBudget: () => resolveT0AttemptBudget
 });
 module.exports = __toCommonJS(production_t0_review_runner_exports);
 var import_crypto33 = require("crypto");
 var import_child_process11 = require("child_process");
-var path12 = __toESM(require("path"));
+var path13 = __toESM(require("path"));
 var import_util11 = require("util");
+var import_promises8 = require("node:timers/promises");
 
 // src/actions/core.ts
 function setSecret(secret) {
@@ -12432,12 +12436,12 @@ function formatSummaryOnlyChunk(chunk, file) {
 function shellQuote(value) {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
-function unquoteGitPath(path13) {
-  if (path13.startsWith('"') && path13.endsWith('"')) {
-    path13 = path13.slice(1, -1);
+function unquoteGitPath(path14) {
+  if (path14.startsWith('"') && path14.endsWith('"')) {
+    path14 = path14.slice(1, -1);
   }
   try {
-    path13 = path13.replace(/\\([\\"tnr])/g, (_m, ch) => {
+    path14 = path14.replace(/\\([\\"tnr])/g, (_m, ch) => {
       switch (ch) {
         case "\\":
           return "\\";
@@ -12455,7 +12459,7 @@ function unquoteGitPath(path13) {
     });
   } catch {
   }
-  return path13;
+  return path14;
 }
 
 // src/utils/token-estimation.ts
@@ -13096,8 +13100,8 @@ var TrivialDetector = class {
    * Check if file is a dependency lock file
    */
   isDependencyLockFile(filename) {
-    const basename2 = filename.split("/").pop() || "";
-    return this.DEPENDENCY_FILES.includes(basename2);
+    const basename3 = filename.split("/").pop() || "";
+    return this.DEPENDENCY_FILES.includes(basename3);
   }
   /**
    * Check if file is documentation
@@ -13522,8 +13526,8 @@ var HIGH_RISK_PATH_TOKENS = /* @__PURE__ */ new Set([
   "workflow",
   "workflows"
 ]);
-function changedPathSemanticRiskPriority(path13) {
-  const normalized = path13.trim().replaceAll("\\", "/").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+function changedPathSemanticRiskPriority(path14) {
+  const normalized = path14.trim().replaceAll("\\", "/").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   if (normalized.length === 0) {
     throw new Error("review_investigation_changed_path_missing");
   }
@@ -13934,7 +13938,7 @@ function normalizeProviderObligationProposal(record) {
     "obligation_proposal"
   );
   const kind = requireProviderProposableObligationKind(record.kind);
-  const path13 = requireRepositoryRelativePath(
+  const path14 = requireRepositoryRelativePath(
     record.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
@@ -13944,7 +13948,7 @@ function normalizeProviderObligationProposal(record) {
     ReviewTurnProposalRevision,
     "obligation_requirement_revision"
   );
-  const pathHash = sha256(path13);
+  const pathHash = sha256(path14);
   return Object.freeze({
     kind,
     canonicalSubject: canonicalJson({
@@ -13955,7 +13959,7 @@ function normalizeProviderObligationProposal(record) {
     }),
     canonicalRequirement: canonicalJson({
       kind: COMPLETE_FILE_REQUIREMENT_KIND,
-      path: path13,
+      path: path14,
       pathHash,
       requirementVersion: COMPLETE_FILE_REQUIREMENT_VERSION,
       revision
@@ -13969,14 +13973,14 @@ function normalizeProviderObligationProposal(record) {
   });
 }
 function requireRepositoryRelativePath(value, field, maxLength) {
-  const path13 = requireString(value, field, maxLength);
-  const segments = path13.split("/");
-  if (path13.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path13) || path13.includes("\\") || segments.some(
+  const path14 = requireString(value, field, maxLength);
+  const segments = path14.split("/");
+  if (path14.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path14) || path14.includes("\\") || segments.some(
     (segment) => segment === "" || segment === "." || segment === ".."
   )) {
     throw new Error(`review_agent_${field}_invalid`);
   }
-  return path13;
+  return path14;
 }
 function parseCanonicalCompleteFileRequirement(value) {
   let parsed;
@@ -13994,7 +13998,7 @@ function parseCanonicalCompleteFileRequirement(value) {
   if (requirement.kind !== COMPLETE_FILE_REQUIREMENT_KIND || requirement.requirementVersion !== COMPLETE_FILE_REQUIREMENT_VERSION) {
     throw new Error("review_agent_obligation_requirement_unsupported");
   }
-  const path13 = requireString(
+  const path14 = requireString(
     requirement.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
@@ -14003,7 +14007,7 @@ function parseCanonicalCompleteFileRequirement(value) {
     requirement.pathHash,
     "obligation_requirement_path_hash"
   );
-  if (pathHash !== sha256(path13)) {
+  if (pathHash !== sha256(path14)) {
     throw new Error("review_agent_obligation_requirement_path_hash_mismatch");
   }
   const revision = requireEnum(
@@ -14014,7 +14018,7 @@ function parseCanonicalCompleteFileRequirement(value) {
   const normalized = Object.freeze({
     requirementVersion: COMPLETE_FILE_REQUIREMENT_VERSION,
     kind: COMPLETE_FILE_REQUIREMENT_KIND,
-    path: path13,
+    path: path14,
     pathHash,
     revision
   });
@@ -14361,13 +14365,13 @@ function reviewInvestigationSearchOperationInputHash(query) {
     })
   );
 }
-function reviewInvestigationBasenameFallbackQuery(path13) {
-  assertPath(path13, "review_investigation_probe_path_invalid");
-  const basename2 = basenameWithoutExtension(path13);
+function reviewInvestigationBasenameFallbackQuery(path14) {
+  assertPath(path14, "review_investigation_probe_path_invalid");
+  const basename3 = basenameWithoutExtension(path14);
   return isSpecificProbeQuery(
     "basename_fallback" /* BasenameFallback */,
-    basename2
-  ) ? basename2 : path13;
+    basename3
+  ) ? basename3 : path14;
 }
 function createProbe(candidate) {
   const obligationKind = obligationKindFor(candidate);
@@ -14452,7 +14456,7 @@ function extractImportExportRelations(line, add) {
     }
   }
 }
-function extractStructuredRelations(path13, line, add) {
+function extractStructuredRelations(path14, line, add) {
   const keyPatterns = [
     /(?:^|[{,])\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*:/gu,
     /^\s*-?\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*=/gu,
@@ -14465,7 +14469,7 @@ function extractStructuredRelations(path13, line, add) {
       add("structured_key" /* StructuredKey */, match[1]);
     }
   }
-  if (STRUCTURED_PATH_PATTERN.test(path13)) {
+  if (STRUCTURED_PATH_PATTERN.test(path14)) {
     for (const literal of quotedLiterals(line)) {
       if (isContractLiteral(literal)) {
         add("structured_key" /* StructuredKey */, literal);
@@ -14556,24 +14560,24 @@ function splitDiffByDestinationPath(diff) {
   for (let index = 0; index < matches.length; index += 1) {
     const match = matches[index];
     if (match.index === void 0) continue;
-    const path13 = unquoteGitPath2(match[2].trim());
+    const path14 = unquoteGitPath2(match[2].trim());
     const end = matches[index + 1]?.index ?? diff.length;
-    if (path13.length === 0 || chunks.has(path13)) continue;
-    chunks.set(path13, diff.slice(match.index, end));
+    if (path14.length === 0 || chunks.has(path14)) continue;
+    chunks.set(path14, diff.slice(match.index, end));
   }
   return chunks;
 }
 function unquoteGitPath2(value) {
-  const path13 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-  return path13.replace(/\\([\\"tnr])/gu, (_match, char) => {
+  const path14 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path14.replace(/\\([\\"tnr])/gu, (_match, char) => {
     if (char === "t") return "	";
     if (char === "n") return "\n";
     if (char === "r") return "\r";
     return char;
   });
 }
-function basenameWithoutExtension(path13) {
-  const fileName = path13.split("/").at(-1) ?? path13;
+function basenameWithoutExtension(path14) {
+  const fileName = path14.split("/").at(-1) ?? path14;
   const extension = fileName.lastIndexOf(".");
   return extension > 0 ? fileName.slice(0, extension) : fileName;
 }
@@ -15167,16 +15171,16 @@ function splitDiffByDestinationPath2(diff) {
   for (let index = 0; index < matches.length; index += 1) {
     const match = matches[index];
     if (match.index === void 0) continue;
-    const path13 = unquoteGitPath3(match[2].trim());
+    const path14 = unquoteGitPath3(match[2].trim());
     const end = matches[index + 1]?.index ?? diff.length;
-    if (!path13 || chunks.has(path13)) continue;
-    chunks.set(path13, diff.slice(match.index, end).replace(/\n+$/, ""));
+    if (!path14 || chunks.has(path14)) continue;
+    chunks.set(path14, diff.slice(match.index, end).replace(/\n+$/, ""));
   }
   return chunks;
 }
 function unquoteGitPath3(value) {
-  const path13 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-  return path13.replace(/\\([\\"tnr])/g, (_match, char) => {
+  const path14 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path14.replace(/\\([\\"tnr])/g, (_match, char) => {
     if (char === "t") return "	";
     if (char === "n") return "\n";
     if (char === "r") return "\r";
@@ -18982,8 +18986,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path13, errorMaps, issueData } = params;
-  const fullPath = [...path13, ...issueData.path || []];
+  const { data, path: path14, errorMaps, issueData } = params;
+  const fullPath = [...path14, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -19099,11 +19103,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path13, key) {
+  constructor(parent, value, path14, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path13;
+    this._path = path14;
     this._key = key;
   }
   get path() {
@@ -23477,6 +23481,30 @@ function safeOidcErrorCode(payload) {
 }
 
 // src/control-plane/runtime-config.ts
+function parseAdmittedRuntimeConfig(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join(",") !== "configVersion,protocolVersion,runtimeEnv") {
+    throw new Error("runtime_config_invalid_response");
+  }
+  const input = value;
+  if (typeof input.configVersion !== "number" || !Number.isSafeInteger(input.configVersion) || input.configVersion < 1 || Array.isArray(input.runtimeEnv)) {
+    throw new Error("runtime_config_invalid_response");
+  }
+  const parsed = parseRuntimeConfig(value);
+  if (parsed.ignoredRuntimeEnvKeys.length > 0) {
+    throw new Error("runtime_config_unsafe_admitted_env");
+  }
+  return Object.freeze({
+    protocolVersion: 1,
+    configVersion: parsed.configVersion,
+    runtimeEnv: Object.freeze(parsed.runtimeEnv)
+  });
+}
+function applyAdmittedRuntimeConfig(value, env = process.env) {
+  const config = parseAdmittedRuntimeConfig(value);
+  applyRuntimeEnv(config.runtimeEnv, env);
+  applyUltraRuntimeTimeoutFallback(config.runtimeEnv, env);
+  return config.runtimeEnv.CODEX_REASONING_EFFORT;
+}
 async function applyControlPlaneRuntimeConfig(input = {}) {
   const env = input.env ?? process.env;
   if (env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== "oidc") {
@@ -23519,7 +23547,8 @@ async function applyControlPlaneRuntimeConfig(input = {}) {
       apiUrl,
       actionVersion,
       configVersion: config.configVersion,
-      sessionToken: session.sessionToken
+      sessionToken: session.sessionToken,
+      ...config.runtimeEnv.CODEX_REASONING_EFFORT !== void 0 ? { reasoningEffort: config.runtimeEnv.CODEX_REASONING_EFFORT } : {}
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown_error";
@@ -23653,8 +23682,8 @@ async function readSafeErrorCode(response) {
   }
   return void 0;
 }
-function joinApiPath(apiUrl, path13) {
-  return new URL(path13, ensureTrailingSlash(apiUrl)).toString();
+function joinApiPath(apiUrl, path14) {
+  return new URL(path14, ensureTrailingSlash(apiUrl)).toString();
 }
 function ensureTrailingSlash(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -63442,8 +63471,8 @@ function isSensitiveTokenPath(tokens) {
   return (tokens.includes("token") || tokens.includes("tokens")) && includesToken(tokens, SENSITIVE_TOKEN_CONTEXT);
 }
 function isActionManifest(filename, tokens) {
-  const basename2 = filename.split("/").at(-1)?.toLowerCase();
-  if (basename2 === "action.yml" || basename2 === "action.yaml") return true;
+  const basename3 = filename.split("/").at(-1)?.toLowerCase();
+  if (basename3 === "action.yml" || basename3 === "action.yaml") return true;
   return tokens.includes("manifest") && (tokens.includes("action") || tokens.includes("actions"));
 }
 function classifyFileRisk(filename) {
@@ -63701,13 +63730,13 @@ var GitHubClient = class {
    * Throttle requests when approaching rate limit
    */
   async throttleIfNeeded() {
-    const delay = this.calculateBackoffDelay();
-    if (delay > 0) {
+    const delay2 = this.calculateBackoffDelay();
+    if (delay2 > 0) {
       const status = this.rateLimitTracker.getStatus();
       debug(
-        `Throttling GitHub API request (${delay}ms delay, ${status?.remaining} requests remaining)`
+        `Throttling GitHub API request (${delay2}ms delay, ${status?.remaining} requests remaining)`
       );
-      await new Promise((resolve4) => setTimeout(resolve4, delay));
+      await new Promise((resolve4) => setTimeout(resolve4, delay2));
     }
   }
   /**
@@ -63938,16 +63967,16 @@ var ReviewLedger = class {
   }
   async load(prNumber) {
     const empty = this.emptyPayload(prNumber);
+    const comments = await this.findLedgerComments(prNumber);
+    if (comments.length === 0) {
+      return { valid: true, payload: empty };
+    }
     if (!this.secret) {
       return {
         valid: false,
         payload: empty,
         invalidReason: "REVIEW_ROUTER_LEDGER_KEY is not configured"
       };
-    }
-    const comments = await this.findLedgerComments(prNumber);
-    if (comments.length === 0) {
-      return { valid: true, payload: empty };
     }
     const invalidReasons = [];
     for (const comment of comments) {
@@ -64580,10 +64609,10 @@ function redactSensitiveText(value) {
 
 // src/providers/codex.ts
 var import_child_process3 = require("child_process");
-var fs4 = __toESM(require("fs/promises"));
+var fs5 = __toESM(require("fs/promises"));
 var fsSync = __toESM(require("fs"));
 var os2 = __toESM(require("os"));
-var path3 = __toESM(require("path"));
+var path4 = __toESM(require("path"));
 var crypto = __toESM(require("crypto"));
 var import__2 = __toESM(require__());
 
@@ -64653,12 +64682,17 @@ var path2 = __toESM(require("path"));
 var CODEX_OAUTH_PINNED_CODEX_PACKAGE = "@openai/codex@0.147.0";
 var CODEX_OAUTH_CLI_INSTALL_TIMEOUT_MS = 3e5;
 async function prepareCodexCliBeforeAuthRead(input = {}) {
+  input.signal?.throwIfAborted();
   const explicit = process.env.REVIEWROUTER_CODEX_BINARY?.trim();
   if (explicit) {
-    await assertCodexBinaryWorks(explicit, input.timeoutMs ?? 1e4);
+    await assertCodexBinaryWorks(
+      explicit,
+      input.timeoutMs ?? 1e4,
+      input.signal
+    );
     return { binaryPath: explicit };
   }
-  if (await canRunCodexBinary("codex", input.timeoutMs ?? 1e4)) {
+  if (await canRunCodexBinary("codex", input.timeoutMs ?? 1e4, input.signal)) {
     return { binaryPath: "codex" };
   }
   input.logger?.info(
@@ -64667,33 +64701,51 @@ async function prepareCodexCliBeforeAuthRead(input = {}) {
   const installRoot = await fs3.mkdtemp(
     path2.join(os.tmpdir(), "reviewrouter-codex-cli-")
   );
-  await runNpmInstall({
-    installRoot,
-    timeoutMs: input.timeoutMs ?? CODEX_OAUTH_CLI_INSTALL_TIMEOUT_MS
-  });
-  const binaryPath = path2.join(installRoot, "node_modules", ".bin", "codex");
-  await assertCodexBinaryWorks(binaryPath, input.timeoutMs ?? 1e4);
-  return {
-    binaryPath,
-    async clear() {
+  try {
+    await runNpmInstall({
+      installRoot,
+      timeoutMs: input.timeoutMs ?? CODEX_OAUTH_CLI_INSTALL_TIMEOUT_MS,
+      signal: input.signal
+    });
+    const binaryPath = path2.join(installRoot, "node_modules", ".bin", "codex");
+    await assertCodexBinaryWorks(
+      binaryPath,
+      input.timeoutMs ?? 1e4,
+      input.signal
+    );
+    return {
+      binaryPath,
+      async clear() {
+        await fs3.rm(installRoot, { recursive: true, force: true });
+      }
+    };
+  } catch (error) {
+    try {
       await fs3.rm(installRoot, { recursive: true, force: true });
+    } catch {
+      input.logger?.warn(
+        "Codex CLI install cleanup failed; removal unconfirmed"
+      );
     }
-  };
+    throw error;
+  }
 }
-async function assertCodexBinaryWorks(binaryPath, timeoutMs) {
-  if (!await canRunCodexBinary(binaryPath, timeoutMs)) {
+async function assertCodexBinaryWorks(binaryPath, timeoutMs, signal) {
+  if (!await canRunCodexBinary(binaryPath, timeoutMs, signal)) {
     throw new Error("codex_oauth_codex_cli_unavailable");
   }
 }
-async function canRunCodexBinary(binaryPath, timeoutMs) {
+async function canRunCodexBinary(binaryPath, timeoutMs, signal) {
   try {
     await runCommand(binaryPath, ["--version"], {
       timeoutMs,
+      signal,
       cwd: os.tmpdir(),
       env: safePreAuthEnv()
     });
     return true;
   } catch {
+    signal?.throwIfAborted();
     return false;
   }
 }
@@ -64711,31 +64763,48 @@ async function runNpmInstall(input) {
     ],
     {
       timeoutMs: input.timeoutMs,
+      signal: input.signal,
       cwd: input.installRoot,
       env: safePreAuthEnv()
     }
   );
 }
 function runCommand(command, args, options) {
+  options.signal?.throwIfAborted();
   return new Promise((resolve4, reject) => {
     const child = (0, import_child_process2.spawn)(command, args, {
       cwd: options.cwd,
+      detached: options.signal !== void 0 && process.platform !== "win32",
       env: options.env,
       stdio: ["ignore", "ignore", "pipe"]
     });
     let stderr = "";
     let timedOut = false;
+    const stop = () => {
+      try {
+        if (options.signal && process.platform !== "win32" && child.pid)
+          process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    options.signal?.addEventListener("abort", stop, { once: true });
+    if (options.signal?.aborted) stop();
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
-      reject(new Error("codex_oauth_codex_cli_prepare_timeout"));
+      stop();
     }, options.timeoutMs);
+    const finish = () => {
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", stop);
+    };
     child.stderr?.on("data", (chunk) => {
       stderr += String(chunk);
     });
     child.on("error", (error) => {
-      if (timedOut) return;
-      clearTimeout(timer);
+      if (child.pid) return;
+      finish();
       reject(
         new Error(
           `codex_oauth_codex_cli_prepare_failed:${safeOutput(String(error))}`
@@ -64743,8 +64812,13 @@ function runCommand(command, args, options) {
       );
     });
     child.on("close", (code) => {
-      if (timedOut) return;
-      clearTimeout(timer);
+      finish();
+      if (options.signal?.aborted || timedOut) {
+        reject(
+          options.signal?.aborted ? options.signal.reason : new Error("codex_oauth_codex_cli_prepare_timeout")
+        );
+        return;
+      }
       if (code === 0) {
         resolve4();
         return;
@@ -64768,6 +64842,109 @@ function safePreAuthEnv() {
 }
 function safeOutput(value) {
   return value.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 200);
+}
+
+// src/codex-oauth/account-gateway-mimo-catalog.ts
+var fs4 = __toESM(require("fs/promises"));
+var path3 = __toESM(require("path"));
+var mimoModel = {
+  slug: "mimo-v2.6-pro",
+  display_name: "MiMo-V2.6-Pro",
+  description: "Xiaomi MiMo: MiMo-V2.6-Pro",
+  base_instructions: "",
+  default_reasoning_level: "low",
+  supported_reasoning_levels: [
+    { effort: "none", description: "No extra reasoning for faster responses" },
+    { effort: "low", description: "Fast responses with lighter reasoning" },
+    {
+      effort: "medium",
+      description: "Balances speed and reasoning depth for everyday tasks"
+    },
+    {
+      effort: "high",
+      description: "Greater reasoning depth for complex problems"
+    }
+  ],
+  shell_type: "unified_exec",
+  visibility: "list",
+  supported_in_api: true,
+  priority: 0,
+  support_verbosity: false,
+  apply_patch_tool_type: "freeform",
+  truncation_policy: { mode: "tokens", limit: 1e4 },
+  supports_parallel_tool_calls: false,
+  context_window: 1048576,
+  max_context_window: 1048576,
+  auto_compact_token_limit: null,
+  comp_hash: "3000",
+  default_reasoning_summary: "none",
+  input_modalities: ["text", "image"],
+  supports_image_detail_original: true,
+  experimental_supported_tools: ["send_user_message_async", "clock"],
+  use_responses_lite: true,
+  tool_mode: "code_mode_only",
+  multi_agent_version: "v2",
+  include_skills_usage_instructions: false,
+  include_apps_usage_instructions: false,
+  include_plugin_usage_instructions: false,
+  auto_review_model_override: null,
+  model_specialty: null
+};
+async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfiguration) {
+  if (model !== mimoModel.slug) return void 0;
+  if (!codexHome || !path3.isAbsolute(codexHome))
+    throw new Error("account_gateway_catalog_home_unavailable");
+  const catalogPath = path3.join(codexHome, "reviewrouter-model-catalog.json");
+  const setting = `model_catalog_json=${JSON.stringify(catalogPath)}`;
+  await fs4.writeFile(
+    catalogPath,
+    JSON.stringify({ models: [mimoModel] }) + "\n",
+    { mode: 384 }
+  );
+  await fs4.chmod(catalogPath, 384);
+  const configPath = path3.join(codexHome, "config.toml");
+  await fs4.writeFile(
+    configPath,
+    [...gatewayConfiguration, setting].join("\n") + "\n",
+    { mode: 384 }
+  );
+  await fs4.chmod(configPath, 384);
+  return setting;
+}
+
+// src/review-orchestration/infrastructure/account-gateway-model-transport.ts
+var LOCAL_MODEL_CAPABILITY_ENV = "REVIEWROUTER_LOCAL_MODEL_TOKEN";
+var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
+  requestBytes: 16777216,
+  outputBytes: 1048576,
+  jsonBytes: 65536,
+  headerBytes: 16384,
+  bufferBytes: 65536,
+  requestMs: 36e5,
+  idleMs: 6e4,
+  controlMs: 3e4,
+  inFlight: 1,
+  localConnections: 4,
+  cliOutputBytes: 8388608
+});
+function createAccountGatewayRunFetch(fetchImpl, signal) {
+  return (input, init) => {
+    const route = new URL(input instanceof Request ? input.url : String(input)).pathname;
+    const cleanup = [
+      "/api/action/v2/review-invocation-leases/release",
+      "/api/action/v2/review-investigations/leases/release",
+      "/api/action/v2/review-investigations/turns/abort"
+    ].includes(route) || [
+      "/api/action/v2/review-context/gateway/seal",
+      "/api/action/v2/review-investigations/context-gateway/seal"
+    ].includes(route) && typeof init?.body === "string" && JSON.parse(init.body).providerSucceeded === false;
+    if (!cleanup) signal.throwIfAborted();
+    const signals = [AbortSignal.timeout(ACCOUNT_GATEWAY_BOUNDS.controlMs)];
+    if (!cleanup) signals.push(signal);
+    const requestSignal = init?.signal ?? (input instanceof Request ? input.signal : void 0);
+    if (requestSignal) signals.push(requestSignal);
+    return fetchImpl(input, { ...init, signal: AbortSignal.any(signals) });
+  };
 }
 
 // src/providers/review-output.ts
@@ -65001,6 +65178,20 @@ function describeEnvironmentContract(environment) {
     )
   );
 }
+function splitProviderEnvironment(environment) {
+  const runtimeEnvironment = {};
+  const credentialEnvironment = {};
+  for (const [key, value] of Object.entries(environment)) {
+    if (value === void 0) continue;
+    if (isCredentialEnvironmentKey(key)) credentialEnvironment[key] = value;
+    else runtimeEnvironment[key] = value;
+  }
+  return Object.freeze({
+    runtimeEnvironment: Object.freeze(runtimeEnvironment),
+    credentialEnvironment: Object.freeze(credentialEnvironment),
+    contract: describeEnvironmentContract(environment)
+  });
+}
 function mergeCredentialEnvironment(runtimeEnvironment, credentialEnvironment) {
   const merged = { ...runtimeEnvironment };
   for (const [key, value] of Object.entries(credentialEnvironment ?? {})) {
@@ -65113,7 +65304,7 @@ var CodexProvider = class _CodexProvider extends Provider {
   // request and can exhaust limited OAuth usage before review starts.
   async healthCheck(_timeoutMs = 5e3) {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5e3);
-    const mode = (process.env.CODEX_HEALTHCHECK_MODE || "binary").toLowerCase();
+    const mode = this.options.accountGateway ? "binary" : (process.env.CODEX_HEALTHCHECK_MODE || "binary").toLowerCase();
     if (mode === "none" || mode === "binary") {
       return true;
     }
@@ -65176,7 +65367,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       if (execution.runResult.audit) {
         this.logAgenticAudit(execution.runResult.audit, false);
       }
-      if (this.shouldRetryForMissingAgenticExploration(
+      if (!this.options.accountGateway && this.shouldRetryForMissingAgenticExploration(
         execution.parsed,
         execution.runResult.audit,
         prompt,
@@ -65275,13 +65466,20 @@ var CodexProvider = class _CodexProvider extends Provider {
     ) : agenticContext ? await this.wrapAgenticReviewPrompt(prompt) : this.wrapPromptOnlyReviewPrompt(prompt);
     const auditMode = agenticContext && !contextGateway ? this.agenticAuditMode() : "off";
     const eventAudit = contextGateway ? true : this.shouldUseEventAudit();
-    const forkSandbox = this.shouldUseForkSandboxCodexHomeConfig();
+    const forkSandbox = !this.options.accountGateway && this.shouldUseForkSandboxCodexHomeConfig();
     const reasoningEffort = this.resolveReasoningEffort(false);
+    const gateway = this.options.accountGateway;
+    const modelCatalogSetting = gateway ? await prepareAccountGatewayModelCatalog(
+      this.model,
+      gateway.environment.CODEX_HOME,
+      gateway.configuration
+    ) : void 0;
     const frozenCliConfig = {
       model: this.model,
       modelProvider: this.options.modelProvider,
       forkSandbox,
-      reasoningEffort
+      reasoningEffort,
+      modelCatalogSetting
     };
     const fullEnvironment = {
       ...this.buildSafeEnv(true, frozenCliConfig),
@@ -65315,7 +65513,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       jsonEvents: auditMode !== "off" || contextGateway !== void 0,
       auditMode,
       optionalAgenticRetryMaxPromptTokens: MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
-      acceptReviewOutputOnNonZero: true,
+      acceptReviewOutputOnNonZero: !this.options.accountGateway,
       ...contextGateway ? { contextGateway } : {}
     };
     return createPreparedProviderInvocation({
@@ -65371,6 +65569,8 @@ var CodexProvider = class _CodexProvider extends Provider {
       this.name
     );
     const request = prepared.request;
+    if (this.options.accountGateway && Buffer.byteLength(request.prompt) > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
+      throw new Error("account_gateway_prompt_bound");
     logger.info(
       `Running Codex CLI safely: ${request.binary} exec --model ${prepared.requestedModel} --sandbox read-only --ephemeral ...`
     );
@@ -65393,10 +65593,17 @@ var CodexProvider = class _CodexProvider extends Provider {
         cwd: request.cwd,
         environment: mergeCredentialEnvironment(
           request.environment,
-          credentialLease?.environment
+          this.options.accountGateway ? {
+            ...credentialLease?.environment,
+            ...splitProviderEnvironment(
+              this.options.accountGateway.environment
+            ).credentialEnvironment
+          } : credentialLease?.environment
         )
       }
     );
+    if (this.options.accountGateway && !runResult.lastMessage.trim())
+      throw new Error("account_gateway_final_missing");
     const content = this.sanitizeReviewContent(
       (runResult.lastMessage || runResult.stdout).trim(),
       request.cwd
@@ -65425,6 +65632,13 @@ var CodexProvider = class _CodexProvider extends Provider {
     };
   }
   captureCredentialLease(invocation) {
+    if (this.options.accountGateway) {
+      return {
+        environment: splitProviderEnvironment(
+          this.options.accountGateway.environment
+        ).credentialEnvironment
+      };
+    }
     const environment = {};
     const credentialKeys = ["OPENAI_API_KEY"];
     if (invocation.request.argsTemplate.includes(
@@ -65448,6 +65662,7 @@ var CodexProvider = class _CodexProvider extends Provider {
     delete sanitized.OPENROUTER_API_KEY;
     delete sanitized[MIMO_TOKEN_PLAN_API_KEY];
     delete sanitized.REVIEWROUTER_CONTEXT_GATEWAY_SECRET;
+    delete sanitized[LOCAL_MODEL_CAPABILITY_ENV];
     return Object.freeze(sanitized);
   }
   async runStructuredPrompt(prompt, outputSchema, timeoutMs, options = {}) {
@@ -65594,7 +65809,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         args.push("-c", `model_reasoning_effort="${normalized}"`);
       }
     }
-    if (config.modelProvider === "openrouter") {
+    if (!this.options.accountGateway && config.modelProvider === "openrouter") {
       args.push(
         "-c",
         'model_provider="openrouter"',
@@ -65606,7 +65821,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
       );
     }
-    if (config.modelProvider === "mimo") {
+    if (!this.options.accountGateway && config.modelProvider === "mimo") {
       args.push(
         "-c",
         'model_provider="mimo"',
@@ -65628,21 +65843,27 @@ ${JSON.stringify(outputSchema)}` : prompt;
     for (const configOverride of SHELL_ENVIRONMENT_POLICY_ARGS) {
       args.push("-c", configOverride);
     }
+    if (this.options.accountGateway) {
+      for (const setting of this.options.accountGateway.configuration)
+        args.push("-c", setting);
+      if (config.modelCatalogSetting)
+        args.push("-c", config.modelCatalogSetting);
+    }
     args.push("-");
     return args;
   }
   async runCliWithStdin(bin, stdin, timeoutMs, options, prepared) {
     const runId = crypto.randomBytes(8).toString("hex");
-    const tmpFile = path3.join(os2.tmpdir(), `codex-prompt-${runId}.txt`);
-    const outputFile = path3.join(os2.tmpdir(), `codex-output-${runId}.txt`);
+    const tmpFile = path4.join(os2.tmpdir(), `codex-prompt-${runId}.txt`);
+    const outputFile = path4.join(os2.tmpdir(), `codex-output-${runId}.txt`);
     const cliSchemaEnabled = prepared ? prepared.argsTemplate.includes("--output-schema") : this.supportsCliOutputSchema(this.options.modelProvider);
-    const schemaFile = options.outputSchema && cliSchemaEnabled ? path3.join(os2.tmpdir(), `codex-schema-${runId}.json`) : void 0;
+    const schemaFile = options.outputSchema && cliSchemaEnabled ? path4.join(os2.tmpdir(), `codex-schema-${runId}.json`) : void 0;
     let fd;
     try {
-      await fs4.writeFile(tmpFile, stdin, { encoding: "utf8", mode: 384 });
-      await fs4.writeFile(outputFile, "", { encoding: "utf8", mode: 384 });
+      await fs5.writeFile(tmpFile, stdin, { encoding: "utf8", mode: 384 });
+      await fs5.writeFile(outputFile, "", { encoding: "utf8", mode: 384 });
       if (schemaFile) {
-        await fs4.writeFile(schemaFile, JSON.stringify(options.outputSchema), {
+        await fs5.writeFile(schemaFile, JSON.stringify(options.outputSchema), {
           encoding: "utf8",
           mode: 384
         });
@@ -65658,7 +65879,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         disableTools: options.disableTools,
         skipGitRepoCheck: options.skipGitRepoCheck
       });
-      fd = await fs4.open(tmpFile, "r");
+      fd = await fs5.open(tmpFile, "r");
       const fdNum = fd.fd;
       const { stdout, stderr } = await new Promise((resolve4, reject) => {
         if (options.signal?.aborted) {
@@ -65674,6 +65895,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
         let stdout2 = "";
         let stderr2 = "";
         let settled = false;
+        let pendingFailure;
+        let failed = false;
         const terminate = () => {
           try {
             if (proc.pid) process.kill(-proc.pid, "SIGKILL");
@@ -65687,6 +65910,14 @@ ${JSON.stringify(outputSchema)}` : prompt;
         };
         const fail = (error) => {
           if (settled) return;
+          if (this.options.accountGateway) {
+            if (!failed) {
+              pendingFailure = error;
+              failed = true;
+              cleanup();
+            }
+            return;
+          }
           settled = true;
           cleanup();
           reject(error);
@@ -65703,20 +65934,36 @@ ${JSON.stringify(outputSchema)}` : prompt;
           fail(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
         }, timeoutMs);
         options.signal?.addEventListener("abort", onAbort, { once: true });
+        if (options.signal?.aborted) onAbort();
+        let outputBytes = 0;
+        const withinOutputBound = (chunk) => {
+          outputBytes += Buffer.byteLength(chunk);
+          if (this.options.accountGateway && outputBytes > ACCOUNT_GATEWAY_BOUNDS.cliOutputBytes) {
+            terminate();
+            fail(new Error("account_gateway_cli_output_bound"));
+            return false;
+          }
+          return true;
+        };
         proc.stdout?.on("data", (chunk) => {
+          if (settled || failed || !withinOutputBound(chunk)) return;
           stdout2 += chunk.toString();
         });
         proc.stderr?.on("data", (chunk) => {
+          if (settled || failed || !withinOutputBound(chunk)) return;
           stderr2 += chunk.toString();
         });
         proc.on("error", (err) => {
+          if (this.options.accountGateway && proc.pid) terminate();
           fail(err);
         });
         proc.on("close", (code) => {
           if (settled) return;
           settled = true;
           cleanup();
-          if (code !== 0) {
+          if (failed) {
+            reject(pendingFailure);
+          } else if (code !== 0) {
             const message = `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr2, stdout2)}`;
             reject(new CodexCliExitError(code, stdout2, stderr2, message));
           } else {
@@ -65724,7 +65971,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           }
         });
       }).catch(async (error) => {
-        if (options.signal?.aborted) throw error;
+        if (this.options.accountGateway || options.signal?.aborted) throw error;
         const lastMessage2 = await this.readOptionalFile(outputFile);
         if (options.acceptReviewOutputOnNonZero && this.isUsableReviewOutput(lastMessage2)) {
           const exitError = error instanceof CodexCliExitError ? error : void 0;
@@ -65754,10 +66001,10 @@ ${JSON.stringify(outputSchema)}` : prompt;
         if (fd) {
           await fd.close();
         }
-        await fs4.unlink(tmpFile);
-        await fs4.unlink(outputFile);
+        await fs5.unlink(tmpFile);
+        await fs5.unlink(outputFile);
         if (schemaFile) {
-          await fs4.unlink(schemaFile);
+          await fs5.unlink(schemaFile);
         }
       } catch {
       }
@@ -65846,6 +66093,13 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const gateway = request.contextGateway;
     const environment = this.observablePreparedEnvironment(request);
     const replacements = [
+      ...this.options.accountGateway ? [
+        [request.environment.CODEX_HOME ?? "", "<codex-home>"],
+        [
+          this.options.accountGateway.baseUrl,
+          "<account-gateway-loopback>"
+        ]
+      ] : [],
       ...gateway ? [
         [gateway.command, "<context-gateway-command>"],
         [gateway.cwd, "<checkout-root>"],
@@ -65889,7 +66143,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
       Object.keys(request.contextGateway?.runtimeEnvironment ?? {})
     );
     const replacements = [
-      ...path3.isAbsolute(request.binary) ? [[path3.dirname(request.binary), "<codex-binary-dir>"]] : [],
+      ...path4.isAbsolute(request.binary) ? [[path4.dirname(request.binary), "<codex-binary-dir>"]] : [],
       [request.cwd, "<checkout-root>"],
       ...request.contextGateway ? [[request.contextGateway.cwd, "<checkout-root>"]] : []
     ];
@@ -65911,7 +66165,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     );
   }
   validateContextGatewayConfig(gateway) {
-    if (!path3.isAbsolute(gateway.command) || gateway.args.length !== 1 || !path3.isAbsolute(gateway.args[0]) || !path3.isAbsolute(gateway.cwd) || !/^[a-f0-9]{64}$/u.test(gateway.gatewayBinaryHash) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(gateway.gatewayPolicyVersion)) {
+    if (!path4.isAbsolute(gateway.command) || gateway.args.length !== 1 || !path4.isAbsolute(gateway.args[0]) || !path4.isAbsolute(gateway.cwd) || !/^[a-f0-9]{64}$/u.test(gateway.gatewayBinaryHash) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(gateway.gatewayPolicyVersion)) {
       throw new Error("codex_context_gateway_config_invalid");
     }
     const expectedTools = this.contextGatewayTools(
@@ -66027,14 +66281,16 @@ ${JSON.stringify(outputSchema)}` : prompt;
       includeWorkspaceEnv: includeWorkspaceEnv && !forkSandbox,
       extraAllowedKeys: [
         "CODEX_HOME",
-        "OPENAI_API_KEY",
-        ...modelProvider === "openrouter" ? ["OPENROUTER_API_KEY"] : [],
-        ...modelProvider === "mimo" ? [MIMO_TOKEN_PLAN_API_KEY] : []
-      ]
+        ...this.options.accountGateway ? [] : ["OPENAI_API_KEY"],
+        ...!this.options.accountGateway && modelProvider === "openrouter" ? ["OPENROUTER_API_KEY"] : [],
+        ...!this.options.accountGateway && modelProvider === "mimo" ? [MIMO_TOKEN_PLAN_API_KEY] : []
+      ],
+      ...this.options.accountGateway ? { overrides: this.options.accountGateway.environment } : {}
     });
   }
   requireModelProviderCredential() {
-    if (this.options.modelProvider !== "mimo") return;
+    if (this.options.accountGateway || this.options.modelProvider !== "mimo")
+      return;
     if (!process.env[MIMO_TOKEN_PLAN_API_KEY]?.trim()) {
       const error = new Error(
         `codex_mimo_api_key_missing: ${MIMO_TOKEN_PLAN_API_KEY} is required for ${this.name}`
@@ -66119,10 +66375,10 @@ ${JSON.stringify(outputSchema)}` : prompt;
     );
   }
   normalizeRepoPath(file) {
-    if (!file || file.includes("\0") || path3.isAbsolute(file)) {
+    if (!file || file.includes("\0") || path4.isAbsolute(file)) {
       return null;
     }
-    const normalized = path3.normalize(file).replace(/\\/g, "/");
+    const normalized = path4.normalize(file).replace(/\\/g, "/");
     if (normalized === "." || normalized.startsWith("../") || normalized === "..") {
       return null;
     }
@@ -66132,16 +66388,16 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const normalized = this.normalizeRepoPath(file);
     if (!normalized) return "";
     const repoRoot = process.cwd();
-    const fullPath = path3.resolve(repoRoot, normalized);
-    if (!fullPath.startsWith(repoRoot + path3.sep)) {
+    const fullPath = path4.resolve(repoRoot, normalized);
+    if (!fullPath.startsWith(repoRoot + path4.sep)) {
       return "";
     }
     try {
-      const stat3 = await fs4.stat(fullPath);
+      const stat3 = await fs5.stat(fullPath);
       if (!stat3.isFile() || stat3.size > 2e5) {
         return "";
       }
-      const content = await fs4.readFile(fullPath, "utf8");
+      const content = await fs5.readFile(fullPath, "utf8");
       return content.split(/\r?\n/).slice(0, 220).join("\n").slice(0, 16e3);
     } catch {
       return "";
@@ -66159,8 +66415,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
     return [...imports];
   }
   resolveRelativeImport(fromFile, specifier) {
-    const base = path3.dirname(fromFile);
-    const raw = this.normalizeRepoPath(path3.join(base, specifier));
+    const base = path4.dirname(fromFile);
+    const raw = this.normalizeRepoPath(path4.join(base, specifier));
     if (!raw) return null;
     const candidates = [
       raw,
@@ -66168,15 +66424,15 @@ ${JSON.stringify(outputSchema)}` : prompt;
         (ext) => `${raw}${ext}`
       ),
       ...[".ts", ".tsx", ".js", ".jsx", ".json"].map(
-        (ext) => path3.posix.join(raw, `index${ext}`)
+        (ext) => path4.posix.join(raw, `index${ext}`)
       )
     ];
     for (const candidate of candidates) {
       const normalized = this.normalizeRepoPath(candidate);
       if (!normalized || !this.isContextReadableFile(normalized)) continue;
       try {
-        const fullPath = path3.resolve(process.cwd(), normalized);
-        if (fullPath.startsWith(process.cwd() + path3.sep)) {
+        const fullPath = path4.resolve(process.cwd(), normalized);
+        if (fullPath.startsWith(process.cwd() + path4.sep)) {
           const stat3 = fsSync.statSync(fullPath);
           if (stat3.isFile()) return normalized;
         }
@@ -66192,7 +66448,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const roots = this.getWorkspacePackageRoots();
     const root = roots.get(packageName) || this.getDependencyPackageRoot(packageName);
     if (!root) return null;
-    return this.resolveImportCandidate(path3.posix.join(root, packagePath));
+    return this.resolveImportCandidate(path4.posix.join(root, packagePath));
   }
   getDependencyPackageRoot(packageName) {
     if (!this.parseBooleanEnv(process.env.CODEX_DEPENDENCY_CONTEXT, true)) {
@@ -66202,17 +66458,17 @@ ${JSON.stringify(outputSchema)}` : prompt;
     if (!dependency) return null;
     const safePackage = packageName.replace(/[^a-zA-Z0-9_.-]/g, "_");
     const cacheKey = crypto.createHash("sha1").update(`${dependency.url}:${dependency.ref}:${dependency.path}`).digest("hex").slice(0, 10);
-    const checkoutDir = path3.join(
+    const checkoutDir = path4.join(
       process.cwd(),
       ".review-router-deps",
       `${safePackage}-${cacheKey}`
     );
-    const root = path3.posix.join(
+    const root = path4.posix.join(
       ".review-router-deps",
       `${safePackage}-${cacheKey}`,
       dependency.path
     );
-    if (fsSync.existsSync(path3.join(checkoutDir, dependency.path))) {
+    if (fsSync.existsSync(path4.join(checkoutDir, dependency.path))) {
       return root;
     }
     if (!this.isSafeDependencyGitUrl(dependency.url)) {
@@ -66222,7 +66478,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
       return null;
     }
     try {
-      fsSync.mkdirSync(path3.dirname(checkoutDir), { recursive: true });
+      fsSync.mkdirSync(path4.dirname(checkoutDir), { recursive: true });
       fsSync.rmSync(checkoutDir, { recursive: true, force: true });
       fsSync.mkdirSync(checkoutDir, { recursive: true });
       this.runGitForDependency(["init", "--quiet"], checkoutDir);
@@ -66238,7 +66494,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         ["checkout", "--quiet", "FETCH_HEAD"],
         checkoutDir
       );
-      if (fsSync.existsSync(path3.join(checkoutDir, dependency.path))) {
+      if (fsSync.existsSync(path4.join(checkoutDir, dependency.path))) {
         logger.info(
           `Loaded dependency context for ${packageName} from ${dependency.url}@${dependency.ref}`
         );
@@ -66273,12 +66529,12 @@ ${JSON.stringify(outputSchema)}` : prompt;
         return;
       }
       if (entries.some((entry) => entry.isFile() && entry.name === "pubspec.lock")) {
-        found.push(path3.join(dir, "pubspec.lock"));
+        found.push(path4.join(dir, "pubspec.lock"));
       }
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         if (this.shouldSkipContextDirectory(entry.name)) continue;
-        walk(path3.join(dir, entry.name), depth + 1);
+        walk(path4.join(dir, entry.name), depth + 1);
       }
     };
     walk(root, 0);
@@ -66329,7 +66585,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         PATH: process.env.PATH || "",
         LANG: process.env.LANG || "C",
         LC_ALL: process.env.LC_ALL || "C",
-        HOME: path3.join(os2.tmpdir(), "review-router-git-home"),
+        HOME: path4.join(os2.tmpdir(), "review-router-git-home"),
         GIT_TERMINAL_PROMPT: "0",
         GIT_CONFIG_NOSYSTEM: "1"
       }
@@ -66347,8 +66603,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
         const content = fsSync.readFileSync(pubspec, "utf8");
         const name = /^name:\s*['"]?([^'"\s#]+)['"]?/m.exec(content)?.[1];
         if (!name) continue;
-        const packageDir = path3.relative(process.cwd(), path3.dirname(pubspec)).replace(/\\/g, "/");
-        const libDir = packageDir === "" ? "lib" : path3.posix.join(packageDir, "lib");
+        const packageDir = path4.relative(process.cwd(), path4.dirname(pubspec)).replace(/\\/g, "/");
+        const libDir = packageDir === "" ? "lib" : path4.posix.join(packageDir, "lib");
         roots.set(name, libDir);
       } catch {
       }
@@ -66366,12 +66622,12 @@ ${JSON.stringify(outputSchema)}` : prompt;
         return;
       }
       if (entries.some((entry) => entry.isFile() && entry.name === "pubspec.yaml")) {
-        found.push(path3.join(dir, "pubspec.yaml"));
+        found.push(path4.join(dir, "pubspec.yaml"));
       }
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
         if (this.shouldSkipContextDirectory(entry.name)) continue;
-        walk(path3.join(dir, entry.name), depth + 1);
+        walk(path4.join(dir, entry.name), depth + 1);
       }
     };
     walk(root, 0);
@@ -66445,7 +66701,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         return;
       }
       for (const entry of entries) {
-        const fullPath = path3.join(dir, entry.name);
+        const fullPath = path4.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (!this.shouldSkipContextDirectory(entry.name)) {
             walk(fullPath, depth + 1);
@@ -66453,7 +66709,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           continue;
         }
         if (!entry.isFile()) continue;
-        const relative2 = path3.relative(root, fullPath).replace(/\\/g, "/");
+        const relative2 = path4.relative(root, fullPath).replace(/\\/g, "/");
         if (!this.isContextReadableFile(relative2)) continue;
         try {
           const stat3 = fsSync.statSync(fullPath);
@@ -66482,8 +66738,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const normalized = this.normalizeRepoPath(file);
     if (!normalized) return "";
     const repoRoot = process.cwd();
-    const fullPath = path3.resolve(repoRoot, normalized);
-    if (!fullPath.startsWith(repoRoot + path3.sep)) return "";
+    const fullPath = path4.resolve(repoRoot, normalized);
+    if (!fullPath.startsWith(repoRoot + path4.sep)) return "";
     try {
       const stat3 = fsSync.statSync(fullPath);
       if (!stat3.isFile() || stat3.size > 2e5) return "";
@@ -66499,15 +66755,15 @@ ${JSON.stringify(outputSchema)}` : prompt;
         (ext) => `${raw}${ext}`
       ),
       ...[".dart", ".ts", ".tsx", ".js", ".jsx", ".json"].map(
-        (ext) => path3.posix.join(raw, `index${ext}`)
+        (ext) => path4.posix.join(raw, `index${ext}`)
       )
     ];
     for (const candidate of candidates) {
       const normalized = this.normalizeRepoPath(candidate);
       if (!normalized || !this.isContextReadableFile(normalized)) continue;
       try {
-        const fullPath = path3.resolve(process.cwd(), normalized);
-        if (fullPath.startsWith(process.cwd() + path3.sep)) {
+        const fullPath = path4.resolve(process.cwd(), normalized);
+        if (fullPath.startsWith(process.cwd() + path4.sep)) {
           const stat3 = fsSync.statSync(fullPath);
           if (stat3.isFile()) return normalized;
         }
@@ -66548,7 +66804,9 @@ ${JSON.stringify(outputSchema)}` : prompt;
   }
   async readOptionalFile(file) {
     try {
-      return await fs4.readFile(file, "utf8");
+      if (this.options.accountGateway && (await fs5.stat(file)).size > ACCOUNT_GATEWAY_BOUNDS.outputBytes)
+        return "";
+      return await fs5.readFile(file, "utf8");
     } catch {
       return "";
     }
@@ -66586,6 +66844,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
     return Object.freeze({ kind: "ambiguous" /* Ambiguous */ });
   }
   resolveEffectiveActualModel(observation, requestedModel) {
+    if (this.options.accountGateway)
+      return this.options.accountGateway.actualModel();
     if (observation.kind === "observed" /* Observed */) {
       return observation.model;
     }
@@ -66690,7 +66950,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
   isReadOnlyExplorationCommand(command) {
     const commandName = this.extractCommandName(command);
     if (!commandName) return false;
-    const base = path3.basename(commandName).toLowerCase();
+    const base = path4.basename(commandName).toLowerCase();
     if ([
       "rg",
       "grep",
@@ -66901,6 +67161,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     );
   }
   withActionableAuthHint(message) {
+    if (this.options.accountGateway) return message;
     if (!message) return message;
     if (!/(401|unauthorized|access token|refresh token|auth|login)/i.test(message)) {
       return message;
@@ -66938,13 +67199,13 @@ ${JSON.stringify(outputSchema)}` : prompt;
   }
   async findPreparedRotatingCodexBinary() {
     try {
-      const entries = await fs4.readdir(os2.tmpdir(), { withFileTypes: true });
+      const entries = await fs5.readdir(os2.tmpdir(), { withFileTypes: true });
       const candidates = [];
       for (const entry of entries) {
         if (!entry.isDirectory() || !entry.name.startsWith("reviewrouter-codex-cli-")) {
           continue;
         }
-        const candidate = path3.join(
+        const candidate = path4.join(
           os2.tmpdir(),
           entry.name,
           "node_modules",
@@ -66952,7 +67213,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           "codex"
         );
         try {
-          const stat3 = await fs4.stat(candidate);
+          const stat3 = await fs5.stat(candidate);
           if (stat3.isFile() || stat3.isSymbolicLink()) {
             candidates.push({ path: candidate, mtimeMs: stat3.mtimeMs });
           }
@@ -67275,10 +67536,10 @@ function createReviewPromptCoverageManifest(input) {
     }
     byPath.set(fact.path, fact);
   }
-  if (byPath.size !== assigned.length || assigned.some((path13) => !byPath.has(path13))) {
+  if (byPath.size !== assigned.length || assigned.some((path14) => !byPath.has(path14))) {
     throw new Error("review_prompt_coverage_path_set_mismatch");
   }
-  const paths = Object.freeze(assigned.map((path13) => byPath.get(path13)));
+  const paths = Object.freeze(assigned.map((path14) => byPath.get(path14)));
   const canonicalFacts = canonicalJson5({
     paths,
     reviewRevisionHash: input.reviewRevisionHash,
@@ -67295,7 +67556,7 @@ function createReviewPromptCoverageManifest(input) {
 }
 function isReviewPromptCoverageComplete(manifest) {
   return manifest.paths.length > 0 && manifest.paths.every(
-    (path13) => path13.kind === "full_patch" /* FullPatch */ || path13.kind === "policy_excluded" /* PolicyExcluded */
+    (path14) => path14.kind === "full_patch" /* FullPatch */ || path14.kind === "policy_excluded" /* PolicyExcluded */
   );
 }
 function createProviderVisibleReviewCoverage(manifest) {
@@ -67513,16 +67774,16 @@ function createStableReviewAssignmentManifest(input) {
   const uncoveredPaths = canonicalPaths(input.uncoveredPaths);
   const excludedPaths = canonicalPaths(input.excludedPaths);
   const eligible = new Set(eligiblePaths);
-  for (const path13 of uncoveredPaths) {
-    if (!eligible.has(path13)) {
+  for (const path14 of uncoveredPaths) {
+    if (!eligible.has(path14)) {
       throw new Error("review_assignment_manifest_uncovered_not_eligible");
     }
   }
   const assignments = input.assignments.map((assignment) => {
     requireIdentity2(assignment.workSlotId, "work_slot_id");
     const paths = canonicalPaths(assignment.paths);
-    for (const path13 of paths) {
-      if (!eligible.has(path13)) {
+    for (const path14 of paths) {
+      if (!eligible.has(path14)) {
         throw new Error("review_assignment_manifest_assignment_not_eligible");
       }
     }
@@ -67537,19 +67798,19 @@ function createStableReviewAssignmentManifest(input) {
   const assignedPaths = new Set(
     assignments.flatMap((assignment) => assignment.paths)
   );
-  for (const path13 of uncoveredPaths) {
-    if (assignedPaths.has(path13)) {
+  for (const path14 of uncoveredPaths) {
+    if (assignedPaths.has(path14)) {
       throw new Error("review_assignment_manifest_uncovered_assigned_overlap");
     }
   }
   const uncovered = new Set(uncoveredPaths);
-  for (const path13 of eligiblePaths) {
-    if (!assignedPaths.has(path13) && !uncovered.has(path13)) {
+  for (const path14 of eligiblePaths) {
+    if (!assignedPaths.has(path14) && !uncovered.has(path14)) {
       throw new Error("review_assignment_manifest_eligible_unaccounted");
     }
   }
-  for (const path13 of excludedPaths) {
-    if (eligible.has(path13)) {
+  for (const path14 of excludedPaths) {
+    if (eligible.has(path14)) {
       throw new Error("review_assignment_manifest_excluded_eligible_overlap");
     }
   }
@@ -67578,11 +67839,11 @@ function createStableReviewAssignmentManifest(input) {
   });
 }
 function canonicalPaths(paths) {
-  for (const path13 of paths) requireNormalizedRepoPath(path13);
+  for (const path14 of paths) requireNormalizedRepoPath(path14);
   return Object.freeze([...new Set(paths)].sort(compareCodePoints4));
 }
-function requireNormalizedRepoPath(path13) {
-  if (path13.length === 0 || path13.length > assignmentManifestMaxPathLength || path13.includes("\0") || path13.includes("\\") || path13.startsWith("/") || path13.endsWith("/") || path13.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+function requireNormalizedRepoPath(path14) {
+  if (path14.length === 0 || path14.length > assignmentManifestMaxPathLength || path14.includes("\0") || path14.includes("\\") || path14.startsWith("/") || path14.endsWith("/") || path14.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
     throw new Error("review_assignment_manifest_path_invalid");
   }
 }
@@ -67891,11 +68152,11 @@ var RunInvestigationTurn = class {
       "review_agent_unclassified_failure"
     );
     const reason = abortReason(failure.failureClass);
-    const delay = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
+    const delay2 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
       failure.retryAfterMs ?? input.minimumCapacityParkMs,
       input.minimumCapacityParkMs
     );
-    const nextEligibleAt = delay === null ? null : new Date(this.dependencies.now().getTime() + delay).toISOString();
+    const nextEligibleAt = delay2 === null ? null : new Date(this.dependencies.now().getTime() + delay2).toISOString();
     return this.abort(
       input,
       reason,
@@ -68453,6 +68714,7 @@ var RunT0ReviewOrchestration = class {
     let authorization;
     let execution;
     try {
+      this.dependencies.signal?.throwIfAborted();
       validateCommand(command);
       authorization = preauthorized ?? await this.dependencies.controlPlane.authorize({
         oidcToken: await this.dependencies.oidc.getToken()
@@ -68485,7 +68747,16 @@ var RunT0ReviewOrchestration = class {
         requestedTtlMs: MAX_PRE_EXECUTION_AUTHORIZATION_TTL_MS
       });
       authorization = preExecutionRenewal.authorization;
-      if (preExecutionRenewal.validForMsAtResponse < MIN_PRE_EXECUTION_AUTHORIZATION_VALIDITY_MS) {
+      this.assertExecutionDeadlineAvailable();
+      const preExecutionRemainingMs = this.executionDeadlineRemainingMs();
+      const preExecutionRequiredValidityMs = Math.min(
+        MIN_PRE_EXECUTION_AUTHORIZATION_VALIDITY_MS,
+        preExecutionRemainingMs === Infinity ? Infinity : safeAddMilliseconds(
+          preExecutionRemainingMs,
+          PUBLICATION_AUTHORIZATION_RESERVE_MS
+        )
+      );
+      if (preExecutionRenewal.validForMsAtResponse < preExecutionRequiredValidityMs) {
         throw new Error(
           "review_orchestration_execution_authorization_window_insufficient"
         );
@@ -68706,9 +68977,16 @@ var RunT0ReviewOrchestration = class {
         };
       }
       await this.assertRevisionCurrent(command);
-      const publicationHorizonMs = safeMultiplyMilliseconds(
-        authorization.limits.maxReconciliationDurationMs,
-        PUBLICATION_HORIZON_MULTIPLIER
+      this.assertExecutionDeadlineAvailable(
+        FINAL_PUBLICATION_STATUS_RESERVE_MS
+      );
+      const publicationRemainingMs = this.executionDeadlineRemainingMs();
+      const publicationHorizonMs = Math.min(
+        safeMultiplyMilliseconds(
+          authorization.limits.maxReconciliationDurationMs,
+          PUBLICATION_HORIZON_MULTIPLIER
+        ),
+        publicationRemainingMs === Infinity ? Infinity : safeAddMilliseconds(publicationRemainingMs, 0) - FINAL_PUBLICATION_STATUS_RESERVE_MS
       );
       const publicationRequiredValidityMs = safeAddMilliseconds(
         publicationHorizonMs,
@@ -68739,7 +69017,9 @@ var RunT0ReviewOrchestration = class {
       });
       execution = refreshExecutionAdmission(execution, latestExecution);
       validateProjectionAgainstLimits(projection, authorization.limits);
-      this.assertExecutionDeadlineAvailable();
+      this.assertExecutionDeadlineAvailable(
+        FINAL_PUBLICATION_STATUS_RESERVE_MS
+      );
       state = evolveReviewOrchestration(state, {
         type: "finalization_started" /* FinalizationStarted */
       });
@@ -68754,7 +69034,9 @@ var RunT0ReviewOrchestration = class {
         allowPartial: partial
       });
       await this.assertRevisionCurrent(command);
-      this.assertExecutionDeadlineAvailable();
+      this.assertExecutionDeadlineAvailable(
+        FINAL_PUBLICATION_STATUS_RESERVE_MS
+      );
       assertPublicationAuthorizationWindow({
         validForMsAtResponse: publicationRenewal.validForMsAtResponse,
         elapsedMs: elapsedMonotonicMs(
@@ -68866,7 +69148,12 @@ var RunT0ReviewOrchestration = class {
           clampPollDelay(pollAfterMs),
           Math.max(0, remainingMs - FINAL_PUBLICATION_STATUS_RESERVE_MS)
         );
-        if (delayMs > 0) await this.dependencies.delay.sleep(delayMs);
+        if (delayMs > 0)
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
+        this.dependencies.signal?.throwIfAborted();
         const requestBudgetMs = Math.floor(
           publicationDeadlineMs - readMonotonicClockMs(this.dependencies.clock)
         );
@@ -68876,6 +69163,7 @@ var RunT0ReviewOrchestration = class {
           publicationAttemptId: publication.publicationAttemptId,
           timeoutMs: requestBudgetMs
         });
+        this.dependencies.signal?.throwIfAborted();
         if (!status.terminal) {
           if (publicationDeadlineMs - readMonotonicClockMs(this.dependencies.clock) <= FINAL_PUBLICATION_STATUS_RESERVE_MS) {
             break;
@@ -68904,6 +69192,7 @@ var RunT0ReviewOrchestration = class {
         failureCode: "publication_poll_exhausted"
       };
     } catch (error) {
+      this.dependencies.signal?.throwIfAborted();
       if (error instanceof ReviewExecutionCancelledSignal) {
         if (!isTerminal3(state.phase)) {
           state = evolveReviewOrchestration(state, {
@@ -68967,6 +69256,7 @@ var RunT0ReviewOrchestration = class {
     }
   }
   async renewAuthorization(input) {
+    this.dependencies.signal?.throwIfAborted();
     const identityParts = [
       input.authorization.authorizationId,
       input.authorization.mutationEpoch,
@@ -69067,7 +69357,8 @@ var RunT0ReviewOrchestration = class {
               exhaustionReason: "deadline_reached" /* DeadlineReached */
             };
           }
-          if (!(error instanceof ReviewInvestigationDeferredSignal)) throw error;
+          if (!(error instanceof ReviewInvestigationDeferredSignal))
+            throw error;
           this.recordInvestigationDiagnostic({
             outcome: "authoritative_deferred" /* AuthoritativeDeferred */,
             workSlot: input.workSlot,
@@ -69163,7 +69454,14 @@ var RunT0ReviewOrchestration = class {
               exhaustionReason: "deadline_reached" /* DeadlineReached */
             };
           }
-          await this.dependencies.delay.sleep(delayMs);
+          if (this.dependencies.signal) {
+            await this.dependencies.delay.sleep(
+              delayMs,
+              this.dependencies.signal
+            );
+          } else {
+            await this.dependencies.delay.sleep(delayMs);
+          }
           await this.assertRevisionCurrent(input.revision);
           const joined = await this.trySatisfyFromLookup({
             ...input,
@@ -69256,6 +69554,7 @@ var RunT0ReviewOrchestration = class {
         };
       }
       let observationPayload;
+      let activeInvocation;
       try {
         observationPayload = await this.dependencies.leaseSupervisor.run({
           lease,
@@ -69263,14 +69562,18 @@ var RunT0ReviewOrchestration = class {
             lease = await this.renewLease(lease, input.ownerIdHash);
             return lease;
           },
-          operation: (signal, currentLease) => precomputedObservation === null ? this.executeInvocationWithRevisionWatch({
-            invocation,
-            manifest,
-            currentLease,
-            sourceExecutionId: input.execution.executionId,
-            signal,
-            revision: input.revision
-          }) : Promise.resolve(precomputedObservation)
+          operation: (signal, currentLease) => {
+            this.dependencies.signal?.throwIfAborted();
+            activeInvocation = precomputedObservation === null ? this.executeInvocationWithRevisionWatch({
+              invocation,
+              manifest,
+              currentLease,
+              sourceExecutionId: input.execution.executionId,
+              signal,
+              revision: input.revision
+            }) : Promise.resolve(precomputedObservation);
+            return activeInvocation;
+          }
         });
         if (invocation.manifestFacts.executionProfile !== "context_gateway_v1") {
           await this.assertRevisionCurrent(input.revision);
@@ -69279,6 +69582,13 @@ var RunT0ReviewOrchestration = class {
           throw new ReviewExecutionDeadlineReachedSignal();
         }
       } catch (error) {
+        if (this.dependencies.signal) {
+          await activeInvocation?.catch(() => void 0);
+          if (this.dependencies.signal.aborted) {
+            await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
+            this.dependencies.signal.throwIfAborted();
+          }
+        }
         if (error instanceof ReviewExecutionSupersededSignal || error instanceof ReviewExecutionCancelledSignal) {
           await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
           throw error;
@@ -69435,7 +69745,14 @@ var RunT0ReviewOrchestration = class {
           Math.min(5e3, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        await this.dependencies.delay.sleep(delayMs);
+        if (this.dependencies.signal) {
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
+        } else {
+          await this.dependencies.delay.sleep(delayMs);
+        }
         continue;
       }
       if (acquire.status !== "acquired" /* Acquired */) {
@@ -69590,6 +69907,7 @@ var RunT0ReviewOrchestration = class {
     }
   }
   async renewLease(lease, ownerIdHash) {
+    this.dependencies.signal?.throwIfAborted();
     const renewRequestId = this.identity("lease-renew-request", [
       lease.leaseId,
       lease.fencingToken,
@@ -69611,7 +69929,9 @@ var RunT0ReviewOrchestration = class {
     return renewed;
   }
   async assertRevisionCurrent(expectedRevision) {
+    this.dependencies.signal?.throwIfAborted();
     const currentRevision = await this.dependencies.revisionGuard.loadCurrentRevision();
+    this.dependencies.signal?.throwIfAborted();
     if (currentRevision.pullRequestState === "closed") {
       throw new ReviewExecutionCancelledSignal();
     }
@@ -69631,11 +69951,16 @@ var RunT0ReviewOrchestration = class {
   }
   async executeInvocationWithRevisionWatch(input) {
     const abort = new AbortController();
+    const monitorStop = new AbortController();
+    const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
     let stopped = false;
-    const relayLeaseAbort = () => abort.abort(input.signal.reason);
-    if (input.signal.aborted) relayLeaseAbort();
+    const invocationSignal = this.dependencies.signal ? AbortSignal.any([input.signal, this.dependencies.signal]) : input.signal;
+    const relayLeaseAbort = () => abort.abort(invocationSignal.reason);
+    if (invocationSignal.aborted) relayLeaseAbort();
     else
-      input.signal.addEventListener("abort", relayLeaseAbort, { once: true });
+      invocationSignal.addEventListener("abort", relayLeaseAbort, {
+        once: true
+      });
     const drainOnSupersession = input.invocation.manifestFacts.executionProfile === "context_gateway_v1";
     const monitor = async () => {
       while (!stopped && !abort.signal.aborted) {
@@ -69644,7 +69969,7 @@ var RunT0ReviewOrchestration = class {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
           return;
         }
-        await this.dependencies.delay.sleep(delayMs);
+        await this.dependencies.delay.sleep(delayMs, monitorSignal);
         if (stopped || abort.signal.aborted) return;
         if (this.providerOperationRemainingMs() <= 0) {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -69660,12 +69985,15 @@ var RunT0ReviewOrchestration = class {
         }
       }
     };
-    void monitor();
+    const monitorPromise = monitor().catch((error) => {
+      if (!stopped) abort.abort(error);
+    });
     try {
       const observation = await this.executeLegacyInvocation(
         input,
         abort.signal
       );
+      this.dependencies.signal?.throwIfAborted();
       if (abort.signal.reason instanceof ReviewExecutionCancelledSignal || abort.signal.reason instanceof ReviewExecutionDeadlineReachedSignal) {
         throw abort.signal.reason;
       }
@@ -69677,7 +70005,9 @@ var RunT0ReviewOrchestration = class {
       throw error;
     } finally {
       stopped = true;
-      input.signal.removeEventListener("abort", relayLeaseAbort);
+      monitorStop.abort();
+      await monitorPromise;
+      invocationSignal.removeEventListener("abort", relayLeaseAbort);
     }
   }
   async prepareInvestigationCandidate(input) {
@@ -69699,7 +70029,15 @@ var RunT0ReviewOrchestration = class {
       if (!recording.supports({ workSlot: input.workSlot, invocation })) {
         return null;
       }
+      this.dependencies.signal?.throwIfAborted();
       const abort = new AbortController();
+      const monitorStop = new AbortController();
+      const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
+      const cancel = () => abort.abort(this.dependencies.signal?.reason);
+      this.dependencies.signal?.addEventListener("abort", cancel, {
+        once: true
+      });
+      if (this.dependencies.signal?.aborted) cancel();
       let stopped = false;
       const monitor = async () => {
         while (!stopped && !abort.signal.aborted) {
@@ -69708,7 +70046,7 @@ var RunT0ReviewOrchestration = class {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
             return;
           }
-          await this.dependencies.delay.sleep(delayMs);
+          await this.dependencies.delay.sleep(delayMs, monitorSignal);
           if (stopped || abort.signal.aborted) return;
           if (this.providerOperationRemainingMs() <= 0) {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -69724,7 +70062,9 @@ var RunT0ReviewOrchestration = class {
           }
         }
       };
-      void monitor();
+      const monitorPromise = monitor().catch((error) => {
+        if (!stopped) abort.abort(error);
+      });
       try {
         const observation = await recording.execute({
           authorization: input.authorization,
@@ -69736,6 +70076,7 @@ var RunT0ReviewOrchestration = class {
           sourceReviewRevisionHash: input.revision.reviewRevisionHash,
           signal: abort.signal
         });
+        this.dependencies.signal?.throwIfAborted();
         if (abort.signal.reason instanceof ReviewExecutionDeadlineReachedSignal) {
           throw abort.signal.reason;
         }
@@ -69747,8 +70088,12 @@ var RunT0ReviewOrchestration = class {
         throw error;
       } finally {
         stopped = true;
+        monitorStop.abort();
+        await monitorPromise;
+        this.dependencies.signal?.removeEventListener("abort", cancel);
       }
     } catch (error) {
+      this.dependencies.signal?.throwIfAborted();
       if (error instanceof ReviewExecutionSupersededSignal || error instanceof ReviewExecutionCancelledSignal || error instanceof ReviewExecutionDeadlineReachedSignal) {
         throw error;
       }
@@ -69802,8 +70147,9 @@ var RunT0ReviewOrchestration = class {
   executionDeadlineRemainingMs() {
     return this.dependencies.executionDeadline?.remainingMs() ?? Infinity;
   }
-  assertExecutionDeadlineAvailable() {
-    if (this.executionDeadlineRemainingMs() <= 0) {
+  assertExecutionDeadlineAvailable(reserveMs = 0) {
+    this.dependencies.signal?.throwIfAborted();
+    if (this.executionDeadlineRemainingMs() <= reserveMs) {
       throw new ReviewExecutionDeadlineReachedSignal();
     }
   }
@@ -70629,7 +70975,7 @@ function buildReviewInvestigationSeedEnvelope(input) {
   if (changedPathFacts.size !== input.probePlan.changedPaths.length) {
     throw new Error("review_investigation_seed_changed_path_duplicate");
   }
-  if (changedPathFacts.size !== paths.length || paths.some((path13) => !changedPathFacts.has(path13))) {
+  if (changedPathFacts.size !== paths.length || paths.some((path14) => !changedPathFacts.has(path14))) {
     throw new Error("review_investigation_seed_path_set_mismatch");
   }
   const inventory = prepareCanonicalInventory(input.canonicalInventory);
@@ -71273,13 +71619,14 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
   });
 }
 var CodexReviewInvocationAdapter = class {
-  constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false) {
+  constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false, investigationReasoningEffort = "xhigh") {
     this.provider = provider;
     this.promptBuilder = promptBuilder;
     this.timeoutMs = timeoutMs;
     this.agenticContext = agenticContext;
     this.contextGateway = contextGateway;
     this.investigationManifestBindingEnabled = investigationManifestBindingEnabled;
+    this.investigationReasoningEffort = investigationReasoningEffort;
     for (const assignment of assignments) {
       if (this.assignments.has(assignment.workSlot.workSlotId)) {
         throw new Error("review_action_v2_assignment_duplicate");
@@ -71343,7 +71690,7 @@ var CodexReviewInvocationAdapter = class {
       enabledTools: [...gatewayPlanningConfig.enabledTools].sort(),
       probeLimits: preparedPrompt.investigationProbePlan.limits,
       probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
-      reasoningEffort: "xhigh",
+      reasoningEffort: this.investigationReasoningEffort,
       requestedModel: prepared.requestedModel,
       searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
       turnPromptContractHash: REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH
@@ -71855,7 +72202,7 @@ var import_child_process5 = require("child_process");
 var import_crypto18 = require("crypto");
 var import_promises3 = require("fs/promises");
 var os3 = __toESM(require("os"));
-var path6 = __toESM(require("path"));
+var path7 = __toESM(require("path"));
 var import_util6 = require("util");
 
 // src/context-gateway/canonical-git-inventory.ts
@@ -71953,18 +72300,18 @@ function parseRawInventory(raw) {
       tokens[index],
       "canonical_inventory_raw_record_encoding_invalid"
     );
-    const path13 = decodeUtf8(
+    const path14 = decodeUtf8(
       tokens[index + 1],
       "canonical_inventory_path_encoding_invalid"
     );
     const match = RAW_RECORD.exec(record);
-    if (!match || !path13 || path13.includes("\0")) {
+    if (!match || !path14 || path14.includes("\0")) {
       throw new Error("canonical_inventory_raw_record_invalid");
     }
     entries.push(
       Object.freeze({
         status: rawStatus(match[5]),
-        path: path13,
+        path: path14,
         beforeMode: match[1],
         afterMode: match[2],
         beforeOid: requireGitOidOrZero2(match[3]),
@@ -72745,7 +73092,7 @@ var ContextGatewayInvocationSessionFactory = class {
     this.attestations = attestations;
     this.options = options;
     this.requiredWitnessRunner = requiredWitnessRunner;
-    if (!path6.isAbsolute(options.checkoutRoot) || !path6.isAbsolute(options.gatewayBundlePath)) {
+    if (!path7.isAbsolute(options.checkoutRoot) || !path7.isAbsolute(options.gatewayBundlePath)) {
       throw new Error("context_gateway_factory_path_invalid");
     }
   }
@@ -72762,8 +73109,8 @@ var ContextGatewayInvocationSessionFactory = class {
       eventChainSeedHash: "0".repeat(64),
       gatewayBinaryHash,
       ...revisionTreeOids,
-      transcriptPath: path6.join(os3.tmpdir(), "planning-transcript.json"),
-      replayMaterialPath: path6.join(os3.tmpdir(), "planning-replay.json"),
+      transcriptPath: path7.join(os3.tmpdir(), "planning-transcript.json"),
+      replayMaterialPath: path7.join(os3.tmpdir(), "planning-replay.json"),
       gatewayBundlePath: this.options.gatewayBundlePath
     });
   }
@@ -72785,11 +73132,11 @@ var ContextGatewayInvocationSessionFactory = class {
     const gatewayBinaryHash = sha25611(gatewayBundleSnapshot);
     const gatewayPolicyVersion = this.policyVersion();
     const directory = await (0, import_promises3.mkdtemp)(
-      path6.join(os3.tmpdir(), "reviewrouter-context-gateway-")
+      path7.join(os3.tmpdir(), "reviewrouter-context-gateway-")
     );
-    const gatewayBundlePath = path6.join(directory, "context-gateway.cjs");
-    const transcriptPath = path6.join(directory, "transcript.json");
-    const replayMaterialPath = path6.join(directory, "replay-material.json");
+    const gatewayBundlePath = path7.join(directory, "context-gateway.cjs");
+    const transcriptPath = path7.join(directory, "transcript.json");
+    const replayMaterialPath = path7.join(directory, "replay-material.json");
     let requiredWitness = null;
     try {
       await (0, import_promises3.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
@@ -73514,13 +73861,13 @@ var import_child_process8 = require("child_process");
 var import_crypto20 = require("crypto");
 var import_promises7 = require("fs/promises");
 var os4 = __toESM(require("os"));
-var path10 = __toESM(require("path"));
+var path11 = __toESM(require("path"));
 var import_util9 = require("util");
 
 // src/context-gateway/context-gateway-recorder.ts
 var import_crypto19 = require("crypto");
 var import_promises4 = require("fs/promises");
-var path7 = __toESM(require("path"));
+var path8 = __toESM(require("path"));
 var MAX_RECORDER_STATE_BYTES = 2 * 1024 * 1024;
 var ContextGatewayRecorder = class {
   constructor(config) {
@@ -73535,11 +73882,11 @@ var ContextGatewayRecorder = class {
   hadFailure = false;
   async initialize() {
     await Promise.all([
-      (0, import_promises4.mkdir)(path7.dirname(this.config.transcriptPath), {
+      (0, import_promises4.mkdir)(path8.dirname(this.config.transcriptPath), {
         recursive: true,
         mode: 448
       }),
-      (0, import_promises4.mkdir)(path7.dirname(this.config.replayMaterialPath), {
+      (0, import_promises4.mkdir)(path8.dirname(this.config.replayMaterialPath), {
         recursive: true,
         mode: 448
       })
@@ -73764,7 +74111,7 @@ function parseCanonicalState(raw, kind) {
   return parsed;
 }
 async function atomicPrivateWrite3(target, content) {
-  await (0, import_promises4.mkdir)(path7.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises4.mkdir)(path8.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto19.randomBytes)(6).toString("hex")}.tmp`;
   await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
   await (0, import_promises4.rename)(temporary, target);
@@ -73774,7 +74121,7 @@ async function atomicPrivateWrite3(target, content) {
 var import_child_process6 = require("child_process");
 var import_promises5 = require("fs/promises");
 var import_os = require("os");
-var path8 = __toESM(require("path"));
+var path9 = __toESM(require("path"));
 var import_util7 = require("util");
 var execFileAsync3 = (0, import_util7.promisify)(import_child_process6.execFile);
 var MAX_FILE_BYTES = 2 * 1024 * 1024;
@@ -74182,7 +74529,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     if (gitPath.length === 0) {
       throw new Error("context_gateway_git_info_attributes_path_invalid");
     }
-    const attributesPath = path8.isAbsolute(gitPath) ? gitPath : path8.resolve(this.root, gitPath);
+    const attributesPath = path9.isAbsolute(gitPath) ? gitPath : path9.resolve(this.root, gitPath);
     let infoAttributes;
     try {
       infoAttributes = await (0, import_promises5.readFile)(attributesPath);
@@ -74224,23 +74571,23 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
   async createIsolatedGitDirectory(policy) {
     const gitDirectory = await (0, import_promises5.mkdtemp)(
-      path8.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
+      path9.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
     );
     try {
       const [objectsPathOutput, objectFormatOutput] = await Promise.all([
         this.gitText(["rev-parse", "--git-path", "objects"]),
         this.gitText(["rev-parse", "--show-object-format=storage"]),
-        (0, import_promises5.mkdir)(path8.join(gitDirectory, "objects", "info"), { recursive: true }),
-        (0, import_promises5.mkdir)(path8.join(gitDirectory, "refs", "heads"), { recursive: true }),
-        (0, import_promises5.mkdir)(path8.join(gitDirectory, "info"), { recursive: true }),
-        (0, import_promises5.mkdir)(path8.join(gitDirectory, "worktree"), { recursive: true })
+        (0, import_promises5.mkdir)(path9.join(gitDirectory, "objects", "info"), { recursive: true }),
+        (0, import_promises5.mkdir)(path9.join(gitDirectory, "refs", "heads"), { recursive: true }),
+        (0, import_promises5.mkdir)(path9.join(gitDirectory, "info"), { recursive: true }),
+        (0, import_promises5.mkdir)(path9.join(gitDirectory, "worktree"), { recursive: true })
       ]);
       const rawObjectsPath = objectsPathOutput.trim();
       if (rawObjectsPath.length === 0) {
         throw new Error("context_gateway_git_objects_path_invalid");
       }
       const objectsPath = await (0, import_promises5.realpath)(
-        path8.isAbsolute(rawObjectsPath) ? rawObjectsPath : path8.resolve(this.root, rawObjectsPath)
+        path9.isAbsolute(rawObjectsPath) ? rawObjectsPath : path9.resolve(this.root, rawObjectsPath)
       );
       if (objectsPath.includes("\0") || objectsPath.includes("\n")) {
         throw new Error("context_gateway_git_objects_path_invalid");
@@ -74251,20 +74598,20 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       }
       const config = objectFormat === "sha256" ? "[core]\n	repositoryformatversion = 1\n	bare = false\n[extensions]\n	objectformat = sha256\n" : "[core]\n	repositoryformatversion = 0\n	bare = false\n";
       await Promise.all([
-        (0, import_promises5.writeFile)(path8.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
-        (0, import_promises5.writeFile)(path8.join(gitDirectory, "config"), config),
+        (0, import_promises5.writeFile)(path9.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
+        (0, import_promises5.writeFile)(path9.join(gitDirectory, "config"), config),
         (0, import_promises5.writeFile)(
-          path8.join(gitDirectory, "objects", "info", "alternates"),
+          path9.join(gitDirectory, "objects", "info", "alternates"),
           `${objectsPath}
 `
         ),
         policy.infoAttributes === null ? Promise.resolve() : (0, import_promises5.writeFile)(
-          path8.join(gitDirectory, "info", "attributes"),
+          path9.join(gitDirectory, "info", "attributes"),
           policy.infoAttributes
         )
       ]);
-      const indexPath = path8.join(gitDirectory, "index");
-      const workTreePath = path8.join(gitDirectory, "worktree");
+      const indexPath = path9.join(gitDirectory, "index");
+      const workTreePath = path9.join(gitDirectory, "worktree");
       await this.gitText(["read-tree", "--reset", this.headSha], /* @__PURE__ */ new Set([0]), {
         GIT_DIR: gitDirectory,
         GIT_INDEX_FILE: indexPath,
@@ -74344,10 +74691,10 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
 };
 function normalizeRelativePath(value) {
-  if (typeof value !== "string" || value.length === 0 || value.length > 1024 || value.includes("\0") || value.includes("\\") || path8.isAbsolute(value)) {
+  if (typeof value !== "string" || value.length === 0 || value.length > 1024 || value.includes("\0") || value.includes("\\") || path9.isAbsolute(value)) {
     throw new Error("context_gateway_path_invalid");
   }
-  const normalized = path8.posix.normalize(value);
+  const normalized = path9.posix.normalize(value);
   if (normalized === ".." || normalized.startsWith("../") || normalized.split("/").some((segment) => segment === "..")) {
     throw new Error("context_gateway_path_invalid");
   }
@@ -75176,7 +75523,7 @@ var MAX_REPLAY_PLAN_BYTES = 512 * 1024;
 var ContextAttestationReplayRunner = class {
   constructor(options) {
     this.options = options;
-    if (!path10.isAbsolute(options.checkoutRoot) || !path10.isAbsolute(options.gatewayBundlePath)) {
+    if (!path11.isAbsolute(options.checkoutRoot) || !path11.isAbsolute(options.gatewayBundlePath)) {
       throw new Error("context_replay_path_invalid");
     }
   }
@@ -75217,7 +75564,7 @@ var ContextAttestationReplayRunner = class {
       return null;
     }
     const directory = await (0, import_promises7.mkdtemp)(
-      path10.join(os4.tmpdir(), "reviewrouter-context-replay-")
+      path11.join(os4.tmpdir(), "reviewrouter-context-replay-")
     );
     const secret = (0, import_crypto20.randomBytes)(32);
     try {
@@ -75231,8 +75578,8 @@ var ContextAttestationReplayRunner = class {
       );
       const recorder = new ContextGatewayRecorder({
         sessionId: `replay-${plan.attestationHash}`,
-        transcriptPath: path10.join(directory, "transcript.json"),
-        replayMaterialPath: path10.join(directory, "replay-material.json"),
+        transcriptPath: path11.join(directory, "transcript.json"),
+        replayMaterialPath: path11.join(directory, "replay-material.json"),
         secret,
         gatewayBinaryHash,
         checkoutTreeOid: targetCheckoutTreeOid,
@@ -75299,7 +75646,7 @@ var ContextAttestationReplayRunner = class {
   }
   async replayV4(input) {
     const directory = await (0, import_promises7.mkdtemp)(
-      path10.join(os4.tmpdir(), "reviewrouter-context-replay-v4-")
+      path11.join(os4.tmpdir(), "reviewrouter-context-replay-v4-")
     );
     const secret = (0, import_crypto20.randomBytes)(32);
     try {
@@ -75314,7 +75661,7 @@ var ContextAttestationReplayRunner = class {
       const sessionId = `replay-v4-${input.candidate.attestationHash.slice(0, 32)}`;
       const recorder = new ContextGatewayV4Recorder({
         sessionId,
-        transcriptPath: path10.join(directory, "transcript.json"),
+        transcriptPath: path11.join(directory, "transcript.json"),
         secret,
         gatewayBinaryHash: input.gatewayBinaryHash,
         checkoutTreeOid: input.targetCheckoutTreeOid,
@@ -77117,11 +77464,11 @@ function hasValidTrustedResolutionMarker(target) {
     marker && marker.trust === "trusted" /* Trusted */ && marker.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker.targetId === target.targetId && marker.fingerprint === target.trustedMarker
   );
 }
-function summaryPlacement(lineageId, path13, reason) {
+function summaryPlacement(lineageId, path14, reason) {
   return {
     lineageId,
     kind: "summary" /* Summary */,
-    path: path13,
+    path: path14,
     reason
   };
 }
@@ -77144,8 +77491,8 @@ function sortOccurrences(occurrences) {
     (left, right) => stateOrder[left.state] - stateOrder[right.state] || severityOrder[left.severity] - severityOrder[right.severity] || left.filePath.localeCompare(right.filePath) || (left.line ?? 0) - (right.line ?? 0) || left.lineageId.localeCompare(right.lineageId)
   );
 }
-function normalizePath(path13) {
-  return path13.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath(path14) {
+  return path14.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique(values) {
   return Array.from(new Set(values)).sort(
@@ -77328,7 +77675,7 @@ query ReviewRouterThreadInventory(
             nodes {
               id
               databaseId
-              author { login }
+              author { login __typename }
               body
               createdAt
               updatedAt
@@ -77353,7 +77700,7 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
         nodes {
           id
           databaseId
-          author { login }
+          author { login __typename }
           body
           createdAt
           updatedAt
@@ -77458,7 +77805,7 @@ var ReviewThreadInventoryLoader = class {
     if (!parent) {
       throw new Error(`thread ${thread.id} parent comment was missing`);
     }
-    const trustedAuthor = this.isTrustedAuthor(parent.author?.login);
+    const trustedAuthor = this.isTrustedAuthor(parent.author);
     const marker = parseFindingMarker(parent.body ?? "");
     if (marker.kind === "conflict" /* Conflict */ || marker.kind === "malformed" /* Malformed */) {
       if (trustedAuthor) {
@@ -77492,7 +77839,7 @@ var ReviewThreadInventoryLoader = class {
     const body = parent.body || "";
     const fingerprint = marker.fingerprint;
     const humanReply = comments.some(
-      (comment, index) => index > 0 && comment.id !== parent.id && !this.isTrustedAuthor(comment.author?.login)
+      (comment, index) => index > 0 && comment.id !== parent.id && !this.isTrustedAuthor(comment.author)
     );
     const cleanBody = stripLifecycleCommentBody(body);
     const parsedTitle = extractInlineTitle(cleanBody);
@@ -77511,8 +77858,8 @@ var ReviewThreadInventoryLoader = class {
       comments,
       targetId,
       fingerprint,
-      expectedAuthorLogin: parent.author?.login,
-      isTrustedAuthor: (login) => this.isTrustedAuthor(login)
+      expectedAuthor: parent.author,
+      isTrustedAuthor: (author) => this.isTrustedAuthor(author)
     });
     const target = {
       targetId,
@@ -77556,8 +77903,12 @@ var ReviewThreadInventoryLoader = class {
     }
     inventory.candidates.push(target);
   }
-  isTrustedAuthor(login) {
-    return isTrustedReviewThreadAuthor(login, this.trustedAuthors);
+  isTrustedAuthor(author) {
+    return isTrustedReviewThreadAuthor(
+      author?.login,
+      this.trustedAuthors,
+      author?.__typename
+    );
   }
   async loadRemainingThreadComments(threadId, initialComments, initialCursor) {
     if (!initialCursor) {
@@ -77610,11 +77961,11 @@ var ReviewThreadInventoryLoader = class {
     return graphql(query, variables);
   }
 };
-function isTrustedReviewThreadAuthor(login, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS) {
-  const normalizedLogin = canonicalBotLogin(login);
+function isTrustedReviewThreadAuthor(login, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS, authorTypename) {
+  const normalizedLogin = normalizeBotLogin(login);
   return Boolean(
     normalizedLogin && trustedAuthors.some(
-      (author) => canonicalBotLogin(author) === normalizedLogin
+      (author) => normalizeBotLogin(author) === normalizedLogin || authorTypename === "Bot" && normalizeBotLogin(author) === canonicalBotLogin(login, authorTypename)
     )
   );
 }
@@ -77624,13 +77975,19 @@ ${parentCommentId}
 ${fingerprint}`).digest("hex").slice(0, 16)}`;
 }
 function findTrustedResolutionMarker(input) {
-  const expectedAuthor = canonicalBotLogin(input.expectedAuthorLogin);
+  const expectedAuthor = canonicalBotLogin(
+    input.expectedAuthor?.login,
+    input.expectedAuthor?.__typename
+  );
   if (!expectedAuthor || expectedAuthor === GITHUB_ACTIONS_BOT_AUTHOR) {
     return void 0;
   }
   for (const comment of input.comments.slice(1)) {
-    const markerAuthor = canonicalBotLogin(comment.author?.login);
-    if (markerAuthor !== expectedAuthor || !input.isTrustedAuthor(comment.author?.login)) {
+    const markerAuthor = canonicalBotLogin(
+      comment.author?.login,
+      comment.author?.__typename
+    );
+    if (markerAuthor !== expectedAuthor || !input.isTrustedAuthor(comment.author)) {
       continue;
     }
     const marker = parseResolutionMarker(comment.body ?? "");
@@ -77689,9 +78046,9 @@ function normalizeBotLogin(value) {
   }
   return login;
 }
-function canonicalBotLogin(value) {
+function canonicalBotLogin(value, authorTypename) {
   const login = normalizeBotLogin(value);
-  return login?.endsWith("[bot]") ? login.slice(0, -5) : login;
+  return login && authorTypename === "Bot" && !login.endsWith("[bot]") ? `${login}[bot]` : login;
 }
 
 // src/review-orchestration/infrastructure/github-review-state-adapter.ts
@@ -77819,7 +78176,8 @@ function mapFreshInventory(raw, expectedHeadSha, ledger) {
   }
   const rawTargets = [
     ...raw.candidates.map((target) => ({ target, manual: false })),
-    ...raw.manualAttention.map((record) => ({
+    // The server excludes untrusted parents from managed lifecycle observations.
+    ...raw.manualAttention.filter((record) => record.target.trustedAuthor).map((record) => ({
       target: record.target,
       manual: true
     }))
@@ -78499,11 +78857,11 @@ function countOccurrenceStates(occurrences) {
 function publicationMarker(kind, scope) {
   return `reviewrouter:${kind}:v2:${scope.reviewRevisionHash}`;
 }
-function summaryPlacement2(lineageId, path13, reason) {
+function summaryPlacement2(lineageId, path14, reason) {
   return {
     lineageId,
     kind: "summary" /* Summary */,
-    path: path13,
+    path: path14,
     reason
   };
 }
@@ -78629,8 +78987,8 @@ function validateGateDecision(occurrences, gate) {
 function assertNonEmpty(name, value) {
   if (!value.trim()) throw new Error(`${name} must not be empty`);
 }
-function normalizePath2(path13) {
-  return path13.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath2(path14) {
+  return path14.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique2(values) {
   return Array.from(new Set(values)).sort(
@@ -81633,8 +81991,8 @@ function minimalLegacyReview(findings) {
     }
   };
 }
-function findRevisionFile(path13, revisionFiles) {
-  const normalized = normalizePath3(path13);
+function findRevisionFile(path14, revisionFiles) {
+  const normalized = normalizePath3(path14);
   return revisionFiles.find(
     (file) => normalizePath3(file.path) === normalized || file.previousPath && normalizePath3(file.previousPath) === normalized
   );
@@ -81656,8 +82014,8 @@ function toProjectionSeverity2(severity) {
 function toLegacySeverity(severity) {
   return severity;
 }
-function normalizePath3(path13) {
-  return path13.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath3(path14) {
+  return path14.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique3(values) {
   return Array.from(new Set(values)).sort(
@@ -81793,13 +82151,13 @@ var ProductionReviewProjectionCommandFactory = class {
           `work_slot_investigation_inconclusive:${assignment.workSlotId}`
         );
       }
-      for (const path13 of manifest.paths) {
-        if (path13.kind === "full_patch" /* FullPatch */) {
-          reviewedFiles.add(path13.path);
-        } else if (path13.kind === "policy_excluded" /* PolicyExcluded */) {
-          policyExcludedFiles.add(path13.path);
+      for (const path14 of manifest.paths) {
+        if (path14.kind === "full_patch" /* FullPatch */) {
+          reviewedFiles.add(path14.path);
+        } else if (path14.kind === "policy_excluded" /* PolicyExcluded */) {
+          policyExcludedFiles.add(path14.path);
         } else {
-          coverageLimitations.push(`path_coverage:${path13.path}:${path13.kind}`);
+          coverageLimitations.push(`path_coverage:${path14.path}:${path14.kind}`);
         }
       }
       if (!isReviewPromptCoverageComplete(manifest)) {
@@ -81817,7 +82175,7 @@ var ProductionReviewProjectionCommandFactory = class {
         (omission) => `pull_request_load:${omission.reason}`
       ) : [],
       ...requiredExhaustedWorkSlotIds.map((id) => `work_slot_exhausted:${id}`),
-      ...this.input.uncoveredPaths.map((path13) => `work_slot_uncovered:${path13}`),
+      ...this.input.uncoveredPaths.map((path14) => `work_slot_uncovered:${path14}`),
       ...this.input.uncoveredLifecycleTargetIds.map(
         (targetId) => `lifecycle_target_uncovered:${targetId}`
       ),
@@ -82160,6 +82518,10 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
     this.client = client;
   }
   activeAuthorization = null;
+  /** Model relay/SCM/terminal close read this at call time, including after renewal. */
+  currentAuthorization() {
+    return this.requireActiveAuthorization();
+  }
   /** Trusted continuation of an actual fresh native receipt. This does not
    * authorize, renew, restore or perform any remote operation. The server still
    * validates the receipt's capability on every subsequent mutation. */
@@ -82202,7 +82564,8 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
           renewalRequestId: input.renewalRequestId,
           oidcToken: input.oidcToken,
           requestedTtlMs: input.requestedTtlMs
-        }
+        },
+        { maxAttempts: 5, retryBaseDelayMs: 5e3 }
       );
     } catch (error) {
       throw controlPlaneFailure(error);
@@ -83767,86 +84130,9 @@ function deterministicIdempotencyKey(purpose, parts) {
   )}`;
 }
 
-// src/review-orchestration/infrastructure/system-review-orchestration-clock.ts
-var SystemReviewOrchestrationClock = class {
-  monotonicNowMs() {
-    return Math.floor(performance.now());
-  }
-};
-
-// src/review-investigation/application/replay-investigation-on-revision.ts
-var ReplayInvestigationOnRevision = class {
-  constructor(dependencies) {
-    this.dependencies = dependencies;
-  }
-  async execute(input) {
-    if (!await this.isCurrent(input)) return null;
-    const prepared = await this.dependencies.controlPlane.prepareReplay({
-      open: input.open,
-      providerManifestCanonicalJson: input.providerManifestCanonicalJson,
-      providerManifestHash: input.providerManifestHash
-    });
-    if (!prepared || !await this.isCurrent(input)) return null;
-    const replayProofs = [];
-    const proofsByReplayIdentity = /* @__PURE__ */ new Map();
-    for (const obligation of prepared.obligations) {
-      if (!await this.isCurrent(input)) return null;
-      const replayIdentity = [
-        obligation.contextAttestationId,
-        obligation.contextAttestationHash,
-        obligation.sourceOperationReceiptIdsHash,
-        obligation.replayPlanHash
-      ].join("\0");
-      let proof = proofsByReplayIdentity.get(replayIdentity);
-      if (!proof) {
-        proof = this.replayAndCommit(input, obligation);
-        proofsByReplayIdentity.set(replayIdentity, proof);
-      }
-      const committed = await proof;
-      if (committed) {
-        replayProofs.push({
-          obligationId: obligation.obligationId,
-          replayProofId: committed.replayProofId
-        });
-      }
-    }
-    if (!await this.isCurrent(input)) return null;
-    replayProofs.sort(
-      (left, right) => compareCodeUnits9(left.obligationId, right.obligationId)
-    );
-    return this.dependencies.controlPlane.replay({
-      open: input.open,
-      scope: input.scope,
-      revision: input.revision,
-      prepared,
-      replayProofs: Object.freeze(replayProofs)
-    });
-  }
-  async replayAndCommit(input, prepared) {
-    const replayed = await this.dependencies.receipts.replayReceipt({
-      prepared,
-      targetRevision: input.revision
-    });
-    if (!replayed || !await this.isCurrent(input)) return null;
-    return this.dependencies.controlPlane.commitReceiptReplay({
-      open: input.open,
-      prepared,
-      result: replayed
-    });
-  }
-  async isCurrent(input) {
-    return await this.dependencies.currency.check({
-      executionId: input.open.executionId,
-      workSlotId: input.open.workSlotId,
-      reviewRevisionHash: input.open.reviewRevisionHash
-    }) === "current" /* Current */;
-  }
-};
-function compareCodeUnits9(left, right) {
-  if (left < right) return -1;
-  if (left > right) return 1;
-  return 0;
-}
+// src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
+var import_child_process10 = require("child_process");
+var import_util10 = require("util");
 
 // src/review-investigation/infrastructure/review-agent-process-runner.ts
 var import_child_process9 = require("child_process");
@@ -83988,394 +84274,6 @@ function result(termination, exitCode, stdout, stderr, startedAt) {
 function sanitizeProcessText(value) {
   return value.replace(/[\r\n]+/gu, " ").slice(0, 400);
 }
-
-// src/review-investigation/infrastructure/strict-cli-review-agent.ts
-var GATEWAY_RUNTIME_ENV_KEYS = /* @__PURE__ */ new Set([
-  "REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION",
-  "REVIEWROUTER_CONTEXT_SESSION_ID",
-  "REVIEWROUTER_CONTEXT_ROOT",
-  "REVIEWROUTER_CONTEXT_TRANSCRIPT_PATH",
-  "REVIEWROUTER_CONTEXT_REPLAY_MATERIAL_PATH",
-  "REVIEWROUTER_CONTEXT_GATEWAY_BINARY_HASH",
-  "REVIEWROUTER_CONTEXT_GATEWAY_MAX_OPERATIONS",
-  "REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID",
-  "REVIEWROUTER_CONTEXT_MERGE_BASE_TREE_OID",
-  "REVIEWROUTER_CONTEXT_EVENT_CHAIN_SEED_HASH",
-  "REVIEWROUTER_CONTEXT_BASE_SHA",
-  "REVIEWROUTER_CONTEXT_MERGE_BASE_SHA",
-  "REVIEWROUTER_CONTEXT_HEAD_SHA"
-]);
-var GATEWAY_CREDENTIAL_ENV_KEYS = /* @__PURE__ */ new Set([
-  "REVIEWROUTER_CONTEXT_GATEWAY_SECRET"
-]);
-var PROVIDER_ENV_KEYS = Object.freeze({
-  ["codex" /* Codex */]: /* @__PURE__ */ new Set([
-    "CODEX_HOME",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY"
-  ]),
-  ["claude_code" /* ClaudeCode */]: /* @__PURE__ */ new Set([
-    "CLAUDE_CODE_OAUTH_TOKEN",
-    "CLAUDE_CONFIG_DIR"
-  ])
-});
-var MAX_SAFE_RETRY_AFTER_MS2 = 7 * 24 * 60 * 60 * 1e3;
-var SAFE_AGENT_ERROR_CODES = /* @__PURE__ */ new Set([
-  "review_agent_actual_model_invalid",
-  "review_agent_actual_model_unavailable",
-  "review_agent_authentication_unavailable",
-  "review_agent_cached_input_tokens_invalid",
-  "review_agent_cached_usage_invalid",
-  "review_agent_cancel_failure",
-  "review_agent_capability_requirements_unsatisfied",
-  "review_agent_capacity_unavailable",
-  "review_agent_claude_stream_incomplete",
-  "review_agent_claude_usage_missing",
-  "review_agent_codex_event_json_invalid",
-  "review_agent_codex_event_stream_empty",
-  "review_agent_codex_stream_incomplete",
-  "review_agent_codex_usage_missing",
-  "review_agent_critic_decision_invalid_for_turn",
-  "review_agent_execution_session_invalid",
-  "review_agent_gateway_credential_environment_invalid",
-  "review_agent_input_tokens_invalid",
-  "review_agent_output_invalid",
-  "review_agent_output_invalid_claims",
-  "review_agent_output_invalid_critic",
-  "review_agent_output_invalid_finding",
-  "review_agent_output_invalid_obligation_proposal",
-  "review_agent_output_invalid_shape",
-  "review_agent_output_tokens_invalid",
-  "review_agent_process_cancelled",
-  "review_agent_process_failure",
-  "review_agent_process_timeout",
-  "review_agent_provider_credential_environment_invalid",
-  "review_agent_quota_unavailable",
-  "review_agent_reasoning_output_tokens_invalid",
-  "review_agent_runtime_environment_invalid",
-  "review_agent_startup_failure",
-  "review_agent_turn_request_invalid",
-  "review_agent_turn_obligation_claim_invalid",
-  "review_agent_usage_attribution_missing",
-  "review_agent_workspace_authority_mismatch"
-]);
-var SAFE_DEFAULT_ERROR_CODE = Object.freeze({
-  ["capability_unavailable" /* CapabilityUnavailable */]: "review_agent_capability_unavailable",
-  ["authentication_unavailable" /* AuthenticationUnavailable */]: "review_agent_authentication_unavailable",
-  ["quota_unavailable" /* QuotaUnavailable */]: "review_agent_quota_unavailable",
-  ["capacity_unavailable" /* CapacityUnavailable */]: "review_agent_capacity_unavailable",
-  ["startup_failure" /* StartupFailure */]: "review_agent_startup_failure",
-  ["process_failure" /* ProcessFailure */]: "review_agent_process_failure",
-  ["timeout" /* Timeout */]: "review_agent_process_timeout",
-  ["cancelled" /* Cancelled */]: "review_agent_process_cancelled",
-  ["schema_invalid_output" /* SchemaInvalidOutput */]: "review_agent_output_invalid",
-  ["stream_incomplete" /* StreamIncomplete */]: "review_agent_stream_incomplete",
-  ["model_attribution_missing" /* ModelAttributionMissing */]: "review_agent_actual_model_unavailable",
-  ["usage_attribution_missing" /* UsageAttributionMissing */]: "review_agent_usage_attribution_missing",
-  ["confinement_violation" /* ConfinementViolation */]: "review_agent_confinement_violation"
-});
-var StrictCliReviewAgent = class {
-  constructor(profile, runner, executionSessions, providerCredentials) {
-    this.profile = profile;
-    this.runner = runner;
-    this.executionSessions = executionSessions;
-    this.providerCredentials = providerCredentials;
-  }
-  async negotiate(requirements) {
-    try {
-      assertRuntimeProfileSatisfies(this.profile, requirements);
-      return this.profile;
-    } catch {
-      throw new ReviewAgentExecutionError(
-        "capability_unavailable" /* CapabilityUnavailable */,
-        null,
-        "review_agent_capability_requirements_unsatisfied"
-      );
-    }
-  }
-  async cancel(invocationId, fencingToken) {
-    try {
-      await this.runner.cancel(invocationId, fencingToken);
-    } catch (error) {
-      throw safeAgentError(
-        error,
-        "process_failure" /* ProcessFailure */,
-        "review_agent_cancel_failure"
-      );
-    }
-  }
-  validateRequest(request) {
-    if (!request.invocationId || !request.fencingToken || !request.turnId || !Number.isSafeInteger(request.dossierVersion) || request.dossierVersion < 0 || !/^[a-f0-9]{64}$/u.test(request.dossierDigest) || !request.prompt || Buffer.byteLength(request.prompt, "utf8") > this.profile.maxPromptBytes || !request.workspaceRoot || request.requestedModel.length < 1 || request.requestedModel.length > 200 || !Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1 || !Number.isSafeInteger(request.maxTurns) || request.maxTurns < 1 || request.maxTurns > this.profile.maxTurns || !validAllowedObligationIds(request.allowedObligationIds)) {
-      throw new ReviewAgentExecutionError(
-        "capability_unavailable" /* CapabilityUnavailable */,
-        null,
-        "review_agent_turn_request_invalid"
-      );
-    }
-  }
-  prepareExecution(request) {
-    this.validateRequest(request);
-    const gateway = this.executionSessions.resolve(
-      request.executionSession,
-      this.profile.providerKind
-    );
-    const providerCredentialEnvironment = Object.freeze({
-      ...this.providerCredentials()
-    });
-    assertGatewayBinding(gateway);
-    if (gateway.cwd !== request.workspaceRoot) {
-      throw new ReviewAgentExecutionError(
-        "confinement_violation" /* ConfinementViolation */,
-        null,
-        "review_agent_workspace_authority_mismatch"
-      );
-    }
-    assertEnvironmentPartition(
-      gateway.runtimeEnvironment,
-      gateway.credentialEnvironment,
-      providerCredentialEnvironment,
-      this.profile.providerKind
-    );
-    return Object.freeze({ gateway, providerCredentialEnvironment });
-  }
-  executionEnvironment(execution) {
-    return {
-      ...this.providerOnlyExecutionEnvironment(execution),
-      ...execution.gateway.runtimeEnvironment,
-      REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION: "context-gateway-v4",
-      ...execution.gateway.credentialEnvironment
-    };
-  }
-  providerOnlyExecutionEnvironment(execution) {
-    return {
-      ...buildCliSafeEnv({ includeWorkspaceEnv: false }),
-      ...execution.providerCredentialEnvironment,
-      GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_NO_REPLACE_OBJECTS: "1"
-    };
-  }
-  async runProcess(request, execution, input) {
-    const result2 = await this.runner.run({
-      invocationId: request.invocationId,
-      fencingToken: request.fencingToken,
-      cwd: execution.gateway.cwd,
-      environment: input.environment ?? this.executionEnvironment(execution),
-      stdin: request.prompt,
-      timeoutMs: request.timeoutMs,
-      maxOutputBytes: this.profile.maxOutputBytes,
-      signal: request.signal,
-      binary: input.binary,
-      args: input.args
-    });
-    assertSuccessfulProcess(result2);
-    return result2;
-  }
-  observation(request, parsed, durationMs) {
-    assertTurnObligationClaimsAllowed(request, parsed.output);
-    if (request.purpose === "discovery" /* Discovery */ && parsed.output.criticDecision !== null || request.purpose === "critic" /* Critic */ && parsed.output.criticDecision === null) {
-      throw new ReviewAgentExecutionError(
-        "schema_invalid_output" /* SchemaInvalidOutput */,
-        null,
-        "review_agent_critic_decision_invalid_for_turn"
-      );
-    }
-    return Object.freeze({
-      observationVersion: REVIEW_TURN_OBSERVATION_VERSION,
-      invocationId: request.invocationId,
-      turnId: request.turnId,
-      dossierVersion: request.dossierVersion,
-      purpose: request.purpose,
-      actualProviderKind: this.profile.providerKind,
-      actualModel: parsed.actualModel,
-      runtimeProfile: this.profile.executionProfile,
-      usage: parsed.usage,
-      durationMs,
-      schemaComplete: true,
-      streamComplete: true,
-      contextAttestationReference: null,
-      ...parsed.output
-    });
-  }
-};
-function validAllowedObligationIds(ids) {
-  return Array.isArray(ids) && ids.length <= 256 && new Set(ids).size === ids.length && ids.every((id) => /^[a-f0-9]{64}$/u.test(id));
-}
-function assertTurnObligationClaimsAllowed(request, output) {
-  const allowed = new Set(request.allowedObligationIds);
-  const closureIds = output.closureClaims.map((claim) => claim.obligationId);
-  const unresolvableIds = output.unresolvableClaims.map(
-    (claim) => claim.obligationId
-  );
-  const invalid = closureIds.some((id) => !allowed.has(id)) || unresolvableIds.some((id) => !allowed.has(id)) || new Set(closureIds).size !== closureIds.length || new Set(unresolvableIds).size !== unresolvableIds.length || closureIds.some((id) => unresolvableIds.includes(id));
-  if (invalid) {
-    throw new ReviewAgentExecutionError(
-      "schema_invalid_output" /* SchemaInvalidOutput */,
-      null,
-      "review_agent_turn_obligation_claim_invalid"
-    );
-  }
-}
-function schemaFailure(error) {
-  if (error instanceof ReviewAgentExecutionError) {
-    return safeAgentError(
-      error,
-      "schema_invalid_output" /* SchemaInvalidOutput */,
-      "review_agent_output_invalid"
-    );
-  }
-  return new ReviewAgentExecutionError(
-    "schema_invalid_output" /* SchemaInvalidOutput */,
-    null,
-    safeErrorCode(
-      error instanceof Error ? error.message : "review_agent_output_invalid",
-      "schema_invalid_output" /* SchemaInvalidOutput */
-    )
-  );
-}
-function assertSuccessfulProcess(result2) {
-  if (result2.termination === "exited" /* Exited */ && result2.exitCode === 0) {
-    return;
-  }
-  if (result2.termination === "timed_out" /* TimedOut */) {
-    throw new ReviewAgentExecutionError(
-      "timeout" /* Timeout */,
-      null,
-      "review_agent_process_timeout"
-    );
-  }
-  if (result2.termination === "cancelled" /* Cancelled */) {
-    throw new ReviewAgentExecutionError(
-      "cancelled" /* Cancelled */,
-      null,
-      "review_agent_process_cancelled"
-    );
-  }
-  const failureSignals = boundedProviderFailureSignals(result2);
-  throw classifyProviderFailure(failureSignals, result2.termination);
-}
-function classifyProviderFailure(diagnostic, termination) {
-  if (/(?:401|403|unauthorized|not logged in|refresh token|oauth|authentication)/iu.test(
-    diagnostic
-  )) {
-    return new ReviewAgentExecutionError(
-      "authentication_unavailable" /* AuthenticationUnavailable */,
-      null,
-      "review_agent_authentication_unavailable"
-    );
-  }
-  if (/(?:invalid_json_schema|invalid schema for response_format|(?:invalid|rejected|unsupported) structured output schema|structured output schema (?:is )?(?:invalid|rejected|unsupported))/iu.test(
-    diagnostic
-  )) {
-    return new ReviewAgentExecutionError(
-      "schema_invalid_output" /* SchemaInvalidOutput */,
-      null,
-      "review_agent_output_invalid"
-    );
-  }
-  if (/(?:usage limit|quota|insufficient_quota|billing limit)/iu.test(diagnostic)) {
-    return new ReviewAgentExecutionError(
-      "quota_unavailable" /* QuotaUnavailable */,
-      null,
-      "review_agent_quota_unavailable"
-    );
-  }
-  if (/(?:capacity[_ -]unavailable|overloaded|too many requests|\b429\b|rate limit)/iu.test(
-    diagnostic
-  )) {
-    return new ReviewAgentExecutionError(
-      "capacity_unavailable" /* CapacityUnavailable */,
-      null,
-      "review_agent_capacity_unavailable"
-    );
-  }
-  if (/(?:model cache|startup|failed to start|enoent|spawn)/iu.test(diagnostic) || termination === "startup_failed" /* StartupFailed */) {
-    return new ReviewAgentExecutionError(
-      "startup_failure" /* StartupFailure */,
-      null,
-      "review_agent_startup_failure"
-    );
-  }
-  return new ReviewAgentExecutionError(
-    "process_failure" /* ProcessFailure */,
-    null,
-    "review_agent_process_failure"
-  );
-}
-function assertGatewayBinding(binding) {
-  const expectedTools = [...REVIEW_INVESTIGATION_GATEWAY_TOOLS].sort();
-  const actualTools = [...binding.enabledTools].sort();
-  if (binding.policyVersion !== "context-gateway-v4" || !/^[a-f0-9]{64}$/u.test(binding.binaryHash) || !binding.command || !binding.cwd || actualTools.length !== expectedTools.length || actualTools.some((tool, index) => tool !== expectedTools[index])) {
-    throw new ReviewAgentExecutionError(
-      "capability_unavailable" /* CapabilityUnavailable */,
-      null,
-      "review_agent_execution_session_invalid"
-    );
-  }
-}
-function assertEnvironmentPartition(runtime, gatewayCredentials, providerCredentials, providerKind) {
-  assertAllowlistedEnvironment(
-    runtime,
-    GATEWAY_RUNTIME_ENV_KEYS,
-    "review_agent_runtime_environment_invalid"
-  );
-  assertAllowlistedEnvironment(
-    gatewayCredentials,
-    GATEWAY_CREDENTIAL_ENV_KEYS,
-    "review_agent_gateway_credential_environment_invalid"
-  );
-  assertAllowlistedEnvironment(
-    providerCredentials,
-    PROVIDER_ENV_KEYS[providerKind],
-    "review_agent_provider_credential_environment_invalid"
-  );
-}
-function assertAllowlistedEnvironment(environment, allowedKeys, errorCode) {
-  for (const key of Object.keys(environment)) {
-    if (!allowedKeys.has(key)) throw new Error(errorCode);
-  }
-}
-function boundedProviderFailureSignals(result2) {
-  return `${result2.stderr.slice(0, 8192)}
-${result2.stdout.slice(0, 8192)}`.replace(/(?:sk|sess|eyJ)[A-Za-z0-9._-]{12,}/gu, "<redacted>").replace(/[\r\n]+/gu, " ").trim().slice(0, 16384);
-}
-function safeAgentError(error, fallbackClass, fallbackCode) {
-  if (!(error instanceof ReviewAgentExecutionError)) {
-    return new ReviewAgentExecutionError(fallbackClass, null, fallbackCode);
-  }
-  return new ReviewAgentExecutionError(
-    error.failureClass,
-    safeRetryAfterMs(error.retryAfterMs),
-    safeErrorCode(error.message, error.failureClass)
-  );
-}
-function safeErrorCode(value, failureClass) {
-  return SAFE_AGENT_ERROR_CODES.has(value) ? value : SAFE_DEFAULT_ERROR_CODE[failureClass];
-}
-function safeRetryAfterMs(value) {
-  if (value === null || !Number.isSafeInteger(value) || value < 0 || value > MAX_SAFE_RETRY_AFTER_MS2) {
-    return null;
-  }
-  return value;
-}
-
-// src/review-investigation/infrastructure/claude-review-agent-adapter.ts
-var CLAUDE_NATIVE_TOOLS = Object.freeze([
-  "Bash",
-  "Edit",
-  "Write",
-  "Read",
-  "Grep",
-  "Glob",
-  "WebFetch",
-  "WebSearch",
-  "NotebookEdit",
-  "Task",
-  "TaskOutput",
-  "KillShell",
-  "AskUserQuestion",
-  "Skill"
-]);
 
 // src/review-investigation/infrastructure/codex-app-server-protocol.ts
 var import_crypto30 = require("crypto");
@@ -84591,7 +84489,7 @@ var CodexAppServerProtocolClient = class {
         this.receiveNotification(message);
         return;
       }
-      throw streamFailure2();
+      throw streamFailure();
     } catch (error) {
       this.fail(withStreamDiagnosticStage(error, diagnosticStage));
     }
@@ -84613,7 +84511,7 @@ var CodexAppServerProtocolClient = class {
   }
   end() {
     if (!this.failed && !this.turnCompleted) {
-      this.fail(streamFailure2("process_end" /* ProcessEnd */));
+      this.fail(streamFailure("process_end" /* ProcessEnd */));
     }
   }
   failureAfterCompletion() {
@@ -84630,7 +84528,7 @@ var CodexAppServerProtocolClient = class {
     });
   }
   async sendRequest(method, params) {
-    if (this.failed) throw this.terminalFailure ?? streamFailure2();
+    if (this.failed) throw this.terminalFailure ?? streamFailure();
     const id = this.nextRequestId++;
     const response = deferred();
     this.pending.set(requestIdKey(id), { deferred: response });
@@ -84643,24 +84541,24 @@ var CodexAppServerProtocolClient = class {
     return response.promise;
   }
   async sendNotification(method) {
-    if (this.failed) throw this.terminalFailure ?? streamFailure2();
+    if (this.failed) throw this.terminalFailure ?? streamFailure();
     try {
       await this.write({ method });
     } catch (error) {
-      if (this.failed) throw this.terminalFailure ?? streamFailure2();
+      if (this.failed) throw this.terminalFailure ?? streamFailure();
       throw error;
     }
-    if (this.failed) throw this.terminalFailure ?? streamFailure2();
+    if (this.failed) throw this.terminalFailure ?? streamFailure();
   }
   receiveResponse(message) {
     const hasResult = Object.prototype.hasOwnProperty.call(message, "result");
     const hasError = Object.prototype.hasOwnProperty.call(message, "error");
     if (hasResult === hasError || Object.prototype.hasOwnProperty.call(message, "method") || Object.prototype.hasOwnProperty.call(message, "params") || !hasOnlyKeys(message, hasResult ? ["id", "result"] : ["error", "id"])) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     const id = requireRequestId(message.id);
     const pending = this.pending.get(requestIdKey(id));
-    if (!pending) throw streamFailure2();
+    if (!pending) throw streamFailure();
     this.pending.delete(requestIdKey(id));
     if (hasError) {
       pending.deferred.reject(responseFailure(message.error));
@@ -84674,7 +84572,7 @@ var CodexAppServerProtocolClient = class {
       ["method", "params"],
       ["emittedAtMs"]
     ) || message.emittedAtMs !== void 0 && (!Number.isSafeInteger(message.emittedAtMs) || message.emittedAtMs < 0)) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     const method = requireNonEmptyString(message.method, "notification_method");
     const params = requireRecord2(message.params, "notification_params");
@@ -84732,7 +84630,7 @@ var CodexAppServerProtocolClient = class {
         return;
       default:
         if (IGNORED_NOTIFICATION_METHODS.has(method)) return;
-        throw streamFailure2();
+        throw streamFailure();
     }
   }
   bindThread(value) {
@@ -84751,18 +84649,18 @@ var CodexAppServerProtocolClient = class {
     this.modelProvider = responseModelProvider;
   }
   bindTurn(value) {
-    if (!this.threadId) throw streamFailure2();
+    if (!this.threadId) throw streamFailure();
     const response = requireRecord2(value, "turn_start_response");
     const turn = requireRecord2(response.turn, "turn");
     const turnId = requireIdentifier2(turn.id, "turn_id");
     if (turn.status !== "inProgress" || !hasAbsentOrNullProperty(turn, "error") || !Array.isArray(turn.items) || turn.items.length !== 0 || this.provisionalTurnId !== null && this.provisionalTurnId !== turnId) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     this.turnId = turnId;
     this.provisionalTurnId = turnId;
   }
   onThreadStarted(params) {
-    if (!this.initialized || this.threadStarted) throw streamFailure2();
+    if (!this.initialized || this.threadStarted) throw streamFailure();
     const thread = requireRecord2(params.thread, "thread_started_thread");
     const threadId = requireIdentifier2(thread.id, "thread_id");
     if (this.provisionalThreadId !== null && this.provisionalThreadId !== threadId || thread.ephemeral !== true || thread.path !== null || thread.cliVersion !== CODEX_APP_SERVER_VERSION || thread.cwd !== this.request.cwd || !Array.isArray(thread.turns) || thread.turns.length !== 0) {
@@ -84782,7 +84680,7 @@ var CodexAppServerProtocolClient = class {
       this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
     }
     if (params.status !== "starting" && params.status !== "ready" && params.status !== "failed" && params.status !== "cancelled") {
-      throw streamFailure2();
+      throw streamFailure();
     }
     if (params.status === "failed" || params.status === "cancelled") {
       throw processFailure();
@@ -84790,7 +84688,7 @@ var CodexAppServerProtocolClient = class {
   }
   onThreadNameUpdated(params) {
     if (!this.threadStarted || !hasRequiredAndOptionalKeys(params, ["threadId"], ["threadName"])) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
     if (params.threadName !== null && params.threadName !== void 0) {
@@ -84799,29 +84697,29 @@ var CodexAppServerProtocolClient = class {
         "thread_name"
       );
       if (Buffer.byteLength(threadName, "utf8") > MAX_NOTIFICATION_STRING_BYTES) {
-        throw streamFailure2();
+        throw streamFailure();
       }
     }
   }
   onTurnStarted(params) {
-    if (!this.threadStarted || this.turnStarted) throw streamFailure2();
+    if (!this.threadStarted || this.turnStarted) throw streamFailure();
     this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
     const turn = requireRecord2(params.turn, "turn_started_turn");
     const turnId = requireIdentifier2(turn.id, "turn_id");
     if (this.provisionalTurnId !== null && this.provisionalTurnId !== turnId || turn.status !== "inProgress" || !hasAbsentOrNullProperty(turn, "error") || !Array.isArray(turn.items) || turn.items.length !== 0) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     this.provisionalTurnId = turnId;
     this.turnStarted = true;
   }
   onItemStarted(params) {
     this.assertTurnFence(params);
-    if (!this.turnStarted || this.turnCompleted) throw streamFailure2();
+    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
     const item = requireRecord2(params.item, "item");
     const id = requireIdentifier2(item.id, "item_id");
     const type2 = requireNonEmptyString(item.type, "item_type");
     if (this.activeItems.has(id) || this.completedItems.has(id)) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     this.validateAllowedItem(item, "started");
     const active = type2 === "mcpToolCall" ? Object.freeze({
@@ -84833,13 +84731,13 @@ var CodexAppServerProtocolClient = class {
   }
   onItemCompleted(params) {
     this.assertTurnFence(params);
-    if (!this.turnStarted || this.turnCompleted) throw streamFailure2();
+    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
     const item = requireRecord2(params.item, "item");
     const id = requireIdentifier2(item.id, "item_id");
     const type2 = requireNonEmptyString(item.type, "item_type");
     const active = this.activeItems.get(id);
     if (!active || active.type !== type2 || this.completedItems.has(id)) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     this.validateAllowedItem(item, "completed");
     if (type2 === "mcpToolCall" && (active.server !== item.server || active.tool !== item.tool)) {
@@ -84858,7 +84756,7 @@ var CodexAppServerProtocolClient = class {
         const type2 = requireNonEmptyString(item.type, "item_type");
         this.validateAllowedItem(item, "completed");
         if (snapshotItemIds.has(id)) {
-          throw streamFailure2();
+          throw streamFailure();
         }
         const observed = this.completedItems.get(id);
         if (!observed) {
@@ -84866,7 +84764,7 @@ var CodexAppServerProtocolClient = class {
           snapshotItemIds.add(id);
           continue;
         }
-        if (observed.type !== type2) throw streamFailure2();
+        if (observed.type !== type2) throw streamFailure();
         if (type2 === "mcpToolCall" && (observed.server !== item.server || observed.tool !== item.tool)) {
           throw confinementFailure("mcp_tool_identity_changed");
         }
@@ -84875,14 +84773,14 @@ var CodexAppServerProtocolClient = class {
         if (error instanceof ReviewAgentExecutionError && error.failureClass === "confinement_violation" /* ConfinementViolation */) {
           throw error;
         }
-        throw streamFailure2();
+        throw streamFailure();
       }
     }
   }
   reconcileTerminalNonEffectfulItem(item, id, type2) {
-    if (type2 === "mcpToolCall") throw streamFailure2();
+    if (type2 === "mcpToolCall") throw streamFailure();
     const active = this.activeItems.get(id);
-    if (active && active.type !== type2) throw streamFailure2();
+    if (active && active.type !== type2) throw streamFailure();
     this.activeItems.delete(id);
     this.completedItems.set(id, Object.freeze({ type: type2 }));
     if (type2 === "agentMessage") this.captureFinalMessage(item);
@@ -84891,12 +84789,12 @@ var CodexAppServerProtocolClient = class {
     for (const active of this.activeItems.values()) {
       if (active.type !== "mcpToolCall") {
         if (!TERMINAL_SUMMARY_OMITTABLE_NON_EFFECTFUL_ITEM_TYPES.has(active.type)) {
-          throw streamFailure2();
+          throw streamFailure();
         }
         continue;
       }
       if (active.server !== CODEX_APP_SERVER_MCP_NAME || active.tool === void 0 || !this.allowedTools.has(active.tool)) {
-        throw streamFailure2();
+        throw streamFailure();
       }
     }
     this.activeItems.clear();
@@ -84906,7 +84804,7 @@ var CodexAppServerProtocolClient = class {
     if (FORBIDDEN_ITEM_TYPES.has(type2)) {
       throw confinementFailure("forbidden_item_type");
     }
-    if (!ALLOWED_ITEM_TYPES.has(type2)) throw streamFailure2();
+    if (!ALLOWED_ITEM_TYPES.has(type2)) throw streamFailure();
     switch (type2) {
       case "userMessage":
         this.validateUserMessage(item);
@@ -84926,21 +84824,21 @@ var CodexAppServerProtocolClient = class {
     }
   }
   validateUserMessage(item) {
-    if (item.clientId !== this.request.clientTurnId) throw streamFailure2();
+    if (item.clientId !== this.request.clientTurnId) throw streamFailure();
     if (!Array.isArray(item.content) || item.content.length !== 1) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     const content = requireRecord2(item.content[0], "user_message_content");
     if (content.type !== "text" || content.text !== this.request.prompt || !Array.isArray(content.text_elements) || content.text_elements.length !== 0) {
-      throw streamFailure2();
+      throw streamFailure();
     }
   }
   validateAgentMessage(item) {
     if (typeof item.text !== "string" || item.phase !== null && item.phase !== "commentary" && item.phase !== "final_answer" || item.memoryCitation !== null) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     if (Buffer.byteLength(item.text, "utf8") > this.request.maxOutputBytes) {
-      throw schemaFailure2();
+      throw schemaFailure();
     }
   }
   validateMcpToolCall(item, lifecycle) {
@@ -84952,7 +84850,7 @@ var CodexAppServerProtocolClient = class {
     requireRecord2(item.arguments, "mcp_arguments");
     if (lifecycle === "started") {
       if (item.status !== "inProgress" || item.result !== null || item.error !== null) {
-        throw streamFailure2();
+        throw streamFailure();
       }
       return;
     }
@@ -84960,13 +84858,13 @@ var CodexAppServerProtocolClient = class {
     const failedWithResult = item.status === "failed" && item.error === null && isRecord8(item.result);
     const failedWithTransportError = item.status === "failed" && item.result === null && isRecord8(item.error) && hasOnlyKeys(item.error, ["message"]) && typeof item.error.message === "string" && Buffer.byteLength(item.error.message, "utf8") <= MAX_NOTIFICATION_STRING_BYTES;
     if (!completed && !failedWithResult && !failedWithTransportError) {
-      throw streamFailure2();
+      throw streamFailure();
     }
   }
   captureFinalMessage(item) {
     if (item.phase === "commentary") return;
     const text = item.text;
-    if (!text.trim()) throw schemaFailure2();
+    if (!text.trim()) throw schemaFailure();
     this.finalMessageCandidates.push({
       phase: item.phase,
       text
@@ -84974,37 +84872,37 @@ var CodexAppServerProtocolClient = class {
   }
   onRawResponseCompleted(params) {
     this.assertTurnFence(params);
-    if (!this.turnStarted || this.turnCompleted) throw streamFailure2();
+    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
     const responseId = requireIdentifier2(params.responseId, "response_id");
-    if (params.usage === null) throw usageFailure2();
+    if (params.usage === null) throw usageFailure();
     const usage = parseTokenUsage(params.usage);
     const existing = this.rawUsageByResponseId.get(responseId);
     if (existing) {
-      throw usageFailure2();
+      throw usageFailure();
     }
     this.rawUsageByResponseId.set(responseId, usage);
   }
   onTokenUsageUpdated(params) {
     this.assertTurnFence(params);
-    if (!this.turnStarted || this.turnCompleted) throw streamFailure2();
+    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
     const tokenUsage = requireRecord2(params.tokenUsage, "thread_token_usage");
     this.aggregateUsage = parseTokenUsage(tokenUsage.total);
     this.lastAggregateUsage = parseTokenUsage(tokenUsage.last);
     if (tokenUsage.modelContextWindow !== null && (!Number.isSafeInteger(tokenUsage.modelContextWindow) || tokenUsage.modelContextWindow < 1)) {
-      throw usageFailure2();
+      throw usageFailure();
     }
   }
   onErrorNotification(params) {
     if (!this.turnStarted || this.turnCompleted || !hasOnlyKeys(params, ["error", "threadId", "turnId", "willRetry"]) || typeof params.willRetry !== "boolean") {
-      throw streamFailure2();
+      throw streamFailure();
     }
     this.assertTurnFence(params);
     const parsed = parseTurnError(params.error);
     if (params.willRetry) {
-      if (this.retainedTerminalError !== null) throw streamFailure2();
+      if (this.retainedTerminalError !== null) throw streamFailure();
       return;
     }
-    if (this.retainedTerminalError !== null) throw streamFailure2();
+    if (this.retainedTerminalError !== null) throw streamFailure();
     this.retainedTerminalError = parsed;
   }
   onModelVerification(params) {
@@ -85016,7 +84914,7 @@ var CodexAppServerProtocolClient = class {
     if (!Array.isArray(params.verifications) || params.verifications.length > MAX_NOTIFICATION_STRING_ARRAY_SIZE || params.verifications.some(
       (verification) => verification !== "trustedAccessForCyber"
     )) {
-      throw streamFailure2();
+      throw streamFailure();
     }
   }
   onTurnModerationMetadata(params) {
@@ -85037,7 +84935,7 @@ var CodexAppServerProtocolClient = class {
     requireBoundedStringArray(params.useCases);
     requireBoundedStringArray(params.reasons);
     if (params.showBufferingUi !== true && params.showBufferingUi !== false) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     if (params.fasterModel !== null) requireModel(params.fasterModel);
   }
@@ -85046,28 +84944,28 @@ var CodexAppServerProtocolClient = class {
     const turn = requireRecord2(params.turn, "turn_completed_turn");
     this.assertTurnId(requireIdentifier2(turn.id, "turn_id"));
     if (!this.turnStarted || this.turnCompleted || !Array.isArray(turn.items)) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     this.validateTurnItemSnapshot(turn.items);
     const turnError = turn.error ?? null;
     switch (turn.status) {
       case "completed":
         if (turnError !== null || this.retainedTerminalError !== null) {
-          throw streamFailure2();
+          throw streamFailure();
         }
         if (this.activeItems.size !== 0 && turn.itemsView === "summary") {
           this.reconcileItemsOmittedFromTerminalSummary();
         }
-        if (this.activeItems.size !== 0) throw streamFailure2();
+        if (this.activeItems.size !== 0) throw streamFailure();
         this.turnCompleted = true;
         this.maybeComplete();
         return;
       case "failed": {
-        if (this.activeItems.size !== 0) throw streamFailure2();
+        if (this.activeItems.size !== 0) throw streamFailure();
         const completedError = parseTurnError(turnError);
         const retained = this.retainedTerminalError;
         if (retained === null || retained.fingerprint !== completedError.fingerprint) {
-          throw streamFailure2();
+          throw streamFailure();
         }
         this.turnCompleted = true;
         this.fail(retained.failure);
@@ -85075,35 +84973,35 @@ var CodexAppServerProtocolClient = class {
       }
       case "interrupted":
         if (turnError !== null || this.activeItems.size !== 0) {
-          throw streamFailure2();
+          throw streamFailure();
         }
         this.turnCompleted = true;
         this.fail(cancelledFailure());
         return;
       default:
-        throw streamFailure2();
+        throw streamFailure();
     }
   }
   maybeComplete() {
     if (!this.turnCompleted || this.failed) return;
     if (!this.threadId || !this.turnId) return;
     if (!this.threadStarted || !this.turnStarted || !this.actualModel || !this.modelProvider) {
-      this.fail(streamFailure2());
+      this.fail(streamFailure());
       return;
     }
     if (this.rawUsageByResponseId.size === 0 || !this.aggregateUsage || !this.lastAggregateUsage) {
-      this.fail(usageFailure2());
+      this.fail(usageFailure());
       return;
     }
     const rawUsage = sumUsage([...this.rawUsageByResponseId.values()]);
     const lastRawUsage = [...this.rawUsageByResponseId.values()].at(-1);
     if (!sameUsage(rawUsage, this.aggregateUsage) || !lastRawUsage || !sameUsage(lastRawUsage, this.lastAggregateUsage)) {
-      this.fail(usageFailure2());
+      this.fail(usageFailure());
       return;
     }
     const finalMessage = selectFinalMessage(this.finalMessageCandidates);
     if (finalMessage === null) {
-      this.fail(schemaFailure2());
+      this.fail(schemaFailure());
       return;
     }
     this.completionResolved = true;
@@ -85128,30 +85026,30 @@ var CodexAppServerProtocolClient = class {
   }
   onServerRequestResolved(params) {
     if (!this.threadStarted || !hasOnlyKeys(params, ["requestId", "threadId"])) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     requireRequestId(params.requestId);
     this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
   }
   assertActiveTurnMetadata(params, keys) {
     if (!this.threadStarted || this.turnCompleted || !hasOnlyKeys(params, keys)) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     this.assertTurnFence(params);
   }
   onWarning(params) {
     if (!hasRequiredAndOptionalKeys(params, ["message"], ["threadId"])) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     if (params.threadId !== null && params.threadId !== void 0) {
       const expectedThreadId = this.threadId ?? this.provisionalThreadId;
-      if (expectedThreadId === null) throw streamFailure2();
+      if (expectedThreadId === null) throw streamFailure();
       const warningThreadId = requireIdentifier2(params.threadId, "thread_id");
-      if (warningThreadId !== expectedThreadId) throw streamFailure2();
+      if (warningThreadId !== expectedThreadId) throw streamFailure();
     }
     const message = requireNonEmptyString(params.message, "warning_message");
     if (Buffer.byteLength(message, "utf8") > MAX_WARNING_MESSAGE_BYTES) {
-      throw streamFailure2();
+      throw streamFailure();
     }
   }
   onConfigWarning(params) {
@@ -85160,7 +85058,7 @@ var CodexAppServerProtocolClient = class {
       ["summary"],
       ["details", "path", "range"]
     )) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     requireBoundedMetadataString(params.summary, true);
     requireNullableBoundedMetadataString(params.details);
@@ -85171,12 +85069,12 @@ var CodexAppServerProtocolClient = class {
   }
   assertThreadId(threadId) {
     const expected = this.threadId ?? this.provisionalThreadId;
-    if (expected !== null && expected !== threadId) throw streamFailure2();
+    if (expected !== null && expected !== threadId) throw streamFailure();
     if (expected === null) this.provisionalThreadId = threadId;
   }
   assertTurnId(turnId) {
     const expected = this.turnId ?? this.provisionalTurnId;
-    if (expected !== null && expected !== turnId) throw streamFailure2();
+    if (expected !== null && expected !== turnId) throw streamFailure();
     if (expected === null) this.provisionalTurnId = turnId;
   }
 };
@@ -85202,7 +85100,7 @@ function classifyCodexAppServerDiagnostic(diagnostic, fallback = "process_failur
   if (/(?:invalid_json_schema|invalid schema for response_format|(?:invalid|rejected|unsupported) structured output schema|structured output schema (?:is )?(?:invalid|rejected|unsupported))/iu.test(
     diagnostic
   )) {
-    return schemaFailure2();
+    return schemaFailure();
   }
   if (/(?:usage\s*limit|usageLimitExceeded|sessionBudgetExceeded|quota|insufficient_quota|billing limit)/iu.test(
     diagnostic
@@ -85256,7 +85154,7 @@ function parseTokenUsage(value) {
     "reasoningOutputTokens",
     "totalTokens"
   ])) {
-    throw usageFailure2();
+    throw usageFailure();
   }
   const parsed = Object.freeze({
     totalTokens: requireTokenCount(usage.totalTokens),
@@ -85267,7 +85165,7 @@ function parseTokenUsage(value) {
     reasoningOutputTokens: requireTokenCount(usage.reasoningOutputTokens)
   });
   if (parsed.cachedInputTokens > parsed.inputTokens || parsed.cacheWriteInputTokens > parsed.inputTokens || parsed.reasoningOutputTokens > parsed.outputTokens || parsed.totalTokens !== parsed.inputTokens + parsed.outputTokens) {
-    throw usageFailure2();
+    throw usageFailure();
   }
   return parsed;
 }
@@ -85283,7 +85181,7 @@ function sumUsage(values) {
   for (const usage of values) {
     for (const key of Object.keys(total)) {
       const next = total[key] + usage[key];
-      if (!Number.isSafeInteger(next)) throw usageFailure2();
+      if (!Number.isSafeInteger(next)) throw usageFailure();
       total[key] = next;
     }
   }
@@ -85295,7 +85193,7 @@ function sameUsage(left, right) {
 function responseFailure(value) {
   const error = requireRecord2(value, "protocol_error");
   if (!Number.isSafeInteger(error.code) || typeof error.message !== "string" || error.message.length > 16384) {
-    return streamFailure2();
+    return streamFailure();
   }
   const diagnostic = `${error.code} ${error.message} ${safeJson(error.data)}`.slice(0, 16384);
   return classifyCodexAppServerDiagnostic(diagnostic);
@@ -85305,10 +85203,10 @@ function parseTurnError(value) {
   const additionalDetails = error.additionalDetails ?? null;
   const codexErrorInfo = parseCodexErrorInfo(error.codexErrorInfo ?? null);
   if (typeof error.message !== "string" || error.message.length > 16384 || additionalDetails !== null && (typeof additionalDetails !== "string" || additionalDetails.length > 16384)) {
-    throw streamFailure2();
+    throw streamFailure();
   }
   if (error.message.length === 0 && !hasCodexErrorClassification(codexErrorInfo)) {
-    throw streamFailure2();
+    throw streamFailure();
   }
   const normalized = Object.freeze({
     message: error.message,
@@ -85317,7 +85215,7 @@ function parseTurnError(value) {
   });
   const canonical = canonicalProtocolValue(normalized);
   if (Buffer.byteLength(canonical, "utf8") > 32768) {
-    throw streamFailure2();
+    throw streamFailure();
   }
   const diagnostic = [
     error.message,
@@ -85335,33 +85233,33 @@ function hasCodexErrorClassification(value) {
 function parseCodexErrorInfo(value) {
   if (value === null) return null;
   if (typeof value === "string") {
-    if (!CODEX_ERROR_INFO_STRING_VARIANTS.has(value)) throw streamFailure2();
+    if (!CODEX_ERROR_INFO_STRING_VARIANTS.has(value)) throw streamFailure();
     return value;
   }
   const tagged = requireRecord2(value, "codex_error_info");
   const variants = Object.keys(tagged);
-  if (variants.length !== 1) throw streamFailure2();
+  if (variants.length !== 1) throw streamFailure();
   const variant = variants[0];
   const payload = requireRecord2(tagged[variant], "codex_error_info_payload");
   if (CODEX_ERROR_INFO_HTTP_VARIANTS.has(variant)) {
     if (!hasRequiredAndOptionalKeys(payload, [], ["httpStatusCode"])) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     const status = payload.httpStatusCode;
     if (status !== void 0 && status !== null && (!Number.isSafeInteger(status) || status < 0 || status > 65535)) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     return value;
   }
   if (variant === "activeTurnNotSteerable" && hasOnlyKeys(payload, ["turnKind"]) && (payload.turnKind === "review" || payload.turnKind === "compact")) {
     return value;
   }
-  throw streamFailure2();
+  throw streamFailure();
 }
 function canonicalProtocolValue(value) {
   if (value === null || typeof value !== "object") {
     const encoded = JSON.stringify(value);
-    if (typeof encoded !== "string") throw streamFailure2();
+    if (typeof encoded !== "string") throw streamFailure();
     return encoded;
   }
   if (Array.isArray(value)) {
@@ -85373,10 +85271,10 @@ function canonicalProtocolValue(value) {
   ).join(",")}}`;
 }
 function normalizeProtocolFailure(error) {
-  return error instanceof ReviewAgentExecutionError ? error : streamFailure2();
+  return error instanceof ReviewAgentExecutionError ? error : streamFailure();
 }
 function requireRecord2(value, _field) {
-  if (!isRecord8(value)) throw streamFailure2();
+  if (!isRecord8(value)) throw streamFailure();
   return value;
 }
 function isRecord8(value) {
@@ -85386,20 +85284,20 @@ function requireRequestId(value) {
   if (typeof value === "string" || Number.isSafeInteger(value) && typeof value === "number") {
     return value;
   }
-  throw streamFailure2();
+  throw streamFailure();
 }
 function requestIdKey(value) {
   return `${typeof value}:${String(value)}`;
 }
 function requireNonEmptyString(value, _field) {
   if (typeof value !== "string" || value.length < 1 || value.length > 16384 || containsControlCharacter(value)) {
-    throw streamFailure2();
+    throw streamFailure();
   }
   return value;
 }
 function requireBoundedMetadataString(value, allowEmpty) {
   if (typeof value !== "string" || !allowEmpty && value.length === 0 || Buffer.byteLength(value, "utf8") > MAX_METADATA_STRING_BYTES) {
-    throw streamFailure2();
+    throw streamFailure();
   }
   return value;
 }
@@ -85409,11 +85307,11 @@ function requireNullableBoundedMetadataString(value) {
 }
 function validateConfigWarningRange(value) {
   const range = requireRecord2(value, "config_warning_range");
-  if (!hasOnlyKeys(range, ["end", "start"])) throw streamFailure2();
+  if (!hasOnlyKeys(range, ["end", "start"])) throw streamFailure();
   for (const key of ["start", "end"]) {
     const position = requireRecord2(range[key], "config_warning_position");
     if (!hasOnlyKeys(position, ["column", "line"]) || !isUnsignedInteger(position.line) || !isUnsignedInteger(position.column)) {
-      throw streamFailure2();
+      throw streamFailure();
     }
   }
 }
@@ -85431,7 +85329,7 @@ function containsControlCharacter(value) {
 }
 function requireIdentifier2(value, field) {
   const result2 = requireNonEmptyString(value, field);
-  if (result2.length > 512) throw streamFailure2();
+  if (result2.length > 512) throw streamFailure();
   return result2;
 }
 function requireModel(value) {
@@ -85450,17 +85348,17 @@ function requireModelProvider(value) {
 }
 function requireStringArray2(value, _field) {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw streamFailure2();
+    throw streamFailure();
   }
   return value;
 }
 function requireBoundedStringArray(value) {
   if (!Array.isArray(value) || value.length > MAX_NOTIFICATION_STRING_ARRAY_SIZE) {
-    throw streamFailure2();
+    throw streamFailure();
   }
   for (const item of value) {
     if (typeof item !== "string" || Buffer.byteLength(item, "utf8") > MAX_NOTIFICATION_STRING_BYTES || containsControlCharacter(item)) {
-      throw streamFailure2();
+      throw streamFailure();
     }
   }
   return value;
@@ -85473,7 +85371,7 @@ function validateBoundedJson(value) {
   while (pending.length > 0) {
     const current = pending.pop();
     if (!current || ++nodeCount > MAX_METADATA_JSON_NODES) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     const candidate = current.value;
     if (candidate === null || typeof candidate === "boolean" || typeof candidate === "number" && Number.isFinite(candidate)) {
@@ -85481,30 +85379,30 @@ function validateBoundedJson(value) {
     }
     if (typeof candidate === "string") {
       if (Buffer.byteLength(candidate, "utf8") > MAX_METADATA_STRING_BYTES || containsControlCharacter(candidate)) {
-        throw streamFailure2();
+        throw streamFailure();
       }
       continue;
     }
-    if (current.depth >= MAX_METADATA_JSON_DEPTH) throw streamFailure2();
+    if (current.depth >= MAX_METADATA_JSON_DEPTH) throw streamFailure();
     if (Array.isArray(candidate)) {
       if (candidate.length > MAX_METADATA_COLLECTION_SIZE) {
-        throw streamFailure2();
+        throw streamFailure();
       }
       for (const item of candidate) {
         pending.push({ value: item, depth: current.depth + 1 });
       }
       continue;
     }
-    if (!isRecord8(candidate)) throw streamFailure2();
+    if (!isRecord8(candidate)) throw streamFailure();
     const prototype = Object.getPrototypeOf(candidate);
     if (prototype !== Object.prototype && prototype !== null) {
-      throw streamFailure2();
+      throw streamFailure();
     }
     const entries = Object.entries(candidate);
-    if (entries.length > MAX_METADATA_COLLECTION_SIZE) throw streamFailure2();
+    if (entries.length > MAX_METADATA_COLLECTION_SIZE) throw streamFailure();
     for (const [key, item] of entries) {
       if (Buffer.byteLength(key, "utf8") > MAX_NOTIFICATION_STRING_BYTES || containsControlCharacter(key)) {
-        throw streamFailure2();
+        throw streamFailure();
       }
       pending.push({ value: item, depth: current.depth + 1 });
     }
@@ -85513,15 +85411,15 @@ function validateBoundedJson(value) {
   try {
     encoded = JSON.stringify(value);
   } catch {
-    throw streamFailure2();
+    throw streamFailure();
   }
   if (Buffer.byteLength(encoded, "utf8") > MAX_METADATA_JSON_BYTES) {
-    throw streamFailure2();
+    throw streamFailure();
   }
 }
 function requireTokenCount(value) {
   if (!Number.isSafeInteger(value) || value < 0) {
-    throw usageFailure2();
+    throw usageFailure();
   }
   return value;
 }
@@ -85591,7 +85489,7 @@ function notificationDiagnosticStage(value) {
   }
 }
 function withStreamDiagnosticStage(error, stage) {
-  return error instanceof ReviewAgentExecutionError && error.failureClass === "stream_incomplete" /* StreamIncomplete */ && error.message === "review_agent_stream_incomplete" ? streamFailure2(stage) : error;
+  return error instanceof ReviewAgentExecutionError && error.failureClass === "stream_incomplete" /* StreamIncomplete */ && error.message === "review_agent_stream_incomplete" ? streamFailure(stage) : error;
 }
 async function withProtocolRunStage(stage, operation) {
   try {
@@ -85600,21 +85498,21 @@ async function withProtocolRunStage(stage, operation) {
     throw withStreamDiagnosticStage(error, stage);
   }
 }
-function streamFailure2(stage) {
+function streamFailure(stage) {
   return new ReviewAgentExecutionError(
     "stream_incomplete" /* StreamIncomplete */,
     null,
     stage ? `review_agent_stream_incomplete_${stage}` : "review_agent_stream_incomplete"
   );
 }
-function schemaFailure2() {
+function schemaFailure() {
   return new ReviewAgentExecutionError(
     "schema_invalid_output" /* SchemaInvalidOutput */,
     null,
     "review_agent_output_invalid"
   );
 }
-function usageFailure2() {
+function usageFailure() {
   return new ReviewAgentExecutionError(
     "usage_attribution_missing" /* UsageAttributionMissing */,
     null,
@@ -85690,8 +85588,6 @@ function deferred() {
 }
 
 // src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
-var import_child_process10 = require("child_process");
-var import_util10 = require("util");
 var DEFAULT_INTERRUPT_GRACE_MS = 500;
 var MAX_DIAGNOSTIC_BYTES = 16384;
 var NodeCodexAppServerTurnRunner = class {
@@ -85946,7 +85842,7 @@ var CodexAppServerChildTurn = class {
 `;
     } catch {
       return Promise.reject(
-        streamFailure3("write_json" /* WriteJson */)
+        streamFailure2("write_json" /* WriteJson */)
       );
     }
     return new Promise((resolve4, reject) => {
@@ -86013,13 +85909,13 @@ var CodexAppServerChildTurn = class {
         ignoreBOM: true
       }).decode(line);
     } catch {
-      throw streamFailure3("stdout_utf8" /* StdoutUtf8 */);
+      throw streamFailure2("stdout_utf8" /* StdoutUtf8 */);
     }
     let message;
     try {
       message = JSON.parse(decoded);
     } catch {
-      throw streamFailure3("stdout_json" /* StdoutJson */);
+      throw streamFailure2("stdout_json" /* StdoutJson */);
     }
     this.protocol.receive(message);
     const postCompletionFailure = this.protocol.failureAfterCompletion();
@@ -86027,7 +85923,7 @@ var CodexAppServerChildTurn = class {
   }
   onProtocolFailure(error) {
     if (this.closed || this.settled || this.forcedTermination !== null) return;
-    this.terminalError = error instanceof ReviewAgentExecutionError ? error : streamFailure3("protocol_failure" /* ProtocolFailure */);
+    this.terminalError = error instanceof ReviewAgentExecutionError ? error : streamFailure2("protocol_failure" /* ProtocolFailure */);
     this.killProcessGroup();
   }
   requestTermination(termination) {
@@ -86076,7 +85972,7 @@ var CodexAppServerChildTurn = class {
         this.receiveLine(line);
       }
     } catch (error) {
-      this.terminalError = error instanceof ReviewAgentExecutionError ? error : streamFailure3("trailing_stdout" /* TrailingStdout */);
+      this.terminalError = error instanceof ReviewAgentExecutionError ? error : streamFailure2("trailing_stdout" /* TrailingStdout */);
     }
     this.stdoutBuffer = Buffer.alloc(0);
     this.protocol.end();
@@ -86119,7 +86015,7 @@ var CodexAppServerChildTurn = class {
     }
     if (!protocolResult) {
       this.settleFailure(
-        streamFailure3("missing_protocol_result" /* MissingProtocolResult */)
+        streamFailure2("missing_protocol_result" /* MissingProtocolResult */)
       );
       return;
     }
@@ -86182,7 +86078,7 @@ function cancelledFailure2() {
     "review_agent_process_cancelled"
   );
 }
-function streamFailure3(stage) {
+function streamFailure2(stage) {
   return new ReviewAgentExecutionError(
     "stream_incomplete" /* StreamIncomplete */,
     null,
@@ -86198,6 +86094,475 @@ function deferred2() {
   });
   return { promise, resolve: resolve4, reject };
 }
+
+// src/review-orchestration/infrastructure/system-review-orchestration-clock.ts
+var SystemReviewOrchestrationClock = class {
+  monotonicNowMs() {
+    return Math.floor(performance.now());
+  }
+};
+
+// src/review-investigation/application/replay-investigation-on-revision.ts
+var ReplayInvestigationOnRevision = class {
+  constructor(dependencies) {
+    this.dependencies = dependencies;
+  }
+  async execute(input) {
+    if (!await this.isCurrent(input)) return null;
+    const prepared = await this.dependencies.controlPlane.prepareReplay({
+      open: input.open,
+      providerManifestCanonicalJson: input.providerManifestCanonicalJson,
+      providerManifestHash: input.providerManifestHash
+    });
+    if (!prepared || !await this.isCurrent(input)) return null;
+    const replayProofs = [];
+    const proofsByReplayIdentity = /* @__PURE__ */ new Map();
+    for (const obligation of prepared.obligations) {
+      if (!await this.isCurrent(input)) return null;
+      const replayIdentity = [
+        obligation.contextAttestationId,
+        obligation.contextAttestationHash,
+        obligation.sourceOperationReceiptIdsHash,
+        obligation.replayPlanHash
+      ].join("\0");
+      let proof = proofsByReplayIdentity.get(replayIdentity);
+      if (!proof) {
+        proof = this.replayAndCommit(input, obligation);
+        proofsByReplayIdentity.set(replayIdentity, proof);
+      }
+      const committed = await proof;
+      if (committed) {
+        replayProofs.push({
+          obligationId: obligation.obligationId,
+          replayProofId: committed.replayProofId
+        });
+      }
+    }
+    if (!await this.isCurrent(input)) return null;
+    replayProofs.sort(
+      (left, right) => compareCodeUnits9(left.obligationId, right.obligationId)
+    );
+    return this.dependencies.controlPlane.replay({
+      open: input.open,
+      scope: input.scope,
+      revision: input.revision,
+      prepared,
+      replayProofs: Object.freeze(replayProofs)
+    });
+  }
+  async replayAndCommit(input, prepared) {
+    const replayed = await this.dependencies.receipts.replayReceipt({
+      prepared,
+      targetRevision: input.revision
+    });
+    if (!replayed || !await this.isCurrent(input)) return null;
+    return this.dependencies.controlPlane.commitReceiptReplay({
+      open: input.open,
+      prepared,
+      result: replayed
+    });
+  }
+  async isCurrent(input) {
+    return await this.dependencies.currency.check({
+      executionId: input.open.executionId,
+      workSlotId: input.open.workSlotId,
+      reviewRevisionHash: input.open.reviewRevisionHash
+    }) === "current" /* Current */;
+  }
+};
+function compareCodeUnits9(left, right) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+// src/review-investigation/infrastructure/strict-cli-review-agent.ts
+var GATEWAY_RUNTIME_ENV_KEYS = /* @__PURE__ */ new Set([
+  "REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION",
+  "REVIEWROUTER_CONTEXT_SESSION_ID",
+  "REVIEWROUTER_CONTEXT_ROOT",
+  "REVIEWROUTER_CONTEXT_TRANSCRIPT_PATH",
+  "REVIEWROUTER_CONTEXT_REPLAY_MATERIAL_PATH",
+  "REVIEWROUTER_CONTEXT_GATEWAY_BINARY_HASH",
+  "REVIEWROUTER_CONTEXT_GATEWAY_MAX_OPERATIONS",
+  "REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID",
+  "REVIEWROUTER_CONTEXT_MERGE_BASE_TREE_OID",
+  "REVIEWROUTER_CONTEXT_EVENT_CHAIN_SEED_HASH",
+  "REVIEWROUTER_CONTEXT_BASE_SHA",
+  "REVIEWROUTER_CONTEXT_MERGE_BASE_SHA",
+  "REVIEWROUTER_CONTEXT_HEAD_SHA"
+]);
+var GATEWAY_CREDENTIAL_ENV_KEYS = /* @__PURE__ */ new Set([
+  "REVIEWROUTER_CONTEXT_GATEWAY_SECRET"
+]);
+var PROVIDER_ENV_KEYS = Object.freeze({
+  ["codex" /* Codex */]: /* @__PURE__ */ new Set([
+    "CODEX_HOME",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY"
+  ]),
+  ["claude_code" /* ClaudeCode */]: /* @__PURE__ */ new Set([
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CONFIG_DIR"
+  ])
+});
+var MAX_SAFE_RETRY_AFTER_MS2 = 7 * 24 * 60 * 60 * 1e3;
+var SAFE_AGENT_ERROR_CODES = /* @__PURE__ */ new Set([
+  "review_agent_actual_model_invalid",
+  "review_agent_actual_model_unavailable",
+  "review_agent_authentication_unavailable",
+  "review_agent_cached_input_tokens_invalid",
+  "review_agent_cached_usage_invalid",
+  "review_agent_cancel_failure",
+  "review_agent_capability_requirements_unsatisfied",
+  "review_agent_capacity_unavailable",
+  "review_agent_claude_stream_incomplete",
+  "review_agent_claude_usage_missing",
+  "review_agent_codex_event_json_invalid",
+  "review_agent_codex_event_stream_empty",
+  "review_agent_codex_stream_incomplete",
+  "review_agent_codex_usage_missing",
+  "review_agent_critic_decision_invalid_for_turn",
+  "review_agent_execution_session_invalid",
+  "review_agent_gateway_credential_environment_invalid",
+  "review_agent_input_tokens_invalid",
+  "review_agent_output_invalid",
+  "review_agent_output_invalid_claims",
+  "review_agent_output_invalid_critic",
+  "review_agent_output_invalid_finding",
+  "review_agent_output_invalid_obligation_proposal",
+  "review_agent_output_invalid_shape",
+  "review_agent_output_tokens_invalid",
+  "review_agent_process_cancelled",
+  "review_agent_process_failure",
+  "review_agent_process_timeout",
+  "review_agent_provider_credential_environment_invalid",
+  "review_agent_quota_unavailable",
+  "review_agent_reasoning_output_tokens_invalid",
+  "review_agent_runtime_environment_invalid",
+  "review_agent_startup_failure",
+  "review_agent_turn_request_invalid",
+  "review_agent_turn_obligation_claim_invalid",
+  "review_agent_usage_attribution_missing",
+  "review_agent_workspace_authority_mismatch"
+]);
+var SAFE_DEFAULT_ERROR_CODE = Object.freeze({
+  ["capability_unavailable" /* CapabilityUnavailable */]: "review_agent_capability_unavailable",
+  ["authentication_unavailable" /* AuthenticationUnavailable */]: "review_agent_authentication_unavailable",
+  ["quota_unavailable" /* QuotaUnavailable */]: "review_agent_quota_unavailable",
+  ["capacity_unavailable" /* CapacityUnavailable */]: "review_agent_capacity_unavailable",
+  ["startup_failure" /* StartupFailure */]: "review_agent_startup_failure",
+  ["process_failure" /* ProcessFailure */]: "review_agent_process_failure",
+  ["timeout" /* Timeout */]: "review_agent_process_timeout",
+  ["cancelled" /* Cancelled */]: "review_agent_process_cancelled",
+  ["schema_invalid_output" /* SchemaInvalidOutput */]: "review_agent_output_invalid",
+  ["stream_incomplete" /* StreamIncomplete */]: "review_agent_stream_incomplete",
+  ["model_attribution_missing" /* ModelAttributionMissing */]: "review_agent_actual_model_unavailable",
+  ["usage_attribution_missing" /* UsageAttributionMissing */]: "review_agent_usage_attribution_missing",
+  ["confinement_violation" /* ConfinementViolation */]: "review_agent_confinement_violation"
+});
+var StrictCliReviewAgent = class {
+  constructor(profile, runner, executionSessions, providerCredentials) {
+    this.profile = profile;
+    this.runner = runner;
+    this.executionSessions = executionSessions;
+    this.providerCredentials = providerCredentials;
+  }
+  async negotiate(requirements) {
+    try {
+      assertRuntimeProfileSatisfies(this.profile, requirements);
+      return this.profile;
+    } catch {
+      throw new ReviewAgentExecutionError(
+        "capability_unavailable" /* CapabilityUnavailable */,
+        null,
+        "review_agent_capability_requirements_unsatisfied"
+      );
+    }
+  }
+  async cancel(invocationId, fencingToken) {
+    try {
+      await this.runner.cancel(invocationId, fencingToken);
+    } catch (error) {
+      throw safeAgentError(
+        error,
+        "process_failure" /* ProcessFailure */,
+        "review_agent_cancel_failure"
+      );
+    }
+  }
+  validateRequest(request) {
+    if (!request.invocationId || !request.fencingToken || !request.turnId || !Number.isSafeInteger(request.dossierVersion) || request.dossierVersion < 0 || !/^[a-f0-9]{64}$/u.test(request.dossierDigest) || !request.prompt || Buffer.byteLength(request.prompt, "utf8") > this.profile.maxPromptBytes || !request.workspaceRoot || request.requestedModel.length < 1 || request.requestedModel.length > 200 || !Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1 || !Number.isSafeInteger(request.maxTurns) || request.maxTurns < 1 || request.maxTurns > this.profile.maxTurns || !validAllowedObligationIds(request.allowedObligationIds)) {
+      throw new ReviewAgentExecutionError(
+        "capability_unavailable" /* CapabilityUnavailable */,
+        null,
+        "review_agent_turn_request_invalid"
+      );
+    }
+  }
+  prepareExecution(request) {
+    this.validateRequest(request);
+    const gateway = this.executionSessions.resolve(
+      request.executionSession,
+      this.profile.providerKind
+    );
+    const providerCredentialEnvironment = Object.freeze({
+      ...this.providerCredentials()
+    });
+    assertGatewayBinding(gateway);
+    if (gateway.cwd !== request.workspaceRoot) {
+      throw new ReviewAgentExecutionError(
+        "confinement_violation" /* ConfinementViolation */,
+        null,
+        "review_agent_workspace_authority_mismatch"
+      );
+    }
+    assertEnvironmentPartition(
+      gateway.runtimeEnvironment,
+      gateway.credentialEnvironment,
+      providerCredentialEnvironment,
+      this.profile.providerKind
+    );
+    return Object.freeze({ gateway, providerCredentialEnvironment });
+  }
+  executionEnvironment(execution) {
+    return {
+      ...this.providerOnlyExecutionEnvironment(execution),
+      ...execution.gateway.runtimeEnvironment,
+      REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION: "context-gateway-v4",
+      ...execution.gateway.credentialEnvironment
+    };
+  }
+  providerOnlyExecutionEnvironment(execution) {
+    return {
+      ...buildCliSafeEnv({ includeWorkspaceEnv: false }),
+      ...execution.providerCredentialEnvironment,
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_NO_REPLACE_OBJECTS: "1"
+    };
+  }
+  async runProcess(request, execution, input) {
+    const result2 = await this.runner.run({
+      invocationId: request.invocationId,
+      fencingToken: request.fencingToken,
+      cwd: execution.gateway.cwd,
+      environment: input.environment ?? this.executionEnvironment(execution),
+      stdin: request.prompt,
+      timeoutMs: request.timeoutMs,
+      maxOutputBytes: this.profile.maxOutputBytes,
+      signal: request.signal,
+      binary: input.binary,
+      args: input.args
+    });
+    assertSuccessfulProcess(result2);
+    return result2;
+  }
+  observation(request, parsed, durationMs) {
+    assertTurnObligationClaimsAllowed(request, parsed.output);
+    if (request.purpose === "discovery" /* Discovery */ && parsed.output.criticDecision !== null || request.purpose === "critic" /* Critic */ && parsed.output.criticDecision === null) {
+      throw new ReviewAgentExecutionError(
+        "schema_invalid_output" /* SchemaInvalidOutput */,
+        null,
+        "review_agent_critic_decision_invalid_for_turn"
+      );
+    }
+    return Object.freeze({
+      observationVersion: REVIEW_TURN_OBSERVATION_VERSION,
+      invocationId: request.invocationId,
+      turnId: request.turnId,
+      dossierVersion: request.dossierVersion,
+      purpose: request.purpose,
+      actualProviderKind: this.profile.providerKind,
+      actualModel: parsed.actualModel,
+      runtimeProfile: this.profile.executionProfile,
+      usage: parsed.usage,
+      durationMs,
+      schemaComplete: true,
+      streamComplete: true,
+      contextAttestationReference: null,
+      ...parsed.output
+    });
+  }
+};
+function validAllowedObligationIds(ids) {
+  return Array.isArray(ids) && ids.length <= 256 && new Set(ids).size === ids.length && ids.every((id) => /^[a-f0-9]{64}$/u.test(id));
+}
+function assertTurnObligationClaimsAllowed(request, output) {
+  const allowed = new Set(request.allowedObligationIds);
+  const closureIds = output.closureClaims.map((claim) => claim.obligationId);
+  const unresolvableIds = output.unresolvableClaims.map(
+    (claim) => claim.obligationId
+  );
+  const invalid = closureIds.some((id) => !allowed.has(id)) || unresolvableIds.some((id) => !allowed.has(id)) || new Set(closureIds).size !== closureIds.length || new Set(unresolvableIds).size !== unresolvableIds.length || closureIds.some((id) => unresolvableIds.includes(id));
+  if (invalid) {
+    throw new ReviewAgentExecutionError(
+      "schema_invalid_output" /* SchemaInvalidOutput */,
+      null,
+      "review_agent_turn_obligation_claim_invalid"
+    );
+  }
+}
+function schemaFailure2(error) {
+  if (error instanceof ReviewAgentExecutionError) {
+    return safeAgentError(
+      error,
+      "schema_invalid_output" /* SchemaInvalidOutput */,
+      "review_agent_output_invalid"
+    );
+  }
+  return new ReviewAgentExecutionError(
+    "schema_invalid_output" /* SchemaInvalidOutput */,
+    null,
+    safeErrorCode(
+      error instanceof Error ? error.message : "review_agent_output_invalid",
+      "schema_invalid_output" /* SchemaInvalidOutput */
+    )
+  );
+}
+function assertSuccessfulProcess(result2) {
+  if (result2.termination === "exited" /* Exited */ && result2.exitCode === 0) {
+    return;
+  }
+  if (result2.termination === "timed_out" /* TimedOut */) {
+    throw new ReviewAgentExecutionError(
+      "timeout" /* Timeout */,
+      null,
+      "review_agent_process_timeout"
+    );
+  }
+  if (result2.termination === "cancelled" /* Cancelled */) {
+    throw new ReviewAgentExecutionError(
+      "cancelled" /* Cancelled */,
+      null,
+      "review_agent_process_cancelled"
+    );
+  }
+  const failureSignals = boundedProviderFailureSignals(result2);
+  throw classifyProviderFailure(failureSignals, result2.termination);
+}
+function classifyProviderFailure(diagnostic, termination) {
+  if (/(?:401|403|unauthorized|not logged in|refresh token|oauth|authentication)/iu.test(
+    diagnostic
+  )) {
+    return new ReviewAgentExecutionError(
+      "authentication_unavailable" /* AuthenticationUnavailable */,
+      null,
+      "review_agent_authentication_unavailable"
+    );
+  }
+  if (/(?:invalid_json_schema|invalid schema for response_format|(?:invalid|rejected|unsupported) structured output schema|structured output schema (?:is )?(?:invalid|rejected|unsupported))/iu.test(
+    diagnostic
+  )) {
+    return new ReviewAgentExecutionError(
+      "schema_invalid_output" /* SchemaInvalidOutput */,
+      null,
+      "review_agent_output_invalid"
+    );
+  }
+  if (/(?:usage limit|quota|insufficient_quota|billing limit)/iu.test(diagnostic)) {
+    return new ReviewAgentExecutionError(
+      "quota_unavailable" /* QuotaUnavailable */,
+      null,
+      "review_agent_quota_unavailable"
+    );
+  }
+  if (/(?:capacity[_ -]unavailable|overloaded|too many requests|\b429\b|rate limit)/iu.test(
+    diagnostic
+  )) {
+    return new ReviewAgentExecutionError(
+      "capacity_unavailable" /* CapacityUnavailable */,
+      null,
+      "review_agent_capacity_unavailable"
+    );
+  }
+  if (/(?:model cache|startup|failed to start|enoent|spawn)/iu.test(diagnostic) || termination === "startup_failed" /* StartupFailed */) {
+    return new ReviewAgentExecutionError(
+      "startup_failure" /* StartupFailure */,
+      null,
+      "review_agent_startup_failure"
+    );
+  }
+  return new ReviewAgentExecutionError(
+    "process_failure" /* ProcessFailure */,
+    null,
+    "review_agent_process_failure"
+  );
+}
+function assertGatewayBinding(binding) {
+  const expectedTools = [...REVIEW_INVESTIGATION_GATEWAY_TOOLS].sort();
+  const actualTools = [...binding.enabledTools].sort();
+  if (binding.policyVersion !== "context-gateway-v4" || !/^[a-f0-9]{64}$/u.test(binding.binaryHash) || !binding.command || !binding.cwd || actualTools.length !== expectedTools.length || actualTools.some((tool, index) => tool !== expectedTools[index])) {
+    throw new ReviewAgentExecutionError(
+      "capability_unavailable" /* CapabilityUnavailable */,
+      null,
+      "review_agent_execution_session_invalid"
+    );
+  }
+}
+function assertEnvironmentPartition(runtime, gatewayCredentials, providerCredentials, providerKind) {
+  assertAllowlistedEnvironment(
+    runtime,
+    GATEWAY_RUNTIME_ENV_KEYS,
+    "review_agent_runtime_environment_invalid"
+  );
+  assertAllowlistedEnvironment(
+    gatewayCredentials,
+    GATEWAY_CREDENTIAL_ENV_KEYS,
+    "review_agent_gateway_credential_environment_invalid"
+  );
+  assertAllowlistedEnvironment(
+    providerCredentials,
+    PROVIDER_ENV_KEYS[providerKind],
+    "review_agent_provider_credential_environment_invalid"
+  );
+}
+function assertAllowlistedEnvironment(environment, allowedKeys, errorCode) {
+  for (const key of Object.keys(environment)) {
+    if (!allowedKeys.has(key)) throw new Error(errorCode);
+  }
+}
+function boundedProviderFailureSignals(result2) {
+  return `${result2.stderr.slice(0, 8192)}
+${result2.stdout.slice(0, 8192)}`.replace(/(?:sk|sess|eyJ)[A-Za-z0-9._-]{12,}/gu, "<redacted>").replace(/[\r\n]+/gu, " ").trim().slice(0, 16384);
+}
+function safeAgentError(error, fallbackClass, fallbackCode) {
+  if (!(error instanceof ReviewAgentExecutionError)) {
+    return new ReviewAgentExecutionError(fallbackClass, null, fallbackCode);
+  }
+  return new ReviewAgentExecutionError(
+    error.failureClass,
+    safeRetryAfterMs(error.retryAfterMs),
+    safeErrorCode(error.message, error.failureClass)
+  );
+}
+function safeErrorCode(value, failureClass) {
+  return SAFE_AGENT_ERROR_CODES.has(value) ? value : SAFE_DEFAULT_ERROR_CODE[failureClass];
+}
+function safeRetryAfterMs(value) {
+  if (value === null || !Number.isSafeInteger(value) || value < 0 || value > MAX_SAFE_RETRY_AFTER_MS2) {
+    return null;
+  }
+  return value;
+}
+
+// src/review-investigation/infrastructure/claude-review-agent-adapter.ts
+var CLAUDE_NATIVE_TOOLS = Object.freeze([
+  "Bash",
+  "Edit",
+  "Write",
+  "Read",
+  "Grep",
+  "Glob",
+  "WebFetch",
+  "WebSearch",
+  "NotebookEdit",
+  "Task",
+  "TaskOutput",
+  "KillShell",
+  "AskUserQuestion",
+  "Skill"
+]);
 
 // src/review-investigation/infrastructure/codex-review-agent-adapter.ts
 var CODEX_APP_SERVER_EVENT_STREAM_OUTPUT_MULTIPLIER = 32;
@@ -86252,7 +86617,7 @@ var CodexReviewAgentAdapter = class extends StrictCliReviewAgent {
     try {
       output = parseFinalTurnOutput(result2.finalMessage);
     } catch (error) {
-      throw schemaFailure(error);
+      throw schemaFailure2(error);
     }
     return this.observation(
       request,
@@ -88841,6 +89206,12 @@ var ProductionT0ReviewRunner = class {
     this.progress = progress;
   }
   async run(input) {
+    if (input.codexBinaryPath && path13.basename(input.codexBinaryPath) !== input.codexBinaryPath) {
+      input = {
+        ...input,
+        codexBinaryPath: path13.resolve(process.cwd(), input.codexBinaryPath)
+      };
+    }
     return withRunnerEnvironment(input, async () => {
       try {
         return await this.runInWorkspace(input);
@@ -88852,27 +89223,49 @@ var ProductionT0ReviewRunner = class {
     });
   }
   async runInWorkspace(input) {
+    const signal = input.accountGateway?.signal;
+    signal?.throwIfAborted();
+    const fetchImpl = signal ? createAccountGatewayRunFetch(this.fetchImpl, signal) : this.fetchImpl;
     validateInput(input);
     const authoritativeDeadlineEpochMs = process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
     const oidc = new GitHubActionsOidcTokenProvider({
-      fetchImpl: this.fetchImpl
+      fetchImpl
     });
-    await applyReviewRuntimeConfig(input, this.fetchImpl, oidc);
+    const serverReasoningEffort = await applyReviewRuntimeConfig(
+      input,
+      fetchImpl,
+      oidc
+    );
     if (authoritativeDeadlineEpochMs === void 0) {
       delete process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
     } else {
       process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY] = authoritativeDeadlineEpochMs;
     }
-    const config = ConfigLoader.load();
+    signal?.throwIfAborted();
+    const loadedConfig = ConfigLoader.load();
+    const config = input.accountGateway ? { ...loadedConfig, providerRetries: 1 } : loadedConfig;
+    const codexProviderName = selectCodexProvider(config);
+    const model = codexProviderName.slice("codex/".length);
+    const reasoningEffort = resolveProductionInvestigationReasoningEffort({
+      codexModel: model,
+      accountGateway: input.accountGateway !== void 0,
+      serverReasoningEffort
+    });
+    if (input.accountGateway && model === "mimo-v2.6-pro") {
+      process.env.CODEX_REASONING_EFFORT = reasoningEffort;
+    }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
+    const configuredTimeoutMs = Math.max(
+      1e3,
+      config.runTimeoutSeconds * 1e3
+    );
+    const providerTimeoutMs = input.accountGateway ? Math.min(ACCOUNT_GATEWAY_BOUNDS.requestMs, configuredTimeoutMs) : configuredTimeoutMs;
     const reviewActionClient = new ReviewActionV2Client({
       apiUrl: input.apiUrl,
-      fetchImpl: this.fetchImpl
+      fetchImpl
     });
-    const controlPlane = new ReviewActionV2ControlPlaneAdapter(
-      reviewActionClient
-    );
-    const authorization = await controlPlane.authorize({
+    const controlPlane = input.accountGateway?.controlPlane ?? new ReviewActionV2ControlPlaneAdapter(reviewActionClient);
+    const authorization = input.accountGateway ? controlPlane.currentAuthorization() : await controlPlane.authorize({
       oidcToken: await oidc.requestToken(input.audience)
     });
     validateAuthorizationInput(input, authorization);
@@ -88881,8 +89274,12 @@ var ProductionT0ReviewRunner = class {
       expiresAt: input.scmReadTokenExpiresAt,
       refresh: input.refreshScmReadToken
     });
-    const github = new GitHubClient(input.scmReadToken, {
-      tokenProvider: scmReadTokenProvider
+    const github = createScmReadGitHubClient({
+      tokenProvider: scmReadTokenProvider,
+      token: input.scmReadToken,
+      expiresAt: input.scmReadTokenExpiresAt,
+      refresh: input.refreshScmReadToken,
+      signal
     });
     const revisionGuard = new GitHubReviewRevisionGuard(github, {
       workspaceId: authorization.facts.workspaceId,
@@ -88890,7 +89287,10 @@ var ProductionT0ReviewRunner = class {
       scmRepositoryIdentityId: authorization.facts.scmRepositoryIdentityId,
       pullRequestNumber: authorization.facts.pullRequestNumber
     });
-    const checkedOutHead = await readCheckedOutHead(input.workspacePath);
+    const checkedOutHead = await readCheckedOutHead(
+      input.workspacePath,
+      signal
+    );
     if (checkedOutHead !== authorization.facts.headSha) {
       throw new Error("review_action_v2_checked_out_revision_mismatch");
     }
@@ -88910,8 +89310,15 @@ var ProductionT0ReviewRunner = class {
     if (pr.baseSha.toLowerCase() !== authorization.facts.baseSha || pr.headSha.toLowerCase() !== authorization.facts.headSha) {
       return { outcome: "superseded" /* Superseded */ };
     }
-    await new GitReviewRevisionMaterializer().ensureAvailable({
-      checkoutRoot: path12.resolve(input.workspacePath),
+    signal?.throwIfAborted();
+    const materializer = new GitReviewRevisionMaterializer(
+      signal ? async (args, options) => {
+        signal.throwIfAborted();
+        await runAccountGatewayGit(args, options, signal);
+      } : void 0
+    );
+    await materializer.ensureAvailable({
+      checkoutRoot: path13.resolve(input.workspacePath),
       repository: input.repository,
       scmReadToken: await scmReadTokenProvider.getToken(),
       commitShas: [
@@ -88928,8 +89335,7 @@ var ProductionT0ReviewRunner = class {
       pr.number,
       authorization.facts.headSha
     );
-    const codexProviderName = selectCodexProvider(config);
-    const model = codexProviderName.slice("codex/".length);
+    signal?.throwIfAborted();
     const agenticContext = config.codexAgenticContext ?? true;
     const investigationRolloutResolution = resolveProductionReviewInvestigationRolloutResolution({
       flags: readProductionReviewInvestigationRolloutFlags(),
@@ -88947,7 +89353,8 @@ var ProductionT0ReviewRunner = class {
     const investigationRecordingEnabled = investigationRollout.recordingEnabled;
     const provider = new CodexProvider(model, {
       agenticContext,
-      eventAudit: config.codexEventAudit
+      eventAudit: config.codexEventAudit,
+      ...input.accountGateway ? { accountGateway: input.accountGateway.modelTransport } : {}
     });
     const compatibilityKey = hashIncrementalCompatibility(
       config,
@@ -88958,7 +89365,7 @@ var ProductionT0ReviewRunner = class {
     const contextGatewayOptions = resolveProductionContextGatewaySessionFactoryOptions({
       agenticContext,
       investigationRecordingEnabled,
-      checkoutRoot: path12.resolve(input.workspacePath),
+      checkoutRoot: path13.resolve(input.workspacePath),
       gatewayBundlePath
     });
     const contextGateway = contextGatewayOptions ? new ContextGatewayInvocationSessionFactory(
@@ -88967,7 +89374,7 @@ var ProductionT0ReviewRunner = class {
       requiredContextWitness
     ) : void 0;
     const contextReplayRunner = contextGateway ? new ContextAttestationReplayRunner({
-      checkoutRoot: path12.resolve(input.workspacePath),
+      checkoutRoot: path13.resolve(input.workspacePath),
       gatewayBundlePath
     }) : void 0;
     const planned = planAssignments({
@@ -88977,13 +89384,14 @@ var ProductionT0ReviewRunner = class {
       providerName: provider.name,
       compatibilityKey,
       lifecycleTargets: initialLifecycle.promptTargets,
-      liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
+      liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+      accountGateway: input.accountGateway !== void 0
     });
     const invocationAdapter = new CodexReviewInvocationAdapter(
       provider,
       new PromptBuilder(config),
       planned.assignments,
-      Math.max(1e3, config.runTimeoutSeconds * 1e3),
+      providerTimeoutMs,
       agenticContext,
       contextGateway,
       false
@@ -88994,10 +89402,11 @@ var ProductionT0ReviewRunner = class {
         provider,
         new PromptBuilder(config),
         planned.assignments,
-        Math.max(1e3, config.runTimeoutSeconds * 1e3),
+        providerTimeoutMs,
         agenticContext,
         contextGateway,
-        true
+        true,
+        reasoningEffort
       )
     });
     const identities = new DeterministicReviewOrchestrationIdentity();
@@ -89005,6 +89414,7 @@ var ProductionT0ReviewRunner = class {
     const investigationRecording = investigationProtocol && contextGatewayOptions ? new ReviewInvestigationRecordingAdapter(
       (recordingInput) => {
         const legacyFallbackGate = new ReviewInvestigationLegacyFallbackGate();
+        if (input.accountGateway) legacyFallbackGate.close();
         const investigationControlPlane = new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
           investigationProtocol,
           legacyFallbackGate
@@ -89045,13 +89455,15 @@ var ProductionT0ReviewRunner = class {
           agents: createConfiguredProductionInvestigationAgents({
             codexModel: model,
             codexBinaryPath: input.codexBinaryPath,
-            executionSessions: gateway
+            executionSessions: gateway,
+            modelTransport: input.accountGateway?.modelTransport,
+            reasoningEffort
           })
         });
         return new RunInvestigationWorkSlot({
           controlPlane: investigationControlPlane,
           legacyFallbackGate,
-          delay: new SystemReviewOrchestrationDelay(),
+          delay: new CancellableReviewOrchestrationDelay(),
           leases: new ReviewActionV2InvestigationLeaseAdapter(
             reviewActionClient
           ),
@@ -89075,12 +89487,9 @@ var ProductionT0ReviewRunner = class {
         });
       },
       {
-        workingDirectory: path12.resolve(input.workspacePath),
-        leaseDurationMs: Math.max(1e3, config.runTimeoutSeconds * 1e3) + 5 * 6e4,
-        providerTimeoutMs: Math.max(
-          1e3,
-          config.runTimeoutSeconds * 1e3
-        ),
+        workingDirectory: path13.resolve(input.workspacePath),
+        leaseDurationMs: providerTimeoutMs + 5 * 6e4,
+        providerTimeoutMs,
         certificateTtlMs: 24 * 60 * 6e4,
         minimumCapacityParkMs: 6e4,
         actionBudget: reviewInvestigationActionBudgetForDepth(
@@ -89133,8 +89542,9 @@ var ProductionT0ReviewRunner = class {
       } : {},
       identities,
       clock: new SystemReviewOrchestrationClock(),
-      delay: new SystemReviewOrchestrationDelay(),
+      delay: new CancellableReviewOrchestrationDelay(),
       executionDeadline,
+      signal,
       ...this.progress ? { progress: this.progress } : {}
     });
     const result2 = await useCase.executeAuthorized(
@@ -89170,6 +89580,7 @@ var ProductionT0ReviewRunner = class {
       },
       authorization
     );
+    signal?.throwIfAborted();
     return mapOrchestrationResultToCodexOutcome(result2);
   }
 };
@@ -89275,17 +89686,61 @@ function publicInvestigationProcessDiagnostic(stderr) {
     )
   });
 }
+function resolveProductionInvestigationReasoningEffort(input) {
+  if (!input.accountGateway || input.codexModel !== "mimo-v2.6-pro") {
+    return "xhigh";
+  }
+  const effort = input.serverReasoningEffort ?? "high";
+  if (effort !== "low" && effort !== "medium" && effort !== "high") {
+    throw new Error("account_gateway_mimo_reasoning_effort_unsupported");
+  }
+  return effort;
+}
 function createConfiguredProductionInvestigationAgents(input) {
+  const reasoningEffort = input.reasoningEffort;
   const processRunner = new NodeReviewAgentProcessRunner();
+  const appServer = input.modelTransport ? new NodeCodexAppServerTurnRunner() : void 0;
   return Object.freeze([
     {
       providerKind: "codex" /* Codex */,
       requestedModel: input.codexModel,
       agent: new CodexReviewAgentAdapter(processRunner, {
         executionSessions: input.executionSessions,
-        providerCredentialEnvironment: codexCredentialEnvironment,
+        providerCredentialEnvironment: input.modelTransport ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME }) : codexCredentialEnvironment,
+        ...appServer && input.modelTransport ? {
+          appServerRunner: {
+            executeTurn: async (request) => {
+              const catalogSetting = await prepareAccountGatewayModelCatalog(
+                input.codexModel,
+                input.modelTransport.environment.CODEX_HOME,
+                input.modelTransport.configuration
+              );
+              const result2 = await appServer.executeTurn({
+                ...request,
+                args: [
+                  ...request.args,
+                  ...input.modelTransport.configuration.flatMap(
+                    (setting) => ["-c", setting]
+                  ),
+                  ...catalogSetting ? ["-c", catalogSetting] : []
+                ],
+                // Attach the local capability after the existing upstream credential allowlist.
+                // MCP env_vars never include it; current RR token remains in the bridge.
+                environment: {
+                  ...request.environment,
+                  ...input.modelTransport.environment
+                }
+              });
+              const actualModel = input.modelTransport.actualModel();
+              if (!actualModel)
+                throw new Error("review_agent_actual_model_unavailable");
+              return { ...result2, actualModel };
+            },
+            cancel: (invocationId, fencingToken) => appServer.cancel(invocationId, fencingToken)
+          }
+        } : {},
         ...input.codexBinaryPath ? { binary: input.codexBinaryPath } : {},
-        reasoningEffort: "xhigh",
+        reasoningEffort,
         processResultObserver: (result2) => {
           if (result2.termination === "exited" /* Exited */ && result2.exitCode === 0) {
             return;
@@ -89302,10 +89757,15 @@ function createConfiguredProductionInvestigationAgents(input) {
   ]);
 }
 function mapOrchestrationResultToCodexOutcome(result2) {
+  const publicationReceipt = result2.publicationAttemptId && result2.canonicalReceiptSetHash ? {
+    publicationAttemptId: result2.publicationAttemptId,
+    canonicalReceiptSetHash: result2.canonicalReceiptSetHash
+  } : void 0;
   switch (result2.status) {
     case "completed" /* Completed */:
       return {
         outcome: "completed" /* Completed */,
+        ...publicationReceipt ? { publicationReceipt } : {},
         mergeGateConclusion: requireMergeGateConclusion(
           result2.mergeGateConclusion
         )
@@ -89313,6 +89773,7 @@ function mapOrchestrationResultToCodexOutcome(result2) {
     case "partial_completed" /* PartialCompleted */:
       return {
         outcome: "partial_completed" /* PartialCompleted */,
+        ...publicationReceipt ? { publicationReceipt } : {},
         reason: mapPartialFailureReason(result2.failureCode),
         ...result2.failureCode ? { blockingFailure: result2.failureCode } : {}
       };
@@ -89398,6 +89859,38 @@ function mapExecutionFailureReason(failureCode2) {
   }
   return failureCode2 ? "execution_failed" /* ExecutionFailed */ : "unknown" /* Unknown */;
 }
+function createScmReadGitHubClient(input) {
+  const { signal, timeoutMs = 3e4 } = input;
+  const github = new GitHubClient(input.token, {
+    tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
+    ...signal ? {
+      sleep: async (ms) => {
+        await (0, import_promises8.setTimeout)(ms, void 0, { signal });
+      }
+    } : {}
+  });
+  if (signal) {
+    github.octokit.hook.wrap("request", (request, options) => {
+      signal.throwIfAborted();
+      const requestSignal = AbortSignal.any([
+        signal,
+        AbortSignal.timeout(timeoutMs)
+      ]);
+      const fetchImpl = options.request?.fetch ?? fetch;
+      options.request = {
+        ...options.request,
+        signal: requestSignal,
+        timeout: timeoutMs,
+        fetch: (url, init) => {
+          requestSignal.throwIfAborted();
+          return fetchImpl(url, { ...init, signal: requestSignal });
+        }
+      };
+      return request(options);
+    });
+  }
+  return github;
+}
 function createScmReadTokenProvider(input) {
   let capability = validateScmReadCapability({
     token: input.token,
@@ -89470,8 +89963,8 @@ function resolveContextGatewayBundlePath() {
   if (!entrypoint) {
     throw new Error("review_action_v2_runtime_entrypoint_missing");
   }
-  return path12.join(
-    path12.dirname(path12.resolve(entrypoint)),
+  return path13.join(
+    path13.dirname(path13.resolve(entrypoint)),
     "context-gateway.js"
   );
 }
@@ -89492,12 +89985,12 @@ async function prepareSingleT0NativeInputs(receipt, trusted) {
     throw new Error("review_action_v2_single_plan_repository_invalid");
   }
   const validateProcessContext = () => {
-    if (path12.resolve(process.cwd()) !== path12.resolve(runner.workspacePath) || process.env.CODEX_HOME !== runner.codexHome || runner.codexBinaryPath !== void 0 && process.env.REVIEWROUTER_CODEX_BINARY !== runner.codexBinaryPath) {
+    if (path13.resolve(process.cwd()) !== path13.resolve(runner.workspacePath) || process.env.CODEX_HOME !== runner.codexHome || runner.codexBinaryPath !== void 0 && process.env.REVIEWROUTER_CODEX_BINARY !== runner.codexBinaryPath) {
       throw new Error("review_action_v2_single_plan_checkout_process_required");
     }
   };
   validateProcessContext();
-  if (!path12.isAbsolute(gatewayBundlePath)) {
+  if (!path13.isAbsolute(gatewayBundlePath)) {
     throw new Error("review_action_v2_gateway_bundle_path_invalid");
   }
   const controlPlane = ReviewActionV2ControlPlaneAdapter.fromFreshAuthorizationReceipt(
@@ -89541,7 +90034,7 @@ async function prepareSingleT0NativeInputs(receipt, trusted) {
   if (pr.baseSha.toLowerCase() !== authorization.facts.baseSha || pr.headSha.toLowerCase() !== authorization.facts.headSha) {
     throw new Error("review_action_v2_single_plan_revision_not_current");
   }
-  const checkoutRoot = path12.resolve(runner.workspacePath);
+  const checkoutRoot = path13.resolve(runner.workspacePath);
   await new GitReviewRevisionMaterializer().ensureAvailable({
     checkoutRoot,
     repository: runner.repository,
@@ -89766,7 +90259,8 @@ function planAssignments(input) {
   );
   const attemptBudget = resolveT0AttemptBudget(
     input.config.providerRetries,
-    input.authorization.limits.maxAttemptsPerSlot
+    input.authorization.limits.maxAttemptsPerSlot,
+    input.accountGateway
   );
   const plan = createStableReviewWorkPlan({
     reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
@@ -89778,7 +90272,7 @@ function planAssignments(input) {
         providerVoteIdentityHash: codexLanes[0].providerVoteIdentityHash,
         required: true,
         attemptBudget,
-        retryPolicyVersion: CODEX_RETRY_POLICY_VERSION
+        retryPolicyVersion: input.accountGateway ? "account-gateway-no-replay.v1" : CODEX_RETRY_POLICY_VERSION
       }
     ],
     batches: plannedBatches.map((batch, schedulingOrdinal) => ({
@@ -89816,10 +90310,11 @@ function planAssignments(input) {
     uncoveredLifecycleTargetIds
   });
 }
-function resolveT0AttemptBudget(configuredTotalAttempts, protocolMaximum) {
+function resolveT0AttemptBudget(configuredTotalAttempts, protocolMaximum, accountGateway = false) {
   if (!Number.isSafeInteger(protocolMaximum) || protocolMaximum < 1) {
     throw new Error("review_action_v2_attempt_budget_limit_invalid");
   }
+  if (accountGateway) return 1;
   return Math.min(
     protocolMaximum,
     getProviderReviewTotalAttempts(configuredTotalAttempts)
@@ -89845,11 +90340,14 @@ function selectCodexProvider(config) {
   return selected;
 }
 async function applyReviewRuntimeConfig(input, fetchImpl, oidc) {
+  if (input.accountGateway) {
+    return applyAdmittedRuntimeConfig(input.accountGateway.runtimeConfig);
+  }
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = "oidc";
   process.env.REVIEWROUTER_API_URL = input.apiUrl;
   process.env.REVIEWROUTER_OIDC_AUDIENCE = input.audience;
   process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK = "false";
-  await applyControlPlaneRuntimeConfig({
+  const result2 = await applyControlPlaneRuntimeConfig({
     fetchImpl,
     oidc,
     logger: {
@@ -89857,6 +90355,7 @@ async function applyReviewRuntimeConfig(input, fetchImpl, oidc) {
       warn: (message) => warning(message)
     }
   });
+  return result2.status === "applied" ? result2.reasoningEffort : void 0;
 }
 async function withRunnerEnvironment(input, operation) {
   const previousCwd = process.cwd();
@@ -89872,10 +90371,12 @@ async function withRunnerEnvironment(input, operation) {
   set2("REVIEWROUTER_HEAD_SHA", input.headSha.toLowerCase());
   if (input.codexBinaryPath) {
     set2("REVIEWROUTER_CODEX_BINARY", input.codexBinaryPath);
-    set2(
-      "PATH",
-      `${path12.dirname(input.codexBinaryPath)}${path12.delimiter}${process.env.PATH ?? ""}`
-    );
+    if (path13.isAbsolute(input.codexBinaryPath)) {
+      set2(
+        "PATH",
+        `${path13.dirname(input.codexBinaryPath)}${path13.delimiter}${process.env.PATH ?? ""}`
+      );
+    }
   }
   try {
     process.chdir(input.workspacePath);
@@ -89905,16 +90406,18 @@ function validateAuthorizationInput(input, authorization) {
 function sameAuthorizedRevision(revision, authorization) {
   return revision.baseSha === authorization.facts.baseSha && revision.mergeBaseSha === authorization.facts.mergeBaseSha && revision.headSha === authorization.facts.headSha && revision.reviewRevisionHash === authorization.facts.reviewRevisionHash;
 }
-async function readCheckedOutHead(workspacePath) {
-  const result2 = await execFileAsync7("git", ["rev-parse", "HEAD"], {
+async function readCheckedOutHead(workspacePath, signal) {
+  signal?.throwIfAborted();
+  const options = {
     cwd: workspacePath,
     env: {
       PATH: process.env.PATH,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/dev/null"
     }
-  });
-  const head = result2.stdout.trim().toLowerCase();
+  };
+  const stdout = signal ? await runAccountGatewayGit(["rev-parse", "HEAD"], options, signal, 1e4) : (await execFileAsync7("git", ["rev-parse", "HEAD"], options)).stdout;
+  const head = stdout.trim().toLowerCase();
   if (!/^[a-f0-9]{40}$/.test(head)) {
     throw new Error("review_action_v2_checked_out_head_invalid");
   }
@@ -89933,13 +90436,81 @@ function canonicalJson12(value) {
 function sha25616(value) {
   return (0, import_crypto33.createHash)("sha256").update(value).digest("hex");
 }
+function runAccountGatewayGit(args, options, signal, timeoutMs = 6e4) {
+  signal.throwIfAborted();
+  return new Promise((resolve4, reject) => {
+    const child = (0, import_child_process11.spawn)("git", args, {
+      ...options,
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let failure;
+    let failed = false;
+    const stop = (error) => {
+      if (failed) return;
+      failure = error;
+      failed = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", cancel);
+      try {
+        if (process.platform !== "win32" && child.pid)
+          process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    const cancel = () => stop(signal.reason);
+    const timer = setTimeout(
+      () => stop(new Error("account_gateway_git_timeout")),
+      timeoutMs
+    );
+    signal.addEventListener("abort", cancel, { once: true });
+    if (signal.aborted) cancel();
+    let stdout = "";
+    let bytes = 0;
+    const collect = (chunk, output) => {
+      if (failed) return;
+      bytes += chunk.length;
+      if (bytes > 256 * 1024)
+        stop(new Error("account_gateway_git_output_bound"));
+      else if (!failed && output) stdout += chunk.toString();
+    };
+    child.stdout.on("data", (chunk) => collect(chunk, true));
+    child.stderr.on("data", (chunk) => collect(chunk, false));
+    child.on("error", (error) => stop(error));
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", cancel);
+      if (failed) reject(failure);
+      else if (code !== 0) reject(new Error("account_gateway_git_failed"));
+      else resolve4(stdout);
+    });
+  });
+}
+var CancellableReviewOrchestrationDelay = class extends SystemReviewOrchestrationDelay {
+  sleep(delayMs, signal) {
+    return new Promise((resolve4) => {
+      const finish = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", finish);
+        resolve4();
+      };
+      const timer = setTimeout(finish, delayMs);
+      signal?.addEventListener("abort", finish, { once: true });
+      if (signal?.aborted) finish();
+    });
+  }
+};
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   ConfigLoader,
   LegacyFallbackBeforeInvestigationAuthorityControlPlane,
   ProductionT0ReviewRunner,
   ReviewActionV2Client,
+  createConfiguredProductionInvestigationAgents,
   createProductionT0ReviewRunner,
+  createScmReadGitHubClient,
   createScmReadTokenProvider,
   mapOrchestrationResultToCodexOutcome,
   mapRevisionGuardErrorToCodexOutcome,
@@ -89948,5 +90519,6 @@ function sha25616(value) {
   prepareSingleT0ReviewPlan,
   resolveProductionContextGatewayPolicyVersion,
   resolveProductionContextGatewaySessionFactoryOptions,
+  resolveProductionInvestigationReasoningEffort,
   resolveT0AttemptBudget
 });

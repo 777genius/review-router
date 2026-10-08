@@ -40,7 +40,10 @@ import { createRotatingCommentTokenProvider } from './control-plane/rotating-com
 import { GitHubTokenProvider } from './github/token-provider';
 import { reportControlPlaneActionHealth } from './control-plane/health-report';
 import { ControlPlaneMemoryClient } from './control-plane/memory';
-import { resolveProviderCliPlan } from './control-plane/provider-cli-plan';
+import {
+  prepareRuntimePreflight,
+  resolveRuntimePreflightPlan,
+} from './control-plane/provider-cli-plan';
 import { parseMemoryInteraction } from './github/memory-interaction';
 import { ControlPlaneManualReviewRequestClient } from './control-plane/review-request';
 import { countPreviousStillValidBySeverity } from './analysis/thread-lifecycle';
@@ -49,7 +52,12 @@ import {
   runCodexOAuthRotatingAction,
   shouldEnterCodexOAuthRotatingAction,
 } from './codex-oauth/action';
-import { scrubAndAssertReviewActionV2ScmMutationEnv } from './codex-oauth/auth-input';
+import {
+  scrubAndAssertReviewActionV2ScmMutationEnv,
+  clearCodexRotatingOidcRequestEnv,
+  clearCodexRotatingProcessAuthEnv,
+} from './codex-oauth/auth-input';
+import { ACCOUNT_GATEWAY_ACTION_MODE } from './codex-oauth/account-gateway-runtime';
 import {
   resolveReviewActionV2Activation,
   ReviewActionV2RuntimeMode,
@@ -167,19 +175,21 @@ async function run(): Promise<void> {
   let prNumber: number | undefined;
   let runtimeConfig: RuntimeConfigResult | undefined;
   const startedAt = new Date();
+  let gatewaySelected = false;
 
   try {
     syncEnvFromInputs();
+    const requestedMode =
+      core.getInput('mode') ||
+      process.env.REVIEW_ROUTER_MODE ||
+      core.getInput('REVIEW_ROUTER_MODE');
+    gatewaySelected = requestedMode === ACCOUNT_GATEWAY_ACTION_MODE;
     const reviewActionV2Activation = resolveReviewActionV2Activation({
       env: process.env,
     });
     if (reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0) {
       scrubAndAssertReviewActionV2ScmMutationEnv(process.env);
     }
-    const requestedMode =
-      core.getInput('mode') ||
-      process.env.REVIEW_ROUTER_MODE ||
-      core.getInput('REVIEW_ROUTER_MODE');
     const lifecycleResolveTokenFromEnv =
       process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN?.trim() || undefined;
     if (lifecycleResolveTokenFromEnv) {
@@ -199,6 +209,9 @@ async function run(): Promise<void> {
     if (entersCodexOAuthRotatingAction) {
       await runCodexOAuthRotatingAction({ reviewActionV2Activation });
       return;
+    }
+    if (requestedMode === 'runtime-preflight') {
+      prepareRuntimePreflight(process.env);
     }
     runtimeConfig = await applyControlPlaneRuntimeConfig({
       logger: {
@@ -374,6 +387,14 @@ async function run(): Promise<void> {
 
     // core.setFailed() sets process.exitCode, so explicit process.exit() is unnecessary
     // Removed process.exit(1) to allow proper cleanup and resource disposal
+  } finally {
+    if (gatewaySelected) {
+      try {
+        clearCodexRotatingOidcRequestEnv();
+      } finally {
+        clearCodexRotatingProcessAuthEnv();
+      }
+    }
   }
 }
 
@@ -392,8 +413,12 @@ async function currentGitHubToken(
 function runRuntimePreflight(
   runtimeConfig: RuntimeConfigResult | undefined
 ): void {
-  const plan = resolveProviderCliPlan(process.env);
+  const plan = resolveRuntimePreflightPlan(runtimeConfig, process.env);
   core.setOutput('runtime_config_status', runtimeConfig?.status || 'unknown');
+  core.setOutput(
+    'account_gateway_needed',
+    plan.accountGatewayNeeded ? 'true' : 'false'
+  );
   core.setOutput('codex_cli_needed', plan.codexCliNeeded ? 'true' : 'false');
   core.setOutput(
     'codex_oauth_needed',
@@ -401,7 +426,7 @@ function runRuntimePreflight(
   );
   core.setOutput('claude_cli_needed', plan.claudeCliNeeded ? 'true' : 'false');
   core.info(
-    `ReviewRouter runtime preflight: status=${runtimeConfig?.status || 'unknown'}, codex_cli_needed=${plan.codexCliNeeded}, codex_oauth_needed=${plan.codexOauthNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
+    `ReviewRouter runtime preflight: status=${runtimeConfig?.status || 'unknown'}, account_gateway_needed=${plan.accountGatewayNeeded}, codex_cli_needed=${plan.codexCliNeeded}, codex_oauth_needed=${plan.codexOauthNeeded}, claude_cli_needed=${plan.claudeCliNeeded}.`
   );
 }
 

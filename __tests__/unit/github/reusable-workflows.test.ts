@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { runInNewContext } from 'node:vm';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -90,6 +91,39 @@ function permissionEscalations(
   });
 }
 
+function runExecutionPreparation(env: NodeJS.ProcessEnv) {
+  const step = parseWorkflow(
+    '.github/workflows/reviewrouter-execution-reusable.yml'
+  ).jobs?.review?.steps?.find(
+    (item) => item.name === 'Prepare ReviewRouter runtime settings'
+  );
+  const script = step?.run?.match(/<<'NODE'\n([\s\S]*?)\nNODE/u)?.[1];
+  if (!script) throw new Error('Execution preparation script missing');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-entry-'));
+  try {
+    const output = path.join(tempDir, 'output');
+    const githubEnv = path.join(tempDir, 'env');
+    fs.writeFileSync(output, '');
+    fs.writeFileSync(githubEnv, '');
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module-typescript'],
+      {
+        input: script,
+        encoding: 'utf8',
+        env: { ...env, GITHUB_ENV: githubEnv, GITHUB_OUTPUT: output },
+      }
+    );
+    return {
+      ...result,
+      output: fs.readFileSync(output, 'utf8'),
+      githubEnv: fs.readFileSync(githubEnv, 'utf8'),
+    };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 function runInteractionRuntimePreparation(
   reviewWorkflowFile: string,
   discussionAuthMode = ''
@@ -134,6 +168,59 @@ function runInteractionRuntimePreparation(
 }
 
 describe('production reusable workflows', () => {
+  it('executes gateway fork eligibility, immutable source, static denial and queue skip', () => {
+    const env: NodeJS.ProcessEnv = {
+      RR_REVIEW_ACTION_LANE: 't0',
+      RR_CODEX_SESSION_MODE: 'account-gateway',
+      RR_RUNTIME_REF: 'main',
+      RR_WORKFLOW_REPOSITORY: '777genius/review-router',
+      RR_WORKFLOW_SHA: '0123456789abcdef0123456789abcdef01234567',
+      RR_REVIEW_TIMEOUT_MINUTES: '240',
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+      GITHUB_EVENT_NAME: 'pull_request',
+      GITHUB_REPOSITORY: 'owner/repo',
+      GITHUB_HEAD_REPO_FULL_NAME: 'fork/repo',
+    };
+    const fork = runExecutionPreparation(env);
+    expect(fork.status).toBe(0);
+    expect(fork.output).toContain('can_run=true\n');
+    expect(fork.output).toContain(`runtime_ref=${env.RR_WORKFLOW_SHA}\n`);
+    expect(fork.githubEnv).toMatch(
+      /REVIEWROUTER_STATIC_CONFIG_FALLBACK<<[^\n]+\nfalse\n/u
+    );
+    const steps =
+      parseWorkflow('.github/workflows/reviewrouter-execution-reusable.yml')
+        .jobs?.review?.steps ?? [];
+    const selectedCheckouts = steps.filter(
+      (step) =>
+        step.uses?.startsWith('actions/checkout@') &&
+        runInNewContext((step.if ?? '${{ true }}').slice(3, -2), {
+          inputs: {
+            review_action_lane: 't0',
+            codex_session_mode: 'account-gateway',
+          },
+          steps: { runtime: { outputs: { can_run: 'true' } } },
+        })
+    );
+    expect(selectedCheckouts.map((step) => step.name)).toEqual([
+      'Checkout ReviewRouter runtime',
+    ]);
+    expect(steps[0]?.name).toBe('Setup Node.js');
+    expect(
+      runExecutionPreparation({ ...env, GITHUB_EVENT_NAME: 'merge_group' })
+        .output
+    ).toContain('can_run=false\nskip_reason=merge_group\n');
+    expect(
+      runExecutionPreparation({ ...env, RR_CODEX_SESSION_MODE: '' }).output
+    ).toContain('can_run=false\nskip_reason=fork\n');
+    expect(
+      runExecutionPreparation({
+        ...env,
+        REVIEWROUTER_RUNTIME_CONFIG_MODE: 'static',
+      }).status
+    ).toBe(1);
+  });
+
   it.each(['', 'codex-oauth', 'openai-api', 'mimo-token-plan-api'])(
     'validates the explicit discussion backend %s before checkout',
     (authMode) => {
@@ -227,6 +314,7 @@ describe('production reusable workflows', () => {
     const workflow = parseWorkflow(workflowPath);
     const review = workflow.jobs?.['repository-secret-review'];
     const hostedPoolReview = workflow.jobs?.['review-hosted-pool'];
+    const gatewayReview = workflow.jobs?.['review-account-gateway'];
     const inputs = workflow.on?.workflow_call?.inputs;
 
     expect(review?.permissions).toEqual({
@@ -253,6 +341,18 @@ describe('production reusable workflows', () => {
     expect(review?.if).toContain(
       "inputs.codex_session_mode != 'codex_subscription_oauth_hosted_pool'"
     );
+    expect(review?.if).toContain(
+      "inputs.codex_session_mode != 'account-gateway'"
+    );
+    expect(gatewayReview?.if).toContain(
+      "inputs.codex_session_mode == 'account-gateway'"
+    );
+    expect(gatewayReview?.with?.codex_session_mode).toBe(
+      '${{ inputs.codex_session_mode }}'
+    );
+    expect(gatewayReview?.with?.static_runtime_env_json).toBe('{}');
+    expect(gatewayReview?.permissions).toEqual(review?.permissions);
+    expect(gatewayReview?.secrets).toBeUndefined();
     expect(review?.with).toMatchObject({
       codex_session_mode: '${{ inputs.codex_session_mode }}',
       session_binding_id: '${{ inputs.session_binding_id }}',
@@ -437,7 +537,7 @@ describe('production reusable workflows', () => {
     expect(hostedPoolRun?.env).not.toHaveProperty(secretName);
   });
 
-  it('uses only the provider preflight for the parsed Codex install condition', () => {
+  it('selects gateway tooling directly and preserves other provider preflight paths', () => {
     const workflowPath =
       '.github/workflows/reviewrouter-execution-reusable.yml';
     const workflowSource = readRepoFile(workflowPath);
@@ -447,8 +547,57 @@ describe('production reusable workflows', () => {
     );
 
     expect(codexInstall?.if).toBe(
-      "${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}"
+      "${{ steps.runtime.outputs.can_run == 'true' && ((inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') || steps.provider-tooling.outputs.codex_cli_needed == 'true') }}"
     );
+    const steps = workflow.jobs?.review?.steps ?? [];
+    const preflight = steps.find(
+      (step) => step.name === 'Resolve ReviewRouter runtime provider tooling'
+    );
+    const gatewayRun = steps.find(
+      (step) => step.name === 'Run ReviewRouter T0 account gateway'
+    );
+    const cases: Array<[string, string, string, string, boolean[]]> = [
+      ['t0', 'account-gateway', 'true', '', [false, true, true]],
+      ['t0', 'account-gateway', 'false', 'true', [false, false, false]],
+      ['t0', '', 'true', 'true', [true, true, false]],
+      ['t0', '', 'true', '', [true, false, false]],
+      ['legacy', '', 'true', 'true', [true, true, false]],
+      ['legacy', '', 'true', '', [true, false, false]],
+      ['legacy', '', 'false', 'true', [false, false, false]],
+      [
+        't0',
+        'codex_subscription_oauth_hosted_pool',
+        'true',
+        '',
+        [false, false, false],
+      ],
+    ];
+    for (const [lane, mode, canRun, codexNeeded, expected] of cases) {
+      const selected = [preflight, codexInstall, gatewayRun].map((step) => {
+        if (!step?.if) throw new Error('Tooling selection condition missing');
+        return runInNewContext(
+          step.if
+            .slice(3, -2)
+            .replaceAll('steps.provider-tooling', 'steps["provider-tooling"]'),
+          {
+            inputs: { review_action_lane: lane, codex_session_mode: mode },
+            steps: {
+              runtime: { outputs: { can_run: canRun } },
+              'provider-tooling': {
+                outputs: { codex_cli_needed: codexNeeded },
+              },
+            },
+          }
+        );
+      });
+      expect({ lane, mode, canRun, codexNeeded, selected }).toEqual({
+        lane,
+        mode,
+        canRun,
+        codexNeeded,
+        selected: expected,
+      });
+    }
     expect(workflow.jobs?.review?.env).not.toHaveProperty(
       'MIMO_TOKEN_PLAN_API_KEY_PRESENT'
     );
@@ -469,6 +618,22 @@ describe('production reusable workflows', () => {
     const hostedPoolRun = steps.find(
       (step) => step.name === 'Run ReviewRouter T0 hosted pool'
     );
+    const gatewayRun = steps.find(
+      (step) => step.name === 'Run ReviewRouter T0 account gateway'
+    );
+    expect(gatewayRun?.run).toBe('node .reviewrouter-runtime/dist/index.js');
+    expect(gatewayRun?.if).toBe(
+      "${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway' && steps.runtime.outputs.can_run == 'true' }}"
+    );
+    expect(gatewayRun?.env).toMatchObject({
+      REVIEW_ROUTER_MODE: 'account-gateway',
+      REVIEWROUTER_ACTION_V2_MODE: 't0',
+    });
+    expect(
+      Object.keys(gatewayRun?.env ?? {}).filter((key) =>
+        /AUTH|TOKEN|KEY|CONFIG_TOML/u.test(key)
+      )
+    ).toEqual([]);
     const hostedPoolCheckout = steps.find(
       (step) => step.name === 'Checkout exact hosted pool review revision'
     );
@@ -579,7 +744,7 @@ describe('production reusable workflows', () => {
     for (const actionUses of externalActionUses) {
       expect(actionUses).toMatch(/@[0-9a-f]{40}$/u);
     }
-    expect(workflowSource).toContain("const crypto = require('node:crypto');");
+    expect(workflowSource).toContain("import crypto from 'node:crypto';");
     expect(workflowSource).toContain(
       "staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';"
     );
@@ -616,7 +781,7 @@ describe('production reusable workflows', () => {
     expect(t0Run?.if).toContain("inputs.review_action_lane == 't0'");
     expect(t0Run?.if).toContain("inputs.codex_session_mode == ''");
     expect(codexInstall?.if).toBe(
-      "${{ steps.runtime.outputs.can_run == 'true' && steps.provider-tooling.outputs.codex_cli_needed == 'true' }}"
+      "${{ steps.runtime.outputs.can_run == 'true' && ((inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') || steps.provider-tooling.outputs.codex_cli_needed == 'true') }}"
     );
     expect(codexInstall?.if).not.toContain(
       "inputs.review_action_lane == 'legacy'"

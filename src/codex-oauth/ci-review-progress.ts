@@ -1,6 +1,10 @@
 import * as fs from 'fs';
 import * as core from '../actions/core';
 import { GitHubClient } from '../github/client';
+import {
+  createPublicationGitHubClient,
+  type PublicationRequestOptions,
+} from './terminal-outcome-publication';
 import type { ReviewOrchestrationProgressPort } from '../review-orchestration/application/run-t0-review-orchestration';
 import type { ReviewWorkSlotPlan } from '../review-orchestration/application';
 
@@ -86,6 +90,7 @@ export class CiReviewProgressPublisher {
       pullRequestNumber: number;
       commentEligible: boolean;
       github?: CiProgressGitHubPort;
+      signal?: AbortSignal;
       summaryPath?: string;
       info?: (message: string) => void;
       warning?: (message: string) => void;
@@ -93,6 +98,7 @@ export class CiReviewProgressPublisher {
   ) {}
 
   async publish(snapshot: ProgressSnapshot): Promise<CiProgressOutput> {
+    this.input.signal?.throwIfAborted();
     const body = formatCiReviewProgress(snapshot);
     if (this.input.commentEligible && this.input.github) {
       try {
@@ -100,6 +106,7 @@ export class CiReviewProgressPublisher {
           repository: this.input.repository,
           pullRequestNumber: this.input.pullRequestNumber,
         });
+        this.input.signal?.throwIfAborted();
         const existing = comments.find((comment) =>
           (comment.body ?? '').includes(CI_PROGRESS_MARKER)
         );
@@ -118,6 +125,7 @@ export class CiReviewProgressPublisher {
         }
         return 'comment';
       } catch (error) {
+        this.input.signal?.throwIfAborted();
         this.warning(
           `ReviewRouter CI progress comment is unavailable; using job summary: ${safeError(error)}`
         );
@@ -127,6 +135,7 @@ export class CiReviewProgressPublisher {
         'ReviewRouter CI progress comment is unavailable; using job summary/log.'
       );
     }
+    this.input.signal?.throwIfAborted();
     this.appendSummary(
       `${body}\n\n> CI progress comment is unavailable in this run. Progress is shown in the job summary and log instead.`
     );
@@ -211,25 +220,41 @@ export class CiOrchestrationProgressReporter implements ReviewOrchestrationProgr
   }
 
   async finish(
-    terminal: Exclude<ProgressSnapshot['terminal'], 'none'>
+    terminal: Exclude<ProgressSnapshot['terminal'], 'none'>,
+    publisher: CiReviewProgressPublisher = this.publisher
   ): Promise<void> {
-    if (this.terminal !== 'none') {
+    const replacesCompletion =
+      terminal === 'cancelled' ||
+      (publisher !== this.publisher &&
+        terminal === 'failed' &&
+        ['complete', 'complete_with_gaps'].includes(this.terminal));
+    if (
+      this.terminal !== 'none' &&
+      (!replacesCompletion || this.terminal === terminal)
+    ) {
       await this.publishChain;
       return;
     }
     this.phase = 'terminal';
     this.terminal = terminal;
-    this.queuePublish(true);
+    this.queuePublish(true, publisher);
     await this.publishChain;
   }
 
-  private queuePublish(force: boolean): void {
+  private queuePublish(
+    force: boolean,
+    publisher: CiReviewProgressPublisher = this.publisher
+  ): void {
     const now = this.now();
     if (!force && now - this.lastPublishedAt < this.minimumIntervalMs) return;
     this.lastPublishedAt = now;
     const snapshot = this.snapshot(now);
     this.publishChain = this.publishChain
-      .then(() => this.publisher.publish(snapshot))
+      .then(() => {
+        if (this.terminal === 'cancelled' && snapshot.terminal !== 'cancelled')
+          return;
+        return publisher.publish(snapshot);
+      })
       .catch(() => undefined);
   }
 
@@ -278,16 +303,23 @@ export function createCiReviewProgressPublisher(input: {
   pullRequestNumber: number;
   eventPath?: string;
   env?: NodeJS.ProcessEnv;
+  requestOptions?: PublicationRequestOptions;
+  commentEligible?: boolean;
 }): CiReviewProgressPublisher | null {
   const env = input.env ?? process.env;
   if (!enabled(env.REVIEW_ROUTER_CI_PROGRESS_WRITES)) return null;
   const token = env.GITHUB_TOKEN?.trim();
   const fork = isForkPullRequest(input.eventPath ?? env.GITHUB_EVENT_PATH);
+  const commentEligible =
+    input.commentEligible !== false && Boolean(token) && !fork;
   return new CiReviewProgressPublisher({
     repository: input.repository,
     pullRequestNumber: input.pullRequestNumber,
-    commentEligible: Boolean(token) && !fork,
-    ...(token && !fork ? { github: new GitHubCiProgressAdapter(token) } : {}),
+    commentEligible,
+    signal: input.requestOptions?.signal,
+    ...(token && commentEligible
+      ? { github: new GitHubCiProgressAdapter(token, input.requestOptions) }
+      : {}),
     summaryPath: env.GITHUB_STEP_SUMMARY,
   });
 }
@@ -295,8 +327,8 @@ export function createCiReviewProgressPublisher(input: {
 class GitHubCiProgressAdapter implements CiProgressGitHubPort {
   private readonly client: GitHubClient;
 
-  constructor(token: string) {
-    this.client = new GitHubClient(token);
+  constructor(token: string, options: PublicationRequestOptions = {}) {
+    this.client = createPublicationGitHubClient(token, options);
   }
 
   async listComments(input: {

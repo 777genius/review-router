@@ -134,8 +134,11 @@ export type RunT0ReviewOrchestrationDependencies = {
   readonly contextAttestations?: ReviewContextAttestationPort;
   readonly identities: ReviewOrchestrationIdentityPort;
   readonly clock: ReviewOrchestrationClockPort;
-  readonly delay: ReviewOrchestrationDelayPort;
+  readonly delay: ReviewOrchestrationDelayPort & {
+    sleep(delayMs: number, signal?: AbortSignal): Promise<void>;
+  };
   readonly executionDeadline?: ExecutionDeadline;
+  readonly signal?: AbortSignal;
   readonly progress?: ReviewOrchestrationProgressPort;
 };
 
@@ -205,6 +208,7 @@ export class RunT0ReviewOrchestration {
     let execution: ReviewExecutionAdmission | undefined;
 
     try {
+      this.dependencies.signal?.throwIfAborted();
       validateCommand(command);
       authorization =
         preauthorized ??
@@ -242,9 +246,20 @@ export class RunT0ReviewOrchestration {
         requestedTtlMs: MAX_PRE_EXECUTION_AUTHORIZATION_TTL_MS,
       });
       authorization = preExecutionRenewal.authorization;
+      this.assertExecutionDeadlineAvailable();
+      const preExecutionRemainingMs = this.executionDeadlineRemainingMs();
+      const preExecutionRequiredValidityMs = Math.min(
+        MIN_PRE_EXECUTION_AUTHORIZATION_VALIDITY_MS,
+        preExecutionRemainingMs === Infinity
+          ? Infinity
+          : safeAddMilliseconds(
+              preExecutionRemainingMs,
+              PUBLICATION_AUTHORIZATION_RESERVE_MS
+            )
+      );
       if (
         preExecutionRenewal.validForMsAtResponse <
-        MIN_PRE_EXECUTION_AUTHORIZATION_VALIDITY_MS
+        preExecutionRequiredValidityMs
       ) {
         throw new Error(
           'review_orchestration_execution_authorization_window_insufficient'
@@ -491,9 +506,19 @@ export class RunT0ReviewOrchestration {
         };
       }
       await this.assertRevisionCurrent(command);
-      const publicationHorizonMs = safeMultiplyMilliseconds(
-        authorization.limits.maxReconciliationDurationMs,
-        PUBLICATION_HORIZON_MULTIPLIER
+      this.assertExecutionDeadlineAvailable(
+        FINAL_PUBLICATION_STATUS_RESERVE_MS
+      );
+      const publicationRemainingMs = this.executionDeadlineRemainingMs();
+      const publicationHorizonMs = Math.min(
+        safeMultiplyMilliseconds(
+          authorization.limits.maxReconciliationDurationMs,
+          PUBLICATION_HORIZON_MULTIPLIER
+        ),
+        publicationRemainingMs === Infinity
+          ? Infinity
+          : safeAddMilliseconds(publicationRemainingMs, 0) -
+              FINAL_PUBLICATION_STATUS_RESERVE_MS
       );
       const publicationRequiredValidityMs = safeAddMilliseconds(
         publicationHorizonMs,
@@ -527,7 +552,9 @@ export class RunT0ReviewOrchestration {
         });
       execution = refreshExecutionAdmission(execution, latestExecution);
       validateProjectionAgainstLimits(projection, authorization.limits);
-      this.assertExecutionDeadlineAvailable();
+      this.assertExecutionDeadlineAvailable(
+        FINAL_PUBLICATION_STATUS_RESERVE_MS
+      );
       state = evolveReviewOrchestration(state, {
         type: ReviewOrchestrationEventType.FinalizationStarted,
       });
@@ -542,7 +569,9 @@ export class RunT0ReviewOrchestration {
         allowPartial: partial,
       });
       await this.assertRevisionCurrent(command);
-      this.assertExecutionDeadlineAvailable();
+      this.assertExecutionDeadlineAvailable(
+        FINAL_PUBLICATION_STATUS_RESERVE_MS
+      );
       assertPublicationAuthorizationWindow({
         validForMsAtResponse: publicationRenewal.validForMsAtResponse,
         elapsedMs: elapsedMonotonicMs(
@@ -664,7 +693,12 @@ export class RunT0ReviewOrchestration {
           clampPollDelay(pollAfterMs),
           Math.max(0, remainingMs - FINAL_PUBLICATION_STATUS_RESERVE_MS)
         );
-        if (delayMs > 0) await this.dependencies.delay.sleep(delayMs);
+        if (delayMs > 0)
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
+        this.dependencies.signal?.throwIfAborted();
         const requestBudgetMs = Math.floor(
           publicationDeadlineMs - readMonotonicClockMs(this.dependencies.clock)
         );
@@ -675,6 +709,7 @@ export class RunT0ReviewOrchestration {
             publicationAttemptId: publication.publicationAttemptId,
             timeoutMs: requestBudgetMs,
           });
+        this.dependencies.signal?.throwIfAborted();
         if (!status.terminal) {
           if (
             publicationDeadlineMs -
@@ -708,6 +743,7 @@ export class RunT0ReviewOrchestration {
         failureCode: 'publication_poll_exhausted',
       };
     } catch (error) {
+      this.dependencies.signal?.throwIfAborted();
       if (error instanceof ReviewExecutionCancelledSignal) {
         if (!isTerminal(state.phase)) {
           state = evolveReviewOrchestration(state, {
@@ -778,6 +814,7 @@ export class RunT0ReviewOrchestration {
     readonly discriminator?: string;
     readonly requestedTtlMs: number;
   }) {
+    this.dependencies.signal?.throwIfAborted();
     // T0 renewal is part of the digest-pinned v2 protocol. Downgrading after a
     // capability error would mix release contracts and can outlive authority.
     const identityParts = [
@@ -918,7 +955,8 @@ export class RunT0ReviewOrchestration {
               exhaustionReason: ReviewWorkSlotExhaustionReason.DeadlineReached,
             };
           }
-          if (!(error instanceof ReviewInvestigationDeferredSignal)) throw error;
+          if (!(error instanceof ReviewInvestigationDeferredSignal))
+            throw error;
           this.recordInvestigationDiagnostic({
             outcome: ReviewInvestigationDiagnosticOutcome.AuthoritativeDeferred,
             workSlot: input.workSlot,
@@ -1035,7 +1073,14 @@ export class RunT0ReviewOrchestration {
               exhaustionReason: ReviewWorkSlotExhaustionReason.DeadlineReached,
             };
           }
-          await this.dependencies.delay.sleep(delayMs);
+          if (this.dependencies.signal) {
+            await this.dependencies.delay.sleep(
+              delayMs,
+              this.dependencies.signal
+            );
+          } else {
+            await this.dependencies.delay.sleep(delayMs);
+          }
           await this.assertRevisionCurrent(input.revision);
           const joined = await this.trySatisfyFromLookup({
             ...input,
@@ -1139,6 +1184,7 @@ export class RunT0ReviewOrchestration {
       }
 
       let observationPayload;
+      let activeInvocation: Promise<ReviewObservationPayload> | undefined;
       try {
         observationPayload = await this.dependencies.leaseSupervisor.run({
           lease,
@@ -1146,17 +1192,21 @@ export class RunT0ReviewOrchestration {
             lease = await this.renewLease(lease!, input.ownerIdHash);
             return lease;
           },
-          operation: (signal, currentLease) =>
-            precomputedObservation === null
-              ? this.executeInvocationWithRevisionWatch({
-                  invocation,
-                  manifest,
-                  currentLease,
-                  sourceExecutionId: input.execution.executionId,
-                  signal,
-                  revision: input.revision,
-                })
-              : Promise.resolve(precomputedObservation),
+          operation: (signal, currentLease) => {
+            this.dependencies.signal?.throwIfAborted();
+            activeInvocation =
+              precomputedObservation === null
+                ? this.executeInvocationWithRevisionWatch({
+                    invocation,
+                    manifest,
+                    currentLease,
+                    sourceExecutionId: input.execution.executionId,
+                    signal,
+                    revision: input.revision,
+                  })
+                : Promise.resolve(precomputedObservation);
+            return activeInvocation;
+          },
         });
         if (
           invocation.manifestFacts.executionProfile !== 'context_gateway_v1'
@@ -1167,6 +1217,13 @@ export class RunT0ReviewOrchestration {
           throw new ReviewExecutionDeadlineReachedSignal();
         }
       } catch (error) {
+        if (this.dependencies.signal) {
+          await activeInvocation?.catch(() => undefined);
+          if (this.dependencies.signal.aborted) {
+            await this.releaseLease(lease, input.ownerIdHash, attemptOrdinal);
+            this.dependencies.signal.throwIfAborted();
+          }
+        }
         if (
           error instanceof ReviewExecutionSupersededSignal ||
           error instanceof ReviewExecutionCancelledSignal
@@ -1363,7 +1420,14 @@ export class RunT0ReviewOrchestration {
           Math.min(5_000, 500 * 2 ** Math.min(busyPollCount, 4))
         );
         if (delayMs <= 0) break;
-        await this.dependencies.delay.sleep(delayMs);
+        if (this.dependencies.signal) {
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
+        } else {
+          await this.dependencies.delay.sleep(delayMs);
+        }
         continue;
       }
       if (
@@ -1568,6 +1632,7 @@ export class RunT0ReviewOrchestration {
     lease: ReviewInvocationLease,
     ownerIdHash: string
   ): Promise<ReviewInvocationLease> {
+    this.dependencies.signal?.throwIfAborted();
     const renewRequestId = this.identity('lease-renew-request', [
       lease.leaseId,
       lease.fencingToken,
@@ -1600,8 +1665,10 @@ export class RunT0ReviewOrchestration {
   private async assertRevisionCurrent(
     expectedRevision: ReviewRevisionFacts
   ): Promise<void> {
+    this.dependencies.signal?.throwIfAborted();
     const currentRevision =
       await this.dependencies.revisionGuard.loadCurrentRevision();
+    this.dependencies.signal?.throwIfAborted();
     if (currentRevision.pullRequestState === 'closed') {
       throw new ReviewExecutionCancelledSignal();
     }
@@ -1631,11 +1698,19 @@ export class RunT0ReviewOrchestration {
     readonly revision: ReviewRevisionFacts;
   }): Promise<ReviewObservationPayload> {
     const abort = new AbortController();
+    // Joining a stopped monitor must not cancel a completed provider invocation.
+    const monitorStop = new AbortController();
+    const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
     let stopped = false;
-    const relayLeaseAbort = () => abort.abort(input.signal.reason);
-    if (input.signal.aborted) relayLeaseAbort();
+    const invocationSignal = this.dependencies.signal
+      ? AbortSignal.any([input.signal, this.dependencies.signal])
+      : input.signal;
+    const relayLeaseAbort = () => abort.abort(invocationSignal.reason);
+    if (invocationSignal.aborted) relayLeaseAbort();
     else
-      input.signal.addEventListener('abort', relayLeaseAbort, { once: true });
+      invocationSignal.addEventListener('abort', relayLeaseAbort, {
+        once: true,
+      });
     const drainOnSupersession =
       input.invocation.manifestFacts.executionProfile === 'context_gateway_v1';
     const monitor = async () => {
@@ -1645,7 +1720,7 @@ export class RunT0ReviewOrchestration {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
           return;
         }
-        await this.dependencies.delay.sleep(delayMs);
+        await this.dependencies.delay.sleep(delayMs, monitorSignal);
         if (stopped || abort.signal.aborted) return;
         if (this.providerOperationRemainingMs() <= 0) {
           abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -1665,12 +1740,15 @@ export class RunT0ReviewOrchestration {
         }
       }
     };
-    void monitor();
+    const monitorPromise = monitor().catch((error) => {
+      if (!stopped) abort.abort(error);
+    });
     try {
       const observation = await this.executeLegacyInvocation(
         input,
         abort.signal
       );
+      this.dependencies.signal?.throwIfAborted();
       if (
         abort.signal.reason instanceof ReviewExecutionCancelledSignal ||
         abort.signal.reason instanceof ReviewExecutionDeadlineReachedSignal
@@ -1689,7 +1767,9 @@ export class RunT0ReviewOrchestration {
       throw error;
     } finally {
       stopped = true;
-      input.signal.removeEventListener('abort', relayLeaseAbort);
+      monitorStop.abort();
+      await monitorPromise;
+      invocationSignal.removeEventListener('abort', relayLeaseAbort);
     }
   }
 
@@ -1730,7 +1810,15 @@ export class RunT0ReviewOrchestration {
         return null;
       }
 
+      this.dependencies.signal?.throwIfAborted();
       const abort = new AbortController();
+      const monitorStop = new AbortController();
+      const monitorSignal = AbortSignal.any([abort.signal, monitorStop.signal]);
+      const cancel = () => abort.abort(this.dependencies.signal?.reason);
+      this.dependencies.signal?.addEventListener('abort', cancel, {
+        once: true,
+      });
+      if (this.dependencies.signal?.aborted) cancel();
       let stopped = false;
       const monitor = async () => {
         while (!stopped && !abort.signal.aborted) {
@@ -1739,7 +1827,7 @@ export class RunT0ReviewOrchestration {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
             return;
           }
-          await this.dependencies.delay.sleep(delayMs);
+          await this.dependencies.delay.sleep(delayMs, monitorSignal);
           if (stopped || abort.signal.aborted) return;
           if (this.providerOperationRemainingMs() <= 0) {
             abort.abort(new ReviewExecutionDeadlineReachedSignal());
@@ -1758,7 +1846,9 @@ export class RunT0ReviewOrchestration {
           }
         }
       };
-      void monitor();
+      const monitorPromise = monitor().catch((error) => {
+        if (!stopped) abort.abort(error);
+      });
       try {
         const observation = await recording.execute({
           authorization: input.authorization,
@@ -1770,6 +1860,7 @@ export class RunT0ReviewOrchestration {
           sourceReviewRevisionHash: input.revision.reviewRevisionHash,
           signal: abort.signal,
         });
+        this.dependencies.signal?.throwIfAborted();
         if (
           abort.signal.reason instanceof ReviewExecutionDeadlineReachedSignal
         ) {
@@ -1787,8 +1878,12 @@ export class RunT0ReviewOrchestration {
         throw error;
       } finally {
         stopped = true;
+        monitorStop.abort();
+        await monitorPromise;
+        this.dependencies.signal?.removeEventListener('abort', cancel);
       }
     } catch (error) {
+      this.dependencies.signal?.throwIfAborted();
       if (
         error instanceof ReviewExecutionSupersededSignal ||
         error instanceof ReviewExecutionCancelledSignal ||
@@ -1875,8 +1970,9 @@ export class RunT0ReviewOrchestration {
     return this.dependencies.executionDeadline?.remainingMs() ?? Infinity;
   }
 
-  private assertExecutionDeadlineAvailable(): void {
-    if (this.executionDeadlineRemainingMs() <= 0) {
+  private assertExecutionDeadlineAvailable(reserveMs = 0): void {
+    this.dependencies.signal?.throwIfAborted();
+    if (this.executionDeadlineRemainingMs() <= reserveMs) {
       throw new ReviewExecutionDeadlineReachedSignal();
     }
   }

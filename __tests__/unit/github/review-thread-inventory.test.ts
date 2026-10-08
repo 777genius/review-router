@@ -92,12 +92,27 @@ describe('ReviewThreadInventoryLoader', () => {
     );
     expect(authors).not.toContain('invalid login!');
     expect(
-      isTrustedReviewThreadAuthor('Review-Router-Owner[bot]', authors)
+      isTrustedReviewThreadAuthor('  Review-Router-Owner[bot]  ', authors)
     ).toBe(true);
     expect(isTrustedReviewThreadAuthor('Review-Router-Owner', authors)).toBe(
-      true
+      false
     );
-    expect(isTrustedReviewThreadAuthor('review-router-ai')).toBe(true);
+    expect(isTrustedReviewThreadAuthor('review-router-ai')).toBe(false);
+    expect(
+      isTrustedReviewThreadAuthor('review-router-ai', undefined, 'Bot')
+    ).toBe(true);
+    expect(
+      isTrustedReviewThreadAuthor('review-router-ai', undefined, 'User')
+    ).toBe(false);
+    expect(isTrustedReviewThreadAuthor('unknown-bot', undefined, 'Bot')).toBe(
+      false
+    );
+    expect(
+      isTrustedReviewThreadAuthor('  Trusted-Human  ', ['trusted-human'])
+    ).toBe(true);
+    expect(
+      isTrustedReviewThreadAuthor('trusted-human[bot]', ['trusted-human'])
+    ).toBe(false);
   });
 
   it('trusts github-actions only when it is the expected or fallback comment identity', () => {
@@ -122,180 +137,205 @@ describe('ReviewThreadInventoryLoader', () => {
     expect(fallbackAuthors).toContain('github-actions[bot]');
   });
 
-  it('loads only unresolved trusted ReviewRouter threads as lifecycle candidates', async () => {
-    const graphql = jest.fn().mockResolvedValue({
-      repository: {
-        pullRequest: {
-          headRefOid: 'head-sha',
-          reviewThreads: {
-            pageInfo: { hasNextPage: false, endCursor: null },
-            nodes: [
-              {
-                id: 'resolved-thread',
-                isResolved: true,
-                viewerCanResolve: true,
-                path: 'src/app.ts',
-                line: 10,
-                comments: {
-                  pageInfo: { hasNextPage: false, endCursor: null },
-                  nodes: [
-                    {
-                      id: 'resolved-comment',
-                      author: { login: 'review-router-ai[bot]' },
-                      body: parentBody,
-                      createdAt: '2026-05-14T00:00:00Z',
-                      updatedAt: '2026-05-14T00:00:00Z',
-                      path: 'src/app.ts',
-                      line: 10,
-                      originalLine: 10,
-                      diffHunk: '@@',
-                      url: 'https://github.test/resolved',
-                    },
-                  ],
+  it.each([
+    { login: 'review-router-ai[bot]' },
+    { login: 'review-router-ai', __typename: 'Bot' },
+  ])(
+    'loads only unresolved trusted ReviewRouter threads as lifecycle candidates (%j)',
+    async (author) => {
+      const graphql = jest.fn().mockResolvedValue({
+        repository: {
+          pullRequest: {
+            headRefOid: 'head-sha',
+            reviewThreads: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [
+                {
+                  id: 'resolved-thread',
+                  isResolved: true,
+                  viewerCanResolve: true,
+                  path: 'src/app.ts',
+                  line: 10,
+                  comments: {
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                    nodes: [
+                      {
+                        id: 'resolved-comment',
+                        author: { login: 'review-router-ai[bot]' },
+                        body: parentBody,
+                        createdAt: '2026-05-14T00:00:00Z',
+                        updatedAt: '2026-05-14T00:00:00Z',
+                        path: 'src/app.ts',
+                        line: 10,
+                        originalLine: 10,
+                        diffHunk: '@@',
+                        url: 'https://github.test/resolved',
+                      },
+                    ],
+                  },
                 },
-              },
-              {
-                id: 'active-thread',
-                isResolved: false,
-                viewerCanResolve: true,
-                path: 'src/app.ts',
-                line: 12,
-                comments: {
-                  pageInfo: { hasNextPage: false, endCursor: null },
-                  nodes: [
-                    {
-                      id: 'active-comment',
-                      author: { login: 'review-router-ai[bot]' },
-                      body: parentBody,
-                      createdAt: '2026-05-14T00:00:00Z',
-                      updatedAt: '2026-05-14T00:00:00Z',
-                      path: 'src/app.ts',
-                      line: 12,
-                      originalLine: 10,
-                      diffHunk: '@@',
-                      url: 'https://github.test/active',
-                    },
-                  ],
+                {
+                  id: 'active-thread',
+                  isResolved: false,
+                  viewerCanResolve: true,
+                  path: 'src/app.ts',
+                  line: 12,
+                  comments: {
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                    nodes: [
+                      {
+                        id: 'active-comment',
+                        author,
+                        body: parentBody,
+                        createdAt: '2026-05-14T00:00:00Z',
+                        updatedAt: '2026-05-14T00:00:00Z',
+                        path: 'src/app.ts',
+                        line: 12,
+                        originalLine: 10,
+                        diffHunk: '@@',
+                        url: 'https://github.test/active',
+                      },
+                    ],
+                  },
                 },
-              },
-            ],
+              ],
+            },
           },
         },
-      },
-    });
-    const loader = new ReviewThreadInventoryLoader({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
-
-    const inventory = await loader.load(123);
-
-    expect(inventory.failed).toBe(false);
-    expect(inventory.headRefOid).toBe('head-sha');
-    expect(inventory.candidates).toHaveLength(1);
-    expect(inventory.candidates[0]).toMatchObject({
-      threadId: 'active-thread',
-      fingerprint: 'aaaaaaaaaaaaaaaaaaaaaaaa',
-      severity: 'major',
-      trustedAuthor: true,
-      hasHumanReply: false,
-    });
-    expect(inventory.dedupeComments).toHaveLength(1);
-    expectGraphqlBracesBalanced(graphql.mock.calls[0]?.[0] as string);
-  });
-
-  it('recognizes only a trusted resolution marker bound to the exact target and fingerprint', async () => {
-    const fingerprint = `rrl_${'a'.repeat(32)}`;
-    const targetId = `rrt_${createHash('sha256')
-      .update(`active-thread\nactive-comment\n${fingerprint}`)
-      .digest('hex')
-      .slice(0, 16)}`;
-    const graphql = jest.fn().mockResolvedValue({
-      repository: {
-        pullRequest: {
-          headRefOid: 'head-sha',
-          reviewThreads: {
-            pageInfo: { hasNextPage: false, endCursor: null },
-            nodes: [
-              {
-                id: 'active-thread',
-                isResolved: false,
-                viewerCanResolve: false,
-                path: 'src/app.ts',
-                line: 12,
-                comments: {
-                  pageInfo: { hasNextPage: false, endCursor: null },
-                  nodes: [
-                    {
-                      id: 'active-comment',
-                      author: { login: 'review-router-ai[bot]' },
-                      body: `Old issue body.\nreviewrouter:finding:v2:${fingerprint}`,
-                      createdAt: '2026-05-14T00:00:00Z',
-                      updatedAt: '2026-05-14T00:00:00Z',
-                      path: 'src/app.ts',
-                      line: 12,
-                      originalLine: 10,
-                    },
-                    {
-                      id: 'untrusted-copy',
-                      author: { login: 'contributor' },
-                      body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=${fingerprint} -->`,
-                      createdAt: '2026-05-14T00:01:00Z',
-                      updatedAt: '2026-05-14T00:01:00Z',
-                    },
-                    {
-                      id: 'trusted-mismatch',
-                      author: { login: 'review-router-ai[bot]' },
-                      body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=bbbbbbbbbbbbbbbbbbbbbbbb -->`,
-                      createdAt: '2026-05-14T00:02:00Z',
-                      updatedAt: '2026-05-14T00:02:00Z',
-                    },
-                    {
-                      id: 'generic-actions-copy',
-                      author: { login: 'github-actions[bot]' },
-                      body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=${fingerprint} -->`,
-                      createdAt: '2026-05-14T00:02:30Z',
-                      updatedAt: '2026-05-14T00:02:30Z',
-                    },
-                    {
-                      id: 'trusted-resolution',
-                      author: { login: 'review-router-ai[bot]' },
-                      body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=${fingerprint} -->`,
-                      createdAt: '2026-05-14T00:03:00Z',
-                      updatedAt: '2026-05-14T00:03:00Z',
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        },
-      },
-    });
-    const loader = new ReviewThreadInventoryLoader(
-      {
+      });
+      const loader = new ReviewThreadInventoryLoader({
         owner: 'owner',
         repo: 'repo',
         octokit: { graphql },
-      } as unknown as GitHubClient,
-      ['review-router-ai[bot]', 'github-actions[bot]']
-    );
+      } as unknown as GitHubClient);
 
-    const inventory = await loader.load(123);
+      const inventory = await loader.load(123);
 
-    expect(inventory.candidates).toHaveLength(0);
-    expect(inventory.manualAttention[0]?.target).toMatchObject({
-      targetId,
-      hasHumanReply: true,
-      trustedResolutionMarker: {
-        schemaVersion: 'reviewrouter-lifecycle-resolution.v1',
+      expect(inventory.failed).toBe(false);
+      expect(inventory.headRefOid).toBe('head-sha');
+      expect(inventory.candidates).toHaveLength(1);
+      expect(inventory.candidates[0]).toMatchObject({
+        threadId: 'active-thread',
+        fingerprint: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+        severity: 'major',
+        trustedAuthor: true,
+        hasHumanReply: false,
+      });
+      expect(inventory.dedupeComments).toHaveLength(1);
+      expectGraphqlBracesBalanced(graphql.mock.calls[0]?.[0] as string);
+      expect(graphql.mock.calls[0][0]).toContain('author { login __typename }');
+    }
+  );
+
+  it.each([
+    {
+      parentAuthor: { login: 'review-router-ai[bot]' },
+      untrustedTypename: 'User',
+    },
+    {
+      parentAuthor: { login: 'review-router-ai', __typename: 'Bot' },
+      untrustedTypename: undefined,
+    },
+  ])(
+    'recognizes only a trusted resolution marker bound to the exact target and fingerprint (%j)',
+    async ({ parentAuthor, untrustedTypename }) => {
+      const fingerprint = `rrl_${'a'.repeat(32)}`;
+      const targetId = `rrt_${createHash('sha256')
+        .update(`active-thread\nactive-comment\n${fingerprint}`)
+        .digest('hex')
+        .slice(0, 16)}`;
+      const graphql = jest.fn().mockResolvedValue({
+        repository: {
+          pullRequest: {
+            headRefOid: 'head-sha',
+            reviewThreads: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [
+                {
+                  id: 'active-thread',
+                  isResolved: false,
+                  viewerCanResolve: false,
+                  path: 'src/app.ts',
+                  line: 12,
+                  comments: {
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                    nodes: [
+                      {
+                        id: 'active-comment',
+                        author: parentAuthor,
+                        body: `Old issue body.\nreviewrouter:finding:v2:${fingerprint}`,
+                        createdAt: '2026-05-14T00:00:00Z',
+                        updatedAt: '2026-05-14T00:00:00Z',
+                        path: 'src/app.ts',
+                        line: 12,
+                        originalLine: 10,
+                      },
+                      {
+                        id: 'untrusted-copy',
+                        author: {
+                          login: 'review-router-ai',
+                          __typename: untrustedTypename,
+                        },
+                        body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=${fingerprint} -->`,
+                        createdAt: '2026-05-14T00:01:00Z',
+                        updatedAt: '2026-05-14T00:01:00Z',
+                      },
+                      {
+                        id: 'trusted-mismatch',
+                        author: { login: 'review-router-ai[bot]' },
+                        body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=bbbbbbbbbbbbbbbbbbbbbbbb -->`,
+                        createdAt: '2026-05-14T00:02:00Z',
+                        updatedAt: '2026-05-14T00:02:00Z',
+                      },
+                      {
+                        id: 'generic-actions-copy',
+                        author: { login: 'github-actions[bot]' },
+                        body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=${fingerprint} -->`,
+                        createdAt: '2026-05-14T00:02:30Z',
+                        updatedAt: '2026-05-14T00:02:30Z',
+                      },
+                      {
+                        id: 'trusted-resolution',
+                        author: {
+                          login: 'review-router-ai',
+                          __typename: 'Bot',
+                        },
+                        body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=${fingerprint} -->`,
+                        createdAt: '2026-05-14T00:03:00Z',
+                        updatedAt: '2026-05-14T00:03:00Z',
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      });
+      const loader = new ReviewThreadInventoryLoader(
+        {
+          owner: 'owner',
+          repo: 'repo',
+          octokit: { graphql },
+        } as unknown as GitHubClient,
+        ['review-router-ai[bot]', 'github-actions[bot]']
+      );
+
+      const inventory = await loader.load(123);
+
+      expect(inventory.candidates).toHaveLength(0);
+      expect(inventory.manualAttention[0]?.target).toMatchObject({
         targetId,
-        fingerprint,
-        commentId: 'trusted-resolution',
-      },
-    });
-  });
+        hasHumanReply: true,
+        trustedResolutionMarker: {
+          schemaVersion: 'reviewrouter-lifecycle-resolution.v1',
+          targetId,
+          fingerprint,
+          commentId: 'trusted-resolution',
+        },
+      });
+    }
+  );
 
   it('keeps outdated unresolved threads as lifecycle targets but not dedupe refs', async () => {
     const graphql = jest.fn().mockResolvedValue({
@@ -790,76 +830,93 @@ describe('ReviewThreadInventoryLoader', () => {
     expect(inventory.dedupeComments).toHaveLength(1);
   });
 
-  it('paginates thread comments before deciding human-reply safety', async () => {
-    const graphql = jest
-      .fn()
-      .mockResolvedValueOnce({
-        repository: {
-          pullRequest: {
-            headRefOid: 'head-sha',
-            reviewThreads: {
+  it.each(['Bot', 'User', undefined])(
+    'paginates thread comments before deciding human-reply safety (%s)',
+    async (authorTypename) => {
+      const graphql = jest
+        .fn()
+        .mockResolvedValueOnce({
+          repository: {
+            pullRequest: {
+              headRefOid: 'head-sha',
+              reviewThreads: {
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [
+                  {
+                    id: 'thread-1',
+                    isResolved: false,
+                    viewerCanResolve: true,
+                    path: 'src/app.ts',
+                    line: 12,
+                    comments: {
+                      pageInfo: {
+                        hasNextPage: true,
+                        endCursor: 'comments-page-1',
+                      },
+                      nodes: [
+                        {
+                          id: 'comment-1',
+                          author: { login: 'review-router-ai[bot]' },
+                          body: parentBody,
+                          createdAt: '2026-05-14T00:00:00Z',
+                          updatedAt: '2026-05-14T00:00:00Z',
+                          path: 'src/app.ts',
+                          line: 12,
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          node: {
+            comments: {
               pageInfo: { hasNextPage: false, endCursor: null },
               nodes: [
                 {
-                  id: 'thread-1',
-                  isResolved: false,
-                  viewerCanResolve: true,
-                  path: 'src/app.ts',
-                  line: 12,
-                  comments: {
-                    pageInfo: {
-                      hasNextPage: true,
-                      endCursor: 'comments-page-1',
-                    },
-                    nodes: [
-                      {
-                        id: 'comment-1',
-                        author: { login: 'review-router-ai[bot]' },
-                        body: parentBody,
-                        createdAt: '2026-05-14T00:00:00Z',
-                        updatedAt: '2026-05-14T00:00:00Z',
-                        path: 'src/app.ts',
-                        line: 12,
-                      },
-                    ],
+                  id: 'comment-2',
+                  author: {
+                    login: 'review-router-ai',
+                    __typename: authorTypename,
                   },
+                  body: 'This still needs discussion.',
+                  createdAt: '2026-05-14T00:01:00Z',
+                  updatedAt: '2026-05-14T00:01:00Z',
                 },
               ],
             },
           },
-        },
-      })
-      .mockResolvedValueOnce({
-        node: {
-          comments: {
-            pageInfo: { hasNextPage: false, endCursor: null },
-            nodes: [
-              {
-                id: 'comment-2',
-                author: { login: 'maintainer' },
-                body: 'This still needs discussion.',
-                createdAt: '2026-05-14T00:01:00Z',
-                updatedAt: '2026-05-14T00:01:00Z',
-              },
-            ],
-          },
-        },
-      });
-    const loader = new ReviewThreadInventoryLoader({
-      owner: 'owner',
-      repo: 'repo',
-      octokit: { graphql },
-    } as unknown as GitHubClient);
+        });
+      const loader = new ReviewThreadInventoryLoader({
+        owner: 'owner',
+        repo: 'repo',
+        octokit: { graphql },
+      } as unknown as GitHubClient);
 
-    const inventory = await loader.load(123);
+      const inventory = await loader.load(123);
 
-    expect(graphql).toHaveBeenCalledTimes(2);
-    expect(inventory.candidates).toHaveLength(0);
-    expect(inventory.manualAttention[0].reasonCodes).toContain('human_reply');
-    expect(inventory.manualAttention[0].reasonCodes).not.toContain(
-      'pagination_incomplete'
-    );
-  });
+      expect(graphql).toHaveBeenCalledTimes(2);
+      expect(inventory.failed).toBe(false);
+      expect(graphql.mock.calls[1][0]).toContain('author { login __typename }');
+      expect(inventory.candidates).toHaveLength(
+        authorTypename === 'Bot' ? 1 : 0
+      );
+      expect(inventory.manualAttention).toHaveLength(
+        authorTypename === 'Bot' ? 0 : 1
+      );
+      if (authorTypename !== 'Bot') {
+        expect(inventory.manualAttention[0].reasonCodes).toContain(
+          'human_reply'
+        );
+        expect(inventory.manualAttention[0].reasonCodes).not.toContain(
+          'pagination_incomplete'
+        );
+      }
+    }
+  );
 
   it('fails the fresh inventory closed when comment pagination is incomplete', async () => {
     const graphql = jest
@@ -1199,57 +1256,77 @@ describe('ReviewThreadInventoryLoader', () => {
     expect(inventory.manualAttentionIssues).toEqual([]);
   });
 
-  it('trusts configured GitHub App bot comments for lifecycle candidates', async () => {
-    const graphql = jest.fn().mockResolvedValue({
-      repository: {
-        pullRequest: {
-          headRefOid: 'head-sha',
-          reviewThreads: {
-            pageInfo: { hasNextPage: false, endCursor: null },
-            nodes: [
-              {
-                id: 'thread-1',
-                isResolved: false,
-                viewerCanResolve: true,
-                path: 'src/app.ts',
-                line: 12,
-                comments: {
-                  pageInfo: { hasNextPage: false, endCursor: null },
-                  nodes: [
-                    {
-                      id: 'comment-1',
-                      author: { login: 'review-router-owner[bot]' },
-                      body: parentBody,
-                      createdAt: '2026-05-14T00:00:00Z',
-                      updatedAt: '2026-05-14T00:00:00Z',
-                      path: 'src/app.ts',
-                      line: 12,
-                    },
-                  ],
+  it.each([
+    { author: { login: 'review-router-owner[bot]' }, trusted: true },
+    {
+      author: { login: 'review-router-owner', __typename: 'Bot' },
+      trusted: true,
+    },
+    {
+      author: { login: 'review-router-owner', __typename: 'User' },
+      trusted: false,
+    },
+    { author: { login: 'review-router-owner' }, trusted: false },
+  ])(
+    'trusts only exact or confirmed Bot configured App authors (%j)',
+    async ({ author, trusted }) => {
+      const graphql = jest.fn().mockResolvedValue({
+        repository: {
+          pullRequest: {
+            headRefOid: 'head-sha',
+            reviewThreads: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [
+                {
+                  id: 'thread-1',
+                  isResolved: false,
+                  viewerCanResolve: true,
+                  path: 'src/app.ts',
+                  line: 12,
+                  comments: {
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                    nodes: [
+                      {
+                        id: 'comment-1',
+                        author,
+                        body: parentBody,
+                        createdAt: '2026-05-14T00:00:00Z',
+                        updatedAt: '2026-05-14T00:00:00Z',
+                        path: 'src/app.ts',
+                        line: 12,
+                      },
+                    ],
+                  },
                 },
-              },
-            ],
+              ],
+            },
           },
         },
-      },
-    });
-    const loader = new ReviewThreadInventoryLoader(
-      {
-        owner: 'owner',
-        repo: 'repo',
-        octokit: { graphql },
-      } as unknown as GitHubClient,
-      trustedReviewThreadAuthorsFromEnv({
-        REVIEW_APP_SLUG: 'review-router-owner',
-      } as NodeJS.ProcessEnv)
-    );
+      });
+      const loader = new ReviewThreadInventoryLoader(
+        {
+          owner: 'owner',
+          repo: 'repo',
+          octokit: { graphql },
+        } as unknown as GitHubClient,
+        trustedReviewThreadAuthorsFromEnv({
+          REVIEW_APP_SLUG: 'review-router-owner',
+        } as NodeJS.ProcessEnv)
+      );
 
-    const inventory = await loader.load(123);
+      const inventory = await loader.load(123);
 
-    expect(inventory.candidates).toHaveLength(1);
-    expect(inventory.manualAttention).toHaveLength(0);
-    expect(inventory.dedupeComments).toHaveLength(1);
-  });
+      expect(inventory.failed).toBe(false);
+      expect(inventory.candidates).toHaveLength(trusted ? 1 : 0);
+      expect(inventory.manualAttention).toHaveLength(trusted ? 0 : 1);
+      expect(inventory.dedupeComments).toHaveLength(trusted ? 1 : 0);
+      if (!trusted) {
+        expect(inventory.manualAttention[0].reasonCodes).toContain(
+          'untrusted_author'
+        );
+      }
+    }
+  );
 });
 
 function expectGraphqlBracesBalanced(query: string): void {

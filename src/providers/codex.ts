@@ -13,6 +13,12 @@ import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
 import { CODEX_CONFINEMENT_DISABLED_FEATURES } from './codex-confinement-policy';
 import { prepareCodexCliBeforeAuthRead } from '../codex-oauth/codex-cli';
+import { prepareAccountGatewayModelCatalog } from '../codex-oauth/account-gateway-mimo-catalog';
+import {
+  ACCOUNT_GATEWAY_BOUNDS,
+  LOCAL_MODEL_CAPABILITY_ENV,
+  type LocalGatewayModelTransport,
+} from '../review-orchestration/infrastructure/account-gateway-model-transport';
 import {
   buildReviewFindingsSchema,
   type ParsedReviewOutput,
@@ -27,6 +33,7 @@ import {
   type ProviderCredentialLease,
   ProviderKind,
   requirePreparedProviderInvocation,
+  splitProviderEnvironment,
 } from './prepared-invocation';
 import {
   CONTEXT_GATEWAY_POLICY_VERSION,
@@ -39,6 +46,8 @@ import {
 } from '../context-gateway/context-gateway-v4-contract';
 
 export interface CodexProviderOptions {
+  /** Internal T0 composition only; no user URL/account/provider-key override. */
+  accountGateway?: LocalGatewayModelTransport;
   agenticContext?: boolean;
   eventAudit?: boolean;
   modelProvider?: 'openai' | 'openrouter' | 'mimo';
@@ -154,6 +163,7 @@ type CodexFrozenCliConfig = {
   readonly modelProvider: CodexProviderOptions['modelProvider'];
   readonly forkSandbox: boolean;
   readonly reasoningEffort?: string;
+  readonly modelCatalogSetting?: string;
 };
 
 const CODEX_OUTPUT_FILE_PLACEHOLDER = '{reviewrouter_output_file}';
@@ -198,7 +208,9 @@ export class CodexProvider extends Provider {
   // request and can exhaust limited OAuth usage before review starts.
   async healthCheck(_timeoutMs: number = 5000): Promise<boolean> {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5000);
-    const mode = (process.env.CODEX_HEALTHCHECK_MODE || 'binary').toLowerCase();
+    const mode = this.options.accountGateway
+      ? 'binary'
+      : (process.env.CODEX_HEALTHCHECK_MODE || 'binary').toLowerCase();
 
     if (mode === 'none' || mode === 'binary') {
       return true;
@@ -275,6 +287,7 @@ export class CodexProvider extends Provider {
       }
 
       if (
+        !this.options.accountGateway &&
         this.shouldRetryForMissingAgenticExploration(
           execution.parsed,
           execution.runResult.audit,
@@ -404,13 +417,24 @@ export class CodexProvider extends Provider {
     const auditMode =
       agenticContext && !contextGateway ? this.agenticAuditMode() : 'off';
     const eventAudit = contextGateway ? true : this.shouldUseEventAudit();
-    const forkSandbox = this.shouldUseForkSandboxCodexHomeConfig();
+    const forkSandbox =
+      !this.options.accountGateway &&
+      this.shouldUseForkSandboxCodexHomeConfig();
     const reasoningEffort = this.resolveReasoningEffort(false);
+    const gateway = this.options.accountGateway;
+    const modelCatalogSetting = gateway
+      ? await prepareAccountGatewayModelCatalog(
+          this.model,
+          gateway.environment.CODEX_HOME,
+          gateway.configuration
+        )
+      : undefined;
     const frozenCliConfig: CodexFrozenCliConfig = {
       model: this.model,
       modelProvider: this.options.modelProvider,
       forkSandbox,
       reasoningEffort,
+      modelCatalogSetting,
     };
     const fullEnvironment = {
       ...this.buildSafeEnv(true, frozenCliConfig),
@@ -446,7 +470,7 @@ export class CodexProvider extends Provider {
       auditMode,
       optionalAgenticRetryMaxPromptTokens:
         MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
-      acceptReviewOutputOnNonZero: true,
+      acceptReviewOutputOnNonZero: !this.options.accountGateway,
       ...(contextGateway ? { contextGateway } : {}),
     };
     return createPreparedProviderInvocation({
@@ -523,6 +547,11 @@ export class CodexProvider extends Provider {
       this.name
     );
     const request = prepared.request;
+    if (
+      this.options.accountGateway &&
+      Buffer.byteLength(request.prompt) > ACCOUNT_GATEWAY_BOUNDS.requestBytes
+    )
+      throw new Error('account_gateway_prompt_bound');
     logger.info(
       `Running Codex CLI safely: ${request.binary} exec --model ${prepared.requestedModel} --sandbox read-only --ephemeral ...`
     );
@@ -545,10 +574,19 @@ export class CodexProvider extends Provider {
         cwd: request.cwd,
         environment: mergeCredentialEnvironment(
           request.environment,
-          credentialLease?.environment
+          this.options.accountGateway
+            ? {
+                ...credentialLease?.environment,
+                ...splitProviderEnvironment(
+                  this.options.accountGateway.environment
+                ).credentialEnvironment,
+              }
+            : credentialLease?.environment
         ),
       }
     );
+    if (this.options.accountGateway && !runResult.lastMessage.trim())
+      throw new Error('account_gateway_final_missing');
     const content = this.sanitizeReviewContent(
       (runResult.lastMessage || runResult.stdout).trim(),
       request.cwd
@@ -580,6 +618,13 @@ export class CodexProvider extends Provider {
   private captureCredentialLease(
     invocation: PreparedProviderInvocation<CodexPreparedRequest>
   ): ProviderCredentialLease {
+    if (this.options.accountGateway) {
+      return {
+        environment: splitProviderEnvironment(
+          this.options.accountGateway.environment
+        ).credentialEnvironment,
+      };
+    }
     const environment: NodeJS.ProcessEnv = {};
     const credentialKeys = ['OPENAI_API_KEY'];
     if (
@@ -610,6 +655,7 @@ export class CodexProvider extends Provider {
     delete sanitized.OPENROUTER_API_KEY;
     delete sanitized[MIMO_TOKEN_PLAN_API_KEY];
     delete sanitized.REVIEWROUTER_CONTEXT_GATEWAY_SECRET;
+    delete sanitized[LOCAL_MODEL_CAPABILITY_ENV];
     return Object.freeze(sanitized);
   }
 
@@ -805,7 +851,7 @@ export class CodexProvider extends Provider {
       }
     }
 
-    if (config.modelProvider === 'openrouter') {
+    if (!this.options.accountGateway && config.modelProvider === 'openrouter') {
       args.push(
         '-c',
         'model_provider="openrouter"',
@@ -818,7 +864,7 @@ export class CodexProvider extends Provider {
       );
     }
 
-    if (config.modelProvider === 'mimo') {
+    if (!this.options.accountGateway && config.modelProvider === 'mimo') {
       args.push(
         '-c',
         'model_provider="mimo"',
@@ -840,6 +886,13 @@ export class CodexProvider extends Provider {
 
     for (const configOverride of SHELL_ENVIRONMENT_POLICY_ARGS) {
       args.push('-c', configOverride);
+    }
+
+    if (this.options.accountGateway) {
+      for (const setting of this.options.accountGateway.configuration)
+        args.push('-c', setting);
+      if (config.modelCatalogSetting)
+        args.push('-c', config.modelCatalogSetting);
     }
 
     args.push('-');
@@ -921,6 +974,8 @@ export class CodexProvider extends Provider {
         let stdout = '';
         let stderr = '';
         let settled = false;
+        let pendingFailure: unknown;
+        let failed = false;
 
         const terminate = () => {
           try {
@@ -935,6 +990,14 @@ export class CodexProvider extends Provider {
         };
         const fail = (error: unknown) => {
           if (settled) return;
+          if (this.options.accountGateway) {
+            if (!failed) {
+              pendingFailure = error;
+              failed = true;
+              cleanup();
+            }
+            return;
+          }
           settled = true;
           cleanup();
           reject(error);
@@ -952,21 +1015,40 @@ export class CodexProvider extends Provider {
           fail(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
         }, timeoutMs);
         options.signal?.addEventListener('abort', onAbort, { once: true });
+        if (options.signal?.aborted) onAbort();
 
+        let outputBytes = 0;
+        const withinOutputBound = (chunk: Buffer | string) => {
+          outputBytes += Buffer.byteLength(chunk);
+          if (
+            this.options.accountGateway &&
+            outputBytes > ACCOUNT_GATEWAY_BOUNDS.cliOutputBytes
+          ) {
+            terminate();
+            fail(new Error('account_gateway_cli_output_bound'));
+            return false;
+          }
+          return true;
+        };
         proc.stdout?.on('data', (chunk) => {
+          if (settled || failed || !withinOutputBound(chunk)) return;
           stdout += chunk.toString();
         });
         proc.stderr?.on('data', (chunk) => {
+          if (settled || failed || !withinOutputBound(chunk)) return;
           stderr += chunk.toString();
         });
         proc.on('error', (err) => {
+          if (this.options.accountGateway && proc.pid) terminate();
           fail(err);
         });
         proc.on('close', (code) => {
           if (settled) return;
           settled = true;
           cleanup();
-          if (code !== 0) {
+          if (failed) {
+            reject(pendingFailure);
+          } else if (code !== 0) {
             const message = `Codex CLI failed with exit code ${code}: ${this.formatCliError(stderr, stdout)}`;
             reject(new CodexCliExitError(code, stdout, stderr, message));
           } else {
@@ -974,7 +1056,7 @@ export class CodexProvider extends Provider {
           }
         });
       }).catch(async (error) => {
-        if (options.signal?.aborted) throw error;
+        if (this.options.accountGateway || options.signal?.aborted) throw error;
         const lastMessage = await this.readOptionalFile(outputFile);
         if (
           options.acceptReviewOutputOnNonZero &&
@@ -1151,6 +1233,15 @@ export class CodexProvider extends Provider {
     const gateway = request.contextGateway;
     const environment = this.observablePreparedEnvironment(request);
     const replacements = [
+      ...(this.options.accountGateway
+        ? [
+            [request.environment.CODEX_HOME ?? '', '<codex-home>'] as const,
+            [
+              this.options.accountGateway.baseUrl,
+              '<account-gateway-loopback>',
+            ] as const,
+          ]
+        : []),
       ...(gateway
         ? [
             [gateway.command, '<context-gateway-command>'] as const,
@@ -1389,15 +1480,23 @@ export class CodexProvider extends Provider {
       includeWorkspaceEnv: includeWorkspaceEnv && !forkSandbox,
       extraAllowedKeys: [
         'CODEX_HOME',
-        'OPENAI_API_KEY',
-        ...(modelProvider === 'openrouter' ? ['OPENROUTER_API_KEY'] : []),
-        ...(modelProvider === 'mimo' ? [MIMO_TOKEN_PLAN_API_KEY] : []),
+        ...(this.options.accountGateway ? [] : ['OPENAI_API_KEY']),
+        ...(!this.options.accountGateway && modelProvider === 'openrouter'
+          ? ['OPENROUTER_API_KEY']
+          : []),
+        ...(!this.options.accountGateway && modelProvider === 'mimo'
+          ? [MIMO_TOKEN_PLAN_API_KEY]
+          : []),
       ],
+      ...(this.options.accountGateway
+        ? { overrides: this.options.accountGateway.environment }
+        : {}),
     });
   }
 
   private requireModelProviderCredential(): void {
-    if (this.options.modelProvider !== 'mimo') return;
+    if (this.options.accountGateway || this.options.modelProvider !== 'mimo')
+      return;
     if (!process.env[MIMO_TOKEN_PLAN_API_KEY]?.trim()) {
       const error = new Error(
         `codex_mimo_api_key_missing: ${MIMO_TOKEN_PLAN_API_KEY} is required for ${this.name}`
@@ -2093,6 +2192,11 @@ export class CodexProvider extends Provider {
 
   private async readOptionalFile(file: string): Promise<string> {
     try {
+      if (
+        this.options.accountGateway &&
+        (await fs.stat(file)).size > ACCOUNT_GATEWAY_BOUNDS.outputBytes
+      )
+        return '';
       return await fs.readFile(file, 'utf8');
     } catch {
       return '';
@@ -2140,6 +2244,9 @@ export class CodexProvider extends Provider {
     observation: CodexActualModelObservation,
     requestedModel: string
   ): string | undefined {
+    // Session configuration proves the CLI pin, not the backend's executed model.
+    if (this.options.accountGateway)
+      return this.options.accountGateway.actualModel();
     if (observation.kind === CodexActualModelObservationKind.Observed) {
       return observation.model;
     }
@@ -2589,6 +2696,7 @@ export class CodexProvider extends Provider {
   }
 
   private withActionableAuthHint(message: string): string {
+    if (this.options.accountGateway) return message;
     if (!message) return message;
     if (
       !/(401|unauthorized|access token|refresh token|auth|login)/i.test(message)

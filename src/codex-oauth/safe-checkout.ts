@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import * as core from '../actions/core';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
@@ -13,9 +14,8 @@ export async function createIsolatedCheckoutWorkspace(input: {
   const workspacePath = await fs.mkdtemp(
     path.join(realRunnerTempPath, 'reviewrouter-pr-')
   );
-  await fs.chmod(workspacePath, 0o700);
-
   try {
+    await fs.chmod(workspacePath, 0o700);
     if (input.githubWorkspacePath) {
       const githubWorkspacePath = await fs.realpath(input.githubWorkspacePath);
       if (pathsOverlap(workspacePath, githubWorkspacePath)) {
@@ -24,7 +24,9 @@ export async function createIsolatedCheckoutWorkspace(input: {
     }
     return workspacePath;
   } catch (error) {
-    await fs.rm(workspacePath, { recursive: true, force: true });
+    await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => {
+      core.warning('Isolated checkout cleanup failed; removal unconfirmed');
+    });
     throw error;
   }
 }
@@ -34,33 +36,40 @@ export async function safeCheckoutRepository(input: {
   headSha: string;
   workspacePath: string;
   token: string;
+  signal?: AbortSignal;
 }): Promise<void> {
+  input.signal?.throwIfAborted();
   assertRepositoryFullName(input.repository);
   assertFullSha(input.headSha);
   await assertWorkspaceEmpty(input.workspacePath);
 
   const gitHome = await fs.mkdtemp(path.join(os.tmpdir(), 'reviewrouter-git-'));
+  let failed = false;
   try {
-    await runGit(['init', '.'], input.workspacePath, gitHome);
+    await runGit(['init', '.'], input.workspacePath, gitHome, input.signal);
     await runGit(
       ['config', '--local', 'gc.auto', '0'],
       input.workspacePath,
-      gitHome
+      gitHome,
+      input.signal
     );
     await runGit(
       ['config', '--local', 'core.hooksPath', '/dev/null'],
       input.workspacePath,
-      gitHome
+      gitHome,
+      input.signal
     );
     await runGit(
       ['config', '--local', 'advice.detachedHead', 'false'],
       input.workspacePath,
-      gitHome
+      gitHome,
+      input.signal
     );
     await runGit(
       ['remote', 'add', 'origin', `https://github.com/${input.repository}.git`],
       input.workspacePath,
-      gitHome
+      gitHome,
+      input.signal
     );
     await runGit(
       [
@@ -80,7 +89,8 @@ export async function safeCheckoutRepository(input: {
         input.headSha,
       ],
       input.workspacePath,
-      gitHome
+      gitHome,
+      input.signal
     );
     await runGit(
       [
@@ -93,10 +103,19 @@ export async function safeCheckoutRepository(input: {
         input.headSha,
       ],
       input.workspacePath,
-      gitHome
+      gitHome,
+      input.signal
     );
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    await fs.rm(gitHome, { recursive: true, force: true });
+    await fs
+      .rm(gitHome, { recursive: true, force: true })
+      .catch((error: unknown) => {
+        core.warning('Git home cleanup failed; removal unconfirmed');
+        if (!failed) throw error;
+      });
   }
 }
 
@@ -112,11 +131,14 @@ async function assertWorkspaceEmpty(workspacePath: string): Promise<void> {
 function runGit(
   args: readonly string[],
   cwd: string,
-  home: string
+  home: string,
+  signal?: AbortSignal
 ): Promise<void> {
+  signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, {
       cwd,
+      detached: signal !== undefined && process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         PATH: process.env.PATH || '',
@@ -127,11 +149,31 @@ function runGit(
         GIT_LFS_SKIP_SMUDGE: '1',
       },
     });
+    let stopped = false;
+    const stop = () => {
+      stopped = true;
+      try {
+        if (signal && process.platform !== 'win32' && child.pid)
+          process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    };
+    signal?.addEventListener('abort', stop, { once: true });
+    if (signal?.aborted) stop();
+    const timer = signal ? setTimeout(stop, 60_000) : undefined;
+    const finish = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', stop);
+    };
     let stderr = '';
     child.stderr?.on('data', (chunk) => {
       stderr += String(chunk);
     });
     child.on('error', (error) => {
+      if (child.pid) return;
+      finish();
       reject(
         new Error(
           `codex_oauth_safe_checkout_spawn_failed:${safeGitError(String(error))}`
@@ -139,6 +181,15 @@ function runGit(
       );
     });
     child.on('close', (code) => {
+      finish();
+      if (stopped) {
+        reject(
+          signal?.aborted
+            ? signal.reason
+            : new Error('account_gateway_checkout_timeout')
+        );
+        return;
+      }
       if (code === 0) {
         resolve();
         return;

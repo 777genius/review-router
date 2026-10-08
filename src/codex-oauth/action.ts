@@ -1,4 +1,8 @@
 import * as fs from 'fs';
+import {
+  ACCOUNT_GATEWAY_ACTION_MODE,
+  runAccountGatewayRuntime,
+} from './account-gateway-runtime';
 import * as path from 'path';
 import * as core from '../actions/core';
 import { ReviewOrchestrator } from '../core/orchestrator';
@@ -63,6 +67,14 @@ import {
   type ReviewActionV2Activation,
 } from '../control-plane/review-action-v2-contract';
 import { createProductionT0ReviewRunner } from '../review-orchestration/infrastructure/production-t0-review-runner';
+import {
+  ReviewActionV2ClientError,
+  ReviewActionV2ClientFailureCode,
+} from '../control-plane/review-action-v2-client';
+import {
+  ReviewActionV2OperationId,
+  ReviewActionV2ProtocolErrorCode,
+} from '../control-plane/generated/review-action-v2/review-action-v2';
 import { ReviewPublicationUnavailableFact } from '../review-orchestration/application';
 import {
   createCiReviewProgressPublisher,
@@ -79,8 +91,9 @@ export function shouldEnterCodexOAuthRotatingAction(input: {
   env?: NodeJS.ProcessEnv;
 }): boolean {
   return (
-    input.requestedMode === CODEX_OAUTH_ROTATING_MODE &&
-    (input.env ?? process.env).REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'static'
+    input.requestedMode === ACCOUNT_GATEWAY_ACTION_MODE ||
+    (input.requestedMode === CODEX_OAUTH_ROTATING_MODE &&
+      (input.env ?? process.env).REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'static')
   );
 }
 
@@ -92,6 +105,10 @@ export async function runCodexOAuthRotatingAction(
     terminalOutcomeReporter?: CodexOAuthTerminalOutcomeReporterPort;
   } = {}
 ): Promise<void> {
+  if (isAccountGatewayActionSelected()) {
+    await runAccountGatewayAction(options);
+    return;
+  }
   const inputs = readCodexOAuthActionInputs();
   const reviewActionV2Activation =
     options.reviewActionV2Activation ??
@@ -280,43 +297,12 @@ export async function runCodexOAuthRotatingAction(
       return;
     }
     if ('v2Review' in runtime) {
-      requireTerminalV2ReviewResult(runtime.v2Review);
-      core.setOutput('reviewrouter_v2_outcome', runtime.v2Review.outcome);
-      if (runtime.v2Review.outcome === CodexOAuthV2ReviewOutcome.Completed) {
-        await publishCompletedTerminalOutcomeCommitStatus(
-          terminalOutcomeReporter,
-          buildCompletedV2TerminalOutcomeCommitStatus(inputs, runtime.v2Review)
-        );
-        await clearTerminalOutcomeReportsSafely(terminalOutcomeReporter, {
-          reason: 'review_completed',
-        });
-      }
-      await ciProgressReporter?.finish(progressTerminal(runtime.v2Review));
-      const report = buildV2TerminalOutcomeReport(inputs, runtime.v2Review);
-      if (report) {
-        appendTerminalOutcomeStepSummary(report);
-        if (
-          runtime.v2Review.outcome ===
-          CodexOAuthV2ReviewOutcome.PartialCompleted
-        ) {
-          await clearTerminalOutcomeReportsSafely(terminalOutcomeReporter, {
-            reason: 'server_summary_published',
-          });
-          await publishTerminalOutcomeCommitStatusSafely(
-            terminalOutcomeReporter,
-            report.commitStatus
-          );
-        } else {
-          await publishTerminalOutcomeReportSafely(
-            terminalOutcomeReporter,
-            report
-          );
-        }
-      }
-      const terminalFailureCode = v2TerminalFailureCode(runtime.v2Review);
-      if (terminalFailureCode) {
-        core.setFailed(terminalFailureCode);
-      }
+      await finishV2ActionReview(
+        inputs,
+        runtime.v2Review,
+        terminalOutcomeReporter,
+        ciProgressReporter
+      );
       return;
     }
     if (runtime.review.blockingFailure) {
@@ -338,6 +324,256 @@ export async function runCodexOAuthRotatingAction(
     if (t0WorkspacePath) {
       fs.rmSync(t0WorkspacePath, { recursive: true, force: true });
     }
+  }
+}
+
+function isAccountGatewayActionSelected(): boolean {
+  return (
+    (core.getInput('mode') ||
+      process.env.REVIEW_ROUTER_MODE ||
+      core.getInput('REVIEW_ROUTER_MODE')) === ACCOUNT_GATEWAY_ACTION_MODE
+  );
+}
+
+export async function runAccountGatewayAction(
+  options: Parameters<typeof runAccountGatewayActionInternal>[0] = {}
+): Promise<void> {
+  try {
+    await runAccountGatewayActionInternal(options);
+  } finally {
+    try {
+      clearCodexRotatingOidcRequestEnv();
+    } finally {
+      clearCodexRotatingProcessAuthEnv();
+    }
+  }
+}
+
+async function runAccountGatewayActionInternal(
+  options: {
+    fetchImpl?: FetchLike;
+    reviewActionV2Activation?: ReviewActionV2Activation;
+    v2ReviewRunner?: CodexOAuthV2ReviewRunnerPort;
+    terminalOutcomeReporter?: CodexOAuthTerminalOutcomeReporterPort;
+  } = {}
+): Promise<void> {
+  const activation =
+    options.reviewActionV2Activation ??
+    resolveReviewActionV2Activation({ env: process.env });
+  if (
+    activation.mode !== ReviewActionV2RuntimeMode.T0 ||
+    process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE === 'static'
+  ) {
+    throw new Error('account_gateway_requires_authorized_t0');
+  }
+  clearCodexRotatingProviderSecretEnv();
+  clearCodexRotatingProcessAuthEnv();
+  const inputs = readCodexOAuthActionInputs();
+  const createProgressPublisher = (signal: AbortSignal) =>
+    createCiReviewProgressPublisher({
+      repository: inputs.repository,
+      pullRequestNumber: inputs.pullRequestNumber,
+      requestOptions: { signal, timeoutMs: 10_000 },
+      commentEligible: false,
+    });
+  let ciProgressReporter: CiOrchestrationProgressReporter | undefined;
+  await runAccountGatewayRuntime(inputs, {
+    fetchImpl: options.fetchImpl,
+    review: {
+      run: (input) => {
+        const signal = input.accountGateway?.signal;
+        const publisher = signal && createProgressPublisher(signal);
+        if (publisher)
+          ciProgressReporter = new CiOrchestrationProgressReporter(publisher);
+        return (
+          options.v2ReviewRunner ??
+          createProductionT0ReviewRunner({
+            fetchImpl: options.fetchImpl,
+            progress: ciProgressReporter,
+          })
+        ).run(input);
+      },
+    },
+    terminalReview: async (review, signal) => {
+      signal.throwIfAborted();
+      if (options.terminalOutcomeReporter) {
+        await finishV2ActionReview(
+          inputs,
+          review,
+          options.terminalOutcomeReporter,
+          ciProgressReporter ?? null,
+          signal
+        );
+      } else {
+        await finishAccountGatewayActionReview(
+          inputs,
+          review,
+          ciProgressReporter ?? null,
+          signal
+        );
+      }
+      signal.throwIfAborted();
+      core.setOutput('reviewrouter_state', 'completed');
+    },
+    terminalFailure: async (error, { authorized }) => {
+      const cancelled =
+        error instanceof Error && error.message === 'account_gateway_cancelled';
+      // Reporting retains its own deadline after normal work is cancelled.
+      const reportingSignal = AbortSignal.timeout(10_000);
+      const reportingPublisher = createProgressPublisher(reportingSignal);
+      await ciProgressReporter?.finish(
+        cancelled ? 'cancelled' : 'failed',
+        reportingPublisher ?? undefined
+      );
+      core.setOutput('reviewrouter_state', cancelled ? 'cancelled' : 'failed');
+      core.setOutput(
+        'reviewrouter_v2_outcome',
+        CodexOAuthV2ReviewOutcome.Failed
+      );
+      const failure = classifyV2ActionFailure(error);
+      const report = failure.report(inputs);
+      appendTerminalOutcomeStepSummary(report);
+      if (authorized && options.terminalOutcomeReporter) {
+        await publishTerminalOutcomeReportSafely(
+          options.terminalOutcomeReporter,
+          report
+        );
+      }
+      core.setFailed(failure.code);
+    },
+    observeRelay: (fact) => {
+      if (!fact) return;
+      core.setOutput('reviewrouter_gateway_code', fact.code);
+      core.setOutput('reviewrouter_gateway_effect', fact.effect);
+      if (fact.requestRef)
+        core.setOutput('reviewrouter_gateway_request_ref', fact.requestRef);
+      const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+      if (summaryPath) {
+        try {
+          fs.appendFileSync(
+            summaryPath,
+            `\nGateway result: ${fact.code}; effect: ${fact.effect}.\n`,
+            'utf8'
+          );
+        } catch {
+          core.warning('Gateway result step summary unavailable');
+        }
+      }
+    },
+    observeClose: (result) => {
+      const value = result.value;
+      const state =
+        value &&
+        typeof value === 'object' &&
+        'state' in value &&
+        ['pending', 'applied', 'rejected', 'unknown'].includes(
+          String(value.state)
+        ) &&
+        result.httpStatus === 200
+          ? String(value.state)
+          : 'unknown';
+      core.setOutput('reviewrouter_gateway_close_operation', state);
+      core.info(`Gateway close operation: ${state}`);
+    },
+    observeReadback: (requestRef, result) => {
+      const value = result.value;
+      const effect =
+        result.httpStatus === 200 &&
+        value &&
+        typeof value === 'object' &&
+        'effect' in value &&
+        [
+          'not_dispatched',
+          'dispatch_started',
+          'response_started',
+          'completed',
+          'rejected_before_dispatch',
+          'effect_unknown',
+        ].includes(String(value.effect))
+          ? String(value.effect)
+          : 'effect_unknown';
+      core.setOutput('reviewrouter_gateway_request_ref', requestRef);
+      core.setOutput('reviewrouter_gateway_request_effect', effect);
+      core.info(`Gateway request readback: ${effect}`);
+    },
+  });
+}
+
+async function finishAccountGatewayActionReview(
+  inputs: ReturnType<typeof readCodexOAuthActionInputs>,
+  review: CodexOAuthV2ReviewResult,
+  ciProgressReporter: CiOrchestrationProgressReporter | null,
+  signal: AbortSignal
+): Promise<void> {
+  signal.throwIfAborted();
+  requireTerminalV2ReviewResult(review);
+  if (
+    review.outcome === CodexOAuthV2ReviewOutcome.Completed ||
+    review.outcome === CodexOAuthV2ReviewOutcome.PartialCompleted
+  ) {
+    const receipt = review.publicationReceipt;
+    if (
+      typeof receipt?.publicationAttemptId !== 'string' ||
+      !receipt.publicationAttemptId.trim() ||
+      !/^[a-f0-9]{64}$/.test(receipt.canonicalReceiptSetHash)
+    ) {
+      throw new Error('account_gateway_app_publication_receipt_missing');
+    }
+    core.info(
+      `ReviewRouter App publication completed: ${receipt.publicationAttemptId} (receipt ${receipt.canonicalReceiptSetHash}).`
+    );
+  }
+  core.setOutput('reviewrouter_v2_outcome', review.outcome);
+  await ciProgressReporter?.finish(progressTerminal(review));
+  signal.throwIfAborted();
+  const report = buildV2TerminalOutcomeReport(inputs, review);
+  if (report) appendTerminalOutcomeStepSummary(report);
+  const terminalFailureCode = v2TerminalFailureCode(review);
+  if (terminalFailureCode) core.setFailed(terminalFailureCode);
+}
+
+async function finishV2ActionReview(
+  inputs: ReturnType<typeof readCodexOAuthActionInputs>,
+  review: CodexOAuthV2ReviewResult,
+  terminalOutcomeReporter: CodexOAuthTerminalOutcomeReporterPort,
+  ciProgressReporter: CiOrchestrationProgressReporter | null,
+  signal?: AbortSignal
+): Promise<void> {
+  signal?.throwIfAborted();
+  requireTerminalV2ReviewResult(review);
+  core.setOutput('reviewrouter_v2_outcome', review.outcome);
+  if (review.outcome === CodexOAuthV2ReviewOutcome.Completed) {
+    await publishCompletedTerminalOutcomeCommitStatus(
+      terminalOutcomeReporter,
+      buildCompletedV2TerminalOutcomeCommitStatus(inputs, review)
+    );
+    signal?.throwIfAborted();
+    await clearTerminalOutcomeReportsSafely(terminalOutcomeReporter, {
+      reason: 'review_completed',
+    });
+  }
+  signal?.throwIfAborted();
+  await ciProgressReporter?.finish(progressTerminal(review));
+  signal?.throwIfAborted();
+  const report = buildV2TerminalOutcomeReport(inputs, review);
+  if (report) {
+    appendTerminalOutcomeStepSummary(report);
+    if (review.outcome === CodexOAuthV2ReviewOutcome.PartialCompleted) {
+      await clearTerminalOutcomeReportsSafely(terminalOutcomeReporter, {
+        reason: 'server_summary_published',
+      });
+      signal?.throwIfAborted();
+      await publishTerminalOutcomeCommitStatusSafely(
+        terminalOutcomeReporter,
+        report.commitStatus
+      );
+    } else {
+      await publishTerminalOutcomeReportSafely(terminalOutcomeReporter, report);
+    }
+  }
+  const terminalFailureCode = v2TerminalFailureCode(review);
+  if (terminalFailureCode) {
+    core.setFailed(terminalFailureCode);
   }
 }
 
@@ -393,6 +629,89 @@ type V2ActionFailure = Readonly<{
 
 function classifyV2ActionFailure(error: unknown): V2ActionFailure {
   if (
+    !(error instanceof ReviewActionV2ClientError) &&
+    error instanceof Error &&
+    error.cause instanceof ReviewActionV2ClientError
+  ) {
+    error = error.cause;
+  }
+  // Only closed contract values may reach logs/comments. Never copy message,
+  // validation issues, cause, response bodies, capabilities or request payloads.
+  if (
+    error instanceof ReviewActionV2ClientError &&
+    Object.values(ReviewActionV2ClientFailureCode).includes(error.code) &&
+    Object.values(ReviewActionV2OperationId).includes(error.operationId)
+  ) {
+    const fields = [
+      `review_action_v2_${error.code}`,
+      `operation=${error.operationId}`,
+    ];
+    if (
+      typeof error.httpStatus === 'number' &&
+      Number.isInteger(error.httpStatus) &&
+      error.httpStatus >= 100 &&
+      error.httpStatus <= 599
+    ) {
+      fields.push(`http_status=${error.httpStatus}`);
+    }
+    if (
+      error.protocolErrorCode !== undefined &&
+      Object.values(ReviewActionV2ProtocolErrorCode).includes(
+        error.protocolErrorCode
+      )
+    ) {
+      fields.push(`error_code=${error.protocolErrorCode}`);
+    }
+    return diagnosedV2ActionFailure(fields.join(' '));
+  }
+  if (
+    error instanceof Error &&
+    [
+      'account_gateway_authorization_input_mismatch',
+      'account_gateway_checkout_capability_unavailable',
+      'account_gateway_checkout_capability_invalid',
+      'account_gateway_runtime_config_changed',
+      'account_gateway_readback_unknown',
+      'account_gateway_authorization_unavailable',
+      'account_gateway_codex_version_unqualified',
+      'account_gateway_git_failed',
+      'account_gateway_git_timeout',
+      'account_gateway_git_output_bound',
+      'review_revision_materialization_incomplete',
+      'review_revision_materialization_input_invalid',
+      'review_revision_materialization_sha_invalid',
+      'review_action_v2_checked_out_head_invalid',
+      'review_action_v2_scm_read_token_invalid',
+      'account_gateway_mimo_reasoning_effort_unsupported',
+      'runtime_config_invalid_response',
+      'runtime_config_unsafe_admitted_env',
+      'review_action_v2_authorization_denied',
+      'review_action_v2_authorization_facts_fields_invalid',
+      'review_action_v2_codex_provider_missing',
+      'review_action_v2_command_ledger_unavailable',
+    ].includes(error.message)
+  ) {
+    return diagnosedV2ActionFailure(error.message);
+  }
+  if (error instanceof Error && error.message === 'account_gateway_cancelled') {
+    return {
+      code: error.message,
+      report: (inputs) =>
+        terminalOutcomeReport({
+          inputs,
+          kind: CodexOAuthTerminalOutcomeKind.Failed,
+          title: 'Review cancelled',
+          summary:
+            'ReviewRouter received run cancellation and stopped starting normal review work.',
+          rows: [['Outcome', 'cancelled']],
+          note: 'An external effect already entered may have applied. Its outcome remains unconfirmed; no rollback or replay is claimed.',
+          statusState: 'error',
+          statusDescription:
+            'Review cancelled: external effects may be unconfirmed.',
+        }),
+    };
+  }
+  if (
     error instanceof Error &&
     error.message === 'review_action_v2_success_status_publication_failed'
   ) {
@@ -413,6 +732,26 @@ function classifyV2ActionFailure(error: unknown): V2ActionFailure {
   return {
     code: 'review_action_v2_terminal_result_missing',
     report: buildMissingV2TerminalOutcomeReport,
+  };
+}
+
+function diagnosedV2ActionFailure(code: string): V2ActionFailure {
+  return {
+    code,
+    report: (inputs) =>
+      terminalOutcomeReport({
+        inputs,
+        kind: CodexOAuthTerminalOutcomeKind.Failed,
+        title: 'Review failed ⚠️',
+        summary: 'ReviewRouter stopped without a terminal review result.',
+        rows: [
+          ['Outcome', 'failed'],
+          ['Failure code', code],
+        ],
+        note: 'No approval was published. Inspect the workflow failure before retrying.',
+        statusState: 'error',
+        statusDescription: 'Review failed: control plane or runtime error.',
+      }),
   };
 }
 

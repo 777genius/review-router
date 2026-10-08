@@ -21,15 +21,23 @@ export async function prepareCodexCliBeforeAuthRead(
   input: {
     logger?: CodexCliLogger;
     timeoutMs?: number;
+    signal?: AbortSignal;
   } = {}
 ): Promise<PreparedCodexCli> {
+  input.signal?.throwIfAborted();
   const explicit = process.env.REVIEWROUTER_CODEX_BINARY?.trim();
   if (explicit) {
-    await assertCodexBinaryWorks(explicit, input.timeoutMs ?? 10_000);
+    await assertCodexBinaryWorks(
+      explicit,
+      input.timeoutMs ?? 10_000,
+      input.signal
+    );
     return { binaryPath: explicit };
   }
 
-  if (await canRunCodexBinary('codex', input.timeoutMs ?? 10_000)) {
+  if (
+    await canRunCodexBinary('codex', input.timeoutMs ?? 10_000, input.signal)
+  ) {
     return { binaryPath: 'codex' };
   }
 
@@ -39,41 +47,61 @@ export async function prepareCodexCliBeforeAuthRead(
   const installRoot = await fs.mkdtemp(
     path.join(os.tmpdir(), 'reviewrouter-codex-cli-')
   );
-  await runNpmInstall({
-    installRoot,
-    timeoutMs: input.timeoutMs ?? CODEX_OAUTH_CLI_INSTALL_TIMEOUT_MS,
-  });
-  const binaryPath = path.join(installRoot, 'node_modules', '.bin', 'codex');
-  await assertCodexBinaryWorks(binaryPath, input.timeoutMs ?? 10_000);
-  return {
-    binaryPath,
-    async clear() {
+  try {
+    await runNpmInstall({
+      installRoot,
+      timeoutMs: input.timeoutMs ?? CODEX_OAUTH_CLI_INSTALL_TIMEOUT_MS,
+      signal: input.signal,
+    });
+    const binaryPath = path.join(installRoot, 'node_modules', '.bin', 'codex');
+    await assertCodexBinaryWorks(
+      binaryPath,
+      input.timeoutMs ?? 10_000,
+      input.signal
+    );
+    return {
+      binaryPath,
+      async clear() {
+        await fs.rm(installRoot, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    try {
       await fs.rm(installRoot, { recursive: true, force: true });
-    },
-  };
+    } catch {
+      input.logger?.warn(
+        'Codex CLI install cleanup failed; removal unconfirmed'
+      );
+    }
+    throw error;
+  }
 }
 
 async function assertCodexBinaryWorks(
   binaryPath: string,
-  timeoutMs: number
+  timeoutMs: number,
+  signal?: AbortSignal
 ): Promise<void> {
-  if (!(await canRunCodexBinary(binaryPath, timeoutMs))) {
+  if (!(await canRunCodexBinary(binaryPath, timeoutMs, signal))) {
     throw new Error('codex_oauth_codex_cli_unavailable');
   }
 }
 
 async function canRunCodexBinary(
   binaryPath: string,
-  timeoutMs: number
+  timeoutMs: number,
+  signal?: AbortSignal
 ): Promise<boolean> {
   try {
     await runCommand(binaryPath, ['--version'], {
       timeoutMs,
+      signal,
       cwd: os.tmpdir(),
       env: safePreAuthEnv(),
     });
     return true;
   } catch {
+    signal?.throwIfAborted();
     return false;
   }
 }
@@ -81,6 +109,7 @@ async function canRunCodexBinary(
 async function runNpmInstall(input: {
   installRoot: string;
   timeoutMs: number;
+  signal?: AbortSignal;
 }): Promise<void> {
   await runCommand(
     'npm',
@@ -95,6 +124,7 @@ async function runNpmInstall(input: {
     ],
     {
       timeoutMs: input.timeoutMs,
+      signal: input.signal,
       cwd: input.installRoot,
       env: safePreAuthEnv(),
     }
@@ -108,27 +138,44 @@ function runCommand(
     timeoutMs: number;
     cwd: string;
     env: NodeJS.ProcessEnv;
+    signal?: AbortSignal;
   }
 ): Promise<void> {
+  options.signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
+      detached: options.signal !== undefined && process.platform !== 'win32',
       env: options.env,
       stdio: ['ignore', 'ignore', 'pipe'],
     });
     let stderr = '';
     let timedOut = false;
+    const stop = () => {
+      try {
+        if (options.signal && process.platform !== 'win32' && child.pid)
+          process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    };
+    options.signal?.addEventListener('abort', stop, { once: true });
+    if (options.signal?.aborted) stop();
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGKILL');
-      reject(new Error('codex_oauth_codex_cli_prepare_timeout'));
+      stop();
     }, options.timeoutMs);
+    const finish = () => {
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', stop);
+    };
     child.stderr?.on('data', (chunk) => {
       stderr += String(chunk);
     });
     child.on('error', (error) => {
-      if (timedOut) return;
-      clearTimeout(timer);
+      if (child.pid) return;
+      finish();
       reject(
         new Error(
           `codex_oauth_codex_cli_prepare_failed:${safeOutput(String(error))}`
@@ -136,8 +183,16 @@ function runCommand(
       );
     });
     child.on('close', (code) => {
-      if (timedOut) return;
-      clearTimeout(timer);
+      finish();
+      // Await subprocess close before deleting the install root.
+      if (options.signal?.aborted || timedOut) {
+        reject(
+          options.signal?.aborted
+            ? options.signal.reason
+            : new Error('codex_oauth_codex_cli_prepare_timeout')
+        );
+        return;
+      }
       if (code === 0) {
         resolve();
         return;

@@ -103,6 +103,11 @@ export class ReviewActionV2ControlPlaneAdapter
 
   constructor(private readonly client: ReviewActionV2Client) {}
 
+  /** Model relay/SCM/terminal close read this at call time, including after renewal. */
+  currentAuthorization(): ReviewRunAuthorization {
+    return this.requireActiveAuthorization();
+  }
+
   /** Trusted continuation of an actual fresh native receipt. This does not
    * authorize, renew, restore or perform any remote operation. The server still
    * validates the receipt's capability on every subsequent mutation. */
@@ -154,7 +159,8 @@ export class ReviewActionV2ControlPlaneAdapter
           renewalRequestId: input.renewalRequestId,
           oidcToken: input.oidcToken,
           requestedTtlMs: input.requestedTtlMs,
-        }
+        },
+        { maxAttempts: 5, retryBaseDelayMs: 5_000 }
       );
     } catch (error) {
       throw controlPlaneFailure(error);

@@ -1,5 +1,48 @@
 import * as core from '../actions/core';
 import { GitHubClient } from '../github/client';
+import { setTimeout as delay } from 'node:timers/promises';
+
+export type PublicationRequestOptions = {
+  readonly signal?: AbortSignal;
+  readonly timeoutMs?: number;
+};
+
+export function createPublicationGitHubClient(
+  token: string,
+  options: PublicationRequestOptions = {}
+): GitHubClient {
+  const client = new GitHubClient(token, {
+    sleep: async (ms) => {
+      await delay(ms, undefined, { signal: options.signal });
+    },
+  });
+  if (options.signal || options.timeoutMs) {
+    client.octokit.hook.wrap('request', (request, parameters) => {
+      options.signal?.throwIfAborted();
+      const signal = options.timeoutMs
+        ? AbortSignal.any([
+            ...(options.signal ? [options.signal] : []),
+            AbortSignal.timeout(options.timeoutMs),
+          ])
+        : options.signal;
+      const fetchImpl = parameters.request?.fetch ?? fetch;
+      parameters.request = {
+        ...parameters.request,
+        signal,
+        ...(options.timeoutMs ? { timeout: options.timeoutMs } : {}),
+        fetch: (
+          url: Parameters<typeof fetch>[0],
+          init?: Parameters<typeof fetch>[1]
+        ) => {
+          signal?.throwIfAborted();
+          return fetchImpl(url, { ...init, signal });
+        },
+      };
+      return request(parameters);
+    });
+  }
+  return client;
+}
 
 export interface CodexOAuthTerminalOutcomeReporterPort {
   post(input: CodexOAuthTerminalOutcomeReport): Promise<void>;
@@ -101,6 +144,7 @@ export class TerminalOutcomePublicationUseCase implements CodexOAuthTerminalOutc
       readonly context: CodexOAuthTerminalOutcomePublicationContext;
       readonly github: TerminalOutcomePublicationGitHubPort;
       readonly logger?: TerminalOutcomePublicationLoggerPort;
+      readonly signal?: AbortSignal;
     }
   ) {}
 
@@ -129,6 +173,7 @@ export class TerminalOutcomePublicationUseCase implements CodexOAuthTerminalOutc
   }
 
   async clear(_request: CodexOAuthTerminalOutcomeClearRequest): Promise<void> {
+    this.input.signal?.throwIfAborted();
     const comments = await this.input.github.listPullRequestComments({
       repository: this.input.context.repository,
       pullRequestNumber: this.input.context.pullRequestNumber,
@@ -138,6 +183,7 @@ export class TerminalOutcomePublicationUseCase implements CodexOAuthTerminalOutc
       (comment.body ?? '').includes(currentRevisionMarker)
     );
     for (const comment of terminalComments) {
+      this.input.signal?.throwIfAborted();
       await this.input.github.deletePullRequestComment({
         repository: this.input.context.repository,
         commentId: comment.id,
@@ -152,6 +198,7 @@ export class TerminalOutcomePublicationUseCase implements CodexOAuthTerminalOutc
   private async upsertPullRequestComment(
     report: CodexOAuthTerminalOutcomeReport
   ): Promise<void> {
+    this.input.signal?.throwIfAborted();
     const comments = await this.input.github.listPullRequestComments({
       repository: this.input.context.repository,
       pullRequestNumber: this.input.context.pullRequestNumber,
@@ -163,6 +210,7 @@ export class TerminalOutcomePublicationUseCase implements CodexOAuthTerminalOutc
     if (existing) {
       for (const duplicate of duplicates) {
         try {
+          this.input.signal?.throwIfAborted();
           await this.input.github.deletePullRequestComment({
             repository: this.input.context.repository,
             commentId: duplicate.id,
@@ -179,6 +227,7 @@ export class TerminalOutcomePublicationUseCase implements CodexOAuthTerminalOutc
         );
         return;
       }
+      this.input.signal?.throwIfAborted();
       await this.input.github.updatePullRequestComment({
         repository: this.input.context.repository,
         commentId: existing.id,
@@ -186,6 +235,7 @@ export class TerminalOutcomePublicationUseCase implements CodexOAuthTerminalOutc
       });
       return;
     }
+    this.input.signal?.throwIfAborted();
     await this.input.github.createPullRequestComment({
       repository: this.input.context.repository,
       pullRequestNumber: this.input.context.pullRequestNumber,
@@ -197,6 +247,7 @@ export class TerminalOutcomePublicationUseCase implements CodexOAuthTerminalOutc
     status: CodexOAuthTerminalOutcomeCommitStatus
   ): Promise<void> {
     try {
+      this.input.signal?.throwIfAborted();
       await this.input.github.createCommitStatus({
         repository: this.input.context.repository,
         headSha: this.input.context.headSha,
@@ -223,8 +274,8 @@ export class TerminalOutcomePublicationUseCase implements CodexOAuthTerminalOutc
 export class GitHubTerminalOutcomePublicationAdapter implements TerminalOutcomePublicationGitHubPort {
   private readonly client: GitHubClient;
 
-  constructor(token: string) {
-    this.client = new GitHubClient(token);
+  constructor(token: string, options: PublicationRequestOptions = {}) {
+    this.client = createPublicationGitHubClient(token, options);
   }
 
   async listPullRequestComments(input: {
@@ -312,24 +363,31 @@ export function createDefaultCodexOAuthTerminalOutcomeReporter(input: {
   readonly audience: string;
   readonly controlPlane: TerminalOutcomePublicationControlPlanePort;
   readonly oidc: { requestToken(audience: string): Promise<string> };
+  readonly requestOptions?: PublicationRequestOptions;
 }): CodexOAuthTerminalOutcomeReporterPort {
   const requestActionCommentToken = async (): Promise<string> => {
+    input.requestOptions?.signal?.throwIfAborted();
     const oidcToken = await input.oidc.requestToken(input.audience);
+    input.requestOptions?.signal?.throwIfAborted();
     const session = await input.controlPlane.actionSession({
       oidcToken,
       audience: input.audience,
     });
+    input.requestOptions?.signal?.throwIfAborted();
     const commentToken = await input.controlPlane.actionCommentToken({
       sessionToken: session.sessionToken,
     });
+    input.requestOptions?.signal?.throwIfAborted();
     return commentToken.token;
   };
 
   const createUseCase = async (): Promise<TerminalOutcomePublicationUseCase> =>
     new TerminalOutcomePublicationUseCase({
       context: input.context,
+      signal: input.requestOptions?.signal,
       github: new GitHubTerminalOutcomePublicationAdapter(
-        await requestActionCommentToken()
+        await requestActionCommentToken(),
+        input.requestOptions
       ),
     });
 

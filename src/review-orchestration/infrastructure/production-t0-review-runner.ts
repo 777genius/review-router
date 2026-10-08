@@ -1,7 +1,8 @@
 import { createHash } from 'crypto';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import * as path from 'path';
 import { promisify } from 'util';
+import { setTimeout as delay } from 'node:timers/promises';
 import * as core from '../../actions/core';
 import { PromptBuilder } from '../../analysis/llm/prompt-builder';
 import { getProviderReviewTotalAttempts } from '../../analysis/llm/retry-policy';
@@ -11,7 +12,10 @@ import {
 } from '../../cache/key-builder';
 import { ConfigLoader } from '../../config/loader';
 export { ConfigLoader } from '../../config/loader';
-import { applyControlPlaneRuntimeConfig } from '../../control-plane/runtime-config';
+import {
+  applyAdmittedRuntimeConfig,
+  applyControlPlaneRuntimeConfig,
+} from '../../control-plane/runtime-config';
 import { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
 export { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../context-gateway/context-gateway-release-contract';
@@ -26,6 +30,7 @@ import type { GitHubTokenProvider } from '../../github/token-provider';
 import { ReviewLedger } from '../../github/ledger';
 import { PullRequestLoader } from '../../github/pr-loader';
 import { CodexProvider } from '../../providers/codex';
+import { prepareAccountGatewayModelCatalog } from '../../codex-oauth/account-gateway-mimo-catalog';
 import { recoverDiffForFiles } from '../../utils/diff';
 import { logger } from '../../utils/logger';
 import { emitReviewInvestigationTelemetry } from './review-investigation-telemetry';
@@ -86,6 +91,15 @@ import {
   projectReviewRunAuthorization,
 } from './review-action-v2-control-plane-adapter';
 import type { ReviewRunAuthorizeResult } from '../../control-plane/generated/review-action-v2/review-action-v2';
+import {
+  ACCOUNT_GATEWAY_BOUNDS,
+  createAccountGatewayRunFetch,
+  type LocalGatewayModelTransport,
+} from './account-gateway-model-transport';
+import {
+  NodeCodexAppServerTurnRunner,
+  type CodexAppServerTurnRunnerPort,
+} from '../../review-investigation/infrastructure/codex-app-server-turn-runner';
 import { SystemReviewOrchestrationClock } from './system-review-orchestration-clock';
 import {
   CodexReviewAgentAdapter,
@@ -125,6 +139,7 @@ import {
   type ConfiguredProductionReviewAgent,
 } from './production-review-investigation-composition';
 import { ReviewActionV2InvestigationContextAttestationAdapter } from './review-action-v2-investigation-context-attestation-adapter';
+import type { CodexReviewAgentAdapterOptions } from '../../review-investigation/infrastructure/codex-review-agent-adapter';
 
 const execFileAsync = promisify(execFile);
 const CODEX_RETRY_POLICY_VERSION = 'codex-semantic-retry.v1';
@@ -139,6 +154,15 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
   async run(
     input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]
   ): Promise<CodexOAuthV2ReviewResult> {
+    if (
+      input.codexBinaryPath &&
+      path.basename(input.codexBinaryPath) !== input.codexBinaryPath
+    ) {
+      input = {
+        ...input,
+        codexBinaryPath: path.resolve(process.cwd(), input.codexBinaryPath),
+      };
+    }
     return withRunnerEnvironment(input, async () => {
       try {
         return await this.runInWorkspace(input);
@@ -153,31 +177,63 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
   private async runInWorkspace(
     input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]
   ): Promise<CodexOAuthV2ReviewResult> {
+    const signal = input.accountGateway?.signal;
+    signal?.throwIfAborted();
+    const fetchImpl = signal
+      ? createAccountGatewayRunFetch(this.fetchImpl, signal)
+      : this.fetchImpl;
     validateInput(input);
     const authoritativeDeadlineEpochMs =
       process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
     const oidc = new GitHubActionsOidcTokenProvider({
-      fetchImpl: this.fetchImpl,
+      fetchImpl,
     });
-    await applyReviewRuntimeConfig(input, this.fetchImpl, oidc);
+    const serverReasoningEffort = await applyReviewRuntimeConfig(
+      input,
+      fetchImpl,
+      oidc
+    );
     if (authoritativeDeadlineEpochMs === undefined) {
       delete process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
     } else {
       process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY] =
         authoritativeDeadlineEpochMs;
     }
-    const config = ConfigLoader.load();
+    signal?.throwIfAborted();
+    const loadedConfig = ConfigLoader.load();
+    const config = input.accountGateway
+      ? { ...loadedConfig, providerRetries: 1 }
+      : loadedConfig;
+    const codexProviderName = selectCodexProvider(config);
+    const model = codexProviderName.slice('codex/'.length);
+    const reasoningEffort = resolveProductionInvestigationReasoningEffort({
+      codexModel: model,
+      accountGateway: input.accountGateway !== undefined,
+      serverReasoningEffort,
+    });
+    if (input.accountGateway && model === 'mimo-v2.6-pro') {
+      process.env.CODEX_REASONING_EFFORT = reasoningEffort;
+    }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
+    const configuredTimeoutMs = Math.max(
+      1_000,
+      config.runTimeoutSeconds * 1_000
+    );
+    const providerTimeoutMs = input.accountGateway
+      ? Math.min(ACCOUNT_GATEWAY_BOUNDS.requestMs, configuredTimeoutMs)
+      : configuredTimeoutMs;
     const reviewActionClient = new ReviewActionV2Client({
       apiUrl: input.apiUrl,
-      fetchImpl: this.fetchImpl,
+      fetchImpl,
     });
-    const controlPlane = new ReviewActionV2ControlPlaneAdapter(
-      reviewActionClient
-    );
-    const authorization = await controlPlane.authorize({
-      oidcToken: await oidc.requestToken(input.audience),
-    });
+    const controlPlane =
+      input.accountGateway?.controlPlane ??
+      new ReviewActionV2ControlPlaneAdapter(reviewActionClient);
+    const authorization = input.accountGateway
+      ? controlPlane.currentAuthorization()
+      : await controlPlane.authorize({
+          oidcToken: await oidc.requestToken(input.audience),
+        });
     validateAuthorizationInput(input, authorization);
 
     const scmReadTokenProvider = createScmReadTokenProvider({
@@ -185,8 +241,12 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       expiresAt: input.scmReadTokenExpiresAt,
       refresh: input.refreshScmReadToken,
     });
-    const github = new GitHubClient(input.scmReadToken, {
+    const github = createScmReadGitHubClient({
       tokenProvider: scmReadTokenProvider,
+      token: input.scmReadToken,
+      expiresAt: input.scmReadTokenExpiresAt,
+      refresh: input.refreshScmReadToken,
+      signal,
     });
     const revisionGuard = new GitHubReviewRevisionGuard(github, {
       workspaceId: authorization.facts.workspaceId,
@@ -194,7 +254,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       scmRepositoryIdentityId: authorization.facts.scmRepositoryIdentityId,
       pullRequestNumber: authorization.facts.pullRequestNumber,
     });
-    const checkedOutHead = await readCheckedOutHead(input.workspacePath);
+    const checkedOutHead = await readCheckedOutHead(
+      input.workspacePath,
+      signal
+    );
     if (checkedOutHead !== authorization.facts.headSha) {
       throw new Error('review_action_v2_checked_out_revision_mismatch');
     }
@@ -218,7 +281,16 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     ) {
       return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
     }
-    await new GitReviewRevisionMaterializer().ensureAvailable({
+    signal?.throwIfAborted();
+    const materializer = new GitReviewRevisionMaterializer(
+      signal
+        ? async (args, options) => {
+            signal.throwIfAborted();
+            await runAccountGatewayGit(args, options, signal);
+          }
+        : undefined
+    );
+    await materializer.ensureAvailable({
       checkoutRoot: path.resolve(input.workspacePath),
       repository: input.repository,
       scmReadToken: await scmReadTokenProvider.getToken(),
@@ -236,8 +308,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       pr.number,
       authorization.facts.headSha
     );
-    const codexProviderName = selectCodexProvider(config);
-    const model = codexProviderName.slice('codex/'.length);
+    signal?.throwIfAborted();
     const agenticContext = config.codexAgenticContext ?? true;
     const investigationRolloutResolution =
       resolveProductionReviewInvestigationRolloutResolution({
@@ -257,6 +328,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const provider = new CodexProvider(model, {
       agenticContext,
       eventAudit: config.codexEventAudit,
+      ...(input.accountGateway
+        ? { accountGateway: input.accountGateway.modelTransport }
+        : {}),
     });
     const compatibilityKey = hashIncrementalCompatibility(
       config,
@@ -292,12 +366,13 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       compatibilityKey,
       lifecycleTargets: initialLifecycle.promptTargets,
       liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+      accountGateway: input.accountGateway !== undefined,
     });
     const invocationAdapter = new CodexReviewInvocationAdapter(
       provider,
       new PromptBuilder(config),
       planned.assignments,
-      Math.max(1_000, config.runTimeoutSeconds * 1_000),
+      providerTimeoutMs,
       agenticContext,
       contextGateway,
       false
@@ -310,10 +385,11 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             provider,
             new PromptBuilder(config),
             planned.assignments,
-            Math.max(1_000, config.runTimeoutSeconds * 1_000),
+            providerTimeoutMs,
             agenticContext,
             contextGateway,
-            true
+            true,
+            reasoningEffort
           ),
       });
     const identities = new DeterministicReviewOrchestrationIdentity();
@@ -326,6 +402,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             (recordingInput) => {
               const legacyFallbackGate =
                 new ReviewInvestigationLegacyFallbackGate();
+              if (input.accountGateway) legacyFallbackGate.close();
               const investigationControlPlane =
                 new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
                   investigationProtocol,
@@ -373,12 +450,14 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                   codexModel: model,
                   codexBinaryPath: input.codexBinaryPath,
                   executionSessions: gateway,
+                  modelTransport: input.accountGateway?.modelTransport,
+                  reasoningEffort,
                 }),
               });
               return new RunInvestigationWorkSlot({
                 controlPlane: investigationControlPlane,
                 legacyFallbackGate,
-                delay: new SystemReviewOrchestrationDelay(),
+                delay: new CancellableReviewOrchestrationDelay(),
                 leases: new ReviewActionV2InvestigationLeaseAdapter(
                   reviewActionClient
                 ),
@@ -406,12 +485,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             },
             {
               workingDirectory: path.resolve(input.workspacePath),
-              leaseDurationMs:
-                Math.max(1_000, config.runTimeoutSeconds * 1_000) + 5 * 60_000,
-              providerTimeoutMs: Math.max(
-                1_000,
-                config.runTimeoutSeconds * 1_000
-              ),
+              leaseDurationMs: providerTimeoutMs + 5 * 60_000,
+              providerTimeoutMs: providerTimeoutMs,
               certificateTtlMs: 24 * 60 * 60_000,
               minimumCapacityParkMs: 60_000,
               actionBudget: reviewInvestigationActionBudgetForDepth(
@@ -470,8 +545,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         : {}),
       identities,
       clock: new SystemReviewOrchestrationClock(),
-      delay: new SystemReviewOrchestrationDelay(),
+      delay: new CancellableReviewOrchestrationDelay(),
       executionDeadline,
+      signal,
       ...(this.progress ? { progress: this.progress } : {}),
     });
     const result = await useCase.executeAuthorized(
@@ -508,6 +584,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       },
       authorization
     );
+    signal?.throwIfAborted();
     return mapOrchestrationResultToCodexOutcome(result);
   }
 }
@@ -682,21 +759,91 @@ function publicInvestigationProcessDiagnostic(stderr: string): Readonly<{
   });
 }
 
-function createConfiguredProductionInvestigationAgents(input: {
+export function resolveProductionInvestigationReasoningEffort(input: {
+  readonly codexModel: string;
+  readonly accountGateway: boolean;
+  readonly serverReasoningEffort?: string;
+}): NonNullable<CodexReviewAgentAdapterOptions['reasoningEffort']> {
+  if (!input.accountGateway || input.codexModel !== 'mimo-v2.6-pro') {
+    return 'xhigh';
+  }
+  // Only the applied server field authorizes effort; caller env can survive
+  // an omitted runtime value. The approved MiMo default is high.
+  const effort = input.serverReasoningEffort ?? 'high';
+  if (effort !== 'low' && effort !== 'medium' && effort !== 'high') {
+    throw new Error('account_gateway_mimo_reasoning_effort_unsupported');
+  }
+  return effort;
+}
+
+/** Internal production composition; model is selected after runtime config and revision checks. */
+export function createConfiguredProductionInvestigationAgents(input: {
   readonly codexModel: string;
   readonly codexBinaryPath: string | undefined;
   readonly executionSessions: ReviewAgentExecutionSessionResolverPort;
+  readonly modelTransport?: LocalGatewayModelTransport;
+  readonly reasoningEffort: NonNullable<
+    CodexReviewAgentAdapterOptions['reasoningEffort']
+  >;
 }): readonly ConfiguredProductionReviewAgent[] {
+  const reasoningEffort = input.reasoningEffort;
   const processRunner = new NodeReviewAgentProcessRunner();
+  const appServer = input.modelTransport
+    ? new NodeCodexAppServerTurnRunner()
+    : undefined;
   return Object.freeze([
     {
       providerKind: ReviewAgentProviderKind.Codex,
       requestedModel: input.codexModel,
       agent: new CodexReviewAgentAdapter(processRunner, {
         executionSessions: input.executionSessions,
-        providerCredentialEnvironment: codexCredentialEnvironment,
+        providerCredentialEnvironment: input.modelTransport
+          ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME })
+          : codexCredentialEnvironment,
+        ...(appServer && input.modelTransport
+          ? {
+              appServerRunner: {
+                executeTurn: async (
+                  request: Parameters<
+                    CodexAppServerTurnRunnerPort['executeTurn']
+                  >[0]
+                ) => {
+                  // Use the selected production model, never the turn's caller model.
+                  // Pin the same fresh-home catalog as exec, above checkout config.
+                  const catalogSetting =
+                    await prepareAccountGatewayModelCatalog(
+                      input.codexModel,
+                      input.modelTransport!.environment.CODEX_HOME,
+                      input.modelTransport!.configuration
+                    );
+                  const result = await appServer.executeTurn({
+                    ...request,
+                    args: [
+                      ...request.args,
+                      ...input.modelTransport!.configuration.flatMap(
+                        (setting) => ['-c', setting]
+                      ),
+                      ...(catalogSetting ? ['-c', catalogSetting] : []),
+                    ],
+                    // Attach the local capability after the existing upstream credential allowlist.
+                    // MCP env_vars never include it; current RR token remains in the bridge.
+                    environment: {
+                      ...request.environment,
+                      ...input.modelTransport!.environment,
+                    },
+                  });
+                  const actualModel = input.modelTransport!.actualModel();
+                  if (!actualModel)
+                    throw new Error('review_agent_actual_model_unavailable');
+                  return { ...result, actualModel };
+                },
+                cancel: (invocationId: string, fencingToken: string) =>
+                  appServer.cancel(invocationId, fencingToken),
+              },
+            }
+          : {}),
         ...(input.codexBinaryPath ? { binary: input.codexBinaryPath } : {}),
-        reasoningEffort: 'xhigh',
+        reasoningEffort,
         processResultObserver: (result) => {
           if (
             result.termination === ReviewAgentProcessTermination.Exited &&
@@ -718,14 +865,24 @@ function createConfiguredProductionInvestigationAgents(input: {
 
 export function mapOrchestrationResultToCodexOutcome(result: {
   readonly status: ReviewOrchestrationResultStatus;
+  readonly publicationAttemptId?: string;
+  readonly canonicalReceiptSetHash?: string;
   readonly failureCode?: string;
   readonly mergeGateConclusion?: MergeGateConclusion;
   readonly unavailablePublicationFacts?: readonly ReviewPublicationUnavailableFact[];
 }): CodexOAuthV2ReviewResult {
+  const publicationReceipt =
+    result.publicationAttemptId && result.canonicalReceiptSetHash
+      ? {
+          publicationAttemptId: result.publicationAttemptId,
+          canonicalReceiptSetHash: result.canonicalReceiptSetHash,
+        }
+      : undefined;
   switch (result.status) {
     case ReviewOrchestrationResultStatus.Completed:
       return {
         outcome: CodexOAuthV2ReviewOutcome.Completed,
+        ...(publicationReceipt ? { publicationReceipt } : {}),
         mergeGateConclusion: requireMergeGateConclusion(
           result.mergeGateConclusion
         ),
@@ -733,6 +890,7 @@ export function mapOrchestrationResultToCodexOutcome(result: {
     case ReviewOrchestrationResultStatus.PartialCompleted:
       return {
         outcome: CodexOAuthV2ReviewOutcome.PartialCompleted,
+        ...(publicationReceipt ? { publicationReceipt } : {}),
         reason: mapPartialFailureReason(result.failureCode),
         ...(result.failureCode ? { blockingFailure: result.failureCode } : {}),
       };
@@ -858,6 +1016,53 @@ function mapExecutionFailureReason(
   return failureCode
     ? CodexOAuthV2TerminalReason.ExecutionFailed
     : CodexOAuthV2TerminalReason.Unknown;
+}
+
+// The runner's SCM client keeps capability refresh and gateway transport bounds together.
+export function createScmReadGitHubClient(input: {
+  readonly tokenProvider?: ReturnType<typeof createScmReadTokenProvider>;
+  readonly token: string;
+  readonly expiresAt: string;
+  readonly refresh: Parameters<typeof createScmReadTokenProvider>[0]['refresh'];
+  readonly signal?: AbortSignal;
+  readonly timeoutMs?: number;
+}): GitHubClient {
+  const { signal, timeoutMs = 30_000 } = input;
+  const github = new GitHubClient(input.token, {
+    tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
+    ...(signal
+      ? {
+          sleep: async (ms: number) => {
+            await delay(ms, undefined, { signal });
+          },
+        }
+      : {}),
+  });
+  if (signal) {
+    github.octokit.hook.wrap('request', (request, options) => {
+      signal.throwIfAborted();
+      const requestSignal = AbortSignal.any([
+        signal,
+        AbortSignal.timeout(timeoutMs),
+      ]);
+      const fetchImpl = options.request?.fetch ?? fetch;
+      // Inner Octokit hooks bind this object; a clone loses these controls.
+      options.request = {
+        ...options.request,
+        signal: requestSignal,
+        timeout: timeoutMs,
+        fetch: (
+          url: Parameters<typeof fetch>[0],
+          init?: Parameters<typeof fetch>[1]
+        ) => {
+          requestSignal.throwIfAborted();
+          return fetchImpl(url, { ...init, signal: requestSignal });
+        },
+      };
+      return request(options);
+    });
+  }
+  return github;
 }
 
 export function createScmReadTokenProvider(input: {
@@ -1295,6 +1500,7 @@ export async function prepareSingleT0ReviewPlan(input: {
 }
 
 export function planAssignments(input: {
+  readonly accountGateway?: boolean;
   readonly authorization: ReviewRunAuthorization;
   readonly pr: PRContext;
   readonly config: ReviewConfig;
@@ -1376,7 +1582,8 @@ export function planAssignments(input: {
 
   const attemptBudget = resolveT0AttemptBudget(
     input.config.providerRetries,
-    input.authorization.limits.maxAttemptsPerSlot
+    input.authorization.limits.maxAttemptsPerSlot,
+    input.accountGateway
   );
   const plan = createStableReviewWorkPlan({
     reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
@@ -1388,7 +1595,9 @@ export function planAssignments(input: {
         providerVoteIdentityHash: codexLanes[0].providerVoteIdentityHash,
         required: true,
         attemptBudget,
-        retryPolicyVersion: CODEX_RETRY_POLICY_VERSION,
+        retryPolicyVersion: input.accountGateway
+          ? 'account-gateway-no-replay.v1'
+          : CODEX_RETRY_POLICY_VERSION,
       },
     ],
     batches: plannedBatches.map((batch, schedulingOrdinal) => ({
@@ -1429,11 +1638,13 @@ export function planAssignments(input: {
 
 export function resolveT0AttemptBudget(
   configuredTotalAttempts: number | undefined,
-  protocolMaximum: number
+  protocolMaximum: number,
+  accountGateway = false
 ): number {
   if (!Number.isSafeInteger(protocolMaximum) || protocolMaximum < 1) {
     throw new Error('review_action_v2_attempt_budget_limit_invalid');
   }
+  if (accountGateway) return 1;
   return Math.min(
     protocolMaximum,
     getProviderReviewTotalAttempts(configuredTotalAttempts)
@@ -1465,12 +1676,15 @@ async function applyReviewRuntimeConfig(
   input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0],
   fetchImpl: typeof fetch,
   oidc: GitHubActionsOidcTokenProvider
-): Promise<void> {
+): Promise<string | undefined> {
+  if (input.accountGateway) {
+    return applyAdmittedRuntimeConfig(input.accountGateway.runtimeConfig);
+  }
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = 'oidc';
   process.env.REVIEWROUTER_API_URL = input.apiUrl;
   process.env.REVIEWROUTER_OIDC_AUDIENCE = input.audience;
   process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK = 'false';
-  await applyControlPlaneRuntimeConfig({
+  const result = await applyControlPlaneRuntimeConfig({
     fetchImpl,
     oidc,
     logger: {
@@ -1478,6 +1692,7 @@ async function applyReviewRuntimeConfig(
       warn: (message) => core.warning(message),
     },
   });
+  return result.status === 'applied' ? result.reasoningEffort : undefined;
 }
 
 async function withRunnerEnvironment<T>(
@@ -1497,10 +1712,12 @@ async function withRunnerEnvironment<T>(
   set('REVIEWROUTER_HEAD_SHA', input.headSha.toLowerCase());
   if (input.codexBinaryPath) {
     set('REVIEWROUTER_CODEX_BINARY', input.codexBinaryPath);
-    set(
-      'PATH',
-      `${path.dirname(input.codexBinaryPath)}${path.delimiter}${process.env.PATH ?? ''}`
-    );
+    if (path.isAbsolute(input.codexBinaryPath)) {
+      set(
+        'PATH',
+        `${path.dirname(input.codexBinaryPath)}${path.delimiter}${process.env.PATH ?? ''}`
+      );
+    }
   }
   try {
     process.chdir(input.workspacePath);
@@ -1562,16 +1779,23 @@ function sameAuthorizedRevision(
   );
 }
 
-async function readCheckedOutHead(workspacePath: string): Promise<string> {
-  const result = await execFileAsync('git', ['rev-parse', 'HEAD'], {
+async function readCheckedOutHead(
+  workspacePath: string,
+  signal?: AbortSignal
+): Promise<string> {
+  signal?.throwIfAborted();
+  const options = {
     cwd: workspacePath,
     env: {
       PATH: process.env.PATH,
       GIT_CONFIG_NOSYSTEM: '1',
       GIT_CONFIG_GLOBAL: '/dev/null',
     },
-  });
-  const head = result.stdout.trim().toLowerCase();
+  };
+  const stdout = signal
+    ? await runAccountGatewayGit(['rev-parse', 'HEAD'], options, signal, 10_000)
+    : (await execFileAsync('git', ['rev-parse', 'HEAD'], options)).stdout;
+  const head = stdout.trim().toLowerCase();
   if (!/^[a-f0-9]{40}$/.test(head)) {
     throw new Error('review_action_v2_checked_out_head_invalid');
   }
@@ -1595,4 +1819,78 @@ function canonicalJson(value: unknown): string {
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+// Owned gateway Git helpers use the same group-kill/close drain as bootstrap checkout.
+function runAccountGatewayGit(
+  args: readonly string[],
+  options: { readonly cwd: string; readonly env: NodeJS.ProcessEnv },
+  signal: AbortSignal,
+  timeoutMs = 60_000
+): Promise<string> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, {
+      ...options,
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let failure: unknown;
+    let failed = false;
+    const stop = (error: unknown) => {
+      if (failed) return;
+      failure = error;
+      failed = true;
+      clearTimeout(timer);
+      signal.removeEventListener('abort', cancel);
+      try {
+        if (process.platform !== 'win32' && child.pid)
+          process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    };
+    const cancel = () => stop(signal.reason);
+    const timer = setTimeout(
+      () => stop(new Error('account_gateway_git_timeout')),
+      timeoutMs
+    );
+    signal.addEventListener('abort', cancel, { once: true });
+    if (signal.aborted) cancel();
+    let stdout = '';
+    let bytes = 0;
+    const collect = (chunk: Buffer, output: boolean) => {
+      if (failed) return;
+      bytes += chunk.length;
+      if (bytes > 256 * 1_024)
+        stop(new Error('account_gateway_git_output_bound'));
+      else if (!failed && output) stdout += chunk.toString();
+    };
+    child.stdout.on('data', (chunk: Buffer) => collect(chunk, true));
+    child.stderr.on('data', (chunk: Buffer) => collect(chunk, false));
+    child.on('error', (error) => stop(error));
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', cancel);
+      if (failed) reject(failure);
+      else if (code !== 0) reject(new Error('account_gateway_git_failed'));
+      else resolve(stdout);
+    });
+  });
+}
+
+class CancellableReviewOrchestrationDelay extends SystemReviewOrchestrationDelay {
+  override sleep(delayMs: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, delayMs);
+      signal?.addEventListener('abort', finish, { once: true });
+      if (signal?.aborted) finish();
+    });
+  }
 }

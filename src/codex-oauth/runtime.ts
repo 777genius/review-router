@@ -90,15 +90,22 @@ type CodexOAuthV2FailureReason =
   | CodexOAuthV2TerminalReason.ExecutionFailed
   | CodexOAuthV2TerminalReason.Unknown;
 
+export type CodexOAuthV2PublicationReceipt = Readonly<{
+  publicationAttemptId: string;
+  canonicalReceiptSetHash: string;
+}>;
+
 export type CodexOAuthV2ReviewResult =
   | {
       readonly outcome: CodexOAuthV2ReviewOutcome.Completed;
       readonly mergeGateConclusion: MergeGateConclusion;
+      readonly publicationReceipt?: CodexOAuthV2PublicationReceipt;
     }
   | {
       readonly outcome: CodexOAuthV2ReviewOutcome.PartialCompleted;
       readonly reason: CodexOAuthV2PartialReason;
       readonly blockingFailure?: string;
+      readonly publicationReceipt?: CodexOAuthV2PublicationReceipt;
     }
   | { readonly outcome: CodexOAuthV2ReviewOutcome.Superseded }
   | {
@@ -139,6 +146,12 @@ export interface CodexOAuthV2ReviewRunnerPort {
     readonly workspacePath: string;
     readonly codexHome: string;
     readonly codexBinaryPath?: string;
+    readonly accountGateway?: {
+      readonly runtimeConfig: import('../control-plane/runtime-config').AdmittedRuntimeConfig;
+      readonly signal?: AbortSignal;
+      readonly controlPlane: import('../review-orchestration/infrastructure/review-action-v2-control-plane-adapter').ReviewActionV2ControlPlaneAdapter;
+      readonly modelTransport: import('../review-orchestration/infrastructure/account-gateway-model-transport').LocalGatewayModelTransport;
+    };
     /**
      * Short-lived GitHub capability restricted by the control plane to
      * contents:read and pull_requests:read. The v2 runner may use it only to

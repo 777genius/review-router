@@ -1,13 +1,70 @@
+import type { RuntimeConfigResult } from './runtime-config';
+
 export type ProviderCliPlan = {
   readonly codexCliNeeded: boolean;
   readonly codexOauthNeeded: boolean;
   readonly claudeCliNeeded: boolean;
 };
 
+const gatewaySessionMode = 'account-gateway';
+const gatewayAuthMode = 'codex-account-gateway';
+
+// The workflow mode selects an entrypoint; only applied OIDC config authorizes it.
+export function prepareRuntimePreflight(
+  env: NodeJS.ProcessEnv = process.env
+): void {
+  if (
+    env.RR_CODEX_SESSION_MODE !== gatewaySessionMode &&
+    env.REVIEW_AUTH_MODE !== gatewayAuthMode
+  ) {
+    return;
+  }
+  if (
+    env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'oidc' ||
+    env.REVIEWROUTER_STATIC_CONFIG_FALLBACK !== 'false'
+  ) {
+    throw new Error('account_gateway_requires_oidc_without_static_fallback');
+  }
+  // Missing server auth mode must not inherit a caller's static gateway claim.
+  delete env.REVIEW_AUTH_MODE;
+}
+
+export function resolveRuntimePreflightPlan(
+  runtimeConfig: RuntimeConfigResult | undefined,
+  env: NodeJS.ProcessEnv = process.env
+): ProviderCliPlan & { readonly accountGatewayNeeded: boolean } {
+  const gatewayRequested = env.RR_CODEX_SESSION_MODE === gatewaySessionMode;
+  const gatewayConfigured = env.REVIEW_AUTH_MODE === gatewayAuthMode;
+  if (gatewayRequested || gatewayConfigured) {
+    if (
+      env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'oidc' ||
+      env.REVIEWROUTER_STATIC_CONFIG_FALLBACK !== 'false' ||
+      runtimeConfig?.status !== 'applied' ||
+      !gatewayConfigured
+    ) {
+      throw new Error('account_gateway_requires_authenticated_applied_config');
+    }
+    if (!gatewayRequested) {
+      throw new Error('account_gateway_workflow_mode_mismatch');
+    }
+  }
+  return {
+    ...resolveProviderCliPlan(env),
+    accountGatewayNeeded: gatewayConfigured,
+  };
+}
+
 export function resolveProviderCliPlan(
   env: NodeJS.ProcessEnv = process.env
 ): ProviderCliPlan {
   const authMode = (env.REVIEW_AUTH_MODE || '').trim();
+  if (authMode === gatewayAuthMode) {
+    return {
+      codexCliNeeded: true,
+      codexOauthNeeded: false,
+      claudeCliNeeded: false,
+    };
+  }
   const explicitProviders = parseProviderList(env.REVIEW_PROVIDERS);
   const inferredProvider =
     explicitProviders.length === 0

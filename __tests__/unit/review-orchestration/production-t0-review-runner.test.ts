@@ -1,4 +1,42 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { createHash } from 'crypto';
+import { PromptBuilder } from '../../../src/analysis/llm/prompt-builder';
 import {
+  createPreparedProviderInvocation,
+  ProviderKind,
+} from '../../../src/providers/prepared-invocation';
+import {
+  CodexReviewInvocationAdapter,
+  GeneratedProviderInvocationManifestAssembler,
+} from '../../../src/review-orchestration/infrastructure/codex-review-invocation-adapter';
+import type { ContextGatewayInvocationSessionFactoryPort } from '../../../src/review-orchestration/infrastructure/context-gateway-invocation-session';
+import { canonicalJson } from '../../../src/context-gateway/context-gateway-contract';
+import {
+  REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
+  REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
+} from '../../../src/review-investigation/domain/deterministic-context-probe-plan';
+import { REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH } from '../../../src/review-investigation/application/review-investigation-turn-prompt';
+import { ConfigLoader } from '../../../src/config/loader';
+import { DEFAULT_CONFIG } from '../../../src/config/defaults';
+import { ReviewActionV2Client } from '../../../src/control-plane/review-action-v2-client';
+import {
+  applyControlPlaneRuntimeConfig,
+  parseAdmittedRuntimeConfig,
+} from '../../../src/control-plane/runtime-config';
+import { GitHubActionsOidcTokenProvider } from '../../../src/codex-oauth/github-actions-oidc';
+import { ReviewActionV2ControlPlaneAdapter } from '../../../src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
+import { CodexProvider } from '../../../src/providers/codex';
+import { NodeCodexAppServerTurnRunner } from '../../../src/review-investigation/infrastructure/codex-app-server-turn-runner';
+import {
+  REVIEW_INVESTIGATION_GATEWAY_TOOLS,
+  ReviewAgentExecutionSessionKind,
+  type ReviewTurnRequest,
+} from '../../../src/review-investigation/application/review-agent-port';
+import {
+  createConfiguredProductionInvestigationAgents,
+  ProductionT0ReviewRunner,
   LegacyFallbackBeforeInvestigationAuthorityControlPlane,
   createScmReadTokenProvider,
   mapOrchestrationResultToCodexOutcome,
@@ -7,6 +45,7 @@ import {
   resolveProductionContextGatewayPolicyVersion,
   resolveProductionContextGatewaySessionFactoryOptions,
   resolveT0AttemptBudget,
+  resolveProductionInvestigationReasoningEffort,
 } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../../src/context-gateway/context-gateway-release-contract';
 import {
@@ -18,6 +57,7 @@ import {
   ReviewInvestigationRolloutCapability,
   ReviewOrchestrationResultStatus,
   ReviewPublicationUnavailableFact,
+  ReviewTaskKind,
   type ReviewRunAuthorization,
 } from '../../../src/review-orchestration/application';
 import {
@@ -67,6 +107,487 @@ describe('ProductionT0ReviewRunner policy', () => {
   afterEach(() => {
     jest.useRealTimers();
   });
+
+  it.each([
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'high'],
+    ['mimo-v2.6-pro', 'gpt-caller', true, undefined],
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'medium'],
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'low'],
+    ['gpt-selected', 'mimo-v2.6-pro', false, undefined],
+    ['gpt-selected', 'mimo-v2.6-pro', false, 'high'],
+  ] as const)(
+    'pins AppServer catalog and effort from selected %s independently of caller %s (gateway %s, effort %s)',
+    async (selectedModel, callerModel, enabled, reasoningEffort) => {
+      const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'mimo-appserver-test-')
+      );
+      const home = path.join(root, 'fresh-home');
+      fs.mkdirSync(home);
+      fs.mkdirSync(path.join(root, '.codex'));
+      const callerConfig = 'model_catalog_json="/caller/untrusted.json"\n';
+      fs.writeFileSync(path.join(root, '.codex/config.toml'), callerConfig);
+      const stoppedAtBoundary = new Error('mock subprocess boundary');
+      const previousEnv = { ...process.env };
+      process.env.CODEX_REASONING_EFFORT = 'xhigh';
+      const execute = jest
+        .spyOn(NodeCodexAppServerTurnRunner.prototype, 'executeTurn')
+        .mockRejectedValue(stoppedAtBoundary);
+      try {
+        const configuration = ['model_provider="reviewrouter_account_gateway"'];
+        const runtimeResult = await applyControlPlaneRuntimeConfig({
+          env: {
+            REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+            REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+            REVIEWROUTER_API_URL: 'https://fixture.invalid',
+            CODEX_REASONING_EFFORT: 'xhigh',
+          },
+          oidc: { requestToken: async () => 'fixture-oidc' },
+          fetchImpl: jest
+            .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+            .mockResolvedValueOnce(
+              new Response(JSON.stringify({ sessionToken: 'fixture-session' }))
+            )
+            .mockResolvedValueOnce(
+              new Response(
+                JSON.stringify({
+                  protocolVersion: 1,
+                  configVersion: 7,
+                  runtimeEnv:
+                    reasoningEffort === undefined
+                      ? {}
+                      : { CODEX_REASONING_EFFORT: reasoningEffort },
+                })
+              )
+            ),
+        });
+        if (runtimeResult.status !== 'applied')
+          throw new Error('expected applied runtime config');
+        const effectiveEffort = resolveProductionInvestigationReasoningEffort({
+          codexModel: selectedModel,
+          accountGateway: true,
+          serverReasoningEffort: runtimeResult.reasoningEffort,
+        });
+        const agents = createConfiguredProductionInvestigationAgents({
+          codexModel: selectedModel,
+          reasoningEffort: effectiveEffort,
+          codexBinaryPath: '/mock/codex',
+          modelTransport: {
+            baseUrl: 'http://127.0.0.1:1/v1',
+            configuration,
+            environment: {
+              CODEX_HOME: home,
+              REVIEWROUTER_LOCAL_MODEL_TOKEN: 'fixture-capability',
+            },
+            actualModel: () => selectedModel,
+            dispose: async () => {},
+          },
+          executionSessions: {
+            resolve: () => ({
+              policyVersion: 'context-gateway-v4',
+              binaryHash: 'a'.repeat(64),
+              command: process.execPath,
+              args: [path.join(root, 'mock-context-gateway.cjs')],
+              cwd: root,
+              enabledTools: REVIEW_INVESTIGATION_GATEWAY_TOOLS,
+              runtimeEnvironment: {
+                REVIEWROUTER_CONTEXT_SESSION_ID: 'session-fixture',
+              },
+              credentialEnvironment: {
+                REVIEWROUTER_CONTEXT_GATEWAY_SECRET: 'fixture-gateway',
+              },
+            }),
+          },
+        });
+        const request: ReviewTurnRequest = {
+          invocationId: 'invocation-fixture',
+          fencingToken: 'fence-fixture',
+          turnId: 'turn-fixture',
+          dossierVersion: 1,
+          dossierDigest: 'b'.repeat(64),
+          purpose: ReviewTurnPurpose.Discovery,
+          allowedObligationIds: ['c'.repeat(64)],
+          prompt: 'Review fixture',
+          workspaceRoot: root,
+          requestedModel: callerModel,
+          timeoutMs: 1_000,
+          maxTurns: 1,
+          executionSession: {
+            kind: ReviewAgentExecutionSessionKind.ContextGatewayV4,
+          },
+        };
+        const digest = (value: string) =>
+          createHash('sha256').update(value).digest('hex');
+        const workSlot = Object.freeze({
+          workSlotId: 'slot-fixture',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Codex,
+          providerVoteIdentityHash: '6'.repeat(64),
+          shardKey: 'batch-fixture',
+          required: true,
+          attemptBudget: 1,
+          retryPolicyVersion: 'retry-fixture',
+        });
+        const planningConfig = {
+          command: process.execPath,
+          args: [path.join(root, 'mock-context-gateway.cjs')],
+          cwd: root,
+          gatewayBinaryHash: 'a'.repeat(64),
+          gatewayPolicyVersion: 'context-gateway-v4',
+          enabledTools: REVIEW_INVESTIGATION_GATEWAY_TOOLS,
+          runtimeEnvironment: {
+            REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID: '4'.repeat(40),
+          },
+        };
+        const inventory = {
+          inventoryVersion: 2 as const,
+          mergeBaseTreeOid: '2'.repeat(40),
+          headTreeOid: '4'.repeat(40),
+          entries: [],
+        };
+        const invocation = await new CodexReviewInvocationAdapter(
+          {
+            prepareInvocation: async (prompt: string) =>
+              createPreparedProviderInvocation({
+                providerKind: ProviderKind.CodexCli,
+                providerName: `codex/${selectedModel}`,
+                requestedModel: selectedModel,
+                timeoutMs: 1_000,
+                request: { prompt },
+                observableRequest: { prompt },
+              }),
+          } as unknown as CodexProvider,
+          new PromptBuilder(DEFAULT_CONFIG),
+          [
+            {
+              workSlot,
+              reviewRevisionHash: '4'.repeat(64),
+              mergeBaseSha: '2'.repeat(40),
+              context: pullRequest([]),
+              lifecycleTargets: [],
+              liveLifecycleStateHash: '8'.repeat(64),
+            },
+          ],
+          1_000,
+          true,
+          {
+            planningConfig: async () => planningConfig,
+            canonicalInventory: async () => ({
+              ...inventory,
+              itemCount: 0,
+              inventoryHash: digest(canonicalJson(inventory)),
+            }),
+          } as unknown as ContextGatewayInvocationSessionFactoryPort,
+          true,
+          effectiveEffort
+        ).prepare({ workSlot, attemptOrdinal: 1 });
+        const manifest = await new GeneratedProviderInvocationManifestAssembler(
+          authorization(1),
+          DEFAULT_CONFIG,
+          '7'.repeat(64)
+        ).assemble(invocation);
+        // Ambient effort changes after preparation cannot change the launch.
+        process.env.CODEX_REASONING_EFFORT = 'low';
+        // Real adapter/session/config preparation, stopped before any subprocess.
+        await expect(agents[0].agent.executeTurn(request)).rejects.toBe(
+          stoppedAtBoundary
+        );
+        await expect(
+          agents[0].agent.executeTurn({
+            ...request,
+            requestedModel: invocation.requestedModel,
+          })
+        ).rejects.toBe(stoppedAtBoundary);
+        expect(execute).toHaveBeenCalledTimes(2);
+        const launch = execute.mock.calls[0][0];
+        const investigationLaunch = execute.mock.calls[1][0];
+        expect(launch.protocol.reasoningEffort).toBe(
+          enabled ? (reasoningEffort ?? 'high') : 'xhigh'
+        );
+        expect(investigationLaunch.protocol.requestedModel).toBe(
+          invocation.requestedModel
+        );
+        expect(investigationLaunch.protocol.reasoningEffort).toBe(
+          launch.protocol.reasoningEffort
+        );
+        expect(
+          JSON.parse(manifest.manifestCanonicalJson).providerCapabilityHash
+        ).toBe(
+          digest(
+            canonicalJson({
+              adapterVersion: 'review-investigation-codex.v3',
+              actualModelAttribution: 'observed',
+              confinement: 'gateway_only',
+              continuation: 'durable_dossier',
+              gatewayBinaryHash: planningConfig.gatewayBinaryHash,
+              gatewayPolicyVersion: planningConfig.gatewayPolicyVersion,
+              enabledTools: [...planningConfig.enabledTools].sort(),
+              probeLimits: invocation.investigationProbePlan.limits,
+              probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
+              reasoningEffort: investigationLaunch.protocol.reasoningEffort,
+              requestedModel: investigationLaunch.protocol.requestedModel,
+              searchPolicyVersion: REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
+              turnPromptContractHash:
+                REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH,
+            })
+          )
+        );
+        expect(launch.environment.CODEX_HOME).toBe(home);
+        expect(launch.environment.REVIEWROUTER_LOCAL_MODEL_TOKEN).toBe(
+          'fixture-capability'
+        );
+        expect(launch.args).toContain('app-server');
+        expect(launch.args).toContain(configuration[0]);
+        const catalogSettings = launch.args.filter((arg) =>
+          arg.startsWith('model_catalog_json=')
+        );
+        if (enabled) {
+          const catalogPath = path.join(
+            home,
+            'reviewrouter-model-catalog.json'
+          );
+          const setting = `model_catalog_json=${JSON.stringify(catalogPath)}`;
+          expect(catalogSettings).toEqual([setting]);
+          expect(launch.args.slice(-2)).toEqual(['-c', setting]);
+          expect(
+            JSON.parse(fs.readFileSync(catalogPath, 'utf8')).models[0]
+          ).toMatchObject({
+            slug: selectedModel,
+            use_responses_lite: true,
+            apply_patch_tool_type: 'freeform',
+          });
+          expect(fs.readFileSync(path.join(home, 'config.toml'), 'utf8')).toBe(
+            [...configuration, setting].join('\n') + '\n'
+          );
+          expect(fs.statSync(catalogPath).mode & 0o777).toBe(0o600);
+        } else {
+          expect(catalogSettings).toEqual([]);
+          expect(fs.readdirSync(home)).toEqual([]);
+        }
+        expect(execute.mock.calls[1][0].args).toEqual(launch.args);
+        expect(
+          fs.readFileSync(path.join(root, '.codex/config.toml'), 'utf8')
+        ).toBe(callerConfig);
+      } finally {
+        process.env = previousEnv;
+        execute.mockRestore();
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it.each([
+    ['mimo-v2.6-pro', true, 'high', 'high', false, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, undefined, 'high', false, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'low', 'low', false, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'medium', 'medium', false, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'xhigh', 'xhigh', true, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'ultra', 'ultra', true, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'arbitrary', 'arbitrary', true, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, '', '', true, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'none', 'none', true, 'xhigh', undefined],
+    ['gpt-selected', true, undefined, 'xhigh', false, 'xhigh', 'bare'],
+    ['gpt-selected', true, 'ultra', 'ultra', false, 'xhigh', 'absolute'],
+    ['mimo-v2.6-pro', false, undefined, 'xhigh', false, 'xhigh', undefined],
+    ['gpt-selected', true, undefined, undefined, false, undefined, 'relative'],
+    ['mimo-v2.6-pro', false, undefined, undefined, false, undefined, undefined],
+    [
+      'gpt-selected',
+      true,
+      undefined,
+      'custom-caller-effort',
+      false,
+      'custom-caller-effort',
+      undefined,
+    ],
+    ['mimo-v2.6-pro', true, undefined, 'high', false, undefined, undefined],
+  ] as const)(
+    'resolves effort for selected %s, gateway %s, server %s (expected %s, denied %s, caller %s) before effects',
+    async (
+      model,
+      accountGateway,
+      serverEffort,
+      expectedEffort,
+      denied,
+      callerEffort,
+      binaryKind?: 'bare' | 'absolute' | 'relative'
+    ) => {
+      const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'mimo-runner-effort-')
+      );
+      const previousEnv = { ...process.env };
+      const previousCwd = process.cwd();
+      const toolPath = ['/fixture/trusted-tools', '/fixture/system-tools'];
+      const expectedBinary =
+        binaryKind === 'bare'
+          ? 'codex'
+          : binaryKind === 'absolute'
+            ? path.join(os.tmpdir(), 'trusted-host-cli', 'codex')
+            : path.join(previousCwd, 'trusted-host-cli', 'codex');
+      const codexBinaryPath =
+        binaryKind === 'relative' ? './trusted-host-cli/codex' : expectedBinary;
+      let observedEnvironment:
+        | {
+            cwd: string;
+            path: string | undefined;
+            binary: string | undefined;
+          }
+        | undefined;
+      const stoppedAtBoundary = new Error('mock authorization boundary');
+      const configuration = jest
+        .spyOn(ConfigLoader, 'load')
+        .mockImplementation(() => {
+          observedEnvironment = {
+            cwd: process.cwd(),
+            path: process.env.PATH,
+            binary: process.env.REVIEWROUTER_CODEX_BINARY,
+          };
+          return {
+            ...DEFAULT_CONFIG,
+            providers: [`codex/${process.env.CODEX_MODEL}`],
+          };
+        });
+      const oidc = jest
+        .spyOn(GitHubActionsOidcTokenProvider.prototype, 'requestToken')
+        .mockResolvedValue('fixture-oidc');
+      const authorize = jest
+        .spyOn(ReviewActionV2ControlPlaneAdapter.prototype, 'authorize')
+        .mockRejectedValue(stoppedAtBoundary);
+      const current = jest
+        .spyOn(
+          ReviewActionV2ControlPlaneAdapter.prototype,
+          'currentAuthorization'
+        )
+        .mockImplementation(() => {
+          throw stoppedAtBoundary;
+        });
+      const execute = jest
+        .spyOn(NodeCodexAppServerTurnRunner.prototype, 'executeTurn')
+        .mockRejectedValue(new Error('unexpected AppServer call'));
+      const review = jest
+        .spyOn(CodexProvider.prototype, 'review')
+        .mockRejectedValue(new Error('unexpected provider call'));
+      const fetchImpl = jest
+        .fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ sessionToken: 'fixture-session' }))
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              protocolVersion: 1,
+              configVersion: 7,
+              runtimeEnv: {
+                CODEX_MODEL: model,
+                ...(serverEffort === undefined
+                  ? {}
+                  : { CODEX_REASONING_EFFORT: serverEffort }),
+              },
+            })
+          )
+        );
+      try {
+        if (binaryKind) {
+          process.env.PATH = toolPath.join(path.delimiter);
+          process.env.REVIEWROUTER_CODEX_BINARY = 'fixture-previous-codex';
+        }
+        process.env.CODEX_MODEL = 'caller-model';
+        if (callerEffort === undefined) {
+          delete process.env.CODEX_REASONING_EFFORT;
+        } else {
+          process.env.CODEX_REASONING_EFFORT = callerEffort;
+        }
+        const controlPlane = new ReviewActionV2ControlPlaneAdapter(
+          new ReviewActionV2Client({
+            apiUrl: 'https://fixture.invalid',
+            fetchImpl,
+          })
+        );
+        const operation = new ProductionT0ReviewRunner(fetchImpl).run({
+          apiUrl: 'https://fixture.invalid',
+          audience: 'reviewrouter',
+          providerInstanceId: 'fixture-provider',
+          workflowSchemaVersion: 1,
+          repository: 'fixture/repository',
+          pullRequestNumber: 1,
+          headSha: 'a'.repeat(40),
+          workspacePath: root,
+          codexHome: path.join(root, 'home'),
+          ...(binaryKind ? { codexBinaryPath } : {}),
+          scmReadToken: 'fixture-scm',
+          scmReadTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          refreshScmReadToken: async () => {
+            throw new Error('unexpected refresh');
+          },
+          ...(accountGateway
+            ? {
+                accountGateway: {
+                  runtimeConfig: parseAdmittedRuntimeConfig({
+                    protocolVersion: 1,
+                    configVersion: 7,
+                    runtimeEnv: {
+                      CODEX_MODEL: model,
+                      ...(serverEffort === undefined
+                        ? {}
+                        : { CODEX_REASONING_EFFORT: serverEffort }),
+                    },
+                  }),
+                  controlPlane,
+                  modelTransport: {
+                    baseUrl: 'http://127.0.0.1:1/v1',
+                    configuration: [],
+                    environment: { CODEX_HOME: path.join(root, 'home') },
+                    actualModel: () => model,
+                    dispose: async () => {},
+                  },
+                },
+              }
+            : {}),
+        });
+        if (denied) {
+          await expect(operation).rejects.toThrow(
+            'account_gateway_mimo_reasoning_effort_unsupported'
+          );
+          expect(current).not.toHaveBeenCalled();
+          expect(authorize).not.toHaveBeenCalled();
+        } else {
+          await expect(operation).rejects.toBe(stoppedAtBoundary);
+          expect(accountGateway ? current : authorize).toHaveBeenCalledTimes(1);
+        }
+        expect(process.env.CODEX_MODEL).toBe(model);
+        expect(process.env.CODEX_REASONING_EFFORT).toBe(expectedEffort);
+        expect(fetchImpl).toHaveBeenCalledTimes(accountGateway ? 0 : 2);
+        expect(oidc).toHaveBeenCalledTimes(accountGateway ? 0 : 2);
+        expect(execute).not.toHaveBeenCalled();
+        expect(review).not.toHaveBeenCalled();
+        if (binaryKind) {
+          expect(observedEnvironment?.cwd).toBe(root);
+          expect(observedEnvironment?.binary).toBe(expectedBinary);
+          const searchPath = observedEnvironment?.path?.split(path.delimiter);
+          expect(searchPath).toEqual(
+            binaryKind === 'bare'
+              ? toolPath
+              : [path.dirname(expectedBinary), ...toolPath]
+          );
+          expect(searchPath).not.toContain('.');
+          expect(searchPath).not.toContain(root);
+          expect(process.cwd()).toBe(previousCwd);
+          expect(process.env.PATH).toBe(toolPath.join(path.delimiter));
+          expect(process.env.REVIEWROUTER_CODEX_BINARY).toBe(
+            'fixture-previous-codex'
+          );
+        }
+      } finally {
+        process.env = previousEnv;
+        configuration.mockRestore();
+        oidc.mockRestore();
+        authorize.mockRestore();
+        current.mockRestore();
+        execute.mockRestore();
+        review.mockRestore();
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
 
   it('treats providerRetries as the total provider attempt budget', () => {
     expect(resolveT0AttemptBudget(3, 10)).toBe(3);
@@ -271,6 +792,23 @@ describe('ProductionT0ReviewRunner policy', () => {
       outcome: CodexOAuthV2ReviewOutcome.Failed,
       reason: CodexOAuthV2TerminalReason.ExecutionFailed,
       blockingFailure: 'provider_failed',
+    });
+  });
+
+  it('preserves the authoritative publication receipt for gateway terminal reporting', () => {
+    const orchestration = {
+      status: ReviewOrchestrationResultStatus.Completed,
+      mergeGateConclusion: MergeGateConclusion.Fail,
+      publicationAttemptId: 'publication-fixture-1',
+      canonicalReceiptSetHash: 'c'.repeat(64),
+    };
+    expect(mapOrchestrationResultToCodexOutcome(orchestration)).toEqual({
+      outcome: CodexOAuthV2ReviewOutcome.Completed,
+      mergeGateConclusion: MergeGateConclusion.Fail,
+      publicationReceipt: {
+        publicationAttemptId: 'publication-fixture-1',
+        canonicalReceiptSetHash: 'c'.repeat(64),
+      },
     });
   });
 

@@ -99,33 +99,52 @@ describe('ReviewThreadResolver', () => {
     expect(graphql).toHaveBeenCalledTimes(1);
   });
 
-  it('rechecks the thread and resolves only after mutation succeeds', async () => {
-    const graphql = jest
-      .fn()
-      .mockResolvedValueOnce({
-        repository: {
-          pullRequest: {
-            headRefOid: 'head-sha',
+  it.each([
+    { login: 'review-router-ai[bot]' },
+    { login: 'review-router-ai', __typename: 'Bot' },
+  ])(
+    'rechecks the thread and resolves only after mutation succeeds (%j)',
+    async (author) => {
+      const response = threadResponse();
+      response.node.comments.nodes[0].author = author;
+      const candidate = record();
+      if (author.__typename === 'Bot') {
+        response.node.comments.nodes.push({
+          ...response.node.comments.nodes[0],
+          id: 'bot-reply',
+        });
+        candidate.target.threadCommentCount = 2;
+      }
+      const graphql = jest
+        .fn()
+        .mockResolvedValueOnce({
+          repository: {
+            pullRequest: {
+              headRefOid: 'head-sha',
+            },
           },
-        },
-      })
-      .mockResolvedValueOnce(threadResponse())
-      .mockResolvedValueOnce({
-        resolveReviewThread: {
-          thread: {
-            id: 'thread-123',
-            isResolved: true,
+        })
+        .mockResolvedValueOnce(response)
+        .mockResolvedValueOnce({
+          resolveReviewThread: {
+            thread: {
+              id: 'thread-123',
+              isResolved: true,
+            },
           },
-        },
-      });
-    const resolver = new ReviewThreadResolver(githubClient(graphql));
+        });
+      const resolver = new ReviewThreadResolver(githubClient(graphql));
 
-    const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
+      const result = await resolver.resolveGuarded(123, 'head-sha', [
+        candidate,
+      ]);
 
-    expect(result.resolved).toHaveLength(1);
-    expect(result.resolved[0].resolvedBy).toBe('review-router');
-    expect(result.failed).toHaveLength(0);
-  });
+      expect(result.resolved).toHaveLength(1);
+      expect(result.resolved[0].resolvedBy).toBe('review-router');
+      expect(result.failed).toHaveLength(0);
+      expect(graphql.mock.calls[1][0]).toContain('author { login __typename }');
+    }
+  );
 
   it('does not resolve a thread when the head changes after thread inspection', async () => {
     const graphql = jest
@@ -434,39 +453,49 @@ describe('ReviewThreadResolver', () => {
     expect(graphql).toHaveBeenCalledTimes(2);
   });
 
-  it('moves the candidate to manual attention if the refreshed parent author is untrusted', async () => {
-    const graphql = jest
-      .fn()
-      .mockResolvedValueOnce({
-        repository: {
-          pullRequest: {
-            headRefOid: 'head-sha',
-          },
-        },
-      })
-      .mockResolvedValueOnce(
-        threadResponse({
-          comments: {
-            pageInfo: { hasNextPage: false, endCursor: null },
-            nodes: [
-              {
-                id: 'comment-123',
-                author: { login: 'unknown-bot[bot]' },
-                body: `<!-- review-router-finding:${'a'.repeat(24)} -->`,
-                createdAt: '2026-05-14T00:00:00Z',
-                updatedAt: '2026-05-14T00:00:00Z',
-              },
-            ],
+  it.each([
+    { login: 'unknown-bot[bot]' },
+    { login: 'review-router-ai', __typename: 'User' },
+    { login: 'review-router-ai' },
+  ])(
+    'moves the candidate to manual attention if the refreshed parent author is untrusted (%j)',
+    async (author) => {
+      const graphql = jest
+        .fn()
+        .mockResolvedValueOnce({
+          repository: {
+            pullRequest: {
+              headRefOid: 'head-sha',
+            },
           },
         })
+        .mockResolvedValueOnce(
+          threadResponse({
+            comments: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [
+                {
+                  id: 'comment-123',
+                  author,
+                  body: `<!-- review-router-finding:${'a'.repeat(24)} -->`,
+                  createdAt: '2026-05-14T00:00:00Z',
+                  updatedAt: '2026-05-14T00:00:00Z',
+                },
+              ],
+            },
+          })
+        );
+      const resolver = new ReviewThreadResolver(githubClient(graphql));
+
+      const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
+
+      expect(result.manualAttention[0].reasonCodes).toContain(
+        'untrusted_author'
       );
-    const resolver = new ReviewThreadResolver(githubClient(graphql));
-
-    const result = await resolver.resolveGuarded(123, 'head-sha', [record()]);
-
-    expect(result.manualAttention[0].reasonCodes).toContain('untrusted_author');
-    expect(graphql).toHaveBeenCalledTimes(2);
-  });
+      expect(result.resolved).toEqual([]);
+      expect(graphql).toHaveBeenCalledTimes(2);
+    }
+  );
 
   it('skips lifecycle mutation instead of deriving a fallback for conflicting markers', async () => {
     const graphql = jest

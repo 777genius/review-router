@@ -688,6 +688,7 @@ function classifyV2ActionFailure(error: unknown): V2ActionFailure {
       'review_action_v2_authorization_denied',
       'review_action_v2_authorization_facts_fields_invalid',
       'review_action_v2_codex_provider_missing',
+      'review_action_v2_command_ledger_unavailable',
     ].includes(error.message)
   ) {
     return diagnosedV2ActionFailure(error.message);

@@ -744,6 +744,11 @@ describe('Codex OAuth rotating setup PR preview', () => {
       'review_action_v2_codex_provider_missing',
       'ReviewRouter stopped without a terminal review result.',
     ],
+    [
+      new Error('review_action_v2_command_ledger_unavailable'),
+      'review_action_v2_command_ledger_unavailable',
+      'ReviewRouter stopped without a terminal review result.',
+    ],
   ] as const)(
     'fails closed and safely diagnoses runtime failure %s',
     async (failure, code, summary) => {

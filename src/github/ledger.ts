@@ -73,17 +73,17 @@ export class ReviewLedger {
 
   async load(prNumber: number): Promise<LoadedLedger> {
     const empty = this.emptyPayload(prNumber);
+    const comments = await this.findLedgerComments(prNumber);
+    // Observed absence needs no signature; existing markers still require one.
+    if (comments.length === 0) {
+      return { valid: true, payload: empty };
+    }
     if (!this.secret) {
       return {
         valid: false,
         payload: empty,
         invalidReason: 'REVIEW_ROUTER_LEDGER_KEY is not configured',
       };
-    }
-
-    const comments = await this.findLedgerComments(prNumber);
-    if (comments.length === 0) {
-      return { valid: true, payload: empty };
     }
 
     const invalidReasons: string[] = [];

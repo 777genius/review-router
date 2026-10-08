@@ -63967,16 +63967,16 @@ var ReviewLedger = class {
   }
   async load(prNumber) {
     const empty = this.emptyPayload(prNumber);
+    const comments = await this.findLedgerComments(prNumber);
+    if (comments.length === 0) {
+      return { valid: true, payload: empty };
+    }
     if (!this.secret) {
       return {
         valid: false,
         payload: empty,
         invalidReason: "REVIEW_ROUTER_LEDGER_KEY is not configured"
       };
-    }
-    const comments = await this.findLedgerComments(prNumber);
-    if (comments.length === 0) {
-      return { valid: true, payload: empty };
     }
     const invalidReasons = [];
     for (const comment of comments) {

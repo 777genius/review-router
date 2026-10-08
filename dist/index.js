@@ -37295,16 +37295,16 @@ var ReviewLedger = class {
   }
   async load(prNumber) {
     const empty = this.emptyPayload(prNumber);
+    const comments = await this.findLedgerComments(prNumber);
+    if (comments.length === 0) {
+      return { valid: true, payload: empty };
+    }
     if (!this.secret) {
       return {
         valid: false,
         payload: empty,
         invalidReason: "REVIEW_ROUTER_LEDGER_KEY is not configured"
       };
-    }
-    const comments = await this.findLedgerComments(prNumber);
-    if (comments.length === 0) {
-      return { valid: true, payload: empty };
     }
     const invalidReasons = [];
     for (const comment of comments) {
@@ -116793,7 +116793,8 @@ function classifyV2ActionFailure(error2) {
     "runtime_config_unsafe_admitted_env",
     "review_action_v2_authorization_denied",
     "review_action_v2_authorization_facts_fields_invalid",
-    "review_action_v2_codex_provider_missing"
+    "review_action_v2_codex_provider_missing",
+    "review_action_v2_command_ledger_unavailable"
   ].includes(error2.message)) {
     return diagnosedV2ActionFailure(error2.message);
   }

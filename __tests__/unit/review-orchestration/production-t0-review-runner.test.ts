@@ -376,20 +376,20 @@ describe('ProductionT0ReviewRunner policy', () => {
   );
 
   it.each([
-    ['mimo-v2.6-pro', true, 'high', 'high', false, 'xhigh'],
-    ['mimo-v2.6-pro', true, undefined, 'high', false, 'xhigh'],
-    ['mimo-v2.6-pro', true, 'low', 'low', false, 'xhigh'],
-    ['mimo-v2.6-pro', true, 'medium', 'medium', false, 'xhigh'],
-    ['mimo-v2.6-pro', true, 'xhigh', 'xhigh', true, 'xhigh'],
-    ['mimo-v2.6-pro', true, 'ultra', 'ultra', true, 'xhigh'],
-    ['mimo-v2.6-pro', true, 'arbitrary', 'arbitrary', true, 'xhigh'],
-    ['mimo-v2.6-pro', true, '', '', true, 'xhigh'],
-    ['mimo-v2.6-pro', true, 'none', 'none', true, 'xhigh'],
-    ['gpt-selected', true, undefined, 'xhigh', false, 'xhigh'],
-    ['gpt-selected', true, 'ultra', 'ultra', false, 'xhigh'],
-    ['mimo-v2.6-pro', false, undefined, 'xhigh', false, 'xhigh'],
-    ['gpt-selected', true, undefined, undefined, false, undefined],
-    ['mimo-v2.6-pro', false, undefined, undefined, false, undefined],
+    ['mimo-v2.6-pro', true, 'high', 'high', false, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, undefined, 'high', false, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'low', 'low', false, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'medium', 'medium', false, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'xhigh', 'xhigh', true, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'ultra', 'ultra', true, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'arbitrary', 'arbitrary', true, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, '', '', true, 'xhigh', undefined],
+    ['mimo-v2.6-pro', true, 'none', 'none', true, 'xhigh', undefined],
+    ['gpt-selected', true, undefined, 'xhigh', false, 'xhigh', 'bare'],
+    ['gpt-selected', true, 'ultra', 'ultra', false, 'xhigh', 'absolute'],
+    ['mimo-v2.6-pro', false, undefined, 'xhigh', false, 'xhigh', undefined],
+    ['gpt-selected', true, undefined, undefined, false, undefined, 'relative'],
+    ['mimo-v2.6-pro', false, undefined, undefined, false, undefined, undefined],
     [
       'gpt-selected',
       true,
@@ -397,8 +397,9 @@ describe('ProductionT0ReviewRunner policy', () => {
       'custom-caller-effort',
       false,
       'custom-caller-effort',
+      undefined,
     ],
-    ['mimo-v2.6-pro', true, undefined, 'high', false, undefined],
+    ['mimo-v2.6-pro', true, undefined, 'high', false, undefined, undefined],
   ] as const)(
     'resolves effort for selected %s, gateway %s, server %s (expected %s, denied %s, caller %s) before effects',
     async (
@@ -407,19 +408,44 @@ describe('ProductionT0ReviewRunner policy', () => {
       serverEffort,
       expectedEffort,
       denied,
-      callerEffort
+      callerEffort,
+      binaryKind?: 'bare' | 'absolute' | 'relative'
     ) => {
       const root = fs.mkdtempSync(
         path.join(os.tmpdir(), 'mimo-runner-effort-')
       );
       const previousEnv = { ...process.env };
+      const previousCwd = process.cwd();
+      const toolPath = ['/fixture/trusted-tools', '/fixture/system-tools'];
+      const expectedBinary =
+        binaryKind === 'bare'
+          ? 'codex'
+          : binaryKind === 'absolute'
+            ? path.join(os.tmpdir(), 'trusted-host-cli', 'codex')
+            : path.join(previousCwd, 'trusted-host-cli', 'codex');
+      const codexBinaryPath =
+        binaryKind === 'relative' ? './trusted-host-cli/codex' : expectedBinary;
+      let observedEnvironment:
+        | {
+            cwd: string;
+            path: string | undefined;
+            binary: string | undefined;
+          }
+        | undefined;
       const stoppedAtBoundary = new Error('mock authorization boundary');
       const configuration = jest
         .spyOn(ConfigLoader, 'load')
-        .mockImplementation(() => ({
-          ...DEFAULT_CONFIG,
-          providers: [`codex/${process.env.CODEX_MODEL}`],
-        }));
+        .mockImplementation(() => {
+          observedEnvironment = {
+            cwd: process.cwd(),
+            path: process.env.PATH,
+            binary: process.env.REVIEWROUTER_CODEX_BINARY,
+          };
+          return {
+            ...DEFAULT_CONFIG,
+            providers: [`codex/${process.env.CODEX_MODEL}`],
+          };
+        });
       const oidc = jest
         .spyOn(GitHubActionsOidcTokenProvider.prototype, 'requestToken')
         .mockResolvedValue('fixture-oidc');
@@ -460,6 +486,10 @@ describe('ProductionT0ReviewRunner policy', () => {
           )
         );
       try {
+        if (binaryKind) {
+          process.env.PATH = toolPath.join(path.delimiter);
+          process.env.REVIEWROUTER_CODEX_BINARY = 'fixture-previous-codex';
+        }
         process.env.CODEX_MODEL = 'caller-model';
         if (callerEffort === undefined) {
           delete process.env.CODEX_REASONING_EFFORT;
@@ -482,6 +512,7 @@ describe('ProductionT0ReviewRunner policy', () => {
           headSha: 'a'.repeat(40),
           workspacePath: root,
           codexHome: path.join(root, 'home'),
+          ...(binaryKind ? { codexBinaryPath } : {}),
           scmReadToken: 'fixture-scm',
           scmReadTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
           refreshScmReadToken: async () => {
@@ -528,6 +559,23 @@ describe('ProductionT0ReviewRunner policy', () => {
         expect(oidc).toHaveBeenCalledTimes(accountGateway ? 0 : 2);
         expect(execute).not.toHaveBeenCalled();
         expect(review).not.toHaveBeenCalled();
+        if (binaryKind) {
+          expect(observedEnvironment?.cwd).toBe(root);
+          expect(observedEnvironment?.binary).toBe(expectedBinary);
+          const searchPath = observedEnvironment?.path?.split(path.delimiter);
+          expect(searchPath).toEqual(
+            binaryKind === 'bare'
+              ? toolPath
+              : [path.dirname(expectedBinary), ...toolPath]
+          );
+          expect(searchPath).not.toContain('.');
+          expect(searchPath).not.toContain(root);
+          expect(process.cwd()).toBe(previousCwd);
+          expect(process.env.PATH).toBe(toolPath.join(path.delimiter));
+          expect(process.env.REVIEWROUTER_CODEX_BINARY).toBe(
+            'fixture-previous-codex'
+          );
+        }
       } finally {
         process.env = previousEnv;
         configuration.mockRestore();

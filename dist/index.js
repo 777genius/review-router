@@ -26611,8 +26611,8 @@ var TrivialDetector = class {
    * Check if file is a dependency lock file
    */
   isDependencyLockFile(filename) {
-    const basename3 = filename.split("/").pop() || "";
-    return this.DEPENDENCY_FILES.includes(basename3);
+    const basename4 = filename.split("/").pop() || "";
+    return this.DEPENDENCY_FILES.includes(basename4);
   }
   /**
    * Check if file is documentation
@@ -27878,11 +27878,11 @@ function reviewInvestigationSearchOperationInputHash(query) {
 }
 function reviewInvestigationBasenameFallbackQuery(path31) {
   assertPath(path31, "review_investigation_probe_path_invalid");
-  const basename3 = basenameWithoutExtension(path31);
+  const basename4 = basenameWithoutExtension(path31);
   return isSpecificProbeQuery(
     "basename_fallback" /* BasenameFallback */,
-    basename3
-  ) ? basename3 : path31;
+    basename4
+  ) ? basename4 : path31;
 }
 function createProbe(candidate) {
   const obligationKind = obligationKindFor(candidate);
@@ -34953,8 +34953,8 @@ ${deleted}`;
     return "source file";
   }
   basenameWithoutExtension(filename) {
-    const basename3 = filename.split("/").pop() || filename;
-    return basename3.replace(/\.[^.]+$/, "");
+    const basename4 = filename.split("/").pop() || filename;
+    return basename4.replace(/\.[^.]+$/, "");
   }
   truncate(value, maxLength) {
     return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
@@ -47508,8 +47508,8 @@ function isSensitiveTokenPath(tokens) {
   return (tokens.includes("token") || tokens.includes("tokens")) && includesToken(tokens, SENSITIVE_TOKEN_CONTEXT);
 }
 function isActionManifest(filename, tokens) {
-  const basename3 = filename.split("/").at(-1)?.toLowerCase();
-  if (basename3 === "action.yml" || basename3 === "action.yaml") return true;
+  const basename4 = filename.split("/").at(-1)?.toLowerCase();
+  if (basename4 === "action.yml" || basename4 === "action.yaml") return true;
   return tokens.includes("manifest") && (tokens.includes("action") || tokens.includes("actions"));
 }
 function classifyFileRisk(filename) {
@@ -48834,12 +48834,12 @@ var ReviewOrchestrator = class {
           review.findings
         );
         if (fixPrompts.length > 0) {
-          const basename3 = this.sanitizeFilename(
+          const basename4 = this.sanitizeFilename(
             process.env.REPORT_BASENAME || "review-router"
           );
           const fixPromptsPath = import_path.default.join(
             process.cwd(),
-            `${basename3}-fix-prompts.md`
+            `${basename4}-fix-prompts.md`
           );
           const format = config.fixPromptFormat || "plain";
           await this.components.promptGenerator.saveToFile(
@@ -114980,6 +114980,12 @@ var ProductionT0ReviewRunner = class {
     this.progress = progress;
   }
   async run(input) {
+    if (input.codexBinaryPath && path29.basename(input.codexBinaryPath) !== input.codexBinaryPath) {
+      input = {
+        ...input,
+        codexBinaryPath: path29.resolve(process.cwd(), input.codexBinaryPath)
+      };
+    }
     return withRunnerEnvironment(input, async () => {
       try {
         return await this.runInWorkspace(input);
@@ -115904,10 +115910,12 @@ async function withRunnerEnvironment(input, operation) {
   set2("REVIEWROUTER_HEAD_SHA", input.headSha.toLowerCase());
   if (input.codexBinaryPath) {
     set2("REVIEWROUTER_CODEX_BINARY", input.codexBinaryPath);
-    set2(
-      "PATH",
-      `${path29.dirname(input.codexBinaryPath)}${path29.delimiter}${process.env.PATH ?? ""}`
-    );
+    if (path29.isAbsolute(input.codexBinaryPath)) {
+      set2(
+        "PATH",
+        `${path29.dirname(input.codexBinaryPath)}${path29.delimiter}${process.env.PATH ?? ""}`
+      );
+    }
   }
   try {
     process.chdir(input.workspacePath);
@@ -116746,6 +116754,9 @@ function requireCompletedMergeGateConclusion(conclusion) {
   }
 }
 function classifyV2ActionFailure(error2) {
+  if (!(error2 instanceof ReviewActionV2ClientError) && error2 instanceof Error && error2.cause instanceof ReviewActionV2ClientError) {
+    error2 = error2.cause;
+  }
   if (error2 instanceof ReviewActionV2ClientError && Object.values(ReviewActionV2ClientFailureCode).includes(error2.code) && Object.values(ReviewActionV2OperationId).includes(error2.operationId)) {
     const fields = [
       `review_action_v2_${error2.code}`,
@@ -116769,6 +116780,15 @@ function classifyV2ActionFailure(error2) {
     "account_gateway_readback_unknown",
     "account_gateway_authorization_unavailable",
     "account_gateway_codex_version_unqualified",
+    "account_gateway_git_failed",
+    "account_gateway_git_timeout",
+    "account_gateway_git_output_bound",
+    "review_revision_materialization_incomplete",
+    "review_revision_materialization_input_invalid",
+    "review_revision_materialization_sha_invalid",
+    "review_action_v2_checked_out_head_invalid",
+    "review_action_v2_scm_read_token_invalid",
+    "account_gateway_mimo_reasoning_effort_unsupported",
     "runtime_config_invalid_response",
     "runtime_config_unsafe_admitted_env",
     "review_action_v2_authorization_denied",

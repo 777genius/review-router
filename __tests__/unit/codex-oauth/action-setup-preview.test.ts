@@ -712,6 +712,34 @@ describe('Codex OAuth rotating setup PR preview', () => {
       'ReviewRouter stopped without a terminal review result.',
     ],
     [
+      new Error('diagnostic-sensitive-sentinel', {
+        cause: new ReviewActionV2ClientError(
+          ReviewActionV2ClientFailureCode.ProtocolError,
+          ReviewActionV2OperationId.ReviewExecutionStart,
+          {
+            httpStatus: 403,
+            protocolErrorCode: ReviewActionV2ProtocolErrorCode.Forbidden,
+            issues: ['diagnostic-sensitive-sentinel'],
+            cause: new Error('diagnostic-sensitive-sentinel'),
+          }
+        ),
+      }),
+      'review_action_v2_protocol_error operation=review_execution_start http_status=403 error_code=forbidden',
+      'ReviewRouter stopped without a terminal review result.',
+    ],
+    [
+      new Error('account_gateway_git_failed'),
+      'account_gateway_git_failed',
+      'ReviewRouter stopped without a terminal review result.',
+    ],
+    [
+      new Error('diagnostic-sensitive-sentinel', {
+        cause: new Error('diagnostic-sensitive-sentinel'),
+      }),
+      'review_action_v2_terminal_result_missing',
+      'did not obtain a terminal review result from the provider',
+    ],
+    [
       new Error('review_action_v2_codex_provider_missing'),
       'review_action_v2_codex_provider_missing',
       'ReviewRouter stopped without a terminal review result.',

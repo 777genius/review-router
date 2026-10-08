@@ -628,6 +628,13 @@ type V2ActionFailure = Readonly<{
 }>;
 
 function classifyV2ActionFailure(error: unknown): V2ActionFailure {
+  if (
+    !(error instanceof ReviewActionV2ClientError) &&
+    error instanceof Error &&
+    error.cause instanceof ReviewActionV2ClientError
+  ) {
+    error = error.cause;
+  }
   // Only closed contract values may reach logs/comments. Never copy message,
   // validation issues, cause, response bodies, capabilities or request payloads.
   if (
@@ -667,6 +674,15 @@ function classifyV2ActionFailure(error: unknown): V2ActionFailure {
       'account_gateway_readback_unknown',
       'account_gateway_authorization_unavailable',
       'account_gateway_codex_version_unqualified',
+      'account_gateway_git_failed',
+      'account_gateway_git_timeout',
+      'account_gateway_git_output_bound',
+      'review_revision_materialization_incomplete',
+      'review_revision_materialization_input_invalid',
+      'review_revision_materialization_sha_invalid',
+      'review_action_v2_checked_out_head_invalid',
+      'review_action_v2_scm_read_token_invalid',
+      'account_gateway_mimo_reasoning_effort_unsupported',
       'runtime_config_invalid_response',
       'runtime_config_unsafe_admitted_env',
       'review_action_v2_authorization_denied',

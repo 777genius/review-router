@@ -154,6 +154,15 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
   async run(
     input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]
   ): Promise<CodexOAuthV2ReviewResult> {
+    if (
+      input.codexBinaryPath &&
+      path.basename(input.codexBinaryPath) !== input.codexBinaryPath
+    ) {
+      input = {
+        ...input,
+        codexBinaryPath: path.resolve(process.cwd(), input.codexBinaryPath),
+      };
+    }
     return withRunnerEnvironment(input, async () => {
       try {
         return await this.runInWorkspace(input);
@@ -1703,10 +1712,12 @@ async function withRunnerEnvironment<T>(
   set('REVIEWROUTER_HEAD_SHA', input.headSha.toLowerCase());
   if (input.codexBinaryPath) {
     set('REVIEWROUTER_CODEX_BINARY', input.codexBinaryPath);
-    set(
-      'PATH',
-      `${path.dirname(input.codexBinaryPath)}${path.delimiter}${process.env.PATH ?? ''}`
-    );
+    if (path.isAbsolute(input.codexBinaryPath)) {
+      set(
+        'PATH',
+        `${path.dirname(input.codexBinaryPath)}${path.delimiter}${process.env.PATH ?? ''}`
+      );
+    }
   }
   try {
     process.chdir(input.workspacePath);

@@ -13100,8 +13100,8 @@ var TrivialDetector = class {
    * Check if file is a dependency lock file
    */
   isDependencyLockFile(filename) {
-    const basename2 = filename.split("/").pop() || "";
-    return this.DEPENDENCY_FILES.includes(basename2);
+    const basename3 = filename.split("/").pop() || "";
+    return this.DEPENDENCY_FILES.includes(basename3);
   }
   /**
    * Check if file is documentation
@@ -14367,11 +14367,11 @@ function reviewInvestigationSearchOperationInputHash(query) {
 }
 function reviewInvestigationBasenameFallbackQuery(path14) {
   assertPath(path14, "review_investigation_probe_path_invalid");
-  const basename2 = basenameWithoutExtension(path14);
+  const basename3 = basenameWithoutExtension(path14);
   return isSpecificProbeQuery(
     "basename_fallback" /* BasenameFallback */,
-    basename2
-  ) ? basename2 : path14;
+    basename3
+  ) ? basename3 : path14;
 }
 function createProbe(candidate) {
   const obligationKind = obligationKindFor(candidate);
@@ -63471,8 +63471,8 @@ function isSensitiveTokenPath(tokens) {
   return (tokens.includes("token") || tokens.includes("tokens")) && includesToken(tokens, SENSITIVE_TOKEN_CONTEXT);
 }
 function isActionManifest(filename, tokens) {
-  const basename2 = filename.split("/").at(-1)?.toLowerCase();
-  if (basename2 === "action.yml" || basename2 === "action.yaml") return true;
+  const basename3 = filename.split("/").at(-1)?.toLowerCase();
+  if (basename3 === "action.yml" || basename3 === "action.yaml") return true;
   return tokens.includes("manifest") && (tokens.includes("action") || tokens.includes("actions"));
 }
 function classifyFileRisk(filename) {
@@ -89195,6 +89195,12 @@ var ProductionT0ReviewRunner = class {
     this.progress = progress;
   }
   async run(input) {
+    if (input.codexBinaryPath && path13.basename(input.codexBinaryPath) !== input.codexBinaryPath) {
+      input = {
+        ...input,
+        codexBinaryPath: path13.resolve(process.cwd(), input.codexBinaryPath)
+      };
+    }
     return withRunnerEnvironment(input, async () => {
       try {
         return await this.runInWorkspace(input);
@@ -90354,10 +90360,12 @@ async function withRunnerEnvironment(input, operation) {
   set2("REVIEWROUTER_HEAD_SHA", input.headSha.toLowerCase());
   if (input.codexBinaryPath) {
     set2("REVIEWROUTER_CODEX_BINARY", input.codexBinaryPath);
-    set2(
-      "PATH",
-      `${path13.dirname(input.codexBinaryPath)}${path13.delimiter}${process.env.PATH ?? ""}`
-    );
+    if (path13.isAbsolute(input.codexBinaryPath)) {
+      set2(
+        "PATH",
+        `${path13.dirname(input.codexBinaryPath)}${path13.delimiter}${process.env.PATH ?? ""}`
+      );
+    }
   }
   try {
     process.chdir(input.workspacePath);

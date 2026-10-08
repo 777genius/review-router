@@ -101112,6 +101112,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     input.apiUrl,
     () => controlPlane.currentAuthorization().authorizationToken
   );
+  let phase = "authorization";
   let authorized = false;
   let failed = false;
   let workspacePath;
@@ -101164,12 +101165,15 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       }
       return capability2;
     };
+    phase = "checkout_capability";
     const capability = await readCapability();
     run2.signal.throwIfAborted();
+    phase = "create_workspace";
     workspacePath = await createIsolatedCheckoutWorkspace({
       runnerTempPath: process.env.RUNNER_TEMP,
       githubWorkspacePath: input.workspacePath
     });
+    phase = "checkout";
     await safeCheckoutRepository({
       repository: capability.repository,
       headSha: capability.headSha,
@@ -101178,10 +101182,12 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       signal: run2.signal
     });
     run2.signal.throwIfAborted();
+    phase = "prepare_cli";
     cli = await prepareCodexCliBeforeAuthRead({
       signal: run2.signal,
       logger: { info, warn: warning }
     });
+    phase = "version";
     const version = await (0, import_util6.promisify)(import_child_process11.execFile)(cli.binaryPath, ["--version"], {
       signal: run2.signal,
       killSignal: "SIGKILL",
@@ -101192,6 +101198,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     if (!/^codex-cli 0\.147\.0\s*$/.test(version.stdout))
       throw new Error("account_gateway_codex_version_unqualified");
     run2.signal.throwIfAborted();
+    phase = "local_transport";
     codexHome = await fs20.mkdtemp(
       path18.join(
         process.env.RUNNER_TEMP || os8.tmpdir(),
@@ -101206,6 +101213,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       { mode: 384 }
     );
     run2.signal.throwIfAborted();
+    phase = "runner";
     const review = await ports.review.run({
       ...input,
       repository: capability.repository,
@@ -101229,6 +101237,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         signal: run2.signal
       }
     });
+    phase = "terminal";
     ports.observeRelay(transport.lastFailure);
     run2.signal.throwIfAborted();
     await ports.terminalReview(review, run2.signal);
@@ -101236,6 +101245,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     reason = review.outcome === "cancelled" /* Cancelled */ || review.outcome === "superseded" /* Superseded */ ? "cancelled" : review.outcome === "completed" /* Completed */ ? "completed" : "failed";
   } catch (error2) {
     failed = true;
+    warning(`Account gateway runtime failed: phase=${phase}`);
     ports.observeRelay(transport.lastFailure);
     await ports.terminalFailure(
       run2.signal.aborted ? run2.signal.reason : error2,

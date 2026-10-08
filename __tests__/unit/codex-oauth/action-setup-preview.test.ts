@@ -1161,6 +1161,7 @@ describe('Codex OAuth rotating setup PR preview', () => {
     'completed',
     'blocking',
     'missing receipt',
+    'opaque checkout failure',
     'admission denied',
     'admission denied with reporter',
   ] as const)(
@@ -1175,6 +1176,8 @@ describe('Codex OAuth rotating setup PR preview', () => {
       const receiptHash = 'c'.repeat(64);
       const publicationAttemptId = 'publication-fixture-1';
       const denied = scenario.startsWith('admission denied');
+      const opaqueFailure = scenario === 'opaque checkout failure';
+      const secret = 'opaque-checkout-secret-sentinel';
       const server = createServer((request, response) => {
         void (async () => {
           const route = new URL(request.url ?? '/', 'http://fixture.invalid')
@@ -1303,7 +1306,9 @@ describe('Codex OAuth rotating setup PR preview', () => {
         });
         const checkout = jest
           .spyOn(safeCheckout, 'safeCheckoutRepository')
-          .mockResolvedValue(undefined);
+          .mockImplementation(async () => {
+            if (opaqueFailure) throw new Error(secret);
+          });
         const actualPublicationClient =
           terminalPublication.createPublicationGitHubClient;
         const publicationClient = jest
@@ -1321,6 +1326,8 @@ describe('Codex OAuth rotating setup PR preview', () => {
           });
         const setFailed = jest.spyOn(core, 'setFailed');
         const info = jest.spyOn(core, 'info');
+        const warning = jest.spyOn(core, 'warning');
+        const error = jest.spyOn(core, 'error');
         const fetchImpl: typeof fetch = (input, init) => {
           const url = new URL(
             input instanceof Request ? input.url : String(input)
@@ -1432,6 +1439,31 @@ describe('Codex OAuth rotating setup PR preview', () => {
           expect(output).toContain('reviewrouter_state');
           expect(output).toContain('failed');
           expect(summary).toContain('operation=review_run_authorize');
+        } else if (opaqueFailure) {
+          expect(checkout).toHaveBeenCalledTimes(1);
+          expect(review).not.toHaveBeenCalled();
+          expect(requests.map(({ route }) => route)).toEqual([
+            '/oidc',
+            '/api/action/v2/review-runs/authorize',
+            '/api/action/v2/account-gateway/checkout',
+            '/api/action/v2/account-gateway/close',
+          ]);
+          expect(closes).toHaveLength(1);
+          expect(closes[0].body).toEqual({ reason: 'failed' });
+          expect(process.exitCode).toBe(1);
+          expect(summary).toContain('Review failed');
+          expect(warning).toHaveBeenCalledWith(
+            'Account gateway runtime failed: phase=checkout'
+          );
+          const diagnostics = [
+            output,
+            summary,
+            ...warning.mock.calls.flat(),
+            ...error.mock.calls.flat(),
+            ...info.mock.calls.flat(),
+            ...setFailed.mock.calls.flat(),
+          ].join('\n');
+          expect(diagnostics).not.toContain(secret);
         } else {
           expect(review).toHaveBeenCalledTimes(1);
           expect(checkout).toHaveBeenCalledTimes(1);

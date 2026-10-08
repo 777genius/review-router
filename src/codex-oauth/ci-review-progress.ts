@@ -304,17 +304,20 @@ export function createCiReviewProgressPublisher(input: {
   eventPath?: string;
   env?: NodeJS.ProcessEnv;
   requestOptions?: PublicationRequestOptions;
+  commentEligible?: boolean;
 }): CiReviewProgressPublisher | null {
   const env = input.env ?? process.env;
   if (!enabled(env.REVIEW_ROUTER_CI_PROGRESS_WRITES)) return null;
   const token = env.GITHUB_TOKEN?.trim();
   const fork = isForkPullRequest(input.eventPath ?? env.GITHUB_EVENT_PATH);
+  const commentEligible =
+    input.commentEligible !== false && Boolean(token) && !fork;
   return new CiReviewProgressPublisher({
     repository: input.repository,
     pullRequestNumber: input.pullRequestNumber,
-    commentEligible: Boolean(token) && !fork,
+    commentEligible,
     signal: input.requestOptions?.signal,
-    ...(token && !fork
+    ...(token && commentEligible
       ? { github: new GitHubCiProgressAdapter(token, input.requestOptions) }
       : {}),
     summaryPath: env.GITHUB_STEP_SUMMARY,

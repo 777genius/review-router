@@ -856,14 +856,24 @@ export function createConfiguredProductionInvestigationAgents(input: {
 
 export function mapOrchestrationResultToCodexOutcome(result: {
   readonly status: ReviewOrchestrationResultStatus;
+  readonly publicationAttemptId?: string;
+  readonly canonicalReceiptSetHash?: string;
   readonly failureCode?: string;
   readonly mergeGateConclusion?: MergeGateConclusion;
   readonly unavailablePublicationFacts?: readonly ReviewPublicationUnavailableFact[];
 }): CodexOAuthV2ReviewResult {
+  const publicationReceipt =
+    result.publicationAttemptId && result.canonicalReceiptSetHash
+      ? {
+          publicationAttemptId: result.publicationAttemptId,
+          canonicalReceiptSetHash: result.canonicalReceiptSetHash,
+        }
+      : undefined;
   switch (result.status) {
     case ReviewOrchestrationResultStatus.Completed:
       return {
         outcome: CodexOAuthV2ReviewOutcome.Completed,
+        ...(publicationReceipt ? { publicationReceipt } : {}),
         mergeGateConclusion: requireMergeGateConclusion(
           result.mergeGateConclusion
         ),
@@ -871,6 +881,7 @@ export function mapOrchestrationResultToCodexOutcome(result: {
     case ReviewOrchestrationResultStatus.PartialCompleted:
       return {
         outcome: CodexOAuthV2ReviewOutcome.PartialCompleted,
+        ...(publicationReceipt ? { publicationReceipt } : {}),
         reason: mapPartialFailureReason(result.failureCode),
         ...(result.failureCode ? { blockingFailure: result.failureCode } : {}),
       };

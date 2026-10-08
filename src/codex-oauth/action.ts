@@ -4,7 +4,6 @@ import {
   runAccountGatewayRuntime,
 } from './account-gateway-runtime';
 import * as path from 'path';
-import { createAccountGatewayRunFetch } from '../review-orchestration/infrastructure/account-gateway-model-transport';
 import * as core from '../actions/core';
 import { ReviewOrchestrator } from '../core/orchestrator';
 import { ConfigLoader } from '../config/loader';
@@ -49,7 +48,6 @@ import {
   type CodexOAuthTerminalOutcomeDedupeKey,
   type CodexOAuthTerminalOutcomeReporterPort,
   type CodexOAuthTerminalOutcomeReport,
-  type PublicationRequestOptions,
 } from './terminal-outcome-publication';
 export type {
   CodexOAuthTerminalOutcomeClearRequest,
@@ -69,6 +67,14 @@ import {
   type ReviewActionV2Activation,
 } from '../control-plane/review-action-v2-contract';
 import { createProductionT0ReviewRunner } from '../review-orchestration/infrastructure/production-t0-review-runner';
+import {
+  ReviewActionV2ClientError,
+  ReviewActionV2ClientFailureCode,
+} from '../control-plane/review-action-v2-client';
+import {
+  ReviewActionV2OperationId,
+  ReviewActionV2ProtocolErrorCode,
+} from '../control-plane/generated/review-action-v2/review-action-v2';
 import { ReviewPublicationUnavailableFact } from '../review-orchestration/application';
 import {
   createCiReviewProgressPublisher,
@@ -363,34 +369,12 @@ async function runAccountGatewayActionInternal(
   clearCodexRotatingProviderSecretEnv();
   clearCodexRotatingProcessAuthEnv();
   const inputs = readCodexOAuthActionInputs();
-  const terminalOidcEnv = snapshotCodexOAuthTerminalOutcomeOidcEnv();
-  const createReporter = (
-    fetchImpl: typeof fetch,
-    requestOptions: PublicationRequestOptions
-  ) =>
-    options.terminalOutcomeReporter ??
-    createDefaultCodexOAuthTerminalOutcomeReporter({
-      context: {
-        repository: inputs.repository,
-        pullRequestNumber: inputs.pullRequestNumber,
-        headSha: inputs.headSha,
-      },
-      audience: inputs.audience,
-      requestOptions,
-      controlPlane: new CodexOAuthControlPlaneClient({
-        apiUrl: inputs.apiUrl,
-        fetchImpl,
-      }),
-      oidc: new GitHubActionsOidcTokenProvider({
-        env: terminalOidcEnv,
-        fetchImpl,
-      }),
-    });
   const createProgressPublisher = (signal: AbortSignal) =>
     createCiReviewProgressPublisher({
       repository: inputs.repository,
       pullRequestNumber: inputs.pullRequestNumber,
       requestOptions: { signal, timeoutMs: 10_000 },
+      commentEligible: false,
     });
   let ciProgressReporter: CiOrchestrationProgressReporter | undefined;
   await runAccountGatewayRuntime(inputs, {
@@ -412,20 +396,26 @@ async function runAccountGatewayActionInternal(
     },
     terminalReview: async (review, signal) => {
       signal.throwIfAborted();
-      await finishV2ActionReview(
-        inputs,
-        review,
-        createReporter(
-          createAccountGatewayRunFetch(options.fetchImpl ?? fetch, signal),
-          { signal, timeoutMs: 10_000 }
-        ),
-        ciProgressReporter ?? null,
-        signal
-      );
+      if (options.terminalOutcomeReporter) {
+        await finishV2ActionReview(
+          inputs,
+          review,
+          options.terminalOutcomeReporter,
+          ciProgressReporter ?? null,
+          signal
+        );
+      } else {
+        await finishAccountGatewayActionReview(
+          inputs,
+          review,
+          ciProgressReporter ?? null,
+          signal
+        );
+      }
       signal.throwIfAborted();
       core.setOutput('reviewrouter_state', 'completed');
     },
-    terminalFailure: async (error) => {
+    terminalFailure: async (error, { authorized }) => {
       const cancelled =
         error instanceof Error && error.message === 'account_gateway_cancelled';
       // Reporting retains its own deadline after normal work is cancelled.
@@ -443,16 +433,12 @@ async function runAccountGatewayActionInternal(
       const failure = classifyV2ActionFailure(error);
       const report = failure.report(inputs);
       appendTerminalOutcomeStepSummary(report);
-      await publishTerminalOutcomeReportSafely(
-        createReporter(
-          createAccountGatewayRunFetch(
-            options.fetchImpl ?? fetch,
-            reportingSignal
-          ),
-          { signal: reportingSignal, timeoutMs: 10_000 }
-        ),
-        report
-      );
+      if (authorized && options.terminalOutcomeReporter) {
+        await publishTerminalOutcomeReportSafely(
+          options.terminalOutcomeReporter,
+          report
+        );
+      }
       core.setFailed(failure.code);
     },
     observeRelay: (fact) => {
@@ -511,6 +497,39 @@ async function runAccountGatewayActionInternal(
       core.info(`Gateway request readback: ${effect}`);
     },
   });
+}
+
+async function finishAccountGatewayActionReview(
+  inputs: ReturnType<typeof readCodexOAuthActionInputs>,
+  review: CodexOAuthV2ReviewResult,
+  ciProgressReporter: CiOrchestrationProgressReporter | null,
+  signal: AbortSignal
+): Promise<void> {
+  signal.throwIfAborted();
+  requireTerminalV2ReviewResult(review);
+  if (
+    review.outcome === CodexOAuthV2ReviewOutcome.Completed ||
+    review.outcome === CodexOAuthV2ReviewOutcome.PartialCompleted
+  ) {
+    const receipt = review.publicationReceipt;
+    if (
+      typeof receipt?.publicationAttemptId !== 'string' ||
+      !receipt.publicationAttemptId.trim() ||
+      !/^[a-f0-9]{64}$/.test(receipt.canonicalReceiptSetHash)
+    ) {
+      throw new Error('account_gateway_app_publication_receipt_missing');
+    }
+    core.info(
+      `ReviewRouter App publication completed: ${receipt.publicationAttemptId} (receipt ${receipt.canonicalReceiptSetHash}).`
+    );
+  }
+  core.setOutput('reviewrouter_v2_outcome', review.outcome);
+  await ciProgressReporter?.finish(progressTerminal(review));
+  signal.throwIfAborted();
+  const report = buildV2TerminalOutcomeReport(inputs, review);
+  if (report) appendTerminalOutcomeStepSummary(report);
+  const terminalFailureCode = v2TerminalFailureCode(review);
+  if (terminalFailureCode) core.setFailed(terminalFailureCode);
 }
 
 async function finishV2ActionReview(
@@ -609,6 +628,54 @@ type V2ActionFailure = Readonly<{
 }>;
 
 function classifyV2ActionFailure(error: unknown): V2ActionFailure {
+  // Only closed contract values may reach logs/comments. Never copy message,
+  // validation issues, cause, response bodies, capabilities or request payloads.
+  if (
+    error instanceof ReviewActionV2ClientError &&
+    Object.values(ReviewActionV2ClientFailureCode).includes(error.code) &&
+    Object.values(ReviewActionV2OperationId).includes(error.operationId)
+  ) {
+    const fields = [
+      `review_action_v2_${error.code}`,
+      `operation=${error.operationId}`,
+    ];
+    if (
+      typeof error.httpStatus === 'number' &&
+      Number.isInteger(error.httpStatus) &&
+      error.httpStatus >= 100 &&
+      error.httpStatus <= 599
+    ) {
+      fields.push(`http_status=${error.httpStatus}`);
+    }
+    if (
+      error.protocolErrorCode !== undefined &&
+      Object.values(ReviewActionV2ProtocolErrorCode).includes(
+        error.protocolErrorCode
+      )
+    ) {
+      fields.push(`error_code=${error.protocolErrorCode}`);
+    }
+    return diagnosedV2ActionFailure(fields.join(' '));
+  }
+  if (
+    error instanceof Error &&
+    [
+      'account_gateway_authorization_input_mismatch',
+      'account_gateway_checkout_capability_unavailable',
+      'account_gateway_checkout_capability_invalid',
+      'account_gateway_runtime_config_changed',
+      'account_gateway_readback_unknown',
+      'account_gateway_authorization_unavailable',
+      'account_gateway_codex_version_unqualified',
+      'runtime_config_invalid_response',
+      'runtime_config_unsafe_admitted_env',
+      'review_action_v2_authorization_denied',
+      'review_action_v2_authorization_facts_fields_invalid',
+      'review_action_v2_codex_provider_missing',
+    ].includes(error.message)
+  ) {
+    return diagnosedV2ActionFailure(error.message);
+  }
   if (error instanceof Error && error.message === 'account_gateway_cancelled') {
     return {
       code: error.message,
@@ -648,6 +715,26 @@ function classifyV2ActionFailure(error: unknown): V2ActionFailure {
   return {
     code: 'review_action_v2_terminal_result_missing',
     report: buildMissingV2TerminalOutcomeReport,
+  };
+}
+
+function diagnosedV2ActionFailure(code: string): V2ActionFailure {
+  return {
+    code,
+    report: (inputs) =>
+      terminalOutcomeReport({
+        inputs,
+        kind: CodexOAuthTerminalOutcomeKind.Failed,
+        title: 'Review failed ⚠️',
+        summary: 'ReviewRouter stopped without a terminal review result.',
+        rows: [
+          ['Outcome', 'failed'],
+          ['Failure code', code],
+        ],
+        note: 'No approval was published. Inspect the workflow failure before retrying.',
+        statusState: 'error',
+        statusDescription: 'Review failed: control plane or runtime error.',
+      }),
   };
 }
 

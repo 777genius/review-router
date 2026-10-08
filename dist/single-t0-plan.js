@@ -89740,10 +89740,15 @@ function createConfiguredProductionInvestigationAgents(input) {
   ]);
 }
 function mapOrchestrationResultToCodexOutcome(result2) {
+  const publicationReceipt = result2.publicationAttemptId && result2.canonicalReceiptSetHash ? {
+    publicationAttemptId: result2.publicationAttemptId,
+    canonicalReceiptSetHash: result2.canonicalReceiptSetHash
+  } : void 0;
   switch (result2.status) {
     case "completed" /* Completed */:
       return {
         outcome: "completed" /* Completed */,
+        ...publicationReceipt ? { publicationReceipt } : {},
         mergeGateConclusion: requireMergeGateConclusion(
           result2.mergeGateConclusion
         )
@@ -89751,6 +89756,7 @@ function mapOrchestrationResultToCodexOutcome(result2) {
     case "partial_completed" /* PartialCompleted */:
       return {
         outcome: "partial_completed" /* PartialCompleted */,
+        ...publicationReceipt ? { publicationReceipt } : {},
         reason: mapPartialFailureReason(result2.failureCode),
         ...result2.failureCode ? { blockingFailure: result2.failureCode } : {}
       };

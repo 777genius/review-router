@@ -747,6 +747,23 @@ describe('ProductionT0ReviewRunner policy', () => {
     });
   });
 
+  it('preserves the authoritative publication receipt for gateway terminal reporting', () => {
+    const orchestration = {
+      status: ReviewOrchestrationResultStatus.Completed,
+      mergeGateConclusion: MergeGateConclusion.Fail,
+      publicationAttemptId: 'publication-fixture-1',
+      canonicalReceiptSetHash: 'c'.repeat(64),
+    };
+    expect(mapOrchestrationResultToCodexOutcome(orchestration)).toEqual({
+      outcome: CodexOAuthV2ReviewOutcome.Completed,
+      mergeGateConclusion: MergeGateConclusion.Fail,
+      publicationReceipt: {
+        publicationAttemptId: 'publication-fixture-1',
+        canonicalReceiptSetHash: 'c'.repeat(64),
+      },
+    });
+  });
+
   it('preserves the completed projection merge gate conclusion', () => {
     expect(
       mapOrchestrationResultToCodexOutcome({

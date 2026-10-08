@@ -82,7 +82,10 @@ async function runAccountGatewayRuntimeInternal(
       review: CodexOAuthV2ReviewResult,
       signal: AbortSignal
     ) => Promise<void>;
-    readonly terminalFailure: (error: unknown) => Promise<void>;
+    readonly terminalFailure: (
+      error: unknown,
+      context: Readonly<{ authorized: boolean }>
+    ) => Promise<void>;
     readonly observeClose: (result: GatewayReadback) => void;
     readonly observeRelay: (fact: GatewayFailureFact | undefined) => void;
     readonly observeReadback: (
@@ -253,7 +256,10 @@ async function runAccountGatewayRuntimeInternal(
   } catch (error) {
     failed = true;
     ports.observeRelay(transport.lastFailure);
-    await ports.terminalFailure(run.signal.aborted ? run.signal.reason : error);
+    await ports.terminalFailure(
+      run.signal.aborted ? run.signal.reason : error,
+      { authorized }
+    );
   } finally {
     transport.cancelInference();
     // Every post-authorization exit (bootstrap failure/early return included).

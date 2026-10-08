@@ -90,15 +90,22 @@ type CodexOAuthV2FailureReason =
   | CodexOAuthV2TerminalReason.ExecutionFailed
   | CodexOAuthV2TerminalReason.Unknown;
 
+export type CodexOAuthV2PublicationReceipt = Readonly<{
+  publicationAttemptId: string;
+  canonicalReceiptSetHash: string;
+}>;
+
 export type CodexOAuthV2ReviewResult =
   | {
       readonly outcome: CodexOAuthV2ReviewOutcome.Completed;
       readonly mergeGateConclusion: MergeGateConclusion;
+      readonly publicationReceipt?: CodexOAuthV2PublicationReceipt;
     }
   | {
       readonly outcome: CodexOAuthV2ReviewOutcome.PartialCompleted;
       readonly reason: CodexOAuthV2PartialReason;
       readonly blockingFailure?: string;
+      readonly publicationReceipt?: CodexOAuthV2PublicationReceipt;
     }
   | { readonly outcome: CodexOAuthV2ReviewOutcome.Superseded }
   | {

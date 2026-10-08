@@ -1,6 +1,26 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import {
+  createServer,
+  request as httpRequest,
+  type IncomingMessage,
+} from 'node:http';
+import https, { type RequestOptions as HttpsRequestOptions } from 'node:https';
+import * as safeCheckout from '../../../src/codex-oauth/safe-checkout';
+import * as terminalPublication from '../../../src/codex-oauth/terminal-outcome-publication';
+import { canonicalJson } from '../../../src/context-gateway/context-gateway-contract';
+import { mapOrchestrationResultToCodexOutcome } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
+import {
+  ReviewOrchestrationResultStatus,
+  ReviewPublicationState,
+} from '../../../src/review-orchestration/application';
+import {
+  reviewActionV2PublishedProtocolVersion,
+  reviewActionV2PublishedSchemaDigest,
+  ReviewPublicationStatusResultStatus,
+  ReviewRunAuthorizationResultStatus,
+} from '../../../src/control-plane/generated/review-action-v2/review-action-v2';
 import * as core from '../../../src/actions/core';
 import { runCodexOAuthRotatingRuntime } from '../../../src/codex-oauth/runtime';
 import {
@@ -21,6 +41,14 @@ import {
   type CodexOAuthV2ReviewRunnerPort,
 } from '../../../src/codex-oauth/runtime';
 import { MergeGateConclusion } from '../../../src/review-projection/domain';
+import {
+  ReviewActionV2ClientError,
+  ReviewActionV2ClientFailureCode,
+} from '../../../src/control-plane/review-action-v2-client';
+import {
+  ReviewActionV2OperationId,
+  ReviewActionV2ProtocolErrorCode,
+} from '../../../src/control-plane/generated/review-action-v2/review-action-v2';
 import { ReviewPublicationUnavailableFact } from '../../../src/review-orchestration/application';
 import {
   ReviewActionV2RuntimeMode,
@@ -661,47 +689,81 @@ describe('Codex OAuth rotating setup PR preview', () => {
     );
   });
 
-  it('fails closed and publishes a terminal failure when the provider aborts', async () => {
-    const abort = new Error('provider aborted before terminal output');
-    abort.name = 'AbortError';
-    mockedRuntime.mockRejectedValue(abort);
-    process.env = {
-      ...actionEnv({ eventPath, outputPath, headRef: 'feature/change' }),
-      GITHUB_STEP_SUMMARY: stepSummaryPath,
-      REVIEW_ROUTER_CI_PROGRESS_WRITES: 'true',
-    };
-    const terminalOutcomeReporter = {
-      post: jest.fn(async () => undefined),
-      clear: jest.fn(async () => undefined),
-      status: jest.fn(async () => undefined),
-    };
+  it.each([
+    [
+      Object.assign(new Error('provider aborted before terminal output'), {
+        name: 'AbortError',
+      }),
+      'review_action_v2_terminal_result_missing',
+      'did not obtain a terminal review result from the provider',
+    ],
+    [
+      new ReviewActionV2ClientError(
+        ReviewActionV2ClientFailureCode.ProtocolError,
+        ReviewActionV2OperationId.ReviewRunAuthorize,
+        {
+          httpStatus: 403,
+          protocolErrorCode: ReviewActionV2ProtocolErrorCode.Forbidden,
+          issues: ['diagnostic-sensitive-sentinel'],
+          cause: new Error('diagnostic-sensitive-sentinel'),
+        }
+      ),
+      'review_action_v2_protocol_error operation=review_run_authorize http_status=403 error_code=forbidden',
+      'ReviewRouter stopped without a terminal review result.',
+    ],
+    [
+      new Error('review_action_v2_codex_provider_missing'),
+      'review_action_v2_codex_provider_missing',
+      'ReviewRouter stopped without a terminal review result.',
+    ],
+  ] as const)(
+    'fails closed and safely diagnoses runtime failure %s',
+    async (failure, code, summary) => {
+      mockedRuntime.mockRejectedValue(failure);
+      const setFailed = jest.spyOn(core, 'setFailed');
+      process.env = {
+        ...actionEnv({ eventPath, outputPath, headRef: 'feature/change' }),
+        GITHUB_STEP_SUMMARY: stepSummaryPath,
+        REVIEW_ROUTER_CI_PROGRESS_WRITES: 'true',
+      };
+      const terminalOutcomeReporter = {
+        post: jest.fn(async () => undefined),
+        clear: jest.fn(async () => undefined),
+        status: jest.fn(async () => undefined),
+      };
 
-    await runCodexOAuthRotatingAction({
-      reviewActionV2Activation: v2Activation(),
-      terminalOutcomeReporter,
-    });
+      await runCodexOAuthRotatingAction({
+        reviewActionV2Activation: v2Activation(),
+        terminalOutcomeReporter,
+      });
 
-    expect(process.exitCode).toBe(1);
-    expect(terminalOutcomeReporter.clear).not.toHaveBeenCalled();
-    expect(terminalOutcomeReporter.status).not.toHaveBeenCalled();
-    expect(terminalOutcomeReporter.post).toHaveBeenCalledWith(
-      expect.objectContaining({
-        body: expect.stringContaining(
-          'did not obtain a terminal review result from the provider'
-        ),
-        commitStatus: expect.objectContaining({ state: 'error' }),
-      })
-    );
-    expect(fs.readFileSync(stepSummaryPath, 'utf8')).toContain(
-      '**Phase:** Review failed'
-    );
-    expect(fs.readFileSync(stepSummaryPath, 'utf8')).toContain(
-      'Review units: 0 of 0 complete (0%)'
-    );
-    expect(fs.readFileSync(stepSummaryPath, 'utf8')).not.toContain(
-      'Review completed'
-    );
-  });
+      expect(process.exitCode).toBe(1);
+      expect(setFailed).toHaveBeenCalledWith(code);
+      expect(
+        JSON.stringify(terminalOutcomeReporter.post.mock.calls)
+      ).not.toContain('diagnostic-sensitive-sentinel');
+      expect(fs.readFileSync(stepSummaryPath, 'utf8')).not.toContain(
+        'diagnostic-sensitive-sentinel'
+      );
+      expect(terminalOutcomeReporter.clear).not.toHaveBeenCalled();
+      expect(terminalOutcomeReporter.status).not.toHaveBeenCalled();
+      expect(terminalOutcomeReporter.post).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining(summary),
+          commitStatus: expect.objectContaining({ state: 'error' }),
+        })
+      );
+      expect(fs.readFileSync(stepSummaryPath, 'utf8')).toContain(
+        '**Phase:** Review failed'
+      );
+      expect(fs.readFileSync(stepSummaryPath, 'utf8')).toContain(
+        'Review units: 0 of 0 complete (0%)'
+      );
+      expect(fs.readFileSync(stepSummaryPath, 'utf8')).not.toContain(
+        'Review completed'
+      );
+    }
+  );
 
   it('fails closed when the v2 runtime returns no terminal review result', async () => {
     mockedRuntime.mockResolvedValue({
@@ -1093,6 +1155,333 @@ describe('Codex OAuth rotating setup PR preview', () => {
     }
   );
 
+  // These cases run the actual gateway Action/runtime and HTTP adapters. Only
+  // source checkout and provider work are replaced at their existing boundaries.
+  it.each([
+    'completed',
+    'blocking',
+    'missing receipt',
+    'admission denied',
+    'admission denied with reporter',
+  ] as const)(
+    'keeps gateway terminal reporting within V2 authority: %s',
+    async (scenario) => {
+      const requests: {
+        route: string;
+        method: string;
+        body: Record<string, unknown>;
+      }[] = [];
+      const fixtureErrors: unknown[] = [];
+      const receiptHash = 'c'.repeat(64);
+      const publicationAttemptId = 'publication-fixture-1';
+      const denied = scenario.startsWith('admission denied');
+      const server = createServer((request, response) => {
+        void (async () => {
+          const route = new URL(request.url ?? '/', 'http://fixture.invalid')
+            .pathname;
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const raw = Buffer.concat(chunks).toString('utf8');
+          const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
+          requests.push({ route, method: request.method ?? '', body });
+          const reply = (value: unknown, status = 200) => {
+            response.writeHead(status, { 'content-type': 'application/json' });
+            response.end(JSON.stringify(value));
+          };
+          if (route === '/oidc') return reply({ value: 'fixture.oidc.token' });
+          if (route.startsWith('/api/action/v1/')) {
+            return reply(
+              { error: 'legacy_review_mutation_blocked:v2_only' },
+              403
+            );
+          }
+          const envelope = {
+            protocolVersion: reviewActionV2PublishedProtocolVersion,
+            schemaDigest: reviewActionV2PublishedSchemaDigest,
+            requestId: body.requestId,
+            serverTime: new Date().toISOString(),
+          };
+          if (route === '/api/action/v2/review-runs/authorize') {
+            return denied
+              ? reply(
+                  {
+                    ...envelope,
+                    error: {
+                      errorCode: 'forbidden',
+                      retryClass: 'never',
+                      details: { issues: ['fixture_admission_denied'] },
+                    },
+                  },
+                  403
+                )
+              : reply({ ...envelope, result: gatewayFixtureAuthorization() });
+          }
+          if (route === '/api/action/v2/account-gateway/checkout') {
+            expect(request.headers.authorization).toBe(
+              'Bearer fixture.authorization'
+            );
+            return reply({
+              protocolVersion: 1,
+              repository: 'fixture/disposable-terminal-review',
+              headSha: 'a'.repeat(40),
+              token: 'fixture.read.token',
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
+              permissions: { contents: 'read', pullRequests: 'read' },
+              runtimeConfig: {
+                protocolVersion: 1,
+                configVersion: 1,
+                runtimeEnv: {},
+              },
+            });
+          }
+          if (route === '/api/action/v2/review-publication/status') {
+            expect(body.authorizationToken).toBe('fixture.authorization');
+            expect(body.publicationAttemptId).toBe(publicationAttemptId);
+            return reply({
+              ...envelope,
+              result: {
+                status: ReviewPublicationStatusResultStatus.Terminal,
+                publicationAttemptId,
+                terminalOutcome: ReviewPublicationState.Succeeded,
+                canonicalReceiptSetHash:
+                  scenario === 'missing receipt' ? null : receiptHash,
+                pollAfterMs: null,
+              },
+            });
+          }
+          if (route === '/api/action/v2/account-gateway/close') {
+            expect(request.headers.authorization).toBe(
+              'Bearer fixture.authorization'
+            );
+            return reply({ state: 'closed' });
+          }
+          // If a gateway progress comment regresses, observe the real Octokit
+          // request here instead of sending it to GitHub.
+          if (route.startsWith('/repos/')) {
+            return reply(request.method === 'GET' ? [] : {});
+          }
+          throw new Error(`unexpected_fixture_route:${route}`);
+        })().catch((error: unknown) => {
+          fixtureErrors.push(error);
+          response.writeHead(500, { 'content-type': 'application/json' });
+          response.end('{}');
+        });
+      });
+      await new Promise<void>((resolve) =>
+        server.listen(0, '127.0.0.1', resolve)
+      );
+      try {
+        const address = server.address();
+        if (!address || typeof address === 'string')
+          throw new Error('fixture_address');
+        const origin = `http://127.0.0.1:${address.port}`;
+        const trustedOrigin = 'https://fixture.reviewrouter.invalid';
+        const redirectGatewayRequest: typeof https.request = (
+          url: string | URL | HttpsRequestOptions,
+          options?: HttpsRequestOptions | ((response: IncomingMessage) => void),
+          callback?: (response: IncomingMessage) => void
+        ) => {
+          if (
+            !(url instanceof URL) ||
+            url.origin !== trustedOrigin ||
+            !options ||
+            typeof options === 'function' ||
+            !callback
+          ) {
+            throw new Error('fixture_external_https_request_denied');
+          }
+          return httpRequest(
+            new URL(url.pathname + url.search, origin),
+            options,
+            callback
+          );
+        };
+        jest.spyOn(https, 'request').mockImplementation(redirectGatewayRequest);
+        const binary = path.join(tempDir, 'synthetic-codex.sh');
+        fs.writeFileSync(binary, '#!/bin/sh\nprintf "codex-cli 0.147.0\\n"\n', {
+          mode: 0o700,
+        });
+        const checkout = jest
+          .spyOn(safeCheckout, 'safeCheckoutRepository')
+          .mockResolvedValue(undefined);
+        const actualPublicationClient =
+          terminalPublication.createPublicationGitHubClient;
+        const publicationClient = jest
+          .spyOn(terminalPublication, 'createPublicationGitHubClient')
+          .mockImplementation((token, options) => {
+            const client = actualPublicationClient(token, options);
+            client.octokit.hook.before('request', (request) => {
+              request.baseUrl = origin;
+              request.url = String(request.url).replace(
+                /^https:\/\/api\.github\.com/,
+                origin
+              );
+            });
+            return client;
+          });
+        const setFailed = jest.spyOn(core, 'setFailed');
+        const info = jest.spyOn(core, 'info');
+        const fetchImpl: typeof fetch = (input, init) => {
+          const url = new URL(
+            input instanceof Request ? input.url : String(input)
+          );
+          if (url.hostname === 'fixture.actions.githubusercontent.com') {
+            return fetch(`${origin}/oidc${url.search}`, init);
+          }
+          if (url.origin !== trustedOrigin)
+            throw new Error('fixture_external_fetch_denied');
+          return fetch(new URL(url.pathname + url.search, origin), init);
+        };
+        process.env = {
+          ...actionEnv({ eventPath, outputPath, headRef: 'feature/change' }),
+          PATH: originalEnv.PATH,
+          GITHUB_REPOSITORY: 'fixture/disposable-terminal-review',
+          GITHUB_STEP_SUMMARY: stepSummaryPath,
+          GITHUB_TOKEN: 'fixture.progress.token',
+          REVIEW_ROUTER_MODE: 'account-gateway',
+          REVIEW_ROUTER_CI_PROGRESS_WRITES: 'true',
+          REVIEWROUTER_CODEX_BINARY: binary,
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fixture.oidc.request',
+          ACTIONS_ID_TOKEN_REQUEST_URL:
+            'https://fixture.actions.githubusercontent.com/oidc',
+          'INPUT_API-URL': trustedOrigin,
+        };
+        fs.writeFileSync(
+          eventPath,
+          JSON.stringify({
+            repository: { full_name: process.env.GITHUB_REPOSITORY },
+            pull_request: {
+              number: 1,
+              head: {
+                ref: 'feature/change',
+                repo: { full_name: process.env.GITHUB_REPOSITORY, fork: false },
+                sha: 'a'.repeat(40),
+              },
+            },
+          })
+        );
+        const review = jest.fn(
+          async (input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]) => {
+            const gateway = input.accountGateway;
+            if (!gateway) throw new Error('gateway_context_missing');
+            const status = await gateway.controlPlane.readPublicationStatus({
+              authorization: gateway.controlPlane.currentAuthorization(),
+              publicationAttemptId,
+              timeoutMs: 5_000,
+            });
+            if (
+              !status.terminal ||
+              status.outcome.state !== ReviewPublicationState.Succeeded
+            ) {
+              throw new Error('fixture_publication_not_succeeded');
+            }
+            const orchestration = {
+              status: ReviewOrchestrationResultStatus.Completed,
+              publicationAttemptId,
+              canonicalReceiptSetHash: status.outcome.canonicalReceiptSetHash,
+              mergeGateConclusion:
+                scenario === 'blocking'
+                  ? MergeGateConclusion.Fail
+                  : MergeGateConclusion.Pass,
+            };
+            return mapOrchestrationResultToCodexOutcome(orchestration);
+          }
+        );
+        const reporter = {
+          post: jest.fn(async () => undefined),
+          clear: jest.fn(async () => undefined),
+          status: jest.fn(async () => undefined),
+        };
+        await runCodexOAuthRotatingAction({
+          fetchImpl,
+          reviewActionV2Activation: v2Activation(),
+          v2ReviewRunner: { run: review },
+          ...(scenario === 'admission denied with reporter'
+            ? { terminalOutcomeReporter: reporter }
+            : {}),
+        });
+
+        expect(fixtureErrors).toEqual([]);
+        expect(
+          requests.filter(({ route }) => route.startsWith('/api/action/v1/'))
+        ).toEqual([]);
+        expect(
+          requests.filter(
+            ({ route }) =>
+              route.startsWith('/repos/') || route.endsWith('/responses')
+          )
+        ).toEqual([]);
+        expect(publicationClient).not.toHaveBeenCalled();
+        expect(reporter.post).not.toHaveBeenCalled();
+        expect(reporter.clear).not.toHaveBeenCalled();
+        expect(reporter.status).not.toHaveBeenCalled();
+        const output = fs.readFileSync(outputPath, 'utf8');
+        const summary = fs.readFileSync(stepSummaryPath, 'utf8');
+        const closes = requests.filter(({ route }) =>
+          route.endsWith('/account-gateway/close')
+        );
+        if (denied) {
+          expect(review).not.toHaveBeenCalled();
+          expect(checkout).not.toHaveBeenCalled();
+          expect(requests.map(({ route }) => route)).toEqual([
+            '/oidc',
+            '/api/action/v2/review-runs/authorize',
+          ]);
+          expect(closes).toEqual([]);
+          expect(process.exitCode).toBe(1);
+          expect(output).toContain('reviewrouter_state');
+          expect(output).toContain('failed');
+          expect(summary).toContain('operation=review_run_authorize');
+        } else {
+          expect(review).toHaveBeenCalledTimes(1);
+          expect(checkout).toHaveBeenCalledTimes(1);
+          expect(
+            requests.filter(({ route }) =>
+              route.endsWith('/review-publication/status')
+            )
+          ).toHaveLength(1);
+          expect(closes).toHaveLength(1);
+          if (scenario === 'missing receipt') {
+            expect(closes[0].body).toEqual({ reason: 'failed' });
+            expect(process.exitCode).toBe(1);
+            expect(output).toContain('failed');
+            expect(summary).toContain('Review failed');
+            expect(info.mock.calls.flat().join('\n')).not.toContain(
+              'App publication completed:'
+            );
+          } else {
+            expect(closes[0].body).toEqual({ reason: 'completed' });
+            expect(
+              requests.findIndex(({ route }) =>
+                route.endsWith('/review-publication/status')
+              )
+            ).toBeLessThan(
+              requests.findIndex(({ route }) =>
+                route.endsWith('/account-gateway/close')
+              )
+            );
+            expect(output).toContain('completed');
+            expect(summary).toContain('**Phase:** Review complete');
+            expect(info.mock.calls.flat().join('\n')).toContain(receiptHash);
+            if (scenario === 'blocking') {
+              expect(process.exitCode).toBe(1);
+              expect(setFailed).toHaveBeenCalledWith(
+                CodexOAuthV2MergeGateFailureCode.Failed
+              );
+            } else {
+              expect(process.exitCode).toBeUndefined();
+              expect(setFailed).not.toHaveBeenCalled();
+            }
+          }
+        }
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    },
+    15_000
+  );
+
   it('uses the production T0 runner when no test runner is injected', async () => {
     mockedRuntime.mockResolvedValue({
       status: 'completed',
@@ -1218,4 +1607,51 @@ function jsonResponse(payload: unknown): Response {
     status: 200,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function gatewayFixtureAuthorization() {
+  return {
+    status: ReviewRunAuthorizationResultStatus.Authorized,
+    authorizationId: 'authorization-fixture',
+    authorizationToken: 'fixture.authorization',
+    producerReleaseId: 'release-fixture',
+    protocolLimitsProfileId: 'limits-fixture',
+    operationalSloProfileId: 'slo-fixture',
+    mutationEpoch: '1',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    protocolLimitsCanonicalJson: canonicalJson({
+      maxAttemptsPerSlot: 3,
+      maxLeaseDurationMs: 60_000,
+      maxObservationBytes: 100_000,
+      maxObservationFindings: 100,
+      maxProjectionBytes: 200_000,
+      maxProjectionFindings: 100,
+      maxPublicationBodyBytes: 200_000,
+      maxPublicationChunks: 20,
+      maxPublicationOperations: 100,
+      maxReconciliationDurationMs: 60_000,
+      maxRequestBatchSize: 20,
+      maxResultReportDurationMs: 60_000,
+      maxWorkSlots: 10,
+    }),
+    authorizationFactsCanonicalJson: canonicalJson({
+      workspaceId: 'workspace-fixture',
+      repositoryConnectionId: 'connection-fixture',
+      scmRepositoryIdentityId: 'repository-fixture',
+      pullRequestNumber: 1,
+      sourceRunId: 'run-fixture',
+      sourceRunAttempt: '1',
+      baseSha: '1'.repeat(40),
+      mergeBaseSha: '2'.repeat(40),
+      headSha: 'a'.repeat(40),
+      reviewRevisionHash: '4'.repeat(64),
+      trustDomain: 'github-actions',
+      producerReleaseId: 'release-fixture',
+      selectedProtocolVersion: 'review-action-v2',
+      schemaDigest: reviewActionV2PublishedSchemaDigest,
+      providerVoteLanes: [
+        { providerKind: 'codex', providerVoteIdentityHash: '6'.repeat(64) },
+      ],
+    }),
+  };
 }

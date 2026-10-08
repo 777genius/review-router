@@ -647,6 +647,5 @@ function normalizeBotLogin(value?: string | null): string | undefined {
 }
 
 function canonicalBotLogin(value?: string | null): string | undefined {
-  const login = normalizeBotLogin(value);
-  return login?.endsWith('[bot]') ? login.slice(0, -5) : login;
+  return normalizeBotLogin(value);
 }

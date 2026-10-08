@@ -78037,8 +78037,7 @@ function normalizeBotLogin(value) {
   return login;
 }
 function canonicalBotLogin(value) {
-  const login = normalizeBotLogin(value);
-  return login?.endsWith("[bot]") ? login.slice(0, -5) : login;
+  return normalizeBotLogin(value);
 }
 
 // src/review-orchestration/infrastructure/github-review-state-adapter.ts

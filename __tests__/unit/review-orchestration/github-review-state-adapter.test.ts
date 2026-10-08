@@ -170,7 +170,7 @@ describe('FreshGitHubLifecycleInventory', () => {
                   nodes: [
                     {
                       id: 'PRRC_untrusted_marker',
-                      author: { login: 'pull-request-author' },
+                      author: { login: 'review-router-ai' },
                       body: [
                         '<!-- review-router-finding:bbbbbbbbbbbbbbbbbbbbbbbb -->',
                         'Copied finding context',

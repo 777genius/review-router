@@ -92,12 +92,18 @@ describe('ReviewThreadInventoryLoader', () => {
     );
     expect(authors).not.toContain('invalid login!');
     expect(
-      isTrustedReviewThreadAuthor('Review-Router-Owner[bot]', authors)
+      isTrustedReviewThreadAuthor('  Review-Router-Owner[bot]  ', authors)
     ).toBe(true);
     expect(isTrustedReviewThreadAuthor('Review-Router-Owner', authors)).toBe(
-      true
+      false
     );
-    expect(isTrustedReviewThreadAuthor('review-router-ai')).toBe(true);
+    expect(isTrustedReviewThreadAuthor('review-router-ai')).toBe(false);
+    expect(
+      isTrustedReviewThreadAuthor('  Trusted-Human  ', ['trusted-human'])
+    ).toBe(true);
+    expect(
+      isTrustedReviewThreadAuthor('trusted-human[bot]', ['trusted-human'])
+    ).toBe(false);
   });
 
   it('trusts github-actions only when it is the expected or fallback comment identity', () => {
@@ -239,7 +245,7 @@ describe('ReviewThreadInventoryLoader', () => {
                     },
                     {
                       id: 'untrusted-copy',
-                      author: { login: 'contributor' },
+                      author: { login: 'review-router-ai' },
                       body: `<!-- reviewrouter-lifecycle-resolution:v1 target_id=${targetId} fingerprint=${fingerprint} -->`,
                       createdAt: '2026-05-14T00:01:00Z',
                       updatedAt: '2026-05-14T00:01:00Z',

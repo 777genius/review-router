@@ -701,6 +701,115 @@ describe('review agent environment allowlists', () => {
   );
 });
 
+// Native schema submission, permissive final parsing, or an unchecked schema suffix
+// would make these contract cases fail at the adapter boundary.
+describe('Codex MiMo local output schema enforcement', () => {
+  const wireOutput = {
+    ...turnOutput,
+    obligationProposals: [
+      {
+        kind: ReviewTurnObligationKind.DirectCaller,
+        path: proposedPath,
+        revision: 'head',
+        riskPriority: 800_000,
+      },
+    ],
+  };
+
+  it.each(['mimo', 'openai', 'openrouter'] as const)(
+    'uses the trusted %s policy independently of the requested model',
+    async (modelProvider) => {
+      const { adapter, runner, request } = fixture(
+        ReviewAgentProviderKind.Codex,
+        undefined,
+        modelProvider
+      );
+      runner.output = wireOutput;
+      await expect(
+        adapter.executeTurn({
+          ...request,
+          requestedModel:
+            modelProvider === 'mimo' ? 'gpt-spoof' : 'mimo-v2.6-pro',
+        })
+      ).resolves.toMatchObject({ schemaComplete: true });
+      const launch = runner.requests[0];
+      if (modelProvider === 'mimo') {
+        expect(launch.outputSchema).toBeUndefined();
+        expect(launch.stdin).toContain('Return exactly one JSON object');
+        const schema = JSON.parse(
+          launch.stdin.split('OUTPUT JSON SCHEMA:\n')[1].split('\n')[0]
+        );
+        expect(schema).toMatchObject({
+          additionalProperties: false,
+          properties: {
+            closureClaims: {
+              items: {
+                properties: {
+                  obligationId: { enum: request.allowedObligationIds },
+                },
+              },
+            },
+          },
+        });
+      } else {
+        expect(launch.stdin).toBe(request.prompt);
+        expect(launch.outputSchema).toMatchObject({
+          additionalProperties: false,
+        });
+      }
+    }
+  );
+
+  it.each([
+    ['no final', ''],
+    ['invalid JSON', '{private-invalid'],
+    ['markdown fence', '```json\n' + JSON.stringify(wireOutput) + '\n```'],
+    ['prose envelope', 'private-prefix ' + JSON.stringify(wireOutput)],
+    ['extra property', JSON.stringify({ ...wireOutput, privateExtra: true })],
+    ['domain-only proposal', JSON.stringify(turnOutput)],
+    [
+      'unadmitted closure',
+      JSON.stringify({
+        ...wireOutput,
+        closureClaims: [
+          {
+            obligationId: digest('f'),
+            operationReceiptIds: [digest('a')],
+          },
+        ],
+      }),
+    ],
+  ])('rejects %s before producing an observation', async (_name, output) => {
+    const { adapter, runner, request } = fixture(
+      ReviewAgentProviderKind.Codex,
+      undefined,
+      'mimo'
+    );
+    runner.rawCodexOutput = output;
+    await expect(adapter.executeTurn(request)).rejects.toMatchObject({
+      failureClass: ReviewAgentFailureClass.SchemaInvalidOutput,
+      message: 'review_agent_output_invalid',
+    });
+  });
+
+  it('rejects schema-augmented prompt overflow before resolving or launching', async () => {
+    const { adapter, runner, request, sessions } = fixture(
+      ReviewAgentProviderKind.Codex,
+      undefined,
+      'mimo'
+    );
+    const resolve = jest.spyOn(sessions, 'resolve');
+    await expect(
+      adapter.executeTurn({
+        ...request,
+        prompt: 'x'.repeat(8 * 1024 * 1024),
+      })
+    ).rejects.toMatchObject({ message: 'review_agent_turn_request_invalid' });
+    expect(resolve).not.toHaveBeenCalled();
+    expect(runner.requests).toEqual([]);
+  });
+});
+
 class FakeRunner implements ReviewAgentProcessRunnerPort {
   readonly requests: Array<{
     readonly args: readonly string[];
@@ -916,7 +1025,8 @@ class FakeExecutionSessions implements ReviewAgentExecutionSessionResolverPort {
 
 function fixture(
   providerKind: ReviewAgentProviderKind,
-  forcedResult?: ReviewAgentProcessResult
+  forcedResult?: ReviewAgentProcessResult,
+  modelProvider?: 'mimo' | 'openai' | 'openrouter'
 ): {
   adapter: ReviewAgentPort;
   credentials: { environment: Readonly<NodeJS.ProcessEnv> };
@@ -938,6 +1048,7 @@ function fixture(
           executionSessions: sessions,
           providerCredentialEnvironment: () => credentials.environment,
           binary: 'codex-test',
+          ...{ modelProvider },
           appServerRunner: runner,
         })
       : new ClaudeReviewAgentAdapter(runner, {

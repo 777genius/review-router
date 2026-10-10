@@ -17,7 +17,7 @@ export type CodexAppServerProtocolRequest = Readonly<{
   clientTurnId: string;
   requestedModel: string;
   reasoningEffort: CodexAppServerReasoningEffort;
-  outputSchema: Readonly<Record<string, unknown>>;
+  outputSchema?: Readonly<Record<string, unknown>>;
   allowedTools: readonly string[];
   maxOutputBytes: number;
 }>;
@@ -256,7 +256,9 @@ export class CodexAppServerProtocolClient {
             networkAccess: false,
           },
           effort: this.request.reasoningEffort,
-          outputSchema: this.request.outputSchema,
+          ...(this.request.outputSchema === undefined
+            ? {}
+            : { outputSchema: this.request.outputSchema }),
         }).then((value) => this.bindTurn(value))
     );
     this.maybeComplete();

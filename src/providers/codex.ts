@@ -8,7 +8,11 @@ import * as fsSync from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import Ajv2020, { type AnySchema } from 'ajv/dist/2020';
+import {
+  supportsCliOutputSchema,
+  assertJsonMatchesSchema,
+  type CodexModelProvider,
+} from './codex-output-schema';
 import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
 import { CODEX_CONFINEMENT_DISABLED_FEATURES } from './codex-confinement-policy';
@@ -50,7 +54,7 @@ export interface CodexProviderOptions {
   accountGateway?: LocalGatewayModelTransport;
   agenticContext?: boolean;
   eventAudit?: boolean;
-  modelProvider?: 'openai' | 'openrouter' | 'mimo';
+  modelProvider?: CodexModelProvider;
   providerNamePrefix?:
     | 'codex'
     | 'codex-openrouter'
@@ -442,7 +446,7 @@ export class CodexProvider extends Provider {
     };
     const environment = this.withoutCredentialEnvironment(fullEnvironment);
     const outputSchema = this.buildFindingsSchema();
-    const validateOutputLocally = !this.supportsCliOutputSchema(
+    const validateOutputLocally = !supportsCliOutputSchema(
       frozenCliConfig.modelProvider
     );
     const argsTemplate = this.buildExecArgs(
@@ -592,7 +596,7 @@ export class CodexProvider extends Provider {
       request.cwd
     );
     if (request.validateOutputLocally) {
-      this.assertJsonMatchesSchema(content, request.outputSchema, 'review');
+      assertJsonMatchesSchema(content, request.outputSchema, 'review');
     }
     const parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
     this.assertNoPlaceholderFindings(parsed.findings);
@@ -672,7 +676,7 @@ export class CodexProvider extends Provider {
   ): Promise<string> {
     this.requireModelProviderCredential();
     const binary = await this.resolveBinary();
-    const validateOutputLocally = !this.supportsCliOutputSchema(
+    const validateOutputLocally = !supportsCliOutputSchema(
       this.options.modelProvider
     );
     const finalPrompt = validateOutputLocally
@@ -699,49 +703,9 @@ export class CodexProvider extends Provider {
       );
     }
     if (validateOutputLocally) {
-      this.assertJsonMatchesSchema(content, outputSchema, 'structured');
+      assertJsonMatchesSchema(content, outputSchema, 'structured');
     }
     return content;
-  }
-
-  private supportsCliOutputSchema(
-    modelProvider: CodexProviderOptions['modelProvider']
-  ): boolean {
-    // MiMo's Responses endpoint rejects text.format=json_schema. Other
-    // providers retain Codex's native structured output enforcement.
-    return modelProvider !== 'mimo';
-  }
-
-  private assertJsonMatchesSchema(
-    content: string,
-    schema: unknown,
-    kind: 'review' | 'structured'
-  ): void {
-    let value: unknown;
-    try {
-      value = JSON.parse(content);
-    } catch {
-      throw new Error(
-        `Codex CLI returned invalid ${kind} JSON: response was not valid JSON`
-      );
-    }
-    try {
-      const validate = new Ajv2020({
-        strict: true,
-        allowUnionTypes: true,
-      }).compile(schema as AnySchema);
-      if ('$async' in validate) {
-        throw new Error('Asynchronous output schemas are unsupported');
-      }
-      if (validate(value)) return;
-    } catch {
-      throw new Error(
-        `Codex CLI returned invalid ${kind} JSON: output schema could not be validated`
-      );
-    }
-    throw new Error(
-      `Codex CLI returned invalid ${kind} JSON: output does not match schema`
-    );
   }
 
   private estimateUsage(prompt: string, content: string) {
@@ -835,7 +799,7 @@ export class CodexProvider extends Provider {
 
     if (
       options.outputSchemaFile &&
-      this.supportsCliOutputSchema(config.modelProvider)
+      supportsCliOutputSchema(config.modelProvider)
     ) {
       args.push('--output-schema', options.outputSchemaFile);
     }
@@ -917,7 +881,7 @@ export class CodexProvider extends Provider {
     const outputFile = path.join(os.tmpdir(), `codex-output-${runId}.txt`);
     const cliSchemaEnabled = prepared
       ? prepared.argsTemplate.includes('--output-schema')
-      : this.supportsCliOutputSchema(this.options.modelProvider);
+      : supportsCliOutputSchema(this.options.modelProvider);
     const schemaFile =
       options.outputSchema && cliSchemaEnabled
         ? path.join(os.tmpdir(), `codex-schema-${runId}.json`)

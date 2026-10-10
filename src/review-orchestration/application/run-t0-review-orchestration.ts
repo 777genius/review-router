@@ -16,6 +16,7 @@ import {
   ReviewInvestigationRecordingMode,
   ReviewInvestigationDiagnosticOutcome,
   ReviewTaskKind,
+  RestoredReviewExecutionState,
   RestoredReviewWorkSlotState,
   type AcceptedReviewObservation,
   type AcceptedReviewWorkSlotEvidence,
@@ -412,25 +413,42 @@ export class RunT0ReviewOrchestration {
           });
           const terminal = terminalizeCommand(outcome.exhaustionReason);
           if (terminal) {
-            const terminalized =
-              await this.dependencies.controlPlane.terminalizeWorkSlot({
+            const latestExecution =
+              await this.dependencies.controlPlane.restoreExecution({
                 authorization,
-                idempotencyKey: this.idempotencyKey('slot-terminalize', [
-                  execution.executionId,
-                  execution.generation,
-                  workSlot.workSlotId,
-                  terminal.terminalState,
-                  terminal.reasonCode,
-                ]),
-                execution,
                 reviewRevisionHash: command.reviewRevisionHash,
-                workSlotId: workSlot.workSlotId,
-                terminal,
               });
-            execution = {
-              ...execution,
-              streamVersion: terminalized.streamVersion,
-            };
+            execution = refreshExecutionAdmission(execution, latestExecution);
+            const latestSlot = execution.restoredExecution.workSlots.find(
+              (slot) => slot.workSlotId === workSlot.workSlotId
+            );
+            // Releasing the final provider attempt already exhausts the server slot.
+            const alreadyExhausted =
+              execution.restoredExecution.state ===
+                RestoredReviewExecutionState.Running &&
+              latestSlot?.state === RestoredReviewWorkSlotState.Exhausted &&
+              latestSlot.activeLeaseId === null;
+            if (!alreadyExhausted) {
+              const terminalized =
+                await this.dependencies.controlPlane.terminalizeWorkSlot({
+                  authorization,
+                  idempotencyKey: this.idempotencyKey('slot-terminalize', [
+                    execution.executionId,
+                    execution.generation,
+                    workSlot.workSlotId,
+                    terminal.terminalState,
+                    terminal.reasonCode,
+                  ]),
+                  execution,
+                  reviewRevisionHash: command.reviewRevisionHash,
+                  workSlotId: workSlot.workSlotId,
+                  terminal,
+                });
+              execution = {
+                ...execution,
+                streamVersion: terminalized.streamVersion,
+              };
+            }
           }
         }
       }

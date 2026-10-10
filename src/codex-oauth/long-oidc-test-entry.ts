@@ -11,7 +11,9 @@ export async function runLongOidcTestEntry(inputs: Inputs, ports: Ports): Promis
   if (!summary) throw new Error('long_oidc_github_summary_required');
   await runLongOidcTestRuntime(inputs, ports, (observation) => {
     // Adapter projects timestamps/authority ID only. No arbitrary error or body.
-    appendFileSync(summary, `\nLong OIDC TEST: ${JSON.stringify(observation)}\n`, 'utf8');
+    const receipt = `Long OIDC TEST: ${JSON.stringify(observation)}`;
+    appendFileSync(summary, `\n${receipt}\n`, 'utf8');
+    console.log(receipt);
   }, {
     repository: '777genius/rr-selfhost-direct-v2-e2e-20260730t120036z',
     model: 'mimo-v2.6-pro',

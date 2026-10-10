@@ -11,7 +11,8 @@ type Ports = Parameters<typeof runAccountGatewayRuntime>[1];
 type Gateway = NonNullable<Parameters<Ports['review']['run']>[0]['accountGateway']>;
 type Authorization = ReturnType<Gateway['controlPlane']['currentAuthorization']>;
 type Observation = Readonly<{
-  stage: 'mint' | 'after-expiry' | 'review-complete' | 'deadline-denied';
+  stage: 'mint' | 'after-expiry' | 'review-complete' | 'deadline-denied' | 'failed';
+  reason?: string;
   observedAt: string;
   elapsedMs: number;
   mintExpiresAt: string;
@@ -43,6 +44,16 @@ export async function runLongOidcTestRuntime(
   let outerBearerExpiresAt = 0;
   let currentAuthorization: (() => Authorization) | undefined;
   let caseCompleted = false;
+  let failureReason: string | undefined;
+  const knownReasons = new Set([
+    'long_oidc_verified_admission_missing', 'long_oidc_approved_deadline_unsuitable',
+    'long_oidc_execution_authority_changed', 'long_oidc_run_window_lost',
+    'long_oidc_normal_execution_deadline_missing', 'long_oidc_execution_window_insufficient',
+    'long_oidc_review_not_completed', 'long_oidc_review_missed_deadline',
+    'long_oidc_deadline_did_not_deny', 'long_oidc_body_unobservable',
+    'long_oidc_reauthorization_forbidden', 'long_oidc_jwt_invalid',
+    'long_oidc_github_mint_required',
+  ]);
   const emit = (stage: Observation['stage'], httpStatus?: number) => {
     record({
       stage,
@@ -141,6 +152,18 @@ export async function runLongOidcTestRuntime(
       emit('review-complete');
       return result;
     } },
+    terminalFailure: async (error, context) => {
+      failureReason = error instanceof Error && knownReasons.has(error.message)
+        ? error.message : 'long_oidc_runtime_failure';
+      try {
+        record({ stage: 'failed', reason: failureReason, observedAt: new Date().toISOString(),
+          elapsedMs: Math.round(performance.now() - started),
+          mintExpiresAt: new Date(mintExpiresAt).toISOString() });
+      } catch {
+        // Diagnostics cannot replace the original runtime failure reporting.
+      }
+      await ports.terminalFailure(error, context);
+    },
     terminalReview: async (review, signal) => {
       await ports.terminalReview(review, signal);
       const current = assertOriginal();
@@ -158,5 +181,5 @@ export async function runLongOidcTestRuntime(
       caseCompleted = true;
     },
   });
-  if (!caseCompleted) throw new Error('long_oidc_case_incomplete');
+  if (!caseCompleted) throw new Error(failureReason ?? 'long_oidc_case_incomplete');
 }

@@ -101384,6 +101384,22 @@ async function runLongOidcTestRuntime(inputs, ports, record, expected) {
   let outerBearerExpiresAt = 0;
   let currentAuthorization;
   let caseCompleted = false;
+  let failureReason;
+  const knownReasons = /* @__PURE__ */ new Set([
+    "long_oidc_verified_admission_missing",
+    "long_oidc_approved_deadline_unsuitable",
+    "long_oidc_execution_authority_changed",
+    "long_oidc_run_window_lost",
+    "long_oidc_normal_execution_deadline_missing",
+    "long_oidc_execution_window_insufficient",
+    "long_oidc_review_not_completed",
+    "long_oidc_review_missed_deadline",
+    "long_oidc_deadline_did_not_deny",
+    "long_oidc_body_unobservable",
+    "long_oidc_reauthorization_forbidden",
+    "long_oidc_jwt_invalid",
+    "long_oidc_github_mint_required"
+  ]);
   const emit = (stage, httpStatus) => {
     record({
       stage,
@@ -101475,6 +101491,20 @@ async function runLongOidcTestRuntime(inputs, ports, record, expected) {
       emit("review-complete");
       return result2;
     } },
+    terminalFailure: async (error2, context) => {
+      failureReason = error2 instanceof Error && knownReasons.has(error2.message) ? error2.message : "long_oidc_runtime_failure";
+      try {
+        record({
+          stage: "failed",
+          reason: failureReason,
+          observedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          elapsedMs: Math.round(import_node_perf_hooks.performance.now() - started),
+          mintExpiresAt: new Date(mintExpiresAt).toISOString()
+        });
+      } catch {
+      }
+      await ports.terminalFailure(error2, context);
+    },
     terminalReview: async (review, signal) => {
       await ports.terminalReview(review, signal);
       const current = assertOriginal();
@@ -101491,7 +101521,7 @@ async function runLongOidcTestRuntime(inputs, ports, record, expected) {
       caseCompleted = true;
     }
   });
-  if (!caseCompleted) throw new Error("long_oidc_case_incomplete");
+  if (!caseCompleted) throw new Error(failureReason ?? "long_oidc_case_incomplete");
 }
 
 // src/codex-oauth/long-oidc-test-entry.ts
@@ -101499,9 +101529,11 @@ async function runLongOidcTestEntry(inputs, ports) {
   const summary = process.env.GITHUB_STEP_SUMMARY;
   if (!summary) throw new Error("long_oidc_github_summary_required");
   await runLongOidcTestRuntime(inputs, ports, (observation) => {
+    const receipt = `Long OIDC TEST: ${JSON.stringify(observation)}`;
     (0, import_node_fs.appendFileSync)(summary, `
-Long OIDC TEST: ${JSON.stringify(observation)}
+${receipt}
 `, "utf8");
+    console.log(receipt);
   }, {
     repository: "777genius/rr-selfhost-direct-v2-e2e-20260730t120036z",
     model: "mimo-v2.6-pro"

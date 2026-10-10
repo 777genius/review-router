@@ -7,6 +7,7 @@ import {
 } from '../../github/ledger';
 import {
   ReviewThreadInventoryLoader,
+  trustedReviewThreadAuthorsFromEnv,
   type ReviewThreadInventory,
 } from '../../github/review-thread-inventory';
 import type { LifecycleTarget } from '../../types';
@@ -146,7 +147,11 @@ export class FreshGitHubLifecycleInventory implements CurrentLifecycleInventoryP
     client: GitHubClient,
     private readonly ledger: ReviewLedger
   ) {
-    this.loader = new ReviewThreadInventoryLoader(client);
+    this.loader = new ReviewThreadInventoryLoader(
+      client,
+      trustedReviewThreadAuthorsFromEnv(),
+      lifecycleObservationAuthors()
+    );
   }
 
   async loadCurrent(query: {
@@ -199,9 +204,12 @@ function mapFreshInventory(
 
   const rawTargets = [
     ...raw.candidates.map((target) => ({ target, manual: false })),
-    // The server excludes untrusted parents from managed lifecycle observations.
+    // Include server-authorized observation-only parents without mutation trust.
     ...raw.manualAttention
-      .filter((record) => record.target.trustedAuthor)
+      .filter(
+        (record) =>
+          record.target.trustedAuthor || record.target.managedObservation
+      )
       .map((record) => ({
         target: record.target,
         manual: true,
@@ -414,4 +422,23 @@ function compareCodeUnits(left: string, right: string): number {
   if (left < right) return -1;
   if (left > right) return 1;
   return 0;
+}
+
+function lifecycleObservationAuthors(): readonly string[] {
+  const raw = process.env.REVIEW_ROUTER_LIFECYCLE_OBSERVATION_AUTHORS;
+  if (raw === undefined) return [];
+  if (raw.length > 8192)
+    throw new Error('lifecycle_observation_authors_invalid');
+  const value: unknown = JSON.parse(raw);
+  if (
+    !Array.isArray(value) ||
+    value.length > 64 ||
+    value.some(
+      (author) =>
+        typeof author !== 'string' ||
+        !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,99}(?:\[bot\])?$/.test(author)
+    )
+  )
+    throw new Error('lifecycle_observation_authors_invalid');
+  return value;
 }

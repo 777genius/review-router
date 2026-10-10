@@ -26,6 +26,11 @@ import type {
 } from './review-agent-execution-session';
 import { StrictCliReviewAgent, schemaFailure } from './strict-cli-review-agent';
 import type { CodexAppServerReasoningEffort } from './codex-app-server-protocol';
+import {
+  supportsCliOutputSchema,
+  assertJsonMatchesSchema,
+  type CodexModelProvider,
+} from '../../providers/codex-output-schema';
 import { CODEX_CONFINEMENT_DISABLED_FEATURES } from '../../providers/codex-confinement-policy';
 
 export type CodexReviewAgentAdapterOptions = Readonly<{
@@ -33,6 +38,8 @@ export type CodexReviewAgentAdapterOptions = Readonly<{
   providerCredentialEnvironment?: () => Readonly<NodeJS.ProcessEnv>;
   binary?: string;
   reasoningEffort?: CodexAppServerReasoningEffort;
+  /** Trusted production composition only; independent of the turn's model. */
+  modelProvider?: CodexModelProvider;
   appServerRunner?: CodexAppServerTurnRunnerPort;
   interruptGraceMs?: number;
   processResultObserver?: (result: ReviewAgentProcessResult) => void;
@@ -73,7 +80,17 @@ export class CodexReviewAgentAdapter extends StrictCliReviewAgent {
   async executeTurn(
     request: ReviewTurnRequest
   ): Promise<ReviewTurnObservation> {
-    const execution = this.prepareExecution(request);
+    this.validateRequest(request);
+    const outputSchema = buildReviewAgentTurnOutputSchema(
+      request.allowedObligationIds
+    );
+    const validateOutputLocally = !supportsCliOutputSchema(
+      this.options.modelProvider
+    );
+    const prompt = validateOutputLocally
+      ? `${request.prompt}\n\nOUTPUT JSON SCHEMA:\n${JSON.stringify(outputSchema)}\nReturn exactly one JSON object matching this schema, with no markdown or prose.`
+      : request.prompt;
+    const execution = this.prepareExecution({ ...request, prompt });
     const reasoningEffort = this.options.reasoningEffort ?? 'xhigh';
     const result = await this.appServerRunner.executeTurn({
       invocationId: request.invocationId,
@@ -92,13 +109,11 @@ export class CodexReviewAgentAdapter extends StrictCliReviewAgent {
       signal: request.signal,
       protocol: {
         cwd: execution.gateway.cwd,
-        prompt: request.prompt,
+        prompt,
         clientTurnId: request.turnId,
         requestedModel: request.requestedModel,
         reasoningEffort,
-        outputSchema: buildReviewAgentTurnOutputSchema(
-          request.allowedObligationIds
-        ),
+        ...(validateOutputLocally ? {} : { outputSchema }),
         allowedTools: execution.gateway.enabledTools,
         maxOutputBytes: this.profile.maxOutputBytes,
       },
@@ -106,6 +121,13 @@ export class CodexReviewAgentAdapter extends StrictCliReviewAgent {
 
     let output;
     try {
+      if (validateOutputLocally) {
+        assertJsonMatchesSchema(
+          result.finalMessage,
+          outputSchema,
+          'structured'
+        );
+      }
       output = parseFinalTurnOutput(result.finalMessage);
     } catch (error) {
       throw schemaFailure(error);

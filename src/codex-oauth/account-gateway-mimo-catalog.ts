@@ -86,6 +86,10 @@ const mimoModel: MiMoModelInfo = {
   model_specialty: null,
 };
 
+export function isAccountGatewayMiMoModel(model: string | undefined): boolean {
+  return model === mimoModel.slug;
+}
+
 /** Called only by account-gateway preparation after authoritative model selection.
  * The home comes from the runtime-owned transport environment, never a catalog
  * path from checkout, user environment, or provider metadata. */
@@ -94,7 +98,7 @@ export async function prepareAccountGatewayModelCatalog(
   codexHome: string | undefined,
   gatewayConfiguration: readonly string[]
 ): Promise<string | undefined> {
-  if (model !== mimoModel.slug) return undefined;
+  if (!isAccountGatewayMiMoModel(model)) return undefined;
   if (!codexHome || !path.isAbsolute(codexHome))
     throw new Error('account_gateway_catalog_home_unavailable');
 

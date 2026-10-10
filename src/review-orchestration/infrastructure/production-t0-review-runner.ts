@@ -30,7 +30,10 @@ import type { GitHubTokenProvider } from '../../github/token-provider';
 import { ReviewLedger } from '../../github/ledger';
 import { PullRequestLoader } from '../../github/pr-loader';
 import { CodexProvider } from '../../providers/codex';
-import { prepareAccountGatewayModelCatalog } from '../../codex-oauth/account-gateway-mimo-catalog';
+import {
+  prepareAccountGatewayModelCatalog,
+  isAccountGatewayMiMoModel,
+} from '../../codex-oauth/account-gateway-mimo-catalog';
 import { recoverDiffForFiles } from '../../utils/diff';
 import { logger } from '../../utils/logger';
 import { emitReviewInvestigationTelemetry } from './review-investigation-telemetry';
@@ -328,6 +331,11 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const provider = new CodexProvider(model, {
       agenticContext,
       eventAudit: config.codexEventAudit,
+      modelProvider: resolveAccountGatewayModelProvider(
+        model,
+        input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
+        input.accountGateway?.modelTransport
+      ),
       ...(input.accountGateway
         ? { accountGateway: input.accountGateway.modelTransport }
         : {}),
@@ -451,6 +459,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                   codexBinaryPath: input.codexBinaryPath,
                   executionSessions: gateway,
                   modelTransport: input.accountGateway?.modelTransport,
+                  admittedGatewayModel:
+                    input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
                   reasoningEffort,
                 }),
               });
@@ -776,12 +786,25 @@ export function resolveProductionInvestigationReasoningEffort(input: {
   return effort;
 }
 
+function resolveAccountGatewayModelProvider(
+  selectedModel: string,
+  admittedModel: string | undefined,
+  transport: LocalGatewayModelTransport | undefined
+): 'mimo' | undefined {
+  return transport &&
+    admittedModel === selectedModel &&
+    isAccountGatewayMiMoModel(admittedModel)
+    ? 'mimo'
+    : undefined;
+}
+
 /** Internal production composition; model is selected after runtime config and revision checks. */
 export function createConfiguredProductionInvestigationAgents(input: {
   readonly codexModel: string;
   readonly codexBinaryPath: string | undefined;
   readonly executionSessions: ReviewAgentExecutionSessionResolverPort;
   readonly modelTransport?: LocalGatewayModelTransport;
+  readonly admittedGatewayModel?: string;
   readonly reasoningEffort: NonNullable<
     CodexReviewAgentAdapterOptions['reasoningEffort']
   >;
@@ -797,6 +820,11 @@ export function createConfiguredProductionInvestigationAgents(input: {
       requestedModel: input.codexModel,
       agent: new CodexReviewAgentAdapter(processRunner, {
         executionSessions: input.executionSessions,
+        modelProvider: resolveAccountGatewayModelProvider(
+          input.codexModel,
+          input.admittedGatewayModel,
+          input.modelTransport
+        ),
         providerCredentialEnvironment: input.modelTransport
           ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME })
           : codexCredentialEnvironment,

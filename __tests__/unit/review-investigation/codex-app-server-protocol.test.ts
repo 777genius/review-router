@@ -49,6 +49,29 @@ const supportedCodexErrorInfo = [
 ];
 
 describe('CodexAppServerProtocolClient', () => {
+  it.each([true, false])(
+    'writes turn/start with schema present=%s',
+    async (nativeSchema) => {
+      const fixture = await activeTurn({ omitOutputSchema: !nativeSchema });
+      const start = fixture.writes.find(
+        (message) => message.method === 'turn/start'
+      )!;
+      if (nativeSchema) {
+        expect(start.params).toHaveProperty('outputSchema', { type: 'object' });
+      } else {
+        expect(start.params).not.toHaveProperty('outputSchema');
+        expect(JSON.stringify(start)).not.toContain('outputSchema');
+      }
+      completeMessage(fixture.client, 'final', 'final_answer', '{"ok":true}');
+      completeUsage(fixture.client);
+      completeTurn(fixture.client);
+      await expect(fixture.result).resolves.toHaveProperty(
+        'finalMessage',
+        '{"ok":true}'
+      );
+    }
+  );
+
   it.each([
     ['turn/start response', { omitTurnResponseError: true }],
     ['turn/started notification', { omitTurnNotificationError: true }],
@@ -1803,15 +1826,20 @@ describe('CodexAppServerProtocolClient', () => {
 
 async function activeTurn(
   options: Readonly<{
+    omitOutputSchema?: boolean;
     omitTurnNotificationError?: boolean;
     omitTurnResponseError?: boolean;
     allowedTools?: readonly string[];
   }> = {}
 ) {
   const writes: Array<Record<string, unknown>> = [];
+  const request = protocolRequest();
+  if (options.omitOutputSchema) {
+    delete (request as { outputSchema?: unknown }).outputSchema;
+  }
   const client = new CodexAppServerProtocolClient(
     {
-      ...protocolRequest(),
+      ...request,
       ...(options.allowedTools === undefined
         ? {}
         : { allowedTools: options.allowedTools }),

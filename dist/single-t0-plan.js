@@ -64614,7 +64614,39 @@ var fsSync = __toESM(require("fs"));
 var os2 = __toESM(require("os"));
 var path4 = __toESM(require("path"));
 var crypto = __toESM(require("crypto"));
+
+// src/providers/codex-output-schema.ts
 var import__2 = __toESM(require__());
+function supportsCliOutputSchema(modelProvider) {
+  return modelProvider !== "mimo";
+}
+function assertJsonMatchesSchema(content, schema2, kind) {
+  let value;
+  try {
+    value = JSON.parse(content);
+  } catch {
+    throw new Error(
+      `Codex CLI returned invalid ${kind} JSON: response was not valid JSON`
+    );
+  }
+  try {
+    const validate = new import__2.default({
+      strict: true,
+      allowUnionTypes: true
+    }).compile(schema2);
+    if ("$async" in validate) {
+      throw new Error("Asynchronous output schemas are unsupported");
+    }
+    if (validate(value)) return;
+  } catch {
+    throw new Error(
+      `Codex CLI returned invalid ${kind} JSON: output schema could not be validated`
+    );
+  }
+  throw new Error(
+    `Codex CLI returned invalid ${kind} JSON: output does not match schema`
+  );
+}
 
 // src/providers/cli-env.ts
 var BASE_CLI_ENV_KEYS = [
@@ -64890,8 +64922,11 @@ var mimoModel = {
   auto_review_model_override: null,
   model_specialty: null
 };
+function isAccountGatewayMiMoModel(model) {
+  return model === mimoModel.slug;
+}
 async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfiguration) {
-  if (model !== mimoModel.slug) return void 0;
+  if (!isAccountGatewayMiMoModel(model)) return void 0;
   if (!codexHome || !path3.isAbsolute(codexHome))
     throw new Error("account_gateway_catalog_home_unavailable");
   const catalogPath = path3.join(codexHome, "reviewrouter-model-catalog.json");
@@ -65487,7 +65522,7 @@ var CodexProvider = class _CodexProvider extends Provider {
     };
     const environment = this.withoutCredentialEnvironment(fullEnvironment);
     const outputSchema = this.buildFindingsSchema();
-    const validateOutputLocally = !this.supportsCliOutputSchema(
+    const validateOutputLocally = !supportsCliOutputSchema(
       frozenCliConfig.modelProvider
     );
     const argsTemplate = this.buildExecArgs(
@@ -65609,7 +65644,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       request.cwd
     );
     if (request.validateOutputLocally) {
-      this.assertJsonMatchesSchema(content, request.outputSchema, "review");
+      assertJsonMatchesSchema(content, request.outputSchema, "review");
     }
     const parsed = this.parseNonEmptyReviewContent(content, runResult.stderr);
     this.assertNoPlaceholderFindings(parsed.findings);
@@ -65668,7 +65703,7 @@ var CodexProvider = class _CodexProvider extends Provider {
   async runStructuredPrompt(prompt, outputSchema, timeoutMs, options = {}) {
     this.requireModelProviderCredential();
     const binary2 = await this.resolveBinary();
-    const validateOutputLocally = !this.supportsCliOutputSchema(
+    const validateOutputLocally = !supportsCliOutputSchema(
       this.options.modelProvider
     );
     const finalPrompt = validateOutputLocally ? `${prompt}
@@ -65696,39 +65731,9 @@ ${JSON.stringify(outputSchema)}` : prompt;
       );
     }
     if (validateOutputLocally) {
-      this.assertJsonMatchesSchema(content, outputSchema, "structured");
+      assertJsonMatchesSchema(content, outputSchema, "structured");
     }
     return content;
-  }
-  supportsCliOutputSchema(modelProvider) {
-    return modelProvider !== "mimo";
-  }
-  assertJsonMatchesSchema(content, schema2, kind) {
-    let value;
-    try {
-      value = JSON.parse(content);
-    } catch {
-      throw new Error(
-        `Codex CLI returned invalid ${kind} JSON: response was not valid JSON`
-      );
-    }
-    try {
-      const validate = new import__2.default({
-        strict: true,
-        allowUnionTypes: true
-      }).compile(schema2);
-      if ("$async" in validate) {
-        throw new Error("Asynchronous output schemas are unsupported");
-      }
-      if (validate(value)) return;
-    } catch {
-      throw new Error(
-        `Codex CLI returned invalid ${kind} JSON: output schema could not be validated`
-      );
-    }
-    throw new Error(
-      `Codex CLI returned invalid ${kind} JSON: output does not match schema`
-    );
   }
   estimateUsage(prompt, content) {
     const promptTokens = estimateTokensSimple(prompt).tokens;
@@ -65797,7 +65802,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         )}`
       );
     }
-    if (options.outputSchemaFile && this.supportsCliOutputSchema(config.modelProvider)) {
+    if (options.outputSchemaFile && supportsCliOutputSchema(config.modelProvider)) {
       args.push("--output-schema", options.outputSchemaFile);
     }
     if (options.eventAudit || options.jsonEvents) {
@@ -65856,7 +65861,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const runId = crypto.randomBytes(8).toString("hex");
     const tmpFile = path4.join(os2.tmpdir(), `codex-prompt-${runId}.txt`);
     const outputFile = path4.join(os2.tmpdir(), `codex-output-${runId}.txt`);
-    const cliSchemaEnabled = prepared ? prepared.argsTemplate.includes("--output-schema") : this.supportsCliOutputSchema(this.options.modelProvider);
+    const cliSchemaEnabled = prepared ? prepared.argsTemplate.includes("--output-schema") : supportsCliOutputSchema(this.options.modelProvider);
     const schemaFile = options.outputSchema && cliSchemaEnabled ? path4.join(os2.tmpdir(), `codex-schema-${runId}.json`) : void 0;
     let fd;
     try {
@@ -84539,7 +84544,7 @@ var CodexAppServerProtocolClient = class {
           networkAccess: false
         },
         effort: this.request.reasoningEffort,
-        outputSchema: this.request.outputSchema
+        ...this.request.outputSchema === void 0 ? {} : { outputSchema: this.request.outputSchema }
       }).then((value) => this.bindTurn(value))
     );
     this.maybeComplete();
@@ -86666,7 +86671,19 @@ var CodexReviewAgentAdapter = class extends StrictCliReviewAgent {
   }
   appServerRunner;
   async executeTurn(request) {
-    const execution = this.prepareExecution(request);
+    this.validateRequest(request);
+    const outputSchema = buildReviewAgentTurnOutputSchema(
+      request.allowedObligationIds
+    );
+    const validateOutputLocally = !supportsCliOutputSchema(
+      this.options.modelProvider
+    );
+    const prompt = validateOutputLocally ? `${request.prompt}
+
+OUTPUT JSON SCHEMA:
+${JSON.stringify(outputSchema)}
+Return exactly one JSON object matching this schema, with no markdown or prose.` : request.prompt;
+    const execution = this.prepareExecution({ ...request, prompt });
     const reasoningEffort = this.options.reasoningEffort ?? "xhigh";
     const result2 = await this.appServerRunner.executeTurn({
       invocationId: request.invocationId,
@@ -86681,19 +86698,24 @@ var CodexReviewAgentAdapter = class extends StrictCliReviewAgent {
       signal: request.signal,
       protocol: {
         cwd: execution.gateway.cwd,
-        prompt: request.prompt,
+        prompt,
         clientTurnId: request.turnId,
         requestedModel: request.requestedModel,
         reasoningEffort,
-        outputSchema: buildReviewAgentTurnOutputSchema(
-          request.allowedObligationIds
-        ),
+        ...validateOutputLocally ? {} : { outputSchema },
         allowedTools: execution.gateway.enabledTools,
         maxOutputBytes: this.profile.maxOutputBytes
       }
     });
     let output;
     try {
+      if (validateOutputLocally) {
+        assertJsonMatchesSchema(
+          result2.finalMessage,
+          outputSchema,
+          "structured"
+        );
+      }
       output = parseFinalTurnOutput(result2.finalMessage);
     } catch (error) {
       throw schemaFailure2(error);
@@ -89433,6 +89455,11 @@ var ProductionT0ReviewRunner = class {
     const provider = new CodexProvider(model, {
       agenticContext,
       eventAudit: config.codexEventAudit,
+      modelProvider: resolveAccountGatewayModelProvider(
+        model,
+        input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
+        input.accountGateway?.modelTransport
+      ),
       ...input.accountGateway ? { accountGateway: input.accountGateway.modelTransport } : {}
     });
     const compatibilityKey = hashIncrementalCompatibility(
@@ -89536,6 +89563,7 @@ var ProductionT0ReviewRunner = class {
             codexBinaryPath: input.codexBinaryPath,
             executionSessions: gateway,
             modelTransport: input.accountGateway?.modelTransport,
+            admittedGatewayModel: input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
             reasoningEffort
           })
         });
@@ -89775,6 +89803,9 @@ function resolveProductionInvestigationReasoningEffort(input) {
   }
   return effort;
 }
+function resolveAccountGatewayModelProvider(selectedModel, admittedModel, transport) {
+  return transport && admittedModel === selectedModel && isAccountGatewayMiMoModel(admittedModel) ? "mimo" : void 0;
+}
 function createConfiguredProductionInvestigationAgents(input) {
   const reasoningEffort = input.reasoningEffort;
   const processRunner = new NodeReviewAgentProcessRunner();
@@ -89785,6 +89816,11 @@ function createConfiguredProductionInvestigationAgents(input) {
       requestedModel: input.codexModel,
       agent: new CodexReviewAgentAdapter(processRunner, {
         executionSessions: input.executionSessions,
+        modelProvider: resolveAccountGatewayModelProvider(
+          input.codexModel,
+          input.admittedGatewayModel,
+          input.modelTransport
+        ),
         providerCredentialEnvironment: input.modelTransport ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME }) : codexCredentialEnvironment,
         ...appServer && input.modelTransport ? {
           appServerRunner: {

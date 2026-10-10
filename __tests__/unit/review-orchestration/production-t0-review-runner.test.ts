@@ -109,15 +109,30 @@ describe('ProductionT0ReviewRunner policy', () => {
   });
 
   it.each([
-    ['mimo-v2.6-pro', 'gpt-caller', true, 'high'],
-    ['mimo-v2.6-pro', 'gpt-caller', true, undefined],
-    ['mimo-v2.6-pro', 'gpt-caller', true, 'medium'],
-    ['mimo-v2.6-pro', 'gpt-caller', true, 'low'],
-    ['gpt-selected', 'mimo-v2.6-pro', false, undefined],
-    ['gpt-selected', 'mimo-v2.6-pro', false, 'high'],
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'high', 'mimo-v2.6-pro'],
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'high', undefined],
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'high', 'gpt-admitted'],
+    [
+      'mimo-v2.6-pro-unknown',
+      'mimo-v2.6-pro',
+      false,
+      undefined,
+      'mimo-v2.6-pro-unknown',
+    ],
+    ['mimo-v2.6-pro', 'gpt-caller', true, undefined, 'mimo-v2.6-pro'],
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'medium', 'mimo-v2.6-pro'],
+    ['mimo-v2.6-pro', 'gpt-caller', true, 'low', 'mimo-v2.6-pro'],
+    ['gpt-selected', 'mimo-v2.6-pro', false, undefined, 'mimo-v2.6-pro'],
+    ['gpt-selected', 'mimo-v2.6-pro', false, 'high', 'mimo-v2.6-pro'],
   ] as const)(
     'pins AppServer catalog and effort from selected %s independently of caller %s (gateway %s, effort %s)',
-    async (selectedModel, callerModel, enabled, reasoningEffort) => {
+    async (
+      selectedModel,
+      callerModel,
+      enabled,
+      reasoningEffort,
+      admittedGatewayModel
+    ) => {
       const root = fs.mkdtempSync(
         path.join(os.tmpdir(), 'mimo-appserver-test-')
       );
@@ -129,6 +144,7 @@ describe('ProductionT0ReviewRunner policy', () => {
       const stoppedAtBoundary = new Error('mock subprocess boundary');
       const previousEnv = { ...process.env };
       process.env.CODEX_REASONING_EFFORT = 'xhigh';
+      process.env.CODEX_MODEL = 'mimo-v2.6-pro';
       const execute = jest
         .spyOn(NodeCodexAppServerTurnRunner.prototype, 'executeTurn')
         .mockRejectedValue(stoppedAtBoundary);
@@ -169,6 +185,7 @@ describe('ProductionT0ReviewRunner policy', () => {
         });
         const agents = createConfiguredProductionInvestigationAgents({
           codexModel: selectedModel,
+          ...{ admittedGatewayModel },
           reasoningEffort: effectiveEffort,
           codexBinaryPath: '/mock/codex',
           modelTransport: {
@@ -299,6 +316,14 @@ describe('ProductionT0ReviewRunner policy', () => {
         ).rejects.toBe(stoppedAtBoundary);
         expect(execute).toHaveBeenCalledTimes(2);
         const launch = execute.mock.calls[0][0];
+        const localSchema = enabled && admittedGatewayModel === selectedModel;
+        if (localSchema) {
+          expect(launch.protocol).not.toHaveProperty('outputSchema');
+          expect(launch.protocol.prompt).toContain('OUTPUT JSON SCHEMA:');
+        } else {
+          expect(launch.protocol).toHaveProperty('outputSchema');
+          expect(launch.protocol.prompt).toBe(request.prompt);
+        }
         const investigationLaunch = execute.mock.calls[1][0];
         expect(launch.protocol.reasoningEffort).toBe(
           enabled ? (reasoningEffort ?? 'high') : 'xhigh'

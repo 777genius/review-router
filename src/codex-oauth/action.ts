@@ -1,7 +1,7 @@
+import { runLongOidcTestEntry } from './long-oidc-test-entry';
 import * as fs from 'fs';
 import {
   ACCOUNT_GATEWAY_ACTION_MODE,
-  runAccountGatewayRuntime,
 } from './account-gateway-runtime';
 import * as path from 'path';
 import * as core from '../actions/core';
@@ -377,7 +377,7 @@ async function runAccountGatewayActionInternal(
       commentEligible: false,
     });
   let ciProgressReporter: CiOrchestrationProgressReporter | undefined;
-  await runAccountGatewayRuntime(inputs, {
+  await runLongOidcTestEntry(inputs, {
     fetchImpl: options.fetchImpl,
     review: {
       run: (input) => {

@@ -29,9 +29,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/ajv/dist/compile/codegen/code.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/code.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/codegen/code.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.regexpCode = exports2.getEsmExportName = exports2.getProperty = exports2.safeStringify = exports2.stringify = exports2.strConcat = exports2.addCodeArg = exports2.str = exports2._ = exports2.nil = exports2._Code = exports2.Name = exports2.IDENTIFIER = exports2._CodeOrName = void 0;
@@ -183,9 +183,9 @@ var require_code = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/codegen/scope.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/codegen/scope.js
 var require_scope = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/scope.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/codegen/scope.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.ValueScope = exports2.ValueScopeName = exports2.Scope = exports2.varKinds = exports2.UsedValueState = void 0;
@@ -328,9 +328,9 @@ var require_scope = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/codegen/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/codegen/index.js
 var require_codegen = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/codegen/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.or = exports2.and = exports2.not = exports2.CodeGen = exports2.operators = exports2.varKinds = exports2.ValueScopeName = exports2.ValueScope = exports2.Scope = exports2.Name = exports2.regexpCode = exports2.stringify = exports2.getProperty = exports2.nil = exports2.strConcat = exports2.str = exports2._ = void 0;
@@ -1048,9 +1048,9 @@ var require_codegen = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/util.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/util.js
 var require_util = __commonJS({
-  "node_modules/ajv/dist/compile/util.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/util.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.checkStrictMode = exports2.getErrorPath = exports2.Type = exports2.useFunc = exports2.setEvaluated = exports2.evaluatedPropsToName = exports2.mergeEvaluated = exports2.eachItem = exports2.unescapeJsonPointer = exports2.escapeJsonPointer = exports2.escapeFragment = exports2.unescapeFragment = exports2.schemaRefOrVal = exports2.schemaHasRulesButRef = exports2.schemaHasRules = exports2.checkUnknownRules = exports2.alwaysValidSchema = exports2.toHash = void 0;
@@ -1215,9 +1215,9 @@ var require_util = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/names.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/names.js
 var require_names = __commonJS({
-  "node_modules/ajv/dist/compile/names.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/names.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -1254,9 +1254,9 @@ var require_names = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/errors.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/errors.js
 var require_errors = __commonJS({
-  "node_modules/ajv/dist/compile/errors.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/errors.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.extendErrors = exports2.resetErrorsCount = exports2.reportExtraError = exports2.reportError = exports2.keyword$DataError = exports2.keywordError = void 0;
@@ -1376,9 +1376,9 @@ var require_errors = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/boolSchema.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/boolSchema.js
 var require_boolSchema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/boolSchema.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/boolSchema.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.boolOrEmptySchema = exports2.topBoolOrEmptySchema = void 0;
@@ -1427,9 +1427,9 @@ var require_boolSchema = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/rules.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/rules.js
 var require_rules = __commonJS({
-  "node_modules/ajv/dist/compile/rules.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/rules.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.getRules = exports2.isJSONType = void 0;
@@ -1458,9 +1458,9 @@ var require_rules = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/applicability.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/applicability.js
 var require_applicability = __commonJS({
-  "node_modules/ajv/dist/compile/validate/applicability.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/applicability.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.shouldUseRule = exports2.shouldUseGroup = exports2.schemaHasRulesForType = void 0;
@@ -1481,9 +1481,9 @@ var require_applicability = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/dataType.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/dataType.js
 var require_dataType = __commonJS({
-  "node_modules/ajv/dist/compile/validate/dataType.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/dataType.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.reportTypeError = exports2.checkDataTypes = exports2.checkDataType = exports2.coerceAndCheckDataType = exports2.getJSONTypes = exports2.getSchemaTypes = exports2.DataType = void 0;
@@ -1665,9 +1665,9 @@ var require_dataType = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/defaults.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/defaults.js
 var require_defaults = __commonJS({
-  "node_modules/ajv/dist/compile/validate/defaults.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/defaults.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.assignDefaults = void 0;
@@ -1702,9 +1702,9 @@ var require_defaults = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/code.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/code.js
 var require_code2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/code.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/code.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateUnion = exports2.validateArray = exports2.usePattern = exports2.callValidateCode = exports2.schemaProperties = exports2.allSchemaProperties = exports2.noPropertyInData = exports2.propertyInData = exports2.isOwnProperty = exports2.hasPropFunc = exports2.reportMissingProp = exports2.checkMissingProp = exports2.checkReportMissingProp = void 0;
@@ -1835,9 +1835,9 @@ var require_code2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/keyword.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/keyword.js
 var require_keyword = __commonJS({
-  "node_modules/ajv/dist/compile/validate/keyword.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/keyword.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateKeywordUsage = exports2.validSchemaType = exports2.funcKeywordCode = exports2.macroKeywordCode = void 0;
@@ -1953,9 +1953,9 @@ var require_keyword = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/subschema.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/subschema.js
 var require_subschema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/subschema.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/subschema.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.extendSubschemaMode = exports2.extendSubschemaData = exports2.getSubschema = void 0;
@@ -2036,9 +2036,9 @@ var require_subschema = __commonJS({
   }
 });
 
-// node_modules/fast-deep-equal/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/fast-deep-equal/index.js
 var require_fast_deep_equal = __commonJS({
-  "node_modules/fast-deep-equal/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/fast-deep-equal/index.js"(exports2, module2) {
     "use strict";
     module2.exports = function equal(a2, b2) {
       if (a2 === b2) return true;
@@ -2071,9 +2071,9 @@ var require_fast_deep_equal = __commonJS({
   }
 });
 
-// node_modules/json-schema-traverse/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/json-schema-traverse/index.js
 var require_json_schema_traverse = __commonJS({
-  "node_modules/json-schema-traverse/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/json-schema-traverse/index.js"(exports2, module2) {
     "use strict";
     var traverse = module2.exports = function(schema2, opts, cb) {
       if (typeof opts == "function") {
@@ -2159,9 +2159,9 @@ var require_json_schema_traverse = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/resolve.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/resolve.js
 var require_resolve = __commonJS({
-  "node_modules/ajv/dist/compile/resolve.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/resolve.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.getSchemaRefs = exports2.resolveUrl = exports2.normalizeId = exports2._getFullPath = exports2.getFullPath = exports2.inlineRef = void 0;
@@ -2315,9 +2315,9 @@ var require_resolve = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/index.js
 var require_validate = __commonJS({
-  "node_modules/ajv/dist/compile/validate/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/validate/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.getData = exports2.KeywordCxt = exports2.validateFunctionCode = void 0;
@@ -2823,9 +2823,9 @@ var require_validate = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/validation_error.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/runtime/validation_error.js
 var require_validation_error = __commonJS({
-  "node_modules/ajv/dist/runtime/validation_error.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/runtime/validation_error.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var ValidationError2 = class extends Error {
@@ -2839,9 +2839,9 @@ var require_validation_error = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/ref_error.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/ref_error.js
 var require_ref_error = __commonJS({
-  "node_modules/ajv/dist/compile/ref_error.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/ref_error.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var resolve_1 = require_resolve();
@@ -2856,9 +2856,9 @@ var require_ref_error = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/index.js
 var require_compile = __commonJS({
-  "node_modules/ajv/dist/compile/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/compile/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.resolveSchema = exports2.getCompilingSchema = exports2.resolveRef = exports2.compileSchema = exports2.SchemaEnv = void 0;
@@ -3080,9 +3080,9 @@ var require_compile = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/data.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/data.json
 var require_data = __commonJS({
-  "node_modules/ajv/dist/refs/data.json"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/data.json"(exports2, module2) {
     module2.exports = {
       $id: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#",
       description: "Meta-schema for $data reference (JSON AnySchema extension proposal)",
@@ -3099,9 +3099,9 @@ var require_data = __commonJS({
   }
 });
 
-// node_modules/fast-uri/lib/utils.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/fast-uri/lib/utils.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/fast-uri/lib/utils.js"(exports2, module2) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
@@ -3596,9 +3596,9 @@ var require_utils = __commonJS({
   }
 });
 
-// node_modules/fast-uri/lib/schemes.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
     "use strict";
     var { isUUID } = require_utils();
     var URN_REG = /^([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-./:;=@]|%[\da-f]{2})+)$/iu;
@@ -3807,9 +3807,9 @@ var require_schemes = __commonJS({
   }
 });
 
-// node_modules/fast-uri/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/fast-uri/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/fast-uri/index.js"(exports2, module2) {
     "use strict";
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
@@ -4206,9 +4206,9 @@ var require_fast_uri = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/uri.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/runtime/uri.js
 var require_uri = __commonJS({
-  "node_modules/ajv/dist/runtime/uri.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/runtime/uri.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var uri = require_fast_uri();
@@ -4217,9 +4217,9 @@ var require_uri = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/core.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/core.js
 var require_core = __commonJS({
-  "node_modules/ajv/dist/core.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/core.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = void 0;
@@ -4828,9 +4828,9 @@ var require_core = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/core/id.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/core/id.js
 var require_id = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/id.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/core/id.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var def = {
@@ -4843,9 +4843,9 @@ var require_id = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/core/ref.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/core/ref.js
 var require_ref = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/ref.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/core/ref.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.callRef = exports2.getValidate = void 0;
@@ -4965,9 +4965,9 @@ var require_ref = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/core/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/core/index.js
 var require_core2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/core/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var id_1 = require_id();
@@ -4986,9 +4986,9 @@ var require_core2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitNumber.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/limitNumber.js
 var require_limitNumber = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5018,9 +5018,9 @@ var require_limitNumber = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/multipleOf.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/multipleOf.js
 var require_multipleOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5046,9 +5046,9 @@ var require_multipleOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/ucs2length.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS({
-  "node_modules/ajv/dist/runtime/ucs2length.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/runtime/ucs2length.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     function ucs2length(str2) {
@@ -5072,9 +5072,9 @@ var require_ucs2length = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitLength.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/limitLength.js
 var require_limitLength = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5104,9 +5104,9 @@ var require_limitLength = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/pattern.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/pattern.js
 var require_pattern = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -5141,9 +5141,9 @@ var require_pattern = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitProperties.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/limitProperties.js
 var require_limitProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5170,9 +5170,9 @@ var require_limitProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/required.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/required.js
 var require_required = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/required.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/required.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -5252,9 +5252,9 @@ var require_required = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitItems.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/limitItems.js
 var require_limitItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5281,9 +5281,9 @@ var require_limitItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/equal.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/runtime/equal.js
 var require_equal = __commonJS({
-  "node_modules/ajv/dist/runtime/equal.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/runtime/equal.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var equal = require_fast_deep_equal();
@@ -5292,9 +5292,9 @@ var require_equal = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
 var require_uniqueItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dataType_1 = require_dataType();
@@ -5359,9 +5359,9 @@ var require_uniqueItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/const.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/const.js
 var require_const = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/const.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/const.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5388,9 +5388,9 @@ var require_const = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/enum.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/enum.js
 var require_enum = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/enum.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/enum.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5437,9 +5437,9 @@ var require_enum = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/index.js
 var require_validation = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var limitNumber_1 = require_limitNumber();
@@ -5475,9 +5475,9 @@ var require_validation = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
 var require_additionalItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateAdditionalItems = void 0;
@@ -5528,9 +5528,9 @@ var require_additionalItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/items.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/items.js
 var require_items = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/items.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateTuple = void 0;
@@ -5585,9 +5585,9 @@ var require_items = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
 var require_prefixItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var items_1 = require_items();
@@ -5602,9 +5602,9 @@ var require_prefixItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/items2020.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/items2020.js
 var require_items2020 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5637,9 +5637,9 @@ var require_items2020 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/contains.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/contains.js
 var require_contains = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5731,9 +5731,9 @@ var require_contains = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/dependencies.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/dependencies.js
 var require_dependencies = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateSchemaDeps = exports2.validatePropertyDeps = exports2.error = void 0;
@@ -5825,9 +5825,9 @@ var require_dependencies = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
 var require_propertyNames = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5868,9 +5868,9 @@ var require_propertyNames = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
 var require_additionalProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -5974,9 +5974,9 @@ var require_additionalProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/properties.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/properties.js
 var require_properties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var validate_1 = require_validate();
@@ -6032,9 +6032,9 @@ var require_properties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
 var require_patternProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -6106,9 +6106,9 @@ var require_patternProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/not.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/not.js
 var require_not = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/not.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/not.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6137,9 +6137,9 @@ var require_not = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/anyOf.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/anyOf.js
 var require_anyOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -6154,9 +6154,9 @@ var require_anyOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/oneOf.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/oneOf.js
 var require_oneOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6212,9 +6212,9 @@ var require_oneOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/allOf.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/allOf.js
 var require_allOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6239,9 +6239,9 @@ var require_allOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/if.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/if.js
 var require_if = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/if.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/if.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6308,9 +6308,9 @@ var require_if = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/thenElse.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/thenElse.js
 var require_thenElse = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6326,9 +6326,9 @@ var require_thenElse = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/index.js
 var require_applicator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var additionalItems_1 = require_additionalItems();
@@ -6374,9 +6374,9 @@ var require_applicator = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js
 var require_dynamicAnchor = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.dynamicAnchor = void 0;
@@ -6409,9 +6409,9 @@ var require_dynamicAnchor = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js
 var require_dynamicRef = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.dynamicRef = void 0;
@@ -6455,9 +6455,9 @@ var require_dynamicRef = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js
 var require_recursiveAnchor = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dynamicAnchor_1 = require_dynamicAnchor();
@@ -6476,9 +6476,9 @@ var require_recursiveAnchor = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js
 var require_recursiveRef = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dynamicRef_1 = require_dynamicRef();
@@ -6491,9 +6491,9 @@ var require_recursiveRef = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/dynamic/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/dynamic/index.js
 var require_dynamic = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/dynamic/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dynamicAnchor_1 = require_dynamicAnchor();
@@ -6505,9 +6505,9 @@ var require_dynamic = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/dependentRequired.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/dependentRequired.js
 var require_dependentRequired = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/dependentRequired.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dependencies_1 = require_dependencies();
@@ -6522,9 +6522,9 @@ var require_dependentRequired = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js
 var require_dependentSchemas = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dependencies_1 = require_dependencies();
@@ -6538,9 +6538,9 @@ var require_dependentSchemas = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitContains.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/limitContains.js
 var require_limitContains = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitContains.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/validation/limitContains.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6558,9 +6558,9 @@ var require_limitContains = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/next.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/next.js
 var require_next = __commonJS({
-  "node_modules/ajv/dist/vocabularies/next.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/next.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dependentRequired_1 = require_dependentRequired();
@@ -6571,9 +6571,9 @@ var require_next = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js
 var require_unevaluatedProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6637,9 +6637,9 @@ var require_unevaluatedProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js
 var require_unevaluatedItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6681,9 +6681,9 @@ var require_unevaluatedItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/unevaluated/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/unevaluated/index.js
 var require_unevaluated = __commonJS({
-  "node_modules/ajv/dist/vocabularies/unevaluated/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/unevaluated/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var unevaluatedProperties_1 = require_unevaluatedProperties();
@@ -6693,9 +6693,9 @@ var require_unevaluated = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/format/format.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/format/format.js
 var require_format = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/format.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/format/format.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6783,9 +6783,9 @@ var require_format = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/format/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/format/index.js
 var require_format2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/format/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var format_1 = require_format();
@@ -6794,9 +6794,9 @@ var require_format2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/metadata.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/metadata.js
 var require_metadata = __commonJS({
-  "node_modules/ajv/dist/vocabularies/metadata.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/metadata.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.contentVocabulary = exports2.metadataVocabulary = void 0;
@@ -6817,9 +6817,9 @@ var require_metadata = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/draft2020.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/draft2020.js
 var require_draft2020 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/draft2020.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/draft2020.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var core_1 = require_core2();
@@ -6845,9 +6845,9 @@ var require_draft2020 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/discriminator/types.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/discriminator/types.js
 var require_types = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.DiscrError = void 0;
@@ -6859,9 +6859,9 @@ var require_types = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/discriminator/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/discriminator/index.js
 var require_discriminator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6964,9 +6964,9 @@ var require_discriminator = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/schema.json
 var require_schema = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/schema.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/schema",
@@ -7024,9 +7024,9 @@ var require_schema = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json
 var require_applicator2 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/applicator",
@@ -7077,9 +7077,9 @@ var require_applicator2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json
 var require_unevaluated2 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/unevaluated",
@@ -7097,9 +7097,9 @@ var require_unevaluated2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json
 var require_content = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/content",
@@ -7118,9 +7118,9 @@ var require_content = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json
 var require_core3 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/core",
@@ -7174,9 +7174,9 @@ var require_core3 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json
 var require_format_annotation = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/format-annotation",
@@ -7193,9 +7193,9 @@ var require_format_annotation = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json
 var require_meta_data = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/meta-data",
@@ -7234,9 +7234,9 @@ var require_meta_data = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json
 var require_validation2 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/validation",
@@ -7329,9 +7329,9 @@ var require_validation2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/index.js
 var require_json_schema_2020_12 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-2020-12/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var metaSchema = require_schema();
@@ -7364,9 +7364,9 @@ var require_json_schema_2020_12 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/2020.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/2020.js
 var require__ = __commonJS({
-  "node_modules/ajv/dist/2020.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/2020.js"(exports2, module2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.MissingRefError = exports2.ValidationError = exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = exports2.Ajv2020 = void 0;
@@ -7441,9 +7441,9 @@ var require__ = __commonJS({
   }
 });
 
-// node_modules/retry/lib/retry_operation.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/retry/lib/retry_operation.js
 var require_retry_operation = __commonJS({
-  "node_modules/retry/lib/retry_operation.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/retry/lib/retry_operation.js"(exports2, module2) {
     function RetryOperation(timeouts, options) {
       if (typeof options === "boolean") {
         options = { forever: options };
@@ -7576,9 +7576,9 @@ var require_retry_operation = __commonJS({
   }
 });
 
-// node_modules/retry/lib/retry.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/retry/lib/retry.js
 var require_retry = __commonJS({
-  "node_modules/retry/lib/retry.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/retry/lib/retry.js"(exports2) {
     var RetryOperation = require_retry_operation();
     exports2.operation = function(options) {
       var timeouts = exports2.timeouts(options);
@@ -7662,16 +7662,16 @@ var require_retry = __commonJS({
   }
 });
 
-// node_modules/retry/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/retry/index.js
 var require_retry2 = __commonJS({
-  "node_modules/retry/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/retry/index.js"(exports2, module2) {
     module2.exports = require_retry();
   }
 });
 
-// node_modules/universal-user-agent/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/universal-user-agent/dist-node/index.js
 var require_dist_node = __commonJS({
-  "node_modules/universal-user-agent/dist-node/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/universal-user-agent/dist-node/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     function getUserAgent() {
@@ -7687,9 +7687,9 @@ var require_dist_node = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/lib/register.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/before-after-hook/lib/register.js
 var require_register = __commonJS({
-  "node_modules/before-after-hook/lib/register.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/before-after-hook/lib/register.js"(exports2, module2) {
     module2.exports = register;
     function register(state, name, method, options) {
       if (typeof method !== "function") {
@@ -7715,9 +7715,9 @@ var require_register = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/lib/add.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/before-after-hook/lib/add.js
 var require_add = __commonJS({
-  "node_modules/before-after-hook/lib/add.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/before-after-hook/lib/add.js"(exports2, module2) {
     module2.exports = addHook;
     function addHook(state, kind, name, hook) {
       var orig = hook;
@@ -7755,9 +7755,9 @@ var require_add = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/lib/remove.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/before-after-hook/lib/remove.js
 var require_remove = __commonJS({
-  "node_modules/before-after-hook/lib/remove.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/before-after-hook/lib/remove.js"(exports2, module2) {
     module2.exports = removeHook;
     function removeHook(state, name, method) {
       if (!state.registry[name]) {
@@ -7774,9 +7774,9 @@ var require_remove = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/before-after-hook/index.js
 var require_before_after_hook = __commonJS({
-  "node_modules/before-after-hook/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/before-after-hook/index.js"(exports2, module2) {
     var register = require_register();
     var addHook = require_add();
     var removeHook = require_remove();
@@ -7830,9 +7830,9 @@ var require_before_after_hook = __commonJS({
   }
 });
 
-// node_modules/@octokit/endpoint/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/endpoint/dist-node/index.js
 var require_dist_node2 = __commonJS({
-  "node_modules/@octokit/endpoint/dist-node/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/endpoint/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8176,9 +8176,9 @@ var require_dist_node2 = __commonJS({
   }
 });
 
-// node_modules/deprecation/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/deprecation/dist-node/index.js
 var require_dist_node3 = __commonJS({
-  "node_modules/deprecation/dist-node/index.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/deprecation/dist-node/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var Deprecation = class extends Error {
@@ -8194,9 +8194,9 @@ var require_dist_node3 = __commonJS({
   }
 });
 
-// node_modules/wrappy/wrappy.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/wrappy/wrappy.js
 var require_wrappy = __commonJS({
-  "node_modules/wrappy/wrappy.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/wrappy/wrappy.js"(exports2, module2) {
     module2.exports = wrappy;
     function wrappy(fn, cb) {
       if (fn && cb) return wrappy(fn)(cb);
@@ -8224,9 +8224,9 @@ var require_wrappy = __commonJS({
   }
 });
 
-// node_modules/once/once.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/once/once.js
 var require_once = __commonJS({
-  "node_modules/once/once.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/once/once.js"(exports2, module2) {
     var wrappy = require_wrappy();
     module2.exports = wrappy(once);
     module2.exports.strict = wrappy(onceStrict);
@@ -8268,9 +8268,9 @@ var require_once = __commonJS({
   }
 });
 
-// node_modules/@octokit/request-error/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/request-error/dist-node/index.js
 var require_dist_node4 = __commonJS({
-  "node_modules/@octokit/request-error/dist-node/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/request-error/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
     var __defProp2 = Object.defineProperty;
@@ -8360,9 +8360,9 @@ var require_dist_node4 = __commonJS({
   }
 });
 
-// node_modules/@octokit/request/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/request/dist-node/index.js
 var require_dist_node5 = __commonJS({
-  "node_modules/@octokit/request/dist-node/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/request/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8570,9 +8570,9 @@ var require_dist_node5 = __commonJS({
   }
 });
 
-// node_modules/@octokit/graphql/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/graphql/dist-node/index.js
 var require_dist_node6 = __commonJS({
-  "node_modules/@octokit/graphql/dist-node/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/graphql/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8707,9 +8707,9 @@ var require_dist_node6 = __commonJS({
   }
 });
 
-// node_modules/@octokit/auth-token/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/auth-token/dist-node/index.js
 var require_dist_node7 = __commonJS({
-  "node_modules/@octokit/auth-token/dist-node/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/auth-token/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8778,9 +8778,9 @@ var require_dist_node7 = __commonJS({
   }
 });
 
-// node_modules/@octokit/core/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/core/dist-node/index.js
 var require_dist_node8 = __commonJS({
-  "node_modules/@octokit/core/dist-node/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/core/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8944,9 +8944,9 @@ var require_dist_node8 = __commonJS({
   }
 });
 
-// node_modules/@octokit/plugin-request-log/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/plugin-request-log/dist-node/index.js
 var require_dist_node9 = __commonJS({
-  "node_modules/@octokit/plugin-request-log/dist-node/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/plugin-request-log/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8994,9 +8994,9 @@ var require_dist_node9 = __commonJS({
   }
 });
 
-// node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
 var require_dist_node10 = __commonJS({
-  "node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -9389,9 +9389,9 @@ var require_dist_node10 = __commonJS({
   }
 });
 
-// node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
 var require_dist_node11 = __commonJS({
-  "node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -11622,9 +11622,9 @@ var require_dist_node11 = __commonJS({
   }
 });
 
-// node_modules/@octokit/rest/dist-node/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/rest/dist-node/index.js
 var require_dist_node12 = __commonJS({
-  "node_modules/@octokit/rest/dist-node/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/@octokit/rest/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -11663,9 +11663,9 @@ var require_dist_node12 = __commonJS({
   }
 });
 
-// node_modules/ajv-formats/dist/formats.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv-formats/dist/formats.js
 var require_formats = __commonJS({
-  "node_modules/ajv-formats/dist/formats.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv-formats/dist/formats.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.formatNames = exports2.fastFormats = exports2.fullFormats = void 0;
@@ -11866,9 +11866,9 @@ var require_formats = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/draft7.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/draft7.js
 var require_draft7 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/draft7.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/vocabularies/draft7.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var core_1 = require_core2();
@@ -11888,9 +11888,9 @@ var require_draft7 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-draft-07.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-draft-07.json
 var require_json_schema_draft_07 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports2, module2) {
     module2.exports = {
       $schema: "http://json-schema.org/draft-07/schema#",
       $id: "http://json-schema.org/draft-07/schema#",
@@ -12045,9 +12045,9 @@ var require_json_schema_draft_07 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/ajv.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/ajv.js
 var require_ajv = __commonJS({
-  "node_modules/ajv/dist/ajv.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv/dist/ajv.js"(exports2, module2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.MissingRefError = exports2.ValidationError = exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = exports2.Ajv = void 0;
@@ -12115,9 +12115,9 @@ var require_ajv = __commonJS({
   }
 });
 
-// node_modules/ajv-formats/dist/limit.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv-formats/dist/limit.js
 var require_limit = __commonJS({
-  "node_modules/ajv-formats/dist/limit.js"(exports2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv-formats/dist/limit.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.formatLimitDefinition = void 0;
@@ -12187,9 +12187,9 @@ var require_limit = __commonJS({
   }
 });
 
-// node_modules/ajv-formats/dist/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv-formats/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/ajv-formats/dist/index.js"(exports2, module2) {
+  "../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/ajv-formats/dist/index.js"(exports2, module2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var formats_1 = require_formats();
@@ -12229,7 +12229,7 @@ var require_dist = __commonJS({
   }
 });
 
-// src/actions/core.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/actions/core.ts
 var core_exports = {};
 __export(core_exports, {
   debug: () => debug,
@@ -12312,14 +12312,14 @@ function escapeProperty(value) {
   return escapeData(value).replace(/:/g, "%3A").replace(/,/g, "%2C");
 }
 
-// src/main.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/main.ts
 var fs24 = __toESM(require("fs"));
 
-// src/config/loader.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/config/loader.ts
 var fs2 = __toESM(require("fs"));
 var path = __toESM(require("path"));
 
-// node_modules/js-yaml/dist/js-yaml.mjs
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/js-yaml/dist/js-yaml.mjs
 function getDefaultExportFromCjs(x2) {
   return x2 && x2.__esModule && Object.prototype.hasOwnProperty.call(x2, "default") ? x2["default"] : x2;
 }
@@ -15385,7 +15385,7 @@ var {
   safeDump
 } = yaml;
 
-// src/types/index.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/types/index.ts
 var ReviewDepth = /* @__PURE__ */ ((ReviewDepth2) => {
   ReviewDepth2["Economy"] = "economy";
   ReviewDepth2["Balanced"] = "balanced";
@@ -15393,7 +15393,7 @@ var ReviewDepth = /* @__PURE__ */ ((ReviewDepth2) => {
   return ReviewDepth2;
 })(ReviewDepth || {});
 
-// src/utils/logger.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/logger.ts
 var LEVELS = {
   debug: 10,
   info: 20,
@@ -15458,7 +15458,7 @@ var logger = {
   }
 };
 
-// src/providers/openrouter-models.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/openrouter-models.ts
 var PREFERRED_OPENROUTER_FREE_MODELS = [
   "openrouter/openai/gpt-oss-120b:free",
   "openrouter/poolside/laguna-m.1:free"
@@ -15488,7 +15488,7 @@ async function getBestFreeModelsCached(count = 4, timeoutMs = 5e3) {
   return models;
 }
 
-// src/config/defaults.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/config/defaults.ts
 var DEFAULT_CONFIG = {
   reviewDepth: "balanced" /* Balanced */,
   // Empty array triggers dynamic model discovery.
@@ -15617,7 +15617,7 @@ var DEFAULT_CONFIG = {
 };
 var FALLBACK_STATIC_PROVIDERS = [...PREFERRED_OPENROUTER_FREE_MODELS];
 
-// src/config/inline-limits.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/config/inline-limits.ts
 var DEFAULT_INLINE_MAX_COMMENTS = 50;
 var LEGACY_DEFAULT_INLINE_MAX_COMMENTS = 5;
 function effectiveInlineMaxComments(value) {
@@ -15630,7 +15630,7 @@ function effectiveInlineMaxComments(value) {
   return value;
 }
 
-// node_modules/zod/v3/external.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -15742,7 +15742,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_2) => {
@@ -15876,7 +15876,7 @@ var getParsedType = (data) => {
   }
 };
 
-// node_modules/zod/v3/ZodError.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -15994,7 +15994,7 @@ ZodError.create = (issues) => {
   return error2;
 };
 
-// node_modules/zod/v3/locales/en.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -16097,7 +16097,7 @@ var errorMap = (issue, _ctx) => {
 };
 var en_default = errorMap;
 
-// node_modules/zod/v3/errors.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map2) {
   overrideErrorMap = map2;
@@ -16106,7 +16106,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path: path31, errorMaps, issueData } = params;
   const fullPath = [...path31, ...issueData.path || []];
@@ -16216,14 +16216,14 @@ var isDirty = (x2) => x2.status === "dirty";
 var isValid = (x2) => x2.status === "valid";
 var isAsync = (x2) => typeof Promise !== "undefined" && x2 instanceof Promise;
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// node_modules/zod/v3/types.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path31, key) {
     this._cachedPath = [];
@@ -19671,7 +19671,7 @@ var coerce = {
 };
 var NEVER = INVALID;
 
-// src/utils/regex-validator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/regex-validator.ts
 function isValidRegexPattern(pattern) {
   if (!pattern || typeof pattern !== "string") {
     return false;
@@ -19733,7 +19733,7 @@ function isValidRegexPattern(pattern) {
   }
 }
 
-// src/config/schema.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/config/schema.ts
 var ReviewConfigSchema = external_exports.object({
   review_depth: external_exports.nativeEnum(ReviewDepth).optional(),
   providers: external_exports.array(external_exports.string()).optional(),
@@ -19850,7 +19850,7 @@ var ReviewConfigSchema = external_exports.object({
   dry_run: external_exports.boolean().optional()
 });
 
-// src/utils/validation.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/validation.ts
 var ValidationError = class extends Error {
   constructor(message, field, hint) {
     super(message);
@@ -20054,7 +20054,7 @@ function validateConfig(config) {
   }
 }
 
-// src/config/loader.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/config/loader.ts
 var ConfigLoader = class {
   static CONFIG_PATHS = [
     ".github/multi-review.yml",
@@ -20534,7 +20534,7 @@ var ConfigLoader = class {
   }
 };
 
-// src/providers/base.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/base.ts
 var Provider = class {
   constructor(name) {
     this.name = name;
@@ -20580,13 +20580,13 @@ var RateLimitError = class extends Error {
   }
 };
 
-// src/providers/opencode.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/opencode.ts
 var import_child_process = require("child_process");
 var fs3 = __toESM(require("fs/promises"));
 var path2 = __toESM(require("path"));
 var crypto = __toESM(require("crypto"));
 
-// src/providers/review-output.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/review-output.ts
 function buildReviewFindingsSchema() {
   return {
     type: "object",
@@ -20777,7 +20777,7 @@ function parseRevalidationEvidence(value) {
   return evidence;
 }
 
-// src/providers/prepared-invocation.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/prepared-invocation.ts
 var PROVIDER_EXECUTION_CONTRACT_VERSION = "review-provider-prepared-invocation.v1";
 function createPreparedProviderInvocation(input) {
   if (!Number.isSafeInteger(input.timeoutMs) || input.timeoutMs <= 0) {
@@ -20890,7 +20890,7 @@ function isPlainObject(value) {
   return prototype === Object.prototype || prototype === null;
 }
 
-// src/providers/opencode.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/opencode.ts
 var OPENCODE_PROMPT_FILE_PLACEHOLDER = "{reviewrouter_prompt_file}";
 var OpenCodeProvider = class extends Provider {
   constructor(modelId) {
@@ -21126,14 +21126,14 @@ var OpenCodeProvider = class extends Provider {
   }
 };
 
-// src/providers/claude-code.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/claude-code.ts
 var import_child_process2 = require("child_process");
 var fs4 = __toESM(require("fs/promises"));
 var os = __toESM(require("os"));
 var path3 = __toESM(require("path"));
 var crypto2 = __toESM(require("crypto"));
 
-// src/utils/diff.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/diff.ts
 function trimDiff(diff, maxBytes) {
   const buf = Buffer.from(diff, "utf8");
   if (buf.byteLength <= maxBytes) return diff;
@@ -21555,7 +21555,7 @@ function unquoteGitPath(path31) {
   return path31;
 }
 
-// src/utils/token-estimation.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/token-estimation.ts
 function estimateTokensSimple(text) {
   const characters = text.length;
   const bytes = Buffer.byteLength(text, "utf8");
@@ -21676,7 +21676,7 @@ function estimateTokensForFile(file, options = {}) {
   return linesChanged * 20;
 }
 
-// src/providers/cli-env.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/cli-env.ts
 var BASE_CLI_ENV_KEYS = [
   "PATH",
   "HOME",
@@ -21713,7 +21713,7 @@ function buildCliSafeEnv(options = {}) {
   return env;
 }
 
-// src/providers/claude-code.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/claude-code.ts
 var CLAUDE_STDIN_LIMIT_BYTES = 10 * 1024 * 1024;
 var CLAUDE_CODE_OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN";
 var CLAUDE_SETTINGS_FILE_PLACEHOLDER = "{reviewrouter_settings_file}";
@@ -22141,7 +22141,7 @@ ${hint}` : text;
   }
 };
 
-// src/utils/redaction.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/redaction.ts
 function redactSensitiveText(value) {
   return value.replace(
     /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
@@ -22155,7 +22155,7 @@ function redactSensitiveText(value) {
   );
 }
 
-// src/providers/codex.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/codex.ts
 var import_child_process4 = require("child_process");
 var fs7 = __toESM(require("fs/promises"));
 var fsSync = __toESM(require("fs"));
@@ -22163,7 +22163,7 @@ var os3 = __toESM(require("os"));
 var path6 = __toESM(require("path"));
 var crypto3 = __toESM(require("crypto"));
 
-// src/providers/codex-output-schema.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/codex-output-schema.ts
 var import__ = __toESM(require__());
 function supportsCliOutputSchema(modelProvider) {
   return modelProvider !== "mimo";
@@ -22196,7 +22196,7 @@ function assertJsonMatchesSchema(content, schema2, kind) {
   );
 }
 
-// src/providers/codex-confinement-policy.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/codex-confinement-policy.ts
 var CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([
   "shell_tool",
   "unified_exec",
@@ -22217,7 +22217,7 @@ var CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([
   "chronicle"
 ]);
 
-// src/codex-oauth/codex-cli.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/codex-cli.ts
 var import_child_process3 = require("child_process");
 var fs5 = __toESM(require("fs/promises"));
 var os2 = __toESM(require("os"));
@@ -22387,7 +22387,7 @@ function safeOutput(value) {
   return value.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 200);
 }
 
-// src/codex-oauth/account-gateway-mimo-catalog.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/account-gateway-mimo-catalog.ts
 var fs6 = __toESM(require("fs/promises"));
 var path5 = __toESM(require("path"));
 var mimoModel = {
@@ -22458,7 +22458,7 @@ async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfig
   return setting;
 }
 
-// src/review-orchestration/infrastructure/account-gateway-model-transport.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/account-gateway-model-transport.ts
 var import_crypto = require("crypto");
 var import_http = require("http");
 var import_https = require("https");
@@ -22959,7 +22959,7 @@ function responsesStreamAudit(observe) {
   };
 }
 
-// src/context-gateway/context-gateway-contract.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/context-gateway-contract.ts
 var import_crypto2 = require("crypto");
 var CONTEXT_GATEWAY_POLICY_VERSION = "context-gateway-v3";
 var CONTEXT_GATEWAY_MAX_OPERATIONS = 2e3;
@@ -23099,7 +23099,7 @@ function isNonNegativeSafeInteger(value) {
   return Number.isSafeInteger(value) && Number(value) >= 0;
 }
 
-// src/context-gateway/context-gateway-v4-contract.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/context-gateway-v4-contract.ts
 var import_crypto3 = require("crypto");
 var CONTEXT_GATEWAY_V4_POLICY_VERSION = "context-gateway-v4";
 var CONTEXT_GATEWAY_V4_CURSOR_VERSION = 1;
@@ -23287,7 +23287,7 @@ function isSha2562(value) {
   return typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
 }
 
-// src/providers/codex.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/codex.ts
 var MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS = 24e3;
 var SHELL_ENVIRONMENT_POLICY_ARGS = [
   "shell_environment_policy.ignore_default_excludes=false",
@@ -25290,7 +25290,7 @@ function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-// src/providers/gemini.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/gemini.ts
 var import_child_process5 = require("child_process");
 var fs8 = __toESM(require("fs/promises"));
 var os4 = __toESM(require("os"));
@@ -25523,7 +25523,7 @@ var GeminiProvider = class extends Provider {
   }
 };
 
-// src/providers/rate-limiter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/rate-limiter.ts
 var fs9 = __toESM(require("fs/promises"));
 var path8 = __toESM(require("path"));
 var os5 = __toESM(require("os"));
@@ -25571,7 +25571,7 @@ var RateLimiter = class {
   }
 };
 
-// src/providers/opencode-models.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/opencode-models.ts
 var import_child_process6 = require("child_process");
 var import_util4 = require("util");
 var execAsync = (0, import_util4.promisify)(import_child_process6.exec);
@@ -25717,7 +25717,7 @@ async function getBestFreeOpenCodeModelsCached(count = 4, timeoutMs = 1e4) {
   return models;
 }
 
-// src/providers/registry.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/registry.ts
 var ProviderRegistry = class {
   constructor(pluginLoader, reliabilityTracker) {
     this.pluginLoader = pluginLoader;
@@ -26224,10 +26224,10 @@ var ProviderRegistry = class {
   }
 };
 
-// src/analysis/llm/prompt-builder.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/llm/prompt-builder.ts
 var import_crypto5 = require("crypto");
 
-// src/analysis/context/validation-detector.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/context/validation-detector.ts
 var ValidationDetector = class {
   /**
    * Analyze a code snippet for defensive programming patterns
@@ -26468,7 +26468,7 @@ var ValidationDetector = class {
   }
 };
 
-// src/analysis/trivial-detector.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/trivial-detector.ts
 var TrivialDetector = class {
   config;
   // Patterns for different types of trivial changes
@@ -26912,7 +26912,7 @@ function createConfiguredTrivialDetector(config) {
   });
 }
 
-// src/analysis/llm/prepared-review-prompt.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/llm/prepared-review-prompt.ts
 var PreparedPromptPathCoverageKind = /* @__PURE__ */ ((PreparedPromptPathCoverageKind2) => {
   PreparedPromptPathCoverageKind2["FullPatch"] = "full_patch";
   PreparedPromptPathCoverageKind2["TrustedRead"] = "trusted_read";
@@ -26924,7 +26924,7 @@ var PreparedPromptPathCoverageKind = /* @__PURE__ */ ((PreparedPromptPathCoverag
   return PreparedPromptPathCoverageKind2;
 })(PreparedPromptPathCoverageKind || {});
 
-// src/review-investigation/domain/canonical-json.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/domain/canonical-json.ts
 var import_crypto4 = require("crypto");
 function canonicalJson2(value) {
   if (value === null || typeof value !== "object") {
@@ -26943,7 +26943,7 @@ function sha2562(value) {
   return (0, import_crypto4.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 
-// src/review-investigation/domain/semantic-risk-policy.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/domain/semantic-risk-policy.ts
 var REVIEW_INVESTIGATION_CRITIC_POLICY_V2 = "review-investigation-critic.v2";
 var REVIEW_INVESTIGATION_RISK_PRIORITY = Object.freeze({
   StandardChangedPath: 5e5,
@@ -27053,7 +27053,7 @@ function changedPathSemanticRiskPriority(path31) {
   return highRisk ? REVIEW_INVESTIGATION_RISK_PRIORITY.HighRiskChangedPath : REVIEW_INVESTIGATION_RISK_PRIORITY.StandardChangedPath;
 }
 
-// src/review-investigation/domain/turn-observation.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/domain/turn-observation.ts
 var REVIEW_TURN_OUTPUT_VERSION = 2;
 var REVIEW_TURN_OBSERVATION_VERSION = 2;
 var MAX_COLLECTION_ITEMS = 256;
@@ -27633,7 +27633,7 @@ function requireEnum(value, enumeration, field) {
   return value;
 }
 
-// src/review-investigation/domain/deterministic-context-probe-plan.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/domain/deterministic-context-probe-plan.ts
 var REVIEW_INVESTIGATION_PROBE_PLAN_VERSION = "review-investigation-probe-plan.v2";
 var REVIEW_INVESTIGATION_PROBE_POLICY_VERSION = "review-investigation-probe-policy.v3";
 var REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION = "review-investigation-fixed-string-search.v1";
@@ -28180,7 +28180,7 @@ function assertPath(value, code) {
   }
 }
 
-// src/analysis/llm/prompt-builder.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/llm/prompt-builder.ts
 var PromptBuilder = class {
   constructor(config, intensity = "standard", promptEnricher, codeGraph, memoryPromptContext) {
     this.config = config;
@@ -28713,10 +28713,10 @@ function sha2563(value) {
   return (0, import_crypto5.createHash)("sha256").update(value).digest("hex");
 }
 
-// node_modules/p-retry/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/p-retry/index.js
 var import_retry = __toESM(require_retry2(), 1);
 
-// node_modules/is-network-error/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/is-network-error/index.js
 var objectToString = Object.prototype.toString;
 var isError = (value) => objectToString.call(value) === "[object Error]";
 var errorMessages = /* @__PURE__ */ new Set([
@@ -28754,7 +28754,7 @@ function isNetworkError(error2) {
   return errorMessages.has(message);
 }
 
-// node_modules/p-retry/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/p-retry/index.js
 var AbortError = class extends Error {
   constructor(message) {
     super();
@@ -28829,13 +28829,13 @@ async function pRetry(input, options) {
   });
 }
 
-// src/utils/retry.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/retry.ts
 async function withRetry(fn, options) {
   if (options.retryOn) {
     const maxAttempts = options.retries + 1;
     const minTimeout = options.minTimeout ?? 500;
     const factor = options.factor ?? 2;
-    let delay3 = minTimeout;
+    let delay4 = minTimeout;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await fn();
@@ -28848,8 +28848,8 @@ async function withRetry(fn, options) {
           `Retryable error: attempt ${attempt} of ${maxAttempts}`,
           err.message
         );
-        await new Promise((resolve5) => setTimeout(resolve5, delay3));
-        delay3 = Math.min(delay3 * factor, options.maxTimeout ?? 4e3);
+        await new Promise((resolve5) => setTimeout(resolve5, delay4));
+        delay4 = Math.min(delay4 * factor, options.maxTimeout ?? 4e3);
       }
     }
   }
@@ -28867,7 +28867,7 @@ async function withRetry(fn, options) {
   });
 }
 
-// src/utils/timeout.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/timeout.ts
 function withTimeout(promise, timeoutMs, onTimeoutMessage) {
   let timeoutHandle;
   const timeoutPromise = new Promise((_2, reject) => {
@@ -28884,7 +28884,7 @@ function withTimeout(promise, timeoutMs, onTimeoutMessage) {
   );
 }
 
-// src/analysis/llm/retry-policy.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/llm/retry-policy.ts
 var STRUCTURED_OUTPUT_RETRY_PATTERNS = [
   "returned invalid review json",
   "response was not valid json",
@@ -28962,7 +28962,7 @@ function sanitizeRetryReason(message) {
   return message.replace(/sk-[A-Za-z0-9_-]+/g, "sk-[redacted]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "gh[redacted]").replace(/refresh[_-]?token[=:]\S+/gi, "refresh_token=[redacted]").slice(0, 240);
 }
 
-// src/review-execution/application/provider-call-limiter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/application/provider-call-limiter.ts
 var ProviderCallLimiter = class {
   constructor(maxParallel) {
     this.maxParallel = maxParallel;
@@ -29000,7 +29000,7 @@ var ProviderCallLimiter = class {
   }
 };
 
-// src/analysis/llm/executor.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/llm/executor.ts
 var LLMExecutor = class {
   constructor(config, policy = {}) {
     this.config = config;
@@ -29260,7 +29260,7 @@ var LLMExecutor = class {
   }
 };
 
-// src/utils/provider-votes.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/provider-votes.ts
 var INSTANCE_SUFFIX = /#\d+$/;
 function stripProviderInstanceSuffix(value) {
   return value.trim().replace(INSTANCE_SUFFIX, "");
@@ -29327,7 +29327,7 @@ function mergeProviderModels(left, right) {
   return Array.from(merged.values());
 }
 
-// src/analysis/deduplicator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/deduplicator.ts
 var SEVERITY_RANK = {
   critical: 3,
   major: 2,
@@ -29532,7 +29532,7 @@ function jaccard(left, right) {
   return intersection / (/* @__PURE__ */ new Set([...left, ...right])).size;
 }
 
-// src/analysis/ast/parsers.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/ast/parsers.ts
 function detectLanguage(filename) {
   if (filename.endsWith(".ts") || filename.endsWith(".tsx"))
     return "typescript";
@@ -29605,7 +29605,7 @@ function debugParser(message) {
   }
 }
 
-// src/validation/ast-comparator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/validation/ast-comparator.ts
 var VALUE_ONLY_TYPES = /* @__PURE__ */ new Set([
   // Identifiers
   "identifier",
@@ -29924,7 +29924,7 @@ function hasUnbalancedDelimiters(code) {
   return quote !== null || stack.length > 0;
 }
 
-// src/analysis/consensus.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/consensus.ts
 var SEVERITY_ORDER = {
   critical: 3,
   major: 2,
@@ -30111,7 +30111,7 @@ function uniqueSuggestionsByVoteKey(suggestions) {
   return unique3;
 }
 
-// src/utils/suggestion-formatter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/suggestion-formatter.ts
 function countMaxConsecutiveBackticks(str2) {
   const backtickSequences = str2.match(/`+/g);
   if (!backtickSequences) {
@@ -30131,7 +30131,7 @@ ${content}
 ${fence}`;
 }
 
-// src/output/reviewer-summary.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/output/reviewer-summary.ts
 var REVIEW_SUMMARY_STATUS_COMPLETE_MARKER = "<!-- reviewrouter:review-status:complete -->";
 var REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER = "<!-- reviewrouter:review-status:incomplete -->";
 var maxSummaryBytes = 6e4;
@@ -30601,7 +30601,7 @@ function utf8Bytes(value) {
   return Buffer.byteLength(value, "utf8");
 }
 
-// src/utils/severity.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/severity.ts
 var DISPLAYS = {
   critical: {
     emoji: "\u{1F534}",
@@ -30637,7 +30637,7 @@ function severityLine(severity) {
   return `**Severity:** ${display.emoji} **${display.label}** - ${display.description}.`;
 }
 
-// src/analysis/synthesis.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/synthesis.ts
 var SynthesisEngine = class {
   constructor(config) {
     this.config = config;
@@ -30898,7 +30898,7 @@ function isSingleLineSuggestion(suggestion) {
   return suggestion.trimEnd().split("\n").length === 1;
 }
 
-// src/analysis/test-coverage.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/test-coverage.ts
 var fs10 = __toESM(require("fs"));
 var path9 = __toESM(require("path"));
 var TestCoverageAnalyzer = class _TestCoverageAnalyzer {
@@ -30971,7 +30971,7 @@ var TestCoverageAnalyzer = class _TestCoverageAnalyzer {
   }
 };
 
-// src/analysis/ast/patterns.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/ast/patterns.ts
 var PATTERNS = [
   {
     regex: /console\.log/,
@@ -31013,7 +31013,7 @@ function detectPatternFindings(filename, addedLines) {
   return findings;
 }
 
-// src/analysis/ast/analyzer.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/ast/analyzer.ts
 var ASTAnalyzer = class {
   analyze(files) {
     const findings = [];
@@ -31161,7 +31161,7 @@ var ASTAnalyzer = class {
   }
 };
 
-// src/cache/storage.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/cache/storage.ts
 var fs11 = __toESM(require("fs/promises"));
 var path10 = __toESM(require("path"));
 var CacheStorage = class {
@@ -31254,10 +31254,10 @@ var CacheStorage = class {
   }
 };
 
-// src/cache/key-builder.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/cache/key-builder.ts
 var import_crypto6 = require("crypto");
 
-// src/cache/version.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/cache/version.ts
 var CACHE_VERSION = 8;
 function versionCache(data) {
   return {
@@ -31290,7 +31290,7 @@ function unversionCache(cached, maxAge) {
   }
 }
 
-// src/cache/key-builder.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/cache/key-builder.ts
 function buildCacheKey(pr2, configHash) {
   const hash = (0, import_crypto6.createHash)("sha1").update(`${pr2.baseSha}:${pr2.headSha}`).digest("hex").slice(0, 12);
   const suffix = configHash ? `-${configHash}` : "";
@@ -31345,7 +31345,7 @@ function sortObject(value) {
   return value;
 }
 
-// src/cache/manager.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/cache/manager.ts
 var DEFAULT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1e3;
 var CacheManager = class {
   constructor(storage = new CacheStorage(), config) {
@@ -31385,7 +31385,7 @@ var CacheManager = class {
   }
 };
 
-// src/cache/incremental.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/cache/incremental.ts
 var import_child_process7 = require("child_process");
 var IncrementalReviewer = class _IncrementalReviewer {
   constructor(storage = new CacheStorage(), config = {
@@ -31679,7 +31679,7 @@ function fullReviewDecision() {
   };
 }
 
-// src/cache/review-snapshot-bridge.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/cache/review-snapshot-bridge.ts
 var fs12 = __toESM(require("fs/promises"));
 var REVIEW_SNAPSHOT_INPUT_PATH_ENV = "REVIEWROUTER_INCREMENTAL_SNAPSHOT_INPUT_PATH";
 var REVIEW_SNAPSHOT_OUTPUT_PATH_ENV = "REVIEWROUTER_INCREMENTAL_SNAPSHOT_OUTPUT_PATH";
@@ -31978,7 +31978,7 @@ function safeError(error2) {
   return error2 instanceof Error ? redactSensitiveText(error2.message).slice(0, 500) : "unknown_error";
 }
 
-// src/cost/pricing.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/cost/pricing.ts
 var PricingService = class _PricingService {
   constructor(apiKey) {
     this.apiKey = apiKey;
@@ -32035,7 +32035,7 @@ var PricingService = class _PricingService {
   }
 };
 
-// src/cost/tracker.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/cost/tracker.ts
 var CostTracker = class {
   constructor(pricing) {
     this.pricing = pricing;
@@ -32076,7 +32076,7 @@ var CostTracker = class {
   }
 };
 
-// src/security/secrets.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/security/secrets.ts
 var SECRET_PATTERNS = [
   // AWS Secrets
   {
@@ -32211,7 +32211,7 @@ function isTestFile(filename) {
   return lower.includes("__tests__") || lower.includes("/tests/") || lower.endsWith(".test.ts") || lower.endsWith(".test.js") || lower.endsWith(".spec.ts") || lower.endsWith(".spec.js");
 }
 
-// src/security/scanner.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/security/scanner.ts
 var SecurityScanner = class {
   scan(files) {
     const findings = [];
@@ -32222,7 +32222,7 @@ var SecurityScanner = class {
   }
 };
 
-// src/rules/engine.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/rules/engine.ts
 var RulesEngine = class {
   constructor(rules = []) {
     this.rules = rules;
@@ -32238,14 +32238,14 @@ var RulesEngine = class {
   }
 };
 
-// src/rules/loader.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/rules/loader.ts
 var RuleLoader = class {
   static load() {
     return new RulesEngine([]);
   }
 };
 
-// src/github/local-git-diff.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/local-git-diff.ts
 var import_child_process8 = require("child_process");
 var GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/i;
 var MAX_LOCAL_DIFF_FILES = 2e4;
@@ -32404,7 +32404,7 @@ function runGit(args, cwd) {
   });
 }
 
-// src/github/pr-loader.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/pr-loader.ts
 var FILES_PER_PAGE = 100;
 var MAX_GITHUB_FILES = 3e3;
 var MAX_RAW_DIFF_FILES = 300;
@@ -32668,7 +32668,7 @@ var PullRequestLoader = class {
   }
 };
 
-// src/utils/suggestion-validator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/suggestion-validator.ts
 function validateSuggestionLine(lineNumber, patch) {
   const lineMap = mapLinesToPositions(patch);
   return lineMap.get(lineNumber) ?? null;
@@ -32726,7 +32726,7 @@ function validateSuggestionRange(startLine, endLine, patch) {
   };
 }
 
-// src/validation/syntax-validator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/validation/syntax-validator.ts
 function getRootNode2(tree) {
   return (tree.rootNode ?? tree.root) || null;
 }
@@ -32911,7 +32911,7 @@ function makeError(code, index, type2) {
   };
 }
 
-// src/validation/confidence-calculator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/validation/confidence-calculator.ts
 var CONFIDENCE_MULTIPLIERS = {
   /** Boost factor when syntax is valid (10% increase) */
   SYNTAX_BOOST: 1.1,
@@ -32975,10 +32975,10 @@ function shouldPostSuggestion(finding, confidence, config) {
   return true;
 }
 
-// src/github/comment-fingerprint.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/comment-fingerprint.ts
 var import_crypto7 = require("crypto");
 
-// src/review-projection/domain/finding-marker.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-projection/domain/finding-marker.ts
 var RESERVED_FINDING_MARKER_PREFIX_RE = /(?:review-router-finding:|reviewrouter:finding:v2:)/gi;
 var LEGACY_FINDING_MARKER_RE = /<!--\s*review-router-finding:([a-f0-9]{24,64})\s*-->/gi;
 var V2_FINDING_MARKER_RE = /(?<!\S)reviewrouter:finding:v2:((?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64}))(?=$|[ \t\r\n])/g;
@@ -33032,7 +33032,7 @@ function collectMarkerMatches(body, pattern) {
   }));
 }
 
-// src/github/comment-fingerprint.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/comment-fingerprint.ts
 var INLINE_MARKER_RE = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/i;
 var INLINE_MARKER_RE_GLOBAL = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/gi;
 var MAX_NEARBY_LINE_DISTANCE = 12;
@@ -33300,7 +33300,7 @@ var STOPWORDS = /* @__PURE__ */ new Set([
   "would"
 ]);
 
-// src/github/summary-metadata.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/summary-metadata.ts
 var REVIEW_THREAD_LIFECYCLE_SCHEMA_VERSION = "review-thread-lifecycle-v1";
 var SUMMARY_METADATA_RE = /<!--\s*review-router-summary:([A-Za-z0-9+/=]+)\s*-->/;
 function buildReviewSummaryMetadata(input) {
@@ -33375,7 +33375,7 @@ function numberFromString(value) {
   return Number.isFinite(parsed) ? parsed : void 0;
 }
 
-// src/github/pr-head-guard.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/pr-head-guard.ts
 async function verifyPullRequestHead(octokit, input) {
   try {
     const response = await octokit.rest.pulls.get({
@@ -33400,7 +33400,7 @@ async function verifyPullRequestHead(octokit, input) {
   }
 }
 
-// src/github/comment-poster.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/comment-poster.ts
 var CommentPoster = class _CommentPoster {
   constructor(client, dryRun = false, config, suppressionTracker, providerWeightTracker) {
     this.client = client;
@@ -34449,7 +34449,7 @@ ${comment.body.substring(0, 200)}...`
   }
 };
 
-// src/github/pr-description.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/pr-description.ts
 var START_MARKER = "<!-- review-router-summary:start -->";
 var END_MARKER = "<!-- review-router-summary:end -->";
 var LEGACY_MARKER_PAIRS = [
@@ -35044,11 +35044,11 @@ ${deleted}`;
   }
 };
 
-// src/github/client.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/client.ts
 var fs13 = __toESM(require("fs"));
 var import_rest = __toESM(require_dist_node12());
 
-// src/github/rate-limit.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/rate-limit.ts
 var GitHubRateLimitTracker = class {
   status = null;
   /**
@@ -35133,7 +35133,7 @@ var GitHubRateLimitTracker = class {
   }
 };
 
-// src/github/client.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/client.ts
 var GitHubClient = class {
   octokit;
   owner;
@@ -35193,13 +35193,13 @@ var GitHubClient = class {
    * Throttle requests when approaching rate limit
    */
   async throttleIfNeeded() {
-    const delay3 = this.calculateBackoffDelay();
-    if (delay3 > 0) {
+    const delay4 = this.calculateBackoffDelay();
+    if (delay4 > 0) {
       const status = this.rateLimitTracker.getStatus();
       debug(
-        `Throttling GitHub API request (${delay3}ms delay, ${status?.remaining} requests remaining)`
+        `Throttling GitHub API request (${delay4}ms delay, ${status?.remaining} requests remaining)`
       );
-      await new Promise((resolve5) => setTimeout(resolve5, delay3));
+      await new Promise((resolve5) => setTimeout(resolve5, delay4));
     }
   }
   /**
@@ -35405,7 +35405,7 @@ function getRepositoryFromEventPayload() {
   return void 0;
 }
 
-// src/analysis/thread-lifecycle.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/thread-lifecycle.ts
 var DEFAULT_RESOLVE_CONFIDENCE = {
   critical: 0.9,
   major: 0.85,
@@ -35790,7 +35790,7 @@ function unique(values) {
   return Array.from(new Set(values));
 }
 
-// src/output/formatter-v2.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/output/formatter-v2.ts
 var MarkdownFormatterV2 = class {
   format(review) {
     const hasFindings = review.findings.length > 0;
@@ -36413,7 +36413,7 @@ var MarkdownFormatterV2 = class {
   }
 };
 
-// src/analysis/context.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/context.ts
 var ContextRetriever = class {
   constructor(graph) {
     this.graph = graph;
@@ -36503,7 +36503,7 @@ var ContextRetriever = class {
   }
 };
 
-// src/analysis/impact.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/impact.ts
 var ImpactAnalyzer = class {
   analyze(files, contexts, hasFindings = true) {
     const consumers = this.collectByRelationship(contexts, "consumer");
@@ -36536,7 +36536,7 @@ var ImpactAnalyzer = class {
   }
 };
 
-// src/analysis/evidence.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/evidence.ts
 var EvidenceScorer = class {
   score(finding, providerCount, astConfirmed, graphConfirmed, hasDirectEvidence) {
     const agreement = providerCount > 0 ? getProviderVoteCount(finding) / providerCount : 0;
@@ -36560,7 +36560,7 @@ var EvidenceScorer = class {
   }
 };
 
-// src/output/mermaid.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/output/mermaid.ts
 var MermaidGenerator = class {
   generateImpactDiagram(files, context) {
     if (files.length > 30) return "";
@@ -36607,7 +36607,7 @@ var MermaidGenerator = class {
   }
 };
 
-// src/review-projection/domain/review-projection.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-projection/domain/review-projection.ts
 var LifecycleRevalidationVerdict = /* @__PURE__ */ ((LifecycleRevalidationVerdict2) => {
   LifecycleRevalidationVerdict2["Resolved"] = "resolved";
   LifecycleRevalidationVerdict2["StillValid"] = "still_valid";
@@ -36615,7 +36615,7 @@ var LifecycleRevalidationVerdict = /* @__PURE__ */ ((LifecycleRevalidationVerdic
   return LifecycleRevalidationVerdict2;
 })(LifecycleRevalidationVerdict || {});
 
-// src/review-projection/domain/review-projection-canonicalizer.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-projection/domain/review-projection-canonicalizer.ts
 var import_crypto8 = require("crypto");
 function canonicalizeReviewProjection(envelope) {
   return JSON.stringify(toCanonicalValue(envelope));
@@ -36655,7 +36655,7 @@ function toCanonicalValue(value) {
   return canonical;
 }
 
-// src/review-projection/domain/current-review-projector.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-projection/domain/current-review-projector.ts
 var CurrentReviewProjector = class {
   projectOccurrences(input) {
     const occurrences = [];
@@ -36840,7 +36840,7 @@ function sortedUnique(values) {
   );
 }
 
-// src/review-projection/domain/review-lifecycle-observation.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-projection/domain/review-lifecycle-observation.ts
 var import_crypto9 = require("crypto");
 var REVIEW_LIFECYCLE_THREAD_STATE_VERSION = "review_lifecycle_thread_state.v1";
 var REVIEW_LIFECYCLE_MARKER_FINGERPRINT = /^(?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64})$/;
@@ -36936,7 +36936,7 @@ function compareCodeUnits2(left, right) {
   return 0;
 }
 
-// src/review-projection/domain/review-projection-limits.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-projection/domain/review-projection-limits.ts
 var REVIEW_PROJECTION_ABSOLUTE_LIMITS = {
   maxProjectionBytes: 2e6,
   maxFindings: 1e3,
@@ -36984,7 +36984,7 @@ function assertWithinProjectionLimit(limitName, actual, limits) {
   }
 }
 
-// src/github/feedback.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/feedback.ts
 var FeedbackFilter = class {
   constructor(client, _providerWeightTracker, ledger) {
     this.client = client;
@@ -37276,7 +37276,7 @@ function locationKey(path31, line) {
   return `${path31.toLowerCase()}:${line}`;
 }
 
-// src/github/ledger.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/ledger.ts
 var import_crypto10 = require("crypto");
 var LEDGER_MARKER = "reviewrouter-ledger:v1";
 var LEDGER_RE = /<!--\s*reviewrouter-ledger:v1\s+payload=([A-Za-z0-9_-]+)\s+signature=([a-f0-9]{64})\s*-->/;
@@ -37504,7 +37504,7 @@ function safeEqualHex(a2, b2) {
   return aBuffer.length === bBuffer.length && (0, import_crypto10.timingSafeEqual)(aBuffer, bBuffer);
 }
 
-// src/learning/feedback-tracker.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/learning/feedback-tracker.ts
 var FeedbackTracker = class _FeedbackTracker {
   // 1 day
   constructor(storage = new CacheStorage(), minFeedbackCount = _FeedbackTracker.MIN_FEEDBACK_FOR_LEARNING) {
@@ -37696,7 +37696,7 @@ var FeedbackTracker = class _FeedbackTracker {
   }
 };
 
-// src/learning/quiet-mode.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/learning/quiet-mode.ts
 var QuietModeFilter = class {
   constructor(config, feedbackTracker) {
     this.config = config;
@@ -37786,7 +37786,7 @@ var QuietModeFilter = class {
   }
 };
 
-// src/analysis/context/graph-builder.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/context/graph-builder.ts
 var path11 = __toESM(require("path"));
 function resolveImportPath(importerFile, moduleSpecifier) {
   if (moduleSpecifier.startsWith(".")) {
@@ -38568,7 +38568,7 @@ var CodeGraphBuilder = class {
   }
 };
 
-// src/autofix/prompt-generator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/autofix/prompt-generator.ts
 var PromptGenerator = class {
   constructor(defaultFormat = "plain") {
     this.defaultFormat = defaultFormat;
@@ -38774,7 +38774,7 @@ var PromptGenerator = class {
   }
 };
 
-// src/utils/sanitize.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/sanitize.ts
 var import_crypto11 = require("crypto");
 function encodeURIComponentSafe(value) {
   if (typeof value !== "string") {
@@ -38788,7 +38788,7 @@ function encodeURIComponentSafe(value) {
   return `${prefix}-${hashSuffix}`;
 }
 
-// src/providers/circuit-breaker.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/circuit-breaker.ts
 var CircuitBreaker = class _CircuitBreaker {
   // Track storage health
   constructor(storage = new CacheStorage(), options = {}) {
@@ -39026,7 +39026,7 @@ var CircuitBreaker = class _CircuitBreaker {
   }
 };
 
-// src/providers/reliability-tracker.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/providers/reliability-tracker.ts
 var ReliabilityTracker = class _ReliabilityTracker {
   constructor(storage = new CacheStorage(), minAttempts = _ReliabilityTracker.MIN_ATTEMPTS_FOR_SCORING, circuitBreaker = new CircuitBreaker(storage)) {
     this.storage = storage;
@@ -39336,7 +39336,7 @@ var ReliabilityTracker = class _ReliabilityTracker {
   }
 };
 
-// src/analytics/metrics-collector.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analytics/metrics-collector.ts
 var MetricsCollector = class _MetricsCollector {
   constructor(storage = new CacheStorage(), config) {
     this.storage = storage;
@@ -39621,7 +39621,7 @@ var MetricsCollector = class _MetricsCollector {
   }
 };
 
-// src/plugins/plugin-loader.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/plugins/plugin-loader.ts
 var fs14 = __toESM(require("fs/promises"));
 var path12 = __toESM(require("path"));
 var crypto5 = __toESM(require("crypto"));
@@ -39875,10 +39875,10 @@ var PluginLoader = class {
   }
 };
 
-// src/core/batch-orchestrator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/core/batch-orchestrator.ts
 var import_crypto13 = require("crypto");
 
-// src/review-orchestration/domain/content-defined-review-batches.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/domain/content-defined-review-batches.ts
 var import_crypto12 = require("crypto");
 var ROUTE_HASH_BITS = 256;
 function createContentDefinedReviewBatches(units, limits) {
@@ -40000,7 +40000,7 @@ function requireNonEmpty(value, field) {
   if (value.length === 0) throw new Error(`${field}_invalid`);
 }
 
-// src/core/batch-orchestrator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/core/batch-orchestrator.ts
 var BatchOrchestrator = class {
   constructor(options) {
     this.options = options;
@@ -40132,7 +40132,7 @@ function fileIdentity(file) {
   ).digest("hex");
 }
 
-// src/learning/suppression-tracker.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/learning/suppression-tracker.ts
 var import_crypto14 = require("crypto");
 var SuppressionTracker = class _SuppressionTracker {
   constructor(storage, repoKey) {
@@ -40286,7 +40286,7 @@ var SuppressionTracker = class _SuppressionTracker {
   }
 };
 
-// src/learning/provider-weights.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/learning/provider-weights.ts
 var ProviderWeightTracker = class _ProviderWeightTracker {
   constructor(storage = new CacheStorage()) {
     this.storage = storage;
@@ -40427,7 +40427,7 @@ var ProviderWeightTracker = class _ProviderWeightTracker {
   }
 };
 
-// src/learning/prompt-enrichment.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/learning/prompt-enrichment.ts
 var DEFAULT_CONFIG2 = {
   minFeedbackForLowQuality: 5,
   lowQualityThreshold: 0.5,
@@ -40524,7 +40524,7 @@ var PromptEnricher = class {
   }
 };
 
-// src/learning/acceptance-detector.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/learning/acceptance-detector.ts
 var AcceptanceDetector = class {
   /**
    * Patterns matching GitHub's "Commit suggestion" feature.
@@ -40624,7 +40624,7 @@ var AcceptanceDetector = class {
   }
 };
 
-// src/github/review-thread-inventory.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/review-thread-inventory.ts
 var import_crypto15 = require("crypto");
 var DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS = ["review-router-ai[bot]"];
 var GITHUB_ACTIONS_BOT_AUTHOR = "github-actions[bot]";
@@ -41105,7 +41105,7 @@ function lifecycleObservationAuthors() {
   return value;
 }
 
-// src/github/review-thread-resolver.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/review-thread-resolver.ts
 var HEAD_QUERY = `
 query ReviewRouterResolveHeadGuard($owner: String!, $repo: String!, $prNumber: Int!) {
   repository(owner: $owner, name: $repo) {
@@ -41601,7 +41601,7 @@ function unique2(values) {
   return Array.from(new Set(values));
 }
 
-// src/control-plane/review-thread-lifecycle.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/review-thread-lifecycle.ts
 var ControlPlaneReviewThreadLifecycleResolver = class {
   constructor(runtimeConfig, fetchImpl = fetch) {
     this.runtimeConfig = runtimeConfig;
@@ -41683,7 +41683,7 @@ function safeReason(message) {
   return message.replace(/[^a-zA-Z0-9:_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
 }
 
-// src/control-plane/memory.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/memory.ts
 var import_crypto16 = require("crypto");
 var ControlPlaneMemoryClient = class {
   constructor(runtimeConfig, env = process.env, fetchImpl = fetch, memoryLogger = logger) {
@@ -41920,7 +41920,7 @@ function safeReason2(error2) {
   return message.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, "<redacted>").replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/sk-[A-Za-z0-9_-]+/g, "[redacted-api-key]").slice(0, 160);
 }
 
-// src/review-execution/domain/execution-deadline.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/domain/execution-deadline.ts
 var SYSTEM_CLOCK = {
   now: () => Date.now()
 };
@@ -41974,7 +41974,7 @@ var ExecutionDeadline = class {
   }
 };
 
-// src/review-execution/infrastructure/execution-deadline-from-environment.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/infrastructure/execution-deadline-from-environment.ts
 var REVIEW_EXECUTION_DEADLINE_ENV_KEY = "REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS";
 var DEFAULT_COMPLETION_RESERVE_MS = 12e4;
 var DEFAULT_MINIMUM_BATCH_START_WINDOW_MS = 3e4;
@@ -42001,11 +42001,11 @@ function createExecutionDeadlineFromEnvironment(environment = process.env, clock
   );
 }
 
-// src/review-execution/infrastructure/http-review-checkpoint-client.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/infrastructure/http-review-checkpoint-client.ts
 var fs15 = __toESM(require("fs/promises"));
 var import_crypto17 = require("crypto");
 
-// src/review-execution/domain/review-checkpoint.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/domain/review-checkpoint.ts
 var REVIEW_CHECKPOINT_PROTOCOL_VERSION = 1;
 var REVIEW_CHECKPOINT_MAX_REQUEST_BYTES = 128 * 1024;
 var REVIEW_CHECKPOINT_MAX_AGGREGATE_BYTES = 2 * 1024 * 1024;
@@ -42346,7 +42346,7 @@ function asRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-// src/review-execution/application/review-checkpoint-session.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/application/review-checkpoint-session.ts
 var ReviewCheckpointSession = class _ReviewCheckpointSession {
   static async open(input) {
     const plan = createReviewCheckpointPlanIdentity(input.plan);
@@ -42697,7 +42697,7 @@ function warnFailOpen(logger2, reason) {
   );
 }
 
-// src/review-execution/infrastructure/http-review-checkpoint-client.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/infrastructure/http-review-checkpoint-client.ts
 var REVIEW_CHECKPOINT_API_URL_ENV = "REVIEWROUTER_API_URL";
 var REVIEW_CHECKPOINT_LEASE_ID_ENV = "REVIEWROUTER_COMMENT_TOKEN_LEASE_ID";
 var REVIEW_CHECKPOINT_PROVIDER_INSTANCE_ID_ENV = "REVIEWROUTER_COMMENT_TOKEN_PROVIDER_INSTANCE_ID";
@@ -43137,7 +43137,7 @@ function parseOptionalEpochMs2(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : void 0;
 }
 
-// src/setup.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/setup.ts
 var DEFAULT_PROVIDER_DISCOVERY_WAVE_TIMEOUT_MS = 15e3;
 function parseBoundedParallelism(value) {
   if (!value?.trim()) return void 0;
@@ -43348,7 +43348,7 @@ async function createComponents(config, githubToken, options = {}) {
   };
 }
 
-// src/utils/suggestion-sanity.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/utils/suggestion-sanity.ts
 function validateSuggestionSanity(suggestion) {
   if (suggestion === void 0 || suggestion === null) {
     return {
@@ -43383,7 +43383,7 @@ function validateSuggestionSanity(suggestion) {
   };
 }
 
-// src/analysis/llm/parser.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/llm/parser.ts
 function extractFindings(results) {
   const findings = [];
   for (const result2 of results) {
@@ -43422,7 +43422,7 @@ function extractFindings(results) {
   return findings;
 }
 
-// src/analysis/ai-detector.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/ai-detector.ts
 function summarizeAIDetection(results) {
   const estimates = {};
   for (const result2 of results) {
@@ -43442,7 +43442,7 @@ function summarizeAIDetection(results) {
   };
 }
 
-// src/analysis/finding-filter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/finding-filter.ts
 var FindingFilter = class {
   /**
    * Filter and adjust findings to reduce false positives
@@ -44039,12 +44039,12 @@ var FindingFilter = class {
   }
 };
 
-// src/output/json.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/output/json.ts
 function buildJson(review) {
   return JSON.stringify(review, null, 2);
 }
 
-// src/output/sarif.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/output/sarif.ts
 function buildSarif(findings) {
   const rules = findings.map((f2, idx) => ({
     id: `RULE-${idx + 1}`,
@@ -44089,7 +44089,7 @@ function severityToLevel(severity) {
   return "note";
 }
 
-// src/cache/graph-cache.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/cache/graph-cache.ts
 var GRAPH_CACHE_VERSION = 1;
 var GraphCache = class _GraphCache {
   // 24 hours
@@ -44159,7 +44159,7 @@ var GraphCache = class _GraphCache {
   }
 };
 
-// node_modules/brace-expansion/node_modules/balanced-match/dist/esm/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/brace-expansion/node_modules/balanced-match/dist/esm/index.js
 var balanced = (a2, b2, str2) => {
   const ma2 = a2 instanceof RegExp ? maybeMatch(a2, str2) : a2;
   const mb = b2 instanceof RegExp ? maybeMatch(b2, str2) : b2;
@@ -44212,7 +44212,7 @@ var range = (a2, b2, str2) => {
   return result2;
 };
 
-// node_modules/brace-expansion/dist/esm/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/brace-expansion/dist/esm/index.js
 var escSlash = "\0SLASH" + Math.random() + "\0";
 var escOpen = "\0OPEN" + Math.random() + "\0";
 var escClose = "\0CLOSE" + Math.random() + "\0";
@@ -44425,7 +44425,7 @@ function expand_(str2, max, maxLength, isTop) {
   return acc;
 }
 
-// node_modules/minimatch/dist/esm/assert-valid-pattern.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/minimatch/dist/esm/assert-valid-pattern.js
 var MAX_PATTERN_LENGTH = 1024 * 64;
 var assertValidPattern = (pattern) => {
   if (typeof pattern !== "string") {
@@ -44436,7 +44436,7 @@ var assertValidPattern = (pattern) => {
   }
 };
 
-// node_modules/minimatch/dist/esm/brace-expressions.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/minimatch/dist/esm/brace-expressions.js
 var posixClasses = {
   "[:alnum:]": ["\\p{L}\\p{Nl}\\p{Nd}", true],
   "[:alpha:]": ["\\p{L}\\p{Nl}", true],
@@ -44545,7 +44545,7 @@ var parseClass = (glob, position) => {
   return [comb, uflag, endPos - pos, true];
 };
 
-// node_modules/minimatch/dist/esm/unescape.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/minimatch/dist/esm/unescape.js
 var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}) => {
   if (magicalBraces) {
     return windowsPathsNoEscape ? s2.replace(/\[([^/\\])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\])\]/g, "$1$2").replace(/\\([^/])/g, "$1");
@@ -44553,7 +44553,7 @@ var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}
   return windowsPathsNoEscape ? s2.replace(/\[([^/\\{}])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\{}])\]/g, "$1$2").replace(/\\([^/{}])/g, "$1");
 };
 
-// node_modules/minimatch/dist/esm/ast.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/minimatch/dist/esm/ast.js
 var _a;
 var types2 = /* @__PURE__ */ new Set(["!", "?", "+", "*", "@"]);
 var isExtglobType = (c2) => types2.has(c2);
@@ -45197,7 +45197,7 @@ var AST = class {
 };
 _a = AST;
 
-// node_modules/minimatch/dist/esm/escape.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/minimatch/dist/esm/escape.js
 var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {}) => {
   if (magicalBraces) {
     return windowsPathsNoEscape ? s2.replace(/[?*()[\]{}]/g, "[$&]") : s2.replace(/[?*()[\]\\{}]/g, "\\$&");
@@ -45205,7 +45205,7 @@ var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {})
   return windowsPathsNoEscape ? s2.replace(/[?*()[\]]/g, "[$&]") : s2.replace(/[?*()[\]\\]/g, "\\$&");
 };
 
-// node_modules/minimatch/dist/esm/index.js
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/minimatch/dist/esm/index.js
 var minimatch = (p2, pattern, options = {}) => {
   assertValidPattern(pattern);
   if (!options.nocomment && pattern.charAt(0) === "#") {
@@ -46014,7 +46014,7 @@ minimatch.Minimatch = Minimatch;
 minimatch.escape = escape2;
 minimatch.unescape = unescape2;
 
-// src/analysis/path-matcher.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/path-matcher.ts
 var MAX_PATTERN_LENGTH2 = 500;
 var MAX_COMPLEXITY_SCORE = 50;
 var PathMatcher = class {
@@ -46435,7 +46435,7 @@ function createDefaultPathMatcherConfig() {
   };
 }
 
-// src/analysis/review-coverage.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/analysis/review-coverage.ts
 function buildReviewCoverage(pr2, config, options = {}) {
   const promptCoverageByPath = classifyPromptCoverage(
     options.reviewedContexts ?? [pr2],
@@ -46581,7 +46581,7 @@ function unquoteGitPath4(path31) {
   });
 }
 
-// src/review-execution/domain/capacity-signal.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/domain/capacity-signal.ts
 var STRUCTURED_OUTPUT_ERROR = /\b(?:structured\s+(?:json|output|response)|(?:invalid|malformed)\s+json|json\s+(?:schema|parse|parsing|validation)|(?:parse|parsing|validate)\s+(?:structured\s+)?json|failed\s+to\s+(?:parse|validate).*json)\b/i;
 var CAPACITY_MESSAGE = /(?:\bcapacity[\s_-]*unavailable\b|\brate[\s_-]*limit(?:ed|ing)?\b|\bratelimit(?:ed|ing)?\b|\busage[\s_-]*limit(?:ed|[\s_-]*(?:reached|exceeded|exhausted))?\b|\bbilling[\s_-]*limit(?:ed|[\s_-]*(?:reached|exceeded))?\b|\binsufficient[\s_-]*quota\b|\btoo many requests\b|\b429\b|\bquota(?:[\s_-]*(?:exceeded|exhausted|unavailable|limited))?\b)/i;
 var DEFINITIVE_CAPACITY_CODE = /^(?:429|capacity[_-]?unavailable|rate[_-]?limit(?:ed|_exceeded)?|usage[_-]?limit(?:ed|_reached|_exceeded|_exhausted)?|billing[_-]?limit(?:ed|_reached|_exceeded)?|insufficient[_-]?quota|too[_-]?many[_-]?requests|quota[_-]?(?:exceeded|exhausted|unavailable|limited)|resource[_-]?exhausted)$/i;
@@ -46679,7 +46679,7 @@ function classifyProviderCapacitySignal(result2) {
   return signals.every((signal) => signal === "healthy" /* Healthy */) ? "healthy" /* Healthy */ : "neutral" /* Neutral */;
 }
 
-// src/errors/review-router-error.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/errors/review-router-error.ts
 var ReviewRouterError = class extends Error {
   code;
   category;
@@ -47102,7 +47102,7 @@ var descriptors = {
   }
 };
 
-// src/github/progress-tracker.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/progress-tracker.ts
 var ProgressTracker = class _ProgressTracker {
   constructor(octokit, config) {
     this.octokit = octokit;
@@ -47473,11 +47473,11 @@ var ProgressTracker = class _ProgressTracker {
   }
 };
 
-// src/core/orchestrator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/core/orchestrator.ts
 var fs16 = __toESM(require("fs/promises"));
 var import_path = __toESM(require("path"));
 
-// src/review-execution/domain/file-risk-priority.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/domain/file-risk-priority.ts
 var TIER_ORDER = {
   ["security" /* Security */]: 0,
   ["migration" /* Migration */]: 1,
@@ -47579,7 +47579,7 @@ function prioritizeFilesByRisk(files) {
   }).map(({ file }) => file);
 }
 
-// src/review-execution/domain/review-batch-plan.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/domain/review-batch-plan.ts
 var import_crypto18 = require("crypto");
 function compareCodePoints3(left, right) {
   if (left < right) return -1;
@@ -47654,7 +47654,7 @@ function createReviewBatchPlan(input) {
   });
 }
 
-// src/review-execution/domain/work-slot-provider-result.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/domain/work-slot-provider-result.ts
 var EMPTY_USAGE = {
   promptTokens: 0,
   completionTokens: 0,
@@ -47747,7 +47747,7 @@ function compareScopedResults(left, right) {
   return left.workSlotId.localeCompare(right.workSlotId) || left.providerResult.name.localeCompare(right.providerResult.name);
 }
 
-// src/review-execution/application/adaptive-batch-scheduler.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-execution/application/adaptive-batch-scheduler.ts
 var ADAPTIVE_BATCH_HARD_MAX_CONCURRENCY = 3;
 var INITIAL_MULTIPLE_ITEM_CONCURRENCY = 2;
 var AdaptiveBatchScheduler = class {
@@ -47834,7 +47834,7 @@ var AdaptiveBatchScheduler = class {
   }
 };
 
-// src/core/orchestrator.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/core/orchestrator.ts
 var HEALTH_CHECK_TIMEOUT_MS = 3e4;
 var ReviewOrchestrator = class {
   constructor(components) {
@@ -50385,7 +50385,7 @@ function emptyFindingCounts() {
   return { critical: 0, major: 0, minor: 0 };
 }
 
-// src/github/failure-summary.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/failure-summary.ts
 var REVIEW_ROUTER_BOT_MARKER = "<!-- review-router-bot -->";
 var REVIEW_ROUTER_FAILURE_MARKER = "<!-- review-router-failure -->";
 var LEGACY_BOT_MARKERS = [
@@ -50538,10 +50538,10 @@ function hasReviewRouterBotMarker(body) {
   return body.includes(REVIEW_ROUTER_BOT_MARKER) || LEGACY_BOT_MARKERS.some((marker) => body.includes(marker));
 }
 
-// src/github/interaction.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/interaction.ts
 var fs17 = __toESM(require("fs"));
 
-// src/github/memory-interaction.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/memory-interaction.ts
 var memoryItemIdPattern = "(mem_[A-Za-z0-9_-]+)";
 var suggestionIdPattern = "(mem_suggestion_[A-Za-z0-9_-]+)";
 function parseMemoryInteraction(body) {
@@ -50698,7 +50698,7 @@ function looksUnsafeCandidateText(value) {
   return /(?:diff --git|@@\s+-\d+|\+\+\+\s|---\s)/.test(value) || /(?:BEGIN|END)\s+(?:RSA|OPENSSH|PRIVATE)\s+KEY/i.test(value) || /(?:gh[pousr]_|github_pat_|sk-)[A-Za-z0-9_-]+/.test(value) || /(?:system|assistant|developer)\s*:/i.test(value) || value.split("\n").filter((line) => /^\s*[+->]/.test(line)).length > 4;
 }
 
-// src/control-plane/review-request.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/review-request.ts
 var ControlPlaneManualReviewRequestClient = class {
   constructor(runtimeConfig, fetchImpl = fetch) {
     this.runtimeConfig = runtimeConfig;
@@ -50781,7 +50781,7 @@ function ensureTrailingSlash2(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-// src/github/interaction.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/interaction.ts
 var DISMISSAL_MARKER_START = "<!-- review-router-dismissal:start -->";
 var DISMISSAL_MARKER_END = "<!-- review-router-dismissal:end -->";
 var MANUAL_REVIEW_REQUEST_UNAVAILABLE_NOTICE = "ReviewRouter could not start a manual review from this comment because this workflow is not connected to the current ReviewRouter request API. Update the ReviewRouter interaction workflow/runtime pin and retry `/rr review`.";
@@ -51577,7 +51577,7 @@ function sanitizeNoticeError(error2) {
   return message.replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").slice(0, 300);
 }
 
-// src/github/discussion.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/github/discussion.ts
 var import_crypto19 = require("crypto");
 var DISCUSSION_MARKER = "reviewrouter-discussion:v1";
 var DISCUSSION_MARKER_RE = /<!--\s*reviewrouter-discussion:v1\s+user_comment_id=(\d+)\s+body_sha=([a-f0-9]{64})\s*-->/;
@@ -51830,7 +51830,7 @@ function sanitizeError(error2) {
   return message.replace(/gh[pousr]_[A-Za-z0-9_]{16,}/g, "gh*-***").replace(/github_pat_[A-Za-z0-9_]+/g, "github_pat_***").replace(/sk-[A-Za-z0-9_-]{16,}/g, "sk-***").slice(0, 240);
 }
 
-// src/discussion/codex-responder.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/discussion/codex-responder.ts
 var fs18 = __toESM(require("fs/promises"));
 var os6 = __toESM(require("os"));
 var path15 = __toESM(require("path"));
@@ -52029,7 +52029,7 @@ async function initializeEmptyGitRepository(cwd) {
   }
 }
 
-// package.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/package.json
 var package_default = {
   name: "review-router",
   version: "1.0.157",
@@ -52130,7 +52130,7 @@ var package_default = {
   }
 };
 
-// src/codex-oauth/github-actions-oidc.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/github-actions-oidc.ts
 var GitHubActionsOidcTokenProvider = class {
   env;
   fetchImpl;
@@ -52207,7 +52207,7 @@ function safeOidcErrorCode(payload) {
   return "unknown_oidc_error";
 }
 
-// src/control-plane/runtime-config.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/runtime-config.ts
 function parseAdmittedRuntimeConfig(value) {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).sort().join(",") !== "configVersion,protocolVersion,runtimeEnv") {
     throw new Error("runtime_config_invalid_response");
@@ -52426,7 +52426,7 @@ function safeReason3(message) {
   return message.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/g, "<redacted>").replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 160);
 }
 
-// src/control-plane/comment-token.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/comment-token.ts
 async function resolveGitHubCommentToken(input) {
   const env = input.env ?? process.env;
   if (env.REVIEWROUTER_COMMENT_TOKEN_MODE !== "app-oidc") {
@@ -52521,7 +52521,7 @@ function safeReason4(message) {
   return message.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 120);
 }
 
-// src/control-plane/rotating-comment-token.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/rotating-comment-token.ts
 var rotatingCommentTokenModes = /* @__PURE__ */ new Set([
   "codex-oauth-rotating",
   "hosted-relay"
@@ -52660,7 +52660,7 @@ function assertSafeRefreshUrl(value) {
   }
 }
 
-// src/control-plane/health-report.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/health-report.ts
 async function reportControlPlaneActionHealth(input) {
   if (!input.runtimeConfig || input.runtimeConfig.status !== "applied") {
     return;
@@ -52815,7 +52815,7 @@ function ensureTrailingSlash4(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-// src/control-plane/provider-cli-plan.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/provider-cli-plan.ts
 var gatewaySessionMode = "account-gateway";
 var gatewayAuthMode = "codex-account-gateway";
 function prepareRuntimePreflight(env = process.env) {
@@ -52904,7 +52904,7 @@ function hasProviderPrefix(value, providerPrefix) {
   return value.split(",").map((part) => part.trim().toLowerCase()).some((part) => part.startsWith(`${providerPrefix}/`));
 }
 
-// src/output/severity-gate.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/output/severity-gate.ts
 var severityRank = {
   critical: 3,
   major: 2,
@@ -53001,22 +53001,26 @@ function pluralize(word, count) {
   return count === 1 ? word : `${word}s`;
 }
 
-// src/codex-oauth/action.ts
-var fs23 = __toESM(require("fs"));
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/long-oidc-test-entry.ts
+var import_node_fs = require("node:fs");
 
-// src/codex-oauth/account-gateway-runtime.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/long-oidc-runtime.ts
+var import_promises2 = require("node:timers/promises");
+var import_node_perf_hooks = require("node:perf_hooks");
+
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/account-gateway-runtime.ts
 var import_child_process11 = require("child_process");
 var import_util6 = require("util");
 var fs20 = __toESM(require("fs/promises"));
 var os8 = __toESM(require("os"));
 var path18 = __toESM(require("path"));
 
-// src/control-plane/review-action-v2-client.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/review-action-v2-client.ts
 var import_crypto20 = require("crypto");
 var import__2 = __toESM(require__());
 var import_ajv_formats = __toESM(require_dist());
 
-// src/review-investigation/domain/investigation-state.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/domain/investigation-state.ts
 var REVIEW_INVESTIGATION_TURN_MAX_OBLIGATIONS = 64;
 var REVIEW_INVESTIGATION_CANONICAL_SUBJECT_MAX_LENGTH = 4096;
 var REVIEW_INVESTIGATION_CANONICAL_REQUIREMENT_MAX_LENGTH = 64e3;
@@ -53056,7 +53060,7 @@ var ReviewInvestigationObligationOrigin = /* @__PURE__ */ ((ReviewInvestigationO
   return ReviewInvestigationObligationOrigin2;
 })(ReviewInvestigationObligationOrigin || {});
 
-// src/control-plane/generated/review-action-v2/schemas/review_context_gateway_open.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_context_gateway_open.schema.json
 var review_context_gateway_open_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_context_gateway_open",
@@ -53975,7 +53979,7 @@ var review_context_gateway_open_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_context_gateway_seal.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_context_gateway_seal.schema.json
 var review_context_gateway_seal_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_context_gateway_seal",
@@ -54815,7 +54819,7 @@ var review_context_gateway_seal_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_context_receipt_replay_commit.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_context_receipt_replay_commit.schema.json
 var review_context_receipt_replay_commit_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_context_receipt_replay_commit",
@@ -55625,7 +55629,7 @@ var review_context_receipt_replay_commit_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_context_replay_commit.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_context_replay_commit.schema.json
 var review_context_replay_commit_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_context_replay_commit",
@@ -56448,7 +56452,7 @@ var review_context_replay_commit_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_evidence_commit.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_evidence_commit.schema.json
 var review_evidence_commit_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_evidence_commit",
@@ -57486,7 +57490,7 @@ var review_evidence_commit_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_evidence_lookup.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_evidence_lookup.schema.json
 var review_evidence_lookup_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_evidence_lookup",
@@ -58434,7 +58438,7 @@ var review_evidence_lookup_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_execution_finalize.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_execution_finalize.schema.json
 var review_execution_finalize_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_execution_finalize",
@@ -59339,7 +59343,7 @@ var review_execution_finalize_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_execution_observation_attach.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_execution_observation_attach.schema.json
 var review_execution_observation_attach_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_execution_observation_attach",
@@ -60233,7 +60237,7 @@ var review_execution_observation_attach_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_execution_observation_adopt.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_execution_observation_adopt.schema.json
 var review_execution_observation_adopt_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_execution_observation_adopt",
@@ -61194,7 +61198,7 @@ var review_execution_observation_adopt_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_execution_restore.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_execution_restore.schema.json
 var review_execution_restore_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_execution_restore",
@@ -61928,7 +61932,7 @@ var review_execution_restore_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_execution_start.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_execution_start.schema.json
 var review_execution_start_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_execution_start",
@@ -62892,7 +62896,7 @@ var review_execution_start_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_execution_work_slot_terminalize.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_execution_work_slot_terminalize.schema.json
 var review_execution_work_slot_terminalize_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_execution_work_slot_terminalize",
@@ -63758,7 +63762,7 @@ var review_execution_work_slot_terminalize_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_execution_supersede.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_execution_supersede.schema.json
 var review_execution_supersede_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_execution_supersede",
@@ -64596,7 +64600,7 @@ var review_execution_supersede_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_conclude.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_conclude.schema.json
 var review_investigation_conclude_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_conclude",
@@ -65578,7 +65582,7 @@ var review_investigation_conclude_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_context_gateway_open.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_context_gateway_open.schema.json
 var review_investigation_context_gateway_open_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_context_gateway_open",
@@ -66497,7 +66501,7 @@ var review_investigation_context_gateway_open_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_context_gateway_seal.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_context_gateway_seal.schema.json
 var review_investigation_context_gateway_seal_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_context_gateway_seal",
@@ -67337,7 +67341,7 @@ var review_investigation_context_gateway_seal_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_lease_acquire.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_lease_acquire.schema.json
 var review_investigation_lease_acquire_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_lease_acquire",
@@ -68280,7 +68284,7 @@ var review_investigation_lease_acquire_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_lease_release.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_lease_release.schema.json
 var review_investigation_lease_release_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_lease_release",
@@ -69142,7 +69146,7 @@ var review_investigation_lease_release_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_lease_renew.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_lease_renew.schema.json
 var review_investigation_lease_renew_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_lease_renew",
@@ -70017,7 +70021,7 @@ var review_investigation_lease_renew_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_open.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_open.schema.json
 var review_investigation_open_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_open",
@@ -71067,7 +71071,7 @@ var review_investigation_open_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_open_v2.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_open_v2.schema.json
 var review_investigation_open_v2_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_open_v2",
@@ -72127,7 +72131,7 @@ var review_investigation_open_v2_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_replay.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_replay.schema.json
 var review_investigation_replay_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_replay",
@@ -73221,7 +73225,7 @@ var review_investigation_replay_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_replay_prepare.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_replay_prepare.schema.json
 var review_investigation_replay_prepare_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_replay_prepare",
@@ -74003,7 +74007,7 @@ var review_investigation_replay_prepare_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_replay_v2.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_replay_v2.schema.json
 var review_investigation_replay_v2_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_replay_v2",
@@ -75107,7 +75111,7 @@ var review_investigation_replay_v2_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_restore.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_restore.schema.json
 var review_investigation_restore_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_restore",
@@ -75951,7 +75955,7 @@ var review_investigation_restore_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_turn_abort.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_turn_abort.schema.json
 var review_investigation_turn_abort_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_turn_abort",
@@ -76982,7 +76986,7 @@ var review_investigation_turn_abort_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_turn_commit.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_turn_commit.schema.json
 var review_investigation_turn_commit_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_turn_commit",
@@ -78009,7 +78013,7 @@ var review_investigation_turn_commit_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_investigation_turn_plan.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_investigation_turn_plan.schema.json
 var review_investigation_turn_plan_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_investigation_turn_plan",
@@ -79046,7 +79050,7 @@ var review_investigation_turn_plan_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_invocation_lease_acquire.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_invocation_lease_acquire.schema.json
 var review_invocation_lease_acquire_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_invocation_lease_acquire",
@@ -79984,7 +79988,7 @@ var review_invocation_lease_acquire_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_invocation_lease_release.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_invocation_lease_release.schema.json
 var review_invocation_lease_release_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_invocation_lease_release",
@@ -80843,7 +80847,7 @@ var review_invocation_lease_release_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_invocation_lease_renew.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_invocation_lease_renew.schema.json
 var review_invocation_lease_renew_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_invocation_lease_renew",
@@ -81715,7 +81719,7 @@ var review_invocation_lease_renew_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_publication_request.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_publication_request.schema.json
 var review_publication_request_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_publication_request",
@@ -82560,7 +82564,7 @@ var review_publication_request_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_publication_status.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_publication_status.schema.json
 var review_publication_status_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_publication_status",
@@ -83271,7 +83275,7 @@ var review_publication_status_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_run_authorize.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_run_authorize.schema.json
 var review_run_authorize_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_run_authorize",
@@ -84002,7 +84006,7 @@ var review_run_authorize_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_run_renew.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_run_renew.schema.json
 var review_run_renew_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_run_renew",
@@ -84839,7 +84843,7 @@ var review_run_renew_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/schemas/review_snapshot_restore.schema.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/schemas/review_snapshot_restore.schema.json
 var review_snapshot_restore_schema_default = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://reviewrouter.site/schemas/action/v2/review-action.json/review_snapshot_restore",
@@ -85584,7 +85588,7 @@ var review_snapshot_restore_schema_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/manifest.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/manifest.json
 var manifest_default = {
   contractSourceVersion: 1,
   protocolVersion: "2",
@@ -88491,7 +88495,7 @@ var manifest_default = {
   ]
 };
 
-// src/control-plane/generated/review-action-v2/review-action-v2.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/review-action-v2.ts
 var reviewActionV2PublishedProtocolVersion = "2";
 var reviewActionV2PublishedSchemaDigest = "32bb25cd3490660dbaeecaa168f162ba97ff171e2dfab69e1bd435bc2e1cf3d3";
 var reviewActionV2CanonicalizerDigest = "95a43332ccff5c8ccf8f6f9cb67d901d5efd3e91522c047c48f83b65c70cb03a";
@@ -91571,7 +91575,7 @@ function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// src/control-plane/review-action-v2-client.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/review-action-v2-client.ts
 var ReviewActionV2ClientFailureCode = /* @__PURE__ */ ((ReviewActionV2ClientFailureCode2) => {
   ReviewActionV2ClientFailureCode2["InvalidConfiguration"] = "invalid_configuration";
   ReviewActionV2ClientFailureCode2["InvalidRequest"] = "invalid_request";
@@ -92078,10 +92082,10 @@ function clampInteger(value, minimum, maximum) {
   return value;
 }
 
-// src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
 var import_crypto25 = require("crypto");
 
-// src/review-orchestration/application/review-orchestration-ports.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/application/review-orchestration-ports.ts
 var ReviewExecutionProviderKind = /* @__PURE__ */ ((ReviewExecutionProviderKind2) => {
   ReviewExecutionProviderKind2["Codex"] = "codex";
   ReviewExecutionProviderKind2["ClaudeCode"] = "claude_code";
@@ -92111,7 +92115,7 @@ var RestoredReviewWorkSlotState = /* @__PURE__ */ ((RestoredReviewWorkSlotState2
   return RestoredReviewWorkSlotState2;
 })(RestoredReviewWorkSlotState || {});
 
-// src/review-orchestration/application/review-context-inspection-failure.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/application/review-context-inspection-failure.ts
 var ReviewContextInspectionFailure = class extends Error {
   constructor(reason, stage) {
     super(`review_context_inspection_failed:${reason}`);
@@ -92128,7 +92132,7 @@ var RetryableReviewContextInspectionFailure = class extends ReviewContextInspect
   }
 };
 
-// src/review-orchestration/application/review-evidence-commit-failure.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/application/review-evidence-commit-failure.ts
 var ReviewEvidenceCommitRejectedError = class extends Error {
   constructor(reason) {
     super(`review_evidence_commit_rejected:${reason}`);
@@ -92137,7 +92141,7 @@ var ReviewEvidenceCommitRejectedError = class extends Error {
   }
 };
 
-// src/review-orchestration/application/review-invocation-failure.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/application/review-invocation-failure.ts
 var ReviewInvocationConfigurationMismatchError = class extends Error {
   constructor(reason, options = {}) {
     super(`review_invocation_configuration_mismatch:${reason}`, options);
@@ -92146,10 +92150,10 @@ var ReviewInvocationConfigurationMismatchError = class extends Error {
   }
 };
 
-// src/review-orchestration/application/run-t0-review-orchestration.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/application/run-t0-review-orchestration.ts
 var import_crypto23 = require("crypto");
 
-// src/review-orchestration/domain/review-orchestration-state.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/domain/review-orchestration-state.ts
 function createReviewOrchestrationState(workSlotIds) {
   if (new Set(workSlotIds).size !== workSlotIds.length) {
     throw new Error("review_orchestration_work_slot_duplicate");
@@ -92280,7 +92284,7 @@ function requireIdentity(value) {
   return value;
 }
 
-// src/review-orchestration/domain/review-prompt-coverage.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/domain/review-prompt-coverage.ts
 var import_crypto21 = require("crypto");
 function createReviewPromptCoverageManifest(input) {
   if (!input.workSlotId || !/^[a-f0-9]{64}$/.test(input.reviewRevisionHash)) {
@@ -92372,7 +92376,7 @@ function sha2567(value) {
   return (0, import_crypto21.createHash)("sha256").update(value).digest("hex");
 }
 
-// src/review-orchestration/domain/stable-review-work-plan.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/domain/stable-review-work-plan.ts
 var import_crypto22 = require("crypto");
 var assignmentManifestMaxBytes = 512 * 1024;
 var assignmentManifestMaxPaths = 4096;
@@ -92650,7 +92654,7 @@ function assertUnique(values, errorCode2) {
   if (new Set(values).size !== values.length) throw new Error(errorCode2);
 }
 
-// src/review-investigation/application/investigation-control-plane-port.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/application/investigation-control-plane-port.ts
 var ReviewInvestigationControlPlaneError = class extends Error {
   constructor(failureClass, message) {
     super(message);
@@ -92659,7 +92663,7 @@ var ReviewInvestigationControlPlaneError = class extends Error {
   }
 };
 
-// src/review-investigation/application/review-agent-port.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/application/review-agent-port.ts
 var REVIEW_INVESTIGATION_GATEWAY_TOOLS = Object.freeze([
   "review_read_file",
   "review_list_directory",
@@ -92676,7 +92680,7 @@ var ReviewAgentExecutionError = class extends Error {
   }
 };
 
-// src/review-investigation/application/investigation-gateway-port.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/application/investigation-gateway-port.ts
 var ReviewInvestigationGatewayConfigurationError = class extends Error {
   constructor(reason, options = {}) {
     super(
@@ -92688,7 +92692,7 @@ var ReviewInvestigationGatewayConfigurationError = class extends Error {
   }
 };
 
-// src/review-investigation/domain/runtime-profile.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/domain/runtime-profile.ts
 var ReviewAgentProviderKind = /* @__PURE__ */ ((ReviewAgentProviderKind2) => {
   ReviewAgentProviderKind2["Codex"] = "codex";
   ReviewAgentProviderKind2["ClaudeCode"] = "claude_code";
@@ -92728,7 +92732,7 @@ function assertPositive(value, field) {
   }
 }
 
-// src/review-investigation/application/run-investigation-turn.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/application/run-investigation-turn.ts
 var MAX_SAFE_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1e3;
 var RunInvestigationTurn = class {
   constructor(dependencies) {
@@ -92916,11 +92920,11 @@ var RunInvestigationTurn = class {
       "review_agent_unclassified_failure"
     );
     const reason = abortReason(failure.failureClass);
-    const delay3 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
+    const delay4 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
       failure.retryAfterMs ?? input.minimumCapacityParkMs,
       input.minimumCapacityParkMs
     );
-    const nextEligibleAt = delay3 === null ? null : new Date(this.dependencies.now().getTime() + delay3).toISOString();
+    const nextEligibleAt = delay4 === null ? null : new Date(this.dependencies.now().getTime() + delay4).toISOString();
     return this.abort(
       input,
       reason,
@@ -93106,7 +93110,7 @@ function boundedRetryAfterMs(value) {
   return value;
 }
 
-// src/review-investigation/application/run-investigation-work-slot.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/application/run-investigation-work-slot.ts
 var ReviewInvestigationLegacyFallbackSignal = class extends Error {
   constructor(reason = "capability_disabled_before_open" /* CapabilityDisabledBeforeOpen */, deferredStatus = null) {
     super(`review_investigation_legacy_fallback:${reason}`);
@@ -93442,7 +93446,7 @@ function isSuperseded(snapshot) {
   return snapshot.state === "superseded" /* Superseded */;
 }
 
-// src/review-orchestration/application/run-t0-review-orchestration.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/application/run-t0-review-orchestration.ts
 var MAX_PRE_EXECUTION_AUTHORIZATION_TTL_MS = 6 * 60 * 6e4;
 var MIN_PRE_EXECUTION_AUTHORIZATION_VALIDITY_MS = 3 * 60 * 6e4 + 5 * 6e4;
 var PUBLICATION_AUTHORIZATION_RESERVE_MS = 5 * 6e4;
@@ -93655,24 +93659,35 @@ var RunT0ReviewOrchestration = class {
           });
           const terminal = terminalizeCommand(outcome.exhaustionReason);
           if (terminal) {
-            const terminalized = await this.dependencies.controlPlane.terminalizeWorkSlot({
+            const latestExecution2 = await this.dependencies.controlPlane.restoreExecution({
               authorization,
-              idempotencyKey: this.idempotencyKey("slot-terminalize", [
-                execution.executionId,
-                execution.generation,
-                workSlot.workSlotId,
-                terminal.terminalState,
-                terminal.reasonCode
-              ]),
-              execution,
-              reviewRevisionHash: command.reviewRevisionHash,
-              workSlotId: workSlot.workSlotId,
-              terminal
+              reviewRevisionHash: command.reviewRevisionHash
             });
-            execution = {
-              ...execution,
-              streamVersion: terminalized.streamVersion
-            };
+            execution = refreshExecutionAdmission(execution, latestExecution2);
+            const latestSlot = execution.restoredExecution.workSlots.find(
+              (slot) => slot.workSlotId === workSlot.workSlotId
+            );
+            const alreadyExhausted = execution.restoredExecution.state === "running" /* Running */ && latestSlot?.state === "exhausted" /* Exhausted */ && latestSlot.activeLeaseId === null;
+            if (!alreadyExhausted) {
+              const terminalized = await this.dependencies.controlPlane.terminalizeWorkSlot({
+                authorization,
+                idempotencyKey: this.idempotencyKey("slot-terminalize", [
+                  execution.executionId,
+                  execution.generation,
+                  workSlot.workSlotId,
+                  terminal.terminalState,
+                  terminal.reasonCode
+                ]),
+                execution,
+                reviewRevisionHash: command.reviewRevisionHash,
+                workSlotId: workSlot.workSlotId,
+                terminal
+              });
+              execution = {
+                ...execution,
+                streamVersion: terminalized.streamVersion
+              };
+            }
           }
         }
       }
@@ -95259,7 +95274,7 @@ var ReviewProviderUnavailableSignal = class extends Error {
   }
 };
 
-// src/review-orchestration/infrastructure/review-investigation-telemetry.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/review-investigation-telemetry.ts
 function emitReviewInvestigationTelemetry(message) {
   try {
     logger.info(message);
@@ -95267,7 +95282,7 @@ function emitReviewInvestigationTelemetry(message) {
   }
 }
 
-// src/review-orchestration/infrastructure/context-gateway-failed-seal.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/context-gateway-failed-seal.ts
 var import_crypto24 = require("crypto");
 var emptyCanonicalJson = "{}";
 var emptyCanonicalJsonHash = digest(emptyCanonicalJson);
@@ -95296,7 +95311,7 @@ function digest(value) {
   return (0, import_crypto24.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 
-// src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
 function projectReviewRunAuthorization(result2) {
   if (result2.status !== "authorized" /* Authorized */ && result2.status !== "restored" /* Restored */) {
     throw new Error("review_action_v2_authorization_denied");
@@ -96948,7 +96963,7 @@ function deterministicIdempotencyKey(purpose, parts) {
   )}`;
 }
 
-// src/codex-oauth/safe-checkout.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/safe-checkout.ts
 var import_child_process10 = require("child_process");
 var fs19 = __toESM(require("fs/promises"));
 var os7 = __toESM(require("os"));
@@ -97153,7 +97168,7 @@ function safeGitError(value) {
   ).slice(0, 300);
 }
 
-// src/codex-oauth/auth-input.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/auth-input.ts
 var CODEX_ROTATING_AUTH_INPUT_ENV_NAMES = [
   "INPUT_AUTH-JSON",
   "INPUT_AUTH_JSON"
@@ -97315,10 +97330,10 @@ function isReviewActionV2ScmMutationEnvName(name) {
   );
 }
 
-// src/codex-oauth/crypto.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/crypto.ts
 var import_crypto26 = require("crypto");
 
-// node_modules/libsodium/dist/modules-esm/libsodium.mjs
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/libsodium/dist/modules-esm/libsodium.mjs
 var import_meta = {};
 async function A(A3 = {}) {
   var I2, g2 = A3, C2 = !!globalThis.window, B2 = !!globalThis.WorkerGlobalScope, Q2 = (globalThis.process?.versions?.node && globalThis.process, import_meta.url);
@@ -97516,7 +97531,7 @@ async function A(A3 = {}) {
 }
 var libsodium_default = A;
 
-// node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
 var r;
 var t = {};
 if (void 0 === globalThis.crypto || "function" != typeof globalThis.crypto.getRandomValues) throw new Error("globalThis.crypto.getRandomValues is not available. The ESM build of libsodium requires a secure random source (available in all browsers and Node.js 19+).");
@@ -100745,7 +100760,7 @@ B.prototype.to_Uint8Array = function() {
 }, t.add = o, t.base64_variants = m, t.compare = l, t.from_base64 = x, t.from_hex = b, t.from_string = v, t.increment = p, t.is_zero = h, t.memcmp = i, t.memzero = y, t.output_formats = T, t.pad = u, t.unpad = d, t.ready = s, t.symbols = c, t.to_base64 = E, t.to_hex = f, t.to_string = g;
 var libsodium_wrappers_default = t;
 
-// src/codex-oauth/crypto.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/crypto.ts
 var CODEX_ROTATING_AUTH_JSON_MAX_BYTES = 32 * 1024;
 function compactCodexAuthJsonBytes(input) {
   const byteLength = Buffer.byteLength(input.authJsonBytes, "utf8");
@@ -100917,8 +100932,38 @@ function looksLikePlaintextAuthJson(value) {
   }
 }
 
-// src/codex-oauth/runtime.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/runtime.ts
 var path17 = __toESM(require("path"));
+var CodexOAuthV2ReviewOutcome = /* @__PURE__ */ ((CodexOAuthV2ReviewOutcome2) => {
+  CodexOAuthV2ReviewOutcome2["Completed"] = "completed";
+  CodexOAuthV2ReviewOutcome2["PartialCompleted"] = "partial_completed";
+  CodexOAuthV2ReviewOutcome2["Superseded"] = "superseded";
+  CodexOAuthV2ReviewOutcome2["Cancelled"] = "cancelled";
+  CodexOAuthV2ReviewOutcome2["PublicationNotApplied"] = "publication_not_applied";
+  CodexOAuthV2ReviewOutcome2["PublicationStale"] = "publication_stale";
+  CodexOAuthV2ReviewOutcome2["PublicationUnavailable"] = "publication_unavailable";
+  CodexOAuthV2ReviewOutcome2["Failed"] = "failed";
+  return CodexOAuthV2ReviewOutcome2;
+})(CodexOAuthV2ReviewOutcome || {});
+var CodexOAuthV2TerminalReason = /* @__PURE__ */ ((CodexOAuthV2TerminalReason2) => {
+  CodexOAuthV2TerminalReason2["RequiredReviewCoverageIncomplete"] = "required_review_coverage_incomplete";
+  CodexOAuthV2TerminalReason2["RequiredProviderLaneBusy"] = "required_provider_lane_busy";
+  CodexOAuthV2TerminalReason2["RequiredWorkExhausted"] = "required_work_exhausted";
+  CodexOAuthV2TerminalReason2["RequiredInvestigationDeferred"] = "required_investigation_deferred";
+  CodexOAuthV2TerminalReason2["ProviderCapacityUnavailable"] = "provider_capacity_unavailable";
+  CodexOAuthV2TerminalReason2["RevisionGuardUnavailable"] = "revision_guard_unavailable";
+  CodexOAuthV2TerminalReason2["RevisionGuardFailed"] = "revision_guard_failed";
+  CodexOAuthV2TerminalReason2["PublicationConflict"] = "publication_conflict";
+  CodexOAuthV2TerminalReason2["PublicationStale"] = "publication_stale";
+  CodexOAuthV2TerminalReason2["PublicationFactsUnavailable"] = "publication_facts_unavailable";
+  CodexOAuthV2TerminalReason2["ExecutionFailed"] = "execution_failed";
+  CodexOAuthV2TerminalReason2["Unknown"] = "unknown";
+  return CodexOAuthV2TerminalReason2;
+})(CodexOAuthV2TerminalReason || {});
+var CodexOAuthV2CancellationReason = /* @__PURE__ */ ((CodexOAuthV2CancellationReason2) => {
+  CodexOAuthV2CancellationReason2["PullRequestClosed"] = "pull_request_closed";
+  return CodexOAuthV2CancellationReason2;
+})(CodexOAuthV2CancellationReason || {});
 async function runCodexOAuthRotatingRuntime(input, ports) {
   let refreshed;
   let preparedCodexCli;
@@ -101129,7 +101174,7 @@ function assertScmReadToken(token, expectedRepository) {
   }
 }
 
-// src/codex-oauth/account-gateway-runtime.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/account-gateway-runtime.ts
 var ACCOUNT_GATEWAY_ACTION_MODE = "account-gateway";
 async function runAccountGatewayRuntime(input, ports) {
   try {
@@ -101371,10 +101416,225 @@ function validateAccountGatewayCheckout(result2, repository, headSha) {
   });
 }
 
-// src/codex-oauth/action.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/long-oidc-runtime.ts
+function projectLongReviewResult(result2) {
+  const outcome = Object.values(CodexOAuthV2ReviewOutcome).includes(result2.outcome) ? result2.outcome : "unknown";
+  const reason = "reason" in result2 ? result2.reason : void 0;
+  const terminalReason = [
+    ...Object.values(CodexOAuthV2TerminalReason),
+    ...Object.values(CodexOAuthV2CancellationReason)
+  ].some((value) => value === reason) ? String(reason) : "unknown";
+  const code = "blockingFailure" in result2 ? result2.blockingFailure : void 0;
+  const knownCodes = /* @__PURE__ */ new Set([
+    "review_orchestration_execution_authorization_window_insufficient",
+    "review_action_v2_authorization_renew_denied",
+    "review_action_v2_authorization_renew_expired",
+    "review_action_v2_authorization_renew_scope_mismatch",
+    "review_action_v2_authorization_renew_epoch_mismatch",
+    "review_action_v2_authorization_renew_expiry_invalid",
+    "review_orchestration_execution_deadline_reached",
+    "review_action_v2_revision_guard_unavailable",
+    "review_action_v2_revision_guard_failed",
+    "codex_oauth_oidc_invalid_response",
+    "codex_oauth_missing_ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+    "codex_oauth_missing_ACTIONS_ID_TOKEN_REQUEST_URL",
+    "required_work_exhausted",
+    "required_execution_deadline_reached",
+    "required_review_coverage_incomplete"
+  ]);
+  let blockingFailure = typeof code === "string" && knownCodes.has(code) ? code : "unknown";
+  if (typeof code === "string") {
+    const [prefix, operation, category] = code.split(":");
+    if (prefix === "review_action_v2" && Object.values(ReviewActionV2OperationId).some((value) => value === operation) && Object.values(ReviewActionV2ProtocolErrorCode).some((value) => value === category))
+      blockingFailure = `${prefix}:${operation}:${category}`;
+  }
+  return { outcome, terminalReason, blockingFailure };
+}
+async function runLongOidcTestRuntime(inputs, ports, record, expected) {
+  if (!process.env.GITHUB_ACTIONS || process.env.GITHUB_EVENT_NAME !== "pull_request" || !expected.repository || inputs.repository !== expected.repository || !expected.model)
+    throw new Error("long_oidc_disposable_github_pr_required");
+  const started = import_node_perf_hooks.performance.now();
+  const network = ports.fetchImpl ?? fetch;
+  let mintExpiresAt = 0;
+  let authorizationCount = 0;
+  let authorityFingerprint;
+  let authorizationId;
+  let deadline = 0;
+  let executionDeadline = 0;
+  let outerBearerExpiresAt = 0;
+  let currentAuthorization;
+  let caseCompleted = false;
+  let failureReason;
+  const knownReasons = /* @__PURE__ */ new Set([
+    "long_oidc_verified_admission_missing",
+    "long_oidc_approved_deadline_unsuitable",
+    "long_oidc_execution_authority_changed",
+    "long_oidc_run_window_lost",
+    "long_oidc_normal_execution_deadline_missing",
+    "long_oidc_execution_window_insufficient",
+    "long_oidc_review_not_completed",
+    "long_oidc_review_missed_deadline",
+    "long_oidc_deadline_did_not_deny",
+    "long_oidc_body_unobservable",
+    "long_oidc_reauthorization_forbidden",
+    "long_oidc_jwt_invalid",
+    "long_oidc_github_mint_required"
+  ]);
+  const emit = (stage, httpStatus) => {
+    record({
+      stage,
+      observedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      elapsedMs: Math.round(import_node_perf_hooks.performance.now() - started),
+      mintExpiresAt: new Date(mintExpiresAt).toISOString(),
+      ...deadline ? { deadline: new Date(deadline).toISOString() } : {},
+      ...executionDeadline ? { executionDeadline: new Date(executionDeadline).toISOString() } : {},
+      ...outerBearerExpiresAt ? { outerBearerExpiresAt: new Date(outerBearerExpiresAt).toISOString() } : {},
+      ...authorizationId ? { authorizationId } : {},
+      ...httpStatus === void 0 ? {} : { httpStatus }
+    });
+  };
+  const fingerprint = (a2) => JSON.stringify({
+    id: a2.authorizationId,
+    epoch: a2.mutationEpoch,
+    release: a2.producerReleaseId,
+    facts: a2.facts,
+    limits: a2.limits
+  });
+  const assertOriginal = () => {
+    const a2 = currentAuthorization?.();
+    outerBearerExpiresAt = a2 ? Date.parse(a2.expiresAt) : NaN;
+    if (!a2 || !Number.isFinite(outerBearerExpiresAt) || fingerprint(a2) !== authorityFingerprint || outerBearerExpiresAt > deadline)
+      throw new Error("long_oidc_execution_authority_changed");
+    return a2;
+  };
+  const waitUntil = async (instant, signal) => {
+    while (Date.now() < instant) {
+      await (0, import_promises2.setTimeout)(Math.min(6e4, instant - Date.now()), void 0, { signal });
+    }
+  };
+  const observedFetch = async (request, init) => {
+    const url = new URL(request instanceof Request ? request.url : String(request));
+    if (url.origin === new URL(inputs.apiUrl).origin && init?.body) {
+      if (typeof init.body !== "string") throw new Error("long_oidc_body_unobservable");
+      const body = JSON.parse(init.body);
+      if (body && typeof body === "object" && "oidcToken" in body && !("authorizationId" in body)) {
+        if (++authorizationCount !== 1 || typeof body.oidcToken !== "string")
+          throw new Error("long_oidc_reauthorization_forbidden");
+        const segments = body.oidcToken.split(".");
+        if (segments.length !== 3) throw new Error("long_oidc_jwt_invalid");
+        const claims = JSON.parse(Buffer.from(segments[1], "base64url").toString());
+        if (!claims || typeof claims !== "object" || !("iss" in claims) || claims.iss !== "https://token.actions.githubusercontent.com" || !("exp" in claims) || typeof claims.exp !== "number" || !Number.isSafeInteger(claims.exp) || claims.exp * 1e3 <= Date.now())
+          throw new Error("long_oidc_github_mint_required");
+        mintExpiresAt = claims.exp * 1e3;
+      }
+    }
+    return network(request, init);
+  };
+  await runAccountGatewayRuntime(inputs, {
+    ...ports,
+    fetchImpl: observedFetch,
+    review: { run: async (input) => {
+      const gateway = input.accountGateway;
+      if (!gateway || !mintExpiresAt || authorizationCount !== 1)
+        throw new Error("long_oidc_verified_admission_missing");
+      const authorization = gateway.controlPlane.currentAuthorization();
+      authorityFingerprint = fingerprint(authorization);
+      authorizationId = authorization.authorizationId;
+      deadline = Date.parse(authorization.expiresAt);
+      outerBearerExpiresAt = deadline;
+      currentAuthorization = () => gateway.controlPlane.currentAuthorization();
+      if (!Number.isFinite(deadline) || deadline <= mintExpiresAt + 12e4 || deadline > Date.now() + 12e5)
+        throw new Error("long_oidc_approved_deadline_unsuitable");
+      emit("mint");
+      await waitUntil(mintExpiresAt + 1500, gateway.signal);
+      assertOriginal();
+      if (Date.now() >= deadline - 6e4) throw new Error("long_oidc_run_window_lost");
+      const deadlineKey = "REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS";
+      const configured = process.env[deadlineKey];
+      const configuredDeadline = Number(configured);
+      if (!configured || !Number.isSafeInteger(configuredDeadline) || configuredDeadline <= Date.now())
+        throw new Error("long_oidc_normal_execution_deadline_missing");
+      executionDeadline = Math.min(configuredDeadline, deadline - 3e5 - 15e3);
+      if (executionDeadline - Date.now() < 15e4)
+        throw new Error("long_oidc_execution_window_insufficient");
+      emit("after-expiry");
+      process.env[deadlineKey] = String(executionDeadline);
+      let result2;
+      try {
+        result2 = await ports.review.run(input);
+      } finally {
+        process.env[deadlineKey] = configured;
+      }
+      try {
+        record({
+          stage: "review-returned",
+          observedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          elapsedMs: Math.round(import_node_perf_hooks.performance.now() - started),
+          mintExpiresAt: new Date(mintExpiresAt).toISOString(),
+          ...projectLongReviewResult(result2)
+        });
+      } catch {
+      }
+      if (result2.outcome !== "completed") throw new Error("long_oidc_review_not_completed");
+      assertOriginal();
+      if (Date.now() >= deadline) throw new Error("long_oidc_review_missed_deadline");
+      emit("review-complete");
+      return result2;
+    } },
+    terminalFailure: async (error2, context) => {
+      failureReason = error2 instanceof Error && knownReasons.has(error2.message) ? error2.message : "long_oidc_runtime_failure";
+      try {
+        record({
+          stage: "failed",
+          reason: failureReason,
+          observedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          elapsedMs: Math.round(import_node_perf_hooks.performance.now() - started),
+          mintExpiresAt: new Date(mintExpiresAt).toISOString()
+        });
+      } catch {
+      }
+      await ports.terminalFailure(error2, context);
+    },
+    terminalReview: async (review, signal) => {
+      await ports.terminalReview(review, signal);
+      const current = assertOriginal();
+      await waitUntil(deadline + 1500, signal);
+      const response = await network(new URL("/api/action/v2/account-gateway/responses", inputs.apiUrl), {
+        method: "POST",
+        signal: AbortSignal.any([signal, AbortSignal.timeout(5e3)]),
+        headers: { authorization: `Bearer ${current.authorizationToken}`, "content-type": "application/json" },
+        body: JSON.stringify({ model: expected.model, input: "Must not dispatch after deadline." })
+      });
+      await response.body?.cancel();
+      if (response.status !== 401) throw new Error("long_oidc_deadline_did_not_deny");
+      emit("deadline-denied", response.status);
+      caseCompleted = true;
+    }
+  });
+  if (!caseCompleted) throw new Error(failureReason ?? "long_oidc_case_incomplete");
+}
+
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/long-oidc-test-entry.ts
+async function runLongOidcTestEntry(inputs, ports) {
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (!summary) throw new Error("long_oidc_github_summary_required");
+  await runLongOidcTestRuntime(inputs, ports, (observation) => {
+    const receipt = `Long OIDC TEST: ${JSON.stringify(observation)}`;
+    (0, import_node_fs.appendFileSync)(summary, `
+${receipt}
+`, "utf8");
+    console.log(receipt);
+  }, {
+    repository: "777genius/rr-selfhost-direct-v2-e2e-20260730t120036z",
+    model: "mimo-v2.6-pro"
+  });
+}
+
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/action.ts
+var fs23 = __toESM(require("fs"));
 var path30 = __toESM(require("path"));
 
-// src/codex-oauth/control-plane.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/control-plane.ts
 var CodexOAuthControlPlaneClient = class {
   apiUrl;
   fetchImpl;
@@ -101587,7 +101847,7 @@ function asRecord2(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 }
 
-// src/codex-oauth/codex-bootstrap.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/codex-bootstrap.ts
 var import_child_process12 = require("child_process");
 var fs21 = __toESM(require("fs/promises"));
 var os9 = __toESM(require("os"));
@@ -101704,7 +101964,7 @@ function safeOutput2(value) {
   ).slice(0, 300);
 }
 
-// src/codex-oauth/github-secrets.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/github-secrets.ts
 async function fetchGitHubRepositoryPublicKey(input) {
   assertSafeOwnerRepoPart(input.owner, "owner");
   assertSafeOwnerRepoPart(input.repo, "repo");
@@ -101739,12 +101999,12 @@ function assertSafeOwnerRepoPart(value, label) {
   }
 }
 
-// src/codex-oauth/terminal-outcome-publication.ts
-var import_promises2 = require("node:timers/promises");
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/terminal-outcome-publication.ts
+var import_promises3 = require("node:timers/promises");
 function createPublicationGitHubClient(token, options = {}) {
   const client = new GitHubClient(token, {
     sleep: async (ms) => {
-      await (0, import_promises2.setTimeout)(ms, void 0, { signal: options.signal });
+      await (0, import_promises3.setTimeout)(ms, void 0, { signal: options.signal });
     }
   });
   if (options.signal || options.timeoutMs) {
@@ -102004,7 +102264,7 @@ function safeTerminalOutcomeError(error2) {
   return message.replace(/ghs_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/gh[pousr]_[A-Za-z0-9_]+/g, "[redacted-github-token]").replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-github-token]").slice(0, 160);
 }
 
-// src/control-plane/review-action-v2-contract.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/review-action-v2-contract.ts
 var import_crypto28 = require("crypto");
 var import_fs = require("fs");
 var import_path2 = __toESM(require("path"));
@@ -102146,14 +102406,14 @@ function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// src/review-orchestration/infrastructure/production-t0-review-runner.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/production-t0-review-runner.ts
 var import_crypto42 = require("crypto");
 var import_child_process20 = require("child_process");
 var path29 = __toESM(require("path"));
 var import_util14 = require("util");
-var import_promises10 = require("node:timers/promises");
+var import_promises11 = require("node:timers/promises");
 
-// src/review-investigation/fixtures/review-investigation-capability-v1.golden.json
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/fixtures/review-investigation-capability-v1.golden.json
 var review_investigation_capability_v1_golden_default = {
   coverageProfile: {
     value: {
@@ -102188,7 +102448,7 @@ var review_investigation_capability_v1_golden_default = {
   }
 };
 
-// src/context-gateway/context-gateway-release-contract.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/context-gateway-release-contract.ts
 var CONTEXT_GATEWAY_RELEASE_METADATA_VERSION = 2;
 var CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION = CONTEXT_GATEWAY_V4_POLICY_VERSION;
 var REVIEW_INVESTIGATION_RELEASE_CAPABILITY = "review_investigation_v1";
@@ -102228,10 +102488,10 @@ function verifyGoldenHash(value, expectedCanonicalJson, expectedHash, field) {
   return expectedHash;
 }
 
-// src/review-orchestration/infrastructure/codex-review-invocation-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/codex-review-invocation-adapter.ts
 var import_crypto30 = require("crypto");
 
-// src/control-plane/generated/review-action-v2/provider-invocation-manifest-v1.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/control-plane/generated/review-action-v2/provider-invocation-manifest-v1.ts
 var providerInvocationManifestV1CanonicalizerDescriptor = {
   descriptorVersion: 1,
   canonicalizerId: "provider_invocation_manifest_v1",
@@ -102533,7 +102793,7 @@ function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// src/review-orchestration/infrastructure/review-observation-normalizer.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/review-observation-normalizer.ts
 var import_crypto29 = require("crypto");
 var reviewEvidencePayloadVersion = 2;
 function normalizeReviewObservation(input) {
@@ -102677,7 +102937,7 @@ function redactSensitiveText2(value) {
   );
 }
 
-// src/review-investigation/domain/review-investigation-seed-envelope.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/domain/review-investigation-seed-envelope.ts
 var REVIEW_INVESTIGATION_SEED_ENVELOPE_CONTRACT = "review_investigation_seed_envelope.v1";
 var REVIEW_INVESTIGATION_SEED_MAX_OBLIGATIONS = 1024;
 function buildReviewInvestigationSeedEnvelope(input) {
@@ -103227,7 +103487,7 @@ function compareCodeUnits3(left, right) {
   return 0;
 }
 
-// src/review-investigation/application/review-investigation-turn-prompt.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/application/review-investigation-turn-prompt.ts
 var REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT = "review_investigation_turn_prompt.v4";
 var TURN_INSTRUCTIONS = Object.freeze([
   "REVIEW INVESTIGATION TURN CONTRACT:",
@@ -103273,7 +103533,7 @@ function buildReviewInvestigationTurnPrompt(input) {
   ].join("\n");
 }
 
-// src/review-orchestration/infrastructure/codex-review-invocation-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/codex-review-invocation-adapter.ts
 async function prepareCodexReviewPrompt(promptBuilder, assignment, investigationManifestBindingEnabled) {
   const effectiveLifecycleTargets = investigationManifestBindingEnabled ? [] : assignment.lifecycleTargets;
   const preparedPrompt = await promptBuilder.buildPreparedV2(
@@ -103930,19 +104190,19 @@ function compareCodeUnits4(left, right) {
   return 0;
 }
 
-// src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
 var import_child_process14 = require("child_process");
 var import_crypto33 = require("crypto");
-var import_promises5 = require("fs/promises");
+var import_promises6 = require("fs/promises");
 var os10 = __toESM(require("os"));
 var path23 = __toESM(require("path"));
 var import_util9 = require("util");
 
-// src/context-gateway/canonical-git-inventory.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/canonical-git-inventory.ts
 var import_child_process13 = require("child_process");
 var import_util8 = require("util");
 
-// src/context-gateway/utf8-content.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/utf8-content.ts
 var import_util7 = require("util");
 var fatalUtf8Decoder = new import_util7.TextDecoder("utf-8", {
   fatal: true,
@@ -103964,7 +104224,7 @@ function countLines(value) {
   return value.split("\n").length - (value.endsWith("\n") ? 1 : 0);
 }
 
-// src/context-gateway/canonical-git-inventory.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/canonical-git-inventory.ts
 var execFileAsync2 = (0, import_util8.promisify)(import_child_process13.execFile);
 var RAW_RECORD = /^:(\d{6}) (\d{6}) ([0-9a-f]+) ([0-9a-f]+) ([A-Z])$/u;
 var MAX_CLASSIFIED_BLOB_BYTES = 2 * 1024 * 1024;
@@ -104291,9 +104551,9 @@ function gitOptions(root, encoding) {
   };
 }
 
-// src/context-gateway/context-gateway-v4-replay-material.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/context-gateway-v4-replay-material.ts
 var import_crypto31 = require("crypto");
-var import_promises3 = require("fs/promises");
+var import_promises4 = require("fs/promises");
 var import_path3 = __toESM(require("path"));
 var MAX_ENTRIES = 2e3;
 var MAX_STATE_BYTES = 2 * 1024 * 1024;
@@ -104308,12 +104568,12 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
   entries = [];
   mutationTail = Promise.resolve();
   async initialize() {
-    await (0, import_promises3.mkdir)(import_path3.default.dirname(this.config.replayMaterialPath), {
+    await (0, import_promises4.mkdir)(import_path3.default.dirname(this.config.replayMaterialPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises3.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises4.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -104327,7 +104587,7 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
     if (this.entries.length > 0) {
       throw new Error("context_gateway_v4_replay_already_active");
     }
-    const encrypted = await (0, import_promises3.readFile)(this.config.replayMaterialPath, "utf8");
+    const encrypted = await (0, import_promises4.readFile)(this.config.replayMaterialPath, "utf8");
     const raw = decryptContextGatewayV4ReplayMaterial({
       encryptedCanonicalJson: encrypted,
       secret: this.config.secret,
@@ -104544,15 +104804,15 @@ function isRecord6(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 async function atomicPrivateWrite(target, content) {
-  await (0, import_promises3.mkdir)(import_path3.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises4.mkdir)(import_path3.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto31.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises3.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises3.rename)(temporary, target);
+  await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises4.rename)(temporary, target);
 }
 
-// src/context-gateway/context-gateway-v4-recorder.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/context-gateway-v4-recorder.ts
 var import_crypto32 = require("crypto");
-var import_promises4 = require("fs/promises");
+var import_promises5 = require("fs/promises");
 var import_path4 = __toESM(require("path"));
 var MAX_EVENTS = 2e3;
 var CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
@@ -104573,12 +104833,12 @@ var ContextGatewayV4Recorder = class {
   terminalFailureClass = null;
   now;
   async initialize() {
-    await (0, import_promises4.mkdir)(import_path4.default.dirname(this.config.transcriptPath), {
+    await (0, import_promises5.mkdir)(import_path4.default.dirname(this.config.transcriptPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises4.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises5.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -104592,7 +104852,7 @@ var ContextGatewayV4Recorder = class {
     if (this.events.length > 0) {
       throw new Error("context_gateway_v4_recorder_already_active");
     }
-    const raw = await (0, import_promises4.readFile)(this.config.transcriptPath, "utf8");
+    const raw = await (0, import_promises5.readFile)(this.config.transcriptPath, "utf8");
     if (raw.length < 2 || Buffer.byteLength(raw, "utf8") > CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES) {
       throw new Error("context_gateway_v4_recorder_state_size_invalid");
     }
@@ -104782,13 +105042,13 @@ function sanitizeReason(value) {
   return value;
 }
 async function atomicPrivateWrite2(target, content) {
-  await (0, import_promises4.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises5.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto32.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises4.rename)(temporary, target);
+  await (0, import_promises5.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises5.rename)(temporary, target);
 }
 
-// src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
 var execFileAsync3 = (0, import_util9.promisify)(import_child_process14.execFile);
 var MAX_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
 var MAX_REPLAY_MATERIAL_BYTES = 2 * 1024 * 1024;
@@ -104864,7 +105124,7 @@ var ContextGatewayInvocationSessionFactory = class {
     const { checkoutTreeOid } = revisionTreeOids;
     const gatewayBinaryHash = sha25613(gatewayBundleSnapshot);
     const gatewayPolicyVersion = this.policyVersion();
-    const directory = await (0, import_promises5.mkdtemp)(
+    const directory = await (0, import_promises6.mkdtemp)(
       path23.join(os10.tmpdir(), "reviewrouter-context-gateway-")
     );
     const gatewayBundlePath = path23.join(directory, "context-gateway.cjs");
@@ -104872,12 +105132,12 @@ var ContextGatewayInvocationSessionFactory = class {
     const replayMaterialPath = path23.join(directory, "replay-material.json");
     let requiredWitness = null;
     try {
-      await (0, import_promises5.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
+      await (0, import_promises6.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
         flag: "wx",
         mode: 448
       });
     } catch (error2) {
-      await (0, import_promises5.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(directory, { recursive: true, force: true });
       throw error2;
     }
     const confinementEvidenceHash = sha25613(
@@ -104914,7 +105174,7 @@ var ContextGatewayInvocationSessionFactory = class {
         }
       });
     } catch (error2) {
-      await (0, import_promises5.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(directory, { recursive: true, force: true });
       throw error2;
     }
     const secret = Buffer.from(serverSession.gatewaySessionSecret, "base64url");
@@ -105001,7 +105261,7 @@ var ContextGatewayInvocationSessionFactory = class {
     return this.options.policyVersion ?? CONTEXT_GATEWAY_POLICY_VERSION;
   }
   async gatewayBundleSnapshot() {
-    this.gatewayBundleSnapshotPromise ??= (0, import_promises5.readFile)(
+    this.gatewayBundleSnapshotPromise ??= (0, import_promises6.readFile)(
       this.options.gatewayBundlePath
     );
     return Buffer.from(await this.gatewayBundleSnapshotPromise);
@@ -105125,7 +105385,7 @@ var ContextGatewayInvocationSession = class {
       );
     }
     const { transcriptCanonicalJson, replayMaterialCanonicalJson } = createWireSealPayload(transcript, replayMaterial);
-    await (0, import_promises5.rm)(this.replayMaterialPath);
+    await (0, import_promises6.rm)(this.replayMaterialPath);
     const attestation = await this.attestations.sealGatewaySession({
       invocationLease: this.currentInvocationLease(),
       session: this.serverSession,
@@ -105258,7 +105518,7 @@ var ContextGatewayInvocationSession = class {
     }
     this.secret.fill(0);
     try {
-      await (0, import_promises5.rm)(this.directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(this.directory, { recursive: true, force: true });
     } catch (error2) {
       failures.push(error2);
     }
@@ -105409,7 +105669,7 @@ async function cleanupOpenedGatewaySession(input) {
   }
   input.secret.fill(0);
   try {
-    await (0, import_promises5.rm)(input.directory, { recursive: true, force: true });
+    await (0, import_promises6.rm)(input.directory, { recursive: true, force: true });
   } catch (error2) {
     failures.push(error2);
   }
@@ -105424,19 +105684,19 @@ function throwCleanupFailures(failures) {
   throw new AggregateError(failures, "context_gateway_dispose_failed");
 }
 async function readBoundedCanonicalJson(file, maximumBytes) {
-  const metadata = await (0, import_promises5.stat)(file);
+  const metadata = await (0, import_promises6.stat)(file);
   if (!metadata.isFile() || metadata.size < 2 || metadata.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const parsed = JSON.parse(await (0, import_promises5.readFile)(file, "utf8"));
+  const parsed = JSON.parse(await (0, import_promises6.readFile)(file, "utf8"));
   return canonicalJson(parsed);
 }
 async function readBoundedText(file, maximumBytes) {
-  const metadata = await (0, import_promises5.stat)(file);
+  const metadata = await (0, import_promises6.stat)(file);
   if (!metadata.isFile() || metadata.size < 2 || metadata.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const value = await (0, import_promises5.readFile)(file, "utf8");
+  const value = await (0, import_promises6.readFile)(file, "utf8");
   if (Buffer.byteLength(value, "utf8") !== metadata.size) {
     throw new Error("context_gateway_output_size_invalid");
   }
@@ -105589,17 +105849,17 @@ function sha25613(value) {
   return (0, import_crypto33.createHash)("sha256").update(value).digest("hex");
 }
 
-// src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
 var import_child_process17 = require("child_process");
 var import_crypto35 = require("crypto");
-var import_promises9 = require("fs/promises");
+var import_promises10 = require("fs/promises");
 var os11 = __toESM(require("os"));
 var path27 = __toESM(require("path"));
 var import_util12 = require("util");
 
-// src/context-gateway/context-gateway-recorder.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/context-gateway-recorder.ts
 var import_crypto34 = require("crypto");
-var import_promises6 = require("fs/promises");
+var import_promises7 = require("fs/promises");
 var path24 = __toESM(require("path"));
 var MAX_RECORDER_STATE_BYTES = 2 * 1024 * 1024;
 var ContextGatewayRecorder = class {
@@ -105615,22 +105875,22 @@ var ContextGatewayRecorder = class {
   hadFailure = false;
   async initialize() {
     await Promise.all([
-      (0, import_promises6.mkdir)(path24.dirname(this.config.transcriptPath), {
+      (0, import_promises7.mkdir)(path24.dirname(this.config.transcriptPath), {
         recursive: true,
         mode: 448
       }),
-      (0, import_promises6.mkdir)(path24.dirname(this.config.replayMaterialPath), {
+      (0, import_promises7.mkdir)(path24.dirname(this.config.replayMaterialPath), {
         recursive: true,
         mode: 448
       })
     ]);
     try {
-      await (0, import_promises6.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises7.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
       });
-      await (0, import_promises6.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises7.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -105825,7 +106085,7 @@ var ContextGatewayRecorder = class {
   }
 };
 async function readBoundedState(file) {
-  const value = await (0, import_promises6.readFile)(file, "utf8");
+  const value = await (0, import_promises7.readFile)(file, "utf8");
   if (value.length < 2 || Buffer.byteLength(value, "utf8") > MAX_RECORDER_STATE_BYTES) {
     throw new Error("context_gateway_recorder_state_size_invalid");
   }
@@ -105844,15 +106104,15 @@ function parseCanonicalState(raw, kind) {
   return parsed;
 }
 async function atomicPrivateWrite3(target, content) {
-  await (0, import_promises6.mkdir)(path24.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises7.mkdir)(path24.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto34.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises6.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises6.rename)(temporary, target);
+  await (0, import_promises7.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises7.rename)(temporary, target);
 }
 
-// src/context-gateway/filesystem-context-gateway.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/filesystem-context-gateway.ts
 var import_child_process15 = require("child_process");
-var import_promises7 = require("fs/promises");
+var import_promises8 = require("fs/promises");
 var import_os = require("os");
 var path25 = __toESM(require("path"));
 var import_util10 = require("util");
@@ -105881,7 +106141,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
   revisionTreeOidPromises = /* @__PURE__ */ new Map();
   static async create(input) {
-    const root = await (0, import_promises7.realpath)(input.root);
+    const root = await (0, import_promises8.realpath)(input.root);
     requireGitOid(input.checkoutTreeOid, "checkout_tree_oid");
     requireGitOid(input.baseSha, "base_sha");
     requireGitOid(input.mergeBaseSha, "merge_base_sha");
@@ -106133,7 +106393,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
               }
             )).sort();
           } finally {
-            await (0, import_promises7.rm)(isolatedGit.gitDirectory, {
+            await (0, import_promises8.rm)(isolatedGit.gitDirectory, {
               recursive: true,
               force: true
             });
@@ -106265,7 +106525,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     const attributesPath = path25.isAbsolute(gitPath) ? gitPath : path25.resolve(this.root, gitPath);
     let infoAttributes;
     try {
-      infoAttributes = await (0, import_promises7.readFile)(attributesPath);
+      infoAttributes = await (0, import_promises8.readFile)(attributesPath);
     } catch (error2) {
       if (error2.code !== "ENOENT") throw error2;
       infoAttributes = null;
@@ -106303,23 +106563,23 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     ]);
   }
   async createIsolatedGitDirectory(policy) {
-    const gitDirectory = await (0, import_promises7.mkdtemp)(
+    const gitDirectory = await (0, import_promises8.mkdtemp)(
       path25.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
     );
     try {
       const [objectsPathOutput, objectFormatOutput] = await Promise.all([
         this.gitText(["rev-parse", "--git-path", "objects"]),
         this.gitText(["rev-parse", "--show-object-format=storage"]),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "objects", "info"), { recursive: true }),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "refs", "heads"), { recursive: true }),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "info"), { recursive: true }),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "worktree"), { recursive: true })
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "objects", "info"), { recursive: true }),
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "refs", "heads"), { recursive: true }),
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "info"), { recursive: true }),
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "worktree"), { recursive: true })
       ]);
       const rawObjectsPath = objectsPathOutput.trim();
       if (rawObjectsPath.length === 0) {
         throw new Error("context_gateway_git_objects_path_invalid");
       }
-      const objectsPath = await (0, import_promises7.realpath)(
+      const objectsPath = await (0, import_promises8.realpath)(
         path25.isAbsolute(rawObjectsPath) ? rawObjectsPath : path25.resolve(this.root, rawObjectsPath)
       );
       if (objectsPath.includes("\0") || objectsPath.includes("\n")) {
@@ -106331,14 +106591,14 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       }
       const config = objectFormat === "sha256" ? "[core]\n	repositoryformatversion = 1\n	bare = false\n[extensions]\n	objectformat = sha256\n" : "[core]\n	repositoryformatversion = 0\n	bare = false\n";
       await Promise.all([
-        (0, import_promises7.writeFile)(path25.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
-        (0, import_promises7.writeFile)(path25.join(gitDirectory, "config"), config),
-        (0, import_promises7.writeFile)(
+        (0, import_promises8.writeFile)(path25.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
+        (0, import_promises8.writeFile)(path25.join(gitDirectory, "config"), config),
+        (0, import_promises8.writeFile)(
           path25.join(gitDirectory, "objects", "info", "alternates"),
           `${objectsPath}
 `
         ),
-        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises7.writeFile)(
+        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises8.writeFile)(
           path25.join(gitDirectory, "info", "attributes"),
           policy.infoAttributes
         )
@@ -106352,7 +106612,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       });
       return Object.freeze({ gitDirectory, indexPath, workTreePath });
     } catch (error2) {
-      await (0, import_promises7.rm)(gitDirectory, { recursive: true, force: true });
+      await (0, import_promises8.rm)(gitDirectory, { recursive: true, force: true });
       throw error2;
     }
   }
@@ -106440,9 +106700,9 @@ function boundedInteger(value, minimum, maximum, field) {
   return value;
 }
 
-// src/context-gateway/filesystem-context-gateway-v4.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/context-gateway/filesystem-context-gateway-v4.ts
 var import_child_process16 = require("child_process");
-var import_promises8 = require("fs/promises");
+var import_promises9 = require("fs/promises");
 var import_path5 = __toESM(require("path"));
 var import_util11 = require("util");
 var execFileAsync5 = (0, import_util11.promisify)(import_child_process16.execFile);
@@ -106469,7 +106729,7 @@ var FilesystemContextGatewayV4 = class _FilesystemContextGatewayV4 {
   operationsStarted = 0;
   budgetExhaustionRecorded = false;
   static async create(input) {
-    const root = await (0, import_promises8.realpath)(input.root);
+    const root = await (0, import_promises9.realpath)(input.root);
     requireGitOid(
       input.checkoutTreeOid,
       "context_gateway_v4_checkout_tree_oid"
@@ -107250,7 +107510,7 @@ function gitOptions2(root) {
   };
 }
 
-// src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
 var execFileAsync6 = (0, import_util12.promisify)(import_child_process17.execFile);
 var MAX_REPLAY_PLAN_BYTES = 512 * 1024;
 var ContextAttestationReplayRunner = class {
@@ -107279,7 +107539,7 @@ var ContextAttestationReplayRunner = class {
     const plan = parseReplayPlan(candidate);
     const [targetCheckoutTreeOid, gatewayBinaryHash] = await Promise.all([
       this.checkoutTreeOid(targetRevision.headSha),
-      (0, import_promises9.readFile)(this.options.gatewayBundlePath).then(sha256)
+      (0, import_promises10.readFile)(this.options.gatewayBundlePath).then(sha256)
     ]);
     if (plan.gatewayBinaryHash !== gatewayBinaryHash) {
       return null;
@@ -107296,7 +107556,7 @@ var ContextAttestationReplayRunner = class {
     if (plan.gatewayPolicyVersion !== CONTEXT_GATEWAY_POLICY_VERSION) {
       return null;
     }
-    const directory = await (0, import_promises9.mkdtemp)(
+    const directory = await (0, import_promises10.mkdtemp)(
       path27.join(os11.tmpdir(), "reviewrouter-context-replay-")
     );
     const secret = (0, import_crypto35.randomBytes)(32);
@@ -107374,11 +107634,11 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(directory, { recursive: true, force: true });
     }
   }
   async replayV4(input) {
-    const directory = await (0, import_promises9.mkdtemp)(
+    const directory = await (0, import_promises10.mkdtemp)(
       path27.join(os11.tmpdir(), "reviewrouter-context-replay-v4-")
     );
     const secret = (0, import_crypto35.randomBytes)(32);
@@ -107472,7 +107732,7 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(directory, { recursive: true, force: true });
     }
   }
   async checkoutTreeOid(expectedHeadSha) {
@@ -107915,7 +108175,7 @@ function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// src/review-orchestration/infrastructure/provider-invocation-failure-classifier.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/provider-invocation-failure-classifier.ts
 var ProviderInvocationFailureClassifier = class {
   classify(error2) {
     if (classifyProviderCapacitySignal({ error: error2 }) === "capacity_pressure" /* CapacityPressure */) {
@@ -107932,7 +108192,7 @@ var ProviderInvocationFailureClassifier = class {
   }
 };
 
-// src/review-orchestration/infrastructure/review-invocation-diagnostics.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/review-invocation-diagnostics.ts
 var LoggingReviewInvocationDiagnostics = class {
   constructor(logger2) {
     this.logger = logger2;
@@ -108034,7 +108294,7 @@ function diagnosticText(error2) {
   return [record.name, record.code, record.message].filter((value) => typeof value === "string").join(" ");
 }
 
-// src/review-orchestration/infrastructure/git-review-revision-materializer.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/git-review-revision-materializer.ts
 var import_node_child_process = require("node:child_process");
 var import_node_util = require("node:util");
 var execFileAsync7 = (0, import_node_util.promisify)(import_node_child_process.execFile);
@@ -108124,7 +108384,7 @@ async function runGitCommand(args, options) {
   });
 }
 
-// src/review-orchestration/infrastructure/github-review-state-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/github-review-state-adapter.ts
 var import_crypto36 = require("crypto");
 var GitHubReviewRevisionGuard = class {
   constructor(client, scope) {
@@ -108414,10 +108674,10 @@ function compareCodeUnits7(left, right) {
   return 0;
 }
 
-// src/review-orchestration/infrastructure/production-review-projection.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/production-review-projection.ts
 var import_crypto38 = require("crypto");
 
-// src/review-projection/application/build-current-review-projection.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-projection/application/build-current-review-projection.ts
 var BuildCurrentReviewProjection = class {
   constructor(dependencies) {
     this.dependencies = dependencies;
@@ -109088,7 +109348,7 @@ function assertUnique2(name, values) {
   }
 }
 
-// src/review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter.ts
 var LegacyReviewProjectionPolicyAdapter = class {
   constructor(config) {
     this.config = config;
@@ -109530,7 +109790,7 @@ function sortedUnique3(values) {
   );
 }
 
-// src/review-orchestration/infrastructure/current-review-projection-builder-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/current-review-projection-builder-adapter.ts
 var import_crypto37 = require("crypto");
 var CurrentReviewProjectionBuilderAdapter = class {
   constructor(projection, commands) {
@@ -109580,7 +109840,7 @@ function sha25615(value) {
   return (0, import_crypto37.createHash)("sha256").update(value).digest("hex");
 }
 
-// src/review-orchestration/infrastructure/production-review-projection.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/production-review-projection.ts
 var productionReviewProjectionPolicyVersion = "review-projection-policy.v5-t0";
 function createProductionReviewProjectionBuilder(input) {
   const limits = projectionLimits(input.config, input.protocolLimits);
@@ -109959,11 +110219,11 @@ function sha25616(value) {
   return (0, import_crypto38.createHash)("sha256").update(value).digest("hex");
 }
 
-// src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
 var import_child_process19 = require("child_process");
 var import_util13 = require("util");
 
-// src/review-investigation/infrastructure/review-agent-process-runner.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/review-agent-process-runner.ts
 var import_child_process18 = require("child_process");
 var NodeReviewAgentProcessRunner = class {
   active = /* @__PURE__ */ new Map();
@@ -110104,7 +110364,7 @@ function sanitizeProcessText(value) {
   return value.replace(/[\r\n]+/gu, " ").slice(0, 400);
 }
 
-// src/review-investigation/infrastructure/codex-app-server-protocol.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/codex-app-server-protocol.ts
 var import_crypto39 = require("crypto");
 var import_path6 = __toESM(require("path"));
 var CODEX_APP_SERVER_VERSION = "0.147.0";
@@ -111416,7 +111676,7 @@ function deferred() {
   return { promise, resolve: resolve5, reject };
 }
 
-// src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
 var DEFAULT_INTERRUPT_GRACE_MS = 500;
 var MAX_DIAGNOSTIC_BYTES = 16384;
 var NodeCodexAppServerTurnRunner = class {
@@ -111924,14 +112184,14 @@ function deferred2() {
   return { promise, resolve: resolve5, reject };
 }
 
-// src/review-orchestration/infrastructure/system-review-orchestration-clock.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/system-review-orchestration-clock.ts
 var SystemReviewOrchestrationClock = class {
   monotonicNowMs() {
     return Math.floor(performance.now());
   }
 };
 
-// src/review-investigation/application/replay-investigation-on-revision.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/application/replay-investigation-on-revision.ts
 var ReplayInvestigationOnRevision = class {
   constructor(dependencies) {
     this.dependencies = dependencies;
@@ -112005,7 +112265,7 @@ function compareCodeUnits9(left, right) {
   return 0;
 }
 
-// src/review-investigation/infrastructure/strict-cli-review-agent.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/strict-cli-review-agent.ts
 var GATEWAY_RUNTIME_ENV_KEYS = /* @__PURE__ */ new Set([
   "REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION",
   "REVIEWROUTER_CONTEXT_SESSION_ID",
@@ -112375,7 +112635,7 @@ function safeRetryAfterMs(value) {
   return value;
 }
 
-// src/review-investigation/infrastructure/claude-review-agent-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/claude-review-agent-adapter.ts
 var CLAUDE_NATIVE_TOOLS = Object.freeze([
   "Bash",
   "Edit",
@@ -112393,7 +112653,7 @@ var CLAUDE_NATIVE_TOOLS = Object.freeze([
   "Skill"
 ]);
 
-// src/review-investigation/infrastructure/codex-review-agent-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/codex-review-agent-adapter.ts
 var CODEX_APP_SERVER_EVENT_STREAM_OUTPUT_MULTIPLIER = 32;
 var CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER = 2;
 var CodexReviewAgentAdapter = class extends StrictCliReviewAgent {
@@ -112621,7 +112881,7 @@ function tomlStringArray2(values) {
   return `[${values.map(tomlString2).join(",")}]`;
 }
 
-// src/review-investigation/infrastructure/review-action-v2-investigation-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/review-action-v2-investigation-adapter.ts
 var ReviewActionV2InvestigationAdapter = class {
   constructor(client) {
     this.client = client;
@@ -113629,7 +113889,7 @@ function nullableTimestamp(value, field) {
   return value === null ? null : timestamp2(value, field);
 }
 
-// src/review-investigation/infrastructure/review-action-v2-investigation-lease-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/review-action-v2-investigation-lease-adapter.ts
 var import_crypto40 = require("crypto");
 var ReviewActionV2InvestigationLeaseAdapter = class {
   constructor(client, requestId = import_crypto40.randomUUID) {
@@ -113860,7 +114120,7 @@ function mapTransportError(error2) {
   );
 }
 
-// src/review-investigation/infrastructure/context-gateway-v4-investigation-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/context-gateway-v4-investigation-adapter.ts
 var InvestigationContextGatewayRuntimeConfigurationError = class extends Error {
   constructor(reason, options = {}) {
     super(
@@ -114022,7 +114282,7 @@ function runtimeLease(lease) {
   return Object.freeze({ ...lease, renewalCeilingReached: false });
 }
 
-// src/review-investigation/infrastructure/deterministic-review-agent-selector.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/deterministic-review-agent-selector.ts
 var DeterministicReviewAgentSelector = class {
   constructor(registrations, options) {
     this.options = options;
@@ -114093,7 +114353,7 @@ var DeterministicReviewAgentSelector = class {
   }
 };
 
-// src/review-investigation/infrastructure/logging-investigation-operational-diagnostics.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-investigation/infrastructure/logging-investigation-operational-diagnostics.ts
 var LoggingInvestigationOperationalDiagnostics = class {
   constructor(logger2) {
     this.logger = logger2;
@@ -114111,7 +114371,7 @@ var LoggingInvestigationOperationalDiagnostics = class {
   }
 };
 
-// src/review-orchestration/infrastructure/review-investigation-recording-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/review-investigation-recording-adapter.ts
 var REVIEW_INVESTIGATION_PRODUCTION_POLICY = Object.freeze({
   policyId: "review-investigation-shadow.v1",
   maxObligations: 1024,
@@ -114558,7 +114818,7 @@ function terminalObservation(status, snapshot) {
   });
 }
 
-// src/review-orchestration/infrastructure/production-review-investigation-composition.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/production-review-investigation-composition.ts
 function createProductionReviewInvestigationGatewayFactory(delegate) {
   return Object.freeze({
     open: async (input) => {
@@ -114885,7 +115145,7 @@ function capabilityUnavailable(message) {
   );
 }
 
-// src/review-orchestration/infrastructure/review-action-v2-investigation-context-attestation-adapter.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/review-action-v2-investigation-context-attestation-adapter.ts
 var import_crypto41 = require("crypto");
 var ReviewActionV2InvestigationContextAttestationAdapter = class {
   constructor(client, authorizationToken) {
@@ -115042,7 +115302,7 @@ function requireTimestamp4(value, field) {
   return parsed;
 }
 
-// src/review-orchestration/infrastructure/production-t0-review-runner.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/review-orchestration/infrastructure/production-t0-review-runner.ts
 var execFileAsync8 = (0, import_util14.promisify)(import_child_process20.execFile);
 var CODEX_RETRY_POLICY_VERSION = "codex-semantic-retry.v1";
 var SCM_READ_TOKEN_EXPIRY_MARGIN_MS = 3e4;
@@ -115725,7 +115985,7 @@ function createScmReadGitHubClient(input) {
     tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
     ...signal ? {
       sleep: async (ms) => {
-        await (0, import_promises10.setTimeout)(ms, void 0, { signal });
+        await (0, import_promises11.setTimeout)(ms, void 0, { signal });
       }
     } : {}
   });
@@ -116128,7 +116388,7 @@ var CancellableReviewOrchestrationDelay = class extends SystemReviewOrchestratio
   }
 };
 
-// src/codex-oauth/ci-review-progress.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/ci-review-progress.ts
 var fs22 = __toESM(require("fs"));
 var CI_PROGRESS_MARKER = "<!-- review-router-live-progress -->";
 function formatCiReviewProgress(snapshot) {
@@ -116423,7 +116683,7 @@ function safeError3(error2) {
   return error2 instanceof Error ? error2.message : String(error2);
 }
 
-// src/codex-oauth/action.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/codex-oauth/action.ts
 var CODEX_OAUTH_ROTATING_MODE = "codex-oauth-rotating";
 var SETUP_PULL_REQUEST_BRANCH = "reviewrouter/setup";
 var SETUP_PREVIEW_MISSING_AUTH_SKIP_REASON = "setup_pr_waiting_for_codex_auth";
@@ -116639,7 +116899,7 @@ async function runAccountGatewayActionInternal(options = {}) {
     commentEligible: false
   });
   let ciProgressReporter;
-  await runAccountGatewayRuntime(inputs, {
+  await runLongOidcTestEntry(inputs, {
     fetchImpl: options.fetchImpl,
     review: {
       run: (input) => {
@@ -117544,7 +117804,7 @@ function readEnvFrom(name, env) {
   return env[name]?.trim() || "";
 }
 
-// src/main.ts
+// ../../srv/workers/TEST-rr-long-oidc-budget20-oct11/source/src/main.ts
 function syncEnvFromInputs() {
   const inputKeys = [
     "REVIEW_ROUTER_MODE",

@@ -29,9 +29,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/ajv/dist/compile/codegen/code.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/code.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/codegen/code.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.regexpCode = exports2.getEsmExportName = exports2.getProperty = exports2.safeStringify = exports2.stringify = exports2.strConcat = exports2.addCodeArg = exports2.str = exports2._ = exports2.nil = exports2._Code = exports2.Name = exports2.IDENTIFIER = exports2._CodeOrName = void 0;
@@ -183,9 +183,9 @@ var require_code = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/codegen/scope.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/codegen/scope.js
 var require_scope = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/scope.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/codegen/scope.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.ValueScope = exports2.ValueScopeName = exports2.Scope = exports2.varKinds = exports2.UsedValueState = void 0;
@@ -328,9 +328,9 @@ var require_scope = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/codegen/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/codegen/index.js
 var require_codegen = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/codegen/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.or = exports2.and = exports2.not = exports2.CodeGen = exports2.operators = exports2.varKinds = exports2.ValueScopeName = exports2.ValueScope = exports2.Scope = exports2.Name = exports2.regexpCode = exports2.stringify = exports2.getProperty = exports2.nil = exports2.strConcat = exports2.str = exports2._ = void 0;
@@ -1048,9 +1048,9 @@ var require_codegen = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/util.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/util.js
 var require_util = __commonJS({
-  "node_modules/ajv/dist/compile/util.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/util.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.checkStrictMode = exports2.getErrorPath = exports2.Type = exports2.useFunc = exports2.setEvaluated = exports2.evaluatedPropsToName = exports2.mergeEvaluated = exports2.eachItem = exports2.unescapeJsonPointer = exports2.escapeJsonPointer = exports2.escapeFragment = exports2.unescapeFragment = exports2.schemaRefOrVal = exports2.schemaHasRulesButRef = exports2.schemaHasRules = exports2.checkUnknownRules = exports2.alwaysValidSchema = exports2.toHash = void 0;
@@ -1215,9 +1215,9 @@ var require_util = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/names.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/names.js
 var require_names = __commonJS({
-  "node_modules/ajv/dist/compile/names.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/names.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -1254,9 +1254,9 @@ var require_names = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/errors.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/errors.js
 var require_errors = __commonJS({
-  "node_modules/ajv/dist/compile/errors.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/errors.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.extendErrors = exports2.resetErrorsCount = exports2.reportExtraError = exports2.reportError = exports2.keyword$DataError = exports2.keywordError = void 0;
@@ -1376,9 +1376,9 @@ var require_errors = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/boolSchema.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/boolSchema.js
 var require_boolSchema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/boolSchema.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/boolSchema.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.boolOrEmptySchema = exports2.topBoolOrEmptySchema = void 0;
@@ -1427,9 +1427,9 @@ var require_boolSchema = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/rules.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/rules.js
 var require_rules = __commonJS({
-  "node_modules/ajv/dist/compile/rules.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/rules.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.getRules = exports2.isJSONType = void 0;
@@ -1458,9 +1458,9 @@ var require_rules = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/applicability.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/applicability.js
 var require_applicability = __commonJS({
-  "node_modules/ajv/dist/compile/validate/applicability.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/applicability.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.shouldUseRule = exports2.shouldUseGroup = exports2.schemaHasRulesForType = void 0;
@@ -1481,9 +1481,9 @@ var require_applicability = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/dataType.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/dataType.js
 var require_dataType = __commonJS({
-  "node_modules/ajv/dist/compile/validate/dataType.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/dataType.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.reportTypeError = exports2.checkDataTypes = exports2.checkDataType = exports2.coerceAndCheckDataType = exports2.getJSONTypes = exports2.getSchemaTypes = exports2.DataType = void 0;
@@ -1665,9 +1665,9 @@ var require_dataType = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/defaults.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/defaults.js
 var require_defaults = __commonJS({
-  "node_modules/ajv/dist/compile/validate/defaults.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/defaults.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.assignDefaults = void 0;
@@ -1702,9 +1702,9 @@ var require_defaults = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/code.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/code.js
 var require_code2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/code.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/code.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateUnion = exports2.validateArray = exports2.usePattern = exports2.callValidateCode = exports2.schemaProperties = exports2.allSchemaProperties = exports2.noPropertyInData = exports2.propertyInData = exports2.isOwnProperty = exports2.hasPropFunc = exports2.reportMissingProp = exports2.checkMissingProp = exports2.checkReportMissingProp = void 0;
@@ -1835,9 +1835,9 @@ var require_code2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/keyword.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/keyword.js
 var require_keyword = __commonJS({
-  "node_modules/ajv/dist/compile/validate/keyword.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/keyword.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateKeywordUsage = exports2.validSchemaType = exports2.funcKeywordCode = exports2.macroKeywordCode = void 0;
@@ -1953,9 +1953,9 @@ var require_keyword = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/subschema.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/subschema.js
 var require_subschema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/subschema.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/subschema.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.extendSubschemaMode = exports2.extendSubschemaData = exports2.getSubschema = void 0;
@@ -2036,9 +2036,9 @@ var require_subschema = __commonJS({
   }
 });
 
-// node_modules/fast-deep-equal/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/fast-deep-equal/index.js
 var require_fast_deep_equal = __commonJS({
-  "node_modules/fast-deep-equal/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/fast-deep-equal/index.js"(exports2, module2) {
     "use strict";
     module2.exports = function equal(a2, b2) {
       if (a2 === b2) return true;
@@ -2071,9 +2071,9 @@ var require_fast_deep_equal = __commonJS({
   }
 });
 
-// node_modules/json-schema-traverse/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/json-schema-traverse/index.js
 var require_json_schema_traverse = __commonJS({
-  "node_modules/json-schema-traverse/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/json-schema-traverse/index.js"(exports2, module2) {
     "use strict";
     var traverse = module2.exports = function(schema2, opts, cb) {
       if (typeof opts == "function") {
@@ -2159,9 +2159,9 @@ var require_json_schema_traverse = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/resolve.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/resolve.js
 var require_resolve = __commonJS({
-  "node_modules/ajv/dist/compile/resolve.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/resolve.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.getSchemaRefs = exports2.resolveUrl = exports2.normalizeId = exports2._getFullPath = exports2.getFullPath = exports2.inlineRef = void 0;
@@ -2315,9 +2315,9 @@ var require_resolve = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/validate/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/index.js
 var require_validate = __commonJS({
-  "node_modules/ajv/dist/compile/validate/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/validate/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.getData = exports2.KeywordCxt = exports2.validateFunctionCode = void 0;
@@ -2823,9 +2823,9 @@ var require_validate = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/validation_error.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/runtime/validation_error.js
 var require_validation_error = __commonJS({
-  "node_modules/ajv/dist/runtime/validation_error.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/runtime/validation_error.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var ValidationError2 = class extends Error {
@@ -2839,9 +2839,9 @@ var require_validation_error = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/ref_error.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/ref_error.js
 var require_ref_error = __commonJS({
-  "node_modules/ajv/dist/compile/ref_error.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/ref_error.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var resolve_1 = require_resolve();
@@ -2856,9 +2856,9 @@ var require_ref_error = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/compile/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/index.js
 var require_compile = __commonJS({
-  "node_modules/ajv/dist/compile/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/compile/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.resolveSchema = exports2.getCompilingSchema = exports2.resolveRef = exports2.compileSchema = exports2.SchemaEnv = void 0;
@@ -3080,9 +3080,9 @@ var require_compile = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/data.json
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/data.json
 var require_data = __commonJS({
-  "node_modules/ajv/dist/refs/data.json"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/data.json"(exports2, module2) {
     module2.exports = {
       $id: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#",
       description: "Meta-schema for $data reference (JSON AnySchema extension proposal)",
@@ -3099,9 +3099,9 @@ var require_data = __commonJS({
   }
 });
 
-// node_modules/fast-uri/lib/utils.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/fast-uri/lib/utils.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/fast-uri/lib/utils.js"(exports2, module2) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
@@ -3596,9 +3596,9 @@ var require_utils = __commonJS({
   }
 });
 
-// node_modules/fast-uri/lib/schemes.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
     "use strict";
     var { isUUID } = require_utils();
     var URN_REG = /^([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-./:;=@]|%[\da-f]{2})+)$/iu;
@@ -3807,9 +3807,9 @@ var require_schemes = __commonJS({
   }
 });
 
-// node_modules/fast-uri/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/fast-uri/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/fast-uri/index.js"(exports2, module2) {
     "use strict";
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
@@ -4206,9 +4206,9 @@ var require_fast_uri = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/uri.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/runtime/uri.js
 var require_uri = __commonJS({
-  "node_modules/ajv/dist/runtime/uri.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/runtime/uri.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var uri = require_fast_uri();
@@ -4217,9 +4217,9 @@ var require_uri = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/core.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/core.js
 var require_core = __commonJS({
-  "node_modules/ajv/dist/core.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/core.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = void 0;
@@ -4828,9 +4828,9 @@ var require_core = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/core/id.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/core/id.js
 var require_id = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/id.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/core/id.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var def = {
@@ -4843,9 +4843,9 @@ var require_id = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/core/ref.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/core/ref.js
 var require_ref = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/ref.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/core/ref.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.callRef = exports2.getValidate = void 0;
@@ -4965,9 +4965,9 @@ var require_ref = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/core/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/core/index.js
 var require_core2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/core/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var id_1 = require_id();
@@ -4986,9 +4986,9 @@ var require_core2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitNumber.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/limitNumber.js
 var require_limitNumber = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5018,9 +5018,9 @@ var require_limitNumber = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/multipleOf.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/multipleOf.js
 var require_multipleOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5046,9 +5046,9 @@ var require_multipleOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/ucs2length.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS({
-  "node_modules/ajv/dist/runtime/ucs2length.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/runtime/ucs2length.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     function ucs2length(str2) {
@@ -5072,9 +5072,9 @@ var require_ucs2length = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitLength.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/limitLength.js
 var require_limitLength = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5104,9 +5104,9 @@ var require_limitLength = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/pattern.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/pattern.js
 var require_pattern = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -5141,9 +5141,9 @@ var require_pattern = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitProperties.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/limitProperties.js
 var require_limitProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5170,9 +5170,9 @@ var require_limitProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/required.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/required.js
 var require_required = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/required.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/required.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -5252,9 +5252,9 @@ var require_required = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitItems.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/limitItems.js
 var require_limitItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5281,9 +5281,9 @@ var require_limitItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/runtime/equal.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/runtime/equal.js
 var require_equal = __commonJS({
-  "node_modules/ajv/dist/runtime/equal.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/runtime/equal.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var equal = require_fast_deep_equal();
@@ -5292,9 +5292,9 @@ var require_equal = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
 var require_uniqueItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dataType_1 = require_dataType();
@@ -5359,9 +5359,9 @@ var require_uniqueItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/const.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/const.js
 var require_const = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/const.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/const.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5388,9 +5388,9 @@ var require_const = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/enum.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/enum.js
 var require_enum = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/enum.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/enum.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5437,9 +5437,9 @@ var require_enum = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/index.js
 var require_validation = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var limitNumber_1 = require_limitNumber();
@@ -5475,9 +5475,9 @@ var require_validation = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
 var require_additionalItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateAdditionalItems = void 0;
@@ -5528,9 +5528,9 @@ var require_additionalItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/items.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/items.js
 var require_items = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/items.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateTuple = void 0;
@@ -5585,9 +5585,9 @@ var require_items = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
 var require_prefixItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var items_1 = require_items();
@@ -5602,9 +5602,9 @@ var require_prefixItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/items2020.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/items2020.js
 var require_items2020 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5637,9 +5637,9 @@ var require_items2020 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/contains.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/contains.js
 var require_contains = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5731,9 +5731,9 @@ var require_contains = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/dependencies.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/dependencies.js
 var require_dependencies = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateSchemaDeps = exports2.validatePropertyDeps = exports2.error = void 0;
@@ -5825,9 +5825,9 @@ var require_dependencies = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
 var require_propertyNames = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5868,9 +5868,9 @@ var require_propertyNames = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
 var require_additionalProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -5974,9 +5974,9 @@ var require_additionalProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/properties.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/properties.js
 var require_properties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var validate_1 = require_validate();
@@ -6032,9 +6032,9 @@ var require_properties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
 var require_patternProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -6106,9 +6106,9 @@ var require_patternProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/not.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/not.js
 var require_not = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/not.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/not.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6137,9 +6137,9 @@ var require_not = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/anyOf.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/anyOf.js
 var require_anyOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -6154,9 +6154,9 @@ var require_anyOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/oneOf.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/oneOf.js
 var require_oneOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6212,9 +6212,9 @@ var require_oneOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/allOf.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/allOf.js
 var require_allOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6239,9 +6239,9 @@ var require_allOf = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/if.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/if.js
 var require_if = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/if.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/if.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6308,9 +6308,9 @@ var require_if = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/thenElse.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/thenElse.js
 var require_thenElse = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6326,9 +6326,9 @@ var require_thenElse = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/index.js
 var require_applicator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var additionalItems_1 = require_additionalItems();
@@ -6374,9 +6374,9 @@ var require_applicator = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js
 var require_dynamicAnchor = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.dynamicAnchor = void 0;
@@ -6409,9 +6409,9 @@ var require_dynamicAnchor = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js
 var require_dynamicRef = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.dynamicRef = void 0;
@@ -6455,9 +6455,9 @@ var require_dynamicRef = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js
 var require_recursiveAnchor = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dynamicAnchor_1 = require_dynamicAnchor();
@@ -6476,9 +6476,9 @@ var require_recursiveAnchor = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js
 var require_recursiveRef = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dynamicRef_1 = require_dynamicRef();
@@ -6491,9 +6491,9 @@ var require_recursiveRef = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/dynamic/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/dynamic/index.js
 var require_dynamic = __commonJS({
-  "node_modules/ajv/dist/vocabularies/dynamic/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/dynamic/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dynamicAnchor_1 = require_dynamicAnchor();
@@ -6505,9 +6505,9 @@ var require_dynamic = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/dependentRequired.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/dependentRequired.js
 var require_dependentRequired = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/dependentRequired.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dependencies_1 = require_dependencies();
@@ -6522,9 +6522,9 @@ var require_dependentRequired = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js
 var require_dependentSchemas = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dependencies_1 = require_dependencies();
@@ -6538,9 +6538,9 @@ var require_dependentSchemas = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/validation/limitContains.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/limitContains.js
 var require_limitContains = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitContains.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/validation/limitContains.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6558,9 +6558,9 @@ var require_limitContains = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/next.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/next.js
 var require_next = __commonJS({
-  "node_modules/ajv/dist/vocabularies/next.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/next.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dependentRequired_1 = require_dependentRequired();
@@ -6571,9 +6571,9 @@ var require_next = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js
 var require_unevaluatedProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6637,9 +6637,9 @@ var require_unevaluatedProperties = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js
 var require_unevaluatedItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6681,9 +6681,9 @@ var require_unevaluatedItems = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/unevaluated/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/unevaluated/index.js
 var require_unevaluated = __commonJS({
-  "node_modules/ajv/dist/vocabularies/unevaluated/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/unevaluated/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var unevaluatedProperties_1 = require_unevaluatedProperties();
@@ -6693,9 +6693,9 @@ var require_unevaluated = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/format/format.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/format/format.js
 var require_format = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/format.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/format/format.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6783,9 +6783,9 @@ var require_format = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/format/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/format/index.js
 var require_format2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/format/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var format_1 = require_format();
@@ -6794,9 +6794,9 @@ var require_format2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/metadata.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/metadata.js
 var require_metadata = __commonJS({
-  "node_modules/ajv/dist/vocabularies/metadata.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/metadata.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.contentVocabulary = exports2.metadataVocabulary = void 0;
@@ -6817,9 +6817,9 @@ var require_metadata = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/draft2020.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/draft2020.js
 var require_draft2020 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/draft2020.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/draft2020.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var core_1 = require_core2();
@@ -6845,9 +6845,9 @@ var require_draft2020 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/discriminator/types.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/discriminator/types.js
 var require_types = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.DiscrError = void 0;
@@ -6859,9 +6859,9 @@ var require_types = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/discriminator/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/discriminator/index.js
 var require_discriminator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6964,9 +6964,9 @@ var require_discriminator = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/schema.json
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/schema.json
 var require_schema = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/schema.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/schema",
@@ -7024,9 +7024,9 @@ var require_schema = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json
 var require_applicator2 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/applicator",
@@ -7077,9 +7077,9 @@ var require_applicator2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json
 var require_unevaluated2 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/unevaluated",
@@ -7097,9 +7097,9 @@ var require_unevaluated2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json
 var require_content = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/content",
@@ -7118,9 +7118,9 @@ var require_content = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json
 var require_core3 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/core",
@@ -7174,9 +7174,9 @@ var require_core3 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json
 var require_format_annotation = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/format-annotation",
@@ -7193,9 +7193,9 @@ var require_format_annotation = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json
 var require_meta_data = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/meta-data",
@@ -7234,9 +7234,9 @@ var require_meta_data = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json
 var require_validation2 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/validation",
@@ -7329,9 +7329,9 @@ var require_validation2 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-2020-12/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/index.js
 var require_json_schema_2020_12 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-2020-12/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-2020-12/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var metaSchema = require_schema();
@@ -7364,9 +7364,9 @@ var require_json_schema_2020_12 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/2020.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/2020.js
 var require__ = __commonJS({
-  "node_modules/ajv/dist/2020.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/2020.js"(exports2, module2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.MissingRefError = exports2.ValidationError = exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = exports2.Ajv2020 = void 0;
@@ -7441,9 +7441,9 @@ var require__ = __commonJS({
   }
 });
 
-// node_modules/retry/lib/retry_operation.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/retry/lib/retry_operation.js
 var require_retry_operation = __commonJS({
-  "node_modules/retry/lib/retry_operation.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/retry/lib/retry_operation.js"(exports2, module2) {
     function RetryOperation(timeouts, options) {
       if (typeof options === "boolean") {
         options = { forever: options };
@@ -7576,9 +7576,9 @@ var require_retry_operation = __commonJS({
   }
 });
 
-// node_modules/retry/lib/retry.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/retry/lib/retry.js
 var require_retry = __commonJS({
-  "node_modules/retry/lib/retry.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/retry/lib/retry.js"(exports2) {
     var RetryOperation = require_retry_operation();
     exports2.operation = function(options) {
       var timeouts = exports2.timeouts(options);
@@ -7662,16 +7662,16 @@ var require_retry = __commonJS({
   }
 });
 
-// node_modules/retry/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/retry/index.js
 var require_retry2 = __commonJS({
-  "node_modules/retry/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/retry/index.js"(exports2, module2) {
     module2.exports = require_retry();
   }
 });
 
-// node_modules/universal-user-agent/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/universal-user-agent/dist-node/index.js
 var require_dist_node = __commonJS({
-  "node_modules/universal-user-agent/dist-node/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/universal-user-agent/dist-node/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     function getUserAgent() {
@@ -7687,9 +7687,9 @@ var require_dist_node = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/lib/register.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/before-after-hook/lib/register.js
 var require_register = __commonJS({
-  "node_modules/before-after-hook/lib/register.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/before-after-hook/lib/register.js"(exports2, module2) {
     module2.exports = register;
     function register(state, name, method, options) {
       if (typeof method !== "function") {
@@ -7715,9 +7715,9 @@ var require_register = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/lib/add.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/before-after-hook/lib/add.js
 var require_add = __commonJS({
-  "node_modules/before-after-hook/lib/add.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/before-after-hook/lib/add.js"(exports2, module2) {
     module2.exports = addHook;
     function addHook(state, kind, name, hook) {
       var orig = hook;
@@ -7755,9 +7755,9 @@ var require_add = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/lib/remove.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/before-after-hook/lib/remove.js
 var require_remove = __commonJS({
-  "node_modules/before-after-hook/lib/remove.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/before-after-hook/lib/remove.js"(exports2, module2) {
     module2.exports = removeHook;
     function removeHook(state, name, method) {
       if (!state.registry[name]) {
@@ -7774,9 +7774,9 @@ var require_remove = __commonJS({
   }
 });
 
-// node_modules/before-after-hook/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/before-after-hook/index.js
 var require_before_after_hook = __commonJS({
-  "node_modules/before-after-hook/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/before-after-hook/index.js"(exports2, module2) {
     var register = require_register();
     var addHook = require_add();
     var removeHook = require_remove();
@@ -7830,9 +7830,9 @@ var require_before_after_hook = __commonJS({
   }
 });
 
-// node_modules/@octokit/endpoint/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/endpoint/dist-node/index.js
 var require_dist_node2 = __commonJS({
-  "node_modules/@octokit/endpoint/dist-node/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/endpoint/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8176,9 +8176,9 @@ var require_dist_node2 = __commonJS({
   }
 });
 
-// node_modules/deprecation/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/deprecation/dist-node/index.js
 var require_dist_node3 = __commonJS({
-  "node_modules/deprecation/dist-node/index.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/deprecation/dist-node/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var Deprecation = class extends Error {
@@ -8194,9 +8194,9 @@ var require_dist_node3 = __commonJS({
   }
 });
 
-// node_modules/wrappy/wrappy.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/wrappy/wrappy.js
 var require_wrappy = __commonJS({
-  "node_modules/wrappy/wrappy.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/wrappy/wrappy.js"(exports2, module2) {
     module2.exports = wrappy;
     function wrappy(fn, cb) {
       if (fn && cb) return wrappy(fn)(cb);
@@ -8224,9 +8224,9 @@ var require_wrappy = __commonJS({
   }
 });
 
-// node_modules/once/once.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/once/once.js
 var require_once = __commonJS({
-  "node_modules/once/once.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/once/once.js"(exports2, module2) {
     var wrappy = require_wrappy();
     module2.exports = wrappy(once);
     module2.exports.strict = wrappy(onceStrict);
@@ -8268,9 +8268,9 @@ var require_once = __commonJS({
   }
 });
 
-// node_modules/@octokit/request-error/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/request-error/dist-node/index.js
 var require_dist_node4 = __commonJS({
-  "node_modules/@octokit/request-error/dist-node/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/request-error/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
     var __defProp2 = Object.defineProperty;
@@ -8360,9 +8360,9 @@ var require_dist_node4 = __commonJS({
   }
 });
 
-// node_modules/@octokit/request/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/request/dist-node/index.js
 var require_dist_node5 = __commonJS({
-  "node_modules/@octokit/request/dist-node/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/request/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8570,9 +8570,9 @@ var require_dist_node5 = __commonJS({
   }
 });
 
-// node_modules/@octokit/graphql/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/graphql/dist-node/index.js
 var require_dist_node6 = __commonJS({
-  "node_modules/@octokit/graphql/dist-node/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/graphql/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8707,9 +8707,9 @@ var require_dist_node6 = __commonJS({
   }
 });
 
-// node_modules/@octokit/auth-token/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/auth-token/dist-node/index.js
 var require_dist_node7 = __commonJS({
-  "node_modules/@octokit/auth-token/dist-node/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/auth-token/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8778,9 +8778,9 @@ var require_dist_node7 = __commonJS({
   }
 });
 
-// node_modules/@octokit/core/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/core/dist-node/index.js
 var require_dist_node8 = __commonJS({
-  "node_modules/@octokit/core/dist-node/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/core/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8944,9 +8944,9 @@ var require_dist_node8 = __commonJS({
   }
 });
 
-// node_modules/@octokit/plugin-request-log/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/plugin-request-log/dist-node/index.js
 var require_dist_node9 = __commonJS({
-  "node_modules/@octokit/plugin-request-log/dist-node/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/plugin-request-log/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8994,9 +8994,9 @@ var require_dist_node9 = __commonJS({
   }
 });
 
-// node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
 var require_dist_node10 = __commonJS({
-  "node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -9389,9 +9389,9 @@ var require_dist_node10 = __commonJS({
   }
 });
 
-// node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
 var require_dist_node11 = __commonJS({
-  "node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -11622,9 +11622,9 @@ var require_dist_node11 = __commonJS({
   }
 });
 
-// node_modules/@octokit/rest/dist-node/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/rest/dist-node/index.js
 var require_dist_node12 = __commonJS({
-  "node_modules/@octokit/rest/dist-node/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/@octokit/rest/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -11663,9 +11663,9 @@ var require_dist_node12 = __commonJS({
   }
 });
 
-// node_modules/ajv-formats/dist/formats.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv-formats/dist/formats.js
 var require_formats = __commonJS({
-  "node_modules/ajv-formats/dist/formats.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv-formats/dist/formats.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.formatNames = exports2.fastFormats = exports2.fullFormats = void 0;
@@ -11866,9 +11866,9 @@ var require_formats = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/vocabularies/draft7.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/draft7.js
 var require_draft7 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/draft7.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/vocabularies/draft7.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var core_1 = require_core2();
@@ -11888,9 +11888,9 @@ var require_draft7 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/refs/json-schema-draft-07.json
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-draft-07.json
 var require_json_schema_draft_07 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports2, module2) {
     module2.exports = {
       $schema: "http://json-schema.org/draft-07/schema#",
       $id: "http://json-schema.org/draft-07/schema#",
@@ -12045,9 +12045,9 @@ var require_json_schema_draft_07 = __commonJS({
   }
 });
 
-// node_modules/ajv/dist/ajv.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/ajv.js
 var require_ajv = __commonJS({
-  "node_modules/ajv/dist/ajv.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv/dist/ajv.js"(exports2, module2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.MissingRefError = exports2.ValidationError = exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = exports2.Ajv = void 0;
@@ -12115,9 +12115,9 @@ var require_ajv = __commonJS({
   }
 });
 
-// node_modules/ajv-formats/dist/limit.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv-formats/dist/limit.js
 var require_limit = __commonJS({
-  "node_modules/ajv-formats/dist/limit.js"(exports2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv-formats/dist/limit.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.formatLimitDefinition = void 0;
@@ -12187,9 +12187,9 @@ var require_limit = __commonJS({
   }
 });
 
-// node_modules/ajv-formats/dist/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv-formats/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/ajv-formats/dist/index.js"(exports2, module2) {
+  "../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/ajv-formats/dist/index.js"(exports2, module2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var formats_1 = require_formats();
@@ -12319,7 +12319,7 @@ var fs24 = __toESM(require("fs"));
 var fs2 = __toESM(require("fs"));
 var path = __toESM(require("path"));
 
-// node_modules/js-yaml/dist/js-yaml.mjs
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/js-yaml/dist/js-yaml.mjs
 function getDefaultExportFromCjs(x2) {
   return x2 && x2.__esModule && Object.prototype.hasOwnProperty.call(x2, "default") ? x2["default"] : x2;
 }
@@ -15630,7 +15630,7 @@ function effectiveInlineMaxComments(value) {
   return value;
 }
 
-// node_modules/zod/v3/external.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -15742,7 +15742,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_2) => {
@@ -15876,7 +15876,7 @@ var getParsedType = (data) => {
   }
 };
 
-// node_modules/zod/v3/ZodError.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -15994,7 +15994,7 @@ ZodError.create = (issues) => {
   return error2;
 };
 
-// node_modules/zod/v3/locales/en.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -16097,7 +16097,7 @@ var errorMap = (issue, _ctx) => {
 };
 var en_default = errorMap;
 
-// node_modules/zod/v3/errors.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map2) {
   overrideErrorMap = map2;
@@ -16106,7 +16106,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path: path31, errorMaps, issueData } = params;
   const fullPath = [...path31, ...issueData.path || []];
@@ -16216,14 +16216,14 @@ var isDirty = (x2) => x2.status === "dirty";
 var isValid = (x2) => x2.status === "valid";
 var isAsync = (x2) => typeof Promise !== "undefined" && x2 instanceof Promise;
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// node_modules/zod/v3/types.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path31, key) {
     this._cachedPath = [];
@@ -28713,10 +28713,10 @@ function sha2563(value) {
   return (0, import_crypto5.createHash)("sha256").update(value).digest("hex");
 }
 
-// node_modules/p-retry/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/p-retry/index.js
 var import_retry = __toESM(require_retry2(), 1);
 
-// node_modules/is-network-error/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/is-network-error/index.js
 var objectToString = Object.prototype.toString;
 var isError = (value) => objectToString.call(value) === "[object Error]";
 var errorMessages = /* @__PURE__ */ new Set([
@@ -28754,7 +28754,7 @@ function isNetworkError(error2) {
   return errorMessages.has(message);
 }
 
-// node_modules/p-retry/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/p-retry/index.js
 var AbortError = class extends Error {
   constructor(message) {
     super();
@@ -28835,7 +28835,7 @@ async function withRetry(fn, options) {
     const maxAttempts = options.retries + 1;
     const minTimeout = options.minTimeout ?? 500;
     const factor = options.factor ?? 2;
-    let delay3 = minTimeout;
+    let delay4 = minTimeout;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await fn();
@@ -28848,8 +28848,8 @@ async function withRetry(fn, options) {
           `Retryable error: attempt ${attempt} of ${maxAttempts}`,
           err.message
         );
-        await new Promise((resolve5) => setTimeout(resolve5, delay3));
-        delay3 = Math.min(delay3 * factor, options.maxTimeout ?? 4e3);
+        await new Promise((resolve5) => setTimeout(resolve5, delay4));
+        delay4 = Math.min(delay4 * factor, options.maxTimeout ?? 4e3);
       }
     }
   }
@@ -35193,13 +35193,13 @@ var GitHubClient = class {
    * Throttle requests when approaching rate limit
    */
   async throttleIfNeeded() {
-    const delay3 = this.calculateBackoffDelay();
-    if (delay3 > 0) {
+    const delay4 = this.calculateBackoffDelay();
+    if (delay4 > 0) {
       const status = this.rateLimitTracker.getStatus();
       debug(
-        `Throttling GitHub API request (${delay3}ms delay, ${status?.remaining} requests remaining)`
+        `Throttling GitHub API request (${delay4}ms delay, ${status?.remaining} requests remaining)`
       );
-      await new Promise((resolve5) => setTimeout(resolve5, delay3));
+      await new Promise((resolve5) => setTimeout(resolve5, delay4));
     }
   }
   /**
@@ -44159,7 +44159,7 @@ var GraphCache = class _GraphCache {
   }
 };
 
-// node_modules/brace-expansion/node_modules/balanced-match/dist/esm/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/brace-expansion/node_modules/balanced-match/dist/esm/index.js
 var balanced = (a2, b2, str2) => {
   const ma2 = a2 instanceof RegExp ? maybeMatch(a2, str2) : a2;
   const mb = b2 instanceof RegExp ? maybeMatch(b2, str2) : b2;
@@ -44212,7 +44212,7 @@ var range = (a2, b2, str2) => {
   return result2;
 };
 
-// node_modules/brace-expansion/dist/esm/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/brace-expansion/dist/esm/index.js
 var escSlash = "\0SLASH" + Math.random() + "\0";
 var escOpen = "\0OPEN" + Math.random() + "\0";
 var escClose = "\0CLOSE" + Math.random() + "\0";
@@ -44425,7 +44425,7 @@ function expand_(str2, max, maxLength, isTop) {
   return acc;
 }
 
-// node_modules/minimatch/dist/esm/assert-valid-pattern.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/minimatch/dist/esm/assert-valid-pattern.js
 var MAX_PATTERN_LENGTH = 1024 * 64;
 var assertValidPattern = (pattern) => {
   if (typeof pattern !== "string") {
@@ -44436,7 +44436,7 @@ var assertValidPattern = (pattern) => {
   }
 };
 
-// node_modules/minimatch/dist/esm/brace-expressions.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/minimatch/dist/esm/brace-expressions.js
 var posixClasses = {
   "[:alnum:]": ["\\p{L}\\p{Nl}\\p{Nd}", true],
   "[:alpha:]": ["\\p{L}\\p{Nl}", true],
@@ -44545,7 +44545,7 @@ var parseClass = (glob, position) => {
   return [comb, uflag, endPos - pos, true];
 };
 
-// node_modules/minimatch/dist/esm/unescape.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/minimatch/dist/esm/unescape.js
 var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}) => {
   if (magicalBraces) {
     return windowsPathsNoEscape ? s2.replace(/\[([^/\\])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\])\]/g, "$1$2").replace(/\\([^/])/g, "$1");
@@ -44553,7 +44553,7 @@ var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}
   return windowsPathsNoEscape ? s2.replace(/\[([^/\\{}])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\{}])\]/g, "$1$2").replace(/\\([^/{}])/g, "$1");
 };
 
-// node_modules/minimatch/dist/esm/ast.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/minimatch/dist/esm/ast.js
 var _a;
 var types2 = /* @__PURE__ */ new Set(["!", "?", "+", "*", "@"]);
 var isExtglobType = (c2) => types2.has(c2);
@@ -45197,7 +45197,7 @@ var AST = class {
 };
 _a = AST;
 
-// node_modules/minimatch/dist/esm/escape.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/minimatch/dist/esm/escape.js
 var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {}) => {
   if (magicalBraces) {
     return windowsPathsNoEscape ? s2.replace(/[?*()[\]{}]/g, "[$&]") : s2.replace(/[?*()[\]\\{}]/g, "\\$&");
@@ -45205,7 +45205,7 @@ var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {})
   return windowsPathsNoEscape ? s2.replace(/[?*()[\]]/g, "[$&]") : s2.replace(/[?*()[\]\\]/g, "\\$&");
 };
 
-// node_modules/minimatch/dist/esm/index.js
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/minimatch/dist/esm/index.js
 var minimatch = (p2, pattern, options = {}) => {
   assertValidPattern(pattern);
   if (!options.nocomment && pattern.charAt(0) === "#") {
@@ -53001,8 +53001,12 @@ function pluralize(word, count) {
   return count === 1 ? word : `${word}s`;
 }
 
-// src/codex-oauth/action.ts
-var fs23 = __toESM(require("fs"));
+// src/codex-oauth/long-oidc-test-entry.ts
+var import_node_fs = require("node:fs");
+
+// src/codex-oauth/long-oidc-runtime.ts
+var import_promises2 = require("node:timers/promises");
+var import_node_perf_hooks = require("node:perf_hooks");
 
 // src/codex-oauth/account-gateway-runtime.ts
 var import_child_process11 = require("child_process");
@@ -92916,11 +92920,11 @@ var RunInvestigationTurn = class {
       "review_agent_unclassified_failure"
     );
     const reason = abortReason(failure.failureClass);
-    const delay3 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
+    const delay4 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
       failure.retryAfterMs ?? input.minimumCapacityParkMs,
       input.minimumCapacityParkMs
     );
-    const nextEligibleAt = delay3 === null ? null : new Date(this.dependencies.now().getTime() + delay3).toISOString();
+    const nextEligibleAt = delay4 === null ? null : new Date(this.dependencies.now().getTime() + delay4).toISOString();
     return this.abort(
       input,
       reason,
@@ -97312,7 +97316,7 @@ function isReviewActionV2ScmMutationEnvName(name) {
 // src/codex-oauth/crypto.ts
 var import_crypto26 = require("crypto");
 
-// node_modules/libsodium/dist/modules-esm/libsodium.mjs
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/libsodium/dist/modules-esm/libsodium.mjs
 var import_meta = {};
 async function A(A3 = {}) {
   var I2, g2 = A3, C2 = !!globalThis.window, B2 = !!globalThis.WorkerGlobalScope, Q2 = (globalThis.process?.versions?.node && globalThis.process, import_meta.url);
@@ -97510,7 +97514,7 @@ async function A(A3 = {}) {
 }
 var libsodium_default = A;
 
-// node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
+// ../../TEST-rr-mimo-appserver-schema-fix-oct10/source-host/node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
 var r;
 var t = {};
 if (void 0 === globalThis.crypto || "function" != typeof globalThis.crypto.getRandomValues) throw new Error("globalThis.crypto.getRandomValues is not available. The ESM build of libsodium requires a secure random source (available in all browsers and Node.js 19+).");
@@ -101365,7 +101369,147 @@ function validateAccountGatewayCheckout(result2, repository, headSha) {
   });
 }
 
+// src/codex-oauth/long-oidc-runtime.ts
+async function runLongOidcTestRuntime(inputs, ports, record, expected) {
+  if (!process.env.GITHUB_ACTIONS || process.env.GITHUB_EVENT_NAME !== "pull_request" || !expected.repository || inputs.repository !== expected.repository || !expected.model)
+    throw new Error("long_oidc_disposable_github_pr_required");
+  const started = import_node_perf_hooks.performance.now();
+  const network = ports.fetchImpl ?? fetch;
+  let mintExpiresAt = 0;
+  let authorizationCount = 0;
+  let authorityFingerprint;
+  let authorizationId;
+  let deadline = 0;
+  let executionDeadline = 0;
+  let outerBearerExpiresAt = 0;
+  let currentAuthorization;
+  let caseCompleted = false;
+  const emit = (stage, httpStatus) => {
+    record({
+      stage,
+      observedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      elapsedMs: Math.round(import_node_perf_hooks.performance.now() - started),
+      mintExpiresAt: new Date(mintExpiresAt).toISOString(),
+      ...deadline ? { deadline: new Date(deadline).toISOString() } : {},
+      ...executionDeadline ? { executionDeadline: new Date(executionDeadline).toISOString() } : {},
+      ...outerBearerExpiresAt ? { outerBearerExpiresAt: new Date(outerBearerExpiresAt).toISOString() } : {},
+      ...authorizationId ? { authorizationId } : {},
+      ...httpStatus === void 0 ? {} : { httpStatus }
+    });
+  };
+  const fingerprint = (a2) => JSON.stringify({
+    id: a2.authorizationId,
+    epoch: a2.mutationEpoch,
+    release: a2.producerReleaseId,
+    facts: a2.facts,
+    limits: a2.limits
+  });
+  const assertOriginal = () => {
+    const a2 = currentAuthorization?.();
+    outerBearerExpiresAt = a2 ? Date.parse(a2.expiresAt) : NaN;
+    if (!a2 || !Number.isFinite(outerBearerExpiresAt) || fingerprint(a2) !== authorityFingerprint || outerBearerExpiresAt > deadline)
+      throw new Error("long_oidc_execution_authority_changed");
+    return a2;
+  };
+  const waitUntil = async (instant, signal) => {
+    while (Date.now() < instant) {
+      await (0, import_promises2.setTimeout)(Math.min(6e4, instant - Date.now()), void 0, { signal });
+    }
+  };
+  const observedFetch = async (request, init) => {
+    const url = new URL(request instanceof Request ? request.url : String(request));
+    if (url.origin === new URL(inputs.apiUrl).origin && init?.body) {
+      if (typeof init.body !== "string") throw new Error("long_oidc_body_unobservable");
+      const body = JSON.parse(init.body);
+      if (body && typeof body === "object" && "oidcToken" in body && !("authorizationId" in body)) {
+        if (++authorizationCount !== 1 || typeof body.oidcToken !== "string")
+          throw new Error("long_oidc_reauthorization_forbidden");
+        const segments = body.oidcToken.split(".");
+        if (segments.length !== 3) throw new Error("long_oidc_jwt_invalid");
+        const claims = JSON.parse(Buffer.from(segments[1], "base64url").toString());
+        if (!claims || typeof claims !== "object" || !("iss" in claims) || claims.iss !== "https://token.actions.githubusercontent.com" || !("exp" in claims) || typeof claims.exp !== "number" || !Number.isSafeInteger(claims.exp) || claims.exp * 1e3 <= Date.now())
+          throw new Error("long_oidc_github_mint_required");
+        mintExpiresAt = claims.exp * 1e3;
+      }
+    }
+    return network(request, init);
+  };
+  await runAccountGatewayRuntime(inputs, {
+    ...ports,
+    fetchImpl: observedFetch,
+    review: { run: async (input) => {
+      const gateway = input.accountGateway;
+      if (!gateway || !mintExpiresAt || authorizationCount !== 1)
+        throw new Error("long_oidc_verified_admission_missing");
+      const authorization = gateway.controlPlane.currentAuthorization();
+      authorityFingerprint = fingerprint(authorization);
+      authorizationId = authorization.authorizationId;
+      deadline = Date.parse(authorization.expiresAt);
+      outerBearerExpiresAt = deadline;
+      currentAuthorization = () => gateway.controlPlane.currentAuthorization();
+      if (!Number.isFinite(deadline) || deadline <= mintExpiresAt + 12e4 || deadline > Date.now() + 9e5)
+        throw new Error("long_oidc_approved_deadline_unsuitable");
+      emit("mint");
+      await waitUntil(mintExpiresAt + 1500, gateway.signal);
+      assertOriginal();
+      if (Date.now() >= deadline - 6e4) throw new Error("long_oidc_run_window_lost");
+      const deadlineKey = "REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS";
+      const configured = process.env[deadlineKey];
+      const configuredDeadline = Number(configured);
+      if (!configured || !Number.isSafeInteger(configuredDeadline) || configuredDeadline <= Date.now())
+        throw new Error("long_oidc_normal_execution_deadline_missing");
+      executionDeadline = Math.min(configuredDeadline, deadline - 3e5 - 15e3);
+      if (executionDeadline - Date.now() < 15e4)
+        throw new Error("long_oidc_execution_window_insufficient");
+      emit("after-expiry");
+      process.env[deadlineKey] = String(executionDeadline);
+      let result2;
+      try {
+        result2 = await ports.review.run(input);
+      } finally {
+        process.env[deadlineKey] = configured;
+      }
+      if (result2.outcome !== "completed") throw new Error("long_oidc_review_not_completed");
+      assertOriginal();
+      if (Date.now() >= deadline) throw new Error("long_oidc_review_missed_deadline");
+      emit("review-complete");
+      return result2;
+    } },
+    terminalReview: async (review, signal) => {
+      await ports.terminalReview(review, signal);
+      const current = assertOriginal();
+      await waitUntil(deadline + 1500, signal);
+      const response = await network(new URL("/api/action/v2/account-gateway/responses", inputs.apiUrl), {
+        method: "POST",
+        signal: AbortSignal.any([signal, AbortSignal.timeout(5e3)]),
+        headers: { authorization: `Bearer ${current.authorizationToken}`, "content-type": "application/json" },
+        body: JSON.stringify({ model: expected.model, input: "Must not dispatch after deadline." })
+      });
+      await response.body?.cancel();
+      if (response.status !== 401) throw new Error("long_oidc_deadline_did_not_deny");
+      emit("deadline-denied", response.status);
+      caseCompleted = true;
+    }
+  });
+  if (!caseCompleted) throw new Error("long_oidc_case_incomplete");
+}
+
+// src/codex-oauth/long-oidc-test-entry.ts
+async function runLongOidcTestEntry(inputs, ports) {
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (!summary) throw new Error("long_oidc_github_summary_required");
+  await runLongOidcTestRuntime(inputs, ports, (observation) => {
+    (0, import_node_fs.appendFileSync)(summary, `
+Long OIDC TEST: ${JSON.stringify(observation)}
+`, "utf8");
+  }, {
+    repository: "777genius/rr-selfhost-direct-v2-e2e-20260730t120036z",
+    model: "mimo-v2.6-pro"
+  });
+}
+
 // src/codex-oauth/action.ts
+var fs23 = __toESM(require("fs"));
 var path30 = __toESM(require("path"));
 
 // src/codex-oauth/control-plane.ts
@@ -101734,11 +101878,11 @@ function assertSafeOwnerRepoPart(value, label) {
 }
 
 // src/codex-oauth/terminal-outcome-publication.ts
-var import_promises2 = require("node:timers/promises");
+var import_promises3 = require("node:timers/promises");
 function createPublicationGitHubClient(token, options = {}) {
   const client = new GitHubClient(token, {
     sleep: async (ms) => {
-      await (0, import_promises2.setTimeout)(ms, void 0, { signal: options.signal });
+      await (0, import_promises3.setTimeout)(ms, void 0, { signal: options.signal });
     }
   });
   if (options.signal || options.timeoutMs) {
@@ -102145,7 +102289,7 @@ var import_crypto42 = require("crypto");
 var import_child_process20 = require("child_process");
 var path29 = __toESM(require("path"));
 var import_util14 = require("util");
-var import_promises10 = require("node:timers/promises");
+var import_promises11 = require("node:timers/promises");
 
 // src/review-investigation/fixtures/review-investigation-capability-v1.golden.json
 var review_investigation_capability_v1_golden_default = {
@@ -103927,7 +104071,7 @@ function compareCodeUnits4(left, right) {
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
 var import_child_process14 = require("child_process");
 var import_crypto33 = require("crypto");
-var import_promises5 = require("fs/promises");
+var import_promises6 = require("fs/promises");
 var os10 = __toESM(require("os"));
 var path23 = __toESM(require("path"));
 var import_util9 = require("util");
@@ -104287,7 +104431,7 @@ function gitOptions(root, encoding) {
 
 // src/context-gateway/context-gateway-v4-replay-material.ts
 var import_crypto31 = require("crypto");
-var import_promises3 = require("fs/promises");
+var import_promises4 = require("fs/promises");
 var import_path3 = __toESM(require("path"));
 var MAX_ENTRIES = 2e3;
 var MAX_STATE_BYTES = 2 * 1024 * 1024;
@@ -104302,12 +104446,12 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
   entries = [];
   mutationTail = Promise.resolve();
   async initialize() {
-    await (0, import_promises3.mkdir)(import_path3.default.dirname(this.config.replayMaterialPath), {
+    await (0, import_promises4.mkdir)(import_path3.default.dirname(this.config.replayMaterialPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises3.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises4.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -104321,7 +104465,7 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
     if (this.entries.length > 0) {
       throw new Error("context_gateway_v4_replay_already_active");
     }
-    const encrypted = await (0, import_promises3.readFile)(this.config.replayMaterialPath, "utf8");
+    const encrypted = await (0, import_promises4.readFile)(this.config.replayMaterialPath, "utf8");
     const raw = decryptContextGatewayV4ReplayMaterial({
       encryptedCanonicalJson: encrypted,
       secret: this.config.secret,
@@ -104538,15 +104682,15 @@ function isRecord6(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 async function atomicPrivateWrite(target, content) {
-  await (0, import_promises3.mkdir)(import_path3.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises4.mkdir)(import_path3.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto31.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises3.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises3.rename)(temporary, target);
+  await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises4.rename)(temporary, target);
 }
 
 // src/context-gateway/context-gateway-v4-recorder.ts
 var import_crypto32 = require("crypto");
-var import_promises4 = require("fs/promises");
+var import_promises5 = require("fs/promises");
 var import_path4 = __toESM(require("path"));
 var MAX_EVENTS = 2e3;
 var CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
@@ -104567,12 +104711,12 @@ var ContextGatewayV4Recorder = class {
   terminalFailureClass = null;
   now;
   async initialize() {
-    await (0, import_promises4.mkdir)(import_path4.default.dirname(this.config.transcriptPath), {
+    await (0, import_promises5.mkdir)(import_path4.default.dirname(this.config.transcriptPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises4.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises5.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -104586,7 +104730,7 @@ var ContextGatewayV4Recorder = class {
     if (this.events.length > 0) {
       throw new Error("context_gateway_v4_recorder_already_active");
     }
-    const raw = await (0, import_promises4.readFile)(this.config.transcriptPath, "utf8");
+    const raw = await (0, import_promises5.readFile)(this.config.transcriptPath, "utf8");
     if (raw.length < 2 || Buffer.byteLength(raw, "utf8") > CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES) {
       throw new Error("context_gateway_v4_recorder_state_size_invalid");
     }
@@ -104776,10 +104920,10 @@ function sanitizeReason(value) {
   return value;
 }
 async function atomicPrivateWrite2(target, content) {
-  await (0, import_promises4.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises5.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto32.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises4.rename)(temporary, target);
+  await (0, import_promises5.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises5.rename)(temporary, target);
 }
 
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
@@ -104858,7 +105002,7 @@ var ContextGatewayInvocationSessionFactory = class {
     const { checkoutTreeOid } = revisionTreeOids;
     const gatewayBinaryHash = sha25613(gatewayBundleSnapshot);
     const gatewayPolicyVersion = this.policyVersion();
-    const directory = await (0, import_promises5.mkdtemp)(
+    const directory = await (0, import_promises6.mkdtemp)(
       path23.join(os10.tmpdir(), "reviewrouter-context-gateway-")
     );
     const gatewayBundlePath = path23.join(directory, "context-gateway.cjs");
@@ -104866,12 +105010,12 @@ var ContextGatewayInvocationSessionFactory = class {
     const replayMaterialPath = path23.join(directory, "replay-material.json");
     let requiredWitness = null;
     try {
-      await (0, import_promises5.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
+      await (0, import_promises6.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
         flag: "wx",
         mode: 448
       });
     } catch (error2) {
-      await (0, import_promises5.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(directory, { recursive: true, force: true });
       throw error2;
     }
     const confinementEvidenceHash = sha25613(
@@ -104908,7 +105052,7 @@ var ContextGatewayInvocationSessionFactory = class {
         }
       });
     } catch (error2) {
-      await (0, import_promises5.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(directory, { recursive: true, force: true });
       throw error2;
     }
     const secret = Buffer.from(serverSession.gatewaySessionSecret, "base64url");
@@ -104995,7 +105139,7 @@ var ContextGatewayInvocationSessionFactory = class {
     return this.options.policyVersion ?? CONTEXT_GATEWAY_POLICY_VERSION;
   }
   async gatewayBundleSnapshot() {
-    this.gatewayBundleSnapshotPromise ??= (0, import_promises5.readFile)(
+    this.gatewayBundleSnapshotPromise ??= (0, import_promises6.readFile)(
       this.options.gatewayBundlePath
     );
     return Buffer.from(await this.gatewayBundleSnapshotPromise);
@@ -105119,7 +105263,7 @@ var ContextGatewayInvocationSession = class {
       );
     }
     const { transcriptCanonicalJson, replayMaterialCanonicalJson } = createWireSealPayload(transcript, replayMaterial);
-    await (0, import_promises5.rm)(this.replayMaterialPath);
+    await (0, import_promises6.rm)(this.replayMaterialPath);
     const attestation = await this.attestations.sealGatewaySession({
       invocationLease: this.currentInvocationLease(),
       session: this.serverSession,
@@ -105252,7 +105396,7 @@ var ContextGatewayInvocationSession = class {
     }
     this.secret.fill(0);
     try {
-      await (0, import_promises5.rm)(this.directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(this.directory, { recursive: true, force: true });
     } catch (error2) {
       failures.push(error2);
     }
@@ -105403,7 +105547,7 @@ async function cleanupOpenedGatewaySession(input) {
   }
   input.secret.fill(0);
   try {
-    await (0, import_promises5.rm)(input.directory, { recursive: true, force: true });
+    await (0, import_promises6.rm)(input.directory, { recursive: true, force: true });
   } catch (error2) {
     failures.push(error2);
   }
@@ -105418,19 +105562,19 @@ function throwCleanupFailures(failures) {
   throw new AggregateError(failures, "context_gateway_dispose_failed");
 }
 async function readBoundedCanonicalJson(file, maximumBytes) {
-  const metadata = await (0, import_promises5.stat)(file);
+  const metadata = await (0, import_promises6.stat)(file);
   if (!metadata.isFile() || metadata.size < 2 || metadata.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const parsed = JSON.parse(await (0, import_promises5.readFile)(file, "utf8"));
+  const parsed = JSON.parse(await (0, import_promises6.readFile)(file, "utf8"));
   return canonicalJson(parsed);
 }
 async function readBoundedText(file, maximumBytes) {
-  const metadata = await (0, import_promises5.stat)(file);
+  const metadata = await (0, import_promises6.stat)(file);
   if (!metadata.isFile() || metadata.size < 2 || metadata.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const value = await (0, import_promises5.readFile)(file, "utf8");
+  const value = await (0, import_promises6.readFile)(file, "utf8");
   if (Buffer.byteLength(value, "utf8") !== metadata.size) {
     throw new Error("context_gateway_output_size_invalid");
   }
@@ -105586,14 +105730,14 @@ function sha25613(value) {
 // src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
 var import_child_process17 = require("child_process");
 var import_crypto35 = require("crypto");
-var import_promises9 = require("fs/promises");
+var import_promises10 = require("fs/promises");
 var os11 = __toESM(require("os"));
 var path27 = __toESM(require("path"));
 var import_util12 = require("util");
 
 // src/context-gateway/context-gateway-recorder.ts
 var import_crypto34 = require("crypto");
-var import_promises6 = require("fs/promises");
+var import_promises7 = require("fs/promises");
 var path24 = __toESM(require("path"));
 var MAX_RECORDER_STATE_BYTES = 2 * 1024 * 1024;
 var ContextGatewayRecorder = class {
@@ -105609,22 +105753,22 @@ var ContextGatewayRecorder = class {
   hadFailure = false;
   async initialize() {
     await Promise.all([
-      (0, import_promises6.mkdir)(path24.dirname(this.config.transcriptPath), {
+      (0, import_promises7.mkdir)(path24.dirname(this.config.transcriptPath), {
         recursive: true,
         mode: 448
       }),
-      (0, import_promises6.mkdir)(path24.dirname(this.config.replayMaterialPath), {
+      (0, import_promises7.mkdir)(path24.dirname(this.config.replayMaterialPath), {
         recursive: true,
         mode: 448
       })
     ]);
     try {
-      await (0, import_promises6.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises7.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
       });
-      await (0, import_promises6.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises7.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -105819,7 +105963,7 @@ var ContextGatewayRecorder = class {
   }
 };
 async function readBoundedState(file) {
-  const value = await (0, import_promises6.readFile)(file, "utf8");
+  const value = await (0, import_promises7.readFile)(file, "utf8");
   if (value.length < 2 || Buffer.byteLength(value, "utf8") > MAX_RECORDER_STATE_BYTES) {
     throw new Error("context_gateway_recorder_state_size_invalid");
   }
@@ -105838,15 +105982,15 @@ function parseCanonicalState(raw, kind) {
   return parsed;
 }
 async function atomicPrivateWrite3(target, content) {
-  await (0, import_promises6.mkdir)(path24.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises7.mkdir)(path24.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto34.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises6.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises6.rename)(temporary, target);
+  await (0, import_promises7.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises7.rename)(temporary, target);
 }
 
 // src/context-gateway/filesystem-context-gateway.ts
 var import_child_process15 = require("child_process");
-var import_promises7 = require("fs/promises");
+var import_promises8 = require("fs/promises");
 var import_os = require("os");
 var path25 = __toESM(require("path"));
 var import_util10 = require("util");
@@ -105875,7 +106019,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
   revisionTreeOidPromises = /* @__PURE__ */ new Map();
   static async create(input) {
-    const root = await (0, import_promises7.realpath)(input.root);
+    const root = await (0, import_promises8.realpath)(input.root);
     requireGitOid(input.checkoutTreeOid, "checkout_tree_oid");
     requireGitOid(input.baseSha, "base_sha");
     requireGitOid(input.mergeBaseSha, "merge_base_sha");
@@ -106127,7 +106271,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
               }
             )).sort();
           } finally {
-            await (0, import_promises7.rm)(isolatedGit.gitDirectory, {
+            await (0, import_promises8.rm)(isolatedGit.gitDirectory, {
               recursive: true,
               force: true
             });
@@ -106259,7 +106403,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     const attributesPath = path25.isAbsolute(gitPath) ? gitPath : path25.resolve(this.root, gitPath);
     let infoAttributes;
     try {
-      infoAttributes = await (0, import_promises7.readFile)(attributesPath);
+      infoAttributes = await (0, import_promises8.readFile)(attributesPath);
     } catch (error2) {
       if (error2.code !== "ENOENT") throw error2;
       infoAttributes = null;
@@ -106297,23 +106441,23 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     ]);
   }
   async createIsolatedGitDirectory(policy) {
-    const gitDirectory = await (0, import_promises7.mkdtemp)(
+    const gitDirectory = await (0, import_promises8.mkdtemp)(
       path25.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
     );
     try {
       const [objectsPathOutput, objectFormatOutput] = await Promise.all([
         this.gitText(["rev-parse", "--git-path", "objects"]),
         this.gitText(["rev-parse", "--show-object-format=storage"]),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "objects", "info"), { recursive: true }),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "refs", "heads"), { recursive: true }),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "info"), { recursive: true }),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "worktree"), { recursive: true })
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "objects", "info"), { recursive: true }),
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "refs", "heads"), { recursive: true }),
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "info"), { recursive: true }),
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "worktree"), { recursive: true })
       ]);
       const rawObjectsPath = objectsPathOutput.trim();
       if (rawObjectsPath.length === 0) {
         throw new Error("context_gateway_git_objects_path_invalid");
       }
-      const objectsPath = await (0, import_promises7.realpath)(
+      const objectsPath = await (0, import_promises8.realpath)(
         path25.isAbsolute(rawObjectsPath) ? rawObjectsPath : path25.resolve(this.root, rawObjectsPath)
       );
       if (objectsPath.includes("\0") || objectsPath.includes("\n")) {
@@ -106325,14 +106469,14 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       }
       const config = objectFormat === "sha256" ? "[core]\n	repositoryformatversion = 1\n	bare = false\n[extensions]\n	objectformat = sha256\n" : "[core]\n	repositoryformatversion = 0\n	bare = false\n";
       await Promise.all([
-        (0, import_promises7.writeFile)(path25.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
-        (0, import_promises7.writeFile)(path25.join(gitDirectory, "config"), config),
-        (0, import_promises7.writeFile)(
+        (0, import_promises8.writeFile)(path25.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
+        (0, import_promises8.writeFile)(path25.join(gitDirectory, "config"), config),
+        (0, import_promises8.writeFile)(
           path25.join(gitDirectory, "objects", "info", "alternates"),
           `${objectsPath}
 `
         ),
-        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises7.writeFile)(
+        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises8.writeFile)(
           path25.join(gitDirectory, "info", "attributes"),
           policy.infoAttributes
         )
@@ -106346,7 +106490,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       });
       return Object.freeze({ gitDirectory, indexPath, workTreePath });
     } catch (error2) {
-      await (0, import_promises7.rm)(gitDirectory, { recursive: true, force: true });
+      await (0, import_promises8.rm)(gitDirectory, { recursive: true, force: true });
       throw error2;
     }
   }
@@ -106436,7 +106580,7 @@ function boundedInteger(value, minimum, maximum, field) {
 
 // src/context-gateway/filesystem-context-gateway-v4.ts
 var import_child_process16 = require("child_process");
-var import_promises8 = require("fs/promises");
+var import_promises9 = require("fs/promises");
 var import_path5 = __toESM(require("path"));
 var import_util11 = require("util");
 var execFileAsync5 = (0, import_util11.promisify)(import_child_process16.execFile);
@@ -106463,7 +106607,7 @@ var FilesystemContextGatewayV4 = class _FilesystemContextGatewayV4 {
   operationsStarted = 0;
   budgetExhaustionRecorded = false;
   static async create(input) {
-    const root = await (0, import_promises8.realpath)(input.root);
+    const root = await (0, import_promises9.realpath)(input.root);
     requireGitOid(
       input.checkoutTreeOid,
       "context_gateway_v4_checkout_tree_oid"
@@ -107273,7 +107417,7 @@ var ContextAttestationReplayRunner = class {
     const plan = parseReplayPlan(candidate);
     const [targetCheckoutTreeOid, gatewayBinaryHash] = await Promise.all([
       this.checkoutTreeOid(targetRevision.headSha),
-      (0, import_promises9.readFile)(this.options.gatewayBundlePath).then(sha256)
+      (0, import_promises10.readFile)(this.options.gatewayBundlePath).then(sha256)
     ]);
     if (plan.gatewayBinaryHash !== gatewayBinaryHash) {
       return null;
@@ -107290,7 +107434,7 @@ var ContextAttestationReplayRunner = class {
     if (plan.gatewayPolicyVersion !== CONTEXT_GATEWAY_POLICY_VERSION) {
       return null;
     }
-    const directory = await (0, import_promises9.mkdtemp)(
+    const directory = await (0, import_promises10.mkdtemp)(
       path27.join(os11.tmpdir(), "reviewrouter-context-replay-")
     );
     const secret = (0, import_crypto35.randomBytes)(32);
@@ -107368,11 +107512,11 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(directory, { recursive: true, force: true });
     }
   }
   async replayV4(input) {
-    const directory = await (0, import_promises9.mkdtemp)(
+    const directory = await (0, import_promises10.mkdtemp)(
       path27.join(os11.tmpdir(), "reviewrouter-context-replay-v4-")
     );
     const secret = (0, import_crypto35.randomBytes)(32);
@@ -107466,7 +107610,7 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(directory, { recursive: true, force: true });
     }
   }
   async checkoutTreeOid(expectedHeadSha) {
@@ -115719,7 +115863,7 @@ function createScmReadGitHubClient(input) {
     tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
     ...signal ? {
       sleep: async (ms) => {
-        await (0, import_promises10.setTimeout)(ms, void 0, { signal });
+        await (0, import_promises11.setTimeout)(ms, void 0, { signal });
       }
     } : {}
   });
@@ -116633,7 +116777,7 @@ async function runAccountGatewayActionInternal(options = {}) {
     commentEligible: false
   });
   let ciProgressReporter;
-  await runAccountGatewayRuntime(inputs, {
+  await runLongOidcTestEntry(inputs, {
     fetchImpl: options.fetchImpl,
     review: {
       run: (input) => {

@@ -11,7 +11,10 @@ import {
 import { RateLimitError } from '../../../src/providers/base';
 import { buildReviewFindingsSchema } from '../../../src/providers/review-output';
 import { logger } from '../../../src/utils/logger';
-import type { LocalGatewayModelTransport } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
+import {
+  codexGatewayConfiguration,
+  type LocalGatewayModelTransport,
+} from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
@@ -188,7 +191,7 @@ describe('CodexProvider', () => {
         const gateway: LocalGatewayModelTransport = {
           baseUrl: 'http://127.0.0.1:1/v1',
           environment: { CODEX_HOME: home },
-          configuration: ['model_provider="reviewrouter_account_gateway"'],
+          configuration: codexGatewayConfiguration('http://127.0.0.1:1'),
           actualModel: () => 'mimo-v2.6-pro',
           dispose: async () => {},
         };
@@ -225,6 +228,7 @@ describe('CodexProvider', () => {
         expect(gatewayConfig).toBe(configBytes);
         expect(gatewayConfig).not.toContain('MIMO_TOKEN_PLAN_API_KEY');
         expect(gatewayConfig).not.toContain('model_providers.mimo.');
+        expect(first.request.argsTemplate).toContain('web_search="disabled"');
         expect(first.request.argsTemplate).not.toContain(
           'model_provider="mimo"'
         );

@@ -100,9 +100,25 @@ describe('RunT0ReviewOrchestration', () => {
     );
   });
 
-  it('aborts in-flight provider work at the deadline and commits no evidence', async () => {
+  it('finalizes a deadline partial after release exhausts the final provider attempt', async () => {
     const fixture = createFixture({ allowPartial: true });
     const providerSignal = jest.fn();
+    let released = false;
+    fixture.controlPlane.releaseInvocationLease.mockImplementation(async () => {
+      released = true;
+    });
+    fixture.controlPlane.restoreExecution.mockImplementation(async () =>
+      released
+        ? exhaustedExecution(fixture.command)
+        : restoredAdmission(fixture.command, {
+            state: RestoredReviewWorkSlotState.Pending,
+            acceptedObservationRefId: null,
+          }).restoredExecution
+    );
+    // The API forbids changing the released final attempt from exhausted to cancelled.
+    fixture.controlPlane.terminalizeWorkSlot.mockRejectedValue(
+      new Error('review_action_v2_execution_work_slot_terminalize_conflict')
+    );
     Object.assign(fixture.dependencies, {
       executionDeadline: orchestrationDeadline(
         155_000,
@@ -136,8 +152,29 @@ describe('RunT0ReviewOrchestration', () => {
       1
     );
     expect(fixture.controlPlane.commitEvidence).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.terminalizeWorkSlot).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowPartial: true,
+        execution: expect.objectContaining({
+          restoredExecution: expect.objectContaining({
+            workSlots: [
+              expect.objectContaining({
+                workSlotId: 'slot-1',
+                state: RestoredReviewWorkSlotState.Exhausted,
+                activeLeaseId: null,
+              }),
+            ],
+          }),
+        }),
+      })
+    );
+    expect(fixture.controlPlane.requestPublication).toHaveBeenCalledTimes(1);
     expect(
       fixture.dependencies.invocationFailureClassifier.classify
+    ).not.toHaveBeenCalled();
+    expect(
+      fixture.dependencies.invocationDiagnostics?.recordFailure
     ).not.toHaveBeenCalled();
   });
 

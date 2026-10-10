@@ -93655,24 +93655,35 @@ var RunT0ReviewOrchestration = class {
           });
           const terminal = terminalizeCommand(outcome.exhaustionReason);
           if (terminal) {
-            const terminalized = await this.dependencies.controlPlane.terminalizeWorkSlot({
+            const latestExecution2 = await this.dependencies.controlPlane.restoreExecution({
               authorization,
-              idempotencyKey: this.idempotencyKey("slot-terminalize", [
-                execution.executionId,
-                execution.generation,
-                workSlot.workSlotId,
-                terminal.terminalState,
-                terminal.reasonCode
-              ]),
-              execution,
-              reviewRevisionHash: command.reviewRevisionHash,
-              workSlotId: workSlot.workSlotId,
-              terminal
+              reviewRevisionHash: command.reviewRevisionHash
             });
-            execution = {
-              ...execution,
-              streamVersion: terminalized.streamVersion
-            };
+            execution = refreshExecutionAdmission(execution, latestExecution2);
+            const latestSlot = execution.restoredExecution.workSlots.find(
+              (slot) => slot.workSlotId === workSlot.workSlotId
+            );
+            const alreadyExhausted = execution.restoredExecution.state === "running" /* Running */ && latestSlot?.state === "exhausted" /* Exhausted */ && latestSlot.activeLeaseId === null;
+            if (!alreadyExhausted) {
+              const terminalized = await this.dependencies.controlPlane.terminalizeWorkSlot({
+                authorization,
+                idempotencyKey: this.idempotencyKey("slot-terminalize", [
+                  execution.executionId,
+                  execution.generation,
+                  workSlot.workSlotId,
+                  terminal.terminalState,
+                  terminal.reasonCode
+                ]),
+                execution,
+                reviewRevisionHash: command.reviewRevisionHash,
+                workSlotId: workSlot.workSlotId,
+                terminal
+              });
+              execution = {
+                ...execution,
+                streamVersion: terminalized.streamVersion
+              };
+            }
           }
         }
       }

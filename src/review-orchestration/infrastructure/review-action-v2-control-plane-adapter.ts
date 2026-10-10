@@ -439,6 +439,8 @@ export class ReviewActionV2ControlPlaneAdapter
     await this.client.execute(ReviewActionV2OperationId.ReviewSnapshotRestore, {
       authorizationToken: input.authorization.authorizationToken,
       reviewRevisionHash: input.reviewRevisionHash,
+    }).catch((error: unknown) => {
+      throw controlPlaneFailure(error);
     });
   }
 
@@ -453,7 +455,9 @@ export class ReviewActionV2ControlPlaneAdapter
         authorizationId: input.authorization.authorizationId,
         reviewRevisionHash: input.reviewRevisionHash,
       }
-    );
+    ).catch((error: unknown) => {
+      throw controlPlaneFailure(error);
+    });
     if (
       result.status === ReviewExecutionRestoreResultStatus.Missing ||
       result.status === ReviewExecutionRestoreResultStatus.NotRestorable
@@ -516,7 +520,9 @@ export class ReviewActionV2ControlPlaneAdapter
         sourceRunId: input.sourceRunId,
         sourceRunAttempt: input.sourceRunAttempt,
       }
-    );
+    ).catch((error: unknown) => {
+      throw controlPlaneFailure(error);
+    });
     if (
       result.status !== ReviewExecutionStartResultStatus.Admitted &&
       result.status !== ReviewExecutionStartResultStatus.Restored

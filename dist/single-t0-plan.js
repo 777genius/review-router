@@ -82883,6 +82883,8 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
     await this.client.execute("review_snapshot_restore" /* ReviewSnapshotRestore */, {
       authorizationToken: input.authorization.authorizationToken,
       reviewRevisionHash: input.reviewRevisionHash
+    }).catch((error) => {
+      throw controlPlaneFailure(error);
     });
   }
   async restoreExecution(input) {
@@ -82893,7 +82895,9 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
         authorizationId: input.authorization.authorizationId,
         reviewRevisionHash: input.reviewRevisionHash
       }
-    );
+    ).catch((error) => {
+      throw controlPlaneFailure(error);
+    });
     if (result2.status === "missing" /* Missing */ || result2.status === "not_restorable" /* NotRestorable */) {
       return null;
     }
@@ -82932,7 +82936,9 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
         sourceRunId: input.sourceRunId,
         sourceRunAttempt: input.sourceRunAttempt
       }
-    );
+    ).catch((error) => {
+      throw controlPlaneFailure(error);
+    });
     if (result2.status !== "admitted" /* Admitted */ && result2.status !== "restored" /* Restored */) {
       throw new Error(`review_action_v2_execution_${result2.status}`);
     }

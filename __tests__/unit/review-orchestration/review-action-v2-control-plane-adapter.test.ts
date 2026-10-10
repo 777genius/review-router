@@ -1434,6 +1434,27 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     ).rejects.toThrow('review_action_v2_source_fencing_token_missing');
   });
 
+  it.each([
+    ReviewActionV2OperationId.ReviewSnapshotRestore,
+    ReviewActionV2OperationId.ReviewExecutionRestore,
+    ReviewActionV2OperationId.ReviewExecutionStart,
+  ])('preserves closed client errors for %s without arbitrary diagnostics', async (operation) => {
+    const original = new ReviewActionV2ClientError(
+      ReviewActionV2ClientFailureCode.InvalidResponse, operation,
+      { issues: ['private-sentinel-MUST-NOT-APPEAR'] }
+    );
+    const execute = jest.fn().mockRejectedValue(original);
+    const adapter = createAdapter(execute);
+    const call = operation === ReviewActionV2OperationId.ReviewSnapshotRestore
+      ? adapter.restoreSnapshot({ authorization, reviewRevisionHash: startInput.reviewRevisionHash })
+      : operation === ReviewActionV2OperationId.ReviewExecutionRestore
+        ? adapter.restoreExecution({ authorization, reviewRevisionHash: startInput.reviewRevisionHash })
+        : adapter.startExecution(startInput);
+    await expect(call).rejects.toMatchObject({
+      message: `review_action_v2:${operation}:invalid_response`, cause: original,
+    });
+  });
+
   it('restores a bounded exact-revision execution instead of dropping it', async () => {
     const execute = jest.fn().mockResolvedValue({
       status: ReviewExecutionRestoreResultStatus.Found,

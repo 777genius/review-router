@@ -40666,6 +40666,7 @@ query ReviewRouterThreadInventory(
             nodes {
               id
               databaseId
+              viewerDidAuthor
               author { login __typename }
               body
               createdAt
@@ -40691,6 +40692,7 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
         nodes {
           id
           databaseId
+          viewerDidAuthor
           author { login __typename }
           body
           createdAt
@@ -40706,9 +40708,10 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
   }
 }`;
 var ReviewThreadInventoryLoader = class {
-  constructor(client, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS) {
+  constructor(client, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS, observationAuthors = []) {
     this.client = client;
     this.trustedAuthors = trustedAuthors;
+    this.observationAuthors = observationAuthors;
   }
   async load(prNumber) {
     const inventory = {
@@ -40797,9 +40800,14 @@ var ReviewThreadInventoryLoader = class {
       throw new Error(`thread ${thread.id} parent comment was missing`);
     }
     const trustedAuthor = this.isTrustedAuthor(parent.author);
+    const managedObservation = trustedAuthor || parent.viewerDidAuthor === true && parent.author?.__typename === "Bot" || isTrustedReviewThreadAuthor(
+      parent.author?.login,
+      this.observationAuthors,
+      parent.author?.__typename
+    );
     const marker = parseFindingMarker(parent.body ?? "");
     if (marker.kind === "conflict" /* Conflict */ || marker.kind === "malformed" /* Malformed */) {
-      if (trustedAuthor) {
+      if (managedObservation) {
         const reason = marker.kind === "conflict" /* Conflict */ ? "conflicting_finding_marker" : "malformed_finding_marker";
         inventory.failed = true;
         inventory.manualAttentionIssues.push({
@@ -40875,6 +40883,7 @@ var ReviewThreadInventoryLoader = class {
       viewerCanResolve: Boolean(thread.viewerCanResolve),
       hasHumanReply: humanReply,
       trustedAuthor,
+      managedObservation,
       ...trustedResolutionMarker ? { trustedResolutionMarker } : {},
       reasonCodes
     };
@@ -41077,6 +41086,18 @@ function normalizeBotLogin(value) {
 function canonicalBotLogin(value, authorTypename) {
   const login = normalizeBotLogin(value);
   return login && authorTypename === "Bot" && !login.endsWith("[bot]") ? `${login}[bot]` : login;
+}
+function lifecycleObservationAuthors() {
+  const raw = process.env.REVIEW_ROUTER_LIFECYCLE_OBSERVATION_AUTHORS;
+  if (raw === void 0) return [];
+  if (raw.length > 8192)
+    throw new Error("lifecycle_observation_authors_invalid");
+  const value = JSON.parse(raw);
+  if (!Array.isArray(value) || value.length > 64 || value.some(
+    (author) => typeof author !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,99}(?:\[bot\])?$/.test(author)
+  ))
+    throw new Error("lifecycle_observation_authors_invalid");
+  return value;
 }
 
 // src/github/review-thread-resolver.ts
@@ -43233,7 +43254,8 @@ async function createComponents(config, githubToken, options = {}) {
   const trustedReviewThreadAuthors = trustedReviewThreadAuthorsFromEnv();
   const reviewThreadInventory = new ReviewThreadInventoryLoader(
     githubClient,
-    trustedReviewThreadAuthors
+    trustedReviewThreadAuthors,
+    lifecycleObservationAuthors()
   );
   const reviewThreadResolver = new ReviewThreadResolver(
     githubClient,
@@ -108179,7 +108201,11 @@ function requirePullRequestState(value) {
 var FreshGitHubLifecycleInventory = class {
   constructor(client, ledger) {
     this.ledger = ledger;
-    this.loader = new ReviewThreadInventoryLoader(client);
+    this.loader = new ReviewThreadInventoryLoader(
+      client,
+      trustedReviewThreadAuthorsFromEnv(),
+      lifecycleObservationAuthors()
+    );
   }
   loader;
   async loadCurrent(query) {
@@ -108217,8 +108243,10 @@ function mapFreshInventory(raw, expectedHeadSha, ledger) {
   }
   const rawTargets = [
     ...raw.candidates.map((target) => ({ target, manual: false })),
-    // The server excludes untrusted parents from managed lifecycle observations.
-    ...raw.manualAttention.filter((record) => record.target.trustedAuthor).map((record) => ({
+    // Include server-authorized observation-only parents without mutation trust.
+    ...raw.manualAttention.filter(
+      (record) => record.target.trustedAuthor || record.target.managedObservation
+    ).map((record) => ({
       target: record.target,
       manual: true
     }))

@@ -44,6 +44,7 @@ import { PromptEnricher } from './learning/prompt-enrichment';
 import { AcceptanceDetector } from './learning/acceptance-detector';
 import {
   ReviewThreadInventoryLoader,
+  lifecycleObservationAuthors,
   trustedReviewThreadAuthorsFromEnv,
 } from './github/review-thread-inventory';
 import { ReviewThreadResolver } from './github/review-thread-resolver';
@@ -417,7 +418,8 @@ export async function createComponents(
   const trustedReviewThreadAuthors = trustedReviewThreadAuthorsFromEnv();
   const reviewThreadInventory = new ReviewThreadInventoryLoader(
     githubClient,
-    trustedReviewThreadAuthors
+    trustedReviewThreadAuthors,
+    lifecycleObservationAuthors()
   );
   const reviewThreadResolver = new ReviewThreadResolver(
     githubClient,

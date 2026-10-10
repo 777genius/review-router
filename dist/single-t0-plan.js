@@ -77648,6 +77648,21 @@ function assertWithinProjectionLimit(limitName, actual, limits) {
 var DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS = ["review-router-ai[bot]"];
 var GITHUB_ACTIONS_BOT_AUTHOR = "github-actions[bot]";
 var RESOLUTION_REPLY_MARKER = "reviewrouter-lifecycle-resolution:v1";
+var TRUSTED_AUTHOR_ENV_KEYS = [
+  "REVIEW_THREAD_LIFECYCLE_TRUSTED_AUTHORS",
+  "REVIEW_ROUTER_TRUSTED_BOT_AUTHORS"
+];
+var APP_BOT_LOGIN_ENV_KEYS = [
+  "REVIEW_APP_BOT_LOGIN",
+  "REVIEW_ROUTER_APP_BOT_LOGIN",
+  "REVIEWROUTER_APP_BOT_LOGIN"
+];
+var APP_SLUG_ENV_KEYS = [
+  "REVIEW_APP_SLUG",
+  "REVIEW_ROUTER_APP_SLUG",
+  "REVIEWROUTER_APP_SLUG",
+  "AI_ROBOT_REVIEW_APP_SLUG"
+];
 var MAX_REVIEW_THREAD_PAGES = 100;
 var MAX_REVIEW_THREAD_COMMENT_PAGES = 100;
 var INVENTORY_QUERY = `
@@ -77675,6 +77690,7 @@ query ReviewRouterThreadInventory(
             nodes {
               id
               databaseId
+              viewerDidAuthor
               author { login __typename }
               body
               createdAt
@@ -77700,6 +77716,7 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
         nodes {
           id
           databaseId
+          viewerDidAuthor
           author { login __typename }
           body
           createdAt
@@ -77715,9 +77732,10 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
   }
 }`;
 var ReviewThreadInventoryLoader = class {
-  constructor(client, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS) {
+  constructor(client, trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS, observationAuthors = []) {
     this.client = client;
     this.trustedAuthors = trustedAuthors;
+    this.observationAuthors = observationAuthors;
   }
   async load(prNumber) {
     const inventory = {
@@ -77806,9 +77824,14 @@ var ReviewThreadInventoryLoader = class {
       throw new Error(`thread ${thread.id} parent comment was missing`);
     }
     const trustedAuthor = this.isTrustedAuthor(parent.author);
+    const managedObservation = trustedAuthor || parent.viewerDidAuthor === true && parent.author?.__typename === "Bot" || isTrustedReviewThreadAuthor(
+      parent.author?.login,
+      this.observationAuthors,
+      parent.author?.__typename
+    );
     const marker = parseFindingMarker(parent.body ?? "");
     if (marker.kind === "conflict" /* Conflict */ || marker.kind === "malformed" /* Malformed */) {
-      if (trustedAuthor) {
+      if (managedObservation) {
         const reason = marker.kind === "conflict" /* Conflict */ ? "conflicting_finding_marker" : "malformed_finding_marker";
         inventory.failed = true;
         inventory.manualAttentionIssues.push({
@@ -77884,6 +77907,7 @@ var ReviewThreadInventoryLoader = class {
       viewerCanResolve: Boolean(thread.viewerCanResolve),
       hasHumanReply: humanReply,
       trustedAuthor,
+      managedObservation,
       ...trustedResolutionMarker ? { trustedResolutionMarker } : {},
       reasonCodes
     };
@@ -77969,6 +77993,35 @@ function isTrustedReviewThreadAuthor(login, trustedAuthors = DEFAULT_TRUSTED_REV
     )
   );
 }
+function trustedReviewThreadAuthorsFromEnv(env = process.env) {
+  const authors = new Set(
+    DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS.map((author) => author.toLowerCase())
+  );
+  if (shouldTrustGitHubActionsBot(env)) {
+    authors.add(GITHUB_ACTIONS_BOT_AUTHOR);
+  }
+  for (const key of TRUSTED_AUTHOR_ENV_KEYS) {
+    for (const raw of splitList(env[key])) {
+      const normalized = normalizeBotLogin(raw);
+      if (normalized) authors.add(normalized);
+    }
+  }
+  for (const key of APP_BOT_LOGIN_ENV_KEYS) {
+    const normalized = normalizeBotLogin(env[key]);
+    if (normalized) authors.add(normalized);
+  }
+  for (const key of APP_SLUG_ENV_KEYS) {
+    const normalized = normalizeAppSlugBotLogin(env[key]);
+    if (normalized) authors.add(normalized);
+  }
+  return Array.from(authors);
+}
+function shouldTrustGitHubActionsBot(env) {
+  if (env.REVIEWROUTER_COMMENT_TOKEN_MODE !== "app-oidc") {
+    return true;
+  }
+  return env.REVIEW_ROUTER_COMMENT_TOKEN_STATUS === "fallback";
+}
 function targetIdFor(threadId, parentCommentId, fingerprint) {
   return `rrt_${(0, import_crypto24.createHash)("sha256").update(`${threadId}
 ${parentCommentId}
@@ -78038,6 +78091,14 @@ function normalizeCommentTimestamp(value) {
 function stripLifecycleCommentBody(body) {
   return stripInlineFingerprintMarkers(body).replace(/<sub><!--\s*review-router-skip-help\s*-->[\s\S]*?<\/sub>/gi, "").replace(/<sub>\s*Models?:[\s\S]*?<\/sub>/gi, "").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, "").trim();
 }
+function splitList(value) {
+  return (value ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+}
+function normalizeAppSlugBotLogin(value) {
+  const slug = (value ?? "").trim();
+  if (!slug) return void 0;
+  return normalizeBotLogin(slug.endsWith("[bot]") ? slug : `${slug}[bot]`);
+}
 function normalizeBotLogin(value) {
   const login = (value ?? "").trim().toLowerCase();
   if (!login) return void 0;
@@ -78049,6 +78110,18 @@ function normalizeBotLogin(value) {
 function canonicalBotLogin(value, authorTypename) {
   const login = normalizeBotLogin(value);
   return login && authorTypename === "Bot" && !login.endsWith("[bot]") ? `${login}[bot]` : login;
+}
+function lifecycleObservationAuthors() {
+  const raw = process.env.REVIEW_ROUTER_LIFECYCLE_OBSERVATION_AUTHORS;
+  if (raw === void 0) return [];
+  if (raw.length > 8192)
+    throw new Error("lifecycle_observation_authors_invalid");
+  const value = JSON.parse(raw);
+  if (!Array.isArray(value) || value.length > 64 || value.some(
+    (author) => typeof author !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,99}(?:\[bot\])?$/.test(author)
+  ))
+    throw new Error("lifecycle_observation_authors_invalid");
+  return value;
 }
 
 // src/review-orchestration/infrastructure/github-review-state-adapter.ts
@@ -78138,7 +78211,11 @@ function requirePullRequestState(value) {
 var FreshGitHubLifecycleInventory = class {
   constructor(client, ledger) {
     this.ledger = ledger;
-    this.loader = new ReviewThreadInventoryLoader(client);
+    this.loader = new ReviewThreadInventoryLoader(
+      client,
+      trustedReviewThreadAuthorsFromEnv(),
+      lifecycleObservationAuthors()
+    );
   }
   loader;
   async loadCurrent(query) {
@@ -78176,8 +78253,10 @@ function mapFreshInventory(raw, expectedHeadSha, ledger) {
   }
   const rawTargets = [
     ...raw.candidates.map((target) => ({ target, manual: false })),
-    // The server excludes untrusted parents from managed lifecycle observations.
-    ...raw.manualAttention.filter((record) => record.target.trustedAuthor).map((record) => ({
+    // Include server-authorized observation-only parents without mutation trust.
+    ...raw.manualAttention.filter(
+      (record) => record.target.trustedAuthor || record.target.managedObservation
+    ).map((record) => ({
       target: record.target,
       manual: true
     }))

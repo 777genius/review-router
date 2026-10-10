@@ -7,6 +7,8 @@ import {
 } from '../../github/ledger';
 import {
   ReviewThreadInventoryLoader,
+  lifecycleObservationAuthors,
+  trustedReviewThreadAuthorsFromEnv,
   type ReviewThreadInventory,
 } from '../../github/review-thread-inventory';
 import type { LifecycleTarget } from '../../types';
@@ -146,7 +148,11 @@ export class FreshGitHubLifecycleInventory implements CurrentLifecycleInventoryP
     client: GitHubClient,
     private readonly ledger: ReviewLedger
   ) {
-    this.loader = new ReviewThreadInventoryLoader(client);
+    this.loader = new ReviewThreadInventoryLoader(
+      client,
+      trustedReviewThreadAuthorsFromEnv(),
+      lifecycleObservationAuthors()
+    );
   }
 
   async loadCurrent(query: {
@@ -199,9 +205,12 @@ function mapFreshInventory(
 
   const rawTargets = [
     ...raw.candidates.map((target) => ({ target, manual: false })),
-    // The server excludes untrusted parents from managed lifecycle observations.
+    // Include server-authorized observation-only parents without mutation trust.
     ...raw.manualAttention
-      .filter((record) => record.target.trustedAuthor)
+      .filter(
+        (record) =>
+          record.target.trustedAuthor || record.target.managedObservation
+      )
       .map((record) => ({
         target: record.target,
         manual: true,

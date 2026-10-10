@@ -59,6 +59,7 @@ export interface ReviewThreadMarkerIssue {
 
 export interface ReviewThreadLifecycleTarget extends LifecycleTarget {
   readonly threadStateHash: string;
+  readonly managedObservation?: boolean;
 }
 
 export interface ReviewThreadLifecycleRecord {
@@ -74,6 +75,7 @@ interface GraphQLPageInfo {
 interface GraphQLComment {
   id: string;
   databaseId?: number | null;
+  viewerDidAuthor?: boolean;
   author?: { login?: string | null; __typename?: string | null } | null;
   body?: string | null;
   createdAt?: string | null;
@@ -133,6 +135,7 @@ query ReviewRouterThreadInventory(
             nodes {
               id
               databaseId
+              viewerDidAuthor
               author { login __typename }
               body
               createdAt
@@ -159,6 +162,7 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
         nodes {
           id
           databaseId
+          viewerDidAuthor
           author { login __typename }
           body
           createdAt
@@ -177,7 +181,8 @@ query ReviewRouterThreadComments($threadId: ID!, $commentsAfter: String) {
 export class ReviewThreadInventoryLoader {
   constructor(
     private readonly client: GitHubClient,
-    private readonly trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS
+    private readonly trustedAuthors = DEFAULT_TRUSTED_REVIEW_THREAD_AUTHORS,
+    private readonly observationAuthors: readonly string[] = []
   ) {}
 
   async load(prNumber: number): Promise<ReviewThreadInventory> {
@@ -286,12 +291,22 @@ export class ReviewThreadInventoryLoader {
       throw new Error(`thread ${thread.id} parent comment was missing`);
     }
     const trustedAuthor = this.isTrustedAuthor(parent.author);
+    // Observation authority does not grant lifecycle mutation authority.
+    const managedObservation =
+      trustedAuthor ||
+      (parent.viewerDidAuthor === true &&
+        parent.author?.__typename === 'Bot') ||
+      isTrustedReviewThreadAuthor(
+        parent.author?.login,
+        this.observationAuthors,
+        parent.author?.__typename
+      );
     const marker = parseFindingMarker(parent.body ?? '');
     if (
       marker.kind === FindingMarkerParseKind.Conflict ||
       marker.kind === FindingMarkerParseKind.Malformed
     ) {
-      if (trustedAuthor) {
+      if (managedObservation) {
         const reason =
           marker.kind === FindingMarkerParseKind.Conflict
             ? 'conflicting_finding_marker'
@@ -377,6 +392,7 @@ export class ReviewThreadInventoryLoader {
       viewerCanResolve: Boolean(thread.viewerCanResolve),
       hasHumanReply: humanReply,
       trustedAuthor,
+      managedObservation,
       ...(trustedResolutionMarker ? { trustedResolutionMarker } : {}),
       reasonCodes,
     };
@@ -670,4 +686,23 @@ function canonicalBotLogin(
   return login && authorTypename === 'Bot' && !login.endsWith('[bot]')
     ? `${login}[bot]`
     : login;
+}
+
+export function lifecycleObservationAuthors(): readonly string[] {
+  const raw = process.env.REVIEW_ROUTER_LIFECYCLE_OBSERVATION_AUTHORS;
+  if (raw === undefined) return [];
+  if (raw.length > 8192)
+    throw new Error('lifecycle_observation_authors_invalid');
+  const value: unknown = JSON.parse(raw);
+  if (
+    !Array.isArray(value) ||
+    value.length > 64 ||
+    value.some(
+      (author) =>
+        typeof author !== 'string' ||
+        !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,99}(?:\[bot\])?$/.test(author)
+    )
+  )
+    throw new Error('lifecycle_observation_authors_invalid');
+  return value;
 }

@@ -294,7 +294,8 @@ export class ReviewThreadInventoryLoader {
     // Observation authority does not grant lifecycle mutation authority.
     const managedObservation =
       trustedAuthor ||
-      parent.viewerDidAuthor === true ||
+      (parent.viewerDidAuthor === true &&
+        parent.author?.__typename === 'Bot') ||
       isTrustedReviewThreadAuthor(
         parent.author?.login,
         this.observationAuthors,
@@ -685,4 +686,23 @@ function canonicalBotLogin(
   return login && authorTypename === 'Bot' && !login.endsWith('[bot]')
     ? `${login}[bot]`
     : login;
+}
+
+export function lifecycleObservationAuthors(): readonly string[] {
+  const raw = process.env.REVIEW_ROUTER_LIFECYCLE_OBSERVATION_AUTHORS;
+  if (raw === undefined) return [];
+  if (raw.length > 8192)
+    throw new Error('lifecycle_observation_authors_invalid');
+  const value: unknown = JSON.parse(raw);
+  if (
+    !Array.isArray(value) ||
+    value.length > 64 ||
+    value.some(
+      (author) =>
+        typeof author !== 'string' ||
+        !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,99}(?:\[bot\])?$/.test(author)
+    )
+  )
+    throw new Error('lifecycle_observation_authors_invalid');
+  return value;
 }

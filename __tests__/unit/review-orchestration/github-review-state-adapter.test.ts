@@ -1,5 +1,10 @@
 import { applyAdmittedRuntimeConfig } from '../../../src/control-plane/runtime-config';
 import type { GitHubClient } from '../../../src/github/client';
+import {
+  ReviewThreadInventoryLoader,
+  lifecycleObservationAuthors,
+  trustedReviewThreadAuthorsFromEnv,
+} from '../../../src/github/review-thread-inventory';
 import { ReviewLedger } from '../../../src/github/ledger';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
@@ -287,7 +292,12 @@ describe('managed lifecycle observation trust', () => {
     });
     try {
       const headSha = 'a'.repeat(40);
-      const thread = (id: string, login: string, viewerDidAuthor: boolean) => ({
+      const thread = (
+        id: string,
+        login: string,
+        viewerDidAuthor: boolean,
+        actorType = 'Bot'
+      ) => ({
         id,
         isResolved: false,
         viewerCanResolve: true,
@@ -298,7 +308,7 @@ describe('managed lifecycle observation trust', () => {
           nodes: [
             {
               id: `${id}_parent`,
-              author: { login, __typename: 'Bot' },
+              author: { login, __typename: actorType },
               viewerDidAuthor,
               body: '<!-- review-router-finding:aaaaaaaaaaaaaaaaaaaaaaaa --> Finding',
               createdAt: '2026-08-05T09:00:00.000Z',
@@ -319,6 +329,7 @@ describe('managed lifecycle observation trust', () => {
                 thread('own', 'reviewrouter-local-777genius', true),
                 thread('historical', 'github-actions', false),
                 thread('outsider', 'unrelated-bot', false),
+                thread('human-viewer', 'human-reviewer', true, 'User'),
               ],
             },
           },
@@ -360,6 +371,32 @@ describe('managed lifecycle observation trust', () => {
           )
       ).toBe(true);
       expect(graphql.mock.calls[0][0]).toContain('viewerDidAuthor');
+      const malformed = thread('malformed', 'github-actions', false);
+      malformed.comments.nodes[0].body =
+        '<!-- review-router-finding:invalid -->';
+      graphql.mockResolvedValueOnce({
+        repository: {
+          pullRequest: {
+            headRefOid: headSha,
+            reviewThreads: {
+              pageInfo: { hasNextPage: false },
+              nodes: [malformed],
+            },
+          },
+        },
+      });
+      const mainInventory = await new ReviewThreadInventoryLoader(
+        client,
+        trustedReviewThreadAuthorsFromEnv(),
+        lifecycleObservationAuthors()
+      ).load(420);
+      expect(mainInventory.failed).toBe(true);
+      expect(mainInventory.manualAttentionIssues).toEqual([
+        expect.objectContaining({
+          threadId: 'malformed',
+          reason: 'malformed_finding_marker',
+        }),
+      ]);
     } finally {
       keys.forEach((key, index) => {
         if (saved[index] === undefined) delete process.env[key];

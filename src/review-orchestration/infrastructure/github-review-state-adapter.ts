@@ -7,6 +7,7 @@ import {
 } from '../../github/ledger';
 import {
   ReviewThreadInventoryLoader,
+  lifecycleObservationAuthors,
   trustedReviewThreadAuthorsFromEnv,
   type ReviewThreadInventory,
 } from '../../github/review-thread-inventory';
@@ -422,23 +423,4 @@ function compareCodeUnits(left: string, right: string): number {
   if (left < right) return -1;
   if (left > right) return 1;
   return 0;
-}
-
-function lifecycleObservationAuthors(): readonly string[] {
-  const raw = process.env.REVIEW_ROUTER_LIFECYCLE_OBSERVATION_AUTHORS;
-  if (raw === undefined) return [];
-  if (raw.length > 8192)
-    throw new Error('lifecycle_observation_authors_invalid');
-  const value: unknown = JSON.parse(raw);
-  if (
-    !Array.isArray(value) ||
-    value.length > 64 ||
-    value.some(
-      (author) =>
-        typeof author !== 'string' ||
-        !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,99}(?:\[bot\])?$/.test(author)
-    )
-  )
-    throw new Error('lifecycle_observation_authors_invalid');
-  return value;
 }

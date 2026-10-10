@@ -5,13 +5,18 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { performance } from 'node:perf_hooks';
 import { runAccountGatewayRuntime } from './account-gateway-runtime';
+import { CodexOAuthV2ReviewOutcome, CodexOAuthV2TerminalReason, CodexOAuthV2CancellationReason } from './runtime';
+import { ReviewActionV2OperationId, ReviewActionV2ProtocolErrorCode } from '../control-plane/generated/review-action-v2/review-action-v2';
 
 type Inputs = Parameters<typeof runAccountGatewayRuntime>[0];
 type Ports = Parameters<typeof runAccountGatewayRuntime>[1];
 type Gateway = NonNullable<Parameters<Ports['review']['run']>[0]['accountGateway']>;
 type Authorization = ReturnType<Gateway['controlPlane']['currentAuthorization']>;
 type Observation = Readonly<{
-  stage: 'mint' | 'after-expiry' | 'review-complete' | 'deadline-denied' | 'failed';
+  stage: 'mint' | 'after-expiry' | 'review-complete' | 'deadline-denied' | 'failed' | 'review-returned';
+  outcome?: string;
+  terminalReason?: string;
+  blockingFailure?: string;
   reason?: string;
   observedAt: string;
   elapsedMs: number;
@@ -22,6 +27,36 @@ type Observation = Readonly<{
   authorizationId?: string;
   httpStatus?: number;
 }>;
+
+function projectLongReviewResult(result: Awaited<ReturnType<Ports['review']['run']>>) {
+  const outcome = Object.values(CodexOAuthV2ReviewOutcome).includes(result.outcome)
+    ? result.outcome : 'unknown';
+  const reason = 'reason' in result ? result.reason : undefined;
+  const terminalReason = [...Object.values(CodexOAuthV2TerminalReason),
+    ...Object.values(CodexOAuthV2CancellationReason)].some(value => value === reason)
+    ? String(reason) : 'unknown';
+  const code = 'blockingFailure' in result ? result.blockingFailure : undefined;
+  const knownCodes = new Set([
+    'review_orchestration_execution_authorization_window_insufficient',
+    'review_action_v2_authorization_renew_denied', 'review_action_v2_authorization_renew_expired',
+    'review_action_v2_authorization_renew_scope_mismatch', 'review_action_v2_authorization_renew_epoch_mismatch',
+    'review_action_v2_authorization_renew_expiry_invalid', 'review_orchestration_execution_deadline_reached',
+    'review_action_v2_revision_guard_unavailable', 'review_action_v2_revision_guard_failed',
+    'codex_oauth_oidc_invalid_response', 'codex_oauth_missing_ACTIONS_ID_TOKEN_REQUEST_TOKEN',
+    'codex_oauth_missing_ACTIONS_ID_TOKEN_REQUEST_URL', 'required_work_exhausted',
+    'required_execution_deadline_reached', 'required_review_coverage_incomplete',
+  ]);
+  let blockingFailure = typeof code === 'string' && knownCodes.has(code) ? code : 'unknown';
+  // Keep only generated operation/category enums; discard arbitrary issue suffixes.
+  if (typeof code === 'string') {
+    const [prefix, operation, category] = code.split(':');
+    if (prefix === 'review_action_v2' &&
+        Object.values(ReviewActionV2OperationId).some(value => value === operation) &&
+        Object.values(ReviewActionV2ProtocolErrorCode).some(value => value === category))
+      blockingFailure = `${prefix}:${operation}:${category}`;
+  }
+  return { outcome, terminalReason, blockingFailure };
+}
 
 // The caller supplies a public-only receipt writer, never arbitrary token logs.
 export async function runLongOidcTestRuntime(
@@ -145,6 +180,13 @@ export async function runLongOidcTestRuntime(
       } finally {
         // Normal runtime runs in its dedicated job process; restore caller config.
         process.env[deadlineKey] = configured;
+      }
+      try {
+        record({ stage: 'review-returned', observedAt: new Date().toISOString(),
+          elapsedMs: Math.round(performance.now() - started),
+          mintExpiresAt: new Date(mintExpiresAt).toISOString(), ...projectLongReviewResult(result) });
+      } catch {
+        // A receipt writer cannot change the returned normal review outcome.
       }
       if (result.outcome !== 'completed') throw new Error('long_oidc_review_not_completed');
       assertOriginal();

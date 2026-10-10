@@ -100917,6 +100917,36 @@ function looksLikePlaintextAuthJson(value) {
 
 // src/codex-oauth/runtime.ts
 var path17 = __toESM(require("path"));
+var CodexOAuthV2ReviewOutcome = /* @__PURE__ */ ((CodexOAuthV2ReviewOutcome2) => {
+  CodexOAuthV2ReviewOutcome2["Completed"] = "completed";
+  CodexOAuthV2ReviewOutcome2["PartialCompleted"] = "partial_completed";
+  CodexOAuthV2ReviewOutcome2["Superseded"] = "superseded";
+  CodexOAuthV2ReviewOutcome2["Cancelled"] = "cancelled";
+  CodexOAuthV2ReviewOutcome2["PublicationNotApplied"] = "publication_not_applied";
+  CodexOAuthV2ReviewOutcome2["PublicationStale"] = "publication_stale";
+  CodexOAuthV2ReviewOutcome2["PublicationUnavailable"] = "publication_unavailable";
+  CodexOAuthV2ReviewOutcome2["Failed"] = "failed";
+  return CodexOAuthV2ReviewOutcome2;
+})(CodexOAuthV2ReviewOutcome || {});
+var CodexOAuthV2TerminalReason = /* @__PURE__ */ ((CodexOAuthV2TerminalReason2) => {
+  CodexOAuthV2TerminalReason2["RequiredReviewCoverageIncomplete"] = "required_review_coverage_incomplete";
+  CodexOAuthV2TerminalReason2["RequiredProviderLaneBusy"] = "required_provider_lane_busy";
+  CodexOAuthV2TerminalReason2["RequiredWorkExhausted"] = "required_work_exhausted";
+  CodexOAuthV2TerminalReason2["RequiredInvestigationDeferred"] = "required_investigation_deferred";
+  CodexOAuthV2TerminalReason2["ProviderCapacityUnavailable"] = "provider_capacity_unavailable";
+  CodexOAuthV2TerminalReason2["RevisionGuardUnavailable"] = "revision_guard_unavailable";
+  CodexOAuthV2TerminalReason2["RevisionGuardFailed"] = "revision_guard_failed";
+  CodexOAuthV2TerminalReason2["PublicationConflict"] = "publication_conflict";
+  CodexOAuthV2TerminalReason2["PublicationStale"] = "publication_stale";
+  CodexOAuthV2TerminalReason2["PublicationFactsUnavailable"] = "publication_facts_unavailable";
+  CodexOAuthV2TerminalReason2["ExecutionFailed"] = "execution_failed";
+  CodexOAuthV2TerminalReason2["Unknown"] = "unknown";
+  return CodexOAuthV2TerminalReason2;
+})(CodexOAuthV2TerminalReason || {});
+var CodexOAuthV2CancellationReason = /* @__PURE__ */ ((CodexOAuthV2CancellationReason2) => {
+  CodexOAuthV2CancellationReason2["PullRequestClosed"] = "pull_request_closed";
+  return CodexOAuthV2CancellationReason2;
+})(CodexOAuthV2CancellationReason || {});
 async function runCodexOAuthRotatingRuntime(input, ports) {
   let refreshed;
   let preparedCodexCli;
@@ -101370,6 +101400,39 @@ function validateAccountGatewayCheckout(result2, repository, headSha) {
 }
 
 // src/codex-oauth/long-oidc-runtime.ts
+function projectLongReviewResult(result2) {
+  const outcome = Object.values(CodexOAuthV2ReviewOutcome).includes(result2.outcome) ? result2.outcome : "unknown";
+  const reason = "reason" in result2 ? result2.reason : void 0;
+  const terminalReason = [
+    ...Object.values(CodexOAuthV2TerminalReason),
+    ...Object.values(CodexOAuthV2CancellationReason)
+  ].some((value) => value === reason) ? String(reason) : "unknown";
+  const code = "blockingFailure" in result2 ? result2.blockingFailure : void 0;
+  const knownCodes = /* @__PURE__ */ new Set([
+    "review_orchestration_execution_authorization_window_insufficient",
+    "review_action_v2_authorization_renew_denied",
+    "review_action_v2_authorization_renew_expired",
+    "review_action_v2_authorization_renew_scope_mismatch",
+    "review_action_v2_authorization_renew_epoch_mismatch",
+    "review_action_v2_authorization_renew_expiry_invalid",
+    "review_orchestration_execution_deadline_reached",
+    "review_action_v2_revision_guard_unavailable",
+    "review_action_v2_revision_guard_failed",
+    "codex_oauth_oidc_invalid_response",
+    "codex_oauth_missing_ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+    "codex_oauth_missing_ACTIONS_ID_TOKEN_REQUEST_URL",
+    "required_work_exhausted",
+    "required_execution_deadline_reached",
+    "required_review_coverage_incomplete"
+  ]);
+  let blockingFailure = typeof code === "string" && knownCodes.has(code) ? code : "unknown";
+  if (typeof code === "string") {
+    const [prefix, operation, category] = code.split(":");
+    if (prefix === "review_action_v2" && Object.values(ReviewActionV2OperationId).some((value) => value === operation) && Object.values(ReviewActionV2ProtocolErrorCode).some((value) => value === category))
+      blockingFailure = `${prefix}:${operation}:${category}`;
+  }
+  return { outcome, terminalReason, blockingFailure };
+}
 async function runLongOidcTestRuntime(inputs, ports, record, expected) {
   if (!process.env.GITHUB_ACTIONS || process.env.GITHUB_EVENT_NAME !== "pull_request" || !expected.repository || inputs.repository !== expected.repository || !expected.model)
     throw new Error("long_oidc_disposable_github_pr_required");
@@ -101484,6 +101547,16 @@ async function runLongOidcTestRuntime(inputs, ports, record, expected) {
         result2 = await ports.review.run(input);
       } finally {
         process.env[deadlineKey] = configured;
+      }
+      try {
+        record({
+          stage: "review-returned",
+          observedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          elapsedMs: Math.round(import_node_perf_hooks.performance.now() - started),
+          mintExpiresAt: new Date(mintExpiresAt).toISOString(),
+          ...projectLongReviewResult(result2)
+        });
+      } catch {
       }
       if (result2.outcome !== "completed") throw new Error("long_oidc_review_not_completed");
       assertOriginal();

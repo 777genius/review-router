@@ -28830,7 +28830,7 @@ async function withRetry(fn, options) {
     const maxAttempts = options.retries + 1;
     const minTimeout = options.minTimeout ?? 500;
     const factor = options.factor ?? 2;
-    let delay3 = minTimeout;
+    let delay4 = minTimeout;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         return await fn();
@@ -28843,8 +28843,8 @@ async function withRetry(fn, options) {
           `Retryable error: attempt ${attempt} of ${maxAttempts}`,
           err.message
         );
-        await new Promise((resolve5) => setTimeout(resolve5, delay3));
-        delay3 = Math.min(delay3 * factor, options.maxTimeout ?? 4e3);
+        await new Promise((resolve5) => setTimeout(resolve5, delay4));
+        delay4 = Math.min(delay4 * factor, options.maxTimeout ?? 4e3);
       }
     }
   }
@@ -35188,13 +35188,13 @@ var GitHubClient = class {
    * Throttle requests when approaching rate limit
    */
   async throttleIfNeeded() {
-    const delay3 = this.calculateBackoffDelay();
-    if (delay3 > 0) {
+    const delay4 = this.calculateBackoffDelay();
+    if (delay4 > 0) {
       const status = this.rateLimitTracker.getStatus();
       debug(
-        `Throttling GitHub API request (${delay3}ms delay, ${status?.remaining} requests remaining)`
+        `Throttling GitHub API request (${delay4}ms delay, ${status?.remaining} requests remaining)`
       );
-      await new Promise((resolve5) => setTimeout(resolve5, delay3));
+      await new Promise((resolve5) => setTimeout(resolve5, delay4));
     }
   }
   /**
@@ -52996,8 +52996,12 @@ function pluralize(word, count) {
   return count === 1 ? word : `${word}s`;
 }
 
-// src/codex-oauth/action.ts
-var fs23 = __toESM(require("fs"));
+// src/codex-oauth/long-oidc-test-entry.ts
+var import_node_fs = require("node:fs");
+
+// src/codex-oauth/long-oidc-runtime.ts
+var import_promises2 = require("node:timers/promises");
+var import_node_perf_hooks = require("node:perf_hooks");
 
 // src/codex-oauth/account-gateway-runtime.ts
 var import_child_process11 = require("child_process");
@@ -92911,11 +92915,11 @@ var RunInvestigationTurn = class {
       "review_agent_unclassified_failure"
     );
     const reason = abortReason(failure.failureClass);
-    const delay3 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
+    const delay4 = failure.retryAfterMs === null && !requiresBoundedParking(failure.failureClass) ? null : Math.max(
       failure.retryAfterMs ?? input.minimumCapacityParkMs,
       input.minimumCapacityParkMs
     );
-    const nextEligibleAt = delay3 === null ? null : new Date(this.dependencies.now().getTime() + delay3).toISOString();
+    const nextEligibleAt = delay4 === null ? null : new Date(this.dependencies.now().getTime() + delay4).toISOString();
     return this.abort(
       input,
       reason,
@@ -101360,7 +101364,147 @@ function validateAccountGatewayCheckout(result2, repository, headSha) {
   });
 }
 
+// src/codex-oauth/long-oidc-runtime.ts
+async function runLongOidcTestRuntime(inputs, ports, record, expected) {
+  if (!process.env.GITHUB_ACTIONS || process.env.GITHUB_EVENT_NAME !== "pull_request" || !expected.repository || inputs.repository !== expected.repository || !expected.model)
+    throw new Error("long_oidc_disposable_github_pr_required");
+  const started = import_node_perf_hooks.performance.now();
+  const network = ports.fetchImpl ?? fetch;
+  let mintExpiresAt = 0;
+  let authorizationCount = 0;
+  let authorityFingerprint;
+  let authorizationId;
+  let deadline = 0;
+  let executionDeadline = 0;
+  let outerBearerExpiresAt = 0;
+  let currentAuthorization;
+  let caseCompleted = false;
+  const emit = (stage, httpStatus) => {
+    record({
+      stage,
+      observedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      elapsedMs: Math.round(import_node_perf_hooks.performance.now() - started),
+      mintExpiresAt: new Date(mintExpiresAt).toISOString(),
+      ...deadline ? { deadline: new Date(deadline).toISOString() } : {},
+      ...executionDeadline ? { executionDeadline: new Date(executionDeadline).toISOString() } : {},
+      ...outerBearerExpiresAt ? { outerBearerExpiresAt: new Date(outerBearerExpiresAt).toISOString() } : {},
+      ...authorizationId ? { authorizationId } : {},
+      ...httpStatus === void 0 ? {} : { httpStatus }
+    });
+  };
+  const fingerprint = (a2) => JSON.stringify({
+    id: a2.authorizationId,
+    epoch: a2.mutationEpoch,
+    release: a2.producerReleaseId,
+    facts: a2.facts,
+    limits: a2.limits
+  });
+  const assertOriginal = () => {
+    const a2 = currentAuthorization?.();
+    outerBearerExpiresAt = a2 ? Date.parse(a2.expiresAt) : NaN;
+    if (!a2 || !Number.isFinite(outerBearerExpiresAt) || fingerprint(a2) !== authorityFingerprint || outerBearerExpiresAt > deadline)
+      throw new Error("long_oidc_execution_authority_changed");
+    return a2;
+  };
+  const waitUntil = async (instant, signal) => {
+    while (Date.now() < instant) {
+      await (0, import_promises2.setTimeout)(Math.min(6e4, instant - Date.now()), void 0, { signal });
+    }
+  };
+  const observedFetch = async (request, init) => {
+    const url = new URL(request instanceof Request ? request.url : String(request));
+    if (url.origin === new URL(inputs.apiUrl).origin && init?.body) {
+      if (typeof init.body !== "string") throw new Error("long_oidc_body_unobservable");
+      const body = JSON.parse(init.body);
+      if (body && typeof body === "object" && "oidcToken" in body && !("authorizationId" in body)) {
+        if (++authorizationCount !== 1 || typeof body.oidcToken !== "string")
+          throw new Error("long_oidc_reauthorization_forbidden");
+        const segments = body.oidcToken.split(".");
+        if (segments.length !== 3) throw new Error("long_oidc_jwt_invalid");
+        const claims = JSON.parse(Buffer.from(segments[1], "base64url").toString());
+        if (!claims || typeof claims !== "object" || !("iss" in claims) || claims.iss !== "https://token.actions.githubusercontent.com" || !("exp" in claims) || typeof claims.exp !== "number" || !Number.isSafeInteger(claims.exp) || claims.exp * 1e3 <= Date.now())
+          throw new Error("long_oidc_github_mint_required");
+        mintExpiresAt = claims.exp * 1e3;
+      }
+    }
+    return network(request, init);
+  };
+  await runAccountGatewayRuntime(inputs, {
+    ...ports,
+    fetchImpl: observedFetch,
+    review: { run: async (input) => {
+      const gateway = input.accountGateway;
+      if (!gateway || !mintExpiresAt || authorizationCount !== 1)
+        throw new Error("long_oidc_verified_admission_missing");
+      const authorization = gateway.controlPlane.currentAuthorization();
+      authorityFingerprint = fingerprint(authorization);
+      authorizationId = authorization.authorizationId;
+      deadline = Date.parse(authorization.expiresAt);
+      outerBearerExpiresAt = deadline;
+      currentAuthorization = () => gateway.controlPlane.currentAuthorization();
+      if (!Number.isFinite(deadline) || deadline <= mintExpiresAt + 12e4 || deadline > Date.now() + 9e5)
+        throw new Error("long_oidc_approved_deadline_unsuitable");
+      emit("mint");
+      await waitUntil(mintExpiresAt + 1500, gateway.signal);
+      assertOriginal();
+      if (Date.now() >= deadline - 6e4) throw new Error("long_oidc_run_window_lost");
+      const deadlineKey = "REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS";
+      const configured = process.env[deadlineKey];
+      const configuredDeadline = Number(configured);
+      if (!configured || !Number.isSafeInteger(configuredDeadline) || configuredDeadline <= Date.now())
+        throw new Error("long_oidc_normal_execution_deadline_missing");
+      executionDeadline = Math.min(configuredDeadline, deadline - 3e5 - 15e3);
+      if (executionDeadline - Date.now() < 15e4)
+        throw new Error("long_oidc_execution_window_insufficient");
+      emit("after-expiry");
+      process.env[deadlineKey] = String(executionDeadline);
+      let result2;
+      try {
+        result2 = await ports.review.run(input);
+      } finally {
+        process.env[deadlineKey] = configured;
+      }
+      if (result2.outcome !== "completed") throw new Error("long_oidc_review_not_completed");
+      assertOriginal();
+      if (Date.now() >= deadline) throw new Error("long_oidc_review_missed_deadline");
+      emit("review-complete");
+      return result2;
+    } },
+    terminalReview: async (review, signal) => {
+      await ports.terminalReview(review, signal);
+      const current = assertOriginal();
+      await waitUntil(deadline + 1500, signal);
+      const response = await network(new URL("/api/action/v2/account-gateway/responses", inputs.apiUrl), {
+        method: "POST",
+        signal: AbortSignal.any([signal, AbortSignal.timeout(5e3)]),
+        headers: { authorization: `Bearer ${current.authorizationToken}`, "content-type": "application/json" },
+        body: JSON.stringify({ model: expected.model, input: "Must not dispatch after deadline." })
+      });
+      await response.body?.cancel();
+      if (response.status !== 401) throw new Error("long_oidc_deadline_did_not_deny");
+      emit("deadline-denied", response.status);
+      caseCompleted = true;
+    }
+  });
+  if (!caseCompleted) throw new Error("long_oidc_case_incomplete");
+}
+
+// src/codex-oauth/long-oidc-test-entry.ts
+async function runLongOidcTestEntry(inputs, ports) {
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (!summary) throw new Error("long_oidc_github_summary_required");
+  await runLongOidcTestRuntime(inputs, ports, (observation) => {
+    (0, import_node_fs.appendFileSync)(summary, `
+Long OIDC TEST: ${JSON.stringify(observation)}
+`, "utf8");
+  }, {
+    repository: "777genius/rr-selfhost-direct-v2-e2e-20260730t120036z",
+    model: "mimo-v2.6-pro"
+  });
+}
+
 // src/codex-oauth/action.ts
+var fs23 = __toESM(require("fs"));
 var path30 = __toESM(require("path"));
 
 // src/codex-oauth/control-plane.ts
@@ -101729,11 +101873,11 @@ function assertSafeOwnerRepoPart(value, label) {
 }
 
 // src/codex-oauth/terminal-outcome-publication.ts
-var import_promises2 = require("node:timers/promises");
+var import_promises3 = require("node:timers/promises");
 function createPublicationGitHubClient(token, options = {}) {
   const client = new GitHubClient(token, {
     sleep: async (ms) => {
-      await (0, import_promises2.setTimeout)(ms, void 0, { signal: options.signal });
+      await (0, import_promises3.setTimeout)(ms, void 0, { signal: options.signal });
     }
   });
   if (options.signal || options.timeoutMs) {
@@ -102140,7 +102284,7 @@ var import_crypto42 = require("crypto");
 var import_child_process20 = require("child_process");
 var path29 = __toESM(require("path"));
 var import_util14 = require("util");
-var import_promises10 = require("node:timers/promises");
+var import_promises11 = require("node:timers/promises");
 
 // src/review-investigation/fixtures/review-investigation-capability-v1.golden.json
 var review_investigation_capability_v1_golden_default = {
@@ -103922,7 +104066,7 @@ function compareCodeUnits4(left, right) {
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
 var import_child_process14 = require("child_process");
 var import_crypto33 = require("crypto");
-var import_promises5 = require("fs/promises");
+var import_promises6 = require("fs/promises");
 var os10 = __toESM(require("os"));
 var path23 = __toESM(require("path"));
 var import_util9 = require("util");
@@ -104282,7 +104426,7 @@ function gitOptions(root, encoding) {
 
 // src/context-gateway/context-gateway-v4-replay-material.ts
 var import_crypto31 = require("crypto");
-var import_promises3 = require("fs/promises");
+var import_promises4 = require("fs/promises");
 var import_path3 = __toESM(require("path"));
 var MAX_ENTRIES = 2e3;
 var MAX_STATE_BYTES = 2 * 1024 * 1024;
@@ -104297,12 +104441,12 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
   entries = [];
   mutationTail = Promise.resolve();
   async initialize() {
-    await (0, import_promises3.mkdir)(import_path3.default.dirname(this.config.replayMaterialPath), {
+    await (0, import_promises4.mkdir)(import_path3.default.dirname(this.config.replayMaterialPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises3.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises4.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -104316,7 +104460,7 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
     if (this.entries.length > 0) {
       throw new Error("context_gateway_v4_replay_already_active");
     }
-    const encrypted = await (0, import_promises3.readFile)(this.config.replayMaterialPath, "utf8");
+    const encrypted = await (0, import_promises4.readFile)(this.config.replayMaterialPath, "utf8");
     const raw = decryptContextGatewayV4ReplayMaterial({
       encryptedCanonicalJson: encrypted,
       secret: this.config.secret,
@@ -104533,15 +104677,15 @@ function isRecord6(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 async function atomicPrivateWrite(target, content) {
-  await (0, import_promises3.mkdir)(import_path3.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises4.mkdir)(import_path3.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto31.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises3.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises3.rename)(temporary, target);
+  await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises4.rename)(temporary, target);
 }
 
 // src/context-gateway/context-gateway-v4-recorder.ts
 var import_crypto32 = require("crypto");
-var import_promises4 = require("fs/promises");
+var import_promises5 = require("fs/promises");
 var import_path4 = __toESM(require("path"));
 var MAX_EVENTS = 2e3;
 var CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
@@ -104562,12 +104706,12 @@ var ContextGatewayV4Recorder = class {
   terminalFailureClass = null;
   now;
   async initialize() {
-    await (0, import_promises4.mkdir)(import_path4.default.dirname(this.config.transcriptPath), {
+    await (0, import_promises5.mkdir)(import_path4.default.dirname(this.config.transcriptPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises4.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises5.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -104581,7 +104725,7 @@ var ContextGatewayV4Recorder = class {
     if (this.events.length > 0) {
       throw new Error("context_gateway_v4_recorder_already_active");
     }
-    const raw = await (0, import_promises4.readFile)(this.config.transcriptPath, "utf8");
+    const raw = await (0, import_promises5.readFile)(this.config.transcriptPath, "utf8");
     if (raw.length < 2 || Buffer.byteLength(raw, "utf8") > CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES) {
       throw new Error("context_gateway_v4_recorder_state_size_invalid");
     }
@@ -104771,10 +104915,10 @@ function sanitizeReason(value) {
   return value;
 }
 async function atomicPrivateWrite2(target, content) {
-  await (0, import_promises4.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises5.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto32.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises4.rename)(temporary, target);
+  await (0, import_promises5.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises5.rename)(temporary, target);
 }
 
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
@@ -104853,7 +104997,7 @@ var ContextGatewayInvocationSessionFactory = class {
     const { checkoutTreeOid } = revisionTreeOids;
     const gatewayBinaryHash = sha25613(gatewayBundleSnapshot);
     const gatewayPolicyVersion = this.policyVersion();
-    const directory = await (0, import_promises5.mkdtemp)(
+    const directory = await (0, import_promises6.mkdtemp)(
       path23.join(os10.tmpdir(), "reviewrouter-context-gateway-")
     );
     const gatewayBundlePath = path23.join(directory, "context-gateway.cjs");
@@ -104861,12 +105005,12 @@ var ContextGatewayInvocationSessionFactory = class {
     const replayMaterialPath = path23.join(directory, "replay-material.json");
     let requiredWitness = null;
     try {
-      await (0, import_promises5.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
+      await (0, import_promises6.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
         flag: "wx",
         mode: 448
       });
     } catch (error2) {
-      await (0, import_promises5.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(directory, { recursive: true, force: true });
       throw error2;
     }
     const confinementEvidenceHash = sha25613(
@@ -104903,7 +105047,7 @@ var ContextGatewayInvocationSessionFactory = class {
         }
       });
     } catch (error2) {
-      await (0, import_promises5.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(directory, { recursive: true, force: true });
       throw error2;
     }
     const secret = Buffer.from(serverSession.gatewaySessionSecret, "base64url");
@@ -104990,7 +105134,7 @@ var ContextGatewayInvocationSessionFactory = class {
     return this.options.policyVersion ?? CONTEXT_GATEWAY_POLICY_VERSION;
   }
   async gatewayBundleSnapshot() {
-    this.gatewayBundleSnapshotPromise ??= (0, import_promises5.readFile)(
+    this.gatewayBundleSnapshotPromise ??= (0, import_promises6.readFile)(
       this.options.gatewayBundlePath
     );
     return Buffer.from(await this.gatewayBundleSnapshotPromise);
@@ -105114,7 +105258,7 @@ var ContextGatewayInvocationSession = class {
       );
     }
     const { transcriptCanonicalJson, replayMaterialCanonicalJson } = createWireSealPayload(transcript, replayMaterial);
-    await (0, import_promises5.rm)(this.replayMaterialPath);
+    await (0, import_promises6.rm)(this.replayMaterialPath);
     const attestation = await this.attestations.sealGatewaySession({
       invocationLease: this.currentInvocationLease(),
       session: this.serverSession,
@@ -105247,7 +105391,7 @@ var ContextGatewayInvocationSession = class {
     }
     this.secret.fill(0);
     try {
-      await (0, import_promises5.rm)(this.directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(this.directory, { recursive: true, force: true });
     } catch (error2) {
       failures.push(error2);
     }
@@ -105398,7 +105542,7 @@ async function cleanupOpenedGatewaySession(input) {
   }
   input.secret.fill(0);
   try {
-    await (0, import_promises5.rm)(input.directory, { recursive: true, force: true });
+    await (0, import_promises6.rm)(input.directory, { recursive: true, force: true });
   } catch (error2) {
     failures.push(error2);
   }
@@ -105413,19 +105557,19 @@ function throwCleanupFailures(failures) {
   throw new AggregateError(failures, "context_gateway_dispose_failed");
 }
 async function readBoundedCanonicalJson(file, maximumBytes) {
-  const metadata = await (0, import_promises5.stat)(file);
+  const metadata = await (0, import_promises6.stat)(file);
   if (!metadata.isFile() || metadata.size < 2 || metadata.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const parsed = JSON.parse(await (0, import_promises5.readFile)(file, "utf8"));
+  const parsed = JSON.parse(await (0, import_promises6.readFile)(file, "utf8"));
   return canonicalJson(parsed);
 }
 async function readBoundedText(file, maximumBytes) {
-  const metadata = await (0, import_promises5.stat)(file);
+  const metadata = await (0, import_promises6.stat)(file);
   if (!metadata.isFile() || metadata.size < 2 || metadata.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const value = await (0, import_promises5.readFile)(file, "utf8");
+  const value = await (0, import_promises6.readFile)(file, "utf8");
   if (Buffer.byteLength(value, "utf8") !== metadata.size) {
     throw new Error("context_gateway_output_size_invalid");
   }
@@ -105581,14 +105725,14 @@ function sha25613(value) {
 // src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
 var import_child_process17 = require("child_process");
 var import_crypto35 = require("crypto");
-var import_promises9 = require("fs/promises");
+var import_promises10 = require("fs/promises");
 var os11 = __toESM(require("os"));
 var path27 = __toESM(require("path"));
 var import_util12 = require("util");
 
 // src/context-gateway/context-gateway-recorder.ts
 var import_crypto34 = require("crypto");
-var import_promises6 = require("fs/promises");
+var import_promises7 = require("fs/promises");
 var path24 = __toESM(require("path"));
 var MAX_RECORDER_STATE_BYTES = 2 * 1024 * 1024;
 var ContextGatewayRecorder = class {
@@ -105604,22 +105748,22 @@ var ContextGatewayRecorder = class {
   hadFailure = false;
   async initialize() {
     await Promise.all([
-      (0, import_promises6.mkdir)(path24.dirname(this.config.transcriptPath), {
+      (0, import_promises7.mkdir)(path24.dirname(this.config.transcriptPath), {
         recursive: true,
         mode: 448
       }),
-      (0, import_promises6.mkdir)(path24.dirname(this.config.replayMaterialPath), {
+      (0, import_promises7.mkdir)(path24.dirname(this.config.replayMaterialPath), {
         recursive: true,
         mode: 448
       })
     ]);
     try {
-      await (0, import_promises6.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises7.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
       });
-      await (0, import_promises6.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises7.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -105814,7 +105958,7 @@ var ContextGatewayRecorder = class {
   }
 };
 async function readBoundedState(file) {
-  const value = await (0, import_promises6.readFile)(file, "utf8");
+  const value = await (0, import_promises7.readFile)(file, "utf8");
   if (value.length < 2 || Buffer.byteLength(value, "utf8") > MAX_RECORDER_STATE_BYTES) {
     throw new Error("context_gateway_recorder_state_size_invalid");
   }
@@ -105833,15 +105977,15 @@ function parseCanonicalState(raw, kind) {
   return parsed;
 }
 async function atomicPrivateWrite3(target, content) {
-  await (0, import_promises6.mkdir)(path24.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises7.mkdir)(path24.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto34.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises6.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises6.rename)(temporary, target);
+  await (0, import_promises7.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises7.rename)(temporary, target);
 }
 
 // src/context-gateway/filesystem-context-gateway.ts
 var import_child_process15 = require("child_process");
-var import_promises7 = require("fs/promises");
+var import_promises8 = require("fs/promises");
 var import_os = require("os");
 var path25 = __toESM(require("path"));
 var import_util10 = require("util");
@@ -105870,7 +106014,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
   revisionTreeOidPromises = /* @__PURE__ */ new Map();
   static async create(input) {
-    const root = await (0, import_promises7.realpath)(input.root);
+    const root = await (0, import_promises8.realpath)(input.root);
     requireGitOid(input.checkoutTreeOid, "checkout_tree_oid");
     requireGitOid(input.baseSha, "base_sha");
     requireGitOid(input.mergeBaseSha, "merge_base_sha");
@@ -106122,7 +106266,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
               }
             )).sort();
           } finally {
-            await (0, import_promises7.rm)(isolatedGit.gitDirectory, {
+            await (0, import_promises8.rm)(isolatedGit.gitDirectory, {
               recursive: true,
               force: true
             });
@@ -106254,7 +106398,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     const attributesPath = path25.isAbsolute(gitPath) ? gitPath : path25.resolve(this.root, gitPath);
     let infoAttributes;
     try {
-      infoAttributes = await (0, import_promises7.readFile)(attributesPath);
+      infoAttributes = await (0, import_promises8.readFile)(attributesPath);
     } catch (error2) {
       if (error2.code !== "ENOENT") throw error2;
       infoAttributes = null;
@@ -106292,23 +106436,23 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     ]);
   }
   async createIsolatedGitDirectory(policy) {
-    const gitDirectory = await (0, import_promises7.mkdtemp)(
+    const gitDirectory = await (0, import_promises8.mkdtemp)(
       path25.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
     );
     try {
       const [objectsPathOutput, objectFormatOutput] = await Promise.all([
         this.gitText(["rev-parse", "--git-path", "objects"]),
         this.gitText(["rev-parse", "--show-object-format=storage"]),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "objects", "info"), { recursive: true }),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "refs", "heads"), { recursive: true }),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "info"), { recursive: true }),
-        (0, import_promises7.mkdir)(path25.join(gitDirectory, "worktree"), { recursive: true })
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "objects", "info"), { recursive: true }),
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "refs", "heads"), { recursive: true }),
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "info"), { recursive: true }),
+        (0, import_promises8.mkdir)(path25.join(gitDirectory, "worktree"), { recursive: true })
       ]);
       const rawObjectsPath = objectsPathOutput.trim();
       if (rawObjectsPath.length === 0) {
         throw new Error("context_gateway_git_objects_path_invalid");
       }
-      const objectsPath = await (0, import_promises7.realpath)(
+      const objectsPath = await (0, import_promises8.realpath)(
         path25.isAbsolute(rawObjectsPath) ? rawObjectsPath : path25.resolve(this.root, rawObjectsPath)
       );
       if (objectsPath.includes("\0") || objectsPath.includes("\n")) {
@@ -106320,14 +106464,14 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       }
       const config = objectFormat === "sha256" ? "[core]\n	repositoryformatversion = 1\n	bare = false\n[extensions]\n	objectformat = sha256\n" : "[core]\n	repositoryformatversion = 0\n	bare = false\n";
       await Promise.all([
-        (0, import_promises7.writeFile)(path25.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
-        (0, import_promises7.writeFile)(path25.join(gitDirectory, "config"), config),
-        (0, import_promises7.writeFile)(
+        (0, import_promises8.writeFile)(path25.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
+        (0, import_promises8.writeFile)(path25.join(gitDirectory, "config"), config),
+        (0, import_promises8.writeFile)(
           path25.join(gitDirectory, "objects", "info", "alternates"),
           `${objectsPath}
 `
         ),
-        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises7.writeFile)(
+        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises8.writeFile)(
           path25.join(gitDirectory, "info", "attributes"),
           policy.infoAttributes
         )
@@ -106341,7 +106485,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       });
       return Object.freeze({ gitDirectory, indexPath, workTreePath });
     } catch (error2) {
-      await (0, import_promises7.rm)(gitDirectory, { recursive: true, force: true });
+      await (0, import_promises8.rm)(gitDirectory, { recursive: true, force: true });
       throw error2;
     }
   }
@@ -106431,7 +106575,7 @@ function boundedInteger(value, minimum, maximum, field) {
 
 // src/context-gateway/filesystem-context-gateway-v4.ts
 var import_child_process16 = require("child_process");
-var import_promises8 = require("fs/promises");
+var import_promises9 = require("fs/promises");
 var import_path5 = __toESM(require("path"));
 var import_util11 = require("util");
 var execFileAsync5 = (0, import_util11.promisify)(import_child_process16.execFile);
@@ -106458,7 +106602,7 @@ var FilesystemContextGatewayV4 = class _FilesystemContextGatewayV4 {
   operationsStarted = 0;
   budgetExhaustionRecorded = false;
   static async create(input) {
-    const root = await (0, import_promises8.realpath)(input.root);
+    const root = await (0, import_promises9.realpath)(input.root);
     requireGitOid(
       input.checkoutTreeOid,
       "context_gateway_v4_checkout_tree_oid"
@@ -107268,7 +107412,7 @@ var ContextAttestationReplayRunner = class {
     const plan = parseReplayPlan(candidate);
     const [targetCheckoutTreeOid, gatewayBinaryHash] = await Promise.all([
       this.checkoutTreeOid(targetRevision.headSha),
-      (0, import_promises9.readFile)(this.options.gatewayBundlePath).then(sha256)
+      (0, import_promises10.readFile)(this.options.gatewayBundlePath).then(sha256)
     ]);
     if (plan.gatewayBinaryHash !== gatewayBinaryHash) {
       return null;
@@ -107285,7 +107429,7 @@ var ContextAttestationReplayRunner = class {
     if (plan.gatewayPolicyVersion !== CONTEXT_GATEWAY_POLICY_VERSION) {
       return null;
     }
-    const directory = await (0, import_promises9.mkdtemp)(
+    const directory = await (0, import_promises10.mkdtemp)(
       path27.join(os11.tmpdir(), "reviewrouter-context-replay-")
     );
     const secret = (0, import_crypto35.randomBytes)(32);
@@ -107363,11 +107507,11 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(directory, { recursive: true, force: true });
     }
   }
   async replayV4(input) {
-    const directory = await (0, import_promises9.mkdtemp)(
+    const directory = await (0, import_promises10.mkdtemp)(
       path27.join(os11.tmpdir(), "reviewrouter-context-replay-v4-")
     );
     const secret = (0, import_crypto35.randomBytes)(32);
@@ -107461,7 +107605,7 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(directory, { recursive: true, force: true });
     }
   }
   async checkoutTreeOid(expectedHeadSha) {
@@ -115683,7 +115827,7 @@ function createScmReadGitHubClient(input) {
     tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
     ...signal ? {
       sleep: async (ms) => {
-        await (0, import_promises10.setTimeout)(ms, void 0, { signal });
+        await (0, import_promises11.setTimeout)(ms, void 0, { signal });
       }
     } : {}
   });
@@ -116597,7 +116741,7 @@ async function runAccountGatewayActionInternal(options = {}) {
     commentEligible: false
   });
   let ciProgressReporter;
-  await runAccountGatewayRuntime(inputs, {
+  await runLongOidcTestEntry(inputs, {
     fetchImpl: options.fetchImpl,
     review: {
       run: (input) => {

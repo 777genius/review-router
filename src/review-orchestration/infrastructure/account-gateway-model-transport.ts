@@ -533,6 +533,7 @@ export function codexGatewayConfiguration(baseUrl: string): readonly string[] {
     `model_providers={reviewrouter_account_gateway={name="ReviewRouter account gateway",base_url=${JSON.stringify(baseUrl)},wire_api="responses",requires_openai_auth=false,supports_websockets=false,request_max_retries=0,stream_max_retries=0,stream_idle_timeout_ms=${ACCOUNT_GATEWAY_BOUNDS.idleMs},env_http_headers={Authorization="${LOCAL_MODEL_CAPABILITY_ENV}"}}}`,
     'cli_auth_credentials_store="ephemeral"',
     'service_tier="default"',
+    'web_search="disabled"',
   ]);
 }
 

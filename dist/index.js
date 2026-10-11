@@ -22479,6 +22479,17 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   localConnections: 4,
   cliOutputBytes: 8388608
 });
+function observeTransport(observe, stage, responseReceived, httpStatus, error2) {
+  try {
+    observe?.({
+      stage,
+      responseReceived,
+      httpStatus,
+      errorCategory: error2 === void 0 ? "none" : error2 instanceof TypeError ? "TypeError" : error2 instanceof RangeError ? "RangeError" : error2 instanceof Error ? error2.name === "AbortError" ? "AbortError" : "Error" : "other"
+    });
+  } catch {
+  }
+}
 function createAccountGatewayRunFetch(fetchImpl, signal) {
   return (input, init) => {
     const route = new URL(input instanceof Request ? input.url : String(input)).pathname;
@@ -22499,8 +22510,9 @@ function createAccountGatewayRunFetch(fetchImpl, signal) {
   };
 }
 var AccountGatewayModelTransport = class {
-  constructor(apiUrl, authorization) {
+  constructor(apiUrl, authorization, observe) {
     this.authorization = authorization;
+    this.observe = observe;
     this.origin = trustedGatewayOrigin(apiUrl);
   }
   origin;
@@ -22522,11 +22534,16 @@ var AccountGatewayModelTransport = class {
   }
   async responses(bytes, signal) {
     if (this.terminal || this.inferenceDenied || this.held.size >= ACCOUNT_GATEWAY_BOUNDS.inFlight) {
-      throw new Error("account_gateway_inference_denied");
+      const error2 = new Error("account_gateway_inference_denied");
+      observeTransport(this.observe, "upstream_request", false, null, error2);
+      throw error2;
     }
     const body = Buffer.from(bytes);
-    if (body.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
-      throw new Error("account_gateway_request_bound");
+    if (body.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes) {
+      const error2 = new Error("account_gateway_request_bound");
+      observeTransport(this.observe, "upstream_request", false, null, error2);
+      throw error2;
+    }
     const controller = new AbortController();
     this.held.add(controller);
     const abort = () => controller.abort();
@@ -22538,6 +22555,8 @@ var AccountGatewayModelTransport = class {
       signal?.removeEventListener("abort", abort);
       this.held.delete(controller);
     };
+    let responseReceived = false;
+    let httpStatus = null;
     try {
       const response = await this.request(
         "POST",
@@ -22546,6 +22565,10 @@ var AccountGatewayModelTransport = class {
         controller.signal
       );
       const status = response.statusCode ?? 502;
+      responseReceived = true;
+      httpStatus = status;
+      if (status !== 200)
+        observeTransport(this.observe, "upstream_headers", true, status);
       const contentType = response.headers["content-type"] ?? "";
       const requestRef = safeReference(
         response.headers["x-reviewrouter-request-ref"]
@@ -22594,6 +22617,7 @@ var AccountGatewayModelTransport = class {
           return;
         }
         this.inferenceDenied = true;
+        observeTransport(this.observe, "upstream_stream", true, status, error2);
         this.failure ??= {
           code: "transport",
           effect: "effect_unknown",
@@ -22632,7 +22656,14 @@ var AccountGatewayModelTransport = class {
         body: bounded,
         cancel: abort
       };
-    } catch {
+    } catch (error2) {
+      observeTransport(
+        this.observe,
+        responseReceived ? "upstream_headers" : "upstream_request",
+        responseReceived,
+        httpStatus,
+        error2
+      );
       this.inferenceDenied = true;
       this.failure ??= { code: "transport", effect: "effect_unknown" };
       controller.abort();
@@ -22737,7 +22768,7 @@ var AccountGatewayModelTransport = class {
     });
   }
 };
-async function startLocalGatewayModelTransport(transport) {
+async function startLocalGatewayModelTransport(transport, observe) {
   const capability = (0, import_crypto.randomBytes)(32).toString("hex");
   let stopping = false;
   let inFlight = 0;
@@ -22772,20 +22803,31 @@ async function startLocalGatewayModelTransport(transport) {
         request.once("aborted", abort);
         reply.once("close", downstreamClosed);
         let upstream;
+        let stage = "request_body";
         try {
           const bytes = await boundedBytes(
             request,
             ACCOUNT_GATEWAY_BOUNDS.requestBytes,
             controller.signal
           );
+          stage = "upstream_request";
           upstream = await transport.responses(bytes, controller.signal);
+          stage = "downstream_stream";
           reply.writeHead(upstream.httpStatus, {
             "content-type": upstream.contentType,
             "cache-control": "no-store",
             ...upstream.requestRef ? { "x-reviewrouter-request-ref": upstream.requestRef } : {}
           });
           await (0, import_promises.pipeline)(upstream.body, reply, { signal: controller.signal });
-        } catch {
+        } catch (error2) {
+          if (stage !== "upstream_request")
+            observeTransport(
+              observe,
+              stage,
+              upstream !== void 0,
+              upstream?.httpStatus ?? null,
+              error2
+            );
           if (reply.headersSent) reply.destroy();
           else {
             reply.writeHead(502, { "content-type": "application/json" });
@@ -52032,7 +52074,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.157",
+  version: "1.0.158",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -101167,9 +101209,13 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       fetchImpl
     })
   );
+  const observeTransport2 = (diagnostic) => warning(
+    `Account gateway model transport: ${JSON.stringify(diagnostic)}`
+  );
   const transport = new AccountGatewayModelTransport(
     input.apiUrl,
-    () => controlPlane.currentAuthorization().authorizationToken
+    () => controlPlane.currentAuthorization().authorizationToken,
+    observeTransport2
   );
   let phase = "authorization";
   let authorized = false;
@@ -101265,7 +101311,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       )
     );
     await fs20.chmod(codexHome, 448);
-    bridge = await startLocalGatewayModelTransport(transport);
+    bridge = await startLocalGatewayModelTransport(transport, observeTransport2);
     await fs20.writeFile(
       path18.join(codexHome, "config.toml"),
       bridge.configuration.join("\n") + "\n",

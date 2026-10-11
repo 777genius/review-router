@@ -14,6 +14,7 @@ import {
   LOCAL_MODEL_CAPABILITY_ENV,
   startLocalGatewayModelTransport,
   type LocalGatewayModelTransport,
+  type GatewayTransportDiagnostic,
 } from '../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 
 // Red: audited completed output followed by client cancellation poisons the
@@ -116,6 +117,7 @@ async function terminalFollowup(
     firstEnded = false;
   let resetFirstUpstream: (() => void) | undefined;
   const fixtureFailures: unknown[] = [];
+  const diagnostics: GatewayTransportDiagnostic[] = [];
   let resolveFirstClose!: () => void;
   const firstClosed = new Promise<void>((resolve) => {
     resolveFirstClose = resolve;
@@ -167,7 +169,10 @@ async function terminalFollowup(
     assert(address && typeof address !== 'string');
     const transport = new AccountGatewayModelTransport(
       `https://127.0.0.1:${address.port}`,
-      () => token
+      () => token,
+      (diagnostic) => {
+        diagnostics.push(diagnostic);
+      }
     );
     local = await bounded(
       startLocalGatewayModelTransport(transport),
@@ -255,6 +260,14 @@ async function terminalFollowup(
     }
     assert.equal(firstCloses, 1);
     assert.deepEqual(fixtureFailures, []);
+    if (upstreamReset)
+      assert.equal(
+        diagnostics.filter(
+          (diagnostic) => diagnostic.stage === 'upstream_stream'
+        ).length,
+        1,
+        'one failed upstream stream must produce exactly one diagnostic'
+      );
   } finally {
     first?.destroy();
     second?.destroy();
@@ -273,9 +286,119 @@ async function terminalFollowup(
   }
   assert.equal(native.listening, false);
 }
+async function failedResponseDiagnostic(upstream502: boolean): Promise<void> {
+  const root = process.env.RR_TERMINAL_CANCELLATION_PROBE_ROOT;
+  assert(root);
+  const diagnostics: GatewayTransportDiagnostic[] = [];
+  let requests = 0;
+  const upstreamBody = 'synthetic private body: error code: 502';
+  const server = createHttpsServer(
+    {
+      cert: readFileSync(join(root, 'cert.pem')),
+      key: readFileSync(join(root, 'key.pem')),
+    },
+    (_request, reply) => {
+      requests++;
+      if (!upstream502) reply.destroy();
+      else {
+        reply.writeHead(502, { 'content-type': 'text/plain' });
+        reply.end(upstreamBody);
+      }
+    }
+  );
+  let local: LocalGatewayModelTransport | undefined;
+  try {
+    await bounded(
+      new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);
+      }),
+      'diagnostic-listen'
+    );
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const observe = (diagnostic: GatewayTransportDiagnostic) => {
+      diagnostics.push(diagnostic);
+      // Even a failing log sink must not alter the original status/body.
+      if (upstream502)
+        return Promise.reject(new Error('synthetic private observer error'));
+      throw new Error('synthetic private observer error');
+    };
+    const transport = new AccountGatewayModelTransport(
+      `https://127.0.0.1:${address.port}`,
+      () => token,
+      observe
+    );
+    local = await bounded(
+      startLocalGatewayModelTransport(transport, observe),
+      'diagnostic-local'
+    );
+    const response = await bounded(post(local), 'diagnostic-headers');
+    const chunks: Buffer[] = [];
+    await bounded(
+      (async () => {
+        for await (const chunk of response) chunks.push(Buffer.from(chunk));
+      })(),
+      'diagnostic-body'
+    );
+    assert.equal(response.statusCode, 502);
+    assert.equal(
+      Buffer.concat(chunks).toString('utf8'),
+      upstream502
+        ? upstreamBody
+        : '{"error":{"code":"relay_unknown","effect":"effect_unknown"}}'
+    );
+    assert.equal(requests, 1, 'failed Responses must never be retried');
+    if (upstream502)
+      assert.deepEqual(diagnostics, [
+        {
+          stage: 'upstream_headers',
+          responseReceived: true,
+          httpStatus: 502,
+          errorCategory: 'none',
+        },
+      ]);
+    else {
+      assert.equal(diagnostics.length, 1);
+      for (const diagnostic of diagnostics)
+        assert.deepEqual(diagnostic, {
+          stage: 'upstream_request',
+          responseReceived: false,
+          httpStatus: null,
+          errorCategory: 'Error',
+        });
+    }
+    for (const privateValue of [
+      token,
+      upstreamBody,
+      '127.0.0.1',
+      'synthetic private observer error',
+    ])
+      assert(
+        !JSON.stringify(diagnostics).includes(privateValue),
+        'diagnostics must retain only closed fields'
+      );
+  } finally {
+    await local?.dispose();
+    await bounded(
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve()))
+      ),
+      'diagnostic-close'
+    );
+  }
+}
 // Same typed file becomes a compiled child observer. Node --test consumes file
 // arguments itself, so the isolated child's --probe marker travels in its env.
 if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
+  for (const upstream502 of [false, true])
+    nodeTest(
+      upstream502
+        ? 'upstream 502 is forwarded unchanged with received-response diagnostic'
+        : 'local preheaders failure retains synthetic 502 with no-response diagnostic',
+      { timeout: 20_000 },
+      () => failedResponseDiagnostic(upstream502)
+    );
   nodeTest(
     'completed SSE then client TCP close permits one sequential followup',
     { timeout: 20_000 },
@@ -355,8 +478,8 @@ if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
           },
         }
       );
-      expect(result.stdout).toMatch(/# tests 3\b/);
-      expect(result.stdout).toMatch(/# pass 3\b/);
+      expect(result.stdout).toMatch(/# tests 5\b/);
+      expect(result.stdout).toMatch(/# pass 5\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

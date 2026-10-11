@@ -19,6 +19,7 @@ import {
   type GatewayReadback,
   type GatewayFailureFact,
   type LocalGatewayModelTransport,
+  type GatewayTransportDiagnostic,
 } from '../review-orchestration/infrastructure/account-gateway-model-transport';
 import { GitHubActionsOidcTokenProvider } from './github-actions-oidc';
 import {
@@ -107,9 +108,14 @@ async function runAccountGatewayRuntimeInternal(
       fetchImpl,
     })
   );
+  const observeTransport = (diagnostic: GatewayTransportDiagnostic) =>
+    core.warning(
+      `Account gateway model transport: ${JSON.stringify(diagnostic)}`
+    );
   const transport = new AccountGatewayModelTransport(
     input.apiUrl,
-    () => controlPlane.currentAuthorization().authorizationToken
+    () => controlPlane.currentAuthorization().authorizationToken,
+    observeTransport
   );
   let phase:
     | 'authorization'
@@ -225,7 +231,7 @@ async function runAccountGatewayRuntimeInternal(
       )
     );
     await fs.chmod(codexHome, 0o700);
-    bridge = await startLocalGatewayModelTransport(transport);
+    bridge = await startLocalGatewayModelTransport(transport, observeTransport);
     // App-server uses generated isolated config; exec also receives pinned -c values.
     // Empty fresh home; never auth.json, including dummy credentials.
     await fs.writeFile(

@@ -44,6 +44,61 @@ export type GatewayResponses = Readonly<{
   body: Readable;
   cancel(): void;
 }>;
+export type GatewayTransportDiagnostic = Readonly<{
+  stage:
+    | 'request_body'
+    | 'upstream_request'
+    | 'upstream_headers'
+    | 'upstream_stream'
+    | 'downstream_stream';
+  responseReceived: boolean;
+  httpStatus: number | null;
+  errorCategory:
+    | 'none'
+    | 'AbortError'
+    | 'TypeError'
+    | 'RangeError'
+    | 'Error'
+    | 'other';
+}>;
+type ObserveTransport = (
+  diagnostic: GatewayTransportDiagnostic
+) => void | Promise<void>;
+
+// Diagnostics must never change transport settlement or include arbitrary error data.
+function observeTransport(
+  observe: ObserveTransport | undefined,
+  stage: GatewayTransportDiagnostic['stage'],
+  responseReceived: boolean,
+  httpStatus: number | null,
+  error?: unknown
+): void {
+  try {
+    void Promise.resolve(
+      observe?.({
+        stage,
+        responseReceived,
+        httpStatus,
+        errorCategory:
+          error === undefined
+            ? 'none'
+            : error instanceof TypeError
+              ? 'TypeError'
+              : error instanceof RangeError
+                ? 'RangeError'
+                : error instanceof Error
+                  ? error.name === 'AbortError'
+                    ? 'AbortError'
+                    : 'Error'
+                  : 'other',
+      })
+    ).catch(() => {
+      /* A rejected diagnostic observer cannot fail a provider request. */
+    });
+  } catch {
+    /* A diagnostic observer cannot fail a provider request. */
+  }
+}
 export type LocalGatewayModelTransport = Readonly<{
   baseUrl: string;
   environment: Readonly<NodeJS.ProcessEnv>;
@@ -98,7 +153,8 @@ export class AccountGatewayModelTransport {
 
   constructor(
     apiUrl: string,
-    private readonly authorization: () => string
+    private readonly authorization: () => string,
+    private readonly observe?: ObserveTransport
   ) {
     this.origin = trustedGatewayOrigin(apiUrl);
   }
@@ -124,12 +180,17 @@ export class AccountGatewayModelTransport {
       this.inferenceDenied ||
       this.held.size >= ACCOUNT_GATEWAY_BOUNDS.inFlight
     ) {
-      throw new Error('account_gateway_inference_denied');
+      const error = new Error('account_gateway_inference_denied');
+      observeTransport(this.observe, 'upstream_request', false, null, error);
+      throw error;
     }
     // Snapshot before awaiting authorization; no mutable caller payload.
     const body = Buffer.from(bytes);
-    if (body.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
-      throw new Error('account_gateway_request_bound');
+    if (body.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes) {
+      const error = new Error('account_gateway_request_bound');
+      observeTransport(this.observe, 'upstream_request', false, null, error);
+      throw error;
+    }
     const controller = new AbortController();
     this.held.add(controller);
     const abort = () => controller.abort();
@@ -141,6 +202,8 @@ export class AccountGatewayModelTransport {
       signal?.removeEventListener('abort', abort);
       this.held.delete(controller);
     };
+    let responseReceived = false;
+    let httpStatus: number | null = null;
     try {
       const response = await this.request(
         'POST',
@@ -149,6 +212,10 @@ export class AccountGatewayModelTransport {
         controller.signal
       );
       const status = response.statusCode ?? 502;
+      responseReceived = true;
+      httpStatus = status;
+      if (status !== 200)
+        observeTransport(this.observe, 'upstream_headers', true, status);
       const contentType = response.headers['content-type'] ?? '';
       const requestRef = safeReference(
         response.headers['x-reviewrouter-request-ref']
@@ -200,6 +267,7 @@ export class AccountGatewayModelTransport {
       });
       response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, abort);
       let terminalCancellation = false;
+      let streamFailureObserved = false;
       const fail = (error: unknown) => {
         // Codex ends a turn at response.completed, before the HTTP EOF.
         // Ignore only the propagated Node cancellation of that audited turn.
@@ -217,6 +285,16 @@ export class AccountGatewayModelTransport {
           return;
         }
         this.inferenceDenied = true;
+        if (!streamFailureObserved) {
+          streamFailureObserved = true;
+          observeTransport(
+            this.observe,
+            'upstream_stream',
+            true,
+            status,
+            error
+          );
+        }
         this.failure ??= {
           code: 'transport',
           effect: 'effect_unknown',
@@ -267,7 +345,14 @@ export class AccountGatewayModelTransport {
         body: bounded,
         cancel: abort,
       };
-    } catch {
+    } catch (error) {
+      observeTransport(
+        this.observe,
+        responseReceived ? 'upstream_headers' : 'upstream_request',
+        responseReceived,
+        httpStatus,
+        error
+      );
       this.inferenceDenied = true;
       this.failure ??= { code: 'transport', effect: 'effect_unknown' };
       controller.abort();
@@ -403,7 +488,8 @@ export class AccountGatewayModelTransport {
 /** Tiny per-run loopback adapter for CLI clients that capture auth once. Only
  * POST /responses exists; destinations/headers are never supplied by the CLI. */
 export async function startLocalGatewayModelTransport(
-  transport: AccountGatewayModelTransport
+  transport: AccountGatewayModelTransport,
+  observe?: ObserveTransport
 ): Promise<LocalGatewayModelTransport> {
   const capability = randomBytes(32).toString('hex');
   let stopping = false;
@@ -448,13 +534,16 @@ export async function startLocalGatewayModelTransport(
         request.once('aborted', abort);
         reply.once('close', downstreamClosed);
         let upstream: GatewayResponses | undefined;
+        let stage: GatewayTransportDiagnostic['stage'] = 'request_body';
         try {
           const bytes = await boundedBytes(
             request,
             ACCOUNT_GATEWAY_BOUNDS.requestBytes,
             controller.signal
           );
+          stage = 'upstream_request';
           upstream = await transport.responses(bytes, controller.signal);
+          stage = 'downstream_stream';
           reply.writeHead(upstream.httpStatus, {
             'content-type': upstream.contentType,
             'cache-control': 'no-store',
@@ -463,7 +552,16 @@ export async function startLocalGatewayModelTransport(
               : {}),
           });
           await pipeline(upstream.body, reply, { signal: controller.signal });
-        } catch {
+        } catch (error) {
+          // The transport owns upstream receipt facts, including pre-request guards.
+          if (stage !== 'upstream_request')
+            observeTransport(
+              observe,
+              stage,
+              upstream !== undefined,
+              upstream?.httpStatus ?? null,
+              error
+            );
           if (reply.headersSent) reply.destroy();
           else {
             reply.writeHead(502, { 'content-type': 'application/json' });

@@ -61,7 +61,9 @@ export type GatewayTransportDiagnostic = Readonly<{
     | 'Error'
     | 'other';
 }>;
-type ObserveTransport = (diagnostic: GatewayTransportDiagnostic) => void;
+type ObserveTransport = (
+  diagnostic: GatewayTransportDiagnostic
+) => void | Promise<void>;
 
 // Diagnostics must never change transport settlement or include arbitrary error data.
 function observeTransport(
@@ -72,22 +74,26 @@ function observeTransport(
   error?: unknown
 ): void {
   try {
-    observe?.({
-      stage,
-      responseReceived,
-      httpStatus,
-      errorCategory:
-        error === undefined
-          ? 'none'
-          : error instanceof TypeError
-            ? 'TypeError'
-            : error instanceof RangeError
-              ? 'RangeError'
-              : error instanceof Error
-                ? error.name === 'AbortError'
-                  ? 'AbortError'
-                  : 'Error'
-                : 'other',
+    void Promise.resolve(
+      observe?.({
+        stage,
+        responseReceived,
+        httpStatus,
+        errorCategory:
+          error === undefined
+            ? 'none'
+            : error instanceof TypeError
+              ? 'TypeError'
+              : error instanceof RangeError
+                ? 'RangeError'
+                : error instanceof Error
+                  ? error.name === 'AbortError'
+                    ? 'AbortError'
+                    : 'Error'
+                  : 'other',
+      })
+    ).catch(() => {
+      /* A rejected diagnostic observer cannot fail a provider request. */
     });
   } catch {
     /* A diagnostic observer cannot fail a provider request. */
@@ -261,6 +267,7 @@ export class AccountGatewayModelTransport {
       });
       response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, abort);
       let terminalCancellation = false;
+      let streamFailureObserved = false;
       const fail = (error: unknown) => {
         // Codex ends a turn at response.completed, before the HTTP EOF.
         // Ignore only the propagated Node cancellation of that audited turn.
@@ -278,7 +285,16 @@ export class AccountGatewayModelTransport {
           return;
         }
         this.inferenceDenied = true;
-        observeTransport(this.observe, 'upstream_stream', true, status, error);
+        if (!streamFailureObserved) {
+          streamFailureObserved = true;
+          observeTransport(
+            this.observe,
+            'upstream_stream',
+            true,
+            status,
+            error
+          );
+        }
         this.failure ??= {
           code: 'transport',
           effect: 'effect_unknown',

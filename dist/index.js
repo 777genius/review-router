@@ -22481,11 +22481,14 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
 });
 function observeTransport(observe, stage, responseReceived, httpStatus, error2) {
   try {
-    observe?.({
-      stage,
-      responseReceived,
-      httpStatus,
-      errorCategory: error2 === void 0 ? "none" : error2 instanceof TypeError ? "TypeError" : error2 instanceof RangeError ? "RangeError" : error2 instanceof Error ? error2.name === "AbortError" ? "AbortError" : "Error" : "other"
+    void Promise.resolve(
+      observe?.({
+        stage,
+        responseReceived,
+        httpStatus,
+        errorCategory: error2 === void 0 ? "none" : error2 instanceof TypeError ? "TypeError" : error2 instanceof RangeError ? "RangeError" : error2 instanceof Error ? error2.name === "AbortError" ? "AbortError" : "Error" : "other"
+      })
+    ).catch(() => {
     });
   } catch {
   }
@@ -22611,13 +22614,23 @@ var AccountGatewayModelTransport = class {
       });
       response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, abort);
       let terminalCancellation = false;
+      let streamFailureObserved = false;
       const fail = (error2) => {
         if (audit?.hasCompleted() && controller.signal.aborted && signal?.aborted && error2 instanceof Error && error2.name === "AbortError" && "code" in error2 && error2.code === "ABORT_ERR" && error2.cause === controller.signal.reason) {
           terminalCancellation = true;
           return;
         }
         this.inferenceDenied = true;
-        observeTransport(this.observe, "upstream_stream", true, status, error2);
+        if (!streamFailureObserved) {
+          streamFailureObserved = true;
+          observeTransport(
+            this.observe,
+            "upstream_stream",
+            true,
+            status,
+            error2
+          );
+        }
         this.failure ??= {
           code: "transport",
           effect: "effect_unknown",

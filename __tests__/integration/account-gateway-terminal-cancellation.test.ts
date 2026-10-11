@@ -117,6 +117,7 @@ async function terminalFollowup(
     firstEnded = false;
   let resetFirstUpstream: (() => void) | undefined;
   const fixtureFailures: unknown[] = [];
+  const diagnostics: GatewayTransportDiagnostic[] = [];
   let resolveFirstClose!: () => void;
   const firstClosed = new Promise<void>((resolve) => {
     resolveFirstClose = resolve;
@@ -168,7 +169,10 @@ async function terminalFollowup(
     assert(address && typeof address !== 'string');
     const transport = new AccountGatewayModelTransport(
       `https://127.0.0.1:${address.port}`,
-      () => token
+      () => token,
+      (diagnostic) => {
+        diagnostics.push(diagnostic);
+      }
     );
     local = await bounded(
       startLocalGatewayModelTransport(transport),
@@ -256,6 +260,14 @@ async function terminalFollowup(
     }
     assert.equal(firstCloses, 1);
     assert.deepEqual(fixtureFailures, []);
+    if (upstreamReset)
+      assert.equal(
+        diagnostics.filter(
+          (diagnostic) => diagnostic.stage === 'upstream_stream'
+        ).length,
+        1,
+        'one failed upstream stream must produce exactly one diagnostic'
+      );
   } finally {
     first?.destroy();
     second?.destroy();
@@ -308,6 +320,8 @@ async function failedResponseDiagnostic(upstream502: boolean): Promise<void> {
     const observe = (diagnostic: GatewayTransportDiagnostic) => {
       diagnostics.push(diagnostic);
       // Even a failing log sink must not alter the original status/body.
+      if (upstream502)
+        return Promise.reject(new Error('synthetic private observer error'));
       throw new Error('synthetic private observer error');
     };
     const transport = new AccountGatewayModelTransport(

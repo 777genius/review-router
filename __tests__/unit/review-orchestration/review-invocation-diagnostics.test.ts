@@ -26,6 +26,14 @@ describe('review invocation diagnostics', () => {
       'model_unavailable',
     ],
     [
+      new Error(
+        'Model metadata for gpt-6.1-sol not found. Defaulting to fallback metadata.\n' +
+          'Codex CLI failed with exit code 1: unexpected status 502 Bad Gateway: error code:502'
+      ),
+      ReviewInvocationFailureClass.Retryable,
+      'provider_invocation_failed',
+    ],
+    [
       new Error('review_action_v2_prepared_invocation_identity_mismatch'),
       ReviewInvocationFailureClass.Retryable,
       'prepared_invocation_invalid',

@@ -114,7 +114,7 @@ export function classifySafeInvocationFailureReason(
     return 'configuration_mismatch';
   }
   if (
-    /\b(?:unknown|unsupported|invalid|unavailable)\s+model\b|\bmodel\b(?!\s+metadata\b).{0,80}\b(?:not found|not supported|does not exist|unavailable)\b/i.test(
+    /\b(?:unknown|unsupported|invalid|unavailable)\s+model\b(?!\s+metadata\b)|\bmodel\b(?!\s+metadata\b).{0,80}\b(?:not found|not supported|does not exist|unavailable)\b/i.test(
       text
     )
   ) {

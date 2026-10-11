@@ -34,6 +34,11 @@ describe('review invocation diagnostics', () => {
       'provider_invocation_failed',
     ],
     [
+      new Error('Unknown model metadata for gpt-6.1-sol not found'),
+      ReviewInvocationFailureClass.Retryable,
+      'provider_invocation_failed',
+    ],
+    [
       new Error('review_action_v2_prepared_invocation_identity_mismatch'),
       ReviewInvocationFailureClass.Retryable,
       'prepared_invocation_invalid',

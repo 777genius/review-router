@@ -52089,7 +52089,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.169",
+  version: "1.0.170",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -94963,6 +94963,7 @@ var RunT0ReviewOrchestration = class {
       invocation: input.invocation,
       manifest: input.manifest,
       lease: input.currentLease(),
+      currentLease: input.currentLease,
       sourceExecutionId: input.sourceExecutionId,
       sourceReviewRevisionHash: input.revision.reviewRevisionHash,
       signal
@@ -103611,6 +103612,7 @@ var CodexReviewInvocationAdapter = class {
     }
     const session = await this.contextGateway.open({
       invocationLease: input.lease,
+      currentInvocationLease: input.currentLease,
       leaseAuthorityKind: "standard_execution" /* StandardExecution */,
       sourceExecutionId: input.sourceExecutionId,
       sourceWorkSlotId: input.invocation.workSlotId,

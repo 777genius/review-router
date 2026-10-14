@@ -2249,8 +2249,13 @@ describe('RunT0ReviewOrchestration', () => {
           currentLease: () => unknown
         ) => Promise<unknown>;
       }) => {
-        const currentLease = await renew();
-        return operation(new AbortController().signal, () => currentLease);
+        let currentLease: unknown = lease;
+        const result = operation(
+          new AbortController().signal,
+          () => currentLease
+        );
+        currentLease = await renew();
+        return result;
       }
     );
     fixture.controlPlane.renewInvocationLease.mockResolvedValue({
@@ -2262,6 +2267,16 @@ describe('RunT0ReviewOrchestration', () => {
     const result = await fixture.useCase.execute(fixture.command);
 
     expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    const invocationInput = jest.mocked(
+      fixture.dependencies.invocations.execute
+    ).mock.calls[0][0];
+    expect(invocationInput.lease).toBe(lease);
+    expect(invocationInput.currentLease?.()).toMatchObject({
+      leaseId: lease.leaseId,
+      attemptId: lease.attemptId,
+      fencingToken: lease.fencingToken,
+      leaseCapability: 'lease.capability.renewed',
+    });
     expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledWith(
       expect.objectContaining({
         lease: expect.objectContaining({

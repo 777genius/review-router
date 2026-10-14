@@ -638,6 +638,7 @@ export interface PreparedReviewInvocationPort {
     readonly invocation: PreparedReviewInvocation;
     readonly manifest: ProviderInvocationManifest;
     readonly lease: ReviewInvocationLease;
+    readonly currentLease?: () => ReviewInvocationLease;
     readonly sourceExecutionId: string;
     readonly sourceReviewRevisionHash: string;
     readonly signal: AbortSignal;

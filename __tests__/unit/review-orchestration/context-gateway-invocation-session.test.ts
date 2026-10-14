@@ -4,6 +4,14 @@ import { access, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
+import type { PromptBuilder } from '../../../src/analysis/llm/prompt-builder';
+import type { CodexProvider } from '../../../src/providers/codex';
+import {
+  createPreparedProviderInvocation,
+  ProviderKind,
+} from '../../../src/providers/prepared-invocation';
+import { createReviewInvestigationProbePlan } from '../../../src/review-investigation/domain/deterministic-context-probe-plan';
+import { CodexReviewInvocationAdapter } from '../../../src/review-orchestration/infrastructure/codex-review-invocation-adapter';
 import {
   canonicalizeReviewContextConfinementEvidence,
   canonicalizeReviewContextGatewayEvent,
@@ -28,6 +36,8 @@ import { ContextGatewayLeaseAuthorityKind } from '../../../src/context-gateway/c
 import {
   ReviewContextInspectionFailureReason,
   ReviewContextInspectionFailureStage,
+  ReviewExecutionProviderKind,
+  ReviewTaskKind,
   type ReviewContextAttestationPort,
   type ReviewInvocationLease,
 } from '../../../src/review-orchestration/application';
@@ -630,6 +640,161 @@ describe('ContextGatewayInvocationSessionFactory', () => {
       await fixture.dispose();
     }
   });
+
+  it.each([false, true])(
+    'uses renewed standard adapter credentials at real gateway seal and cleanup (seal fails=%s)',
+    async (sealFails) => {
+      const fixture = await openSessionFixture(
+        CONTEXT_GATEWAY_V4_POLICY_VERSION
+      );
+      const initialLease = fixture.invocationLease;
+      const renewedLease = {
+        ...initialLease,
+        leaseCapability: 'renewed-capability-at-seal',
+        expiresAt: '2026-07-24T19:15:00.000Z',
+        resultReportUntil: '2026-07-24T19:25:00.000Z',
+      };
+      const cleanupLease = {
+        ...renewedLease,
+        leaseCapability: 'renewed-capability-at-cleanup',
+        expiresAt: '2026-07-24T19:20:00.000Z',
+        resultReportUntil: '2026-07-24T19:30:00.000Z',
+      };
+      let currentLease = initialLease;
+      let runtimeSession = fixture.session;
+      const open = fixture.factory.open.bind(fixture.factory);
+      jest.spyOn(fixture.factory, 'open').mockImplementation(async (input) => {
+        runtimeSession = await open(input);
+        return runtimeSession;
+      });
+      const prepared = createPreparedProviderInvocation({
+        providerKind: ProviderKind.CodexCli,
+        providerName: 'codex/gpt-test',
+        requestedModel: 'gpt-test',
+        timeoutMs: 10_000,
+        request: { prompt: 'review', outputSchema: { type: 'object' } },
+        observableRequest: { semantic: 'same' },
+      });
+      const provider = {
+        describePreparedEnvironmentContract: () => ({}),
+        prepareInvocation: jest.fn().mockResolvedValue(prepared),
+        executePreparedInvocation: jest.fn(async () => {
+          await writeValidV4Evidence({ ...fixture, session: runtimeSession });
+          currentLease = renewedLease;
+          return {
+            content: '{}',
+            findings: [],
+            revalidations: [],
+            actualModel: 'gpt-test',
+          };
+        }),
+      } as unknown as CodexProvider;
+      const workSlot = {
+        workSlotId: 'slot-1',
+        taskKind: ReviewTaskKind.FindingDiscovery,
+        providerKind: ReviewExecutionProviderKind.Codex,
+        providerVoteIdentityHash: hash('vote'),
+        shardKey: 'batch-1',
+        required: true,
+        attemptBudget: 1,
+        retryPolicyVersion: 'retry-v1',
+      };
+      const adapter = new CodexReviewInvocationAdapter(
+        provider,
+        {
+          buildPreparedV2: async () => ({
+            prompt: 'review',
+            investigationContextPrompt: 'context',
+            pathCoverage: [],
+            investigationProbePlan: createReviewInvestigationProbePlan({
+              files: [],
+              fullDiff: '',
+            }),
+          }),
+        } as unknown as PromptBuilder,
+        [
+          {
+            workSlot,
+            reviewRevisionHash: hash('revision'),
+            mergeBaseSha: fixture.revision.mergeBaseSha,
+            context: {
+              number: 1,
+              title: 'PR',
+              body: '',
+              author: 'author',
+              draft: false,
+              labels: [],
+              files: [],
+              diff: '',
+              additions: 0,
+              deletions: 0,
+              baseSha: fixture.revision.baseSha,
+              headSha: fixture.revision.headSha,
+            },
+            lifecycleTargets: [],
+            liveLifecycleStateHash: hash('lifecycle'),
+          },
+        ],
+        10_000,
+        true,
+        fixture.factory
+      );
+      if (sealFails) {
+        fixture.attestations.sealGatewaySession.mockImplementation(async () => {
+          currentLease = cleanupLease;
+          throw new Error('control_plane_seal_failed');
+        });
+      }
+      try {
+        const invocation = await adapter.prepare({
+          workSlot,
+          attemptOrdinal: 1,
+        });
+        const input = {
+          invocation,
+          manifest: {
+            manifestCanonicalJson: '{}',
+            manifestKey: hash('manifest'),
+            providerInvocationKey: hash('provider-invocation'),
+            providerVoteIdentityHash: hash('vote'),
+          },
+          lease: initialLease,
+          currentLease: () => currentLease,
+          sourceExecutionId: 'execution-1',
+          sourceReviewRevisionHash: hash('revision'),
+          signal: new AbortController().signal,
+        };
+        if (sealFails) await expect(adapter.execute(input)).rejects.toThrow();
+        else
+          await expect(adapter.execute(input)).resolves.toMatchObject({
+            contextDependencyAttestationId: 'attestation-1',
+          });
+        expect(
+          fixture.attestations.openGatewaySession
+        ).toHaveBeenLastCalledWith(
+          expect.objectContaining({ invocationLease: initialLease })
+        );
+        expect(fixture.attestations.sealGatewaySession).toHaveBeenCalledWith(
+          expect.objectContaining({ invocationLease: renewedLease })
+        );
+        if (sealFails)
+          expect(
+            fixture.attestations.abandonGatewaySession
+          ).toHaveBeenCalledWith({
+            invocationLease: cleanupLease,
+            session: fixture.serverSession,
+          });
+        else
+          expect(
+            fixture.attestations.abandonGatewaySession
+          ).not.toHaveBeenCalled();
+        expect(provider.executePreparedInvocation).toHaveBeenCalledTimes(1);
+      } finally {
+        await runtimeSession.dispose();
+        await fixture.dispose();
+      }
+    }
+  );
 
   it('rejects a tainted v4 transcript before contacting the control plane', async () => {
     const fixture = await openSessionFixture(CONTEXT_GATEWAY_V4_POLICY_VERSION);

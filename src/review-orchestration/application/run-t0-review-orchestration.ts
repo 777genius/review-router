@@ -1966,6 +1966,7 @@ export class RunT0ReviewOrchestration {
       invocation: input.invocation,
       manifest: input.manifest,
       lease: input.currentLease(),
+      currentLease: input.currentLease,
       sourceExecutionId: input.sourceExecutionId,
       sourceReviewRevisionHash: input.revision.reviewRevisionHash,
       signal,

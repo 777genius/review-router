@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { chmod, mkdtemp, rm } from 'node:fs/promises';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
@@ -61,7 +61,10 @@ async function bounded<T>(work: Promise<T>, phase: string): Promise<T> {
     clearTimeout(timer);
   }
 }
-function post(local: LocalGatewayModelTransport): Promise<IncomingMessage> {
+function post(
+  local: LocalGatewayModelTransport,
+  idleTimeoutMs = 4000
+): Promise<IncomingMessage> {
   const authorization = local.environment[LOCAL_MODEL_CAPABILITY_ENV];
   assert.equal(typeof authorization, 'string');
   return new Promise((resolve, reject) => {
@@ -75,7 +78,7 @@ function post(local: LocalGatewayModelTransport): Promise<IncomingMessage> {
       resolve
     );
     request.once('error', reject);
-    request.setTimeout(4000, () =>
+    request.setTimeout(idleTimeoutMs, () =>
       request.destroy(new Error('synthetic_client_timeout'))
     );
     request.end(body);
@@ -286,6 +289,133 @@ async function terminalFollowup(
   }
   assert.equal(native.listening, false);
 }
+
+// The consumer timeout is for parsed SSE events, so valid comments must keep
+// the native socket alive without resetting that event wait. The fixture sends
+// comments every 20s and its first meaningful event after 60s.
+const expectedStreamIdleMs = 300_000;
+async function parsedEventIdleRegression(): Promise<void> {
+  const root = process.env.RR_TERMINAL_CANCELLATION_PROBE_ROOT;
+  assert(root, 'disposable_probe_root_required');
+  const tls = {
+    cert: readFileSync(join(root, 'cert.pem')),
+    key: readFileSync(join(root, 'key.pem')),
+  };
+  const startedAt = Date.now();
+  const commentTimes: number[] = [];
+  let nativePosts = 0;
+  const fixtureFailures: unknown[] = [];
+  const native = createHttpsServer(tls, (request, reply) => {
+    void (async () => {
+      nativePosts++;
+      assert.equal(nativePosts, 1, 'parsed-event regression must make one POST');
+      assert.equal(request.method, 'POST');
+      assert.equal(request.url, '/api/action/v2/account-gateway/responses');
+      assert.equal(request.headers.authorization, `Bearer ${token}`);
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) {
+        assert(Buffer.isBuffer(chunk));
+        chunks.push(chunk);
+      }
+      assert.equal(Buffer.concat(chunks).toString('utf8'), body);
+      reply.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'x-reviewrouter-request-ref': 'synthetic-parsed-idle',
+      });
+      const sendComment = (id: number) => {
+        commentTimes.push(Date.now() - startedAt);
+        reply.write(`: synthetic comment ${id}\n\n`);
+        if (id < 3) setTimeout(() => sendComment(id + 1), 20_000);
+      };
+      sendComment(1);
+      setTimeout(() => {
+        assert.equal(nativePosts, 1);
+        reply.end(completed('parsed-idle-final'));
+      }, 65_000);
+    })().catch((error: unknown) => {
+      fixtureFailures.push(error);
+      reply.destroy();
+    });
+  });
+  let local: LocalGatewayModelTransport | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      native.once('error', reject);
+      native.listen(0, '127.0.0.1', resolve);
+    });
+    const address = native.address();
+    assert(address && typeof address !== 'string');
+    const transport = new AccountGatewayModelTransport(
+      `https://127.0.0.1:${address.port}`,
+      () => token
+    );
+    local = await startLocalGatewayModelTransport(transport);
+    const idleSetting = local.configuration.find((line) =>
+      line.includes('stream_idle_timeout_ms=')
+    );
+    assert(idleSetting, 'generated consumer idle configuration is required');
+    const idleMatch = idleSetting.match(/\bstream_idle_timeout_ms=(\d+)(?=[,}])/u);
+    assert(idleMatch, 'generated consumer idle value is required');
+    const configuredIdleMs = Number(idleMatch[1]);
+    assert(Number.isSafeInteger(configuredIdleMs) && configuredIdleMs > 0);
+    const response = await post(local, 120_000);
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers['content-type'], 'text/event-stream');
+    let raw = '';
+    await new Promise<void>((resolve, reject) => {
+      // Independently model the consumer wait: comments are ignored, while the
+      // first meaningful event satisfies this 300s event timer.
+      let eventTimer: ReturnType<typeof setTimeout> | undefined;
+      const finish = (error?: Error) => {
+        clearTimeout(eventTimer);
+        eventTimer = undefined;
+        if (error) reject(error);
+        else resolve();
+      };
+      eventTimer = setTimeout(
+        () => finish(new Error('synthetic_parsed_event_idle_timeout')),
+        configuredIdleMs
+      );
+      const onData = (chunk: Buffer) => {
+        raw += chunk.toString('utf8');
+        if (raw.includes('event: response.completed')) finish();
+      };
+      response.on('data', onData);
+      response.once('error', (error) => finish(error));
+      response.once('aborted', () =>
+        finish(new Error('synthetic_parsed_event_aborted'))
+      );
+      response.once('end', () => {
+        if (raw.includes('event: response.completed')) finish();
+        else finish(new Error('synthetic_parsed_event_missing'));
+      });
+    });
+    const completedAt = Date.now() - startedAt;
+    assert.equal(configuredIdleMs, expectedStreamIdleMs);
+    assert(completedAt >= 60_000, 'first meaningful event arrived too early');
+    assert(
+      completedAt < expectedStreamIdleMs,
+      'first meaningful event arrived outside the confirmed parsed-event bound'
+    );
+    assert.equal((raw.match(/: synthetic comment /g) ?? []).length, 3);
+    assert.equal(commentTimes.length, 3);
+    assert(commentTimes[0] < 30_000);
+    for (let index = 1; index < commentTimes.length; index++)
+      assert(commentTimes[index] - commentTimes[index - 1] < 30_000);
+    assert.equal(nativePosts, 1);
+    assert.equal(transport.lastFailure, undefined);
+    assert.equal(local.actualModel(), 'fixture-model');
+    assert.deepEqual(fixtureFailures, []);
+  } finally {
+    try {
+      if (local) await local.dispose();
+    } finally {
+      native.closeAllConnections();
+      await new Promise<void>((resolve) => native.close(() => resolve()));
+    }
+  }
+  assert.equal(native.listening, false);
+}
 async function failedResponseDiagnostic(upstream502: boolean): Promise<void> {
   const root = process.env.RR_TERMINAL_CANCELLATION_PROBE_ROOT;
   assert(root);
@@ -420,6 +550,13 @@ if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
       await terminalFollowup(true, true);
     }
   );
+  nodeTest(
+    'parsed SSE comments keep transport alive until the 60-300s completion event',
+    { timeout: 90_000 },
+    async () => {
+      await parsedEventIdleRegression();
+    }
+  );
 } else {
   test('real TLS/HTTP terminal cancellation permits only the completed client followup', async () => {
     const root = await mkdtemp(
@@ -427,9 +564,14 @@ if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
     );
     const certificate = join(root, 'cert.pem'),
       key = join(root, 'key.pem');
+    const opensslConfig = join(root, 'openssl.cnf');
     const observer = join(root, 'terminal-probe.cjs');
     const execute = promisify(execFile);
     try {
+      writeFileSync(
+        opensslConfig,
+        '[req]\ndistinguished_name=req_distinguished_name\nprompt=no\n[req_distinguished_name]\nCN=localhost\n'
+      );
       await execute(
         'openssl',
         [
@@ -449,7 +591,10 @@ if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
           '-addext',
           'subjectAltName=IP:127.0.0.1,DNS:localhost',
         ],
-        { timeout: 10_000 }
+        {
+          timeout: 10_000,
+          env: { PATH: process.env.PATH, OPENSSL_CONF: opensslConfig },
+        }
       );
       await Promise.all([chmod(certificate, 0o600), chmod(key, 0o600)]);
       buildSync({
@@ -466,23 +611,24 @@ if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
         ['--test', '--test-reporter=tap', observer],
         {
           cwd: root,
-          timeout: 30_000,
+          timeout: 120_000,
           killSignal: 'SIGKILL',
           maxBuffer: 1_048_576,
           env: {
             PATH: process.env.PATH,
             NODE_PATH: resolve('node_modules'),
             NODE_EXTRA_CA_CERTS: certificate,
+            OPENSSL_CONF: opensslConfig,
             RR_TERMINAL_CANCELLATION_PROBE: '--probe',
             RR_TERMINAL_CANCELLATION_PROBE_ROOT: root,
           },
         }
       );
-      expect(result.stdout).toMatch(/# tests 5\b/);
-      expect(result.stdout).toMatch(/# pass 5\b/);
+      expect(result.stdout).toMatch(/# tests 6\b/);
+      expect(result.stdout).toMatch(/# pass 6\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  }, 45_000);
+  }, 120_000);
 }

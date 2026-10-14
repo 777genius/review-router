@@ -18,7 +18,9 @@ export const ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   headerBytes: 16_384,
   bufferBytes: 65_536,
   requestMs: 3_600_000,
-  idleMs: 60_000,
+  // Codex times parsed SSE events; comments can keep native bytes alive
+  // without satisfying that event wait.
+  idleMs: 300_000,
   controlMs: 30_000,
   inFlight: 1,
   localConnections: 4,

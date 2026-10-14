@@ -23305,7 +23305,7 @@ var ConfigLoader = class {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.166",
+  version: "1.0.167",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -64956,7 +64956,9 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   headerBytes: 16384,
   bufferBytes: 65536,
   requestMs: 36e5,
-  idleMs: 6e4,
+  // Codex times parsed SSE events; comments can keep native bytes alive
+  // without satisfying that event wait.
+  idleMs: 3e5,
   controlMs: 3e4,
   inFlight: 1,
   localConnections: 4,

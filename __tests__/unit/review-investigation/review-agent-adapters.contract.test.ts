@@ -35,6 +35,36 @@ import {
 } from '../../../src/review-investigation/infrastructure';
 
 const digest = (character: string) => character.repeat(64);
+describe('precheckout agent negotiation', () => {
+  it('checks the production Codex capabilities without resolving a PR session or launching a turn', async () => {
+    const run = jest.fn();
+    const cancel = jest.fn();
+    const resolve = jest.fn(() => {
+      throw new Error('no PR session before checkout');
+    });
+    const executeTurn = jest.fn();
+    const agent = new CodexReviewAgentAdapter(
+      { run, cancel },
+      {
+        executionSessions: { resolve },
+        appServerRunner: { executeTurn, cancel },
+      }
+    );
+    await expect(
+      agent.negotiate({
+        providerKind: ReviewAgentProviderKind.Codex,
+        executionProfile: ReviewAgentExecutionProfile.GatewayAttestedAgentV1,
+        minimumConfinement: ReviewAgentConfinementStrength.GatewayOnly,
+        requireActualModelAttribution: true,
+        requireUsageAttribution: true,
+        requireFencedCancellation: true,
+        minimumMaxTurns: 1,
+      })
+    ).resolves.toMatchObject({ providerKind: ReviewAgentProviderKind.Codex });
+    for (const effect of [run, cancel, resolve, executeTurn])
+      expect(effect).not.toHaveBeenCalled();
+  });
+});
 const proposedPath = 'src/service.ts';
 const proposedPathHash = sha256(proposedPath);
 const turnOutput = Object.freeze({

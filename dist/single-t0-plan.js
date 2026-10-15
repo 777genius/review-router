@@ -3866,49 +3866,49 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative2, options, skipNormalization) {
+    function resolveComponent(base, relative3, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse(serialize(base, options), options);
-        relative2 = parse(serialize(relative2, options), options);
+        relative3 = parse(serialize(relative3, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative2.scheme) {
-        target.scheme = relative2.scheme;
-        target.userinfo = relative2.userinfo;
-        target.host = relative2.host;
-        target.port = relative2.port;
-        target.path = removeDotSegments(relative2.path || "");
-        target.query = relative2.query;
+      if (!options.tolerant && relative3.scheme) {
+        target.scheme = relative3.scheme;
+        target.userinfo = relative3.userinfo;
+        target.host = relative3.host;
+        target.port = relative3.port;
+        target.path = removeDotSegments(relative3.path || "");
+        target.query = relative3.query;
       } else {
-        if (relative2.userinfo !== void 0 || relative2.host !== void 0 || relative2.port !== void 0) {
-          target.userinfo = relative2.userinfo;
-          target.host = relative2.host;
-          target.port = relative2.port;
-          target.path = removeDotSegments(relative2.path || "");
-          target.query = relative2.query;
+        if (relative3.userinfo !== void 0 || relative3.host !== void 0 || relative3.port !== void 0) {
+          target.userinfo = relative3.userinfo;
+          target.host = relative3.host;
+          target.port = relative3.port;
+          target.path = removeDotSegments(relative3.path || "");
+          target.query = relative3.query;
         } else {
-          if (!relative2.path) {
+          if (!relative3.path) {
             target.path = base.path;
-            if (relative2.query !== void 0) {
-              target.query = relative2.query;
+            if (relative3.query !== void 0) {
+              target.query = relative3.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative2.path[0] === "/") {
-              target.path = removeDotSegments(relative2.path);
+            if (relative3.path[0] === "/") {
+              target.path = removeDotSegments(relative3.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative2.path;
+                target.path = "/" + relative3.path;
               } else if (!base.path) {
-                target.path = relative2.path;
+                target.path = relative3.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative2.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative3.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative2.query;
+            target.query = relative3.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -3916,7 +3916,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative2.fragment;
+      target.fragment = relative3.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -5039,8 +5039,8 @@ var require_multipleOf = __commonJS({
         const { gen, data, schemaCode, it } = cxt;
         const prec = it.opts.multipleOfPrecision;
         const res = gen.let("res");
-        const invalid = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
-        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid}))`);
+        const invalid2 = prec ? (0, codegen_1._)`Math.abs(Math.round(${res}) - ${res}) > 1e-${prec}` : (0, codegen_1._)`${res} !== parseInt(${res})`;
+        cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid2}))`);
       }
     };
     exports2.default = def;
@@ -23403,6 +23403,77 @@ var package_default = {
   }
 };
 
+// src/control-plane/approved-review-agent.ts
+var import_node_crypto = require("node:crypto");
+
+// src/control-plane/generated/review-action-v2/review-agent-profile.ts
+function parseReviewAgentProfiles(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 16)
+    invalid("review_agent_profiles_invalid");
+  const refs = /* @__PURE__ */ new Set();
+  return Object.freeze(
+    value.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item))
+        invalid("review_agent_profile_invalid");
+      const row = item;
+      const names = [
+        "profileRef",
+        "agentKind",
+        "binarySha256",
+        "packageVersion",
+        "modelTransports",
+        "contextGateway",
+        "cancellation"
+      ];
+      if (Object.keys(row).length !== names.length || names.some((name) => !Object.hasOwn(row, name)))
+        invalid("review_agent_profile_invalid");
+      if (typeof row.profileRef !== "string" || typeof row.binarySha256 !== "string" || typeof row.packageVersion !== "string")
+        invalid("review_agent_profile_invalid");
+      if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(row.profileRef))
+        invalid("review_agent_profile_ref_invalid");
+      if (!/^[a-f0-9]{64}$/.test(row.binarySha256))
+        invalid("review_agent_binary_sha256_invalid");
+      if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(
+        row.packageVersion
+      ) || refs.has(row.profileRef))
+        invalid("review_agent_profile_invalid");
+      if (row.agentKind !== "codex" && row.agentKind !== "claude" || row.contextGateway !== true || row.cancellation !== true)
+        invalid("review_agent_profile_capabilities_invalid");
+      const transports = row.modelTransports;
+      if (!Array.isArray(transports) || transports.length < 1 || transports.length > 2 || new Set(transports).size !== transports.length || transports.some((t) => t !== "account_gateway" && t !== "provider_api"))
+        invalid("review_agent_profile_transport_invalid");
+      refs.add(row.profileRef);
+      return Object.freeze({
+        profileRef: row.profileRef,
+        agentKind: row.agentKind,
+        binarySha256: row.binarySha256,
+        packageVersion: row.packageVersion,
+        modelTransports: Object.freeze([
+          ...transports
+        ]),
+        contextGateway: true,
+        cancellation: true
+      });
+    })
+  );
+}
+function invalid(code) {
+  throw new Error(code);
+}
+
+// src/control-plane/approved-review-agent.ts
+function readApprovedReviewAgent(json2, digest3) {
+  if (Buffer.byteLength(json2) > 16384 || !/^[a-f0-9]{64}$/.test(digest3) || (0, import_node_crypto.createHash)("sha256").update(json2).digest("hex") !== digest3)
+    throw new Error("review_agent_profile_digest_mismatch");
+  const profile = parseReviewAgentProfiles([JSON.parse(json2)])[0];
+  if (!profile) throw new Error("review_agent_profile_invalid");
+  return profile;
+}
+function assertApprovedReviewAgentBinary(profile, bytes) {
+  if ((0, import_node_crypto.createHash)("sha256").update(bytes).digest("hex") !== profile.binarySha256)
+    throw new Error("review_agent_binary_drift");
+}
+
 // src/codex-oauth/github-actions-oidc.ts
 var GitHubActionsOidcTokenProvider = class {
   env;
@@ -23493,6 +23564,11 @@ function parseAdmittedRuntimeConfig(value) {
   if (parsed.ignoredRuntimeEnvKeys.length > 0) {
     throw new Error("runtime_config_unsafe_admitted_env");
   }
+  const profileJson = parsed.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON;
+  const profileDigest = parsed.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST;
+  if (!profileJson || !profileDigest)
+    throw new Error("runtime_config_agent_profile_required");
+  readApprovedReviewAgent(profileJson, profileDigest);
   return Object.freeze({
     protocolVersion: 1,
     configVersion: parsed.configVersion,
@@ -64715,6 +64791,67 @@ var CODEX_OAUTH_PINNED_CODEX_PACKAGE = "@openai/codex@0.147.0";
 var CODEX_OAUTH_CLI_INSTALL_TIMEOUT_MS = 3e5;
 async function prepareCodexCliBeforeAuthRead(input = {}) {
   input.signal?.throwIfAborted();
+  if (input.approvedAgent) {
+    const profile = input.approvedAgent;
+    if (profile.agentKind !== "codex" || process.platform !== "linux" || process.arch !== "x64")
+      throw new Error("review_agent_toolchain_unavailable");
+    if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(
+      profile.packageVersion
+    ))
+      throw new Error("review_agent_package_version_invalid");
+    const installRoot2 = await fs3.mkdtemp(
+      path2.join(os.tmpdir(), "reviewrouter-approved-agent-")
+    );
+    try {
+      await runNpmInstall({
+        installRoot: installRoot2,
+        packageVersion: profile.packageVersion,
+        timeoutMs: input.timeoutMs ?? CODEX_OAUTH_CLI_INSTALL_TIMEOUT_MS,
+        signal: input.signal
+      });
+      const triple = "x86_64-unknown-linux-musl/bin/codex";
+      const candidates = [
+        path2.join(installRoot2, "node_modules/@openai/codex/vendor", triple),
+        path2.join(
+          installRoot2,
+          "node_modules/@openai/codex-linux-x64/vendor",
+          triple
+        ),
+        path2.join(
+          installRoot2,
+          "node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor",
+          triple
+        )
+      ];
+      for (const candidate of candidates) {
+        let binaryPath;
+        try {
+          binaryPath = await fs3.realpath(candidate);
+        } catch (error) {
+          if (error.code === "ENOENT") continue;
+          throw error;
+        }
+        const relative3 = path2.relative(installRoot2, binaryPath);
+        if (relative3 === ".." || relative3.startsWith(`..${path2.sep}`) || path2.isAbsolute(relative3))
+          throw new Error("review_agent_binary_path_invalid");
+        assertApprovedReviewAgentBinary(profile, await fs3.readFile(binaryPath));
+        return {
+          binaryPath,
+          clear: () => fs3.rm(installRoot2, { recursive: true, force: true })
+        };
+      }
+      throw new Error("review_agent_binary_missing");
+    } catch (error) {
+      try {
+        await fs3.rm(installRoot2, { recursive: true, force: true });
+      } catch {
+        input.logger?.warn(
+          "Codex CLI install cleanup failed; removal unconfirmed"
+        );
+      }
+      throw error;
+    }
+  }
   const explicit = process.env.REVIEWROUTER_CODEX_BINARY?.trim();
   if (explicit) {
     await assertCodexBinaryWorks(
@@ -64791,7 +64928,8 @@ async function runNpmInstall(input) {
       "--omit=dev",
       "--no-audit",
       "--no-fund",
-      CODEX_OAUTH_PINNED_CODEX_PACKAGE
+      ...input.packageVersion ? ["--ignore-scripts"] : [],
+      input.packageVersion ? `@openai/codex@${input.packageVersion}` : CODEX_OAUTH_PINNED_CODEX_PACKAGE
     ],
     {
       timeoutMs: input.timeoutMs,
@@ -66716,11 +66854,11 @@ ${JSON.stringify(outputSchema)}` : prompt;
           continue;
         }
         if (!entry.isFile()) continue;
-        const relative2 = path4.relative(root, fullPath).replace(/\\/g, "/");
-        if (!this.isContextReadableFile(relative2)) continue;
+        const relative3 = path4.relative(root, fullPath).replace(/\\/g, "/");
+        if (!this.isContextReadableFile(relative3)) continue;
         try {
           const stat3 = fsSync.statSync(fullPath);
-          if (stat3.size <= 2e5) files.push(relative2);
+          if (stat3.size <= 2e5) files.push(relative3);
         } catch {
         }
       }
@@ -86608,8 +86746,8 @@ function assertTurnObligationClaimsAllowed(request, output) {
   const unresolvableIds = output.unresolvableClaims.map(
     (claim) => claim.obligationId
   );
-  const invalid = closureIds.some((id) => !allowed.has(id)) || unresolvableIds.some((id) => !allowed.has(id)) || new Set(closureIds).size !== closureIds.length || new Set(unresolvableIds).size !== unresolvableIds.length || closureIds.some((id) => unresolvableIds.includes(id));
-  if (invalid) {
+  const invalid2 = closureIds.some((id) => !allowed.has(id)) || unresolvableIds.some((id) => !allowed.has(id)) || new Set(closureIds).size !== closureIds.length || new Set(unresolvableIds).size !== unresolvableIds.length || closureIds.some((id) => unresolvableIds.includes(id));
+  if (invalid2) {
     throw new ReviewAgentExecutionError(
       "schema_invalid_output" /* SchemaInvalidOutput */,
       null,
@@ -88436,10 +88574,14 @@ var DeterministicReviewAgentSelector = class {
     const criticRoute = input.purpose === "critic" /* Critic */ ? this.options.critic : void 0;
     const providerKind = criticRoute?.providerKind ?? input.primaryProviderKind;
     const requestedModel = criticRoute?.requestedModel ?? input.primaryRequestedModel;
-    const executionAuthority = input.executionAuthority ?? {
-      providerKind: input.primaryProviderKind,
-      requestedModel: input.primaryRequestedModel
-    };
+    const executionAuthority = input.executionAuthority;
+    if (!executionAuthority) {
+      throw new ReviewAgentExecutionError(
+        "confinement_violation" /* ConfinementViolation */,
+        null,
+        "review_agent_execution_authority_required"
+      );
+    }
     const threshold = this.options.requireIndependentCriticAtOrAboveRiskPriority;
     if (!this.options.allowedProviderKinds.includes(providerKind)) {
       throw new ReviewAgentExecutionError(
@@ -89458,6 +89600,12 @@ var ProductionT0ReviewRunner = class {
     signal?.throwIfAborted();
     const fetchImpl = signal ? createAccountGatewayRunFetch(this.fetchImpl, signal) : this.fetchImpl;
     validateInput(input);
+    const approvedAgent = input.accountGateway ? readApprovedReviewAgent(
+      input.accountGateway.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
+      input.accountGateway.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
+    ) : void 0;
+    if (approvedAgent && approvedAgent.agentKind !== "codex")
+      throw new Error("review_investigation_approved_agent_unavailable");
     const authoritativeDeadlineEpochMs = process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
     const oidc = new GitHubActionsOidcTokenProvider({
       fetchImpl
@@ -89689,6 +89837,7 @@ var ProductionT0ReviewRunner = class {
           primaryProviderKind: "codex" /* Codex */,
           contextCriticEnabled: investigationRollout.contextCriticEnabled,
           agents: createConfiguredProductionInvestigationAgents({
+            approvedAgent,
             codexModel: model,
             codexBinaryPath: input.codexBinaryPath,
             executionSessions: gateway,
@@ -89937,6 +90086,9 @@ function resolveAccountGatewayModelProvider(selectedModel, admittedModel, transp
   return transport && admittedModel === selectedModel && isAccountGatewayMiMoModel(admittedModel) ? "mimo" : void 0;
 }
 function createConfiguredProductionInvestigationAgents(input) {
+  if (input.approvedAgent && input.approvedAgent.agentKind !== "codex") {
+    throw new Error("review_investigation_approved_agent_unavailable");
+  }
   const reasoningEffort = input.reasoningEffort;
   const processRunner = new NodeReviewAgentProcessRunner();
   const appServer = input.modelTransport ? new NodeCodexAppServerTurnRunner() : void 0;

@@ -2432,6 +2432,43 @@ describe('CodexProvider', () => {
     expect(formatted).not.toBe('... specific evidence');
   });
 
+  it('prefers stderr diagnostics over unrelated stdout messages', () => {
+    const provider = new CodexProvider('gpt-5.6-sol');
+    const syntheticKey = ['sk', 'proj', randomBytes(24).toString('hex')].join(
+      '-'
+    );
+    const formatted = (provider as any).formatCliError(
+      `stream disconnected before completion https://example.test/private ${syntheticKey}`,
+      JSON.stringify({
+        type: 'item.completed',
+        item: { message: 'PRIVATE_REVIEW_NARRATIVE' },
+      })
+    );
+
+    expect(formatted).toContain('stream disconnected before completion');
+    expect(formatted).not.toContain('PRIVATE_REVIEW_NARRATIVE');
+    expect(formatted).not.toContain('example.test');
+    expect(formatted).not.toContain(syntheticKey);
+    expect(
+      (provider as any).formatCliError(
+        'stream disconnected before completion',
+        JSON.stringify({ type: 'error', message: 'later retry failed' })
+      )
+    ).toBe('stream disconnected before completion');
+    expect(
+      (provider as any).formatCliError(
+        JSON.stringify({
+          level: 'info',
+          message: 'initializing authentication',
+        }),
+        JSON.stringify({
+          type: 'error',
+          message: 'idle timeout waiting for SSE',
+        })
+      )
+    ).toBe('idle timeout waiting for SSE');
+  });
+
   it('preserves stdout failures when stderr contains only a placeholder', () => {
     const provider = new CodexProvider('gpt-5.6-sol');
     const formatted = (provider as any).formatCliError(

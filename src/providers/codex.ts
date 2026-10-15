@@ -2459,7 +2459,50 @@ export class CodexProvider extends Provider {
   }
 
   private formatCliError(stderr: string, stdout: string): string {
-    const input = [stderr, stdout].filter(Boolean).join('\n') || 'no output';
+    const diagnosticInput = (raw: string, stdoutOnly: boolean): string =>
+      raw
+        .split(/\r?\n/)
+        .filter((line) => {
+          const trimmed = line.trim();
+          if (!trimmed || /^https?:\/\/\S+$/i.test(trimmed)) return false;
+          try {
+            const event = JSON.parse(trimmed);
+            if (event && typeof event === 'object' && !Array.isArray(event)) {
+              const errorEvent =
+                event.type === 'error' || event.type === 'turn.failed';
+              const level = String(event.level || '').toLowerCase();
+              if (
+                !errorEvent &&
+                /^(trace|debug|info|warn|warning)$/.test(level)
+              )
+                return false;
+              const messages = this.extractCliErrorMessages(trimmed);
+              if (
+                messages.length > 0 &&
+                messages.every((message) =>
+                  this.isPlaceholderCliDiagnostic(message)
+                )
+              )
+                return false;
+              // JSON stdout also contains agent messages and tool output.
+              // Those messages are not CLI diagnostics, even on a failed run.
+              return stdoutOnly ? errorEvent : !event.type || errorEvent;
+            }
+            return false;
+          } catch {
+            return /not supported|invalid_request_error|auth|error|failed|timed out|timeout|capacity|limit|quota|stream disconnected before completion|stream closed before response\.completed/i.test(
+              line
+            );
+          }
+        })
+        .join('\n');
+    // A real stderr diagnostic must not be replaced by an unrelated stdout
+    // message. Keep stderr boilerplate only as the last available fallback.
+    const input =
+      diagnosticInput(stderr, false) ||
+      diagnosticInput(stdout, true) ||
+      stderr ||
+      'no output';
     const jsonMessages = this.extractCliErrorMessages(input)
       .map((message) => this.sanitizeCliErrorText(message))
       .map((message) => message.trim())

@@ -23305,7 +23305,7 @@ var ConfigLoader = class {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.171",
+  version: "1.0.172",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -84842,21 +84842,38 @@ var CodexAppServerProtocolClient = class {
     this.turnStarted = true;
   }
   onItemStarted(params) {
-    this.assertTurnFence(params);
-    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
-    const item = requireRecord2(params.item, "item");
-    const id = requireIdentifier2(item.id, "item_id");
-    const type2 = requireNonEmptyString(item.type, "item_type");
-    if (this.activeItems.has(id) || this.completedItems.has(id)) {
-      throw streamFailure();
+    let checkpoint = "fence";
+    let itemType = "other";
+    try {
+      this.assertTurnFence(params);
+      checkpoint = "lifecycle";
+      if (!this.turnStarted || this.turnCompleted) throw streamFailure();
+      checkpoint = "item_shape";
+      const item = requireRecord2(params.item, "item");
+      itemType = itemDiagnosticType(item.type);
+      checkpoint = "identity";
+      const id = requireIdentifier2(item.id, "item_id");
+      const type2 = requireNonEmptyString(item.type, "item_type");
+      checkpoint = "id_duplicate";
+      if (this.activeItems.has(id) || this.completedItems.has(id)) {
+        throw streamFailure();
+      }
+      checkpoint = "item_shape";
+      this.validateAllowedItem(item, "started", (value) => {
+        checkpoint = value;
+      });
+      const active = type2 === "mcpToolCall" ? Object.freeze({
+        type: type2,
+        server: requireNonEmptyString(item.server, "mcp_server"),
+        tool: requireNonEmptyString(item.tool, "mcp_tool")
+      }) : Object.freeze({ type: type2 });
+      this.activeItems.set(id, active);
+    } catch (error) {
+      throw withStreamDiagnosticStage(
+        error,
+        `item_started_${itemType}_${checkpoint}`
+      );
     }
-    this.validateAllowedItem(item, "started");
-    const active = type2 === "mcpToolCall" ? Object.freeze({
-      type: type2,
-      server: requireNonEmptyString(item.server, "mcp_server"),
-      tool: requireNonEmptyString(item.tool, "mcp_tool")
-    }) : Object.freeze({ type: type2 });
-    this.activeItems.set(id, active);
   }
   onItemCompleted(params) {
     this.assertTurnFence(params);
@@ -84928,32 +84945,37 @@ var CodexAppServerProtocolClient = class {
     }
     this.activeItems.clear();
   }
-  validateAllowedItem(item, lifecycle) {
+  validateAllowedItem(item, lifecycle, mark) {
     const type2 = requireNonEmptyString(item.type, "item_type");
     if (FORBIDDEN_ITEM_TYPES.has(type2)) {
       throw confinementFailure("forbidden_item_type");
     }
+    mark?.("unsupported_item_type");
     if (!ALLOWED_ITEM_TYPES.has(type2)) throw streamFailure();
     switch (type2) {
       case "userMessage":
-        this.validateUserMessage(item);
+        this.validateUserMessage(item, mark);
         return;
       case "agentMessage":
-        this.validateAgentMessage(item);
+        this.validateAgentMessage(item, mark);
         return;
       case "reasoning":
+        mark?.("reasoning_summary");
         requireStringArray2(item.summary, "reasoning_summary");
+        mark?.("reasoning_content");
         requireStringArray2(item.content, "reasoning_content");
         return;
       case "mcpToolCall":
-        this.validateMcpToolCall(item, lifecycle);
+        this.validateMcpToolCall(item, lifecycle, mark);
         return;
       case "contextCompaction":
         return;
     }
   }
-  validateUserMessage(item) {
+  validateUserMessage(item, mark) {
+    mark?.("user_client_id");
     if (item.clientId !== this.request.clientTurnId) throw streamFailure();
+    mark?.("user_content");
     if (!Array.isArray(item.content) || item.content.length !== 1) {
       throw streamFailure();
     }
@@ -84962,22 +84984,30 @@ var CodexAppServerProtocolClient = class {
       throw streamFailure();
     }
   }
-  validateAgentMessage(item) {
-    if (typeof item.text !== "string" || item.phase !== null && item.phase !== "commentary" && item.phase !== "final_answer" || item.memoryCitation !== null) {
+  validateAgentMessage(item, mark) {
+    mark?.("agent_text");
+    if (typeof item.text !== "string") throw streamFailure();
+    mark?.("agent_phase");
+    if (item.phase !== null && item.phase !== "commentary" && item.phase !== "final_answer")
       throw streamFailure();
-    }
+    mark?.("agent_memory_citation");
+    if (item.memoryCitation !== null) throw streamFailure();
     if (Buffer.byteLength(item.text, "utf8") > this.request.maxOutputBytes) {
       throw schemaFailure();
     }
   }
-  validateMcpToolCall(item, lifecycle) {
+  validateMcpToolCall(item, lifecycle, mark) {
+    mark?.("mcp_server");
     const server = requireNonEmptyString(item.server, "mcp_server");
+    mark?.("mcp_tool");
     const tool = requireNonEmptyString(item.tool, "mcp_tool");
     if (server !== CODEX_APP_SERVER_MCP_NAME || !this.allowedTools.has(tool) || item.pluginId !== null || item.appContext !== null) {
       throw confinementFailure("mcp_tool_authority");
     }
+    mark?.("mcp_arguments");
     requireRecord2(item.arguments, "mcp_arguments");
     if (lifecycle === "started") {
+      mark?.("mcp_start_state");
       if (item.status !== "inProgress" || item.result !== null || item.error !== null) {
         throw streamFailure();
       }
@@ -85572,6 +85602,22 @@ function safeJson(value) {
     return JSON.stringify(value) ?? "";
   } catch {
     return "";
+  }
+}
+function itemDiagnosticType(value) {
+  switch (value) {
+    case "userMessage":
+      return "user_message";
+    case "agentMessage":
+      return "agent_message";
+    case "reasoning":
+      return "reasoning";
+    case "mcpToolCall":
+      return "mcp_tool_call";
+    case "contextCompaction":
+      return "context_compaction";
+    default:
+      return "other";
   }
 }
 function notificationDiagnosticStage(value) {

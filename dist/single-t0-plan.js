@@ -23305,7 +23305,7 @@ var ConfigLoader = class {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.172",
+  version: "1.0.173",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -84961,9 +84961,15 @@ var CodexAppServerProtocolClient = class {
         return;
       case "reasoning":
         mark?.("reasoning_summary");
-        requireStringArray2(item.summary, "reasoning_summary");
+        requireStringArray2(
+          itemFieldOrDefault(item, "summary", []),
+          "reasoning_summary"
+        );
         mark?.("reasoning_content");
-        requireStringArray2(item.content, "reasoning_content");
+        requireStringArray2(
+          itemFieldOrDefault(item, "content", []),
+          "reasoning_content"
+        );
         return;
       case "mcpToolCall":
         this.validateMcpToolCall(item, lifecycle, mark);
@@ -84988,10 +84994,12 @@ var CodexAppServerProtocolClient = class {
     mark?.("agent_text");
     if (typeof item.text !== "string") throw streamFailure();
     mark?.("agent_phase");
-    if (item.phase !== null && item.phase !== "commentary" && item.phase !== "final_answer")
+    const phase = itemFieldOrDefault(item, "phase", null);
+    if (phase !== null && phase !== "commentary" && phase !== "final_answer")
       throw streamFailure();
     mark?.("agent_memory_citation");
-    if (item.memoryCitation !== null) throw streamFailure();
+    if (itemFieldOrDefault(item, "memoryCitation", null) !== null)
+      throw streamFailure();
     if (Buffer.byteLength(item.text, "utf8") > this.request.maxOutputBytes) {
       throw schemaFailure();
     }
@@ -85021,11 +85029,12 @@ var CodexAppServerProtocolClient = class {
     }
   }
   captureFinalMessage(item) {
-    if (item.phase === "commentary") return;
+    const phase = itemFieldOrDefault(item, "phase", null);
+    if (phase === "commentary") return;
     const text = item.text;
     if (!text.trim()) throw schemaFailure();
     this.finalMessageCandidates.push({
-      phase: item.phase,
+      phase,
       text
     });
   }
@@ -85504,6 +85513,9 @@ function requireModelProvider(value) {
     throw modelFailure();
   }
   return provider;
+}
+function itemFieldOrDefault(item, key, fallback) {
+  return Object.prototype.hasOwnProperty.call(item, key) ? item[key] : fallback;
 }
 function requireStringArray2(value, _field) {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {

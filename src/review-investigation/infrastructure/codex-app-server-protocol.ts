@@ -747,9 +747,15 @@ export class CodexAppServerProtocolClient {
         return;
       case 'reasoning':
         mark?.('reasoning_summary');
-        requireStringArray(item.summary, 'reasoning_summary');
+        requireStringArray(
+          itemFieldOrDefault(item, 'summary', []),
+          'reasoning_summary'
+        );
         mark?.('reasoning_content');
-        requireStringArray(item.content, 'reasoning_content');
+        requireStringArray(
+          itemFieldOrDefault(item, 'content', []),
+          'reasoning_content'
+        );
         return;
       case 'mcpToolCall':
         this.validateMcpToolCall(item, lifecycle, mark);
@@ -787,14 +793,12 @@ export class CodexAppServerProtocolClient {
     mark?.('agent_text');
     if (typeof item.text !== 'string') throw streamFailure();
     mark?.('agent_phase');
-    if (
-      item.phase !== null &&
-      item.phase !== 'commentary' &&
-      item.phase !== 'final_answer'
-    )
+    const phase = itemFieldOrDefault(item, 'phase', null);
+    if (phase !== null && phase !== 'commentary' && phase !== 'final_answer')
       throw streamFailure();
     mark?.('agent_memory_citation');
-    if (item.memoryCitation !== null) throw streamFailure();
+    if (itemFieldOrDefault(item, 'memoryCitation', null) !== null)
+      throw streamFailure();
     if (Buffer.byteLength(item.text, 'utf8') > this.request.maxOutputBytes) {
       throw schemaFailure();
     }
@@ -850,11 +854,12 @@ export class CodexAppServerProtocolClient {
   }
 
   private captureFinalMessage(item: Record<string, unknown>): void {
-    if (item.phase === 'commentary') return;
+    const phase = itemFieldOrDefault(item, 'phase', null);
+    if (phase === 'commentary') return;
     const text = item.text as string;
     if (!text.trim()) throw schemaFailure();
     this.finalMessageCandidates.push({
-      phase: item.phase as 'final_answer' | null,
+      phase: phase as 'final_answer' | null,
       text,
     });
   }
@@ -1507,6 +1512,15 @@ function requireModelProvider(value: unknown): string {
     throw modelFailure();
   }
   return provider;
+}
+
+/** Exact Codex0.147 JSON schema defaults apply to omitted keys only. */
+function itemFieldOrDefault(
+  item: Record<string, unknown>,
+  key: 'summary' | 'content' | 'phase' | 'memoryCitation',
+  fallback: readonly string[] | null
+): unknown {
+  return Object.prototype.hasOwnProperty.call(item, key) ? item[key] : fallback;
 }
 
 function requireStringArray(value: unknown, _field: string): readonly string[] {

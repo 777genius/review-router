@@ -22481,11 +22481,12 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   localConnections: 4,
   cliOutputBytes: 8388608
 });
-function observeTransport(observe, stage, responseReceived, httpStatus, error2) {
+function observeTransport(observe, stage, responseReceived, httpStatus, error2, facts = {}) {
   try {
     void Promise.resolve(
       observe?.({
         stage,
+        ...facts,
         responseReceived,
         httpStatus,
         errorCategory: error2 === void 0 ? "none" : error2 instanceof TypeError ? "TypeError" : error2 instanceof RangeError ? "RangeError" : error2 instanceof Error ? error2.name === "AbortError" ? "AbortError" : "Error" : "other"
@@ -22614,7 +22615,11 @@ var AccountGatewayModelTransport = class {
           }
         }
       });
-      response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, abort);
+      let upstreamIdleExpired = false;
+      response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, () => {
+        upstreamIdleExpired = true;
+        abort();
+      });
       let terminalCancellation = false;
       let streamFailureObserved = false;
       const fail = (error2) => {
@@ -22630,7 +22635,14 @@ var AccountGatewayModelTransport = class {
             "upstream_stream",
             true,
             status,
-            error2
+            error2,
+            {
+              streamFacts: {
+                callerAborted: signal?.aborted === true,
+                upstreamIdleExpired,
+                completedObserved: audit?.hasCompleted() === true
+              }
+            }
           );
         }
         this.failure ??= {
@@ -22810,6 +22822,11 @@ async function startLocalGatewayModelTransport(transport, observe) {
         }
         inFlight++;
         const controller = new AbortController();
+        let downstreamIdleExpired = false;
+        const markSocketIdle = () => {
+          downstreamIdleExpired = true;
+        };
+        request.socket.once("timeout", markSocketIdle);
         const abort = () => controller.abort();
         const downstreamClosed = () => {
           if (!reply.writableFinished) abort();
@@ -22841,7 +22858,8 @@ async function startLocalGatewayModelTransport(transport, observe) {
               stage,
               upstream !== void 0,
               upstream?.httpStatus ?? null,
-              error2
+              error2,
+              { downstreamIdleExpired }
             );
           if (reply.headersSent) reply.destroy();
           else {
@@ -22854,6 +22872,7 @@ async function startLocalGatewayModelTransport(transport, observe) {
           if (!reply.writableFinished) upstream?.cancel();
           clearTimeout(timer);
           request.removeListener("aborted", abort);
+          request.socket.removeListener("timeout", markSocketIdle);
           reply.removeListener("close", downstreamClosed);
           inFlight--;
         }
@@ -52113,7 +52132,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.170",
+  version: "1.0.171",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

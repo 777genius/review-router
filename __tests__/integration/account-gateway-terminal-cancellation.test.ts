@@ -271,6 +271,17 @@ async function terminalFollowup(
         1,
         'one failed upstream stream must produce exactly one diagnostic'
       );
+    if (upstreamReset)
+      assert.deepEqual(
+        diagnostics.find((diagnostic) => diagnostic.stage === 'upstream_stream')
+          ?.streamFacts,
+        {
+          callerAborted: false,
+          upstreamIdleExpired: false,
+          completedObserved: true,
+        },
+        'a provider reset after completion must remain distinct from caller or idle cancellation'
+      );
   } finally {
     first?.destroy();
     second?.destroy();
@@ -308,7 +319,11 @@ async function parsedEventIdleRegression(): Promise<void> {
   const native = createHttpsServer(tls, (request, reply) => {
     void (async () => {
       nativePosts++;
-      assert.equal(nativePosts, 1, 'parsed-event regression must make one POST');
+      assert.equal(
+        nativePosts,
+        1,
+        'parsed-event regression must make one POST'
+      );
       assert.equal(request.method, 'POST');
       assert.equal(request.url, '/api/action/v2/account-gateway/responses');
       assert.equal(request.headers.authorization, `Bearer ${token}`);
@@ -354,7 +369,9 @@ async function parsedEventIdleRegression(): Promise<void> {
       line.includes('stream_idle_timeout_ms=')
     );
     assert(idleSetting, 'generated consumer idle configuration is required');
-    const idleMatch = idleSetting.match(/\bstream_idle_timeout_ms=(\d+)(?=[,}])/u);
+    const idleMatch = idleSetting.match(
+      /\bstream_idle_timeout_ms=(\d+)(?=[,}])/u
+    );
     assert(idleMatch, 'generated consumer idle value is required');
     const configuredIdleMs = Number(idleMatch[1]);
     assert(Number.isSafeInteger(configuredIdleMs) && configuredIdleMs > 0);

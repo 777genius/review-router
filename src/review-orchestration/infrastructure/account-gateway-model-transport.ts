@@ -55,6 +55,12 @@ export type GatewayTransportDiagnostic = Readonly<{
     | 'downstream_stream';
   responseReceived: boolean;
   httpStatus: number | null;
+  streamFacts?: Readonly<{
+    callerAborted: boolean;
+    upstreamIdleExpired: boolean;
+    completedObserved: boolean;
+  }>;
+  downstreamIdleExpired?: boolean;
   errorCategory:
     | 'none'
     | 'AbortError'
@@ -73,12 +79,17 @@ function observeTransport(
   stage: GatewayTransportDiagnostic['stage'],
   responseReceived: boolean,
   httpStatus: number | null,
-  error?: unknown
+  error?: unknown,
+  facts: Pick<
+    GatewayTransportDiagnostic,
+    'streamFacts' | 'downstreamIdleExpired'
+  > = {}
 ): void {
   try {
     void Promise.resolve(
       observe?.({
         stage,
+        ...facts,
         responseReceived,
         httpStatus,
         errorCategory:
@@ -267,7 +278,11 @@ export class AccountGatewayModelTransport {
           }
         },
       });
-      response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, abort);
+      let upstreamIdleExpired = false;
+      response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, () => {
+        upstreamIdleExpired = true;
+        abort();
+      });
       let terminalCancellation = false;
       let streamFailureObserved = false;
       const fail = (error: unknown) => {
@@ -294,7 +309,14 @@ export class AccountGatewayModelTransport {
             'upstream_stream',
             true,
             status,
-            error
+            error,
+            {
+              streamFacts: {
+                callerAborted: signal?.aborted === true,
+                upstreamIdleExpired,
+                completedObserved: audit?.hasCompleted() === true,
+              },
+            }
           );
         }
         this.failure ??= {
@@ -528,6 +550,11 @@ export async function startLocalGatewayModelTransport(
         }
         inFlight++;
         const controller = new AbortController();
+        let downstreamIdleExpired = false;
+        const markSocketIdle = () => {
+          downstreamIdleExpired = true;
+        };
+        request.socket.once('timeout', markSocketIdle);
         const abort = () => controller.abort();
         const downstreamClosed = () => {
           if (!reply.writableFinished) abort();
@@ -562,7 +589,8 @@ export async function startLocalGatewayModelTransport(
               stage,
               upstream !== undefined,
               upstream?.httpStatus ?? null,
-              error
+              error,
+              { downstreamIdleExpired }
             );
           if (reply.headersSent) reply.destroy();
           else {
@@ -575,6 +603,7 @@ export async function startLocalGatewayModelTransport(
           if (!reply.writableFinished) upstream?.cancel();
           clearTimeout(timer);
           request.removeListener('aborted', abort);
+          request.socket.removeListener('timeout', markSocketIdle);
           reply.removeListener('close', downstreamClosed);
           inFlight--;
         }

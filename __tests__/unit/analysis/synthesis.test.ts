@@ -141,6 +141,10 @@ describe('SynthesisEngine', () => {
     expect(review.summary).toContain('## No findings');
     expect(review.summary).not.toContain('PR #1:');
     expect(review.summary).not.toContain('| Item | Result |');
+    expect(review.summary).toContain('# ReviewRouter');
+    expect(review.summary).not.toContain('| Duration |');
+    expect(review.summary).not.toContain('| Tokens |');
+    expect(review.summary).not.toContain('| Cost |');
   });
 
   it('sorts inline comments by severity before applying the inline limit', () => {
@@ -253,6 +257,10 @@ describe('SynthesisEngine', () => {
     expect(review.summary).toContain('**Fix**');
     expect(review.summary).toContain('return deny();');
     expect(review.summary).toContain('Small cleanup is still a real finding.');
+    expect(review.metrics.providersUsed).toBe(0);
+    expect(review.summary).toContain(
+      '<!-- reviewrouter:review-status:complete -->'
+    );
   });
 
   it('writes summary chrome in the configured review language', () => {

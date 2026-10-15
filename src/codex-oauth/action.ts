@@ -16,6 +16,7 @@ import { applyControlPlaneRuntimeConfig } from '../control-plane/runtime-config'
 import { CodexOAuthControlPlaneClient, FetchLike } from './control-plane';
 import { refreshCodexAuthWithOfficialCli } from './codex-bootstrap';
 import { prepareCodexCliBeforeAuthRead } from './codex-cli';
+import { bundledReviewAgentForTransport } from '../control-plane/approved-review-agent';
 import {
   applyCodexRotatingProviderSecretInputs,
   clearCodexRotatingOidcRequestEnv,
@@ -164,6 +165,9 @@ export async function runCodexOAuthRotatingAction(
     codex: {
       prepareCli: () =>
         prepareCodexCliBeforeAuthRead({
+          ...(reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0
+            ? { approvedAgent: bundledReviewAgentForTransport('provider_api') }
+            : {}),
           logger: {
             info: core.info,
             warn: (message) => core.warning(message),

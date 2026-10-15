@@ -411,6 +411,9 @@ describe('Codex OAuth rotating setup PR preview', () => {
   });
 
   it('reports lane-busy partial v2 reviews without duplicating the server summary', async () => {
+    const prepareCli = jest
+      .spyOn(codexCli, 'prepareCodexCliBeforeAuthRead')
+      .mockResolvedValue({ binaryPath: '/tmp/qualified-t0-codex' });
     mockedRuntime.mockResolvedValue({
       status: 'completed',
       publicationMode: CodexOAuthReviewRuntimeMode.ServerPublishedV2,
@@ -449,6 +452,16 @@ describe('Codex OAuth rotating setup PR preview', () => {
       terminalOutcomeReporter,
     });
 
+    await mockedRuntime.mock.calls[0]![1].codex.prepareCli!();
+    expect(prepareCli).toHaveBeenCalledWith(
+      expect.objectContaining({
+        approvedAgent: expect.objectContaining({
+          profileRef: 'codex-default',
+          packageVersion: '0.147.0',
+          modelTransports: ['account_gateway', 'provider_api'],
+        }),
+      })
+    );
     expect(process.exitCode).toBe(1);
     expect(fs.readFileSync(stepSummaryPath, 'utf8')).toContain(
       'Review delayed'

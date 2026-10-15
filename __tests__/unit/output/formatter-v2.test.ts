@@ -1,5 +1,10 @@
 import { MarkdownFormatterV2 } from '../../../src/output/formatter-v2';
 import { Review, Finding } from '../../../src/types';
+import { MarkdownFormatter } from '../../../src/output/formatter';
+import {
+  markReviewSummaryIncomplete,
+  renderReviewSummary,
+} from '../../../src/output/reviewer-summary';
 
 describe('MarkdownFormatterV2', () => {
   let formatter: MarkdownFormatterV2;
@@ -60,16 +65,41 @@ describe('MarkdownFormatterV2', () => {
   });
 
   describe('format', () => {
+    it('uses the same renderer for both compatibility entry points', () => {
+      const review = createMockReview({ findings: [createMockFinding()] });
+      const shared = renderReviewSummary(review);
+      expect(formatter.format(review)).toBe(shared);
+      expect(new MarkdownFormatter().format(review)).toBe(shared);
+    });
+
+    it('preserves an explicit incomplete marker when formatting again', () => {
+      const review = createMockReview();
+      review.summary = markReviewSummaryIncomplete({
+        summary: formatter.format(review),
+        language: 'English',
+        preliminaryFindingCount: 0,
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain(
+        '<!-- reviewrouter:review-status:incomplete -->'
+      );
+      expect(output).not.toContain(
+        '<!-- reviewrouter:review-status:complete -->'
+      );
+      expect(output).toContain('## Review incomplete — 0 preliminary findings');
+      expect(output).not.toContain('## No findings');
+    });
+
     it('should format review with no findings', () => {
       const review = createMockReview();
       const output = formatter.format(review);
 
       expect(output).toContain('# ReviewRouter');
-      expect(output).toContain(
-        '✅ **No reportable findings** · 0 Critical · 0 Major · 0 Minor'
-      );
-      expect(output).toContain('<sub>2/2 providers · 5.5s • $0.0050</sub>');
-      expect(output).not.toContain('## Summary');
+      expect(output).toContain('## No findings');
+      expect(output).toContain('| Providers | 2/2 |');
+      expect(output).toContain('## Summary');
       expect(output).not.toContain('## All Clear!');
       expect(output).not.toContain('Great job');
       expect(output).toContain('Performance Metrics');
@@ -111,14 +141,16 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('No reportable findings in reviewed files');
+      expect(output).toContain('## No reportable findings in reviewed files');
+      expect(output).not.toContain('reviewrouter:review-status:incomplete');
+      expect(output).toContain('Review Scope');
       expect(output).not.toContain('## All Clear!');
       expect(output).toContain('Review Scope');
       expect(output).toContain('| Full diff in prompt | 1 |');
       expect(output).toContain('| Compacted in prompt | 1 |');
       expect(output).toContain('| Metadata-only or trimmed | 1 |');
       expect(output).toContain('| Skipped before LLM review | 1 |');
-      expect(output).toContain('Enabled for Codex providers');
+      expect(output).toContain('| Agentic context | ✓ |');
       expect(output).toContain('`db/migrations/001.sql` - compacted');
       expect(output).toContain('`package-lock.json` - skipped');
     });
@@ -133,15 +165,13 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('## No Active Findings');
+      expect(output).toContain('Dismissed findings');
       expect(output).not.toContain('## All Clear!');
-      expect(output).toContain(
-        'No active findings. 1 finding was dismissed by maintainer/admin `/rr skip` override.'
-      );
+      expect(output).toContain('Dismissed findings: 1');
       expect(output).toContain(
         '1 finding dismissed by maintainer/admin `/rr skip` override'
       );
-      expect(output).toContain('| Overrides | 1 dismissed |');
+      expect(output).toContain('Dismissed findings: 1');
       expect(output).not.toContain('This PR looks great! No issues detected');
     });
 
@@ -168,9 +198,9 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('🔴 **1 Critical**');
-      expect(output).toContain('🟡 **1 Major**');
-      expect(output).toContain('🔵 1 Minor');
+      expect(output).toContain('🔴 **1 critical**');
+      expect(output).toContain('🟡 **1 major**');
+      expect(output).toContain('🔵 **1 minor**');
       expect(output).toContain(
         '<sub>10.5s • $0.0100 • Powered by ReviewRouter</sub>'
       );
@@ -201,7 +231,7 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('🟡 **1 Major**');
+      expect(output).toContain('🟡 **1 major**');
       expect(output).toContain('## Previous Review Threads');
       expect(output).toContain('Previous Major Bug');
       expect(output).not.toContain('## All Clear!');
@@ -245,8 +275,8 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('🟡 **1 Major**');
-      expect(output).not.toContain('🟡 **2 Major**');
+      expect(output).toContain('🟡 **1 major**');
+      expect(output).not.toContain('🟡 **2 major**');
       expect(output).not.toContain(
         'These unresolved findings still look valid'
       );
@@ -279,7 +309,7 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('## Previous Review Threads');
-      expect(output).toContain('Resolved by this run:');
+      expect(output).toContain('resolved ·');
       expect(output).toContain('Previous Major Bug');
     });
 
@@ -312,10 +342,8 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('Lifecycle attention required');
-      expect(output).toContain(
-        'fallback resolution reply posted; GitHub thread remains open'
-      );
-      expect(output).not.toContain('Resolved by this run:');
+      expect(output).toContain('resolution comment posted');
+      expect(output).not.toContain('resolved ·');
       expect(output).not.toContain('Previous threads resolved');
       expect(output).not.toContain('## All Clear!');
     });
@@ -345,9 +373,7 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain(
-        'previous unresolved ReviewRouter threads could not be safely reconciled'
-      );
+      expect(output).toContain('needs attention');
       expect(output).toContain('Lifecycle attention required');
       expect(output).not.toContain('## All Clear!');
     });
@@ -374,9 +400,7 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('Lifecycle attention required');
-      expect(output).toContain(
-        'Review thread inventory failed; no thread was auto-resolved.'
-      );
+      expect(output).toContain('review thread lifecycle inventory failed');
       expect(output).not.toContain('## All Clear!');
       expect(output).not.toContain('No reportable findings');
     });
@@ -401,10 +425,12 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('### 🔴 Critical (1)');
-      expect(output).toContain('#### 🔴 Security Vulnerability');
-      expect(output).toContain('**Reported Location:** `src/auth.ts:123`');
-      expect(output).toContain('**Severity:** 🔴 **Critical**');
+      expect(output).toContain('## Findings');
+      expect(output).toContain(
+        '<summary>critical · src/auth.ts:123 · Security Vulnerability</summary>'
+      );
+      expect(output).toContain('**Location:** `src/auth.ts:123`');
+      expect(output).toContain('🔴 **1 critical**');
       expect(output).toContain('SQL injection risk detected');
     });
 
@@ -425,8 +451,8 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('### 🟡 Major (1)');
-      expect(output).toContain('#### 🟡 Performance Issue');
+      expect(output).toContain('## Findings');
+      expect(output).toContain('Performance Issue</summary>');
     });
 
     it('should format minor findings with emoji', () => {
@@ -446,8 +472,8 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('### 🔵 Minor (1)');
-      expect(output).toContain('#### 🔵 Code Style');
+      expect(output).toContain('## Findings');
+      expect(output).toContain('Code Style</summary>');
     });
 
     it('should omit suggested fixes from the summary comment', () => {
@@ -467,7 +493,7 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).not.toContain('**Suggested Fix:**');
-      expect(output).not.toContain('Use const instead of let');
+      expect(output).toContain('Use const instead of let');
     });
 
     it('should include evidence with confidence percentage', () => {
@@ -492,8 +518,8 @@ describe('MarkdownFormatterV2', () => {
 
       expect(output).toContain('**Evidence:**');
       expect(output).toContain('⭐ High Confidence');
-      expect(output).toContain('(85% confidence)');
-      expect(output).toContain('View reasoning');
+      expect(output).toContain('(85%)');
+      expect(output).toContain('Multiple providers agree');
       expect(output).toContain('Multiple providers agree');
     });
 
@@ -565,9 +591,7 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain(
-        'Inline comments collapse same-line findings, so 2 findings map to 1 code thread.'
-      );
+      expect(output).toContain('## 2 findings (2 major)');
     });
 
     it('should omit duplicated action items from summary output', () => {
@@ -647,10 +671,9 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('OAuth subscription');
-      expect(output).toContain(
-        '<sub>1/1 provider · 5.5s • OAuth subscription</sub>'
-      );
+      expect(output).toContain('| Billing | Not reported |');
+      expect(output).not.toContain('OAuth subscription');
+      expect(output).toContain('| Providers | 1/1 |');
       expect(output).not.toContain('$0.0000');
       expect(output).not.toContain('| Cost |');
       expect(output).not.toContain('| Tokens | 0 |');
@@ -705,7 +728,7 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('| Cache | Hit |');
+      expect(output).toContain('| Cache | ✓ |');
     });
 
     it('shows incomplete review state when all providers fail', () => {
@@ -743,9 +766,9 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('## Review Incomplete');
+      expect(output).toContain('## Review incomplete');
       expect(output).not.toContain('## All Clear!');
-      expect(output).toContain('LLM review did not complete');
+      expect(output).toContain('1 of 1 review providers failed.');
       expect(output).toContain(
         'Codex CLI returned invalid review JSON: response was not valid JSON'
       );
@@ -803,8 +826,8 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('AI-Generated Code Analysis');
-      expect(output).toContain('**Overall Likelihood:** 75.0%');
-      expect(output).toContain('**Consensus:** Likely AI-generated');
+      expect(output).toContain('75.0%');
+      expect(output).toContain('Likely AI-generated');
       expect(output).toContain('provider-1: 80.0%');
       expect(output).toContain('provider-2: 70.0%');
     });
@@ -884,12 +907,10 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('## Summary');
-      expect(output).toContain(
-        '**1 critical issue** requires immediate attention'
-      );
-      expect(output).toContain('1 major issue should be addressed');
-      expect(output).toContain('1 minor improvement suggested');
-      expect(output).toContain('Found across 3 files');
+      expect(output).toContain('## 3 findings (1 critical, 1 major, 1 minor)');
+      expect(output).toContain('major');
+      expect(output).toContain('minor');
+      expect(output).toContain('## Findings');
     });
 
     it('should generate release notes for significant changes', () => {

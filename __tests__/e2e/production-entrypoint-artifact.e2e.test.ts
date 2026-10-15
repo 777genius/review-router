@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import yaml from 'js-yaml';
+import bundledProfiles from '../../src/control-plane/review-agent-profiles.json';
 
 const repoRoot = path.resolve(__dirname, '../..');
 const workflowPath = path.join(
@@ -85,204 +86,251 @@ type SmokeWitness = Readonly<{
 describe('committed production entrypoint artifact', () => {
   jest.setTimeout(30_000);
 
-  it('provisions runtime config into the production runner without real I/O', () => {
-    const tempRoot = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'reviewrouter-entrypoint-smoke-')
-    );
+  const linuxTest =
+    process.platform === 'linux' && process.arch === 'x64' ? it : it.skip;
 
-    try {
-      const runtimeArgument = readCommittedT0RuntimeArgument();
-      assertPublicActionLauncherTargetsRuntime();
-
-      const artifactPath = path.join(
-        repoRoot,
-        runtimeArgument.replace(/^\.reviewrouter-runtime\//, '')
-      );
-      const artifactSha256 = sha256(fs.readFileSync(artifactPath));
-      const actionVersion = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-      }).trim();
-      expect(actionVersion).toMatch(/^[a-f0-9]{40}$/);
-      expect(
-        execFileSync(
-          'git',
-          [
-            'ls-files',
-            '--error-unmatch',
-            path.relative(repoRoot, artifactPath),
-          ],
-          { cwd: repoRoot, encoding: 'utf8' }
-        ).trim()
-      ).toBe('dist/index.js');
-
-      const githubWorkspace = ensureDirectory(
-        path.join(tempRoot, 'github-workspace')
-      );
-      const runnerTemp = ensureDirectory(path.join(tempRoot, 'runner-temp'));
-      const home = ensureDirectory(path.join(tempRoot, 'home'));
-      fs.symlinkSync(
-        repoRoot,
-        path.join(githubWorkspace, '.reviewrouter-runtime'),
-        'dir'
+  linuxTest(
+    'provisions runtime config into the production runner without real I/O',
+    () => {
+      const tempRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'reviewrouter-entrypoint-smoke-')
       );
 
-      const eventPath = path.join(tempRoot, 'event.json');
-      const outputPath = path.join(tempRoot, 'github-output');
-      const witnessPath = path.join(tempRoot, 'witness.json');
-      const codexLogPath = path.join(tempRoot, 'codex.log');
-      const gitLogPath = path.join(tempRoot, 'git.log');
-      const fakeBin = ensureDirectory(path.join(tempRoot, 'fake-bin'));
-      const fakeCodexPath = path.join(fakeBin, 'codex');
-      const fakeGitPath = path.join(fakeBin, 'git');
+      try {
+        const runtimeArgument = readCommittedT0RuntimeArgument();
+        assertPublicActionLauncherTargetsRuntime();
 
-      fs.writeFileSync(
-        eventPath,
-        JSON.stringify({
-          repository: { full_name: 'sandbox/repository' },
-          pull_request: {
-            number: 17,
-            head: {
-              ref: 'artifact-smoke',
-              repo: { full_name: 'sandbox/repository' },
-              sha: 'a'.repeat(40),
+        const artifactPath = path.join(
+          repoRoot,
+          runtimeArgument.replace(/^\.reviewrouter-runtime\//, '')
+        );
+        const artifactSha256 = sha256(fs.readFileSync(artifactPath));
+        const actionVersion = execFileSync('git', ['rev-parse', 'HEAD'], {
+          cwd: repoRoot,
+          encoding: 'utf8',
+        }).trim();
+        expect(actionVersion).toMatch(/^[a-f0-9]{40}$/);
+        expect(
+          execFileSync(
+            'git',
+            [
+              'ls-files',
+              '--error-unmatch',
+              path.relative(repoRoot, artifactPath),
+            ],
+            { cwd: repoRoot, encoding: 'utf8' }
+          ).trim()
+        ).toBe('dist/index.js');
+
+        const githubWorkspace = ensureDirectory(
+          path.join(tempRoot, 'github-workspace')
+        );
+        const runnerTemp = ensureDirectory(path.join(tempRoot, 'runner-temp'));
+        const home = ensureDirectory(path.join(tempRoot, 'home'));
+        fs.symlinkSync(
+          repoRoot,
+          path.join(githubWorkspace, '.reviewrouter-runtime'),
+          'dir'
+        );
+
+        const eventPath = path.join(tempRoot, 'event.json');
+        const outputPath = path.join(tempRoot, 'github-output');
+        const witnessPath = path.join(tempRoot, 'witness.json');
+        const codexLogPath = path.join(tempRoot, 'codex.log');
+        const gitLogPath = path.join(tempRoot, 'git.log');
+        const fakeBin = ensureDirectory(path.join(tempRoot, 'fake-bin'));
+        fs.symlinkSync(process.execPath, path.join(fakeBin, 'node'));
+        const fakeCodexPath = path.join(fakeBin, 'codex');
+        const fakeGitPath = path.join(fakeBin, 'git');
+        const npmLogPath = path.join(tempRoot, 'npm.log');
+        const fixturePreloadPath = path.join(
+          tempRoot,
+          'approved-agent-preload.cjs'
+        );
+
+        fs.writeFileSync(
+          eventPath,
+          JSON.stringify({
+            repository: { full_name: 'sandbox/repository' },
+            pull_request: {
+              number: 17,
+              head: {
+                ref: 'artifact-smoke',
+                repo: { full_name: 'sandbox/repository' },
+                sha: 'a'.repeat(40),
+              },
             },
+          })
+        );
+        fs.writeFileSync(outputPath, '');
+        writeFakeCodex(fakeCodexPath, codexLogPath);
+        writeFakeGit(fakeGitPath, gitLogPath);
+        const approvedProfiles = bundledProfiles.filter(
+          (profile) =>
+            profile.agentKind === 'codex' &&
+            profile.modelTransports.includes('provider_api')
+        );
+        expect(approvedProfiles).toHaveLength(1);
+        const profile = approvedProfiles[0]!;
+        writeFakeNpm(
+          path.join(fakeBin, 'npm'),
+          fakeCodexPath,
+          npmLogPath,
+          profile.packageVersion
+        );
+        // Keep the committed artifact and its hash witness intact. Substitute only
+        // synthetic qualification data at the module-load seam; this smoke does
+        // not certify a real Codex binary. The real digest guard
+        // verifies our harmless fixture executable rather than a provider binary.
+        fs.writeFileSync(
+          fixturePreloadPath,
+          `
+require(${JSON.stringify(preloadPath)});
+const Module = require('node:module');
+const fs = require('node:fs');
+const originalCompile = Module.prototype._compile;
+Module.prototype._compile = function(source, filename) {
+  if (fs.realpathSync(filename) === ${JSON.stringify(fs.realpathSync(artifactPath))}) {
+    const qualifiedDigest = ${JSON.stringify(profile.binarySha256)};
+    if (source.split(qualifiedDigest).length !== 2) throw new Error('artifact_smoke_profile_fixture_mismatch');
+    source = source.replace(qualifiedDigest, ${JSON.stringify(sha256(fs.readFileSync(fakeCodexPath)))});
+  }
+  return originalCompile.call(this, source, filename);
+};
+`
+        );
+
+        const result = spawnSync(process.execPath, [runtimeArgument], {
+          cwd: githubWorkspace,
+          encoding: 'utf8',
+          timeout: 20_000,
+          maxBuffer: 10 * 1024 * 1024,
+          env: {
+            PATH: fakeBin,
+            HOME: home,
+            NODE_OPTIONS: `--require=${fixturePreloadPath}`,
+            CI: 'true',
+            GITHUB_ACTIONS: 'true',
+            GITHUB_EVENT_NAME: 'pull_request',
+            GITHUB_EVENT_PATH: eventPath,
+            GITHUB_OUTPUT: outputPath,
+            GITHUB_REPOSITORY: 'sandbox/repository',
+            GITHUB_WORKSPACE: githubWorkspace,
+            RUNNER_TEMP: runnerTemp,
+            REVIEWROUTER_ACTION_V2_MODE: 't0',
+            REVIEWROUTER_ACTION_VERSION: actionVersion,
+            REVIEWROUTER_API_URL: 'https://control-plane.reviewrouter.test',
+            REVIEWROUTER_CONTROL_PLANE_URL:
+              'https://control-plane.reviewrouter.test',
+            REVIEWROUTER_OIDC_AUDIENCE: 'reviewrouter',
+            REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+            REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+            REVIEWROUTER_CODEX_BINARY: fakeCodexPath,
+            REVIEW_ROUTER_MODE: 'codex-oauth-rotating',
+            INPUT_API_URL: 'https://control-plane.reviewrouter.test',
+            INPUT_CONTROL_PLANE_URL: 'https://control-plane.reviewrouter.test',
+            INPUT_PROVIDER_INSTANCE_ID: 'codex-rotating:artifact-smoke',
+            INPUT_WORKFLOW_SCHEMA_VERSION: '5',
+            INPUT_AUTH_JSON: JSON.stringify({
+              auth_mode: 'chatgpt',
+              tokens: {
+                refresh_token: 'fake-refresh-token',
+                id_token: fakeIdToken,
+              },
+              last_refresh: '2026-08-04T00:00:00.000Z',
+            }),
+            ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fake-oidc-request-token',
+            ACTIONS_ID_TOKEN_REQUEST_URL:
+              'https://token.actions.githubusercontent.com/token',
+            RR_ARTIFACT_SMOKE_EXPECTED_ACTION_VERSION: actionVersion,
+            RR_ARTIFACT_SMOKE_EXPECTED_ARTIFACT: artifactPath,
+            RR_ARTIFACT_SMOKE_EXPECTED_ARTIFACT_SHA256: artifactSha256,
+            RR_ARTIFACT_SMOKE_PUBLIC_KEY: fakeGitHubPublicKey,
+            RR_ARTIFACT_SMOKE_WITNESS_PATH: witnessPath,
           },
-        })
-      );
-      fs.writeFileSync(outputPath, '');
-      writeFakeCodex(fakeCodexPath, codexLogPath);
-      writeFakeGit(fakeGitPath, gitLogPath);
+        });
 
-      const result = spawnSync(process.execPath, [runtimeArgument], {
-        cwd: githubWorkspace,
-        encoding: 'utf8',
-        timeout: 20_000,
-        maxBuffer: 10 * 1024 * 1024,
-        env: {
-          PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ''}`,
-          HOME: home,
-          NODE_OPTIONS: `--require=${preloadPath}`,
-          CI: 'true',
-          GITHUB_ACTIONS: 'true',
-          GITHUB_EVENT_NAME: 'pull_request',
-          GITHUB_EVENT_PATH: eventPath,
-          GITHUB_OUTPUT: outputPath,
-          GITHUB_REPOSITORY: 'sandbox/repository',
-          GITHUB_WORKSPACE: githubWorkspace,
-          RUNNER_TEMP: runnerTemp,
-          REVIEWROUTER_ACTION_V2_MODE: 't0',
-          REVIEWROUTER_ACTION_VERSION: actionVersion,
-          REVIEWROUTER_API_URL: 'https://control-plane.reviewrouter.test',
-          REVIEWROUTER_CONTROL_PLANE_URL:
-            'https://control-plane.reviewrouter.test',
-          REVIEWROUTER_OIDC_AUDIENCE: 'reviewrouter',
-          REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
-          REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
-          REVIEWROUTER_CODEX_BINARY: fakeCodexPath,
-          REVIEW_ROUTER_MODE: 'codex-oauth-rotating',
-          INPUT_API_URL: 'https://control-plane.reviewrouter.test',
-          INPUT_CONTROL_PLANE_URL: 'https://control-plane.reviewrouter.test',
-          INPUT_PROVIDER_INSTANCE_ID: 'codex-rotating:artifact-smoke',
-          INPUT_WORKFLOW_SCHEMA_VERSION: '5',
-          INPUT_AUTH_JSON: JSON.stringify({
-            auth_mode: 'chatgpt',
-            tokens: {
-              refresh_token: 'fake-refresh-token',
-              id_token: fakeIdToken,
-            },
-            last_refresh: '2026-08-04T00:00:00.000Z',
-          }),
-          ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fake-oidc-request-token',
-          ACTIONS_ID_TOKEN_REQUEST_URL:
-            'https://token.actions.githubusercontent.com/token',
-          RR_ARTIFACT_SMOKE_EXPECTED_ACTION_VERSION: actionVersion,
-          RR_ARTIFACT_SMOKE_EXPECTED_ARTIFACT: artifactPath,
-          RR_ARTIFACT_SMOKE_EXPECTED_ARTIFACT_SHA256: artifactSha256,
-          RR_ARTIFACT_SMOKE_PUBLIC_KEY: fakeGitHubPublicKey,
-          RR_ARTIFACT_SMOKE_WITNESS_PATH: witnessPath,
-        },
-      });
+        expect(result.error).toBeUndefined();
+        expect(result.signal).toBeNull();
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain(
+          'ReviewRouter runtime config applied (version 4242).'
+        );
+        expect(result.stdout).toContain(
+          'review_action_v2_terminal_result_missing'
+        );
+        expect(result.stdout).not.toContain('Review completed successfully');
 
-      expect(result.error).toBeUndefined();
-      expect(result.signal).toBeNull();
-      expect(result.status).toBe(1);
-      expect(result.stdout).toContain(
-        'ReviewRouter runtime config applied (version 4242).'
-      );
-      expect(result.stdout).toContain(
-        'review_action_v2_terminal_result_missing'
-      );
-      expect(result.stdout).not.toContain('Review completed successfully');
-
-      const witness = JSON.parse(
-        fs.readFileSync(witnessPath, 'utf8')
-      ) as SmokeWitness;
-      expect(witness).toMatchObject({
-        artifactPath: fs.realpathSync(artifactPath),
-        artifactSha256,
-        expectedActionVersion: actionVersion,
-        networkGuardsInstalled: true,
-        workflowSchemaVersion: 5,
-        terminalComment: expect.stringContaining(
-          'did not obtain a terminal review result from the provider'
-        ),
-        terminalCommitStatus: {
-          state: 'error',
-          description: 'Review failed: no terminal provider result.',
-          context: 'ReviewRouter',
-        },
-        runtimeConfig: {
-          actionVersion,
-          configVersion: 4242,
-          providerLimit: runtimeConfigSentinel,
-        },
-        investigationRollout: {
-          recording: '1',
-          shadow: '1',
-          contextCritic: '1',
-          verifiedClean: '1',
-          crossRevisionReplay: '1',
-          productionEffects: '1',
-        },
-      });
-      expect(witness.failure).toBeUndefined();
-      expect(
-        witness.calls.map(
-          (call) => `${call.method} ${call.origin}${call.pathname}`
-        )
-      ).toEqual([
-        'GET https://token.actions.githubusercontent.com/token',
-        'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/prelease',
-        'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/finalize',
-        'GET https://api.github.com/repos/sandbox/repository/actions/secrets/public-key',
-        'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/writeback-preflight',
-        'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/writeback',
-        'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/checkout-token',
-        'GET https://token.actions.githubusercontent.com/token',
-        'POST https://control-plane.reviewrouter.test/api/action/v1/session/exchange',
-        'GET https://control-plane.reviewrouter.test/api/action/v1/config',
-        'GET https://token.actions.githubusercontent.com/token',
-        'POST https://control-plane.reviewrouter.test/api/action/v1/session/exchange',
-        'POST https://control-plane.reviewrouter.test/api/action/v1/comment-token',
-        'GET https://api.github.com/repos/sandbox/repository/issues/17/comments',
-        'POST https://api.github.com/repos/sandbox/repository/issues/17/comments',
-        'POST https://api.github.com/repos/sandbox/repository/statuses/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      ]);
-      expect(readLog(codexLogPath)).toEqual(['version', 'login-status']);
-      expect(readLog(gitLogPath)).toEqual([
-        'init',
-        'config',
-        'config',
-        'config',
-        'remote',
-        'fetch',
-        'checkout',
-      ]);
-    } finally {
-      fs.rmSync(tempRoot, { recursive: true, force: true });
+        const witness = JSON.parse(
+          fs.readFileSync(witnessPath, 'utf8')
+        ) as SmokeWitness;
+        expect(witness).toMatchObject({
+          artifactPath: fs.realpathSync(artifactPath),
+          artifactSha256,
+          expectedActionVersion: actionVersion,
+          networkGuardsInstalled: true,
+          workflowSchemaVersion: 5,
+          terminalComment: expect.stringContaining(
+            'did not obtain a terminal review result from the provider'
+          ),
+          terminalCommitStatus: {
+            state: 'error',
+            description: 'Review failed: no terminal provider result.',
+            context: 'ReviewRouter',
+          },
+          runtimeConfig: {
+            actionVersion,
+            configVersion: 4242,
+            providerLimit: runtimeConfigSentinel,
+          },
+          investigationRollout: {
+            recording: '1',
+            shadow: '1',
+            contextCritic: '1',
+            verifiedClean: '1',
+            crossRevisionReplay: '1',
+            productionEffects: '1',
+          },
+        });
+        expect(witness.failure).toBeUndefined();
+        expect(
+          witness.calls.map(
+            (call) => `${call.method} ${call.origin}${call.pathname}`
+          )
+        ).toEqual([
+          'GET https://token.actions.githubusercontent.com/token',
+          'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/prelease',
+          'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/finalize',
+          'GET https://api.github.com/repos/sandbox/repository/actions/secrets/public-key',
+          'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/writeback-preflight',
+          'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/writeback',
+          'POST https://control-plane.reviewrouter.test/api/action/v1/codex-oauth/checkout-token',
+          'GET https://token.actions.githubusercontent.com/token',
+          'POST https://control-plane.reviewrouter.test/api/action/v1/session/exchange',
+          'GET https://control-plane.reviewrouter.test/api/action/v1/config',
+          'GET https://token.actions.githubusercontent.com/token',
+          'POST https://control-plane.reviewrouter.test/api/action/v1/session/exchange',
+          'POST https://control-plane.reviewrouter.test/api/action/v1/comment-token',
+          'GET https://api.github.com/repos/sandbox/repository/issues/17/comments',
+          'POST https://api.github.com/repos/sandbox/repository/issues/17/comments',
+          'POST https://api.github.com/repos/sandbox/repository/statuses/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ]);
+        expect(readLog(npmLogPath)).toEqual(['approved-install']);
+        expect(readLog(codexLogPath)).toEqual(['login-status']);
+        expect(readLog(gitLogPath)).toEqual([
+          'init',
+          'config',
+          'config',
+          'config',
+          'remote',
+          'fetch',
+          'checkout',
+        ]);
+      } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      }
     }
-  });
+  );
 });
 
 function readCommittedT0RuntimeArgument(): string {
@@ -332,6 +380,32 @@ const invocation = args.includes('--version')
 fs.appendFileSync(${JSON.stringify(logPath)}, invocation + '\\n');
 if (invocation === 'version') console.log('codex-artifact-smoke 0.0.0');
 process.exitCode = invocation === 'unexpected' ? 97 : 0;
+`
+  );
+}
+
+function writeFakeNpm(
+  filePath: string,
+  codexPath: string,
+  logPath: string,
+  packageVersion: string
+): void {
+  writeExecutable(
+    filePath,
+    `#!${process.execPath}
+const fs = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+const prefix = args[args.indexOf('--prefix') + 1];
+if (!prefix || JSON.stringify(args) !== JSON.stringify([
+  'install', '--prefix', prefix, '--omit=dev', '--no-audit', '--no-fund',
+  '--ignore-scripts', ${JSON.stringify('@openai/codex@' + packageVersion)}
+])) process.exit(96);
+const target = path.join(prefix, 'node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/bin/codex');
+fs.mkdirSync(path.dirname(target), { recursive: true });
+fs.copyFileSync(${JSON.stringify(codexPath)}, target);
+fs.chmodSync(target, 0o755);
+fs.appendFileSync(${JSON.stringify(logPath)}, 'approved-install\\n');
 `
   );
 }

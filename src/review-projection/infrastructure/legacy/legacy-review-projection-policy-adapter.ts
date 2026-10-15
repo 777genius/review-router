@@ -39,10 +39,10 @@ import {
 } from '../../domain/review-projection';
 import {
   findingLocationLabel,
+  isReviewerSummaryIncomplete,
   limitReviewerPostedMarkdown,
-  markReviewSummaryIncomplete,
-  renderReviewerLifecycleMarkdown,
-  reviewerSummaryCopy,
+  renderReviewerSummaryMarkdown,
+  toReviewerSummaryFinding,
   type ReviewerLifecycleLine,
 } from '../../../output/reviewer-summary';
 import {
@@ -241,49 +241,40 @@ export class LegacyReviewProjectionPolicyAdapter
     const placements = query.occurrences.map((occurrence) =>
       this.placeOccurrence(occurrence, review, query.revisionFiles)
     );
-    const lifecycleMarkdown = renderReviewerLifecycleMarkdown({
-      language: this.config.outputLanguage,
-      lines: lifecycleLinesForSummary(query.occurrences),
+    const incomplete = isReviewerSummaryIncomplete({
+      incomplete: query.coverage.state === ProjectionCoverageState.Partial,
+      metrics: review.metrics,
     });
-    const copy = reviewerSummaryCopy(this.config.outputLanguage);
-    const coverageLines =
-      query.coverage.state === ProjectionCoverageState.Partial
-        ? [
-            '',
-            copy.coverageHeading,
-            ...query.coverage.limitations.map(
-              (limitation) => `- ${limitation}`
-            ),
-          ]
-        : [];
-    const reviewSummary =
-      query.coverage.state === ProjectionCoverageState.Partial
-        ? markReviewSummaryIncomplete({
-            summary: review.summary,
-            language: this.config.outputLanguage,
-            preliminaryFindingCount: currentOccurrences.length,
-          })
-        : review.summary;
     const summaryBody = limitReviewerPostedMarkdown(
-      [
-        reviewSummary,
-        ...(lifecycleMarkdown ? ['', lifecycleMarkdown] : []),
-        ...coverageLines,
-      ].join('\n')
+      renderReviewerSummaryMarkdown({
+        language: this.config.outputLanguage,
+        findings: currentOccurrences
+          .map(toLegacyFinding)
+          .map(toReviewerSummaryFinding),
+        metrics: review.metrics,
+        incomplete,
+        coverage: {
+          complete: query.coverage.state === ProjectionCoverageState.Complete,
+          totalFiles: query.coverage.totalFiles,
+          reviewedFiles: query.coverage.reviewedFiles,
+          unreviewedFiles: query.coverage.unreviewedFiles,
+          mode: query.coverage.mode,
+          limitations: query.coverage.limitations,
+        },
+        lifecycle: lifecycleLinesForSummary(query.occurrences),
+      })
     );
 
     return {
       summaryBody,
       checkName: 'ReviewRouter',
-      checkTitle:
-        query.coverage.state === ProjectionCoverageState.Partial
+      checkTitle: incomplete
+        ? query.coverage.state === ProjectionCoverageState.Partial
           ? 'Review incomplete - partial coverage'
-          : 'Review completed',
+          : 'Review incomplete - no successful providers'
+        : 'Review completed',
       checkSummary: summaryBody,
-      checkConclusion:
-        query.coverage.state === ProjectionCoverageState.Partial
-          ? CheckConclusion.Neutral
-          : undefined,
+      checkConclusion: incomplete ? CheckConclusion.Neutral : undefined,
       placements,
     };
   }

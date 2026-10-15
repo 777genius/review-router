@@ -154,7 +154,7 @@ describe('Graceful degradation integration', () => {
     expect(output).not.toContain('Suggested fix:');
   });
 
-  it('formatter omits suggestions from summary findings', () => {
+  it('formatter retains suggested fixes in plain fenced summary details', () => {
     const findingWithSuggestion = {
       file: 'test.ts',
       line: 10,
@@ -191,6 +191,6 @@ describe('Graceful degradation integration', () => {
     expect(output).toContain('test.ts:10');
     expect(output).toContain('Use const');
     expect(output).not.toContain('```suggestion');
-    expect(output).not.toContain('const x = 1;');
+    expect(output).toContain('**Fix**\n\n```\nconst x = 1;\n```');
   });
 });

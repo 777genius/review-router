@@ -48,7 +48,6 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     ]);
   });
 
-
   it.each([false, true])(
     'preserves exact certificate pair membership through production projection (reversed=%s)',
     async (reversed) => {
@@ -447,6 +446,56 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     );
   });
 
+  it.each([0, 1])(
+    'keeps summary and check status consistent with %s planned providers and no successes',
+    async (plannedProviders) => {
+      const projected = await adapter.projectPresentation({
+        scope: {
+          scmRepositoryIdentityId: 'repo-1',
+          pullRequestNumber: 46,
+          baseSha: '0'.repeat(40),
+          reviewedHeadSha: '1'.repeat(40),
+          reviewRevisionHash: 'revision-no-success',
+        },
+        presentation: {
+          title: 'Review',
+          author: 'author',
+          additions: 1,
+          deletions: 0,
+        },
+        providerExecution: { plannedProviders, succeededProviders: 0 },
+        coverage: {
+          state: ProjectionCoverageState.Complete,
+          mode: 'full',
+          totalFiles: 1,
+          reviewedFiles: 1,
+          unreviewedFiles: 0,
+          limitations: [],
+        },
+        occurrences: [],
+        revisionFiles: [revisionFile()],
+        limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+      });
+
+      expect(projected.summaryBody).toContain(
+        `| Providers | 0/${plannedProviders} |`
+      );
+      expect(projected.summaryBody).toContain(
+        plannedProviders > 0
+          ? '<!-- reviewrouter:review-status:incomplete -->'
+          : '<!-- reviewrouter:review-status:complete -->'
+      );
+      expect(projected.checkTitle).toBe(
+        plannedProviders > 0
+          ? 'Review incomplete - no successful providers'
+          : 'Review completed'
+      );
+      expect(projected.checkConclusion).toBe(
+        plannedProviders > 0 ? 'neutral' : undefined
+      );
+    }
+  );
+
   it('presents partial coverage as incomplete while preserving preliminary findings', async () => {
     const projected = await adapter.projectPresentation({
       scope: {
@@ -487,11 +536,17 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     );
     expect(projected.summaryBody).toContain('### Coverage not completed');
     expect(projected.summaryBody).toContain(
-      '- work_slot_coverage_incomplete:slot-2'
+      '- work\\_slot\\_coverage\\_incomplete:slot-2'
     );
     expect(projected.summaryBody).not.toMatch(
       /^##\s+Review complete(?:d)?\b/im
     );
+    expect(projected.summaryBody).toContain('# ReviewRouter');
+    expect(projected.summaryBody).toContain('## Summary');
+    expect(projected.summaryBody).toContain('## Findings');
+    expect(projected.summaryBody).not.toContain('| Duration |');
+    expect(projected.summaryBody).not.toContain('| Tokens |');
+    expect(projected.summaryBody).not.toContain('| Cost |');
     expect(projected.checkTitle).toBe('Review incomplete - partial coverage');
     expect(projected.checkConclusion).toBe('neutral');
   });

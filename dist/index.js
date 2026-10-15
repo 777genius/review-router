@@ -22354,7 +22354,13 @@ async function prepareCodexCliBeforeAuthRead(input = {}) {
       }
       throw new Error("review_agent_binary_missing");
     } catch (error2) {
-      await fs5.rm(installRoot2, { recursive: true, force: true });
+      try {
+        await fs5.rm(installRoot2, { recursive: true, force: true });
+      } catch {
+        input.logger?.warn(
+          "Codex CLI install cleanup failed; removal unconfirmed"
+        );
+      }
       throw error2;
     }
   }

@@ -91,7 +91,13 @@ export async function prepareCodexCliBeforeAuthRead(
       }
       throw new Error('review_agent_binary_missing');
     } catch (error) {
-      await fs.rm(installRoot, { recursive: true, force: true });
+      try {
+        await fs.rm(installRoot, { recursive: true, force: true });
+      } catch {
+        input.logger?.warn(
+          'Codex CLI install cleanup failed; removal unconfirmed'
+        );
+      }
       throw error;
     }
   }

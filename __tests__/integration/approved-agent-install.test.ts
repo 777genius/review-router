@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import fs from 'node:fs/promises';
 import {
   chmod,
   mkdtemp,
@@ -58,6 +59,27 @@ linuxTest(
         await cli.clear?.();
       }
       await assert.rejects(readFile(marker), { code: 'ENOENT' });
+      const warn = jest.fn();
+      const cleanup = jest
+        .spyOn(fs, 'rm')
+        .mockRejectedValueOnce(new Error('synthetic cleanup failure'));
+      try {
+        await assert.rejects(
+          prepareCodexCliBeforeAuthRead({
+            approvedAgent: { ...profile, binarySha256: 'b'.repeat(64) },
+            logger: { info: jest.fn(), warn },
+          }),
+          /review_agent_binary_drift/
+        );
+        expect(warn).toHaveBeenCalledWith(
+          'Codex CLI install cleanup failed; removal unconfirmed'
+        );
+      } finally {
+        const unconfirmedRoot = cleanup.mock.calls[0]?.[0];
+        cleanup.mockRestore();
+        if (unconfirmedRoot !== undefined)
+          await rm(unconfirmedRoot, { recursive: true, force: true });
+      }
       await assert.rejects(
         prepareCodexCliBeforeAuthRead({
           approvedAgent: { ...profile, binarySha256: 'b'.repeat(64) },

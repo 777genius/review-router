@@ -168,6 +168,77 @@ function runInteractionRuntimePreparation(
 }
 
 describe('production reusable workflows', () => {
+  it('promotes the ABI channel only through an explicit exact-tag CAS dispatch', () => {
+    const source = readRepoFile(
+      '.github/workflows/promote-workflow-channel.yml'
+    );
+    const workflow = yaml.load(source, { schema: yaml.JSON_SCHEMA }) as {
+      on: {
+        workflow_dispatch: { inputs: Record<string, { required: boolean }> };
+      };
+    };
+    expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch']);
+    expect(workflow.on.workflow_dispatch.inputs.version.required).toBe(true);
+    expect(
+      workflow.on.workflow_dispatch.inputs.expected_current_sha.required
+    ).toBe(true);
+    const helper = readRepoFile('scripts/promote-workflow-channel.mts');
+    expect(helper).toContain('`refs/tags/${version}`');
+    expect(helper).toContain(
+      '`--force-with-lease=refs/tags/workflow-v1:${expected}`'
+    );
+    expect(helper).not.toContain('git tag');
+  });
+
+  it('accepts the installed ABI and rejects incompatible input or permission changes', () => {
+    const original = readRepoFile('.github/workflows/reviewrouter-runtime.yml');
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-channel-abi-'));
+    try {
+      const candidate = path.join(temp, 'workflow.yml');
+      for (const [source, expected] of [
+        [original, 0],
+        [original.replace('contents: read', 'contents: write'), 1],
+        [original.replace('required: false', 'required: true'), 1],
+        [
+          original.replace(
+            '        default: https://api.reviewrouter.site\n',
+            ''
+          ),
+          1,
+        ],
+        [
+          original.replace(
+            'https://api.reviewrouter.site',
+            'https://other.invalid'
+          ),
+          1,
+        ],
+      ] as const) {
+        fs.writeFileSync(candidate, source);
+        const result = spawnSync(
+          process.execPath,
+          [
+            path.join(repoRoot, 'scripts/promote-workflow-channel.mts'),
+            '--validate',
+            candidate,
+          ],
+          { encoding: 'utf8', cwd: repoRoot }
+        );
+        expect(result.status).toBe(expected);
+        if (expected !== 0)
+          expect(JSON.parse(result.stderr)).toEqual({
+            code: 'workflow_channel_promotion_rejected',
+            phase: 'validate',
+            pushIssued: false,
+            pushCompleted: false,
+            outcome: 'not_issued',
+          });
+      }
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
+  });
+
   it('executes gateway fork eligibility, immutable source, static denial and queue skip', () => {
     const env: NodeJS.ProcessEnv = {
       RR_REVIEW_ACTION_LANE: 't0',

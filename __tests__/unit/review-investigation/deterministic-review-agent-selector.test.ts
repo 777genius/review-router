@@ -1,9 +1,26 @@
-import { type ReviewAgentPort } from '../../../src/review-investigation/application/review-agent-port';
+import {
+  type ReviewAgentPort,
+  type ReviewAgentSelectionRequest,
+} from '../../../src/review-investigation/application/review-agent-port';
 import { ReviewAgentProviderKind } from '../../../src/review-investigation/domain/runtime-profile';
 import { ReviewTurnPurpose } from '../../../src/review-investigation/domain/turn-observation';
 import { DeterministicReviewAgentSelector } from '../../../src/review-investigation/infrastructure/deterministic-review-agent-selector';
 
 describe('DeterministicReviewAgentSelector', () => {
+  it('rejects a missing captured execution authority instead of inferring it from the model route', () => {
+    const selector = new DeterministicReviewAgentSelector(
+      [{ providerKind: ReviewAgentProviderKind.Codex, agent: agent() }],
+      { allowedProviderKinds: [ReviewAgentProviderKind.Codex] }
+    );
+    expect(() =>
+      selector.resolve({
+        primaryProviderKind: ReviewAgentProviderKind.Codex,
+        primaryRequestedModel: 'gpt-primary',
+        purpose: ReviewTurnPurpose.Discovery,
+        maximumSemanticRiskPriority: 0,
+      } as ReviewAgentSelectionRequest)
+    ).toThrow('review_agent_execution_authority_required');
+  });
   it('keeps discovery on the primary provider and model', () => {
     const codex = agent();
     const selector = new DeterministicReviewAgentSelector(
@@ -20,6 +37,10 @@ describe('DeterministicReviewAgentSelector', () => {
       selector.resolve({
         primaryProviderKind: ReviewAgentProviderKind.Codex,
         primaryRequestedModel: 'gpt-primary',
+        executionAuthority: {
+          providerKind: ReviewAgentProviderKind.Codex,
+          requestedModel: 'gpt-primary',
+        },
         purpose: ReviewTurnPurpose.Discovery,
         maximumSemanticRiskPriority: 900_000,
       })
@@ -103,6 +124,10 @@ describe('DeterministicReviewAgentSelector', () => {
       selector.resolve({
         primaryProviderKind: ReviewAgentProviderKind.Codex,
         primaryRequestedModel: 'gpt-primary',
+        executionAuthority: {
+          providerKind: ReviewAgentProviderKind.Codex,
+          requestedModel: 'gpt-primary',
+        },
         purpose: ReviewTurnPurpose.Critic,
         maximumSemanticRiskPriority: 900_000,
       })
@@ -194,6 +219,10 @@ describe('DeterministicReviewAgentSelector', () => {
       selector.resolve({
         primaryProviderKind: ReviewAgentProviderKind.Codex,
         primaryRequestedModel: 'gpt-primary',
+        executionAuthority: {
+          providerKind: ReviewAgentProviderKind.Codex,
+          requestedModel: 'gpt-primary',
+        },
         purpose: ReviewTurnPurpose.Critic,
         maximumSemanticRiskPriority: 900_000,
       })
@@ -229,6 +258,10 @@ describe('DeterministicReviewAgentSelector', () => {
       selector.resolve({
         primaryProviderKind: ReviewAgentProviderKind.Codex,
         primaryRequestedModel: 'gpt-primary',
+        executionAuthority: {
+          providerKind: ReviewAgentProviderKind.Codex,
+          requestedModel: 'gpt-primary',
+        },
         purpose: ReviewTurnPurpose.Critic,
         maximumSemanticRiskPriority: 900_000,
       })

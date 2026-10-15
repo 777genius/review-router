@@ -2,6 +2,10 @@ import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import {
+  assertApprovedReviewAgentBinary,
+  type ApprovedReviewAgent,
+} from '../control-plane/approved-review-agent';
 
 export const CODEX_OAUTH_PINNED_CODEX_PACKAGE = '@openai/codex@0.147.0';
 
@@ -22,9 +26,81 @@ export async function prepareCodexCliBeforeAuthRead(
     logger?: CodexCliLogger;
     timeoutMs?: number;
     signal?: AbortSignal;
+    approvedAgent?: ApprovedReviewAgent;
   } = {}
 ): Promise<PreparedCodexCli> {
   input.signal?.throwIfAborted();
+  if (input.approvedAgent) {
+    const profile = input.approvedAgent;
+    if (
+      profile.agentKind !== 'codex' ||
+      process.platform !== 'linux' ||
+      process.arch !== 'x64'
+    )
+      throw new Error('review_agent_toolchain_unavailable');
+    if (
+      !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(
+        profile.packageVersion
+      )
+    )
+      throw new Error('review_agent_package_version_invalid');
+    const installRoot = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'reviewrouter-approved-agent-')
+    );
+    try {
+      await runNpmInstall({
+        installRoot,
+        packageVersion: profile.packageVersion,
+        timeoutMs: input.timeoutMs ?? CODEX_OAUTH_CLI_INSTALL_TIMEOUT_MS,
+        signal: input.signal,
+      });
+      const triple = 'x86_64-unknown-linux-musl/bin/codex';
+      const candidates = [
+        path.join(installRoot, 'node_modules/@openai/codex/vendor', triple),
+        path.join(
+          installRoot,
+          'node_modules/@openai/codex-linux-x64/vendor',
+          triple
+        ),
+        path.join(
+          installRoot,
+          'node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor',
+          triple
+        ),
+      ];
+      for (const candidate of candidates) {
+        let binaryPath: string;
+        try {
+          binaryPath = await fs.realpath(candidate);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+          throw error;
+        }
+        const relative = path.relative(installRoot, binaryPath);
+        if (
+          relative === '..' ||
+          relative.startsWith(`..${path.sep}`) ||
+          path.isAbsolute(relative)
+        )
+          throw new Error('review_agent_binary_path_invalid');
+        assertApprovedReviewAgentBinary(profile, await fs.readFile(binaryPath));
+        return {
+          binaryPath,
+          clear: () => fs.rm(installRoot, { recursive: true, force: true }),
+        };
+      }
+      throw new Error('review_agent_binary_missing');
+    } catch (error) {
+      try {
+        await fs.rm(installRoot, { recursive: true, force: true });
+      } catch {
+        input.logger?.warn(
+          'Codex CLI install cleanup failed; removal unconfirmed'
+        );
+      }
+      throw error;
+    }
+  }
   const explicit = process.env.REVIEWROUTER_CODEX_BINARY?.trim();
   if (explicit) {
     await assertCodexBinaryWorks(
@@ -110,6 +186,7 @@ async function runNpmInstall(input: {
   installRoot: string;
   timeoutMs: number;
   signal?: AbortSignal;
+  packageVersion?: string;
 }): Promise<void> {
   await runCommand(
     'npm',
@@ -120,7 +197,10 @@ async function runNpmInstall(input: {
       '--omit=dev',
       '--no-audit',
       '--no-fund',
-      CODEX_OAUTH_PINNED_CODEX_PACKAGE,
+      ...(input.packageVersion ? ['--ignore-scripts'] : []),
+      input.packageVersion
+        ? `@openai/codex@${input.packageVersion}`
+        : CODEX_OAUTH_PINNED_CODEX_PACKAGE,
     ],
     {
       timeoutMs: input.timeoutMs,

@@ -75,10 +75,14 @@ export class DeterministicReviewAgentSelector implements ReviewAgentSelectionPor
     const providerKind = criticRoute?.providerKind ?? input.primaryProviderKind;
     const requestedModel =
       criticRoute?.requestedModel ?? input.primaryRequestedModel;
-    const executionAuthority = input.executionAuthority ?? {
-      providerKind: input.primaryProviderKind,
-      requestedModel: input.primaryRequestedModel,
-    };
+    const executionAuthority = input.executionAuthority;
+    if (!executionAuthority) {
+      throw new ReviewAgentExecutionError(
+        ReviewAgentFailureClass.ConfinementViolation,
+        null,
+        'review_agent_execution_authority_required'
+      );
+    }
     const threshold =
       this.options.requireIndependentCriticAtOrAboveRiskPriority;
     if (!this.options.allowedProviderKinds.includes(providerKind)) {

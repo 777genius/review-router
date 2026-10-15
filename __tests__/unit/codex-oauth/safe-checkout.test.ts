@@ -1,3 +1,4 @@
+import { approvedAgentRuntimeEnv } from '../../helpers/approved-agent-fixture';
 import { validateAccountGatewayCheckout } from '../../../src/codex-oauth/account-gateway-runtime';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -20,6 +21,7 @@ describe('Codex OAuth safe checkout workspace', () => {
       protocolVersion: 1,
       configVersion: 7,
       runtimeEnv: {
+        ...approvedAgentRuntimeEnv,
         CODEX_MODEL: 'mimo-v2.6-pro',
         CODEX_REASONING_EFFORT: 'high',
         TARGET_TOKENS_PER_BATCH: '12000',

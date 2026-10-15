@@ -156,6 +156,77 @@ describe('CodexAppServerProtocolClient', () => {
     }
   );
 
+  it.each([
+    ['all optional fields', {}, {}],
+    [
+      'reasoning summary and memory citation',
+      { content: [] },
+      { phase: 'final_answer' },
+    ],
+    [
+      'reasoning content and agent phase',
+      { summary: [] },
+      { memoryCitation: null },
+    ],
+  ] as const)(
+    'accepts Codex147 omission defaults for %s through final selection',
+    async (_label, reasoningFields, messageFields) => {
+      const fixture = await activeTurn();
+      const items = [
+        { type: 'reasoning', id: 'reasoning', ...reasoningFields },
+        {
+          type: 'agentMessage',
+          id: 'final',
+          text: '{"ok":true}',
+          ...messageFields,
+        },
+      ];
+      for (const item of items) {
+        fixture.client.receive(
+          notification('item/started', {
+            threadId,
+            turnId,
+            startedAtMs: 1,
+            item,
+          })
+        );
+        fixture.client.receive(
+          notification('item/completed', {
+            threadId,
+            turnId,
+            completedAtMs: 2,
+            item,
+          })
+        );
+      }
+      completeUsage(fixture.client);
+      completeTurn(fixture.client, items);
+      await expect(fixture.result).resolves.toHaveProperty(
+        'finalMessage',
+        '{"ok":true}'
+      );
+    }
+  );
+
+  it.each([
+    { type: 'reasoning', id: 'invalid', summary: [], content: null },
+    { type: 'reasoning', id: 'invalid', summary: [], content: [7] },
+    { type: 'agentMessage', id: 'invalid', text: 'text', phase: 'analysis' },
+    { type: 'agentMessage', id: 'invalid', text: 'text', memoryCitation: {} },
+    { type: 'agentMessage', id: 'invalid' },
+  ] as const)(
+    'continues to reject explicit invalid optional or required item fields: %j',
+    async (item) => {
+      const fixture = await activeTurn();
+      fixture.client.receive(
+        notification('item/started', { threadId, turnId, startedAtMs: 1, item })
+      );
+      await expect(fixture.result).rejects.toMatchObject({
+        failureClass: ReviewAgentFailureClass.StreamIncomplete,
+      });
+    }
+  );
+
   it('preserves a protocol failure received while initialized is still being written', async () => {
     const writes: Array<Record<string, unknown>> = [];
     let finishInitializedWrite!: () => void;

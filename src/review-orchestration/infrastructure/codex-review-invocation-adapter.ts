@@ -400,6 +400,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     readonly invocation: PreparedReviewInvocation;
     readonly manifest: import('../application').ProviderInvocationManifest;
     readonly lease: ReviewInvocationLease;
+    readonly currentLease?: () => ReviewInvocationLease;
     readonly sourceExecutionId: string;
     readonly sourceReviewRevisionHash: string;
     readonly signal: AbortSignal;
@@ -433,6 +434,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
 
     const session = await this.contextGateway.open({
       invocationLease: input.lease,
+      currentInvocationLease: input.currentLease,
       leaseAuthorityKind: ContextGatewayLeaseAuthorityKind.StandardExecution,
       sourceExecutionId: input.sourceExecutionId,
       sourceWorkSlotId: input.invocation.workSlotId,

@@ -10,13 +10,14 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
 import { prepareCodexCliBeforeAuthRead } from '../../src/codex-oauth/codex-cli';
 import type { ApprovedReviewAgent } from '../../src/control-plane/approved-review-agent';
 
-test(
+const linuxTest =
+  process.platform === 'linux' && process.arch === 'x64' ? test : test.skip;
+
+linuxTest(
   'approved installation rejects drift without executing candidate binaries',
-  { skip: process.platform !== 'linux' || process.arch !== 'x64' },
   async () => {
     const root = await mkdtemp(
       join(tmpdir(), 'TEST-reviewrouter-approved-install-')

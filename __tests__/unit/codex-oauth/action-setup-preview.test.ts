@@ -1,3 +1,4 @@
+import { approvedAgentRuntimeEnv } from '../../helpers/approved-agent-fixture';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -7,6 +8,7 @@ import {
   type IncomingMessage,
 } from 'node:http';
 import https, { type RequestOptions as HttpsRequestOptions } from 'node:https';
+import * as codexCli from '../../../src/codex-oauth/codex-cli';
 import * as safeCheckout from '../../../src/codex-oauth/safe-checkout';
 import * as terminalPublication from '../../../src/codex-oauth/terminal-outcome-publication';
 import { canonicalJson } from '../../../src/context-gateway/context-gateway-contract';
@@ -1266,7 +1268,7 @@ describe('Codex OAuth rotating setup PR preview', () => {
               runtimeConfig: {
                 protocolVersion: 1,
                 configVersion: 1,
-                runtimeEnv: {},
+                runtimeEnv: { ...approvedAgentRuntimeEnv },
               },
             });
           }
@@ -1337,6 +1339,12 @@ describe('Codex OAuth rotating setup PR preview', () => {
         fs.writeFileSync(binary, '#!/bin/sh\nprintf "codex-cli 0.147.0\\n"\n', {
           mode: 0o700,
         });
+        jest
+          .spyOn(codexCli, 'prepareCodexCliBeforeAuthRead')
+          .mockImplementation(async (input) => {
+            expect(input?.approvedAgent?.profileRef).toBe('qualified-test');
+            return { binaryPath: binary };
+          });
         const checkout = jest
           .spyOn(safeCheckout, 'safeCheckoutRepository')
           .mockImplementation(async () => {

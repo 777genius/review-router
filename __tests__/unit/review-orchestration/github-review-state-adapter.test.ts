@@ -1,3 +1,4 @@
+import { approvedAgentRuntimeEnv } from '../../helpers/approved-agent-fixture';
 import { applyAdmittedRuntimeConfig } from '../../../src/control-plane/runtime-config';
 import type { GitHubClient } from '../../../src/github/client';
 import {
@@ -285,6 +286,7 @@ describe('managed lifecycle observation trust', () => {
       protocolVersion: 1,
       configVersion: 1,
       runtimeEnv: {
+        ...approvedAgentRuntimeEnv,
         REVIEW_ROUTER_LIFECYCLE_OBSERVATION_AUTHORS: JSON.stringify([
           'github-actions[bot]',
         ]),

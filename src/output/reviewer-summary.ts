@@ -237,6 +237,18 @@ export type ReviewerSummaryInput = {
   readonly testHints?: Review['testHints'];
 };
 
+export function isReviewerSummaryIncomplete(input: {
+  readonly incomplete?: boolean;
+  readonly coverage?: { readonly complete: boolean };
+  readonly metrics: Pick<ReviewMetrics, 'providersUsed' | 'providersSuccess'>;
+}): boolean {
+  return (
+    input.incomplete === true ||
+    input.coverage?.complete === false ||
+    (input.metrics.providersUsed > 0 && input.metrics.providersSuccess === 0)
+  );
+}
+
 export function renderReviewerSummaryMarkdown(
   input: ReviewerSummaryInput
 ): string {
@@ -252,8 +264,7 @@ export function renderReviewerSummaryMarkdown(
   const previous = input.previousCounts;
   const historical =
     (input.lifecycle?.length ?? 0) > 0 || input.lifecycleAttention;
-  const incomplete =
-    input.incomplete === true || input.coverage?.complete === false;
+  const incomplete = isReviewerSummaryIncomplete(input);
   const limitedScope =
     input.coverage &&
     (input.coverage.unreviewedFiles > 0 ||
@@ -318,7 +329,7 @@ export function renderReviewerSummaryMarkdown(
       `| ${labels.unreviewed} | ${coverage.unreviewedFiles} |`,
       `| ${labels.mode} | ${escapeMarkdownText(coverage.mode)} |`
     );
-    if (!coverage.complete) lines.push('', copy.coverageHeading);
+
     for (const [key, value] of [
       ['fullDiff', coverage.fullDiffFiles],
       ['compacted', coverage.compactedFiles],
@@ -332,6 +343,8 @@ export function renderReviewerSummaryMarkdown(
       lines.push(
         `| ${scopeCopy[locale].context} | ${coverage.agenticContext ? '✓' : '—'} |`
       );
+    lines.push('');
+    if (!coverage.complete) lines.push(copy.coverageHeading, '');
     lines.push(
       ...coverage.limitations.map((value) => `- ${escapeMarkdownText(value)}`)
     );
@@ -504,6 +517,9 @@ export function renderReviewSummary(review: Review, language?: string): string {
   const retainedLocale = review.summary.match(
     /<!-- reviewrouter:summary-locale:([a-z]{2}) -->/
   )?.[1];
+  const retainedIncomplete = review.summary.includes(
+    REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER
+  );
   const lifecycle =
     review.threadLifecycle?.mode === 'off' ? undefined : review.threadLifecycle;
   const stillValid =
@@ -561,8 +577,7 @@ export function renderReviewSummary(review: Review, language?: string): string {
     language: language ?? retainedLocale,
     findings: review.findings.map(toReviewerSummaryFinding),
     metrics: review.metrics,
-    incomplete:
-      scope?.complete === false || review.metrics.providersSuccess === 0,
+    incomplete: retainedIncomplete,
     ...(scope
       ? {
           coverage: {

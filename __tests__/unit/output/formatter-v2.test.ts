@@ -1,7 +1,10 @@
 import { MarkdownFormatterV2 } from '../../../src/output/formatter-v2';
 import { Review, Finding } from '../../../src/types';
 import { MarkdownFormatter } from '../../../src/output/formatter';
-import { renderReviewSummary } from '../../../src/output/reviewer-summary';
+import {
+  markReviewSummaryIncomplete,
+  renderReviewSummary,
+} from '../../../src/output/reviewer-summary';
 
 describe('MarkdownFormatterV2', () => {
   let formatter: MarkdownFormatterV2;
@@ -67,6 +70,26 @@ describe('MarkdownFormatterV2', () => {
       const shared = renderReviewSummary(review);
       expect(formatter.format(review)).toBe(shared);
       expect(new MarkdownFormatter().format(review)).toBe(shared);
+    });
+
+    it('preserves an explicit incomplete marker when formatting again', () => {
+      const review = createMockReview();
+      review.summary = markReviewSummaryIncomplete({
+        summary: formatter.format(review),
+        language: 'English',
+        preliminaryFindingCount: 0,
+      });
+
+      const output = formatter.format(review);
+
+      expect(output).toContain(
+        '<!-- reviewrouter:review-status:incomplete -->'
+      );
+      expect(output).not.toContain(
+        '<!-- reviewrouter:review-status:complete -->'
+      );
+      expect(output).toContain('## Review incomplete — 0 preliminary findings');
+      expect(output).not.toContain('## No findings');
     });
 
     it('should format review with no findings', () => {

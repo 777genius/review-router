@@ -198,6 +198,42 @@ describe('reviewer summary markdown', () => {
     }
   });
 
+  it('finishes the scope table before incomplete coverage details', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      coverage: {
+        complete: false,
+        totalFiles: 2,
+        reviewedFiles: 1,
+        unreviewedFiles: 1,
+        mode: 'full',
+        limitations: ['A required file was not reviewed.'],
+        fullDiffFiles: 1,
+        compactedFiles: 0,
+        metadataOnlyFiles: 0,
+        skippedFiles: 1,
+        agenticContext: true,
+      },
+    });
+
+    expect(markdown).toContain(
+      [
+        '| Review mode | full |',
+        '| Full diff in prompt | 1 |',
+        '| Compacted in prompt | 0 |',
+        '| Metadata-only or trimmed | 0 |',
+        '| Skipped before LLM review | 1 |',
+        '| Agentic context | ✓ |',
+        '',
+        '### Coverage not completed',
+        '',
+        '- A required file was not reviewed.',
+      ].join('\n')
+    );
+  });
+
   it('renders historical lifecycle leftovers as expandable details', () => {
     const markdown = renderReviewerLifecycleMarkdown({
       language: 'Russian',

@@ -249,9 +249,7 @@ describe('SynthesisEngine', () => {
       'critical',
       'minor',
     ]);
-    expect(review.summary).toContain(
-      '## Review incomplete — 2 preliminary findings'
-    );
+    expect(review.summary).toContain('## 2 findings (1 critical, 1 minor)');
     expect(review.summary).toContain(
       '<summary>critical · src/critical.ts:20 · Critical issue</summary>'
     );
@@ -259,6 +257,10 @@ describe('SynthesisEngine', () => {
     expect(review.summary).toContain('**Fix**');
     expect(review.summary).toContain('return deny();');
     expect(review.summary).toContain('Small cleanup is still a real finding.');
+    expect(review.metrics.providersUsed).toBe(0);
+    expect(review.summary).toContain(
+      '<!-- reviewrouter:review-status:complete -->'
+    );
   });
 
   it('writes summary chrome in the configured review language', () => {
@@ -278,9 +280,7 @@ describe('SynthesisEngine', () => {
       pr
     );
 
-    expect(review.summary).toContain(
-      '## Ревью не завершено — 1 предварительное замечание'
-    );
+    expect(review.summary).toContain('## 1 замечание (1 major)');
     expect(review.summary).toContain('**Место:**');
     expect(review.summary).toContain('Обход аутентификации');
     expect(review.summary).toContain('Фильтр email больше не применяется.');

@@ -39,6 +39,7 @@ import {
 } from '../../domain/review-projection';
 import {
   findingLocationLabel,
+  isReviewerSummaryIncomplete,
   limitReviewerPostedMarkdown,
   renderReviewerSummaryMarkdown,
   toReviewerSummaryFinding,
@@ -240,6 +241,10 @@ export class LegacyReviewProjectionPolicyAdapter
     const placements = query.occurrences.map((occurrence) =>
       this.placeOccurrence(occurrence, review, query.revisionFiles)
     );
+    const incomplete = isReviewerSummaryIncomplete({
+      incomplete: query.coverage.state === ProjectionCoverageState.Partial,
+      metrics: review.metrics,
+    });
     const summaryBody = limitReviewerPostedMarkdown(
       renderReviewerSummaryMarkdown({
         language: this.config.outputLanguage,
@@ -247,7 +252,7 @@ export class LegacyReviewProjectionPolicyAdapter
           .map(toLegacyFinding)
           .map(toReviewerSummaryFinding),
         metrics: review.metrics,
-        incomplete: query.coverage.state === ProjectionCoverageState.Partial,
+        incomplete,
         coverage: {
           complete: query.coverage.state === ProjectionCoverageState.Complete,
           totalFiles: query.coverage.totalFiles,
@@ -263,15 +268,13 @@ export class LegacyReviewProjectionPolicyAdapter
     return {
       summaryBody,
       checkName: 'ReviewRouter',
-      checkTitle:
-        query.coverage.state === ProjectionCoverageState.Partial
+      checkTitle: incomplete
+        ? query.coverage.state === ProjectionCoverageState.Partial
           ? 'Review incomplete - partial coverage'
-          : 'Review completed',
+          : 'Review incomplete - no successful providers'
+        : 'Review completed',
       checkSummary: summaryBody,
-      checkConclusion:
-        query.coverage.state === ProjectionCoverageState.Partial
-          ? CheckConclusion.Neutral
-          : undefined,
+      checkConclusion: incomplete ? CheckConclusion.Neutral : undefined,
       placements,
     };
   }

@@ -116,7 +116,14 @@ describe('production review projection coverage', () => {
       .publishing.summary.body;
     const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
 
-    expect(summary).toContain('## No findings');
+    expect(summary).toContain('## No reportable findings in reviewed files');
+    expect(summary).toContain('<!-- reviewrouter:review-status:complete -->');
+    expect(summary).toContain('| Providers | 0/0 |');
+    expect(envelope.coverage).toMatchObject({
+      state: 'complete',
+      reviewedFiles: 0,
+      unreviewedFiles: 1,
+    });
     expect(envelope.authoritativeObservationIds).toEqual([]);
   });
 

@@ -81096,6 +81096,9 @@ function neutralizeDetailsMarkup(value) {
     (tag) => tag.replaceAll("<", "&lt;").replaceAll(">", "&gt;")
   );
 }
+function isReviewerSummaryIncomplete(input) {
+  return input.incomplete === true || input.coverage?.complete === false || input.metrics.providersUsed > 0 && input.metrics.providersSuccess === 0;
+}
 function renderReviewerSummaryMarkdown(input) {
   const locale = resolveReviewerSummaryLocale(input.language);
   const copy = reviewerSummaryCopy(input.language);
@@ -81108,7 +81111,7 @@ function renderReviewerSummaryMarkdown(input) {
   };
   const previous = input.previousCounts;
   const historical = (input.lifecycle?.length ?? 0) > 0 || input.lifecycleAttention;
-  const incomplete = input.incomplete === true || input.coverage?.complete === false;
+  const incomplete = isReviewerSummaryIncomplete(input);
   const limitedScope = input.coverage && (input.coverage.unreviewedFiles > 0 || (input.coverage.compactedFiles ?? 0) > 0 || (input.coverage.metadataOnlyFiles ?? 0) > 0 || (input.coverage.skippedFiles ?? 0) > 0 || input.coverage.limitations.length > 0);
   const heading = incomplete ? copy.incompleteHeading(counts.total) : counts.total > 0 ? copy.findingsHeading(counts) : historical ? `## ${labels.previous}` : input.dismissedFindings ? `## ${labels.dismissed}` : limitedScope ? copy.limitedNoFindingsHeading : copy.noFindingsHeading;
   const lines = [
@@ -81153,7 +81156,6 @@ function renderReviewerSummaryMarkdown(input) {
       `| ${labels.unreviewed} | ${coverage.unreviewedFiles} |`,
       `| ${labels.mode} | ${escapeMarkdownText(coverage.mode)} |`
     );
-    if (!coverage.complete) lines.push("", copy.coverageHeading);
     for (const [key, value] of [
       ["fullDiff", coverage.fullDiffFiles],
       ["compacted", coverage.compactedFiles],
@@ -81167,6 +81169,8 @@ function renderReviewerSummaryMarkdown(input) {
       lines.push(
         `| ${scopeCopy[locale].context} | ${coverage.agenticContext ? "\u2713" : "\u2014"} |`
       );
+    lines.push("");
+    if (!coverage.complete) lines.push(copy.coverageHeading, "");
     lines.push(
       ...coverage.limitations.map((value) => `- ${escapeMarkdownText(value)}`)
     );
@@ -81317,6 +81321,9 @@ function renderReviewSummary(review, language) {
   const retainedLocale = review.summary.match(
     /<!-- reviewrouter:summary-locale:([a-z]{2}) -->/
   )?.[1];
+  const retainedIncomplete = review.summary.includes(
+    REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER
+  );
   const lifecycle = review.threadLifecycle?.mode === "off" ? void 0 : review.threadLifecycle;
   const stillValid = lifecycle?.previousStillValid.filter(
     (record) => !isLinkedCurrentFinding(record)
@@ -81361,7 +81368,7 @@ function renderReviewSummary(review, language) {
     language: language ?? retainedLocale,
     findings: review.findings.map(toReviewerSummaryFinding),
     metrics: review.metrics,
-    incomplete: scope?.complete === false || review.metrics.providersSuccess === 0,
+    incomplete: retainedIncomplete,
     ...scope ? {
       coverage: {
         complete: scope.complete,
@@ -82678,12 +82685,16 @@ var LegacyReviewProjectionPolicyAdapter = class {
     const placements = query.occurrences.map(
       (occurrence) => this.placeOccurrence(occurrence, review, query.revisionFiles)
     );
+    const incomplete = isReviewerSummaryIncomplete({
+      incomplete: query.coverage.state === "partial" /* Partial */,
+      metrics: review.metrics
+    });
     const summaryBody = limitReviewerPostedMarkdown(
       renderReviewerSummaryMarkdown({
         language: this.config.outputLanguage,
         findings: currentOccurrences.map(toLegacyFinding).map(toReviewerSummaryFinding),
         metrics: review.metrics,
-        incomplete: query.coverage.state === "partial" /* Partial */,
+        incomplete,
         coverage: {
           complete: query.coverage.state === "complete" /* Complete */,
           totalFiles: query.coverage.totalFiles,
@@ -82698,9 +82709,9 @@ var LegacyReviewProjectionPolicyAdapter = class {
     return {
       summaryBody,
       checkName: "ReviewRouter",
-      checkTitle: query.coverage.state === "partial" /* Partial */ ? "Review incomplete - partial coverage" : "Review completed",
+      checkTitle: incomplete ? query.coverage.state === "partial" /* Partial */ ? "Review incomplete - partial coverage" : "Review incomplete - no successful providers" : "Review completed",
       checkSummary: summaryBody,
-      checkConclusion: query.coverage.state === "partial" /* Partial */ ? "neutral" /* Neutral */ : void 0,
+      checkConclusion: incomplete ? "neutral" /* Neutral */ : void 0,
       placements
     };
   }

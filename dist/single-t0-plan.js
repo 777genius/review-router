@@ -88483,10 +88483,14 @@ var DeterministicReviewAgentSelector = class {
     const criticRoute = input.purpose === "critic" /* Critic */ ? this.options.critic : void 0;
     const providerKind = criticRoute?.providerKind ?? input.primaryProviderKind;
     const requestedModel = criticRoute?.requestedModel ?? input.primaryRequestedModel;
-    const executionAuthority = input.executionAuthority ?? {
-      providerKind: input.primaryProviderKind,
-      requestedModel: input.primaryRequestedModel
-    };
+    const executionAuthority = input.executionAuthority;
+    if (!executionAuthority) {
+      throw new ReviewAgentExecutionError(
+        "confinement_violation" /* ConfinementViolation */,
+        null,
+        "review_agent_execution_authority_required"
+      );
+    }
     const threshold = this.options.requireIndependentCriticAtOrAboveRiskPriority;
     if (!this.options.allowedProviderKinds.includes(providerKind)) {
       throw new ReviewAgentExecutionError(

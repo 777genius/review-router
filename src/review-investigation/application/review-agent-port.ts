@@ -52,7 +52,7 @@ export interface ReviewAgentPort {
 export type ReviewAgentSelectionRequest = Readonly<{
   primaryProviderKind: ReviewAgentProviderKind;
   primaryRequestedModel: string;
-  executionAuthority?: Readonly<{
+  executionAuthority: Readonly<{
     providerKind: ReviewAgentProviderKind;
     requestedModel: string;
   }>;

@@ -1757,6 +1757,10 @@ describe('ProductionT0ReviewRunner policy', () => {
       selector.resolve({
         primaryProviderKind: ReviewAgentProviderKind.Codex,
         primaryRequestedModel: 'gpt-5.6-terra',
+        executionAuthority: {
+          providerKind: ReviewAgentProviderKind.Codex,
+          requestedModel: 'gpt-5.6-terra',
+        },
         purpose: ReviewTurnPurpose.Critic,
         maximumSemanticRiskPriority: 900_000,
       })
@@ -1816,6 +1820,10 @@ describe('ProductionT0ReviewRunner policy', () => {
       selector.resolve({
         primaryProviderKind: ReviewAgentProviderKind.Codex,
         primaryRequestedModel: 'gpt-5.6-terra',
+        executionAuthority: {
+          providerKind: ReviewAgentProviderKind.Codex,
+          requestedModel: 'gpt-5.6-terra',
+        },
         purpose: ReviewTurnPurpose.Critic,
         maximumSemanticRiskPriority: 500_000,
       })

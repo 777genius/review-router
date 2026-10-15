@@ -590,24 +590,43 @@ export class CodexAppServerProtocolClient {
   }
 
   private onItemStarted(params: Record<string, unknown>): void {
-    this.assertTurnFence(params);
-    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
-    const item = requireRecord(params.item, 'item');
-    const id = requireIdentifier(item.id, 'item_id');
-    const type = requireNonEmptyString(item.type, 'item_type');
-    if (this.activeItems.has(id) || this.completedItems.has(id)) {
-      throw streamFailure();
+    let checkpoint: ItemStartedCheckpoint = 'fence';
+    let itemType: ItemDiagnosticType = 'other';
+    try {
+      this.assertTurnFence(params);
+      checkpoint = 'lifecycle';
+      if (!this.turnStarted || this.turnCompleted) throw streamFailure();
+      checkpoint = 'item_shape';
+      const item = requireRecord(params.item, 'item');
+      itemType = itemDiagnosticType(item.type);
+      checkpoint = 'identity';
+      const id = requireIdentifier(item.id, 'item_id');
+      const type = requireNonEmptyString(item.type, 'item_type');
+      checkpoint = 'id_duplicate';
+      if (this.activeItems.has(id) || this.completedItems.has(id)) {
+        throw streamFailure();
+      }
+      checkpoint = 'item_shape';
+      this.validateAllowedItem(item, 'started', (value) => {
+        checkpoint = value;
+      });
+      const active: ActiveItem =
+        type === 'mcpToolCall'
+          ? Object.freeze({
+              type,
+              server: requireNonEmptyString(item.server, 'mcp_server'),
+              tool: requireNonEmptyString(item.tool, 'mcp_tool'),
+            })
+          : Object.freeze({ type });
+      this.activeItems.set(id, active);
+    } catch (error) {
+      // Fixed vocabulary only: never emit item IDs, payloads or unknown types.
+      // Preserve typed confinement/schema failures and all rejection semantics.
+      throw withStreamDiagnosticStage(
+        error,
+        `item_started_${itemType}_${checkpoint}`
+      );
     }
-    this.validateAllowedItem(item, 'started');
-    const active: ActiveItem =
-      type === 'mcpToolCall'
-        ? Object.freeze({
-            type,
-            server: requireNonEmptyString(item.server, 'mcp_server'),
-            tool: requireNonEmptyString(item.tool, 'mcp_tool'),
-          })
-        : Object.freeze({ type });
-    this.activeItems.set(id, active);
   }
 
   private onItemCompleted(params: Record<string, unknown>): void {
@@ -710,34 +729,43 @@ export class CodexAppServerProtocolClient {
 
   private validateAllowedItem(
     item: Record<string, unknown>,
-    lifecycle: 'started' | 'completed'
+    lifecycle: 'started' | 'completed',
+    mark?: (checkpoint: ItemStartedCheckpoint) => void
   ): void {
     const type = requireNonEmptyString(item.type, 'item_type');
     if (FORBIDDEN_ITEM_TYPES.has(type)) {
       throw confinementFailure('forbidden_item_type');
     }
+    mark?.('unsupported_item_type');
     if (!ALLOWED_ITEM_TYPES.has(type)) throw streamFailure();
     switch (type) {
       case 'userMessage':
-        this.validateUserMessage(item);
+        this.validateUserMessage(item, mark);
         return;
       case 'agentMessage':
-        this.validateAgentMessage(item);
+        this.validateAgentMessage(item, mark);
         return;
       case 'reasoning':
+        mark?.('reasoning_summary');
         requireStringArray(item.summary, 'reasoning_summary');
+        mark?.('reasoning_content');
         requireStringArray(item.content, 'reasoning_content');
         return;
       case 'mcpToolCall':
-        this.validateMcpToolCall(item, lifecycle);
+        this.validateMcpToolCall(item, lifecycle, mark);
         return;
       case 'contextCompaction':
         return;
     }
   }
 
-  private validateUserMessage(item: Record<string, unknown>): void {
+  private validateUserMessage(
+    item: Record<string, unknown>,
+    mark?: (checkpoint: ItemStartedCheckpoint) => void
+  ): void {
+    mark?.('user_client_id');
     if (item.clientId !== this.request.clientTurnId) throw streamFailure();
+    mark?.('user_content');
     if (!Array.isArray(item.content) || item.content.length !== 1) {
       throw streamFailure();
     }
@@ -752,16 +780,21 @@ export class CodexAppServerProtocolClient {
     }
   }
 
-  private validateAgentMessage(item: Record<string, unknown>): void {
+  private validateAgentMessage(
+    item: Record<string, unknown>,
+    mark?: (checkpoint: ItemStartedCheckpoint) => void
+  ): void {
+    mark?.('agent_text');
+    if (typeof item.text !== 'string') throw streamFailure();
+    mark?.('agent_phase');
     if (
-      typeof item.text !== 'string' ||
-      (item.phase !== null &&
-        item.phase !== 'commentary' &&
-        item.phase !== 'final_answer') ||
-      item.memoryCitation !== null
-    ) {
+      item.phase !== null &&
+      item.phase !== 'commentary' &&
+      item.phase !== 'final_answer'
+    )
       throw streamFailure();
-    }
+    mark?.('agent_memory_citation');
+    if (item.memoryCitation !== null) throw streamFailure();
     if (Buffer.byteLength(item.text, 'utf8') > this.request.maxOutputBytes) {
       throw schemaFailure();
     }
@@ -769,9 +802,12 @@ export class CodexAppServerProtocolClient {
 
   private validateMcpToolCall(
     item: Record<string, unknown>,
-    lifecycle: 'started' | 'completed'
+    lifecycle: 'started' | 'completed',
+    mark?: (checkpoint: ItemStartedCheckpoint) => void
   ): void {
+    mark?.('mcp_server');
     const server = requireNonEmptyString(item.server, 'mcp_server');
+    mark?.('mcp_tool');
     const tool = requireNonEmptyString(item.tool, 'mcp_tool');
     if (
       server !== CODEX_APP_SERVER_MCP_NAME ||
@@ -781,8 +817,10 @@ export class CodexAppServerProtocolClient {
     ) {
       throw confinementFailure('mcp_tool_authority');
     }
+    mark?.('mcp_arguments');
     requireRecord(item.arguments, 'mcp_arguments');
     if (lifecycle === 'started') {
+      mark?.('mcp_start_state');
       if (
         item.status !== 'inProgress' ||
         item.result !== null ||
@@ -1649,9 +1687,52 @@ enum CodexProtocolDiagnosticStage {
   Warning = 'warning',
 }
 
+type ItemStartedCheckpoint =
+  | 'fence'
+  | 'lifecycle'
+  | 'identity'
+  | 'id_duplicate'
+  | 'item_shape'
+  | 'unsupported_item_type'
+  | 'user_client_id'
+  | 'user_content'
+  | 'agent_text'
+  | 'agent_phase'
+  | 'agent_memory_citation'
+  | 'reasoning_summary'
+  | 'reasoning_content'
+  | 'mcp_server'
+  | 'mcp_tool'
+  | 'mcp_arguments'
+  | 'mcp_start_state';
+type ItemDiagnosticType =
+  | 'user_message'
+  | 'agent_message'
+  | 'reasoning'
+  | 'mcp_tool_call'
+  | 'context_compaction'
+  | 'other';
+function itemDiagnosticType(value: unknown): ItemDiagnosticType {
+  switch (value) {
+    case 'userMessage':
+      return 'user_message';
+    case 'agentMessage':
+      return 'agent_message';
+    case 'reasoning':
+      return 'reasoning';
+    case 'mcpToolCall':
+      return 'mcp_tool_call';
+    case 'contextCompaction':
+      return 'context_compaction';
+    default:
+      return 'other';
+  }
+}
+
 type CodexProtocolDiagnosticStageValue =
   | CodexProtocolDiagnosticStage
-  | `unknown_notification_${string}`;
+  | `unknown_notification_${string}`
+  | `item_started_${ItemDiagnosticType}_${ItemStartedCheckpoint}`;
 
 function notificationDiagnosticStage(
   value: unknown

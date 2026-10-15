@@ -113,6 +113,49 @@ describe('CodexAppServerProtocolClient', () => {
     );
   });
 
+  it.each([
+    [
+      'reasoning_reasoning_summary',
+      { id: 'private-id', type: 'reasoning', summary: null, content: [] },
+    ],
+    [
+      'mcp_tool_call_mcp_arguments',
+      {
+        ...mcpToolCallItem('private-id', {
+          status: 'inProgress',
+          result: null,
+          error: null,
+        }),
+        arguments: null,
+      },
+    ],
+    [
+      'other_unsupported_item_type',
+      { id: 'private-id', type: 'private-unknown-type' },
+    ],
+  ])(
+    'reports closed item-start rejection %s without exposing the item',
+    async (diagnostic, item) => {
+      const fixture = await activeTurn();
+      fixture.client.receive(
+        notification('item/started', {
+          threadId,
+          turnId,
+          startedAtMs: 1,
+          item,
+        })
+      );
+      await expect(fixture.result).rejects.toMatchObject({
+        failureClass: ReviewAgentFailureClass.StreamIncomplete,
+        message: `review_agent_stream_incomplete_item_started_${diagnostic}`,
+      });
+      const failure = await fixture.result.catch((error: unknown) => error);
+      expect((failure as Error).message).not.toMatch(
+        /private-id|private-unknown-type/
+      );
+    }
+  );
+
   it('preserves a protocol failure received while initialized is still being written', async () => {
     const writes: Array<Record<string, unknown>> = [];
     let finishInitializedWrite!: () => void;

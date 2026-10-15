@@ -2,6 +2,10 @@ import {
   parseAdmittedRuntimeConfig,
   type AdmittedRuntimeConfig,
 } from '../control-plane/runtime-config';
+import {
+  readApprovedReviewAgent,
+  assertApprovedReviewAgentVersion,
+} from '../control-plane/approved-review-agent';
 import { execFile } from 'child_process';
 import * as core from '../actions/core';
 import { promisify } from 'util';
@@ -22,6 +26,13 @@ import {
   type GatewayTransportDiagnostic,
 } from '../review-orchestration/infrastructure/account-gateway-model-transport';
 import { GitHubActionsOidcTokenProvider } from './github-actions-oidc';
+import { CodexReviewAgentAdapter } from '../review-investigation/infrastructure/codex-review-agent-adapter';
+import { NodeReviewAgentProcessRunner } from '../review-investigation/infrastructure/review-agent-process-runner';
+import {
+  ReviewAgentProviderKind,
+  ReviewAgentExecutionProfile,
+  ReviewAgentConfinementStrength,
+} from '../review-investigation/domain/runtime-profile';
 import {
   prepareCodexCliBeforeAuthRead,
   type PreparedCodexCli,
@@ -124,6 +135,7 @@ async function runAccountGatewayRuntimeInternal(
     | 'checkout'
     | 'prepare_cli'
     | 'version'
+    | 'negotiate'
     | 'local_transport'
     | 'runner'
     | 'terminal' = 'authorization';
@@ -192,6 +204,49 @@ async function runAccountGatewayRuntimeInternal(
     phase = 'checkout_capability';
     const capability = await readCapability();
     run.signal.throwIfAborted();
+    const agentProfile = readApprovedReviewAgent(
+      capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!,
+      capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST!
+    );
+    phase = 'prepare_cli';
+    cli = await prepareCodexCliBeforeAuthRead({
+      signal: run.signal,
+      approvedAgent: agentProfile,
+      logger: { info: core.info, warn: core.warning },
+    });
+    // A binary-only version check; alternate installed versions do not inherit retry qualification.
+    phase = 'version';
+    const version = await promisify(execFile)(cli.binaryPath, ['--version'], {
+      signal: run.signal,
+      killSignal: 'SIGKILL',
+      timeout: 10_000,
+      maxBuffer: 16_384,
+      env: { PATH: process.env.PATH, HOME: os.tmpdir() },
+    });
+    assertApprovedReviewAgentVersion(
+      agentProfile,
+      version.stdout.trim().replace(/^codex-cli /, '')
+    );
+    phase = 'negotiate';
+    // Use the execution adapter's existing capability contract. No PR session
+    // exists yet: negotiation must not resolve one or launch an agent turn.
+    await new CodexReviewAgentAdapter(new NodeReviewAgentProcessRunner(), {
+      binary: cli.binaryPath,
+      executionSessions: {
+        resolve: () => {
+          throw new Error('review_agent_precheckout_session_unavailable');
+        },
+      },
+    }).negotiate({
+      providerKind: ReviewAgentProviderKind.Codex,
+      executionProfile: ReviewAgentExecutionProfile.GatewayAttestedAgentV1,
+      minimumConfinement: ReviewAgentConfinementStrength.GatewayOnly,
+      requireActualModelAttribution: true,
+      requireUsageAttribution: true,
+      requireFencedCancellation: true,
+      minimumMaxTurns: 1,
+    });
+    run.signal.throwIfAborted();
     phase = 'create_workspace';
     workspacePath = await createIsolatedCheckoutWorkspace({
       runnerTempPath: process.env.RUNNER_TEMP,
@@ -205,23 +260,6 @@ async function runAccountGatewayRuntimeInternal(
       token: capability.token,
       signal: run.signal,
     });
-    run.signal.throwIfAborted();
-    phase = 'prepare_cli';
-    cli = await prepareCodexCliBeforeAuthRead({
-      signal: run.signal,
-      logger: { info: core.info, warn: core.warning },
-    });
-    // A binary-only version check; alternate installed versions do not inherit retry qualification.
-    phase = 'version';
-    const version = await promisify(execFile)(cli.binaryPath, ['--version'], {
-      signal: run.signal,
-      killSignal: 'SIGKILL',
-      timeout: 10_000,
-      maxBuffer: 16_384,
-      env: { PATH: process.env.PATH, HOME: os.tmpdir() },
-    });
-    if (!/^codex-cli 0\.147\.0\s*$/.test(version.stdout))
-      throw new Error('account_gateway_codex_version_unqualified');
     run.signal.throwIfAborted();
     phase = 'local_transport';
     codexHome = await fs.mkdtemp(

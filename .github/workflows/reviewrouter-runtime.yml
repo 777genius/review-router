@@ -1,0 +1,76 @@
+name: ReviewRouter
+
+on:
+  workflow_call:
+    inputs:
+      review_request_id:
+        required: true
+        type: string
+      pr_number:
+        required: true
+        type: string
+      review_head_sha:
+        required: true
+        type: string
+      control_plane_url:
+        required: false
+        type: string
+        default: https://api.reviewrouter.site
+
+permissions: {}
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Validate execution identity
+        id: runtime
+        shell: bash
+        env:
+          RR_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          RR_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          RR_REQUEST_ID: ${{ inputs.review_request_id }}
+          RR_PR_NUMBER: ${{ inputs.pr_number }}
+          RR_HEAD_SHA: ${{ inputs.review_head_sha }}
+        run: |
+          node --input-type=module-typescript <<'NODE'
+          import fs from 'node:fs';
+          const e = process.env;
+          if (e.RR_WORKFLOW_REPOSITORY !== '777genius/review-router' ||
+              !/^[a-f0-9]{40}$/.test(e.RR_WORKFLOW_SHA || '') ||
+              !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$/.test(e.RR_REQUEST_ID || '') ||
+              !/^[1-9][0-9]*$/.test(e.RR_PR_NUMBER || '') ||
+              !/^[a-f0-9]{40}$/.test(e.RR_HEAD_SHA || '') ||
+              !/^[1-9][0-9]*$/.test(e.GITHUB_REPOSITORY_ID || ''))
+            throw new Error('reviewrouter_execution_identity_invalid');
+          fs.appendFileSync(e.GITHUB_OUTPUT!, `sha=${e.RR_WORKFLOW_SHA}\n`);
+          NODE
+      - name: Checkout approved runtime revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: 777genius/review-router
+          ref: ${{ steps.runtime.outputs.sha }}
+          path: .reviewrouter-runtime
+          persist-credentials: false
+      - name: Run ReviewRouter
+        shell: bash
+        env:
+          REVIEW_ROUTER_MODE: account-gateway
+          REVIEWROUTER_ACTION_V2_MODE: t0
+          REVIEWROUTER_RUNTIME_CONFIG_MODE: oidc
+          REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false'
+          REVIEWROUTER_API_URL: ${{ inputs.control_plane_url }}
+          REVIEWROUTER_OIDC_AUDIENCE: reviewrouter
+          INPUT_PROVIDER_INSTANCE_ID: codex-rotating:${{ github.repository_id }}
+          INPUT_WORKFLOW_SCHEMA_VERSION: '2'
+          PR_NUMBER: ${{ inputs.pr_number }}
+          REVIEW_HEAD_SHA: ${{ inputs.review_head_sha }}
+        run: node .reviewrouter-runtime/dist/index.js

@@ -17,6 +17,7 @@ import {
   applyControlPlaneRuntimeConfig,
 } from '../../control-plane/runtime-config';
 import { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
+import { readApprovedReviewAgent } from '../../control-plane/approved-review-agent';
 export { ReviewActionV2Client } from '../../control-plane/review-action-v2-client';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../context-gateway/context-gateway-release-contract';
 import { BatchOrchestrator } from '../../core/batch-orchestrator';
@@ -186,6 +187,16 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       ? createAccountGatewayRunFetch(this.fetchImpl, signal)
       : this.fetchImpl;
     validateInput(input);
+    const approvedAgent = input.accountGateway
+      ? readApprovedReviewAgent(
+          input.accountGateway.runtimeConfig.runtimeEnv
+            .REVIEW_ROUTER_AGENT_PROFILE_JSON!,
+          input.accountGateway.runtimeConfig.runtimeEnv
+            .REVIEW_ROUTER_AGENT_PROFILE_DIGEST!
+        )
+      : undefined;
+    if (approvedAgent && approvedAgent.agentKind !== 'codex')
+      throw new Error('review_investigation_approved_agent_unavailable');
     const authoritativeDeadlineEpochMs =
       process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
     const oidc = new GitHubActionsOidcTokenProvider({
@@ -455,6 +466,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 primaryProviderKind: ReviewAgentProviderKind.Codex,
                 contextCriticEnabled: investigationRollout.contextCriticEnabled,
                 agents: createConfiguredProductionInvestigationAgents({
+                  approvedAgent,
                   codexModel: model,
                   codexBinaryPath: input.codexBinaryPath,
                   executionSessions: gateway,
@@ -800,6 +812,8 @@ function resolveAccountGatewayModelProvider(
 
 /** Internal production composition; model is selected after runtime config and revision checks. */
 export function createConfiguredProductionInvestigationAgents(input: {
+  /** Captured producer authority, independent of the selected model provider. */
+  readonly approvedAgent?: import('../../control-plane/approved-review-agent').ApprovedReviewAgent;
   readonly codexModel: string;
   readonly codexBinaryPath: string | undefined;
   readonly executionSessions: ReviewAgentExecutionSessionResolverPort;
@@ -809,6 +823,9 @@ export function createConfiguredProductionInvestigationAgents(input: {
     CodexReviewAgentAdapterOptions['reasoningEffort']
   >;
 }): readonly ConfiguredProductionReviewAgent[] {
+  if (input.approvedAgent && input.approvedAgent.agentKind !== 'codex') {
+    throw new Error('review_investigation_approved_agent_unavailable');
+  }
   const reasoningEffort = input.reasoningEffort;
   const processRunner = new NodeReviewAgentProcessRunner();
   const appServer = input.modelTransport

@@ -1,4 +1,5 @@
 import packageJson from '../../package.json';
+import { readApprovedReviewAgent } from './approved-review-agent';
 import {
   clearGitHubActionsOidcRequestEnv,
   GitHubActionsOidcTokenProvider,
@@ -50,6 +51,11 @@ export function parseAdmittedRuntimeConfig(
   if (parsed.ignoredRuntimeEnvKeys.length > 0) {
     throw new Error('runtime_config_unsafe_admitted_env');
   }
+  const profileJson = parsed.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON;
+  const profileDigest = parsed.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST;
+  if (!profileJson || !profileDigest)
+    throw new Error('runtime_config_agent_profile_required');
+  readApprovedReviewAgent(profileJson, profileDigest);
   return Object.freeze({
     protocolVersion: 1,
     configVersion: parsed.configVersion,

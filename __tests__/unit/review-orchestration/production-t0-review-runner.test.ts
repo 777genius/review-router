@@ -104,6 +104,42 @@ import {
 } from '../../../src/review-orchestration/infrastructure/production-review-investigation-composition';
 
 describe('ProductionT0ReviewRunner policy', () => {
+  const admittedAgentJson = JSON.stringify({
+    profileRef: 'fixture-codex',
+    agentKind: 'codex',
+    binarySha256: 'a'.repeat(64),
+    packageVersion: '0.147.0',
+    modelTransports: ['account_gateway'],
+    contextGateway: true,
+    cancellation: true,
+  });
+  const admittedAgentEnv = {
+    REVIEW_ROUTER_AGENT_PROFILE_JSON: admittedAgentJson,
+    REVIEW_ROUTER_AGENT_PROFILE_DIGEST: createHash('sha256')
+      .update(admittedAgentJson)
+      .digest('hex'),
+  };
+  it('rejects an approved alternative agent instead of constructing Codex from its model', () => {
+    const resolve = jest.fn();
+    expect(() =>
+      createConfiguredProductionInvestigationAgents({
+        approvedAgent: {
+          profileRef: 'approved-claude',
+          agentKind: 'claude',
+          binarySha256: 'a'.repeat(64),
+          packageVersion: '1.0.0',
+          modelTransports: ['account_gateway'],
+          contextGateway: true,
+          cancellation: true,
+        },
+        codexModel: 'mimo-v2.6-pro',
+        codexBinaryPath: '/mock/codex',
+        executionSessions: { resolve },
+        reasoningEffort: 'high',
+      })
+    ).toThrow('review_investigation_approved_agent_unavailable');
+    expect(resolve).not.toHaveBeenCalled();
+  });
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -436,8 +472,8 @@ describe('ProductionT0ReviewRunner policy', () => {
       callerEffort,
       binaryKind?: 'bare' | 'absolute' | 'relative'
     ) => {
-      const root = fs.mkdtempSync(
-        path.join(os.tmpdir(), 'mimo-runner-effort-')
+      const root = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), 'mimo-runner-effort-'))
       );
       const previousEnv = { ...process.env };
       const previousCwd = process.cwd();
@@ -550,6 +586,7 @@ describe('ProductionT0ReviewRunner policy', () => {
                     protocolVersion: 1,
                     configVersion: 7,
                     runtimeEnv: {
+                      ...admittedAgentEnv,
                       CODEX_MODEL: model,
                       ...(serverEffort === undefined
                         ? {}

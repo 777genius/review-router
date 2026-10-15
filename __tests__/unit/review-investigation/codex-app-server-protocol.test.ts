@@ -1942,6 +1942,64 @@ describe('CodexAppServerProtocolClient', () => {
     }
   );
 
+  it.each(['full', 'summary'])(
+    'accepts repeated active agent starts without result evidence in a %s turn',
+    async (itemsView) => {
+      const fixture = await activeTurn();
+      for (const item of [
+        agentMessageItem('message', null, ''),
+        agentMessageItem('message', 'final_answer', 'Still inspecting.'),
+      ]) {
+        fixture.client.receive(
+          notification('item/started', { threadId, turnId, item })
+        );
+      }
+      completeMcpToolCall(fixture.client, 'trusted-call');
+      const final = agentMessageItem('message', 'final_answer', '{"ok":true}');
+      fixture.client.receive(
+        notification('item/completed', { threadId, turnId, item: final })
+      );
+      completeUsage(fixture.client);
+      fixture.client.receive(
+        notification('turn/completed', {
+          threadId,
+          turn: { ...turn('completed'), items: [final], itemsView },
+        })
+      );
+      await expect(fixture.result).resolves.toMatchObject({
+        finalMessage: '{"ok":true}',
+      });
+    }
+  );
+
+  it.each(['malformed', 'cross-type'])(
+    'rejects a %s active agent repeat',
+    async (invalid) => {
+      const fixture = await activeTurn();
+      const start = agentMessageItem('message', null, '');
+      fixture.client.receive(
+        notification('item/started', { threadId, turnId, item: start })
+      );
+      fixture.client.receive(
+        notification('item/started', {
+          threadId,
+          turnId,
+          item:
+            invalid === 'malformed'
+              ? { ...start, memoryCitation: { forbidden: true } }
+              : { type: 'reasoning', id: 'message', summary: [], content: [] },
+        })
+      );
+      await expect(fixture.result).rejects.toMatchObject({
+        failureClass: ReviewAgentFailureClass.StreamIncomplete,
+        message:
+          invalid === 'malformed'
+            ? 'review_agent_stream_incomplete_item_started_agent_message_agent_memory_citation'
+            : 'review_agent_stream_incomplete_item_started_reasoning_id_duplicate_active',
+      });
+    }
+  );
+
   it.each(['active', 'cross-type', 'mcp', 'invalid-payload'])(
     'rejects %s item ID reuse',
     async (collision) => {
@@ -1952,6 +2010,11 @@ describe('CodexAppServerProtocolClient', () => {
         'next'
       );
       if (collision === 'active') {
+        item = mcpToolCallItem('message', {
+          status: 'inProgress',
+          result: null,
+          error: null,
+        });
         fixture.client.receive(
           notification('item/started', { threadId, turnId, item })
         );
@@ -1974,7 +2037,7 @@ describe('CodexAppServerProtocolClient', () => {
       );
       await expect(fixture.result).rejects.toMatchObject({
         failureClass: ReviewAgentFailureClass.StreamIncomplete,
-        message: `review_agent_stream_incomplete_item_started_${collision === 'mcp' ? 'mcp_tool_call' : collision === 'cross-type' ? 'reasoning' : 'agent_message'}_${collision === 'active' ? 'id_duplicate_active' : collision === 'invalid-payload' ? 'agent_memory_citation' : 'id_duplicate_completed'}`,
+        message: `review_agent_stream_incomplete_item_started_${collision === 'mcp' || collision === 'active' ? 'mcp_tool_call' : collision === 'cross-type' ? 'reasoning' : 'agent_message'}_${collision === 'active' ? 'id_duplicate_active' : collision === 'invalid-payload' ? 'agent_memory_citation' : 'id_duplicate_completed'}`,
       });
     }
   );

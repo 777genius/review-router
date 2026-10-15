@@ -607,7 +607,13 @@ export class CodexAppServerProtocolClient {
       const id = requireIdentifier(item.id, 'item_id');
       const type = requireNonEmptyString(item.type, 'item_type');
       checkpoint = 'id_duplicate_active';
-      if (this.activeItems.has(id)) throw streamFailure();
+      const previousActive = this.activeItems.get(id);
+      if (
+        previousActive &&
+        (previousActive.type !== 'agentMessage' || type !== 'agentMessage')
+      ) {
+        throw streamFailure();
+      }
       checkpoint = 'id_duplicate_completed';
       const completed = this.completedItems.get(id);
       if (
@@ -620,6 +626,9 @@ export class CodexAppServerProtocolClient {
       this.validateAllowedItem(item, 'started', (value) => {
         checkpoint = value;
       });
+      // Codex 0.147.0 may re-emit a valid active agent start; only completion
+      // contributes result evidence, so preserve the existing lifecycle unchanged.
+      if (previousActive) return;
       const active: ActiveItem =
         type === 'mcpToolCall'
           ? Object.freeze({

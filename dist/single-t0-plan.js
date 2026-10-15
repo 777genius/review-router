@@ -23305,7 +23305,7 @@ var ConfigLoader = class {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.174",
+  version: "1.0.175",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -84856,7 +84856,10 @@ var CodexAppServerProtocolClient = class {
       const id = requireIdentifier2(item.id, "item_id");
       const type2 = requireNonEmptyString(item.type, "item_type");
       checkpoint = "id_duplicate_active";
-      if (this.activeItems.has(id)) throw streamFailure();
+      const previousActive = this.activeItems.get(id);
+      if (previousActive && (previousActive.type !== "agentMessage" || type2 !== "agentMessage")) {
+        throw streamFailure();
+      }
       checkpoint = "id_duplicate_completed";
       const completed = this.completedItems.get(id);
       if (completed && (completed.type !== "agentMessage" || type2 !== "agentMessage")) {
@@ -84866,6 +84869,7 @@ var CodexAppServerProtocolClient = class {
       this.validateAllowedItem(item, "started", (value) => {
         checkpoint = value;
       });
+      if (previousActive) return;
       const active = type2 === "mcpToolCall" ? Object.freeze({
         type: type2,
         server: requireNonEmptyString(item.server, "mcp_server"),

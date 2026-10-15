@@ -141,6 +141,10 @@ describe('SynthesisEngine', () => {
     expect(review.summary).toContain('## No findings');
     expect(review.summary).not.toContain('PR #1:');
     expect(review.summary).not.toContain('| Item | Result |');
+    expect(review.summary).toContain('# ReviewRouter');
+    expect(review.summary).not.toContain('| Duration |');
+    expect(review.summary).not.toContain('| Tokens |');
+    expect(review.summary).not.toContain('| Cost |');
   });
 
   it('sorts inline comments by severity before applying the inline limit', () => {
@@ -245,7 +249,9 @@ describe('SynthesisEngine', () => {
       'critical',
       'minor',
     ]);
-    expect(review.summary).toContain('## 2 findings (1 critical, 1 minor)');
+    expect(review.summary).toContain(
+      '## Review incomplete — 2 preliminary findings'
+    );
     expect(review.summary).toContain(
       '<summary>critical · src/critical.ts:20 · Critical issue</summary>'
     );
@@ -272,7 +278,9 @@ describe('SynthesisEngine', () => {
       pr
     );
 
-    expect(review.summary).toContain('## 1 замечание (1 major)');
+    expect(review.summary).toContain(
+      '## Ревью не завершено — 1 предварительное замечание'
+    );
     expect(review.summary).toContain('**Место:**');
     expect(review.summary).toContain('Обход аутентификации');
     expect(review.summary).toContain('Фильтр email больше не применяется.');

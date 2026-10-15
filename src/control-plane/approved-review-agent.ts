@@ -1,10 +1,25 @@
 import { createHash } from 'node:crypto';
+import bundledProfiles from './review-agent-profiles.json';
 import {
   parseReviewAgentProfiles,
   type ReviewAgentProfile,
 } from './generated/review-action-v2/review-agent-profile';
 
 export type ApprovedReviewAgent = ReviewAgentProfile;
+
+/** Secret-backed T0 installs the qualified binary before reading OAuth input. */
+export function bundledReviewAgentForTransport(
+  transport: ReviewAgentProfile['modelTransports'][number]
+): ApprovedReviewAgent {
+  const profiles = parseReviewAgentProfiles(bundledProfiles).filter(
+    (profile) =>
+      profile.agentKind === 'codex' &&
+      profile.modelTransports.includes(transport)
+  );
+  if (profiles.length !== 1)
+    throw new Error('review_agent_profile_unavailable');
+  return profiles[0]!;
+}
 
 /** Called only with runtimeEnv from the authenticated admitted checkout reply. */
 export function readApprovedReviewAgent(

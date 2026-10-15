@@ -12,9 +12,8 @@ import {
   ImpactAnalysis,
 } from '../types';
 import {
-  renderReviewerSummaryMarkdown,
+  renderReviewSummary,
   neutralizeDetailsMarkup,
-  toReviewerSummaryFinding,
 } from '../output/reviewer-summary';
 import { compareSeverityDesc, getSeverityDisplay } from '../utils/severity';
 import {
@@ -79,12 +78,11 @@ export class SynthesisEngine {
     impactAnalysis?: ImpactAnalysis;
     mermaidDiagram?: string;
   }): Review {
-    const summary = this.buildSummary(input.findings, input.metrics);
     const inlineComments = this.buildInlineComments(input.findings);
     const actionItems = this.buildActionItems(input.findings);
 
-    return {
-      summary,
+    const review: Review = {
+      summary: '',
       findings: input.findings,
       inlineComments,
       actionItems,
@@ -96,6 +94,8 @@ export class SynthesisEngine {
       impactAnalysis: input.impactAnalysis,
       mermaidDiagram: input.mermaidDiagram,
     };
+    review.summary = renderReviewSummary(review, this.config.outputLanguage);
+    return review;
   }
 
   private buildMetrics(
@@ -169,14 +169,6 @@ export class SynthesisEngine {
       totalCost,
       durationSeconds,
     };
-  }
-
-  private buildSummary(findings: Finding[], metrics: ReviewMetrics): string {
-    return renderReviewerSummaryMarkdown({
-      language: this.config.outputLanguage,
-      findings: findings.map(toReviewerSummaryFinding),
-      metrics,
-    });
   }
 
   private buildInlineComments(findings: Finding[]): InlineComment[] {

@@ -48,7 +48,6 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     ]);
   });
 
-
   it.each([false, true])(
     'preserves exact certificate pair membership through production projection (reversed=%s)',
     async (reversed) => {
@@ -487,11 +486,17 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     );
     expect(projected.summaryBody).toContain('### Coverage not completed');
     expect(projected.summaryBody).toContain(
-      '- work_slot_coverage_incomplete:slot-2'
+      '- work\\_slot\\_coverage\\_incomplete:slot-2'
     );
     expect(projected.summaryBody).not.toMatch(
       /^##\s+Review complete(?:d)?\b/im
     );
+    expect(projected.summaryBody).toContain('# ReviewRouter');
+    expect(projected.summaryBody).toContain('## Summary');
+    expect(projected.summaryBody).toContain('## Findings');
+    expect(projected.summaryBody).not.toContain('| Duration |');
+    expect(projected.summaryBody).not.toContain('| Tokens |');
+    expect(projected.summaryBody).not.toContain('| Cost |');
     expect(projected.checkTitle).toBe('Review incomplete - partial coverage');
     expect(projected.checkConclusion).toBe('neutral');
   });

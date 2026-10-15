@@ -1,5 +1,6 @@
 import {
   limitReviewerPostedMarkdown,
+  markReviewSummaryIncomplete,
   renderReviewerLifecycleMarkdown,
   renderReviewerSummaryMarkdown,
   resolveReviewerSummaryLocale,
@@ -39,6 +40,10 @@ describe('reviewer summary markdown', () => {
       ],
     });
 
+    expect(markdown).toContain('# ReviewRouter');
+    expect(markdown).toContain('## Summary');
+    expect(markdown).toContain('## Findings');
+    expect(markdown).toContain('Performance Metrics');
     expect(markdown).toContain('<!-- reviewrouter:review-status:complete -->');
     expect(markdown).toContain('## 1 finding (1 major)');
     expect(markdown).toContain(
@@ -140,6 +145,57 @@ describe('reviewer summary markdown', () => {
     expect(markdown.match(/<details>/g)?.length ?? 0).toBe(
       markdown.match(/<\/details>/g)?.length ?? 0
     );
+  });
+
+  it('keeps planned provider counts separate from unknown measurements', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+    });
+    expect(markdown).toContain('| Providers | 1/1 |');
+    expect(markdown).not.toContain('| Duration |');
+    expect(markdown).not.toContain('| Tokens |');
+    expect(markdown).not.toContain('| Cost |');
+    expect(markdown).not.toContain('OAuth subscription');
+  });
+
+  it('marks the status block incomplete without rewriting localized section headings', () => {
+    for (const language of [
+      'en',
+      'ru',
+      'uk',
+      'es',
+      'pt',
+      'fr',
+      'de',
+      'it',
+      'zh',
+      'ja',
+      'ko',
+    ]) {
+      const original = renderReviewerSummaryMarkdown({
+        language,
+        metrics,
+        findings: [],
+      });
+      const revised = markReviewSummaryIncomplete({
+        summary: original,
+        language,
+        preliminaryFindingCount: 1,
+      });
+      expect(revised).toContain(
+        '<!-- reviewrouter:review-status:incomplete -->'
+      );
+      expect(revised).not.toContain(
+        '<!-- reviewrouter:review-status:complete -->'
+      );
+      expect(revised.split('<!-- reviewrouter:summary-status -->')[0]).toBe(
+        original
+          .replace('review-status:complete', 'review-status:incomplete')
+          .split('<!-- reviewrouter:summary-status -->')[0]
+      );
+    }
   });
 
   it('renders historical lifecycle leftovers as expandable details', () => {

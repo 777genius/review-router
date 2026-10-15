@@ -4,7 +4,7 @@
     "binarySha256": "cb0a15567e9a60a5820d54b0f6ae86d504dc3805c1eab21a47f70e3eb7b73a40",
     "cancellation": true,
     "contextGateway": true,
-    "modelTransports": ["account_gateway"],
+    "modelTransports": ["account_gateway", "provider_api"],
     "packageVersion": "0.147.0",
     "profileRef": "codex-default"
   }

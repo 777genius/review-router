@@ -22226,6 +22226,19 @@ var path4 = __toESM(require("path"));
 // src/control-plane/approved-review-agent.ts
 var import_node_crypto = require("node:crypto");
 
+// src/control-plane/review-agent-profiles.json
+var review_agent_profiles_default = [
+  {
+    agentKind: "codex",
+    binarySha256: "cb0a15567e9a60a5820d54b0f6ae86d504dc3805c1eab21a47f70e3eb7b73a40",
+    cancellation: true,
+    contextGateway: true,
+    modelTransports: ["account_gateway", "provider_api"],
+    packageVersion: "0.147.0",
+    profileRef: "codex-default"
+  }
+];
+
 // src/control-plane/generated/review-action-v2/review-agent-profile.ts
 function parseReviewAgentProfiles(value) {
   if (!Array.isArray(value) || value.length < 1 || value.length > 16)
@@ -22282,6 +22295,14 @@ function invalid(code) {
 }
 
 // src/control-plane/approved-review-agent.ts
+function bundledReviewAgentForTransport(transport) {
+  const profiles = parseReviewAgentProfiles(review_agent_profiles_default).filter(
+    (profile) => profile.agentKind === "codex" && profile.modelTransports.includes(transport)
+  );
+  if (profiles.length !== 1)
+    throw new Error("review_agent_profile_unavailable");
+  return profiles[0];
+}
 function readApprovedReviewAgent(json2, digest3) {
   if (Buffer.byteLength(json2) > 16384 || !/^[a-f0-9]{64}$/.test(digest3) || (0, import_node_crypto.createHash)("sha256").update(json2).digest("hex") !== digest3)
     throw new Error("review_agent_profile_digest_mismatch");
@@ -30350,6 +30371,708 @@ function uniqueSuggestionsByVoteKey(suggestions) {
   return unique3;
 }
 
+// src/github/comment-fingerprint.ts
+var import_crypto6 = require("crypto");
+
+// src/review-projection/domain/finding-marker.ts
+var RESERVED_FINDING_MARKER_PREFIX_RE = /(?:review-router-finding:|reviewrouter:finding:v2:)/gi;
+var LEGACY_FINDING_MARKER_RE = /<!--\s*review-router-finding:([a-f0-9]{24,64})\s*-->/gi;
+var V2_FINDING_MARKER_RE = /(?<!\S)reviewrouter:finding:v2:((?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64}))(?=$|[ \t\r\n])/g;
+var RESERVED_FINDING_MARKER_COMMENT_RE = /<!--(?:(?!-->)[\s\S])*(?:review-router-finding:|reviewrouter:finding:v2:)(?:(?!-->)[\s\S])*-->/gi;
+var UNCLOSED_RESERVED_FINDING_MARKER_COMMENT_RE = /<!--(?:(?!-->)[\s\S])*(?:review-router-finding:|reviewrouter:finding:v2:)[\s\S]*$/gi;
+var RESERVED_FINDING_MARKER_TOKEN_RE = /(?:review-router-finding:|reviewrouter:finding:v2:)[^\s<]*/gi;
+function parseFindingMarker(body) {
+  if (!body) return { kind: "absent" /* Absent */ };
+  const reservedPrefixOffsets = Array.from(
+    body.matchAll(RESERVED_FINDING_MARKER_PREFIX_RE),
+    (match2) => match2.index
+  ).filter((offset) => offset !== void 0);
+  if (reservedPrefixOffsets.length === 0) {
+    return { kind: "absent" /* Absent */ };
+  }
+  const matches = [
+    ...collectMarkerMatches(body, LEGACY_FINDING_MARKER_RE),
+    ...collectMarkerMatches(body, V2_FINDING_MARKER_RE)
+  ];
+  const everyReservedPrefixIsValid = reservedPrefixOffsets.every(
+    (offset) => matches.some((match2) => offset >= match2.start && offset < match2.end)
+  );
+  if (!everyReservedPrefixIsValid) {
+    return { kind: "malformed" /* Malformed */ };
+  }
+  const fingerprints = Array.from(
+    new Set(matches.map((match2) => match2.fingerprint))
+  ).sort();
+  if (fingerprints.length === 1) {
+    return {
+      kind: "valid" /* Valid */,
+      fingerprint: fingerprints[0]
+    };
+  }
+  if (fingerprints.length > 1) {
+    return { kind: "conflict" /* Conflict */, fingerprints };
+  }
+  return { kind: "malformed" /* Malformed */ };
+}
+function stripReservedFindingMarkerSyntax(body) {
+  return body.replace(RESERVED_FINDING_MARKER_COMMENT_RE, "").replace(UNCLOSED_RESERVED_FINDING_MARKER_COMMENT_RE, "").replace(RESERVED_FINDING_MARKER_TOKEN_RE, "").replace(/<!--\s*-->/g, "").trim();
+}
+function findingMarkerV2(fingerprint) {
+  return `reviewrouter:finding:v2:${fingerprint}`;
+}
+function collectMarkerMatches(body, pattern) {
+  return Array.from(body.matchAll(pattern), (match2) => ({
+    start: match2.index ?? 0,
+    end: (match2.index ?? 0) + match2[0].length,
+    fingerprint: (match2[1] ?? "").toLowerCase()
+  }));
+}
+
+// src/github/comment-fingerprint.ts
+var INLINE_MARKER_RE = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/i;
+var INLINE_MARKER_RE_GLOBAL = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/gi;
+var MAX_NEARBY_LINE_DISTANCE = 12;
+function signatureFromInlineComment(path31, line, body) {
+  const cleanBody = stripInlineFingerprintMarkers(body);
+  const severity = extractSeverity(cleanBody);
+  if (severity) {
+    return [
+      (path31 || "unknown").toLowerCase(),
+      String(line ?? 0),
+      severity
+    ].join(":");
+  }
+  const titleMatch = cleanBody.match(/\*\*(.+?)\*\*/);
+  const title = titleMatch ? titleMatch[1] : cleanBody.split("\n")[0] || "unknown";
+  return [
+    (path31 || "unknown").toLowerCase(),
+    String(line ?? 0),
+    normalizeForSignature(title)
+  ].join(":");
+}
+function fingerprintFromInlineComment(path31, line, body) {
+  return (0, import_crypto6.createHash)("sha256").update(signatureFromInlineComment(path31, line, body)).digest("hex").slice(0, 16);
+}
+function inlineFingerprintMarker(fingerprint) {
+  return `<!-- review-router-inline:${fingerprint} -->`;
+}
+function findingFingerprintMarker(fingerprint) {
+  return `<!-- review-router-finding:${fingerprint} -->`;
+}
+function extractInlineFingerprint(body) {
+  const match2 = body?.match(INLINE_MARKER_RE);
+  return match2?.[1]?.toLowerCase() ?? null;
+}
+function extractFindingFingerprint(body) {
+  const parsed = parseFindingMarker(body);
+  return parsed.kind === "valid" /* Valid */ ? parsed.fingerprint : null;
+}
+function appendInlineFingerprintMarker(body, path31, line) {
+  const sanitizedBody = stripReservedFindingMarkerSyntax(body);
+  const parts = [sanitizedBody.trimEnd()];
+  if (!extractInlineFingerprint(sanitizedBody)) {
+    parts.push(
+      inlineFingerprintMarker(
+        fingerprintFromInlineComment(path31, line, sanitizedBody)
+      )
+    );
+  }
+  parts.push(
+    findingFingerprintMarker(
+      findingFingerprintFromInlineComment(path31, line, sanitizedBody)
+    )
+  );
+  return parts.join("\n\n");
+}
+function stripInlineFingerprintMarkers(body) {
+  return stripReservedFindingMarkerSyntax(
+    body.replace(INLINE_MARKER_RE_GLOBAL, "")
+  ).trim();
+}
+function isReviewRouterInlineComment(body) {
+  if (!body) return false;
+  if (extractInlineFingerprint(body)) return true;
+  const trimmed = body.trim();
+  return /^\*\*(?:🔴 Critical|🟡 Major|🔵 Minor)\s+-\s+.+?\*\*/.test(trimmed) || /^_(?:🔴 Critical|🟡 Major|🔵 Minor)_/.test(trimmed);
+}
+function findingFingerprintFromFinding(finding) {
+  return stableFindingFingerprint({
+    path: finding.file,
+    severity: finding.severity,
+    title: finding.title,
+    message: finding.message
+  });
+}
+function findingFingerprintFromInlineComment(path31, _line, body) {
+  const marker = extractFindingFingerprint(body);
+  if (marker) return marker;
+  const cleanBody = stripInlineFingerprintMarkers(body);
+  return stableFindingFingerprint({
+    path: path31,
+    severity: extractSeverity(cleanBody) || "unknown",
+    title: extractNormalizedTitle(cleanBody),
+    message: extractCoreMessage(cleanBody)
+  });
+}
+function extractInlineSeverity(body) {
+  return extractSeverity(stripInlineFingerprintMarkers(body));
+}
+function extractInlineTitle(body) {
+  return stripSeverityPrefix(extractTitle(stripInlineFingerprintMarkers(body)));
+}
+function isLikelySameInlineFinding(existing, candidate) {
+  const existingPath = (existing.path || "").toLowerCase();
+  const candidatePath = (candidate.path || "").toLowerCase();
+  if (!existingPath || existingPath !== candidatePath) return false;
+  const existingBody = stripInlineFingerprintMarkers(existing.body);
+  const candidateBody = stripInlineFingerprintMarkers(candidate.body);
+  const existingLine = existing.line ?? 0;
+  const candidateLine = candidate.line ?? 0;
+  const lineDistance = Math.abs(existingLine - candidateLine);
+  const nearbyLine = lineDistance <= MAX_NEARBY_LINE_DISTANCE;
+  const existingTitleTokens = tokenize2(extractTitle(existingBody));
+  const candidateTitleTokens = tokenize2(extractTitle(candidateBody));
+  const titleSimilarity = diceSimilarity(
+    existingTitleTokens,
+    candidateTitleTokens
+  );
+  const existingTokens = tokenize2(semanticText(existingBody));
+  const candidateTokens = tokenize2(semanticText(candidateBody));
+  const bodySimilarity = diceSimilarity(existingTokens, candidateTokens);
+  const sharedDistinctiveCodeTokens = intersectionSize(
+    distinctiveCodeTokens(semanticText(existingBody)),
+    distinctiveCodeTokens(semanticText(candidateBody))
+  );
+  if (nearbyLine && titleSimilarity >= 0.45) return true;
+  if (nearbyLine && sharedDistinctiveCodeTokens > 0 && bodySimilarity >= 0.24) {
+    return true;
+  }
+  if (nearbyLine && titleSimilarity >= 0.2 && bodySimilarity >= 0.38) {
+    return true;
+  }
+  return titleSimilarity >= 0.6 && bodySimilarity >= 0.55;
+}
+function normalizeForSignature(value) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+function extractSeverity(body) {
+  const match2 = body.match(/\*\*(?:[^\w*`]*\s*)?(critical|major|minor)\s*-/i) || body.match(/^_(?:[^\w_]*\s*)?(critical|major|minor)_/i);
+  return match2?.[1]?.toLowerCase() ?? null;
+}
+function extractTitle(body) {
+  const titleMatch = body.match(/\*\*(.+?)\*\*/);
+  return titleMatch?.[1] ?? body.split("\n")[0] ?? "";
+}
+function stripSeverityPrefix(value) {
+  return value.replace(/^[^\w`]*\s*(critical|major|minor)\s*-\s*/i, "").replace(/^[^\w`]*\s*/, "").trim();
+}
+function extractNormalizedTitle(body) {
+  return stripSeverityPrefix(extractTitle(body));
+}
+function extractCoreMessage(body) {
+  return semanticText(body).split("\n").map((line) => line.trim()).filter(Boolean).filter((line) => !/^\*\*.+\*\*$/.test(line)).slice(0, 6).join(" ");
+}
+function stableFindingFingerprint(input) {
+  const canonical = [
+    "review-router-finding-v2",
+    (input.path || "unknown").toLowerCase(),
+    normalizeForSignature(input.severity),
+    normalizeForSignature(stripSeverityPrefix(input.title)),
+    normalizeForSignature(input.message).slice(0, 800)
+  ].join("\n");
+  return (0, import_crypto6.createHash)("sha256").update(canonical).digest("hex").slice(0, 32);
+}
+function semanticText(body) {
+  return body.replace(/```[\s\S]*?```/g, " ").replace(/<details[\s\S]*?<\/details>/gi, " ").replace(/<sub[\s\S]*?<\/sub>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]+>/g, " ").replace(/\*\*Severity:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Suggestion:\*\*[\s\S]*?(?:\n\n|$)/gi, " ");
+}
+function tokenize2(value) {
+  const normalized = splitIdentifiers(value).toLowerCase().replace(/[^a-z0-9_]+/g, " ");
+  const tokens = normalized.split(/\s+/).map((token) => token.trim()).filter((token) => token.length >= 3 && !STOPWORDS.has(token));
+  return new Set(tokens);
+}
+function extractCodeTokens(body) {
+  const tokens = /* @__PURE__ */ new Set();
+  for (const match2 of body.matchAll(/`([^`\n]{2,120})`/g)) {
+    for (const token of tokenize2(match2[1])) {
+      tokens.add(token);
+    }
+  }
+  return tokens;
+}
+function distinctiveCodeTokens(body) {
+  const tokens = extractCodeTokens(body);
+  for (const token of GENERIC_CODE_TOKENS) {
+    tokens.delete(token);
+  }
+  return tokens;
+}
+function splitIdentifiers(value) {
+  return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_./:-]+/g, " ");
+}
+function diceSimilarity(a2, b2) {
+  if (a2.size === 0 || b2.size === 0) return 0;
+  return 2 * intersectionSize(a2, b2) / (a2.size + b2.size);
+}
+function intersectionSize(a2, b2) {
+  let count = 0;
+  for (const token of a2) {
+    if (b2.has(token)) count += 1;
+  }
+  return count;
+}
+var GENERIC_CODE_TOKENS = /* @__PURE__ */ new Set([
+  "api",
+  "arg",
+  "args",
+  "body",
+  "config",
+  "context",
+  "cookie",
+  "cookies",
+  "ctx",
+  "data",
+  "env",
+  "err",
+  "error",
+  "header",
+  "headers",
+  "http",
+  "https",
+  "input",
+  "json",
+  "options",
+  "output",
+  "param",
+  "params",
+  "query",
+  "req",
+  "request",
+  "res",
+  "response",
+  "value"
+]);
+var STOPWORDS = /* @__PURE__ */ new Set([
+  "about",
+  "after",
+  "also",
+  "and",
+  "are",
+  "because",
+  "before",
+  "branch",
+  "but",
+  "can",
+  "cannot",
+  "comment",
+  "could",
+  "does",
+  "every",
+  "file",
+  "for",
+  "from",
+  "has",
+  "have",
+  "into",
+  "line",
+  "lines",
+  "major",
+  "minor",
+  "must",
+  "not",
+  "only",
+  "return",
+  "should",
+  "that",
+  "the",
+  "this",
+  "true",
+  "use",
+  "uses",
+  "using",
+  "when",
+  "where",
+  "will",
+  "with",
+  "would"
+]);
+
+// src/analysis/thread-lifecycle.ts
+var DEFAULT_RESOLVE_CONFIDENCE = {
+  critical: 0.9,
+  major: 0.85,
+  minor: 0.8,
+  unknown: 0.9
+};
+var ThreadLifecycleAggregator = class {
+  aggregate(input) {
+    const plannedProviders = unique(input.plannedProviders);
+    const quorumMode = plannedProviders.length >= 2 ? "multi-provider" : "single-provider";
+    const thresholds = resolveConfidenceThresholds(
+      input.config?.reviewThreadLifecycleResolveConfidence
+    );
+    const currentFingerprints = new Set(
+      input.currentFindings.map(
+        (finding) => findingFingerprintFromFinding(finding)
+      )
+    );
+    const providerCurrentFindings = input.providerResults.flatMap(
+      (result3) => result3.result?.findings ?? []
+    );
+    const votes = this.collectVotes(input, thresholds);
+    const assignmentByTarget = new Map(
+      (input.assignmentRecords ?? []).map((record) => [record.targetId, record])
+    );
+    const commandDismissedTargetIds = new Set(
+      (input.skipped ?? []).filter((record) => record.reasonCodes.includes("command_dismissed")).map((record) => record.target.targetId)
+    );
+    const result2 = {
+      mode: input.mode,
+      quorumMode,
+      plannedProviders,
+      resolvedCandidates: [],
+      resolvedByLifecycle: [],
+      previousStillValid: [],
+      previousUncertain: [],
+      manualAttention: (input.initialManualAttention ?? []).filter(
+        (record) => !commandDismissedTargetIds.has(record.target.targetId)
+      ),
+      mutationSkipped: [],
+      mutationFailed: [],
+      skipped: [...input.skipped ?? []],
+      warnings: [...input.warnings ?? []],
+      inventoryFailed: input.inventoryFailed
+    };
+    if (input.inventoryFailed) {
+      result2.warnings.push("review thread lifecycle inventory failed");
+      for (const target of input.targets) {
+        result2.previousUncertain.push({
+          target,
+          reasonCodes: unique([
+            ...target.reasonCodes ?? [],
+            "inventory_failed"
+          ])
+        });
+      }
+      return result2;
+    }
+    for (const target of input.targets) {
+      const targetVotes = Array.from(
+        votes.get(target.targetId)?.values() ?? []
+      );
+      const record = (reasonCodes) => ({
+        target,
+        reasonCodes: unique([
+          ...target.reasonCodes ?? [],
+          ...reasonCodes
+        ]),
+        providerVotes: targetVotes
+      });
+      if (target.hasHumanReply || !target.trustedAuthor) {
+        const reasonCodes = [];
+        if (target.hasHumanReply) reasonCodes.push("human_reply");
+        if (!target.trustedAuthor) reasonCodes.push("untrusted_author");
+        result2.manualAttention.push(record(reasonCodes));
+        continue;
+      }
+      if (currentFingerprints.has(target.fingerprint) || input.currentFindings.some(
+        (finding) => currentFindingMatchesTarget(finding, target)
+      )) {
+        result2.previousStillValid.push(record(["current_finding_present"]));
+        continue;
+      }
+      if (providerCurrentFindings.some(
+        (finding) => currentFindingMatchesTarget(finding, target)
+      )) {
+        result2.previousStillValid.push(
+          record(["provider_current_finding_present"])
+        );
+        continue;
+      }
+      const assignment = assignmentByTarget.get(target.targetId);
+      const assignedProviders = assignment?.assignedProviderIds ?? plannedProviders;
+      const missingProviderReasons = plannedProviders.filter((provider) => !assignedProviders.includes(provider)).map(() => "outside_review_scope");
+      if (assignment && (assignment.scopeStatus !== "in_scope" || assignedProviders.length === 0)) {
+        result2.previousUncertain.push(
+          record(
+            unique([
+              ...missingProviderReasons,
+              "outside_review_scope",
+              "insufficient_resolved_quorum"
+            ])
+          )
+        );
+        continue;
+      }
+      const stillValidVotes = targetVotes.filter(
+        (vote) => vote.valid && vote.verdict === "still_valid"
+      );
+      if (stillValidVotes.length > 0) {
+        result2.previousStillValid.push(record(["still_valid_vote"]));
+        continue;
+      }
+      const expectedProviders = plannedProviders.filter(
+        (provider) => assignedProviders.includes(provider)
+      );
+      const providerFailures = assignment ? new Set(assignment.failedProviderIds ?? []) : this.providerFailures(input.providerResults);
+      const missingOrFailedReasons = [
+        ...missingProviderReasons
+      ];
+      for (const provider of expectedProviders) {
+        if (providerFailures.has(provider)) {
+          missingOrFailedReasons.push("provider_failed");
+          continue;
+        }
+        if (!votes.get(target.targetId)?.has(provider)) {
+          missingOrFailedReasons.push("provider_missing_revalidation");
+        }
+      }
+      const resolvedVotes = targetVotes.filter(
+        (vote) => vote.valid && vote.verdict === "resolved"
+      );
+      const uncertainVotes = targetVotes.filter(
+        (vote) => vote.valid && vote.verdict === "uncertain"
+      );
+      const invalidVoteReasons = targetVotes.flatMap(
+        (vote) => vote.valid ? [] : vote.reasonCodes
+      );
+      const hasResolvedQuorum = quorumMode === "single-provider" ? resolvedVotes.length === 1 && plannedProviders.length === 1 : resolvedVotes.length >= 2;
+      if (hasResolvedQuorum) {
+        if (input.mode === "report") {
+          result2.mutationSkipped.push(record(["report_mode"]));
+        } else {
+          result2.resolvedCandidates.push(record([]));
+        }
+        continue;
+      }
+      result2.previousUncertain.push(
+        record(
+          unique([
+            ...missingOrFailedReasons,
+            ...invalidVoteReasons,
+            ...uncertainVotes.length > 0 ? ["provider_uncertain"] : [],
+            "insufficient_resolved_quorum"
+          ])
+        )
+      );
+    }
+    return result2;
+  }
+  collectVotes(input, thresholds) {
+    const targetIds = new Set(input.targets.map((target) => target.targetId));
+    const targetsById = new Map(
+      input.targets.map((target) => [target.targetId, target])
+    );
+    const plannedProviders = new Set(input.plannedProviders);
+    const votes = /* @__PURE__ */ new Map();
+    for (const result2 of input.providerResults) {
+      if (!plannedProviders.has(result2.name)) continue;
+      if (result2.status !== "success") continue;
+      const assignedTargetIds = result2.lifecycleAssignedTargetIds ? new Set(result2.lifecycleAssignedTargetIds) : null;
+      for (const raw of result2.result?.revalidations ?? []) {
+        const rawTargetId = raw.targetId || "";
+        if (assignedTargetIds && !assignedTargetIds.has(rawTargetId)) {
+          continue;
+        }
+        const vote = this.normalizeVote(
+          result2.name,
+          raw,
+          targetIds,
+          targetsById,
+          thresholds
+        );
+        if (!vote) continue;
+        if (!votes.has(vote.targetId)) {
+          votes.set(vote.targetId, /* @__PURE__ */ new Map());
+        }
+        const providerVotes = votes.get(vote.targetId);
+        const existing = providerVotes.get(vote.providerId);
+        providerVotes.set(
+          vote.providerId,
+          existing ? safestVote(existing, vote) : vote
+        );
+      }
+    }
+    return votes;
+  }
+  normalizeVote(providerId, raw, targetIds, targetsById, thresholds) {
+    const reasonCodes = [];
+    if (!raw.targetId) {
+      return {
+        providerId,
+        targetId: "",
+        fingerprint: raw.fingerprint,
+        verdict: "uncertain",
+        confidence: raw.confidence,
+        evidence: raw.evidence,
+        rationale: raw.rationale,
+        valid: false,
+        reasonCodes: ["missing_target_id"]
+      };
+    }
+    if (!targetIds.has(raw.targetId)) {
+      return null;
+    }
+    const target = targetsById.get(raw.targetId);
+    const evidence = Array.isArray(raw.evidence) ? raw.evidence : [];
+    const rationale = typeof raw.rationale === "string" ? raw.rationale : "";
+    const verdict = this.validVerdict(raw.verdict) ? raw.verdict : "uncertain";
+    if (raw.fingerprint && raw.fingerprint !== target.fingerprint) {
+      reasonCodes.push("unknown_target_id");
+    }
+    if (verdict === "resolved") {
+      const threshold = thresholds[target.severity] ?? thresholds.unknown;
+      const confidence = typeof raw.confidence === "number" ? raw.confidence : 0;
+      if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1 || confidence < threshold || !hasConcreteEvidence(evidence)) {
+        reasonCodes.push("invalid_resolved_evidence");
+      }
+    }
+    if (verdict === "still_valid" && !rationale.trim() && !hasConcreteEvidence(evidence)) {
+      reasonCodes.push("invalid_resolved_evidence");
+    }
+    return {
+      providerId,
+      targetId: raw.targetId,
+      fingerprint: raw.fingerprint,
+      verdict,
+      confidence: raw.confidence,
+      evidence,
+      rationale,
+      valid: reasonCodes.length === 0,
+      reasonCodes
+    };
+  }
+  validVerdict(value) {
+    return value === "resolved" || value === "still_valid" || value === "uncertain";
+  }
+  providerFailures(results) {
+    return new Set(
+      results.filter((result2) => result2.status !== "success").map((result2) => result2.name)
+    );
+  }
+};
+function countPreviousStillValidBySeverity(lifecycle) {
+  const counts = {
+    critical: 0,
+    major: 0,
+    minor: 0
+  };
+  for (const record of lifecycle?.previousStillValid ?? []) {
+    if (isLinkedCurrentFinding(record)) continue;
+    const severity = record.target.severity;
+    if (severity === "critical" || severity === "major" || severity === "minor") {
+      counts[severity] += 1;
+    }
+  }
+  return counts;
+}
+function isLinkedCurrentFinding(record) {
+  return record.reasonCodes.includes("current_finding_present");
+}
+function reconcileCarriedFindingsWithLifecycle(input) {
+  if (input.carriedFindings.length === 0 || input.lifecycle.inventoryFailed) {
+    return { findings: [...input.mergedFindings], removed: [] };
+  }
+  const carried = new Set(input.carriedFindings);
+  const projectionInactiveTargets = [
+    ...input.lifecycle.resolvedByLifecycle.map((record) => record.target),
+    ...input.lifecycle.mutationFailed.filter((record) => hasTrustedResolutionFallback(record, input.lifecycle)).map((record) => record.target),
+    ...allLifecycleRecords(input.lifecycle).filter((record) => hasTrustedRecordedResolution(record.target)).map((record) => record.target)
+  ];
+  if (projectionInactiveTargets.length === 0) {
+    return { findings: [...input.mergedFindings], removed: [] };
+  }
+  const removed = [];
+  const findings = input.mergedFindings.filter((finding) => {
+    if (!carried.has(finding)) return true;
+    const inactive = projectionInactiveTargets.some(
+      (target) => currentFindingMatchesTarget(finding, target)
+    );
+    if (inactive) removed.push(finding);
+    return !inactive;
+  });
+  return { findings, removed };
+}
+function allLifecycleRecords(lifecycle) {
+  return [
+    ...lifecycle.resolvedCandidates,
+    ...lifecycle.resolvedByLifecycle,
+    ...lifecycle.previousStillValid,
+    ...lifecycle.previousUncertain,
+    ...lifecycle.manualAttention,
+    ...lifecycle.mutationSkipped,
+    ...lifecycle.mutationFailed,
+    ...lifecycle.skipped
+  ];
+}
+function hasTrustedRecordedResolution(target) {
+  const marker = target.trustedResolutionMarker;
+  return Boolean(
+    marker && target.trustedAuthor && !target.hasHumanReply && marker.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker.targetId === target.targetId && marker.fingerprint === target.fingerprint
+  );
+}
+function hasTrustedResolutionFallback(record, lifecycle) {
+  const reasonCodes = new Set(record.reasonCodes);
+  if (lifecycle.mode !== "resolve" || !record.target.trustedAuthor || record.target.hasHumanReply || !reasonCodes.has("mutation_permission_denied") || !reasonCodes.has("resolution_comment_posted") || Array.from(reasonCodes).some(
+    (reason) => reason !== "mutation_permission_denied" && reason !== "resolution_comment_posted"
+  )) {
+    return false;
+  }
+  const resolvedProviders = new Set(
+    (record.providerVotes ?? []).filter((vote) => vote.valid && vote.verdict === "resolved").map((vote) => vote.providerId)
+  );
+  return lifecycle.quorumMode === "single-provider" ? resolvedProviders.size >= 1 : resolvedProviders.size >= 2;
+}
+function hasConcreteEvidence(evidence) {
+  return evidence.some(
+    (item) => typeof item.path === "string" && item.path.trim().length > 0 && typeof item.reason === "string" && item.reason.trim().length > 0
+  );
+}
+function resolveConfidenceThresholds(overrides) {
+  const thresholds = { ...DEFAULT_RESOLVE_CONFIDENCE };
+  for (const severity of Object.keys(thresholds)) {
+    const value = overrides?.[severity];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1) {
+      thresholds[severity] = value;
+    }
+  }
+  return thresholds;
+}
+function currentFindingMatchesTarget(finding, target) {
+  const targetPath = target.currentPath || target.originalPath;
+  const targetLine = target.currentLine ?? target.originalLine ?? null;
+  const targetReference = {
+    path: targetPath,
+    line: targetLine,
+    body: lifecycleTargetBody(target)
+  };
+  const findingReference = {
+    path: finding.file,
+    line: finding.line,
+    body: `**${finding.severity} - ${finding.title}**
+
+${finding.message}`
+  };
+  return isLikelySameInlineFinding(targetReference, findingReference);
+}
+function lifecycleTargetBody(target) {
+  const severity = target.severity === "critical" || target.severity === "major" || target.severity === "minor" ? target.severity : "minor";
+  return `**${severity} - ${target.title}**
+
+${target.message}`;
+}
+function safestVote(left, right) {
+  const rank = (vote) => {
+    if (vote.valid && vote.verdict === "still_valid") return 3;
+    if (!vote.valid || vote.verdict === "uncertain") return 2;
+    if (vote.valid && vote.verdict === "resolved") return 1;
+    return 0;
+  };
+  return rank(right) > rank(left) ? right : left;
+}
+function unique(values) {
+  return Array.from(new Set(values));
+}
+
 // src/utils/suggestion-formatter.ts
 function countMaxConsecutiveBackticks(str2) {
   const backtickSequences = str2.match(/`+/g);
@@ -30373,6 +31096,7 @@ ${fence}`;
 // src/output/reviewer-summary.ts
 var REVIEW_SUMMARY_STATUS_COMPLETE_MARKER = "<!-- reviewrouter:review-status:complete -->";
 var REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER = "<!-- reviewrouter:review-status:incomplete -->";
+var statusHeadingMarker = "<!-- reviewrouter:summary-status -->";
 var maxSummaryBytes = 6e4;
 var maxFindingBodyChars = 2500;
 function resolveReviewerSummaryLocale(language) {
@@ -30433,56 +31157,315 @@ function neutralizeDetailsMarkup(value) {
   );
 }
 function renderReviewerSummaryMarkdown(input) {
+  const locale = resolveReviewerSummaryLocale(input.language);
   const copy = reviewerSummaryCopy(input.language);
+  const labels = sectionCopy[locale];
   const counts = {
     total: input.metrics.totalFindings,
     critical: input.metrics.critical,
     major: input.metrics.major,
     minor: input.metrics.minor
   };
-  const failedProviders = Math.max(
+  const previous = input.previousCounts;
+  const historical = (input.lifecycle?.length ?? 0) > 0 || input.lifecycleAttention;
+  const incomplete = input.incomplete === true || input.coverage?.complete === false;
+  const limitedScope = input.coverage && (input.coverage.unreviewedFiles > 0 || (input.coverage.compactedFiles ?? 0) > 0 || (input.coverage.metadataOnlyFiles ?? 0) > 0 || (input.coverage.skippedFiles ?? 0) > 0 || input.coverage.limitations.length > 0);
+  const heading = incomplete ? copy.incompleteHeading(counts.total) : counts.total > 0 ? copy.findingsHeading(counts) : historical ? `## ${labels.previous}` : input.dismissedFindings ? `## ${labels.dismissed}` : limitedScope ? copy.limitedNoFindingsHeading : copy.noFindingsHeading;
+  const lines = [
+    incomplete ? REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER : REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
+    `<!-- reviewrouter:summary-locale:${locale} -->`,
+    "# ReviewRouter",
+    "",
+    ["critical", "major", "minor"].map((severity, i2) => {
+      const count = counts[severity] + (previous?.[severity] ?? 0);
+      return `${["\u{1F534}", "\u{1F7E1}", "\u{1F535}"][i2]} **${count} ${severity}**`;
+    }).join(" \xB7 "),
+    "",
+    `## ${labels.summary}`,
+    "",
+    statusHeadingMarker,
+    heading
+  ];
+  if (incomplete) lines.push("", copy.incompleteNote);
+  const failed = Math.max(
     0,
     input.metrics.providersUsed - input.metrics.providersSuccess
   );
-  const heading = input.incomplete ? copy.incompleteHeading(counts.total) : counts.total === 0 ? copy.noFindingsHeading : copy.findingsHeading(counts);
-  const lines = [
-    input.incomplete ? REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER : REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
-    heading
-  ];
-  if (input.incomplete) {
-    lines.push("", copy.incompleteNote);
-  }
-  if (failedProviders > 0) {
+  if (failed > 0)
+    lines.push("", copy.providerFailures(failed, input.metrics.providersUsed));
+  if (input.dismissedFindings)
     lines.push(
       "",
-      copy.providerFailures(failedProviders, input.metrics.providersUsed)
+      `${labels.dismissed}: ${input.dismissedFindings}`,
+      "",
+      copy.dismissedNote(input.dismissedFindings)
+    );
+  if (input.coverage) {
+    const coverage = input.coverage;
+    lines.push(
+      "",
+      "<details>",
+      `<summary>${labels.scope}</summary>`,
+      "",
+      `| ${labels.metric} | ${labels.value} |`,
+      "|---|---:|",
+      `| ${labels.files} | ${coverage.reviewedFiles}/${coverage.totalFiles} |`,
+      `| ${labels.unreviewed} | ${coverage.unreviewedFiles} |`,
+      `| ${labels.mode} | ${escapeMarkdownText(coverage.mode)} |`
+    );
+    if (!coverage.complete) lines.push("", copy.coverageHeading);
+    for (const [key, value] of [
+      ["fullDiff", coverage.fullDiffFiles],
+      ["compacted", coverage.compactedFiles],
+      ["metadataOnly", coverage.metadataOnlyFiles],
+      ["skipped", coverage.skippedFiles]
+    ]) {
+      if (value !== void 0)
+        lines.push(`| ${scopeCopy[locale][key]} | ${value} |`);
+    }
+    if (coverage.agenticContext !== void 0)
+      lines.push(
+        `| ${scopeCopy[locale].context} | ${coverage.agenticContext ? "\u2713" : "\u2014"} |`
+      );
+    lines.push(
+      ...coverage.limitations.map((value) => `- ${escapeMarkdownText(value)}`)
+    );
+    for (const file of (coverage.files ?? []).filter((file2) => file2.status !== "full").slice(0, 20))
+      lines.push(
+        `- \`${escapeMarkdownInline(file.path)}\` - ${escapeMarkdownText(file.status)}${file.reason ? ` \u2014 ${escapeMarkdownText(file.reason)}` : ""}`
+      );
+    lines.push("", "</details>");
+  }
+  const releaseNotes = input.findings.filter(
+    (finding) => finding.category && finding.severity !== "minor"
+  );
+  if (releaseNotes.length) {
+    lines.push("", `## ${scopeCopy[locale].release}`);
+    for (const category of new Set(
+      releaseNotes.map((finding) => finding.category)
+    )) {
+      lines.push(
+        "",
+        `**${escapeMarkdownText(category)}:**`,
+        ...releaseNotes.filter((finding) => finding.category === category).map(
+          (finding) => `- ${finding.severity === "critical" ? "\u{1F534}" : "\u{1F7E1}"} ${escapeMarkdownText(finding.title)}`
+        )
+      );
+    }
+  }
+  if (input.findings.length > 0) lines.push("", `## ${labels.findings}`);
+  const remaining = [];
+  for (const finding of [...input.findings].sort(compareSummaryFindings)) {
+    const block = renderFindingDetails(copy, finding);
+    if (utf8Bytes([...lines, "", block].join("\n")) > maxSummaryBytes - 2e3) {
+      remaining.push(compactFindingLine(finding));
+    } else lines.push("", block);
+  }
+  if (remaining.length > 0)
+    lines.push("", copy.moreFindings(remaining.length), ...remaining);
+  if (input.lifecycle?.length)
+    lines.push(
+      "",
+      `## ${labels.previous}`,
+      "",
+      renderReviewerLifecycleMarkdown({
+        language: input.language,
+        lines: input.lifecycle
+      })
+    );
+  if (input.lifecycleAttention)
+    lines.push(
+      "",
+      `**${labels.attention}**`,
+      ...(input.lifecycleWarnings ?? []).map(
+        (value) => `- ${escapeMarkdownText(value)}`
+      )
+    );
+  const measured = input.measurements;
+  lines.push(
+    "",
+    "<details>",
+    `<summary>${labels.performance}</summary>`,
+    "",
+    `| ${labels.metric} | ${labels.value} |`,
+    "|---|---:|",
+    `| ${labels.providers} | ${input.metrics.providersSuccess}/${input.metrics.providersUsed} |`
+  );
+  if (measured?.durationSeconds !== void 0)
+    lines.push(
+      `| ${labels.duration} | ${measured.durationSeconds.toFixed(2)}s |`
+    );
+  if (measured?.tokens !== void 0)
+    lines.push(
+      `| ${labels.tokens} | ${measured.tokens.toLocaleString("en-US")} |`
+    );
+  if (measured?.cost !== void 0)
+    lines.push(`| ${labels.cost} | $${measured.cost.toFixed(4)} |`);
+  else
+    lines.push(
+      `| ${scopeCopy[locale].billing} | ${scopeCopy[locale].unknown} |`
+    );
+  if (measured?.cacheHit) lines.push(`| ${labels.cache} | \u2713 |`);
+  if (measured?.providers?.length)
+    lines.push("", `**${scopeCopy[locale].providerPerformance}:**`);
+  for (const provider of measured?.providers ?? []) {
+    const facts = [
+      `${provider.durationSeconds.toFixed(2)}s`,
+      ...provider.cost !== void 0 && provider.cost > 0 ? [`$${provider.cost.toFixed(4)}`] : [],
+      ...provider.tokens !== void 0 && provider.tokens > 0 ? [`${provider.tokens} ${labels.tokens.toLowerCase()}`] : []
+    ];
+    const icon = provider.status === "success" ? "\u2705" : provider.status === "timeout" ? "\u23F1\uFE0F" : provider.status === "rate-limited" ? "\u23F8\uFE0F" : "\u274C";
+    lines.push(
+      "",
+      `- ${icon} **${escapeMarkdownText(provider.name)}${provider.requiredHealthy ? ` (${scopeCopy[locale].required})` : ""}** (${facts.join(", ")})`
+    );
+    if (provider.errorMessage)
+      lines.push(`  ${escapeMarkdownText(provider.errorMessage)}`);
+  }
+  lines.push("", "</details>");
+  if (input.analysis) {
+    const analysis = input.analysis;
+    lines.push(
+      "",
+      "<details>",
+      `<summary>${labels.analysis}</summary>`,
+      "",
+      `${(analysis.averageLikelihood * 100).toFixed(1)}% \xB7 ${escapeMarkdownText(analysis.consensus)}`,
+      ...Object.entries(analysis.providerEstimates).map(
+        ([name, likelihood]) => `- ${escapeMarkdownText(name)}: ${(likelihood * 100).toFixed(1)}%`
+      ),
+      "",
+      "</details>"
     );
   }
-  const sorted = [...input.findings].sort(compareSummaryFindings);
-  const remaining = [];
-  for (const finding of sorted) {
-    const block = renderFindingDetails(copy, finding);
-    const candidate = [...lines, "", block];
-    if (utf8Bytes(candidate.join("\n")) > maxSummaryBytes) {
-      remaining.push(compactFindingLine(finding));
-      continue;
-    }
-    lines.push("", block);
+  if (input.diagram?.trim() && /(?:-->|---|-.->|==>)/.test(input.diagram)) {
+    lines.push(
+      "",
+      "<details>",
+      `<summary>${labels.impact}</summary>`,
+      "",
+      formatCodeFence(neutralizeDetailsMarkup(input.diagram), "mermaid"),
+      "",
+      "</details>"
+    );
   }
-  if (remaining.length > 0) {
-    const header = ["", copy.moreFindings(remaining.length)];
-    if (utf8Bytes([...lines, ...header].join("\n")) <= maxSummaryBytes) {
-      lines.push(...header);
-      for (const compact of remaining) {
-        const candidate = [...lines, compact];
-        if (utf8Bytes(candidate.join("\n")) > maxSummaryBytes) {
-          break;
-        }
-        lines.push(compact);
-      }
-    }
-  }
+  if (input.testHints?.length)
+    lines.push(
+      "",
+      "<details>",
+      `<summary>${scopeCopy[locale].tests}</summary>`,
+      "",
+      ...input.testHints.map(
+        (hint) => `- \`${escapeMarkdownInline(hint.file)}\` \u2192 \`${escapeMarkdownInline(hint.suggestedTestFile)}\`: ${escapeMarkdownText(hint.testPattern)}`
+      ),
+      "",
+      "</details>"
+    );
+  const measuredFooter = [
+    measured?.durationSeconds !== void 0 ? `${measured.durationSeconds.toFixed(1)}s` : "",
+    measured?.cost !== void 0 ? `$${measured.cost.toFixed(4)}` : ""
+  ].filter(Boolean);
+  lines.push(
+    "",
+    "---",
+    "",
+    `<sub>${[...measuredFooter, "Powered by ReviewRouter"].join(" \u2022 ")}</sub>`
+  );
   return limitUtf8(lines.join("\n"), maxSummaryBytes);
+}
+function renderReviewSummary(review, language) {
+  const retainedLocale = review.summary.match(
+    /<!-- reviewrouter:summary-locale:([a-z]{2}) -->/
+  )?.[1];
+  const lifecycle = review.threadLifecycle?.mode === "off" ? void 0 : review.threadLifecycle;
+  const stillValid = lifecycle?.previousStillValid.filter(
+    (record) => !isLinkedCurrentFinding(record)
+  ) ?? [];
+  const appliedResolutions = new Set(
+    lifecycle?.resolvedByLifecycle.map((record) => record.target.targetId)
+  );
+  const attention = lifecycle ? [
+    ...lifecycle.resolvedCandidates.filter(
+      (record) => !appliedResolutions.has(record.target.targetId)
+    ),
+    ...lifecycle.previousUncertain,
+    ...lifecycle.manualAttention,
+    ...lifecycle.mutationSkipped,
+    ...lifecycle.mutationFailed,
+    ...lifecycle.skipped.filter(
+      (record) => !record.reasonCodes.every(
+        (reason) => reason === "command_dismissed"
+      )
+    )
+  ] : [];
+  const lifecycleLines = [];
+  const add = (records, kind) => {
+    for (const record of records)
+      lifecycleLines.push({
+        kind,
+        title: record.target.title,
+        message: [
+          record.target.message,
+          ...record.reasonCodes.map((reason) => reason.replaceAll("_", " "))
+        ].join("\n\n"),
+        locationLabel: `${record.target.currentPath ?? record.target.originalPath}:${record.target.currentLine ?? record.target.originalLine ?? 1}`
+      });
+  };
+  add(stillValid, "active");
+  add(lifecycle?.resolvedByLifecycle ?? [], "resolved");
+  add(attention, "uncertain");
+  const scope = review.coverage;
+  const run2 = review.runDetails;
+  const measured = run2 !== void 0 || (review.providerResults?.length ?? 0) > 0 || review.metrics.durationSeconds > 0 || review.metrics.totalTokens > 0 || review.metrics.totalCost > 0;
+  return renderReviewerSummaryMarkdown({
+    language: language ?? retainedLocale,
+    findings: review.findings.map(toReviewerSummaryFinding),
+    metrics: review.metrics,
+    incomplete: scope?.complete === false || review.metrics.providersSuccess === 0,
+    ...scope ? {
+      coverage: {
+        complete: scope.complete,
+        totalFiles: scope.totalFiles,
+        reviewedFiles: scope.filesConsidered,
+        unreviewedFiles: scope.unreviewedFiles,
+        mode: scope.mode,
+        limitations: scope.limitations ?? [],
+        fullDiffFiles: scope.fullDiffFiles,
+        compactedFiles: scope.compactedFiles,
+        metadataOnlyFiles: scope.metadataOnlyFiles,
+        skippedFiles: scope.skippedFiles,
+        agenticContext: scope.agenticContext,
+        files: scope.files
+      }
+    } : {},
+    lifecycle: lifecycleLines,
+    lifecycleWarnings: [
+      ...lifecycle?.warnings ?? [],
+      ...lifecycle?.inventoryFailed ? [
+        sectionCopy[resolveReviewerSummaryLocale(language ?? retainedLocale)].attention
+      ] : []
+    ],
+    lifecycleAttention: attention.length > 0 || lifecycle?.inventoryFailed === true || (lifecycle?.warnings.length ?? 0) > 0,
+    previousCounts: {
+      critical: stillValid.filter(
+        (record) => record.target.severity === "critical"
+      ).length,
+      major: stillValid.filter((record) => record.target.severity === "major").length,
+      minor: stillValid.filter((record) => record.target.severity === "minor").length
+    },
+    ...review.metrics.dismissedFindings ? { dismissedFindings: review.metrics.dismissedFindings } : {},
+    ...measured ? {
+      measurements: {
+        ...run2 || (review.providerResults?.length ?? 0) > 0 || review.metrics.durationSeconds > 0 ? { durationSeconds: review.metrics.durationSeconds } : {},
+        ...review.metrics.totalTokens > 0 ? { tokens: review.metrics.totalTokens } : {},
+        ...review.metrics.totalCost > 0 ? { cost: review.metrics.totalCost } : {},
+        ...run2 ? { providers: run2.providers, cacheHit: run2.cacheHit } : {}
+      }
+    } : {},
+    ...review.aiAnalysis ? { analysis: review.aiAnalysis } : {},
+    ...review.mermaidDiagram ? { diagram: review.mermaidDiagram } : {},
+    ...review.testHints ? { testHints: review.testHints } : {}
+  });
 }
 function renderReviewerLifecycleMarkdown(input) {
   if (input.lines.length === 0) {
@@ -30509,23 +31492,6 @@ function renderReviewerLifecycleMarkdown(input) {
   });
   return limitUtf8(blocks.join("\n\n"), maxSummaryBytes);
 }
-function markReviewSummaryIncomplete(input) {
-  const copy = reviewerSummaryCopy(input.language);
-  if (!input.summary.includes(REVIEW_SUMMARY_STATUS_COMPLETE_MARKER)) {
-    throw new Error("legacy_partial_review_summary_contract_invalid");
-  }
-  const heading = copy.incompleteHeading(input.preliminaryFindingCount);
-  const rewritten = input.summary.replace(
-    REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
-    REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER
-  ).replace(/^## .+$/m, heading);
-  if (rewritten.includes(copy.incompleteNote)) {
-    return rewritten;
-  }
-  return rewritten.replace(heading, `${heading}
-
-${copy.incompleteNote}`);
-}
 function toReviewerSummaryFinding(finding) {
   return {
     severity: finding.severity,
@@ -30535,7 +31501,17 @@ function toReviewerSummaryFinding(finding) {
     line: finding.line,
     ...finding.startLine !== void 0 ? { startLine: finding.startLine } : {},
     ...finding.endLine !== void 0 ? { endLine: finding.endLine } : {},
-    ...finding.suggestion ? { suggestion: finding.suggestion } : {}
+    ...finding.suggestion ? { suggestion: finding.suggestion } : {},
+    ...finding.category ? { category: finding.category } : {},
+    ...finding.evidence ? { evidence: finding.evidence } : {},
+    attribution: Array.from(
+      /* @__PURE__ */ new Set([
+        ...finding.providerModels?.map((model) => model.provider) ?? [],
+        ...finding.providers ?? [],
+        ...finding.provider ? [finding.provider] : []
+      ])
+    ),
+    ...finding.providerPoolSize !== void 0 ? { attributionPoolSize: finding.providerPoolSize } : {}
   };
 }
 function findingLocationLabel(finding) {
@@ -30566,6 +31542,18 @@ function renderFindingDetails(copy, finding) {
       formatCodeFence(finding.suggestion.trim())
     );
   }
+  if (finding.evidence)
+    parts.push(
+      "",
+      `**Evidence:** ${escapeMarkdownText(finding.evidence.badge)} (${Math.round(finding.evidence.confidence * 100)}%)`,
+      "",
+      neutralizeDetailsMarkup(finding.evidence.reasoning ?? "")
+    );
+  if (finding.attribution?.length)
+    parts.push(
+      "",
+      finding.attribution.length === 1 ? `<sub>Model: ${escapeHtml(finding.attribution[0])}</sub>` : `<sub>Models: ${escapeHtml(finding.attribution.join(", "))} \xB7 agreement ${finding.attribution.length}/${Math.max(finding.attributionPoolSize ?? finding.attribution.length, finding.attribution.length)}</sub>`
+    );
   parts.push("", "</details>");
   return parts.join("\n");
 }
@@ -30576,11 +31564,11 @@ function compareSummaryFindings(left, right) {
   const rank = { critical: 3, major: 2, minor: 1 };
   return rank[right.severity] - rank[left.severity] || left.file.localeCompare(right.file) || left.line - right.line;
 }
-function formatCodeFence(content) {
+function formatCodeFence(content, language = "") {
   const fence = "`".repeat(
     Math.max(3, countMaxConsecutiveBackticks(content) + 1)
   );
-  return `${fence}
+  return `${fence}${language}
 ${content.trimEnd()}
 ${fence}`;
 }
@@ -30612,6 +31600,8 @@ function englishFindingWord(count) {
 var copies = {
   en: {
     noFindingsHeading: "## No findings",
+    limitedNoFindingsHeading: "## No reportable findings in reviewed files",
+    dismissedNote: (count) => `${count} ${count === 1 ? "finding" : "findings"} dismissed by maintainer/admin \`/rr skip\` ${count === 1 ? "override" : "overrides"}.`,
     findingsHeading: (counts) => `## ${counts.total} ${englishFindingWord(counts.total)} (${formatSeverityCounts(counts)})`,
     providerFailures: (failed, planned) => `${failed} of ${planned} review providers failed.`,
     location: "Location",
@@ -30622,6 +31612,7 @@ var copies = {
     moreFindings: (count) => `**${count} more ${englishFindingWord(count)} omitted from this summary because of size limits.**`,
     lifecycle: {
       resolved: "resolved",
+      active: "still valid",
       carried: "carried, not revalidated",
       uncertain: "needs attention",
       suppressed: "suppressed"
@@ -30629,6 +31620,8 @@ var copies = {
   },
   ru: {
     noFindingsHeading: "## \u0417\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439 \u043D\u0435\u0442",
+    limitedNoFindingsHeading: "## \u0412 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043D\u044B\u0445 \u0444\u0430\u0439\u043B\u0430\u0445 \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439 \u043D\u0435\u0442",
+    dismissedNote: (count) => `\u0417\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439 \u043E\u0442\u043A\u043B\u043E\u043D\u0435\u043D\u043E: ${count}. \u041F\u0440\u0438\u0447\u0438\u043D\u0430 \u2014 \u043A\u043E\u043C\u0430\u043D\u0434\u0430 \`/rr skip\` \u0441\u043E\u043F\u0440\u043E\u0432\u043E\u0436\u0434\u0430\u044E\u0449\u0435\u0433\u043E \u0438\u043B\u0438 \u0430\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\u043E\u0440\u0430.`,
     findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} (${formatSeverityCounts(counts)})`,
     providerFailures: (failed, planned) => `\u041D\u0435 \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B\u0438 ${failed} \u0438\u0437 ${planned} \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u043E\u0432 \u0440\u0435\u0432\u044C\u044E.`,
     location: "\u041C\u0435\u0441\u0442\u043E",
@@ -30639,6 +31632,7 @@ var copies = {
     moreFindings: (count) => `**\u0415\u0449\u0451 ${count} ${slavicFindingWord(count, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} \u043D\u0435 \u0432\u043B\u0435\u0437\u043B\u0438 \u0432 \u044D\u0442\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435 \u0438\u0437\u2011\u0437\u0430 \u043B\u0438\u043C\u0438\u0442\u0430 \u0440\u0430\u0437\u043C\u0435\u0440\u0430.**`,
     lifecycle: {
       resolved: "\u0441\u043D\u044F\u0442\u043E",
+      active: "\u043E\u0441\u0442\u0430\u0451\u0442\u0441\u044F \u0430\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u044B\u043C",
       carried: "\u043F\u0435\u0440\u0435\u043D\u0435\u0441\u0435\u043D\u043E, \u043D\u0435 \u043F\u0435\u0440\u0435\u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E",
       uncertain: "\u043D\u0443\u0436\u043D\u043E \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435",
       suppressed: "\u0441\u043A\u0440\u044B\u0442\u043E"
@@ -30646,6 +31640,8 @@ var copies = {
   },
   uk: {
     noFindingsHeading: "## \u0417\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C \u043D\u0435\u043C\u0430\u0454",
+    limitedNoFindingsHeading: "## \u0423 \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u0435\u043D\u0438\u0445 \u0444\u0430\u0439\u043B\u0430\u0445 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C \u043D\u0435\u043C\u0430\u0454",
+    dismissedNote: (count) => `\u0412\u0456\u0434\u0445\u0438\u043B\u0435\u043D\u043E \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C: ${count}. \u041F\u0440\u0438\u0447\u0438\u043D\u0430 \u2014 \u043A\u043E\u043C\u0430\u043D\u0434\u0430 \`/rr skip\` \u0441\u0443\u043F\u0440\u043E\u0432\u043E\u0434\u0436\u0443\u0432\u0430\u0447\u0430 \u0430\u0431\u043E \u0430\u0434\u043C\u0456\u043D\u0456\u0441\u0442\u0440\u0430\u0442\u043E\u0440\u0430.`,
     findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} (${formatSeverityCounts(counts)})`,
     providerFailures: (failed, planned) => `\u041D\u0435 \u0441\u043F\u0440\u0430\u0446\u044E\u0432\u0430\u043B\u0438 ${failed} \u0437 ${planned} \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u0456\u0432 \u0440\u0435\u0432\u2019\u044E.`,
     location: "\u041C\u0456\u0441\u0446\u0435",
@@ -30656,6 +31652,7 @@ var copies = {
     moreFindings: (count) => `**\u0429\u0435 ${count} ${slavicFindingWord(count, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} \u043D\u0435 \u0432\u043C\u0456\u0441\u0442\u0438\u043B\u0438\u0441\u044F \u0432 \u0446\u0435 \u043F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u043D\u044F \u0447\u0435\u0440\u0435\u0437 \u043B\u0456\u043C\u0456\u0442 \u0440\u043E\u0437\u043C\u0456\u0440\u0443.**`,
     lifecycle: {
       resolved: "\u0437\u043D\u044F\u0442\u043E",
+      active: "\u0437\u0430\u043B\u0438\u0448\u0430\u0454\u0442\u044C\u0441\u044F \u0430\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u0438\u043C",
       carried: "\u043F\u0435\u0440\u0435\u043D\u0435\u0441\u0435\u043D\u043E, \u043D\u0435 \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u0435\u043D\u043E \u0437\u043D\u043E\u0432\u0443",
       uncertain: "\u043F\u043E\u0442\u0440\u0456\u0431\u043D\u0430 \u0443\u0432\u0430\u0433\u0430",
       suppressed: "\u043F\u0440\u0438\u0445\u043E\u0432\u0430\u043D\u043E"
@@ -30663,6 +31660,8 @@ var copies = {
   },
   es: {
     noFindingsHeading: "## Sin hallazgos",
+    limitedNoFindingsHeading: "## Sin hallazgos en los archivos revisados",
+    dismissedNote: (count) => `${count} hallazgos descartados por la orden \`/rr skip\` de un mantenedor o administrador.`,
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "hallazgo" : "hallazgos"} (${formatSeverityCounts(counts)})`,
     providerFailures: (failed, planned) => `Fallaron ${failed} de ${planned} proveedores de revisi\xF3n.`,
     location: "Ubicaci\xF3n",
@@ -30673,6 +31672,7 @@ var copies = {
     moreFindings: (count) => `**${count} ${count === 1 ? "hallazgo m\xE1s omitido" : "hallazgos m\xE1s omitidos"} de este resumen por el l\xEDmite de tama\xF1o.**`,
     lifecycle: {
       resolved: "resuelto",
+      active: "sigue vigente",
       carried: "arrastrado, no revalidado",
       uncertain: "requiere atenci\xF3n",
       suppressed: "omitido"
@@ -30680,6 +31680,8 @@ var copies = {
   },
   pt: {
     noFindingsHeading: "## Nenhum achado",
+    limitedNoFindingsHeading: "## Nenhum achado nos arquivos revisados",
+    dismissedNote: (count) => `${count} achados dispensados pelo comando \`/rr skip\` de um mantenedor ou administrador.`,
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "achado" : "achados"} (${formatSeverityCounts(counts)})`,
     providerFailures: (failed, planned) => `${failed} de ${planned} provedores de revis\xE3o falharam.`,
     location: "Local",
@@ -30690,6 +31692,7 @@ var copies = {
     moreFindings: (count) => `**Mais ${count} ${count === 1 ? "achado omitido" : "achados omitidos"} deste resumo por limite de tamanho.**`,
     lifecycle: {
       resolved: "resolvido",
+      active: "ainda v\xE1lido",
       carried: "carregado, n\xE3o revalidado",
       uncertain: "precisa de aten\xE7\xE3o",
       suppressed: "suprimido"
@@ -30697,6 +31700,8 @@ var copies = {
   },
   fr: {
     noFindingsHeading: "## Aucune anomalie",
+    limitedNoFindingsHeading: "## Aucune anomalie dans les fichiers examin\xE9s",
+    dismissedNote: (count) => `${count} anomalies \xE9cart\xE9es par la commande \`/rr skip\` d\u2019un responsable ou administrateur.`,
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "anomalie" : "anomalies"} (${formatSeverityCounts(counts)})`,
     providerFailures: (failed, planned) => `${failed} fournisseur(s) de revue sur ${planned} ont \xE9chou\xE9.`,
     location: "Emplacement",
@@ -30707,6 +31712,7 @@ var copies = {
     moreFindings: (count) => `**${count} ${count === 1 ? "anomalie suppl\xE9mentaire omise" : "anomalies suppl\xE9mentaires omises"} de ce r\xE9sum\xE9 \xE0 cause de la limite de taille.**`,
     lifecycle: {
       resolved: "r\xE9solu",
+      active: "toujours valide",
       carried: "report\xE9, non revalid\xE9",
       uncertain: "n\xE9cessite une attention",
       suppressed: "masqu\xE9"
@@ -30714,6 +31720,8 @@ var copies = {
   },
   de: {
     noFindingsHeading: "## Keine Befunde",
+    limitedNoFindingsHeading: "## Keine Befunde in den gepr\xFCften Dateien",
+    dismissedNote: (count) => `${count} Befunde durch den Befehl \`/rr skip\` eines Maintainers oder Administrators verworfen.`,
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "Befund" : "Befunde"} (${formatSeverityCounts(counts)})`,
     providerFailures: (failed, planned) => `${failed} von ${planned} Review-Providern sind fehlgeschlagen.`,
     location: "Stelle",
@@ -30723,6 +31731,7 @@ var copies = {
     coverageHeading: "### Abdeckung unvollst\xE4ndig",
     moreFindings: (count) => `**${count} weitere ${count === 1 ? "Befund" : "Befunde"} fehlen in dieser Zusammenfassung wegen des Gr\xF6\xDFenlimits.**`,
     lifecycle: {
+      active: "weiterhin g\xFCltig",
       resolved: "erledigt",
       carried: "\xFCbernommen, nicht erneut gepr\xFCft",
       uncertain: "braucht Aufmerksamkeit",
@@ -30731,6 +31740,8 @@ var copies = {
   },
   it: {
     noFindingsHeading: "## Nessun rilievo",
+    limitedNoFindingsHeading: "## Nessun rilievo nei file esaminati",
+    dismissedNote: (count) => `${count} riscontri esclusi dal comando \`/rr skip\` di un manutentore o amministratore.`,
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "rilievo" : "rilievi"} (${formatSeverityCounts(counts)})`,
     providerFailures: (failed, planned) => `${failed} di ${planned} provider di review non sono riusciti.`,
     location: "Posizione",
@@ -30741,6 +31752,7 @@ var copies = {
     moreFindings: (count) => `**Altri ${count} ${count === 1 ? "rilievo omesso" : "rilievi omessi"} da questo riassunto per il limite di dimensione.**`,
     lifecycle: {
       resolved: "risolto",
+      active: "ancora valido",
       carried: "riportato, non rivalidato",
       uncertain: "richiede attenzione",
       suppressed: "soppresso"
@@ -30748,6 +31760,8 @@ var copies = {
   },
   zh: {
     noFindingsHeading: "## \u65E0\u95EE\u9898",
+    limitedNoFindingsHeading: "## \u5DF2\u5BA1\u67E5\u6587\u4EF6\u4E2D\u65E0\u95EE\u9898",
+    dismissedNote: (count) => `${count} \u4E2A\u95EE\u9898\u7531\u7EF4\u62A4\u8005\u6216\u7BA1\u7406\u5458\u901A\u8FC7 \`/rr skip\` \u547D\u4EE4\u5FFD\u7565\u3002`,
     findingsHeading: (counts) => `## ${counts.total} \u4E2A\u95EE\u9898\uFF08${formatSeverityCounts(counts)}\uFF09`,
     providerFailures: (failed, planned) => `${planned} \u4E2A\u5BA1\u67E5\u63D0\u4F9B\u65B9\u4E2D\u6709 ${failed} \u4E2A\u5931\u8D25\u3002`,
     location: "\u4F4D\u7F6E",
@@ -30758,6 +31772,7 @@ var copies = {
     moreFindings: (count) => `**\u53D7\u7BC7\u5E45\u9650\u5236\uFF0C\u672C\u6458\u8981\u8FD8\u7701\u7565\u4E86 ${count} \u6761\u95EE\u9898\u3002**`,
     lifecycle: {
       resolved: "\u5DF2\u89E3\u51B3",
+      active: "\u4ECD\u7136\u6709\u6548",
       carried: "\u6CBF\u7528\uFF0C\u672A\u590D\u9A8C",
       uncertain: "\u9700\u8981\u5173\u6CE8",
       suppressed: "\u5DF2\u6291\u5236"
@@ -30765,6 +31780,8 @@ var copies = {
   },
   ja: {
     noFindingsHeading: "## \u6307\u6458\u306A\u3057",
+    limitedNoFindingsHeading: "## \u30EC\u30D3\u30E5\u30FC\u5BFE\u8C61\u30D5\u30A1\u30A4\u30EB\u306B\u6307\u6458\u306A\u3057",
+    dismissedNote: (count) => `${count} \u4EF6\u306E\u6307\u6458\u304C\u30E1\u30F3\u30C6\u30CA\u30FC\u307E\u305F\u306F\u7BA1\u7406\u8005\u306E \`/rr skip\` \u30B3\u30DE\u30F3\u30C9\u306B\u3088\u308A\u9664\u5916\u3055\u308C\u307E\u3057\u305F\u3002`,
     findingsHeading: (counts) => `## \u6307\u6458 ${counts.total} \u4EF6\uFF08${formatSeverityCounts(counts)}\uFF09`,
     providerFailures: (failed, planned) => `\u30EC\u30D3\u30E5\u30FC\u30D7\u30ED\u30D0\u30A4\u30C0\u30FC ${planned} \u4EF6\u4E2D ${failed} \u4EF6\u304C\u5931\u6557\u3057\u307E\u3057\u305F\u3002`,
     location: "\u5834\u6240",
@@ -30775,6 +31792,7 @@ var copies = {
     moreFindings: (count) => `**\u30B5\u30A4\u30BA\u5236\u9650\u306E\u305F\u3081\u3001\u3053\u306E\u8981\u7D04\u304B\u3089\u6307\u6458\u304C\u3055\u3089\u306B ${count} \u4EF6\u7701\u7565\u3055\u308C\u3066\u3044\u307E\u3059\u3002**`,
     lifecycle: {
       resolved: "\u89E3\u6C7A\u6E08\u307F",
+      active: "\u5F15\u304D\u7D9A\u304D\u6709\u52B9",
       carried: "\u6301\u3061\u8D8A\u3057\u3001\u518D\u691C\u8A3C\u306A\u3057",
       uncertain: "\u8981\u78BA\u8A8D",
       suppressed: "\u6291\u5236\u6E08\u307F"
@@ -30782,6 +31800,8 @@ var copies = {
   },
   ko: {
     noFindingsHeading: "## \uC774\uC288 \uC5C6\uC74C",
+    limitedNoFindingsHeading: "## \uAC80\uD1A0\uD55C \uD30C\uC77C\uC5D0\uC11C \uC774\uC288 \uC5C6\uC74C",
+    dismissedNote: (count) => `\uC720\uC9C0\uAD00\uB9AC\uC790 \uB610\uB294 \uAD00\uB9AC\uC790\uC758 \`/rr skip\` \uBA85\uB839\uC73C\uB85C \uC774\uC288 ${count}\uAC1C\uB97C \uC81C\uC678\uD588\uC2B5\uB2C8\uB2E4.`,
     findingsHeading: (counts) => `## \uC774\uC288 ${counts.total}\uAC1C (${formatSeverityCounts(counts)})`,
     providerFailures: (failed, planned) => `\uB9AC\uBDF0 \uC81C\uACF5\uC790 ${planned}\uAC1C \uC911 ${failed}\uAC1C\uAC00 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.`,
     location: "\uC704\uCE58",
@@ -30792,12 +31812,424 @@ var copies = {
     moreFindings: (count) => `**\uD06C\uAE30 \uC81C\uD55C \uB54C\uBB38\uC5D0 \uC774 \uC694\uC57D\uC5D0\uC11C \uC774\uC288 ${count}\uAC1C\uAC00 \uB354 \uC0DD\uB7B5\uB418\uC5C8\uC2B5\uB2C8\uB2E4.**`,
     lifecycle: {
       resolved: "\uD574\uACB0\uB428",
+      active: "\uC5EC\uC804\uD788 \uC720\uD6A8",
       carried: "\uC774\uC6D4\uB428, \uC7AC\uAC80\uC99D \uC548 \uD568",
       uncertain: "\uD655\uC778 \uD544\uC694",
       suppressed: "\uC228\uAE40"
     }
   }
 };
+var sectionWords = {
+  en: [
+    "Summary",
+    "Findings",
+    "Previous Review Threads",
+    "Dismissed findings",
+    "Review Scope",
+    "Performance Metrics",
+    "Metric",
+    "Value",
+    "Files reviewed",
+    "Not reviewed",
+    "Review mode",
+    "Providers",
+    "Duration",
+    "Tokens",
+    "Cost",
+    "Cache",
+    "Lifecycle attention required",
+    "AI-Generated Code Analysis",
+    "Impact Analysis Graph"
+  ],
+  ru: [
+    "\u0418\u0442\u043E\u0433\u0438",
+    "\u0417\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F",
+    "\u041F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0438\u0435 \u043E\u0431\u0441\u0443\u0436\u0434\u0435\u043D\u0438\u044F",
+    "\u041E\u0442\u043A\u043B\u043E\u043D\u0451\u043D\u043D\u044B\u0435 \u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F",
+    "\u041E\u0431\u043B\u0430\u0441\u0442\u044C \u0440\u0435\u0432\u044C\u044E",
+    "\u041C\u0435\u0442\u0440\u0438\u043A\u0438 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F",
+    "\u041C\u0435\u0442\u0440\u0438\u043A\u0430",
+    "\u0417\u043D\u0430\u0447\u0435\u043D\u0438\u0435",
+    "\u041F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E \u0444\u0430\u0439\u043B\u043E\u0432",
+    "\u041D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u043E",
+    "\u0420\u0435\u0436\u0438\u043C \u0440\u0435\u0432\u044C\u044E",
+    "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u044B",
+    "\u0414\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C",
+    "\u0422\u043E\u043A\u0435\u043D\u044B",
+    "\u0421\u0442\u043E\u0438\u043C\u043E\u0441\u0442\u044C",
+    "\u041A\u044D\u0448",
+    "\u041D\u0443\u0436\u043D\u043E \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435 \u043A \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0438\u043C \u043E\u0431\u0441\u0443\u0436\u0434\u0435\u043D\u0438\u044F\u043C",
+    "\u0410\u043D\u0430\u043B\u0438\u0437 \u0418\u0418-\u043A\u043E\u0434\u0430",
+    "\u0413\u0440\u0430\u0444 \u0432\u043B\u0438\u044F\u043D\u0438\u044F"
+  ],
+  uk: [
+    "\u041F\u0456\u0434\u0441\u0443\u043C\u043E\u043A",
+    "\u0417\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F",
+    "\u041F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0456 \u043E\u0431\u0433\u043E\u0432\u043E\u0440\u0435\u043D\u043D\u044F",
+    "\u0412\u0456\u0434\u0445\u0438\u043B\u0435\u043D\u0456 \u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F",
+    "\u041E\u0431\u043B\u0430\u0441\u0442\u044C \u0440\u0435\u0432\u2019\u044E",
+    "\u041C\u0435\u0442\u0440\u0438\u043A\u0438 \u0432\u0438\u043A\u043E\u043D\u0430\u043D\u043D\u044F",
+    "\u041C\u0435\u0442\u0440\u0438\u043A\u0430",
+    "\u0417\u043D\u0430\u0447\u0435\u043D\u043D\u044F",
+    "\u041F\u0435\u0440\u0435\u0432\u0456\u0440\u0435\u043D\u043E \u0444\u0430\u0439\u043B\u0456\u0432",
+    "\u041D\u0435 \u043F\u0435\u0440\u0435\u0432\u0456\u0440\u0435\u043D\u043E",
+    "\u0420\u0435\u0436\u0438\u043C \u0440\u0435\u0432\u2019\u044E",
+    "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u0438",
+    "\u0422\u0440\u0438\u0432\u0430\u043B\u0456\u0441\u0442\u044C",
+    "\u0422\u043E\u043A\u0435\u043D\u0438",
+    "\u0412\u0430\u0440\u0442\u0456\u0441\u0442\u044C",
+    "\u041A\u0435\u0448",
+    "\u041F\u043E\u0442\u0440\u0456\u0431\u043D\u0430 \u0443\u0432\u0430\u0433\u0430 \u0434\u043E \u043F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0456\u0445 \u043E\u0431\u0433\u043E\u0432\u043E\u0440\u0435\u043D\u044C",
+    "\u0410\u043D\u0430\u043B\u0456\u0437 \u0428\u0406-\u043A\u043E\u0434\u0443",
+    "\u0413\u0440\u0430\u0444 \u0432\u043F\u043B\u0438\u0432\u0443"
+  ],
+  es: [
+    "Resumen",
+    "Hallazgos",
+    "Hilos anteriores",
+    "Hallazgos descartados",
+    "Alcance",
+    "M\xE9tricas",
+    "M\xE9trica",
+    "Valor",
+    "Archivos revisados",
+    "Sin revisar",
+    "Modo",
+    "Proveedores",
+    "Duraci\xF3n",
+    "Tokens",
+    "Coste",
+    "Cach\xE9",
+    "Revisar hilos anteriores",
+    "An\xE1lisis de c\xF3digo IA",
+    "Grafo de impacto"
+  ],
+  pt: [
+    "Resumo",
+    "Achados",
+    "Discuss\xF5es anteriores",
+    "Achados dispensados",
+    "Escopo",
+    "M\xE9tricas",
+    "M\xE9trica",
+    "Valor",
+    "Arquivos revisados",
+    "N\xE3o revisados",
+    "Modo",
+    "Provedores",
+    "Dura\xE7\xE3o",
+    "Tokens",
+    "Custo",
+    "Cache",
+    "Aten\xE7\xE3o \xE0s discuss\xF5es anteriores",
+    "An\xE1lise de c\xF3digo IA",
+    "Grafo de impacto"
+  ],
+  fr: [
+    "R\xE9sum\xE9",
+    "Anomalies",
+    "Discussions pr\xE9c\xE9dentes",
+    "Anomalies \xE9cart\xE9es",
+    "P\xE9rim\xE8tre",
+    "M\xE9triques",
+    "M\xE9trique",
+    "Valeur",
+    "Fichiers revus",
+    "Non revus",
+    "Mode",
+    "Fournisseurs",
+    "Dur\xE9e",
+    "Jetons",
+    "Co\xFBt",
+    "Cache",
+    "Discussions \xE0 v\xE9rifier",
+    "Analyse de code IA",
+    "Graphe d\u2019impact"
+  ],
+  de: [
+    "Zusammenfassung",
+    "Befunde",
+    "Fr\xFChere Diskussionen",
+    "Verworfene Befunde",
+    "Pr\xFCfumfang",
+    "Leistungsmetriken",
+    "Metrik",
+    "Wert",
+    "Gepr\xFCfte Dateien",
+    "Nicht gepr\xFCft",
+    "Modus",
+    "Anbieter",
+    "Dauer",
+    "Token",
+    "Kosten",
+    "Cache",
+    "Fr\xFChere Diskussionen pr\xFCfen",
+    "KI-Codeanalyse",
+    "Auswirkungsgraph"
+  ],
+  it: [
+    "Riepilogo",
+    "Riscontri",
+    "Discussioni precedenti",
+    "Riscontri esclusi",
+    "Ambito",
+    "Metriche",
+    "Metrica",
+    "Valore",
+    "File esaminati",
+    "Non esaminati",
+    "Modalit\xE0",
+    "Fornitori",
+    "Durata",
+    "Token",
+    "Costo",
+    "Cache",
+    "Discussioni da verificare",
+    "Analisi codice IA",
+    "Grafo di impatto"
+  ],
+  zh: [
+    "\u603B\u7ED3",
+    "\u95EE\u9898",
+    "\u5386\u53F2\u8BA8\u8BBA",
+    "\u5DF2\u5FFD\u7565\u95EE\u9898",
+    "\u5BA1\u67E5\u8303\u56F4",
+    "\u6027\u80FD\u6307\u6807",
+    "\u6307\u6807",
+    "\u503C",
+    "\u5DF2\u5BA1\u67E5\u6587\u4EF6",
+    "\u672A\u5BA1\u67E5",
+    "\u6A21\u5F0F",
+    "\u63D0\u4F9B\u65B9",
+    "\u8017\u65F6",
+    "\u4EE4\u724C",
+    "\u8D39\u7528",
+    "\u7F13\u5B58",
+    "\u5386\u53F2\u8BA8\u8BBA\u9700\u8981\u5173\u6CE8",
+    "AI\u4EE3\u7801\u5206\u6790",
+    "\u5F71\u54CD\u56FE"
+  ],
+  ja: [
+    "\u8981\u7D04",
+    "\u6307\u6458",
+    "\u4EE5\u524D\u306E\u8B70\u8AD6",
+    "\u9664\u5916\u3057\u305F\u6307\u6458",
+    "\u30EC\u30D3\u30E5\u30FC\u7BC4\u56F2",
+    "\u5B9F\u884C\u6307\u6A19",
+    "\u6307\u6A19",
+    "\u5024",
+    "\u78BA\u8A8D\u6E08\u307F\u30D5\u30A1\u30A4\u30EB",
+    "\u672A\u78BA\u8A8D",
+    "\u30E2\u30FC\u30C9",
+    "\u30D7\u30ED\u30D0\u30A4\u30C0\u30FC",
+    "\u6240\u8981\u6642\u9593",
+    "\u30C8\u30FC\u30AF\u30F3",
+    "\u8CBB\u7528",
+    "\u30AD\u30E3\u30C3\u30B7\u30E5",
+    "\u4EE5\u524D\u306E\u8B70\u8AD6\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+    "AI\u30B3\u30FC\u30C9\u5206\u6790",
+    "\u5F71\u97FF\u56F3"
+  ],
+  ko: [
+    "\uC694\uC57D",
+    "\uC774\uC288",
+    "\uC774\uC804 \uB17C\uC758",
+    "\uC81C\uC678\uB41C \uC774\uC288",
+    "\uB9AC\uBDF0 \uBC94\uC704",
+    "\uC2E4\uD589 \uC9C0\uD45C",
+    "\uC9C0\uD45C",
+    "\uAC12",
+    "\uAC80\uD1A0\uD55C \uD30C\uC77C",
+    "\uBBF8\uAC80\uD1A0",
+    "\uBAA8\uB4DC",
+    "\uC81C\uACF5\uC790",
+    "\uC18C\uC694 \uC2DC\uAC04",
+    "\uD1A0\uD070",
+    "\uBE44\uC6A9",
+    "\uCE90\uC2DC",
+    "\uC774\uC804 \uB17C\uC758 \uD655\uC778 \uD544\uC694",
+    "AI \uCF54\uB4DC \uBD84\uC11D",
+    "\uC601\uD5A5 \uADF8\uB798\uD504"
+  ]
+};
+var sectionKeys = [
+  "summary",
+  "findings",
+  "previous",
+  "dismissed",
+  "scope",
+  "performance",
+  "metric",
+  "value",
+  "files",
+  "unreviewed",
+  "mode",
+  "providers",
+  "duration",
+  "tokens",
+  "cost",
+  "cache",
+  "attention",
+  "analysis",
+  "impact"
+];
+var sectionCopy = Object.fromEntries(
+  Object.entries(sectionWords).map(([locale, words]) => [
+    locale,
+    Object.fromEntries(sectionKeys.map((key, index) => [key, words[index]]))
+  ])
+);
+var scopeCopy = {
+  en: {
+    fullDiff: "Full diff in prompt",
+    compacted: "Compacted in prompt",
+    metadataOnly: "Metadata-only or trimmed",
+    skipped: "Skipped before LLM review",
+    context: "Agentic context",
+    release: "Release Notes",
+    billing: "Billing",
+    unknown: "Not reported",
+    providerPerformance: "Provider Performance",
+    required: "required",
+    tests: "Suggested tests"
+  },
+  ru: {
+    fullDiff: "\u041F\u043E\u043B\u043D\u044B\u0439 diff",
+    compacted: "\u0421\u043E\u043A\u0440\u0430\u0449\u0451\u043D\u043D\u044B\u0439 diff",
+    metadataOnly: "\u0422\u043E\u043B\u044C\u043A\u043E \u043C\u0435\u0442\u0430\u0434\u0430\u043D\u043D\u044B\u0435",
+    skipped: "\u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E \u0434\u043E LLM",
+    context: "\u0410\u0433\u0435\u043D\u0442\u043D\u044B\u0439 \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442",
+    release: "\u041F\u0440\u0438\u043C\u0435\u0447\u0430\u043D\u0438\u044F \u043A \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F\u043C",
+    billing: "\u041E\u043F\u043B\u0430\u0442\u0430",
+    unknown: "\u041D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D\u0430",
+    providerPerformance: "\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435 \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u043E\u0432",
+    required: "\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u0439",
+    tests: "\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0443\u0435\u043C\u044B\u0435 \u0442\u0435\u0441\u0442\u044B"
+  },
+  uk: {
+    fullDiff: "\u041F\u043E\u0432\u043D\u0438\u0439 diff",
+    compacted: "\u0421\u043A\u043E\u0440\u043E\u0447\u0435\u043D\u0438\u0439 diff",
+    metadataOnly: "\u041B\u0438\u0448\u0435 \u043C\u0435\u0442\u0430\u0434\u0430\u043D\u0456",
+    skipped: "\u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E \u0434\u043E LLM",
+    context: "\u0410\u0433\u0435\u043D\u0442\u043D\u0438\u0439 \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442",
+    release: "\u041F\u0440\u0438\u043C\u0456\u0442\u043A\u0438 \u0434\u043E \u0437\u043C\u0456\u043D",
+    billing: "\u041E\u043F\u043B\u0430\u0442\u0430",
+    unknown: "\u041D\u0435 \u0432\u043A\u0430\u0437\u0430\u043D\u043E",
+    providerPerformance: "\u0412\u0438\u043A\u043E\u043D\u0430\u043D\u043D\u044F \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u0456\u0432",
+    required: "\u043E\u0431\u043E\u0432\u2019\u044F\u0437\u043A\u043E\u0432\u0438\u0439",
+    tests: "\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u043E\u0432\u0430\u043D\u0456 \u0442\u0435\u0441\u0442\u0438"
+  },
+  es: {
+    fullDiff: "Diff completo",
+    compacted: "Diff reducido",
+    metadataOnly: "Solo metadatos",
+    skipped: "Omitidos antes del LLM",
+    context: "Contexto agente",
+    release: "Notas de cambios",
+    billing: "Facturaci\xF3n",
+    unknown: "Sin datos",
+    providerPerformance: "Rendimiento de proveedores",
+    required: "obligatorio",
+    tests: "Pruebas sugeridas"
+  },
+  pt: {
+    fullDiff: "Diff completo",
+    compacted: "Diff reduzido",
+    metadataOnly: "S\xF3 metadados",
+    skipped: "Ignorados antes do LLM",
+    context: "Contexto agente",
+    release: "Notas de altera\xE7\xF5es",
+    billing: "Cobran\xE7a",
+    unknown: "N\xE3o informado",
+    providerPerformance: "Desempenho dos provedores",
+    required: "obrigat\xF3rio",
+    tests: "Testes sugeridos"
+  },
+  fr: {
+    fullDiff: "Diff complet",
+    compacted: "Diff r\xE9duit",
+    metadataOnly: "M\xE9tadonn\xE9es seules",
+    skipped: "Ignor\xE9s avant LLM",
+    context: "Contexte agent",
+    release: "Notes de changements",
+    billing: "Facturation",
+    unknown: "Non renseign\xE9e",
+    providerPerformance: "Performance des fournisseurs",
+    required: "requis",
+    tests: "Tests propos\xE9s"
+  },
+  de: {
+    fullDiff: "Vollst\xE4ndiger Diff",
+    compacted: "Gek\xFCrzter Diff",
+    metadataOnly: "Nur Metadaten",
+    skipped: "Vor LLM \xFCbersprungen",
+    context: "Agentenkontext",
+    release: "\xC4nderungsnotizen",
+    billing: "Abrechnung",
+    unknown: "Nicht angegeben",
+    providerPerformance: "Anbieterleistung",
+    required: "erforderlich",
+    tests: "Testvorschl\xE4ge"
+  },
+  it: {
+    fullDiff: "Diff completo",
+    compacted: "Diff ridotto",
+    metadataOnly: "Solo metadati",
+    skipped: "Esclusi prima del LLM",
+    context: "Contesto agente",
+    release: "Note sulle modifiche",
+    billing: "Fatturazione",
+    unknown: "Non riportata",
+    providerPerformance: "Prestazioni fornitori",
+    required: "obbligatorio",
+    tests: "Test suggeriti"
+  },
+  zh: {
+    fullDiff: "\u5B8C\u6574\u5DEE\u5F02",
+    compacted: "\u538B\u7F29\u5DEE\u5F02",
+    metadataOnly: "\u4EC5\u5143\u6570\u636E",
+    skipped: "LLM\u524D\u8DF3\u8FC7",
+    context: "\u4EE3\u7406\u4E0A\u4E0B\u6587",
+    release: "\u53D8\u66F4\u8BF4\u660E",
+    billing: "\u8BA1\u8D39",
+    unknown: "\u672A\u62A5\u544A",
+    providerPerformance: "\u63D0\u4F9B\u65B9\u6027\u80FD",
+    required: "\u5FC5\u9700",
+    tests: "\u5EFA\u8BAE\u6D4B\u8BD5"
+  },
+  ja: {
+    fullDiff: "\u5B8C\u5168\u306A\u5DEE\u5206",
+    compacted: "\u5727\u7E2E\u3057\u305F\u5DEE\u5206",
+    metadataOnly: "\u30E1\u30BF\u30C7\u30FC\u30BF\u306E\u307F",
+    skipped: "LLM\u524D\u306B\u9664\u5916",
+    context: "\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u6587\u8108",
+    release: "\u5909\u66F4\u5185\u5BB9",
+    billing: "\u8AB2\u91D1",
+    unknown: "\u672A\u5831\u544A",
+    providerPerformance: "\u30D7\u30ED\u30D0\u30A4\u30C0\u30FC\u5B9F\u7E3E",
+    required: "\u5FC5\u9808",
+    tests: "\u63A8\u5968\u30C6\u30B9\u30C8"
+  },
+  ko: {
+    fullDiff: "\uC804\uCCB4 \uCC28\uC774",
+    compacted: "\uCD95\uC57D\uD55C \uCC28\uC774",
+    metadataOnly: "\uBA54\uD0C0\uB370\uC774\uD130\uB9CC",
+    skipped: "LLM \uC774\uC804 \uC81C\uC678",
+    context: "\uC5D0\uC774\uC804\uD2B8 \uCEE8\uD14D\uC2A4\uD2B8",
+    release: "\uBCC0\uACBD \uC0AC\uD56D",
+    billing: "\uACFC\uAE08",
+    unknown: "\uBBF8\uBCF4\uACE0",
+    providerPerformance: "\uC81C\uACF5\uC790 \uC2E4\uD589",
+    required: "\uD544\uC218",
+    tests: "\uAD8C\uC7A5 \uD14C\uC2A4\uD2B8"
+  }
+};
+function escapeMarkdownText(value) {
+  return neutralizeDetailsMarkup(escapeHtml(value)).replace(
+    /[\\`*_{}[\]()|]/g,
+    "\\$&"
+  );
+}
 function escapeHtml(value) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
@@ -30905,11 +32337,10 @@ var SynthesisEngine = class {
     return this.buildReview({ findings, pr: pr2, metrics });
   }
   buildReview(input) {
-    const summary = this.buildSummary(input.findings, input.metrics);
     const inlineComments = this.buildInlineComments(input.findings);
     const actionItems = this.buildActionItems(input.findings);
-    return {
-      summary,
+    const review = {
+      summary: "",
       findings: input.findings,
       inlineComments,
       actionItems,
@@ -30921,6 +32352,8 @@ var SynthesisEngine = class {
       impactAnalysis: input.impactAnalysis,
       mermaidDiagram: input.mermaidDiagram
     };
+    review.summary = renderReviewSummary(review, this.config.outputLanguage);
+    return review;
   }
   buildMetrics(findings, providerResults, runDetails, providerExecution) {
     const critical = findings.filter((f2) => f2.severity === "critical").length;
@@ -30976,13 +32409,6 @@ var SynthesisEngine = class {
       totalCost,
       durationSeconds
     };
-  }
-  buildSummary(findings, metrics) {
-    return renderReviewerSummaryMarkdown({
-      language: this.config.outputLanguage,
-      findings: findings.map(toReviewerSummaryFinding),
-      metrics
-    });
   }
   buildInlineComments(findings) {
     const minSeverity = this.config.inlineMinSeverity;
@@ -31494,7 +32920,7 @@ var CacheStorage = class {
 };
 
 // src/cache/key-builder.ts
-var import_crypto6 = require("crypto");
+var import_crypto7 = require("crypto");
 
 // src/cache/version.ts
 var CACHE_VERSION = 8;
@@ -31531,7 +32957,7 @@ function unversionCache(cached, maxAge) {
 
 // src/cache/key-builder.ts
 function buildCacheKey(pr2, configHash) {
-  const hash = (0, import_crypto6.createHash)("sha1").update(`${pr2.baseSha}:${pr2.headSha}`).digest("hex").slice(0, 12);
+  const hash = (0, import_crypto7.createHash)("sha1").update(`${pr2.baseSha}:${pr2.headSha}`).digest("hex").slice(0, 12);
   const suffix = configHash ? `-${configHash}` : "";
   return `mpr-${hash}${suffix}`;
 }
@@ -31557,11 +32983,11 @@ function hashConfig(config) {
     pathDefaultIntensity: config.pathDefaultIntensity
   };
   const stableJson = JSON.stringify(sortObject(relevantConfig));
-  const hash = (0, import_crypto6.createHash)("sha256").update(stableJson).digest("hex");
+  const hash = (0, import_crypto7.createHash)("sha256").update(stableJson).digest("hex");
   return hash.slice(0, 16);
 }
 function hashIncrementalCompatibility(config, runtimeConfigVersion) {
-  return (0, import_crypto6.createHash)("sha256").update(incrementalCompatibilityPreimage(config, runtimeConfigVersion)).digest("hex");
+  return (0, import_crypto7.createHash)("sha256").update(incrementalCompatibilityPreimage(config, runtimeConfigVersion)).digest("hex");
 }
 function incrementalCompatibilityPreimage(config, runtimeConfigVersion) {
   return JSON.stringify(
@@ -33213,331 +34639,6 @@ function shouldPostSuggestion(finding, confidence, config) {
   }
   return true;
 }
-
-// src/github/comment-fingerprint.ts
-var import_crypto7 = require("crypto");
-
-// src/review-projection/domain/finding-marker.ts
-var RESERVED_FINDING_MARKER_PREFIX_RE = /(?:review-router-finding:|reviewrouter:finding:v2:)/gi;
-var LEGACY_FINDING_MARKER_RE = /<!--\s*review-router-finding:([a-f0-9]{24,64})\s*-->/gi;
-var V2_FINDING_MARKER_RE = /(?<!\S)reviewrouter:finding:v2:((?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64}))(?=$|[ \t\r\n])/g;
-var RESERVED_FINDING_MARKER_COMMENT_RE = /<!--(?:(?!-->)[\s\S])*(?:review-router-finding:|reviewrouter:finding:v2:)(?:(?!-->)[\s\S])*-->/gi;
-var UNCLOSED_RESERVED_FINDING_MARKER_COMMENT_RE = /<!--(?:(?!-->)[\s\S])*(?:review-router-finding:|reviewrouter:finding:v2:)[\s\S]*$/gi;
-var RESERVED_FINDING_MARKER_TOKEN_RE = /(?:review-router-finding:|reviewrouter:finding:v2:)[^\s<]*/gi;
-function parseFindingMarker(body) {
-  if (!body) return { kind: "absent" /* Absent */ };
-  const reservedPrefixOffsets = Array.from(
-    body.matchAll(RESERVED_FINDING_MARKER_PREFIX_RE),
-    (match2) => match2.index
-  ).filter((offset) => offset !== void 0);
-  if (reservedPrefixOffsets.length === 0) {
-    return { kind: "absent" /* Absent */ };
-  }
-  const matches = [
-    ...collectMarkerMatches(body, LEGACY_FINDING_MARKER_RE),
-    ...collectMarkerMatches(body, V2_FINDING_MARKER_RE)
-  ];
-  const everyReservedPrefixIsValid = reservedPrefixOffsets.every(
-    (offset) => matches.some((match2) => offset >= match2.start && offset < match2.end)
-  );
-  if (!everyReservedPrefixIsValid) {
-    return { kind: "malformed" /* Malformed */ };
-  }
-  const fingerprints = Array.from(
-    new Set(matches.map((match2) => match2.fingerprint))
-  ).sort();
-  if (fingerprints.length === 1) {
-    return {
-      kind: "valid" /* Valid */,
-      fingerprint: fingerprints[0]
-    };
-  }
-  if (fingerprints.length > 1) {
-    return { kind: "conflict" /* Conflict */, fingerprints };
-  }
-  return { kind: "malformed" /* Malformed */ };
-}
-function stripReservedFindingMarkerSyntax(body) {
-  return body.replace(RESERVED_FINDING_MARKER_COMMENT_RE, "").replace(UNCLOSED_RESERVED_FINDING_MARKER_COMMENT_RE, "").replace(RESERVED_FINDING_MARKER_TOKEN_RE, "").replace(/<!--\s*-->/g, "").trim();
-}
-function findingMarkerV2(fingerprint) {
-  return `reviewrouter:finding:v2:${fingerprint}`;
-}
-function collectMarkerMatches(body, pattern) {
-  return Array.from(body.matchAll(pattern), (match2) => ({
-    start: match2.index ?? 0,
-    end: (match2.index ?? 0) + match2[0].length,
-    fingerprint: (match2[1] ?? "").toLowerCase()
-  }));
-}
-
-// src/github/comment-fingerprint.ts
-var INLINE_MARKER_RE = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/i;
-var INLINE_MARKER_RE_GLOBAL = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/gi;
-var MAX_NEARBY_LINE_DISTANCE = 12;
-function signatureFromInlineComment(path31, line, body) {
-  const cleanBody = stripInlineFingerprintMarkers(body);
-  const severity = extractSeverity(cleanBody);
-  if (severity) {
-    return [
-      (path31 || "unknown").toLowerCase(),
-      String(line ?? 0),
-      severity
-    ].join(":");
-  }
-  const titleMatch = cleanBody.match(/\*\*(.+?)\*\*/);
-  const title = titleMatch ? titleMatch[1] : cleanBody.split("\n")[0] || "unknown";
-  return [
-    (path31 || "unknown").toLowerCase(),
-    String(line ?? 0),
-    normalizeForSignature(title)
-  ].join(":");
-}
-function fingerprintFromInlineComment(path31, line, body) {
-  return (0, import_crypto7.createHash)("sha256").update(signatureFromInlineComment(path31, line, body)).digest("hex").slice(0, 16);
-}
-function inlineFingerprintMarker(fingerprint) {
-  return `<!-- review-router-inline:${fingerprint} -->`;
-}
-function findingFingerprintMarker(fingerprint) {
-  return `<!-- review-router-finding:${fingerprint} -->`;
-}
-function extractInlineFingerprint(body) {
-  const match2 = body?.match(INLINE_MARKER_RE);
-  return match2?.[1]?.toLowerCase() ?? null;
-}
-function extractFindingFingerprint(body) {
-  const parsed = parseFindingMarker(body);
-  return parsed.kind === "valid" /* Valid */ ? parsed.fingerprint : null;
-}
-function appendInlineFingerprintMarker(body, path31, line) {
-  const sanitizedBody = stripReservedFindingMarkerSyntax(body);
-  const parts = [sanitizedBody.trimEnd()];
-  if (!extractInlineFingerprint(sanitizedBody)) {
-    parts.push(
-      inlineFingerprintMarker(
-        fingerprintFromInlineComment(path31, line, sanitizedBody)
-      )
-    );
-  }
-  parts.push(
-    findingFingerprintMarker(
-      findingFingerprintFromInlineComment(path31, line, sanitizedBody)
-    )
-  );
-  return parts.join("\n\n");
-}
-function stripInlineFingerprintMarkers(body) {
-  return stripReservedFindingMarkerSyntax(
-    body.replace(INLINE_MARKER_RE_GLOBAL, "")
-  ).trim();
-}
-function isReviewRouterInlineComment(body) {
-  if (!body) return false;
-  if (extractInlineFingerprint(body)) return true;
-  const trimmed = body.trim();
-  return /^\*\*(?:🔴 Critical|🟡 Major|🔵 Minor)\s+-\s+.+?\*\*/.test(trimmed) || /^_(?:🔴 Critical|🟡 Major|🔵 Minor)_/.test(trimmed);
-}
-function findingFingerprintFromFinding(finding) {
-  return stableFindingFingerprint({
-    path: finding.file,
-    severity: finding.severity,
-    title: finding.title,
-    message: finding.message
-  });
-}
-function findingFingerprintFromInlineComment(path31, _line, body) {
-  const marker = extractFindingFingerprint(body);
-  if (marker) return marker;
-  const cleanBody = stripInlineFingerprintMarkers(body);
-  return stableFindingFingerprint({
-    path: path31,
-    severity: extractSeverity(cleanBody) || "unknown",
-    title: extractNormalizedTitle(cleanBody),
-    message: extractCoreMessage(cleanBody)
-  });
-}
-function extractInlineSeverity(body) {
-  return extractSeverity(stripInlineFingerprintMarkers(body));
-}
-function extractInlineTitle(body) {
-  return stripSeverityPrefix(extractTitle(stripInlineFingerprintMarkers(body)));
-}
-function isLikelySameInlineFinding(existing, candidate) {
-  const existingPath = (existing.path || "").toLowerCase();
-  const candidatePath = (candidate.path || "").toLowerCase();
-  if (!existingPath || existingPath !== candidatePath) return false;
-  const existingBody = stripInlineFingerprintMarkers(existing.body);
-  const candidateBody = stripInlineFingerprintMarkers(candidate.body);
-  const existingLine = existing.line ?? 0;
-  const candidateLine = candidate.line ?? 0;
-  const lineDistance = Math.abs(existingLine - candidateLine);
-  const nearbyLine = lineDistance <= MAX_NEARBY_LINE_DISTANCE;
-  const existingTitleTokens = tokenize2(extractTitle(existingBody));
-  const candidateTitleTokens = tokenize2(extractTitle(candidateBody));
-  const titleSimilarity = diceSimilarity(
-    existingTitleTokens,
-    candidateTitleTokens
-  );
-  const existingTokens = tokenize2(semanticText(existingBody));
-  const candidateTokens = tokenize2(semanticText(candidateBody));
-  const bodySimilarity = diceSimilarity(existingTokens, candidateTokens);
-  const sharedDistinctiveCodeTokens = intersectionSize(
-    distinctiveCodeTokens(semanticText(existingBody)),
-    distinctiveCodeTokens(semanticText(candidateBody))
-  );
-  if (nearbyLine && titleSimilarity >= 0.45) return true;
-  if (nearbyLine && sharedDistinctiveCodeTokens > 0 && bodySimilarity >= 0.24) {
-    return true;
-  }
-  if (nearbyLine && titleSimilarity >= 0.2 && bodySimilarity >= 0.38) {
-    return true;
-  }
-  return titleSimilarity >= 0.6 && bodySimilarity >= 0.55;
-}
-function normalizeForSignature(value) {
-  return value.toLowerCase().replace(/\s+/g, " ").trim();
-}
-function extractSeverity(body) {
-  const match2 = body.match(/\*\*(?:[^\w*`]*\s*)?(critical|major|minor)\s*-/i) || body.match(/^_(?:[^\w_]*\s*)?(critical|major|minor)_/i);
-  return match2?.[1]?.toLowerCase() ?? null;
-}
-function extractTitle(body) {
-  const titleMatch = body.match(/\*\*(.+?)\*\*/);
-  return titleMatch?.[1] ?? body.split("\n")[0] ?? "";
-}
-function stripSeverityPrefix(value) {
-  return value.replace(/^[^\w`]*\s*(critical|major|minor)\s*-\s*/i, "").replace(/^[^\w`]*\s*/, "").trim();
-}
-function extractNormalizedTitle(body) {
-  return stripSeverityPrefix(extractTitle(body));
-}
-function extractCoreMessage(body) {
-  return semanticText(body).split("\n").map((line) => line.trim()).filter(Boolean).filter((line) => !/^\*\*.+\*\*$/.test(line)).slice(0, 6).join(" ");
-}
-function stableFindingFingerprint(input) {
-  const canonical = [
-    "review-router-finding-v2",
-    (input.path || "unknown").toLowerCase(),
-    normalizeForSignature(input.severity),
-    normalizeForSignature(stripSeverityPrefix(input.title)),
-    normalizeForSignature(input.message).slice(0, 800)
-  ].join("\n");
-  return (0, import_crypto7.createHash)("sha256").update(canonical).digest("hex").slice(0, 32);
-}
-function semanticText(body) {
-  return body.replace(/```[\s\S]*?```/g, " ").replace(/<details[\s\S]*?<\/details>/gi, " ").replace(/<sub[\s\S]*?<\/sub>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]+>/g, " ").replace(/\*\*Severity:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Provider:\*\*[\s\S]*?(?:\n\n|$)/gi, " ").replace(/\*\*Suggestion:\*\*[\s\S]*?(?:\n\n|$)/gi, " ");
-}
-function tokenize2(value) {
-  const normalized = splitIdentifiers(value).toLowerCase().replace(/[^a-z0-9_]+/g, " ");
-  const tokens = normalized.split(/\s+/).map((token) => token.trim()).filter((token) => token.length >= 3 && !STOPWORDS.has(token));
-  return new Set(tokens);
-}
-function extractCodeTokens(body) {
-  const tokens = /* @__PURE__ */ new Set();
-  for (const match2 of body.matchAll(/`([^`\n]{2,120})`/g)) {
-    for (const token of tokenize2(match2[1])) {
-      tokens.add(token);
-    }
-  }
-  return tokens;
-}
-function distinctiveCodeTokens(body) {
-  const tokens = extractCodeTokens(body);
-  for (const token of GENERIC_CODE_TOKENS) {
-    tokens.delete(token);
-  }
-  return tokens;
-}
-function splitIdentifiers(value) {
-  return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_./:-]+/g, " ");
-}
-function diceSimilarity(a2, b2) {
-  if (a2.size === 0 || b2.size === 0) return 0;
-  return 2 * intersectionSize(a2, b2) / (a2.size + b2.size);
-}
-function intersectionSize(a2, b2) {
-  let count = 0;
-  for (const token of a2) {
-    if (b2.has(token)) count += 1;
-  }
-  return count;
-}
-var GENERIC_CODE_TOKENS = /* @__PURE__ */ new Set([
-  "api",
-  "arg",
-  "args",
-  "body",
-  "config",
-  "context",
-  "cookie",
-  "cookies",
-  "ctx",
-  "data",
-  "env",
-  "err",
-  "error",
-  "header",
-  "headers",
-  "http",
-  "https",
-  "input",
-  "json",
-  "options",
-  "output",
-  "param",
-  "params",
-  "query",
-  "req",
-  "request",
-  "res",
-  "response",
-  "value"
-]);
-var STOPWORDS = /* @__PURE__ */ new Set([
-  "about",
-  "after",
-  "also",
-  "and",
-  "are",
-  "because",
-  "before",
-  "branch",
-  "but",
-  "can",
-  "cannot",
-  "comment",
-  "could",
-  "does",
-  "every",
-  "file",
-  "for",
-  "from",
-  "has",
-  "have",
-  "into",
-  "line",
-  "lines",
-  "major",
-  "minor",
-  "must",
-  "not",
-  "only",
-  "return",
-  "should",
-  "that",
-  "the",
-  "this",
-  "true",
-  "use",
-  "uses",
-  "using",
-  "when",
-  "where",
-  "will",
-  "with",
-  "would"
-]);
 
 // src/github/summary-metadata.ts
 var REVIEW_THREAD_LIFECYCLE_SCHEMA_VERSION = "review-thread-lifecycle-v1";
@@ -35644,1011 +36745,10 @@ function getRepositoryFromEventPayload() {
   return void 0;
 }
 
-// src/analysis/thread-lifecycle.ts
-var DEFAULT_RESOLVE_CONFIDENCE = {
-  critical: 0.9,
-  major: 0.85,
-  minor: 0.8,
-  unknown: 0.9
-};
-var ThreadLifecycleAggregator = class {
-  aggregate(input) {
-    const plannedProviders = unique(input.plannedProviders);
-    const quorumMode = plannedProviders.length >= 2 ? "multi-provider" : "single-provider";
-    const thresholds = resolveConfidenceThresholds(
-      input.config?.reviewThreadLifecycleResolveConfidence
-    );
-    const currentFingerprints = new Set(
-      input.currentFindings.map(
-        (finding) => findingFingerprintFromFinding(finding)
-      )
-    );
-    const providerCurrentFindings = input.providerResults.flatMap(
-      (result3) => result3.result?.findings ?? []
-    );
-    const votes = this.collectVotes(input, thresholds);
-    const assignmentByTarget = new Map(
-      (input.assignmentRecords ?? []).map((record) => [record.targetId, record])
-    );
-    const commandDismissedTargetIds = new Set(
-      (input.skipped ?? []).filter((record) => record.reasonCodes.includes("command_dismissed")).map((record) => record.target.targetId)
-    );
-    const result2 = {
-      mode: input.mode,
-      quorumMode,
-      plannedProviders,
-      resolvedCandidates: [],
-      resolvedByLifecycle: [],
-      previousStillValid: [],
-      previousUncertain: [],
-      manualAttention: (input.initialManualAttention ?? []).filter(
-        (record) => !commandDismissedTargetIds.has(record.target.targetId)
-      ),
-      mutationSkipped: [],
-      mutationFailed: [],
-      skipped: [...input.skipped ?? []],
-      warnings: [...input.warnings ?? []],
-      inventoryFailed: input.inventoryFailed
-    };
-    if (input.inventoryFailed) {
-      result2.warnings.push("review thread lifecycle inventory failed");
-      for (const target of input.targets) {
-        result2.previousUncertain.push({
-          target,
-          reasonCodes: unique([
-            ...target.reasonCodes ?? [],
-            "inventory_failed"
-          ])
-        });
-      }
-      return result2;
-    }
-    for (const target of input.targets) {
-      const targetVotes = Array.from(
-        votes.get(target.targetId)?.values() ?? []
-      );
-      const record = (reasonCodes) => ({
-        target,
-        reasonCodes: unique([
-          ...target.reasonCodes ?? [],
-          ...reasonCodes
-        ]),
-        providerVotes: targetVotes
-      });
-      if (target.hasHumanReply || !target.trustedAuthor) {
-        const reasonCodes = [];
-        if (target.hasHumanReply) reasonCodes.push("human_reply");
-        if (!target.trustedAuthor) reasonCodes.push("untrusted_author");
-        result2.manualAttention.push(record(reasonCodes));
-        continue;
-      }
-      if (currentFingerprints.has(target.fingerprint) || input.currentFindings.some(
-        (finding) => currentFindingMatchesTarget(finding, target)
-      )) {
-        result2.previousStillValid.push(record(["current_finding_present"]));
-        continue;
-      }
-      if (providerCurrentFindings.some(
-        (finding) => currentFindingMatchesTarget(finding, target)
-      )) {
-        result2.previousStillValid.push(
-          record(["provider_current_finding_present"])
-        );
-        continue;
-      }
-      const assignment = assignmentByTarget.get(target.targetId);
-      const assignedProviders = assignment?.assignedProviderIds ?? plannedProviders;
-      const missingProviderReasons = plannedProviders.filter((provider) => !assignedProviders.includes(provider)).map(() => "outside_review_scope");
-      if (assignment && (assignment.scopeStatus !== "in_scope" || assignedProviders.length === 0)) {
-        result2.previousUncertain.push(
-          record(
-            unique([
-              ...missingProviderReasons,
-              "outside_review_scope",
-              "insufficient_resolved_quorum"
-            ])
-          )
-        );
-        continue;
-      }
-      const stillValidVotes = targetVotes.filter(
-        (vote) => vote.valid && vote.verdict === "still_valid"
-      );
-      if (stillValidVotes.length > 0) {
-        result2.previousStillValid.push(record(["still_valid_vote"]));
-        continue;
-      }
-      const expectedProviders = plannedProviders.filter(
-        (provider) => assignedProviders.includes(provider)
-      );
-      const providerFailures = assignment ? new Set(assignment.failedProviderIds ?? []) : this.providerFailures(input.providerResults);
-      const missingOrFailedReasons = [
-        ...missingProviderReasons
-      ];
-      for (const provider of expectedProviders) {
-        if (providerFailures.has(provider)) {
-          missingOrFailedReasons.push("provider_failed");
-          continue;
-        }
-        if (!votes.get(target.targetId)?.has(provider)) {
-          missingOrFailedReasons.push("provider_missing_revalidation");
-        }
-      }
-      const resolvedVotes = targetVotes.filter(
-        (vote) => vote.valid && vote.verdict === "resolved"
-      );
-      const uncertainVotes = targetVotes.filter(
-        (vote) => vote.valid && vote.verdict === "uncertain"
-      );
-      const invalidVoteReasons = targetVotes.flatMap(
-        (vote) => vote.valid ? [] : vote.reasonCodes
-      );
-      const hasResolvedQuorum = quorumMode === "single-provider" ? resolvedVotes.length === 1 && plannedProviders.length === 1 : resolvedVotes.length >= 2;
-      if (hasResolvedQuorum) {
-        if (input.mode === "report") {
-          result2.mutationSkipped.push(record(["report_mode"]));
-        } else {
-          result2.resolvedCandidates.push(record([]));
-        }
-        continue;
-      }
-      result2.previousUncertain.push(
-        record(
-          unique([
-            ...missingOrFailedReasons,
-            ...invalidVoteReasons,
-            ...uncertainVotes.length > 0 ? ["provider_uncertain"] : [],
-            "insufficient_resolved_quorum"
-          ])
-        )
-      );
-    }
-    return result2;
-  }
-  collectVotes(input, thresholds) {
-    const targetIds = new Set(input.targets.map((target) => target.targetId));
-    const targetsById = new Map(
-      input.targets.map((target) => [target.targetId, target])
-    );
-    const plannedProviders = new Set(input.plannedProviders);
-    const votes = /* @__PURE__ */ new Map();
-    for (const result2 of input.providerResults) {
-      if (!plannedProviders.has(result2.name)) continue;
-      if (result2.status !== "success") continue;
-      const assignedTargetIds = result2.lifecycleAssignedTargetIds ? new Set(result2.lifecycleAssignedTargetIds) : null;
-      for (const raw of result2.result?.revalidations ?? []) {
-        const rawTargetId = raw.targetId || "";
-        if (assignedTargetIds && !assignedTargetIds.has(rawTargetId)) {
-          continue;
-        }
-        const vote = this.normalizeVote(
-          result2.name,
-          raw,
-          targetIds,
-          targetsById,
-          thresholds
-        );
-        if (!vote) continue;
-        if (!votes.has(vote.targetId)) {
-          votes.set(vote.targetId, /* @__PURE__ */ new Map());
-        }
-        const providerVotes = votes.get(vote.targetId);
-        const existing = providerVotes.get(vote.providerId);
-        providerVotes.set(
-          vote.providerId,
-          existing ? safestVote(existing, vote) : vote
-        );
-      }
-    }
-    return votes;
-  }
-  normalizeVote(providerId, raw, targetIds, targetsById, thresholds) {
-    const reasonCodes = [];
-    if (!raw.targetId) {
-      return {
-        providerId,
-        targetId: "",
-        fingerprint: raw.fingerprint,
-        verdict: "uncertain",
-        confidence: raw.confidence,
-        evidence: raw.evidence,
-        rationale: raw.rationale,
-        valid: false,
-        reasonCodes: ["missing_target_id"]
-      };
-    }
-    if (!targetIds.has(raw.targetId)) {
-      return null;
-    }
-    const target = targetsById.get(raw.targetId);
-    const evidence = Array.isArray(raw.evidence) ? raw.evidence : [];
-    const rationale = typeof raw.rationale === "string" ? raw.rationale : "";
-    const verdict = this.validVerdict(raw.verdict) ? raw.verdict : "uncertain";
-    if (raw.fingerprint && raw.fingerprint !== target.fingerprint) {
-      reasonCodes.push("unknown_target_id");
-    }
-    if (verdict === "resolved") {
-      const threshold = thresholds[target.severity] ?? thresholds.unknown;
-      const confidence = typeof raw.confidence === "number" ? raw.confidence : 0;
-      if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1 || confidence < threshold || !hasConcreteEvidence(evidence)) {
-        reasonCodes.push("invalid_resolved_evidence");
-      }
-    }
-    if (verdict === "still_valid" && !rationale.trim() && !hasConcreteEvidence(evidence)) {
-      reasonCodes.push("invalid_resolved_evidence");
-    }
-    return {
-      providerId,
-      targetId: raw.targetId,
-      fingerprint: raw.fingerprint,
-      verdict,
-      confidence: raw.confidence,
-      evidence,
-      rationale,
-      valid: reasonCodes.length === 0,
-      reasonCodes
-    };
-  }
-  validVerdict(value) {
-    return value === "resolved" || value === "still_valid" || value === "uncertain";
-  }
-  providerFailures(results) {
-    return new Set(
-      results.filter((result2) => result2.status !== "success").map((result2) => result2.name)
-    );
-  }
-};
-function countPreviousStillValidBySeverity(lifecycle) {
-  const counts = {
-    critical: 0,
-    major: 0,
-    minor: 0
-  };
-  for (const record of lifecycle?.previousStillValid ?? []) {
-    if (isLinkedCurrentFinding(record)) continue;
-    const severity = record.target.severity;
-    if (severity === "critical" || severity === "major" || severity === "minor") {
-      counts[severity] += 1;
-    }
-  }
-  return counts;
-}
-function isLinkedCurrentFinding(record) {
-  return record.reasonCodes.includes("current_finding_present");
-}
-function hasLifecycleUncertainty(lifecycle) {
-  if (!lifecycle || lifecycle.mode === "off") return false;
-  return Boolean(
-    lifecycle.inventoryFailed || lifecycle.warnings.length > 0 || lifecycle.previousUncertain.length > 0 || lifecycle.manualAttention.length > 0 || lifecycle.mutationSkipped.length > 0 || lifecycle.mutationFailed.length > 0 || lifecycle.skipped.some(
-      (record) => !record.reasonCodes.every((reason) => reason === "command_dismissed")
-    )
-  );
-}
-function reconcileCarriedFindingsWithLifecycle(input) {
-  if (input.carriedFindings.length === 0 || input.lifecycle.inventoryFailed) {
-    return { findings: [...input.mergedFindings], removed: [] };
-  }
-  const carried = new Set(input.carriedFindings);
-  const projectionInactiveTargets = [
-    ...input.lifecycle.resolvedByLifecycle.map((record) => record.target),
-    ...input.lifecycle.mutationFailed.filter((record) => hasTrustedResolutionFallback(record, input.lifecycle)).map((record) => record.target),
-    ...allLifecycleRecords(input.lifecycle).filter((record) => hasTrustedRecordedResolution(record.target)).map((record) => record.target)
-  ];
-  if (projectionInactiveTargets.length === 0) {
-    return { findings: [...input.mergedFindings], removed: [] };
-  }
-  const removed = [];
-  const findings = input.mergedFindings.filter((finding) => {
-    if (!carried.has(finding)) return true;
-    const inactive = projectionInactiveTargets.some(
-      (target) => currentFindingMatchesTarget(finding, target)
-    );
-    if (inactive) removed.push(finding);
-    return !inactive;
-  });
-  return { findings, removed };
-}
-function allLifecycleRecords(lifecycle) {
-  return [
-    ...lifecycle.resolvedCandidates,
-    ...lifecycle.resolvedByLifecycle,
-    ...lifecycle.previousStillValid,
-    ...lifecycle.previousUncertain,
-    ...lifecycle.manualAttention,
-    ...lifecycle.mutationSkipped,
-    ...lifecycle.mutationFailed,
-    ...lifecycle.skipped
-  ];
-}
-function hasTrustedRecordedResolution(target) {
-  const marker = target.trustedResolutionMarker;
-  return Boolean(
-    marker && target.trustedAuthor && !target.hasHumanReply && marker.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker.targetId === target.targetId && marker.fingerprint === target.fingerprint
-  );
-}
-function hasTrustedResolutionFallback(record, lifecycle) {
-  const reasonCodes = new Set(record.reasonCodes);
-  if (lifecycle.mode !== "resolve" || !record.target.trustedAuthor || record.target.hasHumanReply || !reasonCodes.has("mutation_permission_denied") || !reasonCodes.has("resolution_comment_posted") || Array.from(reasonCodes).some(
-    (reason) => reason !== "mutation_permission_denied" && reason !== "resolution_comment_posted"
-  )) {
-    return false;
-  }
-  const resolvedProviders = new Set(
-    (record.providerVotes ?? []).filter((vote) => vote.valid && vote.verdict === "resolved").map((vote) => vote.providerId)
-  );
-  return lifecycle.quorumMode === "single-provider" ? resolvedProviders.size >= 1 : resolvedProviders.size >= 2;
-}
-function hasConcreteEvidence(evidence) {
-  return evidence.some(
-    (item) => typeof item.path === "string" && item.path.trim().length > 0 && typeof item.reason === "string" && item.reason.trim().length > 0
-  );
-}
-function resolveConfidenceThresholds(overrides) {
-  const thresholds = { ...DEFAULT_RESOLVE_CONFIDENCE };
-  for (const severity of Object.keys(thresholds)) {
-    const value = overrides?.[severity];
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1) {
-      thresholds[severity] = value;
-    }
-  }
-  return thresholds;
-}
-function currentFindingMatchesTarget(finding, target) {
-  const targetPath = target.currentPath || target.originalPath;
-  const targetLine = target.currentLine ?? target.originalLine ?? null;
-  const targetReference = {
-    path: targetPath,
-    line: targetLine,
-    body: lifecycleTargetBody(target)
-  };
-  const findingReference = {
-    path: finding.file,
-    line: finding.line,
-    body: `**${finding.severity} - ${finding.title}**
-
-${finding.message}`
-  };
-  return isLikelySameInlineFinding(targetReference, findingReference);
-}
-function lifecycleTargetBody(target) {
-  const severity = target.severity === "critical" || target.severity === "major" || target.severity === "minor" ? target.severity : "minor";
-  return `**${severity} - ${target.title}**
-
-${target.message}`;
-}
-function safestVote(left, right) {
-  const rank = (vote) => {
-    if (vote.valid && vote.verdict === "still_valid") return 3;
-    if (!vote.valid || vote.verdict === "uncertain") return 2;
-    if (vote.valid && vote.verdict === "resolved") return 1;
-    return 0;
-  };
-  return rank(right) > rank(left) ? right : left;
-}
-function unique(values) {
-  return Array.from(new Set(values));
-}
-
 // src/output/formatter-v2.ts
 var MarkdownFormatterV2 = class {
   format(review) {
-    const hasFindings = review.findings.length > 0;
-    const lifecycleSection = this.formatThreadLifecycle(review);
-    const releaseNotes = this.generateReleaseNotes(review).trim();
-    if (!hasFindings && !lifecycleSection && !releaseNotes && review.metrics.providersSuccess > 0 && !this.didAllProviderRunsFail(review) && !this.hasDismissedFindings(review)) {
-      return this.formatCompactAllClear(review);
-    }
-    const lines = [];
-    lines.push("# ReviewRouter");
-    lines.push("");
-    lines.push(this.formatQuickStats(review));
-    lines.push("");
-    lines.push("## Summary");
-    lines.push("");
-    lines.push(`> ${this.generatePRSummary(review)}`);
-    lines.push("");
-    const reviewScope = this.formatReviewScope(review);
-    if (reviewScope) {
-      lines.push(reviewScope);
-      lines.push("");
-    }
-    if (releaseNotes) {
-      lines.push("## Release Notes");
-      lines.push("");
-      lines.push(releaseNotes);
-      lines.push("");
-    }
-    if (hasFindings) {
-      lines.push("## Findings");
-      lines.push("");
-      const critical = review.findings.filter((f2) => f2.severity === "critical");
-      const major = review.findings.filter((f2) => f2.severity === "major");
-      const minor = review.findings.filter((f2) => f2.severity === "minor");
-      if (critical.length > 0) {
-        lines.push(
-          this.formatSeveritySection("\u{1F534} Critical", critical, "critical")
-        );
-      }
-      if (major.length > 0) {
-        lines.push(this.formatSeveritySection("\u{1F7E1} Major", major, "major"));
-      }
-      if (minor.length > 0) {
-        lines.push(this.formatSeveritySection("\u{1F535} Minor", minor, "minor"));
-      }
-    }
-    if (lifecycleSection) {
-      lines.push(lifecycleSection);
-      lines.push("");
-    }
-    if (hasFindings || lifecycleSection) {
-    } else if (this.didAllProviderRunsFail(review)) {
-      lines.push("## Review Incomplete");
-      lines.push("");
-      lines.push(`> ${this.generateAllClearMessage(review)}`);
-      lines.push("");
-    } else if (this.hasDismissedFindings(review)) {
-      lines.push("## No Active Findings");
-      lines.push("");
-      lines.push(`> ${this.generateAllClearMessage(review)}`);
-      lines.push("");
-    } else {
-      const allClearMessage = this.generateAllClearMessage(review, {
-        suppressRepeat: true
-      });
-      lines.push("## All Clear!");
-      lines.push("");
-      lines.push(`> ${allClearMessage}`);
-      lines.push("");
-    }
-    lines.push(this.formatMetrics(review));
-    lines.push("");
-    lines.push(this.formatAdvancedSections(review));
-    lines.push("---");
-    lines.push("");
-    lines.push(this.formatFooter(review));
-    return lines.join("\n");
-  }
-  formatCompactAllClear(review) {
-    const lines = [];
-    lines.push("# ReviewRouter");
-    lines.push("");
-    lines.push(
-      `\u2705 **${this.formatCompactAllClearStatus(review)}** \xB7 ${this.formatPlainStats(review)}`
-    );
-    lines.push(`<sub>${this.formatCompactRunSummary(review)}</sub>`);
-    lines.push("");
-    const reviewScope = this.formatReviewScope(review);
-    if (reviewScope) {
-      lines.push(reviewScope);
-      lines.push("");
-    }
-    lines.push(this.formatMetrics(review));
-    const advancedSections = this.formatAdvancedSections(review).trim();
-    if (advancedSections) {
-      lines.push("");
-      lines.push(advancedSections);
-    }
-    return lines.join("\n");
-  }
-  formatCompactAllClearStatus(review) {
-    return this.hasScopeLimitations(review) ? "No reportable findings in reviewed files" : "No reportable findings";
-  }
-  formatPlainStats(review) {
-    const { metrics } = review;
-    const previous = countPreviousStillValidBySeverity(review.threadLifecycle);
-    const criticalCount = metrics.critical + previous.critical;
-    const majorCount = metrics.major + previous.major;
-    const minorCount = metrics.minor + previous.minor;
-    return `${criticalCount} Critical \xB7 ${majorCount} Major \xB7 ${minorCount} Minor`;
-  }
-  formatCompactRunSummary(review) {
-    const { coverage, metrics } = review;
-    const parts = [];
-    if (coverage) {
-      const files = coverage.filesConsidered === 1 ? "file reviewed" : "files reviewed";
-      parts.push(`${coverage.filesConsidered} ${files}`);
-    }
-    parts.push(
-      `${metrics.providersSuccess}/${metrics.providersUsed} provider${metrics.providersUsed === 1 ? "" : "s"}`
-    );
-    parts.push(this.formatRunSummary(review));
-    return parts.join(" \xB7 ");
-  }
-  formatQuickStats(review) {
-    const { metrics } = review;
-    const previous = countPreviousStillValidBySeverity(review.threadLifecycle);
-    const criticalCount = metrics.critical + previous.critical;
-    const majorCount = metrics.major + previous.major;
-    const minorCount = metrics.minor + previous.minor;
-    const criticalBadge = criticalCount > 0 ? `\u{1F534} **${criticalCount} Critical**` : `~~${criticalCount} Critical~~`;
-    const majorBadge = majorCount > 0 ? `\u{1F7E1} **${majorCount} Major**` : `~~${majorCount} Major~~`;
-    const minorBadge = minorCount > 0 ? `\u{1F535} ${minorCount} Minor` : `~~${minorCount} Minor~~`;
-    const parts = [criticalBadge, majorBadge, minorBadge];
-    return parts.join(" \u2022 ");
-  }
-  formatRunSummary(review) {
-    const { metrics } = review;
-    const parts = [`${metrics.durationSeconds.toFixed(1)}s`];
-    if (this.shouldHideApiBilling(review)) {
-      parts.push("OAuth subscription");
-    } else if (this.hasMeasuredApiBilling(review)) {
-      parts.push(`$${metrics.totalCost.toFixed(4)}`);
-    }
-    return parts.join(" \u2022 ");
-  }
-  generatePRSummary(review) {
-    const { metrics, findings } = review;
-    const previous = countPreviousStillValidBySeverity(review.threadLifecycle);
-    const previousActive = previous.critical + previous.major + previous.minor;
-    if (findings.length === 0) {
-      if (previousActive > 0) {
-        return `No new current findings, but ${previousActive} previous unresolved ReviewRouter finding${previousActive === 1 ? "" : "s"} still appear valid and remain active.`;
-      }
-      if (hasLifecycleUncertainty(review.threadLifecycle)) {
-        return "No new current findings, but previous unresolved ReviewRouter threads could not be safely reconciled. See Previous Review Threads.";
-      }
-      if (this.didAllProviderRunsFail(review)) {
-        return "LLM review did not complete because all configured providers failed. Static checks did not find issues. See Performance Metrics for the provider error.";
-      }
-      if (metrics.providersSuccess === 0) {
-        return "LLM review skipped: no healthy providers were available. Static checks did not find issues.";
-      }
-      if (this.hasDismissedFindings(review)) {
-        const count = metrics.dismissedFindings ?? 0;
-        const noun = count === 1 ? "finding" : "findings";
-        const verb = count === 1 ? "was" : "were";
-        const override = count === 1 ? "override" : "overrides";
-        return `No active findings. ${count} ${noun} ${verb} dismissed by maintainer/admin \`/rr skip\` ${override}.`;
-      }
-      if (this.hasScopeLimitations(review)) {
-        return "No issues detected in reviewed files. Some files were compacted or metadata-only; see Review Scope.";
-      }
-      return "This PR looks great! No issues detected by the automated review.";
-    }
-    const parts = [];
-    if (metrics.critical > 0) {
-      const verb = metrics.critical === 1 ? "requires" : "require";
-      parts.push(
-        `**${metrics.critical} critical issue${metrics.critical > 1 ? "s" : ""}** ${verb} immediate attention`
-      );
-    }
-    if (metrics.major > 0) {
-      parts.push(
-        `${metrics.major} major issue${metrics.major > 1 ? "s" : ""} should be addressed`
-      );
-    }
-    if (metrics.minor > 0) {
-      parts.push(
-        `${metrics.minor} minor improvement${metrics.minor > 1 ? "s" : ""} suggested`
-      );
-    }
-    if (previousActive > 0) {
-      parts.push(
-        `${previousActive} previous unresolved finding${previousActive === 1 ? "" : "s"} still valid`
-      );
-    }
-    const summary = parts.join(", ");
-    const filesReviewed = new Set(findings.map((f2) => f2.file)).size;
-    const context = `Found across ${filesReviewed} file${filesReviewed > 1 ? "s" : ""}.`;
-    const locationCount = this.countFindingLocations(findings);
-    const inlineContext = locationCount < findings.length ? ` Inline comments collapse same-line findings, so ${findings.length} findings map to ${locationCount} code thread${locationCount === 1 ? "" : "s"}.` : "";
-    return `${summary}. ${context}${inlineContext}`;
-  }
-  generateAllClearMessage(review, options = {}) {
-    const { metrics } = review;
-    if (this.didAllProviderRunsFail(review)) {
-      return "No issues were found by static checks, but LLM review did not complete because all configured providers failed.";
-    }
-    if (metrics.providersSuccess === 0) {
-      return options.suppressRepeat ? "LLM analysis skipped because no providers were healthy." : "LLM analysis skipped because no providers were healthy. Static checks found no issues.";
-    }
-    if (this.hasDismissedFindings(review)) {
-      const count = metrics.dismissedFindings ?? 0;
-      return `${count} finding${count === 1 ? "" : "s"} dismissed by maintainer/admin \`/rr skip\` override${count === 1 ? "" : "s"}. No active findings remain.`;
-    }
-    if (this.hasScopeLimitations(review)) {
-      return "No issues found in reviewed files. Some files were compacted or metadata-only; see Review Scope.";
-    }
-    return "No issues found. Great job!";
-  }
-  formatReviewScope(review) {
-    const coverage = review.coverage;
-    if (!coverage) return "";
-    const lines = [];
-    const limitedFiles = coverage.files.filter(
-      (file) => file.status === "compacted" || file.status === "metadata-only" || file.status === "skipped" || file.status === "unreviewed"
-    );
-    lines.push("<details>");
-    lines.push("<summary>Review Scope</summary>");
-    lines.push("");
-    lines.push("| Scope | Count |");
-    lines.push("|-------|------:|");
-    lines.push(`| Total PR files | ${coverage.totalFiles} |`);
-    lines.push(
-      `| Files considered by reviewer | ${coverage.filesConsidered} |`
-    );
-    lines.push(`| Full diff in prompt | ${coverage.fullDiffFiles} |`);
-    lines.push(`| Compacted in prompt | ${coverage.compactedFiles} |`);
-    lines.push(`| Metadata-only or trimmed | ${coverage.metadataOnlyFiles} |`);
-    lines.push(`| Skipped before LLM review | ${coverage.skippedFiles} |`);
-    lines.push(`| Not reviewed by an LLM | ${coverage.unreviewedFiles} |`);
-    lines.push(
-      `| Review coverage complete | ${coverage.complete ? "Yes" : "No"} |`
-    );
-    lines.push(
-      `| Codex agentic context | ${coverage.agenticContext ? "Enabled for Codex providers" : "Disabled"} |`
-    );
-    lines.push(`| Review mode | ${coverage.mode} |`);
-    for (const limitation of coverage.limitations ?? []) {
-      lines.push(`| Coverage limitation | ${limitation} |`);
-    }
-    if (limitedFiles.length > 0) {
-      lines.push("");
-      lines.push("Files not shown as full diffs in the primary prompt:");
-      lines.push("");
-      limitedFiles.slice(0, 20).forEach((file) => {
-        const reason = file.reason ? ` - ${file.reason}` : "";
-        lines.push(`- \`${file.path}\` - ${file.status}${reason}`);
-      });
-      if (limitedFiles.length > 20) {
-        lines.push(`- ...and ${limitedFiles.length - 20} more`);
-      }
-      lines.push("");
-      lines.push(
-        'Codex providers with agentic context can inspect related files read-only during review. This section is still shown so a "no findings" result on a large PR is auditable.'
-      );
-    }
-    lines.push("");
-    lines.push("</details>");
-    return lines.join("\n");
-  }
-  generateReleaseNotes(review) {
-    const lines = [];
-    const significant = review.findings.filter(
-      (f2) => f2.severity === "critical" || f2.severity === "major"
-    );
-    if (significant.length === 0) return "";
-    const byCategory = /* @__PURE__ */ new Map();
-    significant.forEach((f2) => {
-      if (!f2.category) return;
-      if (!byCategory.has(f2.category)) {
-        byCategory.set(f2.category, []);
-      }
-      byCategory.get(f2.category).push(f2);
-    });
-    byCategory.forEach((findings, category) => {
-      lines.push(`**${category}:**`);
-      findings.forEach((f2) => {
-        const emoji = f2.severity === "critical" ? "\u{1F534}" : "\u{1F7E1}";
-        lines.push(`- ${emoji} ${f2.title}`);
-      });
-      lines.push("");
-    });
-    return lines.join("\n").trim();
-  }
-  formatSeveritySection(header, findings, severity) {
-    const lines = [];
-    lines.push(`### ${header} (${findings.length})`);
-    lines.push("");
-    findings.forEach((finding, index) => {
-      lines.push(
-        this.formatFinding(finding, severity, index + 1, findings.length)
-      );
-      if (index < findings.length - 1) {
-        lines.push("");
-      }
-    });
-    lines.push("");
-    return lines.join("\n");
-  }
-  formatFinding(finding, severity, index, total) {
-    const lines = [];
-    const display = getSeverityDisplay(severity);
-    const location = `\`${finding.file}:${finding.line}\``;
-    const numberPrefix = total > 1 ? `${index}. ` : "";
-    lines.push(`#### ${display.emoji} ${numberPrefix}${finding.title}`);
-    lines.push(
-      `**Reported Location:** ${location}${finding.category ? ` \u2022 **Category:** ${finding.category}` : ""}`
-    );
-    lines.push(severityLine(severity));
-    lines.push("");
-    lines.push(finding.message);
-    lines.push("");
-    if (finding.evidence) {
-      const confidence = Math.round(finding.evidence.confidence * 100);
-      if (finding.evidence.reasoning) {
-        lines.push(`<details><summary>View reasoning</summary>`);
-        lines.push("");
-        lines.push(
-          `**Evidence:** ${finding.evidence.badge} (${confidence}% confidence)`
-        );
-        lines.push("");
-        lines.push(finding.evidence.reasoning);
-        lines.push("</details>");
-      } else {
-        lines.push(
-          `**Evidence:** ${finding.evidence.badge} (${confidence}% confidence)`
-        );
-      }
-      lines.push("");
-    }
-    const attribution = this.modelAttributionFooter(finding);
-    if (attribution) {
-      lines.push(attribution);
-      lines.push("");
-    }
-    return lines.join("\n");
-  }
-  formatThreadLifecycle(review) {
-    const lifecycle = review.threadLifecycle;
-    if (!lifecycle || lifecycle.mode === "off") return "";
-    const stillValidRecords = lifecycle.previousStillValid.filter(
-      (record) => !isLinkedCurrentFinding(record)
-    );
-    const attentionRecords = [
-      ...lifecycle.previousUncertain,
-      ...lifecycle.manualAttention,
-      ...lifecycle.mutationSkipped,
-      ...lifecycle.mutationFailed,
-      ...lifecycle.skipped.filter(
-        (record) => !record.reasonCodes.every((reason) => reason === "command_dismissed")
-      )
-    ];
-    const hasStillValid = stillValidRecords.length > 0;
-    const hasResolved = lifecycle.resolvedByLifecycle.length > 0;
-    const hasAttention = attentionRecords.length > 0 || lifecycle.inventoryFailed || lifecycle.warnings.length > 0;
-    if (!hasStillValid && !hasResolved && !hasAttention) return "";
-    const lines = [];
-    lines.push("## Previous Review Threads");
-    lines.push("");
-    if (hasStillValid) {
-      lines.push(
-        "These unresolved findings still look valid and count as active:"
-      );
-      lines.push("");
-      stillValidRecords.forEach((record) => {
-        lines.push(this.formatLifecycleRecord(record));
-      });
-      lines.push("");
-    }
-    if (hasResolved) {
-      lines.push("Resolved by this run:");
-      lines.push("");
-      lifecycle.resolvedByLifecycle.forEach((record) => {
-        lines.push(this.formatLifecycleRecord(record));
-      });
-      lines.push("");
-    }
-    if (hasAttention) {
-      lines.push("<details>");
-      lines.push("<summary>Lifecycle attention required</summary>");
-      lines.push("");
-      if (lifecycle.inventoryFailed) {
-        lines.push(
-          "- Review thread inventory failed; no thread was auto-resolved."
-        );
-      }
-      lifecycle.warnings.forEach((warning2) => {
-        lines.push(`- ${warning2}`);
-      });
-      attentionRecords.forEach((record) => {
-        lines.push(this.formatLifecycleRecord(record));
-      });
-      lines.push("");
-      lines.push("</details>");
-    }
-    return lines.join("\n");
-  }
-  formatLifecycleRecord(record) {
-    const target = record.target;
-    const location = `${target.currentPath || target.originalPath}:${target.currentLine ?? target.originalLine ?? "?"}`;
-    const severity = target.severity === "critical" || target.severity === "major" || target.severity === "minor" ? getSeverityDisplay(target.severity).label : "Unknown";
-    const reasons = record.reasonCodes.map((reason) => this.formatLifecycleReason(reason)).join(", ");
-    const link = target.threadUrl ? ` - [thread](${target.threadUrl})` : "";
-    return `- **${severity}** \`${location}\` - ${target.title}${reasons ? ` (${reasons})` : ""}${link}`;
-  }
-  formatLifecycleReason(reason) {
-    const labels = {
-      already_resolved: "already resolved on GitHub",
-      command_dismissed: "dismissed by /rr skip",
-      current_finding_present: "same finding reported in this run",
-      dry_run: "dry run",
-      head_sha_changed: "PR head changed before mutation",
-      human_reply: "human reply in thread",
-      insufficient_resolved_quorum: "resolved quorum not reached",
-      inventory_failed: "inventory failed",
-      invalid_resolved_evidence: "resolved evidence was insufficient",
-      mutation_failed: "GitHub mutation failed",
-      mutation_permission_denied: "missing permission to resolve",
-      mutation_rate_limited: "GitHub rate limited mutation",
-      resolution_comment_failed: "resolution reply failed",
-      resolution_comment_posted: "fallback resolution reply posted; GitHub thread remains open",
-      outside_review_scope: "outside reviewed diff scope",
-      pagination_incomplete: "thread comments were truncated",
-      provider_failed: "provider failed",
-      provider_current_finding_present: "provider reported same finding in this run",
-      provider_missing_revalidation: "provider omitted revalidation",
-      provider_uncertain: "provider was uncertain",
-      report_mode: "report mode",
-      still_valid_vote: "provider said still valid",
-      target_cap_exceeded: "target cap exceeded",
-      thread_changed_before_mutation: "thread changed before mutation",
-      thread_not_found: "thread no longer found",
-      untrusted_author: "untrusted author",
-      viewer_cannot_resolve: "viewer cannot resolve thread"
-    };
-    return labels[reason] || reason.replace(/_/g, " ");
-  }
-  countFindingLocations(findings) {
-    return new Set(findings.map((f2) => `${f2.file}:${f2.line}`)).size;
-  }
-  modelAttributionFooter(finding) {
-    const attributions = this.normalizeProviderModels(finding);
-    if (attributions.length === 0) {
-      return null;
-    }
-    if (attributions.length === 1) {
-      return `<sub>Model: ${this.formatProviderModel(attributions[0])}</sub>`;
-    }
-    const total = Math.max(
-      finding.providerPoolSize ?? attributions.length,
-      attributions.length
-    );
-    return `<sub>Models: ${attributions.map((item) => this.formatProviderModel(item)).join(", ")} \xB7 agreement ${attributions.length}/${total}</sub>`;
-  }
-  normalizeProviderModels(finding) {
-    const merged = /* @__PURE__ */ new Map();
-    for (const item of finding.providerModels || []) {
-      merged.set(item.provider, item);
-    }
-    for (const provider of finding.providers || []) {
-      if (!merged.has(provider)) {
-        merged.set(provider, { provider });
-      }
-    }
-    if (finding.provider && !merged.has(finding.provider)) {
-      merged.set(finding.provider, {
-        provider: finding.provider,
-        actualModel: finding.actualModel
-      });
-    }
-    return Array.from(merged.values());
-  }
-  formatProviderModel(input) {
-    return input.provider;
-  }
-  formatMetrics(review) {
-    const lines = [];
-    const { metrics, runDetails } = review;
-    const hideApiBilling = this.shouldHideApiBilling(review);
-    lines.push("<details>");
-    lines.push("<summary>Performance Metrics</summary>");
-    lines.push("");
-    lines.push("| Metric | Value |");
-    lines.push("|--------|-------|");
-    lines.push(`| Duration | ${metrics.durationSeconds.toFixed(2)}s |`);
-    if (hideApiBilling) {
-      lines.push("| Billing | OAuth subscription |");
-      if (metrics.totalTokens > 0) {
-        lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
-      }
-    } else if (!this.hasMeasuredApiBilling(review)) {
-      lines.push("| Billing | Not reported |");
-    } else {
-      lines.push(`| Cost | $${metrics.totalCost.toFixed(4)} |`);
-      lines.push(`| Tokens | ${metrics.totalTokens.toLocaleString()} |`);
-    }
-    lines.push(
-      `| Providers | ${metrics.providersSuccess}/${metrics.providersUsed} |`
-    );
-    if (this.hasDismissedFindings(review)) {
-      lines.push(`| Overrides | ${metrics.dismissedFindings} dismissed |`);
-    }
-    if (review.threadLifecycle && review.threadLifecycle.mode !== "off") {
-      const lifecycle = review.threadLifecycle;
-      lines.push(
-        `| Review thread lifecycle | ${lifecycle.mode}, ${lifecycle.quorumMode} |`
-      );
-      if (lifecycle.resolvedByLifecycle.length > 0) {
-        lines.push(
-          `| Previous threads resolved | ${lifecycle.resolvedByLifecycle.length} |`
-        );
-      }
-      const previousStillValidCount = lifecycle.previousStillValid.filter(
-        (record) => !isLinkedCurrentFinding(record)
-      ).length;
-      if (previousStillValidCount > 0) {
-        lines.push(
-          `| Previous findings still valid | ${previousStillValidCount} |`
-        );
-      }
-    }
-    if (runDetails?.cacheHit) {
-      lines.push(`| Cache | Hit |`);
-    }
-    lines.push("");
-    if (runDetails?.providers && runDetails.providers.length > 0) {
-      lines.push("**Provider Performance:**");
-      lines.push("");
-      runDetails.providers.forEach((p2) => {
-        const statusEmoji = p2.status === "success" ? "\u2705" : p2.status === "timeout" ? "\u23F1\uFE0F" : p2.status === "rate-limited" ? "\u23F8\uFE0F" : "\u274C";
-        const costStr = !hideApiBilling && p2.cost !== void 0 ? `, $${p2.cost.toFixed(4)}` : "";
-        const tokensStr = p2.tokens ? `, ${p2.tokens} tokens` : "";
-        const providerName = p2.requiredHealthy ? `${p2.name} (required)` : p2.name;
-        lines.push(
-          `- ${statusEmoji} **${providerName}** (${p2.durationSeconds.toFixed(2)}s${costStr}${tokensStr})`
-        );
-        if (p2.errorMessage) {
-          lines.push(`  <sub>${p2.errorMessage}</sub>`);
-        }
-      });
-      lines.push("");
-    }
-    lines.push("</details>");
-    return lines.join("\n");
-  }
-  shouldHideApiBilling(review) {
-    const hasOAuthCliUsage = (review.runDetails?.providers || []).some(
-      (p2) => /^(codex|claude|gemini|opencode)\//.test(p2.name)
-    );
-    return review.metrics.totalCost === 0 && hasOAuthCliUsage;
-  }
-  hasMeasuredApiBilling(review) {
-    return review.metrics.totalCost > 0 || review.metrics.totalTokens > 0;
-  }
-  hasDismissedFindings(review) {
-    return (review.metrics.dismissedFindings ?? 0) > 0;
-  }
-  hasScopeLimitations(review) {
-    const coverage = review.coverage;
-    if (!coverage) return false;
-    return coverage.compactedFiles > 0 || coverage.metadataOnlyFiles > 0 || coverage.skippedFiles > 0 || coverage.unreviewedFiles > 0 || coverage.complete === false || (coverage.limitations?.length ?? 0) > 0;
-  }
-  didAllProviderRunsFail(review) {
-    return review.metrics.providersUsed > 0 && review.metrics.providersSuccess === 0 && review.metrics.providersFailed > 0;
-  }
-  formatAdvancedSections(review) {
-    const lines = [];
-    if (review.aiAnalysis) {
-      lines.push("<details>");
-      lines.push("<summary>AI-Generated Code Analysis</summary>");
-      lines.push("");
-      lines.push(
-        `**Overall Likelihood:** ${(review.aiAnalysis.averageLikelihood * 100).toFixed(1)}%`
-      );
-      lines.push("");
-      lines.push(`**Consensus:** ${review.aiAnalysis.consensus}`);
-      lines.push("");
-      if (Object.keys(review.aiAnalysis.providerEstimates).length > 0) {
-        lines.push("**Provider Estimates:**");
-        Object.entries(review.aiAnalysis.providerEstimates).forEach(
-          ([provider, likelihood]) => {
-            lines.push(`- ${provider}: ${(likelihood * 100).toFixed(1)}%`);
-          }
-        );
-        lines.push("");
-      }
-      lines.push("</details>");
-      lines.push("");
-    }
-    if (this.shouldShowImpactGraph(review.mermaidDiagram)) {
-      lines.push("<details>");
-      lines.push("<summary>Impact Analysis Graph</summary>");
-      lines.push("");
-      lines.push("```mermaid");
-      lines.push(review.mermaidDiagram);
-      lines.push("```");
-      lines.push("</details>");
-      lines.push("");
-    }
-    return lines.join("\n");
-  }
-  shouldShowImpactGraph(mermaidDiagram) {
-    if (!mermaidDiagram?.trim()) return false;
-    return /(?:-->|---|-.->|==>)/.test(mermaidDiagram);
-  }
-  formatFooter(review) {
-    return `<sub>${this.formatRunSummary(review)} \u2022 Powered by ReviewRouter</sub>`;
+    return renderReviewSummary(review);
   }
 };
 
@@ -52271,7 +52371,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.176",
+  version: "1.0.177",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -112154,29 +112254,22 @@ var LegacyReviewProjectionPolicyAdapter = class {
     const placements = query.occurrences.map(
       (occurrence) => this.placeOccurrence(occurrence, review, query.revisionFiles)
     );
-    const lifecycleMarkdown = renderReviewerLifecycleMarkdown({
-      language: this.config.outputLanguage,
-      lines: lifecycleLinesForSummary(query.occurrences)
-    });
-    const copy = reviewerSummaryCopy(this.config.outputLanguage);
-    const coverageLines = query.coverage.state === "partial" /* Partial */ ? [
-      "",
-      copy.coverageHeading,
-      ...query.coverage.limitations.map(
-        (limitation) => `- ${limitation}`
-      )
-    ] : [];
-    const reviewSummary = query.coverage.state === "partial" /* Partial */ ? markReviewSummaryIncomplete({
-      summary: review.summary,
-      language: this.config.outputLanguage,
-      preliminaryFindingCount: currentOccurrences.length
-    }) : review.summary;
     const summaryBody = limitReviewerPostedMarkdown(
-      [
-        reviewSummary,
-        ...lifecycleMarkdown ? ["", lifecycleMarkdown] : [],
-        ...coverageLines
-      ].join("\n")
+      renderReviewerSummaryMarkdown({
+        language: this.config.outputLanguage,
+        findings: currentOccurrences.map(toLegacyFinding).map(toReviewerSummaryFinding),
+        metrics: review.metrics,
+        incomplete: query.coverage.state === "partial" /* Partial */,
+        coverage: {
+          complete: query.coverage.state === "complete" /* Complete */,
+          totalFiles: query.coverage.totalFiles,
+          reviewedFiles: query.coverage.reviewedFiles,
+          unreviewedFiles: query.coverage.unreviewedFiles,
+          mode: query.coverage.mode,
+          limitations: query.coverage.limitations
+        },
+        lifecycle: lifecycleLinesForSummary(query.occurrences)
+      })
     );
     return {
       summaryBody,
@@ -116861,6 +116954,7 @@ async function runCodexOAuthRotatingAction(options = {}) {
     },
     codex: {
       prepareCli: () => prepareCodexCliBeforeAuthRead({
+        ...reviewActionV2Activation.mode === "t0" /* T0 */ ? { approvedAgent: bundledReviewAgentForTransport("provider_api") } : {},
         logger: {
           info,
           warn: (message) => warning(message)

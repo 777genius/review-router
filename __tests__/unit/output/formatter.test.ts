@@ -9,7 +9,7 @@ describe('MarkdownFormatter', () => {
   });
 
   const createMinimalReview = (): Review => ({
-    summary: 'Test summary',
+    summary: '## Summary',
     findings: [],
     inlineComments: [],
     actionItems: [],
@@ -44,11 +44,11 @@ describe('MarkdownFormatter', () => {
       const review = createMinimalReview();
       const output = formatter.format(review);
 
-      expect(output).toContain('## ReviewRouter Summary');
-      expect(output).toContain('Test summary');
-      expect(output).toContain('Duration: 1.5s');
-      expect(output).toContain('Cost: $0.0010');
-      expect(output).toContain('Tokens: 100');
+      expect(output).toContain('# ReviewRouter');
+      expect(output).toContain('## Summary');
+      expect(output).toContain('| Duration | 1.50s |');
+      expect(output).toContain('| Cost | $0.0010 |');
+      expect(output).toContain('| Tokens | 100 |');
     });
 
     it('formats review with critical findings', () => {
@@ -59,7 +59,7 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('### Critical');
+      expect(output).toContain('critical · src/test.ts:10');
       expect(output).toContain('src/test.ts:10');
       expect(output).toContain('critical issue');
       expect(output).toContain('This is a critical issue');
@@ -73,7 +73,7 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('### Major');
+      expect(output).toContain('major · src/test.ts:10');
       expect(output).toContain('major issue');
     });
 
@@ -85,7 +85,7 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('### Minor');
+      expect(output).toContain('minor · src/test.ts:10');
       expect(output).toContain('minor issue');
     });
 
@@ -103,9 +103,9 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('### Critical');
-      expect(output).toContain('### Major');
-      expect(output).toContain('### Minor');
+      expect(output).toContain('critical · src/test.ts:10');
+      expect(output).toContain('major · src/test.ts:10');
+      expect(output).toContain('minor · src/test.ts:10');
     });
   });
 
@@ -120,7 +120,7 @@ describe('MarkdownFormatter', () => {
 
       expect(output).not.toContain('**Suggested fix:**');
       expect(output).not.toContain('```suggestion');
-      expect(output).not.toContain('Use const instead of let');
+      expect(output).toContain('Use const instead of let');
     });
 
     it('includes evidence when present', () => {
@@ -137,7 +137,7 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('Evidence: High Confidence (95%)');
+      expect(output).toContain('**Evidence:** High Confidence (95%)');
       expect(output).toContain('Multiple providers agree');
     });
 
@@ -155,7 +155,7 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('Evidence: Medium Confidence (70%)');
+      expect(output).toContain('**Evidence:** Medium Confidence (70%)');
       // Check that the evidence line doesn't have reasoning
       const evidenceLine = output
         .split('\n')
@@ -214,7 +214,7 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('<details><summary>Impact graph</summary>');
+      expect(output).toContain('<summary>Impact Analysis Graph</summary>');
       expect(output).toContain('```mermaid');
       expect(output).toContain('graph TD\n  A-->B');
       expect(output).toContain('```');
@@ -262,9 +262,7 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain(
-        'provider-1: success (1.2s, $0.0010, tokens 50)'
-      );
+      expect(output).toContain('**provider-1** (1.20s, $0.0010, 50 tokens)');
     });
 
     it('hides API cost for OAuth CLI subscription providers', () => {
@@ -290,11 +288,11 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('OAuth subscription');
+      expect(output).toContain('| Billing | Not reported |');
       expect(output).not.toContain('$0.0000');
       expect(output).not.toContain('Cost:');
       expect(output).not.toContain('Tokens: 0');
-      expect(output).toContain('codex/gpt-5.4-mini: success (1.2s)');
+      expect(output).toContain('**codex/gpt-5.4-mini** (1.20s)');
     });
 
     it('includes provider error messages', () => {
@@ -318,7 +316,7 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('provider-1: error (0.5s, error: Rate limited)');
+      expect(output).toContain('Rate limited');
     });
 
     it('shows timeout warning when providers timed out', () => {
@@ -342,8 +340,8 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('1 provider(s) timed out');
-      expect(output).toContain('This is expected for large PRs');
+      expect(output).toContain('timed out after 30s');
+      expect(output).toContain('slow-provider');
     });
   });
 
@@ -358,10 +356,8 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain(
-        '<details><summary>AI Generated Code Likelihood</summary>'
-      );
-      expect(output).toContain('Overall: 75.0% (likely)');
+      expect(output).toContain('<summary>AI-Generated Code Analysis</summary>');
+      expect(output).toContain('75.0% · likely');
     });
   });
 

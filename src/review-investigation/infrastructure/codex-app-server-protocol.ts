@@ -52,6 +52,12 @@ type ActiveItem = Readonly<{
   tool?: string;
 }>;
 
+type FinalMessageCandidate = Readonly<{
+  id: string;
+  phase: 'final_answer' | null;
+  text: string;
+}>;
+
 type ParsedTurnError = Readonly<{
   failure: ReviewAgentExecutionError;
   fingerprint: string;
@@ -161,10 +167,8 @@ export class CodexAppServerProtocolClient {
   private turnCompleted = false;
   private actualModel: string | null = null;
   private modelProvider: string | null = null;
-  private readonly finalMessageCandidates: Array<{
-    readonly phase: 'final_answer' | null;
-    readonly text: string;
-  }> = [];
+  private readonly finalMessageCandidates: FinalMessageCandidate[] = [];
+  private terminalSummaryFinalMessage: string | null = null;
   private aggregateUsage: RawTokenUsage | null = null;
   private lastAggregateUsage: RawTokenUsage | null = null;
   private completionResolved = false;
@@ -602,8 +606,14 @@ export class CodexAppServerProtocolClient {
       checkpoint = 'identity';
       const id = requireIdentifier(item.id, 'item_id');
       const type = requireNonEmptyString(item.type, 'item_type');
-      checkpoint = 'id_duplicate';
-      if (this.activeItems.has(id) || this.completedItems.has(id)) {
+      checkpoint = 'id_duplicate_active';
+      if (this.activeItems.has(id)) throw streamFailure();
+      checkpoint = 'id_duplicate_completed';
+      const completed = this.completedItems.get(id);
+      if (
+        completed &&
+        (completed.type !== 'agentMessage' || type !== 'agentMessage')
+      ) {
         throw streamFailure();
       }
       checkpoint = 'item_shape';
@@ -618,10 +628,12 @@ export class CodexAppServerProtocolClient {
               tool: requireNonEmptyString(item.tool, 'mcp_tool'),
             })
           : Object.freeze({ type });
+      // Only a fully validated, non-effectful message may reopen a completed ID.
+      if (completed) this.completedItems.delete(id);
       this.activeItems.set(id, active);
     } catch (error) {
       // Fixed vocabulary only: never emit item IDs, payloads or unknown types.
-      // Preserve typed confinement/schema failures and all rejection semantics.
+      // Preserve typed confinement/schema failures.
       throw withStreamDiagnosticStage(
         error,
         `item_started_${itemType}_${checkpoint}`
@@ -859,9 +871,31 @@ export class CodexAppServerProtocolClient {
     const text = item.text as string;
     if (!text.trim()) throw schemaFailure();
     this.finalMessageCandidates.push({
+      id: item.id as string,
       phase: phase as 'final_answer' | null,
       text,
     });
+  }
+
+  private captureTerminalSummaryFinalMessage(
+    items: readonly unknown[],
+    latestObserved: FinalMessageCandidate | undefined
+  ): void {
+    if (items.length !== 1) return;
+    const item = requireRecord(items[0], 'turn_summary_item');
+    if (item.type !== 'agentMessage') return;
+    // Codex 0.147.0 summarizes its last eligible completed agent message.
+    // Reconciliation must not overwrite a conflicting observed completion.
+    const latest = latestObserved ?? this.finalMessageCandidates.at(-1);
+    if (
+      !latest ||
+      latest.id !== item.id ||
+      latest.phase !== itemFieldOrDefault(item, 'phase', null) ||
+      latest.text !== item.text
+    ) {
+      throw streamFailure();
+    }
+    this.terminalSummaryFinalMessage = latest.text;
   }
 
   private onRawResponseCompleted(params: Record<string, unknown>): void {
@@ -959,12 +993,19 @@ export class CodexAppServerProtocolClient {
     if (!this.turnStarted || this.turnCompleted || !Array.isArray(turn.items)) {
       throw streamFailure();
     }
+    const latestObservedFinalMessage = this.finalMessageCandidates.at(-1);
     this.validateTurnItemSnapshot(turn.items);
     const turnError = turn.error ?? null;
     switch (turn.status) {
       case 'completed':
         if (turnError !== null || this.retainedTerminalError !== null) {
           throw streamFailure();
+        }
+        if (turn.itemsView === 'summary') {
+          this.captureTerminalSummaryFinalMessage(
+            turn.items,
+            latestObservedFinalMessage
+          );
         }
         if (this.activeItems.size !== 0 && turn.itemsView === 'summary') {
           this.reconcileItemsOmittedFromTerminalSummary();
@@ -1029,7 +1070,9 @@ export class CodexAppServerProtocolClient {
       this.fail(usageFailure());
       return;
     }
-    const finalMessage = selectFinalMessage(this.finalMessageCandidates);
+    const finalMessage =
+      this.terminalSummaryFinalMessage ??
+      selectFinalMessage(this.finalMessageCandidates);
     if (finalMessage === null) {
       this.fail(schemaFailure());
       return;
@@ -1705,7 +1748,8 @@ type ItemStartedCheckpoint =
   | 'fence'
   | 'lifecycle'
   | 'identity'
-  | 'id_duplicate'
+  | 'id_duplicate_active'
+  | 'id_duplicate_completed'
   | 'item_shape'
   | 'unsupported_item_type'
   | 'user_client_id'

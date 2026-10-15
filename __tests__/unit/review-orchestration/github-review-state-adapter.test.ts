@@ -278,6 +278,7 @@ describe('managed lifecycle observation trust', () => {
       'REVIEWROUTER_COMMENT_TOKEN_MODE',
       'REVIEW_ROUTER_COMMENT_TOKEN_STATUS',
       'REVIEW_ROUTER_LIFECYCLE_OBSERVATION_AUTHORS',
+      ...Object.keys(approvedAgentRuntimeEnv),
     ];
     const saved = keys.map((key) => process.env[key]);
     process.env.REVIEWROUTER_COMMENT_TOKEN_MODE = 'app-oidc';

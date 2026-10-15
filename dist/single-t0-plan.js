@@ -23305,7 +23305,7 @@ var ConfigLoader = class {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.173",
+  version: "1.0.174",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -84513,6 +84513,7 @@ var CodexAppServerProtocolClient = class {
   actualModel = null;
   modelProvider = null;
   finalMessageCandidates = [];
+  terminalSummaryFinalMessage = null;
   aggregateUsage = null;
   lastAggregateUsage = null;
   completionResolved = false;
@@ -84854,8 +84855,11 @@ var CodexAppServerProtocolClient = class {
       checkpoint = "identity";
       const id = requireIdentifier2(item.id, "item_id");
       const type2 = requireNonEmptyString(item.type, "item_type");
-      checkpoint = "id_duplicate";
-      if (this.activeItems.has(id) || this.completedItems.has(id)) {
+      checkpoint = "id_duplicate_active";
+      if (this.activeItems.has(id)) throw streamFailure();
+      checkpoint = "id_duplicate_completed";
+      const completed = this.completedItems.get(id);
+      if (completed && (completed.type !== "agentMessage" || type2 !== "agentMessage")) {
         throw streamFailure();
       }
       checkpoint = "item_shape";
@@ -84867,6 +84871,7 @@ var CodexAppServerProtocolClient = class {
         server: requireNonEmptyString(item.server, "mcp_server"),
         tool: requireNonEmptyString(item.tool, "mcp_tool")
       }) : Object.freeze({ type: type2 });
+      if (completed) this.completedItems.delete(id);
       this.activeItems.set(id, active);
     } catch (error) {
       throw withStreamDiagnosticStage(
@@ -85034,9 +85039,20 @@ var CodexAppServerProtocolClient = class {
     const text = item.text;
     if (!text.trim()) throw schemaFailure();
     this.finalMessageCandidates.push({
+      id: item.id,
       phase,
       text
     });
+  }
+  captureTerminalSummaryFinalMessage(items, latestObserved) {
+    if (items.length !== 1) return;
+    const item = requireRecord2(items[0], "turn_summary_item");
+    if (item.type !== "agentMessage") return;
+    const latest = latestObserved ?? this.finalMessageCandidates.at(-1);
+    if (!latest || latest.id !== item.id || latest.phase !== itemFieldOrDefault(item, "phase", null) || latest.text !== item.text) {
+      throw streamFailure();
+    }
+    this.terminalSummaryFinalMessage = latest.text;
   }
   onRawResponseCompleted(params) {
     this.assertTurnFence(params);
@@ -85114,12 +85130,19 @@ var CodexAppServerProtocolClient = class {
     if (!this.turnStarted || this.turnCompleted || !Array.isArray(turn.items)) {
       throw streamFailure();
     }
+    const latestObservedFinalMessage = this.finalMessageCandidates.at(-1);
     this.validateTurnItemSnapshot(turn.items);
     const turnError = turn.error ?? null;
     switch (turn.status) {
       case "completed":
         if (turnError !== null || this.retainedTerminalError !== null) {
           throw streamFailure();
+        }
+        if (turn.itemsView === "summary") {
+          this.captureTerminalSummaryFinalMessage(
+            turn.items,
+            latestObservedFinalMessage
+          );
         }
         if (this.activeItems.size !== 0 && turn.itemsView === "summary") {
           this.reconcileItemsOmittedFromTerminalSummary();
@@ -85167,7 +85190,7 @@ var CodexAppServerProtocolClient = class {
       this.fail(usageFailure());
       return;
     }
-    const finalMessage = selectFinalMessage(this.finalMessageCandidates);
+    const finalMessage = this.terminalSummaryFinalMessage ?? selectFinalMessage(this.finalMessageCandidates);
     if (finalMessage === null) {
       this.fail(schemaFailure());
       return;

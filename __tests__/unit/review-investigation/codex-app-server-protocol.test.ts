@@ -1916,6 +1916,109 @@ describe('CodexAppServerProtocolClient', () => {
     });
   });
 
+  it.each(['reused', 'distinct'])(
+    'accepts the witnessed terminal summary after sequential %s agent message IDs',
+    async (identity) => {
+      const fixture = await activeTurn();
+      completeMessage(fixture.client, 'message', null, 'Inspecting context.');
+      completeMcpToolCall(fixture.client, 'trusted-call');
+      const final = agentMessageItem(
+        identity === 'reused' ? 'message' : 'final',
+        null,
+        '{"ok":true}'
+      );
+      completeMessage(fixture.client, final.id, final.phase, final.text);
+      completeUsage(fixture.client);
+      fixture.client.receive(
+        notification('turn/completed', {
+          threadId,
+          turn: { ...turn('completed'), items: [final], itemsView: 'summary' },
+        })
+      );
+      await expect(fixture.result).resolves.toMatchObject({
+        finalMessage: '{"ok":true}',
+        usage: { inputTokens: 100, outputTokens: 10 },
+      });
+    }
+  );
+
+  it.each(['active', 'cross-type', 'mcp', 'invalid-payload'])(
+    'rejects %s item ID reuse',
+    async (collision) => {
+      const fixture = await activeTurn();
+      let item: Record<string, unknown> = agentMessageItem(
+        'message',
+        null,
+        'next'
+      );
+      if (collision === 'active') {
+        fixture.client.receive(
+          notification('item/started', { threadId, turnId, item })
+        );
+      } else if (collision === 'mcp') {
+        completeMcpToolCall(fixture.client, 'message');
+        item = mcpToolCallItem('message', {
+          status: 'inProgress',
+          result: null,
+          error: null,
+        });
+      } else {
+        completeMessage(fixture.client, 'message', null, 'first');
+        item =
+          collision === 'cross-type'
+            ? { type: 'reasoning', id: 'message', summary: [], content: [] }
+            : { ...item, memoryCitation: { forbidden: true } };
+      }
+      fixture.client.receive(
+        notification('item/started', { threadId, turnId, item })
+      );
+      await expect(fixture.result).rejects.toMatchObject({
+        failureClass: ReviewAgentFailureClass.StreamIncomplete,
+        message: `review_agent_stream_incomplete_item_started_${collision === 'mcp' ? 'mcp_tool_call' : collision === 'cross-type' ? 'reasoning' : 'agent_message'}_${collision === 'active' ? 'id_duplicate_active' : collision === 'invalid-payload' ? 'agent_memory_citation' : 'id_duplicate_completed'}`,
+      });
+    }
+  );
+
+  it.each(['stale-text', 'unseen-id', 'wrong-phase'])(
+    'rejects a terminal summary with %s instead of the latest eligible completion',
+    async (mismatch) => {
+      const fixture = await activeTurn();
+      completeMessage(fixture.client, 'message', null, 'earlier');
+      completeMessage(fixture.client, 'message', null, 'latest');
+      completeUsage(fixture.client);
+      const summary = agentMessageItem(
+        mismatch === 'unseen-id' ? 'unseen' : 'message',
+        mismatch === 'wrong-phase' ? 'final_answer' : null,
+        mismatch === 'stale-text' ? 'earlier' : 'latest'
+      );
+      fixture.client.receive(
+        notification('turn/completed', {
+          threadId,
+          turn: {
+            ...turn('completed'),
+            items: [summary],
+            itemsView: 'summary',
+          },
+        })
+      );
+      await expect(fixture.result).rejects.toMatchObject({
+        failureClass: ReviewAgentFailureClass.StreamIncomplete,
+        message: 'review_agent_stream_incomplete_turn_completed',
+      });
+    }
+  );
+
+  it('preserves non-summary ambiguity after completed agent message ID reuse', async () => {
+    const fixture = await activeTurn();
+    completeMessage(fixture.client, 'message', null, 'earlier');
+    completeMessage(fixture.client, 'message', null, 'latest');
+    completeUsage(fixture.client);
+    completeTurn(fixture.client, [agentMessageItem('message', null, 'latest')]);
+    await expect(fixture.result).rejects.toMatchObject({
+      failureClass: ReviewAgentFailureClass.SchemaInvalidOutput,
+    });
+  });
+
   it('records a fail-closed violation that arrives after turn completion', async () => {
     const fixture = await activeTurn();
     completeMessage(fixture.client, 'final', 'final_answer', '{"ok":true}');

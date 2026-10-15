@@ -1,0 +1,43 @@
+name: Promote Gateway workflow channel
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing exact tag whose producer is already activated in private production
+        required: true
+        type: string
+      expected_current_sha:
+        description: Expected current workflow-v1 ref SHA (compare-and-swap)
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout trusted promotion logic
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install existing YAML parser
+        run: npm ci --ignore-scripts
+      - name: Promote compatible workflow after private producer activation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_VERSION: ${{ inputs.version }}
+          EXPECTED_CURRENT_SHA: ${{ inputs.expected_current_sha }}
+        run: node scripts/promote-workflow-channel.mts

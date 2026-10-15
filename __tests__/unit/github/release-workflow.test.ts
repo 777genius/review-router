@@ -12,9 +12,9 @@ const auditedActionShas: Readonly<Record<string, string>> = {
   'actions/setup-node': '820762786026740c76f36085b0efc47a31fe5020',
 };
 const auditedExternalUseCounts: Readonly<Record<string, number>> = {
-  [checkoutActionReference]: 12,
+  [checkoutActionReference]: 13,
   'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1': 2,
-  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020': 8,
+  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020': 9,
 };
 const checkoutCredentialException = {
   workflow: 'release.yml',
@@ -140,7 +140,7 @@ describe('workflow security and release', () => {
         (total, count) => total + count,
         0
       )
-    ).toBe(22);
+    ).toBe(24);
   });
 
   it('finds semantic uses keys without scanning block scalar text', () => {
@@ -231,6 +231,7 @@ jobs:
     )?.[0];
 
     expect(publishStep).toBeDefined();
+    expect(workflow).not.toContain('workflow-v1');
     expect(publishStep?.match(/\bgit push\b/g)).toHaveLength(1);
     expect(publishStep).toMatch(
       /git push --atomic origin \\\n\s+"refs\/tags\/\$VERSION" \\\n\s+"\+refs\/tags\/\$MAJOR_TAG"/

@@ -447,6 +447,45 @@ async function runAccountGatewayActionInternal(
     },
     observeRelay: (fact) => {
       if (!fact) return;
+      // GITHUB_STEP_SUMMARY is not available through Actions log readback.
+      // Emit only the closed protocol vocabulary, never IDs or upstream text.
+      const code = new Set([
+        'invalid_input',
+        'transport',
+        'invalid_response',
+        'cancelled',
+        'safe_error',
+        'invalid_request',
+        'unauthenticated',
+        'forbidden',
+        'not_found',
+        'conflict',
+        'admission_limited',
+        'upstream_failure',
+        'internal_error',
+        'relay_unknown',
+        'gateway_error',
+        'pending',
+        'authorization_denied',
+        'gateway_unavailable',
+        'relay_saturated',
+        'close_pending',
+        'same_operation_recovery_required',
+        'preparation_denied',
+      ]).has(fact.code)
+        ? fact.code
+        : 'unclassified';
+      const effect = new Set([
+        'not_dispatched',
+        'dispatch_started',
+        'response_started',
+        'completed',
+        'effect_unknown',
+        'rejected_before_dispatch',
+      ]).has(fact.effect)
+        ? fact.effect
+        : 'unclassified';
+      core.warning(`Gateway result: ${code}; effect: ${effect}.`);
       core.setOutput('reviewrouter_gateway_code', fact.code);
       core.setOutput('reviewrouter_gateway_effect', fact.effect);
       if (fact.requestRef)

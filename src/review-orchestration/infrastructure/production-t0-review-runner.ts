@@ -1596,10 +1596,12 @@ export function planAssignments(input: {
     readonly lifecycleTargets: readonly LifecycleTarget[];
   }> = batches.map((batch) => {
     const lifecycleTargets = input.lifecycleTargets.filter((target) =>
-      batch.some(
-        (file) =>
-          target.currentPath === file.filename ||
-          target.originalPath === file.filename
+      batch.some((file) =>
+        [file.filename, file.previousFilename].some(
+          (path) =>
+            path !== undefined &&
+            (target.currentPath === path || target.originalPath === path)
+        )
       )
     );
     return {
@@ -1618,9 +1620,22 @@ export function planAssignments(input: {
       batch.lifecycleTargets.map((target) => target.targetId)
     )
   );
+  // Only omitted current-diff targets are required coverage. Historical targets
+  // outside every changed path remain in fresh inventory as uncertain; they are
+  // not assigned extra provider work or silently treated as resolved.
   const uncoveredLifecycleTargetIds = Object.freeze(
     input.lifecycleTargets
-      .filter((target) => !assignedLifecycleTargetIds.has(target.targetId))
+      .filter(
+        (target) =>
+          !assignedLifecycleTargetIds.has(target.targetId) &&
+          files.some((file) =>
+            [file.filename, file.previousFilename].some(
+              (path) =>
+                path !== undefined &&
+                (target.currentPath === path || target.originalPath === path)
+            )
+          )
+      )
       .map((target) => target.targetId)
       .sort()
   );

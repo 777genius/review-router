@@ -717,6 +717,97 @@ describe('ProductionT0ReviewRunner policy', () => {
     expect(delegate.open).toHaveBeenCalledTimes(1);
   });
 
+  it.each([false, true])(
+    'keeps genuinely off-diff history outside required coverage (empty=%s)',
+    (empty) => {
+      const pr = pullRequest(empty ? [] : ['src/a.ts', 'src/b.ts']);
+      const historical = {
+        targetId: 'historical',
+        threadId: 'thread-old',
+        fingerprint: 'old-fingerprint',
+        severity: 'major' as const,
+        title: 'Old caller defect',
+        message: 'Historical finding',
+        originalPath: '.github/workflows/reviewrouter-codex.yml',
+        parentCommentId: 'comment-old',
+        parentCommentUpdatedAt: '2026-07-22T00:00:00Z',
+        threadCommentCount: 1,
+        viewerCanResolve: true,
+        hasHumanReply: false,
+        trustedAuthor: true,
+      };
+      const changed = {
+        ...historical,
+        targetId: 'changed',
+        originalPath: 'src/b.ts',
+      };
+      const options = {
+        authorization: authorization(1),
+        pr,
+        config: {
+          providers: ['codex/gpt-test'],
+          batchMaxFiles: 1,
+          enableTokenAwareBatching: false,
+          providerRetries: 1,
+        } as ReviewConfig,
+        providerName: 'codex/gpt-test',
+        compatibilityKey: '7'.repeat(64),
+        lifecycleTargets: empty ? [historical] : [historical, changed],
+        liveLifecycleStateHash: '8'.repeat(64),
+      };
+      const planned = planAssignments(options);
+      expect(planned.assignments).toHaveLength(1);
+      expect(
+        planned.assignments.flatMap((a) => a.lifecycleTargets)
+      ).not.toContain(historical);
+      expect(
+        planned.assignments.flatMap((a) =>
+          a.context.files.map((f) => f.filename)
+        )
+      ).not.toContain(historical.originalPath);
+      expect(planned.uncoveredLifecycleTargetIds).toEqual(
+        empty ? [] : ['changed']
+      );
+      expect(
+        planAssignments({
+          ...options,
+          lifecycleTargets: [...options.lifecycleTargets].reverse(),
+        })
+      ).toEqual(planned);
+    }
+  );
+
+  it('keeps a renamed changed-path target assigned rather than classifying it as historical', () => {
+    const pr = pullRequest(['src/new.ts']);
+    pr.files[0].previousFilename = 'src/old.ts';
+    const target = {
+      targetId: 'renamed',
+      threadId: 'thread-old',
+      fingerprint: 'old-fingerprint',
+      severity: 'major' as const,
+      title: 'Old defect',
+      message: 'Historical finding',
+      originalPath: 'src/old.ts',
+      parentCommentId: 'comment-old',
+      parentCommentUpdatedAt: '2026-07-22T00:00:00Z',
+      threadCommentCount: 1,
+      viewerCanResolve: true,
+      hasHumanReply: false,
+      trustedAuthor: true,
+    };
+    const planned = planAssignments({
+      authorization: authorization(1),
+      pr,
+      config: DEFAULT_CONFIG,
+      providerName: 'codex/gpt-test',
+      compatibilityKey: '7'.repeat(64),
+      lifecycleTargets: [target],
+      liveLifecycleStateHash: '8'.repeat(64),
+    });
+    expect(planned.assignments[0].lifecycleTargets).toEqual([target]);
+    expect(planned.uncoveredLifecycleTargetIds).toEqual([]);
+  });
+
   it('never re-merges token-safe groups after max work slots', () => {
     const pr = pullRequest(['src/a.ts', 'src/b.ts', 'src/c.ts']);
     const planned = planAssignments({

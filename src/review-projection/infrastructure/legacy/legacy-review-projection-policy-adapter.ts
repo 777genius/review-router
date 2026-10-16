@@ -261,7 +261,7 @@ export class LegacyReviewProjectionPolicyAdapter
           mode: query.coverage.mode,
           limitations: query.coverage.limitations,
         },
-        lifecycle: lifecycleLinesForSummary(query.occurrences),
+        lifecycle: lifecycleLinesForSummary(query.occurrences, query.lifecycle),
       })
     );
 
@@ -392,18 +392,41 @@ export class LegacyReviewProjectionPolicyAdapter
 }
 
 function lifecycleLinesForSummary(
-  occurrences: readonly FindingOccurrence[]
+  occurrences: readonly FindingOccurrence[],
+  lifecycle?: ProjectReviewPresentationQuery['lifecycle']
 ): ReviewerLifecycleLine[] {
   const lines: ReviewerLifecycleLine[] = [];
+  const representedTargetIds = new Set<string>();
+  const attentionReasons = new Map(
+    (lifecycle?.facts ?? []).map((fact) => [
+      fact.targetId,
+      fact.reasonCodes.includes('human_reply')
+        ? 'human discussion; no automatic resolution'
+        : fact.reasonCodes.includes('outside_review_scope')
+          ? 'outside review scope; not revalidated'
+          : 'resolution not established',
+    ])
+  );
   for (const occurrence of occurrences) {
     const kind = lifecycleKindForSummary(occurrence.state);
     if (!kind) {
       continue;
     }
+    // Only an actually emitted historical line with an unambiguous lineage
+    // join represents a lifecycle target. Current findings are not attention.
+    const matchingFacts = (lifecycle?.facts ?? []).filter(
+      (fact) =>
+        fact.lineageId === occurrence.lineageId &&
+        fact.verdict === LifecycleRevalidationVerdict.Uncertain
+    );
+    const fact = matchingFacts.length === 1 ? matchingFacts[0] : undefined;
+    if (fact) representedTargetIds.add(fact.targetId);
     lines.push({
       kind,
       title: occurrence.title,
-      message: occurrence.message,
+      message: fact
+        ? `${occurrence.message} (${attentionReasons.get(fact.targetId)})`
+        : occurrence.message,
       locationLabel: findingLocationLabel({
         file: occurrence.filePath,
         line: occurrence.line ?? occurrence.endLine ?? 1,
@@ -415,6 +438,27 @@ function lifecycleLinesForSummary(
           : {}),
       }),
     });
+  }
+  for (const fact of lifecycle?.facts ?? []) {
+    if (
+      fact.verdict !== LifecycleRevalidationVerdict.Uncertain ||
+      representedTargetIds.has(fact.targetId)
+    )
+      continue;
+    const target = lifecycle?.targets.find(
+      (candidate) => candidate.targetId === fact.targetId
+    );
+    if (!target) continue;
+    lines.push({
+      kind: 'uncertain',
+      title: target.title,
+      message: `${target.message} (${attentionReasons.get(fact.targetId)})`,
+      locationLabel: findingLocationLabel({
+        file: target.currentPath ?? target.originalPath,
+        line: target.currentLine ?? target.originalLine ?? 1,
+      }),
+    });
+    representedTargetIds.add(fact.targetId);
   }
   return lines;
 }

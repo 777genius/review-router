@@ -1,3 +1,5 @@
+import { DEFAULT_CONFIG } from '../../../src/config/defaults';
+import { LegacyReviewProjectionPolicyAdapter } from '../../../src/review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter';
 import {
   BuildCurrentReviewProjection,
   BuildCurrentReviewProjectionCommand,
@@ -163,6 +165,67 @@ class DeterministicGatePolicy implements ReviewMergeGatePolicyPort {
 }
 
 describe('BuildCurrentReviewProjection', () => {
+  it('keeps same-marker human discussion visible beside a current finding without changing its severity gate', async () => {
+    const inventoryPort = new MutableInventoryPort(
+      inventory({
+        targets: [
+          target({ disposition: LifecycleTargetDisposition.HumanReply }),
+        ],
+      })
+    );
+    const useCase = createUseCase(
+      inventoryPort,
+      testLimits(),
+      new LegacyReviewProjectionPolicyAdapter(DEFAULT_CONFIG)
+    );
+    const result = await useCase.execute(
+      command({ currentFindings: [finding({ trustedMarker: DEFAULT_MARKER })] })
+    );
+    expect(result.envelope.occurrences).toHaveLength(1);
+    expect(result.envelope.occurrences[0]).toMatchObject({
+      state: FindingOccurrenceState.New,
+      severity: FindingSeverity.Major,
+      blocking: true,
+    });
+    expect(result.envelope.mergeGate.conclusion).toBe(MergeGateConclusion.Fail);
+    expect(result.envelope.publishing.summary.allClear).toBe(false);
+    expect(result.envelope.publishing.summary.body).toContain(
+      'Concrete runtime failure'
+    );
+    expect(result.envelope.publishing.summary.body).toContain(
+      'Previous defect'
+    );
+    expect(result.envelope.publishing.summary.body).toContain(
+      'human discussion; no automatic resolution'
+    );
+    expect(result.envelope.publishing.lifecycle[0]).toMatchObject({
+      verdict: LifecycleRevalidationVerdict.Uncertain,
+      mutationEligible: false,
+    });
+  });
+
+  it('does not duplicate historical uncertainty already represented by a lineage occurrence', async () => {
+    const inventoryPort = new MutableInventoryPort(
+      inventory({ targets: [target()] })
+    );
+    const useCase = createUseCase(
+      inventoryPort,
+      testLimits(),
+      new LegacyReviewProjectionPolicyAdapter(DEFAULT_CONFIG)
+    );
+    const result = await useCase.execute(
+      command({ priorLineageHints: [hint({ trustedMarker: DEFAULT_MARKER })] })
+    );
+    expect(result.envelope.occurrences).toHaveLength(1);
+    expect(result.envelope.occurrences[0].state).toBe(
+      FindingOccurrenceState.Uncertain
+    );
+    expect(result.envelope.publishing.summary.allClear).toBe(false);
+    expect(
+      result.envelope.publishing.summary.body.match(/Previous defect/g)
+    ).toHaveLength(1);
+  });
+
   it('keeps full coverage publishable while a current Major finding blocks the merge gate', async () => {
     const result = await createUseCase(
       new MutableInventoryPort(inventory())

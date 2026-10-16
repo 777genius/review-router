@@ -8,9 +8,119 @@ import {
   ReviewPromptPathCoverageKind,
 } from '../../../src/review-orchestration/domain';
 import { createProductionReviewProjectionBuilder } from '../../../src/review-orchestration/infrastructure/production-review-projection';
-import { CheckConclusion } from '../../../src/review-projection/domain';
+import {
+  CheckConclusion,
+  FindingSeverity,
+  LifecycleTargetDisposition,
+} from '../../../src/review-projection/domain';
 
 describe('production review projection coverage', () => {
+  it.each([
+    LifecycleTargetDisposition.Active,
+    LifecycleTargetDisposition.HumanReply,
+  ])(
+    'retains off-diff %s history visibly without failing complete current coverage',
+    async (disposition) => {
+      const target = {
+        targetId: 'old-caller',
+        threadId: 'thread-old',
+        trustedMarker: 'a'.repeat(24),
+        title: 'Old caller lifecycle finding',
+        message: 'The obsolete caller used the wrong runtime.',
+        severity: FindingSeverity.Major,
+        originalPath: '.github/workflows/reviewrouter-codex.yml',
+        parentCommentUpdatedAt: '2026-07-22T00:00:00Z',
+        threadCommentCount: 1,
+        threadStateHash: 'a'.repeat(64),
+        disposition,
+        viewerCanResolve: true,
+      };
+      const inventory = completeLifecycleInventory();
+      const load = jest
+        .spyOn(inventory, 'loadCurrent')
+        .mockImplementation(async () => ({
+          inventoryVersion: 'review_lifecycle_inventory.v1',
+          loadedForHeadSha: authorizationFacts.headSha,
+          lifecycleStateHash: 'state',
+          commandLedgerWatermark: 'ledger',
+          complete: true,
+          warnings: [],
+          targets: [target],
+        }));
+      const builder = createProductionReviewProjectionBuilder({
+        authorizationFacts,
+        pr,
+        config: DEFAULT_CONFIG,
+        protocolLimits,
+        assignments: [assignment('required-slot', true)],
+        uncoveredPaths: [],
+        uncoveredLifecycleTargetIds: [],
+        lifecycleInventory: inventory,
+      });
+      const result = await builder.build({
+        acceptedEvidence: [
+          acceptedEvidence(
+            'required-slot',
+            fullCoverageManifest('required-slot')
+          ),
+        ],
+        exhaustedWorkSlotIds: [],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      });
+      const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(envelope.coverage.state).toBe('complete');
+      expect(envelope.occurrences).toEqual([]);
+      expect(envelope.publishing.summary.allClear).toBe(false);
+      expect(envelope.publishing.summary.body).toContain(target.title);
+      expect(envelope.publishing.summary.body).toContain(target.originalPath);
+      expect(envelope.publishing.summary.body).toContain(
+        disposition === LifecycleTargetDisposition.HumanReply
+          ? 'human discussion'
+          : 'outside review scope'
+      );
+      expect(envelope.publishing.summary.body).not.toMatch(/all clear/i);
+      expect(envelope.publishing.lifecycle).toEqual([
+        expect.objectContaining({
+          targetId: target.targetId,
+          verdict: 'uncertain',
+          mutationEligible: false,
+          reasonCodes: expect.arrayContaining(['outside_review_scope']),
+        }),
+      ]);
+    }
+  );
+
+  it('still rejects required lifecycle coverage omitted by the current-diff plan', async () => {
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts,
+      pr,
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [assignment('required-slot', true)],
+      uncoveredPaths: [],
+      uncoveredLifecycleTargetIds: ['current-diff-target'],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const result = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence(
+          'required-slot',
+          fullCoverageManifest('required-slot')
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+    expect(envelope.coverage.state).toBe('partial');
+    expect(envelope.coverage.limitations).toContain(
+      'lifecycle_target_uncovered:current-diff-target'
+    );
+    expect(envelope.publishing.summary.allClear).toBe(false);
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+  });
+
   it('reports one successful required provider slot as 1/1', async () => {
     const builder = projectionBuilder([assignment('required-slot', true)]);
     const manifest = fullCoverageManifest('required-slot');

@@ -6,6 +6,8 @@ import {
   FindingPlacementDecision,
   FindingSeverity,
   LifecycleProjectionDecision,
+  LiveLifecycleTarget,
+  ReviewProjectionLifecycleFact,
   LifecycleRevalidation,
   MergeGateConclusion,
   PriorLineageHint,
@@ -55,6 +57,10 @@ export interface ReviewLifecyclePolicyPort {
 }
 
 export interface ProjectReviewPresentationQuery {
+  readonly lifecycle?: {
+    readonly targets: readonly LiveLifecycleTarget[];
+    readonly facts: readonly ReviewProjectionLifecycleFact[];
+  };
   readonly scope: ReviewProjectionScope;
   readonly presentation: ReviewProjectionPresentationContext;
   readonly providerExecution: ProviderExecutionSummaryFact;

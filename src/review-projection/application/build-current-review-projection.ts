@@ -157,21 +157,6 @@ export class BuildCurrentReviewProjection {
     validateGateDecision(occurrences, gate);
     occurrences = applyBlockingDecision(occurrences, gate);
 
-    const presentation =
-      await this.dependencies.presentationPolicy.projectPresentation({
-        scope: command.scope,
-        presentation: command.presentation,
-        providerExecution: command.providerExecution,
-        coverage,
-        occurrences,
-        revisionFiles: command.revisionFiles,
-        limits: this.limits,
-      });
-    occurrences = applyPlacementDecisions(occurrences, presentation.placements);
-
-    const coverageOnly = coverage.state === ProjectionCoverageState.Partial;
-    const allClear =
-      !coverageOnly && canClaimAllClear(coverage, inventory, occurrences, gate);
     // Preserve target identities even for partial coverage so the control plane
     // can prove that live lifecycle state is still the state this projection saw.
     // buildLifecycleFacts already makes every partial-coverage target ineligible
@@ -181,8 +166,27 @@ export class BuildCurrentReviewProjection {
       lifecycleDecisions,
       command.priorLineageHints,
       coverage,
-      occurrences
+      occurrences,
+      command.revisionFiles
     );
+
+    const presentation =
+      await this.dependencies.presentationPolicy.projectPresentation({
+        scope: command.scope,
+        presentation: command.presentation,
+        providerExecution: command.providerExecution,
+        coverage,
+        occurrences,
+        lifecycle: { targets: inventory.targets, facts: lifecycleFacts },
+        revisionFiles: command.revisionFiles,
+        limits: this.limits,
+      });
+    occurrences = applyPlacementDecisions(occurrences, presentation.placements);
+
+    const coverageOnly = coverage.state === ProjectionCoverageState.Partial;
+    const allClear =
+      !coverageOnly &&
+      canClaimAllClear(coverage, inventory, occurrences, gate, lifecycleFacts);
     const inlineChunks = coverageOnly
       ? []
       : buildInlineChunks(occurrences, this.limits);
@@ -587,7 +591,8 @@ function buildLifecycleFacts(
   decisions: readonly LifecycleProjectionDecision[],
   hints: readonly PriorLineageHint[],
   coverage: ReviewCoverageFact,
-  occurrences: readonly FindingOccurrence[]
+  occurrences: readonly FindingOccurrence[],
+  revisionFiles: readonly RevisionFile[]
 ): ReviewProjectionLifecycleFact[] {
   const decisionByTarget = new Map(
     decisions.map((decision) => [decision.targetId, decision])
@@ -619,6 +624,15 @@ function buildLifecycleFacts(
           : (decision?.verdict ?? LifecycleRevalidationVerdict.Uncertain);
       const reasonCodes = sortedUnique([
         ...(decision?.reasonCodes ?? []),
+        ...(!revisionFiles.some((file) =>
+          [file.path, file.previousPath].some(
+            (path) =>
+              path !== undefined &&
+              (target.currentPath === path || target.originalPath === path)
+          )
+        )
+          ? ['outside_review_scope']
+          : []),
         ...(target.disposition === LifecycleTargetDisposition.HumanReply
           ? ['human_reply']
           : []),
@@ -721,12 +735,18 @@ function canClaimAllClear(
   coverage: ReviewCoverageFact,
   inventory: CurrentLifecycleInventory,
   occurrences: readonly FindingOccurrence[],
-  gate: MergeGateDecision
+  gate: MergeGateDecision,
+  lifecycleFacts: readonly ReviewProjectionLifecycleFact[]
 ): boolean {
   return (
     coverage.state === ProjectionCoverageState.Complete &&
     inventory.complete &&
     gate.conclusion === MergeGateConclusion.Pass &&
+    lifecycleFacts.every(
+      (fact) =>
+        fact.verdict === LifecycleRevalidationVerdict.Resolved ||
+        fact.verdict === 'suppressed_by_human'
+    ) &&
     occurrences.every(
       (occurrence) =>
         occurrence.state === FindingOccurrenceState.Resolved ||

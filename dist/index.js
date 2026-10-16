@@ -52378,7 +52378,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.177",
+  version: "1.0.178",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -111516,25 +111516,27 @@ var BuildCurrentReviewProjection = class {
     });
     validateGateDecision(occurrences, gate);
     occurrences = applyBlockingDecision(occurrences, gate);
+    const lifecycleFacts = buildLifecycleFacts(
+      inventory,
+      lifecycleDecisions,
+      command.priorLineageHints,
+      coverage,
+      occurrences,
+      command.revisionFiles
+    );
     const presentation = await this.dependencies.presentationPolicy.projectPresentation({
       scope: command.scope,
       presentation: command.presentation,
       providerExecution: command.providerExecution,
       coverage,
       occurrences,
+      lifecycle: { targets: inventory.targets, facts: lifecycleFacts },
       revisionFiles: command.revisionFiles,
       limits: this.limits
     });
     occurrences = applyPlacementDecisions(occurrences, presentation.placements);
     const coverageOnly = coverage.state === "partial" /* Partial */;
-    const allClear = !coverageOnly && canClaimAllClear(coverage, inventory, occurrences, gate);
-    const lifecycleFacts = buildLifecycleFacts(
-      inventory,
-      lifecycleDecisions,
-      command.priorLineageHints,
-      coverage,
-      occurrences
-    );
+    const allClear = !coverageOnly && canClaimAllClear(coverage, inventory, occurrences, gate, lifecycleFacts);
     const inlineChunks = coverageOnly ? [] : buildInlineChunks(occurrences, this.limits);
     const summaryBody = coverageOnly ? [
       "ReviewRouter did not complete required coverage. Preliminary findings are preserved below; inline comments and lifecycle changes were held back.",
@@ -111856,7 +111858,7 @@ function buildInlineChunks(occurrences, limits) {
   assertWithinProjectionLimit("maxInlineChunks", chunks.length, limits);
   return chunks;
 }
-function buildLifecycleFacts(inventory, decisions, hints, coverage, occurrences) {
+function buildLifecycleFacts(inventory, decisions, hints, coverage, occurrences, revisionFiles) {
   const decisionByTarget = new Map(
     decisions.map((decision) => [decision.targetId, decision])
   );
@@ -111874,6 +111876,11 @@ function buildLifecycleFacts(inventory, decisions, hints, coverage, occurrences)
     const verdict = suppressed ? "suppressed_by_human" : trustedResolved ? "resolved" /* Resolved */ : decision?.verdict ?? "uncertain" /* Uncertain */;
     const reasonCodes = sortedUnique2([
       ...decision?.reasonCodes ?? [],
+      ...!revisionFiles.some(
+        (file) => [file.path, file.previousPath].some(
+          (path31) => path31 !== void 0 && (target.currentPath === path31 || target.originalPath === path31)
+        )
+      ) ? ["outside_review_scope"] : [],
       ...target.disposition === "human_reply" /* HumanReply */ ? ["human_reply"] : [],
       ...suppressed ? ["command_dismissed"] : [],
       ...trustedResolved ? ["trusted_resolution_marker"] : [],
@@ -111937,8 +111944,10 @@ function normalizeCoverage(coverage, inventory) {
     limitations
   });
 }
-function canClaimAllClear(coverage, inventory, occurrences, gate) {
-  return coverage.state === "complete" /* Complete */ && inventory.complete && gate.conclusion === "pass" /* Pass */ && occurrences.every(
+function canClaimAllClear(coverage, inventory, occurrences, gate, lifecycleFacts) {
+  return coverage.state === "complete" /* Complete */ && inventory.complete && gate.conclusion === "pass" /* Pass */ && lifecycleFacts.every(
+    (fact) => fact.verdict === "resolved" /* Resolved */ || fact.verdict === "suppressed_by_human"
+  ) && occurrences.every(
     (occurrence) => occurrence.state === "resolved" /* Resolved */ || occurrence.state === "suppressed_by_human" /* SuppressedByHuman */
   );
 }
@@ -112279,7 +112288,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
           mode: query.coverage.mode,
           limitations: query.coverage.limitations
         },
-        lifecycle: lifecycleLinesForSummary(query.occurrences)
+        lifecycle: lifecycleLinesForSummary(query.occurrences, query.lifecycle)
       })
     );
     return {
@@ -112380,17 +112389,29 @@ var LegacyReviewProjectionPolicyAdapter = class {
     };
   }
 };
-function lifecycleLinesForSummary(occurrences) {
+function lifecycleLinesForSummary(occurrences, lifecycle) {
   const lines = [];
+  const representedTargetIds = /* @__PURE__ */ new Set();
+  const attentionReasons = new Map(
+    (lifecycle?.facts ?? []).map((fact) => [
+      fact.targetId,
+      fact.reasonCodes.includes("human_reply") ? "human discussion; no automatic resolution" : fact.reasonCodes.includes("outside_review_scope") ? "outside review scope; not revalidated" : "resolution not established"
+    ])
+  );
   for (const occurrence of occurrences) {
     const kind = lifecycleKindForSummary(occurrence.state);
     if (!kind) {
       continue;
     }
+    const matchingFacts = (lifecycle?.facts ?? []).filter(
+      (fact2) => fact2.lineageId === occurrence.lineageId && fact2.verdict === "uncertain" /* Uncertain */
+    );
+    const fact = matchingFacts.length === 1 ? matchingFacts[0] : void 0;
+    if (fact) representedTargetIds.add(fact.targetId);
     lines.push({
       kind,
       title: occurrence.title,
-      message: occurrence.message,
+      message: fact ? `${occurrence.message} (${attentionReasons.get(fact.targetId)})` : occurrence.message,
       locationLabel: findingLocationLabel({
         file: occurrence.filePath,
         line: occurrence.line ?? occurrence.endLine ?? 1,
@@ -112398,6 +112419,24 @@ function lifecycleLinesForSummary(occurrences) {
         ...occurrence.endLine !== void 0 ? { endLine: occurrence.endLine } : {}
       })
     });
+  }
+  for (const fact of lifecycle?.facts ?? []) {
+    if (fact.verdict !== "uncertain" /* Uncertain */ || representedTargetIds.has(fact.targetId))
+      continue;
+    const target = lifecycle?.targets.find(
+      (candidate) => candidate.targetId === fact.targetId
+    );
+    if (!target) continue;
+    lines.push({
+      kind: "uncertain",
+      title: target.title,
+      message: `${target.message} (${attentionReasons.get(fact.targetId)})`,
+      locationLabel: findingLocationLabel({
+        file: target.currentPath ?? target.originalPath,
+        line: target.currentLine ?? target.originalLine ?? 1
+      })
+    });
+    representedTargetIds.add(fact.targetId);
   }
   return lines;
 }
@@ -116348,7 +116387,9 @@ function planAssignments(input) {
   const plannedBatches = batches.map((batch) => {
     const lifecycleTargets = input.lifecycleTargets.filter(
       (target) => batch.some(
-        (file) => target.currentPath === file.filename || target.originalPath === file.filename
+        (file) => [file.filename, file.previousFilename].some(
+          (path31) => path31 !== void 0 && (target.currentPath === path31 || target.originalPath === path31)
+        )
       )
     );
     return {
@@ -116368,7 +116409,13 @@ function planAssignments(input) {
     )
   );
   const uncoveredLifecycleTargetIds = Object.freeze(
-    input.lifecycleTargets.filter((target) => !assignedLifecycleTargetIds.has(target.targetId)).map((target) => target.targetId).sort()
+    input.lifecycleTargets.filter(
+      (target) => !assignedLifecycleTargetIds.has(target.targetId) && files.some(
+        (file) => [file.filename, file.previousFilename].some(
+          (path31) => path31 !== void 0 && (target.currentPath === path31 || target.originalPath === path31)
+        )
+      )
+    ).map((target) => target.targetId).sort()
   );
   const attemptBudget = resolveT0AttemptBudget(
     input.config.providerRetries,

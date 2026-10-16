@@ -52398,7 +52398,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.180",
+  version: "1.0.181",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -117294,6 +117294,39 @@ async function runAccountGatewayActionInternal(options = {}) {
     },
     observeRelay: (fact) => {
       if (!fact) return;
+      const code = (/* @__PURE__ */ new Set([
+        "invalid_input",
+        "transport",
+        "invalid_response",
+        "cancelled",
+        "safe_error",
+        "invalid_request",
+        "unauthenticated",
+        "forbidden",
+        "not_found",
+        "conflict",
+        "admission_limited",
+        "upstream_failure",
+        "internal_error",
+        "relay_unknown",
+        "gateway_error",
+        "pending",
+        "authorization_denied",
+        "gateway_unavailable",
+        "relay_saturated",
+        "close_pending",
+        "same_operation_recovery_required",
+        "preparation_denied"
+      ])).has(fact.code) ? fact.code : "unclassified";
+      const effect = (/* @__PURE__ */ new Set([
+        "not_dispatched",
+        "dispatch_started",
+        "response_started",
+        "completed",
+        "effect_unknown",
+        "rejected_before_dispatch"
+      ])).has(fact.effect) ? fact.effect : "unclassified";
+      warning(`Gateway result: ${code}; effect: ${effect}.`);
       setOutput("reviewrouter_gateway_code", fact.code);
       setOutput("reviewrouter_gateway_effect", fact.effect);
       if (fact.requestRef)

@@ -99,12 +99,30 @@ describe('PromptBuilder', () => {
       expect(prompt).toContain('{"findings":[],"revalidations":[]}');
     });
 
-    it('separates investigation context from the legacy terminal output contract', async () => {
+    it('shares causal review rules while separating the legacy terminal output contract', async () => {
       const builder = new PromptBuilder(DEFAULT_CONFIG);
       const prepared = await builder.buildPreparedV2(mockPR);
 
       expect(prepared.prompt).toContain('Return ONLY one valid JSON object');
       expect(prepared.prompt).toContain('SUGGESTION FIELD');
+      for (const prompt of [
+        prepared.prompt,
+        prepared.investigationContextPrompt,
+      ]) {
+        expect(prompt).toContain(
+          'material failures introduced or aggravated by this base-to-head change'
+        );
+        expect(prompt).toContain('compare before and after');
+        expect(prompt).toContain(
+          'Exclude unchanged pre-existing bugs and residual behavior in partial fixes without a causal change.'
+        );
+        expect(prompt).toContain(
+          'A new supported input/path or an explicit contract change can expose an old fault and make it reportable'
+        );
+        expect(prompt).toContain(
+          'Briefly state the causal base-to-head change and reachable failure path in each finding message.'
+        );
+      }
       expect(prepared.investigationContextPrompt).not.toContain(
         'Return ONLY one valid JSON object'
       );

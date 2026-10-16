@@ -23325,7 +23325,7 @@ var ConfigLoader = class {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.181",
+  version: "1.0.182",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -65118,6 +65118,8 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   // without satisfying that event wait.
   idleMs: 3e5,
   controlMs: 3e4,
+  waitBudgetMs: 12e4,
+  maxWaits: 128,
   inFlight: 1,
   localConnections: 4,
   cliOutputBytes: 8388608

@@ -5,8 +5,10 @@ import {
   type IncomingMessage,
 } from 'http';
 import { request as httpsRequest } from 'https';
+import { performance } from 'perf_hooks';
 import { Readable, Transform } from 'stream';
 import { pipeline } from 'stream/promises';
+import { setTimeout as wait } from 'timers/promises';
 
 const BASE = '/api/action/v2/account-gateway';
 export const LOCAL_MODEL_CAPABILITY_ENV = 'REVIEWROUTER_LOCAL_MODEL_TOKEN';
@@ -22,6 +24,8 @@ export const ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   // without satisfying that event wait.
   idleMs: 300_000,
   controlMs: 30_000,
+  waitBudgetMs: 120_000,
+  maxWaits: 128,
   inFlight: 1,
   localConnections: 4,
   cliOutputBytes: 8_388_608,
@@ -217,26 +221,77 @@ export class AccountGatewayModelTransport {
     };
     let responseReceived = false;
     let httpStatus: number | null = null;
+    let currentRequestRef: string | undefined;
     try {
-      const response = await this.request(
-        'POST',
-        `${BASE}/responses`,
-        body,
-        controller.signal
-      );
+      const waitUntil = performance.now() + ACCOUNT_GATEWAY_BOUNDS.waitBudgetMs;
+      let waits = 0;
+      let response: IncomingMessage;
+      let denial: Buffer | undefined;
+      for (;;) {
+        if (this.terminal || this.inferenceDenied)
+          throw new Error('account_gateway_inference_denied');
+        responseReceived = false;
+        httpStatus = null;
+        currentRequestRef = undefined;
+        denial = undefined;
+        // Admission/model headers retain the existing whole-request deadline.
+        response = await this.request(
+          'POST',
+          `${BASE}/responses`,
+          body,
+          controller.signal
+        );
+        responseReceived = true;
+        httpStatus = response.statusCode ?? 502;
+        currentRequestRef = safeReference(
+          response.headers['x-reviewrouter-request-ref']
+        );
+        if (currentRequestRef) this.requestRef = currentRequestRef;
+        if (httpStatus === 200) break;
+        // Only a non-200 body's drainage receives the short control bound.
+        const controlTimer = setTimeout(
+          abort,
+          ACCOUNT_GATEWAY_BOUNDS.controlMs
+        );
+        try {
+          denial = await boundedBytes(
+            response,
+            ACCOUNT_GATEWAY_BOUNDS.jsonBytes,
+            controller.signal
+          );
+          if (!response.complete)
+            throw new Error('account_gateway_transport_unknown');
+        } finally {
+          clearTimeout(controlTimer);
+        }
+        // Only this fixed-origin, pre-request positive denial permits another
+        // POST. Unknown effects and any request reference remain terminal.
+        if (
+          httpStatus !== 503 ||
+          response.headers['x-reviewrouter-request-ref'] !== undefined ||
+          !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+            response.headers['content-type'] ?? ''
+          ) ||
+          denial === undefined ||
+          !relaySaturated(denial) ||
+          waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits ||
+          performance.now() + 1000 > waitUntil
+        )
+          break;
+        await wait(1000, undefined, { signal: controller.signal });
+        waits++;
+        if (performance.now() >= waitUntil) break;
+      }
       const status = response.statusCode ?? 502;
       responseReceived = true;
       httpStatus = status;
       if (status !== 200)
         observeTransport(this.observe, 'upstream_headers', true, status);
       const contentType = response.headers['content-type'] ?? '';
-      const requestRef = safeReference(
-        response.headers['x-reviewrouter-request-ref']
-      );
-      if (requestRef) this.requestRef = requestRef;
+      const requestRef = currentRequestRef;
       const isStream =
         status === 200 && /^text\/event-stream(?:\s*;.*)?$/i.test(contentType);
-      // Even pending/LOCAL busy is terminal to this consumer. The RR server alone waits.
+      // Every final non-stream response remains terminal to this consumer.
       if (!isStream) this.inferenceDenied = true;
       if (status === 200 && !isStream)
         throw new Error('account_gateway_invalid_stream');
@@ -279,10 +334,11 @@ export class AccountGatewayModelTransport {
         },
       });
       let upstreamIdleExpired = false;
-      response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, () => {
-        upstreamIdleExpired = true;
-        abort();
-      });
+      if (isStream)
+        response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, () => {
+          upstreamIdleExpired = true;
+          abort();
+        });
       let terminalCancellation = false;
       let streamFailureObserved = false;
       const fail = (error: unknown) => {
@@ -332,7 +388,9 @@ export class AccountGatewayModelTransport {
       bounded.once('end', dispose);
       bounded.once('close', dispose);
       // pipeline supplies backpressure and tears down both streams on failure/cancel.
-      void pipeline(response, bounded, { signal: controller.signal }).then(
+      void pipeline(isStream ? response : Readable.from([denial!]), bounded, {
+        signal: controller.signal,
+      }).then(
         () => {
           if (!isStream) {
             this.failure = failureFact(
@@ -378,7 +436,11 @@ export class AccountGatewayModelTransport {
         error
       );
       this.inferenceDenied = true;
-      this.failure ??= { code: 'transport', effect: 'effect_unknown' };
+      this.failure ??= {
+        code: 'transport',
+        effect: 'effect_unknown',
+        ...(currentRequestRef ? { requestRef: currentRequestRef } : {}),
+      };
       controller.abort();
       dispose();
       throw new Error('account_gateway_transport_unknown');
@@ -708,6 +770,19 @@ function safeReference(value: unknown): string | undefined {
   return typeof value === 'string' && /^[A-Za-z0-9._~-]{1,200}$/.test(value)
     ? value
     : undefined;
+}
+function relaySaturated(bytes: Buffer): boolean {
+  try {
+    // Closed JSON envelope: no extra fields, duplicate keys or requestRef.
+    const space = '[ \\t\\r\\n]*';
+    const code = `"code"${space}:${space}"relay_saturated"`;
+    const effect = `"effect"${space}:${space}"not_dispatched"`;
+    return new RegExp(
+      `^${space}\\{${space}"error"${space}:${space}\\{${space}(?:${code}${space},${space}${effect}|${effect}${space},${space}${code})${space}\\}${space}\\}${space}$`
+    ).test(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
+    return false;
+  }
 }
 function failureFact(
   bytes: Buffer,

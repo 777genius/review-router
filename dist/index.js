@@ -22622,8 +22622,10 @@ async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfig
 var import_crypto = require("crypto");
 var import_http = require("http");
 var import_https = require("https");
+var import_perf_hooks = require("perf_hooks");
 var import_stream = require("stream");
 var import_promises = require("stream/promises");
+var import_promises2 = require("timers/promises");
 var BASE = "/api/action/v2/account-gateway";
 var LOCAL_MODEL_CAPABILITY_ENV = "REVIEWROUTER_LOCAL_MODEL_TOKEN";
 var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
@@ -22637,6 +22639,8 @@ var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   // without satisfying that event wait.
   idleMs: 3e5,
   controlMs: 3e4,
+  waitBudgetMs: 12e4,
+  maxWaits: 128,
   inFlight: 1,
   localConnections: 4,
   cliOutputBytes: 8388608
@@ -22723,23 +22727,62 @@ var AccountGatewayModelTransport = class {
     };
     let responseReceived = false;
     let httpStatus = null;
+    let currentRequestRef;
     try {
-      const response = await this.request(
-        "POST",
-        `${BASE}/responses`,
-        body,
-        controller.signal
-      );
+      const waitUntil = import_perf_hooks.performance.now() + ACCOUNT_GATEWAY_BOUNDS.waitBudgetMs;
+      let waits = 0;
+      let response;
+      let denial;
+      for (; ; ) {
+        if (this.terminal || this.inferenceDenied)
+          throw new Error("account_gateway_inference_denied");
+        responseReceived = false;
+        httpStatus = null;
+        currentRequestRef = void 0;
+        denial = void 0;
+        response = await this.request(
+          "POST",
+          `${BASE}/responses`,
+          body,
+          controller.signal
+        );
+        responseReceived = true;
+        httpStatus = response.statusCode ?? 502;
+        currentRequestRef = safeReference(
+          response.headers["x-reviewrouter-request-ref"]
+        );
+        if (currentRequestRef) this.requestRef = currentRequestRef;
+        if (httpStatus === 200) break;
+        const controlTimer = setTimeout(
+          abort,
+          ACCOUNT_GATEWAY_BOUNDS.controlMs
+        );
+        try {
+          denial = await boundedBytes(
+            response,
+            ACCOUNT_GATEWAY_BOUNDS.jsonBytes,
+            controller.signal
+          );
+          if (!response.complete)
+            throw new Error("account_gateway_transport_unknown");
+        } finally {
+          clearTimeout(controlTimer);
+        }
+        if (httpStatus !== 503 || response.headers["x-reviewrouter-request-ref"] !== void 0 || !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+          response.headers["content-type"] ?? ""
+        ) || denial === void 0 || !relaySaturated(denial) || waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits || import_perf_hooks.performance.now() + 1e3 > waitUntil)
+          break;
+        await (0, import_promises2.setTimeout)(1e3, void 0, { signal: controller.signal });
+        waits++;
+        if (import_perf_hooks.performance.now() >= waitUntil) break;
+      }
       const status = response.statusCode ?? 502;
       responseReceived = true;
       httpStatus = status;
       if (status !== 200)
         observeTransport(this.observe, "upstream_headers", true, status);
       const contentType = response.headers["content-type"] ?? "";
-      const requestRef = safeReference(
-        response.headers["x-reviewrouter-request-ref"]
-      );
-      if (requestRef) this.requestRef = requestRef;
+      const requestRef = currentRequestRef;
       const isStream = status === 200 && /^text\/event-stream(?:\s*;.*)?$/i.test(contentType);
       if (!isStream) this.inferenceDenied = true;
       if (status === 200 && !isStream)
@@ -22776,10 +22819,11 @@ var AccountGatewayModelTransport = class {
         }
       });
       let upstreamIdleExpired = false;
-      response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, () => {
-        upstreamIdleExpired = true;
-        abort();
-      });
+      if (isStream)
+        response.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, () => {
+          upstreamIdleExpired = true;
+          abort();
+        });
       let terminalCancellation = false;
       let streamFailureObserved = false;
       const fail = (error2) => {
@@ -22815,7 +22859,9 @@ var AccountGatewayModelTransport = class {
       bounded.once("error", fail);
       bounded.once("end", dispose);
       bounded.once("close", dispose);
-      void (0, import_promises.pipeline)(response, bounded, { signal: controller.signal }).then(
+      void (0, import_promises.pipeline)(isStream ? response : import_stream.Readable.from([denial]), bounded, {
+        signal: controller.signal
+      }).then(
         () => {
           if (!isStream) {
             this.failure = failureFact(
@@ -22852,7 +22898,11 @@ var AccountGatewayModelTransport = class {
         error2
       );
       this.inferenceDenied = true;
-      this.failure ??= { code: "transport", effect: "effect_unknown" };
+      this.failure ??= {
+        code: "transport",
+        effect: "effect_unknown",
+        ...currentRequestRef ? { requestRef: currentRequestRef } : {}
+      };
       controller.abort();
       dispose();
       throw new Error("account_gateway_transport_unknown");
@@ -23118,6 +23168,18 @@ async function boundedBytes(body, maximum, signal) {
 }
 function safeReference(value) {
   return typeof value === "string" && /^[A-Za-z0-9._~-]{1,200}$/.test(value) ? value : void 0;
+}
+function relaySaturated(bytes) {
+  try {
+    const space = "[ \\t\\r\\n]*";
+    const code = `"code"${space}:${space}"relay_saturated"`;
+    const effect = `"effect"${space}:${space}"not_dispatched"`;
+    return new RegExp(
+      `^${space}\\{${space}"error"${space}:${space}\\{${space}(?:${code}${space},${space}${effect}|${effect}${space},${space}${code})${space}\\}${space}\\}${space}$`
+    ).test(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return false;
+  }
 }
 function failureFact(bytes, ref) {
   try {
@@ -52398,7 +52460,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.181",
+  version: "1.0.182",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -93733,7 +93795,7 @@ async function superviseLease(input) {
     abort.abort(error2);
     rejectLeaseFailure(error2);
   };
-  const wait = (delayMs) => new Promise((resolve5) => {
+  const wait2 = (delayMs) => new Promise((resolve5) => {
     const timer = setTimeout(resolve5, delayMs);
     timer.unref?.();
     wake = () => {
@@ -93749,7 +93811,7 @@ async function superviseLease(input) {
         return;
       }
       const atCeiling = Date.parse(currentLease.expiresAt) >= Date.parse(currentLease.resultReportUntil);
-      await wait(
+      await wait2(
         atCeiling ? remaining : Math.min(3e4, Math.max(1e3, Math.floor(remaining / 2)))
       );
       if (stopped) return;
@@ -104836,11 +104898,11 @@ function assertSafeOwnerRepoPart(value, label) {
 }
 
 // src/codex-oauth/terminal-outcome-publication.ts
-var import_promises2 = require("node:timers/promises");
+var import_promises3 = require("node:timers/promises");
 function createPublicationGitHubClient(token, options = {}) {
   const client = new GitHubClient(token, {
     sleep: async (ms) => {
-      await (0, import_promises2.setTimeout)(ms, void 0, { signal: options.signal });
+      await (0, import_promises3.setTimeout)(ms, void 0, { signal: options.signal });
     }
   });
   if (options.signal || options.timeoutMs) {
@@ -105247,7 +105309,7 @@ var import_crypto42 = require("crypto");
 var import_child_process20 = require("child_process");
 var path29 = __toESM(require("path"));
 var import_util14 = require("util");
-var import_promises10 = require("node:timers/promises");
+var import_promises11 = require("node:timers/promises");
 
 // src/review-investigation/fixtures/review-investigation-capability-v1.golden.json
 var review_investigation_capability_v1_golden_default = {
@@ -106927,7 +106989,7 @@ var CooperativeReviewLeaseSupervisor = class {
       abort.abort(error2);
       rejectLeaseFailure(error2);
     };
-    const wait = async (delayMs) => {
+    const wait2 = async (delayMs) => {
       await new Promise((resolve5) => {
         const timer = setTimeout(resolve5, delayMs);
         timer.unref?.();
@@ -106944,7 +107006,7 @@ var CooperativeReviewLeaseSupervisor = class {
           failLease(new Error("review_action_v2_lease_expired"));
           return;
         }
-        await wait(
+        await wait2(
           currentLease.renewalCeilingReached ? remaining : Math.min(3e4, Math.max(1e3, Math.floor(remaining / 2)))
         );
         if (stopped) return;
@@ -107030,7 +107092,7 @@ function compareCodeUnits4(left, right) {
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
 var import_child_process16 = require("child_process");
 var import_crypto34 = require("crypto");
-var import_promises5 = require("fs/promises");
+var import_promises6 = require("fs/promises");
 var os10 = __toESM(require("os"));
 var path24 = __toESM(require("path"));
 var import_util10 = require("util");
@@ -107390,7 +107452,7 @@ function gitOptions(root, encoding) {
 
 // src/context-gateway/context-gateway-v4-replay-material.ts
 var import_crypto32 = require("crypto");
-var import_promises3 = require("fs/promises");
+var import_promises4 = require("fs/promises");
 var import_path4 = __toESM(require("path"));
 var MAX_ENTRIES = 2e3;
 var MAX_STATE_BYTES = 2 * 1024 * 1024;
@@ -107405,12 +107467,12 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
   entries = [];
   mutationTail = Promise.resolve();
   async initialize() {
-    await (0, import_promises3.mkdir)(import_path4.default.dirname(this.config.replayMaterialPath), {
+    await (0, import_promises4.mkdir)(import_path4.default.dirname(this.config.replayMaterialPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises3.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises4.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -107424,7 +107486,7 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
     if (this.entries.length > 0) {
       throw new Error("context_gateway_v4_replay_already_active");
     }
-    const encrypted = await (0, import_promises3.readFile)(this.config.replayMaterialPath, "utf8");
+    const encrypted = await (0, import_promises4.readFile)(this.config.replayMaterialPath, "utf8");
     const raw = decryptContextGatewayV4ReplayMaterial({
       encryptedCanonicalJson: encrypted,
       secret: this.config.secret,
@@ -107641,15 +107703,15 @@ function isRecord7(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 async function atomicPrivateWrite(target, content) {
-  await (0, import_promises3.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises4.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto32.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises3.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises3.rename)(temporary, target);
+  await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises4.rename)(temporary, target);
 }
 
 // src/context-gateway/context-gateway-v4-recorder.ts
 var import_crypto33 = require("crypto");
-var import_promises4 = require("fs/promises");
+var import_promises5 = require("fs/promises");
 var import_path5 = __toESM(require("path"));
 var MAX_EVENTS = 2e3;
 var CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
@@ -107670,12 +107732,12 @@ var ContextGatewayV4Recorder = class {
   terminalFailureClass = null;
   now;
   async initialize() {
-    await (0, import_promises4.mkdir)(import_path5.default.dirname(this.config.transcriptPath), {
+    await (0, import_promises5.mkdir)(import_path5.default.dirname(this.config.transcriptPath), {
       recursive: true,
       mode: 448
     });
     try {
-      await (0, import_promises4.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises5.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -107689,7 +107751,7 @@ var ContextGatewayV4Recorder = class {
     if (this.events.length > 0) {
       throw new Error("context_gateway_v4_recorder_already_active");
     }
-    const raw = await (0, import_promises4.readFile)(this.config.transcriptPath, "utf8");
+    const raw = await (0, import_promises5.readFile)(this.config.transcriptPath, "utf8");
     if (raw.length < 2 || Buffer.byteLength(raw, "utf8") > CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES) {
       throw new Error("context_gateway_v4_recorder_state_size_invalid");
     }
@@ -107879,10 +107941,10 @@ function sanitizeReason(value) {
   return value;
 }
 async function atomicPrivateWrite2(target, content) {
-  await (0, import_promises4.mkdir)(import_path5.default.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises5.mkdir)(import_path5.default.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto33.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises4.rename)(temporary, target);
+  await (0, import_promises5.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises5.rename)(temporary, target);
 }
 
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
@@ -107961,7 +108023,7 @@ var ContextGatewayInvocationSessionFactory = class {
     const { checkoutTreeOid } = revisionTreeOids;
     const gatewayBinaryHash = sha25613(gatewayBundleSnapshot);
     const gatewayPolicyVersion = this.policyVersion();
-    const directory = await (0, import_promises5.mkdtemp)(
+    const directory = await (0, import_promises6.mkdtemp)(
       path24.join(os10.tmpdir(), "reviewrouter-context-gateway-")
     );
     const gatewayBundlePath = path24.join(directory, "context-gateway.cjs");
@@ -107969,12 +108031,12 @@ var ContextGatewayInvocationSessionFactory = class {
     const replayMaterialPath = path24.join(directory, "replay-material.json");
     let requiredWitness = null;
     try {
-      await (0, import_promises5.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
+      await (0, import_promises6.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
         flag: "wx",
         mode: 448
       });
     } catch (error2) {
-      await (0, import_promises5.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(directory, { recursive: true, force: true });
       throw error2;
     }
     const confinementEvidenceHash = sha25613(
@@ -108011,7 +108073,7 @@ var ContextGatewayInvocationSessionFactory = class {
         }
       });
     } catch (error2) {
-      await (0, import_promises5.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(directory, { recursive: true, force: true });
       throw error2;
     }
     const secret = Buffer.from(serverSession.gatewaySessionSecret, "base64url");
@@ -108098,7 +108160,7 @@ var ContextGatewayInvocationSessionFactory = class {
     return this.options.policyVersion ?? CONTEXT_GATEWAY_POLICY_VERSION;
   }
   async gatewayBundleSnapshot() {
-    this.gatewayBundleSnapshotPromise ??= (0, import_promises5.readFile)(
+    this.gatewayBundleSnapshotPromise ??= (0, import_promises6.readFile)(
       this.options.gatewayBundlePath
     );
     return Buffer.from(await this.gatewayBundleSnapshotPromise);
@@ -108222,7 +108284,7 @@ var ContextGatewayInvocationSession = class {
       );
     }
     const { transcriptCanonicalJson, replayMaterialCanonicalJson } = createWireSealPayload(transcript, replayMaterial);
-    await (0, import_promises5.rm)(this.replayMaterialPath);
+    await (0, import_promises6.rm)(this.replayMaterialPath);
     const attestation = await this.attestations.sealGatewaySession({
       invocationLease: this.currentInvocationLease(),
       session: this.serverSession,
@@ -108355,7 +108417,7 @@ var ContextGatewayInvocationSession = class {
     }
     this.secret.fill(0);
     try {
-      await (0, import_promises5.rm)(this.directory, { recursive: true, force: true });
+      await (0, import_promises6.rm)(this.directory, { recursive: true, force: true });
     } catch (error2) {
       failures.push(error2);
     }
@@ -108506,7 +108568,7 @@ async function cleanupOpenedGatewaySession(input) {
   }
   input.secret.fill(0);
   try {
-    await (0, import_promises5.rm)(input.directory, { recursive: true, force: true });
+    await (0, import_promises6.rm)(input.directory, { recursive: true, force: true });
   } catch (error2) {
     failures.push(error2);
   }
@@ -108521,19 +108583,19 @@ function throwCleanupFailures(failures) {
   throw new AggregateError(failures, "context_gateway_dispose_failed");
 }
 async function readBoundedCanonicalJson(file, maximumBytes) {
-  const metadata = await (0, import_promises5.stat)(file);
+  const metadata = await (0, import_promises6.stat)(file);
   if (!metadata.isFile() || metadata.size < 2 || metadata.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const parsed = JSON.parse(await (0, import_promises5.readFile)(file, "utf8"));
+  const parsed = JSON.parse(await (0, import_promises6.readFile)(file, "utf8"));
   return canonicalJson(parsed);
 }
 async function readBoundedText(file, maximumBytes) {
-  const metadata = await (0, import_promises5.stat)(file);
+  const metadata = await (0, import_promises6.stat)(file);
   if (!metadata.isFile() || metadata.size < 2 || metadata.size > maximumBytes) {
     throw new Error("context_gateway_output_size_invalid");
   }
-  const value = await (0, import_promises5.readFile)(file, "utf8");
+  const value = await (0, import_promises6.readFile)(file, "utf8");
   if (Buffer.byteLength(value, "utf8") !== metadata.size) {
     throw new Error("context_gateway_output_size_invalid");
   }
@@ -108689,14 +108751,14 @@ function sha25613(value) {
 // src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
 var import_child_process19 = require("child_process");
 var import_crypto36 = require("crypto");
-var import_promises9 = require("fs/promises");
+var import_promises10 = require("fs/promises");
 var os11 = __toESM(require("os"));
 var path28 = __toESM(require("path"));
 var import_util13 = require("util");
 
 // src/context-gateway/context-gateway-recorder.ts
 var import_crypto35 = require("crypto");
-var import_promises6 = require("fs/promises");
+var import_promises7 = require("fs/promises");
 var path25 = __toESM(require("path"));
 var MAX_RECORDER_STATE_BYTES = 2 * 1024 * 1024;
 var ContextGatewayRecorder = class {
@@ -108712,22 +108774,22 @@ var ContextGatewayRecorder = class {
   hadFailure = false;
   async initialize() {
     await Promise.all([
-      (0, import_promises6.mkdir)(path25.dirname(this.config.transcriptPath), {
+      (0, import_promises7.mkdir)(path25.dirname(this.config.transcriptPath), {
         recursive: true,
         mode: 448
       }),
-      (0, import_promises6.mkdir)(path25.dirname(this.config.replayMaterialPath), {
+      (0, import_promises7.mkdir)(path25.dirname(this.config.replayMaterialPath), {
         recursive: true,
         mode: 448
       })
     ]);
     try {
-      await (0, import_promises6.writeFile)(this.config.transcriptPath, "", {
+      await (0, import_promises7.writeFile)(this.config.transcriptPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
       });
-      await (0, import_promises6.writeFile)(this.config.replayMaterialPath, "", {
+      await (0, import_promises7.writeFile)(this.config.replayMaterialPath, "", {
         encoding: "utf8",
         flag: "wx",
         mode: 384
@@ -108922,7 +108984,7 @@ var ContextGatewayRecorder = class {
   }
 };
 async function readBoundedState(file) {
-  const value = await (0, import_promises6.readFile)(file, "utf8");
+  const value = await (0, import_promises7.readFile)(file, "utf8");
   if (value.length < 2 || Buffer.byteLength(value, "utf8") > MAX_RECORDER_STATE_BYTES) {
     throw new Error("context_gateway_recorder_state_size_invalid");
   }
@@ -108941,15 +109003,15 @@ function parseCanonicalState(raw, kind) {
   return parsed;
 }
 async function atomicPrivateWrite3(target, content) {
-  await (0, import_promises6.mkdir)(path25.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises7.mkdir)(path25.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto35.randomBytes)(6).toString("hex")}.tmp`;
-  await (0, import_promises6.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
-  await (0, import_promises6.rename)(temporary, target);
+  await (0, import_promises7.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
+  await (0, import_promises7.rename)(temporary, target);
 }
 
 // src/context-gateway/filesystem-context-gateway.ts
 var import_child_process17 = require("child_process");
-var import_promises7 = require("fs/promises");
+var import_promises8 = require("fs/promises");
 var import_os = require("os");
 var path26 = __toESM(require("path"));
 var import_util11 = require("util");
@@ -108978,7 +109040,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
   revisionTreeOidPromises = /* @__PURE__ */ new Map();
   static async create(input) {
-    const root = await (0, import_promises7.realpath)(input.root);
+    const root = await (0, import_promises8.realpath)(input.root);
     requireGitOid(input.checkoutTreeOid, "checkout_tree_oid");
     requireGitOid(input.baseSha, "base_sha");
     requireGitOid(input.mergeBaseSha, "merge_base_sha");
@@ -109230,7 +109292,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
               }
             )).sort();
           } finally {
-            await (0, import_promises7.rm)(isolatedGit.gitDirectory, {
+            await (0, import_promises8.rm)(isolatedGit.gitDirectory, {
               recursive: true,
               force: true
             });
@@ -109362,7 +109424,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     const attributesPath = path26.isAbsolute(gitPath) ? gitPath : path26.resolve(this.root, gitPath);
     let infoAttributes;
     try {
-      infoAttributes = await (0, import_promises7.readFile)(attributesPath);
+      infoAttributes = await (0, import_promises8.readFile)(attributesPath);
     } catch (error2) {
       if (error2.code !== "ENOENT") throw error2;
       infoAttributes = null;
@@ -109400,23 +109462,23 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     ]);
   }
   async createIsolatedGitDirectory(policy) {
-    const gitDirectory = await (0, import_promises7.mkdtemp)(
+    const gitDirectory = await (0, import_promises8.mkdtemp)(
       path26.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
     );
     try {
       const [objectsPathOutput, objectFormatOutput] = await Promise.all([
         this.gitText(["rev-parse", "--git-path", "objects"]),
         this.gitText(["rev-parse", "--show-object-format=storage"]),
-        (0, import_promises7.mkdir)(path26.join(gitDirectory, "objects", "info"), { recursive: true }),
-        (0, import_promises7.mkdir)(path26.join(gitDirectory, "refs", "heads"), { recursive: true }),
-        (0, import_promises7.mkdir)(path26.join(gitDirectory, "info"), { recursive: true }),
-        (0, import_promises7.mkdir)(path26.join(gitDirectory, "worktree"), { recursive: true })
+        (0, import_promises8.mkdir)(path26.join(gitDirectory, "objects", "info"), { recursive: true }),
+        (0, import_promises8.mkdir)(path26.join(gitDirectory, "refs", "heads"), { recursive: true }),
+        (0, import_promises8.mkdir)(path26.join(gitDirectory, "info"), { recursive: true }),
+        (0, import_promises8.mkdir)(path26.join(gitDirectory, "worktree"), { recursive: true })
       ]);
       const rawObjectsPath = objectsPathOutput.trim();
       if (rawObjectsPath.length === 0) {
         throw new Error("context_gateway_git_objects_path_invalid");
       }
-      const objectsPath = await (0, import_promises7.realpath)(
+      const objectsPath = await (0, import_promises8.realpath)(
         path26.isAbsolute(rawObjectsPath) ? rawObjectsPath : path26.resolve(this.root, rawObjectsPath)
       );
       if (objectsPath.includes("\0") || objectsPath.includes("\n")) {
@@ -109428,14 +109490,14 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       }
       const config = objectFormat === "sha256" ? "[core]\n	repositoryformatversion = 1\n	bare = false\n[extensions]\n	objectformat = sha256\n" : "[core]\n	repositoryformatversion = 0\n	bare = false\n";
       await Promise.all([
-        (0, import_promises7.writeFile)(path26.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
-        (0, import_promises7.writeFile)(path26.join(gitDirectory, "config"), config),
-        (0, import_promises7.writeFile)(
+        (0, import_promises8.writeFile)(path26.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
+        (0, import_promises8.writeFile)(path26.join(gitDirectory, "config"), config),
+        (0, import_promises8.writeFile)(
           path26.join(gitDirectory, "objects", "info", "alternates"),
           `${objectsPath}
 `
         ),
-        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises7.writeFile)(
+        policy.infoAttributes === null ? Promise.resolve() : (0, import_promises8.writeFile)(
           path26.join(gitDirectory, "info", "attributes"),
           policy.infoAttributes
         )
@@ -109449,7 +109511,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       });
       return Object.freeze({ gitDirectory, indexPath, workTreePath });
     } catch (error2) {
-      await (0, import_promises7.rm)(gitDirectory, { recursive: true, force: true });
+      await (0, import_promises8.rm)(gitDirectory, { recursive: true, force: true });
       throw error2;
     }
   }
@@ -109539,7 +109601,7 @@ function boundedInteger(value, minimum, maximum, field) {
 
 // src/context-gateway/filesystem-context-gateway-v4.ts
 var import_child_process18 = require("child_process");
-var import_promises8 = require("fs/promises");
+var import_promises9 = require("fs/promises");
 var import_path6 = __toESM(require("path"));
 var import_util12 = require("util");
 var execFileAsync5 = (0, import_util12.promisify)(import_child_process18.execFile);
@@ -109566,7 +109628,7 @@ var FilesystemContextGatewayV4 = class _FilesystemContextGatewayV4 {
   operationsStarted = 0;
   budgetExhaustionRecorded = false;
   static async create(input) {
-    const root = await (0, import_promises8.realpath)(input.root);
+    const root = await (0, import_promises9.realpath)(input.root);
     requireGitOid(
       input.checkoutTreeOid,
       "context_gateway_v4_checkout_tree_oid"
@@ -110376,7 +110438,7 @@ var ContextAttestationReplayRunner = class {
     const plan = parseReplayPlan(candidate);
     const [targetCheckoutTreeOid, gatewayBinaryHash] = await Promise.all([
       this.checkoutTreeOid(targetRevision.headSha),
-      (0, import_promises9.readFile)(this.options.gatewayBundlePath).then(sha256)
+      (0, import_promises10.readFile)(this.options.gatewayBundlePath).then(sha256)
     ]);
     if (plan.gatewayBinaryHash !== gatewayBinaryHash) {
       return null;
@@ -110393,7 +110455,7 @@ var ContextAttestationReplayRunner = class {
     if (plan.gatewayPolicyVersion !== CONTEXT_GATEWAY_POLICY_VERSION) {
       return null;
     }
-    const directory = await (0, import_promises9.mkdtemp)(
+    const directory = await (0, import_promises10.mkdtemp)(
       path28.join(os11.tmpdir(), "reviewrouter-context-replay-")
     );
     const secret = (0, import_crypto36.randomBytes)(32);
@@ -110471,11 +110533,11 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(directory, { recursive: true, force: true });
     }
   }
   async replayV4(input) {
-    const directory = await (0, import_promises9.mkdtemp)(
+    const directory = await (0, import_promises10.mkdtemp)(
       path28.join(os11.tmpdir(), "reviewrouter-context-replay-v4-")
     );
     const secret = (0, import_crypto36.randomBytes)(32);
@@ -110569,7 +110631,7 @@ var ContextAttestationReplayRunner = class {
       });
     } finally {
       secret.fill(0);
-      await (0, import_promises9.rm)(directory, { recursive: true, force: true });
+      await (0, import_promises10.rm)(directory, { recursive: true, force: true });
     }
   }
   async checkoutTreeOid(expectedHeadSha) {
@@ -116310,7 +116372,7 @@ function createScmReadGitHubClient(input) {
     tokenProvider: input.tokenProvider ?? createScmReadTokenProvider(input),
     ...signal ? {
       sleep: async (ms) => {
-        await (0, import_promises10.setTimeout)(ms, void 0, { signal });
+        await (0, import_promises11.setTimeout)(ms, void 0, { signal });
       }
     } : {}
   });

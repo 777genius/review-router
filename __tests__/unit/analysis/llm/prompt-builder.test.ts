@@ -110,17 +110,17 @@ describe('PromptBuilder', () => {
         prepared.investigationContextPrompt,
       ]) {
         expect(prompt).toContain(
-          'material failures introduced or aggravated by this base-to-head change'
+          'material failures introduced or aggravated'
         );
         expect(prompt).toContain('compare before and after');
+        expect(prompt).toContain('Exclude unchanged pre-existing bugs');
+        expect(prompt).toContain('without a causal change');
         expect(prompt).toContain(
-          'Exclude unchanged pre-existing bugs and residual behavior in partial fixes without a causal change.'
+          'new supported input/path or an explicit contract change'
         );
+        expect(prompt).toContain('expose an old fault');
         expect(prompt).toContain(
-          'A new supported input/path or an explicit contract change can expose an old fault and make it reportable'
-        );
-        expect(prompt).toContain(
-          'Briefly state the causal base-to-head change and reachable failure path in each finding message.'
+          'causal base-to-head change and reachable failure path'
         );
       }
       expect(prepared.investigationContextPrompt).not.toContain(

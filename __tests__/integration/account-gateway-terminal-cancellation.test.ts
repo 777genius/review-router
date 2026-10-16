@@ -6,7 +6,8 @@ import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { test as nodeTest } from 'node:test';
+import { performance } from 'node:perf_hooks';
+import { mock, test as nodeTest } from 'node:test';
 import { promisify } from 'node:util';
 import { buildSync } from 'esbuild';
 import {
@@ -535,9 +536,291 @@ async function failedResponseDiagnostic(upstream502: boolean): Promise<void> {
     );
   }
 }
+
+async function relaySaturation(
+  mode:
+    | 'success'
+    | 'abort'
+    | 'exhausted'
+    | 'unknown'
+    | 'other'
+    | 'malformed'
+    | 'referenced'
+    | 'headers'
+    | 'truncated'
+    | 'overbound'
+): Promise<void> {
+  const root = process.env.RR_TERMINAL_CANCELLATION_PROBE_ROOT;
+  assert(root);
+  const diagnostics: GatewayTransportDiagnostic[] = [];
+  const fixtureFailures: unknown[] = [];
+  let requests = 0,
+    authorizations = 0,
+    forwards = 0,
+    now = 0;
+  let timersMocked = false;
+  let resolveDenied!: () => void;
+  const firstDenied = new Promise<void>((resolve) => {
+    resolveDenied = resolve;
+  });
+  let releaseHeaders!: () => void;
+  const heldHeaders = new Promise<void>((resolve) => {
+    releaseHeaders = resolve;
+  });
+  const clock =
+    mode === 'exhausted'
+      ? mock.method(performance, 'now', () => now)
+      : undefined;
+  const denial =
+    mode === 'unknown'
+      ? '{"error":{"code":"relay_saturated","effect":"effect_unknown"}}'
+      : mode === 'other'
+        ? '{"error":{"code":"admission_limited","effect":"not_dispatched"}}'
+        : mode === 'malformed'
+          ? '{"error":{"code":"relay_saturated","effect":"not_dispatched"}'
+          : '{"error":{"code":"relay_saturated","effect":"not_dispatched"}}';
+  const server = createHttpsServer(
+    {
+      cert: readFileSync(join(root, 'cert.pem')),
+      key: readFileSync(join(root, 'key.pem')),
+    },
+    (request, reply) => {
+      void (async () => {
+        requests++;
+        assert.equal(request.method, 'POST');
+        assert.equal(request.url, '/api/action/v2/account-gateway/responses');
+        assert.equal(
+          request.headers.authorization,
+          `Bearer ${token}-${requests}`
+        );
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        assert.equal(
+          Buffer.concat(chunks).toString('utf8'),
+          body,
+          'every POST must retain identical Responses bytes and scope'
+        );
+        if (mode === 'headers') {
+          resolveDenied(); // Real HTTPS request/body barrier; no response headers yet.
+          await heldHeaders;
+        }
+        if (mode === 'headers' || (mode === 'success' && requests === 2)) {
+          forwards++;
+          reply.writeHead(200, {
+            'content-type': 'text/event-stream',
+            'x-reviewrouter-request-ref': 'synthetic-after-saturation',
+          });
+          reply.end(completed('after-saturation'));
+        } else {
+          if (mode === 'exhausted' && requests === 2) now = 120_000;
+          reply.writeHead(503, {
+            'content-type': 'application/json',
+            ...(['referenced', 'truncated', 'overbound'].includes(mode)
+              ? { 'x-reviewrouter-request-ref': 'synthetic-existing' }
+              : {}),
+            ...(mode === 'truncated'
+              ? { 'content-length': String(Buffer.byteLength(denial) + 1) }
+              : {}),
+          });
+          reply.once('finish', resolveDenied);
+          reply.end(mode === 'overbound' ? 'N'.repeat(65_537) : denial);
+        }
+      })().catch((error: unknown) => {
+        fixtureFailures.push(error);
+        reply.destroy();
+      });
+    }
+  );
+  let local: LocalGatewayModelTransport | undefined;
+  try {
+    await bounded(
+      new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);
+      }),
+      'saturation-listen'
+    );
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const transport = new AccountGatewayModelTransport(
+      `https://127.0.0.1:${address.port}`,
+      () => `${token}-${++authorizations}`,
+      (diagnostic) => {
+        diagnostics.push(diagnostic);
+      }
+    );
+    if (mode === 'headers') {
+      mock.timers.enable({ apis: ['setTimeout'] });
+      timersMocked = true;
+      let rejected = false;
+      const pending = transport.responses(Buffer.from(body));
+      void pending.catch(() => {
+        rejected = true;
+      });
+      await firstDenied;
+      mock.timers.tick(31_000);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(
+        rejected,
+        false,
+        'successful headers may outlive the 30s denial-body bound'
+      );
+      releaseHeaders();
+      const response = await bounded(pending, 'held-success-headers');
+      const chunks: Buffer[] = [];
+      await bounded(
+        (async () => {
+          for await (const chunk of response.body)
+            chunks.push(Buffer.from(chunk));
+        })(),
+        'held-success-body'
+      );
+      assert.equal(response.httpStatus, 200);
+      assert.equal(
+        Buffer.concat(chunks).toString('utf8'),
+        completed('after-saturation')
+      );
+      assert.equal(forwards, 1);
+      assert.deepEqual(diagnostics, []);
+    } else if (mode === 'truncated' || mode === 'overbound') {
+      await assert.rejects(
+        bounded(transport.responses(Buffer.from(body)), 'referenced-drain')
+      );
+      assert.equal(transport.lastRequestRef, 'synthetic-existing');
+      assert.deepEqual(transport.lastFailure, {
+        code: 'transport',
+        effect: 'effect_unknown',
+        requestRef: 'synthetic-existing',
+      });
+      await assert.rejects(transport.responses(Buffer.from(body)));
+      assert.equal(
+        requests,
+        1,
+        'failed referenced drainage must remain terminal'
+      );
+      assert.equal(forwards, 0);
+    } else if (mode === 'abort') {
+      const controller = new AbortController();
+      const pending = transport.responses(Buffer.from(body), controller.signal);
+      void pending.catch(() => {});
+      await bounded(firstDenied, 'saturation-first-denial');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      controller.abort();
+      await assert.rejects(bounded(pending, 'saturation-abort'));
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      assert.equal(
+        requests,
+        1,
+        'abort while waiting must prevent the next POST'
+      );
+      assert.equal(forwards, 0);
+    } else {
+      local = await startLocalGatewayModelTransport(transport);
+      const response = await bounded(post(local), 'saturation-response');
+      const chunks: Buffer[] = [];
+      await bounded(
+        (async () => {
+          for await (const chunk of response) chunks.push(Buffer.from(chunk));
+        })(),
+        'saturation-body'
+      );
+      assert.equal(response.statusCode, mode === 'success' ? 200 : 503);
+      assert.equal(
+        Buffer.concat(chunks).toString('utf8'),
+        mode === 'success' ? completed('after-saturation') : denial,
+        'no intermediate denial bytes may escape to the CLI'
+      );
+      assert.equal(
+        requests,
+        mode === 'success' || mode === 'exhausted' ? 2 : 1
+      );
+      assert.equal(forwards, mode === 'success' ? 1 : 0);
+      if (mode === 'success') {
+        assert.equal(transport.lastFailure, undefined);
+        assert.equal(local.actualModel(), 'fixture-model');
+        assert.deepEqual(
+          diagnostics,
+          [],
+          'transient saturation is not a final warning'
+        );
+      } else {
+        assert.equal(diagnostics.length, 1);
+        assert.equal(diagnostics[0].stage, 'upstream_headers');
+        const subsequent = await bounded(post(local), 'saturation-latched');
+        subsequent.resume();
+        assert.equal(subsequent.statusCode, 502);
+        assert.equal(
+          requests,
+          mode === 'exhausted' ? 2 : 1,
+          'a terminal response must never clear inference denial'
+        );
+      }
+    }
+    assert.equal(
+      authorizations,
+      requests,
+      'each POST must obtain the current token'
+    );
+    assert.deepEqual(fixtureFailures, []);
+  } finally {
+    releaseHeaders();
+    if (timersMocked) mock.timers.reset();
+    await local?.dispose();
+    server.closeAllConnections();
+    if (server.listening)
+      await bounded(
+        new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve()))
+        ),
+        'saturation-close'
+      );
+    clock?.mock.restore();
+  }
+}
 // Same typed file becomes a compiled child observer. Node --test consumes file
 // arguments itself, so the isolated child's --probe marker travels in its env.
 if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
+  nodeTest(
+    'successful headers retain the original request deadline beyond 30s',
+    { timeout: 20_000 },
+    () => relaySaturation('headers')
+  );
+  nodeTest(
+    'referenced denial drainage failures retain same-operation readback',
+    { timeout: 20_000 },
+    async () => {
+      for (const mode of ['truncated', 'overbound'] as const)
+        await relaySaturation(mode);
+    }
+  );
+  nodeTest(
+    'positive relay saturation waits for one identical authorized POST and SSE',
+    { timeout: 20_000 },
+    () => relaySaturation('success')
+  );
+  nodeTest(
+    'caller abort while saturated prevents another POST',
+    { timeout: 20_000 },
+    () => relaySaturation('abort')
+  );
+  nodeTest(
+    'persistent saturation exhausts the finite monotonic wait budget',
+    { timeout: 20_000 },
+    () => relaySaturation('exhausted')
+  );
+  nodeTest(
+    'non-attested 503 failures remain one attempt and terminal',
+    { timeout: 20_000 },
+    async () => {
+      for (const mode of [
+        'unknown',
+        'other',
+        'malformed',
+        'referenced',
+      ] as const)
+        await relaySaturation(mode);
+    }
+  );
   for (const upstream502 of [false, true])
     nodeTest(
       upstream502
@@ -641,8 +924,8 @@ if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
           },
         }
       );
-      expect(result.stdout).toMatch(/# tests 6\b/);
-      expect(result.stdout).toMatch(/# pass 6\b/);
+      expect(result.stdout).toMatch(/# tests 12\b/);
+      expect(result.stdout).toMatch(/# pass 12\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

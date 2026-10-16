@@ -28234,9 +28234,14 @@ function extractImportExportRelations(line, add) {
   }
 }
 function extractStructuredRelations(path31, line, add) {
+  const dartSource = /\.dart$/iu.test(path31);
   const keyPatterns = [
-    /(?:^|[{,])\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*:/gu,
-    /^\s*-?\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*=/gu,
+    // Dart's unquoted labels and assignments are arguments/variables, not
+    // external keys. Quoted map/JSON keys still provide contract evidence.
+    ...dartSource ? [/(?:^|[{,])\s*["']([A-Za-z_][A-Za-z0-9_.-]*)["']\s*:/gu] : [
+      /(?:^|[{,])\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*:/gu,
+      /^\s*-?\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*=/gu
+    ],
     /\b(?:ADD|DROP|RENAME)\s+(?:COLUMN\s+)?["`]?([A-Za-z_][A-Za-z0-9_$]*)["`]?/giu,
     /\b(?:CREATE|ALTER)\s+TABLE\s+["`]?([A-Za-z_][A-Za-z0-9_$]*)["`]?/giu,
     /\bREFERENCES\s+["`]?([A-Za-z_][A-Za-z0-9_$]*)["`]?/giu
@@ -28255,6 +28260,13 @@ function extractStructuredRelations(path31, line, add) {
   }
 }
 function extractRuntimeContractRelations(line, add) {
+  if (/^\s*(?:import\s+(?:["'{*]|[A-Za-z_$])|export\s+(?:["'*{]|type\s*\{))/u.test(
+    line
+  )) {
+    const statementEnd = line.indexOf(";");
+    if (statementEnd < 0) return;
+    line = line.slice(statementEnd + 1);
+  }
   const isRuntimeLine = RUNTIME_CONTRACT_KEYWORD_PATTERN.test(line);
   const isRouteCall = ROUTE_CALL_PATTERN.test(line);
   if (!isRuntimeLine && !isRouteCall) return;
@@ -52378,7 +52390,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.178",
+  version: "1.0.179",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -98180,53 +98192,71 @@ var CodexAppServerProtocolClient = class {
     if (params.fasterModel !== null) requireModel(params.fasterModel);
   }
   onTurnCompleted(params) {
-    this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
-    const turn = requireRecord2(params.turn, "turn_completed_turn");
-    this.assertTurnId(requireIdentifier2(turn.id, "turn_id"));
-    if (!this.turnStarted || this.turnCompleted || !Array.isArray(turn.items)) {
-      throw streamFailure();
-    }
-    const latestObservedFinalMessage = this.finalMessageCandidates.at(-1);
-    this.validateTurnItemSnapshot(turn.items);
-    const turnError = turn.error ?? null;
-    switch (turn.status) {
-      case "completed":
-        if (turnError !== null || this.retainedTerminalError !== null) {
+    let checkpoint = "thread_fence";
+    try {
+      this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
+      checkpoint = "turn_shape";
+      const turn = requireRecord2(params.turn, "turn_completed_turn");
+      checkpoint = "turn_fence";
+      this.assertTurnId(requireIdentifier2(turn.id, "turn_id"));
+      checkpoint = "lifecycle";
+      if (!this.turnStarted || this.turnCompleted) throw streamFailure();
+      checkpoint = "items_shape";
+      if (!Array.isArray(turn.items)) throw streamFailure();
+      const latestObservedFinalMessage = this.finalMessageCandidates.at(-1);
+      checkpoint = "items_snapshot";
+      this.validateTurnItemSnapshot(turn.items);
+      const turnError = turn.error ?? null;
+      checkpoint = "status";
+      switch (turn.status) {
+        case "completed":
+          checkpoint = "completed_error";
+          if (turnError !== null || this.retainedTerminalError !== null) {
+            throw streamFailure();
+          }
+          if (turn.itemsView === "summary") {
+            checkpoint = "summary_witness";
+            this.captureTerminalSummaryFinalMessage(
+              turn.items,
+              latestObservedFinalMessage
+            );
+          }
+          if (this.activeItems.size !== 0 && turn.itemsView === "summary") {
+            checkpoint = "summary_reconcile";
+            this.reconcileItemsOmittedFromTerminalSummary();
+          }
+          checkpoint = "completed_active_items";
+          if (this.activeItems.size !== 0) throw streamFailure();
+          this.turnCompleted = true;
+          this.maybeComplete();
+          return;
+        case "failed": {
+          checkpoint = "failed_active_items";
+          if (this.activeItems.size !== 0) throw streamFailure();
+          checkpoint = "failed_error";
+          const completedError = parseTurnError(turnError);
+          const retained = this.retainedTerminalError;
+          checkpoint = "failed_retained_error";
+          if (retained === null || retained.fingerprint !== completedError.fingerprint) {
+            throw streamFailure();
+          }
+          this.turnCompleted = true;
+          this.fail(retained.failure);
+          return;
+        }
+        case "interrupted":
+          checkpoint = "interrupted_error";
+          if (turnError !== null) throw streamFailure();
+          checkpoint = "interrupted_active_items";
+          if (this.activeItems.size !== 0) throw streamFailure();
+          this.turnCompleted = true;
+          this.fail(cancelledFailure());
+          return;
+        default:
           throw streamFailure();
-        }
-        if (turn.itemsView === "summary") {
-          this.captureTerminalSummaryFinalMessage(
-            turn.items,
-            latestObservedFinalMessage
-          );
-        }
-        if (this.activeItems.size !== 0 && turn.itemsView === "summary") {
-          this.reconcileItemsOmittedFromTerminalSummary();
-        }
-        if (this.activeItems.size !== 0) throw streamFailure();
-        this.turnCompleted = true;
-        this.maybeComplete();
-        return;
-      case "failed": {
-        if (this.activeItems.size !== 0) throw streamFailure();
-        const completedError = parseTurnError(turnError);
-        const retained = this.retainedTerminalError;
-        if (retained === null || retained.fingerprint !== completedError.fingerprint) {
-          throw streamFailure();
-        }
-        this.turnCompleted = true;
-        this.fail(retained.failure);
-        return;
       }
-      case "interrupted":
-        if (turnError !== null || this.activeItems.size !== 0) {
-          throw streamFailure();
-        }
-        this.turnCompleted = true;
-        this.fail(cancelledFailure());
-        return;
-      default:
-        throw streamFailure();
+    } catch (error2) {
+      throw withStreamDiagnosticStage(error2, `turn_completed_${checkpoint}`);
     }
   }
   maybeComplete() {

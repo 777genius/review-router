@@ -1328,8 +1328,39 @@ describe('CodexAppServerProtocolClient', () => {
     );
     await expect(unpaired.result).rejects.toMatchObject({
       failureClass: ReviewAgentFailureClass.StreamIncomplete,
+      message:
+        'review_agent_stream_incomplete_turn_completed_failed_retained_error',
     });
   });
+
+  it.each([
+    ['thread_fence', { threadId: 'private-thread-id' }],
+    ['turn_fence', { turn: { ...turn('completed'), id: 'private-turn-id' } }],
+    ['items_shape', { turn: { ...turn('completed'), items: 'private-items' } }],
+    ['status', { turn: { ...turn('completed'), status: 'private-status' } }],
+    [
+      'completed_error',
+      { turn: { ...turn('completed'), error: { message: 'private-error' } } },
+    ],
+  ] as const)(
+    'reports the closed terminal checkpoint %s without exposing values',
+    async (checkpoint, overrides) => {
+      const fixture = await activeTurn();
+      fixture.client.receive(
+        notification('turn/completed', {
+          threadId,
+          turn: turn('completed'),
+          ...overrides,
+        })
+      );
+      await expect(fixture.result).rejects.toMatchObject({
+        failureClass: ReviewAgentFailureClass.StreamIncomplete,
+        message: `review_agent_stream_incomplete_turn_completed_${checkpoint}`,
+      });
+      const failure = await fixture.result.catch((error: unknown) => error);
+      expect((failure as Error).message).not.toContain('private-');
+    }
+  );
 
   it('normalizes optional turn-error fields', async () => {
     const fixture = await activeTurn();
@@ -1406,7 +1437,7 @@ describe('CodexAppServerProtocolClient', () => {
 
     await expect(fixture.result).rejects.toMatchObject({
       failureClass: ReviewAgentFailureClass.StreamIncomplete,
-      message: 'review_agent_stream_incomplete_turn_completed',
+      message: 'review_agent_stream_incomplete_turn_completed_items_snapshot',
     });
   });
 
@@ -1491,7 +1522,8 @@ describe('CodexAppServerProtocolClient', () => {
 
     await expect(fixture.result).rejects.toMatchObject({
       failureClass: ReviewAgentFailureClass.StreamIncomplete,
-      message: 'review_agent_stream_incomplete_turn_completed',
+      message:
+        'review_agent_stream_incomplete_turn_completed_completed_active_items',
     });
   });
 
@@ -1600,7 +1632,8 @@ describe('CodexAppServerProtocolClient', () => {
 
       await expect(fixture.result).rejects.toMatchObject({
         failureClass: ReviewAgentFailureClass.StreamIncomplete,
-        message: 'review_agent_stream_incomplete_turn_completed',
+        message:
+          'review_agent_stream_incomplete_turn_completed_completed_active_items',
       });
     }
   );
@@ -1697,6 +1730,7 @@ describe('CodexAppServerProtocolClient', () => {
 
     await expect(fixture.result).rejects.toMatchObject({
       failureClass: ReviewAgentFailureClass.StreamIncomplete,
+      message: 'review_agent_stream_incomplete_turn_completed_items_snapshot',
     });
   });
 
@@ -2066,7 +2100,8 @@ describe('CodexAppServerProtocolClient', () => {
       );
       await expect(fixture.result).rejects.toMatchObject({
         failureClass: ReviewAgentFailureClass.StreamIncomplete,
-        message: 'review_agent_stream_incomplete_turn_completed',
+        message:
+          'review_agent_stream_incomplete_turn_completed_summary_witness',
       });
     }
   );

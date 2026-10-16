@@ -996,56 +996,75 @@ export class CodexAppServerProtocolClient {
   }
 
   private onTurnCompleted(params: Record<string, unknown>): void {
-    this.assertThreadId(requireIdentifier(params.threadId, 'thread_id'));
-    const turn = requireRecord(params.turn, 'turn_completed_turn');
-    this.assertTurnId(requireIdentifier(turn.id, 'turn_id'));
-    if (!this.turnStarted || this.turnCompleted || !Array.isArray(turn.items)) {
-      throw streamFailure();
-    }
-    const latestObservedFinalMessage = this.finalMessageCandidates.at(-1);
-    this.validateTurnItemSnapshot(turn.items);
-    const turnError = turn.error ?? null;
-    switch (turn.status) {
-      case 'completed':
-        if (turnError !== null || this.retainedTerminalError !== null) {
+    let checkpoint: TurnCompletedCheckpoint = 'thread_fence';
+    try {
+      this.assertThreadId(requireIdentifier(params.threadId, 'thread_id'));
+      checkpoint = 'turn_shape';
+      const turn = requireRecord(params.turn, 'turn_completed_turn');
+      checkpoint = 'turn_fence';
+      this.assertTurnId(requireIdentifier(turn.id, 'turn_id'));
+      checkpoint = 'lifecycle';
+      if (!this.turnStarted || this.turnCompleted) throw streamFailure();
+      checkpoint = 'items_shape';
+      if (!Array.isArray(turn.items)) throw streamFailure();
+      const latestObservedFinalMessage = this.finalMessageCandidates.at(-1);
+      checkpoint = 'items_snapshot';
+      this.validateTurnItemSnapshot(turn.items);
+      const turnError = turn.error ?? null;
+      checkpoint = 'status';
+      switch (turn.status) {
+        case 'completed':
+          checkpoint = 'completed_error';
+          if (turnError !== null || this.retainedTerminalError !== null) {
+            throw streamFailure();
+          }
+          if (turn.itemsView === 'summary') {
+            checkpoint = 'summary_witness';
+            this.captureTerminalSummaryFinalMessage(
+              turn.items,
+              latestObservedFinalMessage
+            );
+          }
+          if (this.activeItems.size !== 0 && turn.itemsView === 'summary') {
+            checkpoint = 'summary_reconcile';
+            this.reconcileItemsOmittedFromTerminalSummary();
+          }
+          checkpoint = 'completed_active_items';
+          if (this.activeItems.size !== 0) throw streamFailure();
+          this.turnCompleted = true;
+          this.maybeComplete();
+          return;
+        case 'failed': {
+          checkpoint = 'failed_active_items';
+          if (this.activeItems.size !== 0) throw streamFailure();
+          checkpoint = 'failed_error';
+          const completedError = parseTurnError(turnError);
+          const retained = this.retainedTerminalError;
+          checkpoint = 'failed_retained_error';
+          if (
+            retained === null ||
+            retained.fingerprint !== completedError.fingerprint
+          ) {
+            throw streamFailure();
+          }
+          this.turnCompleted = true;
+          this.fail(retained.failure);
+          return;
+        }
+        case 'interrupted':
+          checkpoint = 'interrupted_error';
+          if (turnError !== null) throw streamFailure();
+          checkpoint = 'interrupted_active_items';
+          if (this.activeItems.size !== 0) throw streamFailure();
+          this.turnCompleted = true;
+          this.fail(cancelledFailure());
+          return;
+        default:
           throw streamFailure();
-        }
-        if (turn.itemsView === 'summary') {
-          this.captureTerminalSummaryFinalMessage(
-            turn.items,
-            latestObservedFinalMessage
-          );
-        }
-        if (this.activeItems.size !== 0 && turn.itemsView === 'summary') {
-          this.reconcileItemsOmittedFromTerminalSummary();
-        }
-        if (this.activeItems.size !== 0) throw streamFailure();
-        this.turnCompleted = true;
-        this.maybeComplete();
-        return;
-      case 'failed': {
-        if (this.activeItems.size !== 0) throw streamFailure();
-        const completedError = parseTurnError(turnError);
-        const retained = this.retainedTerminalError;
-        if (
-          retained === null ||
-          retained.fingerprint !== completedError.fingerprint
-        ) {
-          throw streamFailure();
-        }
-        this.turnCompleted = true;
-        this.fail(retained.failure);
-        return;
       }
-      case 'interrupted':
-        if (turnError !== null || this.activeItems.size !== 0) {
-          throw streamFailure();
-        }
-        this.turnCompleted = true;
-        this.fail(cancelledFailure());
-        return;
-      default:
-        throw streamFailure();
+    } catch (error) {
+      // Fixed checkpoints only; preserve typed failures without payload values.
+      throw withStreamDiagnosticStage(error, `turn_completed_${checkpoint}`);
     }
   }
 
@@ -1772,6 +1791,23 @@ type ItemStartedCheckpoint =
   | 'mcp_tool'
   | 'mcp_arguments'
   | 'mcp_start_state';
+type TurnCompletedCheckpoint =
+  | 'thread_fence'
+  | 'turn_shape'
+  | 'turn_fence'
+  | 'lifecycle'
+  | 'items_shape'
+  | 'items_snapshot'
+  | 'status'
+  | 'completed_error'
+  | 'summary_witness'
+  | 'summary_reconcile'
+  | 'completed_active_items'
+  | 'failed_active_items'
+  | 'failed_error'
+  | 'failed_retained_error'
+  | 'interrupted_error'
+  | 'interrupted_active_items';
 type ItemDiagnosticType =
   | 'user_message'
   | 'agent_message'
@@ -1799,7 +1835,8 @@ function itemDiagnosticType(value: unknown): ItemDiagnosticType {
 type CodexProtocolDiagnosticStageValue =
   | CodexProtocolDiagnosticStage
   | `unknown_notification_${string}`
-  | `item_started_${ItemDiagnosticType}_${ItemStartedCheckpoint}`;
+  | `item_started_${ItemDiagnosticType}_${ItemStartedCheckpoint}`
+  | `turn_completed_${TurnCompletedCheckpoint}`;
 
 function notificationDiagnosticStage(
   value: unknown

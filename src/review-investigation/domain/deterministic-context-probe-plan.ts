@@ -497,12 +497,18 @@ function extractImportExportRelations(
   line: string,
   add: (kind: ReviewInvestigationProbeKind, query: string) => void
 ): void {
-  if (!/\b(?:import|export|require|include|use)\b/u.test(line)) return;
+  if (
+    !/\b(?:import|export|require|include|use)\b|^\s*\}(?:\s|\/\*.*?\*\/)*from(?:\s|\/\*.*?\*\/)*["'`]/u.test(
+      line
+    )
+  ) {
+    return;
+  }
 
   const modulePatterns = [
-    /\bfrom\s*["'`]([^"'`\r\n]+)["'`]/gu,
+    /\bfrom(?:\s|\/\*.*?\*\/)*["'`]([^"'`\r\n]+)["'`]/gu,
     /\b(?:require|import)\s*\(\s*["'`]([^"'`\r\n]+)["'`]/gu,
-    /\b(?:import|include)\s*["'`]([^"'`\r\n]+)["'`]/gu,
+    /\b(?:import|include)(?:\s|\/\*.*?\*\/)*["'`]([^"'`\r\n]+)["'`]/gu,
     /\buse\s+([A-Za-z_][A-Za-z0-9_:]*)/gu,
   ];
   for (const pattern of modulePatterns) {
@@ -532,9 +538,16 @@ function extractStructuredRelations(
   line: string,
   add: (kind: ReviewInvestigationProbeKind, query: string) => void
 ): void {
+  const dartSource = /\.dart$/iu.test(path);
   const keyPatterns = [
-    /(?:^|[{,])\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*:/gu,
-    /^\s*-?\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*=/gu,
+    // Dart's unquoted labels and assignments are arguments/variables, not
+    // external keys. Quoted map/JSON keys still provide contract evidence.
+    ...(dartSource
+      ? [/(?:^|[{,])\s*["']([A-Za-z_][A-Za-z0-9_.-]*)["']\s*:/gu]
+      : [
+          /(?:^|[{,])\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*:/gu,
+          /^\s*-?\s*["']?([A-Za-z_][A-Za-z0-9_.-]*)["']?\s*=/gu,
+        ]),
     /\b(?:ADD|DROP|RENAME)\s+(?:COLUMN\s+)?["`]?([A-Za-z_][A-Za-z0-9_$]*)["`]?/giu,
     /\b(?:CREATE|ALTER)\s+TABLE\s+["`]?([A-Za-z_][A-Za-z0-9_$]*)["`]?/giu,
     /\bREFERENCES\s+["`]?([A-Za-z_][A-Za-z0-9_$]*)["`]?/giu,
@@ -557,6 +570,20 @@ function extractRuntimeContractRelations(
   line: string,
   add: (kind: ReviewInvestigationProbeKind, query: string) => void
 ): void {
+  // Dependency declarations already produce module/reference probes. A path
+  // containing "feature" or "event" is not itself runtime configuration.
+  const declarationLine = line.replace(/\/\*.*?\*\//gu, (comment) =>
+    ' '.repeat(comment.length)
+  );
+  if (
+    /^\s*(?:import\s+(?:["'{*]|[A-Za-z_$])|export\s+(?:["'*{]|type\s*\{)|\}\s*from\s*["'`])/u.test(
+      declarationLine
+    )
+  ) {
+    const statementEnd = declarationLine.indexOf(';');
+    if (statementEnd < 0) return;
+    line = line.slice(statementEnd + 1);
+  }
   const isRuntimeLine = RUNTIME_CONTRACT_KEYWORD_PATTERN.test(line);
   const isRouteCall = ROUTE_CALL_PATTERN.test(line);
   if (!isRuntimeLine && !isRouteCall) return;

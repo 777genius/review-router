@@ -107,6 +107,107 @@ describe('deterministic context probe plan', () => {
     });
   });
 
+  it('keeps Dart map contracts without promoting fixture arguments or local assignments', () => {
+    const path = 'test/match_participant_test.dart';
+    const dependency = 'package:padelapp/src/feature/match/model/event.dart';
+    const plan = createReviewInvestigationProbePlan({
+      files: [file(path)],
+      fullDiff: diff(
+        path,
+        `+import '${dependency}';`,
+        '+final details = MatchDetails(',
+        "+  matchId: 'm1',",
+        "+  bookingPaymentId: 'pay',",
+        '+);',
+        '+_askToJoinInFlight = true;',
+        '+final snapshot = <String, Object?>{',
+        "+  'schemaVersion': 2,",
+        '+};',
+        "+featureFlag('real-checkout');",
+        '+fetchMatchDetails();'
+      ),
+    });
+
+    for (const query of ['matchId', 'bookingPaymentId', '_askToJoinInFlight']) {
+      expect(plan.probes.map((item) => item.query)).not.toContain(query);
+    }
+    expect(probe(plan, dependency)).toMatchObject({
+      probeKind: ReviewInvestigationProbeKind.ModulePath,
+      obligationKind: ReviewTurnObligationKind.DirectReferenceSearch,
+    });
+    expect(probe(plan, 'schemaVersion')).toMatchObject({
+      probeKind: ReviewInvestigationProbeKind.StructuredKey,
+      obligationKind: ReviewTurnObligationKind.SchemaContract,
+    });
+    expect(probe(plan, 'real-checkout')).toMatchObject({
+      probeKind: ReviewInvestigationProbeKind.RuntimeContractIdentifier,
+      obligationKind: ReviewTurnObligationKind.ConfigurationContract,
+    });
+    expect(probe(plan, 'fetchMatchDetails')).toMatchObject({
+      probeKind: ReviewInvestigationProbeKind.SideEffectIdentifier,
+      obligationKind: ReviewTurnObligationKind.SideEffectParity,
+    });
+  });
+
+  it('keeps import/export dependencies separate from actual runtime declarations and calls', () => {
+    const path = 'src/setup.ts';
+    const plan = createReviewInvestigationProbePlan({
+      files: [file(path)],
+      fullDiff: diff(
+        path,
+        '+import { EventPayload } from "./feature/event-route";',
+        '+export { EventPayload } from "./feature/event-route";',
+        '+import /* dependency; annotation */ { EventPayload } from "./feature/annotated-event-route";',
+        '+import /* init */ "./feature/side-effect-setup";',
+        ' import {',
+        '   EventPayload,',
+        '-} from "./feature/old-event-route";',
+        '+} from "./feature/multiline-event-route";',
+        ' import {',
+        '   EventPayload,',
+        '+} /* annotation */ from "./feature/commented-multiline-event-route";',
+        ' import {',
+        '   EventPayload,',
+        '+} from /* annotation */ "./feature/after-from-event-route";',
+        '+export const route = "/v1/payments";',
+        '+import "./feature/setup"; featureFlag("runtime-after-import");',
+        '+import ("./dependency").then(() => featureFlag("dynamic-checkout"));',
+        '+import /* chunk annotation */ ("./dependency").then(() => featureFlag("commented-dynamic-checkout"));'
+      ),
+    });
+
+    for (const query of [
+      './feature/event-route',
+      './feature/annotated-event-route',
+      './feature/side-effect-setup',
+      './feature/old-event-route',
+      './feature/multiline-event-route',
+      './feature/commented-multiline-event-route',
+      './feature/after-from-event-route',
+      './feature/setup',
+    ]) {
+      expect(probe(plan, query)).toMatchObject({
+        probeKind: ReviewInvestigationProbeKind.ModulePath,
+        obligationKind: ReviewTurnObligationKind.DirectReferenceSearch,
+      });
+    }
+    expect(probe(plan, 'EventPayload')).toMatchObject({
+      probeKind: ReviewInvestigationProbeKind.ImportExportIdentifier,
+      obligationKind: ReviewTurnObligationKind.DirectReferenceSearch,
+    });
+    for (const query of [
+      '/v1/payments',
+      'runtime-after-import',
+      'dynamic-checkout',
+      'commented-dynamic-checkout',
+    ]) {
+      expect(probe(plan, query)).toMatchObject({
+        probeKind: ReviewInvestigationProbeKind.RuntimeContractIdentifier,
+        obligationKind: ReviewTurnObligationKind.ConfigurationContract,
+      });
+    }
+  });
+
   it('deduplicates by maximum risk with a deterministic source tie-break', () => {
     const files = [
       file('src/z.ts'),

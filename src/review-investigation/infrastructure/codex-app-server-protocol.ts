@@ -1365,7 +1365,10 @@ function responseFailure(value: unknown): ReviewAgentExecutionError {
   }
   const diagnostic =
     `${error.code} ${error.message} ${safeJson(error.data)}`.slice(0, 16_384);
-  return classifyCodexAppServerDiagnostic(diagnostic);
+  return withProtocolProcessDetail(
+    classifyCodexAppServerDiagnostic(diagnostic),
+    'response_error'
+  );
 }
 
 function parseTurnError(value: unknown): ParsedTurnError {
@@ -1404,9 +1407,44 @@ function parseTurnError(value: unknown): ParsedTurnError {
     .join(' ')
     .slice(0, 16_384);
   return Object.freeze({
-    failure: classifyCodexAppServerDiagnostic(diagnostic),
+    failure: withProtocolProcessDetail(
+      classifyCodexAppServerDiagnostic(diagnostic),
+      'turn_error',
+      codexErrorInfo
+    ),
     fingerprint: createHash('sha256').update(canonical).digest('hex'),
   });
+}
+
+function withProtocolProcessDetail(
+  failure: ReviewAgentExecutionError,
+  origin: 'response_error' | 'turn_error',
+  validatedCodexErrorInfo?: unknown
+): ReviewAgentExecutionError {
+  if (
+    failure.failureClass !== ReviewAgentFailureClass.ProcessFailure ||
+    failure.message !== 'review_agent_process_failure'
+  ) {
+    return failure;
+  }
+  const variant =
+    typeof validatedCodexErrorInfo === 'string'
+      ? validatedCodexErrorInfo
+      : isRecord(validatedCodexErrorInfo)
+        ? Object.keys(validatedCodexErrorInfo)[0]
+        : undefined;
+  const suffix =
+    variant &&
+    (CODEX_ERROR_INFO_STRING_VARIANTS.has(variant) ||
+      CODEX_ERROR_INFO_HTTP_VARIANTS.has(variant) ||
+      variant === 'activeTurnNotSteerable')
+      ? `_${variant.toLowerCase()}`
+      : '';
+  return new ReviewAgentExecutionError(
+    failure.failureClass,
+    failure.retryAfterMs,
+    `review_agent_process_failure_${origin}${suffix}`
+  );
 }
 
 function hasCodexErrorClassification(value: unknown): boolean {

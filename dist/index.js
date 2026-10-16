@@ -52398,7 +52398,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.179",
+  version: "1.0.180",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -98481,7 +98481,10 @@ function responseFailure(value) {
     return streamFailure();
   }
   const diagnostic = `${error2.code} ${error2.message} ${safeJson(error2.data)}`.slice(0, 16384);
-  return classifyCodexAppServerDiagnostic(diagnostic);
+  return withProtocolProcessDetail(
+    classifyCodexAppServerDiagnostic(diagnostic),
+    "response_error"
+  );
 }
 function parseTurnError(value) {
   const error2 = requireRecord2(value, "turn_error");
@@ -98508,9 +98511,25 @@ function parseTurnError(value) {
     safeJson(codexErrorInfo)
   ].join(" ").slice(0, 16384);
   return Object.freeze({
-    failure: classifyCodexAppServerDiagnostic(diagnostic),
+    failure: withProtocolProcessDetail(
+      classifyCodexAppServerDiagnostic(diagnostic),
+      "turn_error",
+      codexErrorInfo
+    ),
     fingerprint: (0, import_crypto26.createHash)("sha256").update(canonical).digest("hex")
   });
+}
+function withProtocolProcessDetail(failure, origin, validatedCodexErrorInfo) {
+  if (failure.failureClass !== "process_failure" /* ProcessFailure */ || failure.message !== "review_agent_process_failure") {
+    return failure;
+  }
+  const variant = typeof validatedCodexErrorInfo === "string" ? validatedCodexErrorInfo : isRecord4(validatedCodexErrorInfo) ? Object.keys(validatedCodexErrorInfo)[0] : void 0;
+  const suffix = variant && (CODEX_ERROR_INFO_STRING_VARIANTS.has(variant) || CODEX_ERROR_INFO_HTTP_VARIANTS.has(variant) || variant === "activeTurnNotSteerable") ? `_${variant.toLowerCase()}` : "";
+  return new ReviewAgentExecutionError(
+    failure.failureClass,
+    failure.retryAfterMs,
+    `review_agent_process_failure_${origin}${suffix}`
+  );
 }
 function hasCodexErrorClassification(value) {
   return value !== null;
@@ -116118,8 +116137,19 @@ function createConfiguredProductionInvestigationAgents(input) {
     throw new Error("review_investigation_approved_agent_unavailable");
   }
   const reasoningEffort = input.reasoningEffort;
+  const processResultObserver = (result2) => {
+    if (result2.termination === "exited" /* Exited */ && result2.exitCode === 0) {
+      return;
+    }
+    logger.warn("Review investigation app-server process failed", {
+      termination: result2.termination,
+      exitCode: result2.exitCode,
+      durationMs: result2.durationMs,
+      ...publicInvestigationProcessDiagnostic(result2.stderr)
+    });
+  };
   const processRunner = new NodeReviewAgentProcessRunner();
-  const appServer = input.modelTransport ? new NodeCodexAppServerTurnRunner() : void 0;
+  const appServer = input.modelTransport ? new NodeCodexAppServerTurnRunner({ processResultObserver }) : void 0;
   return Object.freeze([
     {
       providerKind: "codex" /* Codex */,
@@ -116166,17 +116196,7 @@ function createConfiguredProductionInvestigationAgents(input) {
         } : {},
         ...input.codexBinaryPath ? { binary: input.codexBinaryPath } : {},
         reasoningEffort,
-        processResultObserver: (result2) => {
-          if (result2.termination === "exited" /* Exited */ && result2.exitCode === 0) {
-            return;
-          }
-          logger.warn("Review investigation app-server process failed", {
-            termination: result2.termination,
-            exitCode: result2.exitCode,
-            durationMs: result2.durationMs,
-            ...publicInvestigationProcessDiagnostic(result2.stderr)
-          });
-        }
+        processResultObserver
       })
     }
   ]);

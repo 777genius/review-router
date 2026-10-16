@@ -157,6 +157,18 @@ describe('deterministic context probe plan', () => {
         path,
         '+import { EventPayload } from "./feature/event-route";',
         '+export { EventPayload } from "./feature/event-route";',
+        '+import /* dependency; annotation */ { EventPayload } from "./feature/annotated-event-route";',
+        '+import /* init */ "./feature/side-effect-setup";',
+        ' import {',
+        '   EventPayload,',
+        '-} from "./feature/old-event-route";',
+        '+} from "./feature/multiline-event-route";',
+        ' import {',
+        '   EventPayload,',
+        '+} /* annotation */ from "./feature/commented-multiline-event-route";',
+        ' import {',
+        '   EventPayload,',
+        '+} from /* annotation */ "./feature/after-from-event-route";',
         '+export const route = "/v1/payments";',
         '+import "./feature/setup"; featureFlag("runtime-after-import");',
         '+import ("./dependency").then(() => featureFlag("dynamic-checkout"));',
@@ -164,7 +176,16 @@ describe('deterministic context probe plan', () => {
       ),
     });
 
-    for (const query of ['./feature/event-route', './feature/setup']) {
+    for (const query of [
+      './feature/event-route',
+      './feature/annotated-event-route',
+      './feature/side-effect-setup',
+      './feature/old-event-route',
+      './feature/multiline-event-route',
+      './feature/commented-multiline-event-route',
+      './feature/after-from-event-route',
+      './feature/setup',
+    ]) {
       expect(probe(plan, query)).toMatchObject({
         probeKind: ReviewInvestigationProbeKind.ModulePath,
         obligationKind: ReviewTurnObligationKind.DirectReferenceSearch,

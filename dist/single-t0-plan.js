@@ -14433,11 +14433,15 @@ function extractDeclarationIdentifiers(line, add) {
   }
 }
 function extractImportExportRelations(line, add) {
-  if (!/\b(?:import|export|require|include|use)\b/u.test(line)) return;
+  if (!/\b(?:import|export|require|include|use)\b|^\s*\}(?:\s|\/\*.*?\*\/)*from(?:\s|\/\*.*?\*\/)*["'`]/u.test(
+    line
+  )) {
+    return;
+  }
   const modulePatterns = [
-    /\bfrom\s*["'`]([^"'`\r\n]+)["'`]/gu,
+    /\bfrom(?:\s|\/\*.*?\*\/)*["'`]([^"'`\r\n]+)["'`]/gu,
     /\b(?:require|import)\s*\(\s*["'`]([^"'`\r\n]+)["'`]/gu,
-    /\b(?:import|include)\s*["'`]([^"'`\r\n]+)["'`]/gu,
+    /\b(?:import|include)(?:\s|\/\*.*?\*\/)*["'`]([^"'`\r\n]+)["'`]/gu,
     /\buse\s+([A-Za-z_][A-Za-z0-9_:]*)/gu
   ];
   for (const pattern of modulePatterns) {
@@ -14483,10 +14487,14 @@ function extractStructuredRelations(path14, line, add) {
   }
 }
 function extractRuntimeContractRelations(line, add) {
-  if (/^\s*(?:import\s+(?:["'{*]|[A-Za-z_$])|export\s+(?:["'*{]|type\s*\{))/u.test(
-    line
+  const declarationLine = line.replace(
+    /\/\*.*?\*\//gu,
+    (comment) => " ".repeat(comment.length)
+  );
+  if (/^\s*(?:import\s+(?:["'{*]|[A-Za-z_$])|export\s+(?:["'*{]|type\s*\{)|\}\s*from\s*["'`])/u.test(
+    declarationLine
   )) {
-    const statementEnd = line.indexOf(";");
+    const statementEnd = declarationLine.indexOf(";");
     if (statementEnd < 0) return;
     line = line.slice(statementEnd + 1);
   }

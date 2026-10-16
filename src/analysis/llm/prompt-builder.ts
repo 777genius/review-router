@@ -249,6 +249,10 @@ export class PromptBuilder {
       '   • Inspect function names, comments, nearby tests, direct callers, and sibling implementations before deciding findings are empty',
       '   • Treat helpers named matches*, is*, has*, assert*, parse*, extract*, slim*, delete*, recover*, load*, save*, route*, or configure* as contract-bearing until callers prove otherwise',
       '   • Semantic inversions and dropped structured fields are bugs when existing callers depend on the previous meaning, even if the changed line is not directly user-facing',
+      '',
+      '5. INTRODUCED-ISSUE CHECK:',
+      '   • Only report material failures introduced or aggravated by this base-to-head change; compare before and after using the available diff, repository context, and callers.',
+      '   • Exclude unchanged pre-existing bugs and residual behavior in partial fixes without a causal change. A new supported input/path or an explicit contract change can expose an old fault and make it reportable; the underlying fault need not be new.',
       ''
     );
 
@@ -278,6 +282,7 @@ export class PromptBuilder {
     pushShared(
       'FINDING TEXT:',
       'Each finding message must be complete enough to understand and fix the issue from the PR summary alone: what is wrong, why it matters, and how to fix it.',
+      'Briefly state the causal base-to-head change and reachable failure path in each finding message.',
       ''
     );
 

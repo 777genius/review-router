@@ -98,11 +98,10 @@ describe('PromptBuilder Context Window Validation', () => {
     });
 
     it('should detect high utilization', async () => {
-      // Create PR that uses significant portion of a small context window
-      // Simplified prompt is shorter, so need more diff content for high utilization
+      // Keep significant context utilization with headroom for shared review rules.
       const mediumPR: PRContext = {
         ...mockPR,
-        diff: 'a'.repeat(3000), // high utilization while staying under gpt-3.5-turbo's 2k available test budget
+        diff: 'a'.repeat(1500), // Stay within gpt-3.5-turbo's 2k available test budget.
       };
 
       const builder = new PromptBuilder(DEFAULT_CONFIG, 'standard');

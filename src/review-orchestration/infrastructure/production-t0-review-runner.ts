@@ -827,9 +827,25 @@ export function createConfiguredProductionInvestigationAgents(input: {
     throw new Error('review_investigation_approved_agent_unavailable');
   }
   const reasoningEffort = input.reasoningEffort;
+  const processResultObserver: NonNullable<
+    CodexReviewAgentAdapterOptions['processResultObserver']
+  > = (result) => {
+    if (
+      result.termination === ReviewAgentProcessTermination.Exited &&
+      result.exitCode === 0
+    ) {
+      return;
+    }
+    logger.warn('Review investigation app-server process failed', {
+      termination: result.termination,
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+      ...publicInvestigationProcessDiagnostic(result.stderr),
+    });
+  };
   const processRunner = new NodeReviewAgentProcessRunner();
   const appServer = input.modelTransport
-    ? new NodeCodexAppServerTurnRunner()
+    ? new NodeCodexAppServerTurnRunner({ processResultObserver })
     : undefined;
   return Object.freeze([
     {
@@ -889,20 +905,7 @@ export function createConfiguredProductionInvestigationAgents(input: {
           : {}),
         ...(input.codexBinaryPath ? { binary: input.codexBinaryPath } : {}),
         reasoningEffort,
-        processResultObserver: (result) => {
-          if (
-            result.termination === ReviewAgentProcessTermination.Exited &&
-            result.exitCode === 0
-          ) {
-            return;
-          }
-          logger.warn('Review investigation app-server process failed', {
-            termination: result.termination,
-            exitCode: result.exitCode,
-            durationMs: result.durationMs,
-            ...publicInvestigationProcessDiagnostic(result.stderr),
-          });
-        },
+        processResultObserver,
       }),
     },
   ] satisfies readonly ConfiguredProductionReviewAgent[]);

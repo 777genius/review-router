@@ -18,6 +18,7 @@ import {
   REVIEW_INVESTIGATION_SEARCH_POLICY_VERSION,
 } from '../../../src/review-investigation/domain/deterministic-context-probe-plan';
 import { REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH } from '../../../src/review-investigation/application/review-investigation-turn-prompt';
+import { logger } from '../../../src/utils/logger';
 import { ConfigLoader } from '../../../src/config/loader';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import { ReviewActionV2Client } from '../../../src/control-plane/review-action-v2-client';
@@ -649,6 +650,99 @@ describe('ProductionT0ReviewRunner policy', () => {
         fs.rmSync(root, { recursive: true, force: true });
       }
     }
+  );
+
+  it.each([true, false])(
+    'reports one safe subprocess failure through the configured gateway=%s runner',
+    async (gateway) => {
+      const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'appserver-observer-')
+      );
+      const home = path.join(root, 'home');
+      const binary = path.join(root, 'codex-fixture');
+      fs.mkdirSync(home);
+      fs.writeFileSync(
+        binary,
+        `#!${process.execPath}
+if (process.argv.includes('--version')) {
+  process.stdout.write('codex-cli 0.147.0');
+  process.exit(0);
+}
+process.stdin.once('data', () => {
+  process.stderr.write('panic private-stderr-sentinel');
+  process.exit(17);
+});
+`,
+        { mode: 0o700 }
+      );
+      const warning = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+      try {
+        const agents = createConfiguredProductionInvestigationAgents({
+          codexModel: 'gpt-fixture',
+          codexBinaryPath: binary,
+          reasoningEffort: 'high',
+          ...(gateway
+            ? {
+                modelTransport: {
+                  baseUrl: 'http://127.0.0.1:1/v1',
+                  configuration: [],
+                  environment: { CODEX_HOME: home },
+                  actualModel: () => 'gpt-fixture',
+                  dispose: async () => {},
+                },
+              }
+            : {}),
+          executionSessions: {
+            resolve: () => ({
+              policyVersion: 'context-gateway-v4',
+              binaryHash: 'a'.repeat(64),
+              command: process.execPath,
+              args: [path.join(root, 'unused-context-gateway.cjs')],
+              cwd: root,
+              enabledTools: REVIEW_INVESTIGATION_GATEWAY_TOOLS,
+              runtimeEnvironment: {},
+              credentialEnvironment: {},
+            }),
+          },
+        });
+        await expect(
+          agents[0].agent.executeTurn({
+            invocationId: 'observer-invocation',
+            fencingToken: 'observer-fence',
+            turnId: 'observer-turn',
+            dossierVersion: 1,
+            dossierDigest: 'b'.repeat(64),
+            purpose: ReviewTurnPurpose.Discovery,
+            allowedObligationIds: ['c'.repeat(64)],
+            prompt: 'Review fixture',
+            workspaceRoot: root,
+            requestedModel: 'gpt-fixture',
+            timeoutMs: 5_000,
+            maxTurns: 1,
+            executionSession: {
+              kind: ReviewAgentExecutionSessionKind.ContextGatewayV4,
+            },
+          })
+        ).rejects.toMatchObject({ message: 'review_agent_process_failure' });
+        expect(warning).toHaveBeenCalledTimes(1);
+        expect(warning).toHaveBeenCalledWith(
+          'Review investigation app-server process failed',
+          expect.objectContaining({
+            termination: 'exited',
+            exitCode: 17,
+            diagnosticKinds: ['internal'],
+            stderrByteCount: Buffer.byteLength('panic private-stderr-sentinel'),
+          })
+        );
+        expect(JSON.stringify(warning.mock.calls)).not.toContain(
+          'private-stderr-sentinel'
+        );
+      } finally {
+        warning.mockRestore();
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    },
+    15_000
   );
 
   it('treats providerRetries as the total provider attempt budget', () => {

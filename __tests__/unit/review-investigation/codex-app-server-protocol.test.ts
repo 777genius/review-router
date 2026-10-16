@@ -1171,6 +1171,63 @@ describe('CodexAppServerProtocolClient', () => {
     });
   });
 
+  it('reports a fixed response-error origin without exposing RPC data', async () => {
+    const writes: Array<Record<string, unknown>> = [];
+    const client = new CodexAppServerProtocolClient(
+      protocolRequest(),
+      async (message) => {
+        writes.push({ ...message });
+      }
+    );
+    const result = client.run();
+    await waitForWrite(writes, 'initialize');
+    client.receive({
+      id: 1,
+      error: {
+        code: -32603,
+        message: 'private-rpc-sentinel',
+        data: { codexErrorInfo: 'contextWindowExceeded' },
+      },
+    });
+    await expect(result).rejects.toMatchObject({
+      failureClass: ReviewAgentFailureClass.ProcessFailure,
+      message: 'review_agent_process_failure_response_error',
+    });
+  });
+
+  it.each([
+    ['contextwindowexceeded', 'contextWindowExceeded'],
+    [
+      'responsestreamdisconnected',
+      { responseStreamDisconnected: { httpStatusCode: 502 } },
+    ],
+  ] as const)(
+    'reports only the validated terminal variant %s for an unclassified failure',
+    async (variant, codexErrorInfo) => {
+      const fixture = await activeTurn();
+      const error = turnError('private-terminal-sentinel', codexErrorInfo);
+      fixture.client.receive(
+        notification('error', {
+          threadId,
+          turnId,
+          willRetry: false,
+          error,
+        })
+      );
+      fixture.client.receive(
+        notification('turn/completed', {
+          threadId,
+          turn: { id: turnId, status: 'failed', error, items: [] },
+        })
+      );
+      await expect(fixture.result).rejects.toMatchObject({
+        failureClass: ReviewAgentFailureClass.ProcessFailure,
+        message: `review_agent_process_failure_turn_error_${variant}`,
+        retryAfterMs: null,
+      });
+    }
+  );
+
   it('preserves a terminal app-server error instead of reporting an incomplete stream', async () => {
     const fixture = await activeTurn();
     const error = turnError('provider overloaded', 'serverOverloaded');
@@ -1270,6 +1327,7 @@ describe('CodexAppServerProtocolClient', () => {
 
       await expect(fixture.result).rejects.toMatchObject({
         failureClass: ReviewAgentFailureClass.StreamIncomplete,
+        message: 'review_agent_stream_incomplete_error',
       });
     }
   );

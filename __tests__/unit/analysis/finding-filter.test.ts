@@ -316,6 +316,36 @@ index 51097d9..d0723db 100644
       );
     });
 
+    test('reports fixture exclusion without calling a concrete bug a suggestion', () => {
+      const finding: Finding = {
+        file: 'fixtures/reviewrouter/pagination.mts',
+        line: 7,
+        severity: 'major',
+        title: 'One-based pagination skips the first page',
+        message:
+          'This newly added helper documents one-based pages and its loadInitialPage caller requires page 1, size 2 to return [A,B], but `start = page * size` begins page 1 at offset 2. As a result, loadInitialPage returns [C,D], breaking the changed caller contract and causing any page-N request to return the items from page N+1 or skip data entirely.',
+        suggestion: 'const start = (page - 1) * size;',
+      };
+
+      const excluded = filter.filter([finding], '');
+      expect(excluded.findings).toHaveLength(0);
+      expect(
+        excluded.stats.reasons['test file/infrastructure (excluded from review)']
+      ).toBe(1);
+      expect(
+        excluded.stats.reasons['suggestion/optimization (not a bug)']
+      ).toBeUndefined();
+
+      // Ordinary application paths retain the same concrete finding. The fix
+      // changes diagnostics, not the existing test/fixture exclusion policy.
+      const included = filter.filter(
+        [{ ...finding, file: 'src/pagination.mts' }],
+        ''
+      );
+      expect(included.findings).toHaveLength(1);
+      expect(included.stats.filtered).toBe(0);
+    });
+
     test('still filters generic validation suggestions with cautious wording', () => {
       const findings: Finding[] = [
         {

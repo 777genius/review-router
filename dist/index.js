@@ -31303,6 +31303,16 @@ function renderReviewerSummaryMarkdown(input) {
       `| ${labels.unreviewed} | ${coverage.unreviewedFiles} |`,
       `| ${labels.mode} | ${escapeMarkdownText(coverage.mode)} |`
     );
+    const excludedFiles = [
+      coverage.totalFiles,
+      coverage.reviewedFiles,
+      coverage.unreviewedFiles
+    ].every((count) => Number.isSafeInteger(count) && count >= 0) ? coverage.totalFiles - coverage.reviewedFiles - coverage.unreviewedFiles : 0;
+    if (coverage.mode === "full" && Number.isSafeInteger(excludedFiles) && excludedFiles > 0) {
+      lines.push(
+        `| ${scopeCopy[locale].excludedByPolicy} | ${excludedFiles} |`
+      );
+    }
     for (const [key, value] of [
       ["fullDiff", coverage.fullDiffFiles],
       ["compacted", coverage.compactedFiles],
@@ -32179,6 +32189,7 @@ var scopeCopy = {
     compacted: "Compacted in prompt",
     metadataOnly: "Metadata-only or trimmed",
     skipped: "Skipped before LLM review",
+    excludedByPolicy: "Excluded by review policy",
     context: "Agentic context",
     release: "Release Notes",
     billing: "Billing",
@@ -32192,6 +32203,7 @@ var scopeCopy = {
     compacted: "\u0421\u043E\u043A\u0440\u0430\u0449\u0451\u043D\u043D\u044B\u0439 diff",
     metadataOnly: "\u0422\u043E\u043B\u044C\u043A\u043E \u043C\u0435\u0442\u0430\u0434\u0430\u043D\u043D\u044B\u0435",
     skipped: "\u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E \u0434\u043E LLM",
+    excludedByPolicy: "\u0418\u0441\u043A\u043B\u044E\u0447\u0435\u043D\u043E \u043F\u043E\u043B\u0438\u0442\u0438\u043A\u043E\u0439 \u0440\u0435\u0432\u044C\u044E",
     context: "\u0410\u0433\u0435\u043D\u0442\u043D\u044B\u0439 \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442",
     release: "\u041F\u0440\u0438\u043C\u0435\u0447\u0430\u043D\u0438\u044F \u043A \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F\u043C",
     billing: "\u041E\u043F\u043B\u0430\u0442\u0430",
@@ -32205,6 +32217,7 @@ var scopeCopy = {
     compacted: "\u0421\u043A\u043E\u0440\u043E\u0447\u0435\u043D\u0438\u0439 diff",
     metadataOnly: "\u041B\u0438\u0448\u0435 \u043C\u0435\u0442\u0430\u0434\u0430\u043D\u0456",
     skipped: "\u041F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u043E \u0434\u043E LLM",
+    excludedByPolicy: "\u0412\u0438\u043A\u043B\u044E\u0447\u0435\u043D\u043E \u043F\u043E\u043B\u0456\u0442\u0438\u043A\u043E\u044E \u0440\u0435\u0432\u2019\u044E",
     context: "\u0410\u0433\u0435\u043D\u0442\u043D\u0438\u0439 \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442",
     release: "\u041F\u0440\u0438\u043C\u0456\u0442\u043A\u0438 \u0434\u043E \u0437\u043C\u0456\u043D",
     billing: "\u041E\u043F\u043B\u0430\u0442\u0430",
@@ -32218,6 +32231,7 @@ var scopeCopy = {
     compacted: "Diff reducido",
     metadataOnly: "Solo metadatos",
     skipped: "Omitidos antes del LLM",
+    excludedByPolicy: "Excluidos por la pol\xEDtica de revisi\xF3n",
     context: "Contexto agente",
     release: "Notas de cambios",
     billing: "Facturaci\xF3n",
@@ -32231,6 +32245,7 @@ var scopeCopy = {
     compacted: "Diff reduzido",
     metadataOnly: "S\xF3 metadados",
     skipped: "Ignorados antes do LLM",
+    excludedByPolicy: "Exclu\xEDdos pela pol\xEDtica de revis\xE3o",
     context: "Contexto agente",
     release: "Notas de altera\xE7\xF5es",
     billing: "Cobran\xE7a",
@@ -32244,6 +32259,7 @@ var scopeCopy = {
     compacted: "Diff r\xE9duit",
     metadataOnly: "M\xE9tadonn\xE9es seules",
     skipped: "Ignor\xE9s avant LLM",
+    excludedByPolicy: "Exclus par la politique de revue",
     context: "Contexte agent",
     release: "Notes de changements",
     billing: "Facturation",
@@ -32257,6 +32273,7 @@ var scopeCopy = {
     compacted: "Gek\xFCrzter Diff",
     metadataOnly: "Nur Metadaten",
     skipped: "Vor LLM \xFCbersprungen",
+    excludedByPolicy: "Durch Review-Richtlinie ausgeschlossen",
     context: "Agentenkontext",
     release: "\xC4nderungsnotizen",
     billing: "Abrechnung",
@@ -32270,6 +32287,7 @@ var scopeCopy = {
     compacted: "Diff ridotto",
     metadataOnly: "Solo metadati",
     skipped: "Esclusi prima del LLM",
+    excludedByPolicy: "Esclusi dalla politica di revisione",
     context: "Contesto agente",
     release: "Note sulle modifiche",
     billing: "Fatturazione",
@@ -32283,6 +32301,7 @@ var scopeCopy = {
     compacted: "\u538B\u7F29\u5DEE\u5F02",
     metadataOnly: "\u4EC5\u5143\u6570\u636E",
     skipped: "LLM\u524D\u8DF3\u8FC7",
+    excludedByPolicy: "\u6309\u5BA1\u67E5\u7B56\u7565\u6392\u9664",
     context: "\u4EE3\u7406\u4E0A\u4E0B\u6587",
     release: "\u53D8\u66F4\u8BF4\u660E",
     billing: "\u8BA1\u8D39",
@@ -32296,6 +32315,7 @@ var scopeCopy = {
     compacted: "\u5727\u7E2E\u3057\u305F\u5DEE\u5206",
     metadataOnly: "\u30E1\u30BF\u30C7\u30FC\u30BF\u306E\u307F",
     skipped: "LLM\u524D\u306B\u9664\u5916",
+    excludedByPolicy: "\u30EC\u30D3\u30E5\u30FC\u30DD\u30EA\u30B7\u30FC\u306B\u3088\u308A\u9664\u5916",
     context: "\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u6587\u8108",
     release: "\u5909\u66F4\u5185\u5BB9",
     billing: "\u8AB2\u91D1",
@@ -32309,6 +32329,7 @@ var scopeCopy = {
     compacted: "\uCD95\uC57D\uD55C \uCC28\uC774",
     metadataOnly: "\uBA54\uD0C0\uB370\uC774\uD130\uB9CC",
     skipped: "LLM \uC774\uC804 \uC81C\uC678",
+    excludedByPolicy: "\uAC80\uD1A0 \uC815\uCC45\uC5D0 \uB530\uB77C \uC81C\uC678",
     context: "\uC5D0\uC774\uC804\uD2B8 \uCEE8\uD14D\uC2A4\uD2B8",
     release: "\uBCC0\uACBD \uC0AC\uD56D",
     billing: "\uACFC\uAE08",
@@ -44014,6 +44035,9 @@ var FindingFilter = class {
     if (this.isTestFile(finding.file) && this.isIntentionalTestPattern(finding)) {
       return "intentional test pattern";
     }
+    if (this.isTestFile(finding.file) || this.isTestInfrastructure(finding.file)) {
+      return "test file/infrastructure (excluded from review)";
+    }
     if (this.isWorkflowOrCIFile(finding.file) && this.isWorkflowConfigurationIssue(finding)) {
       return "workflow/CI configuration (not application code)";
     }
@@ -52465,7 +52489,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.183",
+  version: "1.0.184",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

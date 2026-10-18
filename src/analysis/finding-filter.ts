@@ -226,6 +226,14 @@ export class FindingFilter {
     ) {
       return 'intentional test pattern';
     }
+    // Test paths are excluded before suggestion/runtime classification. Report
+    // that actual policy decision even when the message also mentions docs.
+    if (
+      this.isTestFile(finding.file) ||
+      this.isTestInfrastructure(finding.file)
+    ) {
+      return 'test file/infrastructure (excluded from review)';
+    }
     if (
       this.isWorkflowOrCIFile(finding.file) &&
       this.isWorkflowConfigurationIssue(finding)

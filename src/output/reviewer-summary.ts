@@ -329,6 +329,23 @@ export function renderReviewerSummaryMarkdown(
       `| ${labels.unreviewed} | ${coverage.unreviewedFiles} |`,
       `| ${labels.mode} | ${escapeMarkdownText(coverage.mode)} |`
     );
+    const excludedFiles = [
+      coverage.totalFiles,
+      coverage.reviewedFiles,
+      coverage.unreviewedFiles,
+    ].every((count) => Number.isSafeInteger(count) && count >= 0)
+      ? coverage.totalFiles - coverage.reviewedFiles - coverage.unreviewedFiles
+      : 0;
+    // Incremental totals also contain unchanged files outside this update.
+    if (
+      coverage.mode === 'full' &&
+      Number.isSafeInteger(excludedFiles) &&
+      excludedFiles > 0
+    ) {
+      lines.push(
+        `| ${scopeCopy[locale].excludedByPolicy} | ${excludedFiles} |`
+      );
+    }
 
     for (const [key, value] of [
       ['fullDiff', coverage.fullDiffFiles],
@@ -1423,6 +1440,7 @@ type ScopeCopy = Record<
   | 'compacted'
   | 'metadataOnly'
   | 'skipped'
+  | 'excludedByPolicy'
   | 'context'
   | 'release'
   | 'billing'
@@ -1438,6 +1456,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: 'Compacted in prompt',
     metadataOnly: 'Metadata-only or trimmed',
     skipped: 'Skipped before LLM review',
+    excludedByPolicy: 'Excluded by review policy',
     context: 'Agentic context',
     release: 'Release Notes',
     billing: 'Billing',
@@ -1451,6 +1470,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: 'Сокращённый diff',
     metadataOnly: 'Только метаданные',
     skipped: 'Пропущено до LLM',
+    excludedByPolicy: 'Исключено политикой ревью',
     context: 'Агентный контекст',
     release: 'Примечания к изменениям',
     billing: 'Оплата',
@@ -1464,6 +1484,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: 'Скорочений diff',
     metadataOnly: 'Лише метадані',
     skipped: 'Пропущено до LLM',
+    excludedByPolicy: 'Виключено політикою рев’ю',
     context: 'Агентний контекст',
     release: 'Примітки до змін',
     billing: 'Оплата',
@@ -1477,6 +1498,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: 'Diff reducido',
     metadataOnly: 'Solo metadatos',
     skipped: 'Omitidos antes del LLM',
+    excludedByPolicy: 'Excluidos por la política de revisión',
     context: 'Contexto agente',
     release: 'Notas de cambios',
     billing: 'Facturación',
@@ -1490,6 +1512,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: 'Diff reduzido',
     metadataOnly: 'Só metadados',
     skipped: 'Ignorados antes do LLM',
+    excludedByPolicy: 'Excluídos pela política de revisão',
     context: 'Contexto agente',
     release: 'Notas de alterações',
     billing: 'Cobrança',
@@ -1503,6 +1526,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: 'Diff réduit',
     metadataOnly: 'Métadonnées seules',
     skipped: 'Ignorés avant LLM',
+    excludedByPolicy: 'Exclus par la politique de revue',
     context: 'Contexte agent',
     release: 'Notes de changements',
     billing: 'Facturation',
@@ -1516,6 +1540,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: 'Gekürzter Diff',
     metadataOnly: 'Nur Metadaten',
     skipped: 'Vor LLM übersprungen',
+    excludedByPolicy: 'Durch Review-Richtlinie ausgeschlossen',
     context: 'Agentenkontext',
     release: 'Änderungsnotizen',
     billing: 'Abrechnung',
@@ -1529,6 +1554,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: 'Diff ridotto',
     metadataOnly: 'Solo metadati',
     skipped: 'Esclusi prima del LLM',
+    excludedByPolicy: 'Esclusi dalla politica di revisione',
     context: 'Contesto agente',
     release: 'Note sulle modifiche',
     billing: 'Fatturazione',
@@ -1542,6 +1568,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: '压缩差异',
     metadataOnly: '仅元数据',
     skipped: 'LLM前跳过',
+    excludedByPolicy: '按审查策略排除',
     context: '代理上下文',
     release: '变更说明',
     billing: '计费',
@@ -1555,6 +1582,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: '圧縮した差分',
     metadataOnly: 'メタデータのみ',
     skipped: 'LLM前に除外',
+    excludedByPolicy: 'レビューポリシーにより除外',
     context: 'エージェント文脈',
     release: '変更内容',
     billing: '課金',
@@ -1568,6 +1596,7 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     compacted: '축약한 차이',
     metadataOnly: '메타데이터만',
     skipped: 'LLM 이전 제외',
+    excludedByPolicy: '검토 정책에 따라 제외',
     context: '에이전트 컨텍스트',
     release: '변경 사항',
     billing: '과금',

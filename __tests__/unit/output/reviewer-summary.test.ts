@@ -234,6 +234,102 @@ describe('reviewer summary markdown', () => {
     );
   });
 
+  it('explains policy-excluded files without changing completed coverage', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      coverage: {
+        complete: true,
+        totalFiles: 1,
+        reviewedFiles: 0,
+        unreviewedFiles: 0,
+        mode: 'full',
+        limitations: [],
+      },
+    });
+
+    expect(markdown).toContain('| Files reviewed | 0/1 |');
+    expect(markdown).toContain('| Not reviewed | 0 |');
+    expect(markdown).toContain('| Excluded by review policy | 1 |');
+    expect(markdown).toContain('<!-- reviewrouter:review-status:complete -->');
+    expect(markdown).not.toContain('### Coverage not completed');
+  });
+
+  it('keeps missing coverage distinct from policy exclusions', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      coverage: {
+        complete: false,
+        totalFiles: 5,
+        reviewedFiles: 2,
+        unreviewedFiles: 1,
+        mode: 'full',
+        limitations: ['A required file was not reviewed.'],
+      },
+    });
+
+    expect(markdown).toContain('| Files reviewed | 2/5 |');
+    expect(markdown).toContain('| Not reviewed | 1 |');
+    expect(markdown).toContain('| Excluded by review policy | 2 |');
+    expect(markdown).toContain(
+      '<!-- reviewrouter:review-status:incomplete -->'
+    );
+    expect(markdown).toContain('A required file was not reviewed.');
+  });
+
+  it('does not label unchanged incremental files as excluded by policy', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      coverage: {
+        complete: true,
+        totalFiles: 5,
+        reviewedFiles: 2,
+        unreviewedFiles: 0,
+        mode: 'incremental',
+        limitations: [],
+      },
+    });
+
+    expect(markdown).toContain('| Files reviewed | 2/5 |');
+    expect(markdown).toContain('| Review mode | incremental |');
+    expect(markdown).not.toContain('| Excluded by review policy |');
+    expect(markdown).toContain('<!-- reviewrouter:review-status:complete -->');
+  });
+
+  it.each([
+    { totalFiles: 1, reviewedFiles: 1, unreviewedFiles: 0 },
+    { totalFiles: 2, reviewedFiles: 1, unreviewedFiles: 1 },
+    { totalFiles: 0, reviewedFiles: 0, unreviewedFiles: 0 },
+    { totalFiles: 1, reviewedFiles: 2, unreviewedFiles: 0 },
+    { totalFiles: Infinity, reviewedFiles: 0, unreviewedFiles: 0 },
+    { totalFiles: 1, reviewedFiles: NaN, unreviewedFiles: 0 },
+    { totalFiles: 1, reviewedFiles: -1, unreviewedFiles: 0 },
+    { totalFiles: 1, reviewedFiles: 0, unreviewedFiles: -1 },
+    { totalFiles: 1.5, reviewedFiles: 0, unreviewedFiles: 0 },
+    {
+      totalFiles: Number.MAX_SAFE_INTEGER + 1,
+      reviewedFiles: 0,
+      unreviewedFiles: 0,
+    },
+  ])(
+    'does not invent policy exclusions for zero or invalid residuals: %j',
+    (counts) => {
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'English',
+        metrics,
+        findings: [],
+        coverage: { ...counts, complete: true, mode: 'full', limitations: [] },
+      });
+
+      expect(markdown).not.toContain('| Excluded by review policy |');
+    }
+  );
+
   it('renders historical lifecycle leftovers as expandable details', () => {
     const markdown = renderReviewerLifecycleMarkdown({
       language: 'Russian',

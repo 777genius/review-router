@@ -7,5 +7,14 @@
     "modelTransports": ["account_gateway", "provider_api"],
     "packageVersion": "0.147.0",
     "profileRef": "codex-default"
+  },
+  {
+    "agentKind": "ocr",
+    "binarySha256": "7df22058668028dc2099aab53f8f825e39ec2e5f90d3f83074588aa276422d8f",
+    "cancellation": true,
+    "contextGateway": false,
+    "modelTransports": ["account_gateway"],
+    "packageVersion": "1.13.1-rr.1",
+    "profileRef": "ocr-managed-v1"
   }
 ]

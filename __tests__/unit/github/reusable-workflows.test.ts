@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import yaml from 'js-yaml';
+import { REVIEW_ROUTER_API_ORIGIN } from '../../../src/config/review-router-endpoints';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -200,17 +201,11 @@ describe('production reusable workflows', () => {
         [original.replace('contents: read', 'contents: write'), 1],
         [original.replace('required: false', 'required: true'), 1],
         [
-          original.replace(
-            '        default: https://api.reviewrouter.site\n',
-            ''
-          ),
+          original.replace(`        default: ${REVIEW_ROUTER_API_ORIGIN}\n`, ''),
           1,
         ],
         [
-          original.replace(
-            'https://api.reviewrouter.site',
-            'https://other.invalid'
-          ),
+          original.replace(REVIEW_ROUTER_API_ORIGIN, 'https://other.invalid'),
           1,
         ],
       ] as const) {

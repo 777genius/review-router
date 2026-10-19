@@ -152,6 +152,20 @@ function safeOidcErrorCode(payload) {
 
 // src/control-plane/newtest-root-rendezvous.ts
 var import_promises = require("node:timers/promises");
+
+// src/config/review-router-endpoints.json
+var review_router_endpoints_default = {
+  webOrigin: "https://reviewrouter.site",
+  apiOrigin: "https://api.reviewrouter.site"
+};
+
+// src/config/review-router-endpoints.ts
+var REVIEW_ROUTER_WEB_ORIGIN = review_router_endpoints_default.webOrigin;
+var REVIEW_ROUTER_API_ORIGIN = review_router_endpoints_default.apiOrigin;
+var CODEX_SEED_SCRIPT_URL = `${REVIEW_ROUTER_WEB_ORIGIN}/install/codex`;
+var NEWTEST_V4_ROOT_URL = `${REVIEW_ROUTER_API_ORIGIN}/__newtest_v4/`;
+
+// src/control-plane/newtest-root-rendezvous.ts
 var WAIT_MS = 12e4;
 var ATTEMPTS = 24;
 var CONNECTION_CODES = /* @__PURE__ */ new Set([
@@ -190,7 +204,7 @@ function connectionFailure(error2, signal) {
 async function waitForNewtestRootChallenge(input) {
   if (!/^[1-9][0-9]*$/.test(input.runId))
     throw new Error("newtest_readiness_identity_rejected");
-  const url = new URL("https://api.reviewrouter.site/__newtest_v4/challenge");
+  const url = new URL("challenge", NEWTEST_V4_ROOT_URL);
   url.searchParams.set("runId", input.runId);
   const clock = input.monotonicNow ?? (() => performance.now());
   const sleep = input.wait ?? ((ms, signal) => (0, import_promises.setTimeout)(ms, void 0, { signal }));
@@ -260,7 +274,7 @@ async function waitForNewtestRootChallenge(input) {
 }
 
 // src/control-plane/newtest-one-shot-job-transport.ts
-var ROOT = "https://api.reviewrouter.site/__newtest_v4/";
+var ROOT = NEWTEST_V4_ROOT_URL;
 var TEST_REPOSITORY = "777genius/reviewrouter-e2e-prod-20260529-000305";
 var TEST_REPOSITORY_ID = "1252762369";
 var SHA = /^[a-f0-9]{40}$/;

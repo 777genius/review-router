@@ -50842,6 +50842,18 @@ function emptyFindingCounts() {
   return { critical: 0, major: 0, minor: 0 };
 }
 
+// src/config/review-router-endpoints.json
+var review_router_endpoints_default = {
+  webOrigin: "https://reviewrouter.site",
+  apiOrigin: "https://api.reviewrouter.site"
+};
+
+// src/config/review-router-endpoints.ts
+var REVIEW_ROUTER_WEB_ORIGIN = review_router_endpoints_default.webOrigin;
+var REVIEW_ROUTER_API_ORIGIN = review_router_endpoints_default.apiOrigin;
+var CODEX_SEED_SCRIPT_URL = `${REVIEW_ROUTER_WEB_ORIGIN}/install/codex`;
+var NEWTEST_V4_ROOT_URL = `${REVIEW_ROUTER_API_ORIGIN}/__newtest_v4/`;
+
 // src/github/failure-summary.ts
 var REVIEW_ROUTER_BOT_MARKER = "<!-- review-router-bot -->";
 var REVIEW_ROUTER_FAILURE_MARKER = "<!-- review-router-failure -->";
@@ -50863,7 +50875,6 @@ var FAILED_PROGRESS_TEXT = [
   "### Review needs attention",
   "\u{1F534} **"
 ];
-var CODEX_SEED_SCRIPT_URL = "https://reviewrouter.site/install/codex";
 function formatReviewFailureSummary(error2, prNumber) {
   const normalized = normalizeReviewError(error2);
   const safeDetails = sanitizeErrorMessage(
@@ -52517,6 +52528,8 @@ var package_default = {
     format: 'prettier --write "src/**/*.ts" "__tests__/**/*.ts"',
     "format:check": 'prettier --check "src/**/*.ts" "__tests__/**/*.ts"',
     typecheck: "tsc --noEmit",
+    "domains:sync": "node scripts/sync-review-router-domains.mjs",
+    "domains:check": "node scripts/sync-review-router-domains.mjs --check",
     "hooks:install": "bash scripts/install-hooks.sh",
     prepare: "npm run build:prod"
   },

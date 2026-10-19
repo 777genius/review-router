@@ -5,6 +5,7 @@ import {
   normalizeReviewError,
   sanitizeErrorMessage,
 } from '../errors/review-router-error';
+import { CODEX_SEED_SCRIPT_URL } from '../config/review-router-endpoints';
 
 const REVIEW_ROUTER_BOT_MARKER = '<!-- review-router-bot -->';
 const REVIEW_ROUTER_FAILURE_MARKER = '<!-- review-router-failure -->';
@@ -26,8 +27,6 @@ const FAILED_PROGRESS_TEXT = [
   '### Review needs attention',
   '🔴 **',
 ];
-const CODEX_SEED_SCRIPT_URL = 'https://reviewrouter.site/install/codex';
-
 export function formatReviewFailureSummary(
   error: Error,
   prNumber?: number

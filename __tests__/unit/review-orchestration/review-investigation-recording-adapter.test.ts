@@ -408,7 +408,7 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         manifestFacts: { ...base.invocation.manifestFacts, ...overrides },
       });
     const incompletePlan = {
-      ...base.invocation.investigationProbePlan,
+      ...base.invocation.investigationProbePlan!,
       status: ReviewInvestigationProbePlanStatus.LimitExceeded,
       probes: [],
       exceededLimit: {
@@ -502,12 +502,12 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         reason: ReviewInvestigationRecordingSupportReason.ProbeLimitsMismatch,
         input: candidate({
           investigationProbePlan: {
-            ...base.invocation.investigationProbePlan,
+            ...base.invocation.investigationProbePlan!,
             limits: {
-              ...base.invocation.investigationProbePlan.limits,
+              ...base.invocation.investigationProbePlan!.limits,
               maxProbesOverall:
-                base.invocation.investigationProbePlan.limits.maxProbesOverall +
-                1,
+                base.invocation.investigationProbePlan!.limits
+                  .maxProbesOverall + 1,
             },
           },
         }),
@@ -647,7 +647,7 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         apply: (state) =>
           updateInvocation(state, {
             investigationProbePlan: {
-              ...state.input.invocation.investigationProbePlan,
+              ...state.input.invocation.investigationProbePlan!,
               status: ReviewInvestigationProbePlanStatus.LimitExceeded,
               probes: [],
               exceededLimit: {
@@ -669,11 +669,11 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         apply: (state) =>
           updateInvocation(state, {
             investigationProbePlan: {
-              ...state.input.invocation.investigationProbePlan,
+              ...state.input.invocation.investigationProbePlan!,
               limits: {
-                ...state.input.invocation.investigationProbePlan.limits,
+                ...state.input.invocation.investigationProbePlan!.limits,
                 maxProbesOverall:
-                  state.input.invocation.investigationProbePlan.limits
+                  state.input.invocation.investigationProbePlan!.limits
                     .maxProbesOverall + 1,
               },
             },
@@ -712,7 +712,7 @@ describe('ReviewInvestigationRecordingAdapter', () => {
     );
     const input = executionInput();
     const incompleteProbePlan = {
-      ...input.invocation.investigationProbePlan,
+      ...input.invocation.investigationProbePlan!,
       status: ReviewInvestigationProbePlanStatus.LimitExceeded,
       probes: [],
       exceededLimit: {
@@ -822,7 +822,7 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         inventoryEntry('src/auth/session.ts'),
       ]),
       coverageManifest: nextRevisionCoverage,
-      probePlan: invocation.investigationProbePlan,
+      probePlan: invocation.investigationProbePlan!,
       requestedModel: invocation.requestedModel,
       reviewPrompt: invocation.investigationContextPrompt!,
     });

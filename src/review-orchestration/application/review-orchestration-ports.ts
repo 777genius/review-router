@@ -10,6 +10,7 @@ export enum ReviewExecutionProviderKind {
   Codex = 'codex',
   ClaudeCode = 'claude_code',
   OpenRouter = 'openrouter',
+  Ocr = 'ocr',
 }
 
 export enum ReviewCapabilityKind {
@@ -165,7 +166,8 @@ export type PreparedReviewInvocation = {
   readonly immutableRequest: unknown;
   readonly manifestFacts: PreparedReviewInvocationManifestFacts;
   readonly coverageManifest: import('../domain').ReviewPromptCoverageManifest;
-  readonly investigationProbePlan: import('../../review-investigation/domain').ReviewInvestigationProbePlan;
+  /** Null for managed OCR invocations; Codex invocations always carry a plan. */
+  readonly investigationProbePlan: import('../../review-investigation/domain').ReviewInvestigationProbePlan | null;
   readonly investigationSeedEnvelope?:
     | import('../../review-investigation/domain').PreparedReviewInvestigationSeedEnvelope
     | null;

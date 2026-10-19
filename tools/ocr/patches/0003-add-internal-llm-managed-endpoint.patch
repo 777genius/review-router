@@ -1,0 +1,338 @@
+diff --git a/internal/llm/managed.go b/internal/llm/managed.go
+new file mode 100644
+index 0000000..b301014
+--- /dev/null
++++ b/internal/llm/managed.go
+@@ -0,0 +1,332 @@
++// SPDX-License-Identifier: Apache-2.0
++// Copyright 2026 alibaba/open-code-review Contributors
++
++package llm
++
++import (
++	"encoding/json"
++	"fmt"
++	"net"
++	"net/url"
++	"os"
++	"strings"
++)
++
++// Managed review mode (the --reviewrouter-managed flag) is a review-only,
++// typed compatibility mode for the ReviewRouter integration. It resolves its
++// endpoint exclusively from a controlled custom_providers entry named
++// ManagedProviderName in the private HOME config file, BEFORE any general
++// credential resolution, and rejects every ambient, inherited or
++// command-executing credential path. Nothing in this file is reachable without
++// the explicit flag; unmanaged resolution keeps upstream behavior exactly.
++
++// ManagedProviderName is the only provider name managed mode accepts, both on
++// the command line (--provider reviewrouter) and in the config file
++// (custom_providers.reviewrouter).
++const ManagedProviderName = "reviewrouter"
++
++// managedRetryCount is the typed managed retry setting. The SDK retry count is
++// an optional numeric throughout: an absent value keeps the upstream default,
++// while this explicit 0 disables SDK-level retries for managed runs.
++var managedRetryCount = 0
++
++// managedReasoningEfforts is the allowlist for extra_body.reasoning.effort —
++// the captured model policy value. It is deliberately independent from the OCR
++// effort preset (low/medium/high): a model whose policy says "xhigh" must not
++// be forced into a non-existent OCR effort.
++var managedReasoningEfforts = map[string]bool{
++	"minimal": true,
++	"low":     true,
++	"medium":  true,
++	"high":    true,
++	"xhigh":   true,
++	"none":    true,
++}
++
++// managedEnvRejects are environment variables that would inject an inherited
++// endpoint or header override into the resolved endpoint. Managed mode rejects
++// them when set instead of silently ignoring or silently applying them, so a
++// leaked parent environment can never re-point the controlled endpoint.
++var managedEnvRejects = []string{
++	envOCRLLMURL,
++	envOCRLLMToken,
++	envOCRLLMModel,
++	envOCRLLMAuthHeader,
++	envOCRLLMExtraHeaders,
++	envOCRLLMProtocol,
++	envCCBaseURL,
++	envCCToken,
++	envCCModel,
++}
++
++// managedConfigFile mirrors the native config file shape with every known key
++// spelled out, so forbidden keys are rejected with a message that names them.
++// Unrecognized keys are ignored and never enable any behavior (transport flags
++// and the retry count come from typed mode, not from JSON).
++type managedConfigFile struct {
++	Provider        string                          `json:"provider"`
++	Model           string                          `json:"model"`
++	Language        string                          `json:"language"`
++	Telemetry       *managedTelemetrySection        `json:"telemetry"`
++	Providers       map[string]managedProviderEntry `json:"providers"`
++	CustomProviders map[string]managedProviderEntry `json:"custom_providers"`
++	Llm             json.RawMessage                 `json:"llm"`
++}
++
++type managedTelemetrySection struct {
++	Enabled *bool `json:"enabled"`
++}
++
++type managedProviderEntry struct {
++	APIKey       string            `json:"api_key"`
++	APIKeyCmd    string            `json:"api_key_cmd"`
++	URL          string            `json:"url"`
++	Protocol     string            `json:"protocol"`
++	Model        string            `json:"model"`
++	Models       []string          `json:"models"`
++	AuthHeader   string            `json:"auth_header"`
++	TimeoutSec   int               `json:"timeout_sec"`
++	ExtraBody    map[string]any    `json:"extra_body"`
++	ExtraHeaders map[string]string `json:"extra_headers"`
++	RetryCodes   []int             `json:"retry_codes"`
++	AWSProfile   string            `json:"aws_profile"`
++	AWSRegion    string            `json:"aws_region"`
++}
++
++// ResolveManagedEndpoint resolves the controlled managed endpoint from the
++// private HOME config file. It runs instead of every general resolution
++// strategy: no environment fallback, no shell-rc parsing, no api_key_cmd, no
++// ambient auth and no ChatGPT OAuth path is consulted or reachable.
++func ResolveManagedEndpoint(configPath string, opts ResolveOptions) (ResolvedEndpoint, error) {
++	if opts.Provider != ManagedProviderName {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires explicit --provider %s", ManagedProviderName)
++	}
++	for _, name := range managedEnvRejects {
++		if strings.TrimSpace(os.Getenv(name)) != "" {
++			return ResolvedEndpoint{}, fmt.Errorf("managed mode rejects inherited endpoint/header override: %s must not be set", name)
++		}
++	}
++
++	info, err := os.Stat(configPath)
++	if err != nil {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires the controlled config file %s: %w", configPath, err)
++	}
++	if info.Mode().Perm()&0o077 != 0 {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires a private config file: %s must not be group/world accessible (mode %04o)", configPath, info.Mode().Perm())
++	}
++
++	data, err := os.ReadFile(configPath)
++	if err != nil {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode: read config: %w", err)
++	}
++	var cfg managedConfigFile
++	if err := json.Unmarshal(data, &cfg); err != nil {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode: parse config: %w", err)
++	}
++
++	if cfg.Provider != ManagedProviderName {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires config provider %q, got %q", ManagedProviderName, cfg.Provider)
++	}
++	if strings.TrimSpace(cfg.Model) != "" {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode rejects a top-level model override; the admitted model lives in custom_providers.%s.model", ManagedProviderName)
++	}
++	if len(cfg.Providers) > 0 {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode rejects the providers section; only custom_providers.%s is allowed", ManagedProviderName)
++	}
++	if len(cfg.Llm) > 0 && string(cfg.Llm) != "null" {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode rejects the llm section; only custom_providers.%s is allowed", ManagedProviderName)
++	}
++	for name := range cfg.CustomProviders {
++		if name != ManagedProviderName {
++			return ResolvedEndpoint{}, fmt.Errorf("managed mode rejects custom provider %q; only %s is allowed", name, ManagedProviderName)
++		}
++	}
++	if cfg.Telemetry != nil && cfg.Telemetry.Enabled != nil && *cfg.Telemetry.Enabled {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires telemetry.enabled=false")
++	}
++
++	entry, ok := cfg.CustomProviders[ManagedProviderName]
++	if !ok {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires custom_providers.%s in %s", ManagedProviderName, configPath)
++	}
++	return resolveManagedEntry(entry, opts)
++}
++
++func resolveManagedEntry(entry managedProviderEntry, opts ResolveOptions) (ResolvedEndpoint, error) {
++	// Forbidden native knobs: anything that could execute a command, inject a
++	// header, re-arm SDK retries or switch transports.
++	if strings.TrimSpace(entry.APIKeyCmd) != "" {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode rejects api_key_cmd")
++	}
++	if strings.TrimSpace(entry.AuthHeader) != "" {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode rejects auth_header overrides")
++	}
++	if len(entry.ExtraHeaders) > 0 {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode rejects extra_headers overrides")
++	}
++	if len(entry.RetryCodes) > 0 {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode rejects retry_codes; retry count is set by typed mode")
++	}
++	if strings.TrimSpace(entry.AWSProfile) != "" || strings.TrimSpace(entry.AWSRegion) != "" {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode rejects ambient auth configuration (aws_profile/aws_region)")
++	}
++
++	protocol := NormalizeProtocol(entry.Protocol)
++	if protocol != ProtocolOpenAIResponses {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires protocol %q, got %q", ProtocolOpenAIResponses, entry.Protocol)
++	}
++
++	baseURL, err := validateManagedURL(entry.URL)
++	if err != nil {
++		return ResolvedEndpoint{}, err
++	}
++
++	token, err := managedToken(entry.APIKey)
++	if err != nil {
++		return ResolvedEndpoint{}, err
++	}
++
++	model := strings.TrimSpace(entry.Model)
++	if model == "" {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires the captured model in custom_providers.%s.model", ManagedProviderName)
++	}
++	if cli := strings.TrimSpace(opts.Model); cli != "" && cli != model {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode: --model %q does not match the captured model %q", cli, model)
++	}
++
++	timeout, err := ValidateTimeoutSec(entry.TimeoutSec)
++	if err != nil {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode: %w", err)
++	}
++	if timeout <= 0 {
++		return ResolvedEndpoint{}, fmt.Errorf("managed mode requires a positive timeout_sec per-request cap")
++	}
++
++	extraBody, err := validateManagedExtraBody(entry.ExtraBody)
++	if err != nil {
++		return ResolvedEndpoint{}, err
++	}
++
++	// Typed managed transport baseline: streaming Responses, strict terminal
++	// completion, sampling params suppressed, no ChatGPT plan semantics, and an
++	// explicit zero retry count. These flags are set here — never by JSON keys.
++	return ResolvedEndpoint{
++		URL:                   baseURL,
++		Token:                 token,
++		Model:                 model,
++		Provider:              ManagedProviderName,
++		Protocol:              ProtocolOpenAIResponses,
++		Source:                "managed:" + ManagedProviderName,
++		ExtraBody:             extraBody,
++		Timeout:               timeout,
++		RequiresStreaming:     true,
++		RejectsSamplingParams: true,
++		ChatGPTPlan:           false,
++		StrictTerminal:        true,
++		MaxRetries:            &managedRetryCount,
++	}, nil
++}
++
++// validateManagedURL checks the controlled loopback base URL: the client
++// appends /responses itself, so a base already carrying /v1 or /responses is a
++// configuration error rather than something to normalize away.
++func validateManagedURL(raw string) (string, error) {
++	raw = strings.TrimSpace(raw)
++	if raw == "" {
++		return "", fmt.Errorf("managed mode requires custom_providers.%s.url", ManagedProviderName)
++	}
++	u, err := url.Parse(raw)
++	if err != nil {
++		return "", fmt.Errorf("managed mode: invalid url: %w", err)
++	}
++	if u.Scheme != "http" && u.Scheme != "https" {
++		return "", fmt.Errorf("managed mode: url must be http(s), got %q", u.Scheme)
++	}
++	if u.User != nil {
++		return "", fmt.Errorf("managed mode: url must not carry userinfo")
++	}
++	if u.RawQuery != "" || u.Fragment != "" {
++		return "", fmt.Errorf("managed mode: url must not carry a query or fragment")
++	}
++	if !managedLoopbackHost(u.Hostname()) {
++		return "", fmt.Errorf("managed mode: url host %q must be loopback", u.Hostname())
++	}
++	path := strings.TrimRight(u.Path, "/")
++	if strings.HasSuffix(path, "/v1") || strings.HasSuffix(path, "/responses") {
++		return "", fmt.Errorf("managed mode: url must be the bare base URL without a /v1 or /responses suffix")
++	}
++	return raw, nil
++}
++
++func managedLoopbackHost(host string) bool {
++	if strings.EqualFold(host, "localhost") {
++		return true
++	}
++	ip := net.ParseIP(host)
++	return ip != nil && ip.IsLoopback()
++}
++
++// managedToken normalizes the raw loopback capability. The captured
++// Authorization value arrives as "Bearer HEX"; exactly one expected prefix is
++// stripped (the Go SDK adds Bearer itself). A double-prefixed or otherwise
++// malformed value is a hard error — it would otherwise produce
++// "Bearer Bearer HEX" on the wire.
++func managedToken(apiKey string) (string, error) {
++	token := strings.TrimSpace(apiKey)
++	const prefix = "Bearer "
++	if strings.HasPrefix(token, prefix) {
++		token = strings.TrimSpace(strings.TrimPrefix(token, prefix))
++	}
++	if token == "" {
++		return "", fmt.Errorf("managed mode: api_key is empty")
++	}
++	if strings.HasPrefix(token, prefix) {
++		return "", fmt.Errorf("managed mode: api_key is double-prefixed; expected a single %q prefix", prefix)
++	}
++	for _, r := range token {
++		if r <= ' ' || r == 0x7f {
++			return "", fmt.Errorf("managed mode: api_key is malformed")
++		}
++	}
++	return token, nil
++}
++
++// validateManagedExtraBody enforces the closed extra_body contract: only
++// service_tier=default and reasoning.effort from the captured model policy.
++// stream, URL, credentials, previous_response_id and arbitrary PR fields are
++// all rejected.
++func validateManagedExtraBody(body map[string]any) (map[string]any, error) {
++	if len(body) == 0 {
++		return nil, nil
++	}
++	for key := range body {
++		if key != "service_tier" && key != "reasoning" {
++			return nil, fmt.Errorf("managed mode: extra_body key %q is not allowed (only service_tier and reasoning)", key)
++		}
++	}
++	if v, ok := body["service_tier"]; ok {
++		tier, ok := v.(string)
++		if !ok || tier != "default" {
++			return nil, fmt.Errorf("managed mode: extra_body.service_tier must be \"default\"")
++		}
++	}
++	if v, ok := body["reasoning"]; ok {
++		reasoning, ok := v.(map[string]any)
++		if !ok {
++			return nil, fmt.Errorf("managed mode: extra_body.reasoning must be an object")
++		}
++		for key := range reasoning {
++			if key != "effort" {
++				return nil, fmt.Errorf("managed mode: extra_body.reasoning key %q is not allowed (only effort)", key)
++			}
++		}
++		effort, ok := reasoning["effort"].(string)
++		if !ok {
++			return nil, fmt.Errorf("managed mode: extra_body.reasoning.effort must be a string")
++		}
++		if !managedReasoningEfforts[effort] {
++			return nil, fmt.Errorf("managed mode: extra_body.reasoning.effort %q is not an allowlisted model effort", effort)
++		}
++	}
++	return body, nil
++}

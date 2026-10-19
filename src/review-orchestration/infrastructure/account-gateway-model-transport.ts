@@ -121,6 +121,10 @@ export type LocalGatewayModelTransport = Readonly<{
   environment: Readonly<NodeJS.ProcessEnv>;
   configuration: readonly string[];
   actualModel(): string | undefined;
+  /** Dispatched model-request observations (upstream relay attempts). Additive
+   * run evidence only: a managed engine may not claim success with zero model
+   * requests, so acceptance reads this instead of guessing from exit status. */
+  requestCount?(): number;
   dispose(): Promise<void>;
 }>;
 
@@ -580,6 +584,7 @@ export async function startLocalGatewayModelTransport(
   const capability = randomBytes(32).toString('hex');
   let stopping = false;
   let inFlight = 0;
+  let dispatchedRequests = 0;
   const server = createServer(
     { maxHeaderSize: ACCOUNT_GATEWAY_BOUNDS.headerBytes },
     (request, reply) => {
@@ -633,6 +638,7 @@ export async function startLocalGatewayModelTransport(
             controller.signal
           );
           stage = 'upstream_request';
+          dispatchedRequests++;
           upstream = await transport.responses(bytes, controller.signal);
           stage = 'downstream_stream';
           reply.writeHead(upstream.httpStatus, {
@@ -699,6 +705,7 @@ export async function startLocalGatewayModelTransport(
     }),
     configuration: codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
+    requestCount: () => dispatchedRequests,
     async dispose() {
       stopping = true;
       transport.cancelHeldStreams();

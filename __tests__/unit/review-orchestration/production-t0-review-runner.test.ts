@@ -383,7 +383,7 @@ describe('ProductionT0ReviewRunner policy', () => {
               gatewayBinaryHash: planningConfig.gatewayBinaryHash,
               gatewayPolicyVersion: planningConfig.gatewayPolicyVersion,
               enabledTools: [...planningConfig.enabledTools].sort(),
-              probeLimits: invocation.investigationProbePlan.limits,
+              probeLimits: invocation.investigationProbePlan!.limits,
               probePolicyVersion: REVIEW_INVESTIGATION_PROBE_POLICY_VERSION,
               reasoningEffort: investigationLaunch.protocol.reasoningEffort,
               requestedModel: investigationLaunch.protocol.requestedModel,

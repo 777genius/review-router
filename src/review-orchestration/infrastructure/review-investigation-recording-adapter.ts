@@ -519,6 +519,8 @@ function reviewAgentProviderKind(
       return ReviewAgentProviderKind.ClaudeCode;
     case ReviewExecutionProviderKind.OpenRouter:
       return null;
+    case ReviewExecutionProviderKind.Ocr:
+      return null;
   }
 }
 
@@ -585,7 +587,10 @@ export function reviewInvestigationRecordingSupportDecision(
   const bindingFailure = investigationPromptBindingFailure(input.invocation);
   if (bindingFailure !== null) return unsupported(bindingFailure);
   const plan = input.invocation.investigationProbePlan;
-  if (plan.status !== ReviewInvestigationProbePlanStatus.Complete) {
+  if (
+    plan === null ||
+    plan.status !== ReviewInvestigationProbePlanStatus.Complete
+  ) {
     return unsupported(
       ReviewInvestigationRecordingSupportReason.ProbePlanIncomplete
     );

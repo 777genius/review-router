@@ -23358,6 +23358,8 @@ var package_default = {
     format: 'prettier --write "src/**/*.ts" "__tests__/**/*.ts"',
     "format:check": 'prettier --check "src/**/*.ts" "__tests__/**/*.ts"',
     typecheck: "tsc --noEmit",
+    "domains:sync": "node scripts/sync-review-router-domains.mts",
+    "domains:check": "node scripts/sync-review-router-domains.mts --check",
     "hooks:install": "bash scripts/install-hooks.sh",
     prepare: "npm run build:prod"
   },

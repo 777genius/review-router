@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { NEWTEST_V4_ROOT_URL } from "../config/review-router-endpoints";
 
 const WAIT_MS = 120_000;
 const ATTEMPTS = 24;
@@ -62,7 +63,7 @@ export async function waitForNewtestRootChallenge<T>(input: {
 }): Promise<T> {
   if (!/^[1-9][0-9]*$/.test(input.runId))
     throw new Error("newtest_readiness_identity_rejected");
-  const url = new URL("https://api.reviewrouter.site/__newtest_v4/challenge");
+  const url = new URL("challenge", NEWTEST_V4_ROOT_URL);
   url.searchParams.set("runId", input.runId);
   const clock = input.monotonicNow ?? (() => performance.now());
   const sleep =

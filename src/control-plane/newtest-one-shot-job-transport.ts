@@ -6,7 +6,8 @@ import {
   waitForNewtestRootChallenge,
   withNewtestAbort,
 } from "./newtest-root-rendezvous";
-const ROOT = "https://api.reviewrouter.site/__newtest_v4/";
+import { NEWTEST_V4_ROOT_URL } from "../config/review-router-endpoints";
+const ROOT = NEWTEST_V4_ROOT_URL;
 const TEST_REPOSITORY = "777genius/reviewrouter-e2e-prod-20260529-000305";
 const TEST_REPOSITORY_ID = "1252762369";
 const SHA = /^[a-f0-9]{40}$/;

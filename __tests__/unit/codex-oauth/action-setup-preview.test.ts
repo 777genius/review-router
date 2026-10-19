@@ -359,7 +359,7 @@ describe('Codex OAuth rotating setup PR preview', () => {
       }
       if (
         urlText ===
-        'https://api.reviewrouter.site/api/action/v1/session/exchange'
+        'https://api.reviewrouter.org/api/action/v1/session/exchange'
       ) {
         expect(JSON.parse(String(init?.body))).toMatchObject({
           oidcToken: 'runner-oidc-token',
@@ -371,7 +371,7 @@ describe('Codex OAuth rotating setup PR preview', () => {
         });
       }
       if (
-        urlText === 'https://api.reviewrouter.site/api/action/v1/comment-token'
+        urlText === 'https://api.reviewrouter.org/api/action/v1/comment-token'
       ) {
         expect((init?.headers as Record<string, string>).authorization).toBe(
           'Bearer action-session-token'
@@ -402,7 +402,7 @@ describe('Codex OAuth rotating setup PR preview', () => {
       expect.any(Object)
     );
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://api.reviewrouter.site/api/action/v1/session/exchange',
+      'https://api.reviewrouter.org/api/action/v1/session/exchange',
       expect.any(Object)
     );
     expect(fs.readFileSync(stepSummaryPath, 'utf8')).toContain(
@@ -1642,7 +1642,7 @@ function actionEnv(input: {
     RUNNER_TEMP: ensureDirectory(
       path.join(path.dirname(input.eventPath), 'runner-temp')
     ),
-    'INPUT_API-URL': 'https://api.reviewrouter.site',
+    'INPUT_API-URL': 'https://api.reviewrouter.org',
     'INPUT_PROVIDER-INSTANCE-ID': 'codex-rotating:1196598615',
     'INPUT_WORKFLOW-SCHEMA-VERSION': '1',
   };

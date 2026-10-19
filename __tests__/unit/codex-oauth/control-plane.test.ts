@@ -16,7 +16,7 @@ describe('Codex OAuth control-plane client', () => {
       })
     ) as unknown as typeof fetch;
     const client = new CodexOAuthControlPlaneClient({
-      apiUrl: 'https://api.reviewrouter.site',
+      apiUrl: 'https://api.reviewrouter.org',
       fetchImpl,
     });
 
@@ -43,7 +43,7 @@ describe('Codex OAuth control-plane client', () => {
       })
     ) as unknown as typeof fetch;
     const client = new CodexOAuthControlPlaneClient({
-      apiUrl: 'https://api.reviewrouter.site',
+      apiUrl: 'https://api.reviewrouter.org',
       fetchImpl,
     });
 
@@ -70,7 +70,7 @@ describe('Codex OAuth control-plane client', () => {
       })
     ) as unknown as typeof fetch;
     const client = new CodexOAuthControlPlaneClient({
-      apiUrl: 'https://api.reviewrouter.site',
+      apiUrl: 'https://api.reviewrouter.org',
       fetchImpl,
     });
 

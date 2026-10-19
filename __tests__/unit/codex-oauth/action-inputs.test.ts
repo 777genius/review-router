@@ -5,8 +5,8 @@ describe('Codex OAuth action inputs', () => {
     expect(
       resolveCodexOAuthActionApiUrl({
         'INPUT_CONTROL-PLANE-URL': 'https://self-hosted.reviewrouter.test',
-        INPUT_API_URL: 'https://api.reviewrouter.site',
-        REVIEWROUTER_API_URL: 'https://env.reviewrouter.site',
+        INPUT_API_URL: 'https://api.reviewrouter.org',
+        REVIEWROUTER_API_URL: 'https://env.reviewrouter.org',
       })
     ).toBe('https://self-hosted.reviewrouter.test');
   });
@@ -15,7 +15,7 @@ describe('Codex OAuth action inputs', () => {
     expect(
       resolveCodexOAuthActionApiUrl({
         INPUT_CONTROL_PLANE_URL: 'https://control-plane.internal',
-        INPUT_API_URL: 'https://api.reviewrouter.site',
+        INPUT_API_URL: 'https://api.reviewrouter.org',
       })
     ).toBe('https://control-plane.internal');
   });

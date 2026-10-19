@@ -113,7 +113,7 @@ describe('Codex OAuth terminal outcome comment upsert', () => {
       }
       if (
         urlText ===
-        'https://api.reviewrouter.site/api/action/v1/session/exchange'
+        'https://api.reviewrouter.org/api/action/v1/session/exchange'
       ) {
         return jsonResponse({
           protocolVersion: 1,
@@ -121,7 +121,7 @@ describe('Codex OAuth terminal outcome comment upsert', () => {
         });
       }
       if (
-        urlText === 'https://api.reviewrouter.site/api/action/v1/comment-token'
+        urlText === 'https://api.reviewrouter.org/api/action/v1/comment-token'
       ) {
         return jsonResponse({
           protocolVersion: 1,
@@ -195,7 +195,7 @@ describe('Codex OAuth terminal outcome comment upsert', () => {
       }
       if (
         urlText ===
-        'https://api.reviewrouter.site/api/action/v1/session/exchange'
+        'https://api.reviewrouter.org/api/action/v1/session/exchange'
       ) {
         return jsonResponse({
           protocolVersion: 1,
@@ -203,7 +203,7 @@ describe('Codex OAuth terminal outcome comment upsert', () => {
         });
       }
       if (
-        urlText === 'https://api.reviewrouter.site/api/action/v1/comment-token'
+        urlText === 'https://api.reviewrouter.org/api/action/v1/comment-token'
       ) {
         return jsonResponse({
           protocolVersion: 1,
@@ -282,7 +282,7 @@ function actionEnv(input: {
     RUNNER_TEMP: ensureDirectory(
       path.join(path.dirname(input.eventPath), 'runner-temp')
     ),
-    'INPUT_API-URL': 'https://api.reviewrouter.site',
+    'INPUT_API-URL': 'https://api.reviewrouter.org',
     'INPUT_PROVIDER-INSTANCE-ID': 'codex-rotating:1196598615',
     'INPUT_WORKFLOW-SCHEMA-VERSION': '1',
   };

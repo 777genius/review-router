@@ -69,7 +69,7 @@ describe('Codex OAuth rotating runtime', () => {
 
     const result = await runCodexOAuthRotatingRuntime(
       {
-        apiUrl: 'https://api.reviewrouter.site',
+        apiUrl: 'https://api.reviewrouter.org',
         audience: 'reviewrouter',
         providerInstanceId: 'codex-rotating:123456',
         workflowSchemaVersion: 1,
@@ -130,7 +130,7 @@ describe('Codex OAuth rotating runtime', () => {
 
     const result = await runCodexOAuthRotatingRuntime(
       {
-        apiUrl: 'https://api.reviewrouter.site',
+        apiUrl: 'https://api.reviewrouter.org',
         audience: 'reviewrouter',
         providerInstanceId: 'codex-rotating:123456',
         workflowSchemaVersion: 1,
@@ -173,7 +173,7 @@ describe('Codex OAuth rotating runtime', () => {
 
     const result = await runCodexOAuthRotatingRuntime(
       {
-        apiUrl: 'https://api.reviewrouter.site',
+        apiUrl: 'https://api.reviewrouter.org',
         audience: 'reviewrouter',
         providerInstanceId: 'codex-rotating:123456',
         workflowSchemaVersion: 1,
@@ -236,7 +236,7 @@ describe('Codex OAuth rotating runtime', () => {
 
     const result = await runCodexOAuthRotatingRuntime(
       {
-        apiUrl: 'https://api.reviewrouter.site',
+        apiUrl: 'https://api.reviewrouter.org',
         audience: 'reviewrouter',
         providerInstanceId: 'codex-rotating:123456',
         workflowSchemaVersion: 1,
@@ -286,7 +286,7 @@ describe('Codex OAuth rotating runtime', () => {
     await expect(
       runCodexOAuthRotatingRuntime(
         {
-          apiUrl: 'https://api.reviewrouter.site',
+          apiUrl: 'https://api.reviewrouter.org',
           audience: 'reviewrouter',
           providerInstanceId: 'codex-rotating:123456',
           workflowSchemaVersion: 1,
@@ -334,7 +334,7 @@ describe('Codex OAuth rotating runtime', () => {
     await expect(
       runCodexOAuthRotatingRuntime(
         {
-          apiUrl: 'https://api.reviewrouter.site',
+          apiUrl: 'https://api.reviewrouter.org',
           audience: 'reviewrouter',
           providerInstanceId: 'codex-rotating:123456',
           workflowSchemaVersion: 1,
@@ -378,7 +378,7 @@ describe('Codex OAuth rotating runtime', () => {
 
     const result = await runCodexOAuthRotatingRuntime(
       {
-        apiUrl: 'https://api.reviewrouter.site',
+        apiUrl: 'https://api.reviewrouter.org',
         audience: 'reviewrouter',
         providerInstanceId: 'codex-rotating:123456',
         workflowSchemaVersion: 1,

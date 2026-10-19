@@ -5,7 +5,7 @@ import {
 
 const applied = {
   status: 'applied' as const,
-  apiUrl: 'https://api.reviewrouter.site',
+  apiUrl: 'https://api.reviewrouter.org',
   actionVersion: '1.0.0',
   configVersion: 1,
   sessionToken: 'session-token',

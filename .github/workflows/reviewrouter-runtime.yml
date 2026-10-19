@@ -15,7 +15,7 @@ on:
       control_plane_url:
         required: false
         type: string
-        default: https://api.reviewrouter.site
+        default: https://api.reviewrouter.org
 
 permissions: {}
 

@@ -35,14 +35,14 @@ describe('Codex OAuth rotating review runtime config', () => {
       );
 
     await applyCodexRotatingReviewRuntimeConfig({
-      apiUrl: 'https://api.reviewrouter.site',
+      apiUrl: 'https://api.reviewrouter.org',
       audience: 'reviewrouter',
       fetchImpl,
     });
 
     expect(process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE).toBe('oidc');
     expect(process.env.REVIEWROUTER_API_URL).toBe(
-      'https://api.reviewrouter.site'
+      'https://api.reviewrouter.org'
     );
     expect(process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK).toBe('false');
     expect(process.env.REVIEW_PROVIDERS).toBe('codex/gpt-5.5,claude/sonnet');
@@ -74,7 +74,7 @@ describe('Codex OAuth rotating review runtime config', () => {
       );
 
     await applyCodexRotatingReviewRuntimeConfig({
-      apiUrl: 'https://api.reviewrouter.site',
+      apiUrl: 'https://api.reviewrouter.org',
       audience: 'reviewrouter',
       fetchImpl,
     });
@@ -90,7 +90,7 @@ describe('Codex OAuth rotating review runtime config', () => {
 
     await expect(
       applyCodexRotatingReviewRuntimeConfig({
-        apiUrl: 'https://api.reviewrouter.site',
+        apiUrl: 'https://api.reviewrouter.org',
         audience: 'reviewrouter',
         fetchImpl,
       })
@@ -101,7 +101,7 @@ describe('Codex OAuth rotating review runtime config', () => {
   it('keeps static runtime config for the post-lease review child process', async () => {
     process.env = {
       REVIEWROUTER_RUNTIME_CONFIG_MODE: 'static',
-      REVIEWROUTER_API_URL: 'https://api.reviewrouter.site',
+      REVIEWROUTER_API_URL: 'https://api.reviewrouter.org',
       REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
       REVIEW_PROVIDERS: 'codex/gpt-5.5',
     };
@@ -111,14 +111,14 @@ describe('Codex OAuth rotating review runtime config', () => {
     >();
 
     await applyCodexRotatingReviewRuntimeConfig({
-      apiUrl: 'https://api.reviewrouter.site',
+      apiUrl: 'https://api.reviewrouter.org',
       audience: 'reviewrouter',
       fetchImpl,
     });
 
     expect(process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE).toBe('static');
     expect(process.env.REVIEWROUTER_API_URL).toBe(
-      'https://api.reviewrouter.site'
+      'https://api.reviewrouter.org'
     );
     expect(process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK).toBe('false');
     expect(process.env.REVIEW_PROVIDERS).toBe('codex/gpt-5.5');

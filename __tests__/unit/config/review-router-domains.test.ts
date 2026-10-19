@@ -44,7 +44,7 @@ function buildDomainFixtureRoot(): string {
       '        default: https://other.invalid\n',
     '.github/workflows/reviewrouter-interaction-reusable.yml': '',
     '.github/workflows/reviewrouter-t0-reusable.yml':
-      '      api_url: https://api.reviewrouter.org\n',
+      '      api_url: https://api.reviewrouter.site\n',
     '.github/workflows/reviewrouter-runtime.yml':
       '# see https://other.invalid for details\n',
     '.github/workflows/reviewrouter.yml': '',

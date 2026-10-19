@@ -8,7 +8,7 @@ import { PRContext } from '../../../src/types';
 describe('ControlPlaneMemoryClient', () => {
   const runtimeConfig = {
     status: 'applied' as const,
-    apiUrl: 'https://api.reviewrouter.site',
+    apiUrl: 'https://api.reviewrouter.org',
     actionVersion: 'main',
     configVersion: 1,
     sessionToken: 'rr-session',
@@ -48,7 +48,7 @@ describe('ControlPlaneMemoryClient', () => {
     );
 
     expect(String(fetchImpl.mock.calls[0][0])).toBe(
-      'https://api.reviewrouter.site/api/action/v1/memory?safeRetrievalQuery=Memory+dashboard+badge+layout+app%2Fdashboard%2Fmemory-management-panel.tsx'
+      'https://api.reviewrouter.org/api/action/v1/memory?safeRetrievalQuery=Memory+dashboard+badge+layout+app%2Fdashboard%2Fmemory-management-panel.tsx'
     );
     expect(fetchImpl.mock.calls[0][1]).toMatchObject({
       headers: { Authorization: 'Bearer rr-session' },
@@ -113,13 +113,13 @@ describe('ControlPlaneMemoryClient', () => {
     ]);
 
     expect(String(fetchImpl.mock.calls[0][0])).toBe(
-      'https://api.reviewrouter.site/api/action/v1/memory-candidates'
+      'https://api.reviewrouter.org/api/action/v1/memory-candidates'
     );
     expect(JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))).toMatchObject({
       candidateBody: 'Prefer guard clauses.',
     });
     expect(String(fetchImpl.mock.calls[1][0])).toBe(
-      'https://api.reviewrouter.site/api/action/v1/memory-commands'
+      'https://api.reviewrouter.org/api/action/v1/memory-commands'
     );
     expect(JSON.parse(String(fetchImpl.mock.calls[1][1]?.body))).toEqual({
       protocolVersion: 1,

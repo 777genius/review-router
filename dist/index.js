@@ -50844,8 +50844,8 @@ function emptyFindingCounts() {
 
 // src/config/review-router-endpoints.json
 var review_router_endpoints_default = {
-  webOrigin: "https://reviewrouter.site",
-  apiOrigin: "https://api.reviewrouter.site"
+  webOrigin: "https://reviewrouter.org",
+  apiOrigin: "https://api.reviewrouter.org"
 };
 
 // src/config/review-router-endpoints.ts

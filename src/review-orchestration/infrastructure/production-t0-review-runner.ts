@@ -443,6 +443,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           checkoutRoot: path.resolve(input.workspacePath),
           processRunner: runOcrReviewProcess,
           previewRunner: runOcrReviewProcess,
+          acceptanceDiagnostic: (diagnostic) =>
+            logger.info('Managed OCR acceptance', diagnostic),
         }
       );
       const identities = new DeterministicReviewOrchestrationIdentity();

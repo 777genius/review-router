@@ -138,7 +138,7 @@ export interface CodexOAuthV2ReviewRunnerPort {
   run(input: {
     readonly apiUrl: string;
     readonly audience: string;
-    readonly providerInstanceId: string;
+    readonly providerInstanceId?: string;
     readonly workflowSchemaVersion: number;
     readonly repository: string;
     readonly pullRequestNumber: number;
@@ -147,6 +147,13 @@ export interface CodexOAuthV2ReviewRunnerPort {
     /** Absent on the managed OCR path: no Codex home exists there. */
     readonly codexHome?: string;
     readonly codexBinaryPath?: string;
+    /** Direct API credentials remain local; authenticated capture owns policy. */
+    readonly providerApi?: {
+      readonly runtimeConfig: import('../control-plane/runtime-config').AdmittedRuntimeConfig;
+      readonly signal: AbortSignal;
+      readonly controlPlane: import('../review-orchestration/infrastructure/review-action-v2-control-plane-adapter').ReviewActionV2ControlPlaneAdapter;
+      readonly credentialLease: () => import('../providers/prepared-invocation').ProviderCredentialLease;
+    };
     readonly accountGateway?: {
       readonly runtimeConfig: import('../control-plane/runtime-config').AdmittedRuntimeConfig;
       readonly signal?: AbortSignal;

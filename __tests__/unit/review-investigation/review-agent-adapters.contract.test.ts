@@ -728,6 +728,22 @@ describe('review agent environment allowlists', () => {
       await adapter.executeTurn(request);
 
       expect(runner.requests[0].environment).toMatchObject(providerEnvironment);
+      if (providerKind === ReviewAgentProviderKind.Codex) {
+        const args = runner.requests[0].args;
+        expect(args).toContain(
+          'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}'
+        );
+        const toolEnvironment = args.find((argument) =>
+          argument.startsWith('mcp_servers.reviewrouter.env_vars=')
+        );
+        expect(toolEnvironment).toBeDefined();
+        const allowed = JSON.parse(
+          toolEnvironment!.slice(toolEnvironment!.indexOf('=') + 1)
+        ) as string[];
+        for (const key of Object.keys(providerEnvironment))
+          expect(allowed).not.toContain(key);
+        expect(JSON.stringify(args)).not.toContain('openrouter-canary');
+      }
     }
   );
 });
@@ -764,6 +780,15 @@ describe('Codex MiMo local output schema enforcement', () => {
         })
       ).resolves.toMatchObject({ schemaComplete: true });
       const launch = runner.requests[0];
+      if (modelProvider === 'openrouter') {
+        expect(launch.args).toEqual(
+          expect.arrayContaining([
+            'model_provider="openrouter"',
+            'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
+            'model_providers.openrouter.env_key="OPENROUTER_API_KEY"',
+          ])
+        );
+      }
       if (modelProvider === 'mimo') {
         expect(launch.outputSchema).toBeUndefined();
         expect(launch.stdin).toContain('Return exactly one JSON object');

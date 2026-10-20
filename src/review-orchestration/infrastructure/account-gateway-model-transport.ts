@@ -8,6 +8,7 @@ import { request as httpsRequest } from 'https';
 import { performance } from 'perf_hooks';
 import { Readable, Transform } from 'stream';
 import { pipeline } from 'stream/promises';
+import { providerApiCheckoutCompanionContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import { setTimeout as wait } from 'timers/promises';
 
 const BASE = '/api/action/v2/account-gateway';
@@ -493,6 +494,13 @@ export class AccountGatewayModelTransport {
     signal?: AbortSignal
   ): Promise<GatewayReadback> {
     return this.json('POST', `${BASE}/checkout`, request, signal);
+  }
+
+  providerApiCheckoutCapability(
+    signal?: AbortSignal
+  ): Promise<GatewayReadback> {
+    const { path: route, ...request } = providerApiCheckoutCompanionContract;
+    return this.json('POST', route, request, signal);
   }
 
   private async json(

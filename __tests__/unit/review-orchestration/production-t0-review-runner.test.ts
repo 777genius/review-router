@@ -47,6 +47,7 @@ import {
   resolveProductionContextGatewaySessionFactoryOptions,
   resolveT0AttemptBudget,
   resolveProductionInvestigationReasoningEffort,
+  selectDirectOpenRouterProvider,
 } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../../src/context-gateway/context-gateway-release-contract';
 import {
@@ -105,6 +106,34 @@ import {
 } from '../../../src/review-orchestration/infrastructure/production-review-investigation-composition';
 
 describe('ProductionT0ReviewRunner policy', () => {
+  it('preserves one explicit OpenRouter model and refuses policy collapse', () => {
+    const provider = 'openrouter/vendor/model';
+    const config = {
+      ...DEFAULT_CONFIG,
+      providers: [provider],
+      synthesisModel: provider,
+      providerLimit: 1,
+      providerMaxParallel: 1,
+      inlineMinAgreement: 1,
+      requiredHealthyProviders: [provider],
+      fallbackProviders: [],
+    };
+    expect(selectDirectOpenRouterProvider(config)).toBe(provider);
+    for (const mismatch of [
+      { providers: [provider, 'openrouter/other/model'] },
+      { providers: ['codex/model'] },
+      { providers: ['openrouter/free'] },
+      { providerLimit: 2 },
+      { providerMaxParallel: 2 },
+      { inlineMinAgreement: 2 },
+      { synthesisModel: 'openrouter/other/model' },
+      { fallbackProviders: ['openrouter/other/model'] },
+      { requiredHealthyProviders: [] },
+    ])
+      expect(() =>
+        selectDirectOpenRouterProvider({ ...config, ...mismatch })
+      ).toThrow('review_action_v2_direct_provider_policy_invalid');
+  });
   const admittedAgentJson = JSON.stringify({
     profileRef: 'fixture-codex',
     agentKind: 'codex',
@@ -432,6 +461,207 @@ describe('ProductionT0ReviewRunner policy', () => {
         ).toBe(callerConfig);
       } finally {
         process.env = previousEnv;
+        execute.mockRestore();
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it.each([undefined, 'medium'] as const)(
+    'uses only captured direct policy and effort=%s despite hostile checkout/ambient settings',
+    async (capturedEffort) => {
+      const root = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), 'direct-policy-'))
+      );
+      const previousEnv = { ...process.env };
+      const stoppedAtBoundary = new Error('mock authorization boundary');
+      const profile = JSON.stringify({
+        ...JSON.parse(admittedAgentJson),
+        modelTransports: ['provider_api'],
+      });
+      const runtimeEnv = {
+        REVIEW_AUTH_MODE: 'openrouter-api',
+        REVIEW_PROVIDERS: 'openrouter/vendor/captured-model',
+        REQUIRED_HEALTHY_PROVIDERS: 'openrouter/vendor/captured-model',
+        SYNTHESIS_MODEL: 'openrouter/vendor/captured-model',
+        PROVIDER_LIMIT: '1',
+        PROVIDER_MAX_PARALLEL: '1',
+        INLINE_MIN_AGREEMENT: '1',
+        CODEX_AGENTIC_CONTEXT: 'true',
+        ...(capturedEffort === undefined
+          ? {}
+          : { CODEX_REASONING_EFFORT: capturedEffort }),
+        REVIEW_ROUTER_AGENT_PROFILE_JSON: profile,
+        REVIEW_ROUTER_AGENT_PROFILE_DIGEST: createHash('sha256')
+          .update(profile)
+          .digest('hex'),
+      };
+      const configuration = jest.spyOn(ConfigLoader, 'load');
+      const captured = jest.spyOn(ConfigLoader, 'loadRuntimeEnvironment');
+      const current = jest
+        .spyOn(
+          ReviewActionV2ControlPlaneAdapter.prototype,
+          'currentAuthorization'
+        )
+        .mockImplementation(() => {
+          throw stoppedAtBoundary;
+        });
+      const review = jest.spyOn(CodexProvider.prototype, 'review');
+      const execute = jest.spyOn(
+        NodeCodexAppServerTurnRunner.prototype,
+        'executeTurn'
+      );
+      const fetchImpl = jest.fn<
+        Promise<Response>,
+        [RequestInfo | URL, RequestInit?]
+      >();
+      const credentialLease = jest.fn(() => ({
+        environment: { OPENROUTER_API_KEY: 'never-read' },
+      }));
+      try {
+        fs.mkdirSync(path.join(root, '.github'));
+        fs.writeFileSync(
+          path.join(root, '.github/multi-review.yml'),
+          [
+            'providers: [openrouter/attacker/model]',
+            'fallback_providers: [openrouter/attacker/fallback]',
+            'codex_agentic_context: false',
+            'budget_max_usd: 999',
+            'run_timeout_seconds: 9999',
+          ].join('\n')
+        );
+        process.env.REVIEW_PROVIDERS = 'openrouter/ambient/model';
+        process.env.BUDGET_MAX_USD = '888';
+        process.env.RUN_TIMEOUT_SECONDS = '8888';
+        process.env.CODEX_AGENTIC_CONTEXT = 'false';
+        process.env.CODEX_REASONING_EFFORT = 'low';
+        await expect(
+          new ProductionT0ReviewRunner(fetchImpl).run({
+            apiUrl: 'https://fixture.invalid',
+            audience: 'reviewrouter',
+            workflowSchemaVersion: 2,
+            repository: 'fixture/repository',
+            pullRequestNumber: 1,
+            headSha: 'a'.repeat(40),
+            workspacePath: root,
+            codexHome: path.join(root, 'home'),
+            scmReadToken: 'fixture-scm',
+            scmReadTokenExpiresAt: new Date(
+              Date.now() + 3_600_000
+            ).toISOString(),
+            refreshScmReadToken: async () => {
+              throw new Error('unexpected refresh');
+            },
+            providerApi: {
+              runtimeConfig: parseAdmittedRuntimeConfig({
+                protocolVersion: 1,
+                configVersion: 7,
+                runtimeEnv,
+              }),
+              signal: new AbortController().signal,
+              controlPlane: new ReviewActionV2ControlPlaneAdapter(
+                new ReviewActionV2Client({
+                  apiUrl: 'https://fixture.invalid',
+                  fetchImpl,
+                })
+              ),
+              credentialLease,
+            },
+          })
+        ).rejects.toBe(stoppedAtBoundary);
+        expect(configuration).not.toHaveBeenCalled();
+        expect(captured).toHaveBeenCalledWith(runtimeEnv);
+        const resolved = captured.mock.results[0].value as ReviewConfig;
+        expect(resolved.providers).toEqual([
+          'openrouter/vendor/captured-model',
+        ]);
+        expect(resolved.fallbackProviders).toEqual([]);
+        expect(resolved.codexAgenticContext).toBe(true);
+        expect(resolved.budgetMaxUsd).toBe(DEFAULT_CONFIG.budgetMaxUsd);
+        expect(resolved.runTimeoutSeconds).toBe(
+          DEFAULT_CONFIG.runTimeoutSeconds
+        );
+        expect(current).toHaveBeenCalledTimes(1);
+        expect(review).not.toHaveBeenCalled();
+        expect(execute).not.toHaveBeenCalled();
+        expect(credentialLease).not.toHaveBeenCalled();
+        expect(fetchImpl).not.toHaveBeenCalled();
+        const expectedEffort = capturedEffort ?? 'xhigh';
+        expect(process.env.CODEX_REASONING_EFFORT).toBe(expectedEffort);
+        const primary = new CodexProvider('vendor/captured-model', {
+          modelProvider: 'openrouter',
+          providerNamePrefix: 'openrouter',
+          agenticContext: false,
+          disableBuiltinTools: true,
+          waitForProcessClose: true,
+        });
+        Object.defineProperty(primary, 'resolveBinary', {
+          value: async () => '/qualified/codex',
+        });
+        const prepared = await primary.prepareInvocation(
+          'Review captured patch',
+          1000
+        );
+        expect(prepared.request.argsTemplate).toContain(
+          `model_reasoning_effort="${expectedEffort}"`
+        );
+        const effectiveEffort = resolveProductionInvestigationReasoningEffort({
+          codexModel: 'vendor/captured-model',
+          accountGateway: false,
+          providerApi: true,
+          serverReasoningEffort: runtimeEnv.CODEX_REASONING_EFFORT,
+        });
+        execute.mockRejectedValue(stoppedAtBoundary);
+        const agents = createConfiguredProductionInvestigationAgents({
+          codexModel: 'vendor/captured-model',
+          codexBinaryPath: '/qualified/codex',
+          reasoningEffort: effectiveEffort,
+          directCredentialLease: credentialLease,
+          executionSessions: {
+            resolve: () => ({
+              policyVersion: 'context-gateway-v4',
+              binaryHash: 'a'.repeat(64),
+              command: process.execPath,
+              args: ['/fixture/gateway.js'],
+              cwd: root,
+              enabledTools: REVIEW_INVESTIGATION_GATEWAY_TOOLS,
+              runtimeEnvironment: {
+                REVIEWROUTER_CONTEXT_SESSION_ID: 'fixture-session',
+              },
+              credentialEnvironment: {
+                REVIEWROUTER_CONTEXT_GATEWAY_SECRET: 'fixture-capability',
+              },
+            }),
+          },
+        });
+        await expect(
+          agents[0]!.agent.executeTurn({
+            invocationId: 'fixture-invocation',
+            fencingToken: 'fixture-fence',
+            turnId: 'fixture-turn',
+            dossierVersion: 1,
+            dossierDigest: 'b'.repeat(64),
+            purpose: ReviewTurnPurpose.Discovery,
+            allowedObligationIds: ['c'.repeat(64)],
+            prompt: 'Review captured patch',
+            workspaceRoot: root,
+            requestedModel: 'vendor/captured-model',
+            timeoutMs: 1000,
+            maxTurns: 1,
+            executionSession: {
+              kind: ReviewAgentExecutionSessionKind.ContextGatewayV4,
+            },
+          })
+        ).rejects.toBe(stoppedAtBoundary);
+        expect(execute.mock.calls[0][0].protocol.reasoningEffort).toBe(
+          expectedEffort
+        );
+      } finally {
+        process.env = previousEnv;
+        configuration.mockRestore();
+        captured.mockRestore();
+        current.mockRestore();
+        review.mockRestore();
         execute.mockRestore();
         fs.rmSync(root, { recursive: true, force: true });
       }

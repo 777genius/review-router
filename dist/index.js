@@ -22251,6 +22251,17 @@ var review_agent_profiles_default = [
     ],
     packageVersion: "1.13.1-rr.2",
     profileRef: "ocr-managed-v1"
+  },
+  {
+    agentKind: "ocr",
+    binarySha256: "2f62d6fbb326e74d0fe9377f0224f1b56520bcefee688c58073fa1a30e45f1c9",
+    cancellation: true,
+    contextGateway: false,
+    modelTransports: [
+      "account_gateway"
+    ],
+    packageVersion: "1.13.1-rr.3",
+    profileRef: "ocr-managed-v2"
   }
 ];
 
@@ -23156,9 +23167,14 @@ function normalizeCodexGatewayServiceTier(bytes) {
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || Object.prototype.hasOwnProperty.call(parsed, "service_tier"))
     return original;
-  const normalized = Buffer.from(
-    JSON.stringify({ ...parsed, service_tier: "default" })
-  );
+  const closingBrace = original.lastIndexOf(125);
+  const normalized = Buffer.concat([
+    original.subarray(0, closingBrace),
+    Buffer.from(
+      `${Object.keys(parsed).length > 0 ? "," : ""}"service_tier":"default"`
+    ),
+    original.subarray(closingBrace)
+  ]);
   if (normalized.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
     throw new Error("account_gateway_request_bound");
   return normalized;
@@ -23211,12 +23227,10 @@ async function startLocalGatewayModelTransport(transport, observe) {
             ACCOUNT_GATEWAY_BOUNDS.requestBytes,
             controller.signal
           );
+          const normalized = normalizeCodexGatewayServiceTier(bytes);
           stage = "upstream_request";
           dispatchedRequests++;
-          upstream = await transport.responses(
-            normalizeCodexGatewayServiceTier(bytes),
-            controller.signal
-          );
+          upstream = await transport.responses(normalized, controller.signal);
           stage = "downstream_stream";
           reply.writeHead(upstream.httpStatus, {
             "content-type": upstream.contentType,
@@ -52696,7 +52710,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.184",
+  version: "1.0.185",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -101498,7 +101512,10 @@ async function safeCheckoutRepository(input) {
       ],
       input.workspacePath,
       gitHome,
-      input.signal
+      input.signal,
+      // Range ancestry can be much larger than a shallow checkout. Keep its
+      // dedicated budget bounded by the authoritative execution deadline.
+      input.mergeBaseSha === void 0 ? 6e4 : 3e5
     );
     await runGit2(
       [
@@ -101532,8 +101549,14 @@ async function assertWorkspaceEmpty(workspacePath) {
     throw new Error("codex_oauth_workspace_not_empty_before_checkout");
   }
 }
-function runGit2(args, cwd, home, signal) {
+function runGit2(args, cwd, home, signal, timeoutMs = 6e4) {
   signal?.throwIfAborted();
+  const boundedTimeoutMs = Math.min(
+    timeoutMs,
+    createExecutionDeadlineFromEnvironment().remainingMs()
+  );
+  if (boundedTimeoutMs <= 0)
+    throw new Error("account_gateway_checkout_timeout");
   return new Promise((resolve5, reject) => {
     const child = (0, import_child_process13.spawn)("git", args, {
       cwd,
@@ -101561,7 +101584,7 @@ function runGit2(args, cwd, home, signal) {
     };
     signal?.addEventListener("abort", stop, { once: true });
     if (signal?.aborted) stop();
-    const timer = signal ? setTimeout(stop, 6e4) : void 0;
+    const timer = setTimeout(stop, boundedTimeoutMs);
     const finish = () => {
       clearTimeout(timer);
       signal?.removeEventListener("abort", stop);
@@ -105704,6 +105727,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         agentProfileJson,
         agentProfileDigest
       );
+      phase = "prepare_ocr";
       ocrBinary = await resolveApprovedOcrBinary({
         approvedAgent: ocrAgent,
         signal: run2.signal

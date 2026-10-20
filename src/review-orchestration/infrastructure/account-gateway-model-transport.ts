@@ -16,6 +16,9 @@ export const LOCAL_MODEL_CAPABILITY_ENV = 'REVIEWROUTER_LOCAL_MODEL_TOKEN';
 export const ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   requestBytes: 16_777_216,
   outputBytes: 1_048_576,
+  // Raw SSE includes repeated deltas/tool events; final review files remain bounded above.
+  streamOutputBytes: 8_388_608,
+  streamFrameBytes: 1_048_576,
   jsonBytes: 65_536,
   headerBytes: 16_384,
   bufferBytes: 65_536,
@@ -317,7 +320,7 @@ export class AccountGatewayModelTransport {
         transform: (chunk: Buffer, _encoding, done) => {
           count += chunk.length;
           const maximum = isStream
-            ? ACCOUNT_GATEWAY_BOUNDS.outputBytes
+            ? ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes
             : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
           if (count > maximum) done(new Error('account_gateway_output_bound'));
           else
@@ -862,6 +865,9 @@ function responsesStreamAudit(observe: (model: string | undefined) => void) {
   let data: string[] = [];
   let event = '';
   let completed = false;
+  let frameBytes = 0;
+  let rawLineBytes = 0;
+  let rawLineLastByte = 0;
   function endLine() {
     if (!line) {
       if (data.length) {
@@ -924,6 +930,24 @@ function responsesStreamAudit(observe: (model: string | undefined) => void) {
   return {
     hasCompleted: () => completed,
     accept(bytes: Uint8Array) {
+      // Match the native raw SSE budget: LF/CRLF separators and comments count
+      // toward the current event before its terminating blank line resets it.
+      for (const byte of bytes) {
+        frameBytes++;
+        if (frameBytes > ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes)
+          throw new Error('account_gateway_stream_frame_bound');
+        if (byte === 0x0a) {
+          if (
+            rawLineBytes === 0 ||
+            (rawLineBytes === 1 && rawLineLastByte === 0x0d)
+          )
+            frameBytes = 0;
+          rawLineBytes = 0;
+        } else {
+          rawLineBytes++;
+          rawLineLastByte = byte;
+        }
+      }
       consume(decoder.decode(bytes, { stream: true }));
     },
     finish() {

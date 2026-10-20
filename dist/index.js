@@ -22767,6 +22767,9 @@ var LOCAL_MODEL_CAPABILITY_ENV = "REVIEWROUTER_LOCAL_MODEL_TOKEN";
 var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   requestBytes: 16777216,
   outputBytes: 1048576,
+  // Raw SSE includes repeated deltas/tool events; final review files remain bounded above.
+  streamOutputBytes: 8388608,
+  streamFrameBytes: 1048576,
   jsonBytes: 65536,
   headerBytes: 16384,
   bufferBytes: 65536,
@@ -22934,7 +22937,7 @@ var AccountGatewayModelTransport = class {
         highWaterMark: ACCOUNT_GATEWAY_BOUNDS.bufferBytes,
         transform: (chunk, _encoding, done) => {
           count += chunk.length;
-          const maximum = isStream ? ACCOUNT_GATEWAY_BOUNDS.outputBytes : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
+          const maximum = isStream ? ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
           if (count > maximum) done(new Error("account_gateway_output_bound"));
           else
             try {
@@ -23368,6 +23371,9 @@ function responsesStreamAudit(observe) {
   let data = [];
   let event = "";
   let completed = false;
+  let frameBytes = 0;
+  let rawLineBytes = 0;
+  let rawLineLastByte = 0;
   function endLine() {
     if (!line) {
       if (data.length) {
@@ -23411,6 +23417,19 @@ function responsesStreamAudit(observe) {
   return {
     hasCompleted: () => completed,
     accept(bytes) {
+      for (const byte of bytes) {
+        frameBytes++;
+        if (frameBytes > ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes)
+          throw new Error("account_gateway_stream_frame_bound");
+        if (byte === 10) {
+          if (rawLineBytes === 0 || rawLineBytes === 1 && rawLineLastByte === 13)
+            frameBytes = 0;
+          rawLineBytes = 0;
+        } else {
+          rawLineBytes++;
+          rawLineLastByte = byte;
+        }
+      }
       consume(decoder.decode(bytes, { stream: true }));
     },
     finish() {
@@ -93951,6 +93970,17 @@ var RunInvestigationWorkSlot = class {
     if (isSuperseded(snapshot)) {
       return { status: "superseded" /* Superseded */, snapshot };
     }
+    if (input.maxStateTransitions > 0 && snapshot.nextAction === "conclude" /* Conclude */) {
+      throwIfAborted(input.signal);
+      snapshot = await this.dependencies.controlPlane.conclude({
+        authorizationToken: input.authorizationToken,
+        snapshot,
+        certificateTtlMs: input.certificateTtlMs
+      });
+    }
+    if (isSuperseded(snapshot)) {
+      return { status: "superseded" /* Superseded */, snapshot };
+    }
     if (snapshot.nextAction === "terminal" /* Terminal */ || isTerminal2(snapshot)) {
       return { status: "completed" /* Completed */, snapshot };
     }
@@ -106683,10 +106713,10 @@ var review_investigation_capability_v1_golden_default = {
       probePolicyVersion: "review-investigation-probe-policy.v3",
       runtimeProfileVersion: "gateway-attested-agent.v1",
       searchPolicyVersion: "review-investigation-fixed-string-search.v1",
-      turnPromptContractHash: "e73f81f5506c1f9c33510faff8a1a872b439596c694a70753927e84ff3ea0fa1"
+      turnPromptContractHash: "48a3a67d11904996957416757bc82cdc2e7ddca13510bf9b4a441bd6f946bf82"
     },
-    canonicalJson: '{"coverageContractVersion":"review-investigation-coverage.v1","criticPolicyVersion":"review-investigation-critic.v2","expansionRulesVersion":"review-investigation-expansion.v3","gatewayPolicyVersion":"context-gateway-v4","probePolicyVersion":"review-investigation-probe-policy.v3","runtimeProfileVersion":"gateway-attested-agent.v1","searchPolicyVersion":"review-investigation-fixed-string-search.v1","turnPromptContractHash":"e73f81f5506c1f9c33510faff8a1a872b439596c694a70753927e84ff3ea0fa1"}',
-    sha256: "021acf02bba4c0cc8d194edd921652adf6427bb073798a718520a01b245c5e9a"
+    canonicalJson: '{"coverageContractVersion":"review-investigation-coverage.v1","criticPolicyVersion":"review-investigation-critic.v2","expansionRulesVersion":"review-investigation-expansion.v3","gatewayPolicyVersion":"context-gateway-v4","probePolicyVersion":"review-investigation-probe-policy.v3","runtimeProfileVersion":"gateway-attested-agent.v1","searchPolicyVersion":"review-investigation-fixed-string-search.v1","turnPromptContractHash":"48a3a67d11904996957416757bc82cdc2e7ddca13510bf9b4a441bd6f946bf82"}',
+    sha256: "359b9499b5cf7244bc734c2c8f352ce63ea99b285e67136f1214148ef0dd8dba"
   },
   policy: {
     value: {
@@ -107747,7 +107777,7 @@ function compareCodeUnits3(left, right) {
 }
 
 // src/review-investigation/application/review-investigation-turn-prompt.ts
-var REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT = "review_investigation_turn_prompt.v4";
+var REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT = "review_investigation_turn_prompt.v5";
 var TURN_INSTRUCTIONS = Object.freeze([
   "REVIEW INVESTIGATION TURN CONTRACT:",
   "Use only the reviewrouter Context Gateway tools. Investigate every obligation in the authenticated turn brief.",
@@ -107770,7 +107800,7 @@ var REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH = sha2562(
   canonicalJson2({
     contract: REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT,
     instructions: TURN_INSTRUCTIONS,
-    turnBriefEncoding: "REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:<canonical-json-base64url>",
+    turnBriefEncoding: "REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:<canonical-json>",
     operationBudgetEncoding: "REVIEWROUTER_CONTEXT_OPERATION_BUDGET:<positive-integer>"
   })
 );
@@ -107781,16 +107811,13 @@ function buildReviewInvestigationTurnPrompt(input) {
   if (!Number.isSafeInteger(input.maxGatewayOperations) || input.maxGatewayOperations < 1) {
     throw new Error("review_investigation_operation_budget_invalid");
   }
-  const encodedBrief = Buffer.from(
-    canonicalJson2(input.turnBrief),
-    "utf8"
-  ).toString("base64url");
+  const canonicalBrief = canonicalJson2(input.turnBrief);
   return [
     input.reviewContextPrompt,
     "",
     ...TURN_INSTRUCTIONS,
     `REVIEWROUTER_CONTEXT_OPERATION_BUDGET:${input.maxGatewayOperations}`,
-    `REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:${encodedBrief}`
+    `REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:${canonicalBrief}`
   ].join("\n");
 }
 

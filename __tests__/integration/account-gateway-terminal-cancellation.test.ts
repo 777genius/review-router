@@ -303,6 +303,103 @@ async function terminalFollowup(
   assert.equal(native.listening, false);
 }
 
+async function rawStreamBound(
+  mode: 'complete' | 'aggregate' | 'frame' | 'frame-boundary'
+) {
+  const root = process.env.RR_TERMINAL_CANCELLATION_PROBE_ROOT;
+  assert(root, 'disposable_probe_root_required');
+  const end = completed('bounded-final');
+  const maximum = 8 * 1024 * 1024;
+  const frame = `:${'x'.repeat(16 * 1024 - 3)}\n\n`;
+  const remaining = maximum - Buffer.byteLength(end);
+  const remainder = remaining % Buffer.byteLength(frame);
+  assert(remainder >= 3);
+  const large =
+    frame.repeat(Math.floor(remaining / Buffer.byteLength(frame))) +
+    `:${'x'.repeat(remainder - 3)}\n\n` +
+    end;
+  assert.equal(Buffer.byteLength(large), maximum);
+  const bytes = Buffer.from(
+    mode === 'frame'
+      ? `:${'x'.repeat(1024 * 1024)}\n\n${end}`
+      : mode === 'frame-boundary'
+        ? `:${'é'.repeat((1024 * 1024 - 6) / 2)}x\r\n\r\n${end}`
+        : mode === 'aggregate'
+          ? frame + large
+          : large
+  );
+  let nativePosts = 0;
+  const native = createHttpsServer(
+    {
+      cert: readFileSync(join(root, 'cert.pem')),
+      key: readFileSync(join(root, 'key.pem')),
+    },
+    (request, reply) => {
+      nativePosts++;
+      request.resume();
+      reply.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'x-reviewrouter-request-ref': 'synthetic-stream-bound',
+      });
+      reply.end(bytes);
+    }
+  );
+  let local: LocalGatewayModelTransport | undefined;
+  try {
+    await bounded(
+      new Promise<void>((resolve, reject) => {
+        native.once('error', reject);
+        native.listen(0, '127.0.0.1', resolve);
+      }),
+      'stream-bound-listen'
+    );
+    const address = native.address();
+    assert(address && typeof address !== 'string');
+    const transport = new AccountGatewayModelTransport(
+      `https://127.0.0.1:${address.port}`,
+      () => token
+    );
+    local = await startLocalGatewayModelTransport(transport);
+    const response = await post(local);
+    assert.equal(response.statusCode, 200);
+    const chunks: Buffer[] = [];
+    const drained = bounded(
+      (async () => {
+        for await (const chunk of response) chunks.push(Buffer.from(chunk));
+      })(),
+      'stream-bound-drain'
+    );
+    if (mode === 'complete' || mode === 'frame-boundary') {
+      await drained;
+      assert.deepEqual(Buffer.concat(chunks), bytes);
+      assert.equal(response.complete, true);
+      assert.equal(transport.actualModel, 'fixture-model');
+      assert.equal(transport.lastFailure, undefined);
+    } else {
+      await assert.rejects(drained);
+      assert.equal(response.complete, false);
+      assert.deepEqual(transport.lastFailure, {
+        code: 'transport',
+        effect: 'effect_unknown',
+        requestRef: 'synthetic-stream-bound',
+      });
+      const denied = await post(local);
+      assert.equal(denied.statusCode, 502);
+      denied.resume();
+      assert.equal(
+        nativePosts,
+        1,
+        'bounded failures must not dispatch a replay'
+      );
+    }
+    assert.equal(nativePosts, 1);
+  } finally {
+    await local?.dispose();
+    native.closeAllConnections();
+    await new Promise<void>((resolve) => native.close(() => resolve()));
+  }
+}
+
 // The consumer timeout is for parsed SSE events, so valid comments must keep
 // the native socket alive without resetting that event wait. The fixture sends
 // comments every 20s and its first meaningful event after 60s.
@@ -781,6 +878,15 @@ async function relaySaturation(
 // Same typed file becomes a compiled child observer. Node --test consumes file
 // arguments itself, so the isolated child's --probe marker travels in its env.
 if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
+  for (const mode of [
+    'complete',
+    'aggregate',
+    'frame',
+    'frame-boundary',
+  ] as const)
+    nodeTest(`raw SSE bounded stream: ${mode}`, { timeout: 20_000 }, () =>
+      rawStreamBound(mode)
+    );
   nodeTest(
     'successful headers retain the original request deadline beyond 30s',
     { timeout: 20_000 },
@@ -930,8 +1036,8 @@ if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 12\b/);
-      expect(result.stdout).toMatch(/# pass 12\b/);
+      expect(result.stdout).toMatch(/# tests 16\b/);
+      expect(result.stdout).toMatch(/# pass 16\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

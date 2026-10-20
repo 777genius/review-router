@@ -311,6 +311,23 @@ export class RunInvestigationWorkSlot {
     if (isSuperseded(snapshot)) {
       return { status: ReviewInvestigationRunStatus.Superseded, snapshot };
     }
+    // A final successful turn may consume the transition budget while making
+    // the aggregate ready. Finish that admitted work without planning or
+    // executing another provider turn; the control plane still owns conclusion.
+    if (
+      input.maxStateTransitions > 0 &&
+      snapshot.nextAction === ReviewInvestigationNextAction.Conclude
+    ) {
+      throwIfAborted(input.signal);
+      snapshot = await this.dependencies.controlPlane.conclude({
+        authorizationToken: input.authorizationToken,
+        snapshot,
+        certificateTtlMs: input.certificateTtlMs,
+      });
+    }
+    if (isSuperseded(snapshot)) {
+      return { status: ReviewInvestigationRunStatus.Superseded, snapshot };
+    }
     if (
       snapshot.nextAction === ReviewInvestigationNextAction.Terminal ||
       isTerminal(snapshot)

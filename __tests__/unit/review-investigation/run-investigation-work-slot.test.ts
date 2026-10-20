@@ -174,6 +174,84 @@ describe('RunInvestigationWorkSlot', () => {
     });
   });
 
+  it('concludes once when the final permitted turn makes the aggregate ready', async () => {
+    const ready = Object.freeze({
+      ...plannedSnapshot(),
+      state: ReviewInvestigationState.ReadyToConclude,
+      nextAction: ReviewInvestigationNextAction.Conclude,
+      turn: null,
+    });
+    const terminal = terminalSnapshot(4);
+    const controlPlane = controlPlaneFixture(plannedSnapshot());
+    controlPlane.commitTurn.mockResolvedValue(ready);
+    controlPlane.conclude.mockResolvedValue(terminal);
+    const agent = agentFixture(observation());
+
+    const result = await runnerFixture(controlPlane, agent).execute({
+      ...runInput(),
+      maxStateTransitions: 1,
+    });
+
+    expect(result).toEqual({
+      status: ReviewInvestigationRunStatus.Completed,
+      snapshot: terminal,
+    });
+    expect(agent.executeTurn).toHaveBeenCalledTimes(1);
+    expect(controlPlane.planTurn).not.toHaveBeenCalled();
+    expect(controlPlane.conclude).toHaveBeenCalledTimes(1);
+    expect(controlPlane.conclude).toHaveBeenCalledWith({
+      authorizationToken: runInput().authorizationToken,
+      snapshot: ready,
+      certificateTtlMs: runInput().certificateTtlMs,
+    });
+  });
+
+  it('does not conclude or start another turn after the budget leaves work pending', async () => {
+    const pending = Object.freeze({ ...plannedSnapshot(), turn: null });
+    const controlPlane = controlPlaneFixture(plannedSnapshot());
+    controlPlane.commitTurn.mockResolvedValue(pending);
+    const agent = agentFixture(observation());
+
+    const result = await runnerFixture(controlPlane, agent).execute({
+      ...runInput(),
+      maxStateTransitions: 1,
+    });
+
+    expect(result).toEqual({
+      status: ReviewInvestigationRunStatus.TransitionBudgetExhausted,
+      snapshot: pending,
+    });
+    expect(agent.executeTurn).toHaveBeenCalledTimes(1);
+    expect(controlPlane.planTurn).not.toHaveBeenCalled();
+    expect(controlPlane.conclude).not.toHaveBeenCalled();
+  });
+
+  it('verifies the one boundary conclusion without retrying a nonterminal result', async () => {
+    const ready = Object.freeze({
+      ...plannedSnapshot(),
+      state: ReviewInvestigationState.ReadyToConclude,
+      nextAction: ReviewInvestigationNextAction.Conclude,
+      turn: null,
+    });
+    const controlPlane = controlPlaneFixture(plannedSnapshot());
+    controlPlane.commitTurn.mockResolvedValue(ready);
+    controlPlane.conclude.mockResolvedValue(ready);
+    const agent = agentFixture(observation());
+
+    const result = await runnerFixture(controlPlane, agent).execute({
+      ...runInput(),
+      maxStateTransitions: 1,
+    });
+
+    expect(result).toEqual({
+      status: ReviewInvestigationRunStatus.TransitionBudgetExhausted,
+      snapshot: ready,
+    });
+    expect(controlPlane.conclude).toHaveBeenCalledTimes(1);
+    expect(agent.executeTurn).toHaveBeenCalledTimes(1);
+    expect(controlPlane.planTurn).not.toHaveBeenCalled();
+  });
+
   it('refreshes a restored active-turn capability before provider execution', async () => {
     const restored = Object.freeze({
       ...plannedSnapshot(),

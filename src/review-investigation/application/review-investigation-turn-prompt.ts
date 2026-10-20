@@ -2,7 +2,7 @@ import type { ReviewInvestigationTurnBrief } from '../domain/investigation-state
 import { canonicalJson, sha256 } from '../domain/canonical-json';
 
 export const REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT =
-  'review_investigation_turn_prompt.v4' as const;
+  'review_investigation_turn_prompt.v5' as const;
 
 const TURN_INSTRUCTIONS = Object.freeze([
   'REVIEW INVESTIGATION TURN CONTRACT:',
@@ -28,7 +28,7 @@ export const REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH = sha256(
     contract: REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT,
     instructions: TURN_INSTRUCTIONS,
     turnBriefEncoding:
-      'REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:<canonical-json-base64url>',
+      'REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:<canonical-json>',
     operationBudgetEncoding:
       'REVIEWROUTER_CONTEXT_OPERATION_BUDGET:<positive-integer>',
   })
@@ -48,15 +48,12 @@ export function buildReviewInvestigationTurnPrompt(input: {
   ) {
     throw new Error('review_investigation_operation_budget_invalid');
   }
-  const encodedBrief = Buffer.from(
-    canonicalJson(input.turnBrief),
-    'utf8'
-  ).toString('base64url');
+  const canonicalBrief = canonicalJson(input.turnBrief);
   return [
     input.reviewContextPrompt,
     '',
     ...TURN_INSTRUCTIONS,
     `REVIEWROUTER_CONTEXT_OPERATION_BUDGET:${input.maxGatewayOperations}`,
-    `REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:${encodedBrief}`,
+    `REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:${canonicalBrief}`,
   ].join('\n');
 }

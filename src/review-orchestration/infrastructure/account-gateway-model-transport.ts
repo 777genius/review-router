@@ -576,6 +576,32 @@ export class AccountGatewayModelTransport {
   }
 }
 
+/** Codex may omit its default tier on the wire; the gateway requires it explicit. */
+export function normalizeCodexGatewayServiceTier(bytes: Uint8Array): Buffer {
+  const original = Buffer.from(bytes);
+  if (original.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
+    throw new Error('account_gateway_request_bound');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(original.toString('utf8')) as unknown;
+  } catch {
+    return original;
+  }
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    Array.isArray(parsed) ||
+    Object.prototype.hasOwnProperty.call(parsed, 'service_tier')
+  )
+    return original;
+  const normalized = Buffer.from(
+    JSON.stringify({ ...parsed, service_tier: 'default' })
+  );
+  if (normalized.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
+    throw new Error('account_gateway_request_bound');
+  return normalized;
+}
+
 /** Tiny per-run loopback adapter for CLI clients that capture auth once. Only
  * POST /responses exists; destinations/headers are never supplied by the CLI. */
 export async function startLocalGatewayModelTransport(
@@ -640,7 +666,10 @@ export async function startLocalGatewayModelTransport(
           );
           stage = 'upstream_request';
           dispatchedRequests++;
-          upstream = await transport.responses(bytes, controller.signal);
+          upstream = await transport.responses(
+            normalizeCodexGatewayServiceTier(bytes),
+            controller.signal
+          );
           stage = 'downstream_stream';
           reply.writeHead(upstream.httpStatus, {
             'content-type': upstream.contentType,
@@ -732,6 +761,7 @@ export function codexGatewayConfiguration(baseUrl: string): readonly string[] {
     // Replace the provider table so user/project entries cannot add headers/auth.
     `model_providers={reviewrouter_account_gateway={name="ReviewRouter account gateway",base_url=${JSON.stringify(baseUrl)},wire_api="responses",requires_openai_auth=false,supports_websockets=false,request_max_retries=0,stream_max_retries=0,stream_idle_timeout_ms=${ACCOUNT_GATEWAY_BOUNDS.idleMs},env_http_headers={Authorization="${LOCAL_MODEL_CAPABILITY_ENV}"}}}`,
     'cli_auth_credentials_store="ephemeral"',
+    'agents.enabled=false',
     'service_tier="default"',
     'web_search="disabled"',
   ]);

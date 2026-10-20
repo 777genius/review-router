@@ -13,6 +13,7 @@ import { buildReviewFindingsSchema } from '../../../src/providers/review-output'
 import { logger } from '../../../src/utils/logger';
 import {
   codexGatewayConfiguration,
+  normalizeCodexGatewayServiceTier,
   type LocalGatewayModelTransport,
 } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 
@@ -854,6 +855,7 @@ describe('CodexProvider', () => {
       ])
     );
     expect(isFeatureDisabled(args, 'apps')).toBe(true);
+    expect(isFeatureDisabled(args, 'multi_agent_v2')).toBe(true);
     expect(args.indexOf('--skip-git-repo-check')).toBe(1);
   });
 
@@ -903,6 +905,7 @@ describe('CodexProvider', () => {
       ])
     );
     expect(isFeatureDisabled(args, 'apps')).toBe(true);
+    expect(isFeatureDisabled(args, 'multi_agent_v2')).toBe(true);
     expect(args.join('\n')).toContain(
       'mcp_servers.reviewrouter.enabled_tools='
     );
@@ -2779,3 +2782,31 @@ function isFeatureDisabled(args: readonly string[], feature: string): boolean {
     (argument, index) => argument === feature && args[index - 1] === '--disable'
   );
 }
+
+// Real Codex 0.147 omits default service_tier despite its configured CLI default.
+describe('Codex account gateway wire tier', () => {
+  it('disables legacy agents alongside the confined gateway transport', () => {
+    expect(codexGatewayConfiguration('http://127.0.0.1:12345')).toContain(
+      'agents.enabled=false'
+    );
+  });
+  it('adds only a missing default tier and preserves explicitly supplied payloads', () => {
+    const original = {
+      model: 'gpt-5.6-sol',
+      store: false,
+      stream: true,
+      reasoning: { effort: 'xhigh' },
+    };
+    expect(
+      JSON.parse(
+        normalizeCodexGatewayServiceTier(
+          Buffer.from(JSON.stringify(original))
+        ).toString()
+      )
+    ).toEqual({ ...original, service_tier: 'default' });
+    for (const service_tier of ['default', 'priority', null]) {
+      const bytes = Buffer.from(JSON.stringify({ ...original, service_tier }));
+      expect(normalizeCodexGatewayServiceTier(bytes)).toEqual(bytes);
+    }
+  });
+});

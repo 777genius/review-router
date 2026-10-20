@@ -47,6 +47,7 @@ import {
 } from './ocr-review-normalization';
 import {
   OCR_OUTCOME_SCHEMA_VERSION,
+  OCR_OUTCOME_DIAGNOSTIC_REASONS,
   type OcrNativeManifestAdmission,
 } from './ocr-review-outcome-contract';
 import {
@@ -109,6 +110,23 @@ export type OcrManagedRunLayout = Readonly<{
   backgroundPath: string | null;
 }>;
 
+const OCR_ACCEPTANCE_DIAGNOSTIC_REASONS = [
+  ...OCR_OUTCOME_DIAGNOSTIC_REASONS,
+  'unverified_native_span',
+  'unclassified_native_severity',
+] as const;
+
+export type OcrReviewAcceptanceDiagnostic = Readonly<{
+  reasons: readonly (typeof OCR_ACCEPTANCE_DIAGNOSTIC_REASONS)[number][];
+  acceptedPartial: boolean;
+  classificationPartial: boolean;
+  normalizationPartial: boolean;
+  skippedFindingCount: number;
+  uncoveredPathCount: number;
+  nativeCommentCount: number;
+  normalizedFindingCount: number;
+}>;
+
 export type OcrReviewInvocationOptions = Readonly<{
   /** Root cancellation also owns the model-free preparation process. */
   signal?: AbortSignal;
@@ -132,6 +150,7 @@ export type OcrReviewInvocationOptions = Readonly<{
   checkoutRoot: string;
   processRunner: OcrReviewProcessRunner;
   previewRunner: OcrPreviewRunner;
+  acceptanceDiagnostic?: (diagnostic: OcrReviewAcceptanceDiagnostic) => void;
 }>;
 
 export type OcrPreparedReviewInvocation = PreparedReviewInvocation & {
@@ -820,6 +839,25 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       headFiles,
       diffPositions,
     });
+    try {
+      this.options.acceptanceDiagnostic?.({
+        reasons: Object.freeze(
+          OCR_ACCEPTANCE_DIAGNOSTIC_REASONS.filter((reason) =>
+            accepted.reasons.includes(reason)
+          )
+        ),
+        acceptedPartial: accepted.partial,
+        classificationPartial: accepted.classification.partial,
+        normalizationPartial:
+          accepted.normalized.diagnostics.partialFlagsRequired,
+        skippedFindingCount: accepted.normalized.diagnostics.skipped.length,
+        uncoveredPathCount: accepted.uncoveredPaths.length,
+        nativeCommentCount: accepted.native.comments.length,
+        normalizedFindingCount: accepted.normalized.findings.length,
+      });
+    } catch {
+      // Local diagnostics cannot change engine acceptance or publication.
+    }
     const result: ReviewResult = {
       content: accepted.reasons.join(','),
       findings: [...accepted.normalized.findings],

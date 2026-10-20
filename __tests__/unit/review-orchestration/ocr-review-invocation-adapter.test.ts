@@ -14,6 +14,7 @@ import {
   planOcrReviewAssignments,
   runOcrReviewProcess,
   type OcrLoopbackBridge,
+  type OcrReviewAcceptanceDiagnostic,
   type OcrManagedRunLayout,
   type OcrReviewProcessRunner,
   type OcrPreviewRunner,
@@ -340,6 +341,9 @@ describe('OcrReviewInvocationAdapter', () => {
     readonly bridge: OcrLoopbackBridge;
     readonly processRunner: OcrReviewProcessRunner;
     readonly previewRunner: OcrPreviewRunner;
+    readonly acceptanceDiagnostic?: (
+      diagnostic: OcrReviewAcceptanceDiagnostic
+    ) => void;
     readonly planInputOverrides?: Record<string, unknown>;
     readonly lifecycle?: {
       readonly signal?: AbortSignal;
@@ -373,6 +377,7 @@ describe('OcrReviewInvocationAdapter', () => {
       checkoutRoot,
       processRunner: options.processRunner,
       previewRunner: options.previewRunner,
+      acceptanceDiagnostic: options.acceptanceDiagnostic,
     });
     return { adapter, workSlot: planned.assignments[0].workSlot };
   }
@@ -584,16 +589,35 @@ describe('OcrReviewInvocationAdapter', () => {
 
   it('flags a degraded outcome with context_inspection_incomplete + provider_warning', async () => {
     const body = JSON.parse(nativeResultBody()) as Record<string, unknown>;
+    const secretish = 'private_native_reason_and_model_content_923';
+    body.comments = [
+      {
+        path: 'calc.ts',
+        content: secretish,
+        severity: 'unclassified',
+        category: 'correctness',
+        existing_code: secretish,
+        start_line: 1,
+        end_line: 1,
+      },
+      { path: 'private_path_923.ts', content: secretish },
+    ];
     const outcome = body.reviewrouter_outcome as {
       groups: Record<string, unknown>[];
     };
     outcome.groups[0].main_completed = false;
     outcome.groups[0].stop_cause = 'review_limit_reached';
     outcome.groups[0].rounds = { configured: 2, started: 1, completed: 0 };
+    (outcome.groups[0].phases as Record<string, unknown>).plan = {
+      state: 'failed',
+      reason: secretish,
+    };
+    const diagnostic = jest.fn<void, [OcrReviewAcceptanceDiagnostic]>();
     const { bridge, requests } = bridgeFixture();
     requests.count = 1;
     const { adapter, workSlot } = adapterFixture({
       bridge,
+      acceptanceDiagnostic: diagnostic,
       processRunner: processRunnerWriting(JSON.stringify(body)).runner,
       previewRunner: previewRunner().runner,
     });
@@ -603,6 +627,27 @@ describe('OcrReviewInvocationAdapter', () => {
       'context_inspection_incomplete',
       'provider_warning',
     ]);
+    expect(diagnostic).toHaveBeenCalledTimes(1);
+    expect(diagnostic).toHaveBeenCalledWith({
+      reasons: [
+        'late_round_stop',
+        'review_limit',
+        'phase_failed',
+        'unverified_native_span',
+        'unclassified_native_severity',
+      ],
+      acceptedPartial: true,
+      classificationPartial: true,
+      normalizationPartial: true,
+      skippedFindingCount: 1,
+      uncoveredPathCount: 0,
+      nativeCommentCount: 2,
+      normalizedFindingCount: 1,
+    });
+    const serialized = JSON.stringify(diagnostic.mock.calls);
+    expect(serialized).not.toContain(secretish);
+    expect(serialized).not.toContain('calc.ts');
+    expect(serialized).not.toContain('private_path_923.ts');
   });
 
   it('never reruns after a truncated managed result (no new inference)', async () => {

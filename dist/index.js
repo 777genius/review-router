@@ -110035,6 +110035,15 @@ function parseOcrReviewOutcome(value) {
     groups: Object.freeze(groups)
   });
 }
+var OCR_OUTCOME_DIAGNOSTIC_REASONS = [
+  "missing_required_main",
+  "late_round_stop",
+  "review_limit",
+  "missing_paths",
+  "phase_failed",
+  "invalid_filter_decision",
+  "grouping_fallback"
+];
 var STOP_CAUSE_REASONS = {
   max_rounds: "review_limit",
   empty_rounds: "missing_required_main",
@@ -110450,6 +110459,11 @@ function acceptOcrManagedReviewResult(input) {
 // src/review-orchestration/infrastructure/ocr-review-invocation-adapter.ts
 var OCR_ADAPTER_CONTRACT_VERSION = "ocr-managed-review.v1";
 var OCR_RETRY_POLICY_VERSION = "ocr-managed-no-replay.v1";
+var OCR_ACCEPTANCE_DIAGNOSTIC_REASONS = [
+  ...OCR_OUTCOME_DIAGNOSTIC_REASONS,
+  "unverified_native_span",
+  "unclassified_native_severity"
+];
 function buildOcrControlledRuleText(input) {
   const rule = [
     "ReviewRouter managed additive policy (reviewrouter-managed-v1).",
@@ -110960,6 +110974,23 @@ var OcrReviewInvocationAdapter = class {
       headFiles,
       diffPositions
     });
+    try {
+      this.options.acceptanceDiagnostic?.({
+        reasons: Object.freeze(
+          OCR_ACCEPTANCE_DIAGNOSTIC_REASONS.filter(
+            (reason) => accepted.reasons.includes(reason)
+          )
+        ),
+        acceptedPartial: accepted.partial,
+        classificationPartial: accepted.classification.partial,
+        normalizationPartial: accepted.normalized.diagnostics.partialFlagsRequired,
+        skippedFindingCount: accepted.normalized.diagnostics.skipped.length,
+        uncoveredPathCount: accepted.uncoveredPaths.length,
+        nativeCommentCount: accepted.native.comments.length,
+        normalizedFindingCount: accepted.normalized.findings.length
+      });
+    } catch {
+    }
     const result2 = {
       content: accepted.reasons.join(","),
       findings: [...accepted.normalized.findings],
@@ -116726,7 +116757,8 @@ var ProductionT0ReviewRunner = class {
           backgroundText: ocrBackgroundParts.length > 0 ? ocrBackgroundParts.join("\n\n") : null,
           checkoutRoot: path27.resolve(input.workspacePath),
           processRunner: runOcrReviewProcess,
-          previewRunner: runOcrReviewProcess
+          previewRunner: runOcrReviewProcess,
+          acceptanceDiagnostic: (diagnostic) => logger.info("Managed OCR acceptance", diagnostic)
         }
       );
       const identities2 = new DeterministicReviewOrchestrationIdentity();

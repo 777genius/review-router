@@ -244,6 +244,7 @@ export class OcrReviewAcceptanceError extends Error {
   constructor(
     readonly code:
       | 'gateway_effect_unknown'
+      | 'review_agent_not_dispatched'
       | 'process_failed'
       | 'output_unreadable'
       | 'result_contract'
@@ -267,6 +268,8 @@ export type OcrAcceptedReviewResult = Readonly<{
   /** Bounded local diagnostic codes; never new wire keys (§8.2). */
   reasons: readonly string[];
   partial: boolean;
+  /** Inventory paths with no outcome group (§8.2 missing_paths limitation). */
+  uncoveredPaths: readonly string[];
 }>;
 
 /**
@@ -293,7 +296,15 @@ export function acceptOcrManagedReviewResult(input: {
   readonly diffPositions?: ReadonlyMap<string, ReadonlyMap<number, number>>;
 }): OcrAcceptedReviewResult {
   // Step 2: Gateway effect facts before any output interpretation.
+  // A positively proven not_dispatched effect is a distinct retry-safe failure
+  // (§8.4 step 2), not an unknown effect that could have been paid.
   if (input.effectFacts && input.effectFacts.effect !== 'none') {
+    if (input.effectFacts.effect === 'not_dispatched') {
+      throw new OcrReviewAcceptanceError(
+        'review_agent_not_dispatched',
+        input.effectFacts.effect
+      );
+    }
     throw new OcrReviewAcceptanceError(
       'gateway_effect_unknown',
       input.effectFacts.effect
@@ -340,7 +351,11 @@ export function acceptOcrManagedReviewResult(input: {
   if (input.observedActualModel === undefined) {
     throw new OcrReviewAcceptanceError('actual_model_missing', '');
   }
-  // Step 6: selected paths must match the prepared canonical inventory.
+  // Step 6: reconcile outcome paths with the prepared canonical inventory.
+  // Paths reported outside the inventory (or duplicated) are a genuine
+  // contradiction and fail closed; inventory paths without any outcome group
+  // (deleted/binary/preview-excluded files the producer never grouped) are a
+  // bounded missing_paths limitation, not a fatal mismatch (§8.1/§8.2).
   const expected = new Set(input.expectedPaths);
   const observed = new Set<string>();
   for (const group of native.outcome.groups) {
@@ -351,11 +366,9 @@ export function acceptOcrManagedReviewResult(input: {
       observed.add(path);
     }
   }
-  for (const path of expected) {
-    if (!observed.has(path)) {
-      throw new OcrReviewAcceptanceError('coverage_mismatch', path);
-    }
-  }
+  const uncoveredPaths = Object.freeze(
+    [...expected].filter((path) => !observed.has(path)).sort()
+  );
   // Step 7: normalize only usable findings; §8.2 skips and bounds apply.
   let normalized: OcrNormalizedFindings;
   try {
@@ -372,7 +385,11 @@ export function acceptOcrManagedReviewResult(input: {
   }
   const classification = classifyOcrReviewOutcome(native.outcome);
   const reasons = [
-    ...new Set([...classification.reasons, ...normalized.diagnostics.reasons]),
+    ...new Set([
+      ...classification.reasons,
+      ...normalized.diagnostics.reasons,
+      ...(uncoveredPaths.length > 0 ? ['missing_paths'] : []),
+    ]),
   ].sort();
   const usage: TokenUsage = {
     promptTokens: native.usage.inputTokens ?? 0,
@@ -388,6 +405,10 @@ export function acceptOcrManagedReviewResult(input: {
     actualModel: input.observedActualModel,
     usage,
     reasons: Object.freeze(reasons),
-    partial: classification.partial || normalized.diagnostics.partialFlagsRequired,
+    partial:
+      classification.partial ||
+      normalized.diagnostics.partialFlagsRequired ||
+      uncoveredPaths.length > 0,
+    uncoveredPaths,
   });
 }

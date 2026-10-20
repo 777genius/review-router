@@ -87,6 +87,23 @@ describe('parseOcrReviewOutcome (§7.4 reviewrouter_outcome)', () => {
     );
   });
 
+  it('rejects a missing run_stop_cause instead of reading a silent null', () => {
+    const { run_stop_cause: _dropped, ...withoutRunStop } = validOutcome();
+    const error = violationOf(() => withoutRunStop);
+    expect(error.issues.map((issue) => issue.code)).toContain(
+      'outcome_stop_cause_missing'
+    );
+  });
+
+  it('rejects a missing group stop_cause instead of reading a silent null', () => {
+    const group = validGroup();
+    delete group.stop_cause;
+    const error = violationOf(() => validOutcome({ groups: [group] }));
+    expect(error.issues.map((issue) => issue.code)).toContain(
+      'outcome_stop_cause_missing'
+    );
+  });
+
   it('rejects an unknown phase state enum value', () => {
     const group = validGroup();
     (group.phases as Record<string, unknown>).plan = {

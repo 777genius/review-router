@@ -40,6 +40,10 @@ import {
 } from '../../analysis/llm/prepared-review-prompt';
 import { normalizeReviewObservation } from './review-observation-normalizer';
 import {
+  OCR_NORMALIZATION_LIMITS,
+  OcrOutputTooLargeError,
+} from './ocr-review-normalization';
+import {
   OCR_OUTCOME_SCHEMA_VERSION,
   type OcrNativeManifestAdmission,
 } from './ocr-review-outcome-contract';
@@ -668,9 +672,14 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     if (Date.parse(lease.expiresAt) <= Date.now()) {
       throw new Error('review_action_v2_lease_expired');
     }
-    // Step 2: known-terminal/unknown Gateway effect fences new calls.
+    // Step 2: known-terminal/unknown Gateway effect fences new calls. A
+    // positively proven not_dispatched effect is a distinct retry-safe
+    // failure (§8.4 step 2), never a paid/unknown effect.
     const effectBefore = this.options.bridge.effectFacts?.();
     if (effectBefore && effectBefore.effect !== 'none') {
+      if (effectBefore.effect === 'not_dispatched') {
+        throw new Error('review_action_v2_ocr_not_dispatched');
+      }
       throw new Error('review_action_v2_ocr_gateway_effect_unknown');
     }
     // One engine invocation in flight; aborting callers never dispatch late.
@@ -788,7 +797,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     const qualityFlags = accepted.partial
       ? ['context_inspection_incomplete', 'provider_warning']
       : [];
-    return normalizeReviewObservation({
+    const observation = normalizeReviewObservation({
       workSlotId: input.invocation.workSlotId,
       attemptOrdinal: input.invocation.attemptOrdinal,
       providerName: input.invocation.provider,
@@ -797,6 +806,13 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       transportAttemptCount: 1,
       qualityFlags,
     });
+    // §8.2: the payload bound is checked exactly here, after the existing
+    // normalizer serializes the observation. Oversized payloads fail
+    // explicitly with the shared output-too-large error, never silently.
+    if (observation.byteCount > OCR_NORMALIZATION_LIMITS.maxPayloadBytes) {
+      throw new OcrOutputTooLargeError('payload');
+    }
+    return observation;
   }
 }
 

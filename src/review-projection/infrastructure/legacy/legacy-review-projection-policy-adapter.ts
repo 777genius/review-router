@@ -119,6 +119,15 @@ export class LegacyReviewProjectionPolicyAdapter
         sourceFindingIds: sortedUnique(
           contributors.map((candidate) => candidate.sourceFindingId)
         ),
+        // §8.2: the verified marker survives a merge only when every merged
+        // contributor carried a verified span and the merged finding kept the
+        // full range; otherwise the anchor is not treated as verified.
+        anchorVerified:
+          contributors.every(
+            (candidate) => candidate.anchorVerified === true
+          ) &&
+          finding.startLine !== undefined &&
+          finding.endLine !== undefined,
         severity: toProjectionSeverity(finding.severity),
         title: finding.title,
         message: finding.message,
@@ -362,6 +371,44 @@ export class LegacyReviewProjectionPolicyAdapter
         kind: FindingPlacementKind.File,
         path: revisionFile.path,
         reason: 'legacy synthesis did not select inline placement',
+      };
+    }
+    if (occurrence.anchorVerified === true) {
+      // §8.2: a verified HEAD span must survive to the final placement
+      // verbatim; chooseBestAddedLineForComment may never move it to a
+      // neighboring added line. If the full range is not provably placeable
+      // in the current diff, degrade to file placement without the
+      // committable suggested patch.
+      const positions = mapLinesToPositions(revisionFile.patch);
+      const rangeStart = occurrence.startLine ?? line;
+      const rangeEnd = occurrence.endLine ?? line;
+      const low = Math.min(rangeStart, rangeEnd);
+      const high = Math.max(rangeStart, rangeEnd);
+      let rangePlaceable = positions.has(line);
+      for (let current = low; rangePlaceable && current <= high; current += 1) {
+        rangePlaceable = positions.has(current);
+      }
+      if (!rangePlaceable) {
+        return {
+          lineageId: occurrence.lineageId,
+          kind: FindingPlacementKind.File,
+          path: revisionFile.path,
+          reason:
+            'verified span range is not provably placeable in the current diff',
+        };
+      }
+      return {
+        lineageId: occurrence.lineageId,
+        kind: FindingPlacementKind.Inline,
+        path: revisionFile.path,
+        ...(occurrence.startLine !== undefined
+          ? { startLine: occurrence.startLine }
+          : {}),
+        line,
+        ...(occurrence.endLine !== undefined
+          ? { endLine: occurrence.endLine }
+          : {}),
+        body: inline.body,
       };
     }
     const correctedLine = chooseBestAddedLineForComment(

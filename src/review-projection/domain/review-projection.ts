@@ -88,6 +88,12 @@ export interface CurrentFindingCandidate {
   readonly normalizedFailureModeHash: string;
   readonly symbolAnchor?: string;
   readonly trustedMarker?: string;
+  /**
+   * Set only when the producing adapter verified the anchor span against the
+   * authorized HEAD content (§8.2). A verified span must survive to the final
+   * placement verbatim; it is never re-anchored heuristically.
+   */
+  readonly anchorVerified?: boolean;
   readonly severity: FindingSeverity;
   readonly title: string;
   readonly message: string;
@@ -214,6 +220,8 @@ export interface FindingOccurrence {
   readonly normalizedFailureModeHash: string;
   readonly symbolAnchor?: string;
   readonly trustedMarker?: string;
+  /** See CurrentFindingCandidate.anchorVerified (§8.2 verified HEAD span). */
+  readonly anchorVerified?: boolean;
   readonly title: string;
   readonly message: string;
   readonly suggestion?: string;

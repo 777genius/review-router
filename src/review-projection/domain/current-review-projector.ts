@@ -63,6 +63,7 @@ export class CurrentReviewProjector {
         ...(finding.trustedMarker
           ? { trustedMarker: finding.trustedMarker }
           : {}),
+        ...(finding.anchorVerified ? { anchorVerified: true } : {}),
         title: finding.title,
         message: finding.message,
         ...(finding.suggestion ? { suggestion: finding.suggestion } : {}),

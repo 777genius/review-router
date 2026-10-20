@@ -37152,6 +37152,7 @@ var CurrentReviewProjector = class {
         normalizedFailureModeHash: finding.normalizedFailureModeHash,
         ...finding.symbolAnchor ? { symbolAnchor: finding.symbolAnchor } : {},
         ...finding.trustedMarker ? { trustedMarker: finding.trustedMarker } : {},
+        ...finding.anchorVerified ? { anchorVerified: true } : {},
         title: finding.title,
         message: finding.message,
         ...finding.suggestion ? { suggestion: finding.suggestion } : {},
@@ -97537,6 +97538,10 @@ function parseOcrReviewOutcome(value) {
     return null;
   };
   const runStopCause = parseStopCause(value.run_stop_cause, "run_stop_cause");
+  if (value.run_stop_cause === void 0) {
+    issues.push({ code: "outcome_stop_cause_missing", detail: "run_stop_cause" });
+    return violation();
+  }
   if (value.run_stop_cause !== null && value.run_stop_cause !== void 0 && runStopCause === null) {
     return violation();
   }
@@ -97587,6 +97592,13 @@ function parseOcrReviewOutcome(value) {
       return violation();
     }
     const stopCause = parseStopCause(groupRaw.stop_cause, field("stop_cause"));
+    if (groupRaw.stop_cause === void 0) {
+      issues.push({
+        code: "outcome_stop_cause_missing",
+        detail: field("stop_cause")
+      });
+      return violation();
+    }
     if (groupRaw.stop_cause !== null && groupRaw.stop_cause !== void 0 && stopCause === null) {
       return violation();
     }
@@ -98154,6 +98166,12 @@ var OcrReviewAcceptanceError = class extends Error {
 };
 function acceptOcrManagedReviewResult(input) {
   if (input.effectFacts && input.effectFacts.effect !== "none") {
+    if (input.effectFacts.effect === "not_dispatched") {
+      throw new OcrReviewAcceptanceError(
+        "review_agent_not_dispatched",
+        input.effectFacts.effect
+      );
+    }
     throw new OcrReviewAcceptanceError(
       "gateway_effect_unknown",
       input.effectFacts.effect
@@ -98199,11 +98217,9 @@ function acceptOcrManagedReviewResult(input) {
       observed.add(path33);
     }
   }
-  for (const path33 of expected) {
-    if (!observed.has(path33)) {
-      throw new OcrReviewAcceptanceError("coverage_mismatch", path33);
-    }
-  }
+  const uncoveredPaths = Object.freeze(
+    [...expected].filter((path33) => !observed.has(path33)).sort()
+  );
   let normalized;
   try {
     normalized = normalizeOcrFindings({
@@ -98219,7 +98235,11 @@ function acceptOcrManagedReviewResult(input) {
   }
   const classification = classifyOcrReviewOutcome(native.outcome);
   const reasons = [
-    .../* @__PURE__ */ new Set([...classification.reasons, ...normalized.diagnostics.reasons])
+    .../* @__PURE__ */ new Set([
+      ...classification.reasons,
+      ...normalized.diagnostics.reasons,
+      ...uncoveredPaths.length > 0 ? ["missing_paths"] : []
+    ])
   ].sort();
   const usage = {
     promptTokens: native.usage.inputTokens ?? 0,
@@ -98233,7 +98253,8 @@ function acceptOcrManagedReviewResult(input) {
     actualModel: input.observedActualModel,
     usage,
     reasons: Object.freeze(reasons),
-    partial: classification.partial || normalized.diagnostics.partialFlagsRequired
+    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0,
+    uncoveredPaths
   });
 }
 
@@ -113308,6 +113329,12 @@ var LegacyReviewProjectionPolicyAdapter = class {
         sourceFindingIds: sortedUnique3(
           contributors.map((candidate) => candidate.sourceFindingId)
         ),
+        // §8.2: the verified marker survives a merge only when every merged
+        // contributor carried a verified span and the merged finding kept the
+        // full range; otherwise the anchor is not treated as verified.
+        anchorVerified: contributors.every(
+          (candidate) => candidate.anchorVerified === true
+        ) && finding.startLine !== void 0 && finding.endLine !== void 0,
         severity: toProjectionSeverity2(finding.severity),
         title: finding.title,
         message: finding.message,
@@ -113498,6 +113525,34 @@ var LegacyReviewProjectionPolicyAdapter = class {
         kind: "file" /* File */,
         path: revisionFile.path,
         reason: "legacy synthesis did not select inline placement"
+      };
+    }
+    if (occurrence.anchorVerified === true) {
+      const positions = mapLinesToPositions(revisionFile.patch);
+      const rangeStart = occurrence.startLine ?? line;
+      const rangeEnd = occurrence.endLine ?? line;
+      const low = Math.min(rangeStart, rangeEnd);
+      const high = Math.max(rangeStart, rangeEnd);
+      let rangePlaceable = positions.has(line);
+      for (let current = low; rangePlaceable && current <= high; current += 1) {
+        rangePlaceable = positions.has(current);
+      }
+      if (!rangePlaceable) {
+        return {
+          lineageId: occurrence.lineageId,
+          kind: "file" /* File */,
+          path: revisionFile.path,
+          reason: "verified span range is not provably placeable in the current diff"
+        };
+      }
+      return {
+        lineageId: occurrence.lineageId,
+        kind: "inline" /* Inline */,
+        path: revisionFile.path,
+        ...occurrence.startLine !== void 0 ? { startLine: occurrence.startLine } : {},
+        line,
+        ...occurrence.endLine !== void 0 ? { endLine: occurrence.endLine } : {},
+        body: inline.body
       };
     }
     const correctedLine = chooseBestAddedLineForComment(
@@ -114021,6 +114076,9 @@ function toFinding(observation, value, index) {
     value.normalizedFailureModeHash,
     "finding_failure_mode_hash"
   );
+  const startLine = optionalPositiveInteger(value.startLine);
+  const endLine = optionalPositiveInteger(value.endLine);
+  const anchorVerified = observation.providerKind === "ocr" /* Ocr */ && startLine !== void 0 && endLine !== void 0;
   return Object.freeze({
     sourceFindingId: deterministicId("finding", [
       observation.observationId,
@@ -114028,14 +114086,15 @@ function toFinding(observation, value, index) {
     ]),
     category,
     normalizedFailureModeHash,
+    ...anchorVerified ? { anchorVerified: true } : {},
     severity: toFindingSeverity(value.severity),
     title,
     message,
     ...optionalString(value.suggestion) ? { suggestion: optionalString(value.suggestion) } : {},
     filePath,
-    ...optionalPositiveInteger(value.startLine) !== void 0 ? { startLine: optionalPositiveInteger(value.startLine) } : {},
-    ...optionalPositiveInteger(value.startLine) !== void 0 ? { line: optionalPositiveInteger(value.startLine) } : {},
-    ...optionalPositiveInteger(value.endLine) !== void 0 ? { endLine: optionalPositiveInteger(value.endLine) } : {},
+    ...startLine !== void 0 ? { startLine } : {},
+    ...startLine !== void 0 ? { line: startLine } : {},
+    ...endLine !== void 0 ? { endLine } : {},
     ...optionalConfidence(value.placementConfidence) !== void 0 ? { confidence: optionalConfidence(value.placementConfidence) } : {},
     providerIds: Object.freeze([observation.providerKind]),
     providerVoteKeys: Object.freeze([observation.providerVoteIdentityHash]),
@@ -114593,6 +114652,9 @@ var OcrReviewInvocationAdapter = class {
     }
     const effectBefore = this.options.bridge.effectFacts?.();
     if (effectBefore && effectBefore.effect !== "none") {
+      if (effectBefore.effect === "not_dispatched") {
+        throw new Error("review_action_v2_ocr_not_dispatched");
+      }
       throw new Error("review_action_v2_ocr_gateway_effect_unknown");
     }
     const run2 = this.gate(() => this.runInvocation(input, assignment));
@@ -114684,7 +114746,7 @@ var OcrReviewInvocationAdapter = class {
       transportAttemptCount: 1
     };
     const qualityFlags = accepted.partial ? ["context_inspection_incomplete", "provider_warning"] : [];
-    return normalizeReviewObservation({
+    const observation = normalizeReviewObservation({
       workSlotId: input.invocation.workSlotId,
       attemptOrdinal: input.invocation.attemptOrdinal,
       providerName: input.invocation.provider,
@@ -114693,6 +114755,10 @@ var OcrReviewInvocationAdapter = class {
       transportAttemptCount: 1,
       qualityFlags
     });
+    if (observation.byteCount > OCR_NORMALIZATION_LIMITS.maxPayloadBytes) {
+      throw new OcrOutputTooLargeError("payload");
+    }
+    return observation;
   }
 };
 function readPreviewOutput(outputPath) {

@@ -126,6 +126,21 @@ function acceptanceErrorOf(build: () => unknown): { code: string; message: strin
   throw new Error('expected acceptance error');
 }
 
+/** Acceptance result including the §8.4-6 coverage facts. */
+function acceptedWithCoverage(input: Record<string, unknown>): {
+  uncoveredPaths: readonly string[];
+  partial: boolean;
+  reasons: readonly string[];
+} {
+  return acceptOcrManagedReviewResult(
+    input as Parameters<typeof acceptOcrManagedReviewResult>[0]
+  ) as unknown as {
+    uncoveredPaths: readonly string[];
+    partial: boolean;
+    reasons: readonly string[];
+  };
+}
+
 describe('buildOcrReviewArgv (§5.1)', () => {
   it('builds the managed argv with the reviewrouter-managed mode flag', () => {
     const argv = buildOcrReviewArgv(
@@ -312,6 +327,18 @@ describe('acceptOcrManagedReviewResult (§8.4 order 1-8)', () => {
     expect(error.code).toBe('gateway_effect_unknown');
   });
 
+  it('reports a positively proven not_dispatched effect as retry-safe, not gateway_effect_unknown', () => {
+    // §8.4 step 2: proven not_dispatched is not an unknown paid effect; it
+    // must never enter paid reconciliation as gateway_effect_unknown.
+    const error = acceptanceErrorOf(() =>
+      acceptOcrManagedReviewResult(
+        acceptInput({ effectFacts: { effect: 'not_dispatched' } })
+      )
+    );
+    expect(error.code).toBe('review_agent_not_dispatched');
+    expect(error.code).not.toBe('gateway_effect_unknown');
+  });
+
   it('rejects a nonzero exit even when a valid JSON is present (local diagnostics only)', () => {
     const error = acceptanceErrorOf(() =>
       acceptOcrManagedReviewResult(
@@ -377,14 +404,7 @@ describe('acceptOcrManagedReviewResult (§8.4 order 1-8)', () => {
     expect(error.code).toBe('actual_model_missing');
   });
 
-  it('rejects coverage that does not match the prepared inventory', () => {
-    expect(
-      acceptanceErrorOf(() =>
-        acceptOcrManagedReviewResult(
-          acceptInput({ expectedPaths: ['calc.ts', 'extra.ts'] })
-        )
-      ).code
-    ).toBe('coverage_mismatch');
+  it('rejects outcome paths outside the prepared inventory as a genuine contradiction', () => {
     const raw = JSON.parse(validNativeResultBytes().toString('utf8'));
     raw.reviewrouter_outcome.groups[0].paths = ['other.ts'];
     expect(
@@ -394,6 +414,36 @@ describe('acceptOcrManagedReviewResult (§8.4 order 1-8)', () => {
         )
       ).code
     ).toBe('coverage_mismatch');
+  });
+
+  it('classifies inventory gaps as partial missing_paths instead of a fatal coverage mismatch', () => {
+    // Deleted/binary/gitignored/preview-excluded paths stay in the RR
+    // inventory denominator but never appear in outcome groups (§8.1/§8.4-6):
+    // that is a coverage limitation, not a contradiction.
+    const accepted = acceptedWithCoverage(
+      acceptInput({ expectedPaths: ['calc.ts', 'deleted.ts', 'binary.bin'] })
+    );
+    expect(accepted.uncoveredPaths).toEqual(['binary.bin', 'deleted.ts']);
+    expect(accepted.partial).toBe(true);
+    expect(accepted.reasons).toContain('missing_paths');
+  });
+
+  it('treats empty outcome coverage over a non-empty inventory as partial, not fatal', () => {
+    const raw = JSON.parse(validNativeResultBytes().toString('utf8'));
+    raw.reviewrouter_outcome.groups = [];
+    const accepted = acceptedWithCoverage(
+      acceptInput({ resultBytes: Buffer.from(JSON.stringify(raw)) })
+    );
+    expect(accepted.uncoveredPaths).toEqual(['calc.ts']);
+    expect(accepted.partial).toBe(true);
+    expect(accepted.reasons).toContain('missing_paths');
+  });
+
+  it('keeps full outcome coverage over the inventory clean without missing_paths', () => {
+    const accepted = acceptedWithCoverage(acceptInput());
+    expect(accepted.uncoveredPaths).toEqual([]);
+    expect(accepted.reasons).not.toContain('missing_paths');
+    expect(accepted.partial).toBe(false);
   });
 
   it('degrades a partial outcome with quality reasons instead of a clean result', () => {

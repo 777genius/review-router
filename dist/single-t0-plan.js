@@ -77556,6 +77556,7 @@ var CurrentReviewProjector = class {
         normalizedFailureModeHash: finding.normalizedFailureModeHash,
         ...finding.symbolAnchor ? { symbolAnchor: finding.symbolAnchor } : {},
         ...finding.trustedMarker ? { trustedMarker: finding.trustedMarker } : {},
+        ...finding.anchorVerified ? { anchorVerified: true } : {},
         title: finding.title,
         message: finding.message,
         ...finding.suggestion ? { suggestion: finding.suggestion } : {},
@@ -82655,6 +82656,12 @@ var LegacyReviewProjectionPolicyAdapter = class {
         sourceFindingIds: sortedUnique3(
           contributors.map((candidate) => candidate.sourceFindingId)
         ),
+        // §8.2: the verified marker survives a merge only when every merged
+        // contributor carried a verified span and the merged finding kept the
+        // full range; otherwise the anchor is not treated as verified.
+        anchorVerified: contributors.every(
+          (candidate) => candidate.anchorVerified === true
+        ) && finding.startLine !== void 0 && finding.endLine !== void 0,
         severity: toProjectionSeverity2(finding.severity),
         title: finding.title,
         message: finding.message,
@@ -82845,6 +82852,34 @@ var LegacyReviewProjectionPolicyAdapter = class {
         kind: "file" /* File */,
         path: revisionFile.path,
         reason: "legacy synthesis did not select inline placement"
+      };
+    }
+    if (occurrence.anchorVerified === true) {
+      const positions = mapLinesToPositions(revisionFile.patch);
+      const rangeStart = occurrence.startLine ?? line;
+      const rangeEnd = occurrence.endLine ?? line;
+      const low = Math.min(rangeStart, rangeEnd);
+      const high = Math.max(rangeStart, rangeEnd);
+      let rangePlaceable = positions.has(line);
+      for (let current = low; rangePlaceable && current <= high; current += 1) {
+        rangePlaceable = positions.has(current);
+      }
+      if (!rangePlaceable) {
+        return {
+          lineageId: occurrence.lineageId,
+          kind: "file" /* File */,
+          path: revisionFile.path,
+          reason: "verified span range is not provably placeable in the current diff"
+        };
+      }
+      return {
+        lineageId: occurrence.lineageId,
+        kind: "inline" /* Inline */,
+        path: revisionFile.path,
+        ...occurrence.startLine !== void 0 ? { startLine: occurrence.startLine } : {},
+        line,
+        ...occurrence.endLine !== void 0 ? { endLine: occurrence.endLine } : {},
+        body: inline.body
       };
     }
     const correctedLine = chooseBestAddedLineForComment(
@@ -83368,6 +83403,9 @@ function toFinding(observation, value, index) {
     value.normalizedFailureModeHash,
     "finding_failure_mode_hash"
   );
+  const startLine = optionalPositiveInteger(value.startLine);
+  const endLine = optionalPositiveInteger(value.endLine);
+  const anchorVerified = observation.providerKind === "ocr" /* Ocr */ && startLine !== void 0 && endLine !== void 0;
   return Object.freeze({
     sourceFindingId: deterministicId("finding", [
       observation.observationId,
@@ -83375,14 +83413,15 @@ function toFinding(observation, value, index) {
     ]),
     category,
     normalizedFailureModeHash,
+    ...anchorVerified ? { anchorVerified: true } : {},
     severity: toFindingSeverity(value.severity),
     title,
     message,
     ...optionalString(value.suggestion) ? { suggestion: optionalString(value.suggestion) } : {},
     filePath,
-    ...optionalPositiveInteger(value.startLine) !== void 0 ? { startLine: optionalPositiveInteger(value.startLine) } : {},
-    ...optionalPositiveInteger(value.startLine) !== void 0 ? { line: optionalPositiveInteger(value.startLine) } : {},
-    ...optionalPositiveInteger(value.endLine) !== void 0 ? { endLine: optionalPositiveInteger(value.endLine) } : {},
+    ...startLine !== void 0 ? { startLine } : {},
+    ...startLine !== void 0 ? { line: startLine } : {},
+    ...endLine !== void 0 ? { endLine } : {},
     ...optionalConfidence(value.placementConfidence) !== void 0 ? { confidence: optionalConfidence(value.placementConfidence) } : {},
     providerIds: Object.freeze([observation.providerKind]),
     providerVoteKeys: Object.freeze([observation.providerVoteIdentityHash]),
@@ -85207,6 +85246,145 @@ var import_child_process9 = require("child_process");
 var fs6 = __toESM(require("fs"));
 var path12 = __toESM(require("path"));
 
+// src/review-orchestration/infrastructure/ocr-review-normalization.ts
+var OCR_NORMALIZATION_LIMITS = Object.freeze({
+  maxPayloadBytes: 512 * 1024,
+  maxFindings: 200,
+  maxPathChars: 1024,
+  maxMessageChars: 16384,
+  maxTitleChars: 512
+});
+function normalizeEol(value) {
+  return value.split(/\r\n|\r|\n/u);
+}
+function verifyOcrSpan(input) {
+  const { existingCode, startLine, endLine } = input.comment;
+  if (existingCode === null) return { verified: false, reason: "missing_existing_code" };
+  if (startLine === null || endLine === null || endLine < startLine) {
+    return { verified: false, reason: "invalid_range" };
+  }
+  const fileLines = normalizeEol(input.headContent);
+  if (startLine < 1 || endLine > fileLines.length) {
+    return { verified: false, reason: "invalid_range" };
+  }
+  const blockLines = normalizeEol(existingCode.replace(/\s+$/u, ""));
+  const headBlock = fileLines.slice(startLine - 1, endLine);
+  if (blockLines.length !== headBlock.length || blockLines.some((line, index) => line !== headBlock[index])) {
+    return { verified: false, reason: "content_mismatch" };
+  }
+  let occurrences = 0;
+  for (let index = 0; index + blockLines.length <= fileLines.length; index++) {
+    let matches = true;
+    for (let offset = 0; offset < blockLines.length; offset++) {
+      if (fileLines[index + offset] !== blockLines[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) occurrences++;
+    if (occurrences > 1) break;
+  }
+  if (occurrences !== 1) return { verified: false, reason: "ambiguous_match" };
+  if (input.diffPositions) {
+    for (let line = startLine; line <= endLine; line++) {
+      if (!input.diffPositions.has(line)) {
+        return { verified: false, reason: "outside_diff" };
+      }
+    }
+  }
+  return { verified: true, startLine, endLine };
+}
+var OcrOutputTooLargeError = class extends Error {
+  constructor(bound) {
+    super(`ocr_review_output_too_large: ${bound}`);
+    this.bound = bound;
+    this.name = "OcrOutputTooLargeError";
+  }
+};
+var SEVERITY_MAP = {
+  critical: "critical",
+  high: "major",
+  medium: "minor",
+  low: "minor"
+};
+function normalizeOcrRepoPath(raw) {
+  const path15 = raw.replace(/^\.\//u, "");
+  if (path15.length === 0 || path15.length > OCR_NORMALIZATION_LIMITS.maxPathChars || path15.includes("\\") || path15.includes("\0") || path15.startsWith("/") || path15.split("/").some((segment) => segment === ".." || segment === "")) {
+    return null;
+  }
+  return path15;
+}
+function plainTitleLine(content) {
+  const firstLine = content.split(/\r\n|\r|\n/u).map((line) => line.replace(/[^\P{Z}\u00a0]/gu, " ").trim()).find((line) => line.length > 0) ?? "";
+  return firstLine.replace(/[`#>*_~\[\]]/gu, "").replace(/\s+/gu, " ").trim().slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
+}
+function normalizeOcrFindings(input) {
+  const findings = [];
+  const skipped = [];
+  const reasons = /* @__PURE__ */ new Set();
+  input.comments.forEach((comment, index) => {
+    const path15 = normalizeOcrRepoPath(comment.path);
+    const content = comment.content.trim();
+    if (path15 === null || content.length === 0) {
+      skipped.push({ index, reason: "invalid_native_finding" });
+      return;
+    }
+    if (content.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
+      throw new OcrOutputTooLargeError("message");
+    }
+    const headContent = input.headFiles.get(path15);
+    const span = headContent !== void 0 ? verifyOcrSpan({
+      comment,
+      headContent,
+      ...input.diffPositions ? { diffPositions: input.diffPositions.get(path15) } : {}
+    }) : { verified: false, reason: "invalid_range" };
+    if (!span.verified && span.reason !== "missing_existing_code") {
+      reasons.add("unverified_native_span");
+    }
+    const mappedSeverity = comment.severity ? SEVERITY_MAP[comment.severity] : void 0;
+    const severity = mappedSeverity ?? "minor";
+    if (mappedSeverity === void 0) {
+      reasons.add("unclassified_native_severity");
+    }
+    findings.push({
+      file: path15,
+      ...span.verified ? {
+        startLine: span.startLine,
+        line: span.startLine,
+        endLine: span.endLine
+      } : {
+        // No current-line anchor for unverified spans: the existing
+        // normalizer maps line 0 to null and placement stays file/summary.
+        line: 0
+      },
+      severity,
+      title: plainTitleLine(content),
+      message: content,
+      category: comment.category ?? "correctness",
+      ...span.verified && comment.suggestionCode !== null ? { suggestion: comment.suggestionCode } : {}
+    });
+  });
+  if (findings.length > OCR_NORMALIZATION_LIMITS.maxFindings) {
+    throw new OcrOutputTooLargeError("findings");
+  }
+  for (const finding of findings) {
+    if (finding.file.length > OCR_NORMALIZATION_LIMITS.maxPathChars) {
+      throw new OcrOutputTooLargeError("path");
+    }
+    if (finding.message.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
+      throw new OcrOutputTooLargeError("message");
+    }
+  }
+  return Object.freeze({
+    findings: Object.freeze(findings),
+    diagnostics: Object.freeze({
+      skipped: Object.freeze(skipped),
+      reasons: Object.freeze([...reasons].sort()),
+      partialFlagsRequired: reasons.size > 0 || skipped.length > 0
+    })
+  });
+}
+
 // src/review-orchestration/infrastructure/ocr-review-outcome-contract.ts
 var OCR_OUTCOME_SCHEMA_VERSION = "reviewrouter.ocr-outcome/v1";
 var OCR_PHASE_STATES = [
@@ -85295,6 +85473,10 @@ function parseOcrReviewOutcome(value) {
     return null;
   };
   const runStopCause = parseStopCause(value.run_stop_cause, "run_stop_cause");
+  if (value.run_stop_cause === void 0) {
+    issues.push({ code: "outcome_stop_cause_missing", detail: "run_stop_cause" });
+    return violation();
+  }
   if (value.run_stop_cause !== null && value.run_stop_cause !== void 0 && runStopCause === null) {
     return violation();
   }
@@ -85345,6 +85527,13 @@ function parseOcrReviewOutcome(value) {
       return violation();
     }
     const stopCause = parseStopCause(groupRaw.stop_cause, field("stop_cause"));
+    if (groupRaw.stop_cause === void 0) {
+      issues.push({
+        code: "outcome_stop_cause_missing",
+        detail: field("stop_cause")
+      });
+      return violation();
+    }
     if (groupRaw.stop_cause !== null && groupRaw.stop_cause !== void 0 && stopCause === null) {
       return violation();
     }
@@ -85635,145 +85824,6 @@ function parseOcrNativeReviewResult(raw, admission) {
   });
 }
 
-// src/review-orchestration/infrastructure/ocr-review-normalization.ts
-var OCR_NORMALIZATION_LIMITS = Object.freeze({
-  maxPayloadBytes: 512 * 1024,
-  maxFindings: 200,
-  maxPathChars: 1024,
-  maxMessageChars: 16384,
-  maxTitleChars: 512
-});
-function normalizeEol(value) {
-  return value.split(/\r\n|\r|\n/u);
-}
-function verifyOcrSpan(input) {
-  const { existingCode, startLine, endLine } = input.comment;
-  if (existingCode === null) return { verified: false, reason: "missing_existing_code" };
-  if (startLine === null || endLine === null || endLine < startLine) {
-    return { verified: false, reason: "invalid_range" };
-  }
-  const fileLines = normalizeEol(input.headContent);
-  if (startLine < 1 || endLine > fileLines.length) {
-    return { verified: false, reason: "invalid_range" };
-  }
-  const blockLines = normalizeEol(existingCode.replace(/\s+$/u, ""));
-  const headBlock = fileLines.slice(startLine - 1, endLine);
-  if (blockLines.length !== headBlock.length || blockLines.some((line, index) => line !== headBlock[index])) {
-    return { verified: false, reason: "content_mismatch" };
-  }
-  let occurrences = 0;
-  for (let index = 0; index + blockLines.length <= fileLines.length; index++) {
-    let matches = true;
-    for (let offset = 0; offset < blockLines.length; offset++) {
-      if (fileLines[index + offset] !== blockLines[offset]) {
-        matches = false;
-        break;
-      }
-    }
-    if (matches) occurrences++;
-    if (occurrences > 1) break;
-  }
-  if (occurrences !== 1) return { verified: false, reason: "ambiguous_match" };
-  if (input.diffPositions) {
-    for (let line = startLine; line <= endLine; line++) {
-      if (!input.diffPositions.has(line)) {
-        return { verified: false, reason: "outside_diff" };
-      }
-    }
-  }
-  return { verified: true, startLine, endLine };
-}
-var OcrOutputTooLargeError = class extends Error {
-  constructor(bound) {
-    super(`ocr_review_output_too_large: ${bound}`);
-    this.bound = bound;
-    this.name = "OcrOutputTooLargeError";
-  }
-};
-var SEVERITY_MAP = {
-  critical: "critical",
-  high: "major",
-  medium: "minor",
-  low: "minor"
-};
-function normalizeOcrRepoPath(raw) {
-  const path15 = raw.replace(/^\.\//u, "");
-  if (path15.length === 0 || path15.length > OCR_NORMALIZATION_LIMITS.maxPathChars || path15.includes("\\") || path15.includes("\0") || path15.startsWith("/") || path15.split("/").some((segment) => segment === ".." || segment === "")) {
-    return null;
-  }
-  return path15;
-}
-function plainTitleLine(content) {
-  const firstLine = content.split(/\r\n|\r|\n/u).map((line) => line.replace(/[^\P{Z}\u00a0]/gu, " ").trim()).find((line) => line.length > 0) ?? "";
-  return firstLine.replace(/[`#>*_~\[\]]/gu, "").replace(/\s+/gu, " ").trim().slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
-}
-function normalizeOcrFindings(input) {
-  const findings = [];
-  const skipped = [];
-  const reasons = /* @__PURE__ */ new Set();
-  input.comments.forEach((comment, index) => {
-    const path15 = normalizeOcrRepoPath(comment.path);
-    const content = comment.content.trim();
-    if (path15 === null || content.length === 0) {
-      skipped.push({ index, reason: "invalid_native_finding" });
-      return;
-    }
-    if (content.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
-      throw new OcrOutputTooLargeError("message");
-    }
-    const headContent = input.headFiles.get(path15);
-    const span = headContent !== void 0 ? verifyOcrSpan({
-      comment,
-      headContent,
-      ...input.diffPositions ? { diffPositions: input.diffPositions.get(path15) } : {}
-    }) : { verified: false, reason: "invalid_range" };
-    if (!span.verified && span.reason !== "missing_existing_code") {
-      reasons.add("unverified_native_span");
-    }
-    const mappedSeverity = comment.severity ? SEVERITY_MAP[comment.severity] : void 0;
-    const severity = mappedSeverity ?? "minor";
-    if (mappedSeverity === void 0) {
-      reasons.add("unclassified_native_severity");
-    }
-    findings.push({
-      file: path15,
-      ...span.verified ? {
-        startLine: span.startLine,
-        line: span.startLine,
-        endLine: span.endLine
-      } : {
-        // No current-line anchor for unverified spans: the existing
-        // normalizer maps line 0 to null and placement stays file/summary.
-        line: 0
-      },
-      severity,
-      title: plainTitleLine(content),
-      message: content,
-      category: comment.category ?? "correctness",
-      ...span.verified && comment.suggestionCode !== null ? { suggestion: comment.suggestionCode } : {}
-    });
-  });
-  if (findings.length > OCR_NORMALIZATION_LIMITS.maxFindings) {
-    throw new OcrOutputTooLargeError("findings");
-  }
-  for (const finding of findings) {
-    if (finding.file.length > OCR_NORMALIZATION_LIMITS.maxPathChars) {
-      throw new OcrOutputTooLargeError("path");
-    }
-    if (finding.message.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
-      throw new OcrOutputTooLargeError("message");
-    }
-  }
-  return Object.freeze({
-    findings: Object.freeze(findings),
-    diagnostics: Object.freeze({
-      skipped: Object.freeze(skipped),
-      reasons: Object.freeze([...reasons].sort()),
-      partialFlagsRequired: reasons.size > 0 || skipped.length > 0
-    })
-  });
-}
-
 // src/review-orchestration/infrastructure/ocr-review-managed-run.ts
 var OCR_RESULT_FILE_LIMIT_BYTES = 16 * 1024 * 1024;
 var OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES = 64 * 1024;
@@ -85876,6 +85926,12 @@ var OcrReviewAcceptanceError = class extends Error {
 };
 function acceptOcrManagedReviewResult(input) {
   if (input.effectFacts && input.effectFacts.effect !== "none") {
+    if (input.effectFacts.effect === "not_dispatched") {
+      throw new OcrReviewAcceptanceError(
+        "review_agent_not_dispatched",
+        input.effectFacts.effect
+      );
+    }
     throw new OcrReviewAcceptanceError(
       "gateway_effect_unknown",
       input.effectFacts.effect
@@ -85921,11 +85977,9 @@ function acceptOcrManagedReviewResult(input) {
       observed.add(path15);
     }
   }
-  for (const path15 of expected) {
-    if (!observed.has(path15)) {
-      throw new OcrReviewAcceptanceError("coverage_mismatch", path15);
-    }
-  }
+  const uncoveredPaths = Object.freeze(
+    [...expected].filter((path15) => !observed.has(path15)).sort()
+  );
   let normalized;
   try {
     normalized = normalizeOcrFindings({
@@ -85941,7 +85995,11 @@ function acceptOcrManagedReviewResult(input) {
   }
   const classification = classifyOcrReviewOutcome(native.outcome);
   const reasons = [
-    .../* @__PURE__ */ new Set([...classification.reasons, ...normalized.diagnostics.reasons])
+    .../* @__PURE__ */ new Set([
+      ...classification.reasons,
+      ...normalized.diagnostics.reasons,
+      ...uncoveredPaths.length > 0 ? ["missing_paths"] : []
+    ])
   ].sort();
   const usage = {
     promptTokens: native.usage.inputTokens ?? 0,
@@ -85955,7 +86013,8 @@ function acceptOcrManagedReviewResult(input) {
     actualModel: input.observedActualModel,
     usage,
     reasons: Object.freeze(reasons),
-    partial: classification.partial || normalized.diagnostics.partialFlagsRequired
+    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0,
+    uncoveredPaths
   });
 }
 
@@ -86378,6 +86437,9 @@ var OcrReviewInvocationAdapter = class {
     }
     const effectBefore = this.options.bridge.effectFacts?.();
     if (effectBefore && effectBefore.effect !== "none") {
+      if (effectBefore.effect === "not_dispatched") {
+        throw new Error("review_action_v2_ocr_not_dispatched");
+      }
       throw new Error("review_action_v2_ocr_gateway_effect_unknown");
     }
     const run = this.gate(() => this.runInvocation(input, assignment));
@@ -86469,7 +86531,7 @@ var OcrReviewInvocationAdapter = class {
       transportAttemptCount: 1
     };
     const qualityFlags = accepted.partial ? ["context_inspection_incomplete", "provider_warning"] : [];
-    return normalizeReviewObservation({
+    const observation = normalizeReviewObservation({
       workSlotId: input.invocation.workSlotId,
       attemptOrdinal: input.invocation.attemptOrdinal,
       providerName: input.invocation.provider,
@@ -86478,6 +86540,10 @@ var OcrReviewInvocationAdapter = class {
       transportAttemptCount: 1,
       qualityFlags
     });
+    if (observation.byteCount > OCR_NORMALIZATION_LIMITS.maxPayloadBytes) {
+      throw new OcrOutputTooLargeError("payload");
+    }
+    return observation;
   }
 };
 function readPreviewOutput(outputPath) {

@@ -192,6 +192,13 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
   };
 
   const runStopCause = parseStopCause(value.run_stop_cause, 'run_stop_cause');
+  // §7.4 rule 7: the producer always emits the field (null on a natural run
+  // stop). A missing key is a contract failure, never a silent null that
+  // would read as "the run stopped successfully".
+  if (value.run_stop_cause === undefined) {
+    issues.push({ code: 'outcome_stop_cause_missing', detail: 'run_stop_cause' });
+    return violation();
+  }
   if (
     value.run_stop_cause !== null &&
     value.run_stop_cause !== undefined &&
@@ -251,6 +258,16 @@ export function parseOcrReviewOutcome(value: unknown): OcrReviewOutcome {
       return violation();
     }
     const stopCause = parseStopCause(groupRaw.stop_cause, field('stop_cause'));
+    // §7.4 rule 7: same as run_stop_cause — the key is always on the wire, so
+    // a missing stop_cause must not silently read as the null of a natural
+    // main completion.
+    if (groupRaw.stop_cause === undefined) {
+      issues.push({
+        code: 'outcome_stop_cause_missing',
+        detail: field('stop_cause'),
+      });
+      return violation();
+    }
     if (groupRaw.stop_cause !== null && groupRaw.stop_cause !== undefined && stopCause === null) {
       return violation();
     }

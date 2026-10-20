@@ -292,6 +292,20 @@ describe('OcrReviewInvocationAdapter', () => {
     });
   }
 
+  /** Native comments whose serialized observation payload is ~16.7 KiB each. */
+  function bulkyNativeComments(count: number): Record<string, unknown>[] {
+    return Array.from({ length: count }, () => ({
+      path: 'calc.ts',
+      content: `Finding: ${'x'.repeat(16_000 - 9)}`,
+      suggestion_code: null,
+      existing_code: null,
+      start_line: null,
+      end_line: null,
+      category: 'correctness',
+      severity: 'high',
+    }));
+  }
+
   function processRunnerWriting(body: string): {
     runner: OcrReviewProcessRunner;
     calls: number[];
@@ -316,11 +330,14 @@ describe('OcrReviewInvocationAdapter', () => {
     readonly bridge: OcrLoopbackBridge;
     readonly processRunner: OcrReviewProcessRunner;
     readonly previewRunner: OcrPreviewRunner;
+    readonly planInputOverrides?: Record<string, unknown>;
   }): {
     adapter: OcrReviewInvocationAdapter;
     workSlot: ReviewWorkSlotPlan;
   } {
-    const planned = planOcrReviewAssignments(planInput());
+    const planned = planOcrReviewAssignments(
+      planInput(options.planInputOverrides ?? {})
+    );
     const adapter = new OcrReviewInvocationAdapter(planned.assignments, {
       model: 'admitted-model',
       binaryPath: '/opt/ocr/opencodereview',
@@ -541,6 +558,112 @@ describe('OcrReviewInvocationAdapter', () => {
       /review_action_v2_ocr_process_failed/u
     );
     expect(processRunner.calls).toHaveLength(1);
+  });
+
+  it('reports a proven not_dispatched effect as retry-safe, not gateway_effect_unknown', async () => {
+    // §8.4 step 2: a positively proven not_dispatched effect is a distinct
+    // retry-safe failure; it must never be conflated with an unknown/paid
+    // effect and must fence the engine invocation before dispatch.
+    const { bridge } = bridgeFixture({
+      effectFacts: () => ({ effect: 'not_dispatched' }),
+    });
+    const processRunner = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunner.runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const failure = await adapter.execute(executionInput(prepared)).then(
+      () => null,
+      (error: unknown) => error as Error
+    );
+    expect(failure).not.toBeNull();
+    expect(failure?.message).toMatch(/review_action_v2_ocr_not_dispatched/u);
+    expect(failure?.message).not.toMatch(/gateway_effect_unknown/u);
+    expect(processRunner.calls).toHaveLength(0);
+  });
+
+  it('classifies an inventory gap as a partial missing_paths observation', async () => {
+    // §8.1/§8.2: a deleted file stays in the RR inventory denominator but the
+    // producer never groups it; that gap is a bounded missing_paths
+    // limitation, not a fatal coverage mismatch.
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const processRunner = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunner.runner,
+      previewRunner: previewRunner().runner,
+      planInputOverrides: {
+        pr: prContext({
+          files: [
+            {
+              filename: 'calc.ts',
+              status: 'modified',
+              additions: 1,
+              deletions: 1,
+              changes: 2,
+              patch:
+                '@@ -1 +1 @@\n-function add(a, b) { return a + b }\n+function add(a, b) { return a - b }',
+            },
+            {
+              filename: 'gone.ts',
+              status: 'removed',
+              additions: 0,
+              deletions: 3,
+              changes: 3,
+            },
+          ],
+        }),
+      },
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.qualityFlags).toEqual([
+      'context_inspection_incomplete',
+      'provider_warning',
+    ]);
+  });
+
+  it('fails explicitly when the materialized observation payload exceeds 512 KiB', async () => {
+    // §8.2: the payload bound is checked exactly by the adapter after the
+    // existing normalizer serializes the observation; oversize is an explicit
+    // OcrOutputTooLargeError('payload'), never silent truncation.
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const processRunner = processRunnerWriting(
+      nativeResultBody({ comments: bulkyNativeComments(40) })
+    );
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunner.runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const failure = await adapter.execute(executionInput(prepared)).then(
+      () => null,
+      (error: unknown) => error as Error
+    );
+    expect(failure?.name).toBe('OcrOutputTooLargeError');
+    expect(failure?.message).toBe('ocr_review_output_too_large: payload');
+  });
+
+  it('accepts a materialized observation payload within the 512 KiB bound', async () => {
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const processRunner = processRunnerWriting(
+      nativeResultBody({ comments: bulkyNativeComments(20) })
+    );
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: processRunner.runner,
+      previewRunner: previewRunner().runner,
+    });
+    const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    const observation = await adapter.execute(executionInput(prepared));
+    expect(observation.byteCount).toBeLessThanOrEqual(512 * 1024);
+    expect(observation.findingCount).toBe(20);
   });
 
   it('serializes engine invocations (real in-flight <= 1)', async () => {

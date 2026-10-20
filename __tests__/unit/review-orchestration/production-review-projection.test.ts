@@ -91,6 +91,94 @@ describe('production review projection coverage', () => {
     }
   );
 
+  it('marks OCR verified spans and never re-anchors them through projection', async () => {
+    // §8.2: an OCR verified HEAD span keeps its exact range in the final
+    // placement. The colliding patch makes the legacy heuristic prefer the
+    // added line 2 (see the Codex control below).
+    const ocrFacts = {
+      ...authorizationFacts,
+      providerVoteLanes: [
+        {
+          providerKind: ReviewExecutionProviderKind.Ocr,
+          providerVoteIdentityHash: '6'.repeat(64),
+        },
+      ],
+    };
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts: ocrFacts,
+      pr: collidingPr(),
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [
+        {
+          workSlotId: 'ocr-slot',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Ocr,
+          required: true,
+          filePaths: ['src/a.ts'],
+        },
+      ],
+      uncoveredPaths: [],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const result = await builder.build({
+      acceptedEvidence: [
+        spanEvidence(
+          'ocr-slot',
+          ReviewExecutionProviderKind.Ocr,
+          ocrFacts.providerVoteLanes[0].providerVoteIdentityHash
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: ocrFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].anchorVerified).toBe(true);
+    expect(envelope.occurrences[0].placement).toMatchObject({
+      kind: 'inline',
+      path: 'src/a.ts',
+      startLine: 1,
+      line: 1,
+      endLine: 1,
+    });
+  });
+
+  it('keeps the legacy heuristic for non-verified Codex spans', async () => {
+    // Control: without the OCR verified marker the same span is re-anchored
+    // to the competing added line exactly as before (byte-identical legacy).
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts,
+      pr: collidingPr(),
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [assignment('codex-slot', true)],
+      uncoveredPaths: [],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const result = await builder.build({
+      acceptedEvidence: [
+        spanEvidence(
+          'codex-slot',
+          ReviewExecutionProviderKind.Codex,
+          authorizationFacts.providerVoteLanes[0].providerVoteIdentityHash
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].anchorVerified).toBeUndefined();
+    expect(envelope.occurrences[0].placement).toMatchObject({
+      kind: 'inline',
+      path: 'src/a.ts',
+      line: 2,
+    });
+  });
+
   it('still rejects required lifecycle coverage omitted by the current-diff plan', async () => {
     const builder = createProductionReviewProjectionBuilder({
       authorizationFacts,
@@ -612,6 +700,78 @@ function acceptedEvidence(
       findingCount: 0,
       actualModel: 'gpt-5.6-sol',
       qualityFlags,
+      transportAttemptCount: 1,
+      schemaValidated: true,
+      fullyConsumed: true,
+    },
+  };
+}
+
+/** PR whose diff collides: the heuristic prefers the added line 2. */
+function collidingPr() {
+  const patch = [
+    '@@ -1,2 +1,2 @@',
+    '-function old() {',
+    '-  return old();',
+    '+function neu() {',
+    '+  return neu();',
+  ].join('\n');
+  return {
+    ...pr,
+    files: [
+      {
+        filename: 'src/a.ts',
+        status: 'modified' as const,
+        additions: 2,
+        deletions: 2,
+        changes: 4,
+        patch,
+      },
+    ],
+    diff: `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n${patch}`,
+  };
+}
+
+/** One normalized finding with a verified single-line span at new line 1. */
+function spanEvidence(
+  workSlotId: string,
+  providerKind: ReviewExecutionProviderKind,
+  providerVoteIdentityHash: string
+) {
+  const payloadCanonicalJson = JSON.stringify({
+    payloadVersion: 2,
+    normalizedFindings: [
+      {
+        category: 'correctness',
+        endLine: 1,
+        evidence: [],
+        message: 'The return value is wrong.',
+        normalizedFailureModeHash: '9'.repeat(64),
+        path: 'src/a.ts',
+        placementConfidence: null,
+        severity: 'major',
+        startLine: 1,
+        suggestion: 'return ok();',
+        title: 'Wrong return value',
+      },
+    ],
+    normalizedLifecycleRevalidations: [],
+  });
+  return {
+    workSlotId,
+    coverageManifest: fullCoverageManifest(workSlotId),
+    observation: {
+      observationId: `observation-${workSlotId}`,
+      eligibilityPolicyVersion: 'eligibility.v1',
+      providerKind,
+      providerInvocationKey: '7'.repeat(64),
+      providerVoteIdentityHash,
+      payloadCanonicalJson,
+      payloadHash: '8'.repeat(64),
+      byteCount: Buffer.byteLength(payloadCanonicalJson),
+      findingCount: 1,
+      actualModel: 'observed-model',
+      qualityFlags: [],
       transportAttemptCount: 1,
       schemaValidated: true,
       fullyConsumed: true,

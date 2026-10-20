@@ -28,7 +28,8 @@ export class FindingFilter {
    */
   filter(
     findings: Finding[],
-    diffContent: string
+    diffContent: string,
+    options: { readonly allowUnanchoredFindings?: boolean } = {}
   ): { findings: Finding[]; stats: FilterStats } {
     const stats: FilterStats = {
       total: findings.length,
@@ -42,11 +43,16 @@ export class FindingFilter {
     const filtered: Finding[] = [];
 
     for (const finding of findings) {
-      const action = this.shouldFilter(finding, diffContent);
+      const unanchored =
+        options.allowUnanchoredFindings === true &&
+        finding.line === 0 &&
+        finding.startLine === undefined &&
+        finding.endLine === undefined;
+      const action = this.shouldFilter(finding, diffContent, unanchored);
 
       if (action === 'filter') {
         stats.filtered++;
-        const reason = this.getFilterReason(finding, diffContent);
+        const reason = this.getFilterReason(finding, diffContent, unanchored);
         stats.reasons[reason] = (stats.reasons[reason] || 0) + 1;
         if (stats.filteredExamples.length < 5) {
           stats.filteredExamples.push(
@@ -100,15 +106,16 @@ export class FindingFilter {
 
   private shouldFilter(
     finding: Finding,
-    diffContent: string
+    diffContent: string,
+    unanchored = false
   ): 'filter' | 'downgrade' | 'keep' {
     // Filter invalid anchors before any keep/downgrade rule. Otherwise a
     // finding can still fail later when GitHub rejects the review comment line.
-    if (this.hasInvalidLineNumber(finding)) {
+    if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return 'filter';
     }
 
-    if (this.isLineNumberIssue(finding, diffContent)) {
+    if (!unanchored && this.isLineNumberIssue(finding, diffContent)) {
       return 'filter';
     }
 
@@ -200,11 +207,15 @@ export class FindingFilter {
     return 'keep';
   }
 
-  private getFilterReason(finding: Finding, diffContent: string): string {
-    if (this.hasInvalidLineNumber(finding)) {
+  private getFilterReason(
+    finding: Finding,
+    diffContent: string,
+    unanchored = false
+  ): string {
+    if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return 'invalid/suspicious line number';
     }
-    if (this.isLineNumberIssue(finding, diffContent)) {
+    if (!unanchored && this.isLineNumberIssue(finding, diffContent)) {
       return 'line number points to blank/brace/comment';
     }
     if (

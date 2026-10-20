@@ -54,7 +54,10 @@ export type OcrReviewArgvInput = Readonly<{
   preview: boolean;
 }>;
 
-function requirePositiveSetting(value: number | undefined, field: string): void {
+function requirePositiveSetting(
+  value: number | undefined,
+  field: string
+): void {
   if (value === undefined) return;
   if (!Number.isSafeInteger(value) || value <= 0) {
     // 0 is never a stand-in for "unlimited"; absence omits the flag (§5.1).
@@ -67,7 +70,9 @@ function requirePositiveSetting(value: number | undefined, field: string): void 
  * shell=false; names here are captured values, never shell substitutions.
  * No --resume, --commit or --tools; native embedded tools are used.
  */
-export function buildOcrReviewArgv(input: OcrReviewArgvInput): readonly string[] {
+export function buildOcrReviewArgv(
+  input: OcrReviewArgvInput
+): readonly string[] {
   requirePositiveSetting(input.limits.timeoutMinutes, 'timeout');
   requirePositiveSetting(input.limits.maxTokens, 'max_tokens');
   requirePositiveSetting(input.limits.maxTokensBudget, 'max_tokens_budget');
@@ -77,7 +82,10 @@ export function buildOcrReviewArgv(input: OcrReviewArgvInput): readonly string[]
   ) {
     throw new Error('review_action_v2_ocr_limit_invalid:timeout_sec');
   }
-  if (!/^[a-f0-9]{40}$/i.test(input.mergeBaseSha) || !/^[a-f0-9]{40}$/i.test(input.headSha)) {
+  if (
+    !/^[a-f0-9]{40}$/i.test(input.mergeBaseSha) ||
+    !/^[a-f0-9]{40}$/i.test(input.headSha)
+  ) {
     throw new Error('review_action_v2_ocr_argv_refs_invalid');
   }
   const argv = [
@@ -169,8 +177,12 @@ export function buildOcrManagedConfigJson(input: {
  * Extract the raw loopback capability from the bridge Authorization value
  * `Bearer HEX_TOKEN` (§5.1). Exactly one expected prefix; never log the value.
  */
-export function extractRawLoopbackCapability(authorizationValue: string): string {
-  const match = authorizationValue.match(/^Bearer ([A-Za-z0-9._~+/=-]{16,512})$/);
+export function extractRawLoopbackCapability(
+  authorizationValue: string
+): string {
+  const match = authorizationValue.match(
+    /^Bearer ([A-Za-z0-9._~+/=-]{16,512})$/
+  );
   if (!match) {
     throw new Error('review_action_v2_ocr_capability_format_invalid');
   }
@@ -187,7 +199,9 @@ export function buildOcrChildEnvironment(input: {
   readonly capabilityAuthorization: string;
   readonly path: string | undefined;
 }): Readonly<NodeJS.ProcessEnv> {
-  if (!/^Bearer [A-Za-z0-9._~+/=-]{16,512}$/.test(input.capabilityAuthorization)) {
+  if (
+    !/^Bearer [A-Za-z0-9._~+/=-]{16,512}$/.test(input.capabilityAuthorization)
+  ) {
     throw new Error('review_action_v2_ocr_capability_format_invalid');
   }
   return Object.freeze({
@@ -374,12 +388,16 @@ export function acceptOcrManagedReviewResult(input: {
   try {
     normalized = normalizeOcrFindings({
       comments: native.comments,
+      assignedPaths: input.expectedPaths,
       headFiles: input.headFiles,
       ...(input.diffPositions ? { diffPositions: input.diffPositions } : {}),
     });
   } catch (error) {
     if (error instanceof OcrOutputTooLargeError) {
-      throw new OcrReviewAcceptanceError('result_contract', `bound=${error.bound}`);
+      throw new OcrReviewAcceptanceError(
+        'result_contract',
+        `bound=${error.bound}`
+      );
     }
     throw error;
   }

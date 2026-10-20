@@ -380,7 +380,9 @@ function toFinding(
     ]),
     category,
     normalizedFailureModeHash,
-    ...(anchorVerified ? { anchorVerified: true } : {}),
+    ...(observation.providerKind === ReviewExecutionProviderKind.Ocr
+      ? { anchorVerified }
+      : {}),
     severity: toFindingSeverity(value.severity),
     title,
     message,

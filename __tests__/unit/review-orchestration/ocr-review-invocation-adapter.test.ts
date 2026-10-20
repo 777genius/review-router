@@ -69,7 +69,9 @@ function prContext(overrides: Partial<PRContext> = {}): PRContext {
   };
 }
 
-function authorization(overrides: Record<string, unknown> = {}): ReviewRunAuthorization {
+function authorization(
+  overrides: Record<string, unknown> = {}
+): ReviewRunAuthorization {
   return {
     authorizationId: 'auth-1',
     authorizationToken: 'token',
@@ -168,12 +170,16 @@ describe('planOcrReviewAssignments (§4.3 one slot, one vote identity)', () => {
 
   it('rejects missing or ambiguous OCR vote lanes', () => {
     const withoutLane = authorization();
-    (withoutLane.facts as unknown as { providerVoteLanes: unknown[] }).providerVoteLanes = [];
+    (
+      withoutLane.facts as unknown as { providerVoteLanes: unknown[] }
+    ).providerVoteLanes = [];
     expect(() =>
       planOcrReviewAssignments(planInput({ authorization: withoutLane }))
     ).toThrow('review_action_v2_ocr_vote_lane_ambiguous');
     const twoLanes = authorization();
-    (twoLanes.facts as unknown as { providerVoteLanes: unknown[] }).providerVoteLanes = [
+    (
+      twoLanes.facts as unknown as { providerVoteLanes: unknown[] }
+    ).providerVoteLanes = [
       {
         providerKind: ReviewExecutionProviderKind.Ocr,
         providerVoteIdentityHash: VOTE_IDENTITY,
@@ -266,7 +272,11 @@ describe('OcrReviewInvocationAdapter', () => {
         schema_version: 'ocr.run-manifest/v1',
         operation: 'review',
         terminal_state: 'complete',
-        input: { mode: 'range', resolved_base: MERGE_BASE, resolved_head: HEAD },
+        input: {
+          mode: 'range',
+          resolved_base: MERGE_BASE,
+          resolved_head: HEAD,
+        },
       },
       reviewrouter_outcome: {
         schema_version: 'reviewrouter.ocr-outcome/v1',
@@ -331,6 +341,10 @@ describe('OcrReviewInvocationAdapter', () => {
     readonly processRunner: OcrReviewProcessRunner;
     readonly previewRunner: OcrPreviewRunner;
     readonly planInputOverrides?: Record<string, unknown>;
+    readonly lifecycle?: {
+      readonly signal?: AbortSignal;
+      readonly previewTimeoutMs?: number;
+    };
   }): {
     adapter: OcrReviewInvocationAdapter;
     workSlot: ReviewWorkSlotPlan;
@@ -339,6 +353,7 @@ describe('OcrReviewInvocationAdapter', () => {
       planInput(options.planInputOverrides ?? {})
     );
     const adapter = new OcrReviewInvocationAdapter(planned.assignments, {
+      ...options.lifecycle,
       model: 'admitted-model',
       binaryPath: '/opt/ocr/opencodereview',
       binarySha256: '1'.repeat(64),
@@ -477,6 +492,54 @@ describe('OcrReviewInvocationAdapter', () => {
     // Changing the captured model changes the semantic identity (§8.3).
     expect(three.semanticIdentityHash).not.toBe(one.semanticIdentityHash);
   });
+
+  it.each(['root', 'deadline'] as const)(
+    'closes the real preview process on %s cancellation without inference',
+    async (source) => {
+      const root = new AbortController();
+      let started!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      let closedSignal: NodeJS.Signals | null = null;
+      const processRunner = processRunnerWriting(nativeResultBody());
+      const { adapter, workSlot } = adapterFixture({
+        bridge: bridgeFixture().bridge,
+        processRunner: processRunner.runner,
+        lifecycle: {
+          signal: root.signal,
+          previewTimeoutMs: source === 'deadline' ? 25 : 1000,
+        },
+        previewRunner: async (input) => {
+          fs.writeFileSync(
+            input.outputPath,
+            JSON.stringify({ files: [{ path: 'calc.ts', will_review: true }] })
+          );
+          const child = runOcrReviewProcess({
+            ...input,
+            binaryPath: process.execPath,
+            argv: ['-e', 'setTimeout(() => process.exit(0), 500)'],
+          });
+          started();
+          const result = await child;
+          closedSignal = result.signal;
+          return result;
+        },
+      });
+      const result = adapter.prepare({ workSlot, attemptOrdinal: 1 }).then(
+        () => null,
+        (error: unknown) => error as Error
+      );
+      await ready;
+      if (source === 'root') root.abort(new Error('fixture_root_cancelled'));
+      const failure = await result;
+      expect(failure?.message).toMatch(
+        source === 'root' ? /fixture_root_cancelled/ : /timeout/i
+      );
+      expect(closedSignal).toBe('SIGKILL');
+      expect(processRunner.calls).toHaveLength(0);
+    }
+  );
 
   it('executes one managed run and reports the observed model with one transport attempt', async () => {
     const { bridge, requests } = bridgeFixture();

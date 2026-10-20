@@ -29,7 +29,7 @@ TOOLCHAIN=go1.26.9
 UPSTREAM_COMMIT=8eb83340a487b1150af00701b94f01af97e4b4d6 # v1.13.1
 UPSTREAM_NAME=alibaba/open-code-review
 OUTCOME_SCHEMA_VERSION=reviewrouter.ocr-outcome/v1
-RELEASE_VERSION=1.13.1-rr.1
+RELEASE_VERSION=1.13.1-rr.2
 BUILD_FLAGS="-trimpath -ldflags -X=main.Version=$RELEASE_VERSION"
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
@@ -97,7 +97,7 @@ echo "==> building with GOTOOLCHAIN=$TOOLCHAIN"
 
 # --- 4. digests + manifest -------------------------------------------------
 binary_sha=$(sha256 "$binary")
-{ printf '%s\n' "$binary  opencodereview" ; } > "$binary.sha256"
+{ printf '%s\n' "$binary_sha  opencodereview" ; } > "$binary.sha256"
 
 # Patch digest: sha256 over the sorted, per-patch sha256 listing, so the
 # manifest pins the exact patch bytes applied to upstream.

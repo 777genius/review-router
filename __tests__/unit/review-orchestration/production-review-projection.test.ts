@@ -1,4 +1,8 @@
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
+import { acceptOcrManagedReviewResult } from '../../../src/review-orchestration/infrastructure/ocr-review-managed-run';
+import type { OcrNativeComment } from '../../../src/review-orchestration/infrastructure/ocr-review-outcome-contract';
+import { normalizeReviewObservation } from '../../../src/review-orchestration/infrastructure/review-observation-normalizer';
+import { mapLinesToPositions } from '../../../src/utils/diff';
 import {
   ReviewExecutionProviderKind,
   ReviewTaskKind,
@@ -139,10 +143,112 @@ describe('production review projection coverage', () => {
     expect(envelope.occurrences[0].placement).toMatchObject({
       kind: 'inline',
       path: 'src/a.ts',
-      startLine: 1,
       line: 1,
       endLine: 1,
     });
+  });
+
+  it('drops committable suggestions when dedup expands separately verified OCR spans', async () => {
+    const envelope = await projectNativeOcrComments([
+      nativeOcrComment({
+        existingCode: 'unsafe_a();',
+        endLine: 1,
+        suggestionCode: 'safe_a();',
+      }),
+      nativeOcrComment({
+        existingCode: 'unsafe_b();',
+        startLine: 2,
+        suggestionCode: 'safe_b();',
+      }),
+    ]);
+
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].placement.kind).toBe('file');
+    expect(envelope.occurrences[0].suggestion).toBeUndefined();
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+    expect(envelope.publishing.summary.body).toContain(
+      'Unsafe user data corrupts stored record'
+    );
+  });
+
+  it.each([
+    { existingCode: null },
+    { existingCode: 'old_a();' },
+    { startLine: 2, endLine: 1 },
+  ])(
+    'keeps unverified OCR findings in file placement: %j',
+    async (unverified) => {
+      const envelope = await projectNativeOcrComments([
+        nativeOcrComment(unverified),
+      ]);
+
+      expect(envelope.occurrences).toHaveLength(1);
+      expect(envelope.occurrences[0].line).toBeUndefined();
+      expect(envelope.occurrences[0].placement.kind).toBe('file');
+      expect(envelope.occurrences[0].suggestion).toBeUndefined();
+      expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+      expect(envelope.publishing.summary.body).toContain(
+        'Unsafe user data corrupts stored record'
+      );
+      expect(envelope.publishing.summary.body).not.toContain('src/a.ts:1');
+    }
+  );
+
+  it('preserves an unanchored finding when the first added line is a comment', async () => {
+    const envelope = await projectNativeOcrComments(
+      [nativeOcrComment({ existingCode: null })],
+      '// New file header\nunsafe_b();'
+    );
+
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].placement.kind).toBe('file');
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+    expect(envelope.publishing.summary.body).not.toContain('src/a.ts:1');
+  });
+
+  it.each([
+    {
+      comment: nativeOcrComment(),
+      expected: { startLine: 1, line: 2, endLine: 2 },
+    },
+    {
+      comment: nativeOcrComment({
+        existingCode: 'unsafe_a();',
+        endLine: 1,
+        suggestionCode: 'safe_a();',
+      }),
+      expected: { line: 1, endLine: 1 },
+    },
+  ])(
+    'emits the verified OCR range in publication coordinates: $expected',
+    async ({ comment, expected }) => {
+      const envelope = await projectNativeOcrComments([comment]);
+      const [published] = envelope.publishing.inlineReviewChunks.flatMap(
+        (chunk: { comments: Record<string, unknown>[] }) => chunk.comments
+      );
+
+      expect(published).toMatchObject({ path: 'src/a.ts', ...expected });
+      if (!('startLine' in expected))
+        expect(published.startLine).toBeUndefined();
+      expect(envelope.occurrences[0].anchorVerified).toBe(true);
+      expect(envelope.occurrences[0].suggestion).toBe(comment.suggestionCode);
+    }
+  );
+
+  it('skips OCR comments outside assigned inventory without creating a blocking finding', async () => {
+    const envelope = await projectNativeOcrComments([
+      nativeOcrComment({
+        path: 'src/outside.ts',
+        existingCode: 'outside_unsafe();',
+        startLine: 0,
+        endLine: 0,
+      }),
+    ]);
+
+    expect(envelope.occurrences).toEqual([]);
+    expect(envelope.coverage.state).toBe('partial');
+    expect(envelope.mergeGate.blockingLineageIds).toEqual([]);
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
   });
 
   it('keeps the legacy heuristic for non-verified Codex spans', async () => {
@@ -841,3 +947,160 @@ const protocolLimits = {
   maxResultReportDurationMs: 60_000,
   maxReconciliationDurationMs: 60_000,
 };
+
+function nativeOcrComment(
+  overrides: Partial<OcrNativeComment> = {}
+): OcrNativeComment {
+  return {
+    path: 'src/a.ts',
+    content:
+      'Unsafe user data corrupts stored record\nThe changed runtime writes unsafe data and causes data loss for users.',
+    existingCode: 'unsafe_a();\nunsafe_b();',
+    suggestionCode: 'safe_a();\nsafe_b();',
+    startLine: 1,
+    endLine: 2,
+    category: 'correctness',
+    severity: 'high',
+    ...overrides,
+  };
+}
+
+async function projectNativeOcrComments(
+  comments: readonly OcrNativeComment[],
+  headContent = 'unsafe_a();\nunsafe_b();'
+) {
+  const patch = [
+    '@@ -1,2 +1,2 @@',
+    '-old_a();',
+    '-old_b();',
+    ...headContent.split('\n').map((line) => `+${line}`),
+  ].join('\n');
+  const context = {
+    ...pr,
+    files: [{ ...pr.files[0], additions: 2, deletions: 2, changes: 4, patch }],
+    diff: `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n${patch}`,
+  };
+  const accepted = acceptOcrManagedReviewResult({
+    admission: authorizationFacts,
+    effectFacts: { effect: 'none' },
+    process: {
+      closed: true,
+      exitCode: 0,
+      signal: null,
+      stdoutTail: '',
+      stderrTail: '',
+    },
+    observedActualModel: 'observed-model',
+    observedRequestCount: 1,
+    expectedPaths: ['src/a.ts'],
+    headFiles: new Map([
+      ['src/a.ts', headContent],
+      ['src/outside.ts', 'outside_unsafe();'],
+    ]),
+    diffPositions: new Map([['src/a.ts', mapLinesToPositions(patch)]]),
+    resultBytes: Buffer.from(
+      JSON.stringify({
+        comments: comments.map((comment) => ({
+          path: comment.path,
+          content: comment.content,
+          existing_code: comment.existingCode,
+          suggestion_code: comment.suggestionCode,
+          start_line: comment.startLine,
+          end_line: comment.endLine,
+          category: comment.category,
+          severity: comment.severity,
+        })),
+        manifest: {
+          schema_version: 'ocr.run-manifest/v1',
+          operation: 'review',
+          input: {
+            mode: 'range',
+            resolved_base: authorizationFacts.mergeBaseSha,
+            resolved_head: authorizationFacts.headSha,
+          },
+        },
+        reviewrouter_outcome: {
+          schema_version: 'reviewrouter.ocr-outcome/v1',
+          run_stop_cause: null,
+          grouping: { state: 'not_applicable', reason: 'single_file' },
+          groups: [
+            {
+              paths: ['src/a.ts'],
+              main_completed: true,
+              stop_cause: null,
+              rounds: { configured: 2, started: 1, completed: 1 },
+              phases: {
+                plan: { state: 'not_applicable', reason: 'threshold' },
+                compression: { state: 'not_applicable', reason: 'no_zone' },
+                relocation: { state: 'completed', reason: null },
+                filter: { state: 'completed', reason: null },
+              },
+              filter_decision_valid: true,
+            },
+          ],
+        },
+      })
+    ),
+  });
+  const payload = normalizeReviewObservation({
+    workSlotId: 'ocr-slot',
+    attemptOrdinal: 1,
+    providerName: 'ocr/managed',
+    requestedModel: 'requested-model',
+    result: {
+      content: '',
+      findings: [...accepted.normalized.findings],
+      actualModel: accepted.actualModel,
+      usage: accepted.usage,
+    },
+    qualityFlags: accepted.partial
+      ? ['context_inspection_incomplete', 'provider_warning']
+      : [],
+  });
+  const evidence = acceptedEvidence(
+    'ocr-slot',
+    fullCoverageManifest('ocr-slot')
+  );
+  const builder = createProductionReviewProjectionBuilder({
+    authorizationFacts: {
+      ...authorizationFacts,
+      providerVoteLanes: [
+        {
+          providerKind: ReviewExecutionProviderKind.Ocr,
+          providerVoteIdentityHash:
+            authorizationFacts.providerVoteLanes[0].providerVoteIdentityHash,
+        },
+      ],
+    },
+    pr: context,
+    config: { ...DEFAULT_CONFIG, failOnSeverity: 'major' },
+    protocolLimits,
+    assignments: [
+      {
+        workSlotId: 'ocr-slot',
+        taskKind: ReviewTaskKind.FindingDiscovery,
+        providerKind: ReviewExecutionProviderKind.Ocr,
+        required: true,
+        filePaths: ['src/a.ts'],
+      },
+    ],
+    uncoveredPaths: [],
+    uncoveredLifecycleTargetIds: [],
+    lifecycleInventory: completeLifecycleInventory(),
+  });
+  const projection = await builder.build({
+    acceptedEvidence: [
+      {
+        ...evidence,
+        observation: {
+          ...evidence.observation,
+          ...payload,
+          providerKind: ReviewExecutionProviderKind.Ocr,
+        },
+      },
+    ],
+    exhaustedWorkSlotIds: [],
+    reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+  });
+  return JSON.parse(projection.projectionEnvelopeCanonicalJson);
+}

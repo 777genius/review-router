@@ -13,10 +13,13 @@ import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { mapLinesToPositions } from '../../utils/diff';
-import {
-  PROVIDER_EXECUTION_CONTRACT_VERSION,
-} from '../../providers/prepared-invocation';
-import type { LifecycleTarget, PRContext, ReviewConfig, ReviewResult } from '../../types';
+import { PROVIDER_EXECUTION_CONTRACT_VERSION } from '../../providers/prepared-invocation';
+import type {
+  LifecycleTarget,
+  PRContext,
+  ReviewConfig,
+  ReviewResult,
+} from '../../types';
 import {
   ReviewExecutionProviderKind,
   ReviewTaskKind,
@@ -108,6 +111,10 @@ export type OcrManagedRunLayout = Readonly<{
 }>;
 
 export type OcrReviewInvocationOptions = Readonly<{
+  /** Root cancellation also owns the model-free preparation process. */
+  signal?: AbortSignal;
+  /** Remaining preparation window captured from the execution deadline. */
+  previewTimeoutMs?: number;
   model: string;
   binaryPath: string;
   binarySha256: string;
@@ -150,7 +157,11 @@ export type OcrManagedInvocationRequest = Readonly<{
   assignedPaths: readonly string[];
   ruleTextHash: string;
   backgroundTextHash: string | null;
-  binary: Readonly<{ profileRef: string; sha256: string; packageVersion: string }>;
+  binary: Readonly<{
+    profileRef: string;
+    sha256: string;
+    packageVersion: string;
+  }>;
   model: string;
   ocrEffort: 'low' | 'medium' | 'high';
   modelReasoningEffort: string | null;
@@ -200,7 +211,11 @@ export function buildOcrSemanticInvocationPreimage(input: {
   readonly assignedPaths: readonly string[];
   readonly ruleText: string;
   readonly backgroundText: string | null;
-  readonly binary: Readonly<{ profileRef: string; sha256: string; packageVersion: string }>;
+  readonly binary: Readonly<{
+    profileRef: string;
+    sha256: string;
+    packageVersion: string;
+  }>;
   readonly model: string;
   readonly ocrEffort: 'low' | 'medium' | 'high';
   readonly modelReasoningEffort: string | null;
@@ -278,13 +293,17 @@ export function planOcrReviewAssignments(input: {
       [file.filename, file.previousFilename].some(
         (candidate) =>
           candidate !== undefined &&
-          (target.currentPath === candidate || target.originalPath === candidate)
+          (target.currentPath === candidate ||
+            target.originalPath === candidate)
       )
     );
   // OCR produces no lifecycle verdicts; every in-scope target is explicitly
   // uncovered instead of silently dropped from assignment accounting (§4.3).
   const uncoveredLifecycleTargetIds = Object.freeze(
-    input.lifecycleTargets.filter(inScope).map((target) => target.targetId).sort()
+    input.lifecycleTargets
+      .filter(inScope)
+      .map((target) => target.targetId)
+      .sort()
   );
   const plan = createStableReviewWorkPlan({
     reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
@@ -401,7 +420,10 @@ export function runOcrReviewProcess(input: {
 export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort {
   private readonly assignments = new Map<string, OcrReviewAssignment>();
   private readonly prepared = new WeakMap<object, OcrReviewAssignment>();
-  private readonly preimages = new WeakMap<object, OcrPreparedReviewInvocation>();
+  private readonly preimages = new WeakMap<
+    object,
+    OcrPreparedReviewInvocation
+  >();
   private inFlight: Promise<unknown> = Promise.resolve();
   private running = false;
 
@@ -422,6 +444,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     readonly workSlot: ReviewWorkSlotPlan;
     readonly attemptOrdinal: number;
   }): Promise<OcrPreparedReviewInvocation> {
+    this.options.signal?.throwIfAborted();
     const assignment = this.assignments.get(input.workSlot.workSlotId);
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error('review_action_v2_assignment_missing');
@@ -475,6 +498,17 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       this.options.run.runDirectory,
       'preview.json'
     );
+    const timeoutMs =
+      this.options.previewTimeoutMs ??
+      this.options.limits.requestTimeoutSec * 1000;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+      throw new Error('review_action_v2_ocr_preview_timeout');
+    }
+    const previewSignal = AbortSignal.any([
+      ...(this.options.signal ? [this.options.signal] : []),
+      AbortSignal.timeout(timeoutMs),
+    ]);
+    previewSignal.throwIfAborted();
     const previewResult = await this.options.previewRunner({
       binaryPath: this.options.binaryPath,
       argv: buildOcrReviewArgv({
@@ -497,18 +531,22 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         path: process.env.PATH,
       }),
       cwd: this.options.run.runDirectory,
-      signal: new AbortController().signal,
+      signal: previewSignal,
       outputPath: previewOutputPath,
     });
-    if (previewResult.exitCode !== 0 || previewResult.spawnError !== undefined) {
+    previewSignal.throwIfAborted();
+    if (
+      previewResult.exitCode !== 0 ||
+      previewResult.spawnError !== undefined
+    ) {
       throw new Error('review_action_v2_ocr_preview_failed');
     }
     const previewSelectedPaths = Object.freeze(
       parseOcrPreviewSelection(readPreviewOutput(previewOutputPath))
     );
 
-    const pathCoverage: readonly PreparedPromptPathCoverage[] = assignedPaths.map(
-      (path) => {
+    const pathCoverage: readonly PreparedPromptPathCoverage[] =
+      assignedPaths.map((path) => {
         const file = assignment.context.files.find(
           (candidate) => candidate.filename === path
         );
@@ -528,8 +566,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
             })
           ),
         };
-      }
-    );
+      });
     const coverageManifest = createReviewPromptCoverageManifest({
       workSlotId: input.workSlot.workSlotId,
       reviewRevisionHash: assignment.reviewRevisionHash,
@@ -626,7 +663,9 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       manifestFacts: Object.freeze({
         taskKindSet: Object.freeze([ReviewTaskKind.FindingDiscovery]),
         providerKind: ReviewExecutionProviderKind.Ocr,
-        providerCapabilityHash: sha256(manifestPreimages.providerCapabilityHash),
+        providerCapabilityHash: sha256(
+          manifestPreimages.providerCapabilityHash
+        ),
         providerRequestEnvelopeHash: sha256(semanticPreimage),
         outputSchemaHash: sha256(manifestPreimages.outputSchemaHash),
         filePatchManifestHash: sha256(manifestPreimages.filePatchManifestHash),
@@ -667,11 +706,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       throw new Error('review_action_v2_prepared_invocation_identity_mismatch');
     }
     // §8.4 step 1: outer signal and current lease authority before dispatch.
-    input.signal.throwIfAborted();
-    const lease = input.currentLease ? input.currentLease() : input.lease;
-    if (Date.parse(lease.expiresAt) <= Date.now()) {
-      throw new Error('review_action_v2_lease_expired');
-    }
+    assertOcrInvocationLive(input);
     // Step 2: known-terminal/unknown Gateway effect fences new calls. A
     // positively proven not_dispatched effect is a distinct retry-safe
     // failure (§8.4 step 2), never a paid/unknown effect.
@@ -705,10 +740,12 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
     input: {
       readonly invocation: PreparedReviewInvocation;
       readonly signal: AbortSignal;
+      readonly lease: ReviewInvocationLease;
+      readonly currentLease?: () => ReviewInvocationLease;
     },
     assignment: OcrReviewAssignment
   ): Promise<ReviewObservationPayload> {
-    input.signal.throwIfAborted();
+    assertOcrInvocationLive(input);
     const outputPath = path.join(this.options.run.runDirectory, 'result.json');
     const argv = buildOcrReviewArgv({
       binaryPath: this.options.binaryPath,
@@ -737,6 +774,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       cwd: this.options.run.runDirectory,
       signal: input.signal,
     });
+    assertOcrInvocationLive(input);
     // Step 3 gate first: a failed process keeps any JSON local diagnostics.
     const failedProcess =
       processResult.spawnError !== undefined ||
@@ -751,6 +789,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
           async (file) => fs.statSync(file).size,
           outputPath
         );
+    assertOcrInvocationLive(input);
     const headFiles = {
       get: (file: string): string | undefined => {
         const resolved = path.join(this.options.checkoutRoot, file);
@@ -816,6 +855,19 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
   }
 }
 
+function assertOcrInvocationLive(input: {
+  readonly signal: AbortSignal;
+  readonly lease: ReviewInvocationLease;
+  readonly currentLease?: () => ReviewInvocationLease;
+}): void {
+  input.signal.throwIfAborted();
+  const lease = input.currentLease?.() ?? input.lease;
+  const expiresAt = Date.parse(lease.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    throw new Error('review_action_v2_lease_expired');
+  }
+}
+
 function readPreviewOutput(outputPath: string): unknown {
   try {
     const bytes = fs.readFileSync(outputPath);
@@ -857,11 +909,15 @@ function parseOcrPreviewSelection(raw: unknown): readonly string[] {
   }
   if (Array.isArray(value.groups)) {
     return Object.freeze([
-      ...new Set(value.groups.flatMap((group) => collect(
-        typeof group === 'object' && group !== null
-          ? (group as Record<string, unknown>).paths
-          : undefined
-      ))),
+      ...new Set(
+        value.groups.flatMap((group) =>
+          collect(
+            typeof group === 'object' && group !== null
+              ? (group as Record<string, unknown>).paths
+              : undefined
+          )
+        )
+      ),
     ]);
   }
   return Object.freeze([]);

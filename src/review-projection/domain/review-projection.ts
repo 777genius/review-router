@@ -89,9 +89,9 @@ export interface CurrentFindingCandidate {
   readonly symbolAnchor?: string;
   readonly trustedMarker?: string;
   /**
-   * Set only when the producing adapter verified the anchor span against the
-   * authorized HEAD content (§8.2). A verified span must survive to the final
-   * placement verbatim; it is never re-anchored heuristically.
+   * When present, the producing adapter requires HEAD span verification
+   * (§8.2): true preserves the exact verified span; false requires file/summary
+   * placement without a suggested patch. Absence retains legacy placement.
    */
   readonly anchorVerified?: boolean;
   readonly severity: FindingSeverity;

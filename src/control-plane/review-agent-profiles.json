@@ -4,17 +4,22 @@
     "binarySha256": "cb0a15567e9a60a5820d54b0f6ae86d504dc3805c1eab21a47f70e3eb7b73a40",
     "cancellation": true,
     "contextGateway": true,
-    "modelTransports": ["account_gateway", "provider_api"],
+    "modelTransports": [
+      "account_gateway",
+      "provider_api"
+    ],
     "packageVersion": "0.147.0",
     "profileRef": "codex-default"
   },
   {
     "agentKind": "ocr",
-    "binarySha256": "7df22058668028dc2099aab53f8f825e39ec2e5f90d3f83074588aa276422d8f",
+    "binarySha256": "97aa184122b1ca8fbfdbe4bfb28e175cf371c4402ab8ecfd1914d68547f13745",
     "cancellation": true,
     "contextGateway": false,
-    "modelTransports": ["account_gateway"],
-    "packageVersion": "1.13.1-rr.1",
+    "modelTransports": [
+      "account_gateway"
+    ],
+    "packageVersion": "1.13.1-rr.2",
     "profileRef": "ocr-managed-v1"
   }
 ]

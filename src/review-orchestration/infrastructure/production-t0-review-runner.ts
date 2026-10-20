@@ -207,8 +207,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       ? {
           json: input.accountGateway.runtimeConfig.runtimeEnv
             .REVIEW_ROUTER_AGENT_PROFILE_JSON!,
-          digest: input.accountGateway.runtimeConfig.runtimeEnv
-            .REVIEW_ROUTER_AGENT_PROFILE_DIGEST!,
+          digest:
+            input.accountGateway.runtimeConfig.runtimeEnv
+              .REVIEW_ROUTER_AGENT_PROFILE_DIGEST!,
         }
       : undefined;
     // The captured agentKind picks the engine; the OCR profile never enters
@@ -393,6 +394,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       const invocationAdapter = new OcrReviewInvocationAdapter(
         planned.assignments,
         {
+          ...(signal ? { signal } : {}),
+          previewTimeoutMs: Math.floor(
+            executionDeadline.clampProviderTimeout(providerTimeoutMs)
+          ),
           model: ocrModel,
           binaryPath: input.ocr.run.binaryPath,
           binarySha256: approvedOcrAgent.binarySha256,

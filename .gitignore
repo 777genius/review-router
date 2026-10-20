@@ -19,3 +19,7 @@ IMPLEMENTATION_PLANS.md
 multi-provider-review.json
 ai-robot-review.json
 review-router.json
+
+tmp/
+
+tools/ocr/out-linux/

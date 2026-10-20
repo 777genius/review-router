@@ -96,7 +96,9 @@ export class LegacyReviewProjectionPolicyAdapter
     const legacyFindings = query.findings.map(toLegacyFinding);
     const deduped = new Deduplicator().dedupe(legacyFindings);
     const consensus = this.consensus.filter(deduped);
-    const filtered = new FindingFilter().filter(consensus, query.diff).findings;
+    const filtered = new FindingFilter().filter(consensus, query.diff, {
+      allowUnanchoredFindings: true,
+    }).findings;
 
     return filtered.map((finding) => {
       const metadata = finding as FindingWithProjectionMetadata;
@@ -113,21 +115,33 @@ export class LegacyReviewProjectionPolicyAdapter
         throw new Error('legacy finding policy returned an unknown finding');
       }
 
-      return {
+      const requiresVerifiedAnchor = contributors.some(
+        (candidate) => candidate.anchorVerified !== undefined
+      );
+      // Legacy dedup may union nearby ranges and retain only one source's
+      // suggestion. A union is not proof for that replacement: every source
+      // must agree with the final exact range before it can remain inline.
+      const anchorVerified =
+        finding.startLine !== undefined &&
+        finding.endLine !== undefined &&
+        contributors.every(
+          (candidate) =>
+            candidate.anchorVerified === true &&
+            candidate.filePath === finding.file &&
+            candidate.startLine === finding.startLine &&
+            candidate.endLine === finding.endLine
+        ) &&
+        (!finding.suggestion ||
+          contributors.some(
+            (candidate) => candidate.suggestion === finding.suggestion
+          ));
+      const selected = {
         ...representative,
         sourceFindingId: representative.sourceFindingId,
         sourceFindingIds: sortedUnique(
           contributors.map((candidate) => candidate.sourceFindingId)
         ),
-        // §8.2: the verified marker survives a merge only when every merged
-        // contributor carried a verified span and the merged finding kept the
-        // full range; otherwise the anchor is not treated as verified.
-        anchorVerified:
-          contributors.every(
-            (candidate) => candidate.anchorVerified === true
-          ) &&
-          finding.startLine !== undefined &&
-          finding.endLine !== undefined,
+        ...(requiresVerifiedAnchor ? { anchorVerified } : {}),
         severity: toProjectionSeverity(finding.severity),
         title: finding.title,
         message: finding.message,
@@ -151,6 +165,17 @@ export class LegacyReviewProjectionPolicyAdapter
           contributors.flatMap((candidate) => candidate.observationIds)
         ),
       };
+      if (requiresVerifiedAnchor && !anchorVerified) {
+        const {
+          startLine: _startLine,
+          line: _line,
+          endLine: _endLine,
+          suggestion: _suggestion,
+          ...unanchored
+        } = selected;
+        return unanchored;
+      }
+      return selected;
     });
   }
 
@@ -351,6 +376,14 @@ export class LegacyReviewProjectionPolicyAdapter
     if (revisionFile.status === RevisionFileStatus.Removed) {
       return summaryPlacement(occurrence, 'file was deleted');
     }
+    if (occurrence.anchorVerified === false) {
+      return {
+        lineageId: occurrence.lineageId,
+        kind: FindingPlacementKind.File,
+        path: revisionFile.path,
+        reason: 'finding has no verified current span',
+      };
+    }
     const line = occurrence.line ?? occurrence.endLine;
     if (line === undefined) {
       return {
@@ -401,13 +434,10 @@ export class LegacyReviewProjectionPolicyAdapter
         lineageId: occurrence.lineageId,
         kind: FindingPlacementKind.Inline,
         path: revisionFile.path,
-        ...(occurrence.startLine !== undefined
-          ? { startLine: occurrence.startLine }
-          : {}),
-        line,
-        ...(occurrence.endLine !== undefined
-          ? { endLine: occurrence.endLine }
-          : {}),
+        ...(rangeStart < rangeEnd ? { startLine: rangeStart } : {}),
+        // GitHub's publication line is the end of a multiline range.
+        line: rangeEnd,
+        endLine: rangeEnd,
         body: inline.body,
       };
     }
@@ -542,7 +572,10 @@ function toLegacyFinding(
     ...(finding.startLine !== undefined
       ? { startLine: finding.startLine }
       : {}),
-    line: finding.line ?? finding.endLine ?? 1,
+    line:
+      finding.line ??
+      finding.endLine ??
+      (finding.anchorVerified === false ? 0 : 1),
     ...(finding.endLine !== undefined ? { endLine: finding.endLine } : {}),
     severity: toLegacySeverity(finding.severity),
     title: finding.title,

@@ -58,7 +58,8 @@ export function verifyOcrSpan(input: {
   readonly diffPositions?: ReadonlyMap<number, number>;
 }): OcrSpanVerification {
   const { existingCode, startLine, endLine } = input.comment;
-  if (existingCode === null) return { verified: false, reason: 'missing_existing_code' };
+  if (existingCode === null)
+    return { verified: false, reason: 'missing_existing_code' };
   if (startLine === null || endLine === null || endLine < startLine) {
     return { verified: false, reason: 'invalid_range' };
   }
@@ -102,7 +103,10 @@ export type OcrFindingSkipReason = 'invalid_native_finding';
 
 export type OcrNormalizationDiagnostics = Readonly<{
   /** Per-item skips: kept out of findings with provider_warning flags. */
-  skipped: readonly { readonly index: number; readonly reason: OcrFindingSkipReason }[];
+  skipped: readonly {
+    readonly index: number;
+    readonly reason: OcrFindingSkipReason;
+  }[];
   /** Bounded local diagnostic codes for partial quality flags. */
   reasons: readonly string[];
   /** True when at least one reason requires partial quality flags (§8.2). */
@@ -151,7 +155,7 @@ function plainTitleLine(content: string): string {
       .map((line) => line.replace(/[^\P{Z}\u00a0]/gu, ' ').trim())
       .find((line) => line.length > 0) ?? '';
   return firstLine
-    .replace(/[`#>*_~\[\]]/gu, '')
+    .replace(/[`#>*_~[\]]/gu, '')
     .replace(/\s+/gu, ' ')
     .trim()
     .slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
@@ -166,6 +170,8 @@ function plainTitleLine(content: string): string {
  */
 export function normalizeOcrFindings(input: {
   readonly comments: readonly OcrNativeComment[];
+  /** Canonical assigned inventory; omitted only for standalone normalization. */
+  readonly assignedPaths?: readonly string[];
   /** path -> authorized HEAD content of the checked-out snapshot. */
   readonly headFiles: Readonly<{ get(path: string): string | undefined }>;
   /** path -> (new line number -> PR diff position) of the current diff. */
@@ -174,11 +180,18 @@ export function normalizeOcrFindings(input: {
   const findings: Finding[] = [];
   const skipped: { index: number; reason: OcrFindingSkipReason }[] = [];
   const reasons = new Set<string>();
+  const assignedPaths = input.assignedPaths
+    ? new Set(input.assignedPaths)
+    : undefined;
 
   input.comments.forEach((comment, index) => {
     const path = normalizeOcrRepoPath(comment.path);
     const content = comment.content.trim();
-    if (path === null || content.length === 0) {
+    if (
+      path === null ||
+      content.length === 0 ||
+      (assignedPaths && !assignedPaths.has(path))
+    ) {
       skipped.push({ index, reason: 'invalid_native_finding' });
       return;
     }

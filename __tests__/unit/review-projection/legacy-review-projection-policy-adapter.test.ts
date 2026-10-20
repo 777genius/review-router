@@ -20,6 +20,63 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     inlineMinAgreement: 1,
   });
 
+  it.each([
+    { providerIds: ['codex'], category: 'bug' },
+    { providerIds: ['ocr'], category: 'maintainability' },
+    { providerIds: ['ocr'], category: 'bug', line: -1 },
+    {
+      providerIds: ['ocr'],
+      category: 'bug',
+      message: 'Consider using const instead of let for this variable.',
+    },
+  ])(
+    'retains legacy exclusions outside the producer bug language exception: %j',
+    async (overrides) => {
+      const selected = await adapter.selectCurrent({
+        findings: [
+          candidate({
+            title: 'Canonicalize the identifier',
+            message: 'Add a mixed-case UUID test as well.',
+            ...overrides,
+          }),
+        ],
+        revisionFiles: [revisionFile()],
+        diff: diff(),
+        limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+      });
+      expect(selected).toEqual([]);
+    }
+  );
+
+  it.each([
+    [
+      { providerIds: ['ocr'], category: 'bug' },
+      { providerIds: ['codex'], category: 'bug' },
+    ],
+    [
+      { providerIds: ['ocr'], category: 'maintainability' },
+      { providerIds: ['codex'], category: 'bug' },
+    ],
+  ])(
+    'does not inherit producer bug classification across mixed contributors: %j',
+    async (first, second) => {
+      const selected = await adapter.selectCurrent({
+        findings: [first, second].map((overrides, index) =>
+          candidate({
+            sourceFindingId: `source-${index}`,
+            title: 'Canonicalize the identifier',
+            message: 'Add a mixed-case UUID test as well.',
+            ...overrides,
+          })
+        ),
+        revisionFiles: [revisionFile()],
+        diff: diff(),
+        limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+      });
+      expect(selected).toEqual([]);
+    }
+  );
+
   it('reuses filtering and consensus while preserving projection provenance', async () => {
     const selected = await adapter.selectCurrent({
       findings: [

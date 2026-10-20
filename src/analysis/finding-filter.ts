@@ -29,7 +29,11 @@ export class FindingFilter {
   filter(
     findings: Finding[],
     diffContent: string,
-    options: { readonly allowUnanchoredFindings?: boolean } = {}
+    options: {
+      readonly allowUnanchoredFindings?: boolean;
+      /** Trust a producer's bug classification over suggestion/code-quality text heuristics. */
+      readonly isProducerClassifiedBug?: (finding: Finding) => boolean;
+    } = {}
   ): { findings: Finding[]; stats: FilterStats } {
     const stats: FilterStats = {
       total: findings.length,
@@ -48,11 +52,23 @@ export class FindingFilter {
         finding.line === 0 &&
         finding.startLine === undefined &&
         finding.endLine === undefined;
-      const action = this.shouldFilter(finding, diffContent, unanchored);
+      const producerClassifiedBug =
+        options.isProducerClassifiedBug?.(finding) === true;
+      const action = this.shouldFilter(
+        finding,
+        diffContent,
+        unanchored,
+        producerClassifiedBug
+      );
 
       if (action === 'filter') {
         stats.filtered++;
-        const reason = this.getFilterReason(finding, diffContent, unanchored);
+        const reason = this.getFilterReason(
+          finding,
+          diffContent,
+          unanchored,
+          producerClassifiedBug
+        );
         stats.reasons[reason] = (stats.reasons[reason] || 0) + 1;
         if (stats.filteredExamples.length < 5) {
           stats.filteredExamples.push(
@@ -107,7 +123,8 @@ export class FindingFilter {
   private shouldFilter(
     finding: Finding,
     diffContent: string,
-    unanchored = false
+    unanchored = false,
+    producerClassifiedBug = false
   ): 'filter' | 'downgrade' | 'keep' {
     // Filter invalid anchors before any keep/downgrade rule. Otherwise a
     // finding can still fail later when GitHub rejects the review comment line.
@@ -164,10 +181,11 @@ export class FindingFilter {
       return 'keep';
     }
 
-    // Filter: Suggestions/optimizations should never be reported as issues.
+    // Bug classifications take precedence over text-only suggestion labels.
     // Keep concrete runtime regressions first; LLMs often explain them with
     // "should/could" wording even when the changed line clearly breaks behavior.
     if (
+      !producerClassifiedBug &&
       !this.isConcreteRuntimeRegression(finding) &&
       this.isSuggestionOrOptimization(finding)
     ) {
@@ -184,8 +202,8 @@ export class FindingFilter {
       return 'filter';
     }
 
-    // COMPLETELY filter code quality issues - prompt explicitly says not to report these
-    if (this.isCodeQualityIssue(finding)) {
+    // Apply the code-quality text heuristic unless the producer classified a bug.
+    if (!producerClassifiedBug && this.isCodeQualityIssue(finding)) {
       return 'filter';
     }
 
@@ -210,7 +228,8 @@ export class FindingFilter {
   private getFilterReason(
     finding: Finding,
     diffContent: string,
-    unanchored = false
+    unanchored = false,
+    producerClassifiedBug = false
   ): string {
     if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return 'invalid/suspicious line number';
@@ -254,7 +273,7 @@ export class FindingFilter {
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
       return 'workflow security already handled/config issue';
     }
-    if (this.isSuggestionOrOptimization(finding)) {
+    if (!producerClassifiedBug && this.isSuggestionOrOptimization(finding)) {
       return 'suggestion/optimization (not a bug)';
     }
     if (this.isSubjectiveCodeOpinion(finding)) {
@@ -266,7 +285,7 @@ export class FindingFilter {
     if (this.isMissingMethodFalsePositive(finding, diffContent)) {
       return 'method exists in code';
     }
-    if (this.isCodeQualityIssue(finding)) {
+    if (!producerClassifiedBug && this.isCodeQualityIssue(finding)) {
       return 'code quality (not a concrete bug)';
     }
     if (this.isLintOrStyleIssue(finding)) {

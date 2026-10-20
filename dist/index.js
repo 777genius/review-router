@@ -43939,10 +43939,21 @@ var FindingFilter = class {
     const filtered = [];
     for (const finding of findings) {
       const unanchored = options.allowUnanchoredFindings === true && finding.line === 0 && finding.startLine === void 0 && finding.endLine === void 0;
-      const action = this.shouldFilter(finding, diffContent, unanchored);
+      const producerClassifiedBug = options.isProducerClassifiedBug?.(finding) === true;
+      const action = this.shouldFilter(
+        finding,
+        diffContent,
+        unanchored,
+        producerClassifiedBug
+      );
       if (action === "filter") {
         stats.filtered++;
-        const reason = this.getFilterReason(finding, diffContent, unanchored);
+        const reason = this.getFilterReason(
+          finding,
+          diffContent,
+          unanchored,
+          producerClassifiedBug
+        );
         stats.reasons[reason] = (stats.reasons[reason] || 0) + 1;
         if (stats.filteredExamples.length < 5) {
           stats.filteredExamples.push(
@@ -43985,7 +43996,7 @@ var FindingFilter = class {
     }
     return { findings: deduplicated, stats };
   }
-  shouldFilter(finding, diffContent, unanchored = false) {
+  shouldFilter(finding, diffContent, unanchored = false, producerClassifiedBug = false) {
     if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return "filter";
     }
@@ -44023,7 +44034,7 @@ var FindingFilter = class {
     if (this.isConcreteRuntimeRegression(finding)) {
       return "keep";
     }
-    if (!this.isConcreteRuntimeRegression(finding) && this.isSuggestionOrOptimization(finding)) {
+    if (!producerClassifiedBug && !this.isConcreteRuntimeRegression(finding) && this.isSuggestionOrOptimization(finding)) {
       return "filter";
     }
     if (this.isAboutAddedFileFalsePositive(finding)) {
@@ -44032,7 +44043,7 @@ var FindingFilter = class {
     if (this.isSubjectiveCodeOpinion(finding)) {
       return "filter";
     }
-    if (this.isCodeQualityIssue(finding)) {
+    if (!producerClassifiedBug && this.isCodeQualityIssue(finding)) {
       return "filter";
     }
     if (this.isLintOrStyleIssue(finding)) {
@@ -44046,7 +44057,7 @@ var FindingFilter = class {
     }
     return "keep";
   }
-  getFilterReason(finding, diffContent, unanchored = false) {
+  getFilterReason(finding, diffContent, unanchored = false, producerClassifiedBug = false) {
     if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return "invalid/suspicious line number";
     }
@@ -44071,7 +44082,7 @@ var FindingFilter = class {
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
       return "workflow security already handled/config issue";
     }
-    if (this.isSuggestionOrOptimization(finding)) {
+    if (!producerClassifiedBug && this.isSuggestionOrOptimization(finding)) {
       return "suggestion/optimization (not a bug)";
     }
     if (this.isSubjectiveCodeOpinion(finding)) {
@@ -44083,7 +44094,7 @@ var FindingFilter = class {
     if (this.isMissingMethodFalsePositive(finding, diffContent)) {
       return "method exists in code";
     }
-    if (this.isCodeQualityIssue(finding)) {
+    if (!producerClassifiedBug && this.isCodeQualityIssue(finding)) {
       return "code quality (not a concrete bug)";
     }
     if (this.isLintOrStyleIssue(finding)) {
@@ -113489,11 +113500,20 @@ var LegacyReviewProjectionPolicyAdapter = class {
   consensus;
   synthesis;
   async selectCurrent(query) {
+    const producerClassifiedBugIds = new Set(
+      query.findings.filter(
+        (finding) => finding.category === "bug" && finding.providerIds.length > 0 && finding.providerIds.every((provider) => provider === "ocr")
+      ).map((finding) => finding.sourceFindingId)
+    );
     const legacyFindings = query.findings.map(toLegacyFinding);
     const deduped = new Deduplicator().dedupe(legacyFindings);
     const consensus = this.consensus.filter(deduped);
     const filtered = new FindingFilter().filter(consensus, query.diff, {
-      allowUnanchoredFindings: true
+      allowUnanchoredFindings: true,
+      isProducerClassifiedBug: (finding) => {
+        const sourceIds = finding.sourceFindingIds ?? [];
+        return sourceIds.length > 0 && sourceIds.every((id) => producerClassifiedBugIds.has(id));
+      }
     }).findings;
     return filtered.map((finding) => {
       const metadata = finding;

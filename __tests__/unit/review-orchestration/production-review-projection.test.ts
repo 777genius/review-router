@@ -95,6 +95,57 @@ describe('production review projection coverage', () => {
     }
   );
 
+  it('retains the two producer-classified production bugs from five accepted OCR findings', async () => {
+    // Sanitized actual OCR messages: prose such as "validation"/"Add ... test"
+    // does not reverse the producer's bug classification. Test policy still applies.
+    const findings = [
+      {
+        path: 'general-ledger/src/modules/ledger-entries/services/ledger-processor.service.ts',
+        content:
+          'This read detects only collisions that have already committed; it does not make the new global source identity atomic with creation. Two concurrent batch messages with the same `(source_type_id, source_id)` but different accounts can both get an empty result, lock different account rows, and both insert successfully because the existing unique constraint also includes `account_id`. The in-batch validation does not cover concurrent/separate requests, and the added concurrency test uses one account, so that constraint masks the race. Enforce uniqueness for `(source_type_id, source_id)` in the database (after handling existing collisions), or serialize/check-and-insert that pair transactionally before documenting it as globally unique.',
+      },
+      {
+        path: 'general-ledger/src/modules/ledger-entries/services/ledger.service.ts',
+        content:
+          'Canonicalize `source_id` before checking uniqueness. `source_id` is accepted as a UUID by `@IsUUID`, which permits upper-case hex, while PostgreSQL stores/compares the `UUID` column canonically. Thus the same UUID in lower- and upper-case produces different Set keys and this check accepts the batch; after the first item is written, the consumer resolves the second to that same ledger entry and acknowledges it without creating its own posting. This reintroduces the silent batch-item loss this guard is intended to prevent. Add a mixed-case UUID test as well.',
+      },
+      {
+        path: 'general-ledger/src/modules/ledger-entries/consumers/create-transaction.consumer.batch.spec.ts',
+        content:
+          'These assertions pass if both deliveries are nacked and no completion event is published, because the loop is vacuously true.',
+      },
+      {
+        path: 'general-ledger/src/modules/ledger-entries/consumers/create-transaction.consumer.batch.spec.ts',
+        content:
+          'This final assertion can be satisfied by the completion event from the first delivery even if the post-reversal retry publishes no event.',
+      },
+      {
+        path: 'general-ledger/src/modules/ledger-entries/consumers/dlx.consumer.spec.ts',
+        content:
+          'Despite the test name, mockMessage has no batchid, so this expectation requires retrying a COMPLETED standalone request.',
+      },
+    ];
+    const paths = [...new Set(findings.map((finding) => finding.path))];
+    const envelope = await projectNativeOcrComments(
+      findings.map((finding) =>
+        nativeOcrComment({ ...finding, category: 'bug' })
+      ),
+      'unsafe_a();\nunsafe_b();',
+      paths
+    );
+    expect(envelope.coverage.state).toBe('complete');
+    expect(envelope.occurrences).toHaveLength(2);
+    expect(
+      envelope.occurrences.map(
+        (finding: { severity: string }) => finding.severity
+      )
+    ).toEqual(['major', 'major']);
+    expect(envelope.publishing.summary.allClear).toBe(false);
+    expect(envelope.publishing.summary.body).not.toContain('## No findings');
+    expect(envelope.publishing.summary.body).not.toContain('.spec.ts');
+    expect(envelope.mergeGate.conclusion).toBe('fail');
+  });
+
   it('marks OCR verified spans and never re-anchors them through projection', async () => {
     // §8.2: an OCR verified HEAD span keeps its exact range in the final
     // placement. The colliding patch makes the legacy heuristic prefer the
@@ -967,7 +1018,8 @@ function nativeOcrComment(
 
 async function projectNativeOcrComments(
   comments: readonly OcrNativeComment[],
-  headContent = 'unsafe_a();\nunsafe_b();'
+  headContent = 'unsafe_a();\nunsafe_b();',
+  paths: readonly string[] = ['src/a.ts']
 ) {
   const patch = [
     '@@ -1,2 +1,2 @@',
@@ -977,8 +1029,20 @@ async function projectNativeOcrComments(
   ].join('\n');
   const context = {
     ...pr,
-    files: [{ ...pr.files[0], additions: 2, deletions: 2, changes: 4, patch }],
-    diff: `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n${patch}`,
+    files: paths.map((filename) => ({
+      ...pr.files[0],
+      filename,
+      additions: 2,
+      deletions: 2,
+      changes: 4,
+      patch,
+    })),
+    diff: paths
+      .map(
+        (filename) =>
+          `diff --git a/${filename} b/${filename}\n--- a/${filename}\n+++ b/${filename}\n${patch}`
+      )
+      .join('\n'),
   };
   const accepted = acceptOcrManagedReviewResult({
     admission: authorizationFacts,
@@ -992,12 +1056,14 @@ async function projectNativeOcrComments(
     },
     observedActualModel: 'observed-model',
     observedRequestCount: 1,
-    expectedPaths: ['src/a.ts'],
+    expectedPaths: paths,
     headFiles: new Map([
-      ['src/a.ts', headContent],
+      ...paths.map((filename) => [filename, headContent] as const),
       ['src/outside.ts', 'outside_unsafe();'],
     ]),
-    diffPositions: new Map([['src/a.ts', mapLinesToPositions(patch)]]),
+    diffPositions: new Map(
+      paths.map((filename) => [filename, mapLinesToPositions(patch)])
+    ),
     resultBytes: Buffer.from(
       JSON.stringify({
         comments: comments.map((comment) => ({
@@ -1022,10 +1088,13 @@ async function projectNativeOcrComments(
         reviewrouter_outcome: {
           schema_version: 'reviewrouter.ocr-outcome/v1',
           run_stop_cause: null,
-          grouping: { state: 'not_applicable', reason: 'single_file' },
+          grouping:
+            paths.length === 1
+              ? { state: 'not_applicable', reason: 'single_file' }
+              : { state: 'completed', reason: null },
           groups: [
             {
-              paths: ['src/a.ts'],
+              paths,
               main_completed: true,
               stop_cause: null,
               rounds: { configured: 2, started: 1, completed: 1 },
@@ -1042,6 +1111,9 @@ async function projectNativeOcrComments(
       })
     ),
   });
+  expect(accepted.normalized.findings).toHaveLength(
+    comments.filter((comment) => paths.includes(comment.path)).length
+  );
   const payload = normalizeReviewObservation({
     workSlotId: 'ocr-slot',
     attemptOrdinal: 1,
@@ -1059,7 +1131,16 @@ async function projectNativeOcrComments(
   });
   const evidence = acceptedEvidence(
     'ocr-slot',
-    fullCoverageManifest('ocr-slot')
+    createReviewPromptCoverageManifest({
+      workSlotId: 'ocr-slot',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      assignedPaths: paths,
+      pathCoverage: paths.map((filename) => ({
+        path: filename,
+        kind: ReviewPromptPathCoverageKind.FullPatch,
+        contentHash: '8'.repeat(64),
+      })),
+    })
   );
   const builder = createProductionReviewProjectionBuilder({
     authorizationFacts: {
@@ -1081,7 +1162,7 @@ async function projectNativeOcrComments(
         taskKind: ReviewTaskKind.FindingDiscovery,
         providerKind: ReviewExecutionProviderKind.Ocr,
         required: true,
-        filePaths: ['src/a.ts'],
+        filePaths: paths,
       },
     ],
     uncoveredPaths: [],

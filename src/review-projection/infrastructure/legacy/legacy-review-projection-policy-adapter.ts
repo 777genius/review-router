@@ -93,11 +93,31 @@ export class LegacyReviewProjectionPolicyAdapter
   async selectCurrent(
     query: SelectCurrentFindingsQuery
   ): Promise<readonly SelectedCurrentFinding[]> {
+    // Provider identities here come from accepted observations. Require every
+    // original contributor, since dedup can retain one source's category while
+    // replacing its text with another source's explanation.
+    const producerClassifiedBugIds = new Set(
+      query.findings
+        .filter(
+          (finding) =>
+            finding.category === 'bug' &&
+            finding.providerIds.length > 0 &&
+            finding.providerIds.every((provider) => provider === 'ocr')
+        )
+        .map((finding) => finding.sourceFindingId)
+    );
     const legacyFindings = query.findings.map(toLegacyFinding);
     const deduped = new Deduplicator().dedupe(legacyFindings);
     const consensus = this.consensus.filter(deduped);
     const filtered = new FindingFilter().filter(consensus, query.diff, {
       allowUnanchoredFindings: true,
+      isProducerClassifiedBug: (finding) => {
+        const sourceIds = finding.sourceFindingIds ?? [];
+        return (
+          sourceIds.length > 0 &&
+          sourceIds.every((id) => producerClassifiedBugIds.has(id))
+        );
+      },
     }).findings;
 
     return filtered.map((finding) => {

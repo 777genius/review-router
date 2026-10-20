@@ -193,23 +193,29 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
   private async runInWorkspace(
     input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]
   ): Promise<CodexOAuthV2ReviewResult> {
-    const signal = input.accountGateway?.signal;
+    const signal = input.accountGateway?.signal ?? input.providerApi?.signal;
     signal?.throwIfAborted();
     const fetchImpl = signal
       ? createAccountGatewayRunFetch(this.fetchImpl, signal)
       : this.fetchImpl;
     validateInput(input);
+    if (
+      input.providerApi &&
+      (input.accountGateway || input.ocr || input.providerInstanceId)
+    ) {
+      throw new Error('review_action_v2_direct_auth_route_invalid');
+    }
     if (input.ocr && !input.accountGateway) {
       // Managed OCR exists only on the account gateway transport (§4.1).
       throw new Error('review_action_v2_ocr_account_gateway_required');
     }
-    const agentProfile = input.accountGateway
+    const admittedRuntime =
+      input.accountGateway?.runtimeConfig ?? input.providerApi?.runtimeConfig;
+    const agentProfile = admittedRuntime
       ? {
-          json: input.accountGateway.runtimeConfig.runtimeEnv
-            .REVIEW_ROUTER_AGENT_PROFILE_JSON!,
+          json: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!,
           digest:
-            input.accountGateway.runtimeConfig.runtimeEnv
-              .REVIEW_ROUTER_AGENT_PROFILE_DIGEST!,
+            admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST!,
         }
       : undefined;
     // The captured agentKind picks the engine; the OCR profile never enters
@@ -240,14 +246,22 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         authoritativeDeadlineEpochMs;
     }
     signal?.throwIfAborted();
-    const loadedConfig = ConfigLoader.load();
+    const loadedConfig = input.providerApi
+      ? ConfigLoader.loadRuntimeEnvironment(
+          input.providerApi.runtimeConfig.runtimeEnv
+        )
+      : ConfigLoader.load();
     const config = input.accountGateway
       ? { ...loadedConfig, providerRetries: 1 }
       : loadedConfig;
     // Codex model selection stays before every effect (including on the OCR
     // path where the managed engine owns its own model capture).
-    const codexProviderName = input.ocr ? '' : selectCodexProvider(config);
-    const model = codexProviderName.slice('codex/'.length);
+    const codexProviderName = input.ocr
+      ? ''
+      : input.providerApi
+        ? selectDirectOpenRouterProvider(config)
+        : selectCodexProvider(config);
+    const model = codexProviderName.slice(codexProviderName.indexOf('/') + 1);
     const reasoningEffort = resolveProductionInvestigationReasoningEffort({
       codexModel: model,
       accountGateway: input.accountGateway !== undefined,
@@ -270,12 +284,14 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     });
     const controlPlane =
       input.accountGateway?.controlPlane ??
+      input.providerApi?.controlPlane ??
       new ReviewActionV2ControlPlaneAdapter(reviewActionClient);
-    const authorization = input.accountGateway
-      ? controlPlane.currentAuthorization()
-      : await controlPlane.authorize({
-          oidcToken: await oidc.requestToken(input.audience),
-        });
+    const authorization =
+      input.accountGateway || input.providerApi
+        ? controlPlane.currentAuthorization()
+        : await controlPlane.authorize({
+            oidcToken: await oidc.requestToken(input.audience),
+          });
     validateAuthorizationInput(input, authorization);
 
     const scmReadTokenProvider = createScmReadTokenProvider({
@@ -526,11 +542,19 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const provider = new CodexProvider(model, {
       agenticContext,
       eventAudit: config.codexEventAudit,
-      modelProvider: resolveAccountGatewayModelProvider(
-        model,
-        input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
-        input.accountGateway?.modelTransport
-      ),
+      modelProvider: input.providerApi
+        ? 'openrouter'
+        : resolveAccountGatewayModelProvider(
+            model,
+            input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
+            input.accountGateway?.modelTransport
+          ),
+      ...(input.providerApi
+        ? {
+            providerNamePrefix: 'openrouter' as const,
+            disableBuiltinTools: true,
+          }
+        : {}),
       ...(input.accountGateway
         ? { accountGateway: input.accountGateway.modelTransport }
         : {}),
@@ -578,7 +602,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       providerTimeoutMs,
       agenticContext,
       contextGateway,
-      false
+      false,
+      'xhigh',
+      input.providerApi?.credentialLease
     );
     const investigationInvocationAdapter =
       createProductionReviewInvestigationInvocation({
@@ -592,7 +618,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             agenticContext,
             contextGateway,
             true,
-            reasoningEffort
+            reasoningEffort,
+            input.providerApi?.credentialLease
           ),
       });
     const identities = new DeterministicReviewOrchestrationIdentity();
@@ -651,6 +678,12 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                 contextCriticEnabled: investigationRollout.contextCriticEnabled,
                 agents: createConfiguredProductionInvestigationAgents({
                   approvedAgent,
+                  ...(input.providerApi
+                    ? {
+                        directCredentialLease:
+                          input.providerApi.credentialLease,
+                      }
+                    : {}),
                   codexModel: model,
                   codexBinaryPath: input.codexBinaryPath,
                   executionSessions: gateway,
@@ -1005,6 +1038,7 @@ export function createConfiguredProductionInvestigationAgents(input: {
   readonly executionSessions: ReviewAgentExecutionSessionResolverPort;
   readonly modelTransport?: LocalGatewayModelTransport;
   readonly admittedGatewayModel?: string;
+  readonly directCredentialLease?: () => import('../../providers/prepared-invocation').ProviderCredentialLease;
   readonly reasoningEffort: NonNullable<
     CodexReviewAgentAdapterOptions['reasoningEffort']
   >;
@@ -1039,14 +1073,22 @@ export function createConfiguredProductionInvestigationAgents(input: {
       requestedModel: input.codexModel,
       agent: new CodexReviewAgentAdapter(processRunner, {
         executionSessions: input.executionSessions,
-        modelProvider: resolveAccountGatewayModelProvider(
-          input.codexModel,
-          input.admittedGatewayModel,
-          input.modelTransport
-        ),
-        providerCredentialEnvironment: input.modelTransport
-          ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME })
-          : codexCredentialEnvironment,
+        modelProvider: input.directCredentialLease
+          ? 'openrouter'
+          : resolveAccountGatewayModelProvider(
+              input.codexModel,
+              input.admittedGatewayModel,
+              input.modelTransport
+            ),
+        providerCredentialEnvironment: input.directCredentialLease
+          ? () =>
+              Object.freeze({
+                CODEX_HOME: process.env.CODEX_HOME,
+                ...input.directCredentialLease!().environment,
+              })
+          : input.modelTransport
+            ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME })
+            : codexCredentialEnvironment,
         ...(appServer && input.modelTransport
           ? {
               appServerRunner: {
@@ -1590,7 +1632,10 @@ export async function prepareSingleT0ReviewPlan(input: {
     pr.number !== authorization.facts.pullRequestNumber ||
     pr.baseSha !== authorization.facts.baseSha ||
     pr.headSha !== authorization.facts.headSha ||
-    provider.name !== selectCodexProvider(config) ||
+    provider.name !==
+      (config.providers[0]?.startsWith('openrouter/')
+        ? selectDirectOpenRouterProvider(config)
+        : selectCodexProvider(config)) ||
     config.codexAgenticContext === false
   ) {
     throw new Error('review_action_v2_single_plan_authority_mismatch');
@@ -1923,13 +1968,33 @@ function selectCodexProvider(config: ReviewConfig): string {
   return selected;
 }
 
+export function selectDirectOpenRouterProvider(config: ReviewConfig): string {
+  const selected = config.providers[0];
+  if (
+    config.providers.length !== 1 ||
+    !selected ||
+    !/^openrouter\/[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(selected) ||
+    config.providerLimit !== 1 ||
+    config.providerMaxParallel !== 1 ||
+    config.inlineMinAgreement !== 1 ||
+    config.synthesisModel !== selected ||
+    config.fallbackProviders.length !== 0 ||
+    config.requiredHealthyProviders?.length !== 1 ||
+    config.requiredHealthyProviders[0] !== selected
+  )
+    throw new Error('review_action_v2_direct_provider_policy_invalid');
+  return selected;
+}
+
 async function applyReviewRuntimeConfig(
   input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0],
   fetchImpl: typeof fetch,
   oidc: GitHubActionsOidcTokenProvider
 ): Promise<string | undefined> {
-  if (input.accountGateway) {
-    return applyAdmittedRuntimeConfig(input.accountGateway.runtimeConfig);
+  if (input.accountGateway || input.providerApi) {
+    return applyAdmittedRuntimeConfig(
+      (input.accountGateway ?? input.providerApi)!.runtimeConfig
+    );
   }
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = 'oidc';
   process.env.REVIEWROUTER_API_URL = input.apiUrl;

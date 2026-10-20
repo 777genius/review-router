@@ -710,7 +710,7 @@ describe('CodexProvider', () => {
       expect.arrayContaining([
         '-c',
         'shell_environment_policy.ignore_default_excludes=false',
-        'shell_environment_policy.filters={OPENAI_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}',
+        'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}',
       ])
     );
     expect(args).not.toContain('shell_tool');
@@ -721,6 +721,63 @@ describe('CodexProvider', () => {
       }).MIMO_TOKEN_PLAN_API_KEY
     ).toBe('mimo-provider-test');
   });
+
+  it.each([false, true])(
+    'keeps direct provider T0 tools confined with Context Gateway=%s',
+    async (withContext) => {
+      process.env.OPENROUTER_API_KEY = 'direct-model-credential';
+      process.env.REVIEWROUTER_FORK_AGENTIC_SANDBOX = 'true';
+      const provider = new CodexProvider('vendor/model', {
+        modelProvider: 'openrouter',
+        providerNamePrefix: 'openrouter',
+        agenticContext: withContext,
+        disableBuiltinTools: true,
+      });
+      overridePrivate(
+        provider,
+        'resolveBinary',
+        async () => '/qualified/codex'
+      );
+      const prepared = await provider.prepareInvocation(
+        'Review the captured patch.',
+        1000,
+        undefined,
+        withContext ? contextGatewayV4Config() : undefined
+      );
+      const args = prepared.request.argsTemplate;
+      expect(args).toContain('--ignore-user-config');
+      expect(args).toContain('mcp_servers={}');
+      expect(
+        args.some((argument) =>
+          argument.startsWith('mcp_servers.reviewrouter.enabled_tools=')
+        )
+      ).toBe(withContext);
+      for (const feature of [
+        'shell_tool',
+        'unified_exec',
+        'js_repl',
+        'computer_use',
+      ]) {
+        expect(
+          args.some(
+            (argument, index) =>
+              argument === '--disable' && args[index + 1] === feature
+          )
+        ).toBe(true);
+      }
+      expect(args).toContain(
+        'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
+      );
+      expect(args).toContain(
+        'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}'
+      );
+      expect(prepared.providerName).toBe('openrouter/vendor/model');
+      expect(prepared.request.environment.OPENROUTER_API_KEY).toBeUndefined();
+      expect(prepared.observableInputPreimage).not.toContain(
+        'direct-model-credential'
+      );
+    }
+  );
 
   it('directs MiMo authentication failures to the MiMo credential', () => {
     const provider = new CodexProvider('mimo-v2.6-pro', {

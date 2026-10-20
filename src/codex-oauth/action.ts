@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import { runProviderApiRuntime } from './provider-api-runtime';
+import { providerApiCheckoutCompanionContract } from '../control-plane/generated/review-action-v2/companion-contracts';
 import {
   ACCOUNT_GATEWAY_ACTION_MODE,
   runAccountGatewayRuntime,
@@ -331,6 +333,53 @@ export async function runCodexOAuthRotatingAction(
   }
 }
 
+export async function runProviderApiAction(
+  activation: ReviewActionV2Activation
+): Promise<void> {
+  if (
+    activation.mode !== ReviewActionV2RuntimeMode.T0 ||
+    process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'oidc' ||
+    process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK !== 'false' ||
+    readInput('provider-api-auth-mode') !==
+      providerApiCheckoutCompanionContract.providerApiAuthMode ||
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$/.test(
+      process.env.REVIEW_REQUEST_ID ?? ''
+    )
+  ) {
+    throw new Error('provider_api_requires_authorized_t0');
+  }
+  const inputs = readReviewActionContext();
+  const publisher = createCiReviewProgressPublisher({
+    repository: inputs.repository,
+    pullRequestNumber: inputs.pullRequestNumber,
+    commentEligible: false,
+  });
+  const progress = publisher
+    ? new CiOrchestrationProgressReporter(publisher)
+    : null;
+  try {
+    await runProviderApiRuntime(
+      {
+        ...inputs,
+        workflowSchemaVersion:
+          providerApiCheckoutCompanionContract.workflowSchemaVersion,
+      },
+      {
+        review: createProductionT0ReviewRunner({
+          ...(progress ? { progress } : {}),
+        }),
+        terminalReview: (review, signal) =>
+          finishAccountGatewayActionReview(inputs, review, progress, signal),
+      }
+    );
+    core.setOutput('reviewrouter_state', 'completed');
+  } catch (error) {
+    await progress?.finish('failed');
+    core.setOutput('reviewrouter_state', 'failed');
+    throw error;
+  }
+}
+
 function isAccountGatewayActionSelected(): boolean {
   return (
     (core.getInput('mode') ||
@@ -543,7 +592,7 @@ async function runAccountGatewayActionInternal(
 }
 
 async function finishAccountGatewayActionReview(
-  inputs: ReturnType<typeof readCodexOAuthActionInputs>,
+  inputs: ReturnType<typeof readReviewActionContext>,
   review: CodexOAuthV2ReviewResult,
   ciProgressReporter: CiOrchestrationProgressReporter | null,
   signal: AbortSignal
@@ -576,7 +625,7 @@ async function finishAccountGatewayActionReview(
 }
 
 async function finishV2ActionReview(
-  inputs: ReturnType<typeof readCodexOAuthActionInputs>,
+  inputs: ReturnType<typeof readReviewActionContext>,
   review: CodexOAuthV2ReviewResult,
   terminalOutcomeReporter: CodexOAuthTerminalOutcomeReporterPort,
   ciProgressReporter: CiOrchestrationProgressReporter | null,
@@ -666,7 +715,7 @@ function requireCompletedMergeGateConclusion(
 type V2ActionFailure = Readonly<{
   code: string;
   report: (
-    inputs: ReturnType<typeof readCodexOAuthActionInputs>
+    inputs: ReturnType<typeof readReviewActionContext>
   ) => CodexOAuthTerminalOutcomeReport;
 }>;
 
@@ -799,7 +848,7 @@ function diagnosedV2ActionFailure(code: string): V2ActionFailure {
 }
 
 function buildSuccessStatusPublicationFailureReport(
-  inputs: ReturnType<typeof readCodexOAuthActionInputs>
+  inputs: ReturnType<typeof readReviewActionContext>
 ): CodexOAuthTerminalOutcomeReport {
   return terminalOutcomeReport({
     inputs,
@@ -818,7 +867,7 @@ function buildSuccessStatusPublicationFailureReport(
 }
 
 function buildInvalidMergeGateConclusionReport(
-  inputs: ReturnType<typeof readCodexOAuthActionInputs>
+  inputs: ReturnType<typeof readReviewActionContext>
 ): CodexOAuthTerminalOutcomeReport {
   return terminalOutcomeReport({
     inputs,
@@ -837,7 +886,7 @@ function buildInvalidMergeGateConclusionReport(
 }
 
 function buildMissingV2TerminalOutcomeReport(
-  inputs: ReturnType<typeof readCodexOAuthActionInputs>
+  inputs: ReturnType<typeof readReviewActionContext>
 ): CodexOAuthTerminalOutcomeReport {
   return terminalOutcomeReport({
     inputs,
@@ -875,7 +924,7 @@ function progressTerminal(
 }
 
 function buildSkippedTerminalOutcomeReport(
-  inputs: ReturnType<typeof readCodexOAuthActionInputs>,
+  inputs: ReturnType<typeof readReviewActionContext>,
   runtime: Extract<CodexOAuthReviewResultLike, { status: 'skipped' }>
 ): CodexOAuthTerminalOutcomeReport {
   if (runtime.reason === 'max_changed_lines_exceeded') {
@@ -930,7 +979,7 @@ type CodexOAuthReviewResultLike = Awaited<
 >;
 
 function buildV2TerminalOutcomeReport(
-  inputs: ReturnType<typeof readCodexOAuthActionInputs>,
+  inputs: ReturnType<typeof readReviewActionContext>,
   review: CodexOAuthV2ReviewResult
 ): CodexOAuthTerminalOutcomeReport | null {
   if (review.outcome === CodexOAuthV2ReviewOutcome.Completed) return null;
@@ -1152,7 +1201,7 @@ function formatUnavailablePublicationFacts(
 }
 
 function terminalOutcomeReport(input: {
-  readonly inputs: ReturnType<typeof readCodexOAuthActionInputs>;
+  readonly inputs: ReturnType<typeof readReviewActionContext>;
   readonly kind: CodexOAuthTerminalOutcomeKind;
   readonly marker?: string;
   readonly dedupeKey?: CodexOAuthTerminalOutcomeDedupeKey;
@@ -1197,7 +1246,7 @@ function terminalOutcomeReport(input: {
 }
 
 function buildCompletedV2TerminalOutcomeCommitStatus(
-  inputs: ReturnType<typeof readCodexOAuthActionInputs>,
+  inputs: ReturnType<typeof readReviewActionContext>,
   review: Extract<
     CodexOAuthV2ReviewResult,
     { readonly outcome: CodexOAuthV2ReviewOutcome.Completed }
@@ -1368,7 +1417,7 @@ function shortSha(sha: string): string {
 }
 
 function githubRunUrl(
-  inputs: ReturnType<typeof readCodexOAuthActionInputs>
+  inputs: ReturnType<typeof readReviewActionContext>
 ): string | undefined {
   const runId = process.env.GITHUB_RUN_ID;
   if (!runId) return undefined;
@@ -1381,14 +1430,9 @@ function truncateCommitStatusDescription(value: string): string {
 }
 
 function readCodexOAuthActionInputs() {
-  const apiUrl = resolveCodexOAuthActionApiUrl();
+  const context = readReviewActionContext();
   const providerInstanceId = readInput('provider-instance-id');
   const workflowSchemaVersion = Number(readInput('workflow-schema-version'));
-  const audience = readInput('audience') || 'reviewrouter';
-  const event = readPullRequestEvent();
-  if (!apiUrl) {
-    throw new Error('codex_oauth_api_url_missing');
-  }
   if (!providerInstanceId) {
     throw new Error('codex_oauth_provider_instance_id_missing');
   }
@@ -1396,10 +1440,19 @@ function readCodexOAuthActionInputs() {
     throw new Error('codex_oauth_workflow_schema_version_invalid');
   }
   return {
-    apiUrl,
-    audience,
+    ...context,
     providerInstanceId,
     workflowSchemaVersion,
+  };
+}
+
+function readReviewActionContext() {
+  const apiUrl = resolveCodexOAuthActionApiUrl();
+  if (!apiUrl) throw new Error('codex_oauth_api_url_missing');
+  const event = readPullRequestEvent();
+  return {
+    apiUrl,
+    audience: readInput('audience') || 'reviewrouter',
     repository: event.repository,
     pullRequestNumber: event.number,
     headSha: event.headSha,

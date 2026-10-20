@@ -47,6 +47,7 @@ import {
   resolveProductionContextGatewaySessionFactoryOptions,
   resolveT0AttemptBudget,
   resolveProductionInvestigationReasoningEffort,
+  selectDirectOpenRouterProvider,
 } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
 import { CONTEXT_GATEWAY_DEFAULT_POLICY_VERSION } from '../../../src/context-gateway/context-gateway-release-contract';
 import {
@@ -105,6 +106,34 @@ import {
 } from '../../../src/review-orchestration/infrastructure/production-review-investigation-composition';
 
 describe('ProductionT0ReviewRunner policy', () => {
+  it('preserves one explicit OpenRouter model and refuses policy collapse', () => {
+    const provider = 'openrouter/vendor/model';
+    const config = {
+      ...DEFAULT_CONFIG,
+      providers: [provider],
+      synthesisModel: provider,
+      providerLimit: 1,
+      providerMaxParallel: 1,
+      inlineMinAgreement: 1,
+      requiredHealthyProviders: [provider],
+      fallbackProviders: [],
+    };
+    expect(selectDirectOpenRouterProvider(config)).toBe(provider);
+    for (const mismatch of [
+      { providers: [provider, 'openrouter/other/model'] },
+      { providers: ['codex/model'] },
+      { providers: ['openrouter/free'] },
+      { providerLimit: 2 },
+      { providerMaxParallel: 2 },
+      { inlineMinAgreement: 2 },
+      { synthesisModel: 'openrouter/other/model' },
+      { fallbackProviders: ['openrouter/other/model'] },
+      { requiredHealthyProviders: [] },
+    ])
+      expect(() =>
+        selectDirectOpenRouterProvider({ ...config, ...mismatch })
+      ).toThrow('review_action_v2_direct_provider_policy_invalid');
+  });
   const admittedAgentJson = JSON.stringify({
     profileRef: 'fixture-codex',
     agentKind: 'codex',
@@ -437,6 +466,124 @@ describe('ProductionT0ReviewRunner policy', () => {
       }
     }
   );
+
+  it('uses only the captured direct policy despite hostile checkout and ambient settings', async () => {
+    const root = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'direct-policy-'))
+    );
+    const previousEnv = { ...process.env };
+    const stoppedAtBoundary = new Error('mock authorization boundary');
+    const profile = JSON.stringify({
+      ...JSON.parse(admittedAgentJson),
+      modelTransports: ['provider_api'],
+    });
+    const runtimeEnv = {
+      REVIEW_AUTH_MODE: 'openrouter-api',
+      REVIEW_PROVIDERS: 'openrouter/vendor/captured-model',
+      REQUIRED_HEALTHY_PROVIDERS: 'openrouter/vendor/captured-model',
+      SYNTHESIS_MODEL: 'openrouter/vendor/captured-model',
+      PROVIDER_LIMIT: '1',
+      PROVIDER_MAX_PARALLEL: '1',
+      INLINE_MIN_AGREEMENT: '1',
+      CODEX_AGENTIC_CONTEXT: 'true',
+      REVIEW_ROUTER_AGENT_PROFILE_JSON: profile,
+      REVIEW_ROUTER_AGENT_PROFILE_DIGEST: createHash('sha256')
+        .update(profile)
+        .digest('hex'),
+    };
+    const configuration = jest.spyOn(ConfigLoader, 'load');
+    const captured = jest.spyOn(ConfigLoader, 'loadRuntimeEnvironment');
+    const current = jest
+      .spyOn(
+        ReviewActionV2ControlPlaneAdapter.prototype,
+        'currentAuthorization'
+      )
+      .mockImplementation(() => {
+        throw stoppedAtBoundary;
+      });
+    const review = jest.spyOn(CodexProvider.prototype, 'review');
+    const execute = jest.spyOn(
+      NodeCodexAppServerTurnRunner.prototype,
+      'executeTurn'
+    );
+    const fetchImpl = jest.fn<
+      Promise<Response>,
+      [RequestInfo | URL, RequestInit?]
+    >();
+    const credentialLease = jest.fn(() => ({
+      environment: { OPENROUTER_API_KEY: 'never-read' },
+    }));
+    try {
+      fs.mkdirSync(path.join(root, '.github'));
+      fs.writeFileSync(
+        path.join(root, '.github/multi-review.yml'),
+        [
+          'providers: [openrouter/attacker/model]',
+          'fallback_providers: [openrouter/attacker/fallback]',
+          'codex_agentic_context: false',
+          'budget_max_usd: 999',
+          'run_timeout_seconds: 9999',
+        ].join('\n')
+      );
+      process.env.REVIEW_PROVIDERS = 'openrouter/ambient/model';
+      process.env.BUDGET_MAX_USD = '888';
+      process.env.RUN_TIMEOUT_SECONDS = '8888';
+      process.env.CODEX_AGENTIC_CONTEXT = 'false';
+      await expect(
+        new ProductionT0ReviewRunner(fetchImpl).run({
+          apiUrl: 'https://fixture.invalid',
+          audience: 'reviewrouter',
+          workflowSchemaVersion: 2,
+          repository: 'fixture/repository',
+          pullRequestNumber: 1,
+          headSha: 'a'.repeat(40),
+          workspacePath: root,
+          codexHome: path.join(root, 'home'),
+          scmReadToken: 'fixture-scm',
+          scmReadTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+          refreshScmReadToken: async () => {
+            throw new Error('unexpected refresh');
+          },
+          providerApi: {
+            runtimeConfig: parseAdmittedRuntimeConfig({
+              protocolVersion: 1,
+              configVersion: 7,
+              runtimeEnv,
+            }),
+            signal: new AbortController().signal,
+            controlPlane: new ReviewActionV2ControlPlaneAdapter(
+              new ReviewActionV2Client({
+                apiUrl: 'https://fixture.invalid',
+                fetchImpl,
+              })
+            ),
+            credentialLease,
+          },
+        })
+      ).rejects.toBe(stoppedAtBoundary);
+      expect(configuration).not.toHaveBeenCalled();
+      expect(captured).toHaveBeenCalledWith(runtimeEnv);
+      const resolved = captured.mock.results[0].value as ReviewConfig;
+      expect(resolved.providers).toEqual(['openrouter/vendor/captured-model']);
+      expect(resolved.fallbackProviders).toEqual([]);
+      expect(resolved.codexAgenticContext).toBe(true);
+      expect(resolved.budgetMaxUsd).toBe(DEFAULT_CONFIG.budgetMaxUsd);
+      expect(resolved.runTimeoutSeconds).toBe(DEFAULT_CONFIG.runTimeoutSeconds);
+      expect(current).toHaveBeenCalledTimes(1);
+      expect(review).not.toHaveBeenCalled();
+      expect(execute).not.toHaveBeenCalled();
+      expect(credentialLease).not.toHaveBeenCalled();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } finally {
+      process.env = previousEnv;
+      configuration.mockRestore();
+      captured.mockRestore();
+      current.mockRestore();
+      review.mockRestore();
+      execute.mockRestore();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   it.each([
     ['mimo-v2.6-pro', true, 'high', 'high', false, 'xhigh', undefined],

@@ -15,7 +15,11 @@ import {
 } from './codex-output-schema';
 import { estimateTokensSimple } from '../utils/token-estimation';
 import { buildCliSafeEnv } from './cli-env';
-import { CODEX_CONFINEMENT_DISABLED_FEATURES } from './codex-confinement-policy';
+import {
+  CODEX_CONFINEMENT_DISABLED_FEATURES,
+  CODEX_SHELL_ENVIRONMENT_POLICY,
+} from './codex-confinement-policy';
+import { CODEX_OPENROUTER_CONFIGURATION } from './codex-model-provider-configuration';
 import { prepareCodexCliBeforeAuthRead } from '../codex-oauth/codex-cli';
 import { prepareAccountGatewayModelCatalog } from '../codex-oauth/account-gateway-mimo-catalog';
 import {
@@ -52,6 +56,8 @@ import {
 export interface CodexProviderOptions {
   /** Internal T0 composition only; no user URL/account/provider-key override. */
   accountGateway?: LocalGatewayModelTransport;
+  /** Trusted provider API T0 composition; context access remains RR MCP-only. */
+  disableBuiltinTools?: boolean;
   agenticContext?: boolean;
   eventAudit?: boolean;
   modelProvider?: CodexModelProvider;
@@ -111,11 +117,6 @@ type CodexActualModelObservation =
 type CodexAgenticAuditMode = 'off' | 'rerun' | 'strict';
 
 const MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS = 24_000;
-
-const SHELL_ENVIRONMENT_POLICY_ARGS = [
-  'shell_environment_policy.ignore_default_excludes=false',
-  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}',
-] as const;
 
 const REVIEW_OUTPUT_CONTRACT = [
   'FINAL OUTPUT CONTRACT:',
@@ -456,6 +457,7 @@ export class CodexProvider extends Provider {
         outputSchemaFile: CODEX_SCHEMA_FILE_PLACEHOLDER,
         eventAudit,
         jsonEvents: auditMode !== 'off' || contextGateway !== undefined,
+        disableTools: this.options.disableBuiltinTools,
       },
       frozenCliConfig,
       contextGateway
@@ -769,6 +771,9 @@ export class CodexProvider extends Provider {
       }
       args.push('--disable', 'web_search_request');
     }
+    if (this.options.disableBuiltinTools && !contextGateway) {
+      args.push('-c', 'mcp_servers={}');
+    }
 
     if (contextGateway) {
       args.push(
@@ -816,16 +821,8 @@ export class CodexProvider extends Provider {
     }
 
     if (!this.options.accountGateway && config.modelProvider === 'openrouter') {
-      args.push(
-        '-c',
-        'model_provider="openrouter"',
-        '-c',
-        'model_providers.openrouter.name="openrouter"',
-        '-c',
-        'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
-        '-c',
-        'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
-      );
+      for (const setting of CODEX_OPENROUTER_CONFIGURATION)
+        args.push('-c', setting);
     }
 
     if (!this.options.accountGateway && config.modelProvider === 'mimo') {
@@ -848,7 +845,7 @@ export class CodexProvider extends Provider {
       );
     }
 
-    for (const configOverride of SHELL_ENVIRONMENT_POLICY_ARGS) {
+    for (const configOverride of CODEX_SHELL_ENVIRONMENT_POLICY) {
       args.push('-c', configOverride);
     }
 
@@ -1471,6 +1468,7 @@ export class CodexProvider extends Provider {
   }
 
   private shouldUseForkSandboxCodexHomeConfig(): boolean {
+    if (this.options.disableBuiltinTools) return false;
     return this.parseBooleanEnv(
       process.env.REVIEWROUTER_FORK_AGENTIC_SANDBOX,
       false

@@ -12021,7 +12021,8 @@ __export(production_t0_review_runner_exports, {
   resolveProductionContextGatewayPolicyVersion: () => resolveProductionContextGatewayPolicyVersion,
   resolveProductionContextGatewaySessionFactoryOptions: () => resolveProductionContextGatewaySessionFactoryOptions,
   resolveProductionInvestigationReasoningEffort: () => resolveProductionInvestigationReasoningEffort,
-  resolveT0AttemptBudget: () => resolveT0AttemptBudget
+  resolveT0AttemptBudget: () => resolveT0AttemptBudget,
+  selectDirectOpenRouterProvider: () => selectDirectOpenRouterProvider
 });
 module.exports = __toCommonJS(production_t0_review_runner_exports);
 var import_crypto34 = require("crypto");
@@ -23330,7 +23331,7 @@ var ConfigLoader = class {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.185",
+  version: "1.0.186",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -64795,6 +64796,10 @@ function buildCliSafeEnv(options = {}) {
 }
 
 // src/providers/codex-confinement-policy.ts
+var CODEX_SHELL_ENVIRONMENT_POLICY = Object.freeze([
+  "shell_environment_policy.ignore_default_excludes=false",
+  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}'
+]);
 var CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([
   "shell_tool",
   "unified_exec",
@@ -64814,6 +64819,14 @@ var CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([
   "memories",
   "external_agent_memory_import",
   "chronicle"
+]);
+
+// src/providers/codex-model-provider-configuration.ts
+var CODEX_OPENROUTER_CONFIGURATION = Object.freeze([
+  'model_provider="openrouter"',
+  'model_providers.openrouter.name="openrouter"',
+  'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
+  'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
 ]);
 
 // src/codex-oauth/codex-cli.ts
@@ -65234,6 +65247,13 @@ async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfig
   return setting;
 }
 
+// src/control-plane/generated/review-action-v2/companion-contracts.ts
+var providerApiCheckoutCompanionContract = Object.freeze({
+  path: "/api/action/v2/provider-api/checkout",
+  providerApiAuthMode: "openrouter-api",
+  workflowSchemaVersion: 2
+});
+
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
 var LOCAL_MODEL_CAPABILITY_ENV = "REVIEWROUTER_LOCAL_MODEL_TOKEN";
 var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
@@ -65579,10 +65599,6 @@ function isPlainObject(value) {
 
 // src/providers/codex.ts
 var MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS = 24e3;
-var SHELL_ENVIRONMENT_POLICY_ARGS = [
-  "shell_environment_policy.ignore_default_excludes=false",
-  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}'
-];
 var REVIEW_OUTPUT_CONTRACT = [
   "FINAL OUTPUT CONTRACT:",
   'Return exactly one JSON object with exactly two top-level arrays: "findings" and "revalidations".',
@@ -65825,7 +65841,8 @@ var CodexProvider = class _CodexProvider extends Provider {
         outputLastMessageFile: CODEX_OUTPUT_FILE_PLACEHOLDER,
         outputSchemaFile: CODEX_SCHEMA_FILE_PLACEHOLDER,
         eventAudit,
-        jsonEvents: auditMode !== "off" || contextGateway !== void 0
+        jsonEvents: auditMode !== "off" || contextGateway !== void 0,
+        disableTools: this.options.disableBuiltinTools
       },
       frozenCliConfig,
       contextGateway
@@ -66070,6 +66087,9 @@ ${JSON.stringify(outputSchema)}` : prompt;
       }
       args.push("--disable", "web_search_request");
     }
+    if (this.options.disableBuiltinTools && !contextGateway) {
+      args.push("-c", "mcp_servers={}");
+    }
     if (contextGateway) {
       args.push(
         "-c",
@@ -66109,16 +66129,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
       }
     }
     if (!this.options.accountGateway && config.modelProvider === "openrouter") {
-      args.push(
-        "-c",
-        'model_provider="openrouter"',
-        "-c",
-        'model_providers.openrouter.name="openrouter"',
-        "-c",
-        'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
-        "-c",
-        'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
-      );
+      for (const setting of CODEX_OPENROUTER_CONFIGURATION)
+        args.push("-c", setting);
     }
     if (!this.options.accountGateway && config.modelProvider === "mimo") {
       args.push(
@@ -66139,7 +66151,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         'web_search="disabled"'
       );
     }
-    for (const configOverride of SHELL_ENVIRONMENT_POLICY_ARGS) {
+    for (const configOverride of CODEX_SHELL_ENVIRONMENT_POLICY) {
       args.push("-c", configOverride);
     }
     if (this.options.accountGateway) {
@@ -66599,6 +66611,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     }
   }
   shouldUseForkSandboxCodexHomeConfig() {
+    if (this.options.disableBuiltinTools) return false;
     return this.parseBooleanEnv(
       process.env.REVIEWROUTER_FORK_AGENTIC_SANDBOX,
       false
@@ -71995,7 +72008,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
   });
 }
 var CodexReviewInvocationAdapter = class {
-  constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false, investigationReasoningEffort = "xhigh") {
+  constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false, investigationReasoningEffort = "xhigh", directCredentialLease) {
     this.provider = provider;
     this.promptBuilder = promptBuilder;
     this.timeoutMs = timeoutMs;
@@ -72003,6 +72016,7 @@ var CodexReviewInvocationAdapter = class {
     this.contextGateway = contextGateway;
     this.investigationManifestBindingEnabled = investigationManifestBindingEnabled;
     this.investigationReasoningEffort = investigationReasoningEffort;
+    this.directCredentialLease = directCredentialLease;
     for (const assignment of assignments) {
       if (this.assignments.has(assignment.workSlot.workSlotId)) {
         throw new Error("review_action_v2_assignment_duplicate");
@@ -72012,6 +72026,17 @@ var CodexReviewInvocationAdapter = class {
   }
   assignments = /* @__PURE__ */ new Map();
   prepared = /* @__PURE__ */ new WeakMap();
+  credentialsForInvocation(session) {
+    if (!this.directCredentialLease) return session;
+    const direct = this.directCredentialLease();
+    const environment = direct.environment;
+    if (direct.bearerToken !== void 0 || !environment || Object.keys(environment).join(",") !== "OPENROUTER_API_KEY" || !environment.OPENROUTER_API_KEY || session?.environment?.OPENROUTER_API_KEY !== void 0)
+      throw new Error("review_action_v2_direct_credential_lease_invalid");
+    return {
+      ...session,
+      environment: Object.freeze({ ...environment, ...session?.environment })
+    };
+  }
   async prepare(input) {
     const assignment = this.assignments.get(input.workSlot.workSlotId);
     if (!assignment || assignment.workSlot !== input.workSlot) {
@@ -72169,7 +72194,7 @@ var CodexReviewInvocationAdapter = class {
     if (!this.contextGateway) {
       const result2 = await this.provider.executePreparedInvocation(
         prepared,
-        void 0,
+        this.credentialsForInvocation(),
         input.signal
       );
       return normalizeReviewObservation({
@@ -72215,7 +72240,7 @@ var CodexReviewInvocationAdapter = class {
       }
       const result2 = await this.provider.executePreparedInvocation(
         runtimePrepared,
-        session.credentialLease,
+        this.credentialsForInvocation(session.credentialLease),
         input.signal
       );
       logger.info(
@@ -89538,6 +89563,12 @@ Return exactly one JSON object matching this schema, with no markdown or prose.`
     for (const feature of CODEX_CONFINEMENT_DISABLED_FEATURES) {
       args.push("--disable", feature);
     }
+    for (const setting of CODEX_SHELL_ENVIRONMENT_POLICY)
+      args.push("-c", setting);
+    if (this.options.modelProvider === "openrouter") {
+      for (const setting of CODEX_OPENROUTER_CONFIGURATION)
+        args.push("-c", setting);
+    }
     args.push(
       "-c",
       'approval_policy="never"',
@@ -92125,16 +92156,20 @@ var ProductionT0ReviewRunner = class {
     });
   }
   async runInWorkspace(input) {
-    const signal = input.accountGateway?.signal;
+    const signal = input.accountGateway?.signal ?? input.providerApi?.signal;
     signal?.throwIfAborted();
     const fetchImpl = signal ? createAccountGatewayRunFetch(this.fetchImpl, signal) : this.fetchImpl;
     validateInput(input);
+    if (input.providerApi && (input.accountGateway || input.ocr || input.providerInstanceId)) {
+      throw new Error("review_action_v2_direct_auth_route_invalid");
+    }
     if (input.ocr && !input.accountGateway) {
       throw new Error("review_action_v2_ocr_account_gateway_required");
     }
-    const agentProfile = input.accountGateway ? {
-      json: input.accountGateway.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
-      digest: input.accountGateway.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
+    const admittedRuntime = input.accountGateway?.runtimeConfig ?? input.providerApi?.runtimeConfig;
+    const agentProfile = admittedRuntime ? {
+      json: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
+      digest: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
     } : void 0;
     const approvedOcrAgent = input.ocr ? readApprovedOcrReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
     const approvedAgent = agentProfile && !input.ocr ? readApprovedReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
@@ -92155,10 +92190,12 @@ var ProductionT0ReviewRunner = class {
       process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY] = authoritativeDeadlineEpochMs;
     }
     signal?.throwIfAborted();
-    const loadedConfig = ConfigLoader.load();
+    const loadedConfig = input.providerApi ? ConfigLoader.loadRuntimeEnvironment(
+      input.providerApi.runtimeConfig.runtimeEnv
+    ) : ConfigLoader.load();
     const config = input.accountGateway ? { ...loadedConfig, providerRetries: 1 } : loadedConfig;
-    const codexProviderName = input.ocr ? "" : selectCodexProvider(config);
-    const model = codexProviderName.slice("codex/".length);
+    const codexProviderName = input.ocr ? "" : input.providerApi ? selectDirectOpenRouterProvider(config) : selectCodexProvider(config);
+    const model = codexProviderName.slice(codexProviderName.indexOf("/") + 1);
     const reasoningEffort = resolveProductionInvestigationReasoningEffort({
       codexModel: model,
       accountGateway: input.accountGateway !== void 0,
@@ -92177,8 +92214,8 @@ var ProductionT0ReviewRunner = class {
       apiUrl: input.apiUrl,
       fetchImpl
     });
-    const controlPlane = input.accountGateway?.controlPlane ?? new ReviewActionV2ControlPlaneAdapter(reviewActionClient);
-    const authorization = input.accountGateway ? controlPlane.currentAuthorization() : await controlPlane.authorize({
+    const controlPlane = input.accountGateway?.controlPlane ?? input.providerApi?.controlPlane ?? new ReviewActionV2ControlPlaneAdapter(reviewActionClient);
+    const authorization = input.accountGateway || input.providerApi ? controlPlane.currentAuthorization() : await controlPlane.authorize({
       oidcToken: await oidc.requestToken(input.audience)
     });
     validateAuthorizationInput(input, authorization);
@@ -92412,11 +92449,15 @@ var ProductionT0ReviewRunner = class {
     const provider = new CodexProvider(model, {
       agenticContext,
       eventAudit: config.codexEventAudit,
-      modelProvider: resolveAccountGatewayModelProvider(
+      modelProvider: input.providerApi ? "openrouter" : resolveAccountGatewayModelProvider(
         model,
         input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
         input.accountGateway?.modelTransport
       ),
+      ...input.providerApi ? {
+        providerNamePrefix: "openrouter",
+        disableBuiltinTools: true
+      } : {},
       ...input.accountGateway ? { accountGateway: input.accountGateway.modelTransport } : {}
     });
     const compatibilityKey = hashIncrementalCompatibility(
@@ -92457,7 +92498,9 @@ var ProductionT0ReviewRunner = class {
       providerTimeoutMs,
       agenticContext,
       contextGateway,
-      false
+      false,
+      "xhigh",
+      input.providerApi?.credentialLease
     );
     const investigationInvocationAdapter = createProductionReviewInvestigationInvocation({
       rollout: investigationRollout,
@@ -92469,7 +92512,8 @@ var ProductionT0ReviewRunner = class {
         agenticContext,
         contextGateway,
         true,
-        reasoningEffort
+        reasoningEffort,
+        input.providerApi?.credentialLease
       )
     });
     const identities = new DeterministicReviewOrchestrationIdentity();
@@ -92517,6 +92561,9 @@ var ProductionT0ReviewRunner = class {
           contextCriticEnabled: investigationRollout.contextCriticEnabled,
           agents: createConfiguredProductionInvestigationAgents({
             approvedAgent,
+            ...input.providerApi ? {
+              directCredentialLease: input.providerApi.credentialLease
+            } : {},
             codexModel: model,
             codexBinaryPath: input.codexBinaryPath,
             executionSessions: gateway,
@@ -92790,12 +92837,15 @@ function createConfiguredProductionInvestigationAgents(input) {
       requestedModel: input.codexModel,
       agent: new CodexReviewAgentAdapter(processRunner, {
         executionSessions: input.executionSessions,
-        modelProvider: resolveAccountGatewayModelProvider(
+        modelProvider: input.directCredentialLease ? "openrouter" : resolveAccountGatewayModelProvider(
           input.codexModel,
           input.admittedGatewayModel,
           input.modelTransport
         ),
-        providerCredentialEnvironment: input.modelTransport ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME }) : codexCredentialEnvironment,
+        providerCredentialEnvironment: input.directCredentialLease ? () => Object.freeze({
+          CODEX_HOME: process.env.CODEX_HOME,
+          ...input.directCredentialLease().environment
+        }) : input.modelTransport ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME }) : codexCredentialEnvironment,
         ...appServer && input.modelTransport ? {
           appServerRunner: {
             executeTurn: async (request) => {
@@ -93168,7 +93218,7 @@ async function prepareSingleT0ReviewPlan(input) {
   const provider = input.provider;
   const contextGateway = input.contextGateway;
   const runtimeConfigVersion = input.runtimeConfigVersion;
-  if (!authorization.facts.workflowIdentityHash || !/^[a-f0-9]{64}$/u.test(authorization.facts.workflowIdentityHash) || pr.number !== authorization.facts.pullRequestNumber || pr.baseSha !== authorization.facts.baseSha || pr.headSha !== authorization.facts.headSha || provider.name !== selectCodexProvider(config) || config.codexAgenticContext === false) {
+  if (!authorization.facts.workflowIdentityHash || !/^[a-f0-9]{64}$/u.test(authorization.facts.workflowIdentityHash) || pr.number !== authorization.facts.pullRequestNumber || pr.baseSha !== authorization.facts.baseSha || pr.headSha !== authorization.facts.headSha || provider.name !== (config.providers[0]?.startsWith("openrouter/") ? selectDirectOpenRouterProvider(config) : selectCodexProvider(config)) || config.codexAgenticContext === false) {
     throw new Error("review_action_v2_single_plan_authority_mismatch");
   }
   const compatibilityKey = hashIncrementalCompatibility(
@@ -93427,9 +93477,17 @@ function selectCodexProvider(config) {
   }
   return selected;
 }
+function selectDirectOpenRouterProvider(config) {
+  const selected = config.providers[0];
+  if (config.providers.length !== 1 || !selected || !/^openrouter\/[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(selected) || config.providerLimit !== 1 || config.providerMaxParallel !== 1 || config.inlineMinAgreement !== 1 || config.synthesisModel !== selected || config.fallbackProviders.length !== 0 || config.requiredHealthyProviders?.length !== 1 || config.requiredHealthyProviders[0] !== selected)
+    throw new Error("review_action_v2_direct_provider_policy_invalid");
+  return selected;
+}
 async function applyReviewRuntimeConfig(input, fetchImpl, oidc) {
-  if (input.accountGateway) {
-    return applyAdmittedRuntimeConfig(input.accountGateway.runtimeConfig);
+  if (input.accountGateway || input.providerApi) {
+    return applyAdmittedRuntimeConfig(
+      (input.accountGateway ?? input.providerApi).runtimeConfig
+    );
   }
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = "oidc";
   process.env.REVIEWROUTER_API_URL = input.apiUrl;
@@ -93608,5 +93666,6 @@ var CancellableReviewOrchestrationDelay = class extends SystemReviewOrchestratio
   resolveProductionContextGatewayPolicyVersion,
   resolveProductionContextGatewaySessionFactoryOptions,
   resolveProductionInvestigationReasoningEffort,
-  resolveT0AttemptBudget
+  resolveT0AttemptBudget,
+  selectDirectOpenRouterProvider
 });

@@ -395,9 +395,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         planned.assignments,
         {
           ...(signal ? { signal } : {}),
-          previewTimeoutMs: Math.floor(
-            executionDeadline.clampProviderTimeout(providerTimeoutMs)
-          ),
+          previewTimeoutMs: () =>
+            Math.floor(
+              executionDeadline.clampProviderTimeout(providerTimeoutMs)
+            ),
           model: ocrModel,
           binaryPath: input.ocr.run.binaryPath,
           binarySha256: approvedOcrAgent.binarySha256,

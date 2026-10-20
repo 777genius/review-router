@@ -343,7 +343,7 @@ describe('OcrReviewInvocationAdapter', () => {
     readonly planInputOverrides?: Record<string, unknown>;
     readonly lifecycle?: {
       readonly signal?: AbortSignal;
-      readonly previewTimeoutMs?: number;
+      readonly previewTimeoutMs?: () => number;
     };
   }): {
     adapter: OcrReviewInvocationAdapter;
@@ -508,7 +508,7 @@ describe('OcrReviewInvocationAdapter', () => {
         processRunner: processRunner.runner,
         lifecycle: {
           signal: root.signal,
-          previewTimeoutMs: source === 'deadline' ? 25 : 1000,
+          previewTimeoutMs: () => (source === 'deadline' ? 25 : 1000),
         },
         previewRunner: async (input) => {
           fs.writeFileSync(
@@ -540,6 +540,24 @@ describe('OcrReviewInvocationAdapter', () => {
       expect(processRunner.calls).toHaveLength(0);
     }
   );
+
+  it('does not launch preview when the execution budget expires after composition', async () => {
+    let remainingMs = 1000;
+    const preview = previewRunner();
+    const engine = processRunnerWriting(nativeResultBody());
+    const { adapter, workSlot } = adapterFixture({
+      bridge: bridgeFixture().bridge,
+      processRunner: engine.runner,
+      previewRunner: preview.runner,
+      lifecycle: { previewTimeoutMs: () => remainingMs },
+    });
+    remainingMs = 0;
+    await expect(
+      adapter.prepare({ workSlot, attemptOrdinal: 1 })
+    ).rejects.toThrow('review_action_v2_ocr_preview_timeout');
+    expect(preview.calls).toHaveLength(0);
+    expect(engine.calls).toHaveLength(0);
+  });
 
   it('executes one managed run and reports the observed model with one transport attempt', async () => {
     const { bridge, requests } = bridgeFixture();

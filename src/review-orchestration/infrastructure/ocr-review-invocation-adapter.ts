@@ -114,7 +114,7 @@ export type OcrReviewInvocationOptions = Readonly<{
   /** Root cancellation also owns the model-free preparation process. */
   signal?: AbortSignal;
   /** Remaining preparation window captured from the execution deadline. */
-  previewTimeoutMs?: number;
+  previewTimeoutMs?: () => number;
   model: string;
   binaryPath: string;
   binarySha256: string;
@@ -499,7 +499,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       'preview.json'
     );
     const timeoutMs =
-      this.options.previewTimeoutMs ??
+      this.options.previewTimeoutMs?.() ??
       this.options.limits.requestTimeoutSec * 1000;
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
       throw new Error('review_action_v2_ocr_preview_timeout');

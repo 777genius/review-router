@@ -86295,7 +86295,7 @@ var OcrReviewInvocationAdapter = class {
       this.options.run.runDirectory,
       "preview.json"
     );
-    const timeoutMs = this.options.previewTimeoutMs ?? this.options.limits.requestTimeoutSec * 1e3;
+    const timeoutMs = this.options.previewTimeoutMs?.() ?? this.options.limits.requestTimeoutSec * 1e3;
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
       throw new Error("review_action_v2_ocr_preview_timeout");
     }
@@ -92097,7 +92097,7 @@ var ProductionT0ReviewRunner = class {
         planned2.assignments,
         {
           ...signal ? { signal } : {},
-          previewTimeoutMs: Math.floor(
+          previewTimeoutMs: () => Math.floor(
             executionDeadline.clampProviderTimeout(providerTimeoutMs)
           ),
           model: ocrModel,

@@ -30,7 +30,7 @@ UPSTREAM_COMMIT=8eb83340a487b1150af00701b94f01af97e4b4d6 # v1.13.1
 UPSTREAM_NAME=alibaba/open-code-review
 OUTCOME_SCHEMA_VERSION=reviewrouter.ocr-outcome/v1
 RELEASE_VERSION=1.13.1-rr.2
-BUILD_FLAGS="-trimpath -ldflags -X=main.Version=$RELEASE_VERSION"
+BUILD_FLAGS="-trimpath -buildvcs=false -ldflags -X=main.Version=$RELEASE_VERSION"
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
 patches_dir="$script_dir/patches"

@@ -1,7 +1,7 @@
 {
   "canonicalizerDigest": "12408727c244f65242534d3060983b87221715f2086631ab743c2c6f6248629a",
   "contractExportVersion": 1,
-  "expectedPublicActionBaseCommit": "46b070358e91fe4ca436218920857716426eacd1",
+  "expectedPublicActionBaseCommit": "f96044639fb23b83632ee32e09349f9d99a15ae0",
   "generatedFileDigests": {
     "fixtures/provider-invocation-manifest-v1.golden.json": "9e0369a80cb91c458befaf0b2aeb41be5b98246e0217b032e8fca414dab579bb",
     "fixtures/review-action-v2.golden.json": "3a6ac679431d56ff9a19d5cc77e057460ce2f2080f2c1813247f4842ec1831be",
@@ -54,6 +54,6 @@
   },
   "goldenFixtureDigest": "d6d5a918ce9e5e01a14aa9714a77d6557fcaee90c68e272cbc3f925f3e4c94a4",
   "protocolVersion": "2",
-  "saasSourceCommit": "59df84cad1241ac624821d646dd7ee0d754c5aab",
+  "saasSourceCommit": "548109df54f965a8253615441ab518b24490b583",
   "schemaDigest": "32bb25cd3490660dbaeecaa168f162ba97ff171e2dfab69e1bd435bc2e1cf3d3"
 }

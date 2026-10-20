@@ -26,6 +26,7 @@ const body = JSON.stringify({
   input: 'synthetic',
   stream: true,
   store: false,
+  service_tier: 'default',
 });
 const completed = (id: string) =>
   `event: response.completed\ndata: ${JSON.stringify({
@@ -923,7 +924,12 @@ if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
             RR_TERMINAL_CANCELLATION_PROBE_ROOT: root,
           },
         }
-      );
+      ).catch((error: Error & { stdout?: string; stderr?: string }) => {
+        // execFile's default message hides the child TAP assertion in CI.
+        throw new Error(
+          [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
+        );
+      });
       expect(result.stdout).toMatch(/# tests 12\b/);
       expect(result.stdout).toMatch(/# pass 12\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);

@@ -105,6 +105,7 @@ export function classifySafeInvocationFailureReason(
   if (failureClass === 'authentication_unavailable') {
     return 'authentication_unavailable';
   }
+  if (failureClass === 'admission_limited') return 'admission_limited';
 
   const text = diagnosticText(error);
   if (error instanceof ReviewInvocationConfigurationMismatchError) {

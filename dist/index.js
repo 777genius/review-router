@@ -23140,6 +23140,7 @@ async function startLocalGatewayModelTransport(transport, observe) {
     configuration: codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
     requestCount: () => dispatchedRequests,
+    failureFact: () => transport.lastFailure,
     async dispose() {
       stopping = true;
       transport.cancelHeldStreams();
@@ -94067,6 +94068,7 @@ var RunT0ReviewOrchestration = class {
       const exhaustedWorkSlotIds = [];
       const exhaustedWorkSlotReasons = /* @__PURE__ */ new Map();
       const busyPollsByProviderLane = /* @__PURE__ */ new Map();
+      let admissionLimited = false;
       const restoredSlots = new Map(
         execution.restoredExecution.workSlots.map((slot) => [
           slot.workSlotId,
@@ -94124,6 +94126,7 @@ var RunT0ReviewOrchestration = class {
           revision: command,
           restoredSlot,
           busyPollsByProviderLane,
+          admissionLimited,
           onEvent: (event) => {
             state = evolveReviewOrchestration(state, event);
           }
@@ -94150,6 +94153,9 @@ var RunT0ReviewOrchestration = class {
               workSlot.workSlotId,
               outcome.exhaustionReason
             );
+          }
+          if (outcome.exhaustionReason === "admission_limited" /* AdmissionLimited */) {
+            admissionLimited = true;
           }
           this.dependencies.progress?.report({
             type: "exhausted",
@@ -94600,6 +94606,16 @@ var RunT0ReviewOrchestration = class {
           "review_orchestration_restored_observation_unavailable"
         );
       }
+      if (input.admissionLimited) {
+        input.onEvent({
+          type: "slot_exhausted" /* SlotExhausted */,
+          workSlotId: input.workSlot.workSlotId
+        });
+        return {
+          streamVersion,
+          exhaustionReason: "admission_limited" /* AdmissionLimited */
+        };
+      }
       if (!this.canStartInvocation(attemptOrdinal)) {
         input.onEvent({
           type: "slot_exhausted" /* SlotExhausted */,
@@ -94907,6 +94923,16 @@ var RunT0ReviewOrchestration = class {
           }
           if (failureClass === "configuration_mismatch" /* ConfigurationMismatch */) {
             throw error2 instanceof ReviewInvocationConfigurationMismatchError ? error2 : new Error("review_invocation_configuration_mismatch");
+          }
+          if (failureClass === "admission_limited" /* AdmissionLimited */) {
+            input.onEvent({
+              type: "slot_exhausted" /* SlotExhausted */,
+              workSlotId: input.workSlot.workSlotId
+            });
+            return {
+              streamVersion,
+              exhaustionReason: "admission_limited" /* AdmissionLimited */
+            };
           }
           continue;
         }
@@ -95532,6 +95558,9 @@ function derivePartialFailureCode(input) {
     }
     if (reason === "deadline_reached" /* DeadlineReached */) {
       return "required_execution_deadline_reached";
+    }
+    if (reason === "admission_limited" /* AdmissionLimited */) {
+      return "required_admission_limited";
     }
     return "required_work_exhausted";
   }
@@ -112258,7 +112287,14 @@ function isRecord9(value) {
 
 // src/review-orchestration/infrastructure/provider-invocation-failure-classifier.ts
 var ProviderInvocationFailureClassifier = class {
+  constructor(gatewayFailureFact = () => void 0) {
+    this.gatewayFailureFact = gatewayFailureFact;
+  }
   classify(error2) {
+    const fact = this.gatewayFailureFact();
+    if (fact?.code === "admission_limited" && (fact.effect === "not_dispatched" || fact.effect === "rejected_before_dispatch")) {
+      return "admission_limited" /* AdmissionLimited */;
+    }
     if (classifyProviderCapacitySignal({ error: error2 }) === "capacity_pressure" /* CapacityPressure */) {
       return "capacity_unavailable" /* CapacityUnavailable */;
     }
@@ -112343,6 +112379,7 @@ function classifySafeInvocationFailureReason(error2, failureClass) {
   if (failureClass === "authentication_unavailable") {
     return "authentication_unavailable";
   }
+  if (failureClass === "admission_limited") return "admission_limited";
   const text = diagnosticText(error2);
   if (error2 instanceof ReviewInvocationConfigurationMismatchError) {
     return error2.reason;
@@ -117759,7 +117796,9 @@ var ProductionT0ReviewRunner = class {
           ocrCompatibilityKey
         ),
         invocations: invocationAdapter2,
-        invocationFailureClassifier: new ProviderInvocationFailureClassifier(),
+        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+          modelTransport.failureFact
+        ),
         invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
         investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
           logger
@@ -118008,7 +118047,9 @@ var ProductionT0ReviewRunner = class {
       ),
       invocations: invocationAdapter,
       ...investigationInvocationAdapter ? { investigationInvocations: investigationInvocationAdapter } : {},
-      invocationFailureClassifier: new ProviderInvocationFailureClassifier(),
+      invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+        input.accountGateway?.modelTransport.failureFact
+      ),
       invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
       investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
         logger
@@ -118354,6 +118395,7 @@ function mapPartialFailureReason(failureCode2) {
       return "required_work_exhausted" /* RequiredWorkExhausted */;
     case "required_investigation_deferred":
       return "required_investigation_deferred" /* RequiredInvestigationDeferred */;
+    case "required_admission_limited":
     case "required_execution_deadline_reached":
       return "required_work_exhausted" /* RequiredWorkExhausted */;
     default:

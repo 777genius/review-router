@@ -125,6 +125,7 @@ export type LocalGatewayModelTransport = Readonly<{
    * run evidence only: a managed engine may not claim success with zero model
    * requests, so acceptance reads this instead of guessing from exit status. */
   requestCount?(): number;
+  failureFact(): GatewayFailureFact | undefined;
   dispose(): Promise<void>;
 }>;
 
@@ -706,6 +707,7 @@ export async function startLocalGatewayModelTransport(
     configuration: codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
     requestCount: () => dispatchedRequests,
+    failureFact: () => transport.lastFailure,
     async dispose() {
       stopping = true;
       transport.cancelHeldStreams();

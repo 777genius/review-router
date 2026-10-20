@@ -1565,6 +1565,41 @@ describe('RunT0ReviewOrchestration', () => {
     expect(fixture.dependencies.projectionBuilder.build).not.toHaveBeenCalled();
   });
 
+  it('stops the remaining work slots on terminal admission refusal without burning attempts', async () => {
+    const fixture = createFixture({
+      workSlotCount: 2,
+      maxAttempts: 2,
+      allowPartial: true,
+    });
+    jest
+      .mocked(fixture.dependencies.invocations.execute)
+      .mockRejectedValue(new Error('account_gateway_inference_denied'));
+    jest
+      .mocked(fixture.dependencies.invocationFailureClassifier.classify)
+      .mockReturnValue('admission_limited' as ReviewInvocationFailureClass);
+
+    const result = await fixture.useCase.execute(fixture.command);
+
+    expect(result).toMatchObject({
+      status: ReviewOrchestrationResultStatus.PartialCompleted,
+      failureCode: 'required_admission_limited',
+    });
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+    expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+      expect.objectContaining({ exhaustedWorkSlotIds: ['slot-1', 'slot-2'] })
+    );
+    expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledWith(
+      expect.objectContaining({ allowPartial: true })
+    );
+    expect(fixture.controlPlane.terminalizeWorkSlot).not.toHaveBeenCalled();
+  });
+
   it('keeps record-only investigation failures isolated from the legacy review', async () => {
     const failure = new ReviewInvocationConfigurationMismatchError(
       ReviewInvocationConfigurationMismatchReason.ContextGatewayPolicyMismatch
@@ -2383,6 +2418,7 @@ describe('RunT0ReviewOrchestration', () => {
 function createFixture(
   options: {
     maxAttempts?: number;
+    workSlotCount?: number;
     allowPartial?: boolean;
     investigationMode?: ReviewInvestigationRecordingMode;
     investigationVerifiedCleanEffectsEnabled?: boolean;
@@ -2464,18 +2500,19 @@ function createFixture(
       },
     }),
   } as jest.Mocked<ReviewActionV2ControlPlanePort>;
-  const workSlots = [
-    {
-      workSlotId: 'slot-1',
+  const workSlots = Array.from(
+    { length: options.workSlotCount ?? 1 },
+    (_, index) => ({
+      workSlotId: `slot-${index + 1}`,
       taskKind: ReviewTaskKind.FindingDiscovery,
       providerKind: ReviewExecutionProviderKind.Codex,
       providerVoteIdentityHash: hash('vote'),
-      shardKey: 'batch-1',
+      shardKey: `batch-${index + 1}`,
       required: true,
       attemptBudget: options.maxAttempts ?? 1,
       retryPolicyVersion: 'retry-v1',
-    },
-  ] as const;
+    })
+  );
   const command: RunT0ReviewOrchestrationCommand = {
     executionId: 'execution-1',
     baseSha: '1'.repeat(40),
@@ -2493,17 +2530,19 @@ function createFixture(
     ownerIdHash: hash('owner'),
     allowPartial: options.allowPartial ?? false,
   };
-  let acquiredProviderAttempts = 0;
+  const acquiredProviderAttempts = new Map<string, number>();
   let serverExhausted = false;
-  controlPlane.acquireInvocationLease.mockImplementation(async () => {
-    if (acquiredProviderAttempts >= (options.maxAttempts ?? 1)) {
+  controlPlane.acquireInvocationLease.mockImplementation(async (input) => {
+    const workSlotId = input.workSlot.workSlotId;
+    const attempts = acquiredProviderAttempts.get(workSlotId) ?? 0;
+    if (attempts >= (options.maxAttempts ?? 1)) {
       serverExhausted = true;
       return {
         status:
           ReviewInvocationLeaseAcquireOutcomeStatus.AttemptBudgetExhausted,
       };
     }
-    acquiredProviderAttempts += 1;
+    acquiredProviderAttempts.set(workSlotId, attempts + 1);
     return {
       status: ReviewInvocationLeaseAcquireOutcomeStatus.Acquired,
       lease,

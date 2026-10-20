@@ -61,6 +61,7 @@ export enum ReviewInvocationFailureClass {
   CapacityUnavailable = 'capacity_unavailable',
   AuthenticationUnavailable = 'authentication_unavailable',
   ConfigurationMismatch = 'configuration_mismatch',
+  AdmissionLimited = 'admission_limited',
 }
 
 export enum ReviewPublicationState {

@@ -86695,6 +86695,7 @@ function readApprovedOcrReviewAgent(json2, digest3) {
     cancellation: true
   });
 }
+var OCR_BINARY_ASSET_LIMIT_BYTES = 128 * 1024 * 1024;
 
 // src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
 var import_child_process11 = require("child_process");

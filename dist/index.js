@@ -46422,10 +46422,10 @@ var Minimatch = class {
       }
       return filtered.join("/");
     }).join("|");
-    const [open3, close] = set2.length > 1 ? ["(?:", ")"] : ["", ""];
-    re2 = "^" + open3 + re2 + close + "$";
+    const [open4, close] = set2.length > 1 ? ["(?:", ")"] : ["", ""];
+    re2 = "^" + open4 + re2 + close + "$";
     if (this.partial) {
-      re2 = "^(?:\\/|" + open3 + re2.slice(1, -1) + close + ")$";
+      re2 = "^(?:\\/|" + open4 + re2.slice(1, -1) + close + ")$";
     }
     if (this.negate)
       re2 = "^(?!" + re2 + ").+$";
@@ -50350,8 +50350,8 @@ var ReviewOrchestrator = class {
     if (!tracker || providers.length === 0) return providers;
     const available = [];
     for (const provider of providers) {
-      const open3 = await tracker.isCircuitOpen(provider.name);
-      if (open3) {
+      const open4 = await tracker.isCircuitOpen(provider.name);
+      if (open4) {
         logger.warn(`Skipping provider ${provider.name} (circuit open)`);
         continue;
       }
@@ -98356,6 +98356,108 @@ async function verifyApprovedOcrBinary(input) {
   input.signal?.throwIfAborted();
   return binaryPath;
 }
+var OCR_BINARY_ASSET_LIMIT_BYTES = 128 * 1024 * 1024;
+var OCR_BINARY_ASSET_DOWNLOAD_TIMEOUT_MS = 12e4;
+async function resolveApprovedOcrBinary(input) {
+  const env = input.env ?? process.env;
+  input.signal?.throwIfAborted();
+  if (env.REVIEWROUTER_OCR_BINARY) {
+    return {
+      binaryPath: await verifyApprovedOcrBinary(input),
+      cleanup: async () => {
+      }
+    };
+  }
+  if (process.platform !== "linux" || process.arch !== "x64") {
+    throw new Error("review_action_v2_ocr_asset_platform_unsupported");
+  }
+  const { packageVersion, binarySha256 } = input.approvedAgent;
+  if (packageVersion.length > 128 || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/u.test(packageVersion) || !/^[a-f0-9]{64}$/u.test(binarySha256)) {
+    throw new Error("review_action_v2_ocr_asset_identity_invalid");
+  }
+  const directory = await fs19.mkdtemp(
+    path16.join(env.RUNNER_TEMP || os7.tmpdir(), "reviewrouter-ocr-binary-")
+  );
+  let cleaned = false;
+  const cleanup = async () => {
+    if (cleaned) return;
+    await fs19.rm(directory, { recursive: true, force: true });
+    cleaned = true;
+  };
+  try {
+    await fs19.chmod(directory, 448);
+    const binaryPath = path16.join(directory, "opencodereview");
+    const timeout = new AbortController();
+    const signal = input.signal ? AbortSignal.any([input.signal, timeout.signal]) : timeout.signal;
+    const timer = setTimeout(
+      () => timeout.abort(new Error("review_action_v2_ocr_asset_download_timeout")),
+      OCR_BINARY_ASSET_DOWNLOAD_TIMEOUT_MS
+    );
+    try {
+      signal.throwIfAborted();
+      const response = await (input.fetchImpl ?? fetch)(
+        `https://github.com/777genius/review-router/releases/download/ocr-v${packageVersion}/opencodereview-linux-amd64`,
+        {
+          signal,
+          credentials: "omit",
+          headers: { Accept: "application/octet-stream" }
+        }
+      );
+      signal.throwIfAborted();
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error(`review_action_v2_ocr_asset_http:${response.status}`);
+      }
+      await writeOcrAsset(response, binaryPath, signal);
+    } finally {
+      clearTimeout(timer);
+    }
+    input.signal?.throwIfAborted();
+    await fs19.chmod(binaryPath, 448);
+    await verifyApprovedOcrBinary({
+      approvedAgent: input.approvedAgent,
+      signal: input.signal,
+      env: { ...env, REVIEWROUTER_OCR_BINARY: binaryPath }
+    });
+    return { binaryPath, cleanup };
+  } catch (error2) {
+    await cleanup();
+    throw error2;
+  }
+}
+async function writeOcrAsset(response, binaryPath, signal) {
+  if (!response.body)
+    throw new Error("review_action_v2_ocr_asset_body_missing");
+  const reader = response.body.getReader();
+  const cancel = () => {
+    void reader.cancel(signal.reason).catch(() => void 0);
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  let file;
+  try {
+    signal.throwIfAborted();
+    const declaredBytes = Number(response.headers.get("content-length"));
+    if (declaredBytes > OCR_BINARY_ASSET_LIMIT_BYTES) {
+      throw new Error("review_action_v2_ocr_asset_too_large");
+    }
+    file = await fs19.open(binaryPath, "wx", 384);
+    let bytes = 0;
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+      signal.throwIfAborted();
+      bytes += chunk.value.byteLength;
+      if (bytes > OCR_BINARY_ASSET_LIMIT_BYTES) {
+        throw new Error("review_action_v2_ocr_asset_too_large");
+      }
+      await file.writeFile(chunk.value);
+    }
+    signal.throwIfAborted();
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    await reader.cancel().catch(() => void 0);
+    reader.releaseLock();
+    await file?.close();
+  }
+}
 async function prepareOcrManagedRun(input) {
   const env = input.env ?? process.env;
   const binaryPath = await verifyApprovedOcrBinary({
@@ -98374,7 +98476,11 @@ async function prepareOcrManagedRun(input) {
       mode: 448
     });
     await fs19.chmod(homeDirectory, 448);
-    const configPath = path16.join(homeDirectory, ".opencodereview", "config.json");
+    const configPath = path16.join(
+      homeDirectory,
+      ".opencodereview",
+      "config.json"
+    );
     await fs19.writeFile(
       configPath,
       buildOcrManagedConfigJson({
@@ -105321,6 +105427,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
   let cli;
   let bridge;
   let ocrRun;
+  let ocrBinary;
   let reason = "failed";
   const onSignal = () => {
     reason = "cancelled";
@@ -105382,7 +105489,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         agentProfileJson,
         agentProfileDigest
       );
-      await verifyApprovedOcrBinary({
+      ocrBinary = await resolveApprovedOcrBinary({
         approvedAgent: ocrAgent,
         signal: run2.signal
       });
@@ -105457,7 +105564,11 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3,
         modelReasoningEffort: capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
         language: capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
-        signal: run2.signal
+        signal: run2.signal,
+        env: {
+          ...process.env,
+          REVIEWROUTER_OCR_BINARY: ocrBinary.binaryPath
+        }
       });
     } else {
       codexHome = await fs21.mkdtemp(
@@ -105556,6 +105667,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         };
         await cleanup("bridge", async () => bridge?.dispose());
         await cleanup("OCR run", async () => ocrRun?.cleanup());
+        await cleanup("OCR binary", async () => ocrBinary?.cleanup());
         if (codexHome)
           await cleanup(
             "CODEX_HOME",

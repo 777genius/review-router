@@ -31,7 +31,7 @@ import {
   prepareOcrManagedRun,
   readApprovedOcrReviewAgent,
   readApprovedReviewAgentKind,
-  verifyApprovedOcrBinary,
+  resolveApprovedOcrBinary,
   type ApprovedOcrReviewAgent,
   type OcrManagedRunHandle,
 } from './ocr-managed-bootstrap';
@@ -157,6 +157,7 @@ async function runAccountGatewayRuntimeInternal(
   let cli: PreparedCodexCli | undefined;
   let bridge: LocalGatewayModelTransport | undefined;
   let ocrRun: OcrManagedRunHandle | undefined;
+  let ocrBinary: Awaited<ReturnType<typeof resolveApprovedOcrBinary>> | undefined;
   let reason: GatewayCloseReason = 'failed';
   const onSignal = () => {
     reason = 'cancelled';
@@ -233,7 +234,7 @@ async function runAccountGatewayRuntimeInternal(
         agentProfileJson,
         agentProfileDigest
       );
-      await verifyApprovedOcrBinary({
+      ocrBinary = await resolveApprovedOcrBinary({
         approvedAgent: ocrAgent,
         signal: run.signal,
       });
@@ -316,6 +317,10 @@ async function runAccountGatewayRuntimeInternal(
         language:
           capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
         signal: run.signal,
+        env: {
+          ...process.env,
+          REVIEWROUTER_OCR_BINARY: ocrBinary!.binaryPath,
+        },
       });
     } else {
       codexHome = await fs.mkdtemp(
@@ -435,6 +440,7 @@ async function runAccountGatewayRuntimeInternal(
         await cleanup('bridge', async () => bridge?.dispose());
         // Private OCR run dir removal also covers cache-hit/early-exit paths.
         await cleanup('OCR run', async () => ocrRun?.cleanup());
+        await cleanup('OCR binary', async () => ocrBinary?.cleanup());
         if (codexHome)
           await cleanup('CODEX_HOME', () =>
             fs.rm(codexHome!, { recursive: true, force: true })

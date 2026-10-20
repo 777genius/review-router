@@ -10,7 +10,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
+  OCR_BINARY_ASSET_LIMIT_BYTES,
   prepareOcrManagedRun,
+  resolveApprovedOcrBinary,
   readApprovedOcrReviewAgent,
   readApprovedReviewAgentKind,
   verifyApprovedOcrBinary,
@@ -55,9 +57,9 @@ describe('approved OCR profile parser (§4.1 seven keys)', () => {
     expect(() => readApprovedReviewAgentKind(json, '0'.repeat(64))).toThrow(
       'review_agent_profile_digest_mismatch'
     );
-    expect(() =>
-      readApprovedOcrReviewAgent(json, '0'.repeat(64))
-    ).toThrow('review_agent_profile_digest_mismatch');
+    expect(() => readApprovedOcrReviewAgent(json, '0'.repeat(64))).toThrow(
+      'review_agent_profile_digest_mismatch'
+    );
   });
 
   it.each([
@@ -138,7 +140,10 @@ describe('verifyApprovedOcrBinary / prepareOcrManagedRun (§5.2)', () => {
     await expect(
       verifyApprovedOcrBinary({
         approvedAgent,
-        env: { REVIEWROUTER_OCR_BINARY: 'relative/path', PATH: process.env.PATH },
+        env: {
+          REVIEWROUTER_OCR_BINARY: 'relative/path',
+          PATH: process.env.PATH,
+        },
       })
     ).rejects.toThrow('review_action_v2_ocr_binary_unavailable');
     await expect(
@@ -216,9 +221,250 @@ describe('verifyApprovedOcrBinary / prepareOcrManagedRun (§5.2)', () => {
   });
 });
 
+describe('run-owned approved OCR release assets', () => {
+  let workspace: string;
+  let env: NodeJS.ProcessEnv;
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  const arch = Object.getOwnPropertyDescriptor(process, 'arch')!;
+  const bytes = Buffer.from('#!/bin/sh\necho "ocr-fake 1.2.3"\n');
+  const approvedAgent = readApprovedOcrReviewAgent(
+    profileJson({
+      binarySha256: createHash('sha256').update(bytes).digest('hex'),
+    }),
+    digestOf(
+      profileJson({
+        binarySha256: createHash('sha256').update(bytes).digest('hex'),
+      })
+    )
+  );
+
+  beforeEach(() => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-ocr-asset-'));
+    env = { RUNNER_TEMP: workspace, PATH: process.env.PATH };
+    Object.defineProperty(process, 'platform', { ...platform, value: 'linux' });
+    Object.defineProperty(process, 'arch', { ...arch, value: 'x64' });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', platform);
+    Object.defineProperty(process, 'arch', arch);
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+    fs.rmSync(workspace, { recursive: true, force: true });
+  });
+
+  it('downloads the versioned public asset, verifies it, and removes only its private copy', async () => {
+    const fetchImpl: jest.MockedFunction<typeof fetch> = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >(async () => new Response(bytes));
+    const handle = await resolveApprovedOcrBinary({
+      approvedAgent,
+      env,
+      fetchImpl,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      'https://github.com/777genius/review-router/releases/download/ocr-v1.2.3/opencodereview-linux-amd64'
+    );
+    expect(fetchImpl.mock.calls[0][1]).toMatchObject({ credentials: 'omit' });
+    expect(fs.readFileSync(handle.binaryPath)).toEqual(bytes);
+    expect(fs.statSync(path.dirname(handle.binaryPath)).mode & 0o777).toBe(
+      0o700
+    );
+    expect(fs.statSync(handle.binaryPath).mode & 0o777).toBe(0o700);
+    // Reusing the captured path for prepare performs no second download.
+    expect(
+      await verifyApprovedOcrBinary({
+        approvedAgent,
+        env: { ...env, REVIEWROUTER_OCR_BINARY: handle.binaryPath },
+      })
+    ).toBe(handle.binaryPath);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    await handle.cleanup();
+    await handle.cleanup();
+    expect(fs.readdirSync(workspace)).toEqual([]);
+  });
+
+  it('preserves an explicit absolute binary override without downloading or removing it', async () => {
+    const binaryPath = path.join(workspace, 'existing');
+    fs.writeFileSync(binaryPath, bytes, { mode: 0o700 });
+    const fetchImpl: jest.MockedFunction<typeof fetch> = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >();
+    const handle = await resolveApprovedOcrBinary({
+      approvedAgent,
+      env: { ...env, REVIEWROUTER_OCR_BINARY: binaryPath },
+      fetchImpl,
+    });
+    await handle.cleanup();
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(fs.existsSync(binaryPath)).toBe(true);
+    await expect(
+      resolveApprovedOcrBinary({
+        approvedAgent,
+        env: { ...env, REVIEWROUTER_OCR_BINARY: 'relative' },
+        fetchImpl,
+      })
+    ).rejects.toThrow('review_action_v2_ocr_binary_unavailable');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it.each(['digest', 'version'] as const)(
+    'cleans failed %s verification and never executes a digest mismatch',
+    async (failure) => {
+      const marker = path.join(workspace, 'executed');
+      const candidate = Buffer.from(
+        `#!/bin/sh\necho executed > '${marker}'\necho "ocr-fake 9.9.9"\n`
+      );
+      const fetchImpl: jest.MockedFunction<typeof fetch> = jest.fn<
+        ReturnType<typeof fetch>,
+        Parameters<typeof fetch>
+      >(async () => new Response(candidate));
+      const profile =
+        failure === 'digest'
+          ? approvedAgent
+          : {
+              ...approvedAgent,
+              binarySha256: createHash('sha256')
+                .update(candidate)
+                .digest('hex'),
+            };
+      await expect(
+        resolveApprovedOcrBinary({ approvedAgent: profile, env, fetchImpl })
+      ).rejects.toThrow(
+        failure === 'digest'
+          ? 'review_agent_binary_drift'
+          : 'review_agent_version_drift'
+      );
+      expect(fs.existsSync(marker)).toBe(failure === 'version');
+      expect(fs.readdirSync(workspace)).toEqual(
+        failure === 'version' ? ['executed'] : []
+      );
+    }
+  );
+
+  it('bounds actual streamed bytes even without a content length, then cancels and removes the partial asset', async () => {
+    const cancelled = jest.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(OCR_BINARY_ASSET_LIMIT_BYTES + 1));
+      },
+      cancel: cancelled,
+    });
+    const fetchImpl: jest.MockedFunction<typeof fetch> = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >(async () => new Response(body));
+    await expect(
+      resolveApprovedOcrBinary({ approvedAgent, env, fetchImpl })
+    ).rejects.toThrow('review_action_v2_ocr_asset_too_large');
+    expect(cancelled).toHaveBeenCalled();
+    expect(fs.readdirSync(workspace)).toEqual([]);
+  });
+
+  it('cancels an unfinished response body and closes its private output on root abort', async () => {
+    let reading!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      reading = resolve;
+    });
+    const cancelled = jest.fn();
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull: reading,
+        cancel: cancelled,
+      },
+      { highWaterMark: 0 }
+    );
+    const fetchImpl: jest.MockedFunction<typeof fetch> = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >(async () => new Response(body));
+    const controller = new AbortController();
+    const pending = resolveApprovedOcrBinary({
+      approvedAgent,
+      env,
+      fetchImpl,
+      signal: controller.signal,
+    });
+    const rejected = expect(pending).rejects.toThrow('fixture_body_cancelled');
+    await ready;
+    controller.abort(new Error('fixture_body_cancelled'));
+    await rejected;
+    expect(cancelled).toHaveBeenCalled();
+    expect(fs.readdirSync(workspace)).toEqual([]);
+  });
+
+  it.each(['root', 'deadline'] as const)(
+    'cancels a pending download on %s and cleans its private directory',
+    async (cause) => {
+      if (cause === 'deadline') jest.useFakeTimers();
+      let started!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const controller = new AbortController();
+      const fetchImpl: jest.MockedFunction<typeof fetch> = jest.fn<
+        ReturnType<typeof fetch>,
+        Parameters<typeof fetch>
+      >(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init!.signal!.addEventListener(
+              'abort',
+              () => reject(init!.signal!.reason),
+              { once: true }
+            );
+            started();
+          })
+      );
+      const pending = resolveApprovedOcrBinary({
+        approvedAgent,
+        env,
+        signal: controller.signal,
+        fetchImpl,
+      });
+      const rejected = expect(pending).rejects.toThrow(
+        cause === 'root'
+          ? 'fixture_cancelled'
+          : 'review_action_v2_ocr_asset_download_timeout'
+      );
+      await ready;
+      if (cause === 'root') controller.abort(new Error('fixture_cancelled'));
+      else await jest.advanceTimersByTimeAsync(120_000);
+      await rejected;
+      expect(fs.readdirSync(workspace)).toEqual([]);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('rejects an unsafe release version before any download or filesystem effect', async () => {
+    const fetchImpl: jest.MockedFunction<typeof fetch> = jest.fn<
+      ReturnType<typeof fetch>,
+      Parameters<typeof fetch>
+    >();
+    await expect(
+      resolveApprovedOcrBinary({
+        approvedAgent: {
+          ...approvedAgent,
+          packageVersion: '1.2.3/../../latest',
+        },
+        env,
+        fetchImpl,
+      })
+    ).rejects.toThrow('review_action_v2_ocr_asset_identity_invalid');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(fs.readdirSync(workspace)).toEqual([]);
+  });
+});
+
 describe('managed config hardening in the bootstrap path', () => {
   it('rejects an ambient/inherited capability format before writing config', async () => {
-    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-ocr-bootstrap-'));
+    const workspace = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'rr-ocr-bootstrap-')
+    );
     const binaryPath = path.join(workspace, 'opencodereview');
     fs.writeFileSync(binaryPath, '#!/bin/sh\necho "ocr-fake 1.2.3"\n', {
       mode: 0o755,

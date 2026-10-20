@@ -145,6 +145,144 @@ export async function verifyApprovedOcrBinary(input: {
   return binaryPath;
 }
 
+/** Public release assets are bounded separately from model/process budgets. */
+export const OCR_BINARY_ASSET_LIMIT_BYTES = 128 * 1024 * 1024;
+const OCR_BINARY_ASSET_DOWNLOAD_TIMEOUT_MS = 120_000;
+
+export type OcrApprovedBinaryHandle = Readonly<{
+  binaryPath: string;
+  /** Removes only a downloaded private copy, never an explicit local override. */
+  cleanup: () => Promise<void>;
+}>;
+
+/**
+ * Resolve once after authenticated OCR profile admission. Public release assets
+ * use a fixed repository/version convention; the admitted digest and canonical
+ * version verifier remain the authority. No upstream credentials are needed.
+ */
+export async function resolveApprovedOcrBinary(input: {
+  readonly approvedAgent: ApprovedOcrReviewAgent;
+  readonly signal?: AbortSignal;
+  readonly env?: NodeJS.ProcessEnv;
+  readonly fetchImpl?: typeof fetch;
+}): Promise<OcrApprovedBinaryHandle> {
+  const env = input.env ?? process.env;
+  input.signal?.throwIfAborted();
+  if (env.REVIEWROUTER_OCR_BINARY) {
+    return {
+      binaryPath: await verifyApprovedOcrBinary(input),
+      cleanup: async () => {},
+    };
+  }
+  if (process.platform !== 'linux' || process.arch !== 'x64') {
+    throw new Error('review_action_v2_ocr_asset_platform_unsupported');
+  }
+  const { packageVersion, binarySha256 } = input.approvedAgent;
+  if (
+    packageVersion.length > 128 ||
+    !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/u.test(packageVersion) ||
+    !/^[a-f0-9]{64}$/u.test(binarySha256)
+  ) {
+    throw new Error('review_action_v2_ocr_asset_identity_invalid');
+  }
+  const directory = await fs.mkdtemp(
+    path.join(env.RUNNER_TEMP || os.tmpdir(), 'reviewrouter-ocr-binary-')
+  );
+  let cleaned = false;
+  const cleanup = async () => {
+    if (cleaned) return;
+    await fs.rm(directory, { recursive: true, force: true });
+    cleaned = true;
+  };
+  try {
+    await fs.chmod(directory, 0o700);
+    const binaryPath = path.join(directory, 'opencodereview');
+    const timeout = new AbortController();
+    const signal = input.signal
+      ? AbortSignal.any([input.signal, timeout.signal])
+      : timeout.signal;
+    const timer = setTimeout(
+      () =>
+        timeout.abort(new Error('review_action_v2_ocr_asset_download_timeout')),
+      OCR_BINARY_ASSET_DOWNLOAD_TIMEOUT_MS
+    );
+    try {
+      signal.throwIfAborted();
+      const response = await (input.fetchImpl ?? fetch)(
+        `https://github.com/777genius/review-router/releases/download/ocr-v${packageVersion}/opencodereview-linux-amd64`,
+        {
+          signal,
+          credentials: 'omit',
+          headers: { Accept: 'application/octet-stream' },
+        }
+      );
+      signal.throwIfAborted();
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error(`review_action_v2_ocr_asset_http:${response.status}`);
+      }
+      await writeOcrAsset(response, binaryPath, signal);
+    } finally {
+      clearTimeout(timer);
+    }
+    input.signal?.throwIfAborted();
+    await fs.chmod(binaryPath, 0o700);
+    // The existing verifier hashes before executing --version. A downloaded
+    // checksum sidecar or the asset's URL never grants execution authority.
+    await verifyApprovedOcrBinary({
+      approvedAgent: input.approvedAgent,
+      signal: input.signal,
+      env: { ...env, REVIEWROUTER_OCR_BINARY: binaryPath },
+    });
+    return { binaryPath, cleanup };
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+}
+
+async function writeOcrAsset(
+  response: Response,
+  binaryPath: string,
+  signal: AbortSignal
+): Promise<void> {
+  if (!response.body)
+    throw new Error('review_action_v2_ocr_asset_body_missing');
+  const reader = response.body.getReader();
+  const cancel = () => {
+    void reader.cancel(signal.reason).catch(() => undefined);
+  };
+  signal.addEventListener('abort', cancel, { once: true });
+  let file: fs.FileHandle | undefined;
+  try {
+    signal.throwIfAborted();
+    const declaredBytes = Number(response.headers.get('content-length'));
+    if (declaredBytes > OCR_BINARY_ASSET_LIMIT_BYTES) {
+      throw new Error('review_action_v2_ocr_asset_too_large');
+    }
+    file = await fs.open(binaryPath, 'wx', 0o600);
+    let bytes = 0;
+    for (
+      let chunk = await reader.read();
+      !chunk.done;
+      chunk = await reader.read()
+    ) {
+      signal.throwIfAborted();
+      bytes += chunk.value.byteLength;
+      if (bytes > OCR_BINARY_ASSET_LIMIT_BYTES) {
+        throw new Error('review_action_v2_ocr_asset_too_large');
+      }
+      await file.writeFile(chunk.value);
+    }
+    signal.throwIfAborted();
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+    await file?.close();
+  }
+}
+
 export type OcrManagedRunHandle = Readonly<{
   binaryPath: string;
   runDirectory: string;
@@ -192,7 +330,11 @@ export async function prepareOcrManagedRun(input: {
       mode: 0o700,
     });
     await fs.chmod(homeDirectory, 0o700);
-    const configPath = path.join(homeDirectory, '.opencodereview', 'config.json');
+    const configPath = path.join(
+      homeDirectory,
+      '.opencodereview',
+      'config.json'
+    );
     await fs.writeFile(
       configPath,
       buildOcrManagedConfigJson({

@@ -142,6 +142,7 @@ async function runAccountGatewayRuntimeInternal(
   let phase:
     | 'authorization'
     | 'checkout_capability'
+    | 'prepare_ocr'
     | 'create_workspace'
     | 'checkout'
     | 'prepare_cli'
@@ -236,6 +237,7 @@ async function runAccountGatewayRuntimeInternal(
         agentProfileJson,
         agentProfileDigest
       );
+      phase = 'prepare_ocr';
       ocrBinary = await resolveApprovedOcrBinary({
         approvedAgent: ocrAgent,
         signal: run.signal,

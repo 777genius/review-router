@@ -3,7 +3,7 @@ new file mode 100644
 index 0000000..6255647
 --- /dev/null
 +++ b/internal/llm/serialize.go
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,56 @@
 +package llm
 +
 +import "context"
@@ -46,6 +46,12 @@ index 0000000..6255647
 +		return nil, s.root.Err()
 +	}
 +	defer func() { <-s.permit }()
++	if err := s.root.Err(); err != nil {
++		return nil, err
++	}
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
 +
 +	callCtx, cancel := context.WithCancel(ctx)
 +	defer cancel()

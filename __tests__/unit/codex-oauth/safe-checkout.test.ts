@@ -28,6 +28,9 @@ describe('Codex OAuth safe checkout workspace', () => {
       const origin = path.join(tempRoot, 'origin');
       const workspace = path.join(tempRoot, 'checkout');
       await fs.mkdir(origin);
+      const gitEnv = Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))
+      );
       const git = (cwd: string, ...args: string[]) =>
         childProcess
           .execFileSync(
@@ -41,7 +44,15 @@ describe('Codex OAuth safe checkout workspace', () => {
               'user.email=iliyazelenkog@gmail.com',
               ...args,
             ],
-            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+            {
+              encoding: 'utf8',
+              stdio: ['ignore', 'pipe', 'pipe'],
+              env: {
+                ...gitEnv,
+                GIT_CONFIG_NOSYSTEM: '1',
+                GIT_CONFIG_GLOBAL: '/dev/null',
+              },
+            }
           )
           .trim();
       git(origin, 'init');

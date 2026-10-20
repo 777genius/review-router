@@ -597,9 +597,16 @@ export function normalizeCodexGatewayServiceTier(bytes: Uint8Array): Buffer {
     Object.prototype.hasOwnProperty.call(parsed, 'service_tier')
   )
     return original;
-  const normalized = Buffer.from(
-    JSON.stringify({ ...parsed, service_tier: 'default' })
-  );
+  // Parse only to inspect the object shape. Reserializing would round JSON
+  // numbers outside JavaScript's safe integer range and alter the wire request.
+  const closingBrace = original.lastIndexOf(0x7d);
+  const normalized = Buffer.concat([
+    original.subarray(0, closingBrace),
+    Buffer.from(
+      `${Object.keys(parsed).length > 0 ? ',' : ''}"service_tier":"default"`
+    ),
+    original.subarray(closingBrace),
+  ]);
   if (normalized.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
     throw new Error('account_gateway_request_bound');
   return normalized;
@@ -667,12 +674,10 @@ export async function startLocalGatewayModelTransport(
             ACCOUNT_GATEWAY_BOUNDS.requestBytes,
             controller.signal
           );
+          const normalized = normalizeCodexGatewayServiceTier(bytes);
           stage = 'upstream_request';
           dispatchedRequests++;
-          upstream = await transport.responses(
-            normalizeCodexGatewayServiceTier(bytes),
-            controller.signal
-          );
+          upstream = await transport.responses(normalized, controller.signal);
           stage = 'downstream_stream';
           reply.writeHead(upstream.httpStatus, {
             'content-type': upstream.contentType,

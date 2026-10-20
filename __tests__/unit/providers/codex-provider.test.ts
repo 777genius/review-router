@@ -13,7 +13,11 @@ import { buildReviewFindingsSchema } from '../../../src/providers/review-output'
 import { logger } from '../../../src/utils/logger';
 import {
   codexGatewayConfiguration,
+  AccountGatewayModelTransport,
+  ACCOUNT_GATEWAY_BOUNDS,
+  LOCAL_MODEL_CAPABILITY_ENV,
   normalizeCodexGatewayServiceTier,
+  startLocalGatewayModelTransport,
   type LocalGatewayModelTransport,
 } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 
@@ -2785,6 +2789,60 @@ function isFeatureDisabled(args: readonly string[], feature: string): boolean {
 
 // Real Codex 0.147 omits default service_tier despite its configured CLI default.
 describe('Codex account gateway wire tier', () => {
+  it('preserves numeric lexemes and surrounding bytes while adding the tier', () => {
+    const original = Buffer.from(
+      ' { "model":"fixture", "metadata":{"large":9007199254740993,"float":1.2300e+9} } \n'
+    );
+    expect(normalizeCodexGatewayServiceTier(original).toString()).toBe(
+      ' { "model":"fixture", "metadata":{"large":9007199254740993,"float":1.2300e+9} ,"service_tier":"default"} \n'
+    );
+    expect(
+      normalizeCodexGatewayServiceTier(Buffer.from(' { } ')).toString()
+    ).toBe(' { "service_tier":"default"} ');
+  });
+
+  it('does not count or dispatch a request rejected by normalized size', async () => {
+    const transport = new AccountGatewayModelTransport(
+      'https://fixture.invalid',
+      () => 'synthetic-token'
+    );
+    const dispatch = jest.spyOn(transport, 'responses');
+    const diagnostics: { stage: string; responseReceived: boolean }[] = [];
+    const bridge = await startLocalGatewayModelTransport(transport, (item) => {
+      diagnostics.push(item);
+    });
+    try {
+      const prefix = '{"input":"';
+      const suffix = '"}';
+      const body =
+        prefix +
+        'x'.repeat(
+          ACCOUNT_GATEWAY_BOUNDS.requestBytes - prefix.length - suffix.length
+        ) +
+        suffix;
+      const response = await fetch(`${bridge.baseUrl}/responses`, {
+        method: 'POST',
+        headers: {
+          authorization: bridge.environment[LOCAL_MODEL_CAPABILITY_ENV]!,
+          'content-type': 'application/json',
+        },
+        body,
+      });
+      await response.text();
+      expect(response.status).toBe(502);
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(bridge.requestCount()).toBe(0);
+      expect(diagnostics).toEqual([
+        expect.objectContaining({
+          stage: 'request_body',
+          responseReceived: false,
+        }),
+      ]);
+    } finally {
+      await bridge.dispose();
+    }
+  });
+
   it('disables legacy agents alongside the confined gateway transport', () => {
     expect(codexGatewayConfiguration('http://127.0.0.1:12345')).toContain(
       'agents.enabled=false'

@@ -35,7 +35,6 @@ import {
   createReviewPromptCoverageManifest,
   createStableReviewBatchId,
   createStableReviewWorkPlan,
-  type ReviewPromptCoverageManifest,
 } from '../domain';
 import {
   PreparedPromptPathCoverageKind,

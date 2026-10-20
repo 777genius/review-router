@@ -3,7 +3,7 @@ import { resolveGitHubCommentToken } from '../../../src/control-plane/comment-to
 describe('resolveGitHubCommentToken', () => {
   const runtimeConfig = {
     status: 'applied' as const,
-    apiUrl: 'https://api.reviewrouter.site',
+    apiUrl: 'https://api.reviewrouter.org',
     actionVersion: 'main',
     configVersion: 3,
     sessionToken: 'rr-session',
@@ -53,7 +53,7 @@ describe('resolveGitHubCommentToken', () => {
       repository: '777genius/example',
     });
     expect(String(fetchImpl.mock.calls[0][0])).toBe(
-      'https://api.reviewrouter.site/api/action/v1/comment-token'
+      'https://api.reviewrouter.org/api/action/v1/comment-token'
     );
     expect(fetchImpl.mock.calls[0][1]).toMatchObject({
       method: 'POST',

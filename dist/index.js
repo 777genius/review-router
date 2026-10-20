@@ -22233,17 +22233,22 @@ var review_agent_profiles_default = [
     binarySha256: "cb0a15567e9a60a5820d54b0f6ae86d504dc3805c1eab21a47f70e3eb7b73a40",
     cancellation: true,
     contextGateway: true,
-    modelTransports: ["account_gateway", "provider_api"],
+    modelTransports: [
+      "account_gateway",
+      "provider_api"
+    ],
     packageVersion: "0.147.0",
     profileRef: "codex-default"
   },
   {
     agentKind: "ocr",
-    binarySha256: "7df22058668028dc2099aab53f8f825e39ec2e5f90d3f83074588aa276422d8f",
+    binarySha256: "97aa184122b1ca8fbfdbe4bfb28e175cf371c4402ab8ecfd1914d68547f13745",
     cancellation: true,
     contextGateway: false,
-    modelTransports: ["account_gateway"],
-    packageVersion: "1.13.1-rr.1",
+    modelTransports: [
+      "account_gateway"
+    ],
+    packageVersion: "1.13.1-rr.2",
     profileRef: "ocr-managed-v1"
   }
 ];
@@ -22288,7 +22293,7 @@ function parseReviewAgentProfiles(value) {
       const transports = row.modelTransports;
       if (!Array.isArray(transports) || transports.length < 1 || transports.length > 2 || new Set(transports).size !== transports.length || transports.some((t2) => t2 !== "account_gateway" && t2 !== "provider_api"))
         invalid("review_agent_profile_transport_invalid");
-      if (agentKind === "ocr" && !transports.includes("account_gateway"))
+      if (agentKind === "ocr" && (transports.length !== 1 || transports[0] !== "account_gateway"))
         invalid("review_agent_profile_transport_invalid");
       refs.add(row.profileRef);
       return Object.freeze({
@@ -31637,6 +31642,7 @@ function toReviewerSummaryFinding(finding) {
   };
 }
 function findingLocationLabel(finding) {
+  if (finding.line <= 0) return finding.file;
   return finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `${finding.file}:${finding.startLine}-${finding.endLine}` : `${finding.file}:${finding.line}`;
 }
 function renderFindingDetails(copy, finding) {
@@ -37152,7 +37158,7 @@ var CurrentReviewProjector = class {
         normalizedFailureModeHash: finding.normalizedFailureModeHash,
         ...finding.symbolAnchor ? { symbolAnchor: finding.symbolAnchor } : {},
         ...finding.trustedMarker ? { trustedMarker: finding.trustedMarker } : {},
-        ...finding.anchorVerified ? { anchorVerified: true } : {},
+        ...finding.anchorVerified !== void 0 ? { anchorVerified: finding.anchorVerified } : {},
         title: finding.title,
         message: finding.message,
         ...finding.suggestion ? { suggestion: finding.suggestion } : {},
@@ -43920,7 +43926,7 @@ var FindingFilter = class {
   /**
    * Filter and adjust findings to reduce false positives
    */
-  filter(findings, diffContent) {
+  filter(findings, diffContent, options = {}) {
     const stats = {
       total: findings.length,
       filtered: 0,
@@ -43931,10 +43937,11 @@ var FindingFilter = class {
     };
     const filtered = [];
     for (const finding of findings) {
-      const action = this.shouldFilter(finding, diffContent);
+      const unanchored = options.allowUnanchoredFindings === true && finding.line === 0 && finding.startLine === void 0 && finding.endLine === void 0;
+      const action = this.shouldFilter(finding, diffContent, unanchored);
       if (action === "filter") {
         stats.filtered++;
-        const reason = this.getFilterReason(finding, diffContent);
+        const reason = this.getFilterReason(finding, diffContent, unanchored);
         stats.reasons[reason] = (stats.reasons[reason] || 0) + 1;
         if (stats.filteredExamples.length < 5) {
           stats.filteredExamples.push(
@@ -43977,11 +43984,11 @@ var FindingFilter = class {
     }
     return { findings: deduplicated, stats };
   }
-  shouldFilter(finding, diffContent) {
-    if (this.hasInvalidLineNumber(finding)) {
+  shouldFilter(finding, diffContent, unanchored = false) {
+    if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return "filter";
     }
-    if (this.isLineNumberIssue(finding, diffContent)) {
+    if (!unanchored && this.isLineNumberIssue(finding, diffContent)) {
       return "filter";
     }
     if (this.isDocumentationFile(finding.file)) {
@@ -44038,11 +44045,11 @@ var FindingFilter = class {
     }
     return "keep";
   }
-  getFilterReason(finding, diffContent) {
-    if (this.hasInvalidLineNumber(finding)) {
+  getFilterReason(finding, diffContent, unanchored = false) {
+    if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return "invalid/suspicious line number";
     }
-    if (this.isLineNumberIssue(finding, diffContent)) {
+    if (!unanchored && this.isLineNumberIssue(finding, diffContent)) {
       return "line number points to blank/brace/comment";
     }
     if (this.isDocumentationFile(finding.file) && this.isStyleOrFormattingIssue(finding)) {
@@ -50861,6 +50868,18 @@ function emptyFindingCounts() {
   return { critical: 0, major: 0, minor: 0 };
 }
 
+// src/config/review-router-endpoints.json
+var review_router_endpoints_default = {
+  webOrigin: "https://reviewrouter.org",
+  apiOrigin: "https://api.reviewrouter.org"
+};
+
+// src/config/review-router-endpoints.ts
+var REVIEW_ROUTER_WEB_ORIGIN = review_router_endpoints_default.webOrigin;
+var REVIEW_ROUTER_API_ORIGIN = review_router_endpoints_default.apiOrigin;
+var CODEX_SEED_SCRIPT_URL = `${REVIEW_ROUTER_WEB_ORIGIN}/install/codex`;
+var NEWTEST_V4_ROOT_URL = `${REVIEW_ROUTER_API_ORIGIN}/__newtest_v4/`;
+
 // src/github/failure-summary.ts
 var REVIEW_ROUTER_BOT_MARKER = "<!-- review-router-bot -->";
 var REVIEW_ROUTER_FAILURE_MARKER = "<!-- review-router-failure -->";
@@ -50882,7 +50901,6 @@ var FAILED_PROGRESS_TEXT = [
   "### Review needs attention",
   "\u{1F534} **"
 ];
-var CODEX_SEED_SCRIPT_URL = "https://reviewrouter.site/install/codex";
 function formatReviewFailureSummary(error2, prNumber) {
   const normalized = normalizeReviewError(error2);
   const safeDetails = sanitizeErrorMessage(
@@ -52536,6 +52554,8 @@ var package_default = {
     format: 'prettier --write "src/**/*.ts" "__tests__/**/*.ts"',
     "format:check": 'prettier --check "src/**/*.ts" "__tests__/**/*.ts"',
     typecheck: "tsc --noEmit",
+    "domains:sync": "node scripts/sync-review-router-domains.mjs",
+    "domains:check": "node scripts/sync-review-router-domains.mjs --check",
     "hooks:install": "bash scripts/install-hooks.sh",
     prepare: "npm run build:prod"
   },
@@ -97902,7 +97922,8 @@ function normalizeEol(value) {
 }
 function verifyOcrSpan(input) {
   const { existingCode, startLine, endLine } = input.comment;
-  if (existingCode === null) return { verified: false, reason: "missing_existing_code" };
+  if (existingCode === null)
+    return { verified: false, reason: "missing_existing_code" };
   if (startLine === null || endLine === null || endLine < startLine) {
     return { verified: false, reason: "invalid_range" };
   }
@@ -97959,16 +97980,17 @@ function normalizeOcrRepoPath(raw) {
 }
 function plainTitleLine(content) {
   const firstLine = content.split(/\r\n|\r|\n/u).map((line) => line.replace(/[^\P{Z}\u00a0]/gu, " ").trim()).find((line) => line.length > 0) ?? "";
-  return firstLine.replace(/[`#>*_~\[\]]/gu, "").replace(/\s+/gu, " ").trim().slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
+  return firstLine.replace(/[`#>*_~[\]]/gu, "").replace(/\s+/gu, " ").trim().slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
 }
 function normalizeOcrFindings(input) {
   const findings = [];
   const skipped = [];
   const reasons = /* @__PURE__ */ new Set();
+  const assignedPaths = input.assignedPaths ? new Set(input.assignedPaths) : void 0;
   input.comments.forEach((comment, index) => {
     const path33 = normalizeOcrRepoPath(comment.path);
     const content = comment.content.trim();
-    if (path33 === null || content.length === 0) {
+    if (path33 === null || content.length === 0 || assignedPaths && !assignedPaths.has(path33)) {
       skipped.push({ index, reason: "invalid_native_finding" });
       return;
     }
@@ -98119,7 +98141,9 @@ function buildOcrManagedConfigJson(input) {
 `;
 }
 function extractRawLoopbackCapability(authorizationValue) {
-  const match2 = authorizationValue.match(/^Bearer ([A-Za-z0-9._~+/=-]{16,512})$/);
+  const match2 = authorizationValue.match(
+    /^Bearer ([A-Za-z0-9._~+/=-]{16,512})$/
+  );
   if (!match2) {
     throw new Error("review_action_v2_ocr_capability_format_invalid");
   }
@@ -98224,12 +98248,16 @@ function acceptOcrManagedReviewResult(input) {
   try {
     normalized = normalizeOcrFindings({
       comments: native.comments,
+      assignedPaths: input.expectedPaths,
       headFiles: input.headFiles,
       ...input.diffPositions ? { diffPositions: input.diffPositions } : {}
     });
   } catch (error2) {
     if (error2 instanceof OcrOutputTooLargeError) {
-      throw new OcrReviewAcceptanceError("result_contract", `bound=${error2.bound}`);
+      throw new OcrReviewAcceptanceError(
+        "result_contract",
+        `bound=${error2.bound}`
+      );
     }
     throw error2;
   }
@@ -113310,7 +113338,9 @@ var LegacyReviewProjectionPolicyAdapter = class {
     const legacyFindings = query.findings.map(toLegacyFinding);
     const deduped = new Deduplicator().dedupe(legacyFindings);
     const consensus = this.consensus.filter(deduped);
-    const filtered = new FindingFilter().filter(consensus, query.diff).findings;
+    const filtered = new FindingFilter().filter(consensus, query.diff, {
+      allowUnanchoredFindings: true
+    }).findings;
     return filtered.map((finding) => {
       const metadata = finding;
       const memberIds = new Set(finding.sourceFindingIds);
@@ -113323,18 +113353,21 @@ var LegacyReviewProjectionPolicyAdapter = class {
       if (!representative) {
         throw new Error("legacy finding policy returned an unknown finding");
       }
-      return {
+      const requiresVerifiedAnchor = contributors.some(
+        (candidate) => candidate.anchorVerified !== void 0
+      );
+      const anchorVerified = finding.startLine !== void 0 && finding.endLine !== void 0 && contributors.every(
+        (candidate) => candidate.anchorVerified === true && candidate.filePath === finding.file && candidate.startLine === finding.startLine && candidate.endLine === finding.endLine
+      ) && (!finding.suggestion || contributors.some(
+        (candidate) => candidate.suggestion === finding.suggestion
+      ));
+      const selected = {
         ...representative,
         sourceFindingId: representative.sourceFindingId,
         sourceFindingIds: sortedUnique3(
           contributors.map((candidate) => candidate.sourceFindingId)
         ),
-        // §8.2: the verified marker survives a merge only when every merged
-        // contributor carried a verified span and the merged finding kept the
-        // full range; otherwise the anchor is not treated as verified.
-        anchorVerified: contributors.every(
-          (candidate) => candidate.anchorVerified === true
-        ) && finding.startLine !== void 0 && finding.endLine !== void 0,
+        ...requiresVerifiedAnchor ? { anchorVerified } : {},
         severity: toProjectionSeverity2(finding.severity),
         title: finding.title,
         message: finding.message,
@@ -113354,6 +113387,17 @@ var LegacyReviewProjectionPolicyAdapter = class {
           contributors.flatMap((candidate) => candidate.observationIds)
         )
       };
+      if (requiresVerifiedAnchor && !anchorVerified) {
+        const {
+          startLine: _startLine,
+          line: _line,
+          endLine: _endLine,
+          suggestion: _suggestion,
+          ...unanchored
+        } = selected;
+        return unanchored;
+      }
+      return selected;
     });
   }
   async projectLifecycle(query) {
@@ -113507,6 +113551,14 @@ var LegacyReviewProjectionPolicyAdapter = class {
     if (revisionFile.status === "removed" /* Removed */) {
       return summaryPlacement3(occurrence, "file was deleted");
     }
+    if (occurrence.anchorVerified === false) {
+      return {
+        lineageId: occurrence.lineageId,
+        kind: "file" /* File */,
+        path: revisionFile.path,
+        reason: "finding has no verified current span"
+      };
+    }
     const line = occurrence.line ?? occurrence.endLine;
     if (line === void 0) {
       return {
@@ -113549,9 +113601,10 @@ var LegacyReviewProjectionPolicyAdapter = class {
         lineageId: occurrence.lineageId,
         kind: "inline" /* Inline */,
         path: revisionFile.path,
-        ...occurrence.startLine !== void 0 ? { startLine: occurrence.startLine } : {},
-        line,
-        ...occurrence.endLine !== void 0 ? { endLine: occurrence.endLine } : {},
+        ...rangeStart < rangeEnd ? { startLine: rangeStart } : {},
+        // GitHub's publication line is the end of a multiline range.
+        line: rangeEnd,
+        endLine: rangeEnd,
         body: inline.body
       };
     }
@@ -113650,7 +113703,7 @@ function toLegacyFinding(finding) {
   return {
     file: "filePath" in finding ? finding.filePath : "",
     ...finding.startLine !== void 0 ? { startLine: finding.startLine } : {},
-    line: finding.line ?? finding.endLine ?? 1,
+    line: finding.line ?? finding.endLine ?? (finding.anchorVerified === false ? 0 : 1),
     ...finding.endLine !== void 0 ? { endLine: finding.endLine } : {},
     severity: toLegacySeverity(finding.severity),
     title: finding.title,
@@ -114086,7 +114139,7 @@ function toFinding(observation, value, index) {
     ]),
     category,
     normalizedFailureModeHash,
-    ...anchorVerified ? { anchorVerified: true } : {},
+    ...observation.providerKind === "ocr" /* Ocr */ ? { anchorVerified } : {},
     severity: toFindingSeverity(value.severity),
     title,
     message,
@@ -114428,6 +114481,7 @@ var OcrReviewInvocationAdapter = class {
   running = false;
   /** Model-free: deterministic preview and semantic capture only (§5.2). */
   async prepare(input) {
+    this.options.signal?.throwIfAborted();
     const assignment = this.assignments.get(input.workSlot.workSlotId);
     if (!assignment || assignment.workSlot !== input.workSlot) {
       throw new Error("review_action_v2_assignment_missing");
@@ -114474,6 +114528,15 @@ var OcrReviewInvocationAdapter = class {
       this.options.run.runDirectory,
       "preview.json"
     );
+    const timeoutMs = this.options.previewTimeoutMs ?? this.options.limits.requestTimeoutSec * 1e3;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+      throw new Error("review_action_v2_ocr_preview_timeout");
+    }
+    const previewSignal = AbortSignal.any([
+      ...this.options.signal ? [this.options.signal] : [],
+      AbortSignal.timeout(timeoutMs)
+    ]);
+    previewSignal.throwIfAborted();
     const previewResult = await this.options.previewRunner({
       binaryPath: this.options.binaryPath,
       argv: buildOcrReviewArgv({
@@ -114495,36 +114558,35 @@ var OcrReviewInvocationAdapter = class {
         path: process.env.PATH
       }),
       cwd: this.options.run.runDirectory,
-      signal: new AbortController().signal,
+      signal: previewSignal,
       outputPath: previewOutputPath
     });
+    previewSignal.throwIfAborted();
     if (previewResult.exitCode !== 0 || previewResult.spawnError !== void 0) {
       throw new Error("review_action_v2_ocr_preview_failed");
     }
     const previewSelectedPaths = Object.freeze(
       parseOcrPreviewSelection(readPreviewOutput(previewOutputPath))
     );
-    const pathCoverage = assignedPaths.map(
-      (path33) => {
-        const file = assignment.context.files.find(
-          (candidate) => candidate.filename === path33
-        );
-        return {
-          path: path33,
-          // The full canonical patch of every assigned path is in the exact
-          // revision OCR reviews; a preview-skipped path stays visible as
-          // unreviewed, never as an RR policy exclusion (§8.1).
-          kind: previewSelectedPaths.includes(path33) ? "full_patch" /* FullPatch */ : "unavailable" /* Unavailable */,
-          contentHash: sha25617(
-            canonicalJson13({
-              filename: path33,
-              patch: file?.patch ?? null,
-              status: file?.status ?? null
-            })
-          )
-        };
-      }
-    );
+    const pathCoverage = assignedPaths.map((path33) => {
+      const file = assignment.context.files.find(
+        (candidate) => candidate.filename === path33
+      );
+      return {
+        path: path33,
+        // The full canonical patch of every assigned path is in the exact
+        // revision OCR reviews; a preview-skipped path stays visible as
+        // unreviewed, never as an RR policy exclusion (§8.1).
+        kind: previewSelectedPaths.includes(path33) ? "full_patch" /* FullPatch */ : "unavailable" /* Unavailable */,
+        contentHash: sha25617(
+          canonicalJson13({
+            filename: path33,
+            patch: file?.patch ?? null,
+            status: file?.status ?? null
+          })
+        )
+      };
+    });
     const coverageManifest = createReviewPromptCoverageManifest({
       workSlotId: input.workSlot.workSlotId,
       reviewRevisionHash: assignment.reviewRevisionHash,
@@ -114620,7 +114682,9 @@ var OcrReviewInvocationAdapter = class {
       manifestFacts: Object.freeze({
         taskKindSet: Object.freeze(["finding_discovery" /* FindingDiscovery */]),
         providerKind: "ocr" /* Ocr */,
-        providerCapabilityHash: sha25617(manifestPreimages.providerCapabilityHash),
+        providerCapabilityHash: sha25617(
+          manifestPreimages.providerCapabilityHash
+        ),
         providerRequestEnvelopeHash: sha25617(semanticPreimage),
         outputSchemaHash: sha25617(manifestPreimages.outputSchemaHash),
         filePatchManifestHash: sha25617(manifestPreimages.filePatchManifestHash),
@@ -114645,11 +114709,7 @@ var OcrReviewInvocationAdapter = class {
     if (!assignment || !preimages || input.invocation.investigationProbePlan !== null || input.invocation.manifestFacts.providerKind !== "ocr" /* Ocr */) {
       throw new Error("review_action_v2_prepared_invocation_identity_mismatch");
     }
-    input.signal.throwIfAborted();
-    const lease = input.currentLease ? input.currentLease() : input.lease;
-    if (Date.parse(lease.expiresAt) <= Date.now()) {
-      throw new Error("review_action_v2_lease_expired");
-    }
+    assertOcrInvocationLive(input);
     const effectBefore = this.options.bridge.effectFacts?.();
     if (effectBefore && effectBefore.effect !== "none") {
       if (effectBefore.effect === "not_dispatched") {
@@ -114674,7 +114734,7 @@ var OcrReviewInvocationAdapter = class {
     return next;
   }
   async runInvocation(input, assignment) {
-    input.signal.throwIfAborted();
+    assertOcrInvocationLive(input);
     const outputPath = path30.join(this.options.run.runDirectory, "result.json");
     const argv = buildOcrReviewArgv({
       binaryPath: this.options.binaryPath,
@@ -114700,12 +114760,14 @@ var OcrReviewInvocationAdapter = class {
       cwd: this.options.run.runDirectory,
       signal: input.signal
     });
+    assertOcrInvocationLive(input);
     const failedProcess = processResult2.spawnError !== void 0 || processResult2.exitCode !== 0 || processResult2.signal !== null || !processResult2.closed;
     const resultBytes = failedProcess ? Buffer.alloc(0) : await readOcrOutputFileAfterClose(
       async (file) => fs23.readFileSync(file),
       async (file) => fs23.statSync(file).size,
       outputPath
     );
+    assertOcrInvocationLive(input);
     const headFiles = {
       get: (file) => {
         const resolved = path30.join(this.options.checkoutRoot, file);
@@ -114761,6 +114823,14 @@ var OcrReviewInvocationAdapter = class {
     return observation;
   }
 };
+function assertOcrInvocationLive(input) {
+  input.signal.throwIfAborted();
+  const lease = input.currentLease?.() ?? input.lease;
+  const expiresAt = Date.parse(lease.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    throw new Error("review_action_v2_lease_expired");
+  }
+}
 function readPreviewOutput(outputPath) {
   try {
     const bytes = fs23.readFileSync(outputPath);
@@ -114792,9 +114862,13 @@ function parseOcrPreviewSelection(raw) {
   }
   if (Array.isArray(value.groups)) {
     return Object.freeze([
-      ...new Set(value.groups.flatMap((group) => collect(
-        typeof group === "object" && group !== null ? group.paths : void 0
-      )))
+      ...new Set(
+        value.groups.flatMap(
+          (group) => collect(
+            typeof group === "object" && group !== null ? group.paths : void 0
+          )
+        )
+      )
     ]);
   }
   return Object.freeze([]);
@@ -117528,6 +117602,10 @@ var ProductionT0ReviewRunner = class {
       const invocationAdapter2 = new OcrReviewInvocationAdapter(
         planned2.assignments,
         {
+          ...signal ? { signal } : {},
+          previewTimeoutMs: Math.floor(
+            executionDeadline.clampProviderTimeout(providerTimeoutMs)
+          ),
           model: ocrModel,
           binaryPath: input.ocr.run.binaryPath,
           binarySha256: approvedOcrAgent.binarySha256,

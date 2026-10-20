@@ -12,7 +12,7 @@ on:
         description: 'ReviewRouter API URL used for OIDC runtime config and App comment tokens'
         required: false
         type: string
-        default: https://api.reviewrouter.site
+        default: https://api.reviewrouter.org
       control_plane_url:
         description: 'ReviewRouter control plane URL; overrides api_url when set'
         required: false

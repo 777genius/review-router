@@ -3,6 +3,15 @@ import { execFileSync } from 'node:child_process';
 import { isDeepStrictEqual } from 'node:util';
 import yaml from 'js-yaml';
 
+const REVIEW_ROUTER_API_ORIGIN = (
+  JSON.parse(
+    fs.readFileSync(
+      new URL('../src/config/review-router-endpoints.json', import.meta.url),
+      'utf8'
+    )
+  ) as { apiOrigin: string }
+).apiOrigin;
+
 type PromotionPhase =
   | 'validate'
   | 'fetch'
@@ -46,7 +55,7 @@ function validateAbi(source: string): void {
   need(
     (optional.required === false || optional.required === undefined) &&
       optional.type === 'string' &&
-      optional.default === 'https://api.reviewrouter.site'
+      optional.default === REVIEW_ROUTER_API_ORIGIN
   );
   need(isDeepStrictEqual(workflow.permissions, {}));
   const jobs = record(workflow.jobs);

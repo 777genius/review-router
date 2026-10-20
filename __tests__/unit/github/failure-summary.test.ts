@@ -2,6 +2,7 @@ import {
   clearReviewFailureSummariesForClient,
   formatReviewFailureSummary,
 } from '../../../src/github/failure-summary';
+import { CODEX_SEED_SCRIPT_URL } from '../../../src/config/review-router-endpoints';
 
 jest.mock('../../../src/utils/logger', () => ({
   logger: {
@@ -40,7 +41,7 @@ describe('formatReviewFailureSummary', () => {
       'Run this from a trusted machine after `codex login`'
     );
     expect(body).toContain(
-      'curl -fsSL https://reviewrouter.site/install/codex | REVIEW_ROUTER_CONFIRM_WRITE=1 REVIEW_ROUTER_SECRET_SCOPE=repo REVIEW_ROUTER_REPO=777genius/agent-teams-ai bash'
+      `curl -fsSL ${CODEX_SEED_SCRIPT_URL} | REVIEW_ROUTER_CONFIRM_WRITE=1 REVIEW_ROUTER_SECRET_SCOPE=repo REVIEW_ROUTER_REPO=777genius/agent-teams-ai bash`
     );
     expect(body).toContain('<summary>Technical details</summary>');
     expect(body).toContain('Code: codex_oauth_invalid_secret');
@@ -78,7 +79,7 @@ describe('formatReviewFailureSummary', () => {
     expect(body).not.toContain('## Why it matters');
     expect(body).toContain('Code: provider_capacity_limited');
     expect(body.toLowerCase()).not.toContain('reseed');
-    expect(body).not.toContain('reviewrouter.site/install/codex');
+    expect(body).not.toContain(CODEX_SEED_SCRIPT_URL);
   });
 
   it('redacts obvious secrets from failure comments', () => {
@@ -108,7 +109,7 @@ describe('formatReviewFailureSummary', () => {
       'No configured review provider passed health checks'
     );
     expect(body).toContain('Check provider credentials and model names');
-    expect(body).not.toContain('reviewrouter.site/install/codex');
+    expect(body).not.toContain(CODEX_SEED_SCRIPT_URL);
     expect(body).toContain('Code: no_healthy_providers');
   });
 

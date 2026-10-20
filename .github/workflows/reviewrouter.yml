@@ -42,8 +42,8 @@ jobs:
     uses: ./.github/workflows/reviewrouter-t0-reusable.yml
     with:
       runtime_ref: ${{ github.event.pull_request.head.sha || inputs.review_head_sha }}
-      api_url: https://api.reviewrouter.site
-      control_plane_url: https://api.reviewrouter.site
+      api_url: https://api.reviewrouter.org
+      control_plane_url: https://api.reviewrouter.org
       runtime_config_mode: oidc
       pr_number: ${{ github.event.pull_request.number || inputs.pr_number }}
       review_head_sha: ${{ github.event.pull_request.head.sha || inputs.review_head_sha }}

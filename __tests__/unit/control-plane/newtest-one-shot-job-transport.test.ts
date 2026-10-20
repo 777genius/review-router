@@ -2,6 +2,7 @@ import {
   createNewtestJobTransport,
   type NewtestJobIdentity,
 } from "../../../src/control-plane/newtest-one-shot-job-transport";
+import { NEWTEST_V4_ROOT_URL } from "../../../src/config/review-router-endpoints";
 
 const identity: NewtestJobIdentity = {
   repository: "777genius/reviewrouter-e2e-prod-20260529-000305",
@@ -302,7 +303,7 @@ describe("finite TEST job transport", () => {
     await expect(transport.runOnce()).resolves.toBe(receipt.evidenceHash);
     expect(requestOidc).toHaveBeenCalledWith("reviewrouter");
     expect(fetchImpl.mock.calls[1][0].toString()).toBe(
-      "https://api.reviewrouter.site/__newtest_v4/dispatch",
+      new URL("dispatch", NEWTEST_V4_ROOT_URL).toString(),
     );
     expect(fetchImpl.mock.calls[1][1]).toMatchObject({
       method: "POST",

@@ -21,5 +21,16 @@
     ],
     "packageVersion": "1.13.1-rr.2",
     "profileRef": "ocr-managed-v1"
+  },
+  {
+    "agentKind": "ocr",
+    "binarySha256": "2f62d6fbb326e74d0fe9377f0224f1b56520bcefee688c58073fa1a30e45f1c9",
+    "cancellation": true,
+    "contextGateway": false,
+    "modelTransports": [
+      "account_gateway"
+    ],
+    "packageVersion": "1.13.1-rr.3",
+    "profileRef": "ocr-managed-v2"
   }
 ]

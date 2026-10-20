@@ -2831,7 +2831,7 @@ describe('Codex account gateway wire tier', () => {
       await response.text();
       expect(response.status).toBe(502);
       expect(dispatch).not.toHaveBeenCalled();
-      expect(bridge.requestCount()).toBe(0);
+      expect(bridge.requestCount?.()).toBe(0);
       expect(diagnostics).toEqual([
         expect.objectContaining({
           stage: 'request_body',

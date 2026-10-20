@@ -10,6 +10,7 @@ export const REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER =
 const statusHeadingMarker = '<!-- reviewrouter:summary-status -->';
 const maxSummaryBytes = 60_000;
 const maxFindingBodyChars = 2_500;
+const maxCoverageFileLines = 100;
 
 export type ReviewerSummaryLocale =
   | 'en'
@@ -35,6 +36,8 @@ type ReviewerSummaryCopy = {
   readonly incompleteHeading: (count: number) => string;
   readonly incompleteNote: string;
   readonly coverageHeading: string;
+  readonly manifestHeading: string;
+  readonly moreFiles: (count: number) => string;
   readonly moreFindings: (count: number) => string;
   readonly lifecycle: {
     readonly resolved: string;
@@ -365,12 +368,18 @@ export function renderReviewerSummaryMarkdown(
     lines.push(
       ...coverage.limitations.map((value) => `- ${escapeMarkdownText(value)}`)
     );
-    for (const file of (coverage.files ?? [])
-      .filter((file) => file.status !== 'full')
-      .slice(0, 20))
+    const manifestFiles = incomplete
+      ? [...(coverage.files ?? [])].sort(compareCoverageManifestFiles)
+      : (coverage.files ?? []).filter((file) => file.status !== 'full');
+    const shownFiles = manifestFiles.slice(0, maxCoverageFileLines);
+    if (incomplete && shownFiles.length > 0)
+      lines.push(copy.manifestHeading, '');
+    for (const file of shownFiles)
       lines.push(
         `- \`${escapeMarkdownInline(file.path)}\` - ${escapeMarkdownText(file.status)}${file.reason ? ` — ${escapeMarkdownText(file.reason)}` : ''}`
       );
+    const hiddenFiles = manifestFiles.length - shownFiles.length;
+    if (hiddenFiles > 0) lines.push('', copy.moreFiles(hiddenFiles));
     lines.push('', '</details>');
   }
   const releaseNotes = input.findings.filter(
@@ -885,6 +894,8 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteNote:
       'Inline comments and lifecycle changes were withheld because required coverage did not complete.',
     coverageHeading: '### Coverage not completed',
+    manifestHeading: '### File coverage',
+    moreFiles: (count) => `**${count} more files not shown.**`,
     moreFindings: (count) =>
       `**${count} more ${englishFindingWord(count)} omitted from this summary because of size limits.**`,
     lifecycle: {
@@ -911,6 +922,8 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteNote:
       'Инлайн-комментарии и изменения lifecycle не публиковались: покрытие ревью не завершено.',
     coverageHeading: '### Покрытие не завершено',
+    manifestHeading: '### Покрытие файлов',
+    moreFiles: (count) => `**Ещё ${count} файлов не показано.**`,
     moreFindings: (count) =>
       `**Ещё ${count} ${slavicFindingWord(count, ['замечание', 'замечания', 'замечаний'])} не влезли в это сообщение из‑за лимита размера.**`,
     lifecycle: {
@@ -937,6 +950,8 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteNote:
       'Інлайн-коментарі та зміни lifecycle не публікувалися: покриття рев’ю не завершено.',
     coverageHeading: '### Покриття не завершено',
+    manifestHeading: '### Покриття файлів',
+    moreFiles: (count) => `**Ще ${count} файлів не показано.**`,
     moreFindings: (count) =>
       `**Ще ${count} ${slavicFindingWord(count, ['зауваження', 'зауваження', 'зауважень'])} не вмістилися в це повідомлення через ліміт розміру.**`,
     lifecycle: {
@@ -963,6 +978,8 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteNote:
       'No se publicaron comentarios en línea ni cambios de ciclo de vida porque la cobertura no se completó.',
     coverageHeading: '### Cobertura incompleta',
+    manifestHeading: '### Cobertura de archivos',
+    moreFiles: (count) => `**${count} archivos más no se muestran.**`,
     moreFindings: (count) =>
       `**${count} ${count === 1 ? 'hallazgo más omitido' : 'hallazgos más omitidos'} de este resumen por el límite de tamaño.**`,
     lifecycle: {
@@ -989,6 +1006,8 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteNote:
       'Comentários inline e mudanças de ciclo de vida não foram publicados porque a cobertura não foi concluída.',
     coverageHeading: '### Cobertura não concluída',
+    manifestHeading: '### Cobertura de arquivos',
+    moreFiles: (count) => `**Mais ${count} arquivos não exibidos.**`,
     moreFindings: (count) =>
       `**Mais ${count} ${count === 1 ? 'achado omitido' : 'achados omitidos'} deste resumo por limite de tamanho.**`,
     lifecycle: {
@@ -1015,6 +1034,8 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteNote:
       'Les commentaires inline et les changements de cycle de vie n’ont pas été publiés car la couverture est incomplète.',
     coverageHeading: '### Couverture incomplète',
+    manifestHeading: '### Couverture des fichiers',
+    moreFiles: (count) => `**${count} fichiers supplémentaires non affichés.**`,
     moreFindings: (count) =>
       `**${count} ${count === 1 ? 'anomalie supplémentaire omise' : 'anomalies supplémentaires omises'} de ce résumé à cause de la limite de taille.**`,
     lifecycle: {
@@ -1041,6 +1062,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteNote:
       'Inline-Kommentare und Lifecycle-Änderungen wurden nicht veröffentlicht, weil die Abdeckung unvollständig ist.',
     coverageHeading: '### Abdeckung unvollständig',
+    manifestHeading: '### Dateiabdeckung',
+    moreFiles: (count) =>
+      `**${count} weitere Dateien werden nicht angezeigt.**`,
     moreFindings: (count) =>
       `**${count} weitere ${count === 1 ? 'Befund' : 'Befunde'} fehlen in dieser Zusammenfassung wegen des Größenlimits.**`,
     lifecycle: {
@@ -1067,6 +1091,8 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteNote:
       'I commenti inline e le modifiche di lifecycle non sono stati pubblicati perché la copertura non è completa.',
     coverageHeading: '### Copertura non completata',
+    manifestHeading: '### Copertura dei file',
+    moreFiles: (count) => `**${count} file aggiuntivi non mostrati.**`,
     moreFindings: (count) =>
       `**Altri ${count} ${count === 1 ? 'rilievo omesso' : 'rilievi omessi'} da questo riassunto per il limite di dimensione.**`,
     lifecycle: {
@@ -1091,6 +1117,8 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteHeading: (count) => `## 审查未完成 — 保留 ${count} 条初步问题`,
     incompleteNote: '因覆盖未完成，未发布行内评论和生命周期变更。',
     coverageHeading: '### 覆盖未完成',
+    manifestHeading: '### 文件覆盖',
+    moreFiles: (count) => `**另有 ${count} 个文件未显示。**`,
     moreFindings: (count) => `**受篇幅限制，本摘要还省略了 ${count} 条问题。**`,
     lifecycle: {
       resolved: '已解决',
@@ -1115,6 +1143,9 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteNote:
       'カバレッジが完了していないため、インラインコメントとライフサイクル変更は投稿していません。',
     coverageHeading: '### カバレッジ未完了',
+    manifestHeading: '### ファイルカバレッジ',
+    moreFiles: (count) =>
+      `**さらに ${count} 件のファイルは表示されていません。**`,
     moreFindings: (count) =>
       `**サイズ制限のため、この要約から指摘がさらに ${count} 件省略されています。**`,
     lifecycle: {
@@ -1140,6 +1171,8 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteNote:
       '커버리지가 끝나지 않아 인라인 댓글과 라이프사이클 변경을 게시하지 않았습니다.',
     coverageHeading: '### 커버리지 미완료',
+    manifestHeading: '### 파일 커버리지',
+    moreFiles: (count) => `**파일 ${count}개가 표시되지 않았습니다.**`,
     moreFindings: (count) =>
       `**크기 제한 때문에 이 요약에서 이슈 ${count}개가 더 생략되었습니다.**`,
     lifecycle: {
@@ -1606,6 +1639,27 @@ const scopeCopy: Record<ReviewerSummaryLocale, ScopeCopy> = {
     tests: '권장 테스트',
   },
 };
+
+const coverageFileStatusOrder: Readonly<Record<string, number>> = {
+  unreviewed: 0,
+  skipped: 1,
+  'metadata-only': 2,
+  compacted: 3,
+  full: 4,
+};
+
+// Incomplete summaries surface coverage gaps before fully reviewed files.
+function compareCoverageManifestFiles(
+  left: { readonly path: string; readonly status: string },
+  right: { readonly path: string; readonly status: string }
+): number {
+  const leftRank = coverageFileStatusOrder[left.status] ?? 5;
+  const rightRank = coverageFileStatusOrder[right.status] ?? 5;
+  if (leftRank !== rightRank) return leftRank - rightRank;
+  if (left.path < right.path) return -1;
+  if (left.path > right.path) return 1;
+  return 0;
+}
 
 function escapeMarkdownText(value: string): string {
   return neutralizeDetailsMarkup(escapeHtml(value)).replace(

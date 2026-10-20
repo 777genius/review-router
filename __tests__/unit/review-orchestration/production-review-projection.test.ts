@@ -428,6 +428,98 @@ describe('production review projection coverage', () => {
     });
   });
 
+  it('publishes a per-file coverage manifest in the partial summary body', async () => {
+    const partialPr = {
+      ...pr,
+      files: [
+        ...pr.files,
+        {
+          filename: 'src/b.ts',
+          status: 'modified' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -1 +1 @@\n+more',
+        },
+        {
+          filename: 'src/c.ts',
+          status: 'modified' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -1 +1 @@\n+other',
+        },
+      ],
+    };
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts,
+      pr: partialPr,
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [
+        {
+          workSlotId: 'slot-1',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Codex,
+          required: true,
+          filePaths: ['src/a.ts', 'src/b.ts'],
+        },
+      ],
+      uncoveredPaths: ['src/c.ts'],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const coverageManifest = createReviewPromptCoverageManifest({
+      workSlotId: 'slot-1',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      assignedPaths: ['src/a.ts', 'src/b.ts'],
+      pathCoverage: [
+        {
+          path: 'src/a.ts',
+          kind: ReviewPromptPathCoverageKind.SummaryOnly,
+          contentHash: '9'.repeat(64),
+        },
+        {
+          path: 'src/b.ts',
+          kind: ReviewPromptPathCoverageKind.FullPatch,
+          contentHash: '8'.repeat(64),
+        },
+      ],
+    });
+
+    const projection = await builder.build({
+      acceptedEvidence: [acceptedEvidence('slot-1', coverageManifest)],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
+
+    expect(envelope.coverage.state).toBe('partial');
+    expect(envelope.coverage.files).toEqual([
+      {
+        path: 'src/a.ts',
+        status: 'compacted',
+        reason: 'summary-only content in prompt',
+      },
+      { path: 'src/b.ts', status: 'full' },
+      {
+        path: 'src/c.ts',
+        status: 'unreviewed',
+        reason: 'no review work slot covered this file',
+      },
+    ]);
+    const body = envelope.publishing.summary.body;
+    expect(body).toContain(
+      '- `src/a.ts` - compacted — summary-only content in prompt'
+    );
+    expect(body).toContain('- `src/b.ts` - full');
+    expect(body).toContain(
+      '- `src/c.ts` - unreviewed — no review work slot covered this file'
+    );
+    // Findings stay out of inline comments while coverage is partial.
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+  });
+
   it('does not make coverage partial for an exhausted optional vote lane', async () => {
     const builder = createProductionReviewProjectionBuilder({
       authorizationFacts,

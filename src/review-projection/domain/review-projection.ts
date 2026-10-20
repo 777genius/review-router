@@ -113,6 +113,17 @@ export interface RevisionFile {
   readonly patch?: string;
 }
 
+export interface ReviewCoverageManifestFile {
+  readonly path: string;
+  readonly status:
+    | 'full'
+    | 'compacted'
+    | 'metadata-only'
+    | 'skipped'
+    | 'unreviewed';
+  readonly reason?: string;
+}
+
 export interface ReviewCoverageFact {
   readonly state: ProjectionCoverageState;
   readonly mode: 'full' | 'incremental';
@@ -120,6 +131,7 @@ export interface ReviewCoverageFact {
   readonly reviewedFiles: number;
   readonly unreviewedFiles: number;
   readonly limitations: readonly string[];
+  readonly files?: readonly ReviewCoverageManifestFile[];
 }
 
 export interface PriorLineageHint {

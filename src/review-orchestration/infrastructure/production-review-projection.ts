@@ -15,6 +15,7 @@ import {
   RevisionFileStatus,
   type CurrentFindingCandidate,
   type LifecycleRevalidation,
+  type ReviewCoverageManifestFile,
   type ReviewProjectionLimits,
 } from '../../review-projection/domain';
 import { LegacyReviewProjectionPolicyAdapter } from '../../review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter';
@@ -128,6 +129,49 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     const reviewedFiles = new Set<string>();
     const policyExcludedFiles = new Set<string>();
     const coverageLimitations: string[] = [];
+    const manifestByPath = new Map<string, ReviewCoverageManifestFile>();
+    const recordManifestFile = (entry: ReviewCoverageManifestFile) => {
+      const existing = manifestByPath.get(entry.path);
+      if (
+        !existing ||
+        manifestFileStatusRank(entry.status) >
+          manifestFileStatusRank(existing.status)
+      ) {
+        manifestByPath.set(entry.path, entry);
+      }
+    };
+    for (const assignment of this.input.assignments) {
+      const accepted = evidence.get(assignment.workSlotId);
+      if (!accepted) {
+        if (assignment.required) {
+          for (const path of assignment.filePaths) {
+            recordManifestFile({
+              path,
+              status: 'unreviewed',
+              reason: 'required work slot produced no accepted evidence',
+            });
+          }
+        }
+        continue;
+      }
+      for (const path of accepted.coverageManifest.paths) {
+        recordManifestFile(promptCoverageToManifestFile(path));
+      }
+    }
+    for (const path of this.input.uncoveredPaths) {
+      recordManifestFile({
+        path,
+        status: 'unreviewed',
+        reason: 'no review work slot covered this file',
+      });
+    }
+    for (const file of this.input.pr.files) {
+      recordManifestFile({
+        path: file.filename,
+        status: 'unreviewed',
+        reason: 'no review work slot covered this file',
+      });
+    }
     for (const assignment of requiredAssignments) {
       const accepted = evidence.get(assignment.workSlotId);
       if (!accepted) {
@@ -197,6 +241,11 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       this.input.assignments,
       evidence
     );
+    const manifestFiles = Object.freeze(
+      [...manifestByPath.values()].sort((left, right) =>
+        compareCodeUnits(left.path, right.path)
+      )
+    );
 
     return Object.freeze({
       projectionPolicyVersion: productionReviewProjectionPolicyVersion,
@@ -241,6 +290,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
             policyExcludedFiles.size
         ),
         limitations: Object.freeze(limitations),
+        files: manifestFiles,
       },
       revisionFiles: Object.freeze(
         this.input.pr.files.map((file) => ({
@@ -547,6 +597,69 @@ export function compareCodeUnits(left: string, right: string): number {
   if (left < right) return -1;
   if (left > right) return 1;
   return 0;
+}
+
+function promptCoverageToManifestFile(path: {
+  readonly path: string;
+  readonly kind: ReviewPromptPathCoverageKind;
+}): ReviewCoverageManifestFile {
+  switch (path.kind) {
+    case ReviewPromptPathCoverageKind.FullPatch:
+      return { path: path.path, status: 'full' };
+    case ReviewPromptPathCoverageKind.PolicyExcluded:
+      return {
+        path: path.path,
+        status: 'skipped',
+        reason: 'excluded by review policy',
+      };
+    case ReviewPromptPathCoverageKind.SummaryOnly:
+      return {
+        path: path.path,
+        status: 'compacted',
+        reason: 'summary-only content in prompt',
+      };
+    case ReviewPromptPathCoverageKind.TrustedRead:
+      return {
+        path: path.path,
+        status: 'compacted',
+        reason: 'trusted read without full patch',
+      };
+    case ReviewPromptPathCoverageKind.Trimmed:
+      return {
+        path: path.path,
+        status: 'metadata-only',
+        reason: 'diff trimmed in prompt',
+      };
+    case ReviewPromptPathCoverageKind.MetadataOnly:
+      return {
+        path: path.path,
+        status: 'metadata-only',
+        reason: 'metadata-only content in prompt',
+      };
+    case ReviewPromptPathCoverageKind.Unavailable:
+      return {
+        path: path.path,
+        status: 'unreviewed',
+        reason: 'file content unavailable',
+      };
+  }
+}
+
+function manifestFileStatusRank(
+  status: ReviewCoverageManifestFile['status']
+): number {
+  switch (status) {
+    case 'full':
+      return 4;
+    case 'compacted':
+      return 3;
+    case 'metadata-only':
+      return 2;
+    case 'skipped':
+      return 1;
+    case 'unreviewed':
+      return 0;
+  }
 }
 
 function sha256(value: string): string {

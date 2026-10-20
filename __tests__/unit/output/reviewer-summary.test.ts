@@ -301,6 +301,103 @@ describe('reviewer summary markdown', () => {
     expect(markdown).toContain('<!-- reviewrouter:review-status:complete -->');
   });
 
+  it('lists reviewed and not-reviewed files in the incomplete coverage manifest', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      coverage: {
+        complete: false,
+        totalFiles: 4,
+        reviewedFiles: 3,
+        unreviewedFiles: 1,
+        mode: 'full',
+        limitations: ['A required file was not reviewed.'],
+        files: [
+          { path: 'src/full-1.ts', status: 'full' },
+          { path: 'src/full-2.ts', status: 'full' },
+          {
+            path: 'src/compacted.ts',
+            status: 'compacted',
+            reason: 'summary-only content in prompt',
+          },
+          {
+            path: 'src/missed.ts',
+            status: 'unreviewed',
+            reason: 'no review work slot covered this file',
+          },
+        ],
+      },
+    });
+
+    expect(markdown).toContain('### File coverage');
+    expect(markdown).toContain('- `src/full-1.ts` - full');
+    expect(markdown).toContain('- `src/full-2.ts` - full');
+    expect(markdown).toContain(
+      '- `src/compacted.ts` - compacted — summary-only content in prompt'
+    );
+    expect(markdown).toContain(
+      '- `src/missed.ts` - unreviewed — no review work slot covered this file'
+    );
+    // Gaps surface before fully reviewed files.
+    expect(markdown.indexOf('- `src/missed.ts`')).toBeLessThan(
+      markdown.indexOf('- `src/full-1.ts`')
+    );
+    expect(markdown.indexOf('- `src/compacted.ts`')).toBeLessThan(
+      markdown.indexOf('- `src/full-1.ts`')
+    );
+  });
+
+  it('reports manifest overflow instead of dropping coverage lines silently', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      coverage: {
+        complete: false,
+        totalFiles: 120,
+        reviewedFiles: 120,
+        unreviewedFiles: 0,
+        mode: 'full',
+        limitations: ['A required file was not reviewed.'],
+        files: Array.from({ length: 120 }, (_, index) => ({
+          path: `src/file-${String(index).padStart(3, '0')}.ts`,
+          status: 'full',
+        })),
+      },
+    });
+
+    expect(markdown).toContain('- `src/file-000.ts` - full');
+    expect(markdown).toContain('- `src/file-099.ts` - full');
+    expect(markdown).not.toContain('- `src/file-100.ts` - full');
+    expect(markdown).toContain('20 more files not shown.');
+  });
+
+  it('flags truncated non-full coverage lines in complete reports', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      coverage: {
+        complete: true,
+        totalFiles: 120,
+        reviewedFiles: 120,
+        unreviewedFiles: 0,
+        mode: 'full',
+        limitations: [],
+        files: Array.from({ length: 120 }, (_, index) => ({
+          path: `src/file-${String(index).padStart(3, '0')}.ts`,
+          status: 'compacted',
+          reason: 'summary-only content in prompt',
+        })),
+      },
+    });
+
+    expect(markdown).toContain('- `src/file-000.ts` - compacted');
+    expect(markdown).not.toContain('- `src/file-100.ts` - compacted');
+    expect(markdown).toContain('20 more files not shown.');
+  });
+
   it.each([
     { totalFiles: 1, reviewedFiles: 1, unreviewedFiles: 0 },
     { totalFiles: 2, reviewedFiles: 1, unreviewedFiles: 1 },

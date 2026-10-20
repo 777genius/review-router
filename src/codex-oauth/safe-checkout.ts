@@ -34,6 +34,8 @@ export async function createIsolatedCheckoutWorkspace(input: {
 export async function safeCheckoutRepository(input: {
   repository: string;
   headSha: string;
+  /** OCR range mode needs the captured merge-base and its ancestry to HEAD. */
+  mergeBaseSha?: string;
   workspacePath: string;
   token: string;
   signal?: AbortSignal;
@@ -41,6 +43,7 @@ export async function safeCheckoutRepository(input: {
   input.signal?.throwIfAborted();
   assertRepositoryFullName(input.repository);
   assertFullSha(input.headSha);
+  if (input.mergeBaseSha !== undefined) assertFullSha(input.mergeBaseSha);
   await assertWorkspaceEmpty(input.workspacePath);
 
   const gitHome = await fs.mkdtemp(path.join(os.tmpdir(), 'reviewrouter-git-'));
@@ -84,9 +87,12 @@ export async function safeCheckoutRepository(input: {
         'fetch',
         '--no-tags',
         '--no-recurse-submodules',
-        '--depth=1',
+        // Native OCR recomputes merge-base, so two shallow endpoints are not
+        // sufficient. Fetch only the captured range refs, with their ancestry.
+        ...(input.mergeBaseSha === undefined ? ['--depth=1'] : []),
         'origin',
         input.headSha,
+        ...(input.mergeBaseSha === undefined ? [] : [input.mergeBaseSha]),
       ],
       input.workspacePath,
       gitHome,
@@ -210,7 +216,7 @@ function assertRepositoryFullName(value: string): void {
 }
 
 function assertFullSha(value: string): void {
-  if (!/^[a-f0-9]{40}$/i.test(value)) {
+  if (value.length !== 40 || !/^[a-f0-9]{40}$/i.test(value)) {
     throw new Error('codex_oauth_invalid_head_sha');
   }
 }

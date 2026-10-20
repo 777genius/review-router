@@ -101235,6 +101235,7 @@ async function safeCheckoutRepository(input) {
   input.signal?.throwIfAborted();
   assertRepositoryFullName(input.repository);
   assertFullSha(input.headSha);
+  if (input.mergeBaseSha !== void 0) assertFullSha(input.mergeBaseSha);
   await assertWorkspaceEmpty(input.workspacePath);
   const gitHome = await fs20.mkdtemp(path18.join(os8.tmpdir(), "reviewrouter-git-"));
   let failed = false;
@@ -101277,9 +101278,12 @@ async function safeCheckoutRepository(input) {
         "fetch",
         "--no-tags",
         "--no-recurse-submodules",
-        "--depth=1",
+        // Native OCR recomputes merge-base, so two shallow endpoints are not
+        // sufficient. Fetch only the captured range refs, with their ancestry.
+        ...input.mergeBaseSha === void 0 ? ["--depth=1"] : [],
         "origin",
-        input.headSha
+        input.headSha,
+        ...input.mergeBaseSha === void 0 ? [] : [input.mergeBaseSha]
       ],
       input.workspacePath,
       gitHome,
@@ -101390,7 +101394,7 @@ function assertRepositoryFullName(value) {
   }
 }
 function assertFullSha(value) {
-  if (!/^[a-f0-9]{40}$/i.test(value)) {
+  if (value.length !== 40 || !/^[a-f0-9]{40}$/i.test(value)) {
     throw new Error("codex_oauth_invalid_head_sha");
   }
 }
@@ -105544,6 +105548,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     await safeCheckoutRepository({
       repository: capability.repository,
       headSha: capability.headSha,
+      ...ocrAgent ? { mergeBaseSha: authorization.facts.mergeBaseSha } : {},
       workspacePath,
       token: capability.token,
       signal: run2.signal

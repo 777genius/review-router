@@ -157,7 +157,9 @@ async function runAccountGatewayRuntimeInternal(
   let cli: PreparedCodexCli | undefined;
   let bridge: LocalGatewayModelTransport | undefined;
   let ocrRun: OcrManagedRunHandle | undefined;
-  let ocrBinary: Awaited<ReturnType<typeof resolveApprovedOcrBinary>> | undefined;
+  let ocrBinary:
+    | Awaited<ReturnType<typeof resolveApprovedOcrBinary>>
+    | undefined;
   let reason: GatewayCloseReason = 'failed';
   const onSignal = () => {
     reason = 'cancelled';
@@ -292,6 +294,7 @@ async function runAccountGatewayRuntimeInternal(
     await safeCheckoutRepository({
       repository: capability.repository,
       headSha: capability.headSha,
+      ...(ocrAgent ? { mergeBaseSha: authorization.facts.mergeBaseSha } : {}),
       workspacePath,
       token: capability.token,
       signal: run.signal,

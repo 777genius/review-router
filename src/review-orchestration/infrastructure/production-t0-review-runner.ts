@@ -265,9 +265,13 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const reasoningEffort = resolveProductionInvestigationReasoningEffort({
       codexModel: model,
       accountGateway: input.accountGateway !== undefined,
+      providerApi: input.providerApi !== undefined,
       serverReasoningEffort,
     });
-    if (input.accountGateway && model === 'mimo-v2.6-pro') {
+    if (
+      input.providerApi ||
+      (input.accountGateway && model === 'mimo-v2.6-pro')
+    ) {
       process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
@@ -553,6 +557,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         ? {
             providerNamePrefix: 'openrouter' as const,
             disableBuiltinTools: true,
+            waitForProcessClose: true,
           }
         : {}),
       ...(input.accountGateway
@@ -603,7 +608,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       agenticContext,
       contextGateway,
       false,
-      'xhigh',
+      input.providerApi ? reasoningEffort : 'xhigh',
       input.providerApi?.credentialLease
     );
     const investigationInvocationAdapter =
@@ -1003,8 +1008,20 @@ function publicInvestigationProcessDiagnostic(stderr: string): Readonly<{
 export function resolveProductionInvestigationReasoningEffort(input: {
   readonly codexModel: string;
   readonly accountGateway: boolean;
+  readonly providerApi?: boolean;
   readonly serverReasoningEffort?: string;
 }): NonNullable<CodexReviewAgentAdapterOptions['reasoningEffort']> {
+  if (input.providerApi) {
+    const effort = input.serverReasoningEffort ?? 'xhigh';
+    if (
+      effort !== 'low' &&
+      effort !== 'medium' &&
+      effort !== 'high' &&
+      effort !== 'xhigh'
+    )
+      throw new Error('provider_api_reasoning_effort_unsupported');
+    return effort;
+  }
   if (!input.accountGateway || input.codexModel !== 'mimo-v2.6-pro') {
     return 'xhigh';
   }

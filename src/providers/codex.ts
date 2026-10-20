@@ -58,6 +58,8 @@ export interface CodexProviderOptions {
   accountGateway?: LocalGatewayModelTransport;
   /** Trusted provider API T0 composition; context access remains RR MCP-only. */
   disableBuiltinTools?: boolean;
+  /** Trusted isolated runtime cleanup must follow child closure. */
+  waitForProcessClose?: boolean;
   agenticContext?: boolean;
   eventAudit?: boolean;
   modelProvider?: CodexModelProvider;
@@ -476,7 +478,8 @@ export class CodexProvider extends Provider {
       auditMode,
       optionalAgenticRetryMaxPromptTokens:
         MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
-      acceptReviewOutputOnNonZero: !this.options.accountGateway,
+      acceptReviewOutputOnNonZero:
+        !this.options.accountGateway && !this.options.waitForProcessClose,
       ...(contextGateway ? { contextGateway } : {}),
     };
     return createPreparedProviderInvocation({
@@ -883,6 +886,9 @@ export class CodexProvider extends Provider {
       options.outputSchema && cliSchemaEnabled
         ? path.join(os.tmpdir(), `codex-schema-${runId}.json`)
         : undefined;
+    const waitForProcessClose = Boolean(
+      this.options.accountGateway || this.options.waitForProcessClose
+    );
     let fd: fs.FileHandle | undefined;
     try {
       await fs.writeFile(tmpFile, stdin, { encoding: 'utf8', mode: 0o600 });
@@ -951,7 +957,7 @@ export class CodexProvider extends Provider {
         };
         const fail = (error: unknown) => {
           if (settled) return;
-          if (this.options.accountGateway) {
+          if (waitForProcessClose) {
             if (!failed) {
               pendingFailure = error;
               failed = true;
@@ -1000,7 +1006,7 @@ export class CodexProvider extends Provider {
           stderr += chunk.toString();
         });
         proc.on('error', (err) => {
-          if (this.options.accountGateway && proc.pid) terminate();
+          if (waitForProcessClose && proc.pid) terminate();
           fail(err);
         });
         proc.on('close', (code) => {
@@ -1017,7 +1023,7 @@ export class CodexProvider extends Provider {
           }
         });
       }).catch(async (error) => {
-        if (this.options.accountGateway || options.signal?.aborted) throw error;
+        if (waitForProcessClose || options.signal?.aborted) throw error;
         const lastMessage = await this.readOptionalFile(outputFile);
         if (
           options.acceptReviewOutputOnNonZero &&

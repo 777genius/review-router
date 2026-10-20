@@ -732,6 +732,7 @@ describe('CodexProvider', () => {
         providerNamePrefix: 'openrouter',
         agenticContext: withContext,
         disableBuiltinTools: true,
+        waitForProcessClose: true,
       });
       overridePrivate(
         provider,
@@ -745,6 +746,7 @@ describe('CodexProvider', () => {
         withContext ? contextGatewayV4Config() : undefined
       );
       const args = prepared.request.argsTemplate;
+      expect(prepared.request.acceptReviewOutputOnNonZero).toBe(false);
       expect(args).toContain('--ignore-user-config');
       expect(args).toContain('mcp_servers={}');
       expect(
@@ -2792,6 +2794,75 @@ describe('CodexProvider', () => {
     expect(content).toContain('[src/ratePolicies.js](src/ratePolicies.js)');
     expect(content).not.toContain('/home/runner/work/');
   });
+
+  it.each(['abort', 'timeout', 'error'] as const)(
+    'drains direct child close after %s before resolving cleanup ownership',
+    async (failure) => {
+      const proc = new EventEmitter() as any;
+      proc.stdout = new EventEmitter();
+      proc.stderr = new EventEmitter();
+      proc.kill = jest.fn();
+      proc.pid = 12345;
+      spawnMock.mockReturnValue(proc);
+      const kill = jest
+        .spyOn(process, 'kill')
+        .mockImplementation((() => true) as any);
+      const abort = new AbortController();
+      const provider = new CodexProvider('vendor/model', {
+        modelProvider: 'openrouter',
+        waitForProcessClose: true,
+      });
+      let settled = false;
+      const running = (provider as any).runCliWithStdin(
+        'codex',
+        'review prompt',
+        failure === 'timeout' ? 30 : 60_000,
+        { healthCheck: false, signal: abort.signal }
+      );
+      const result = running.then(
+        () => {
+          settled = true;
+          return undefined;
+        },
+        (error: Error) => {
+          settled = true;
+          return error;
+        }
+      );
+      try {
+        for (
+          let attempt = 0;
+          attempt < 100 && spawnMock.mock.calls.length === 0;
+          attempt += 1
+        )
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(spawnMock).toHaveBeenCalledTimes(1);
+        if (failure === 'abort') abort.abort();
+        if (failure === 'error')
+          proc.emit('error', new Error('direct child failure'));
+        await new Promise((resolve) =>
+          setTimeout(resolve, failure === 'timeout' ? 60 : 10)
+        );
+        expect(kill).toHaveBeenCalledWith(-proc.pid, 'SIGKILL');
+        expect(settled).toBe(false);
+        proc.emit('close', null);
+        const error = await result;
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toMatch(
+          failure === 'abort'
+            ? /aborted/
+            : failure === 'timeout'
+              ? /timed out/
+              : /direct child failure/
+        );
+      } finally {
+        abort.abort();
+        proc.emit('close', null);
+        await result;
+        kill.mockRestore();
+      }
+    }
+  );
 
   it('kills the detached Codex process group when execution is aborted', async () => {
     const proc = new EventEmitter() as any;

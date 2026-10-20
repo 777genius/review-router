@@ -65859,7 +65859,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       jsonEvents: auditMode !== "off" || contextGateway !== void 0,
       auditMode,
       optionalAgenticRetryMaxPromptTokens: MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
-      acceptReviewOutputOnNonZero: !this.options.accountGateway,
+      acceptReviewOutputOnNonZero: !this.options.accountGateway && !this.options.waitForProcessClose,
       ...contextGateway ? { contextGateway } : {}
     };
     return createPreparedProviderInvocation({
@@ -66169,6 +66169,9 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const outputFile = path4.join(os2.tmpdir(), `codex-output-${runId}.txt`);
     const cliSchemaEnabled = prepared ? prepared.argsTemplate.includes("--output-schema") : supportsCliOutputSchema(this.options.modelProvider);
     const schemaFile = options.outputSchema && cliSchemaEnabled ? path4.join(os2.tmpdir(), `codex-schema-${runId}.json`) : void 0;
+    const waitForProcessClose = Boolean(
+      this.options.accountGateway || this.options.waitForProcessClose
+    );
     let fd;
     try {
       await fs5.writeFile(tmpFile, stdin, { encoding: "utf8", mode: 384 });
@@ -66221,7 +66224,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         };
         const fail = (error) => {
           if (settled) return;
-          if (this.options.accountGateway) {
+          if (waitForProcessClose) {
             if (!failed) {
               pendingFailure = error;
               failed = true;
@@ -66265,7 +66268,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           stderr2 += chunk.toString();
         });
         proc.on("error", (err) => {
-          if (this.options.accountGateway && proc.pid) terminate();
+          if (waitForProcessClose && proc.pid) terminate();
           fail(err);
         });
         proc.on("close", (code) => {
@@ -66282,7 +66285,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           }
         });
       }).catch(async (error) => {
-        if (this.options.accountGateway || options.signal?.aborted) throw error;
+        if (waitForProcessClose || options.signal?.aborted) throw error;
         const lastMessage2 = await this.readOptionalFile(outputFile);
         if (options.acceptReviewOutputOnNonZero && this.isUsableReviewOutput(lastMessage2)) {
           const exitError = error instanceof CodexCliExitError ? error : void 0;
@@ -92199,9 +92202,10 @@ var ProductionT0ReviewRunner = class {
     const reasoningEffort = resolveProductionInvestigationReasoningEffort({
       codexModel: model,
       accountGateway: input.accountGateway !== void 0,
+      providerApi: input.providerApi !== void 0,
       serverReasoningEffort
     });
-    if (input.accountGateway && model === "mimo-v2.6-pro") {
+    if (input.providerApi || input.accountGateway && model === "mimo-v2.6-pro") {
       process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
@@ -92456,7 +92460,8 @@ var ProductionT0ReviewRunner = class {
       ),
       ...input.providerApi ? {
         providerNamePrefix: "openrouter",
-        disableBuiltinTools: true
+        disableBuiltinTools: true,
+        waitForProcessClose: true
       } : {},
       ...input.accountGateway ? { accountGateway: input.accountGateway.modelTransport } : {}
     });
@@ -92499,7 +92504,7 @@ var ProductionT0ReviewRunner = class {
       agenticContext,
       contextGateway,
       false,
-      "xhigh",
+      input.providerApi ? reasoningEffort : "xhigh",
       input.providerApi?.credentialLease
     );
     const investigationInvocationAdapter = createProductionReviewInvestigationInvocation({
@@ -92801,6 +92806,12 @@ function publicInvestigationProcessDiagnostic(stderr) {
   });
 }
 function resolveProductionInvestigationReasoningEffort(input) {
+  if (input.providerApi) {
+    const effort2 = input.serverReasoningEffort ?? "xhigh";
+    if (effort2 !== "low" && effort2 !== "medium" && effort2 !== "high" && effort2 !== "xhigh")
+      throw new Error("provider_api_reasoning_effort_unsupported");
+    return effort2;
+  }
   if (!input.accountGateway || input.codexModel !== "mimo-v2.6-pro") {
     return "xhigh";
   }

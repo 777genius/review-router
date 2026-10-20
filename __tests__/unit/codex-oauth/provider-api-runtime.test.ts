@@ -1,6 +1,10 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
+import childProcess, { type ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { CodexProvider } from '../../../src/providers/codex';
 import * as core from '../../../src/actions/core';
 import { bundledReviewAgentForTransport } from '../../../src/control-plane/approved-review-agent';
 import { AccountGatewayModelTransport } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
@@ -209,6 +213,7 @@ describe('direct provider API bootstrap', () => {
   it.each([
     { REVIEW_AUTH_MODE: 'codex-account-gateway' },
     { INLINE_MIN_AGREEMENT: '2' },
+    { CODEX_REASONING_EFFORT: 'ultra' },
   ])(
     'denies a mismatched capture %j before CLI, checkout or key materialization',
     async (override) => {
@@ -268,6 +273,78 @@ describe('direct provider API bootstrap', () => {
       review,
       terminalReview: jest.fn(),
     });
+  });
+
+  it('keeps bootstrap-owned files and CLI until an aborted direct child closes', async () => {
+    const proc = Object.assign(new EventEmitter(), {
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      pid: 12345,
+      kill: jest.fn(),
+    }) as unknown as ChildProcess;
+    let didSpawn!: () => void;
+    const spawned = new Promise<void>((resolve) => {
+      didSpawn = resolve;
+    });
+    jest.spyOn(childProcess, 'spawn').mockImplementation(() => {
+      didSpawn();
+      return proc;
+    });
+    const kill = jest.spyOn(process, 'kill').mockImplementation(() => true);
+    let home = '';
+    let checkout = '';
+    const terminalReview = jest.fn();
+    const review = {
+      run: async (
+        input: Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]
+      ) => {
+        home = input.codexHome!;
+        checkout = input.workspacePath;
+        const provider = new CodexProvider('vendor/model', {
+          modelProvider: 'openrouter',
+          disableBuiltinTools: true,
+          waitForProcessClose: true,
+        });
+        await provider['runCliWithStdin'](
+          input.codexBinaryPath!,
+          'review prompt',
+          60_000,
+          {
+            healthCheck: false,
+            signal: input.providerApi!.signal,
+            cwd: checkout,
+          }
+        );
+        return completed;
+      },
+    };
+    const operation = runProviderApiRuntime(inputs(), {
+      review,
+      terminalReview,
+    });
+    const rejected = expect(operation).rejects.toThrow(
+      'provider_api_runtime_failed:runner'
+    );
+    try {
+      await spawned;
+      const cli = await jest.mocked(prepareCodexCliBeforeAuthRead).mock
+        .results[0].value;
+      process.emit('SIGTERM');
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(kill).toHaveBeenCalledWith(-proc.pid!, 'SIGKILL');
+      await expect(fs.stat(home)).resolves.toBeDefined();
+      await expect(fs.stat(checkout)).resolves.toBeDefined();
+      expect(cli.clear).not.toHaveBeenCalled();
+      proc.emit('close', null);
+      await rejected;
+      await expect(fs.stat(home)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.stat(checkout)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(cli.clear).toHaveBeenCalledTimes(1);
+      expect(terminalReview).not.toHaveBeenCalled();
+    } finally {
+      proc.emit('close', null);
+      await operation.catch(() => undefined);
+    }
   });
 
   it('fences the local credential on cancellation and never enters terminal publication', async () => {

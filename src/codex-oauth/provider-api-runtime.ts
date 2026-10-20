@@ -19,7 +19,10 @@ import {
   createAccountGatewayRunFetch,
 } from '../review-orchestration/infrastructure/account-gateway-model-transport';
 import { ReviewActionV2ControlPlaneAdapter } from '../review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
-import { selectDirectOpenRouterProvider } from '../review-orchestration/infrastructure/production-t0-review-runner';
+import {
+  selectDirectOpenRouterProvider,
+  resolveProductionInvestigationReasoningEffort,
+} from '../review-orchestration/infrastructure/production-t0-review-runner';
 import { validateAccountGatewayCheckout } from './account-gateway-runtime';
 import {
   clearCodexRotatingOidcRequestEnv,
@@ -84,6 +87,12 @@ export function approvedProviderApiAgent(runtime: AdmittedRuntimeConfig) {
     throw new Error('provider_api_admitted_configuration_invalid');
   }
   selectDirectOpenRouterProvider(ConfigLoader.loadRuntimeEnvironment(env));
+  resolveProductionInvestigationReasoningEffort({
+    codexModel: env.REVIEW_PROVIDERS!.slice('openrouter/'.length),
+    accountGateway: false,
+    providerApi: true,
+    serverReasoningEffort: env.CODEX_REASONING_EFFORT,
+  });
   const agent = readApprovedReviewAgent(
     env.REVIEW_ROUTER_AGENT_PROFILE_JSON ?? '',
     env.REVIEW_ROUTER_AGENT_PROFILE_DIGEST ?? ''

@@ -233,6 +233,7 @@ describe('ProductionT0ReviewRunner policy', () => {
               REVIEWROUTER_LOCAL_MODEL_TOKEN: 'fixture-capability',
             },
             actualModel: () => selectedModel,
+            failureFact: () => undefined,
             dispose: async () => {},
           },
           executionSessions: {
@@ -600,6 +601,7 @@ describe('ProductionT0ReviewRunner policy', () => {
                     configuration: [],
                     environment: { CODEX_HOME: path.join(root, 'home') },
                     actualModel: () => model,
+                    failureFact: () => undefined,
                     dispose: async () => {},
                   },
                 },
@@ -688,6 +690,7 @@ process.stdin.once('data', () => {
                   configuration: [],
                   environment: { CODEX_HOME: home },
                   actualModel: () => 'gpt-fixture',
+                  failureFact: () => undefined,
                   dispose: async () => {},
                 },
               }

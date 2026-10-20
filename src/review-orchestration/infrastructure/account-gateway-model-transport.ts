@@ -121,6 +121,7 @@ export type LocalGatewayModelTransport = Readonly<{
   environment: Readonly<NodeJS.ProcessEnv>;
   configuration: readonly string[];
   actualModel(): string | undefined;
+  failureFact(): GatewayFailureFact | undefined;
   dispose(): Promise<void>;
 }>;
 
@@ -699,6 +700,7 @@ export async function startLocalGatewayModelTransport(
     }),
     configuration: codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
+    failureFact: () => transport.lastFailure,
     async dispose() {
       stopping = true;
       transport.cancelHeldStreams();

@@ -116,6 +116,7 @@ enum ReviewWorkSlotExhaustionReason {
   InvestigationDeferred = 'investigation_deferred',
   RestoredTerminal = 'restored_terminal',
   DeadlineReached = 'deadline_reached',
+  AdmissionLimited = 'admission_limited',
 }
 
 export type RunT0ReviewOrchestrationDependencies = {
@@ -313,6 +314,7 @@ export class RunT0ReviewOrchestration {
         ReviewWorkSlotExhaustionReason
       >();
       const busyPollsByProviderLane = new Map<string, number>();
+      let admissionLimited = false;
       const restoredSlots = new Map(
         execution.restoredExecution.workSlots.map((slot) => [
           slot.workSlotId,
@@ -380,6 +382,7 @@ export class RunT0ReviewOrchestration {
           revision: command,
           restoredSlot,
           busyPollsByProviderLane,
+          admissionLimited,
           onEvent: (event) => {
             state = evolveReviewOrchestration(state, event);
           },
@@ -406,6 +409,12 @@ export class RunT0ReviewOrchestration {
               workSlot.workSlotId,
               outcome.exhaustionReason
             );
+          }
+          if (
+            outcome.exhaustionReason ===
+            ReviewWorkSlotExhaustionReason.AdmissionLimited
+          ) {
+            admissionLimited = true;
           }
           this.dependencies.progress?.report({
             type: 'exhausted',
@@ -868,6 +877,7 @@ export class RunT0ReviewOrchestration {
     readonly revision: ReviewRevisionFacts;
     readonly restoredSlot: RestoredReviewWorkSlot;
     readonly busyPollsByProviderLane: Map<string, number>;
+    readonly admissionLimited: boolean;
     readonly onEvent: (event: {
       readonly type:
         | ReviewOrchestrationEventType.SlotLookupStarted
@@ -935,6 +945,16 @@ export class RunT0ReviewOrchestration {
         throw new Error(
           'review_orchestration_restored_observation_unavailable'
         );
+      }
+      if (input.admissionLimited) {
+        input.onEvent({
+          type: ReviewOrchestrationEventType.SlotExhausted,
+          workSlotId: input.workSlot.workSlotId,
+        });
+        return {
+          streamVersion,
+          exhaustionReason: ReviewWorkSlotExhaustionReason.AdmissionLimited,
+        };
       }
       if (!this.canStartInvocation(attemptOrdinal)) {
         input.onEvent({
@@ -1301,6 +1321,18 @@ export class RunT0ReviewOrchestration {
             throw error instanceof ReviewInvocationConfigurationMismatchError
               ? error
               : new Error('review_invocation_configuration_mismatch');
+          }
+          if (
+            failureClass === ReviewInvocationFailureClass.AdmissionLimited
+          ) {
+            input.onEvent({
+              type: ReviewOrchestrationEventType.SlotExhausted,
+              workSlotId: input.workSlot.workSlotId,
+            });
+            return {
+              streamVersion,
+              exhaustionReason: ReviewWorkSlotExhaustionReason.AdmissionLimited,
+            };
           }
           continue;
         }
@@ -2143,6 +2175,9 @@ function derivePartialFailureCode(input: {
     }
     if (reason === ReviewWorkSlotExhaustionReason.DeadlineReached) {
       return 'required_execution_deadline_reached';
+    }
+    if (reason === ReviewWorkSlotExhaustionReason.AdmissionLimited) {
+      return 'required_admission_limited';
     }
     return 'required_work_exhausted';
   }

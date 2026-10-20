@@ -53,4 +53,41 @@ describe('ProviderInvocationFailureClassifier', () => {
       )
     ).toBe(ReviewInvocationFailureClass.ConfigurationMismatch);
   });
+
+  it('classifies terminal gateway admission refusal from the failure fact', () => {
+    const refused = new ProviderInvocationFailureClassifier(() => ({
+      code: 'admission_limited',
+      effect: 'not_dispatched',
+    }));
+    expect(
+      refused.classify(new Error('account_gateway_inference_denied'))
+    ).toBe('admission_limited');
+    expect(refused.classify(new Error('rate limit exceeded'))).toBe(
+      'admission_limited'
+    );
+    const rejected = new ProviderInvocationFailureClassifier(() => ({
+      code: 'admission_limited',
+      effect: 'rejected_before_dispatch',
+    }));
+    expect(rejected.classify(new Error('relay refused'))).toBe(
+      'admission_limited'
+    );
+  });
+
+  it('keeps non-terminal gateway facts on the error heuristics', () => {
+    const unknownEffect = new ProviderInvocationFailureClassifier(() => ({
+      code: 'admission_limited',
+      effect: 'effect_unknown',
+    }));
+    expect(unknownEffect.classify(new Error('request timed out'))).toBe(
+      ReviewInvocationFailureClass.Retryable
+    );
+    const transportFact = new ProviderInvocationFailureClassifier(() => ({
+      code: 'transport',
+      effect: 'effect_unknown',
+    }));
+    expect(transportFact.classify(new Error('quota_exceeded'))).toBe(
+      ReviewInvocationFailureClass.CapacityUnavailable
+    );
+  });
 });

@@ -489,6 +489,7 @@ if (process.argv[2] === '--source-main') {
             environment: {},
             configuration: [],
             actualModel: () => undefined,
+            failureFact: () => undefined,
             dispose: async () => undefined,
           },
         });

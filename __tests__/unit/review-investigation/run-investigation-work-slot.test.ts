@@ -252,6 +252,31 @@ describe('RunInvestigationWorkSlot', () => {
     expect(controlPlane.planTurn).not.toHaveBeenCalled();
   });
 
+  it('does not repeat an in-budget conclusion that returns a nonterminal snapshot', async () => {
+    const ready = Object.freeze({
+      ...plannedSnapshot(),
+      state: ReviewInvestigationState.ReadyToConclude,
+      nextAction: ReviewInvestigationNextAction.Conclude,
+      turn: null,
+    });
+    const controlPlane = controlPlaneFixture(ready);
+    controlPlane.conclude.mockResolvedValue(ready);
+    const agent = agentFixture(observation());
+
+    const result = await runnerFixture(controlPlane, agent).execute({
+      ...runInput(),
+      maxStateTransitions: 1,
+    });
+
+    expect(result).toEqual({
+      status: ReviewInvestigationRunStatus.TransitionBudgetExhausted,
+      snapshot: ready,
+    });
+    expect(controlPlane.conclude).toHaveBeenCalledTimes(1);
+    expect(agent.executeTurn).not.toHaveBeenCalled();
+    expect(controlPlane.planTurn).not.toHaveBeenCalled();
+  });
+
   it('refreshes a restored active-turn capability before provider execution', async () => {
     const restored = Object.freeze({
       ...plannedSnapshot(),

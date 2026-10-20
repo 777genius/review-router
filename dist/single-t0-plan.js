@@ -68734,6 +68734,7 @@ var RunInvestigationWorkSlot = class {
       }
     }
     legacyFallbackGate.close();
+    let conclusionAttempted = false;
     for (let transition = 0; transition < input.maxStateTransitions; transition += 1) {
       throwIfAborted(input.signal);
       if (isSuperseded(snapshot)) {
@@ -68760,12 +68761,13 @@ var RunInvestigationWorkSlot = class {
         continue;
       }
       if (snapshot.nextAction === "conclude" /* Conclude */) {
+        conclusionAttempted = true;
         snapshot = await this.dependencies.controlPlane.conclude({
           authorizationToken: input.authorizationToken,
           snapshot,
           certificateTtlMs: input.certificateTtlMs
         });
-        continue;
+        break;
       }
       if (snapshot.turn === null || snapshot.turn.turnCapability.length === 0) {
         snapshot = await this.dependencies.controlPlane.planTurn({
@@ -68858,7 +68860,7 @@ var RunInvestigationWorkSlot = class {
     if (isSuperseded(snapshot)) {
       return { status: "superseded" /* Superseded */, snapshot };
     }
-    if (input.maxStateTransitions > 0 && snapshot.nextAction === "conclude" /* Conclude */) {
+    if (input.maxStateTransitions > 0 && !conclusionAttempted && snapshot.nextAction === "conclude" /* Conclude */) {
       throwIfAborted(input.signal);
       snapshot = await this.dependencies.controlPlane.conclude({
         authorizationToken: input.authorizationToken,

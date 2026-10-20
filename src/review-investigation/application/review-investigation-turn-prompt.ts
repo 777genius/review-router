@@ -17,6 +17,8 @@ const TURN_INSTRUCTIONS = Object.freeze([
   'When inspected evidence reveals additional review scope, add a provider-neutral obligationProposals entry instead of silently broadening an existing obligation.',
   'Each obligation proposal must contain exactly kind, path, revision, and riskPriority. Use the repository-relative path and either head or merge_base revision; the control plane derives canonical identities and hashes. Use only schema-listed kinds; never provide an obligation ID, state, authority decision, or receipt claim.',
   'Obligation proposals are non-authoritative and remain open until the control plane validates and independently closes them with accepted evidence.',
+  'Each finding must include in its own evidenceOperationReceiptIds every receipt in a contiguous file_read chain for that exact finding path at revision="head", starting at startByte=0 and covering the file through EOF; the terminal read must report eof=true, making its authenticated receipt complete=true. Search results, merge_base reads, and partial snippets do not satisfy this requirement.',
+  'If you cannot obtain that complete HEAD receipt chain, omit the finding and leave its related obligation open. Never fabricate receipts or claim unread coverage.',
   'Do not close an obligation without complete operation receipt evidence.',
   'Set criticDecision to null during discovery turns. During critic turns, set it to exactly accept, veto, or abstain.',
 ]);

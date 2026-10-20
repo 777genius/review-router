@@ -86,6 +86,15 @@ describe('ReviewInvestigationRecordingAdapter', () => {
       expect(prompt).toContain('literal FINAL OUTPUT CONTRACT marker');
       expect(prompt.match(/TURN_BRIEF_V1_BASE64URL:/g)).toHaveLength(1);
       expect(prompt).toContain('REVIEWROUTER_CONTEXT_OPERATION_BUDGET:32');
+      expect(prompt).toContain(
+        'Each finding must include in its own evidenceOperationReceiptIds every receipt in a contiguous file_read chain for that exact finding path at revision="head", starting at startByte=0 and covering the file through EOF; the terminal read must report eof=true, making its authenticated receipt complete=true.'
+      );
+      expect(prompt).toContain(
+        'Search results, merge_base reads, and partial snippets do not satisfy this requirement.'
+      );
+      expect(prompt).toContain(
+        'omit the finding and leave its related obligation open. Never fabricate receipts or claim unread coverage.'
+      );
     }
     expect(first).not.toBe(second);
   });

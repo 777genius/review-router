@@ -106683,10 +106683,10 @@ var review_investigation_capability_v1_golden_default = {
       probePolicyVersion: "review-investigation-probe-policy.v3",
       runtimeProfileVersion: "gateway-attested-agent.v1",
       searchPolicyVersion: "review-investigation-fixed-string-search.v1",
-      turnPromptContractHash: "a185e50ee887e3351d1c1eccb135a2d48030fe56ef5ec2e1411002d4c1a76ef6"
+      turnPromptContractHash: "e73f81f5506c1f9c33510faff8a1a872b439596c694a70753927e84ff3ea0fa1"
     },
-    canonicalJson: '{"coverageContractVersion":"review-investigation-coverage.v1","criticPolicyVersion":"review-investigation-critic.v2","expansionRulesVersion":"review-investigation-expansion.v3","gatewayPolicyVersion":"context-gateway-v4","probePolicyVersion":"review-investigation-probe-policy.v3","runtimeProfileVersion":"gateway-attested-agent.v1","searchPolicyVersion":"review-investigation-fixed-string-search.v1","turnPromptContractHash":"a185e50ee887e3351d1c1eccb135a2d48030fe56ef5ec2e1411002d4c1a76ef6"}',
-    sha256: "86a68eda454aff14d596da321ad635c7e67b3d6f18b990c2c1e02dfb3f9298b8"
+    canonicalJson: '{"coverageContractVersion":"review-investigation-coverage.v1","criticPolicyVersion":"review-investigation-critic.v2","expansionRulesVersion":"review-investigation-expansion.v3","gatewayPolicyVersion":"context-gateway-v4","probePolicyVersion":"review-investigation-probe-policy.v3","runtimeProfileVersion":"gateway-attested-agent.v1","searchPolicyVersion":"review-investigation-fixed-string-search.v1","turnPromptContractHash":"e73f81f5506c1f9c33510faff8a1a872b439596c694a70753927e84ff3ea0fa1"}',
+    sha256: "021acf02bba4c0cc8d194edd921652adf6427bb073798a718520a01b245c5e9a"
   },
   policy: {
     value: {
@@ -107761,6 +107761,8 @@ var TURN_INSTRUCTIONS = Object.freeze([
   "When inspected evidence reveals additional review scope, add a provider-neutral obligationProposals entry instead of silently broadening an existing obligation.",
   "Each obligation proposal must contain exactly kind, path, revision, and riskPriority. Use the repository-relative path and either head or merge_base revision; the control plane derives canonical identities and hashes. Use only schema-listed kinds; never provide an obligation ID, state, authority decision, or receipt claim.",
   "Obligation proposals are non-authoritative and remain open until the control plane validates and independently closes them with accepted evidence.",
+  'Each finding must include in its own evidenceOperationReceiptIds every receipt in a contiguous file_read chain for that exact finding path at revision="head", starting at startByte=0 and covering the file through EOF; the terminal read must report eof=true, making its authenticated receipt complete=true. Search results, merge_base reads, and partial snippets do not satisfy this requirement.',
+  "If you cannot obtain that complete HEAD receipt chain, omit the finding and leave its related obligation open. Never fabricate receipts or claim unread coverage.",
   "Do not close an obligation without complete operation receipt evidence.",
   "Set criticDecision to null during discovery turns. During critic turns, set it to exactly accept, veto, or abstain."
 ]);
@@ -116179,6 +116181,9 @@ function transportError(error2, operationId, mutation) {
 var providerOutputInvariantViolations = /* @__PURE__ */ new Set([
   "turn_obligation_claim_invalid",
   "investigation_obligation_evidence_mismatch",
+  "investigation_finding_evidence_invalid",
+  "investigation_finding_evidence_path_invalid",
+  "investigation_finding_evidence_line_invalid",
   "investigation_operation_backed_discovery_invalid",
   "investigation_operation_backed_discovery_limit_exceeded"
 ]);

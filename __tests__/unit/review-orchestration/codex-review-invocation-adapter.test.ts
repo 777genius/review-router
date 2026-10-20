@@ -508,7 +508,7 @@ describe('Codex T0 prepared invocation', () => {
       attemptOrdinal: 1,
     });
 
-    expect(invocation.investigationProbePlan.status).toBe(
+    expect(invocation.investigationProbePlan!.status).toBe(
       ReviewInvestigationProbePlanStatus.LimitExceeded
     );
     expect(invocation.manifestFacts.executionProfile).toBe(

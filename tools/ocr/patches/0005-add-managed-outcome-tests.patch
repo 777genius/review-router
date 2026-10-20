@@ -1,0 +1,426 @@
+diff --git a/internal/agent/managed_outcome_test.go b/internal/agent/managed_outcome_test.go
+new file mode 100644
+index 0000000..8fe66e3
+--- /dev/null
++++ b/internal/agent/managed_outcome_test.go
+@@ -0,0 +1,420 @@
++// SPDX-License-Identifier: Apache-2.0
++// Copyright 2026 alibaba/open-code-review Contributors
++
++package agent
++
++import (
++	"encoding/json"
++	"strings"
++	"testing"
++
++	"github.com/alibaba/open-code-review/internal/llm"
++)
++
++// TestManagedOutcomeFreeze drives the recorder through the managed outcome
++// contract's terminal shapes (plan §7.3–7.4) and checks the frozen record.
++func TestManagedOutcomeFreeze(t *testing.T) {
++	for _, tc := range []struct {
++		name  string
++		drive func(r *managedRecorder)
++		// wantGroups checks one group's frozen record; nil skips.
++		wantRunStop ManagedStopCause
++		check       func(t *testing.T, out *ManagedOutcome)
++	}{
++		{
++			name: "zero findings natural completion mirrors the v1 example",
++			drive: func(r *managedRecorder) {
++				r.setGrouping(managedStateCompleted, "")
++				r.registerGroup("a.go", []string{"src/example.ts"}, 2)
++				r.expectPaths([]string{"src/example.ts"})
++				r.recordPhase("a.go", phasePlan, managedStateNotApplicable, reasonThreshold)
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.recordPhase("a.go", phaseFilter, managedStateNotApplicable, reasonNoCandidates)
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				if out.SchemaVersion != managedOutcomeSchemaVersion {
++					t.Fatalf("schema_version = %q", out.SchemaVersion)
++				}
++				if out.RunStopCause != nil {
++					t.Fatalf("run_stop_cause = %v, want null", *out.RunStopCause)
++				}
++				if out.Grouping.State != managedStateCompleted || out.Grouping.Reason != nil {
++					t.Fatalf("grouping = %+v, want completed/null", out.Grouping)
++				}
++				if len(out.Groups) != 1 {
++					t.Fatalf("groups = %d, want 1", len(out.Groups))
++				}
++				g := out.Groups[0]
++				phaseIs := func(name string, got ManagedPhaseOutcome, state, reason string) {
++					t.Helper()
++					if got.State != state {
++						t.Fatalf("phase %s state = %q, want %q", name, got.State, state)
++					}
++					if reason == "" {
++						if got.Reason != nil {
++							t.Fatalf("phase %s reason = %q, want null", name, *got.Reason)
++						}
++					} else if got.Reason == nil || *got.Reason != reason {
++						t.Fatalf("phase %s reason = %v, want %q", name, got.Reason, reason)
++					}
++				}
++				if !g.MainCompleted || g.StopCause != nil {
++					t.Fatalf("main_completed/stop = %v/%v, want true/null", g.MainCompleted, g.StopCause)
++				}
++				if g.Rounds != (ManagedRounds{Configured: 2, Started: 1, Completed: 1}) {
++					t.Fatalf("rounds = %+v", g.Rounds)
++				}
++				phaseIs("plan", g.Phases.Plan, managedStateNotApplicable, reasonThreshold)
++				phaseIs("compression", g.Phases.Compression, managedStateNotApplicable, reasonNoZone)
++				phaseIs("relocation", g.Phases.Relocation, managedStateNotApplicable, reasonNoCandidates)
++				phaseIs("filter", g.Phases.Filter, managedStateNotApplicable, reasonNoCandidates)
++				if g.FilterDecisionValid != nil {
++					t.Fatalf("filter_decision_valid = %v, want null", *g.FilterDecisionValid)
++				}
++			},
++		},
++		{
++			name: "round-2 prompt overflow is configured=2/started=2/completed=1 prompt_budget",
++			drive: func(r *managedRecorder) {
++				r.setGrouping(managedStateNotApplicable, reasonSingleFile)
++				r.registerGroup("a.go", []string{"a.go"}, 2)
++				r.expectPaths([]string{"a.go"})
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.recordPhase("a.go", phaseFilter, managedStateCompleted, "")
++				r.recordFilterDecision("a.go", true)
++				r.roundStarted("a.go") // round 2 preparation
++				r.latchStop("a.go", ManagedStopPromptBudget)
++				r.setRunStop(ManagedStopPromptBudget)
++			},
++			wantRunStop: ManagedStopPromptBudget,
++			check: func(t *testing.T, out *ManagedOutcome) {
++				g := out.Groups[0]
++				if g.MainCompleted {
++					t.Fatal("prompt-budget stop must not read as main_completed")
++				}
++				if g.StopCause == nil || *g.StopCause != ManagedStopPromptBudget {
++					t.Fatalf("stop_cause = %v, want prompt_budget", g.StopCause)
++				}
++				if g.Rounds != (ManagedRounds{Configured: 2, Started: 2, Completed: 1}) {
++					t.Fatalf("rounds = %+v, want configured=2/started=2/completed=1", g.Rounds)
++				}
++			},
++		},
++		{
++			name: "invalid filter decision latches false and never reads as success",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 1)
++				r.expectPaths([]string{"a.go"})
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.recordPhase("a.go", phaseFilter, managedStateFailed, reasonMalformed)
++				r.recordFilterDecision("a.go", false)
++				// A late approve-all must not revert the latch (rule 5).
++				r.recordFilterDecision("a.go", true)
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				g := out.Groups[0]
++				if g.FilterDecisionValid == nil || *g.FilterDecisionValid {
++					t.Fatalf("filter_decision_valid = %v, want false", g.FilterDecisionValid)
++				}
++				if g.Phases.Filter.State != managedStateFailed {
++					t.Fatalf("filter state = %q, want failed", g.Phases.Filter.State)
++				}
++			},
++		},
++		{
++			name: "approve-all filter is completed with a valid decision",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 1)
++				r.expectPaths([]string{"a.go"})
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.recordPhase("a.go", phaseFilter, managedStateCompleted, "")
++				r.recordFilterDecision("a.go", true)
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				g := out.Groups[0]
++				if g.FilterDecisionValid == nil || !*g.FilterDecisionValid {
++					t.Fatalf("filter_decision_valid = %v, want true", g.FilterDecisionValid)
++				}
++				if g.Phases.Filter.State != managedStateCompleted {
++					t.Fatalf("filter state = %q, want completed", g.Phases.Filter.State)
++				}
++			},
++		},
++		{
++			name: "optional-phase failure preserves main completion",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 1)
++				r.expectPaths([]string{"a.go"})
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.recordPhase("a.go", phaseRelocation, managedStateFailed, reasonError)
++				r.recordPhase("a.go", phaseFilter, managedStateFailed, reasonMalformed)
++				r.recordFilterDecision("a.go", false)
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				g := out.Groups[0]
++				if !g.MainCompleted || g.StopCause != nil {
++					t.Fatalf("phase failure must not erase main completion: %+v", g)
++				}
++				if g.Phases.Relocation.State != managedStateFailed || g.Phases.Filter.State != managedStateFailed {
++					t.Fatalf("phases = %+v, want failed optional phases", g.Phases)
++				}
++			},
++		},
++		{
++			name: "phase aggregate keeps an earlier failure over a late success",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 2)
++				r.expectPaths([]string{"a.go"})
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.recordPhase("a.go", phaseFilter, managedStateFailed, reasonMalformed)
++				r.recordFilterDecision("a.go", false)
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.recordPhase("a.go", phaseFilter, managedStateCompleted, "")
++				r.recordFilterDecision("a.go", true)
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				g := out.Groups[0]
++				if g.Phases.Filter.State != managedStateFailed {
++					t.Fatalf("late success erased a failure: %+v", g.Phases.Filter)
++				}
++				if g.FilterDecisionValid == nil || *g.FilterDecisionValid {
++					t.Fatalf("filter_decision_valid = %v, want false", g.FilterDecisionValid)
++				}
++			},
++		},
++		{
++			name: "not-dispatched group reads cancelled/not_dispatched",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 2)
++				r.registerGroup("b.go", []string{"b.go"}, 2)
++				r.expectPaths([]string{"a.go", "b.go"})
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.markNotDispatched("b.go", ManagedStopTokenBudget)
++				r.setRunStop(ManagedStopTokenBudget)
++			},
++			wantRunStop: ManagedStopTokenBudget,
++			check: func(t *testing.T, out *ManagedOutcome) {
++				if len(out.Groups) != 2 {
++					t.Fatalf("groups = %d, want 2", len(out.Groups))
++				}
++				g := out.Groups[1]
++				if g.MainCompleted || g.StopCause == nil || *g.StopCause != ManagedStopTokenBudget {
++					t.Fatalf("not-dispatched group = %+v", g)
++				}
++				for name, ph := range map[string]ManagedPhaseOutcome{
++					"plan": g.Phases.Plan, "compression": g.Phases.Compression,
++					"relocation": g.Phases.Relocation, "filter": g.Phases.Filter,
++				} {
++					if ph.State != managedStateCancelled || ph.Reason == nil || *ph.Reason != reasonNotDispatched {
++						t.Fatalf("phase %s = %+v, want cancelled/not_dispatched", name, ph)
++					}
++				}
++			},
++		},
++		{
++			name: "group stopped before execution reads cancelled/not_dispatched phases",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 1)
++				r.expectPaths([]string{"a.go"})
++				r.latchStop("a.go", ManagedStopCancelled)
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				g := out.Groups[0]
++				for name, ph := range map[string]ManagedPhaseOutcome{"plan": g.Phases.Plan, "filter": g.Phases.Filter} {
++					if ph.State != managedStateCancelled || ph.Reason == nil || *ph.Reason != reasonNotDispatched {
++						t.Fatalf("phase %s = %+v, want cancelled/not_dispatched", name, ph)
++					}
++				}
++			},
++		},
++		{
++			name: "cancellation outranks an earlier budget stop at run level",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 1)
++				r.expectPaths([]string{"a.go"})
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.setRunStop(ManagedStopTokenBudget)
++				r.setRunStop(ManagedStopCancelled)
++			},
++			wantRunStop: ManagedStopCancelled,
++			check: func(t *testing.T, out *ManagedOutcome) {
++				if out.RunStopCause == nil || *out.RunStopCause != ManagedStopCancelled {
++					t.Fatalf("run_stop_cause = %v, want cancelled", out.RunStopCause)
++				}
++			},
++		},
++		{
++			name: "no-selection run emits groups=[]",
++			drive: func(r *managedRecorder) {
++				r.expectPaths(nil)
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				if out.Groups == nil || len(out.Groups) != 0 {
++					t.Fatalf("groups = %v, want []", out.Groups)
++				}
++			},
++		},
++		{
++			name: "contract failure: selected set mismatch refuses to freeze",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 1)
++				r.expectPaths([]string{"a.go", "b.go"})
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				if out != nil {
++					t.Fatalf("frozen = %+v, want nil on contract failure", out)
++				}
++			},
++		},
++		{
++			name: "contract failure: rounds invariant started<=configured",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 1)
++				r.expectPaths([]string{"a.go"})
++				r.roundStarted("a.go")
++				r.roundStarted("a.go")
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				if out != nil {
++					t.Fatalf("frozen = %+v, want nil on contract failure", out)
++				}
++			},
++		},
++		{
++			name: "contract failure: completed filter without a valid decision",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 1)
++				r.expectPaths([]string{"a.go"})
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.recordPhase("a.go", phaseFilter, managedStateCompleted, "")
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				if out != nil {
++					t.Fatalf("frozen = %+v, want nil on contract failure", out)
++				}
++			},
++		},
++		{
++			name: "contract failure: filter_decision_valid=false outside failed/cancelled",
++			drive: func(r *managedRecorder) {
++				r.registerGroup("a.go", []string{"a.go"}, 1)
++				r.expectPaths([]string{"a.go"})
++				r.roundStarted("a.go")
++				r.roundCompleted("a.go")
++				r.recordPhase("a.go", phaseFilter, managedStateNotApplicable, reasonNoCandidates)
++				r.recordFilterDecision("a.go", false)
++			},
++			check: func(t *testing.T, out *ManagedOutcome) {
++				if out != nil {
++					t.Fatalf("frozen = %+v, want nil on contract failure", out)
++				}
++			},
++		},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			r := newManagedRecorder()
++			tc.drive(r)
++			out := r.freeze()
++			tc.check(t, out)
++			if out == nil {
++				return
++			}
++			if tc.wantRunStop != "" && (out.RunStopCause == nil || *out.RunStopCause != tc.wantRunStop) {
++				t.Fatalf("run_stop_cause = %v, want %q", out.RunStopCause, tc.wantRunStop)
++			}
++			// The frozen record must be stable across re-reads.
++			if again := r.freeze(); again != out {
++				t.Fatal("freeze is not idempotent")
++			}
++			data, err := json.Marshal(out)
++			if err != nil {
++				t.Fatalf("marshal: %v", err)
++			}
++			if !strings.Contains(string(data), `"schema_version":"reviewrouter.ocr-outcome/v1"`) {
++				t.Fatalf("schema_version missing in wire form: %s", data)
++			}
++		})
++	}
++}
++
++// TestClassifyFilterResponse pins the outcome verdicts of one filter response
++// (plan §7.3): a parsed approve-all/empty set is success, malformed arguments
++// or unparseable text is degradation, and no decision material never counts as
++// a parsed decision.
++func TestClassifyFilterResponse(t *testing.T) {
++	call := func(name, args string) []llm.ToolCall {
++		return []llm.ToolCall{{Function: llm.FunctionCall{Name: name, Arguments: args}}}
++	}
++	for _, tc := range []struct {
++		name        string
++		calls       []llm.ToolCall
++		content     string
++		wantIndices int
++		wantNil     bool
++		wantVerdict managedFilterParse
++	}{
++		{
++			name:        "approve-all tool call is a valid decision",
++			calls:       call("approve_all_comments", "{}"),
++			wantIndices: 0,
++			wantVerdict: managedFilterParse{received: true, parsed: true},
++		},
++		{
++			name:        "removal tool call is a valid decision",
++			calls:       call("report_incorrect_comments", `{"comment_ids":["c-0"]}`),
++			wantIndices: 1,
++			wantVerdict: managedFilterParse{received: true, parsed: true},
++		},
++		{
++			name:        "malformed tool arguments degrade with preserved comments",
++			calls:       call("report_incorrect_comments", `not json`),
++			wantNil:     true,
++			wantVerdict: managedFilterParse{received: true, malformed: true},
++		},
++		{
++			name:        "text fallback parses an empty removal set",
++			content:     `[]`,
++			wantIndices: 0,
++			wantVerdict: managedFilterParse{received: true, parsed: true},
++		},
++		{
++			name:        "unparseable text decision degrades",
++			content:     `I think all comments are fine`,
++			wantNil:     true,
++			wantVerdict: managedFilterParse{received: true, malformed: true},
++		},
++		{
++			name:        "no decision material never counts as parsed",
++			wantNil:     true,
++			wantVerdict: managedFilterParse{},
++		},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			indices, verdict := classifyFilterResponse(tc.calls, tc.content, 5)
++			if verdict != tc.wantVerdict {
++				t.Fatalf("verdict = %+v, want %+v", verdict, tc.wantVerdict)
++			}
++			if tc.wantNil {
++				if indices != nil {
++					t.Fatalf("indices = %v, want nil", indices)
++				}
++				return
++			}
++			if indices == nil || len(indices) != tc.wantIndices {
++				t.Fatalf("indices = %v, want %d entries", indices, tc.wantIndices)
++			}
++		})
++	}
++}

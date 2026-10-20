@@ -571,6 +571,7 @@ describe('strict provider command shapes', () => {
       'js_repl',
       'tool_search',
       'multi_agent',
+      'multi_agent_v2',
       'apps',
       'plugins',
       'hooks',

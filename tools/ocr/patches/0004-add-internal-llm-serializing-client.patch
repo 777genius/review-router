@@ -1,0 +1,62 @@
+diff --git a/internal/llm/serialize.go b/internal/llm/serialize.go
+new file mode 100644
+index 0000000..6255647
+--- /dev/null
++++ b/internal/llm/serialize.go
+@@ -0,0 +1,56 @@
++package llm
++
++import "context"
++
++// serializingClient wraps an LLMClient with a run-wide permit keeping at most
++// one CompletionsWithCtx call in flight at a time (plan §7.2). The permit is
++// held for the whole inner call — request, stream read, response decode and
++// stream close all happen inside CompletionsWithCtx — and is released as soon
++// as the call returns, so tool execution, auxiliary phases and worker waits
++// never hold it.
++//
++// Waiting is cancellation-aware on both axes: the caller's context and the
++// root run context. The root also re-links into the request context, so an
++// auxiliary caller that arrived through context.WithoutCancel still cannot
++// keep a request (or a permit wait) alive after the run was cancelled — no
++// queue survives cancellation to start a later model call.
++type serializingClient struct {
++	inner  LLMClient
++	root   context.Context
++	permit chan struct{}
++}
++
++// NewSerializingClient returns inner wrapped in a run-wide serialization
++// permit (≤1 in-flight model call). root is the run's root context; when it is
++// cancelled every waiter and in-flight request is unblocked. Used by managed
++// mode only; unmanaged runs keep the raw client untouched.
++func NewSerializingClient(inner LLMClient, root context.Context) LLMClient {
++	if root == nil {
++		root = context.Background()
++	}
++	return &serializingClient{inner: inner, root: root, permit: make(chan struct{}, 1)}
++}
++
++func (s *serializingClient) CompletionsWithCtx(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
++	select {
++	case s.permit <- struct{}{}:
++	case <-ctx.Done():
++		return nil, ctx.Err()
++	case <-s.root.Done():
++		return nil, s.root.Err()
++	}
++	defer func() { <-s.permit }()
++	if err := s.root.Err(); err != nil {
++		return nil, err
++	}
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++
++	callCtx, cancel := context.WithCancel(ctx)
++	defer cancel()
++	stopRoot := context.AfterFunc(s.root, cancel)
++	defer stopRoot()
++
++	return s.inner.CompletionsWithCtx(callCtx, req)
++}

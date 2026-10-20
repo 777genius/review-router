@@ -1,0 +1,185 @@
+diff --git a/internal/llm/serialize_test.go b/internal/llm/serialize_test.go
+new file mode 100644
+index 0000000..35ea6ae
+--- /dev/null
++++ b/internal/llm/serialize_test.go
+@@ -0,0 +1,179 @@
++// SPDX-License-Identifier: Apache-2.0
++// Copyright 2026 alibaba/open-code-review Contributors
++
++package llm
++
++import (
++	"context"
++	"errors"
++	"sync"
++	"testing"
++	"time"
++)
++
++// fakeSerialClient counts in-flight CompletionsWithCtx calls and blocks until
++// told to finish, so a test can observe the serialization permit directly.
++type fakeSerialClient struct {
++	mu       sync.Mutex
++	inFlight int
++	maxSeen  int
++	entered  chan struct{}
++	release  chan struct{}
++}
++
++func (f *fakeSerialClient) CompletionsWithCtx(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
++	f.mu.Lock()
++	f.inFlight++
++	if f.inFlight > f.maxSeen {
++		f.maxSeen = f.inFlight
++	}
++	f.mu.Unlock()
++	if f.entered != nil {
++		select {
++		case f.entered <- struct{}{}:
++		default:
++		}
++	}
++	select {
++	case <-f.release:
++	case <-ctx.Done():
++		f.mu.Lock()
++		f.inFlight--
++		f.mu.Unlock()
++		return nil, ctx.Err()
++	}
++	f.mu.Lock()
++	f.inFlight--
++	f.mu.Unlock()
++	return &ChatResponse{}, nil
++}
++
++// TestSerializingClientCapsInFlight asserts the run-wide permit keeps at most
++// one model request in flight and is released only after the call returns
++// (plan §7.2).
++func TestSerializingClientCapsInFlight(t *testing.T) {
++	fake := &fakeSerialClient{release: make(chan struct{})}
++	root, cancelRoot := context.WithCancel(context.Background())
++	defer cancelRoot()
++	client := NewSerializingClient(fake, root)
++
++	var wg sync.WaitGroup
++	started := make(chan struct{}, 4)
++	for i := 0; i < 4; i++ {
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			started <- struct{}{}
++			if _, err := client.CompletionsWithCtx(context.Background(), ChatRequest{}); err != nil {
++				t.Errorf("call: %v", err)
++			}
++		}()
++	}
++	for i := 0; i < 4; i++ {
++		<-started
++	}
++	// All four callers are now either in-flight or waiting on the permit; with
++	// the permit held until the first call finishes, exactly one can be inside.
++	time.Sleep(50 * time.Millisecond)
++	fake.mu.Lock()
++	inFlight := fake.inFlight
++	fake.mu.Unlock()
++	if inFlight != 1 {
++		t.Fatalf("in-flight = %d, want 1", inFlight)
++	}
++	close(fake.release)
++	wg.Wait()
++	fake.mu.Lock()
++	defer fake.mu.Unlock()
++	if fake.maxSeen != 1 {
++		t.Fatalf("max in-flight = %d, want 1", fake.maxSeen)
++	}
++}
++
++// TestSerializingClientRootCancellation asserts a root cancellation unblocks
++// permit waiters and the in-flight request, and that no queued call starts a
++// model request afterwards (plan §7.2).
++func TestSerializingClientRootCancellation(t *testing.T) {
++	fake := &fakeSerialClient{
++		entered: make(chan struct{}, 1),
++		release: make(chan struct{}),
++	}
++	root, cancelRoot := context.WithCancel(context.Background())
++	client := NewSerializingClient(fake, root)
++
++	firstDone := make(chan error, 1)
++	go func() {
++		_, err := client.CompletionsWithCtx(context.Background(), ChatRequest{})
++		firstDone <- err
++	}()
++	<-fake.entered // first call holds the permit and is in flight
++
++	waiterDone := make(chan error, 1)
++	go func() {
++		_, err := client.CompletionsWithCtx(context.Background(), ChatRequest{})
++		waiterDone <- err
++	}()
++	time.Sleep(20 * time.Millisecond) // let the waiter queue up
++
++	cancelRoot()
++	if err := <-firstDone; !errors.Is(err, context.Canceled) {
++		t.Fatalf("in-flight error = %v, want context.Canceled", err)
++	}
++	if err := <-waiterDone; !errors.Is(err, context.Canceled) {
++		t.Fatalf("waiter error = %v, want context.Canceled", err)
++	}
++	// A call arriving after the root cancellation must not start either.
++	if _, err := client.CompletionsWithCtx(context.Background(), ChatRequest{}); !errors.Is(err, context.Canceled) {
++		t.Fatalf("post-cancel error = %v, want context.Canceled", err)
++	}
++	fake.mu.Lock()
++	defer fake.mu.Unlock()
++	if fake.maxSeen != 1 {
++		t.Fatalf("max in-flight = %d, want 1 (cancelled queue must not dispatch)", fake.maxSeen)
++	}
++}
++
++// TestSerializingClientCallerCancellation asserts permit waits respect the
++// caller's own context even while the root stays alive.
++func TestSerializingClientCallerCancellation(t *testing.T) {
++	fake := &fakeSerialClient{entered: make(chan struct{}, 1), release: make(chan struct{})}
++	root, cancelRoot := context.WithCancel(context.Background())
++	defer cancelRoot()
++	client := NewSerializingClient(fake, root)
++
++	firstDone := make(chan error, 1)
++	go func() {
++		_, err := client.CompletionsWithCtx(context.Background(), ChatRequest{})
++		firstDone <- err
++	}()
++	<-fake.entered
++
++	callCtx, cancelCall := context.WithCancel(context.Background())
++	waiterDone := make(chan error, 1)
++	go func() {
++		_, err := client.CompletionsWithCtx(callCtx, ChatRequest{})
++		waiterDone <- err
++	}()
++	time.Sleep(20 * time.Millisecond)
++	cancelCall()
++	if err := <-waiterDone; !errors.Is(err, context.Canceled) {
++		t.Fatalf("waiter error = %v, want context.Canceled", err)
++	}
++	close(fake.release)
++	if err := <-firstDone; err != nil {
++		t.Fatalf("first call error = %v", err)
++	}
++}
++
++// TestSerializingClientIsANoOpWrapperWithoutContention asserts the wrapper
++// passes results through unchanged when uncontended.
++func TestSerializingClientPassThrough(t *testing.T) {
++	fake := &fakeSerialClient{release: make(chan struct{})}
++	close(fake.release)
++	client := NewSerializingClient(fake, nil)
++	resp, err := client.CompletionsWithCtx(context.Background(), ChatRequest{Model: "m"})
++	if err != nil || resp == nil {
++		t.Fatalf("pass-through failed: %v", err)
++	}
++	var _ LLMClient = client
++}

@@ -757,6 +757,7 @@ export function findingLocationLabel(finding: {
   readonly startLine?: number;
   readonly endLine?: number;
 }): string {
+  if (finding.line <= 0) return finding.file;
   return finding.startLine !== undefined &&
     finding.endLine !== undefined &&
     finding.startLine < finding.endLine

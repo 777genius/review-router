@@ -1,0 +1,245 @@
+diff --git a/internal/agent/managed_outcome.go b/internal/agent/managed_outcome.go
+--- a/internal/agent/managed_outcome.go
++++ b/internal/agent/managed_outcome.go
+@@ -5,6 +5,7 @@
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"errors"
+ 	"fmt"
+ 	"sort"
+@@ -663,9 +664,51 @@
+ 	}
+ 	verdict.received = len(calls) > 0 || strings.TrimSpace(content) != ""
+ 	verdict.malformed = toolMalformed
++	for _, call := range calls {
++		if !validManagedFilterArguments(call) {
++			verdict.malformed = true
++		}
++	}
++	if textParsed {
++		// JSON null unmarshals to a nil slice without an error; unlike [],
++		// it supplies no removal decision. Keep native fallback behavior,
++		// but do not attest to a parsed filter decision.
++		textParsed = validManagedFilterSelection([]byte(llmloop.StripMarkdownFences(content)))
++	}
+ 	if !toolDecision && !textParsed && verdict.received {
+ 		verdict.malformed = true
+ 	}
+ 	verdict.parsed = (toolDecision || textParsed) && !verdict.malformed
+ 	return indices, verdict
+ }
++
++// validManagedFilterArguments validates only the decision-bearing fields for
++// the managed outcome. Native removal/fallback semantics remain unchanged.
++func validManagedFilterArguments(call llm.ToolCall) bool {
++	switch call.Function.Name {
++	case "approve_all_comments", "report_incorrect_comments":
++		var args map[string]json.RawMessage
++		if json.Unmarshal([]byte(call.Function.Arguments), &args) != nil || args == nil {
++			return false
++		}
++		if call.Function.Name == "approve_all_comments" {
++			return true
++		}
++		return validManagedFilterSelection(args["comment_ids"])
++	default:
++		return true // Unrecognized tools are handled by the native text fallback.
++	}
++}
++
++func validManagedFilterSelection(raw []byte) bool {
++	var ids []any
++	if json.Unmarshal(raw, &ids) != nil || ids == nil {
++		return false
++	}
++	for _, id := range ids {
++		if _, ok := id.(string); !ok {
++			return false
++		}
++	}
++	return true
++}
+diff --git a/internal/agent/managed_outcome_test.go b/internal/agent/managed_outcome_test.go
+--- a/internal/agent/managed_outcome_test.go
++++ b/internal/agent/managed_outcome_test.go
+@@ -384,6 +384,51 @@
+ 			wantVerdict: managedFilterParse{received: true, malformed: true},
+ 		},
+ 		{
++			name:        "explicit empty tool selection is valid",
++			calls:       call("report_incorrect_comments", `{"comment_ids":[]}`),
++			wantVerdict: managedFilterParse{received: true, parsed: true},
++		},
++		{
++			name:        "null tool arguments supply no decision",
++			calls:       call("report_incorrect_comments", `null`),
++			wantVerdict: managedFilterParse{received: true, malformed: true},
++		},
++		{
++			name:        "missing selection supplies no decision",
++			calls:       call("report_incorrect_comments", `{}`),
++			wantVerdict: managedFilterParse{received: true, malformed: true},
++		},
++		{
++			name:        "null selection supplies no decision",
++			calls:       call("report_incorrect_comments", `{"comment_ids":null}`),
++			wantVerdict: managedFilterParse{received: true, malformed: true},
++		},
++		{
++			name:        "null selection member is not a comment id",
++			calls:       call("report_incorrect_comments", `{"comment_ids":[null]}`),
++			wantVerdict: managedFilterParse{received: true, malformed: true},
++		},
++		{
++			name:        "null text selection member is not a comment id",
++			content:     `[null]`,
++			wantVerdict: managedFilterParse{received: true, malformed: true},
++		},
++		{
++			name:        "malformed approve arguments degrade",
++			calls:       call("approve_all_comments", `not json`),
++			wantVerdict: managedFilterParse{received: true, malformed: true},
++		},
++		{
++			name:        "a later valid selection does not hide malformed input",
++			calls:       append(call("report_incorrect_comments", `null`), call("approve_all_comments", `{}`)...),
++			wantVerdict: managedFilterParse{received: true, malformed: true},
++		},
++		{
++			name:        "null text supplies no decision",
++			content:     `null`,
++			wantVerdict: managedFilterParse{received: true, malformed: true},
++		},
++		{
+ 			name:        "text fallback parses an empty removal set",
+ 			content:     `[]`,
+ 			wantIndices: 0,
+diff --git a/internal/llmloop/loop.go b/internal/llmloop/loop.go
+--- a/internal/llmloop/loop.go
++++ b/internal/llmloop/loop.go
+@@ -877,13 +877,11 @@
+ 			asyncCtx := context.WithoutCancel(ctx)
+ 			var cancelAsync context.CancelFunc
+ 			if r.deps.Managed {
+-				// Managed (plan §7.2): the worker gets the original bounded
+-				// group context instead of a fully detached one — it keeps the
+-				// group context's values but its own lifetime (cancelled when
+-				// the worker completes). Root cancellation is enforced by the
+-				// run-wide client wrapper, so a cancelled run can neither hold
+-				// the serialization permit nor start a later model call.
+-				asyncCtx, cancelAsync = context.WithCancel(context.WithoutCancel(ctx))
++				// Keep the group deadline and cancellation while the caller
++				// awaits these workers. The run-wide client also observes root
++				// cancellation, but the root does not carry --timeout's
++				// per-group deadline.
++				asyncCtx, cancelAsync = context.WithCancel(ctx)
+ 			}
+ 			toolName := t.Name()
+ 			pool.SubmitFor(taskKey, func() ([]model.LlmComment, error) {
+diff --git a/internal/llmloop/managed_comment_context_test.go b/internal/llmloop/managed_comment_context_test.go
+new file mode 100644
+--- /dev/null
++++ b/internal/llmloop/managed_comment_context_test.go
+@@ -0,0 +1,100 @@
++// SPDX-License-Identifier: Apache-2.0
++// Copyright 2026 alibaba/open-code-review Contributors
++
++package llmloop
++
++import (
++	"context"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"github.com/alibaba/open-code-review/internal/config/template"
++	"github.com/alibaba/open-code-review/internal/llm"
++	"github.com/alibaba/open-code-review/internal/model"
++	"github.com/alibaba/open-code-review/internal/session"
++	"github.com/alibaba/open-code-review/internal/tool"
++)
++
++type managedCommentContextClient struct {
++	entered  chan context.Context
++	release  chan struct{}
++	requests atomic.Int32
++}
++
++func (c *managedCommentContextClient) CompletionsWithCtx(ctx context.Context, _ llm.ChatRequest) (*llm.ChatResponse, error) {
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	c.requests.Add(1)
++	c.entered <- ctx
++	select {
++	case <-ctx.Done():
++		return nil, ctx.Err()
++	case <-c.release:
++		return &llm.ChatResponse{}, nil
++	}
++}
++
++// A live command root must not keep a comment worker alive after its bounded
++// group is cancelled. The second comment must never start another model call.
++func TestManagedCommentWorkersKeepGroupDeadlineAndCancellation(t *testing.T) {
++	root := context.Background()
++	group, cancelGroup := context.WithDeadline(root, time.Now().Add(time.Minute))
++	defer cancelGroup()
++	client := &managedCommentContextClient{entered: make(chan context.Context, 2), release: make(chan struct{})}
++	collector := tool.NewCommentCollector()
++	pool := NewCommentWorkerPool(1)
++	t.Cleanup(func() {
++		close(client.release) // Also releases the deliberately broken pre-fix worker.
++		pool.Await()
++	})
++	registry := tool.NewRegistry()
++	registry.Register(&tool.CodeCommentProvider{Collector: collector})
++	registry.Freeze()
++	runner := NewRunner(Deps{
++		Managed:           true,
++		LLMClient:         llm.NewSerializingClient(client, root),
++		Model:             "test-model",
++		Tools:             registry,
++		CommentCollector:  collector,
++		CommentWorkerPool: pool,
++		Session:           session.New(t.TempDir(), "main", "test-model", session.SessionOptions{ReviewMode: "diff"}),
++		Template: template.Template{ReLocationTask: &template.LlmConversation{
++			Messages: []template.ChatMessage{{Role: "user", Content: "Locate {existing_code}"}},
++		}},
++		DiffLookup: func(path string) *model.Diff {
++			return &model.Diff{NewPath: path, NewFileContent: "unrelated code"}
++		},
++	})
++	runner.executeToolCall(group, "a.go", llm.ToolCall{Function: llm.FunctionCall{
++		Name: "code_comment",
++		Arguments: `{"comments":[` +
++			`{"path":"a.go","content":"first issue","existing_code":"first missing snippet"},` +
++			`{"path":"a.go","content":"second issue","existing_code":"second missing snippet"}]}`,
++	}}, nil, "")
++	var requestCtx context.Context
++	select {
++	case requestCtx = <-client.entered:
++	case <-time.After(time.Second):
++		t.Fatal("relocation request did not start")
++	}
++	wantDeadline, _ := group.Deadline()
++	if deadline, ok := requestCtx.Deadline(); !ok || !deadline.Equal(wantDeadline) {
++		t.Errorf("relocation deadline = %v (%v), want group deadline %v", deadline, ok, wantDeadline)
++	}
++	cancelGroup()
++	drained := make(chan struct{})
++	go func() { pool.AwaitKey("a.go"); close(drained) }()
++	select {
++	case <-drained:
++	case <-time.After(time.Second):
++		t.Fatal("group cancellation did not stop the relocation worker")
++	}
++	if root.Err() != nil {
++		t.Fatal("test cancelled the command root instead of only its group")
++	}
++	if got := client.requests.Load(); got != 1 {
++		t.Fatalf("model dispatches = %d, want only the cancelled first relocation", got)
++	}
++}

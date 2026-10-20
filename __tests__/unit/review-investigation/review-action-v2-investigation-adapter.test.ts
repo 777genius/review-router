@@ -649,6 +649,21 @@ describe('ReviewActionV2InvestigationAdapter turn brief', () => {
       ReviewInvestigationControlPlaneFailureClass.ProviderOutputInvalid,
     ],
     [
+      'provider finding receipt reference',
+      ['investigation_finding_evidence_invalid'],
+      ReviewInvestigationControlPlaneFailureClass.ProviderOutputInvalid,
+    ],
+    [
+      'provider finding complete HEAD path evidence',
+      ['investigation_finding_evidence_path_invalid'],
+      ReviewInvestigationControlPlaneFailureClass.ProviderOutputInvalid,
+    ],
+    [
+      'provider finding authenticated line bounds',
+      ['investigation_finding_evidence_line_invalid'],
+      ReviewInvestigationControlPlaneFailureClass.ProviderOutputInvalid,
+    ],
+    [
       'an unrelated server invariant',
       ['investigation_internal_state_invalid'],
       ReviewInvestigationControlPlaneFailureClass.Rejected,

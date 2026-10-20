@@ -1,0 +1,1476 @@
+diff --git a/cmd/opencodereview/delegate_cmd.go b/cmd/opencodereview/delegate_cmd.go
+index f47a3ba..94ed8ce 100644
+--- a/cmd/opencodereview/delegate_cmd.go
++++ b/cmd/opencodereview/delegate_cmd.go
+@@ -95,7 +95,7 @@ type delegateContext struct {
+ 
+ func loadDelegateContext(opts delegateOptions) (*delegateContext, error) {
+ 	contentRef, _ := tool.ParseReviewMode(opts.from, opts.to, opts.commit).RefValue(opts.to, opts.commit)
+-	cc, err := loadCommonContext(opts.repoDir, opts.rulePath, contentRef, 0, opts.maxGitProcs, true)
++	cc, err := loadCommonContext(opts.repoDir, opts.rulePath, contentRef, 0, opts.maxGitProcs, true, false)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+diff --git a/cmd/opencodereview/flags_test.go b/cmd/opencodereview/flags_test.go
+index 75e44b3..9852cde 100644
+--- a/cmd/opencodereview/flags_test.go
++++ b/cmd/opencodereview/flags_test.go
+@@ -68,6 +68,41 @@ func TestParseReviewFlags_PreviewWithResume(t *testing.T) {
+ 	}
+ }
+ 
++func TestParseReviewFlags_Managed(t *testing.T) {
++	cases := []struct {
++		name     string
++		args     []string
++		wantErr  bool
++		wantFlag bool
++	}{
++		{"defaults to false", []string{"--commit", "abc123"}, false, false},
++		{"accepted with explicit provider reviewrouter", []string{"--commit", "abc123", "--reviewrouter-managed", "--provider", "reviewrouter"}, false, true},
++		{"combines with --preview", []string{"--commit", "abc123", "--reviewrouter-managed", "--provider", "reviewrouter", "--preview"}, false, true},
++		{"rejected without --provider", []string{"--commit", "abc123", "--reviewrouter-managed"}, true, false},
++		{"rejected with foreign provider", []string{"--commit", "abc123", "--reviewrouter-managed", "--provider", "anthropic"}, true, false},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			opts, err := parseReviewFlags(tc.args)
++			if tc.wantErr {
++				if err == nil {
++					t.Fatal("expected error")
++				}
++				if !strings.Contains(err.Error(), "--reviewrouter-managed") {
++					t.Errorf("error %q does not name --reviewrouter-managed", err)
++				}
++				return
++			}
++			if err != nil {
++				t.Fatalf("parseReviewFlags: %v", err)
++			}
++			if opts.managed != tc.wantFlag {
++				t.Errorf("managed = %v, want %v", opts.managed, tc.wantFlag)
++			}
++		})
++	}
++}
++
+ func TestParseReviewFlags_InvalidAudience(t *testing.T) {
+ 	_, err := parseReviewFlags([]string{"--audience", "robot"})
+ 	if err == nil {
+diff --git a/cmd/opencodereview/manual_e2e_retry_test.go b/cmd/opencodereview/manual_e2e_retry_test.go
+index b56536b..c5e243e 100644
+--- a/cmd/opencodereview/manual_e2e_retry_test.go
++++ b/cmd/opencodereview/manual_e2e_retry_test.go
+@@ -47,7 +47,7 @@ func runManualReview(t *testing.T, srv *fakeLLM) manualResult {
+ 	repoDir := retryTestRepo(t)
+ 	startFakeLLM(t, srv)
+ 
+-	cc, err := loadCommonContext(repoDir, "", "", 0, 4, true)
++	cc, err := loadCommonContext(repoDir, "", "", 0, 4, true, false)
+ 	if err != nil {
+ 		t.Fatalf("loadCommonContext: %v", err)
+ 	}
+diff --git a/cmd/opencodereview/output.go b/cmd/opencodereview/output.go
+index 46df5bb..71527ca 100644
+--- a/cmd/opencodereview/output.go
++++ b/cmd/opencodereview/output.go
+@@ -348,6 +348,10 @@ type jsonOutput struct {
+ 	Resume         *agent.ResumeInfo     `json:"resume,omitempty"`
+ 	SessionID      string                `json:"session_id,omitempty"`
+ 	Manifest       *session.RunManifest  `json:"manifest,omitempty"`
++	// ReviewRouterOutcome is the frozen managed outcome contract
++	// (reviewrouter.ocr-outcome/v1, plan §7.3–7.4). Emitted only for
++	// --reviewrouter-managed runs and never for unmanaged output.
++	ReviewRouterOutcome *agent.ManagedOutcome `json:"reviewrouter_outcome,omitempty"`
+ 	// RetryReport is the frozen LLM retry report (ocr.llm-retry-report/v1).
+ 	// Reuses llm.RetryReport's own field/tag definitions rather than mirroring
+ 	// them here, and sits last with omitempty so a first-try-success run emits
+@@ -374,7 +378,7 @@ func outputJSONWithWarnings(comments []model.LlmComment, warnings []agent.AgentW
+ 	duration time.Duration, projectSummary string, toolCalls map[string]int64, toolFailures []llmloop.ToolFailureDetail,
+ 	traceID string, resumeInfo *agent.ResumeInfo, sessionID string,
+ 	manifest *session.RunManifest, budgetExceeded bool, llmIdentity *jsonLLMIdentity, out io.Writer,
+-	retryReport *llm.RetryReport, groups []agent.FileGroupInfo) error {
++	retryReport *llm.RetryReport, groups []agent.FileGroupInfo, managedOutcome *agent.ManagedOutcome) error {
+ 	publishedWarnings := warningsForOutput(warnings, manifest)
+ 	payload := jsonOutput{
+ 		Status:   "success",
+@@ -392,12 +396,13 @@ func outputJSONWithWarnings(comments []model.LlmComment, warnings []agent.AgentW
+ 			Elapsed:          duration.Round(time.Second).String(),
+ 			BudgetExceeded:   budgetExceeded,
+ 		},
+-		Groups:         groups,
+-		ProjectSummary: projectSummary,
+-		Resume:         resumeInfo,
+-		SessionID:      sessionID,
+-		Manifest:       manifest,
+-		RetryReport:    retryReport,
++		Groups:              groups,
++		ProjectSummary:      projectSummary,
++		Resume:              resumeInfo,
++		SessionID:           sessionID,
++		Manifest:            manifest,
++		ReviewRouterOutcome: managedOutcome,
++		RetryReport:         retryReport,
+ 	}
+ 	payload.ToolCalls = newJSONToolCalls(toolCalls, toolFailures)
+ 	if manifest != nil {
+@@ -648,14 +653,15 @@ func manifestMessage(manifest *session.RunManifest, findings int) string {
+ 	}
+ }
+ 
+-func outputJSONNoFiles(traceID string, llmIdentity *jsonLLMIdentity, out io.Writer) error {
++func outputJSONNoFiles(traceID string, llmIdentity *jsonLLMIdentity, out io.Writer, managedOutcome *agent.ManagedOutcome) error {
+ 	payload := jsonOutput{
+-		Status:    "skipped",
+-		LLM:       llmIdentity,
+-		TraceID:   traceID,
+-		Message:   "No supported files changed.",
+-		Comments:  []model.LlmComment{},
+-		ToolCalls: newJSONToolCalls(nil, nil),
++		Status:              "skipped",
++		LLM:                 llmIdentity,
++		TraceID:             traceID,
++		Message:             "No supported files changed.",
++		Comments:            []model.LlmComment{},
++		ToolCalls:           newJSONToolCalls(nil, nil),
++		ReviewRouterOutcome: managedOutcome,
+ 	}
+ 	enc := json.NewEncoder(out)
+ 	enc.SetIndent("", "  ")
+diff --git a/cmd/opencodereview/output_helpers_test.go b/cmd/opencodereview/output_helpers_test.go
+index 36ec229..09cd5e4 100644
+--- a/cmd/opencodereview/output_helpers_test.go
++++ b/cmd/opencodereview/output_helpers_test.go
+@@ -196,7 +196,7 @@ func TestOutputJSONWithWarnings_NoCommentsSubtaskError(t *testing.T) {
+ 	os.Stdout = w
+ 
+ 	warnings := []agent.AgentWarning{{Type: "subtask_error", File: "x.go", Message: "fail"}}
+-	err := outputJSONWithWarnings(nil, warnings, 1, 10, 5, 15, 0, 0, time.Second, "", nil, nil, "abc123trace", nil, "", nil, false, nil, os.Stdout, nil, nil)
++	err := outputJSONWithWarnings(nil, warnings, 1, 10, 5, 15, 0, 0, time.Second, "", nil, nil, "abc123trace", nil, "", nil, false, nil, os.Stdout, nil, nil, nil)
+ 	_ = w.Close()
+ 	os.Stdout = old
+ 
+@@ -316,7 +316,7 @@ func TestOutputJSONWithWarnings(t *testing.T) {
+ 		Arguments:      `{"path":"missing.go"}`,
+ 		Error:          "file not found",
+ 	}}
+-	err := outputJSONWithWarnings(comments, warnings, 5, 100, 50, 150, 10, 5, 3*time.Second, "summary", map[string]int64{"file_read": 3}, failures, "trace-xyz-789", nil, "", nil, false, nil, os.Stdout, nil, nil)
++	err := outputJSONWithWarnings(comments, warnings, 5, 100, 50, 150, 10, 5, 3*time.Second, "summary", map[string]int64{"file_read": 3}, failures, "trace-xyz-789", nil, "", nil, false, nil, os.Stdout, nil, nil, nil)
+ 	_ = w.Close()
+ 	os.Stdout = old
+ 
+@@ -371,7 +371,7 @@ func TestOutputJSONWithWarnings_NoCommentsNoErrors(t *testing.T) {
+ 	os.Stdout = w
+ 
+ 	warnings := []agent.AgentWarning{{Type: "warning", Message: "something"}}
+-	err := outputJSONWithWarnings(nil, warnings, 2, 50, 20, 70, 0, 0, time.Second, "", nil, nil, "", nil, "", nil, false, nil, os.Stdout, nil, nil)
++	err := outputJSONWithWarnings(nil, warnings, 2, 50, 20, 70, 0, 0, time.Second, "", nil, nil, "", nil, "", nil, false, nil, os.Stdout, nil, nil, nil)
+ 	_ = w.Close()
+ 	os.Stdout = old
+ 
+@@ -402,7 +402,7 @@ func TestOutputJSONWithWarnings_NoCommentsWithReviewLimitReached(t *testing.T) {
+ 	}}
+ 	got := captureStdout(t, func() {
+ 		err := outputJSONWithWarnings(nil, warnings, 1, 40_000, 0, 40_000, 0, 0,
+-			time.Second, "", nil, nil, "trace-1", nil, "sess-1", nil, false, nil, os.Stdout, nil, nil)
++			time.Second, "", nil, nil, "trace-1", nil, "sess-1", nil, false, nil, os.Stdout, nil, nil, nil)
+ 		if err != nil {
+ 			t.Fatalf("outputJSONWithWarnings: %v", err)
+ 		}
+@@ -431,7 +431,7 @@ func TestOutputJSONNoFiles(t *testing.T) {
+ 	os.Stdout = w
+ 
+ 	identity := &jsonLLMIdentity{Provider: "anthropic", Model: "claude-opus-4-6"}
+-	err := outputJSONNoFiles("test-trace-id-456", identity, os.Stdout)
++	err := outputJSONNoFiles("test-trace-id-456", identity, os.Stdout, nil)
+ 
+ 	_ = w.Close()
+ 	os.Stdout = old
+diff --git a/cmd/opencodereview/review_cmd.go b/cmd/opencodereview/review_cmd.go
+index 898a084..cd08514 100644
+--- a/cmd/opencodereview/review_cmd.go
++++ b/cmd/opencodereview/review_cmd.go
+@@ -51,6 +51,7 @@ type reviewOptions struct {
+ 	effort                string
+ 	noFilter              bool
+ 	preview               bool
++	managed               bool
+ }
+ 
+ var reviewOpts reviewOptions
+@@ -116,6 +117,12 @@ func executeReviewContext(ctx context.Context, opts reviewOptions) (retErr error
+ 	if err != nil {
+ 		return err
+ 	}
++	if opts.managed {
++		// Managed runs bound the serialized result (plan §7.3) and commit it
++		// atomically via the lazy file writer's temp+rename. reviewResultError
++		// still decides the exit code independently of the file.
++		out = &limitWriter{dst: out, limit: managedResultByteLimit}
++	}
+ 	closeOutPending := true
+ 	finishOutput := func() error {
+ 		if !closeOutPending {
+@@ -134,7 +141,7 @@ func executeReviewContext(ctx context.Context, opts reviewOptions) (retErr error
+ 	}()
+ 
+ 	contentRef, _ := tool.ParseReviewMode(opts.from, opts.to, opts.commit).RefValue(opts.to, opts.commit)
+-	cc, err := loadCommonContext(opts.repoDir, opts.rulePath, contentRef, opts.maxTools, opts.maxGitProcs, true)
++	cc, err := loadCommonContext(opts.repoDir, opts.rulePath, contentRef, opts.maxTools, opts.maxGitProcs, true, opts.managed)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -164,6 +171,7 @@ func executeReviewContext(ctx context.Context, opts reviewOptions) (retErr error
+ 		Provider: opts.provider,
+ 		Model:    opts.model,
+ 		Context:  ctx,
++		Managed:  opts.managed,
+ 	})
+ 	if err != nil {
+ 		return err
+@@ -241,6 +249,7 @@ func executeReviewContext(ctx context.Context, opts reviewOptions) (retErr error
+ 		MaxTokensBudget:       int64(opts.maxTokensBudget),
+ 		SkipFilter:            opts.noFilter,
+ 		RuntimeConfig:         rt.RuntimeConfig,
++		Managed:               opts.managed,
+ 	})
+ 
+ 	closeRaw := bindRawWriter(rt.RawHolder, cc.RepoDir, ag.Session())
+diff --git a/cmd/opencodereview/review_helpers_test.go b/cmd/opencodereview/review_helpers_test.go
+index eab0d9a..ca68f23 100644
+--- a/cmd/opencodereview/review_helpers_test.go
++++ b/cmd/opencodereview/review_helpers_test.go
+@@ -24,7 +24,7 @@ func TestRunPreview(t *testing.T) {
+ 	freshOCRHome(t)
+ 	dir := initTestGitRepo(t)
+ 	gitCommitFile(t, dir, "x.go", "package x\n", "add x")
+-	cc, err := loadCommonContext(dir, "", "", 0, 0, true)
++	cc, err := loadCommonContext(dir, "", "", 0, 0, true, false)
+ 	if err != nil {
+ 		t.Fatalf("loadCommonContext: %v", err)
+ 	}
+@@ -40,7 +40,7 @@ func TestRunPreviewJSONFormat(t *testing.T) {
+ 	dir := initTestGitRepo(t)
+ 	gitCommitFile(t, dir, "main.go", "package main\n", "add main")
+ 	gitCommitFile(t, dir, "notes.md", "# notes\n", "add notes")
+-	cc, err := loadCommonContext(dir, "", "", 0, 0, true)
++	cc, err := loadCommonContext(dir, "", "", 0, 0, true, false)
+ 	if err != nil {
+ 		t.Fatalf("loadCommonContext: %v", err)
+ 	}
+@@ -84,7 +84,7 @@ func TestRunPreviewJSON_ProviderDirectoryKeepsChangesetOrder(t *testing.T) {
+ 		}
+ 	}
+ 
+-	cc, err := loadCommonContext(dir, "", "", 0, 0, true)
++	cc, err := loadCommonContext(dir, "", "", 0, 0, true, false)
+ 	if err != nil {
+ 		t.Fatalf("loadCommonContext: %v", err)
+ 	}
+@@ -142,7 +142,7 @@ func TestRunPreviewAppliesResolvedMaxTokens(t *testing.T) {
+ 
+ 			dir := initTestGitRepo(t)
+ 			gitCommitFile(t, dir, "huge.go", strings.Repeat("token ", 500), "add huge")
+-			cc, err := loadCommonContext(dir, "", "", 0, 0, true)
++			cc, err := loadCommonContext(dir, "", "", 0, 0, true, false)
+ 			if err != nil {
+ 				t.Fatalf("loadCommonContext: %v", err)
+ 			}
+@@ -197,7 +197,7 @@ func TestPreviewMaxTokensMatchesRun(t *testing.T) {
+ 			}
+ 
+ 			dir := initTestGitRepo(t)
+-			cc, err := loadCommonContext(dir, "", "", 0, 0, true)
++			cc, err := loadCommonContext(dir, "", "", 0, 0, true, false)
+ 			if err != nil {
+ 				t.Fatalf("loadCommonContext: %v", err)
+ 			}
+@@ -256,7 +256,7 @@ func TestRunPreviewCreatesNoSession(t *testing.T) {
+ 
+ 	dir := initTestGitRepo(t)
+ 	gitCommitFile(t, dir, "x.go", "package x\n", "add x")
+-	cc, err := loadCommonContext(dir, "", "", 0, 0, true)
++	cc, err := loadCommonContext(dir, "", "", 0, 0, true, false)
+ 	if err != nil {
+ 		t.Fatalf("loadCommonContext: %v", err)
+ 	}
+diff --git a/cmd/opencodereview/scan_cmd.go b/cmd/opencodereview/scan_cmd.go
+index 38b67ab..63ddc77 100644
+--- a/cmd/opencodereview/scan_cmd.go
++++ b/cmd/opencodereview/scan_cmd.go
+@@ -123,7 +123,7 @@ func executeScanContext(ctx context.Context, opts scanOptions) (retErr error) {
+ 		}
+ 	}()
+ 
+-	cc, err := loadCommonContext(opts.repoDir, opts.rulePath, "", opts.maxTools, opts.maxGitProcs, false)
++	cc, err := loadCommonContext(opts.repoDir, opts.rulePath, "", opts.maxTools, opts.maxGitProcs, false, false)
+ 	if err != nil {
+ 		return err
+ 	}
+diff --git a/cmd/opencodereview/scan_helpers_test.go b/cmd/opencodereview/scan_helpers_test.go
+index 2c569d5..e6a80bb 100644
+--- a/cmd/opencodereview/scan_helpers_test.go
++++ b/cmd/opencodereview/scan_helpers_test.go
+@@ -35,7 +35,7 @@ func TestLoadScanResumeState(t *testing.T) {
+ func TestRunScanPreview(t *testing.T) {
+ 	dir := initTestGitRepo(t)
+ 	gitCommitFile(t, dir, "y.go", "package y\n", "add y")
+-	cc, err := loadCommonContext(dir, "", "", 0, 0, false)
++	cc, err := loadCommonContext(dir, "", "", 0, 0, false, false)
+ 	if err != nil {
+ 		t.Fatalf("loadCommonContext: %v", err)
+ 	}
+@@ -53,7 +53,7 @@ func TestRunScanPreview(t *testing.T) {
+ func TestRunScanPreviewJSONFormat(t *testing.T) {
+ 	dir := initTestGitRepo(t)
+ 	gitCommitFile(t, dir, "y.go", "package y\n", "add y")
+-	cc, err := loadCommonContext(dir, "", "", 0, 0, false)
++	cc, err := loadCommonContext(dir, "", "", 0, 0, false, false)
+ 	if err != nil {
+ 		t.Fatalf("loadCommonContext: %v", err)
+ 	}
+@@ -135,7 +135,7 @@ func TestRunScanPreviewCreatesNoSession(t *testing.T) {
+ 
+ 	dir := initTestGitRepo(t)
+ 	gitCommitFile(t, dir, "y.go", "package y\n", "add y")
+-	cc, err := loadCommonContext(dir, "", "", 0, 0, false)
++	cc, err := loadCommonContext(dir, "", "", 0, 0, false, false)
+ 	if err != nil {
+ 		t.Fatalf("loadCommonContext: %v", err)
+ 	}
+diff --git a/cmd/opencodereview/shared.go b/cmd/opencodereview/shared.go
+index c002b58..a14528d 100644
+--- a/cmd/opencodereview/shared.go
++++ b/cmd/opencodereview/shared.go
+@@ -108,7 +108,9 @@ func previewMaxTokens(templateDefault, cliOverride int) (int, error) {
+ // inspect when disambiguating ambiguous extensions — derive it via
+ // tool.ParseReviewMode(from, to, commit).RefValue(to, commit). Pass "" to
+ // read the working tree, which is what scan wants.
+-func loadCommonContext(repoDirInput, rulePath, contentRef string, maxTools, maxGitProcs int, requireGit bool) (*commonContext, error) {
++// skipProjectRules drops the project .opencodereview/rule.json layer; managed
++// runs set it so rules from the reviewed PR repository never load (plan §5.1).
++func loadCommonContext(repoDirInput, rulePath, contentRef string, maxTools, maxGitProcs int, requireGit, skipProjectRules bool) (*commonContext, error) {
+ 	tpl, err := template.LoadDefault()
+ 	if err != nil {
+ 		return nil, fmt.Errorf("load default template: %w", err)
+@@ -130,8 +132,9 @@ func loadCommonContext(repoDirInput, rulePath, contentRef string, maxTools, maxG
+ 	gitRunner := gitcmd.New(maxGitProcs)
+ 
+ 	resolver, fileFilter, err := rules.NewResolver(repoDir, rulePath, rules.ResolverOptions{
+-		Ref:    contentRef,
+-		Runner: gitRunner,
++		Ref:              contentRef,
++		Runner:           gitRunner,
++		SkipProjectRules: skipProjectRules,
+ 	})
+ 	if err != nil {
+ 		return nil, fmt.Errorf("load rules: %w", err)
+@@ -267,12 +270,21 @@ func loadLLMRuntime(tpl *template.Template, toolConfigPath string, resolveOpts l
+ 	retryCollector := newRetryCollector()
+ 
+ 	var rawHolder *llm.RawHolder
+-	if llm.RawLoggingEnabled() {
++	if llm.RawLoggingEnabled() && !resolveOpts.Managed {
+ 		rawHolder = llm.NewRawHolder()
+ 	}
+ 
++	client := llm.NewLLMClient(ep, retryCollector, rawHolder)
++	if resolveOpts.Managed {
++		// Managed mode serializes model calls run-wide: at most one in-flight
++		// request for the whole run (plan §7.2). The run root context makes
++		// permit waits and in-flight requests respect root cancellation even
++		// when auxiliary code arrives via context.WithoutCancel.
++		client = llm.NewSerializingClient(client, resolveOpts.Context)
++	}
++
+ 	return &llmRuntime{
+-		Client:         llm.NewLLMClient(ep, retryCollector, rawHolder),
++		Client:         client,
+ 		Model:          ep.Model,
+ 		Provider:       ep.Provider,
+ 		Source:         ep.Source,
+@@ -739,6 +751,41 @@ func (w *lazyFileWriter) Close() error {
+ 	return nil
+ }
+ 
++// managedResultByteLimit bounds the managed result document (plan §7.3,
++// "bounded serializer"): 16 MiB, the same ceiling the Responses stream
++// accumulator enforces on model output. A document past the limit fails the
++// write — and with it the command — instead of publishing a truncated result.
++const managedResultByteLimit = 16 << 20
++
++// limitWriter fails every Write once limit bytes have been produced (or an
++// earlier write failed). It reports deferred errors via Err so text-mode
++// rendering, which drops per-write errors, still fails the command non-zero.
++type limitWriter struct {
++	dst   io.Writer
++	limit int64
++	n     int64
++	err   error
++}
++
++func (w *limitWriter) Write(p []byte) (int, error) {
++	if w.err != nil {
++		return 0, w.err
++	}
++	if w.n+int64(len(p)) > w.limit {
++		w.err = fmt.Errorf("managed result exceeds the %d MiB output limit", w.limit>>20)
++		return 0, w.err
++	}
++	n, err := w.dst.Write(p)
++	w.n += int64(n)
++	if err != nil && w.err == nil {
++		w.err = err
++	}
++	return n, err
++}
++
++// Err reports the first write failure, including the size-limit rejection.
++func (w *limitWriter) Err() error { return w.err }
++
+ // resolveOutputWriter resolves the --output target into a writer plus a
+ // cleanup function.
+ //   - "" or "-"      → os.Stdout with a no-op cleanup (colors preserved, no hint)
+@@ -803,6 +850,13 @@ type resumeInfoProvider interface {
+ 	ResumeInfo() *agent.ResumeInfo
+ }
+ 
++// managedOutcomeProvider is implemented by review agents that can freeze the
++// managed outcome contract (plan §7.3–7.4). scan agents never managed-run, so
++// the assertion simply fails there and the field stays absent.
++type managedOutcomeProvider interface {
++	ManagedOutcome() *agent.ManagedOutcome
++}
++
+ // emitRunResult is the post-LLM-run finalization shared by `ocr review` and
+ // `ocr scan`: resolves comment line numbers, records telemetry, restores
+ // stdout early for agent-text audiences so the summary is visible, prints
+@@ -844,9 +898,16 @@ func emitRunResult(
+ 	// share the same suppression of trace summaries and early stdout restore.
+ 	machineReadable := isMachineReadable(outputFormat)
+ 
++	// The frozen managed outcome, when this run is managed (plan §7.4). Absent
++	// for every unmanaged run, keeping native JSON byte-identical.
++	var managedOutcome *agent.ManagedOutcome
++	if p, ok := ag.(managedOutcomeProvider); ok {
++		managedOutcome = p.ManagedOutcome()
++	}
++
+ 	if machineReadable && manifest == nil && len(comments) == 0 && ag.FilesReviewed() == 0 {
+ 		if outputFormat == "json" {
+-			return outputJSONNoFiles(traceID, llmIdentity, out)
++			return outputJSONNoFiles(traceID, llmIdentity, out, managedOutcome)
+ 		}
+ 		return outputSARIF(nil, Version, ag.Warnings(), manifest, out)
+ 	}
+@@ -883,7 +944,7 @@ func emitRunResult(
+ 		return outputJSONWithWarnings(comments, ag.Warnings(), ag.FilesReviewed(),
+ 			ag.TotalInputTokens(), ag.TotalOutputTokens(), ag.TotalTokensUsed(),
+ 			ag.TotalCacheReadTokens(), ag.TotalCacheWriteTokens(), duration,
+-			ag.ProjectSummary(), ag.ToolCalls(), ag.ToolFailures(), traceID, resumeInfo, ag.SessionID(), manifest, ag.BudgetExceeded(), llmIdentity, out, retryReport, groups)
++			ag.ProjectSummary(), ag.ToolCalls(), ag.ToolFailures(), traceID, resumeInfo, ag.SessionID(), manifest, ag.BudgetExceeded(), llmIdentity, out, retryReport, groups, managedOutcome)
+ 	}
+ 	if outputFormat == "sarif" {
+ 		return outputSARIF(comments, Version, ag.Warnings(), manifest, out)
+diff --git a/cmd/opencodereview/shared_flags.go b/cmd/opencodereview/shared_flags.go
+index 73f2a38..b4c8bcc 100644
+--- a/cmd/opencodereview/shared_flags.go
++++ b/cmd/opencodereview/shared_flags.go
+@@ -9,6 +9,7 @@ import (
+ 	"strings"
+ 
+ 	"github.com/alibaba/open-code-review/internal/config/template"
++	"github.com/alibaba/open-code-review/internal/llm"
+ 	"github.com/spf13/cobra"
+ )
+ 
+@@ -76,6 +77,13 @@ func addPreviewFlag(cmd *cobra.Command, target *bool) {
+ 	cmd.Flags().BoolVarP(target, "preview", "p", false, "preview which files will be reviewed without running the LLM")
+ }
+ 
++// addManagedFlag registers the review-only managed compatibility flag. Managed
++// mode pins provider/config/transport to the Review Router contract (plan §5.1)
++// and is only valid together with an explicit --provider reviewrouter.
++func addManagedFlag(cmd *cobra.Command, target *bool) {
++	cmd.Flags().BoolVar(target, "reviewrouter-managed", false, "managed Review Router mode: pinned provider, config and transport contract (requires --provider reviewrouter)")
++}
++
+ func completeEnum(values ...string) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+ 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+ 		return values, cobra.ShellCompDirectiveNoFileComp
+@@ -127,6 +135,9 @@ func validateReviewOptions(opts *reviewOptions) error {
+ 	if err := validateDiffMode(opts.from, opts.to, opts.commit); err != nil {
+ 		return err
+ 	}
++	if opts.managed && opts.provider != llm.ManagedProviderName {
++		return fmt.Errorf("--reviewrouter-managed requires an explicit --provider %s", llm.ManagedProviderName)
++	}
+ 	if opts.preview && opts.resume != "" {
+ 		return fmt.Errorf("--preview and --resume cannot be used together")
+ 	}
+@@ -219,6 +230,7 @@ func registerReviewFlags(cmd *cobra.Command, opts *reviewOptions) {
+ 	cmd.RegisterFlagCompletionFunc("effort", completeEnum(template.EffortNames()...))
+ 	cmd.Flags().BoolVar(&opts.noFilter, "no-filter", false, "keep all review comments without LLM post-filtering")
+ 	addPreviewFlag(cmd, &opts.preview)
++	addManagedFlag(cmd, &opts.managed)
+ }
+ 
+ // registerScanFlags registers all scan command flags on cmd, binding to opts.
+diff --git a/internal/agent/agent.go b/internal/agent/agent.go
+index 1d02bb0..7551d06 100644
+--- a/internal/agent/agent.go
++++ b/internal/agent/agent.go
+@@ -164,6 +164,12 @@ type Args struct {
+ 	// LLM endpoint and app config; a zero value simply omits those fields from
+ 	// the hash input.
+ 	RuntimeConfig RuntimeConfig
++
++	// Managed marks the Review Router managed mode (plan §5.1–§7.4). It
++	// activates the outcome recorder behind the single reviewrouter_outcome
++	// JSON field and the managed scheduling/transort contract. Unmanaged runs
++	// leave it false and are unaffected.
++	Managed bool
+ }
+ 
+ // RuntimeConfig captures the allowlisted, non-secret runtime settings that
+@@ -202,6 +208,11 @@ type Agent struct {
+ 	// and consumed by finalizeManifest to fill the manifest input/repository.
+ 	inputResolution    diff.InputResolution
+ 	repoRemoteIdentity string
++
++	// outcomes accumulates the managed outcome contract's facts (plan §7.3–7.4)
++	// and is frozen once at run end. Nil for unmanaged runs; every recorder
++	// method is nil-safe.
++	outcomes *managedRecorder
+ }
+ 
+ // ResumeInfo summarizes file-level reuse for a resumed review.
+@@ -235,6 +246,9 @@ func New(args Args) *Agent {
+ 		args:    args,
+ 		session: args.Session,
+ 	}
++	if args.Managed {
++		a.outcomes = newManagedRecorder()
++	}
+ 	a.initManifest()
+ 	// DiffLookup closure captures a so the runner can resolve per-file
+ 	// model.Diff records lazily (a.diffs is only populated by loadDiffs,
+@@ -254,6 +268,8 @@ func New(args Args) *Agent {
+ 		// stay out of the retry report. See newRequestMeta.
+ 		NewRequestMeta:  a.newRequestMeta,
+ 		MaxTokensBudget: args.MaxTokensBudget,
++		Managed:         args.Managed,
++		PhaseRecorder:   a.outcomes,
+ 	})
+ 	return a
+ }
+@@ -282,6 +298,12 @@ func (a *Agent) newRequestMeta(filePath string, taskType session.TaskType, reque
+ 
+ // Run executes the full review pipeline: parse diffs -> group -> plan per group -> LLM tool-loop -> collect comments.
+ func (a *Agent) Run(ctx context.Context) ([]model.LlmComment, error) {
++	// Freeze the managed outcome exactly once at run exit (plan §7.4): by the
++	// time any return path gets here, every group, comment and compression
++	// worker has been joined (or never started), so the frozen record can
++	// never change after capture.
++	defer a.outcomes.freeze()
++
+ 	// Base prompt-cache affinity key for any LLM request in this run that a task doesn't re-scope.
+ 	// Each task conversation (plan, per-group main loop, compression, ...) refines it with llm.SessionTaskKey where it starts,
+ 	// so affinity keys stay per-conversation, the granularity provider prompt caches actually reuse prefixes at.
+@@ -291,6 +313,9 @@ func (a *Agent) Run(ctx context.Context) ([]model.LlmComment, error) {
+ 	ctx, diffSpan := telemetry.StartSpan(ctx, "diff.parse")
+ 	if err := a.loadDiffs(ctx); err != nil {
+ 		diffSpan.End()
++		// The run stopped before any group existed; the outcome names the cause
++		// and carries no groups (plan §7.4 rule 2).
++		a.outcomes.setRunStop(ManagedStopInputError)
+ 		// The builder already exists (agent.New created session + manifest), but
+ 		// no item was selected yet. Record the run-level input failure at this
+ 		// trigger point, then finalize and persist so the run still emits a
+@@ -447,6 +472,17 @@ func (a *Agent) Session() *session.SessionHistory {
+ 	return a.session
+ }
+ 
++// ManagedOutcome returns the frozen managed outcome record (plan §7.4), or
++// nil when this run is unmanaged. The record is frozen at run exit; the lazy
++// freeze here is a defensive fallback that cannot observe unfinalized workers,
++// because Agent.Run has returned by the time any caller reads it.
++func (a *Agent) ManagedOutcome() *ManagedOutcome {
++	if a.outcomes == nil {
++		return nil
++	}
++	return a.outcomes.freeze()
++}
++
+ // SessionID returns the current review's resumable session ID. It returns an
+ // empty string when the session file could not be created, so callers do not
+ // advertise a retry target that does not exist.
+@@ -665,6 +701,26 @@ func (a *Agent) dispatchSubtasks(ctx context.Context) ([]model.LlmComment, error
+ 	if groupResult.usage != nil {
+ 		a.runner.RecordUsage(groupResult.usage)
+ 	}
++	a.outcomes.setGrouping(groupResult.state, groupResult.reason)
++
++	// Every planned group is recorded before dispatch, so groups the budget
++	// never starts are still part of the outcome (plan §7.4 rule 2).
++	maxRounds := a.args.Template.ReviewRounds()
++	for _, g := range groups {
++		paths := make([]string, 0, len(g.Diffs))
++		for _, d := range g.Diffs {
++			paths = append(paths, d.NewPath)
++		}
++		a.outcomes.registerGroup(fileGroupKey(g.Diffs), paths, maxRounds)
++	}
++	if a.resumeInfo == nil {
++		// Without resume the group/path set must equal the native selected set.
++		selected := make([]string, 0, len(nonDeleted))
++		for _, d := range nonDeleted {
++			selected = append(selected, d.NewPath)
++		}
++		a.outcomes.expectPaths(selected)
++	}
+ 
+ 	var wg sync.WaitGroup
+ 
+@@ -712,6 +768,12 @@ dispatchLoop:
+ 						a.recordWarning("manifest_error", "", err.Error())
+ 					}
+ 				}
++				if a.outcomes != nil {
++					for _, rest := range groups[gi:] {
++						a.outcomes.markNotDispatched(fileGroupKey(rest.Diffs), ManagedStopTokenBudget)
++					}
++					a.outcomes.setRunStop(ManagedStopTokenBudget)
++				}
+ 				break
+ 			}
+ 		}
+@@ -719,10 +781,24 @@ dispatchLoop:
+ 		select {
+ 		case sem <- struct{}{}: // acquire semaphore
+ 		case <-ctx.Done():
++			if a.outcomes != nil {
++				stopCause := managedErrorStopCause(ctx.Err())
++				for _, rest := range groups[gi:] {
++					a.outcomes.markNotDispatched(fileGroupKey(rest.Diffs), stopCause)
++				}
++				a.outcomes.setRunStop(stopCause)
++			}
+ 			break dispatchLoop
+ 		}
+ 		if ctx.Err() != nil {
+ 			<-sem // release the slot acquired concurrently with cancellation
++			if a.outcomes != nil {
++				stopCause := managedErrorStopCause(ctx.Err())
++				for _, rest := range groups[gi:] {
++					a.outcomes.markNotDispatched(fileGroupKey(rest.Diffs), stopCause)
++				}
++				a.outcomes.setRunStop(stopCause)
++			}
+ 			break dispatchLoop
+ 		}
+ 		dispatched += int64(len(group.Diffs))
+@@ -746,6 +822,7 @@ dispatchLoop:
+ 					telemetry.ErrorEvent(ctx, "subtask.panic", fmt.Errorf("panic: %v", r),
+ 						telemetry.AnyToAttr("group.label", g.Label))
+ 					a.recordWarning("subtask_error", g.Label, fmt.Sprintf("panic: %v", r))
++					a.outcomes.latchStop(fileGroupKey(g.Diffs), ManagedStopInternalError)
+ 				}
+ 			}()
+ 
+@@ -827,6 +904,7 @@ dispatchLoop:
+ 		a.args.CommentWorkerPool.Await()
+ 	}
+ 	if ctxErr := ctx.Err(); ctxErr != nil {
++		a.outcomes.setRunStop(managedErrorStopCause(ctxErr))
+ 		a.recordContextFailure(ctxErr)
+ 		return a.args.CommentCollector.Comments(), ctxErr
+ 	}
+@@ -1388,6 +1466,7 @@ func (a *Agent) executeGroupSubtask(ctx context.Context, g FileGroup) (bool, *su
+ 	telemetry.SetAttr(span, "lines.changed.max_file", maxFileChanged)
+ 
+ 	if ctx.Err() != nil {
++		a.outcomes.latchStop(groupKey, managedErrorStopCause(ctx.Err()))
+ 		return false, nil, ctx.Err()
+ 	}
+ 
+@@ -1408,6 +1487,7 @@ func (a *Agent) executeGroupSubtask(ctx context.Context, g FileGroup) (bool, *su
+ 	switch {
+ 	case !planEnabled:
+ 		// No plan task configured.
++		a.outcomes.recordPhase(groupKey, phasePlan, managedStateNotApplicable, reasonDisabled)
+ 	case planRequired:
+ 		var err error
+ 		planResult, err = a.executeGroupPlanPhase(ctx, g, concatenatedDiffs, changeFilesExcludingGroup, rule)
+@@ -1416,8 +1496,16 @@ func (a *Agent) executeGroupSubtask(ctx context.Context, g FileGroup) (bool, *su
+ 			telemetry.Eventf(ctx, "plan.failed", err.Error(),
+ 				telemetry.AnyToAttr("group.label", groupKey))
+ 			planResult = ""
++			reason := reasonError
++			if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
++				reason = reasonCancelled
++			}
++			a.outcomes.recordPhase(groupKey, phasePlan, managedStateFailed, reason)
++		} else {
++			a.outcomes.recordPhase(groupKey, phasePlan, managedStateCompleted, "")
+ 		}
+ 	default:
++		a.outcomes.recordPhase(groupKey, phasePlan, managedStateNotApplicable, reasonThreshold)
+ 		fmt.Fprintf(stdout.Writer(), "[ocr] Skipping plan phase for group %q (%d file(s), max %d lines, total %d lines)\n",
+ 			groupKey, len(g.Diffs), maxFileChanged, totalChanged)
+ 		telemetry.Event(ctx, "plan.skipped",
+@@ -1431,6 +1519,7 @@ func (a *Agent) executeGroupSubtask(ctx context.Context, g FileGroup) (bool, *su
+ 
+ 	// Phase 2: Main task loop (multi-round)
+ 	if len(a.args.Template.MainTask.Messages) == 0 {
++		a.outcomes.latchStop(groupKey, ManagedStopInputError)
+ 		return false, nil, errMainTaskEmpty
+ 	}
+ 
+@@ -1450,6 +1539,7 @@ func (a *Agent) executeGroupSubtask(ctx context.Context, g FileGroup) (bool, *su
+ 
+ 	for round := 1; round <= maxRounds; round++ {
+ 		if ctx.Err() != nil {
++			a.outcomes.latchStop(groupKey, managedErrorStopCause(ctx.Err()))
+ 			return false, nil, ctx.Err()
+ 		}
+ 
+@@ -1461,9 +1551,16 @@ func (a *Agent) executeGroupSubtask(ctx context.Context, g FileGroup) (bool, *su
+ 				a.recordWarning("token_budget_reached", g.Diffs[0].NewPath,
+ 					fmt.Sprintf("skipped round %d of group %q: used %d tokens exceeds budget %d", round, groupKey, a.runner.TotalTokensUsed(), a.args.MaxTokensBudget))
+ 			}
++			// Latched at its trigger point before the break: a later clean round
++			// must not erase the budget stop (plan §7.3).
++			a.outcomes.latchStop(groupKey, ManagedStopTokenBudget)
+ 			break
+ 		}
+ 
++		// The round counts as started before its preparation begins (plan §7.4
++		// rule 3), so a prompt-budget overflow during preparation still counts.
++		a.outcomes.roundStarted(groupKey)
++
+ 		// Round 2+ strips the plan to avoid it acting as a coverage ceiling.
+ 		roundPlan := planResult
+ 		if round > 1 {
+@@ -1474,6 +1571,10 @@ func (a *Agent) executeGroupSubtask(ctx context.Context, g FileGroup) (bool, *su
+ 		messages := a.buildMainTaskMessages(rule, changeFilesExcludingGroup, concatenatedDiffs, roundPlan, confirmedText)
+ 
+ 		if stop := a.checkPromptBudget(ctx, messages, groupKey, round); stop != nil {
++			// Latched before either exit path: a round-1 overflow stops the group
++			// with prompt_budget, a later one truncates an already-completed
++			// group's story the same way (plan §7.3).
++			a.outcomes.latchStop(groupKey, ManagedStopPromptBudget)
+ 			if round == 1 {
+ 				return false, stop, nil
+ 			}
+@@ -1495,6 +1596,7 @@ func (a *Agent) executeGroupSubtask(ctx context.Context, g FileGroup) (bool, *su
+ 		}()
+ 
+ 		if err != nil {
++			a.outcomes.latchStop(groupKey, managedErrorStopCause(err))
+ 			if round == 1 {
+ 				return false, nil, err
+ 			}
+@@ -1520,6 +1622,19 @@ func (a *Agent) executeGroupSubtask(ctx context.Context, g FileGroup) (bool, *su
+ 		}
+ 		confirmed = append(confirmed, newlyConfirmed...)
+ 
++		// Managed rounds (plan §7.4 rule 3): a round is completed only after its
++		// main task_done was confirmed. A task_done carried by the budget grace
++		// round confirms the round but keeps the spent limit latched — complete
++		// investigation is not promised after review_limit_reached (plan §7.3).
++		if mainCompleted {
++			a.outcomes.roundCompleted(groupKey)
++		} else {
++			a.outcomes.latchStop(groupKey, managedMainLoopStopCause(mainStop))
++		}
++		if mainStop == llmloop.StopMaxRounds || mainStop == llmloop.StopTokenBudget {
++			a.outcomes.latchStop(groupKey, managedMainLoopStopCause(mainStop))
++		}
++
+ 		if !mainCompleted {
+ 			if mainStop == llmloop.StopTokenBudget {
+ 				// The runner stopped this conversation on the aggregate budget. Surface
+@@ -1803,12 +1918,14 @@ func (a *Agent) executeGroupReviewFilter(ctx context.Context, g FileGroup, from
+ 
+ 	ft := a.args.Template.ReviewFilterTask
+ 	if ft == nil || len(ft.Messages) == 0 {
++		a.outcomes.recordPhase(groupKey, phaseFilter, managedStateNotApplicable, reasonDisabled)
+ 		return
+ 	}
+ 
+ 	if a.args.SkipFilter {
+ 		telemetry.SetAttr(span, "skipped", true)
+ 		fmt.Fprintf(stdout.Writer(), "[ocr] Review filter skipped for group %q (--no-filter)\n", groupKey)
++		a.outcomes.recordPhase(groupKey, phaseFilter, managedStateNotApplicable, reasonDisabled)
+ 		return
+ 	}
+ 
+@@ -1832,6 +1949,7 @@ func (a *Agent) executeGroupReviewFilter(ctx context.Context, g FileGroup, from
+ 		}
+ 	}
+ 	if len(candidates) == 0 {
++		a.outcomes.recordPhase(groupKey, phaseFilter, managedStateNotApplicable, reasonNoCandidates)
+ 		return
+ 	}
+ 	telemetry.SetAttr(span, "comments.before", len(candidates))
+@@ -1875,6 +1993,11 @@ func (a *Agent) executeGroupReviewFilter(ctx context.Context, g FileGroup, from
+ 		fmt.Fprintf(stdout.Writer(), "[ocr] Review filter failed for group %q: %v\n", groupKey, err)
+ 		span.SetStatus(codes.Error, err.Error())
+ 		span.RecordError(err)
++		reason := reasonError
++		if reqCtx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
++			reason = reasonCancelled
++		}
++		a.outcomes.recordPhase(groupKey, phaseFilter, managedStateFailed, reason)
+ 		return
+ 	}
+ 	var totalTokens int64
+@@ -1886,9 +2009,22 @@ func (a *Agent) executeGroupReviewFilter(ctx context.Context, g FileGroup, from
+ 	rec.SetResponse(resp, duration)
+ 	a.runner.RecordUsage(resp.Usage)
+ 
+-	indices := parseFilterToolCalls(resp.ToolCalls(), len(candidates))
+-	if indices == nil {
+-		indices = parseFilterResponse(resp.Content(), len(candidates))
++	// Managed outcome verdict (plan §7.3): only a successfully parsed decision
++	// proves the filter's work; HTTP success and an empty removal set reached by
++	// fallback text parsing never do. The native removal behavior is unchanged.
++	indices, verdict := classifyFilterResponse(resp.ToolCalls(), resp.Content(), len(candidates))
++	switch {
++	case verdict.parsed:
++		a.outcomes.recordPhase(groupKey, phaseFilter, managedStateCompleted, "")
++		a.outcomes.recordFilterDecision(groupKey, true)
++	case verdict.malformed:
++		// Degradation with preserved comments; filter_decision_valid latches false.
++		a.outcomes.recordPhase(groupKey, phaseFilter, managedStateFailed, reasonMalformed)
++		a.outcomes.recordFilterDecision(groupKey, false)
++	default:
++		// No decision material arrived at all: the phase fails without a parsed
++		// decision, so filter_decision_valid stays null (plan §7.4 rule 5).
++		a.outcomes.recordPhase(groupKey, phaseFilter, managedStateFailed, reasonMalformed)
+ 	}
+ 	telemetry.SetAttr(span, "comments.filtered", len(indices))
+ 	if len(indices) == 0 {
+@@ -1946,22 +2082,33 @@ func buildGroupFilterCommentsJSON(comments []model.LlmComment) string {
+ // parseFilterToolCalls extracts comment indices from the filter tool call response.
+ // Returns nil if no matching tool call is found, allowing fallback to text-based parsing.
+ // Returns an empty map (non-nil) for approve_all_comments or an empty comment_ids list.
+-func parseFilterToolCalls(calls []llm.ToolCall, total int) map[int]struct{} {
++//
++// The second result reports that a recognized filter decision arrived; the
++// third that some recognized decision was malformed (unparseable tool
++// arguments). Malformed arguments keep their native behavior — the call is
++// skipped and the text parser runs as fallback — the verdicts only feed the
++// managed outcome contract (plan §7.3).
++func parseFilterToolCalls(calls []llm.ToolCall, total int) (map[int]struct{}, bool, bool) {
+ 	var indices map[int]struct{}
++	decision := false
++	malformed := false
+ 	for _, call := range calls {
+ 		switch call.Function.Name {
+ 		case "approve_all_comments":
+ 			if indices == nil {
+ 				indices = make(map[int]struct{})
+ 			}
++			decision = true
+ 		case "report_incorrect_comments":
+ 			var args struct {
+ 				CommentIDs []string `json:"comment_ids"`
+ 			}
+ 			if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
+ 				fmt.Fprintf(stdout.Writer(), "[ocr] Review filter: failed to parse tool call arguments: %v\n", err)
++				malformed = true
+ 				continue
+ 			}
++			decision = true
+ 			if indices == nil {
+ 				indices = make(map[int]struct{})
+ 			}
+@@ -1973,7 +2120,7 @@ func parseFilterToolCalls(calls []llm.ToolCall, total int) map[int]struct{} {
+ 			}
+ 		}
+ 	}
+-	return indices
++	return indices, decision, malformed
+ }
+ 
+ // parseFilterResponse extracts comment indices from the LLM filter response.
+diff --git a/internal/agent/agent_test.go b/internal/agent/agent_test.go
+index 08ed858..f18411d 100644
+--- a/internal/agent/agent_test.go
++++ b/internal/agent/agent_test.go
+@@ -238,10 +238,12 @@ func TestParseFilterResponse(t *testing.T) {
+ 
+ func TestParseFilterToolCalls(t *testing.T) {
+ 	tests := []struct {
+-		name    string
+-		calls   []llm.ToolCall
+-		total   int
+-		wantSet map[int]struct{}
++		name          string
++		calls         []llm.ToolCall
++		total         int
++		wantSet       map[int]struct{}
++		wantDecision  bool
++		wantMalformed bool
+ 	}{
+ 		{
+ 			name:    "no tool calls",
+@@ -257,8 +259,9 @@ func TestParseFilterToolCalls(t *testing.T) {
+ 					Arguments: `{"comment_ids": ["c-0", "c-2"]}`,
+ 				},
+ 			}},
+-			total:   5,
+-			wantSet: map[int]struct{}{0: {}, 2: {}},
++			total:        5,
++			wantSet:      map[int]struct{}{0: {}, 2: {}},
++			wantDecision: true,
+ 		},
+ 		{
+ 			name: "approve_all_comments returns empty map",
+@@ -268,8 +271,9 @@ func TestParseFilterToolCalls(t *testing.T) {
+ 					Arguments: `{}`,
+ 				},
+ 			}},
+-			total:   5,
+-			wantSet: map[int]struct{}{},
++			total:        5,
++			wantSet:      map[int]struct{}{},
++			wantDecision: true,
+ 		},
+ 		{
+ 			name: "ignores non-matching tool names",
+@@ -290,8 +294,9 @@ func TestParseFilterToolCalls(t *testing.T) {
+ 					Arguments: `{"comment_ids": ["c-0", "c-10"]}`,
+ 				},
+ 			}},
+-			total:   5,
+-			wantSet: map[int]struct{}{0: {}},
++			total:        5,
++			wantSet:      map[int]struct{}{0: {}},
++			wantDecision: true,
+ 		},
+ 		{
+ 			name: "invalid JSON arguments falls through",
+@@ -301,13 +306,20 @@ func TestParseFilterToolCalls(t *testing.T) {
+ 					Arguments: `not json`,
+ 				},
+ 			}},
+-			total:   5,
+-			wantSet: nil,
++			total:         5,
++			wantSet:       nil,
++			wantMalformed: true,
+ 		},
+ 	}
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+-			got := parseFilterToolCalls(tt.calls, tt.total)
++			got, decision, malformed := parseFilterToolCalls(tt.calls, tt.total)
++			if decision != tt.wantDecision {
++				t.Errorf("decision = %v, want %v", decision, tt.wantDecision)
++			}
++			if malformed != tt.wantMalformed {
++				t.Errorf("malformed = %v, want %v", malformed, tt.wantMalformed)
++			}
+ 			if tt.wantSet == nil {
+ 				if got != nil {
+ 					t.Errorf("expected nil, got %v", got)
+diff --git a/internal/agent/grouping.go b/internal/agent/grouping.go
+index 336202e..e960da0 100644
+--- a/internal/agent/grouping.go
++++ b/internal/agent/grouping.go
+@@ -49,9 +49,13 @@ type groupingResponse struct {
+ }
+ 
+ // groupDiffsResult holds the grouping output and any LLM usage to record.
++// state/reason describe how the partition was decided, for the managed outcome
++// (plan §7.4 grouping).
+ type groupDiffsResult struct {
+ 	groups []FileGroup
+ 	usage  *llm.UsageInfo
++	state  string
++	reason string
+ }
+ 
+ // groupingSessionOpts carries optional session-recording context.
+@@ -81,7 +85,11 @@ func groupDiffs(ctx context.Context, diffs []model.Diff, client llm.LLMClient, m
+ 			totalChanged, _ := diffsChurn(diffs)
+ 			emitGroupingSkipped(ctx, template.GroupingPerFile, len(diffs), totalChanged, tpl)
+ 		}
+-		return groupDiffsResult{groups: toSingleFileGroups(diffs)}
++		state, reason := managedStateNotApplicable, reasonSingleFile
++		if len(diffs) == 0 {
++			reason = reasonNoSelection
++		}
++		return groupDiffsResult{groups: toSingleFileGroups(diffs), state: state, reason: reason}
+ 	}
+ 
+ 	// A small change set decides its partition without an LLM round trip: too
+@@ -90,21 +98,26 @@ func groupDiffs(ctx context.Context, diffs []model.Diff, client llm.LLMClient, m
+ 	// Template.GroupingPlan.
+ 	totalChanged, _ := diffsChurn(diffs)
+ 	if strategy := tpl.GroupingPlan(len(diffs), totalChanged); strategy != template.GroupingViaLLM {
+-		return groupDiffsResult{groups: groupWithoutLLM(ctx, diffs, strategy, tpl, totalChanged, tokenLimit)}
++		return groupDiffsResult{groups: groupWithoutLLM(ctx, diffs, strategy, tpl, totalChanged, tokenLimit),
++			state: managedStateNotApplicable, reason: reasonThreshold}
+ 	}
+ 
+ 	if tpl.GroupingTask == nil || len(tpl.GroupingTask.Messages) == 0 {
+-		return groupDiffsResult{groups: toSingleFileGroups(diffs)}
++		return groupDiffsResult{groups: toSingleFileGroups(diffs),
++			state: managedStateNotApplicable, reason: reasonDisabled}
+ 	}
+ 
+ 	groups, usage, err := callGroupingLLM(ctx, diffs, client, modelName, tpl.GroupingTask, tpl.CompletionTokenLimit(), sessOpts)
+ 	if err != nil {
+ 		fmt.Fprintf(stdout.Writer(), "[ocr] LLM grouping failed (%v), falling back to per-file dispatch\n", err)
+-		return groupDiffsResult{groups: toSingleFileGroups(diffs), usage: usage}
++		// The fallback partition works, but the grouping itself failed: the
++		// managed outcome must read failed, never completed (plan §7.4 rule 1).
++		return groupDiffsResult{groups: toSingleFileGroups(diffs), usage: usage,
++			state: managedStateFailed, reason: reasonFallback}
+ 	}
+ 
+ 	groups = enforceGroupTokenBudget(groups, tokenLimit)
+-	return groupDiffsResult{groups: groups, usage: usage}
++	return groupDiffsResult{groups: groups, usage: usage, state: managedStateCompleted}
+ }
+ 
+ // groupWithoutLLM partitions a below-threshold change set locally, in the shape
+diff --git a/internal/config/rules/system_rules.go b/internal/config/rules/system_rules.go
+index 403c46a..4a368f5 100644
+--- a/internal/config/rules/system_rules.go
++++ b/internal/config/rules/system_rules.go
+@@ -283,6 +283,14 @@ type ResolverOptions struct {
+ 	// Runner bounds concurrent git subprocesses. Optional; when nil the
+ 	// resolver shells out to git directly.
+ 	Runner *gitcmd.Runner
++
++	// SkipProjectRules suppresses the project-local .opencodereview/rule.json
++	// layer entirely. Default (false) preserves upstream behavior; the managed
++	// review mode sets it to true before any rules are loaded so a rule.json
++	// shipped inside the reviewed repository can neither change nor break
++	// trusted rule loading. Custom (--rule), global and system layers are
++	// unaffected.
++	SkipProjectRules bool
+ }
+ 
+ // NewResolver builds a Resolver with the following priority:
+@@ -317,7 +325,7 @@ func NewResolver(repoDir, customRulePath string, opts ResolverOptions) (Resolver
+ 	}
+ 
+ 	var projectRule *ProjectRule
+-	if repoDir != "" {
++	if repoDir != "" && !opts.SkipProjectRules {
+ 		pr, err := loadProjectRule(repoDir)
+ 		if err != nil {
+ 			return nil, nil, err
+diff --git a/internal/llm/client.go b/internal/llm/client.go
+index e0b7aa9..589beec 100644
+--- a/internal/llm/client.go
++++ b/internal/llm/client.go
+@@ -410,6 +410,17 @@ type ClientConfig struct {
+ 	RejectsSamplingParams bool
+ 	ChatGPTPlan           bool
+ 	ChatGPTAccount        string
++
++	// StrictTerminal is the independent strict terminal-completion check for
++	// streaming Responses calls (only response.completed + completed status is
++	// success). Independent from ChatGPTPlan so managed mode can enforce it
++	// without adopting any ChatGPT OAuth semantics.
++	StrictTerminal bool
++
++	// MaxRetries optionally overrides the SDK retry count: nil keeps the
++	// upstream default, an explicit 0 disables SDK retries. See
++	// ResolvedEndpoint.MaxRetries.
++	MaxRetries *int
+ 	// SessionKey is the fallback prompt-cache affinity key
+ 	// for requests whose context carries none (see ContextWithSessionKey).
+ 	//
+@@ -468,6 +479,16 @@ func retryCodesMiddleware(codes []int) func(*http.Request, func(*http.Request) (
+ 
+ // --- Factory ---
+ 
++// sdkMaxRetries resolves the effective SDK retry count from cfg.MaxRetries:
++// nil keeps the upstream default of 5, an explicit value (including 0) is used
++// as-is so managed mode can disable SDK retries entirely.
++func sdkMaxRetries(cfg ClientConfig) int {
++	if cfg.MaxRetries != nil {
++		return *cfg.MaxRetries
++	}
++	return 5
++}
++
+ // NewLLMClient creates the appropriate client based on the resolved endpoint protocol.
+ // protocol dispatch (canonical names from protocol.go):
+ //   - ProtocolAnthropic ("anthropic") -> AnthropicClient
+@@ -497,6 +518,8 @@ func NewLLMClient(ep ResolvedEndpoint, collector *RetryCollector, raw *RawHolder
+ 		RejectsSamplingParams: ep.RejectsSamplingParams,
+ 		ChatGPTPlan:           ep.ChatGPTPlan,
+ 		ChatGPTAccount:        ep.ChatGPTAccount,
++		StrictTerminal:        ep.StrictTerminal,
++		MaxRetries:            ep.MaxRetries,
+ 		retryCollector:        collector,
+ 		rawHolder:             raw,
+ 		AWSProfile:            ep.AWSProfile,
+@@ -608,7 +631,7 @@ func NewOpenAIClient(cfg ClientConfig) *OpenAIClient {
+ 	opts := []openaiopt.RequestOption{
+ 		openaiopt.WithAPIKey(cfg.APIKey),
+ 		openaiopt.WithBaseURL(sdkBaseURL),
+-		openaiopt.WithMaxRetries(5),
++		openaiopt.WithMaxRetries(sdkMaxRetries(cfg)),
+ 		openaiopt.WithHeader("User-Agent", userAgent("")),
+ 		openaiopt.WithRequestTimeout(cfg.Timeout),
+ 		openaiopt.WithHTTPClient(httpClientWithHeaderTimeout(cfg.Timeout)),
+@@ -1181,7 +1204,7 @@ func NewAnthropicClient(cfg ClientConfig) *AnthropicClient {
+ 
+ 	opts := []option.RequestOption{
+ 		option.WithBaseURL(sdkBaseURL),
+-		option.WithMaxRetries(5),
++		option.WithMaxRetries(sdkMaxRetries(cfg)),
+ 		option.WithHeader("User-Agent", userAgent("claude")),
+ 		option.WithRequestTimeout(cfg.Timeout),
+ 		// anthropic-sdk-go's default client hardcodes the same 10-minute
+@@ -1246,7 +1269,7 @@ func NewAnthropicBedrockClient(cfg ClientConfig) *AnthropicClient {
+ 	// would be overwritten rather than honoured. A custom endpoint (a VPC
+ 	// endpoint, say) would need to be threaded through the AWS config instead.
+ 	opts := []option.RequestOption{
+-		option.WithMaxRetries(5),
++		option.WithMaxRetries(sdkMaxRetries(cfg)),
+ 		option.WithHeader("User-Agent", userAgent("claude")),
+ 		option.WithRequestTimeout(cfg.Timeout),
+ 		// No httpClientWithHeaderTimeout here (unlike NewAnthropicClient): bedrock.WithConfig
+diff --git a/internal/llm/resolver.go b/internal/llm/resolver.go
+index 3399107..18d8c88 100644
+--- a/internal/llm/resolver.go
++++ b/internal/llm/resolver.go
+@@ -39,6 +39,17 @@ type ResolvedEndpoint struct {
+ 	ChatGPTPlan           bool
+ 	ChatGPTAccount        string
+ 
++	// StrictTerminal enables the independent strict terminal-completion check
++	// for streaming Responses calls: only response.completed with completed
++	// status is a success; failed/incomplete/EOF are errors. It is a typed
++	// transport flag (managed mode sets it) and never implies ChatGPTPlan.
++	StrictTerminal bool
++
++	// MaxRetries optionally overrides the SDK retry count. Nil keeps the
++	// upstream default; an explicit 0 disables SDK retries entirely. Managed
++	// mode sets 0. Pointer so "absent" and "explicit zero" stay distinguishable.
++	MaxRetries *int
++
+ 	// AmbientAuth marks an endpoint that carries no token and needs no base
+ 	// URL, because the transport supplies both — AWS SigV4 signing derives the
+ 	// host from the region and the credentials from the environment's own
+@@ -84,6 +95,13 @@ type ResolveOptions struct {
+ 	Provider string
+ 	Model    string
+ 	Context  context.Context
++
++	// Managed selects the typed managed review mode (the --reviewrouter-managed
++	// flag). When set, resolution is handled by ResolveManagedEndpoint before
++	// any general strategy: only the controlled custom_providers.reviewrouter
++	// entry of the config file is consulted, and ambient/inherited credentials
++	// are rejected. Provider must be ManagedProviderName.
++	Managed bool
+ }
+ 
+ // ResolveEndpoint resolves an endpoint without per-run overrides.
+@@ -104,6 +122,14 @@ func ResolveEndpointWithOptions(configPath string, opts ResolveOptions) (Resolve
+ 	opts.Provider = strings.TrimSpace(opts.Provider)
+ 	opts.Model = strings.TrimSpace(opts.Model)
+ 
++	// Managed mode resolves before anything else — before env overrides, before
++	// config-file credential resolution, before api_key_cmd can run — so no
++	// inherited credential or endpoint override can reach the controlled
++	// endpoint.
++	if opts.Managed {
++		return ResolveManagedEndpoint(configPath, opts)
++	}
++
+ 	// The global env overrides are parsed before any strategy runs, even though
+ 	// they are applied to the endpoint afterwards. Parsing them inside
+ 	// finalizeResolvedEndpoint would let a typo'd OCR_LLM_TIMEOUT ("30s") or an
+diff --git a/internal/llm/responses_client.go b/internal/llm/responses_client.go
+index 4cd8d41..1da8fe3 100644
+--- a/internal/llm/responses_client.go
++++ b/internal/llm/responses_client.go
+@@ -50,7 +50,7 @@ func NewOpenAIResponsesClient(cfg ClientConfig) *OpenAIResponsesClient {
+ 	sdkBaseURL := strings.TrimSuffix(strings.TrimRight(cfg.URL, "/"), "/responses")
+ 
+ 	httpClient := httpClientWithHeaderTimeout(cfg.Timeout)
+-	retries := 5
++	retries := sdkMaxRetries(cfg)
+ 	if cfg.ChatGPTPlan {
+ 		retries = 0
+ 		httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+@@ -257,7 +257,10 @@ func (c *OpenAIResponsesClient) responsesStreamingInner(ctx context.Context, par
+ 	stream := c.sdk.Responses.NewStreaming(ctx, params, opts...)
+ 	defer stream.Close()
+ 
+-	accumulator := responseStreamAccumulator{requireCompleted: c.cfg.ChatGPTPlan}
++	accumulator := responseStreamAccumulator{
++		requireCompleted: c.cfg.ChatGPTPlan || c.cfg.StrictTerminal,
++		chatGPTPlan:      c.cfg.ChatGPTPlan,
++	}
+ 	for stream.Next() {
+ 		if err := accumulator.add(stream.Current()); err != nil {
+ 			return nil, err
+@@ -281,7 +284,10 @@ type responseStreamAccumulator struct {
+ 	outputBytes      int
+ 	terminal         *responses.Response
+ 	requireCompleted bool
+-	terminalType     string
++	// chatGPTPlan marks ChatGPT-plan streams so failure messages can carry the
++	// ChatGPT usage-management URL; managed strict mode keeps generic messages.
++	chatGPTPlan  bool
++	terminalType string
+ }
+ 
+ func (a *responseStreamAccumulator) add(event responses.ResponseStreamEventUnion) error {
+@@ -314,7 +320,9 @@ func (a *responseStreamAccumulator) add(event responses.ResponseStreamEventUnion
+ 			if len(envelope.Incomplete) > 0 && string(envelope.Incomplete) != "null" {
+ 				message += " " + string(envelope.Incomplete)
+ 			}
+-			message += "; Manage usage: " + chatgptauth.UsageURL
++			if a.chatGPTPlan {
++				message += "; Manage usage: " + chatgptauth.UsageURL
++			}
+ 			return &responseStreamEventError{code: string(event.Response.Error.Code), param: envelope.Error.Param, message: message}
+ 		}
+ 		a.terminalType = event.Type
+@@ -340,7 +348,11 @@ func (a *responseStreamAccumulator) response() (*responses.Response, error) {
+ 	}
+ 	if a.requireCompleted {
+ 		if a.terminalType != "response.completed" || a.terminal.Status != responses.ResponseStatusCompleted {
+-			return nil, &responseStatusError{message: "chatgpt stream did not reach response.completed"}
++			message := "openai-responses stream did not reach response.completed"
++			if a.chatGPTPlan {
++				message = "chatgpt stream did not reach response.completed"
++			}
++			return nil, &responseStatusError{message: message}
+ 		}
+ 		if len(a.terminal.Output) > 0 {
+ 			return a.terminal, nil
+@@ -370,6 +382,12 @@ func (a *responseStreamAccumulator) response() (*responses.Response, error) {
+ 	if err := checkResponseStatus(&full); err != nil {
+ 		return nil, err
+ 	}
++	// Strict terminal-completion (managed / ChatGPT): only a completed status is
++	// success — an incomplete stream must never degrade into an empty success.
++	if a.requireCompleted && full.Status != responses.ResponseStatusCompleted {
++		return nil, &responseStatusError{message: fmt.Sprintf(
++			"openai-responses stream did not reach response.completed: status=%s", full.Status)}
++	}
+ 	if full.Status != responses.ResponseStatusCompleted && full.Status != responses.ResponseStatusIncomplete {
+ 		return nil, &responseStatusError{message: fmt.Sprintf(
+ 			"openai-responses terminal event carried unexpected status=%q", full.Status)}
+diff --git a/internal/llm/responses_client_test.go b/internal/llm/responses_client_test.go
+index fd055d7..9b90483 100644
+--- a/internal/llm/responses_client_test.go
++++ b/internal/llm/responses_client_test.go
+@@ -860,7 +860,7 @@ func TestChatGPTStreamFailureDetails(t *testing.T) {
+ 	} {
+ 		t.Run(tc.name, func(t *testing.T) {
+ 			events := responseStreamEvents(t, `{"type":"response.`+tc.eventType+`","response":{"id":"resp_failed","status":"`+tc.eventType+`","error":{"code":"rate_limit_exceeded","message":"rate limited","param":"model"}`+tc.details+`}}`)
+-			accumulator := responseStreamAccumulator{requireCompleted: true}
++			accumulator := responseStreamAccumulator{requireCompleted: true, chatGPTPlan: true}
+ 			err := accumulator.add(events[0])
+ 			var streamErr *responseStreamEventError
+ 			if !errors.As(err, &streamErr) || streamErr.code != "rate_limit_exceeded" || streamErr.param != "model" {
+@@ -869,6 +869,15 @@ func TestChatGPTStreamFailureDetails(t *testing.T) {
+ 			if streamErr.message != tc.want+"https://chatgpt.com/settings/usage" {
+ 				t.Fatalf("unexpected error message: %s", streamErr.message)
+ 			}
++			// Managed strict terminal mode shares the failure detection but keeps
++			// generic messages: no ChatGPT usage-management URL leaks into a
++			// non-ChatGPT endpoint's diagnostics (plan §7.1).
++			strict := responseStreamAccumulator{requireCompleted: true}
++			if err := strict.add(events[0]); err == nil {
++				t.Fatal("strict accumulator accepted a failed event")
++			} else if strings.Contains(err.Error(), "Manage usage") {
++				t.Fatalf("strict managed stream leaked the ChatGPT usage URL: %s", err.Error())
++			}
+ 		})
+ 	}
+ }
+diff --git a/internal/llmloop/compression.go b/internal/llmloop/compression.go
+index a1de6c5..7ac1367 100644
+--- a/internal/llmloop/compression.go
++++ b/internal/llmloop/compression.go
+@@ -221,12 +221,18 @@ func copyMessages(msgs []llm.Message) []llm.Message {
+ // intact. Returns rebuilt as [frozen] + [compressed_summary appended to
+ // the user prompt] + [active].
+ func (r *Runner) runCompression(ctx context.Context, msgs []llm.Message, taskKey string) ([]llm.Message, error) {
+-	if len(r.deps.Template.MemoryCompressionTask.Messages) == 0 || len(msgs) <= 2 {
++	if len(r.deps.Template.MemoryCompressionTask.Messages) == 0 {
++		r.recordPhase(taskKey, PhaseCompression, PhaseNotApplicable, "disabled")
++		return msgs[:min(len(msgs), 2)], nil
++	}
++	if len(msgs) <= 2 {
++		r.recordPhase(taskKey, PhaseCompression, PhaseNotApplicable, "no_zone")
+ 		return msgs[:min(len(msgs), 2)], nil
+ 	}
+ 
+ 	part := partitionMessages(msgs, r.deps.Template.MaxTokens, 0)
+ 	if part.compressEnd <= part.frozenEnd {
++		r.recordPhase(taskKey, PhaseCompression, PhaseNotApplicable, "no_zone")
+ 		return msgs, nil
+ 	}
+ 
+@@ -261,6 +267,11 @@ func (r *Runner) runCompression(ctx context.Context, msgs []llm.Message, taskKey
+ 
+ 	if err != nil {
+ 		rec.SetError(err, duration)
++		reason := "error"
++		if ctx.Err() != nil {
++			reason = "cancelled"
++		}
++		r.recordPhase(taskKey, PhaseCompression, PhaseFailed, reason)
+ 		// Return msgs unchanged: truncating to frozenEnd would discard all
+ 		// conversation context, which is worse than staying over the token
+ 		// limit temporarily.
+@@ -278,6 +289,7 @@ func (r *Runner) runCompression(ctx context.Context, msgs []llm.Message, taskKey
+ 	if rawSummary == "" {
+ 		// Empty summary: keep the original conversation rather than dropping
+ 		// everything below the frozen zone.
++		r.recordPhase(taskKey, PhaseCompression, PhaseCompleted, "")
+ 		return msgs, nil
+ 	}
+ 
+@@ -292,6 +304,7 @@ func (r *Runner) runCompression(ctx context.Context, msgs []llm.Message, taskKey
+ 		rebuilt = append(rebuilt, msgs[i])
+ 	}
+ 
++	r.recordPhase(taskKey, PhaseCompression, PhaseCompleted, "")
+ 	return rebuilt, nil
+ }
+ 
+diff --git a/internal/llmloop/loop.go b/internal/llmloop/loop.go
+index 9f0e72d..129224b 100644
+--- a/internal/llmloop/loop.go
++++ b/internal/llmloop/loop.go
+@@ -72,6 +72,55 @@ type Deps struct {
+ 	// unlimited, which is also what scan and every existing caller get by
+ 	// default.
+ 	MaxTokensBudget int64
++
++	// Managed marks the Review Router managed mode (plan §5.1–§7.2): memory
++	// compression runs synchronously at the soft threshold and async comment
++	// workers get a bounded worker context. False (the zero value) keeps the
++	// unmanaged scheduling bit-for-bit unchanged.
++	Managed bool
++
++	// PhaseRecorder receives the managed outcome contract's optional-phase
++	// facts that only this loop can observe (compression and relocation phase
++	// outcomes; plan §7.3–7.4). Nil in unmanaged runs.
++	PhaseRecorder ManagedPhaseRecorder
++}
++
++// ManagedPhase names an optional result-changing phase of the managed outcome
++// contract that runs inside the LLM loop.
++type ManagedPhase string
++
++const (
++	// PhaseCompression is the memory-compression phase.
++	PhaseCompression ManagedPhase = "compression"
++	// PhaseRelocation is the per-comment re-location phase.
++	PhaseRelocation ManagedPhase = "relocation"
++)
++
++// ManagedPhaseState is the closed phase-state enum of the managed outcome
++// contract (plan §7.4 rule 1).
++type ManagedPhaseState string
++
++const (
++	PhaseCompleted     ManagedPhaseState = "completed"
++	PhaseNotApplicable ManagedPhaseState = "not_applicable"
++	PhaseFailed        ManagedPhaseState = "failed"
++	PhaseCancelled     ManagedPhaseState = "cancelled"
++)
++
++// ManagedPhaseRecorder is the narrow sink the agent-side managed outcome
++// recorder implements for loop-owned phase facts. taskKey is the subtask
++// (group) key the phase ran under. reason is a short allowlisted code or "".
++// Implementations must be safe for concurrent use.
++type ManagedPhaseRecorder interface {
++	RecordPhaseOutcome(taskKey string, phase ManagedPhase, state ManagedPhaseState, reason string)
++}
++
++// recordPhase forwards a phase outcome to the managed recorder; no-op when
++// unmanaged (nil recorder).
++func (r *Runner) recordPhase(taskKey string, phase ManagedPhase, state ManagedPhaseState, reason string) {
++	if r.deps.PhaseRecorder != nil {
++		r.deps.PhaseRecorder.RecordPhaseOutcome(taskKey, phase, state, reason)
++	}
+ }
+ 
+ // requestCtx returns ctx carrying the identity of one logical LLM request, or
+@@ -798,6 +847,7 @@ func (r *Runner) executeToolCall(ctx context.Context, taskKey string, call llm.T
+ 							_, resp := diff.ReLocateComment(reqCtx, cm, d, r.deps.LLMClient, msgs, r.deps.Model, r.deps.Template.CompletionTokenLimit())
+ 							if resp != nil {
+ 								rlRec.SetResponse(resp, time.Since(rlStart))
++								r.recordPhase(taskKey, PhaseRelocation, PhaseCompleted, "")
+ 								if resp.Usage != nil {
+ 									atomic.AddInt64(&r.totalInputTokens, resp.Usage.PromptTokens)
+ 									atomic.AddInt64(&r.totalOutputTokens, resp.Usage.CompletionTokens)
+@@ -806,6 +856,11 @@ func (r *Runner) executeToolCall(ctx context.Context, taskKey string, call llm.T
+ 								}
+ 							} else {
+ 								rlRec.SetError(fmt.Errorf("re-location LLM call failed"), time.Since(rlStart))
++								reason := "error"
++								if reqCtx.Err() != nil {
++									reason = "cancelled"
++								}
++								r.recordPhase(taskKey, PhaseRelocation, PhaseFailed, reason)
+ 							}
+ 						}
+ 					}
+@@ -820,8 +875,21 @@ func (r *Runner) executeToolCall(ctx context.Context, taskKey string, call llm.T
+ 			}
+ 			pool := r.deps.CommentWorkerPool
+ 			asyncCtx := context.WithoutCancel(ctx)
++			var cancelAsync context.CancelFunc
++			if r.deps.Managed {
++				// Managed (plan §7.2): the worker gets the original bounded
++				// group context instead of a fully detached one — it keeps the
++				// group context's values but its own lifetime (cancelled when
++				// the worker completes). Root cancellation is enforced by the
++				// run-wide client wrapper, so a cancelled run can neither hold
++				// the serialization permit nor start a later model call.
++				asyncCtx, cancelAsync = context.WithCancel(context.WithoutCancel(ctx))
++			}
+ 			toolName := t.Name()
+ 			pool.SubmitFor(taskKey, func() ([]model.LlmComment, error) {
++				if cancelAsync != nil {
++					defer cancelAsync()
++				}
+ 				defer func() {
+ 					dur := time.Since(startTime)
+ 					telemetry.RecordToolResult(toolSpan, toolName, dur.Milliseconds(), nil)
+@@ -921,7 +989,22 @@ func (r *Runner) addNextMessage(ctx context.Context, assistantContent string, to
+ 	// a job is never started and then immediately cancelled by the same
+ 	// call (#384), and never started when we are about to return false.
+ 	if finalCount > softLimit && finalCount < warnLimit {
+-		r.triggerAsyncCompression(ctx, st, *messages, taskKey)
++		if r.deps.Managed {
++			// Managed (plan §7.2): compression runs synchronously at the
++			// existing soft-threshold point with the same runCompression /
++			// partition algorithm. The async variant is skipped because the
++			// deferred cancelPendingCompression after task_done would cancel a
++			// still-streaming compression request and brick the RR transport
++			// for later calls (filter). Hard-threshold sync fallback above is
++			// kept as-is.
++			var err error
++			if *messages, err = r.runCompression(ctx, *messages, taskKey); err != nil {
++				fmt.Fprintf(stdout.Writer(), "[ocr] Memory compression failed: %v\n", err)
++			}
++			finalCount = CountMessagesTokens(*messages)
++		} else {
++			r.triggerAsyncCompression(ctx, st, *messages, taskKey)
++		}
+ 	}
+ 
+ 	return finalCount < warnLimit

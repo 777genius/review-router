@@ -1,0 +1,300 @@
+diff --git a/internal/llm/managed_test.go b/internal/llm/managed_test.go
+new file mode 100644
+index 0000000..d657a21
+--- /dev/null
++++ b/internal/llm/managed_test.go
+@@ -0,0 +1,294 @@
++// SPDX-License-Identifier: Apache-2.0
++// Copyright 2026 alibaba/open-code-review Contributors
++
++package llm
++
++import (
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++)
++
++const validManagedConfig = `{
++  "provider": "reviewrouter",
++  "language": "en",
++  "telemetry": { "enabled": false },
++  "custom_providers": {
++    "reviewrouter": {
++      "protocol": "openai-responses",
++      "url": "http://127.0.0.1:8787",
++      "api_key": "Bearer deadbeefcafebabe",
++      "model": "admitted-model",
++      "timeout_sec": 300,
++      "extra_body": { "service_tier": "default", "reasoning": { "effort": "xhigh" } }
++    }
++  }
++}`
++
++// writeManagedConfig writes cfg into a private-mode config file and returns its
++// path. The file mode is the managed contract's 0600 unless overridden after.
++func writeManagedConfig(t *testing.T, cfg string) string {
++	t.Helper()
++	path := filepath.Join(t.TempDir(), "config.json")
++	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
++		t.Fatal(err)
++	}
++	return path
++}
++
++func resolveManaged(t *testing.T, cfg string) (ResolvedEndpoint, error) {
++	t.Helper()
++	// Clear every rejected override so the ambient environment cannot trip the
++	// contract from outside the fixture.
++	for _, name := range managedEnvRejects {
++		t.Setenv(name, "")
++	}
++	return ResolveManagedEndpoint(writeManagedConfig(t, cfg), ResolveOptions{
++		Provider: ManagedProviderName,
++		Context:  t.Context(),
++		Managed:  true,
++	})
++}
++
++// TestResolveManagedEndpointContract pins the typed managed endpoint baseline
++// (plan §5.1, §7.1): controlled config only, one Bearer strip, streaming
++// Responses without sampling params, explicit zero retries, no ChatGPT plan.
++func TestResolveManagedEndpointContract(t *testing.T) {
++	ep, err := resolveManaged(t, validManagedConfig)
++	if err != nil {
++		t.Fatalf("resolve: %v", err)
++	}
++	if ep.URL != "http://127.0.0.1:8787" {
++		t.Errorf("url = %q, want bare base URL", ep.URL)
++	}
++	if ep.Token != "deadbeefcafebabe" {
++		t.Errorf("token = %q, want raw capability after one Bearer strip", ep.Token)
++	}
++	if ep.Model != "admitted-model" || ep.Provider != ManagedProviderName || ep.Protocol != ProtocolOpenAIResponses {
++		t.Errorf("identity = %+v", ep)
++	}
++	if !ep.RequiresStreaming || !ep.RejectsSamplingParams || !ep.StrictTerminal || ep.ChatGPTPlan {
++		t.Errorf("transport flags = %+v", ep)
++	}
++	if ep.MaxRetries == nil || *ep.MaxRetries != 0 {
++		t.Errorf("MaxRetries = %v, want explicit 0", ep.MaxRetries)
++	}
++	if ep.Timeout != 300*time.Second {
++		t.Errorf("timeout = %v", ep.Timeout)
++	}
++	if len(ep.ExtraBody) != 2 {
++		t.Errorf("extra_body = %v", ep.ExtraBody)
++	}
++}
++
++// TestResolveManagedEndpointRejects covers every knob that must never reach the
++// controlled endpoint (plan §5.1): inherited credentials, command execution,
++// header injection, transport switching and non-canonical URLs.
++func TestResolveManagedEndpointRejects(t *testing.T) {
++	withEntry := func(body string) string {
++		return `{"provider":"reviewrouter","custom_providers":{"reviewrouter":{` + body + `}}}`
++	}
++	for _, tc := range []struct {
++		name    string
++		cfg     string
++		env     map[string]string
++		wantErr string
++	}{
++		{
++			name:    "wrong provider name",
++			cfg:     `{"provider":"openai","custom_providers":{"reviewrouter":{"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10}}}`,
++			wantErr: "requires config provider",
++		},
++		{
++			name:    "missing custom provider entry",
++			cfg:     `{"provider":"reviewrouter","custom_providers":{}}`,
++			wantErr: "requires custom_providers.reviewrouter",
++		},
++		{
++			name:    "extra custom provider",
++			cfg:     `{"provider":"reviewrouter","custom_providers":{"reviewrouter":{"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10},"other":{"url":"http://x"}}}`,
++			wantErr: "rejects custom provider",
++		},
++		{
++			name:    "providers section",
++			cfg:     `{"provider":"reviewrouter","providers":{"openai":{"api_key":"k"}},"custom_providers":{"reviewrouter":{"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10}}}`,
++			wantErr: "rejects the providers section",
++		},
++		{
++			name:    "llm section",
++			cfg:     `{"provider":"reviewrouter","llm":{"mcp_servers":{"x":{"command":"sh"}}},"custom_providers":{"reviewrouter":{"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10}}}`,
++			wantErr: "rejects the llm section",
++		},
++		{
++			name:    "top-level model override",
++			cfg:     `{"provider":"reviewrouter","model":"other","custom_providers":{"reviewrouter":{"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10}}}`,
++			wantErr: "rejects a top-level model override",
++		},
++		{
++			name:    "telemetry enabled",
++			cfg:     `{"provider":"reviewrouter","telemetry":{"enabled":true},"custom_providers":{"reviewrouter":{"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10}}}`,
++			wantErr: "telemetry.enabled=false",
++		},
++		{
++			name:    "api_key_cmd",
++			cfg:     withEntry(`"api_key_cmd":"cat secret","protocol":"openai-responses","url":"http://127.0.0.1:1","model":"m","timeout_sec":10`),
++			wantErr: "rejects api_key_cmd",
++		},
++		{
++			name:    "auth_header override",
++			cfg:     withEntry(`"auth_header":"X-Api-Key","protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10`),
++			wantErr: "rejects auth_header",
++		},
++		{
++			name:    "extra_headers",
++			cfg:     withEntry(`"extra_headers":{"X-Trace":"1"},"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10`),
++			wantErr: "rejects extra_headers",
++		},
++		{
++			name:    "retry_codes",
++			cfg:     withEntry(`"retry_codes":[500],"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10`),
++			wantErr: "rejects retry_codes",
++		},
++		{
++			name:    "ambient aws auth",
++			cfg:     withEntry(`"aws_profile":"p","protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10`),
++			wantErr: "rejects ambient auth",
++		},
++		{
++			name:    "wrong protocol",
++			cfg:     withEntry(`"protocol":"openai-chat-completions","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10`),
++			wantErr: `requires protocol "openai-responses"`,
++		},
++		{
++			name:    "url carries /v1",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1/v1","api_key":"k","model":"m","timeout_sec":10`),
++			wantErr: "without a /v1 or /responses suffix",
++		},
++		{
++			name:    "url carries /responses",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1/responses","api_key":"k","model":"m","timeout_sec":10`),
++			wantErr: "without a /v1 or /responses suffix",
++		},
++		{
++			name:    "url not loopback",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"https://api.example.com","api_key":"k","model":"m","timeout_sec":10`),
++			wantErr: "must be loopback",
++		},
++		{
++			name:    "url with userinfo",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://u:p@127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10`),
++			wantErr: "must not carry userinfo",
++		},
++		{
++			name:    "double-prefixed api key",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"Bearer Bearer hex","model":"m","timeout_sec":10`),
++			wantErr: "double-prefixed",
++		},
++		{
++			name:    "empty api key",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"  ","model":"m","timeout_sec":10`),
++			wantErr: "api_key is empty",
++		},
++		{
++			name:    "malformed api key",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"hex token with spaces","model":"m","timeout_sec":10`),
++			wantErr: "api_key is malformed",
++		},
++		{
++			name:    "missing model",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","timeout_sec":10`),
++			wantErr: "requires the captured model",
++		},
++		{
++			name:    "missing timeout",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m"`),
++			wantErr: "positive timeout_sec",
++		},
++		{
++			name:    "extra_body stream",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10,"extra_body":{"stream":true}`),
++			wantErr: "is not allowed",
++		},
++		{
++			name:    "extra_body previous_response_id",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10,"extra_body":{"previous_response_id":"x"}`),
++			wantErr: "is not allowed",
++		},
++		{
++			name:    "extra_body service_tier not default",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10,"extra_body":{"service_tier":"flex"}`),
++			wantErr: `must be "default"`,
++		},
++		{
++			name:    "extra_body unknown reasoning key",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10,"extra_body":{"reasoning":{"effort":"high","summary":"auto"}}`),
++			wantErr: "is not allowed",
++		},
++		{
++			name:    "extra_body unknown effort",
++			cfg:     withEntry(`"protocol":"openai-responses","url":"http://127.0.0.1:1","api_key":"k","model":"m","timeout_sec":10,"extra_body":{"reasoning":{"effort":"ultra"}}`),
++			wantErr: "not an allowlisted model effort",
++		},
++		{
++			name:    "inherited endpoint override",
++			cfg:     validManagedConfig,
++			env:     map[string]string{"OCR_LLM_URL": "https://evil.example.com"},
++			wantErr: "rejects inherited endpoint/header override",
++		},
++		{
++			name:    "inherited token override",
++			cfg:     validManagedConfig,
++			env:     map[string]string{"OCR_LLM_TOKEN": "sk-leak"},
++			wantErr: "rejects inherited endpoint/header override",
++		},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			for _, name := range managedEnvRejects {
++				t.Setenv(name, "")
++			}
++			for k, v := range tc.env {
++				t.Setenv(k, v)
++			}
++			_, err := ResolveManagedEndpoint(writeManagedConfig(t, tc.cfg), ResolveOptions{
++				Provider: ManagedProviderName,
++				Context:  t.Context(),
++				Managed:  true,
++			})
++			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
++				t.Fatalf("error = %v, want containing %q", err, tc.wantErr)
++			}
++		})
++	}
++}
++
++// TestResolveManagedEndpointCLIAndPerms covers the remaining contract edges:
++// the explicit provider requirement, the --model cross-check and the private
++// config file mode (plan §5.1).
++func TestResolveManagedEndpointCLIAndPerms(t *testing.T) {
++	for _, name := range managedEnvRejects {
++		t.Setenv(name, "")
++	}
++	cfgPath := writeManagedConfig(t, validManagedConfig)
++
++	if _, err := ResolveManagedEndpoint(cfgPath, ResolveOptions{Provider: "openai", Model: "admitted-model", Context: t.Context(), Managed: true}); err == nil ||
++		!strings.Contains(err.Error(), "requires explicit --provider") {
++		t.Fatalf("provider check: %v", err)
++	}
++	if _, err := ResolveManagedEndpoint(cfgPath, ResolveOptions{Provider: ManagedProviderName, Model: "other-model", Context: t.Context(), Managed: true}); err == nil ||
++		!strings.Contains(err.Error(), "does not match the captured model") {
++		t.Fatalf("model check: %v", err)
++	}
++	if _, err := ResolveManagedEndpoint(cfgPath, ResolveOptions{Provider: ManagedProviderName, Model: "admitted-model", Context: t.Context(), Managed: true}); err != nil {
++		t.Fatalf("matching model rejected: %v", err)
++	}
++
++	if err := os.Chmod(cfgPath, 0o644); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := ResolveManagedEndpoint(cfgPath, ResolveOptions{Provider: ManagedProviderName, Context: t.Context(), Managed: true}); err == nil ||
++		!strings.Contains(err.Error(), "private config file") {
++		t.Fatalf("perm check: %v", err)
++	}
++}

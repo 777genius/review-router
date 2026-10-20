@@ -7,6 +7,7 @@ export const CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([
   'tool_search',
   // Native delegation cannot share the gateway's fenced execution session.
   'multi_agent',
+  'multi_agent_v2',
   // Codex 0.145 starts the built-in codex_apps MCP unless this is explicit.
   'apps',
   'plugins',

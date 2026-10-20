@@ -3,6 +3,7 @@ import * as core from '../actions/core';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { createExecutionDeadlineFromEnvironment } from '../review-execution/infrastructure/execution-deadline-from-environment';
 
 export async function createIsolatedCheckoutWorkspace(input: {
   runnerTempPath?: string;
@@ -34,6 +35,8 @@ export async function createIsolatedCheckoutWorkspace(input: {
 export async function safeCheckoutRepository(input: {
   repository: string;
   headSha: string;
+  /** OCR range mode needs the captured merge-base and its ancestry to HEAD. */
+  mergeBaseSha?: string;
   workspacePath: string;
   token: string;
   signal?: AbortSignal;
@@ -41,6 +44,7 @@ export async function safeCheckoutRepository(input: {
   input.signal?.throwIfAborted();
   assertRepositoryFullName(input.repository);
   assertFullSha(input.headSha);
+  if (input.mergeBaseSha !== undefined) assertFullSha(input.mergeBaseSha);
   await assertWorkspaceEmpty(input.workspacePath);
 
   const gitHome = await fs.mkdtemp(path.join(os.tmpdir(), 'reviewrouter-git-'));
@@ -84,13 +88,19 @@ export async function safeCheckoutRepository(input: {
         'fetch',
         '--no-tags',
         '--no-recurse-submodules',
-        '--depth=1',
+        // Native OCR recomputes merge-base, so two shallow endpoints are not
+        // sufficient. Fetch only the captured range refs, with their ancestry.
+        ...(input.mergeBaseSha === undefined ? ['--depth=1'] : []),
         'origin',
         input.headSha,
+        ...(input.mergeBaseSha === undefined ? [] : [input.mergeBaseSha]),
       ],
       input.workspacePath,
       gitHome,
-      input.signal
+      input.signal,
+      // Range ancestry can be much larger than a shallow checkout. Keep its
+      // dedicated budget bounded by the authoritative execution deadline.
+      input.mergeBaseSha === undefined ? 60_000 : 300_000
     );
     await runGit(
       [
@@ -132,9 +142,16 @@ function runGit(
   args: readonly string[],
   cwd: string,
   home: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  timeoutMs = 60_000
 ): Promise<void> {
   signal?.throwIfAborted();
+  const boundedTimeoutMs = Math.min(
+    timeoutMs,
+    createExecutionDeadlineFromEnvironment().remainingMs()
+  );
+  if (boundedTimeoutMs <= 0)
+    throw new Error('account_gateway_checkout_timeout');
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, {
       cwd,
@@ -162,7 +179,7 @@ function runGit(
     };
     signal?.addEventListener('abort', stop, { once: true });
     if (signal?.aborted) stop();
-    const timer = signal ? setTimeout(stop, 60_000) : undefined;
+    const timer = setTimeout(stop, boundedTimeoutMs);
     const finish = () => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', stop);
@@ -210,7 +227,7 @@ function assertRepositoryFullName(value: string): void {
 }
 
 function assertFullSha(value: string): void {
-  if (!/^[a-f0-9]{40}$/i.test(value)) {
+  if (value.length !== 40 || !/^[a-f0-9]{40}$/i.test(value)) {
     throw new Error('codex_oauth_invalid_head_sha');
   }
 }

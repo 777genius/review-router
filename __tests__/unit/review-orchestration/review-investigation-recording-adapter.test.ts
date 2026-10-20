@@ -28,11 +28,15 @@ import {
   REVIEW_INVESTIGATION_TURN_MAX_OBLIGATIONS,
   ReviewInvestigationConclusion,
   ReviewInvestigationNextAction,
+  ReviewInvestigationObligationOrigin,
   ReviewInvestigationRunStatus,
   ReviewInvestigationState,
 } from '../../../src/review-investigation/domain/investigation-state';
 import { ReviewAgentProviderKind } from '../../../src/review-investigation/domain/runtime-profile';
-import { ReviewTurnPurpose } from '../../../src/review-investigation/domain/turn-observation';
+import {
+  ReviewTurnObligationKind,
+  ReviewTurnPurpose,
+} from '../../../src/review-investigation/domain/turn-observation';
 import { canonicalJson } from '../../../src/review-investigation/domain/canonical-json';
 import {
   ReviewInvestigationChangedFileStatus,
@@ -84,10 +88,63 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         1
       );
       expect(prompt).toContain('literal FINAL OUTPUT CONTRACT marker');
-      expect(prompt.match(/TURN_BRIEF_V1_BASE64URL:/g)).toHaveLength(1);
+      expect(prompt.match(/TURN_BRIEF_V1_JSON:/g)).toHaveLength(1);
       expect(prompt).toContain('REVIEWROUTER_CONTEXT_OPERATION_BUDGET:32');
+      expect(prompt).toContain(
+        'Each finding must include in its own evidenceOperationReceiptIds every receipt in a contiguous file_read chain for that exact finding path at revision="head", starting at startByte=0 and covering the file through EOF; the terminal read must report eof=true, making its authenticated receipt complete=true.'
+      );
+      expect(prompt).toContain(
+        'Search results, merge_base reads, and partial snippets do not satisfy this requirement.'
+      );
+      expect(prompt).toContain(
+        'omit the finding and leave its related obligation open. Never fabricate receipts or claim unread coverage.'
+      );
     }
     expect(first).not.toBe(second);
+  });
+
+  it('exposes the complete authenticated brief as lossless readable JSON', () => {
+    const brief = {
+      ...activeSnapshot().turn!.brief!,
+      obligations: [
+        {
+          obligationId: '1'.repeat(64),
+          kind: ReviewTurnObligationKind.DirectReferenceSearch,
+          canonicalSubject: canonicalJson({
+            kind: 'text_search',
+            queryHash: '2'.repeat(64),
+          }),
+          canonicalRequirement: canonicalJson({
+            kind: 'complete_page_chain',
+            query: 'ключ "quoted"\nnext\\path 🔍',
+            paths: ['src/дані.ts'],
+            revision: 'head',
+          }),
+          riskPriority: 900_000,
+          origin: ReviewInvestigationObligationOrigin.DeterministicExpansion,
+        },
+      ],
+    };
+    const prompt = buildReviewInvestigationTurnPrompt({
+      reviewContextPrompt: 'Review the change.',
+      turnBrief: brief,
+      maxGatewayOperations: 32,
+    });
+    const marker = 'REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:';
+    const encodedBrief = prompt.slice(
+      prompt.lastIndexOf(marker) + marker.length
+    );
+
+    expect(prompt).toContain(marker);
+    expect(JSON.parse(encodedBrief)).toEqual(brief);
+    expect(encodedBrief).toContain('src/дані.ts');
+    expect(encodedBrief).not.toContain('\n');
+    expect(Buffer.byteLength(encodedBrief, 'utf8')).toBeLessThan(
+      Buffer.byteLength(
+        Buffer.from(JSON.stringify(brief), 'utf8').toString('base64url'),
+        'utf8'
+      )
+    );
   });
 
   it('reads removed changed content from merge-base instead of the absent head', () => {
@@ -231,7 +288,7 @@ describe('ReviewInvestigationRecordingAdapter', () => {
       ).toBeGreaterThan(1);
       const prompt = runInput.promptFor(activeSnapshot());
       expect(prompt).toContain(
-        'REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:'
+        'REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:'
       );
       expect(prompt).toContain('operationBackedDiscoveryClaims');
       expect(prompt).toContain('closureClaims only');
@@ -408,7 +465,7 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         manifestFacts: { ...base.invocation.manifestFacts, ...overrides },
       });
     const incompletePlan = {
-      ...base.invocation.investigationProbePlan,
+      ...base.invocation.investigationProbePlan!,
       status: ReviewInvestigationProbePlanStatus.LimitExceeded,
       probes: [],
       exceededLimit: {
@@ -502,12 +559,12 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         reason: ReviewInvestigationRecordingSupportReason.ProbeLimitsMismatch,
         input: candidate({
           investigationProbePlan: {
-            ...base.invocation.investigationProbePlan,
+            ...base.invocation.investigationProbePlan!,
             limits: {
-              ...base.invocation.investigationProbePlan.limits,
+              ...base.invocation.investigationProbePlan!.limits,
               maxProbesOverall:
-                base.invocation.investigationProbePlan.limits.maxProbesOverall +
-                1,
+                base.invocation.investigationProbePlan!.limits
+                  .maxProbesOverall + 1,
             },
           },
         }),
@@ -647,7 +704,7 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         apply: (state) =>
           updateInvocation(state, {
             investigationProbePlan: {
-              ...state.input.invocation.investigationProbePlan,
+              ...state.input.invocation.investigationProbePlan!,
               status: ReviewInvestigationProbePlanStatus.LimitExceeded,
               probes: [],
               exceededLimit: {
@@ -669,11 +726,11 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         apply: (state) =>
           updateInvocation(state, {
             investigationProbePlan: {
-              ...state.input.invocation.investigationProbePlan,
+              ...state.input.invocation.investigationProbePlan!,
               limits: {
-                ...state.input.invocation.investigationProbePlan.limits,
+                ...state.input.invocation.investigationProbePlan!.limits,
                 maxProbesOverall:
-                  state.input.invocation.investigationProbePlan.limits
+                  state.input.invocation.investigationProbePlan!.limits
                     .maxProbesOverall + 1,
               },
             },
@@ -712,7 +769,7 @@ describe('ReviewInvestigationRecordingAdapter', () => {
     );
     const input = executionInput();
     const incompleteProbePlan = {
-      ...input.invocation.investigationProbePlan,
+      ...input.invocation.investigationProbePlan!,
       status: ReviewInvestigationProbePlanStatus.LimitExceeded,
       probes: [],
       exceededLimit: {
@@ -822,7 +879,7 @@ describe('ReviewInvestigationRecordingAdapter', () => {
         inventoryEntry('src/auth/session.ts'),
       ]),
       coverageManifest: nextRevisionCoverage,
-      probePlan: invocation.investigationProbePlan,
+      probePlan: invocation.investigationProbePlan!,
       requestedModel: invocation.requestedModel,
       reviewPrompt: invocation.investigationContextPrompt!,
     });

@@ -16,6 +16,9 @@ export const LOCAL_MODEL_CAPABILITY_ENV = 'REVIEWROUTER_LOCAL_MODEL_TOKEN';
 export const ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   requestBytes: 16_777_216,
   outputBytes: 1_048_576,
+  // Raw SSE includes repeated deltas/tool events; final review files remain bounded above.
+  streamOutputBytes: 8_388_608,
+  streamFrameBytes: 1_048_576,
   jsonBytes: 65_536,
   headerBytes: 16_384,
   bufferBytes: 65_536,
@@ -121,6 +124,10 @@ export type LocalGatewayModelTransport = Readonly<{
   environment: Readonly<NodeJS.ProcessEnv>;
   configuration: readonly string[];
   actualModel(): string | undefined;
+  /** Dispatched model-request observations (upstream relay attempts). Additive
+   * run evidence only: a managed engine may not claim success with zero model
+   * requests, so acceptance reads this instead of guessing from exit status. */
+  requestCount?(): number;
   failureFact(): GatewayFailureFact | undefined;
   dispose(): Promise<void>;
 }>;
@@ -313,7 +320,7 @@ export class AccountGatewayModelTransport {
         transform: (chunk: Buffer, _encoding, done) => {
           count += chunk.length;
           const maximum = isStream
-            ? ACCOUNT_GATEWAY_BOUNDS.outputBytes
+            ? ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes
             : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
           if (count > maximum) done(new Error('account_gateway_output_bound'));
           else
@@ -572,6 +579,39 @@ export class AccountGatewayModelTransport {
   }
 }
 
+/** Codex may omit its default tier on the wire; the gateway requires it explicit. */
+export function normalizeCodexGatewayServiceTier(bytes: Uint8Array): Buffer {
+  const original = Buffer.from(bytes);
+  if (original.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
+    throw new Error('account_gateway_request_bound');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(original.toString('utf8')) as unknown;
+  } catch {
+    return original;
+  }
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    Array.isArray(parsed) ||
+    Object.prototype.hasOwnProperty.call(parsed, 'service_tier')
+  )
+    return original;
+  // Parse only to inspect the object shape. Reserializing would round JSON
+  // numbers outside JavaScript's safe integer range and alter the wire request.
+  const closingBrace = original.lastIndexOf(0x7d);
+  const normalized = Buffer.concat([
+    original.subarray(0, closingBrace),
+    Buffer.from(
+      `${Object.keys(parsed).length > 0 ? ',' : ''}"service_tier":"default"`
+    ),
+    original.subarray(closingBrace),
+  ]);
+  if (normalized.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
+    throw new Error('account_gateway_request_bound');
+  return normalized;
+}
+
 /** Tiny per-run loopback adapter for CLI clients that capture auth once. Only
  * POST /responses exists; destinations/headers are never supplied by the CLI. */
 export async function startLocalGatewayModelTransport(
@@ -581,6 +621,7 @@ export async function startLocalGatewayModelTransport(
   const capability = randomBytes(32).toString('hex');
   let stopping = false;
   let inFlight = 0;
+  let dispatchedRequests = 0;
   const server = createServer(
     { maxHeaderSize: ACCOUNT_GATEWAY_BOUNDS.headerBytes },
     (request, reply) => {
@@ -633,8 +674,10 @@ export async function startLocalGatewayModelTransport(
             ACCOUNT_GATEWAY_BOUNDS.requestBytes,
             controller.signal
           );
+          const normalized = normalizeCodexGatewayServiceTier(bytes);
           stage = 'upstream_request';
-          upstream = await transport.responses(bytes, controller.signal);
+          dispatchedRequests++;
+          upstream = await transport.responses(normalized, controller.signal);
           stage = 'downstream_stream';
           reply.writeHead(upstream.httpStatus, {
             'content-type': upstream.contentType,
@@ -700,6 +743,7 @@ export async function startLocalGatewayModelTransport(
     }),
     configuration: codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
+    requestCount: () => dispatchedRequests,
     failureFact: () => transport.lastFailure,
     async dispose() {
       stopping = true;
@@ -725,6 +769,7 @@ export function codexGatewayConfiguration(baseUrl: string): readonly string[] {
     // Replace the provider table so user/project entries cannot add headers/auth.
     `model_providers={reviewrouter_account_gateway={name="ReviewRouter account gateway",base_url=${JSON.stringify(baseUrl)},wire_api="responses",requires_openai_auth=false,supports_websockets=false,request_max_retries=0,stream_max_retries=0,stream_idle_timeout_ms=${ACCOUNT_GATEWAY_BOUNDS.idleMs},env_http_headers={Authorization="${LOCAL_MODEL_CAPABILITY_ENV}"}}}`,
     'cli_auth_credentials_store="ephemeral"',
+    'agents.enabled=false',
     'service_tier="default"',
     'web_search="disabled"',
   ]);
@@ -825,6 +870,9 @@ function responsesStreamAudit(observe: (model: string | undefined) => void) {
   let data: string[] = [];
   let event = '';
   let completed = false;
+  let frameBytes = 0;
+  let rawLineBytes = 0;
+  let rawLineLastByte = 0;
   function endLine() {
     if (!line) {
       if (data.length) {
@@ -887,6 +935,24 @@ function responsesStreamAudit(observe: (model: string | undefined) => void) {
   return {
     hasCompleted: () => completed,
     accept(bytes: Uint8Array) {
+      // Match the native raw SSE budget: LF/CRLF separators and comments count
+      // toward the current event before its terminating blank line resets it.
+      for (const byte of bytes) {
+        frameBytes++;
+        if (frameBytes > ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes)
+          throw new Error('account_gateway_stream_frame_bound');
+        if (byte === 0x0a) {
+          if (
+            rawLineBytes === 0 ||
+            (rawLineBytes === 1 && rawLineLastByte === 0x0d)
+          )
+            frameBytes = 0;
+          rawLineBytes = 0;
+        } else {
+          rawLineBytes++;
+          rawLineLastByte = byte;
+        }
+      }
       consume(decoder.decode(bytes, { stream: true }));
     },
     finish() {

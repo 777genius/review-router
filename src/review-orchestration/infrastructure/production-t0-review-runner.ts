@@ -98,8 +98,20 @@ import type { ReviewRunAuthorizeResult } from '../../control-plane/generated/rev
 import {
   ACCOUNT_GATEWAY_BOUNDS,
   createAccountGatewayRunFetch,
+  LOCAL_MODEL_CAPABILITY_ENV,
   type LocalGatewayModelTransport,
 } from './account-gateway-model-transport';
+import {
+  buildOcrControlledRuleText,
+  OcrReviewInvocationAdapter,
+  planOcrReviewAssignments,
+  runOcrReviewProcess,
+  type OcrLoopbackBridge,
+} from './ocr-review-invocation-adapter';
+import {
+  readApprovedOcrReviewAgent,
+  type ApprovedOcrReviewAgent,
+} from '../../codex-oauth/ocr-managed-bootstrap';
 import {
   NodeCodexAppServerTurnRunner,
   type CodexAppServerTurnRunnerPort,
@@ -187,14 +199,28 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       ? createAccountGatewayRunFetch(this.fetchImpl, signal)
       : this.fetchImpl;
     validateInput(input);
-    const approvedAgent = input.accountGateway
-      ? readApprovedReviewAgent(
-          input.accountGateway.runtimeConfig.runtimeEnv
+    if (input.ocr && !input.accountGateway) {
+      // Managed OCR exists only on the account gateway transport (§4.1).
+      throw new Error('review_action_v2_ocr_account_gateway_required');
+    }
+    const agentProfile = input.accountGateway
+      ? {
+          json: input.accountGateway.runtimeConfig.runtimeEnv
             .REVIEW_ROUTER_AGENT_PROFILE_JSON!,
-          input.accountGateway.runtimeConfig.runtimeEnv
-            .REVIEW_ROUTER_AGENT_PROFILE_DIGEST!
-        )
+          digest:
+            input.accountGateway.runtimeConfig.runtimeEnv
+              .REVIEW_ROUTER_AGENT_PROFILE_DIGEST!,
+        }
       : undefined;
+    // The captured agentKind picks the engine; the OCR profile never enters
+    // the generated Codex parser and vice versa.
+    const approvedOcrAgent: ApprovedOcrReviewAgent | undefined = input.ocr
+      ? readApprovedOcrReviewAgent(agentProfile!.json, agentProfile!.digest)
+      : undefined;
+    const approvedAgent =
+      agentProfile && !input.ocr
+        ? readApprovedReviewAgent(agentProfile.json, agentProfile.digest)
+        : undefined;
     if (approvedAgent && approvedAgent.agentKind !== 'codex')
       throw new Error('review_investigation_approved_agent_unavailable');
     const authoritativeDeadlineEpochMs =
@@ -218,7 +244,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     const config = input.accountGateway
       ? { ...loadedConfig, providerRetries: 1 }
       : loadedConfig;
-    const codexProviderName = selectCodexProvider(config);
+    // Codex model selection stays before every effect (including on the OCR
+    // path where the managed engine owns its own model capture).
+    const codexProviderName = input.ocr ? '' : selectCodexProvider(config);
     const model = codexProviderName.slice('codex/'.length);
     const reasoningEffort = resolveProductionInvestigationReasoningEffort({
       codexModel: model,
@@ -323,6 +351,162 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       authorization.facts.headSha
     );
     signal?.throwIfAborted();
+    if (input.ocr) {
+      // Managed OCR review (plan 56): one FindingDiscovery slot over the whole
+      // inventory, no CodexProvider/PromptBuilder/Context Gateway and no RR
+      // investigation composition on this path.
+      const ocrRuntimeEnv = input.accountGateway!.runtimeConfig.runtimeEnv;
+      const ocrModel = ocrRuntimeEnv.CODEX_MODEL;
+      if (!ocrModel || !approvedOcrAgent) {
+        throw new Error('review_action_v2_ocr_model_missing');
+      }
+      const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
+      const ocrModelReasoningEffort =
+        ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
+      const modelTransport = input.accountGateway!.modelTransport;
+      const capabilityAuthorization =
+        modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
+      if (!capabilityAuthorization) {
+        throw new Error('review_action_v2_ocr_capability_missing');
+      }
+      const ocrCompatibilityKey = hashIncrementalCompatibility(
+        config,
+        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
+      );
+      const ocrBackgroundParts = [pr.title, pr.body].filter(
+        (part) => part.trim().length > 0
+      );
+      const planned = planOcrReviewAssignments({
+        authorization,
+        pr,
+        config,
+        compatibilityKey: ocrCompatibilityKey,
+        lifecycleTargets: initialLifecycle.promptTargets,
+        liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+      });
+      const bridge: OcrLoopbackBridge = {
+        baseUrl: modelTransport.baseUrl,
+        capabilityAuthorization,
+        actualModel: () => modelTransport.actualModel(),
+        requestCount: () => modelTransport.requestCount?.(),
+        effectFacts: input.ocr.effectFacts,
+      };
+      const invocationAdapter = new OcrReviewInvocationAdapter(
+        planned.assignments,
+        {
+          ...(signal ? { signal } : {}),
+          previewTimeoutMs: () =>
+            Math.floor(
+              executionDeadline.clampProviderTimeout(providerTimeoutMs)
+            ),
+          model: ocrModel,
+          binaryPath: input.ocr.run.binaryPath,
+          binarySha256: approvedOcrAgent.binarySha256,
+          packageVersion: approvedOcrAgent.packageVersion,
+          profileRef: approvedOcrAgent.profileRef,
+          run: input.ocr.run,
+          bridge,
+          limits: {
+            requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
+          },
+          ocrEffort: 'medium',
+          modelReasoningEffort: ocrModelReasoningEffort,
+          language: ocrLanguage,
+          ruleText: buildOcrControlledRuleText({
+            language: ocrLanguage,
+            assignedPaths: pr.files.map((file) => file.filename).sort(),
+          }),
+          backgroundText:
+            ocrBackgroundParts.length > 0
+              ? ocrBackgroundParts.join('\n\n')
+              : null,
+          checkoutRoot: path.resolve(input.workspacePath),
+          processRunner: runOcrReviewProcess,
+          previewRunner: runOcrReviewProcess,
+        }
+      );
+      const identities = new DeterministicReviewOrchestrationIdentity();
+      const useCase = new RunT0ReviewOrchestration({
+        controlPlane,
+        revisionGuard,
+        oidc: {
+          getToken: () => oidc.requestToken(input.audience),
+        },
+        invocationManifestAssembler:
+          new GeneratedProviderInvocationManifestAssembler(
+            authorization,
+            config,
+            ocrCompatibilityKey
+          ),
+        invocations: invocationAdapter,
+        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+          modelTransport.failureFact
+        ),
+        invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
+        investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
+          logger
+        ),
+        leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+        projectionBuilder: createProductionReviewProjectionBuilder({
+          authorizationFacts: authorization.facts,
+          pr,
+          config,
+          protocolLimits: authorization.limits,
+          assignments: planned.assignments.map((assignment) => ({
+            workSlotId: assignment.workSlot.workSlotId,
+            taskKind: assignment.workSlot.taskKind,
+            providerKind: assignment.workSlot.providerKind,
+            required: assignment.workSlot.required,
+            filePaths: assignment.context.files.map((file) => file.filename),
+          })),
+          uncoveredPaths: planned.uncoveredPaths,
+          uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
+          lifecycleInventory,
+        }),
+        identities,
+        clock: new SystemReviewOrchestrationClock(),
+        delay: new CancellableReviewOrchestrationDelay(),
+        executionDeadline,
+        signal,
+        ...(this.progress ? { progress: this.progress } : {}),
+      });
+      const result = await useCase.executeAuthorized(
+        {
+          executionId: identities.deterministicId('execution', [
+            authorization.authorizationId,
+            authorization.facts.reviewRevisionHash,
+            planned.plan.planHash,
+          ]),
+          baseSha: authorization.facts.baseSha,
+          mergeBaseSha: authorization.facts.mergeBaseSha,
+          headSha: authorization.facts.headSha,
+          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          compatibilityKey: ocrCompatibilityKey,
+          planHash: planned.plan.planHash,
+          workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
+          assignmentManifestCanonicalJson:
+            planned.plan.assignmentManifestCanonicalJson,
+          assignmentManifestHash: planned.plan.assignmentManifestHash,
+          workSlots: planned.plan.assignments.map(
+            (assignment) => assignment.workSlot
+          ),
+          sourceRunId: authorization.facts.sourceRunId,
+          sourceRunAttempt: authorization.facts.sourceRunAttempt,
+          ownerIdHash: sha256(
+            canonicalJson({
+              authorizationId: authorization.authorizationId,
+              providerInstanceId: input.providerInstanceId,
+              sourceRunAttempt: authorization.facts.sourceRunAttempt,
+              sourceRunId: authorization.facts.sourceRunId,
+            })
+          ),
+          allowPartial: true,
+        },
+        authorization
+      );
+      signal?.throwIfAborted();
+      return mapOrchestrationResultToCodexOutcome(result);
+    }
     const agenticContext = config.codexAgenticContext ?? true;
     const investigationRolloutResolution =
       resolveProductionReviewInvestigationRolloutResolution({
@@ -1451,6 +1635,7 @@ export async function prepareSingleT0ReviewPlan(input: {
   const investigation = await prepare(true);
   if (
     !investigation.investigationSeedEnvelope ||
+    !investigation.investigationProbePlan ||
     investigation.manifestFacts.executionProfile !== 'investigation_gateway_v1'
   ) {
     throw new Error('review_action_v2_single_plan_investigation_ineligible');
@@ -1771,7 +1956,7 @@ async function withRunnerEnvironment<T>(
     previous.set(key, process.env[key]);
     process.env[key] = value;
   };
-  set('CODEX_HOME', input.codexHome);
+  if (input.codexHome !== undefined) set('CODEX_HOME', input.codexHome);
   set('CODEX_HEALTHCHECK_MODE', 'binary');
   set('REVIEW_ROUTER_PROGRESS_COMMENTS', 'never');
   set('GITHUB_REPOSITORY', input.repository);

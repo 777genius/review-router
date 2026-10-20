@@ -3257,8 +3257,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path31) {
-      let input = path31;
+    function removeDotSegments(path33) {
+      let input = path33;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3663,8 +3663,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path31 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path31 && path31 !== "/" ? path31 : void 0;
+        const path33 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path33 && path33 !== "/" ? path33 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -8976,15 +8976,15 @@ var require_dist_node9 = __commonJS({
         octokit.log.debug("request", options);
         const start = Date.now();
         const requestOptions = octokit.request.endpoint.parse(options);
-        const path31 = requestOptions.url.replace(options.baseUrl, "");
+        const path33 = requestOptions.url.replace(options.baseUrl, "");
         return request(options).then((response) => {
           octokit.log.info(
-            `${requestOptions.method} ${path31} - ${response.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path33} - ${response.status} in ${Date.now() - start}ms`
           );
           return response;
         }).catch((error2) => {
           octokit.log.info(
-            `${requestOptions.method} ${path31} - ${error2.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path33} - ${error2.status} in ${Date.now() - start}ms`
           );
           throw error2;
         });
@@ -12216,12 +12216,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f2;
     };
-    function addFormats2(ajv, list, fs25, exportName) {
+    function addFormats2(ajv, list, fs27, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f2 of list)
-        ajv.addFormat(f2, fs25[f2]);
+        ajv.addFormat(f2, fs27[f2]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -12313,7 +12313,7 @@ function escapeProperty(value) {
 }
 
 // src/main.ts
-var fs24 = __toESM(require("fs"));
+var fs26 = __toESM(require("fs"));
 
 // src/config/loader.ts
 var fs2 = __toESM(require("fs"));
@@ -16108,8 +16108,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path31, errorMaps, issueData } = params;
-  const fullPath = [...path31, ...issueData.path || []];
+  const { data, path: path33, errorMaps, issueData } = params;
+  const fullPath = [...path33, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -16225,11 +16225,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path31, key) {
+  constructor(parent, value, path33, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path31;
+    this._path = path33;
     this._key = key;
   }
   get path() {
@@ -21529,12 +21529,12 @@ function formatSummaryOnlyChunk(chunk, file) {
 function shellQuote(value) {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
-function unquoteGitPath(path31) {
-  if (path31.startsWith('"') && path31.endsWith('"')) {
-    path31 = path31.slice(1, -1);
+function unquoteGitPath(path33) {
+  if (path33.startsWith('"') && path33.endsWith('"')) {
+    path33 = path33.slice(1, -1);
   }
   try {
-    path31 = path31.replace(/\\([\\"tnr])/g, (_m, ch) => {
+    path33 = path33.replace(/\\([\\"tnr])/g, (_m, ch) => {
       switch (ch) {
         case "\\":
           return "\\";
@@ -21552,7 +21552,7 @@ function unquoteGitPath(path31) {
     });
   } catch {
   }
-  return path31;
+  return path33;
 }
 
 // src/utils/token-estimation.ts
@@ -22206,6 +22206,7 @@ var CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([
   "tool_search",
   // Native delegation cannot share the gateway's fenced execution session.
   "multi_agent",
+  "multi_agent_v2",
   // Codex 0.145 starts the built-in codex_apps MCP unless this is explicit.
   "apps",
   "plugins",
@@ -22233,9 +22234,34 @@ var review_agent_profiles_default = [
     binarySha256: "cb0a15567e9a60a5820d54b0f6ae86d504dc3805c1eab21a47f70e3eb7b73a40",
     cancellation: true,
     contextGateway: true,
-    modelTransports: ["account_gateway", "provider_api"],
+    modelTransports: [
+      "account_gateway",
+      "provider_api"
+    ],
     packageVersion: "0.147.0",
     profileRef: "codex-default"
+  },
+  {
+    agentKind: "ocr",
+    binarySha256: "97aa184122b1ca8fbfdbe4bfb28e175cf371c4402ab8ecfd1914d68547f13745",
+    cancellation: true,
+    contextGateway: false,
+    modelTransports: [
+      "account_gateway"
+    ],
+    packageVersion: "1.13.1-rr.2",
+    profileRef: "ocr-managed-v1"
+  },
+  {
+    agentKind: "ocr",
+    binarySha256: "2f62d6fbb326e74d0fe9377f0224f1b56520bcefee688c58073fa1a30e45f1c9",
+    cancellation: true,
+    contextGateway: false,
+    modelTransports: [
+      "account_gateway"
+    ],
+    packageVersion: "1.13.1-rr.3",
+    profileRef: "ocr-managed-v2"
   }
 ];
 
@@ -22270,21 +22296,27 @@ function parseReviewAgentProfiles(value) {
         row.packageVersion
       ) || refs.has(row.profileRef))
         invalid("review_agent_profile_invalid");
-      if (row.agentKind !== "codex" && row.agentKind !== "claude" || row.contextGateway !== true || row.cancellation !== true)
+      const agentKind = row.agentKind;
+      if (agentKind !== "codex" && agentKind !== "claude" && agentKind !== "ocr")
+        invalid("review_agent_profile_capabilities_invalid");
+      const contextGateway = agentKind === "ocr" ? false : true;
+      if (row.contextGateway !== contextGateway || row.cancellation !== true)
         invalid("review_agent_profile_capabilities_invalid");
       const transports = row.modelTransports;
       if (!Array.isArray(transports) || transports.length < 1 || transports.length > 2 || new Set(transports).size !== transports.length || transports.some((t2) => t2 !== "account_gateway" && t2 !== "provider_api"))
         invalid("review_agent_profile_transport_invalid");
+      if (agentKind === "ocr" && (transports.length !== 1 || transports[0] !== "account_gateway"))
+        invalid("review_agent_profile_transport_invalid");
       refs.add(row.profileRef);
       return Object.freeze({
         profileRef: row.profileRef,
-        agentKind: row.agentKind,
+        agentKind,
         binarySha256: row.binarySha256,
         packageVersion: row.packageVersion,
         modelTransports: Object.freeze([
           ...transports
         ]),
-        contextGateway: true,
+        contextGateway,
         cancellation: true
       });
     })
@@ -22550,6 +22582,120 @@ function safeOutput(value) {
 // src/codex-oauth/account-gateway-mimo-catalog.ts
 var fs6 = __toESM(require("fs/promises"));
 var path5 = __toESM(require("path"));
+
+// src/codex-oauth/gpt-5.6-sol-model-0.147.0.json
+var gpt_5_6_sol_model_0_147_0_default = {
+  slug: "gpt-5.6-sol",
+  prefer_websockets: true,
+  support_verbosity: true,
+  default_verbosity: "low",
+  apply_patch_tool_type: "freeform",
+  web_search_tool_type: "text_and_image",
+  input_modalities: ["text", "image"],
+  supports_image_detail_original: true,
+  truncation_policy: {
+    mode: "tokens",
+    limit: 1e4
+  },
+  supports_parallel_tool_calls: true,
+  tool_mode: "code_mode_only",
+  multi_agent_version: "v2",
+  use_responses_lite: true,
+  include_skills_usage_instructions: false,
+  include_plugin_usage_instructions: true,
+  include_apps_usage_instructions: true,
+  auto_review_model_override: null,
+  context_window: 272e3,
+  max_context_window: 272e3,
+  auto_compact_token_limit: null,
+  comp_hash: "3000",
+  reasoning_summary_format: "experimental",
+  default_reasoning_summary: "none",
+  display_name: "GPT-5.6-Sol",
+  description: "Latest frontier agentic coding model.",
+  default_reasoning_level: "low",
+  supported_reasoning_levels: [
+    {
+      effort: "low",
+      description: "Fast responses with lighter reasoning"
+    },
+    {
+      effort: "medium",
+      description: "Balances speed and reasoning depth for everyday tasks"
+    },
+    {
+      effort: "high",
+      description: "Greater reasoning depth for complex problems"
+    },
+    {
+      effort: "xhigh",
+      description: "Extra high reasoning depth for complex problems"
+    },
+    {
+      effort: "max",
+      description: "Maximum reasoning depth for the hardest problems"
+    },
+    {
+      effort: "ultra",
+      description: "Maximum reasoning with automatic task delegation"
+    }
+  ],
+  shell_type: "shell_command",
+  visibility: "list",
+  minimal_client_version: "0.144.0",
+  supported_in_api: true,
+  availability_nux: {
+    message: "Our most capable model yet. GPT-5.6 Sol can tackle complex code changes, dig into research, produce polished documents, and take on your most ambitious work. Sol is highly capable at lower reasoning efforts\u2014try starting lower, then turn it up for harder jobs."
+  },
+  upgrade: null,
+  priority: 1,
+  model_messages: {
+    instructions_template: "You are Codex, an agent based on GPT-5. You and the user share one workspace, and your job is to collaborate with them until their goal is genuinely handled.\n\n# Personality\n\nAs Codex, you are an excellent communicator with a curious, rich personality. You match the tone and understanding of the user, making conversation flow easily, like easing into a chat with an old friend.\n\nYou have tastes, preferences, and your own way of seeing the world. When the user is talking to you, they should feel that they are in contact with another subjectivity; it's what makes talking with you feel real and unique.\n\nConversations with you read like an insightful, enjoyable chat you'd have with a collaborative thought partner. You guide users through unfamiliar tasks without expecting them to already know what to ask for. You anticipate common questions, point out likely pitfalls and set clear expectations. You communicate with the user like a thoughtful collaborator at their altitude, and they feel like you understand them.\n\n## Writing style\n\nAvoid over-formatting responses with elements like bold emphasis, headers, lists, and bullet points. Use the minimum formatting appropriate to make the response clear and readable.\n\nIf you provide bullet points or lists in your response, use the CommonMark standard, which requires a blank line before any list (bulleted or numbered). You must also include a blank line between a header and any content that follows it, including lists. This blank line separation is required for correct rendering.\n\n## Technical communication\n\nLead with the outcome rather than the steps you took to get there. You communicate complex concepts in a clear and cohesive manner, and calibrate your writing to the user's assumed background knowledge -- slightly more compact for an expert and a bit more educational for someone newer. Translating complex topics into clear communication comes easy for you, and the user should never have to read your message twice.\n\nYou prefer using plain language over jargon. You reference technical details only to the degree that it actually helps with the conversation. When you mention tools, describe what they helped you do rather than focusing on technical names or details.\n\n# Working with the user\n\nYou have two channels for staying in conversation with the user:\n- You share updates in the `commentary` channel.\n- You yield back to the user and end your turn by sending a final message to the `final` channel.\n\nThe user may send a new message while you are still working. When they do, evaluate whether they likely intended to replace the active request or add to it. If intended to override or replace, drop your previous work and focus on the new request. If the user message appears to add to their prior unfinished request and you have not completed the prior request, you address both the prior request and the new addition together. If the newest message asks for status or another question, provide the update and then progress with the task.\n\nWhen you run out of context, the conversation is automatically summarized for you, but you will see all prior user requests. Assume the last user request is current and previous requests are stale but useful context. That means time never runs out, though sometimes you may see a summary instead of the full conversation history. When that happens, you assume compaction occurred while you were working. Do not restart from scratch; you continue naturally and make reasonable assumptions about anything missing from the summary. Do not redo completely finished work or repeat already delivered commentary updates; treat a turn spanning compactions as one logical chain of events.\n\n## Intermediate commentary\n\nAs you work, you send messages to the `commentary` channel. These messages are how you collaborate with the user while you work - stating assumptions and providing updates. These messages should be concise and quickly scannable. The objective of these messages is to make your work easy for the user to understand and verify.\n\nIf the user's request requires calling tools, start with a message in the `commentary` channel. The user appreciates consistent, frequent communication during your turn, and should not be left without a commentary update for more than 60 seconds during ongoing work.\n\nDo NOT put a final response (e.g. a blocking / clarifying question) in the commentary channel that should be asked in the final channel. Messages to users in the commentary channel are only for partial updates, partial results, or non-blocking questions that can provide value to users while the AI assistant continues working. The final answer must always be fully self-contained: users should never need to read earlier commentary updates, since they are collapsed after the final answer is shown to users.\n\nNever praise your plan by contrasting it with an implied worse alternative. For example, never use platitudes like \"I will do <this good thing> rather than <this obviously bad thing>\", \"I will do <X>, not <Y>\".\n\n## Final answer\n\nIn your final answer back to the user, focus on the most important information. Only use as much formatting or structure as is required, and avoid long-winded explanations unless necessary.\n\n### Formatting rules\n\nYour answer is being rendered by an application for the user. Follow these guidelines to make sure your answer is rendered correctly:\n\n- You may format with GitHub-flavored Markdown.\n- When referencing a real local file, prefer a clickable markdown link.\n  * Clickable file links should look like [app.py](/abs/path/app.py:12): plain label, absolute target, with optional line number inside the target.\n  * If a file path has spaces, wrap the target in angle brackets: [My Report.md](</abs/path/My Project/My Report.md:3>).\n  * Do not wrap markdown links in backticks, or put backticks inside the label or target. This confuses the markdown renderer.\n  * Do not use URIs like file://, vscode://, or https:// for file links.\n  * Do not provide ranges of lines.\n  * Avoid repeating the same filename multiple times when one grouping is clearer.\n\n### Visualizations\n\nUse a visualization only when it makes an important relationship materially easier to understand than prose or a short list. Do not add one merely because an answer has components or steps.\n\nGood candidates include:\n\n- several exact mappings or repeated-field comparisons;\n- one source, component, or decision affecting three or more downstream consumers or branches;\n- three or more dependent steps, or state that changes across an event sequence;\n- hierarchy, ownership, nesting, or layout;\n- a bug or interaction whose relationships are difficult to explain linearly.\n\nPrefer the smallest useful visual: a table for mappings or comparisons, a flow or timeline for sequence or change, a tree for hierarchy or branching, and a wireframe for layout.\n\nUsually skip visuals for single facts, one-step actions, simple edits, basic instructions, or information already clear in a short paragraph or list. Compact notation and small examples do not count as visualizations.\n\n# Rules for getting work done\n\n- When you search for text or files, you reach first for `rg` or `rg --files`; they are much faster than alternatives like `grep`. If `rg` is unavailable, you use the next best tool without fuss.\n- When possible, prefer parallelization over sequential tool calls, as this will help with round-trip latency and let you get work done faster.\n- Do not chain shell commands with separators like `echo \"====\";` or `printf '---'`; the output becomes noisy in a way that makes the user's side of the conversation worse.\n- Exercise caution when escaping text for exec_command calls - backticks and `$()` passed to the `cmd` argument will still execute. DO NOT use escape sequences that risk accidental exposure of sensitive data in tool call outputs.\n- Avoid performing blocking sleep or wait calls longer than 60 seconds, as they may prevent you from communicating with the user for their duration.\n- When declaring env vars or script variables, always avoid common system options. Never repurpose `$HOME`, `$home`, or `$CODEX_HOME`. Instead, use a task-specific variable name.\n\n## File editing constraints\n\nUse `apply_patch` for local file edits. Do not create or edit files with `cat` or other shell write tricks. Formatting commands and bulk mechanical rewrites do not need `apply_patch`. Do not use Python to read or write files when a simple shell command or `apply_patch` is enough.\n\nYou may find yourself working in a dirty worktree. Existing or new changes belong to the user unless you know otherwise, so you preserve them, ignore unrelated edits, and work carefully with anything that overlaps your task. If you cannot work around them you escalate to the user.\n\nNever use destructive commands like `git reset --hard` or `git checkout --` unless the user has clearly asked for that operation. If the request is ambiguous, ask for approval first. You prefer non-interactive git commands.\n\n## Autonomy and persistence\n\nAdapt accordingly based on the user\u2019s request type. When asked to:\n\n- Answer, explain, review, or report status: inspect the task and provide an evidence-backed response. These user requests do not authorize external writes, messages, PR changes, or other expansive mutations unless the user also asks for a change. Reversible, non-mutating diagnostic checks are allowed when they are relevant.\n- Diagnose: determine the cause and explain it. Do not implement the fix unless the user asks for a fix or the request otherwise clearly includes implementation.\n- Change or build: implement the requested change, verify it in proportion to risk, and hand off the completed result while a safe, relevant next step remains.\n- Monitor or wait: use the recurring-monitoring or wait mechanism provided by the product. Unchanged external state is expected and is not by itself a blocker.\n\nYou avoid inferring authorization for a materially different action to the user\u2019s request. Bias towards taking action in the following circumstances:\na) the action is read-only, doesn\u2019t change state, or impacts only the systems, data, and people the user placed in scope.\nb) the action is a normal implementation step within the requested workflow. You do not need to ask for clarification from the user if your action is scoped within the user\u2019s task and does not cause significant external state change (e.g. tool calls to external applications).\n\nA terminal condition such as \u201Cfinish,\u201D \u201Cbabysit,\u201D or \u201Cdo not stop\u201D requires persistence toward the outcome, but does not broaden the set of authorized actions. When blocked, exhaust safe in-scope checks and alternatives.\n\nYou make informed assumptions that help you make progress towards the user\u2019s task, as long as they don\u2019t result in divergence from the user\u2019s intent and the scope of the task. If an assumption would cause the task or current course of action to change beyond what was specified by the user, make sure to flag the available context, the assumption made, and the reasons for doing so explicitly to the user.\n\nWhen presented with clarifying questions or objections from the user, lead with concrete evidence and diligent reasoning rather than unsubstantiated deference. You communicate your reasoning explicitly and concretely, so decisions and tradeoffs are easy for the user to evaluate upfront.\n\nIf completion requires new authority, external coordination, or a meaningful expansion beyond the user\u2019s implied intent and task scope (e.g. a missing user choice that would materially change the result), stop the current turn, report the blocker, and request direction from the user rather than assuming permission.\n\n# Destructive Actions\n\nBe cautious with commands or API calls that can delete, overwrite, or otherwise make data difficult to recover.\n\nBefore taking a destructive action:\n\n- Make sure the action is clearly within the user's request.\n- Resolve the exact targets with read-only checks when necessary.\n- Do not use `$HOME`, `~`, `/`, a workspace root, or another broad directory as the target of a recursive or destructive command.\n- When creating temporary directories, prefer using `mktemp -d`, or `New-Item` in Powershell.\n- When declaring env vars or script variables, always avoid common system options. Never repurpose `$HOME`, `$home`, or `$CODEX_HOME`. Instead, use a task-specific variable name.\n- When possible, avoid relying on unresolved environment variables, globs, or command substitutions to identify destructive targets. Use explicit, validated paths.\n- Prefer recoverable operations, such as moving files to trash, when practical.\n- If the target or scope is unclear, stop and ask the user.\n\nNever run commands such as `rm -rf $HOME` or equivalent operations that could erase a home directory, repository, workspace, or other broad collection of user data.\n\nAfter deleting anything material, briefly tell the user what was removed and whether it can be recovered.\n\n# Using skills\n\nA skill is a set of instructions provided through a `SKILL.md` source. The skills available to you will be listed in the \u201C## Skills\u201D section under \u201C### Available skills\u201D.\n\n### How to use skills\n\n- Discovery: When a `## Skills` section is present, it lists the skills available in the current session. Each entry includes a name, description, and location for its `SKILL.md`. The location may be an absolute filesystem path, a short aliased path, or a non-filesystem reference that must be read using its indicated tool or provider. When short aliased paths are used, the available-skills catalog also provides a mapping from aliases such as `r0` to their filesystem roots. Expand the alias before accessing the skill.\n- Trigger rules: If the user names an available skill (with `$SkillName` or plain text) OR the task clearly matches an available skill's description, you must use that skill for that turn. Multiple mentions mean use them all. Do not carry skills across turns unless re-mentioned.\n- Missing/blocked: If a named skill is not available or its `SKILL.md` cannot be read, say so briefly and continue with the best fallback.\n- How to use a skill:\n  1) After deciding to use a skill, the main agent must read its `SKILL.md` completely before taking task actions. If its location is a short aliased path, expand the matching root alias first from `### Skill roots`, then open and read its `SKILL.md` completely before taking task actions. For a filesystem path, open the file. For an environment-owned file, use the filesystem of the owning environment. For an orchestrator reference, call `skills.list` with `{\"authority\":{\"kind\":\"orchestrator\"}}`, select the matching package, and pass its `main_resource` to `skills.read`. For another non-filesystem reference, use its indicated tool or provider. If a read is truncated or paginated, continue until EOF.\n  2) When `SKILL.md` references another file or resource, use the same access mechanism. Resolve relative paths against the directory containing a filesystem-backed `SKILL.md`. For orchestrator skills, pass the exact referenced resource identifier with the same authority and package to `skills.read`; do not treat `skill://` identifiers as filesystem paths.\n  3) If `SKILL.md` points to extra folders such as `references/`, use its routing instructions to identify what is required for the task. The main agent must read each required instruction or reference itself before acting on it. Do not delegate reading, summarizing, or interpreting skill instructions to a subagent. Subagents may still perform task work when the selected skill allows it.\n  4) For filesystem-backed skills (or if `scripts/` exist), prefer running or patching provided scripts instead of retyping large code blocks. For orchestrator skills, use `skills.read` and the available tools; do not invent a local path.\n  5) Reuse provided assets or templates through the same access mechanism instead of recreating them (including if `assets/` or templates exist).\n- Coordination and sequencing:\n  - If multiple skills apply, choose the minimal set that covers the request and state the order you'll use them.\n  - Announce which skills you're using and why. If you skip an obvious skill, say why.\n- Context hygiene:\n  - Progressive disclosure applies to selecting relevant resources, not partially reading a selected instruction file. Do not load unrelated references, scripts, or assets.\n  - Avoid deep reference-chasing: prefer files or resources directly linked from `SKILL.md` unless blocked.\n  - When variants exist, select only the relevant references and note the choice.\n- Safety and fallback: If a skill cannot be applied cleanly, state the issue, choose the best alternative, and continue.\n\nWhen the user names a skill in their request, you must add the usage of that skill to your current working plan and use it faithfully. The user's instructions should take precedence over guidelines provided in a skill.\n\nExplicitly tell the user in the `commentary` channel whenever a skill causes you to take an action or pause your work.\n\nWhen using a skill the user did not explicitly name, follow this procedure:\n\n- First, tell the user in the commentary channel **why** you are using the skill.\n- Then, use the skill as long as it stays within the scope of the task.\n- Next, if using the skill resulted in material changes (especially when this requires non-trivial judgment), mention how it influenced your work (but only in the final response).\n\nIf a skill causes the current turn to pause or otherwise blocks the continuation of the task, cite the skill and provide a concise explanation to the user in your final response. Do not cite skills you merely inspected.\n",
+    instructions_variables: {
+      personality_default: "",
+      personality_friendly: "",
+      personality_pragmatic: ""
+    },
+    approvals: null
+  },
+  experimental_supported_tools: [],
+  available_in_plans: [
+    "business",
+    "edu",
+    "edu_plus",
+    "edu_pro",
+    "education",
+    "enterprise",
+    "enterprise_cbp_automation",
+    "enterprise_cbp_usage_based",
+    "finserv",
+    "free",
+    "free_workspace",
+    "go",
+    "hc",
+    "k12",
+    "plus",
+    "pro",
+    "prolite",
+    "quorum",
+    "sci",
+    "self_serve_business_usage_based",
+    "team"
+  ],
+  supports_search_tool: true,
+  default_service_tier: null,
+  service_tiers: [
+    {
+      id: "priority",
+      name: "Fast",
+      description: "1.5x speed, increased usage"
+    }
+  ],
+  additional_speed_tiers: ["fast"],
+  supports_reasoning_summaries: true
+};
+
+// src/codex-oauth/account-gateway-mimo-catalog.ts
 var mimoModel = {
   slug: "mimo-v2.6-pro",
   display_name: "MiMo-V2.6-Pro",
@@ -22597,14 +22743,15 @@ function isAccountGatewayMiMoModel(model) {
   return model === mimoModel.slug;
 }
 async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfiguration) {
-  if (!isAccountGatewayMiMoModel(model)) return void 0;
+  const catalogModel = model === gpt_5_6_sol_model_0_147_0_default.slug ? { ...gpt_5_6_sol_model_0_147_0_default, tool_mode: "direct", supports_search_tool: false } : isAccountGatewayMiMoModel(model) ? mimoModel : void 0;
+  if (!catalogModel) return void 0;
   if (!codexHome || !path5.isAbsolute(codexHome))
     throw new Error("account_gateway_catalog_home_unavailable");
   const catalogPath = path5.join(codexHome, "reviewrouter-model-catalog.json");
   const setting = `model_catalog_json=${JSON.stringify(catalogPath)}`;
   await fs6.writeFile(
     catalogPath,
-    JSON.stringify({ models: [mimoModel] }) + "\n",
+    JSON.stringify({ models: [catalogModel] }) + "\n",
     { mode: 384 }
   );
   await fs6.chmod(catalogPath, 384);
@@ -22631,6 +22778,9 @@ var LOCAL_MODEL_CAPABILITY_ENV = "REVIEWROUTER_LOCAL_MODEL_TOKEN";
 var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   requestBytes: 16777216,
   outputBytes: 1048576,
+  // Raw SSE includes repeated deltas/tool events; final review files remain bounded above.
+  streamOutputBytes: 8388608,
+  streamFrameBytes: 1048576,
   jsonBytes: 65536,
   headerBytes: 16384,
   bufferBytes: 65536,
@@ -22798,7 +22948,7 @@ var AccountGatewayModelTransport = class {
         highWaterMark: ACCOUNT_GATEWAY_BOUNDS.bufferBytes,
         transform: (chunk, _encoding, done) => {
           count += chunk.length;
-          const maximum = isStream ? ACCOUNT_GATEWAY_BOUNDS.outputBytes : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
+          const maximum = isStream ? ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
           if (count > maximum) done(new Error("account_gateway_output_bound"));
           else
             try {
@@ -23005,10 +23155,35 @@ var AccountGatewayModelTransport = class {
     });
   }
 };
+function normalizeCodexGatewayServiceTier(bytes) {
+  const original = Buffer.from(bytes);
+  if (original.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
+    throw new Error("account_gateway_request_bound");
+  let parsed;
+  try {
+    parsed = JSON.parse(original.toString("utf8"));
+  } catch {
+    return original;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || Object.prototype.hasOwnProperty.call(parsed, "service_tier"))
+    return original;
+  const closingBrace = original.lastIndexOf(125);
+  const normalized = Buffer.concat([
+    original.subarray(0, closingBrace),
+    Buffer.from(
+      `${Object.keys(parsed).length > 0 ? "," : ""}"service_tier":"default"`
+    ),
+    original.subarray(closingBrace)
+  ]);
+  if (normalized.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes)
+    throw new Error("account_gateway_request_bound");
+  return normalized;
+}
 async function startLocalGatewayModelTransport(transport, observe) {
   const capability = (0, import_crypto.randomBytes)(32).toString("hex");
   let stopping = false;
   let inFlight = 0;
+  let dispatchedRequests = 0;
   const server = (0, import_http.createServer)(
     { maxHeaderSize: ACCOUNT_GATEWAY_BOUNDS.headerBytes },
     (request, reply) => {
@@ -23052,8 +23227,10 @@ async function startLocalGatewayModelTransport(transport, observe) {
             ACCOUNT_GATEWAY_BOUNDS.requestBytes,
             controller.signal
           );
+          const normalized = normalizeCodexGatewayServiceTier(bytes);
           stage = "upstream_request";
-          upstream = await transport.responses(bytes, controller.signal);
+          dispatchedRequests++;
+          upstream = await transport.responses(normalized, controller.signal);
           stage = "downstream_stream";
           reply.writeHead(upstream.httpStatus, {
             "content-type": upstream.contentType,
@@ -23117,6 +23294,7 @@ async function startLocalGatewayModelTransport(transport, observe) {
     }),
     configuration: codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
+    requestCount: () => dispatchedRequests,
     failureFact: () => transport.lastFailure,
     async dispose() {
       stopping = true;
@@ -23136,6 +23314,7 @@ function codexGatewayConfiguration(baseUrl) {
     // Replace the provider table so user/project entries cannot add headers/auth.
     `model_providers={reviewrouter_account_gateway={name="ReviewRouter account gateway",base_url=${JSON.stringify(baseUrl)},wire_api="responses",requires_openai_auth=false,supports_websockets=false,request_max_retries=0,stream_max_retries=0,stream_idle_timeout_ms=${ACCOUNT_GATEWAY_BOUNDS.idleMs},env_http_headers={Authorization="${LOCAL_MODEL_CAPABILITY_ENV}"}}}`,
     'cli_auth_credentials_store="ephemeral"',
+    "agents.enabled=false",
     'service_tier="default"',
     'web_search="disabled"'
   ]);
@@ -23206,6 +23385,9 @@ function responsesStreamAudit(observe) {
   let data = [];
   let event = "";
   let completed = false;
+  let frameBytes = 0;
+  let rawLineBytes = 0;
+  let rawLineLastByte = 0;
   function endLine() {
     if (!line) {
       if (data.length) {
@@ -23249,6 +23431,19 @@ function responsesStreamAudit(observe) {
   return {
     hasCompleted: () => completed,
     accept(bytes) {
+      for (const byte of bytes) {
+        frameBytes++;
+        if (frameBytes > ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes)
+          throw new Error("account_gateway_stream_frame_bound");
+        if (byte === 10) {
+          if (rawLineBytes === 0 || rawLineBytes === 1 && rawLineLastByte === 13)
+            frameBytes = 0;
+          rawLineBytes = 0;
+        } else {
+          rawLineBytes++;
+          rawLineLastByte = byte;
+        }
+      }
       consume(decoder.decode(bytes, { stream: true }));
     },
     finish() {
@@ -27366,8 +27561,8 @@ var HIGH_RISK_PATH_TOKENS = /* @__PURE__ */ new Set([
   "workflow",
   "workflows"
 ]);
-function changedPathSemanticRiskPriority(path31) {
-  const normalized = path31.trim().replaceAll("\\", "/").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+function changedPathSemanticRiskPriority(path33) {
+  const normalized = path33.trim().replaceAll("\\", "/").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   if (normalized.length === 0) {
     throw new Error("review_investigation_changed_path_missing");
   }
@@ -27778,7 +27973,7 @@ function normalizeProviderObligationProposal(record) {
     "obligation_proposal"
   );
   const kind = requireProviderProposableObligationKind(record.kind);
-  const path31 = requireRepositoryRelativePath(
+  const path33 = requireRepositoryRelativePath(
     record.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
@@ -27788,7 +27983,7 @@ function normalizeProviderObligationProposal(record) {
     ReviewTurnProposalRevision,
     "obligation_requirement_revision"
   );
-  const pathHash = sha2562(path31);
+  const pathHash = sha2562(path33);
   return Object.freeze({
     kind,
     canonicalSubject: canonicalJson2({
@@ -27799,7 +27994,7 @@ function normalizeProviderObligationProposal(record) {
     }),
     canonicalRequirement: canonicalJson2({
       kind: COMPLETE_FILE_REQUIREMENT_KIND,
-      path: path31,
+      path: path33,
       pathHash,
       requirementVersion: COMPLETE_FILE_REQUIREMENT_VERSION,
       revision
@@ -27813,14 +28008,14 @@ function normalizeProviderObligationProposal(record) {
   });
 }
 function requireRepositoryRelativePath(value, field, maxLength) {
-  const path31 = requireString(value, field, maxLength);
-  const segments = path31.split("/");
-  if (path31.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path31) || path31.includes("\\") || segments.some(
+  const path33 = requireString(value, field, maxLength);
+  const segments = path33.split("/");
+  if (path33.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path33) || path33.includes("\\") || segments.some(
     (segment) => segment === "" || segment === "." || segment === ".."
   )) {
     throw new Error(`review_agent_${field}_invalid`);
   }
-  return path31;
+  return path33;
 }
 function parseCanonicalCompleteFileRequirement(value) {
   let parsed;
@@ -27838,7 +28033,7 @@ function parseCanonicalCompleteFileRequirement(value) {
   if (requirement.kind !== COMPLETE_FILE_REQUIREMENT_KIND || requirement.requirementVersion !== COMPLETE_FILE_REQUIREMENT_VERSION) {
     throw new Error("review_agent_obligation_requirement_unsupported");
   }
-  const path31 = requireString(
+  const path33 = requireString(
     requirement.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
@@ -27847,7 +28042,7 @@ function parseCanonicalCompleteFileRequirement(value) {
     requirement.pathHash,
     "obligation_requirement_path_hash"
   );
-  if (pathHash !== sha2562(path31)) {
+  if (pathHash !== sha2562(path33)) {
     throw new Error("review_agent_obligation_requirement_path_hash_mismatch");
   }
   const revision = requireEnum(
@@ -27858,7 +28053,7 @@ function parseCanonicalCompleteFileRequirement(value) {
   const normalized = Object.freeze({
     requirementVersion: COMPLETE_FILE_REQUIREMENT_VERSION,
     kind: COMPLETE_FILE_REQUIREMENT_KIND,
-    path: path31,
+    path: path33,
     pathHash,
     revision
   });
@@ -28205,13 +28400,13 @@ function reviewInvestigationSearchOperationInputHash(query) {
     })
   );
 }
-function reviewInvestigationBasenameFallbackQuery(path31) {
-  assertPath(path31, "review_investigation_probe_path_invalid");
-  const basename4 = basenameWithoutExtension(path31);
+function reviewInvestigationBasenameFallbackQuery(path33) {
+  assertPath(path33, "review_investigation_probe_path_invalid");
+  const basename4 = basenameWithoutExtension(path33);
   return isSpecificProbeQuery(
     "basename_fallback" /* BasenameFallback */,
     basename4
-  ) ? basename4 : path31;
+  ) ? basename4 : path33;
 }
 function createProbe(candidate) {
   const obligationKind = obligationKindFor(candidate);
@@ -28300,8 +28495,8 @@ function extractImportExportRelations(line, add) {
     }
   }
 }
-function extractStructuredRelations(path31, line, add) {
-  const dartSource = /\.dart$/iu.test(path31);
+function extractStructuredRelations(path33, line, add) {
+  const dartSource = /\.dart$/iu.test(path33);
   const keyPatterns = [
     // Dart's unquoted labels and assignments are arguments/variables, not
     // external keys. Quoted map/JSON keys still provide contract evidence.
@@ -28318,7 +28513,7 @@ function extractStructuredRelations(path31, line, add) {
       add("structured_key" /* StructuredKey */, match2[1]);
     }
   }
-  if (STRUCTURED_PATH_PATTERN.test(path31)) {
+  if (STRUCTURED_PATH_PATTERN.test(path33)) {
     for (const literal of quotedLiterals(line)) {
       if (isContractLiteral(literal)) {
         add("structured_key" /* StructuredKey */, literal);
@@ -28420,24 +28615,24 @@ function splitDiffByDestinationPath(diff) {
   for (let index = 0; index < matches.length; index += 1) {
     const match2 = matches[index];
     if (match2.index === void 0) continue;
-    const path31 = unquoteGitPath2(match2[2].trim());
+    const path33 = unquoteGitPath2(match2[2].trim());
     const end = matches[index + 1]?.index ?? diff.length;
-    if (path31.length === 0 || chunks.has(path31)) continue;
-    chunks.set(path31, diff.slice(match2.index, end));
+    if (path33.length === 0 || chunks.has(path33)) continue;
+    chunks.set(path33, diff.slice(match2.index, end));
   }
   return chunks;
 }
 function unquoteGitPath2(value) {
-  const path31 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-  return path31.replace(/\\([\\"tnr])/gu, (_match, char) => {
+  const path33 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path33.replace(/\\([\\"tnr])/gu, (_match, char) => {
     if (char === "t") return "	";
     if (char === "n") return "\n";
     if (char === "r") return "\r";
     return char;
   });
 }
-function basenameWithoutExtension(path31) {
-  const fileName = path31.split("/").at(-1) ?? path31;
+function basenameWithoutExtension(path33) {
+  const fileName = path33.split("/").at(-1) ?? path33;
   const extension = fileName.lastIndexOf(".");
   return extension > 0 ? fileName.slice(0, extension) : fileName;
 }
@@ -29036,16 +29231,16 @@ function splitDiffByDestinationPath2(diff) {
   for (let index = 0; index < matches.length; index += 1) {
     const match2 = matches[index];
     if (match2.index === void 0) continue;
-    const path31 = unquoteGitPath3(match2[2].trim());
+    const path33 = unquoteGitPath3(match2[2].trim());
     const end = matches[index + 1]?.index ?? diff.length;
-    if (!path31 || chunks.has(path31)) continue;
-    chunks.set(path31, diff.slice(match2.index, end).replace(/\n+$/, ""));
+    if (!path33 || chunks.has(path33)) continue;
+    chunks.set(path33, diff.slice(match2.index, end).replace(/\n+$/, ""));
   }
   return chunks;
 }
 function unquoteGitPath3(value) {
-  const path31 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-  return path31.replace(/\\([\\"tnr])/g, (_match, char) => {
+  const path33 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path33.replace(/\\([\\"tnr])/g, (_match, char) => {
     if (char === "t") return "	";
     if (char === "n") return "\n";
     if (char === "r") return "\r";
@@ -30520,12 +30715,12 @@ function collectMarkerMatches(body, pattern) {
 var INLINE_MARKER_RE = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/i;
 var INLINE_MARKER_RE_GLOBAL = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/gi;
 var MAX_NEARBY_LINE_DISTANCE = 12;
-function signatureFromInlineComment(path31, line, body) {
+function signatureFromInlineComment(path33, line, body) {
   const cleanBody = stripInlineFingerprintMarkers(body);
   const severity = extractSeverity(cleanBody);
   if (severity) {
     return [
-      (path31 || "unknown").toLowerCase(),
+      (path33 || "unknown").toLowerCase(),
       String(line ?? 0),
       severity
     ].join(":");
@@ -30533,13 +30728,13 @@ function signatureFromInlineComment(path31, line, body) {
   const titleMatch = cleanBody.match(/\*\*(.+?)\*\*/);
   const title = titleMatch ? titleMatch[1] : cleanBody.split("\n")[0] || "unknown";
   return [
-    (path31 || "unknown").toLowerCase(),
+    (path33 || "unknown").toLowerCase(),
     String(line ?? 0),
     normalizeForSignature(title)
   ].join(":");
 }
-function fingerprintFromInlineComment(path31, line, body) {
-  return (0, import_crypto6.createHash)("sha256").update(signatureFromInlineComment(path31, line, body)).digest("hex").slice(0, 16);
+function fingerprintFromInlineComment(path33, line, body) {
+  return (0, import_crypto6.createHash)("sha256").update(signatureFromInlineComment(path33, line, body)).digest("hex").slice(0, 16);
 }
 function inlineFingerprintMarker(fingerprint) {
   return `<!-- review-router-inline:${fingerprint} -->`;
@@ -30555,19 +30750,19 @@ function extractFindingFingerprint(body) {
   const parsed = parseFindingMarker(body);
   return parsed.kind === "valid" /* Valid */ ? parsed.fingerprint : null;
 }
-function appendInlineFingerprintMarker(body, path31, line) {
+function appendInlineFingerprintMarker(body, path33, line) {
   const sanitizedBody = stripReservedFindingMarkerSyntax(body);
   const parts = [sanitizedBody.trimEnd()];
   if (!extractInlineFingerprint(sanitizedBody)) {
     parts.push(
       inlineFingerprintMarker(
-        fingerprintFromInlineComment(path31, line, sanitizedBody)
+        fingerprintFromInlineComment(path33, line, sanitizedBody)
       )
     );
   }
   parts.push(
     findingFingerprintMarker(
-      findingFingerprintFromInlineComment(path31, line, sanitizedBody)
+      findingFingerprintFromInlineComment(path33, line, sanitizedBody)
     )
   );
   return parts.join("\n\n");
@@ -30591,12 +30786,12 @@ function findingFingerprintFromFinding(finding) {
     message: finding.message
   });
 }
-function findingFingerprintFromInlineComment(path31, _line, body) {
+function findingFingerprintFromInlineComment(path33, _line, body) {
   const marker = extractFindingFingerprint(body);
   if (marker) return marker;
   const cleanBody = stripInlineFingerprintMarkers(body);
   return stableFindingFingerprint({
-    path: path31,
+    path: path33,
     severity: extractSeverity(cleanBody) || "unknown",
     title: extractNormalizedTitle(cleanBody),
     message: extractCoreMessage(cleanBody)
@@ -31620,6 +31815,7 @@ function toReviewerSummaryFinding(finding) {
   };
 }
 function findingLocationLabel(finding) {
+  if (finding.line <= 0) return finding.file;
   return finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `${finding.file}:${finding.startLine}-${finding.endLine}` : `${finding.file}:${finding.line}`;
 }
 function renderFindingDetails(copy, finding) {
@@ -35237,10 +35433,10 @@ ${content.substring(0, 500)}...`
     }
     return { keys, comments: activeComments };
   }
-  hasInlineDuplicate(activeComments, path31, line, body) {
+  hasInlineDuplicate(activeComments, path33, line, body) {
     const marker = extractInlineFingerprint(body);
-    return activeComments.keys.has(signatureFromInlineComment(path31, line, body)) || activeComments.keys.has(fingerprintFromInlineComment(path31, line, body)) || (marker ? activeComments.keys.has(marker) : false) || activeComments.comments.some(
-      (comment) => isLikelySameInlineFinding(comment, { path: path31, line, body })
+    return activeComments.keys.has(signatureFromInlineComment(path33, line, body)) || activeComments.keys.has(fingerprintFromInlineComment(path33, line, body)) || (marker ? activeComments.keys.has(marker) : false) || activeComments.comments.some(
+      (comment) => isLikelySameInlineFinding(comment, { path: path33, line, body })
     );
   }
   /**
@@ -37075,8 +37271,8 @@ var import_crypto8 = require("crypto");
 function canonicalizeReviewProjection(envelope) {
   return JSON.stringify(toCanonicalValue(envelope));
 }
-function hashReviewProjectionCanonicalJson(canonicalJson14) {
-  return (0, import_crypto8.createHash)("sha256").update(canonicalJson14, "utf8").digest("hex");
+function hashReviewProjectionCanonicalJson(canonicalJson15) {
+  return (0, import_crypto8.createHash)("sha256").update(canonicalJson15, "utf8").digest("hex");
 }
 function hashProjectionFact(value) {
   return (0, import_crypto8.createHash)("sha256").update(JSON.stringify(toCanonicalValue(value)), "utf8").digest("hex");
@@ -37135,6 +37331,7 @@ var CurrentReviewProjector = class {
         normalizedFailureModeHash: finding.normalizedFailureModeHash,
         ...finding.symbolAnchor ? { symbolAnchor: finding.symbolAnchor } : {},
         ...finding.trustedMarker ? { trustedMarker: finding.trustedMarker } : {},
+        ...finding.anchorVerified !== void 0 ? { anchorVerified: finding.anchorVerified } : {},
         title: finding.title,
         message: finding.message,
         ...finding.suggestion ? { suggestion: finding.suggestion } : {},
@@ -37259,11 +37456,11 @@ function hasValidTrustedResolutionMarker(target) {
     marker && marker.trust === "trusted" /* Trusted */ && marker.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker.targetId === target.targetId && marker.fingerprint === target.trustedMarker
   );
 }
-function summaryPlacement(lineageId, path31, reason) {
+function summaryPlacement(lineageId, path33, reason) {
   return {
     lineageId,
     kind: "summary" /* Summary */,
-    path: path31,
+    path: path33,
     reason
   };
 }
@@ -37286,8 +37483,8 @@ function sortOccurrences(occurrences) {
     (left, right) => stateOrder[left.state] - stateOrder[right.state] || severityOrder[left.severity] - severityOrder[right.severity] || left.filePath.localeCompare(right.filePath) || (left.line ?? 0) - (right.line ?? 0) || left.lineageId.localeCompare(right.lineageId)
   );
 }
-function normalizePath(path31) {
-  return path31.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath(path33) {
+  return path33.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique(values) {
   return Array.from(new Set(values)).sort(
@@ -37605,8 +37802,8 @@ var FeedbackFilter = class {
       (existing) => isLikelySameDismissedFinding(existing, comment)
     );
   }
-  signatureFromComment(path31, line, body) {
-    return signatureFromInlineComment(path31, line, body);
+  signatureFromComment(path33, line, body) {
+    return signatureFromInlineComment(path33, line, body);
   }
 };
 function skippedFindingBody(skip) {
@@ -37726,9 +37923,9 @@ var TOKEN_STOPWORDS = /* @__PURE__ */ new Set([
   "when",
   "with"
 ]);
-function locationKey(path31, line) {
-  if (!path31 || line == null) return null;
-  return `${path31.toLowerCase()}:${line}`;
+function locationKey(path33, line) {
+  if (!path33 || line == null) return null;
+  return `${path33.toLowerCase()}:${line}`;
 }
 
 // src/github/ledger.ts
@@ -38406,8 +38603,8 @@ var CodeGraph = class _CodeGraph {
   /**
    * Normalize a file path for comparison (strips extensions, converts to posix)
    */
-  normalizePathForComparison(path31) {
-    let normalized = path31.replace(/\\/g, "/");
+  normalizePathForComparison(path33) {
+    let normalized = path33.replace(/\\/g, "/");
     normalized = normalized.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, "");
     return normalized;
   }
@@ -39201,9 +39398,9 @@ var PromptGenerator = class {
    * Save prompts to a file (for CLI usage)
    */
   async saveToFile(prompts, filepath, format = this.defaultFormat) {
-    const fs25 = await import("fs/promises");
+    const fs27 = await import("fs/promises");
     const content = this.formatForIDE(prompts, format);
-    await fs25.writeFile(filepath, content, "utf8");
+    await fs27.writeFile(filepath, content, "utf8");
     logger.info(`Saved ${prompts.length} fix prompts to ${filepath}`);
   }
   /**
@@ -42131,8 +42328,8 @@ async function readSafeErrorCode(response) {
   }
   return void 0;
 }
-function joinApiPath(apiUrl, path31) {
-  return `${apiUrl.replace(/\/+$/, "")}${path31}`;
+function joinApiPath(apiUrl, path33) {
+  return `${apiUrl.replace(/\/+$/, "")}${path33}`;
 }
 function safeReason(message) {
   return message.replace(/[^a-zA-Z0-9:_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
@@ -42210,13 +42407,13 @@ var ControlPlaneMemoryClient = class {
     }
     return results.map(parseMutationResponse);
   }
-  async postJson(path31, body) {
+  async postJson(path33, body) {
     if (!this.isAvailable()) {
       throw new Error("memory_runtime_unavailable");
     }
     const runtimeConfig = this.runtimeConfig;
     const response = await this.fetchImpl(
-      joinApiPath2(runtimeConfig.apiUrl, path31),
+      joinApiPath2(runtimeConfig.apiUrl, path33),
       {
         method: "POST",
         headers: {
@@ -42338,14 +42535,14 @@ function endpointPath(value, fallback2) {
   const normalized = value?.trim();
   return normalized || fallback2;
 }
-function joinApiPath2(apiUrl, path31) {
-  return new URL(path31, ensureTrailingSlash(apiUrl)).toString();
+function joinApiPath2(apiUrl, path33) {
+  return new URL(path33, ensureTrailingSlash(apiUrl)).toString();
 }
 function ensureTrailingSlash(value) {
   return value.endsWith("/") ? value : `${value}/`;
 }
-function compactPathHint(path31) {
-  return path31.split("/").filter(Boolean).slice(-3).join("/");
+function compactPathHint(path33) {
+  return path33.split("/").filter(Boolean).slice(-3).join("/");
 }
 function compactWhitespace(value) {
   return value.replace(/\s+/g, " ").trim();
@@ -42622,10 +42819,10 @@ function normalizeFilePaths(record) {
   const seen = /* @__PURE__ */ new Set();
   for (const value of values) {
     if (typeof value !== "string") continue;
-    const path31 = normalizeText2(value, 4096);
-    if (!path31 || seen.has(path31)) continue;
-    seen.add(path31);
-    paths.push(path31);
+    const path33 = normalizeText2(value, 4096);
+    if (!path33 || seen.has(path33)) continue;
+    seen.add(path33);
+    paths.push(path33);
     if (paths.length > MAX_FILE_PATHS) {
       throw new Error("review_checkpoint_filePaths_limit_exceeded");
     }
@@ -43389,7 +43586,7 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
       ...body
     };
   }
-  async post(path31, body, schema2) {
+  async post(path33, body, schema2) {
     const serialized = JSON.stringify(body);
     if (Buffer.byteLength(serialized, "utf8") > REVIEW_CHECKPOINT_MAX_REQUEST_BYTES) {
       throw new ReviewCheckpointHttpError(
@@ -43413,7 +43610,7 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
       let response;
       try {
         response = await Promise.race([
-          this.fetchImpl(`${this.apiUrl}${CHECKPOINT_PATH}${path31}`, {
+          this.fetchImpl(`${this.apiUrl}${CHECKPOINT_PATH}${path33}`, {
             method: "POST",
             redirect: "error",
             headers: {
@@ -43530,12 +43727,12 @@ function isAllowedCheckpointApiUrl(input) {
   }
 }
 var FileReviewCheckpointFinalizationMarkerWriter = class _FileReviewCheckpointFinalizationMarkerWriter {
-  constructor(path31) {
-    this.path = path31;
+  constructor(path33) {
+    this.path = path33;
   }
   static fromEnvironment(env = process.env) {
-    const path31 = env[REVIEW_CHECKPOINT_FINALIZATION_PATH_ENV]?.trim();
-    return path31 ? new _FileReviewCheckpointFinalizationMarkerWriter(path31) : null;
+    const path33 = env[REVIEW_CHECKPOINT_FINALIZATION_PATH_ENV]?.trim();
+    return path33 ? new _FileReviewCheckpointFinalizationMarkerWriter(path33) : null;
   }
   static parse(input) {
     return parseReviewCheckpointFinalizationMarker(input);
@@ -43902,7 +44099,7 @@ var FindingFilter = class {
   /**
    * Filter and adjust findings to reduce false positives
    */
-  filter(findings, diffContent) {
+  filter(findings, diffContent, options = {}) {
     const stats = {
       total: findings.length,
       filtered: 0,
@@ -43913,10 +44110,22 @@ var FindingFilter = class {
     };
     const filtered = [];
     for (const finding of findings) {
-      const action = this.shouldFilter(finding, diffContent);
+      const unanchored = options.allowUnanchoredFindings === true && finding.line === 0 && finding.startLine === void 0 && finding.endLine === void 0;
+      const producerClassifiedBug = options.isProducerClassifiedBug?.(finding) === true;
+      const action = this.shouldFilter(
+        finding,
+        diffContent,
+        unanchored,
+        producerClassifiedBug
+      );
       if (action === "filter") {
         stats.filtered++;
-        const reason = this.getFilterReason(finding, diffContent);
+        const reason = this.getFilterReason(
+          finding,
+          diffContent,
+          unanchored,
+          producerClassifiedBug
+        );
         stats.reasons[reason] = (stats.reasons[reason] || 0) + 1;
         if (stats.filteredExamples.length < 5) {
           stats.filteredExamples.push(
@@ -43959,11 +44168,11 @@ var FindingFilter = class {
     }
     return { findings: deduplicated, stats };
   }
-  shouldFilter(finding, diffContent) {
-    if (this.hasInvalidLineNumber(finding)) {
+  shouldFilter(finding, diffContent, unanchored = false, producerClassifiedBug = false) {
+    if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return "filter";
     }
-    if (this.isLineNumberIssue(finding, diffContent)) {
+    if (!unanchored && this.isLineNumberIssue(finding, diffContent)) {
       return "filter";
     }
     if (this.isDocumentationFile(finding.file)) {
@@ -43997,7 +44206,7 @@ var FindingFilter = class {
     if (this.isConcreteRuntimeRegression(finding)) {
       return "keep";
     }
-    if (!this.isConcreteRuntimeRegression(finding) && this.isSuggestionOrOptimization(finding)) {
+    if (!producerClassifiedBug && !this.isConcreteRuntimeRegression(finding) && this.isSuggestionOrOptimization(finding)) {
       return "filter";
     }
     if (this.isAboutAddedFileFalsePositive(finding)) {
@@ -44006,7 +44215,7 @@ var FindingFilter = class {
     if (this.isSubjectiveCodeOpinion(finding)) {
       return "filter";
     }
-    if (this.isCodeQualityIssue(finding)) {
+    if (!producerClassifiedBug && this.isCodeQualityIssue(finding)) {
       return "filter";
     }
     if (this.isLintOrStyleIssue(finding)) {
@@ -44020,11 +44229,11 @@ var FindingFilter = class {
     }
     return "keep";
   }
-  getFilterReason(finding, diffContent) {
-    if (this.hasInvalidLineNumber(finding)) {
+  getFilterReason(finding, diffContent, unanchored = false, producerClassifiedBug = false) {
+    if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return "invalid/suspicious line number";
     }
-    if (this.isLineNumberIssue(finding, diffContent)) {
+    if (!unanchored && this.isLineNumberIssue(finding, diffContent)) {
       return "line number points to blank/brace/comment";
     }
     if (this.isDocumentationFile(finding.file) && this.isStyleOrFormattingIssue(finding)) {
@@ -44045,7 +44254,7 @@ var FindingFilter = class {
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
       return "workflow security already handled/config issue";
     }
-    if (this.isSuggestionOrOptimization(finding)) {
+    if (!producerClassifiedBug && this.isSuggestionOrOptimization(finding)) {
       return "suggestion/optimization (not a bug)";
     }
     if (this.isSubjectiveCodeOpinion(finding)) {
@@ -44057,7 +44266,7 @@ var FindingFilter = class {
     if (this.isMissingMethodFalsePositive(finding, diffContent)) {
       return "method exists in code";
     }
-    if (this.isCodeQualityIssue(finding)) {
+    if (!producerClassifiedBug && this.isCodeQualityIssue(finding)) {
       return "code quality (not a concrete bug)";
     }
     if (this.isLintOrStyleIssue(finding)) {
@@ -46397,10 +46606,10 @@ var Minimatch = class {
       }
       return filtered.join("/");
     }).join("|");
-    const [open3, close] = set2.length > 1 ? ["(?:", ")"] : ["", ""];
-    re2 = "^" + open3 + re2 + close + "$";
+    const [open4, close] = set2.length > 1 ? ["(?:", ")"] : ["", ""];
+    re2 = "^" + open4 + re2 + close + "$";
     if (this.partial) {
-      re2 = "^(?:\\/|" + open3 + re2.slice(1, -1) + close + ")$";
+      re2 = "^(?:\\/|" + open4 + re2.slice(1, -1) + close + ")$";
     }
     if (this.negate)
       re2 = "^(?!" + re2 + ").+$";
@@ -47017,11 +47226,11 @@ function extractDiffDestinationPaths(diff) {
   }
   return paths;
 }
-function unquoteGitPath4(path31) {
-  if (path31.startsWith('"') && path31.endsWith('"')) {
-    path31 = path31.slice(1, -1);
+function unquoteGitPath4(path33) {
+  if (path33.startsWith('"') && path33.endsWith('"')) {
+    path33 = path33.slice(1, -1);
   }
-  return path31.replace(/\\([\\"tnr])/g, (_match, char) => {
+  return path33.replace(/\\([\\"tnr])/g, (_match, char) => {
     switch (char) {
       case "\\":
         return "\\";
@@ -49795,17 +50004,17 @@ var ReviewOrchestrator = class {
     if (reviewCommentState.commandDismissed?.has(target.fingerprint)) {
       return true;
     }
-    const path31 = target.currentPath || target.originalPath;
+    const path33 = target.currentPath || target.originalPath;
     const line = target.currentLine ?? target.originalLine;
-    if (path31 && line != null && reviewCommentState.commandDismissedLocations?.has(
-      `${path31.toLowerCase()}:${line}`
+    if (path33 && line != null && reviewCommentState.commandDismissedLocations?.has(
+      `${path33.toLowerCase()}:${line}`
     )) {
       return true;
     }
     const severity = target.severity === "critical" || target.severity === "major" || target.severity === "minor" ? target.severity : "minor";
     return this.components.feedbackFilter.isInlineCommandDismissed(
       {
-        path: path31,
+        path: path33,
         line: line ?? 0,
         side: "RIGHT",
         body: target.message,
@@ -50325,8 +50534,8 @@ var ReviewOrchestrator = class {
     if (!tracker || providers.length === 0) return providers;
     const available = [];
     for (const provider of providers) {
-      const open3 = await tracker.isCircuitOpen(provider.name);
-      if (open3) {
+      const open4 = await tracker.isCircuitOpen(provider.name);
+      if (open4) {
         logger.warn(`Skipping provider ${provider.name} (circuit open)`);
         continue;
       }
@@ -51784,14 +51993,14 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
     }
   }
   matchesReviewWorkflowRun(candidate, workflowFile, prNumber, headSha) {
-    const path31 = String(candidate.path || "");
+    const path33 = String(candidate.path || "");
     const knownWorkflowFiles = [
       workflowFile,
       "reviewrouter.yml",
       "ai-robot-review.yml"
     ];
     const matchesWorkflow = knownWorkflowFiles.some(
-      (file) => path31.endsWith(`/${file}`) || path31 === file
+      (file) => path33.endsWith(`/${file}`) || path33 === file
     );
     const matchesSha = candidate.head_sha === headSha;
     const matchesPr = (candidate.pull_requests || []).some(
@@ -52501,7 +52710,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.184",
+  version: "1.0.185",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -52885,8 +53094,8 @@ async function readSafeErrorCode2(response) {
   }
   return void 0;
 }
-function joinApiPath3(apiUrl, path31) {
-  return new URL(path31, ensureTrailingSlash3(apiUrl)).toString();
+function joinApiPath3(apiUrl, path33) {
+  return new URL(path33, ensureTrailingSlash3(apiUrl)).toString();
 }
 function ensureTrailingSlash3(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -52976,8 +53185,8 @@ function fallback(input, reason) {
   );
   return { status: "fallback", token: input.fallbackToken, reason };
 }
-function joinApiPath4(apiUrl, path31) {
-  return `${apiUrl.replace(/\/+$/, "")}${path31}`;
+function joinApiPath4(apiUrl, path33) {
+  return `${apiUrl.replace(/\/+$/, "")}${path33}`;
 }
 async function readSafeErrorCode3(response) {
   try {
@@ -53284,8 +53493,8 @@ function safeErrorSummaryForCategory(category) {
       return void 0;
   }
 }
-function joinApiPath5(apiUrl, path31) {
-  return new URL(path31, ensureTrailingSlash4(apiUrl)).toString();
+function joinApiPath5(apiUrl, path33) {
+  return new URL(path33, ensureTrailingSlash4(apiUrl)).toString();
 }
 function ensureTrailingSlash4(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -53478,14 +53687,14 @@ function pluralize(word, count) {
 }
 
 // src/codex-oauth/action.ts
-var fs23 = __toESM(require("fs"));
+var fs25 = __toESM(require("fs"));
 
 // src/codex-oauth/account-gateway-runtime.ts
-var import_child_process13 = require("child_process");
-var import_util7 = require("util");
-var fs20 = __toESM(require("fs/promises"));
-var os8 = __toESM(require("os"));
-var path19 = __toESM(require("path"));
+var import_child_process14 = require("child_process");
+var import_util8 = require("util");
+var fs21 = __toESM(require("fs/promises"));
+var os9 = __toESM(require("os"));
+var path20 = __toESM(require("path"));
 
 // src/control-plane/review-action-v2-client.ts
 var import_crypto20 = require("crypto");
@@ -86066,12 +86275,12 @@ var manifest_default = {
   protocolVersion: "2",
   schemaDigest: "32bb25cd3490660dbaeecaa168f162ba97ff171e2dfab69e1bd435bc2e1cf3d3",
   goldenFixtureDigest: "d6d5a918ce9e5e01a14aa9714a77d6557fcaee90c68e272cbc3f925f3e4c94a4",
-  canonicalizerDigest: "95a43332ccff5c8ccf8f6f9cb67d901d5efd3e91522c047c48f83b65c70cb03a",
+  canonicalizerDigest: "12408727c244f65242534d3060983b87221715f2086631ab743c2c6f6248629a",
   extensions: [
     {
       extensionId: "review-investigation-shadow.v1",
       schemaDigest: "9ab22a39cc983b88ae50576ece6a777d72d904d09654d3f4c51a20fc13c29003",
-      canonicalizerDigest: "20dc769dd28947fe6ee0c7770199fbb6c5cd490a7d7f71785159da99d793ff77",
+      canonicalizerDigest: "5dc6b98d93527381c4337c9e05ea58a910b3b26342140300992077884f4d04ec",
       operationIds: [
         "review_investigation_open_v2",
         "review_investigation_lease_acquire",
@@ -88970,11 +89179,11 @@ var manifest_default = {
 // src/control-plane/generated/review-action-v2/review-action-v2.ts
 var reviewActionV2PublishedProtocolVersion = "2";
 var reviewActionV2PublishedSchemaDigest = "32bb25cd3490660dbaeecaa168f162ba97ff171e2dfab69e1bd435bc2e1cf3d3";
-var reviewActionV2CanonicalizerDigest = "95a43332ccff5c8ccf8f6f9cb67d901d5efd3e91522c047c48f83b65c70cb03a";
+var reviewActionV2CanonicalizerDigest = "12408727c244f65242534d3060983b87221715f2086631ab743c2c6f6248629a";
 var reviewInvestigationExtensionV1 = {
   extensionId: "review-investigation-shadow.v1",
   schemaDigest: "9ab22a39cc983b88ae50576ece6a777d72d904d09654d3f4c51a20fc13c29003",
-  canonicalizerDigest: "20dc769dd28947fe6ee0c7770199fbb6c5cd490a7d7f71785159da99d793ff77",
+  canonicalizerDigest: "5dc6b98d93527381c4337c9e05ea58a910b3b26342140300992077884f4d04ec",
   operationIds: [
     "review_investigation_open_v2",
     "review_investigation_lease_acquire",
@@ -92562,6 +92771,7 @@ var ReviewExecutionProviderKind = /* @__PURE__ */ ((ReviewExecutionProviderKind2
   ReviewExecutionProviderKind2["Codex"] = "codex";
   ReviewExecutionProviderKind2["ClaudeCode"] = "claude_code";
   ReviewExecutionProviderKind2["OpenRouter"] = "openrouter";
+  ReviewExecutionProviderKind2["Ocr"] = "ocr";
   return ReviewExecutionProviderKind2;
 })(ReviewExecutionProviderKind || {});
 var ReviewTaskKind = /* @__PURE__ */ ((ReviewTaskKind2) => {
@@ -92776,10 +92986,10 @@ function createReviewPromptCoverageManifest(input) {
     }
     byPath.set(fact.path, fact);
   }
-  if (byPath.size !== assigned.length || assigned.some((path31) => !byPath.has(path31))) {
+  if (byPath.size !== assigned.length || assigned.some((path33) => !byPath.has(path33))) {
     throw new Error("review_prompt_coverage_path_set_mismatch");
   }
-  const paths = Object.freeze(assigned.map((path31) => byPath.get(path31)));
+  const paths = Object.freeze(assigned.map((path33) => byPath.get(path33)));
   const canonicalFacts = canonicalJson5({
     paths,
     reviewRevisionHash: input.reviewRevisionHash,
@@ -92796,7 +93006,7 @@ function createReviewPromptCoverageManifest(input) {
 }
 function isReviewPromptCoverageComplete(manifest) {
   return manifest.paths.length > 0 && manifest.paths.every(
-    (path31) => path31.kind === "full_patch" /* FullPatch */ || path31.kind === "policy_excluded" /* PolicyExcluded */
+    (path33) => path33.kind === "full_patch" /* FullPatch */ || path33.kind === "policy_excluded" /* PolicyExcluded */
   );
 }
 function createProviderVisibleReviewCoverage(manifest) {
@@ -93014,16 +93224,16 @@ function createStableReviewAssignmentManifest(input) {
   const uncoveredPaths = canonicalPaths(input.uncoveredPaths);
   const excludedPaths = canonicalPaths(input.excludedPaths);
   const eligible = new Set(eligiblePaths);
-  for (const path31 of uncoveredPaths) {
-    if (!eligible.has(path31)) {
+  for (const path33 of uncoveredPaths) {
+    if (!eligible.has(path33)) {
       throw new Error("review_assignment_manifest_uncovered_not_eligible");
     }
   }
   const assignments = input.assignments.map((assignment) => {
     requireIdentity2(assignment.workSlotId, "work_slot_id");
     const paths = canonicalPaths(assignment.paths);
-    for (const path31 of paths) {
-      if (!eligible.has(path31)) {
+    for (const path33 of paths) {
+      if (!eligible.has(path33)) {
         throw new Error("review_assignment_manifest_assignment_not_eligible");
       }
     }
@@ -93038,19 +93248,19 @@ function createStableReviewAssignmentManifest(input) {
   const assignedPaths = new Set(
     assignments.flatMap((assignment) => assignment.paths)
   );
-  for (const path31 of uncoveredPaths) {
-    if (assignedPaths.has(path31)) {
+  for (const path33 of uncoveredPaths) {
+    if (assignedPaths.has(path33)) {
       throw new Error("review_assignment_manifest_uncovered_assigned_overlap");
     }
   }
   const uncovered = new Set(uncoveredPaths);
-  for (const path31 of eligiblePaths) {
-    if (!assignedPaths.has(path31) && !uncovered.has(path31)) {
+  for (const path33 of eligiblePaths) {
+    if (!assignedPaths.has(path33) && !uncovered.has(path33)) {
       throw new Error("review_assignment_manifest_eligible_unaccounted");
     }
   }
-  for (const path31 of excludedPaths) {
-    if (eligible.has(path31)) {
+  for (const path33 of excludedPaths) {
+    if (eligible.has(path33)) {
       throw new Error("review_assignment_manifest_excluded_eligible_overlap");
     }
   }
@@ -93079,11 +93289,11 @@ function createStableReviewAssignmentManifest(input) {
   });
 }
 function canonicalPaths(paths) {
-  for (const path31 of paths) requireNormalizedRepoPath(path31);
+  for (const path33 of paths) requireNormalizedRepoPath(path33);
   return Object.freeze([...new Set(paths)].sort(compareCodePoints5));
 }
-function requireNormalizedRepoPath(path31) {
-  if (path31.length === 0 || path31.length > assignmentManifestMaxPathLength || path31.includes("\0") || path31.includes("\\") || path31.startsWith("/") || path31.endsWith("/") || path31.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+function requireNormalizedRepoPath(path33) {
+  if (path33.length === 0 || path33.length > assignmentManifestMaxPathLength || path33.includes("\0") || path33.includes("\\") || path33.startsWith("/") || path33.endsWith("/") || path33.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
     throw new Error("review_assignment_manifest_path_invalid");
   }
 }
@@ -93650,6 +93860,7 @@ var RunInvestigationWorkSlot = class {
       }
     }
     legacyFallbackGate.close();
+    let conclusionAttempted = false;
     for (let transition = 0; transition < input.maxStateTransitions; transition += 1) {
       throwIfAborted(input.signal);
       if (isSuperseded(snapshot)) {
@@ -93676,12 +93887,13 @@ var RunInvestigationWorkSlot = class {
         continue;
       }
       if (snapshot.nextAction === "conclude" /* Conclude */) {
+        conclusionAttempted = true;
         snapshot = await this.dependencies.controlPlane.conclude({
           authorizationToken: input.authorizationToken,
           snapshot,
           certificateTtlMs: input.certificateTtlMs
         });
-        continue;
+        break;
       }
       if (snapshot.turn === null || snapshot.turn.turnCapability.length === 0) {
         snapshot = await this.dependencies.controlPlane.planTurn({
@@ -93770,6 +93982,17 @@ var RunInvestigationWorkSlot = class {
         } catch {
         }
       }
+    }
+    if (isSuperseded(snapshot)) {
+      return { status: "superseded" /* Superseded */, snapshot };
+    }
+    if (input.maxStateTransitions > 0 && !conclusionAttempted && snapshot.nextAction === "conclude" /* Conclude */) {
+      throwIfAborted(input.signal);
+      snapshot = await this.dependencies.controlPlane.conclude({
+        authorizationToken: input.authorizationToken,
+        snapshot,
+        certificateTtlMs: input.certificateTtlMs
+      });
     }
     if (isSuperseded(snapshot)) {
       return { status: "superseded" /* Superseded */, snapshot };
@@ -97464,12 +97687,1068 @@ function deterministicIdempotencyKey(purpose, parts) {
   )}`;
 }
 
-// src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
-var import_child_process11 = require("child_process");
+// src/codex-oauth/ocr-managed-bootstrap.ts
+var import_child_process10 = require("child_process");
+var import_node_crypto2 = require("node:crypto");
+var fs19 = __toESM(require("fs/promises"));
+var os7 = __toESM(require("os"));
+var path16 = __toESM(require("path"));
 var import_util6 = require("util");
 
+// src/review-orchestration/infrastructure/ocr-review-outcome-contract.ts
+var OCR_OUTCOME_SCHEMA_VERSION = "reviewrouter.ocr-outcome/v1";
+var OCR_PHASE_STATES = [
+  "completed",
+  "not_applicable",
+  "failed",
+  "cancelled"
+];
+var OCR_STOP_CAUSES = [
+  "max_rounds",
+  "empty_rounds",
+  "compression",
+  "token_budget",
+  "prompt_budget",
+  "provider_error",
+  "input_error",
+  "internal_error",
+  "cancelled",
+  "deadline"
+];
+var OCR_STOP_CAUSE_ALIASES = {
+  review_limit_reached: "max_rounds"
+};
+var OcrManagedContractViolation = class extends Error {
+  issues;
+  constructor(issues) {
+    super(
+      `ocr_managed_outcome_contract_violation: ${issues.map((issue) => issue.code).join(",")}`
+    );
+    this.name = "OcrManagedContractViolation";
+    this.issues = Object.freeze([...issues]);
+  }
+};
+var OcrNativeResultContractViolation = class extends Error {
+  issues;
+  constructor(issues) {
+    super(
+      `ocr_native_result_contract_violation: ${issues.map((issue) => issue.code).join(",")}`
+    );
+    this.name = "OcrNativeResultContractViolation";
+    this.issues = Object.freeze([...issues]);
+  }
+};
+var REASON_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
+function isRecord4(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function parseOcrReviewOutcome(value) {
+  const issues = [];
+  const violation = () => {
+    throw new OcrManagedContractViolation(issues);
+  };
+  if (!isRecord4(value)) {
+    issues.push({ code: "outcome_not_an_object", detail: "reviewrouter_outcome" });
+    return violation();
+  }
+  if (value.schema_version !== OCR_OUTCOME_SCHEMA_VERSION) {
+    issues.push({
+      code: "outcome_schema_version",
+      detail: `expected ${OCR_OUTCOME_SCHEMA_VERSION}`
+    });
+    return violation();
+  }
+  const parseStopCause = (raw, field) => {
+    if (raw === null || raw === void 0) return null;
+    if (typeof raw === "string" && OCR_STOP_CAUSES.includes(raw)) {
+      return raw;
+    }
+    if (typeof raw === "string" && OCR_STOP_CAUSE_ALIASES[raw] !== void 0) {
+      return OCR_STOP_CAUSE_ALIASES[raw];
+    }
+    issues.push({ code: "outcome_stop_cause_unknown", detail: field });
+    return null;
+  };
+  const parseReason = (raw, field) => {
+    if (raw === null || raw === void 0) return null;
+    if (typeof raw === "string" && REASON_PATTERN.test(raw)) return raw;
+    issues.push({ code: "outcome_reason_invalid", detail: field });
+    return null;
+  };
+  const parseState = (raw, field) => {
+    if (typeof raw === "string" && OCR_PHASE_STATES.includes(raw)) {
+      return raw;
+    }
+    issues.push({ code: "outcome_phase_state_unknown", detail: field });
+    return null;
+  };
+  const runStopCause = parseStopCause(value.run_stop_cause, "run_stop_cause");
+  if (value.run_stop_cause === void 0) {
+    issues.push({ code: "outcome_stop_cause_missing", detail: "run_stop_cause" });
+    return violation();
+  }
+  if (value.run_stop_cause !== null && value.run_stop_cause !== void 0 && runStopCause === null) {
+    return violation();
+  }
+  const groupingRaw = value.grouping;
+  if (!isRecord4(groupingRaw)) {
+    issues.push({ code: "outcome_grouping_missing", detail: "grouping" });
+    return violation();
+  }
+  const groupingState = parseState(groupingRaw.state, "grouping.state");
+  const groupingReason = parseReason(groupingRaw.reason, "grouping.reason");
+  if (groupingState === null) return violation();
+  const groupsRaw = value.groups;
+  if (!Array.isArray(groupsRaw)) {
+    issues.push({ code: "outcome_groups_missing", detail: "groups" });
+    return violation();
+  }
+  const seenPaths = /* @__PURE__ */ new Set();
+  const groups = groupsRaw.map((groupRaw, groupIndex) => {
+    const field = (name) => `groups[${groupIndex}].${name}`;
+    if (!isRecord4(groupRaw)) {
+      issues.push({ code: "outcome_group_invalid", detail: field("group") });
+      return violation();
+    }
+    const pathsRaw = groupRaw.paths;
+    const paths = [];
+    if (!Array.isArray(pathsRaw) || pathsRaw.length === 0) {
+      issues.push({ code: "outcome_group_paths_invalid", detail: field("paths") });
+    } else {
+      for (const path33 of pathsRaw) {
+        if (typeof path33 !== "string" || path33.length === 0) {
+          issues.push({ code: "outcome_group_paths_invalid", detail: field("paths") });
+          continue;
+        }
+        if (paths.includes(path33) || seenPaths.has(path33)) {
+          issues.push({ code: "outcome_group_paths_duplicate", detail: path33 });
+          continue;
+        }
+        paths.push(path33);
+        seenPaths.add(path33);
+      }
+    }
+    const mainCompleted = groupRaw.main_completed;
+    if (typeof mainCompleted !== "boolean") {
+      issues.push({
+        code: "outcome_main_completed_invalid",
+        detail: field("main_completed")
+      });
+      return violation();
+    }
+    const stopCause = parseStopCause(groupRaw.stop_cause, field("stop_cause"));
+    if (groupRaw.stop_cause === void 0) {
+      issues.push({
+        code: "outcome_stop_cause_missing",
+        detail: field("stop_cause")
+      });
+      return violation();
+    }
+    if (groupRaw.stop_cause !== null && groupRaw.stop_cause !== void 0 && stopCause === null) {
+      return violation();
+    }
+    const roundsRaw = groupRaw.rounds;
+    if (!isRecord4(roundsRaw)) {
+      issues.push({ code: "outcome_rounds_invalid", detail: field("rounds") });
+      return violation();
+    }
+    const roundCount = (raw) => Number.isSafeInteger(raw) && raw >= 0 ? raw : null;
+    const configured = roundCount(roundsRaw.configured);
+    const started = roundCount(roundsRaw.started);
+    const completed = roundCount(roundsRaw.completed);
+    if (configured === null || started === null || completed === null) {
+      issues.push({ code: "outcome_rounds_invalid", detail: field("rounds") });
+      return violation();
+    }
+    if (!(completed <= started && started <= configured)) {
+      issues.push({
+        code: "outcome_rounds_inconsistent",
+        detail: field("rounds")
+      });
+      return violation();
+    }
+    const phasesRaw = groupRaw.phases;
+    if (!isRecord4(phasesRaw)) {
+      issues.push({ code: "outcome_phases_invalid", detail: field("phases") });
+      return violation();
+    }
+    const parsePhase = (name) => {
+      const raw = phasesRaw[name];
+      if (!isRecord4(raw)) {
+        issues.push({ code: "outcome_phase_invalid", detail: field(`phases.${name}`) });
+        return null;
+      }
+      const state = parseState(raw.state, field(`phases.${name}.state`));
+      const reason = parseReason(raw.reason, field(`phases.${name}.reason`));
+      if (state === null) return null;
+      return Object.freeze({ state, reason });
+    };
+    const plan = parsePhase("plan");
+    const compression = parsePhase("compression");
+    const relocation = parsePhase("relocation");
+    const filter2 = parsePhase("filter");
+    const filterDecisionValidRaw = groupRaw.filter_decision_valid;
+    let filterDecisionValid = null;
+    if (filterDecisionValidRaw === void 0) {
+      issues.push({
+        code: "outcome_filter_decision_valid_invalid",
+        detail: field("filter_decision_valid")
+      });
+    } else if (filterDecisionValidRaw !== null && typeof filterDecisionValidRaw !== "boolean") {
+      issues.push({
+        code: "outcome_filter_decision_valid_invalid",
+        detail: field("filter_decision_valid")
+      });
+    } else if (filterDecisionValidRaw !== null) {
+      filterDecisionValid = filterDecisionValidRaw;
+    }
+    if (plan === null || compression === null || relocation === null || filter2 === null) {
+      return violation();
+    }
+    if (mainCompleted && stopCause !== null) {
+      issues.push({
+        code: "outcome_main_completed_contradiction",
+        detail: field("main_completed")
+      });
+    }
+    if (mainCompleted && completed === 0) {
+      issues.push({
+        code: "outcome_main_completed_contradiction",
+        detail: field("rounds.completed")
+      });
+    }
+    if (!mainCompleted && stopCause === null) {
+      issues.push({
+        code: "outcome_main_incomplete_without_stop",
+        detail: field("stop_cause")
+      });
+    }
+    if (filter2.state === "completed" && filterDecisionValid !== true) {
+      issues.push({
+        code: "outcome_filter_decision_contradiction",
+        detail: field("filter_decision_valid")
+      });
+    }
+    if (filterDecisionValid === false && filter2.state !== "failed" && filter2.state !== "cancelled") {
+      issues.push({
+        code: "outcome_filter_decision_contradiction",
+        detail: field("filter_decision_valid")
+      });
+    }
+    if (filter2.state === "not_applicable" && filterDecisionValid !== null) {
+      issues.push({
+        code: "outcome_filter_decision_contradiction",
+        detail: field("filter_decision_valid")
+      });
+    }
+    return Object.freeze({
+      paths: Object.freeze(paths),
+      mainCompleted,
+      stopCause,
+      rounds: Object.freeze({ configured, started, completed }),
+      phases: Object.freeze({ plan, compression, relocation, filter: filter2 }),
+      filterDecisionValid
+    });
+  });
+  if (issues.length > 0) return violation();
+  return Object.freeze({
+    schemaVersion: OCR_OUTCOME_SCHEMA_VERSION,
+    runStopCause,
+    grouping: Object.freeze({ state: groupingState, reason: groupingReason }),
+    groups: Object.freeze(groups)
+  });
+}
+var STOP_CAUSE_REASONS = {
+  max_rounds: "review_limit",
+  empty_rounds: "missing_required_main",
+  compression: "phase_failed",
+  token_budget: "late_round_stop",
+  prompt_budget: "late_round_stop",
+  provider_error: "missing_required_main",
+  input_error: "missing_required_main",
+  internal_error: "missing_required_main",
+  cancelled: "missing_required_main",
+  deadline: "missing_required_main"
+};
+function classifyOcrReviewOutcome(outcome) {
+  const reasons = /* @__PURE__ */ new Set();
+  if (outcome.runStopCause !== null) {
+    reasons.add(STOP_CAUSE_REASONS[outcome.runStopCause]);
+  }
+  if (outcome.grouping.state === "failed" || outcome.grouping.state === "cancelled") {
+    reasons.add("grouping_fallback");
+  }
+  for (const group of outcome.groups) {
+    if (!group.mainCompleted) {
+      reasons.add(
+        group.stopCause !== null ? STOP_CAUSE_REASONS[group.stopCause] : "missing_required_main"
+      );
+    }
+    const phases = [
+      group.phases.plan,
+      group.phases.compression,
+      group.phases.relocation,
+      group.phases.filter
+    ];
+    if (phases.some((phase) => phase.state === "failed" || phase.state === "cancelled")) {
+      reasons.add("phase_failed");
+    }
+    if (group.filterDecisionValid === false) {
+      reasons.add("invalid_filter_decision");
+    }
+    if (group.rounds.completed < group.rounds.started) {
+      reasons.add("late_round_stop");
+    }
+  }
+  return Object.freeze({
+    reasons: Object.freeze([...reasons].sort()),
+    partial: reasons.size > 0
+  });
+}
+function optionalInt(value) {
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+function optionalText(value) {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function sameSha(observed, expected) {
+  return typeof observed === "string" && observed.toLowerCase() === expected.toLowerCase();
+}
+function parseOcrNativeReviewResult(raw, admission) {
+  const issues = [];
+  const violation = () => {
+    throw new OcrNativeResultContractViolation(issues);
+  };
+  if (!isRecord4(raw)) {
+    issues.push({ code: "native_result_not_an_object", detail: "result" });
+    return violation();
+  }
+  const manifestRaw = raw.manifest;
+  if (!isRecord4(manifestRaw)) {
+    issues.push({ code: "native_manifest_missing", detail: "manifest" });
+    return violation();
+  }
+  const manifestInput = isRecord4(manifestRaw.input) ? manifestRaw.input : null;
+  if (manifestInput === null) {
+    issues.push({ code: "native_manifest_input_missing", detail: "manifest.input" });
+    return violation();
+  }
+  const manifest = Object.freeze({
+    schemaVersion: typeof manifestRaw.schema_version === "string" ? manifestRaw.schema_version : "",
+    operation: typeof manifestRaw.operation === "string" ? manifestRaw.operation : "",
+    terminalState: optionalText(manifestRaw.terminal_state),
+    input: Object.freeze({
+      mode: typeof manifestInput.mode === "string" ? manifestInput.mode : "",
+      resolvedBase: optionalText(manifestInput.resolved_base),
+      resolvedHead: optionalText(manifestInput.resolved_head)
+    })
+  });
+  if (manifest.schemaVersion !== "ocr.run-manifest/v1") {
+    issues.push({ code: "native_manifest_schema_version", detail: manifest.schemaVersion });
+  }
+  if (manifest.operation !== "review") {
+    issues.push({ code: "native_manifest_operation", detail: manifest.operation });
+  }
+  if (manifest.input.mode !== "range") {
+    issues.push({ code: "native_manifest_mode", detail: manifest.input.mode });
+  }
+  if (!sameSha(manifest.input.resolvedBase, admission.mergeBaseSha)) {
+    issues.push({ code: "native_manifest_refs_mismatch", detail: "resolved_base" });
+  }
+  if (!sameSha(manifest.input.resolvedHead, admission.headSha)) {
+    issues.push({ code: "native_manifest_refs_mismatch", detail: "resolved_head" });
+  }
+  const outcomeRaw = raw.reviewrouter_outcome;
+  if (outcomeRaw === void 0 || outcomeRaw === null) {
+    issues.push({ code: "managed_outcome_missing", detail: "reviewrouter_outcome" });
+    return violation();
+  }
+  let outcome;
+  try {
+    outcome = parseOcrReviewOutcome(outcomeRaw);
+  } catch (error2) {
+    if (error2 instanceof OcrManagedContractViolation) {
+      issues.push(...error2.issues);
+      return violation();
+    }
+    throw error2;
+  }
+  const llmRaw = isRecord4(raw.llm) ? raw.llm : null;
+  const summaryRaw = isRecord4(raw.summary) ? raw.summary : null;
+  const usage = Object.freeze({
+    inputTokens: summaryRaw ? optionalInt(summaryRaw.input_tokens) : null,
+    outputTokens: summaryRaw ? optionalInt(summaryRaw.output_tokens) : null,
+    totalTokens: summaryRaw ? optionalInt(summaryRaw.total_tokens) : null
+  });
+  const comments = [];
+  const commentsRaw = raw.comments;
+  if (commentsRaw !== void 0 && commentsRaw !== null) {
+    if (!Array.isArray(commentsRaw)) {
+      issues.push({ code: "native_comments_invalid", detail: "comments" });
+    } else {
+      commentsRaw.forEach((comment, index) => {
+        if (!isRecord4(comment)) {
+          issues.push({
+            code: "native_comment_invalid",
+            detail: `comments[${index}]`
+          });
+          return;
+        }
+        comments.push(
+          Object.freeze({
+            path: typeof comment.path === "string" ? comment.path : "",
+            content: typeof comment.content === "string" ? comment.content : "",
+            suggestionCode: optionalText(comment.suggestion_code),
+            existingCode: optionalText(comment.existing_code),
+            startLine: optionalInt(comment.start_line),
+            endLine: optionalInt(comment.end_line),
+            category: optionalText(comment.category),
+            severity: optionalText(comment.severity)
+            // Native thinking is intentionally never captured (§8.2).
+          })
+        );
+      });
+    }
+  }
+  const warnings = [];
+  const warningsRaw = raw.warnings;
+  if (Array.isArray(warningsRaw)) {
+    for (const warning2 of warningsRaw) {
+      if (typeof warning2 === "string") {
+        warnings.push(warning2);
+      } else if (isRecord4(warning2) && typeof warning2.message === "string") {
+        warnings.push(warning2.message);
+      }
+    }
+  }
+  if (issues.length > 0) return violation();
+  return Object.freeze({
+    status: optionalText(raw.status),
+    requestedModel: llmRaw ? optionalText(llmRaw.model) : null,
+    usage,
+    budgetExceeded: summaryRaw && typeof summaryRaw.budget_exceeded === "boolean" ? summaryRaw.budget_exceeded : false,
+    comments: Object.freeze(comments),
+    warnings: Object.freeze(warnings),
+    manifest,
+    outcome
+  });
+}
+
+// src/review-orchestration/infrastructure/ocr-review-normalization.ts
+var OCR_NORMALIZATION_LIMITS = Object.freeze({
+  maxPayloadBytes: 512 * 1024,
+  maxFindings: 200,
+  maxPathChars: 1024,
+  maxMessageChars: 16384,
+  maxTitleChars: 512
+});
+function normalizeEol(value) {
+  return value.split(/\r\n|\r|\n/u);
+}
+function verifyOcrSpan(input) {
+  const { existingCode, startLine, endLine } = input.comment;
+  if (existingCode === null)
+    return { verified: false, reason: "missing_existing_code" };
+  if (startLine === null || endLine === null || endLine < startLine) {
+    return { verified: false, reason: "invalid_range" };
+  }
+  const fileLines = normalizeEol(input.headContent);
+  if (startLine < 1 || endLine > fileLines.length) {
+    return { verified: false, reason: "invalid_range" };
+  }
+  const blockLines = normalizeEol(existingCode.replace(/\s+$/u, ""));
+  const headBlock = fileLines.slice(startLine - 1, endLine);
+  if (blockLines.length !== headBlock.length || blockLines.some((line, index) => line !== headBlock[index])) {
+    return { verified: false, reason: "content_mismatch" };
+  }
+  let occurrences = 0;
+  for (let index = 0; index + blockLines.length <= fileLines.length; index++) {
+    let matches = true;
+    for (let offset = 0; offset < blockLines.length; offset++) {
+      if (fileLines[index + offset] !== blockLines[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) occurrences++;
+    if (occurrences > 1) break;
+  }
+  if (occurrences !== 1) return { verified: false, reason: "ambiguous_match" };
+  if (input.diffPositions) {
+    for (let line = startLine; line <= endLine; line++) {
+      if (!input.diffPositions.has(line)) {
+        return { verified: false, reason: "outside_diff" };
+      }
+    }
+  }
+  return { verified: true, startLine, endLine };
+}
+var OcrOutputTooLargeError = class extends Error {
+  constructor(bound) {
+    super(`ocr_review_output_too_large: ${bound}`);
+    this.bound = bound;
+    this.name = "OcrOutputTooLargeError";
+  }
+};
+var SEVERITY_MAP = {
+  critical: "critical",
+  high: "major",
+  medium: "minor",
+  low: "minor"
+};
+function normalizeOcrRepoPath(raw) {
+  const path33 = raw.replace(/^\.\//u, "");
+  if (path33.length === 0 || path33.length > OCR_NORMALIZATION_LIMITS.maxPathChars || path33.includes("\\") || path33.includes("\0") || path33.startsWith("/") || path33.split("/").some((segment) => segment === ".." || segment === "")) {
+    return null;
+  }
+  return path33;
+}
+function plainTitleLine(content) {
+  const firstLine = content.split(/\r\n|\r|\n/u).map((line) => line.replace(/[^\P{Z}\u00a0]/gu, " ").trim()).find((line) => line.length > 0) ?? "";
+  return firstLine.replace(/[`#>*_~[\]]/gu, "").replace(/\s+/gu, " ").trim().slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
+}
+function normalizeOcrFindings(input) {
+  const findings = [];
+  const skipped = [];
+  const reasons = /* @__PURE__ */ new Set();
+  const assignedPaths = input.assignedPaths ? new Set(input.assignedPaths) : void 0;
+  input.comments.forEach((comment, index) => {
+    const path33 = normalizeOcrRepoPath(comment.path);
+    const content = comment.content.trim();
+    if (path33 === null || content.length === 0 || assignedPaths && !assignedPaths.has(path33)) {
+      skipped.push({ index, reason: "invalid_native_finding" });
+      return;
+    }
+    if (content.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
+      throw new OcrOutputTooLargeError("message");
+    }
+    const headContent = input.headFiles.get(path33);
+    const span = headContent !== void 0 ? verifyOcrSpan({
+      comment,
+      headContent,
+      ...input.diffPositions ? { diffPositions: input.diffPositions.get(path33) } : {}
+    }) : { verified: false, reason: "invalid_range" };
+    if (!span.verified && span.reason !== "missing_existing_code") {
+      reasons.add("unverified_native_span");
+    }
+    const mappedSeverity = comment.severity ? SEVERITY_MAP[comment.severity] : void 0;
+    const severity = mappedSeverity ?? "minor";
+    if (mappedSeverity === void 0) {
+      reasons.add("unclassified_native_severity");
+    }
+    findings.push({
+      file: path33,
+      ...span.verified ? {
+        startLine: span.startLine,
+        line: span.startLine,
+        endLine: span.endLine
+      } : {
+        // No current-line anchor for unverified spans: the existing
+        // normalizer maps line 0 to null and placement stays file/summary.
+        line: 0
+      },
+      severity,
+      title: plainTitleLine(content),
+      message: content,
+      category: comment.category ?? "correctness",
+      ...span.verified && comment.suggestionCode !== null ? { suggestion: comment.suggestionCode } : {}
+    });
+  });
+  if (findings.length > OCR_NORMALIZATION_LIMITS.maxFindings) {
+    throw new OcrOutputTooLargeError("findings");
+  }
+  for (const finding of findings) {
+    if (finding.file.length > OCR_NORMALIZATION_LIMITS.maxPathChars) {
+      throw new OcrOutputTooLargeError("path");
+    }
+    if (finding.message.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
+      throw new OcrOutputTooLargeError("message");
+    }
+  }
+  return Object.freeze({
+    findings: Object.freeze(findings),
+    diagnostics: Object.freeze({
+      skipped: Object.freeze(skipped),
+      reasons: Object.freeze([...reasons].sort()),
+      partialFlagsRequired: reasons.size > 0 || skipped.length > 0
+    })
+  });
+}
+
+// src/review-orchestration/infrastructure/ocr-review-managed-run.ts
+var OCR_RESULT_FILE_LIMIT_BYTES = 16 * 1024 * 1024;
+var OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES = 64 * 1024;
+function requirePositiveSetting(value, field) {
+  if (value === void 0) return;
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`review_action_v2_ocr_limit_invalid:${field}`);
+  }
+}
+function buildOcrReviewArgv(input) {
+  requirePositiveSetting(input.limits.timeoutMinutes, "timeout");
+  requirePositiveSetting(input.limits.maxTokens, "max_tokens");
+  requirePositiveSetting(input.limits.maxTokensBudget, "max_tokens_budget");
+  if (!Number.isSafeInteger(input.limits.requestTimeoutSec) || input.limits.requestTimeoutSec <= 0) {
+    throw new Error("review_action_v2_ocr_limit_invalid:timeout_sec");
+  }
+  if (!/^[a-f0-9]{40}$/i.test(input.mergeBaseSha) || !/^[a-f0-9]{40}$/i.test(input.headSha)) {
+    throw new Error("review_action_v2_ocr_argv_refs_invalid");
+  }
+  const argv = [
+    "review",
+    "--reviewrouter-managed",
+    "--repo",
+    input.repoPath,
+    "--from",
+    input.mergeBaseSha.toLowerCase(),
+    "--to",
+    input.headSha.toLowerCase(),
+    "--provider",
+    "reviewrouter",
+    "--model",
+    input.model,
+    "--rule",
+    input.rulePath
+  ];
+  if (input.backgroundPath !== null) {
+    argv.push("--background-file", input.backgroundPath);
+  }
+  argv.push(
+    "--effort",
+    input.effort,
+    "--concurrency",
+    "1",
+    "--format",
+    "json",
+    "--audience",
+    "agent"
+  );
+  if (input.limits.timeoutMinutes !== void 0) {
+    argv.push("--timeout", String(input.limits.timeoutMinutes));
+  }
+  if (input.limits.maxTokens !== void 0) {
+    argv.push("--max-tokens", String(input.limits.maxTokens));
+  }
+  if (input.limits.maxTokensBudget !== void 0) {
+    argv.push("--max-tokens-budget", String(input.limits.maxTokensBudget));
+  }
+  if (input.preview) argv.push("--preview");
+  argv.push("--output", input.outputPath);
+  return Object.freeze(argv);
+}
+function buildOcrManagedConfigJson(input) {
+  if (!/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(input.baseUrl)) {
+    throw new Error("review_action_v2_ocr_config_base_url_invalid");
+  }
+  if (!/^[A-Za-z0-9._~+/=-]{16,512}$/.test(input.rawCapability)) {
+    throw new Error("review_action_v2_ocr_config_capability_invalid");
+  }
+  requirePositiveSetting(input.limits.timeoutMinutes, "timeout");
+  const extraBody = { service_tier: "default" };
+  if (input.modelReasoningEffort !== null) {
+    extraBody.reasoning = { effort: input.modelReasoningEffort };
+  }
+  const provider = {
+    protocol: "openai-responses",
+    url: input.baseUrl,
+    api_key: input.rawCapability,
+    model: input.model,
+    timeout_sec: input.limits.requestTimeoutSec,
+    extra_body: extraBody
+  };
+  const config = {
+    provider: "reviewrouter",
+    custom_providers: { reviewrouter: provider },
+    telemetry: { enabled: false }
+  };
+  if (input.language !== null) config.language = input.language;
+  return `${JSON.stringify(config, null, 2)}
+`;
+}
+function extractRawLoopbackCapability(authorizationValue) {
+  const match2 = authorizationValue.match(
+    /^Bearer ([A-Za-z0-9._~+/=-]{16,512})$/
+  );
+  if (!match2) {
+    throw new Error("review_action_v2_ocr_capability_format_invalid");
+  }
+  return match2[1];
+}
+function buildOcrChildEnvironment(input) {
+  if (!/^Bearer [A-Za-z0-9._~+/=-]{16,512}$/.test(input.capabilityAuthorization)) {
+    throw new Error("review_action_v2_ocr_capability_format_invalid");
+  }
+  return Object.freeze({
+    PATH: input.path ?? "/usr/local/bin:/usr/bin:/bin",
+    HOME: input.homeDirectory,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_TERMINAL_PROMPT: "0",
+    REVIEWROUTER_LOCAL_MODEL_TOKEN: input.capabilityAuthorization
+  });
+}
+async function readOcrOutputFileAfterClose(readFile15, statSize, outputPath) {
+  const size = await statSize(outputPath);
+  if (!Number.isSafeInteger(size) || size < 0) {
+    throw new Error("review_action_v2_ocr_output_stat_invalid");
+  }
+  if (size > OCR_RESULT_FILE_LIMIT_BYTES) {
+    throw new OcrOutputTooLargeError("result_file");
+  }
+  const bytes = await readFile15(outputPath);
+  if (bytes.length > OCR_RESULT_FILE_LIMIT_BYTES) {
+    throw new OcrOutputTooLargeError("result_file");
+  }
+  return bytes;
+}
+function truncateDiagnosticTail(value) {
+  const bytes = Buffer.from(value, "utf8");
+  if (bytes.length <= OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES) return value;
+  return bytes.subarray(0, OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES).toString("utf8");
+}
+var OcrReviewAcceptanceError = class extends Error {
+  constructor(code, detail) {
+    super(`review_action_v2_ocr_${code}${detail ? `:${detail}` : ""}`);
+    this.code = code;
+    this.name = "OcrReviewAcceptanceError";
+  }
+};
+function acceptOcrManagedReviewResult(input) {
+  if (input.effectFacts && input.effectFacts.effect !== "none") {
+    if (input.effectFacts.effect === "not_dispatched") {
+      throw new OcrReviewAcceptanceError(
+        "review_agent_not_dispatched",
+        input.effectFacts.effect
+      );
+    }
+    throw new OcrReviewAcceptanceError(
+      "gateway_effect_unknown",
+      input.effectFacts.effect
+    );
+  }
+  if (input.process.spawnError !== void 0 || input.process.exitCode !== 0 || input.process.signal !== null || !input.process.closed) {
+    throw new OcrReviewAcceptanceError(
+      "process_failed",
+      `exit=${input.process.exitCode ?? "none"}${input.process.signal ? ` signal=${input.process.signal}` : ""}${input.process.spawnError ? " spawn_error" : ""}`
+    );
+  }
+  let native;
+  let raw;
+  try {
+    raw = JSON.parse(input.resultBytes.toString("utf8"));
+  } catch {
+    throw new OcrReviewAcceptanceError("result_contract", "unparsable_json");
+  }
+  try {
+    native = parseOcrNativeReviewResult(raw, input.admission);
+  } catch (error2) {
+    if (error2 instanceof OcrNativeResultContractViolation) {
+      throw new OcrReviewAcceptanceError(
+        "result_contract",
+        error2.issues.map((issue) => issue.code).join(",")
+      );
+    }
+    throw error2;
+  }
+  if (input.observedRequestCount === 0) {
+    throw new OcrReviewAcceptanceError("no_model_requests", "");
+  }
+  if (input.observedActualModel === void 0) {
+    throw new OcrReviewAcceptanceError("actual_model_missing", "");
+  }
+  const expected = new Set(input.expectedPaths);
+  const observed = /* @__PURE__ */ new Set();
+  for (const group of native.outcome.groups) {
+    for (const path33 of group.paths) {
+      if (!expected.has(path33) || observed.has(path33)) {
+        throw new OcrReviewAcceptanceError("coverage_mismatch", path33);
+      }
+      observed.add(path33);
+    }
+  }
+  const uncoveredPaths = Object.freeze(
+    [...expected].filter((path33) => !observed.has(path33)).sort()
+  );
+  let normalized;
+  try {
+    normalized = normalizeOcrFindings({
+      comments: native.comments,
+      assignedPaths: input.expectedPaths,
+      headFiles: input.headFiles,
+      ...input.diffPositions ? { diffPositions: input.diffPositions } : {}
+    });
+  } catch (error2) {
+    if (error2 instanceof OcrOutputTooLargeError) {
+      throw new OcrReviewAcceptanceError(
+        "result_contract",
+        `bound=${error2.bound}`
+      );
+    }
+    throw error2;
+  }
+  const classification = classifyOcrReviewOutcome(native.outcome);
+  const reasons = [
+    .../* @__PURE__ */ new Set([
+      ...classification.reasons,
+      ...normalized.diagnostics.reasons,
+      ...uncoveredPaths.length > 0 ? ["missing_paths"] : []
+    ])
+  ].sort();
+  const usage = {
+    promptTokens: native.usage.inputTokens ?? 0,
+    completionTokens: native.usage.outputTokens ?? 0,
+    totalTokens: native.usage.totalTokens ?? (native.usage.inputTokens ?? 0) + (native.usage.outputTokens ?? 0)
+  };
+  return Object.freeze({
+    native,
+    classification,
+    normalized,
+    actualModel: input.observedActualModel,
+    usage,
+    reasons: Object.freeze(reasons),
+    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0,
+    uncoveredPaths
+  });
+}
+
+// src/codex-oauth/ocr-managed-bootstrap.ts
+function readApprovedReviewAgentKind(json2, digest3) {
+  if (Buffer.byteLength(json2) > 16384 || !/^[a-f0-9]{64}$/.test(digest3) || (0, import_node_crypto2.createHash)("sha256").update(json2).digest("hex") !== digest3) {
+    throw new Error("review_agent_profile_digest_mismatch");
+  }
+  const row = JSON.parse(json2);
+  const kind = row?.agentKind;
+  if (kind !== "codex" && kind !== "claude" && kind !== "ocr") {
+    throw new Error("review_agent_profile_invalid");
+  }
+  return kind;
+}
+function readApprovedOcrReviewAgent(json2, digest3) {
+  if (readApprovedReviewAgentKind(json2, digest3) !== "ocr") {
+    throw new Error("review_agent_profile_invalid");
+  }
+  const row = JSON.parse(json2);
+  const keys = [
+    "agentKind",
+    "binarySha256",
+    "cancellation",
+    "contextGateway",
+    "modelTransports",
+    "packageVersion",
+    "profileRef"
+  ];
+  const transports = row.modelTransports;
+  if (Object.keys(row).sort().join(",") !== keys.join(",") || typeof row.profileRef !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(row.profileRef) || typeof row.binarySha256 !== "string" || !/^[a-f0-9]{64}$/.test(row.binarySha256) || typeof row.packageVersion !== "string" || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(row.packageVersion) || row.contextGateway !== false || row.cancellation !== true || !Array.isArray(transports) || transports.length !== 1 || transports[0] !== "account_gateway") {
+    throw new Error("review_agent_profile_capabilities_invalid");
+  }
+  return Object.freeze({
+    profileRef: row.profileRef,
+    agentKind: "ocr",
+    binarySha256: row.binarySha256,
+    packageVersion: row.packageVersion,
+    modelTransports: Object.freeze(["account_gateway"]),
+    contextGateway: false,
+    cancellation: true
+  });
+}
+function extractReportedVersion(stdout) {
+  const tokens = (stdout.split("\n")[0] ?? "").trim().split(/\s+/u);
+  const versions = tokens.filter(
+    (token) => /^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/u.test(token)
+  );
+  return versions.length === 1 ? versions[0] : tokens.join(" ");
+}
+async function verifyApprovedOcrBinary(input) {
+  const env = input.env ?? process.env;
+  const binaryPath = env.REVIEWROUTER_OCR_BINARY;
+  if (!binaryPath || !path16.isAbsolute(binaryPath)) {
+    throw new Error("review_action_v2_ocr_binary_unavailable");
+  }
+  input.signal?.throwIfAborted();
+  const binaryBytes = await fs19.readFile(binaryPath);
+  assertApprovedReviewAgentBinary(input.approvedAgent, binaryBytes);
+  const version = await (0, import_util6.promisify)(import_child_process10.execFile)(binaryPath, ["--version"], {
+    signal: input.signal,
+    killSignal: "SIGKILL",
+    timeout: 1e4,
+    maxBuffer: 16384,
+    env: { PATH: env.PATH, HOME: os7.tmpdir() }
+  });
+  assertApprovedReviewAgentVersion(
+    input.approvedAgent,
+    extractReportedVersion(version.stdout)
+  );
+  input.signal?.throwIfAborted();
+  return binaryPath;
+}
+var OCR_BINARY_ASSET_LIMIT_BYTES = 128 * 1024 * 1024;
+var OCR_BINARY_ASSET_DOWNLOAD_TIMEOUT_MS = 12e4;
+async function resolveApprovedOcrBinary(input) {
+  const env = input.env ?? process.env;
+  input.signal?.throwIfAborted();
+  if (env.REVIEWROUTER_OCR_BINARY) {
+    return {
+      binaryPath: await verifyApprovedOcrBinary(input),
+      cleanup: async () => {
+      }
+    };
+  }
+  if (process.platform !== "linux" || process.arch !== "x64") {
+    throw new Error("review_action_v2_ocr_asset_platform_unsupported");
+  }
+  const { packageVersion, binarySha256 } = input.approvedAgent;
+  if (packageVersion.length > 128 || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/u.test(packageVersion) || !/^[a-f0-9]{64}$/u.test(binarySha256)) {
+    throw new Error("review_action_v2_ocr_asset_identity_invalid");
+  }
+  const directory = await fs19.mkdtemp(
+    path16.join(env.RUNNER_TEMP || os7.tmpdir(), "reviewrouter-ocr-binary-")
+  );
+  let cleaned = false;
+  const cleanup = async () => {
+    if (cleaned) return;
+    await fs19.rm(directory, { recursive: true, force: true });
+    cleaned = true;
+  };
+  try {
+    await fs19.chmod(directory, 448);
+    const binaryPath = path16.join(directory, "opencodereview");
+    const timeout = new AbortController();
+    const signal = input.signal ? AbortSignal.any([input.signal, timeout.signal]) : timeout.signal;
+    const timer = setTimeout(
+      () => timeout.abort(new Error("review_action_v2_ocr_asset_download_timeout")),
+      OCR_BINARY_ASSET_DOWNLOAD_TIMEOUT_MS
+    );
+    try {
+      signal.throwIfAborted();
+      const response = await (input.fetchImpl ?? fetch)(
+        `https://github.com/777genius/review-router/releases/download/ocr-v${packageVersion}/opencodereview-linux-amd64`,
+        {
+          signal,
+          credentials: "omit",
+          headers: { Accept: "application/octet-stream" }
+        }
+      );
+      signal.throwIfAborted();
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error(`review_action_v2_ocr_asset_http:${response.status}`);
+      }
+      await writeOcrAsset(response, binaryPath, signal);
+    } finally {
+      clearTimeout(timer);
+    }
+    input.signal?.throwIfAborted();
+    await fs19.chmod(binaryPath, 448);
+    await verifyApprovedOcrBinary({
+      approvedAgent: input.approvedAgent,
+      signal: input.signal,
+      env: { ...env, REVIEWROUTER_OCR_BINARY: binaryPath }
+    });
+    return { binaryPath, cleanup };
+  } catch (error2) {
+    await cleanup();
+    throw error2;
+  }
+}
+async function writeOcrAsset(response, binaryPath, signal) {
+  if (!response.body)
+    throw new Error("review_action_v2_ocr_asset_body_missing");
+  const reader = response.body.getReader();
+  const cancel = () => {
+    void reader.cancel(signal.reason).catch(() => void 0);
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  let file;
+  try {
+    signal.throwIfAborted();
+    const declaredBytes = Number(response.headers.get("content-length"));
+    if (declaredBytes > OCR_BINARY_ASSET_LIMIT_BYTES) {
+      throw new Error("review_action_v2_ocr_asset_too_large");
+    }
+    file = await fs19.open(binaryPath, "wx", 384);
+    let bytes = 0;
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+      signal.throwIfAborted();
+      bytes += chunk.value.byteLength;
+      if (bytes > OCR_BINARY_ASSET_LIMIT_BYTES) {
+        throw new Error("review_action_v2_ocr_asset_too_large");
+      }
+      await file.writeFile(chunk.value);
+    }
+    signal.throwIfAborted();
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    await reader.cancel().catch(() => void 0);
+    reader.releaseLock();
+    await file?.close();
+  }
+}
+async function prepareOcrManagedRun(input) {
+  const env = input.env ?? process.env;
+  const binaryPath = await verifyApprovedOcrBinary({
+    approvedAgent: input.approvedAgent,
+    ...input.signal ? { signal: input.signal } : {},
+    env
+  });
+  const runDirectory = await fs19.mkdtemp(
+    path16.join(process.env.RUNNER_TEMP || os7.tmpdir(), "reviewrouter-ocr-run-")
+  );
+  try {
+    await fs19.chmod(runDirectory, 448);
+    const homeDirectory = path16.join(runDirectory, "home");
+    await fs19.mkdir(path16.join(homeDirectory, ".opencodereview"), {
+      recursive: true,
+      mode: 448
+    });
+    await fs19.chmod(homeDirectory, 448);
+    const configPath = path16.join(
+      homeDirectory,
+      ".opencodereview",
+      "config.json"
+    );
+    await fs19.writeFile(
+      configPath,
+      buildOcrManagedConfigJson({
+        baseUrl: input.baseUrl,
+        rawCapability: input.rawCapability,
+        model: input.model,
+        limits: { requestTimeoutSec: input.requestTimeoutSec },
+        modelReasoningEffort: input.modelReasoningEffort,
+        language: input.language
+      }),
+      { mode: 384 }
+    );
+    const rulePath = path16.join(runDirectory, "rule.json");
+    await fs19.writeFile(rulePath, "", { mode: 384 });
+    const backgroundPath = path16.join(runDirectory, "background.md");
+    await fs19.writeFile(backgroundPath, "", { mode: 384 });
+    let cleaned = false;
+    const cleanup = async () => {
+      if (cleaned) return;
+      cleaned = true;
+      await fs19.rm(runDirectory, { recursive: true, force: true });
+    };
+    return Object.freeze({
+      binaryPath,
+      runDirectory,
+      homeDirectory,
+      configPath,
+      rulePath,
+      backgroundPath,
+      cleanup
+    });
+  } catch (error2) {
+    await fs19.rm(runDirectory, { recursive: true, force: true });
+    throw error2;
+  }
+}
+
+// src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
+var import_child_process12 = require("child_process");
+var import_util7 = require("util");
+
 // src/review-investigation/infrastructure/review-agent-process-runner.ts
-var import_child_process10 = require("child_process");
+var import_child_process11 = require("child_process");
 var NodeReviewAgentProcessRunner = class {
   active = /* @__PURE__ */ new Map();
   async run(request) {
@@ -97493,7 +98772,7 @@ var NodeReviewAgentProcessRunner = class {
       }
       let child;
       try {
-        child = (0, import_child_process10.spawn)(request.binary, request.args, {
+        child = (0, import_child_process11.spawn)(request.binary, request.args, {
           cwd: request.cwd,
           env: { ...request.environment },
           detached: true,
@@ -98235,9 +99514,9 @@ var CodexAppServerProtocolClient = class {
       }
       return;
     }
-    const completed = item.status === "completed" && item.error === null && isRecord4(item.result);
-    const failedWithResult = item.status === "failed" && item.error === null && isRecord4(item.result);
-    const failedWithTransportError = item.status === "failed" && item.result === null && isRecord4(item.error) && hasOnlyKeys(item.error, ["message"]) && typeof item.error.message === "string" && Buffer.byteLength(item.error.message, "utf8") <= MAX_NOTIFICATION_STRING_BYTES;
+    const completed = item.status === "completed" && item.error === null && isRecord5(item.result);
+    const failedWithResult = item.status === "failed" && item.error === null && isRecord5(item.result);
+    const failedWithTransportError = item.status === "failed" && item.result === null && isRecord5(item.error) && hasOnlyKeys(item.error, ["message"]) && typeof item.error.message === "string" && Buffer.byteLength(item.error.message, "utf8") <= MAX_NOTIFICATION_STRING_BYTES;
     if (!completed && !failedWithResult && !failedWithTransportError) {
       throw streamFailure();
     }
@@ -98656,7 +99935,7 @@ function withProtocolProcessDetail(failure, origin, validatedCodexErrorInfo) {
   if (failure.failureClass !== "process_failure" /* ProcessFailure */ || failure.message !== "review_agent_process_failure") {
     return failure;
   }
-  const variant = typeof validatedCodexErrorInfo === "string" ? validatedCodexErrorInfo : isRecord4(validatedCodexErrorInfo) ? Object.keys(validatedCodexErrorInfo)[0] : void 0;
+  const variant = typeof validatedCodexErrorInfo === "string" ? validatedCodexErrorInfo : isRecord5(validatedCodexErrorInfo) ? Object.keys(validatedCodexErrorInfo)[0] : void 0;
   const suffix = variant && (CODEX_ERROR_INFO_STRING_VARIANTS.has(variant) || CODEX_ERROR_INFO_HTTP_VARIANTS.has(variant) || variant === "activeTurnNotSteerable") ? `_${variant.toLowerCase()}` : "";
   return new ReviewAgentExecutionError(
     failure.failureClass,
@@ -98711,10 +99990,10 @@ function normalizeProtocolFailure(error2) {
   return error2 instanceof ReviewAgentExecutionError ? error2 : streamFailure();
 }
 function requireRecord2(value, _field) {
-  if (!isRecord4(value)) throw streamFailure();
+  if (!isRecord5(value)) throw streamFailure();
   return value;
 }
-function isRecord4(value) {
+function isRecord5(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 function requireRequestId(value) {
@@ -98833,7 +100112,7 @@ function validateBoundedJson(value) {
       }
       continue;
     }
-    if (!isRecord4(candidate)) throw streamFailure();
+    if (!isRecord5(candidate)) throw streamFailure();
     const prototype = Object.getPrototypeOf(candidate);
     if (prototype !== Object.prototype && prototype !== null) {
       throw streamFailure();
@@ -98876,7 +100155,7 @@ function hasAbsentOrNullProperty(value, key) {
   return !Object.prototype.hasOwnProperty.call(value, key) || value[key] === null;
 }
 function isReadOnlySandbox(value) {
-  return isRecord4(value) && value.type === "readOnly" && value.networkAccess === false;
+  return isRecord5(value) && value.type === "readOnly" && value.networkAccess === false;
 }
 function safeJson(value) {
   try {
@@ -99086,7 +100365,7 @@ var NodeCodexAppServerTurnRunner = class {
       if (remainingMs < 1) throw timeoutFailure();
       let child;
       try {
-        child = (0, import_child_process11.spawn)(request.binary, [...request.args], {
+        child = (0, import_child_process12.spawn)(request.binary, [...request.args], {
           cwd: request.cwd,
           env: { ...request.environment },
           detached: true,
@@ -99153,7 +100432,7 @@ var NodeCodexAppServerVersionProbe = class {
     return new Promise((resolve5, reject) => {
       let child;
       try {
-        child = (0, import_child_process11.spawn)(request.binary, ["--version"], {
+        child = (0, import_child_process12.spawn)(request.binary, ["--version"], {
           cwd: request.cwd,
           env: { ...request.environment },
           detached: false,
@@ -99360,7 +100639,7 @@ var CodexAppServerChildTurn = class {
     if (line.byteLength === 0) return;
     let decoded;
     try {
-      decoded = new import_util6.TextDecoder("utf-8", {
+      decoded = new import_util7.TextDecoder("utf-8", {
         fatal: true,
         ignoreBOM: true
       }).decode(line);
@@ -100150,28 +101429,28 @@ function tomlStringArray2(values) {
 }
 
 // src/codex-oauth/safe-checkout.ts
-var import_child_process12 = require("child_process");
-var fs19 = __toESM(require("fs/promises"));
-var os7 = __toESM(require("os"));
-var path17 = __toESM(require("path"));
+var import_child_process13 = require("child_process");
+var fs20 = __toESM(require("fs/promises"));
+var os8 = __toESM(require("os"));
+var path18 = __toESM(require("path"));
 async function createIsolatedCheckoutWorkspace(input) {
-  const runnerTempPath = input.runnerTempPath || os7.tmpdir();
-  await fs19.mkdir(runnerTempPath, { recursive: true, mode: 448 });
-  const realRunnerTempPath = await fs19.realpath(runnerTempPath);
-  const workspacePath = await fs19.mkdtemp(
-    path17.join(realRunnerTempPath, "reviewrouter-pr-")
+  const runnerTempPath = input.runnerTempPath || os8.tmpdir();
+  await fs20.mkdir(runnerTempPath, { recursive: true, mode: 448 });
+  const realRunnerTempPath = await fs20.realpath(runnerTempPath);
+  const workspacePath = await fs20.mkdtemp(
+    path18.join(realRunnerTempPath, "reviewrouter-pr-")
   );
   try {
-    await fs19.chmod(workspacePath, 448);
+    await fs20.chmod(workspacePath, 448);
     if (input.githubWorkspacePath) {
-      const githubWorkspacePath = await fs19.realpath(input.githubWorkspacePath);
+      const githubWorkspacePath = await fs20.realpath(input.githubWorkspacePath);
       if (pathsOverlap(workspacePath, githubWorkspacePath)) {
         throw new Error("codex_oauth_checkout_workspace_not_isolated");
       }
     }
     return workspacePath;
   } catch (error2) {
-    await fs19.rm(workspacePath, { recursive: true, force: true }).catch(() => {
+    await fs20.rm(workspacePath, { recursive: true, force: true }).catch(() => {
       warning("Isolated checkout cleanup failed; removal unconfirmed");
     });
     throw error2;
@@ -100181,8 +101460,9 @@ async function safeCheckoutRepository(input) {
   input.signal?.throwIfAborted();
   assertRepositoryFullName(input.repository);
   assertFullSha(input.headSha);
+  if (input.mergeBaseSha !== void 0) assertFullSha(input.mergeBaseSha);
   await assertWorkspaceEmpty(input.workspacePath);
-  const gitHome = await fs19.mkdtemp(path17.join(os7.tmpdir(), "reviewrouter-git-"));
+  const gitHome = await fs20.mkdtemp(path18.join(os8.tmpdir(), "reviewrouter-git-"));
   let failed = false;
   try {
     await runGit2(["init", "."], input.workspacePath, gitHome, input.signal);
@@ -100223,13 +101503,19 @@ async function safeCheckoutRepository(input) {
         "fetch",
         "--no-tags",
         "--no-recurse-submodules",
-        "--depth=1",
+        // Native OCR recomputes merge-base, so two shallow endpoints are not
+        // sufficient. Fetch only the captured range refs, with their ancestry.
+        ...input.mergeBaseSha === void 0 ? ["--depth=1"] : [],
         "origin",
-        input.headSha
+        input.headSha,
+        ...input.mergeBaseSha === void 0 ? [] : [input.mergeBaseSha]
       ],
       input.workspacePath,
       gitHome,
-      input.signal
+      input.signal,
+      // Range ancestry can be much larger than a shallow checkout. Keep its
+      // dedicated budget bounded by the authoritative execution deadline.
+      input.mergeBaseSha === void 0 ? 6e4 : 3e5
     );
     await runGit2(
       [
@@ -100249,24 +101535,30 @@ async function safeCheckoutRepository(input) {
     failed = true;
     throw error2;
   } finally {
-    await fs19.rm(gitHome, { recursive: true, force: true }).catch((error2) => {
+    await fs20.rm(gitHome, { recursive: true, force: true }).catch((error2) => {
       warning("Git home cleanup failed; removal unconfirmed");
       if (!failed) throw error2;
     });
   }
 }
 async function assertWorkspaceEmpty(workspacePath) {
-  await fs19.mkdir(workspacePath, { recursive: true, mode: 448 });
-  const entries = await fs19.readdir(workspacePath);
+  await fs20.mkdir(workspacePath, { recursive: true, mode: 448 });
+  const entries = await fs20.readdir(workspacePath);
   const unsafeEntries = entries.filter((entry) => entry !== ".git");
   if (unsafeEntries.length > 0) {
     throw new Error("codex_oauth_workspace_not_empty_before_checkout");
   }
 }
-function runGit2(args, cwd, home, signal) {
+function runGit2(args, cwd, home, signal, timeoutMs = 6e4) {
   signal?.throwIfAborted();
+  const boundedTimeoutMs = Math.min(
+    timeoutMs,
+    createExecutionDeadlineFromEnvironment().remainingMs()
+  );
+  if (boundedTimeoutMs <= 0)
+    throw new Error("account_gateway_checkout_timeout");
   return new Promise((resolve5, reject) => {
-    const child = (0, import_child_process12.spawn)("git", args, {
+    const child = (0, import_child_process13.spawn)("git", args, {
       cwd,
       detached: signal !== void 0 && process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
@@ -100292,7 +101584,7 @@ function runGit2(args, cwd, home, signal) {
     };
     signal?.addEventListener("abort", stop, { once: true });
     if (signal?.aborted) stop();
-    const timer = signal ? setTimeout(stop, 6e4) : void 0;
+    const timer = setTimeout(stop, boundedTimeoutMs);
     const finish = () => {
       clearTimeout(timer);
       signal?.removeEventListener("abort", stop);
@@ -100336,7 +101628,7 @@ function assertRepositoryFullName(value) {
   }
 }
 function assertFullSha(value) {
-  if (!/^[a-f0-9]{40}$/i.test(value)) {
+  if (value.length !== 40 || !/^[a-f0-9]{40}$/i.test(value)) {
     throw new Error("codex_oauth_invalid_head_sha");
   }
 }
@@ -100344,8 +101636,8 @@ function pathsOverlap(left, right) {
   return pathIsWithin(left, right) || pathIsWithin(right, left);
 }
 function pathIsWithin(parent, candidate) {
-  const relative4 = path17.relative(parent, candidate);
-  return relative4 === "" || !relative4.startsWith(`..${path17.sep}`) && relative4 !== ".." && !path17.isAbsolute(relative4);
+  const relative4 = path18.relative(parent, candidate);
+  return relative4 === "" || !relative4.startsWith(`..${path18.sep}`) && relative4 !== ".." && !path18.isAbsolute(relative4);
 }
 function safeGitError(value) {
   return value.replace(/x-access-token:[^@\s]+@/g, "x-access-token:[redacted]@").replace(
@@ -104119,7 +105411,7 @@ function looksLikePlaintextAuthJson(value) {
 }
 
 // src/codex-oauth/runtime.ts
-var path18 = __toESM(require("path"));
+var path19 = __toESM(require("path"));
 async function runCodexOAuthRotatingRuntime(input, ports) {
   let refreshed;
   let preparedCodexCli;
@@ -104177,9 +105469,9 @@ async function runCodexOAuthRotatingRuntime(input, ports) {
     if (preparedCodexCli) {
       previousCodexBinary = process.env.REVIEWROUTER_CODEX_BINARY;
       previousPath = process.env.PATH;
-      const codexBinDir = path18.dirname(preparedCodexCli.binaryPath);
+      const codexBinDir = path19.dirname(preparedCodexCli.binaryPath);
       process.env.REVIEWROUTER_CODEX_BINARY = preparedCodexCli.binaryPath;
-      process.env.PATH = previousPath ? `${codexBinDir}${path18.delimiter}${previousPath}` : codexBinDir;
+      process.env.PATH = previousPath ? `${codexBinDir}${path19.delimiter}${previousPath}` : codexBinDir;
       preparedCodexCliEnvApplied = true;
     }
     const restoredAuth = readCodexRotatingAuthInput().authJsonBytes;
@@ -104372,6 +105664,8 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
   let codexHome;
   let cli;
   let bridge;
+  let ocrRun;
+  let ocrBinary;
   let reason = "failed";
   const onSignal = () => {
     reason = "cancelled";
@@ -104421,45 +105715,64 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     phase = "checkout_capability";
     const capability = await readCapability();
     run2.signal.throwIfAborted();
-    const agentProfile = readApprovedReviewAgent(
-      capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
-      capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
+    const agentProfileJson = capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON;
+    const agentProfileDigest = capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST;
+    const agentKind = readApprovedReviewAgentKind(
+      agentProfileJson,
+      agentProfileDigest
     );
-    phase = "prepare_cli";
-    cli = await prepareCodexCliBeforeAuthRead({
-      signal: run2.signal,
-      approvedAgent: agentProfile,
-      logger: { info, warn: warning }
-    });
-    phase = "version";
-    const version = await (0, import_util7.promisify)(import_child_process13.execFile)(cli.binaryPath, ["--version"], {
-      signal: run2.signal,
-      killSignal: "SIGKILL",
-      timeout: 1e4,
-      maxBuffer: 16384,
-      env: { PATH: process.env.PATH, HOME: os8.tmpdir() }
-    });
-    assertApprovedReviewAgentVersion(
-      agentProfile,
-      version.stdout.trim().replace(/^codex-cli /, "")
-    );
-    phase = "negotiate";
-    await new CodexReviewAgentAdapter(new NodeReviewAgentProcessRunner(), {
-      binary: cli.binaryPath,
-      executionSessions: {
-        resolve: () => {
-          throw new Error("review_agent_precheckout_session_unavailable");
+    let ocrAgent;
+    if (agentKind === "ocr") {
+      ocrAgent = readApprovedOcrReviewAgent(
+        agentProfileJson,
+        agentProfileDigest
+      );
+      phase = "prepare_ocr";
+      ocrBinary = await resolveApprovedOcrBinary({
+        approvedAgent: ocrAgent,
+        signal: run2.signal
+      });
+    } else {
+      const agentProfile = readApprovedReviewAgent(
+        agentProfileJson,
+        agentProfileDigest
+      );
+      phase = "prepare_cli";
+      cli = await prepareCodexCliBeforeAuthRead({
+        signal: run2.signal,
+        approvedAgent: agentProfile,
+        logger: { info, warn: warning }
+      });
+      phase = "version";
+      const version = await (0, import_util8.promisify)(import_child_process14.execFile)(cli.binaryPath, ["--version"], {
+        signal: run2.signal,
+        killSignal: "SIGKILL",
+        timeout: 1e4,
+        maxBuffer: 16384,
+        env: { PATH: process.env.PATH, HOME: os9.tmpdir() }
+      });
+      assertApprovedReviewAgentVersion(
+        agentProfile,
+        version.stdout.trim().replace(/^codex-cli /, "")
+      );
+      phase = "negotiate";
+      await new CodexReviewAgentAdapter(new NodeReviewAgentProcessRunner(), {
+        binary: cli.binaryPath,
+        executionSessions: {
+          resolve: () => {
+            throw new Error("review_agent_precheckout_session_unavailable");
+          }
         }
-      }
-    }).negotiate({
-      providerKind: "codex" /* Codex */,
-      executionProfile: "gateway_attested_agent_v1" /* GatewayAttestedAgentV1 */,
-      minimumConfinement: "gateway_only" /* GatewayOnly */,
-      requireActualModelAttribution: true,
-      requireUsageAttribution: true,
-      requireFencedCancellation: true,
-      minimumMaxTurns: 1
-    });
+      }).negotiate({
+        providerKind: "codex" /* Codex */,
+        executionProfile: "gateway_attested_agent_v1" /* GatewayAttestedAgentV1 */,
+        minimumConfinement: "gateway_only" /* GatewayOnly */,
+        requireActualModelAttribution: true,
+        requireUsageAttribution: true,
+        requireFencedCancellation: true,
+        minimumMaxTurns: 1
+      });
+    }
     run2.signal.throwIfAborted();
     phase = "create_workspace";
     workspacePath = await createIsolatedCheckoutWorkspace({
@@ -104470,25 +105783,47 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     await safeCheckoutRepository({
       repository: capability.repository,
       headSha: capability.headSha,
+      ...ocrAgent ? { mergeBaseSha: authorization.facts.mergeBaseSha } : {},
       workspacePath,
       token: capability.token,
       signal: run2.signal
     });
     run2.signal.throwIfAborted();
     phase = "local_transport";
-    codexHome = await fs20.mkdtemp(
-      path19.join(
-        process.env.RUNNER_TEMP || os8.tmpdir(),
-        "reviewrouter-keyless-codex-"
-      )
-    );
-    await fs20.chmod(codexHome, 448);
     bridge = await startLocalGatewayModelTransport(transport, observeTransport2);
-    await fs20.writeFile(
-      path19.join(codexHome, "config.toml"),
-      bridge.configuration.join("\n") + "\n",
-      { mode: 384 }
-    );
+    if (ocrAgent) {
+      const model = capability.runtimeConfig.runtimeEnv.CODEX_MODEL;
+      if (!model) throw new Error("review_action_v2_ocr_model_missing");
+      ocrRun = await prepareOcrManagedRun({
+        approvedAgent: ocrAgent,
+        baseUrl: bridge.baseUrl,
+        rawCapability: extractRawLoopbackCapability(
+          bridge.environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ""
+        ),
+        model,
+        requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3,
+        modelReasoningEffort: capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
+        language: capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
+        signal: run2.signal,
+        env: {
+          ...process.env,
+          REVIEWROUTER_OCR_BINARY: ocrBinary.binaryPath
+        }
+      });
+    } else {
+      codexHome = await fs21.mkdtemp(
+        path20.join(
+          process.env.RUNNER_TEMP || os9.tmpdir(),
+          "reviewrouter-keyless-codex-"
+        )
+      );
+      await fs21.chmod(codexHome, 448);
+      await fs21.writeFile(
+        path20.join(codexHome, "config.toml"),
+        bridge.configuration.join("\n") + "\n",
+        { mode: 384 }
+      );
+    }
     run2.signal.throwIfAborted();
     phase = "runner";
     const review = await ports.review.run({
@@ -104496,23 +105831,32 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       repository: capability.repository,
       headSha: capability.headSha,
       workspacePath,
-      codexHome,
-      codexBinaryPath: cli.binaryPath,
+      ...codexHome ? { codexHome } : {},
+      ...cli ? { codexBinaryPath: cli.binaryPath } : {},
       scmReadToken: capability.token,
       scmReadTokenExpiresAt: capability.expiresAt,
       refreshScmReadToken: readCapability,
       accountGateway: {
         runtimeConfig: capability.runtimeConfig,
         controlPlane,
-        modelTransport: {
+        modelTransport: codexHome !== void 0 ? {
           ...bridge,
           environment: Object.freeze({
             ...bridge.environment,
             CODEX_HOME: codexHome
           })
-        },
+        } : bridge,
         signal: run2.signal
-      }
+      },
+      ...ocrRun ? {
+        ocr: {
+          run: ocrRun,
+          effectFacts: () => {
+            const failure = transport.lastFailure;
+            return failure ? { effect: failure.effect } : void 0;
+          }
+        }
+      } : {}
     });
     phase = "terminal";
     ports.observeRelay(transport.lastFailure);
@@ -104562,15 +105906,17 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
           }
         };
         await cleanup("bridge", async () => bridge?.dispose());
+        await cleanup("OCR run", async () => ocrRun?.cleanup());
+        await cleanup("OCR binary", async () => ocrBinary?.cleanup());
         if (codexHome)
           await cleanup(
             "CODEX_HOME",
-            () => fs20.rm(codexHome, { recursive: true, force: true })
+            () => fs21.rm(codexHome, { recursive: true, force: true })
           );
         if (workspacePath)
           await cleanup(
             "checkout",
-            () => fs20.rm(workspacePath, { recursive: true, force: true })
+            () => fs21.rm(workspacePath, { recursive: true, force: true })
           );
         await cleanup("CLI", async () => cli?.clear?.());
       } finally {
@@ -104601,7 +105947,7 @@ function validateAccountGatewayCheckout(result2, repository, headSha) {
 }
 
 // src/codex-oauth/action.ts
-var path30 = __toESM(require("path"));
+var path32 = __toESM(require("path"));
 
 // src/codex-oauth/control-plane.ts
 var CodexOAuthControlPlaneClient = class {
@@ -104676,8 +106022,8 @@ var CodexOAuthControlPlaneClient = class {
       isActionCommentTokenResponse
     );
   }
-  async postJson(path31, body, guard) {
-    const response = await this.fetchImpl(resolveApiPath(this.apiUrl, path31), {
+  async postJson(path33, body, guard) {
+    const response = await this.fetchImpl(resolveApiPath(this.apiUrl, path33), {
       method: "POST",
       headers: {
         accept: "application/json",
@@ -104697,8 +106043,8 @@ var CodexOAuthControlPlaneClient = class {
     }
     return payload;
   }
-  async postJsonWithAuthorization(path31, bearerToken, body, guard) {
-    const response = await this.fetchImpl(resolveApiPath(this.apiUrl, path31), {
+  async postJsonWithAuthorization(path33, bearerToken, body, guard) {
+    const response = await this.fetchImpl(resolveApiPath(this.apiUrl, path33), {
       method: "POST",
       headers: {
         accept: "application/json",
@@ -104791,11 +106137,11 @@ function parseTrustedApiUrl(apiUrl) {
   }
   throw new Error("codex_oauth_api_url_invalid");
 }
-function resolveApiPath(apiUrl, path31) {
-  if (!path31.startsWith("/") || path31.startsWith("//") || path31.includes("\\") || path31.includes("?") || path31.includes("#") || path31.includes("..") || /%2e|%2f|%5c/i.test(path31)) {
+function resolveApiPath(apiUrl, path33) {
+  if (!path33.startsWith("/") || path33.startsWith("//") || path33.includes("\\") || path33.includes("?") || path33.includes("#") || path33.includes("..") || /%2e|%2f|%5c/i.test(path33)) {
     throw new Error("codex_oauth_api_path_invalid");
   }
-  const resolved = new URL(path31, apiUrl);
+  const resolved = new URL(path33, apiUrl);
   if (resolved.origin !== apiUrl.origin) {
     throw new Error("codex_oauth_api_path_invalid");
   }
@@ -104817,26 +106163,26 @@ function asRecord2(value) {
 }
 
 // src/codex-oauth/codex-bootstrap.ts
-var import_child_process14 = require("child_process");
-var fs21 = __toESM(require("fs/promises"));
-var os9 = __toESM(require("os"));
-var path20 = __toESM(require("path"));
+var import_child_process15 = require("child_process");
+var fs22 = __toESM(require("fs/promises"));
+var os10 = __toESM(require("os"));
+var path21 = __toESM(require("path"));
 async function refreshCodexAuthWithOfficialCli(input) {
   const parent = await ensureCodexOAuthRuntimeParent();
-  const root = await fs21.mkdtemp(path20.join(parent, "reviewrouter-codex-oauth-"));
-  const home = path20.join(root, "home");
-  const codexHome = path20.join(root, "codex");
-  const emptyCwd = path20.join(root, "empty");
-  const authPath = path20.join(codexHome, "auth.json");
-  await fs21.mkdir(home, { recursive: true, mode: 448 });
-  await fs21.mkdir(codexHome, { recursive: true, mode: 448 });
-  await fs21.mkdir(emptyCwd, { recursive: true, mode: 448 });
-  await fs21.writeFile(authPath, input.authJsonBytes, {
+  const root = await fs22.mkdtemp(path21.join(parent, "reviewrouter-codex-oauth-"));
+  const home = path21.join(root, "home");
+  const codexHome = path21.join(root, "codex");
+  const emptyCwd = path21.join(root, "empty");
+  const authPath = path21.join(codexHome, "auth.json");
+  await fs22.mkdir(home, { recursive: true, mode: 448 });
+  await fs22.mkdir(codexHome, { recursive: true, mode: 448 });
+  await fs22.mkdir(emptyCwd, { recursive: true, mode: 448 });
+  await fs22.writeFile(authPath, input.authJsonBytes, {
     encoding: "utf8",
     mode: 384
   });
-  await fs21.writeFile(
-    path20.join(codexHome, "config.toml"),
+  await fs22.writeFile(
+    path21.join(codexHome, "config.toml"),
     'cli_auth_credentials_store = "file"\napproval_policy = "never"\n',
     { encoding: "utf8", mode: 384 }
   );
@@ -104849,26 +106195,26 @@ async function refreshCodexAuthWithOfficialCli(input) {
     codexHome,
     cwd: emptyCwd
   });
-  const refreshedAuth = await fs21.readFile(authPath, "utf8");
+  const refreshedAuth = await fs22.readFile(authPath, "utf8");
   return {
     authJsonBytes: refreshedAuth,
     codexHome,
     async clearAuthMaterial() {
-      await fs21.rm(root, { recursive: true, force: true });
+      await fs22.rm(root, { recursive: true, force: true });
     }
   };
 }
 async function ensureCodexOAuthRuntimeParent(env = process.env) {
-  const home = env.HOME?.trim() || os9.homedir();
-  const parent = home && path20.isAbsolute(home) ? path20.join(home, ".reviewrouter", "runtime") : path20.join(os9.tmpdir(), "reviewrouter-runtime");
-  await fs21.mkdir(parent, { recursive: true, mode: 448 });
-  await fs21.chmod(parent, 448).catch(() => void 0);
+  const home = env.HOME?.trim() || os10.homedir();
+  const parent = home && path21.isAbsolute(home) ? path21.join(home, ".reviewrouter", "runtime") : path21.join(os10.tmpdir(), "reviewrouter-runtime");
+  await fs22.mkdir(parent, { recursive: true, mode: 448 });
+  await fs22.chmod(parent, 448).catch(() => void 0);
   return parent;
 }
 async function runCodexBootstrapCommand(input) {
   const args = ["login", "status"];
   await new Promise((resolve5, reject) => {
-    const child = (0, import_child_process14.spawn)(input.binary, args, {
+    const child = (0, import_child_process15.spawn)(input.binary, args, {
       cwd: input.cwd,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
@@ -105281,7 +106627,7 @@ function verifyReviewActionV2Handoff(generatedRoot) {
   if (typeof value.saasSourceCommit !== "string" || !SHA_PATTERN.test(value.saasSourceCommit) || typeof value.expectedPublicActionBaseCommit !== "string" || !SHA_PATTERN.test(value.expectedPublicActionBaseCommit)) {
     throw new Error("review_action_v2_handoff_commit_invalid");
   }
-  if (!isRecord5(value.generatedFileDigests)) {
+  if (!isRecord6(value.generatedFileDigests)) {
     throw new Error("review_action_v2_handoff_file_digests_invalid");
   }
   const actualFiles = listRegularFiles(generatedRoot).filter(
@@ -105340,7 +106686,7 @@ function parseCanonicalObject2(raw) {
   } catch (error2) {
     throw new Error("review_action_v2_handoff_json_invalid", { cause: error2 });
   }
-  if (!isRecord5(value) || canonicalJson7(value) !== raw) {
+  if (!isRecord6(value) || canonicalJson7(value) !== raw) {
     throw new Error("review_action_v2_handoff_not_canonical");
   }
   return value;
@@ -105351,7 +106697,7 @@ function canonicalJson7(value) {
 }
 function canonicalize4(value) {
   if (Array.isArray(value)) return value.map(canonicalize4);
-  if (isRecord5(value)) {
+  if (isRecord6(value)) {
     return Object.fromEntries(
       Object.keys(value).sort().map((key) => [key, canonicalize4(value[key])])
     );
@@ -105371,15 +106717,15 @@ function assertExactKeys(value, expected) {
 function sha25610(value) {
   return (0, import_crypto29.createHash)("sha256").update(value).digest("hex");
 }
-function isRecord5(value) {
+function isRecord6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/review-orchestration/infrastructure/production-t0-review-runner.ts
-var import_crypto42 = require("crypto");
-var import_child_process20 = require("child_process");
-var path29 = __toESM(require("path"));
-var import_util14 = require("util");
+var import_crypto43 = require("crypto");
+var import_child_process22 = require("child_process");
+var path31 = __toESM(require("path"));
+var import_util15 = require("util");
 var import_promises11 = require("node:timers/promises");
 
 // src/review-investigation/fixtures/review-investigation-capability-v1.golden.json
@@ -105393,10 +106739,10 @@ var review_investigation_capability_v1_golden_default = {
       probePolicyVersion: "review-investigation-probe-policy.v3",
       runtimeProfileVersion: "gateway-attested-agent.v1",
       searchPolicyVersion: "review-investigation-fixed-string-search.v1",
-      turnPromptContractHash: "a185e50ee887e3351d1c1eccb135a2d48030fe56ef5ec2e1411002d4c1a76ef6"
+      turnPromptContractHash: "48a3a67d11904996957416757bc82cdc2e7ddca13510bf9b4a441bd6f946bf82"
     },
-    canonicalJson: '{"coverageContractVersion":"review-investigation-coverage.v1","criticPolicyVersion":"review-investigation-critic.v2","expansionRulesVersion":"review-investigation-expansion.v3","gatewayPolicyVersion":"context-gateway-v4","probePolicyVersion":"review-investigation-probe-policy.v3","runtimeProfileVersion":"gateway-attested-agent.v1","searchPolicyVersion":"review-investigation-fixed-string-search.v1","turnPromptContractHash":"a185e50ee887e3351d1c1eccb135a2d48030fe56ef5ec2e1411002d4c1a76ef6"}',
-    sha256: "86a68eda454aff14d596da321ad635c7e67b3d6f18b990c2c1e02dfb3f9298b8"
+    canonicalJson: '{"coverageContractVersion":"review-investigation-coverage.v1","criticPolicyVersion":"review-investigation-critic.v2","expansionRulesVersion":"review-investigation-expansion.v3","gatewayPolicyVersion":"context-gateway-v4","probePolicyVersion":"review-investigation-probe-policy.v3","runtimeProfileVersion":"gateway-attested-agent.v1","searchPolicyVersion":"review-investigation-fixed-string-search.v1","turnPromptContractHash":"48a3a67d11904996957416757bc82cdc2e7ddca13510bf9b4a441bd6f946bf82"}',
+    sha256: "359b9499b5cf7244bc734c2c8f352ce63ea99b285e67136f1214148ef0dd8dba"
   },
   policy: {
     value: {
@@ -105497,7 +106843,7 @@ var providerInvocationManifestV1CanonicalizerDescriptor = {
     {
       name: "providerKind",
       kind: "enum",
-      values: ["codex", "claude_code", "openrouter"],
+      values: ["codex", "claude_code", "openrouter", "ocr"],
       unknownValue: "unknown",
       unknownErrorCode: "provider_kind_unknown",
       invalidErrorCode: "provider_kind_invalid"
@@ -105655,7 +107001,7 @@ var providerInvocationManifestV1CanonicalizerDescriptor = {
   }
 };
 function normalizeProviderInvocationManifestV1(input) {
-  if (!isRecord6(input)) throw new Error("provider_invocation_manifest_invalid");
+  if (!isRecord7(input)) throw new Error("provider_invocation_manifest_invalid");
   const fields = providerInvocationManifestV1CanonicalizerDescriptor.fields;
   const fieldNames = new Set(fields.map((field) => field.name));
   const unknownField = Object.keys(input).sort().find((field) => !fieldNames.has(field));
@@ -105751,14 +107097,14 @@ function normalizeManifestField(field, value) {
 }
 function canonicalJson8(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson8).join(",")}]`;
-  if (isRecord6(value)) {
+  if (isRecord7(value)) {
     return `{${Object.keys(value).sort().map(
       (key) => `${JSON.stringify(key)}:${canonicalJson8(value[key])}`
     ).join(",")}}`;
   }
   return JSON.stringify(value);
 }
-function isRecord6(value) {
+function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -105937,7 +107283,7 @@ function buildReviewInvestigationSeedEnvelope(input) {
   if (changedPathFacts.size !== input.probePlan.changedPaths.length) {
     throw new Error("review_investigation_seed_changed_path_duplicate");
   }
-  if (changedPathFacts.size !== paths.length || paths.some((path31) => !changedPathFacts.has(path31))) {
+  if (changedPathFacts.size !== paths.length || paths.some((path33) => !changedPathFacts.has(path33))) {
     throw new Error("review_investigation_seed_path_set_mismatch");
   }
   const inventory = prepareCanonicalInventory(input.canonicalInventory);
@@ -106457,7 +107803,7 @@ function compareCodeUnits3(left, right) {
 }
 
 // src/review-investigation/application/review-investigation-turn-prompt.ts
-var REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT = "review_investigation_turn_prompt.v4";
+var REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT = "review_investigation_turn_prompt.v5";
 var TURN_INSTRUCTIONS = Object.freeze([
   "REVIEW INVESTIGATION TURN CONTRACT:",
   "Use only the reviewrouter Context Gateway tools. Investigate every obligation in the authenticated turn brief.",
@@ -106471,6 +107817,8 @@ var TURN_INSTRUCTIONS = Object.freeze([
   "When inspected evidence reveals additional review scope, add a provider-neutral obligationProposals entry instead of silently broadening an existing obligation.",
   "Each obligation proposal must contain exactly kind, path, revision, and riskPriority. Use the repository-relative path and either head or merge_base revision; the control plane derives canonical identities and hashes. Use only schema-listed kinds; never provide an obligation ID, state, authority decision, or receipt claim.",
   "Obligation proposals are non-authoritative and remain open until the control plane validates and independently closes them with accepted evidence.",
+  'Each finding must include in its own evidenceOperationReceiptIds every receipt in a contiguous file_read chain for that exact finding path at revision="head", starting at startByte=0 and covering the file through EOF; the terminal read must report eof=true, making its authenticated receipt complete=true. Search results, merge_base reads, and partial snippets do not satisfy this requirement.',
+  "If you cannot obtain that complete HEAD receipt chain, omit the finding and leave its related obligation open. Never fabricate receipts or claim unread coverage.",
   "Do not close an obligation without complete operation receipt evidence.",
   "Set criticDecision to null during discovery turns. During critic turns, set it to exactly accept, veto, or abstain."
 ]);
@@ -106478,7 +107826,7 @@ var REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH = sha2562(
   canonicalJson2({
     contract: REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT,
     instructions: TURN_INSTRUCTIONS,
-    turnBriefEncoding: "REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:<canonical-json-base64url>",
+    turnBriefEncoding: "REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:<canonical-json>",
     operationBudgetEncoding: "REVIEWROUTER_CONTEXT_OPERATION_BUDGET:<positive-integer>"
   })
 );
@@ -106489,16 +107837,13 @@ function buildReviewInvestigationTurnPrompt(input) {
   if (!Number.isSafeInteger(input.maxGatewayOperations) || input.maxGatewayOperations < 1) {
     throw new Error("review_investigation_operation_budget_invalid");
   }
-  const encodedBrief = Buffer.from(
-    canonicalJson2(input.turnBrief),
-    "utf8"
-  ).toString("base64url");
+  const canonicalBrief = canonicalJson2(input.turnBrief);
   return [
     input.reviewContextPrompt,
     "",
     ...TURN_INSTRUCTIONS,
     `REVIEWROUTER_CONTEXT_OPERATION_BUDGET:${input.maxGatewayOperations}`,
-    `REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:${encodedBrief}`
+    `REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:${canonicalBrief}`
   ].join("\n");
 }
 
@@ -107161,20 +108506,20 @@ function compareCodeUnits4(left, right) {
 }
 
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
-var import_child_process16 = require("child_process");
+var import_child_process17 = require("child_process");
 var import_crypto34 = require("crypto");
 var import_promises6 = require("fs/promises");
-var os10 = __toESM(require("os"));
-var path24 = __toESM(require("path"));
-var import_util10 = require("util");
+var os11 = __toESM(require("os"));
+var path25 = __toESM(require("path"));
+var import_util11 = require("util");
 
 // src/context-gateway/canonical-git-inventory.ts
-var import_child_process15 = require("child_process");
-var import_util9 = require("util");
+var import_child_process16 = require("child_process");
+var import_util10 = require("util");
 
 // src/context-gateway/utf8-content.ts
-var import_util8 = require("util");
-var fatalUtf8Decoder = new import_util8.TextDecoder("utf-8", {
+var import_util9 = require("util");
+var fatalUtf8Decoder = new import_util9.TextDecoder("utf-8", {
   fatal: true,
   ignoreBOM: true
 });
@@ -107195,7 +108540,7 @@ function countLines(value) {
 }
 
 // src/context-gateway/canonical-git-inventory.ts
-var execFileAsync2 = (0, import_util9.promisify)(import_child_process15.execFile);
+var execFileAsync2 = (0, import_util10.promisify)(import_child_process16.execFile);
 var RAW_RECORD = /^:(\d{6}) (\d{6}) ([0-9a-f]+) ([0-9a-f]+) ([A-Z])$/u;
 var MAX_CLASSIFIED_BLOB_BYTES = 2 * 1024 * 1024;
 var MAX_INVENTORY_ENTRIES = 25e4;
@@ -107263,18 +108608,18 @@ function parseRawInventory(raw) {
       tokens[index],
       "canonical_inventory_raw_record_encoding_invalid"
     );
-    const path31 = decodeUtf8(
+    const path33 = decodeUtf8(
       tokens[index + 1],
       "canonical_inventory_path_encoding_invalid"
     );
     const match2 = RAW_RECORD.exec(record);
-    if (!match2 || !path31 || path31.includes("\0")) {
+    if (!match2 || !path33 || path33.includes("\0")) {
       throw new Error("canonical_inventory_raw_record_invalid");
     }
     entries.push(
       Object.freeze({
         status: rawStatus(match2[5]),
-        path: path31,
+        path: path33,
         beforeMode: match2[1],
         afterMode: match2[2],
         beforeOid: requireGitOidOrZero2(match2[3]),
@@ -107300,7 +108645,7 @@ function splitNulTerminated(raw) {
 }
 function decodeUtf8(value, errorCode2) {
   try {
-    return new import_util9.TextDecoder("utf-8", {
+    return new import_util10.TextDecoder("utf-8", {
       fatal: true,
       ignoreBOM: true
     }).decode(value);
@@ -107644,7 +108989,7 @@ function decryptContextGatewayV4ReplayMaterial(input) {
   } catch {
     throw new Error("context_gateway_v4_replay_envelope_invalid");
   }
-  if (canonicalJson(envelope) !== input.encryptedCanonicalJson || !isRecord7(envelope) || Object.keys(envelope).sort().join(",") !== "algorithm,authTag,ciphertext,encryptionVersion,nonce,sessionId" || envelope.encryptionVersion !== REPLAY_ENCRYPTION_VERSION || envelope.algorithm !== REPLAY_ENCRYPTION_ALGORITHM || envelope.sessionId !== input.sessionId || typeof envelope.nonce !== "string" || typeof envelope.authTag !== "string" || typeof envelope.ciphertext !== "string") {
+  if (canonicalJson(envelope) !== input.encryptedCanonicalJson || !isRecord8(envelope) || Object.keys(envelope).sort().join(",") !== "algorithm,authTag,ciphertext,encryptionVersion,nonce,sessionId" || envelope.encryptionVersion !== REPLAY_ENCRYPTION_VERSION || envelope.algorithm !== REPLAY_ENCRYPTION_ALGORITHM || envelope.sessionId !== input.sessionId || typeof envelope.nonce !== "string" || typeof envelope.authTag !== "string" || typeof envelope.ciphertext !== "string") {
     throw new Error("context_gateway_v4_replay_envelope_invalid");
   }
   try {
@@ -107760,7 +109105,7 @@ function operationForReplayInput(kind, replayInput) {
 function normalizeEntry(candidate, previousSequence) {
   if (!Number.isSafeInteger(candidate.sequence) || candidate.sequence <= previousSequence || !Object.values(ContextGatewayV4OperationKind).includes(
     candidate.operationKind
-  ) || candidate.operationKind === "unsupported_tool" /* UnsupportedTool */ || !isRecord7(candidate.replayInput)) {
+  ) || candidate.operationKind === "unsupported_tool" /* UnsupportedTool */ || !isRecord8(candidate.replayInput)) {
     throw new Error("context_gateway_v4_replay_entry_invalid");
   }
   requireSha256(candidate.operationReceiptId, "operation_receipt_id");
@@ -107770,7 +109115,7 @@ function normalizeEntry(candidate, previousSequence) {
     replayInput: Object.freeze({ ...candidate.replayInput })
   });
 }
-function isRecord7(value) {
+function isRecord8(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 async function atomicPrivateWrite(target, content) {
@@ -108019,7 +109364,7 @@ async function atomicPrivateWrite2(target, content) {
 }
 
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
-var execFileAsync3 = (0, import_util10.promisify)(import_child_process16.execFile);
+var execFileAsync3 = (0, import_util11.promisify)(import_child_process17.execFile);
 var MAX_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
 var MAX_REPLAY_MATERIAL_BYTES = 2 * 1024 * 1024;
 var MAX_ENCRYPTED_REPLAY_MATERIAL_BYTES = Math.ceil(MAX_REPLAY_MATERIAL_BYTES * 4 / 3) + 4096;
@@ -108055,7 +109400,7 @@ var ContextGatewayInvocationSessionFactory = class {
     this.attestations = attestations;
     this.options = options;
     this.requiredWitnessRunner = requiredWitnessRunner;
-    if (!path24.isAbsolute(options.checkoutRoot) || !path24.isAbsolute(options.gatewayBundlePath)) {
+    if (!path25.isAbsolute(options.checkoutRoot) || !path25.isAbsolute(options.gatewayBundlePath)) {
       throw new Error("context_gateway_factory_path_invalid");
     }
   }
@@ -108072,8 +109417,8 @@ var ContextGatewayInvocationSessionFactory = class {
       eventChainSeedHash: "0".repeat(64),
       gatewayBinaryHash,
       ...revisionTreeOids,
-      transcriptPath: path24.join(os10.tmpdir(), "planning-transcript.json"),
-      replayMaterialPath: path24.join(os10.tmpdir(), "planning-replay.json"),
+      transcriptPath: path25.join(os11.tmpdir(), "planning-transcript.json"),
+      replayMaterialPath: path25.join(os11.tmpdir(), "planning-replay.json"),
       gatewayBundlePath: this.options.gatewayBundlePath
     });
   }
@@ -108095,11 +109440,11 @@ var ContextGatewayInvocationSessionFactory = class {
     const gatewayBinaryHash = sha25613(gatewayBundleSnapshot);
     const gatewayPolicyVersion = this.policyVersion();
     const directory = await (0, import_promises6.mkdtemp)(
-      path24.join(os10.tmpdir(), "reviewrouter-context-gateway-")
+      path25.join(os11.tmpdir(), "reviewrouter-context-gateway-")
     );
-    const gatewayBundlePath = path24.join(directory, "context-gateway.cjs");
-    const transcriptPath = path24.join(directory, "transcript.json");
-    const replayMaterialPath = path24.join(directory, "replay-material.json");
+    const gatewayBundlePath = path25.join(directory, "context-gateway.cjs");
+    const transcriptPath = path25.join(directory, "transcript.json");
+    const replayMaterialPath = path25.join(directory, "replay-material.json");
     let requiredWitness = null;
     try {
       await (0, import_promises6.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
@@ -108820,17 +110165,17 @@ function sha25613(value) {
 }
 
 // src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
-var import_child_process19 = require("child_process");
+var import_child_process20 = require("child_process");
 var import_crypto36 = require("crypto");
 var import_promises10 = require("fs/promises");
-var os11 = __toESM(require("os"));
-var path28 = __toESM(require("path"));
-var import_util13 = require("util");
+var os12 = __toESM(require("os"));
+var path29 = __toESM(require("path"));
+var import_util14 = require("util");
 
 // src/context-gateway/context-gateway-recorder.ts
 var import_crypto35 = require("crypto");
 var import_promises7 = require("fs/promises");
-var path25 = __toESM(require("path"));
+var path26 = __toESM(require("path"));
 var MAX_RECORDER_STATE_BYTES = 2 * 1024 * 1024;
 var ContextGatewayRecorder = class {
   constructor(config) {
@@ -108845,11 +110190,11 @@ var ContextGatewayRecorder = class {
   hadFailure = false;
   async initialize() {
     await Promise.all([
-      (0, import_promises7.mkdir)(path25.dirname(this.config.transcriptPath), {
+      (0, import_promises7.mkdir)(path26.dirname(this.config.transcriptPath), {
         recursive: true,
         mode: 448
       }),
-      (0, import_promises7.mkdir)(path25.dirname(this.config.replayMaterialPath), {
+      (0, import_promises7.mkdir)(path26.dirname(this.config.replayMaterialPath), {
         recursive: true,
         mode: 448
       })
@@ -109074,19 +110419,19 @@ function parseCanonicalState(raw, kind) {
   return parsed;
 }
 async function atomicPrivateWrite3(target, content) {
-  await (0, import_promises7.mkdir)(path25.dirname(target), { recursive: true, mode: 448 });
+  await (0, import_promises7.mkdir)(path26.dirname(target), { recursive: true, mode: 448 });
   const temporary = `${target}.${process.pid}.${(0, import_crypto35.randomBytes)(6).toString("hex")}.tmp`;
   await (0, import_promises7.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
   await (0, import_promises7.rename)(temporary, target);
 }
 
 // src/context-gateway/filesystem-context-gateway.ts
-var import_child_process17 = require("child_process");
+var import_child_process18 = require("child_process");
 var import_promises8 = require("fs/promises");
 var import_os = require("os");
-var path26 = __toESM(require("path"));
-var import_util11 = require("util");
-var execFileAsync4 = (0, import_util11.promisify)(import_child_process17.execFile);
+var path27 = __toESM(require("path"));
+var import_util12 = require("util");
+var execFileAsync4 = (0, import_util12.promisify)(import_child_process18.execFile);
 var MAX_FILE_BYTES = 2 * 1024 * 1024;
 var MAX_DIRECTORY_ENTRIES = 2e4;
 var MAX_SEARCH_RESULTS = 2e4;
@@ -109492,7 +110837,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     if (gitPath.length === 0) {
       throw new Error("context_gateway_git_info_attributes_path_invalid");
     }
-    const attributesPath = path26.isAbsolute(gitPath) ? gitPath : path26.resolve(this.root, gitPath);
+    const attributesPath = path27.isAbsolute(gitPath) ? gitPath : path27.resolve(this.root, gitPath);
     let infoAttributes;
     try {
       infoAttributes = await (0, import_promises8.readFile)(attributesPath);
@@ -109534,23 +110879,23 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
   async createIsolatedGitDirectory(policy) {
     const gitDirectory = await (0, import_promises8.mkdtemp)(
-      path26.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
+      path27.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
     );
     try {
       const [objectsPathOutput, objectFormatOutput] = await Promise.all([
         this.gitText(["rev-parse", "--git-path", "objects"]),
         this.gitText(["rev-parse", "--show-object-format=storage"]),
-        (0, import_promises8.mkdir)(path26.join(gitDirectory, "objects", "info"), { recursive: true }),
-        (0, import_promises8.mkdir)(path26.join(gitDirectory, "refs", "heads"), { recursive: true }),
-        (0, import_promises8.mkdir)(path26.join(gitDirectory, "info"), { recursive: true }),
-        (0, import_promises8.mkdir)(path26.join(gitDirectory, "worktree"), { recursive: true })
+        (0, import_promises8.mkdir)(path27.join(gitDirectory, "objects", "info"), { recursive: true }),
+        (0, import_promises8.mkdir)(path27.join(gitDirectory, "refs", "heads"), { recursive: true }),
+        (0, import_promises8.mkdir)(path27.join(gitDirectory, "info"), { recursive: true }),
+        (0, import_promises8.mkdir)(path27.join(gitDirectory, "worktree"), { recursive: true })
       ]);
       const rawObjectsPath = objectsPathOutput.trim();
       if (rawObjectsPath.length === 0) {
         throw new Error("context_gateway_git_objects_path_invalid");
       }
       const objectsPath = await (0, import_promises8.realpath)(
-        path26.isAbsolute(rawObjectsPath) ? rawObjectsPath : path26.resolve(this.root, rawObjectsPath)
+        path27.isAbsolute(rawObjectsPath) ? rawObjectsPath : path27.resolve(this.root, rawObjectsPath)
       );
       if (objectsPath.includes("\0") || objectsPath.includes("\n")) {
         throw new Error("context_gateway_git_objects_path_invalid");
@@ -109561,20 +110906,20 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       }
       const config = objectFormat === "sha256" ? "[core]\n	repositoryformatversion = 1\n	bare = false\n[extensions]\n	objectformat = sha256\n" : "[core]\n	repositoryformatversion = 0\n	bare = false\n";
       await Promise.all([
-        (0, import_promises8.writeFile)(path26.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
-        (0, import_promises8.writeFile)(path26.join(gitDirectory, "config"), config),
+        (0, import_promises8.writeFile)(path27.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
+        (0, import_promises8.writeFile)(path27.join(gitDirectory, "config"), config),
         (0, import_promises8.writeFile)(
-          path26.join(gitDirectory, "objects", "info", "alternates"),
+          path27.join(gitDirectory, "objects", "info", "alternates"),
           `${objectsPath}
 `
         ),
         policy.infoAttributes === null ? Promise.resolve() : (0, import_promises8.writeFile)(
-          path26.join(gitDirectory, "info", "attributes"),
+          path27.join(gitDirectory, "info", "attributes"),
           policy.infoAttributes
         )
       ]);
-      const indexPath = path26.join(gitDirectory, "index");
-      const workTreePath = path26.join(gitDirectory, "worktree");
+      const indexPath = path27.join(gitDirectory, "index");
+      const workTreePath = path27.join(gitDirectory, "worktree");
       await this.gitText(["read-tree", "--reset", this.headSha], /* @__PURE__ */ new Set([0]), {
         GIT_DIR: gitDirectory,
         GIT_INDEX_FILE: indexPath,
@@ -109654,10 +110999,10 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
 };
 function normalizeRelativePath(value) {
-  if (typeof value !== "string" || value.length === 0 || value.length > 1024 || value.includes("\0") || value.includes("\\") || path26.isAbsolute(value)) {
+  if (typeof value !== "string" || value.length === 0 || value.length > 1024 || value.includes("\0") || value.includes("\\") || path27.isAbsolute(value)) {
     throw new Error("context_gateway_path_invalid");
   }
-  const normalized = path26.posix.normalize(value);
+  const normalized = path27.posix.normalize(value);
   if (normalized === ".." || normalized.startsWith("../") || normalized.split("/").some((segment) => segment === "..")) {
     throw new Error("context_gateway_path_invalid");
   }
@@ -109671,11 +111016,11 @@ function boundedInteger(value, minimum, maximum, field) {
 }
 
 // src/context-gateway/filesystem-context-gateway-v4.ts
-var import_child_process18 = require("child_process");
+var import_child_process19 = require("child_process");
 var import_promises9 = require("fs/promises");
 var import_path6 = __toESM(require("path"));
-var import_util12 = require("util");
-var execFileAsync5 = (0, import_util12.promisify)(import_child_process18.execFile);
+var import_util13 = require("util");
+var execFileAsync5 = (0, import_util13.promisify)(import_child_process19.execFile);
 var MAX_FILE_RANGE_BYTES = 2 * 1024 * 1024;
 var MAX_FILE_TOTAL_BYTES = 32 * 1024 * 1024;
 var MAX_DIRECTORY_RESULTS = 25e4;
@@ -110481,12 +111826,12 @@ function gitOptions2(root) {
 }
 
 // src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
-var execFileAsync6 = (0, import_util13.promisify)(import_child_process19.execFile);
+var execFileAsync6 = (0, import_util14.promisify)(import_child_process20.execFile);
 var MAX_REPLAY_PLAN_BYTES = 512 * 1024;
 var ContextAttestationReplayRunner = class {
   constructor(options) {
     this.options = options;
-    if (!path28.isAbsolute(options.checkoutRoot) || !path28.isAbsolute(options.gatewayBundlePath)) {
+    if (!path29.isAbsolute(options.checkoutRoot) || !path29.isAbsolute(options.gatewayBundlePath)) {
       throw new Error("context_replay_path_invalid");
     }
   }
@@ -110527,7 +111872,7 @@ var ContextAttestationReplayRunner = class {
       return null;
     }
     const directory = await (0, import_promises10.mkdtemp)(
-      path28.join(os11.tmpdir(), "reviewrouter-context-replay-")
+      path29.join(os12.tmpdir(), "reviewrouter-context-replay-")
     );
     const secret = (0, import_crypto36.randomBytes)(32);
     try {
@@ -110541,8 +111886,8 @@ var ContextAttestationReplayRunner = class {
       );
       const recorder = new ContextGatewayRecorder({
         sessionId: `replay-${plan.attestationHash}`,
-        transcriptPath: path28.join(directory, "transcript.json"),
-        replayMaterialPath: path28.join(directory, "replay-material.json"),
+        transcriptPath: path29.join(directory, "transcript.json"),
+        replayMaterialPath: path29.join(directory, "replay-material.json"),
         secret,
         gatewayBinaryHash,
         checkoutTreeOid: targetCheckoutTreeOid,
@@ -110609,7 +111954,7 @@ var ContextAttestationReplayRunner = class {
   }
   async replayV4(input) {
     const directory = await (0, import_promises10.mkdtemp)(
-      path28.join(os11.tmpdir(), "reviewrouter-context-replay-v4-")
+      path29.join(os12.tmpdir(), "reviewrouter-context-replay-v4-")
     );
     const secret = (0, import_crypto36.randomBytes)(32);
     try {
@@ -110624,7 +111969,7 @@ var ContextAttestationReplayRunner = class {
       const sessionId = `replay-v4-${input.candidate.attestationHash.slice(0, 32)}`;
       const recorder = new ContextGatewayV4Recorder({
         sessionId,
-        transcriptPath: path28.join(directory, "transcript.json"),
+        transcriptPath: path29.join(directory, "transcript.json"),
         secret,
         gatewayBinaryHash: input.gatewayBinaryHash,
         checkoutTreeOid: input.targetCheckoutTreeOid,
@@ -110833,7 +112178,7 @@ async function replayAllPages(call) {
   let cursor = null;
   for (let page = 0; page < CONTEXT_GATEWAY_MAX_OPERATIONS; page += 1) {
     const response = await call(cursor);
-    if (!isRecord8(response)) {
+    if (!isRecord9(response)) {
       throw new Error("context_replay_v4_page_invalid");
     }
     if (response.complete === true) {
@@ -110909,7 +112254,7 @@ function parseReplayPlan(candidate) {
     throw new Error("context_replay_plan_identity_invalid");
   }
   const parsed = JSON.parse(candidate.replayPlanCanonicalJson);
-  if (!isRecord8(parsed)) throw new Error("context_replay_plan_invalid");
+  if (!isRecord9(parsed)) throw new Error("context_replay_plan_invalid");
   if (canonicalJson(parsed) !== candidate.replayPlanCanonicalJson) {
     throw new Error("context_replay_plan_not_canonical");
   }
@@ -110928,14 +112273,14 @@ function parseReplayPlan(candidate) {
     throw new Error("context_replay_plan_scope_invalid");
   }
   const dependencies = parsed.sourceDependencies.map((value, index) => {
-    if (!isRecord8(value)) throw new Error("context_replay_dependency_invalid");
+    if (!isRecord9(value)) throw new Error("context_replay_dependency_invalid");
     requireExactKeys3(value, [
       "operation",
       "operationKey",
       "replayQuery",
       "sequence"
     ]);
-    if (value.sequence !== index + 1 || !isRecord8(value.operation) || value.replayQuery !== null && typeof value.replayQuery !== "string") {
+    if (value.sequence !== index + 1 || !isRecord9(value.operation) || value.replayQuery !== null && typeof value.replayQuery !== "string") {
       throw new Error("context_replay_dependency_invalid");
     }
     const operationKey = requireSha256(
@@ -110995,7 +112340,7 @@ function parseReplayPlanV4(parsed, candidate) {
     throw new Error("context_replay_v4_plan_scope_invalid");
   }
   const operations = parsed.operations.map((value) => {
-    if (!isRecord8(value))
+    if (!isRecord9(value))
       throw new Error("context_replay_v4_operation_invalid");
     requireExactKeys3(value, ["operationKind", "replayInput"]);
     const operationKind = enumField(value, "operationKind", [
@@ -111005,7 +112350,7 @@ function parseReplayPlanV4(parsed, candidate) {
       "canonical_inventory" /* CanonicalInventory */,
       "git_fact" /* GitFact */
     ]);
-    if (!isRecord8(value.replayInput)) {
+    if (!isRecord9(value.replayInput)) {
       throw new Error("context_replay_v4_input_invalid");
     }
     return Object.freeze({
@@ -111141,7 +112486,7 @@ function compareCodeUnits6(left, right) {
   if (left > right) return 1;
   return 0;
 }
-function isRecord8(value) {
+function isRecord9(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -111793,13 +113138,13 @@ var BuildCurrentReviewProjection = class {
       },
       snapshot: coverageOnly ? { occurrenceProvenance: [], lineageHints: [] } : buildSnapshotFacts(occurrences)
     });
-    const canonicalJson14 = canonicalizeReviewProjection(envelope);
-    const byteCount = Buffer.byteLength(canonicalJson14, "utf8");
+    const canonicalJson15 = canonicalizeReviewProjection(envelope);
+    const byteCount = Buffer.byteLength(canonicalJson15, "utf8");
     assertWithinProjectionLimit("maxProjectionBytes", byteCount, this.limits);
     return deepFreezeProjection({
       envelope,
-      canonicalJson: canonicalJson14,
-      projectionHash: hashReviewProjectionCanonicalJson(canonicalJson14),
+      canonicalJson: canonicalJson15,
+      projectionHash: hashReviewProjectionCanonicalJson(canonicalJson15),
       byteCount,
       findingCount: occurrences.length
     });
@@ -112076,7 +113421,7 @@ function buildLifecycleFacts(inventory, decisions, hints, coverage, occurrences,
       ...decision?.reasonCodes ?? [],
       ...!revisionFiles.some(
         (file) => [file.path, file.previousPath].some(
-          (path31) => path31 !== void 0 && (target.currentPath === path31 || target.originalPath === path31)
+          (path33) => path33 !== void 0 && (target.currentPath === path33 || target.originalPath === path33)
         )
       ) ? ["outside_review_scope"] : [],
       ...target.disposition === "human_reply" /* HumanReply */ ? ["human_reply"] : [],
@@ -112184,11 +113529,11 @@ function countOccurrenceStates(occurrences) {
 function publicationMarker(kind, scope) {
   return `reviewrouter:${kind}:v2:${scope.reviewRevisionHash}`;
 }
-function summaryPlacement2(lineageId, path31, reason) {
+function summaryPlacement2(lineageId, path33, reason) {
   return {
     lineageId,
     kind: "summary" /* Summary */,
-    path: path31,
+    path: path33,
     reason
   };
 }
@@ -112314,8 +113659,8 @@ function validateGateDecision(occurrences, gate) {
 function assertNonEmpty(name, value) {
   if (!value.trim()) throw new Error(`${name} must not be empty`);
 }
-function normalizePath2(path31) {
-  return path31.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath2(path33) {
+  return path33.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique2(values) {
   return Array.from(new Set(values)).sort(
@@ -112349,10 +113694,21 @@ var LegacyReviewProjectionPolicyAdapter = class {
   consensus;
   synthesis;
   async selectCurrent(query) {
+    const producerClassifiedBugIds = new Set(
+      query.findings.filter(
+        (finding) => finding.category === "bug" && finding.providerIds.length > 0 && finding.providerIds.every((provider) => provider === "ocr")
+      ).map((finding) => finding.sourceFindingId)
+    );
     const legacyFindings = query.findings.map(toLegacyFinding);
     const deduped = new Deduplicator().dedupe(legacyFindings);
     const consensus = this.consensus.filter(deduped);
-    const filtered = new FindingFilter().filter(consensus, query.diff).findings;
+    const filtered = new FindingFilter().filter(consensus, query.diff, {
+      allowUnanchoredFindings: true,
+      isProducerClassifiedBug: (finding) => {
+        const sourceIds = finding.sourceFindingIds ?? [];
+        return sourceIds.length > 0 && sourceIds.every((id) => producerClassifiedBugIds.has(id));
+      }
+    }).findings;
     return filtered.map((finding) => {
       const metadata = finding;
       const memberIds = new Set(finding.sourceFindingIds);
@@ -112365,12 +113721,21 @@ var LegacyReviewProjectionPolicyAdapter = class {
       if (!representative) {
         throw new Error("legacy finding policy returned an unknown finding");
       }
-      return {
+      const requiresVerifiedAnchor = contributors.some(
+        (candidate) => candidate.anchorVerified !== void 0
+      );
+      const anchorVerified = finding.startLine !== void 0 && finding.endLine !== void 0 && contributors.every(
+        (candidate) => candidate.anchorVerified === true && candidate.filePath === finding.file && candidate.startLine === finding.startLine && candidate.endLine === finding.endLine
+      ) && (!finding.suggestion || contributors.some(
+        (candidate) => candidate.suggestion === finding.suggestion
+      ));
+      const selected = {
         ...representative,
         sourceFindingId: representative.sourceFindingId,
         sourceFindingIds: sortedUnique3(
           contributors.map((candidate) => candidate.sourceFindingId)
         ),
+        ...requiresVerifiedAnchor ? { anchorVerified } : {},
         severity: toProjectionSeverity2(finding.severity),
         title: finding.title,
         message: finding.message,
@@ -112390,6 +113755,17 @@ var LegacyReviewProjectionPolicyAdapter = class {
           contributors.flatMap((candidate) => candidate.observationIds)
         )
       };
+      if (requiresVerifiedAnchor && !anchorVerified) {
+        const {
+          startLine: _startLine,
+          line: _line,
+          endLine: _endLine,
+          suggestion: _suggestion,
+          ...unanchored
+        } = selected;
+        return unanchored;
+      }
+      return selected;
     });
   }
   async projectLifecycle(query) {
@@ -112543,6 +113919,14 @@ var LegacyReviewProjectionPolicyAdapter = class {
     if (revisionFile.status === "removed" /* Removed */) {
       return summaryPlacement3(occurrence, "file was deleted");
     }
+    if (occurrence.anchorVerified === false) {
+      return {
+        lineageId: occurrence.lineageId,
+        kind: "file" /* File */,
+        path: revisionFile.path,
+        reason: "finding has no verified current span"
+      };
+    }
     const line = occurrence.line ?? occurrence.endLine;
     if (line === void 0) {
       return {
@@ -112561,6 +113945,35 @@ var LegacyReviewProjectionPolicyAdapter = class {
         kind: "file" /* File */,
         path: revisionFile.path,
         reason: "legacy synthesis did not select inline placement"
+      };
+    }
+    if (occurrence.anchorVerified === true) {
+      const positions = mapLinesToPositions(revisionFile.patch);
+      const rangeStart = occurrence.startLine ?? line;
+      const rangeEnd = occurrence.endLine ?? line;
+      const low = Math.min(rangeStart, rangeEnd);
+      const high = Math.max(rangeStart, rangeEnd);
+      let rangePlaceable = positions.has(line);
+      for (let current = low; rangePlaceable && current <= high; current += 1) {
+        rangePlaceable = positions.has(current);
+      }
+      if (!rangePlaceable) {
+        return {
+          lineageId: occurrence.lineageId,
+          kind: "file" /* File */,
+          path: revisionFile.path,
+          reason: "verified span range is not provably placeable in the current diff"
+        };
+      }
+      return {
+        lineageId: occurrence.lineageId,
+        kind: "inline" /* Inline */,
+        path: revisionFile.path,
+        ...rangeStart < rangeEnd ? { startLine: rangeStart } : {},
+        // GitHub's publication line is the end of a multiline range.
+        line: rangeEnd,
+        endLine: rangeEnd,
+        body: inline.body
       };
     }
     const correctedLine = chooseBestAddedLineForComment(
@@ -112658,7 +114071,7 @@ function toLegacyFinding(finding) {
   return {
     file: "filePath" in finding ? finding.filePath : "",
     ...finding.startLine !== void 0 ? { startLine: finding.startLine } : {},
-    line: finding.line ?? finding.endLine ?? 1,
+    line: finding.line ?? finding.endLine ?? (finding.anchorVerified === false ? 0 : 1),
     ...finding.endLine !== void 0 ? { endLine: finding.endLine } : {},
     severity: toLegacySeverity(finding.severity),
     title: finding.title,
@@ -112772,8 +114185,8 @@ function minimalLegacyReview(findings) {
     }
   };
 }
-function findRevisionFile(path31, revisionFiles) {
-  const normalized = normalizePath3(path31);
+function findRevisionFile(path33, revisionFiles) {
+  const normalized = normalizePath3(path33);
   return revisionFiles.find(
     (file) => normalizePath3(file.path) === normalized || file.previousPath && normalizePath3(file.previousPath) === normalized
   );
@@ -112795,8 +114208,8 @@ function toProjectionSeverity2(severity) {
 function toLegacySeverity(severity) {
   return severity;
 }
-function normalizePath3(path31) {
-  return path31.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath3(path33) {
+  return path33.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique3(values) {
   return Array.from(new Set(values)).sort(
@@ -112932,13 +114345,13 @@ var ProductionReviewProjectionCommandFactory = class {
           `work_slot_investigation_inconclusive:${assignment.workSlotId}`
         );
       }
-      for (const path31 of manifest.paths) {
-        if (path31.kind === "full_patch" /* FullPatch */) {
-          reviewedFiles.add(path31.path);
-        } else if (path31.kind === "policy_excluded" /* PolicyExcluded */) {
-          policyExcludedFiles.add(path31.path);
+      for (const path33 of manifest.paths) {
+        if (path33.kind === "full_patch" /* FullPatch */) {
+          reviewedFiles.add(path33.path);
+        } else if (path33.kind === "policy_excluded" /* PolicyExcluded */) {
+          policyExcludedFiles.add(path33.path);
         } else {
-          coverageLimitations.push(`path_coverage:${path31.path}:${path31.kind}`);
+          coverageLimitations.push(`path_coverage:${path33.path}:${path33.kind}`);
         }
       }
       if (!isReviewPromptCoverageComplete(manifest)) {
@@ -112956,7 +114369,7 @@ var ProductionReviewProjectionCommandFactory = class {
         (omission) => `pull_request_load:${omission.reason}`
       ) : [],
       ...requiredExhaustedWorkSlotIds.map((id) => `work_slot_exhausted:${id}`),
-      ...this.input.uncoveredPaths.map((path31) => `work_slot_uncovered:${path31}`),
+      ...this.input.uncoveredPaths.map((path33) => `work_slot_uncovered:${path33}`),
       ...this.input.uncoveredLifecycleTargetIds.map(
         (targetId) => `lifecycle_target_uncovered:${targetId}`
       ),
@@ -113067,7 +114480,7 @@ function providerExecutionSummary(assignments, evidence) {
 }
 function parseObservation(value) {
   const parsed = JSON.parse(value);
-  if (parsed.payloadVersion !== 2 || !Array.isArray(parsed.normalizedFindings) || !Array.isArray(parsed.normalizedLifecycleRevalidations) || parsed.normalizedFindings.some((item) => !isRecord9(item)) || parsed.normalizedLifecycleRevalidations.some((item) => !isRecord9(item))) {
+  if (parsed.payloadVersion !== 2 || !Array.isArray(parsed.normalizedFindings) || !Array.isArray(parsed.normalizedLifecycleRevalidations) || parsed.normalizedFindings.some((item) => !isRecord10(item)) || parsed.normalizedLifecycleRevalidations.some((item) => !isRecord10(item))) {
     throw new Error("review_action_v2_observation_payload_invalid");
   }
   return {
@@ -113084,6 +114497,9 @@ function toFinding(observation, value, index) {
     value.normalizedFailureModeHash,
     "finding_failure_mode_hash"
   );
+  const startLine = optionalPositiveInteger(value.startLine);
+  const endLine = optionalPositiveInteger(value.endLine);
+  const anchorVerified = observation.providerKind === "ocr" /* Ocr */ && startLine !== void 0 && endLine !== void 0;
   return Object.freeze({
     sourceFindingId: deterministicId("finding", [
       observation.observationId,
@@ -113091,14 +114507,15 @@ function toFinding(observation, value, index) {
     ]),
     category,
     normalizedFailureModeHash,
+    ...observation.providerKind === "ocr" /* Ocr */ ? { anchorVerified } : {},
     severity: toFindingSeverity(value.severity),
     title,
     message,
     ...optionalString(value.suggestion) ? { suggestion: optionalString(value.suggestion) } : {},
     filePath,
-    ...optionalPositiveInteger(value.startLine) !== void 0 ? { startLine: optionalPositiveInteger(value.startLine) } : {},
-    ...optionalPositiveInteger(value.startLine) !== void 0 ? { line: optionalPositiveInteger(value.startLine) } : {},
-    ...optionalPositiveInteger(value.endLine) !== void 0 ? { endLine: optionalPositiveInteger(value.endLine) } : {},
+    ...startLine !== void 0 ? { startLine } : {},
+    ...startLine !== void 0 ? { line: startLine } : {},
+    ...endLine !== void 0 ? { endLine } : {},
     ...optionalConfidence(value.placementConfidence) !== void 0 ? { confidence: optionalConfidence(value.placementConfidence) } : {},
     providerIds: Object.freeze([observation.providerKind]),
     providerVoteKeys: Object.freeze([observation.providerVoteIdentityHash]),
@@ -113218,7 +114635,7 @@ function requireDigest4(value, field) {
   }
   return parsed;
 }
-function isRecord9(value) {
+function isRecord10(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function deterministicId(namespace, parts) {
@@ -113231,6 +114648,611 @@ function compareCodeUnits8(left, right) {
 }
 function sha25616(value) {
   return (0, import_crypto39.createHash)("sha256").update(value).digest("hex");
+}
+
+// src/review-orchestration/infrastructure/ocr-review-invocation-adapter.ts
+var import_crypto40 = require("crypto");
+var import_child_process21 = require("child_process");
+var fs23 = __toESM(require("fs"));
+var path30 = __toESM(require("path"));
+var OCR_ADAPTER_CONTRACT_VERSION = "ocr-managed-review.v1";
+var OCR_RETRY_POLICY_VERSION = "ocr-managed-no-replay.v1";
+function buildOcrControlledRuleText(input) {
+  const rule = [
+    "ReviewRouter managed additive policy (reviewrouter-managed-v1).",
+    "Report only issues material to this change: introduced or aggravated by the base-to-head diff.",
+    "For every finding describe the causal base-to-head change that creates or worsens the issue.",
+    "Allowed finding scope is the reviewed changed paths assigned to this run.",
+    input.language !== null ? `Write finding titles and messages in ${input.language}.` : "Write finding titles and messages in the repository language."
+  ].join("\n");
+  return `${JSON.stringify(
+    {
+      merge_system_rule: true,
+      include: [...input.assignedPaths].sort(),
+      rules: [{ id: "reviewrouter-managed-v1", content: rule }]
+    },
+    null,
+    2
+  )}
+`;
+}
+function buildOcrSemanticInvocationPreimage(input) {
+  return canonicalJson13({
+    contract: "ocr-semantic-identity.v1",
+    revision: {
+      baseSha: input.revision.baseSha.toLowerCase(),
+      mergeBaseSha: input.revision.mergeBaseSha.toLowerCase(),
+      headSha: input.revision.headSha.toLowerCase()
+    },
+    assignedPaths: [...new Set(input.assignedPaths)].sort(),
+    engine: {
+      profileRef: input.binary.profileRef,
+      binarySha256: input.binary.sha256,
+      packageVersion: input.binary.packageVersion
+    },
+    rules: {
+      ruleTextHash: sha25617(input.ruleText),
+      backgroundTextHash: input.backgroundText === null ? null : sha25617(input.backgroundText)
+    },
+    model: {
+      model: input.model,
+      ocrEffort: input.ocrEffort,
+      modelReasoningEffort: input.modelReasoningEffort,
+      language: input.language
+    },
+    budgets: {
+      timeoutMinutes: input.limits.timeoutMinutes ?? null,
+      maxTokens: input.limits.maxTokens ?? null,
+      maxTokensBudget: input.limits.maxTokensBudget ?? null,
+      requestTimeoutSec: input.limits.requestTimeoutSec
+    },
+    transportPolicy: "account-gateway-loopback-v1",
+    outputContract: OCR_OUTCOME_SCHEMA_VERSION,
+    retryPolicyVersion: OCR_RETRY_POLICY_VERSION,
+    attemptBudget: 1
+  });
+}
+function planOcrReviewAssignments(input) {
+  const ocrLanes = input.authorization.facts.providerVoteLanes.filter(
+    (lane) => lane.providerKind === "ocr" /* Ocr */
+  );
+  if (ocrLanes.length !== 1) {
+    throw new Error("review_action_v2_ocr_vote_lane_ambiguous");
+  }
+  const files = [...input.pr.files].sort(
+    (left, right) => left.filename < right.filename ? -1 : left.filename > right.filename ? 1 : 0
+  );
+  const paths = files.map((file) => file.filename);
+  const inScope = (target) => files.some(
+    (file) => [file.filename, file.previousFilename].some(
+      (candidate) => candidate !== void 0 && (target.currentPath === candidate || target.originalPath === candidate)
+    )
+  );
+  const uncoveredLifecycleTargetIds = Object.freeze(
+    input.lifecycleTargets.filter(inScope).map((target) => target.targetId).sort()
+  );
+  const plan = createStableReviewWorkPlan({
+    reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
+    compatibilityKey: input.compatibilityKey,
+    providers: [
+      {
+        providerName: "ocr/managed",
+        providerKind: "ocr" /* Ocr */,
+        providerVoteIdentityHash: ocrLanes[0].providerVoteIdentityHash,
+        required: true,
+        attemptBudget: 1,
+        retryPolicyVersion: OCR_RETRY_POLICY_VERSION
+      }
+    ],
+    batches: [
+      {
+        batchId: createStableReviewBatchId({
+          taskKind: "finding_discovery" /* FindingDiscovery */,
+          members: files
+        }),
+        taskKind: "finding_discovery" /* FindingDiscovery */,
+        required: true,
+        paths,
+        schedulingOrdinal: 0
+      }
+    ],
+    eligiblePaths: paths,
+    uncoveredPaths: [],
+    excludedPaths: [],
+    maxWorkSlots: Math.max(1, input.authorization.limits.maxWorkSlots),
+    maxAttemptsPerSlot: input.authorization.limits.maxAttemptsPerSlot
+  });
+  const assignments = plan.assignments.map(
+    (assignment) => Object.freeze({
+      workSlot: assignment.workSlot,
+      reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
+      mergeBaseSha: input.authorization.facts.mergeBaseSha,
+      context: input.pr,
+      lifecycleTargets: Object.freeze([]),
+      liveLifecycleStateHash: input.liveLifecycleStateHash
+    })
+  );
+  return Object.freeze({
+    plan,
+    assignments: Object.freeze(assignments),
+    uncoveredPaths: Object.freeze([]),
+    uncoveredLifecycleTargetIds
+  });
+}
+function runOcrReviewProcess(input) {
+  return new Promise((resolve5) => {
+    const child = (0, import_child_process21.spawn)(input.binaryPath, [...input.argv], {
+      cwd: input.cwd,
+      env: { ...input.env },
+      shell: false,
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let spawnError;
+    let stdout = "";
+    let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let done = false;
+    const killGroup = () => {
+      try {
+        if (process.platform !== "win32" && child.pid)
+          process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    const cancel = () => killGroup();
+    input.signal.addEventListener("abort", cancel, { once: true });
+    if (input.signal.aborted) killGroup();
+    child.stdout?.on("data", (chunk) => {
+      stdoutBytes += chunk.length;
+      if (stdoutBytes <= 64 * 1024) stdout += chunk.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderrBytes += chunk.length;
+      if (stderrBytes <= 64 * 1024) stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error2) => {
+      spawnError = error2.name;
+    });
+    child.on("close", (exitCode, signal) => {
+      if (done) return;
+      done = true;
+      input.signal.removeEventListener("abort", cancel);
+      resolve5({
+        closed: true,
+        exitCode,
+        signal,
+        ...spawnError !== void 0 ? { spawnError } : {},
+        stdoutTail: truncateDiagnosticTail(stdout),
+        stderrTail: truncateDiagnosticTail(stderr)
+      });
+    });
+  });
+}
+var OcrReviewInvocationAdapter = class {
+  constructor(assignments, options) {
+    this.options = options;
+    for (const assignment of assignments) {
+      if (this.assignments.has(assignment.workSlot.workSlotId)) {
+        throw new Error("review_action_v2_assignment_duplicate");
+      }
+      this.assignments.set(assignment.workSlot.workSlotId, assignment);
+    }
+  }
+  assignments = /* @__PURE__ */ new Map();
+  prepared = /* @__PURE__ */ new WeakMap();
+  preimages = /* @__PURE__ */ new WeakMap();
+  inFlight = Promise.resolve();
+  running = false;
+  /** Model-free: deterministic preview and semantic capture only (§5.2). */
+  async prepare(input) {
+    this.options.signal?.throwIfAborted();
+    const assignment = this.assignments.get(input.workSlot.workSlotId);
+    if (!assignment || assignment.workSlot !== input.workSlot) {
+      throw new Error("review_action_v2_assignment_missing");
+    }
+    if (assignment.workSlot.attemptBudget !== 1 || assignment.workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */) {
+      throw new Error("review_action_v2_ocr_slot_contract_invalid");
+    }
+    const assignedPaths = Object.freeze(
+      assignment.context.files.map((file) => file.filename).sort()
+    );
+    if (assignedPaths.length === 0) {
+      throw new Error("review_action_v2_ocr_nothing_to_review");
+    }
+    const ruleText = this.options.ruleText;
+    const backgroundText = this.options.backgroundText;
+    const revision = Object.freeze({
+      baseSha: assignment.context.baseSha,
+      mergeBaseSha: assignment.mergeBaseSha,
+      headSha: assignment.context.headSha
+    });
+    const semanticPreimage = buildOcrSemanticInvocationPreimage({
+      revision,
+      assignedPaths,
+      ruleText,
+      backgroundText,
+      binary: {
+        profileRef: this.options.profileRef,
+        sha256: this.options.binarySha256,
+        packageVersion: this.options.packageVersion
+      },
+      model: this.options.model,
+      ocrEffort: this.options.ocrEffort,
+      modelReasoningEffort: this.options.modelReasoningEffort,
+      language: this.options.language,
+      limits: this.options.limits
+    });
+    fs23.writeFileSync(this.options.run.rulePath, ruleText, { mode: 384 });
+    if (backgroundText !== null && this.options.run.backgroundPath !== null) {
+      fs23.writeFileSync(this.options.run.backgroundPath, backgroundText, {
+        mode: 384
+      });
+    }
+    const previewOutputPath = path30.join(
+      this.options.run.runDirectory,
+      "preview.json"
+    );
+    const timeoutMs = this.options.previewTimeoutMs?.() ?? this.options.limits.requestTimeoutSec * 1e3;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+      throw new Error("review_action_v2_ocr_preview_timeout");
+    }
+    const previewSignal = AbortSignal.any([
+      ...this.options.signal ? [this.options.signal] : [],
+      AbortSignal.timeout(timeoutMs)
+    ]);
+    previewSignal.throwIfAborted();
+    const previewResult = await this.options.previewRunner({
+      binaryPath: this.options.binaryPath,
+      argv: buildOcrReviewArgv({
+        binaryPath: this.options.binaryPath,
+        repoPath: this.options.checkoutRoot,
+        mergeBaseSha: revision.mergeBaseSha,
+        headSha: revision.headSha,
+        model: this.options.model,
+        rulePath: this.options.run.rulePath,
+        backgroundPath: backgroundText !== null ? this.options.run.backgroundPath : null,
+        outputPath: previewOutputPath,
+        effort: this.options.ocrEffort,
+        limits: this.options.limits,
+        preview: true
+      }),
+      env: buildOcrChildEnvironment({
+        homeDirectory: this.options.run.homeDirectory,
+        capabilityAuthorization: this.options.bridge.capabilityAuthorization,
+        path: process.env.PATH
+      }),
+      cwd: this.options.run.runDirectory,
+      signal: previewSignal,
+      outputPath: previewOutputPath
+    });
+    previewSignal.throwIfAborted();
+    if (previewResult.exitCode !== 0 || previewResult.spawnError !== void 0) {
+      throw new Error("review_action_v2_ocr_preview_failed");
+    }
+    const previewSelectedPaths = Object.freeze(
+      parseOcrPreviewSelection(readPreviewOutput(previewOutputPath))
+    );
+    const pathCoverage = assignedPaths.map((path33) => {
+      const file = assignment.context.files.find(
+        (candidate) => candidate.filename === path33
+      );
+      return {
+        path: path33,
+        // The full canonical patch of every assigned path is in the exact
+        // revision OCR reviews; a preview-skipped path stays visible as
+        // unreviewed, never as an RR policy exclusion (§8.1).
+        kind: previewSelectedPaths.includes(path33) ? "full_patch" /* FullPatch */ : "unavailable" /* Unavailable */,
+        contentHash: sha25617(
+          canonicalJson13({
+            filename: path33,
+            patch: file?.patch ?? null,
+            status: file?.status ?? null
+          })
+        )
+      };
+    });
+    const coverageManifest = createReviewPromptCoverageManifest({
+      workSlotId: input.workSlot.workSlotId,
+      reviewRevisionHash: assignment.reviewRevisionHash,
+      assignedPaths,
+      pathCoverage
+    });
+    const manifestPreimages = Object.freeze({
+      semanticIdentityPreimage: semanticPreimage,
+      providerCapabilityHash: canonicalJson13({
+        adapterVersion: OCR_ADAPTER_CONTRACT_VERSION,
+        preparedInvocationContract: PROVIDER_EXECUTION_CONTRACT_VERSION,
+        outputContract: OCR_OUTCOME_SCHEMA_VERSION,
+        binary: {
+          profileRef: this.options.profileRef,
+          sha256: this.options.binarySha256,
+          packageVersion: this.options.packageVersion
+        },
+        modelTransport: "account_gateway"
+      }),
+      outputSchemaHash: canonicalJson13({
+        outputContract: OCR_OUTCOME_SCHEMA_VERSION,
+        nativeManifestSchema: "ocr.run-manifest/v1"
+      }),
+      filePatchManifestHash: canonicalJson13(
+        assignment.context.files.map((file) => ({
+          additions: file.additions,
+          changes: file.changes,
+          deletions: file.deletions,
+          filename: file.filename,
+          patch: file.patch ?? null,
+          previousFilename: file.previousFilename ?? null,
+          status: file.status
+        }))
+      ),
+      contextManifestHash: canonicalJson13({
+        author: assignment.context.author,
+        body: assignment.context.body,
+        coverageHash: coverageManifest.coverageHash,
+        lifecycleTargetIds: [],
+        number: assignment.context.number,
+        title: assignment.context.title
+      }),
+      toolPolicyHash: canonicalJson13({
+        sandbox: "read-only",
+        network: "loopback-only",
+        workspaceMutation: false,
+        builtinTools: "native_embedded",
+        concurrency: 1
+      }),
+      environmentContractHash: canonicalJson13({
+        credentialKeys: ["REVIEWROUTER_LOCAL_MODEL_TOKEN"],
+        gitConfigGlobal: "/dev/null",
+        gitConfigNoSystem: "1",
+        homeMode: "0700",
+        configMode: "0600"
+      })
+    });
+    const immutableRequest = Object.freeze({
+      kind: OCR_ADAPTER_CONTRACT_VERSION,
+      revision,
+      assignedPaths,
+      ruleTextHash: sha25617(ruleText),
+      backgroundTextHash: backgroundText === null ? null : sha25617(backgroundText),
+      binary: Object.freeze({
+        profileRef: this.options.profileRef,
+        sha256: this.options.binarySha256,
+        packageVersion: this.options.packageVersion
+      }),
+      model: this.options.model,
+      ocrEffort: this.options.ocrEffort,
+      modelReasoningEffort: this.options.modelReasoningEffort,
+      language: this.options.language,
+      limits: this.options.limits,
+      outputContract: OCR_OUTCOME_SCHEMA_VERSION,
+      retryPolicyVersion: OCR_RETRY_POLICY_VERSION
+    });
+    const prepared = Object.freeze({
+      workSlotId: input.workSlot.workSlotId,
+      attemptOrdinal: input.attemptOrdinal,
+      provider: `ocr/${this.options.profileRef}`,
+      requestedModel: this.options.model,
+      // Additive controlled rule text only (§4.2).
+      reviewPrompt: ruleText,
+      investigationContextPrompt: null,
+      immutableRequest,
+      coverageManifest,
+      // OCR performs no RR model investigation; no fabricated plan (§4.2).
+      investigationProbePlan: null,
+      investigationSeedEnvelope: null,
+      manifestPreimages,
+      semanticIdentityHash: sha25617(semanticPreimage),
+      previewSelectedPaths,
+      manifestFacts: Object.freeze({
+        taskKindSet: Object.freeze(["finding_discovery" /* FindingDiscovery */]),
+        providerKind: "ocr" /* Ocr */,
+        providerCapabilityHash: sha25617(
+          manifestPreimages.providerCapabilityHash
+        ),
+        providerRequestEnvelopeHash: sha25617(semanticPreimage),
+        outputSchemaHash: sha25617(manifestPreimages.outputSchemaHash),
+        filePatchManifestHash: sha25617(manifestPreimages.filePatchManifestHash),
+        contextManifestHash: sha25617(manifestPreimages.contextManifestHash),
+        lifecycleTargetSetHash: null,
+        liveLifecycleStateHash: null,
+        toolPolicyHash: sha25617(manifestPreimages.toolPolicyHash),
+        executionProfile: "agentic_unbounded_v1",
+        baseTreeHash: null,
+        environmentContractHash: sha25617(
+          manifestPreimages.environmentContractHash
+        )
+      })
+    });
+    this.prepared.set(prepared, assignment);
+    this.preimages.set(prepared, prepared);
+    return prepared;
+  }
+  async execute(input) {
+    const assignment = this.prepared.get(input.invocation);
+    const preimages = this.preimages.get(input.invocation);
+    if (!assignment || !preimages || input.invocation.investigationProbePlan !== null || input.invocation.manifestFacts.providerKind !== "ocr" /* Ocr */) {
+      throw new Error("review_action_v2_prepared_invocation_identity_mismatch");
+    }
+    assertOcrInvocationLive(input);
+    const effectBefore = this.options.bridge.effectFacts?.();
+    if (effectBefore && effectBefore.effect !== "none") {
+      if (effectBefore.effect === "not_dispatched") {
+        throw new Error("review_action_v2_ocr_not_dispatched");
+      }
+      throw new Error("review_action_v2_ocr_gateway_effect_unknown");
+    }
+    const run2 = this.gate(() => this.runInvocation(input, assignment));
+    return await run2;
+  }
+  gate(operation) {
+    const next = this.inFlight.then(async () => {
+      if (this.running) throw new Error("review_action_v2_ocr_invocation_busy");
+      this.running = true;
+      try {
+        return await operation();
+      } finally {
+        this.running = false;
+      }
+    });
+    this.inFlight = next.catch(() => void 0);
+    return next;
+  }
+  async runInvocation(input, assignment) {
+    assertOcrInvocationLive(input);
+    const outputPath = path30.join(this.options.run.runDirectory, "result.json");
+    const argv = buildOcrReviewArgv({
+      binaryPath: this.options.binaryPath,
+      repoPath: this.options.checkoutRoot,
+      mergeBaseSha: assignment.mergeBaseSha,
+      headSha: assignment.context.headSha,
+      model: this.options.model,
+      rulePath: this.options.run.rulePath,
+      backgroundPath: this.options.backgroundText !== null ? this.options.run.backgroundPath : null,
+      outputPath,
+      effort: this.options.ocrEffort,
+      limits: this.options.limits,
+      preview: false
+    });
+    const processResult2 = await this.options.processRunner({
+      binaryPath: this.options.binaryPath,
+      argv,
+      env: buildOcrChildEnvironment({
+        homeDirectory: this.options.run.homeDirectory,
+        capabilityAuthorization: this.options.bridge.capabilityAuthorization,
+        path: process.env.PATH
+      }),
+      cwd: this.options.run.runDirectory,
+      signal: input.signal
+    });
+    assertOcrInvocationLive(input);
+    const failedProcess = processResult2.spawnError !== void 0 || processResult2.exitCode !== 0 || processResult2.signal !== null || !processResult2.closed;
+    const resultBytes = failedProcess ? Buffer.alloc(0) : await readOcrOutputFileAfterClose(
+      async (file) => fs23.readFileSync(file),
+      async (file) => fs23.statSync(file).size,
+      outputPath
+    );
+    assertOcrInvocationLive(input);
+    const headFiles = {
+      get: (file) => {
+        const resolved = path30.join(this.options.checkoutRoot, file);
+        try {
+          return fs23.readFileSync(resolved, "utf8");
+        } catch {
+          return void 0;
+        }
+      }
+    };
+    const diffPositions = new Map(
+      assignment.context.files.map((file) => [
+        file.filename,
+        mapLinesToPositions(file.patch)
+      ])
+    );
+    const accepted = acceptOcrManagedReviewResult({
+      admission: {
+        baseSha: assignment.context.baseSha,
+        mergeBaseSha: assignment.mergeBaseSha,
+        headSha: assignment.context.headSha
+      },
+      effectFacts: this.options.bridge.effectFacts?.(),
+      process: processResult2,
+      resultBytes,
+      observedActualModel: this.options.bridge.actualModel(),
+      observedRequestCount: this.options.bridge.requestCount(),
+      expectedPaths: assignment.context.files.map((file) => file.filename),
+      headFiles,
+      diffPositions
+    });
+    const result2 = {
+      content: accepted.reasons.join(","),
+      findings: [...accepted.normalized.findings],
+      usage: accepted.usage,
+      actualModel: accepted.actualModel,
+      // One engine invocation; model calls are accounted separately (§9).
+      transportAttemptCount: 1
+    };
+    const qualityFlags = accepted.partial ? ["context_inspection_incomplete", "provider_warning"] : [];
+    const observation = normalizeReviewObservation({
+      workSlotId: input.invocation.workSlotId,
+      attemptOrdinal: input.invocation.attemptOrdinal,
+      providerName: input.invocation.provider,
+      requestedModel: input.invocation.requestedModel,
+      result: result2,
+      transportAttemptCount: 1,
+      qualityFlags
+    });
+    if (observation.byteCount > OCR_NORMALIZATION_LIMITS.maxPayloadBytes) {
+      throw new OcrOutputTooLargeError("payload");
+    }
+    return observation;
+  }
+};
+function assertOcrInvocationLive(input) {
+  input.signal.throwIfAborted();
+  const lease = input.currentLease?.() ?? input.lease;
+  const expiresAt = Date.parse(lease.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    throw new Error("review_action_v2_lease_expired");
+  }
+}
+function readPreviewOutput(outputPath) {
+  try {
+    const bytes = fs23.readFileSync(outputPath);
+    if (bytes.length > 4 * 1024 * 1024) return void 0;
+    return JSON.parse(bytes.toString("utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function parseOcrPreviewSelection(raw) {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return [];
+  const value = raw;
+  const collect = (candidate) => Array.isArray(candidate) ? candidate.filter((item) => typeof item === "string") : [];
+  const direct = [
+    ...collect(value.paths),
+    ...collect(value.selected_paths),
+    ...collect(value.selectedPaths)
+  ];
+  if (direct.length > 0) return Object.freeze([...new Set(direct)]);
+  if (Array.isArray(value.files)) {
+    const selected = value.files.flatMap((file) => {
+      if (typeof file !== "object" || file === null) return [];
+      const entry = file;
+      const path33 = entry.path;
+      if (typeof path33 !== "string") return [];
+      return entry.will_review === true ? [path33] : [];
+    });
+    return Object.freeze([...new Set(selected)]);
+  }
+  if (Array.isArray(value.groups)) {
+    return Object.freeze([
+      ...new Set(
+        value.groups.flatMap(
+          (group) => collect(
+            typeof group === "object" && group !== null ? group.paths : void 0
+          )
+        )
+      )
+    ]);
+  }
+  return Object.freeze([]);
+}
+function canonicalJson13(value) {
+  if (value === void 0) return "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson13).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map(
+      (key) => `${JSON.stringify(key)}:${canonicalJson13(value[key])}`
+    ).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function sha25617(value) {
+  return (0, import_crypto40.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/infrastructure/system-review-orchestration-clock.ts
@@ -114087,7 +116109,7 @@ function verifyTerminalPayload(snapshot) {
   } catch {
     throw invalidResponse("investigation_terminal_payload_invalid");
   }
-  if (!isRecord10(value)) {
+  if (!isRecord11(value)) {
     throw invalidResponse("investigation_terminal_payload_invalid");
   }
   const findings = value.normalizedFindings;
@@ -114102,7 +116124,7 @@ function verifyTerminalPayload(snapshot) {
   }
 }
 function isNormalizedFinding(value) {
-  return isRecord10(value) && hasExactKeys2(value, [
+  return isRecord11(value) && hasExactKeys2(value, [
     "category",
     "endLine",
     "evidence",
@@ -114117,7 +116139,7 @@ function isNormalizedFinding(value) {
   ]) && typeof value.category === "string" && isNullablePositiveInteger(value.endLine) && isStringArray(value.evidence) && typeof value.message === "string" && isSha256Digest(value.normalizedFailureModeHash) && typeof value.path === "string" && isNullableConfidence(value.placementConfidence) && isFindingSeverity(value.severity) && isNullablePositiveInteger(value.startLine) && (value.suggestion === null || typeof value.suggestion === "string") && typeof value.title === "string";
 }
 function isNormalizedLifecycleRevalidation(value) {
-  return isRecord10(value) && hasExactKeys2(value, [
+  return isRecord11(value) && hasExactKeys2(value, [
     "confidence",
     "evidence",
     "fingerprint",
@@ -114127,7 +116149,7 @@ function isNormalizedLifecycleRevalidation(value) {
   ]) && isNullableConfidence(value.confidence) && Array.isArray(value.evidence) && value.evidence.every(isNormalizedLifecycleEvidence) && (value.fingerprint === null || typeof value.fingerprint === "string") && (value.rationale === null || typeof value.rationale === "string") && typeof value.targetId === "string" && isLifecycleVerdict(value.verdict);
 }
 function isNormalizedLifecycleEvidence(value) {
-  return isRecord10(value) && hasExactKeys2(value, ["endLine", "path", "reason", "startLine"]) && isNullablePositiveInteger(value.endLine) && typeof value.path === "string" && typeof value.reason === "string" && isNullablePositiveInteger(value.startLine);
+  return isRecord11(value) && hasExactKeys2(value, ["endLine", "path", "reason", "startLine"]) && isNullablePositiveInteger(value.endLine) && typeof value.path === "string" && typeof value.reason === "string" && isNullablePositiveInteger(value.startLine);
 }
 function isFindingSeverity(value) {
   return value === "critical" || value === "major" || value === "minor";
@@ -114148,7 +116170,7 @@ function isNullableConfidence(value) {
   return value === null || typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 function isSafeUsage(value) {
-  if (!isRecord10(value) || !hasExactKeys2(value, ["inputTokens", "outputTokens", "totalTokens"]) || !isNullableNonNegativeInteger(value.inputTokens) || !isNullableNonNegativeInteger(value.outputTokens) || !isNullableNonNegativeInteger(value.totalTokens)) {
+  if (!isRecord11(value) || !hasExactKeys2(value, ["inputTokens", "outputTokens", "totalTokens"]) || !isNullableNonNegativeInteger(value.inputTokens) || !isNullableNonNegativeInteger(value.outputTokens) || !isNullableNonNegativeInteger(value.totalTokens)) {
     return false;
   }
   return !(typeof value.inputTokens === "number" && typeof value.outputTokens === "number" && typeof value.totalTokens === "number" && value.totalTokens !== value.inputTokens + value.outputTokens);
@@ -114212,6 +116234,9 @@ function transportError(error2, operationId, mutation) {
 var providerOutputInvariantViolations = /* @__PURE__ */ new Set([
   "turn_obligation_claim_invalid",
   "investigation_obligation_evidence_mismatch",
+  "investigation_finding_evidence_invalid",
+  "investigation_finding_evidence_path_invalid",
+  "investigation_finding_evidence_line_invalid",
   "investigation_operation_backed_discovery_invalid",
   "investigation_operation_backed_discovery_limit_exceeded"
 ]);
@@ -114228,12 +116253,12 @@ function invalidResponse(message) {
   );
 }
 function requireRecord3(value, field) {
-  if (!isRecord10(value)) {
+  if (!isRecord11(value)) {
     throw invalidResponse(`${field}_invalid`);
   }
   return value;
 }
-function isRecord10(value) {
+function isRecord11(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function requireExactKeys4(value, keys) {
@@ -114341,9 +116366,9 @@ function nullableTimestamp(value, field) {
 }
 
 // src/review-investigation/infrastructure/review-action-v2-investigation-lease-adapter.ts
-var import_crypto40 = require("crypto");
+var import_crypto41 = require("crypto");
 var ReviewActionV2InvestigationLeaseAdapter = class {
-  constructor(client, requestId = import_crypto40.randomUUID) {
+  constructor(client, requestId = import_crypto41.randomUUID) {
     this.client = client;
     this.requestId = requestId;
   }
@@ -114512,7 +116537,7 @@ function leaseFromAcquire(input) {
   return lease;
 }
 function deterministicId2(namespace, parts) {
-  const digest3 = (0, import_crypto40.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  const digest3 = (0, import_crypto41.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
   return `rr:${namespace}:${digest3}`;
 }
 function requireString5(value, field) {
@@ -115141,6 +117166,8 @@ function reviewAgentProviderKind(providerKind) {
       return "claude_code" /* ClaudeCode */;
     case "openrouter" /* OpenRouter */:
       return null;
+    case "ocr" /* Ocr */:
+      return null;
   }
 }
 function requireReviewAgentProviderKind(providerKind) {
@@ -115185,7 +117212,7 @@ function reviewInvestigationRecordingSupportDecision(input, policy) {
   const bindingFailure = investigationPromptBindingFailure(input.invocation);
   if (bindingFailure !== null) return unsupported(bindingFailure);
   const plan = input.invocation.investigationProbePlan;
-  if (plan.status !== "complete" /* Complete */) {
+  if (plan === null || plan.status !== "complete" /* Complete */) {
     return unsupported(
       "probe_plan_incomplete" /* ProbePlanIncomplete */
     );
@@ -115601,7 +117628,7 @@ function capabilityUnavailable(message) {
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-investigation-context-attestation-adapter.ts
-var import_crypto41 = require("crypto");
+var import_crypto42 = require("crypto");
 var ReviewActionV2InvestigationContextAttestationAdapter = class {
   constructor(client, authorizationToken) {
     this.client = client;
@@ -115733,7 +117760,7 @@ var ReviewActionV2InvestigationContextAttestationAdapter = class {
   }
 };
 function deterministicId3(namespace, parts) {
-  const digest3 = (0, import_crypto41.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  const digest3 = (0, import_crypto42.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
   return `rr:${namespace}:${digest3}`;
 }
 function requireString6(value, field) {
@@ -115758,7 +117785,7 @@ function requireTimestamp4(value, field) {
 }
 
 // src/review-orchestration/infrastructure/production-t0-review-runner.ts
-var execFileAsync8 = (0, import_util14.promisify)(import_child_process20.execFile);
+var execFileAsync8 = (0, import_util15.promisify)(import_child_process22.execFile);
 var CODEX_RETRY_POLICY_VERSION = "codex-semantic-retry.v1";
 var SCM_READ_TOKEN_EXPIRY_MARGIN_MS = 3e4;
 var ProductionT0ReviewRunner = class {
@@ -115767,10 +117794,10 @@ var ProductionT0ReviewRunner = class {
     this.progress = progress;
   }
   async run(input) {
-    if (input.codexBinaryPath && path29.basename(input.codexBinaryPath) !== input.codexBinaryPath) {
+    if (input.codexBinaryPath && path31.basename(input.codexBinaryPath) !== input.codexBinaryPath) {
       input = {
         ...input,
-        codexBinaryPath: path29.resolve(process.cwd(), input.codexBinaryPath)
+        codexBinaryPath: path31.resolve(process.cwd(), input.codexBinaryPath)
       };
     }
     return withRunnerEnvironment(input, async () => {
@@ -115788,10 +117815,15 @@ var ProductionT0ReviewRunner = class {
     signal?.throwIfAborted();
     const fetchImpl = signal ? createAccountGatewayRunFetch(this.fetchImpl, signal) : this.fetchImpl;
     validateInput(input);
-    const approvedAgent = input.accountGateway ? readApprovedReviewAgent(
-      input.accountGateway.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
-      input.accountGateway.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
-    ) : void 0;
+    if (input.ocr && !input.accountGateway) {
+      throw new Error("review_action_v2_ocr_account_gateway_required");
+    }
+    const agentProfile = input.accountGateway ? {
+      json: input.accountGateway.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
+      digest: input.accountGateway.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
+    } : void 0;
+    const approvedOcrAgent = input.ocr ? readApprovedOcrReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
+    const approvedAgent = agentProfile && !input.ocr ? readApprovedReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
     if (approvedAgent && approvedAgent.agentKind !== "codex")
       throw new Error("review_investigation_approved_agent_unavailable");
     const authoritativeDeadlineEpochMs = process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
@@ -115811,7 +117843,7 @@ var ProductionT0ReviewRunner = class {
     signal?.throwIfAborted();
     const loadedConfig = ConfigLoader.load();
     const config = input.accountGateway ? { ...loadedConfig, providerRetries: 1 } : loadedConfig;
-    const codexProviderName = selectCodexProvider(config);
+    const codexProviderName = input.ocr ? "" : selectCodexProvider(config);
     const model = codexProviderName.slice("codex/".length);
     const reasoningEffort = resolveProductionInvestigationReasoningEffort({
       codexModel: model,
@@ -115885,7 +117917,7 @@ var ProductionT0ReviewRunner = class {
       } : void 0
     );
     await materializer.ensureAvailable({
-      checkoutRoot: path29.resolve(input.workspacePath),
+      checkoutRoot: path31.resolve(input.workspacePath),
       repository: input.repository,
       scmReadToken: await scmReadTokenProvider.getToken(),
       commitShas: [
@@ -115903,6 +117935,151 @@ var ProductionT0ReviewRunner = class {
       authorization.facts.headSha
     );
     signal?.throwIfAborted();
+    if (input.ocr) {
+      const ocrRuntimeEnv = input.accountGateway.runtimeConfig.runtimeEnv;
+      const ocrModel = ocrRuntimeEnv.CODEX_MODEL;
+      if (!ocrModel || !approvedOcrAgent) {
+        throw new Error("review_action_v2_ocr_model_missing");
+      }
+      const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
+      const ocrModelReasoningEffort = ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
+      const modelTransport = input.accountGateway.modelTransport;
+      const capabilityAuthorization = modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
+      if (!capabilityAuthorization) {
+        throw new Error("review_action_v2_ocr_capability_missing");
+      }
+      const ocrCompatibilityKey = hashIncrementalCompatibility(
+        config,
+        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
+      );
+      const ocrBackgroundParts = [pr2.title, pr2.body].filter(
+        (part) => part.trim().length > 0
+      );
+      const planned2 = planOcrReviewAssignments({
+        authorization,
+        pr: pr2,
+        config,
+        compatibilityKey: ocrCompatibilityKey,
+        lifecycleTargets: initialLifecycle.promptTargets,
+        liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
+      });
+      const bridge = {
+        baseUrl: modelTransport.baseUrl,
+        capabilityAuthorization,
+        actualModel: () => modelTransport.actualModel(),
+        requestCount: () => modelTransport.requestCount?.(),
+        effectFacts: input.ocr.effectFacts
+      };
+      const invocationAdapter2 = new OcrReviewInvocationAdapter(
+        planned2.assignments,
+        {
+          ...signal ? { signal } : {},
+          previewTimeoutMs: () => Math.floor(
+            executionDeadline.clampProviderTimeout(providerTimeoutMs)
+          ),
+          model: ocrModel,
+          binaryPath: input.ocr.run.binaryPath,
+          binarySha256: approvedOcrAgent.binarySha256,
+          packageVersion: approvedOcrAgent.packageVersion,
+          profileRef: approvedOcrAgent.profileRef,
+          run: input.ocr.run,
+          bridge,
+          limits: {
+            requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
+          },
+          ocrEffort: "medium",
+          modelReasoningEffort: ocrModelReasoningEffort,
+          language: ocrLanguage,
+          ruleText: buildOcrControlledRuleText({
+            language: ocrLanguage,
+            assignedPaths: pr2.files.map((file) => file.filename).sort()
+          }),
+          backgroundText: ocrBackgroundParts.length > 0 ? ocrBackgroundParts.join("\n\n") : null,
+          checkoutRoot: path31.resolve(input.workspacePath),
+          processRunner: runOcrReviewProcess,
+          previewRunner: runOcrReviewProcess
+        }
+      );
+      const identities2 = new DeterministicReviewOrchestrationIdentity();
+      const useCase2 = new RunT0ReviewOrchestration({
+        controlPlane,
+        revisionGuard,
+        oidc: {
+          getToken: () => oidc.requestToken(input.audience)
+        },
+        invocationManifestAssembler: new GeneratedProviderInvocationManifestAssembler(
+          authorization,
+          config,
+          ocrCompatibilityKey
+        ),
+        invocations: invocationAdapter2,
+        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+          modelTransport.failureFact
+        ),
+        invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
+        investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
+          logger
+        ),
+        leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+        projectionBuilder: createProductionReviewProjectionBuilder({
+          authorizationFacts: authorization.facts,
+          pr: pr2,
+          config,
+          protocolLimits: authorization.limits,
+          assignments: planned2.assignments.map((assignment) => ({
+            workSlotId: assignment.workSlot.workSlotId,
+            taskKind: assignment.workSlot.taskKind,
+            providerKind: assignment.workSlot.providerKind,
+            required: assignment.workSlot.required,
+            filePaths: assignment.context.files.map((file) => file.filename)
+          })),
+          uncoveredPaths: planned2.uncoveredPaths,
+          uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+          lifecycleInventory
+        }),
+        identities: identities2,
+        clock: new SystemReviewOrchestrationClock(),
+        delay: new CancellableReviewOrchestrationDelay(),
+        executionDeadline,
+        signal,
+        ...this.progress ? { progress: this.progress } : {}
+      });
+      const result3 = await useCase2.executeAuthorized(
+        {
+          executionId: identities2.deterministicId("execution", [
+            authorization.authorizationId,
+            authorization.facts.reviewRevisionHash,
+            planned2.plan.planHash
+          ]),
+          baseSha: authorization.facts.baseSha,
+          mergeBaseSha: authorization.facts.mergeBaseSha,
+          headSha: authorization.facts.headSha,
+          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          compatibilityKey: ocrCompatibilityKey,
+          planHash: planned2.plan.planHash,
+          workSlotsCanonicalJson: planned2.plan.workSlotsCanonicalJson,
+          assignmentManifestCanonicalJson: planned2.plan.assignmentManifestCanonicalJson,
+          assignmentManifestHash: planned2.plan.assignmentManifestHash,
+          workSlots: planned2.plan.assignments.map(
+            (assignment) => assignment.workSlot
+          ),
+          sourceRunId: authorization.facts.sourceRunId,
+          sourceRunAttempt: authorization.facts.sourceRunAttempt,
+          ownerIdHash: sha25618(
+            canonicalJson14({
+              authorizationId: authorization.authorizationId,
+              providerInstanceId: input.providerInstanceId,
+              sourceRunAttempt: authorization.facts.sourceRunAttempt,
+              sourceRunId: authorization.facts.sourceRunId
+            })
+          ),
+          allowPartial: true
+        },
+        authorization
+      );
+      signal?.throwIfAborted();
+      return mapOrchestrationResultToCodexOutcome(result3);
+    }
     const agenticContext = config.codexAgenticContext ?? true;
     const investigationRolloutResolution = resolveProductionReviewInvestigationRolloutResolution({
       flags: readProductionReviewInvestigationRolloutFlags(),
@@ -115937,7 +118114,7 @@ var ProductionT0ReviewRunner = class {
     const contextGatewayOptions = resolveProductionContextGatewaySessionFactoryOptions({
       agenticContext,
       investigationRecordingEnabled,
-      checkoutRoot: path29.resolve(input.workspacePath),
+      checkoutRoot: path31.resolve(input.workspacePath),
       gatewayBundlePath
     });
     const contextGateway = contextGatewayOptions ? new ContextGatewayInvocationSessionFactory(
@@ -115946,7 +118123,7 @@ var ProductionT0ReviewRunner = class {
       requiredContextWitness
     ) : void 0;
     const contextReplayRunner = contextGateway ? new ContextAttestationReplayRunner({
-      checkoutRoot: path29.resolve(input.workspacePath),
+      checkoutRoot: path31.resolve(input.workspacePath),
       gatewayBundlePath
     }) : void 0;
     const planned = planAssignments({
@@ -116061,7 +118238,7 @@ var ProductionT0ReviewRunner = class {
         });
       },
       {
-        workingDirectory: path29.resolve(input.workspacePath),
+        workingDirectory: path31.resolve(input.workspacePath),
         leaseDurationMs: providerTimeoutMs + 5 * 6e4,
         providerTimeoutMs,
         certificateTtlMs: 24 * 60 * 6e4,
@@ -116144,8 +118321,8 @@ var ProductionT0ReviewRunner = class {
         ),
         sourceRunId: authorization.facts.sourceRunId,
         sourceRunAttempt: authorization.facts.sourceRunAttempt,
-        ownerIdHash: sha25617(
-          canonicalJson13({
+        ownerIdHash: sha25618(
+          canonicalJson14({
             authorizationId: authorization.authorizationId,
             providerInstanceId: input.providerInstanceId,
             sourceRunAttempt: authorization.facts.sourceRunAttempt,
@@ -116256,7 +118433,7 @@ function publicInvestigationProcessDiagnostic(stderr) {
   ];
   return Object.freeze({
     stderrByteCount: Buffer.byteLength(stderr, "utf8"),
-    stderrDigest: (0, import_crypto42.createHash)("sha256").update(stderr).digest("hex").slice(0, 16),
+    stderrDigest: (0, import_crypto43.createHash)("sha256").update(stderr).digest("hex").slice(0, 16),
     diagnosticKinds: Object.freeze(
       diagnosticKinds.filter(([pattern]) => pattern.test(stderr)).map(([, kind]) => kind)
     )
@@ -116552,8 +118729,8 @@ function resolveContextGatewayBundlePath() {
   if (!entrypoint) {
     throw new Error("review_action_v2_runtime_entrypoint_missing");
   }
-  return path29.join(
-    path29.dirname(path29.resolve(entrypoint)),
+  return path31.join(
+    path31.dirname(path31.resolve(entrypoint)),
     "context-gateway.js"
   );
 }
@@ -116590,7 +118767,7 @@ function planAssignments(input) {
     const lifecycleTargets = input.lifecycleTargets.filter(
       (target) => batch.some(
         (file) => [file.filename, file.previousFilename].some(
-          (path31) => path31 !== void 0 && (target.currentPath === path31 || target.originalPath === path31)
+          (path33) => path33 !== void 0 && (target.currentPath === path33 || target.originalPath === path33)
         )
       )
     );
@@ -116614,7 +118791,7 @@ function planAssignments(input) {
     input.lifecycleTargets.filter(
       (target) => !assignedLifecycleTargetIds.has(target.targetId) && files.some(
         (file) => [file.filename, file.previousFilename].some(
-          (path31) => path31 !== void 0 && (target.currentPath === path31 || target.originalPath === path31)
+          (path33) => path33 !== void 0 && (target.currentPath === path33 || target.originalPath === path33)
         )
       )
     ).map((target) => target.targetId).sort()
@@ -116726,17 +118903,17 @@ async function withRunnerEnvironment(input, operation) {
     previous.set(key, process.env[key]);
     process.env[key] = value;
   };
-  set2("CODEX_HOME", input.codexHome);
+  if (input.codexHome !== void 0) set2("CODEX_HOME", input.codexHome);
   set2("CODEX_HEALTHCHECK_MODE", "binary");
   set2("REVIEW_ROUTER_PROGRESS_COMMENTS", "never");
   set2("GITHUB_REPOSITORY", input.repository);
   set2("REVIEWROUTER_HEAD_SHA", input.headSha.toLowerCase());
   if (input.codexBinaryPath) {
     set2("REVIEWROUTER_CODEX_BINARY", input.codexBinaryPath);
-    if (path29.isAbsolute(input.codexBinaryPath)) {
+    if (path31.isAbsolute(input.codexBinaryPath)) {
       set2(
         "PATH",
-        `${path29.dirname(input.codexBinaryPath)}${path29.delimiter}${process.env.PATH ?? ""}`
+        `${path31.dirname(input.codexBinaryPath)}${path31.delimiter}${process.env.PATH ?? ""}`
       );
     }
   }
@@ -116785,23 +118962,23 @@ async function readCheckedOutHead(workspacePath, signal) {
   }
   return head;
 }
-function canonicalJson13(value) {
+function canonicalJson14(value) {
   if (value === void 0) return "null";
-  if (Array.isArray(value)) return `[${value.map(canonicalJson13).join(",")}]`;
+  if (Array.isArray(value)) return `[${value.map(canonicalJson14).join(",")}]`;
   if (value && typeof value === "object") {
     return `{${Object.keys(value).sort().map(
-      (key) => `${JSON.stringify(key)}:${canonicalJson13(value[key])}`
+      (key) => `${JSON.stringify(key)}:${canonicalJson14(value[key])}`
     ).join(",")}}`;
   }
   return JSON.stringify(value);
 }
-function sha25617(value) {
-  return (0, import_crypto42.createHash)("sha256").update(value).digest("hex");
+function sha25618(value) {
+  return (0, import_crypto43.createHash)("sha256").update(value).digest("hex");
 }
 function runAccountGatewayGit(args, options, signal, timeoutMs = 6e4) {
   signal.throwIfAborted();
   return new Promise((resolve5, reject) => {
-    const child = (0, import_child_process20.spawn)("git", args, {
+    const child = (0, import_child_process22.spawn)("git", args, {
       ...options,
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"]
@@ -116866,7 +119043,7 @@ var CancellableReviewOrchestrationDelay = class extends SystemReviewOrchestratio
 };
 
 // src/codex-oauth/ci-review-progress.ts
-var fs22 = __toESM(require("fs"));
+var fs24 = __toESM(require("fs"));
 var CI_PROGRESS_MARKER = "<!-- review-router-live-progress -->";
 function formatCiReviewProgress(snapshot) {
   const percent = snapshot.counts.total === 0 && !(snapshot.phase === "terminal" && snapshot.terminal === "complete") ? 0 : percentage(snapshot.counts.completed, snapshot.counts.total);
@@ -116946,7 +119123,7 @@ var CiReviewProgressPublisher = class {
   appendSummary(body) {
     if (this.input.summaryPath) {
       try {
-        fs22.appendFileSync(this.input.summaryPath, `
+        fs24.appendFileSync(this.input.summaryPath, `
 ${body}
 `, "utf8");
       } catch (error2) {
@@ -117115,7 +119292,7 @@ var GitHubCiProgressAdapter = class {
 function isForkPullRequest(eventPath) {
   if (!eventPath) return false;
   try {
-    const event = JSON.parse(fs22.readFileSync(eventPath, "utf8"));
+    const event = JSON.parse(fs24.readFileSync(eventPath, "utf8"));
     return event.pull_request?.head?.repo?.fork === true || typeof event.repository?.full_name === "string" && typeof event.pull_request?.head?.repo?.full_name === "string" && event.repository.full_name !== event.pull_request.head.repo.full_name;
   } catch {
     return true;
@@ -117344,7 +119521,7 @@ async function runCodexOAuthRotatingAction(options = {}) {
     setFailed(failure.code);
   } finally {
     if (t0WorkspacePath) {
-      fs23.rmSync(t0WorkspacePath, { recursive: true, force: true });
+      fs25.rmSync(t0WorkspacePath, { recursive: true, force: true });
     }
   }
 }
@@ -117478,7 +119655,7 @@ async function runAccountGatewayActionInternal(options = {}) {
       const summaryPath = process.env.GITHUB_STEP_SUMMARY;
       if (summaryPath) {
         try {
-          fs23.appendFileSync(
+          fs25.appendFileSync(
             summaryPath,
             `
 Gateway result: ${fact.code}; effect: ${fact.effect}.
@@ -117999,7 +120176,7 @@ function appendTerminalOutcomeStepSummary(report) {
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
   if (!summaryPath) return;
   try {
-    fs23.appendFileSync(summaryPath, `
+    fs25.appendFileSync(summaryPath, `
 ${report.stepSummary}
 `, "utf8");
   } catch (error2) {
@@ -118143,8 +120320,8 @@ async function runReviewComputation(input) {
     process.env.CODEX_HEALTHCHECK_MODE = "binary";
     if (input.codexBinaryPath) {
       process.env.REVIEWROUTER_CODEX_BINARY = input.codexBinaryPath;
-      const codexBinDir = path30.dirname(input.codexBinaryPath);
-      process.env.PATH = previousPath ? `${codexBinDir}${path30.delimiter}${previousPath}` : codexBinDir;
+      const codexBinDir = path32.dirname(input.codexBinaryPath);
+      process.env.PATH = previousPath ? `${codexBinDir}${path32.delimiter}${previousPath}` : codexBinDir;
     }
     process.env.REVIEW_ROUTER_PROGRESS_COMMENTS = "never";
     await applyCodexRotatingReviewRuntimeConfig({
@@ -118274,7 +120451,7 @@ function readPullRequestEvent() {
   if (!eventPath) {
     throw new Error("codex_oauth_github_event_path_missing");
   }
-  const event = JSON.parse(fs23.readFileSync(eventPath, "utf8"));
+  const event = JSON.parse(fs25.readFileSync(eventPath, "utf8"));
   const eventName = process.env.GITHUB_EVENT_NAME || "";
   const workflowDispatch = eventName === "workflow_dispatch";
   const repository = event.repository?.full_name || process.env.GITHUB_REPOSITORY;
@@ -118661,7 +120838,7 @@ async function runInteractionPreflight(token) {
   const githubClient = new GitHubClient(token);
   const discussionHandler = createDiscussionHandler(githubClient);
   const payload = JSON.parse(
-    fs24.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
+    fs26.readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
   );
   const body = String(payload?.comment?.body || "");
   const botComment = payload?.comment?.user?.type === "Bot" || String(payload?.comment?.user?.login || "").endsWith("[bot]");

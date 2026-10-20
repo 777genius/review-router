@@ -18,10 +18,10 @@ import {
   type ReviewProjectionLimits,
 } from '../../review-projection/domain';
 import { LegacyReviewProjectionPolicyAdapter } from '../../review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter';
+import { ReviewExecutionProviderKind } from '../application';
 import type {
   AcceptedReviewObservation,
   AcceptedReviewWorkSlotEvidence,
-  ReviewExecutionProviderKind,
   ReviewProtocolLimits,
   ReviewRunAuthorizationFacts,
   ReviewTaskKind,
@@ -364,6 +364,15 @@ function toFinding(
     value.normalizedFailureModeHash,
     'finding_failure_mode_hash'
   );
+  const startLine = optionalPositiveInteger(value.startLine);
+  const endLine = optionalPositiveInteger(value.endLine);
+  // §8.2: the OCR normalizer emits a start/end span only for spans verified
+  // against the authorized HEAD content. Such an anchor must survive to the
+  // final placement verbatim; mark it so the projection never re-anchors it.
+  const anchorVerified =
+    observation.providerKind === ReviewExecutionProviderKind.Ocr &&
+    startLine !== undefined &&
+    endLine !== undefined;
   return Object.freeze({
     sourceFindingId: deterministicId('finding', [
       observation.observationId,
@@ -371,6 +380,9 @@ function toFinding(
     ]),
     category,
     normalizedFailureModeHash,
+    ...(observation.providerKind === ReviewExecutionProviderKind.Ocr
+      ? { anchorVerified }
+      : {}),
     severity: toFindingSeverity(value.severity),
     title,
     message,
@@ -378,15 +390,9 @@ function toFinding(
       ? { suggestion: optionalString(value.suggestion) }
       : {}),
     filePath,
-    ...(optionalPositiveInteger(value.startLine) !== undefined
-      ? { startLine: optionalPositiveInteger(value.startLine) }
-      : {}),
-    ...(optionalPositiveInteger(value.startLine) !== undefined
-      ? { line: optionalPositiveInteger(value.startLine) }
-      : {}),
-    ...(optionalPositiveInteger(value.endLine) !== undefined
-      ? { endLine: optionalPositiveInteger(value.endLine) }
-      : {}),
+    ...(startLine !== undefined ? { startLine } : {}),
+    ...(startLine !== undefined ? { line: startLine } : {}),
+    ...(endLine !== undefined ? { endLine } : {}),
     ...(optionalConfidence(value.placementConfidence) !== undefined
       ? { confidence: optionalConfidence(value.placementConfidence) }
       : {}),

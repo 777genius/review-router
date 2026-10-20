@@ -18,6 +18,8 @@ import {
   AccountGatewayModelTransport,
   createAccountGatewayRunFetch,
   startLocalGatewayModelTransport,
+  ACCOUNT_GATEWAY_BOUNDS,
+  LOCAL_MODEL_CAPABILITY_ENV,
   type AccountGatewayCheckoutRequest,
   type GatewayCloseReason,
   type GatewayReadback,
@@ -25,6 +27,15 @@ import {
   type LocalGatewayModelTransport,
   type GatewayTransportDiagnostic,
 } from '../review-orchestration/infrastructure/account-gateway-model-transport';
+import {
+  prepareOcrManagedRun,
+  readApprovedOcrReviewAgent,
+  readApprovedReviewAgentKind,
+  resolveApprovedOcrBinary,
+  type ApprovedOcrReviewAgent,
+  type OcrManagedRunHandle,
+} from './ocr-managed-bootstrap';
+import { extractRawLoopbackCapability } from '../review-orchestration/infrastructure/ocr-review-managed-run';
 import { GitHubActionsOidcTokenProvider } from './github-actions-oidc';
 import { CodexReviewAgentAdapter } from '../review-investigation/infrastructure/codex-review-agent-adapter';
 import { NodeReviewAgentProcessRunner } from '../review-investigation/infrastructure/review-agent-process-runner';
@@ -131,6 +142,7 @@ async function runAccountGatewayRuntimeInternal(
   let phase:
     | 'authorization'
     | 'checkout_capability'
+    | 'prepare_ocr'
     | 'create_workspace'
     | 'checkout'
     | 'prepare_cli'
@@ -145,6 +157,10 @@ async function runAccountGatewayRuntimeInternal(
   let codexHome: string | undefined;
   let cli: PreparedCodexCli | undefined;
   let bridge: LocalGatewayModelTransport | undefined;
+  let ocrRun: OcrManagedRunHandle | undefined;
+  let ocrBinary:
+    | Awaited<ReturnType<typeof resolveApprovedOcrBinary>>
+    | undefined;
   let reason: GatewayCloseReason = 'failed';
   const onSignal = () => {
     reason = 'cancelled';
@@ -204,48 +220,72 @@ async function runAccountGatewayRuntimeInternal(
     phase = 'checkout_capability';
     const capability = await readCapability();
     run.signal.throwIfAborted();
-    const agentProfile = readApprovedReviewAgent(
-      capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!,
-      capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST!
+    const agentProfileJson =
+      capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!;
+    const agentProfileDigest =
+      capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST!;
+    // Captured agentKind decides the engine before any CLI effect (plan 56 §5.2).
+    const agentKind = readApprovedReviewAgentKind(
+      agentProfileJson,
+      agentProfileDigest
     );
-    phase = 'prepare_cli';
-    cli = await prepareCodexCliBeforeAuthRead({
-      signal: run.signal,
-      approvedAgent: agentProfile,
-      logger: { info: core.info, warn: core.warning },
-    });
-    // A binary-only version check; alternate installed versions do not inherit retry qualification.
-    phase = 'version';
-    const version = await promisify(execFile)(cli.binaryPath, ['--version'], {
-      signal: run.signal,
-      killSignal: 'SIGKILL',
-      timeout: 10_000,
-      maxBuffer: 16_384,
-      env: { PATH: process.env.PATH, HOME: os.tmpdir() },
-    });
-    assertApprovedReviewAgentVersion(
-      agentProfile,
-      version.stdout.trim().replace(/^codex-cli /, '')
-    );
-    phase = 'negotiate';
-    // Use the execution adapter's existing capability contract. No PR session
-    // exists yet: negotiation must not resolve one or launch an agent turn.
-    await new CodexReviewAgentAdapter(new NodeReviewAgentProcessRunner(), {
-      binary: cli.binaryPath,
-      executionSessions: {
-        resolve: () => {
-          throw new Error('review_agent_precheckout_session_unavailable');
+    let ocrAgent: ApprovedOcrReviewAgent | undefined;
+    if (agentKind === 'ocr') {
+      // OCR dispatch happens before phase=prepare_cli: no Codex install,
+      // probe, negotiate, health check or exec exists on this path.
+      ocrAgent = readApprovedOcrReviewAgent(
+        agentProfileJson,
+        agentProfileDigest
+      );
+      phase = 'prepare_ocr';
+      ocrBinary = await resolveApprovedOcrBinary({
+        approvedAgent: ocrAgent,
+        signal: run.signal,
+      });
+    } else {
+      const agentProfile = readApprovedReviewAgent(
+        agentProfileJson,
+        agentProfileDigest
+      );
+      phase = 'prepare_cli';
+      cli = await prepareCodexCliBeforeAuthRead({
+        signal: run.signal,
+        approvedAgent: agentProfile,
+        logger: { info: core.info, warn: core.warning },
+      });
+      // A binary-only version check; alternate installed versions do not inherit retry qualification.
+      phase = 'version';
+      const version = await promisify(execFile)(cli.binaryPath, ['--version'], {
+        signal: run.signal,
+        killSignal: 'SIGKILL',
+        timeout: 10_000,
+        maxBuffer: 16_384,
+        env: { PATH: process.env.PATH, HOME: os.tmpdir() },
+      });
+      assertApprovedReviewAgentVersion(
+        agentProfile,
+        version.stdout.trim().replace(/^codex-cli /, '')
+      );
+      phase = 'negotiate';
+      // Use the execution adapter's existing capability contract. No PR session
+      // exists yet: negotiation must not resolve one or launch an agent turn.
+      await new CodexReviewAgentAdapter(new NodeReviewAgentProcessRunner(), {
+        binary: cli.binaryPath,
+        executionSessions: {
+          resolve: () => {
+            throw new Error('review_agent_precheckout_session_unavailable');
+          },
         },
-      },
-    }).negotiate({
-      providerKind: ReviewAgentProviderKind.Codex,
-      executionProfile: ReviewAgentExecutionProfile.GatewayAttestedAgentV1,
-      minimumConfinement: ReviewAgentConfinementStrength.GatewayOnly,
-      requireActualModelAttribution: true,
-      requireUsageAttribution: true,
-      requireFencedCancellation: true,
-      minimumMaxTurns: 1,
-    });
+      }).negotiate({
+        providerKind: ReviewAgentProviderKind.Codex,
+        executionProfile: ReviewAgentExecutionProfile.GatewayAttestedAgentV1,
+        minimumConfinement: ReviewAgentConfinementStrength.GatewayOnly,
+        requireActualModelAttribution: true,
+        requireUsageAttribution: true,
+        requireFencedCancellation: true,
+        minimumMaxTurns: 1,
+      });
+    }
     run.signal.throwIfAborted();
     phase = 'create_workspace';
     workspacePath = await createIsolatedCheckoutWorkspace({
@@ -256,27 +296,53 @@ async function runAccountGatewayRuntimeInternal(
     await safeCheckoutRepository({
       repository: capability.repository,
       headSha: capability.headSha,
+      ...(ocrAgent ? { mergeBaseSha: authorization.facts.mergeBaseSha } : {}),
       workspacePath,
       token: capability.token,
       signal: run.signal,
     });
     run.signal.throwIfAborted();
     phase = 'local_transport';
-    codexHome = await fs.mkdtemp(
-      path.join(
-        process.env.RUNNER_TEMP || os.tmpdir(),
-        'reviewrouter-keyless-codex-'
-      )
-    );
-    await fs.chmod(codexHome, 0o700);
     bridge = await startLocalGatewayModelTransport(transport, observeTransport);
-    // App-server uses generated isolated config; exec also receives pinned -c values.
-    // Empty fresh home; never auth.json, including dummy credentials.
-    await fs.writeFile(
-      path.join(codexHome, 'config.toml'),
-      bridge.configuration.join('\n') + '\n',
-      { mode: 0o600 }
-    );
+    if (ocrAgent) {
+      // Managed OCR run layout (§5.2): private run dir, HOME 0700 and
+      // HOME/.opencodereview/config.json 0600 with the controlled provider.
+      const model = capability.runtimeConfig.runtimeEnv.CODEX_MODEL;
+      if (!model) throw new Error('review_action_v2_ocr_model_missing');
+      ocrRun = await prepareOcrManagedRun({
+        approvedAgent: ocrAgent,
+        baseUrl: bridge.baseUrl,
+        rawCapability: extractRawLoopbackCapability(
+          bridge.environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ''
+        ),
+        model,
+        requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
+        modelReasoningEffort:
+          capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
+        language:
+          capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
+        signal: run.signal,
+        env: {
+          ...process.env,
+          REVIEWROUTER_OCR_BINARY: ocrBinary!.binaryPath,
+        },
+      });
+    } else {
+      codexHome = await fs.mkdtemp(
+        path.join(
+          process.env.RUNNER_TEMP || os.tmpdir(),
+          'reviewrouter-keyless-codex-'
+        )
+      );
+      await fs.chmod(codexHome, 0o700);
+      // App-server uses generated isolated config; exec also receives pinned -c values.
+      // Empty fresh home; never auth.json, including dummy credentials.
+      await fs.writeFile(
+        path.join(codexHome, 'config.toml'),
+        bridge.configuration.join('\n') + '\n',
+        { mode: 0o600 }
+      );
+    }
     run.signal.throwIfAborted();
     phase = 'runner';
     const review = await ports.review.run({
@@ -284,23 +350,37 @@ async function runAccountGatewayRuntimeInternal(
       repository: capability.repository,
       headSha: capability.headSha,
       workspacePath,
-      codexHome,
-      codexBinaryPath: cli.binaryPath,
+      ...(codexHome ? { codexHome } : {}),
+      ...(cli ? { codexBinaryPath: cli.binaryPath } : {}),
       scmReadToken: capability.token,
       scmReadTokenExpiresAt: capability.expiresAt,
       refreshScmReadToken: readCapability,
       accountGateway: {
         runtimeConfig: capability.runtimeConfig,
         controlPlane,
-        modelTransport: {
-          ...bridge,
-          environment: Object.freeze({
-            ...bridge.environment,
-            CODEX_HOME: codexHome,
-          }),
-        },
+        modelTransport:
+          codexHome !== undefined
+            ? {
+                ...bridge,
+                environment: Object.freeze({
+                  ...bridge.environment,
+                  CODEX_HOME: codexHome,
+                }),
+              }
+            : bridge,
         signal: run.signal,
       },
+      ...(ocrRun
+        ? {
+            ocr: {
+              run: ocrRun,
+              effectFacts: (): Readonly<{ effect: string }> | undefined => {
+                const failure = transport.lastFailure;
+                return failure ? { effect: failure.effect } : undefined;
+              },
+            },
+          }
+        : {}),
     });
     phase = 'terminal';
     // Runner has awaited App publication. Terminal status/advisory finishes before close.
@@ -363,6 +443,9 @@ async function runAccountGatewayRuntimeInternal(
           }
         };
         await cleanup('bridge', async () => bridge?.dispose());
+        // Private OCR run dir removal also covers cache-hit/early-exit paths.
+        await cleanup('OCR run', async () => ocrRun?.cleanup());
+        await cleanup('OCR binary', async () => ocrBinary?.cleanup());
         if (codexHome)
           await cleanup('CODEX_HOME', () =>
             fs.rm(codexHome!, { recursive: true, force: true })

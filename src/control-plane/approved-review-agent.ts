@@ -37,9 +37,16 @@ export function readApprovedReviewAgent(
   return profile;
 }
 
+/** Digest/version checks only need the installed identity; the managed OCR
+ * bootstrap verifies its approved profile against the same drift contract. */
+export type ApprovedAgentBinaryIdentity = Readonly<{
+  binarySha256: string;
+  packageVersion: string;
+}>;
+
 /** Hash the installed executable before executing it or checking out PR files. */
 export function assertApprovedReviewAgentBinary(
-  profile: ApprovedReviewAgent,
+  profile: ApprovedAgentBinaryIdentity,
   bytes: Uint8Array
 ): void {
   if (createHash('sha256').update(bytes).digest('hex') !== profile.binarySha256)
@@ -48,7 +55,7 @@ export function assertApprovedReviewAgentBinary(
 
 /** Version negotiation follows executable digest verification. */
 export function assertApprovedReviewAgentVersion(
-  profile: ApprovedReviewAgent,
+  profile: ApprovedAgentBinaryIdentity,
   observedVersion: string
 ): void {
   if (observedVersion !== profile.packageVersion)

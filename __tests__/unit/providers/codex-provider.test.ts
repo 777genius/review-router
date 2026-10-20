@@ -193,6 +193,7 @@ describe('CodexProvider', () => {
           environment: { CODEX_HOME: home },
           configuration: codexGatewayConfiguration('http://127.0.0.1:1'),
           actualModel: () => 'mimo-v2.6-pro',
+          failureFact: () => undefined,
           dispose: async () => {},
         };
         const provider = new CodexProvider('mimo-v2.6-pro', {
@@ -300,6 +301,7 @@ describe('CodexProvider', () => {
         'model_providers.reviewrouter_account_gateway.env_key="REVIEWROUTER_LOCAL_MODEL_TOKEN"',
       ],
       actualModel: () => 'mimo-v2.6-pro',
+      failureFact: () => undefined,
       dispose: async () => {},
     };
     const provider = new CodexProvider('mimo-v2.6-pro', {
@@ -431,6 +433,7 @@ describe('CodexProvider', () => {
                       'model_provider="reviewrouter_account_gateway"',
                     ],
                     actualModel: () => 'gpt-test',
+                    failureFact: () => undefined,
                     dispose: async () => {},
                   },
                 }

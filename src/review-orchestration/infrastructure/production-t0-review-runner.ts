@@ -536,7 +536,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       ...(investigationInvocationAdapter
         ? { investigationInvocations: investigationInvocationAdapter }
         : {}),
-      invocationFailureClassifier: new ProviderInvocationFailureClassifier(),
+      invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+        input.accountGateway?.modelTransport.failureFact
+      ),
       invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
       investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
         logger
@@ -1045,6 +1047,7 @@ function mapPartialFailureReason(
       return CodexOAuthV2TerminalReason.RequiredWorkExhausted;
     case 'required_investigation_deferred':
       return CodexOAuthV2TerminalReason.RequiredInvestigationDeferred;
+    case 'required_admission_limited':
     case 'required_execution_deadline_reached':
       return CodexOAuthV2TerminalReason.RequiredWorkExhausted;
     default:

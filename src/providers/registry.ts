@@ -1,3 +1,4 @@
+import type { UsageDelivery } from '../provider-usage/delivery';
 import { Provider } from './base';
 import { OpenCodeProvider } from './opencode';
 import { ClaudeCodeProvider } from './claude-code';
@@ -18,8 +19,53 @@ export class ProviderRegistry {
 
   constructor(
     private readonly pluginLoader?: PluginLoader,
-    private readonly reliabilityTracker?: ReliabilityTracker
+    private readonly reliabilityTracker?: ReliabilityTracker,
+    private readonly usage?: {
+      deliveries: readonly UsageDelivery[];
+      authMode?: string;
+    }
   ) {}
+
+  private usageOptions(name: string): {
+    usageDelivery?: UsageDelivery;
+    usageUpstreamBaseUrl?:
+      | 'https://api.openai.com/v1'
+      | 'https://chatgpt.com/backend-api/codex';
+  } {
+    const slash = name.indexOf('/');
+    const family = name.slice(0, slash),
+      model = name.slice(slash + 1).replace(/#\d+$/, '');
+    const provider =
+      family === 'codex-mimo'
+        ? 'mimo'
+        : family === 'codex-openrouter'
+          ? 'openrouter'
+          : family === 'codex'
+            ? this.usage?.authMode === 'openai-api'
+              ? 'openai'
+              : 'codex'
+            : family;
+    const requestedModel =
+      provider === 'openrouter' && model === 'free' ? 'openrouter/free' : model;
+    const matches =
+      this.usage?.deliveries.filter(
+        (d) =>
+          d.scope.provider === provider &&
+          d.scope.requestedModel === requestedModel
+      ) ?? [];
+    if (matches.length !== 1) return {};
+    return {
+      usageDelivery: matches[0],
+      ...(family === 'codex' && this.usage?.authMode === 'openai-api'
+        ? { usageUpstreamBaseUrl: 'https://api.openai.com/v1' as const }
+        : family === 'codex' && this.usage?.authMode === 'codex-oauth'
+          ? {
+              usageUpstreamBaseUrl:
+                'https://chatgpt.com/backend-api/codex' as const,
+            }
+          : {}),
+    };
+  }
 
   async createProviders(config: ReviewConfig): Promise<Provider[]> {
     let providers = this.instantiate(config.providers, config);
@@ -344,6 +390,7 @@ export class ProviderRegistry {
         const codexModel = baseModel === 'free' ? 'openrouter/free' : baseModel;
         list.push(
           new CodexProvider(codexModel, {
+            ...this.usageOptions(name),
             agenticContext: config.codexAgenticContext,
             eventAudit: config.codexEventAudit,
             modelProvider: 'openrouter',
@@ -364,6 +411,7 @@ export class ProviderRegistry {
         const model = name.replace('claude/', '');
         list.push(
           new ClaudeCodeProvider(model, {
+            ...this.usageOptions(name),
             agenticContext: config.claudeAgenticContext,
           })
         );
@@ -374,6 +422,7 @@ export class ProviderRegistry {
         const model = name.replace('codex/', '');
         list.push(
           new CodexProvider(model, {
+            ...this.usageOptions(name),
             agenticContext: config.codexAgenticContext,
             eventAudit: config.codexEventAudit,
           })
@@ -385,6 +434,7 @@ export class ProviderRegistry {
         const model = name.replace('codex-openrouter/', '');
         list.push(
           new CodexProvider(model, {
+            ...this.usageOptions(name),
             agenticContext: config.codexAgenticContext,
             eventAudit: config.codexEventAudit,
             modelProvider: 'openrouter',
@@ -398,6 +448,7 @@ export class ProviderRegistry {
         const model = name.replace('codex-mimo/', '');
         list.push(
           new CodexProvider(model, {
+            ...this.usageOptions(name),
             agenticContext: config.codexAgenticContext,
             eventAudit: config.codexEventAudit,
             modelProvider: 'mimo',

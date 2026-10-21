@@ -222,6 +222,9 @@ async function run(): Promise<void> {
       prepareRuntimePreflight(process.env);
     }
     runtimeConfig = await applyControlPlaneRuntimeConfig({
+      registerProviderUsage:
+        requestedMode !== 'runtime-preflight' &&
+        requestedMode !== 'interaction',
       logger: {
         info: core.info,
         warn: (message) => core.warning(message),
@@ -396,6 +399,24 @@ async function run(): Promise<void> {
     // core.setFailed() sets process.exitCode, so explicit process.exit() is unnecessary
     // Removed process.exit(1) to allow proper cleanup and resource disposal
   } finally {
+    if (runtimeConfig?.status === 'applied') {
+      const deliveries = runtimeConfig.usageDeliveries ?? [];
+      await Promise.allSettled(
+        (runtimeConfig.usageDeliveries ?? []).map((delivery) =>
+          delivery.cleanup()
+        )
+      );
+      core.setOutput(
+        'provider_usage_status',
+        !deliveries.length
+          ? 'unavailable'
+          : deliveries.some((d) => d.coverage === 'partial')
+            ? 'partial'
+            : deliveries.some((d) => d.coverage === 'pending')
+              ? 'pending'
+              : 'delivered'
+      );
+    }
     if (gatewaySelected) {
       try {
         clearCodexRotatingOidcRequestEnv();

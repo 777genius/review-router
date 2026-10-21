@@ -1263,3 +1263,52 @@ describe('production reusable workflows', () => {
     }
   });
 });
+
+describe('immutable Secrets runtime producer', () => {
+  it('binds checkout to the owning workflow SHA and runs the existing OIDC engine', () => {
+    const document = yaml.load(
+      readRepoFile('.github/workflows/reviewrouter-secrets-runtime.yml')
+    ) as WorkflowDocument;
+    const review = document.jobs!.review!;
+    const steps = review.steps!;
+    const checkout = steps.find(
+      (step) => step.name === 'Checkout immutable producer runtime'
+    )!;
+    expect(checkout.with).toMatchObject({
+      repository: '777genius/review-router',
+      ref: '${{ job.workflow_sha }}',
+      path: '.reviewrouter-runtime',
+      'persist-credentials': false,
+    });
+    expect(review.env).toMatchObject({
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+    });
+    expect(
+      steps.some(
+        (step) =>
+          step.run === 'node .reviewrouter-runtime/dist/index.js' &&
+          step.env?.REVIEW_ROUTER_MODE === 'review'
+      )
+    ).toBe(true);
+    const guard = steps.find(
+      (step) => step.name === 'Validate immutable producer identity'
+    )!.run!;
+    const script = guard.split("<<'NODE'\n")[1]!.replace(/\nNODE\s*$/, '');
+    const run = (sha: string, repository = '777genius/review-router') =>
+      runInNewContext(script, {
+        process: {
+          env: {
+            RR_WORKFLOW_SHA: sha,
+            RR_WORKFLOW_REPOSITORY: repository,
+            GITHUB_REPOSITORY_ID: '123',
+          },
+        },
+      });
+    expect(() => run('a'.repeat(40))).not.toThrow();
+    expect(() => run('main')).toThrow('producer_identity_invalid');
+    expect(() => run('a'.repeat(40), 'foreign/producer')).toThrow(
+      'producer_identity_invalid'
+    );
+  });
+});

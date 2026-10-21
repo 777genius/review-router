@@ -1,3 +1,5 @@
+import { UsageDelivery } from '../provider-usage/delivery';
+import { uploadUsageArtifact } from '../provider-usage/github-artifact';
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -131,6 +133,7 @@ export async function runProviderApiRuntime(
   let codexHome: string | undefined;
   let apiKey: string | undefined;
   let modelTransport: LocalGatewayModelTransport | undefined;
+  let usageDelivery: UsageDelivery | undefined;
   let phase = 'authorization';
   try {
     const fetchImpl = createAccountGatewayRunFetch(
@@ -163,6 +166,19 @@ export async function runProviderApiRuntime(
       authorization.facts.pullRequestNumber !== input.pullRequestNumber
     ) {
       throw new Error('provider_api_authorization_input_mismatch');
+    }
+    try {
+      usageDelivery = await UsageDelivery.create({
+        apiUrl: input.apiUrl,
+        executionToken: authorization.authorizationToken,
+        invocationId: `${authorization.authorizationId}-provider-api`,
+        temporaryDirectory: process.env.RUNNER_TEMP || os.tmpdir(),
+        fetchImpl: ports.fetchImpl,
+        uploadArtifact: uploadUsageArtifact,
+        status: (status) => core.setOutput('provider_usage_status', status),
+      });
+    } catch {
+      core.setOutput('provider_usage_status', 'unavailable');
     }
     phase = 'checkout_capability';
     let admitted: AdmittedRuntimeConfig | undefined;
@@ -245,6 +261,17 @@ export async function runProviderApiRuntime(
           ).runTimeoutSeconds * 1000
         ),
         streamFrameBytes: CODEX_REVIEW_AGENT_MAX_EVENT_BYTES,
+        ...(usageDelivery
+          ? {
+              usage: {
+                delivery: usageDelivery,
+                requestedModel:
+                  capability.runtimeConfig.runtimeEnv.REVIEW_PROVIDERS!.slice(
+                    'openrouter/'.length
+                  ),
+              },
+            }
+          : {}),
       }
     );
     // No auth.json or upstream key: exec and app-server share only the local capability.
@@ -294,6 +321,9 @@ export async function runProviderApiRuntime(
     for (const cleanup of [
       async () => {
         await modelTransport?.dispose();
+      },
+      async () => {
+        await usageDelivery?.cleanup();
       },
       async () => {
         if (codexHome) await fs.rm(codexHome, { recursive: true, force: true });

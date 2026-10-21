@@ -54,6 +54,8 @@ describe('applyControlPlaneRuntimeConfig', () => {
 
     expect(result).toEqual({
       status: 'applied',
+      usageDeliveries: [],
+      usageAuthMode: 'codex-oauth',
       apiUrl: 'https://app.reviewrouter.dev',
       actionVersion: 'v1.0.6',
       configVersion: 7,

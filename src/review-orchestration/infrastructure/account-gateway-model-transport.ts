@@ -1,3 +1,5 @@
+import { createResponsesUsageObserver } from '../../provider-usage/responses-observer';
+import type { UsageDelivery } from '../../provider-usage/delivery';
 import { randomBytes, timingSafeEqual } from 'crypto';
 import {
   createServer,
@@ -80,6 +82,7 @@ export type GatewayTransportDiagnostic = Readonly<{
 type DirectOpenRouterLimits = Readonly<{
   requestMs: number;
   streamFrameBytes: number;
+  usage?: { delivery: UsageDelivery; requestedModel: string };
 }>;
 type ObserveTransport = (
   diagnostic: GatewayTransportDiagnostic
@@ -245,6 +248,12 @@ export class AccountGatewayModelTransport {
       signal?.removeEventListener('abort', abort);
       this.held.delete(controller);
     };
+    const usage = this.directOpenRouter?.usage
+      ? createResponsesUsageObserver(
+          this.directOpenRouter.usage.delivery,
+          this.directOpenRouter.usage.requestedModel
+        )
+      : undefined;
     let responseReceived = false;
     let httpStatus: number | null = null;
     let currentRequestRef: string | undefined;
@@ -266,9 +275,11 @@ export class AccountGatewayModelTransport {
           'POST',
           this.directOpenRouter ? '/api/v1/responses' : `${BASE}/responses`,
           body,
-          controller.signal
+          controller.signal,
+          usage?.dispatched
         );
         responseReceived = true;
+        usage?.responseReceived();
         httpStatus = response.statusCode ?? 502;
         currentRequestRef = safeReference(
           response.headers['x-reviewrouter-request-ref']
@@ -333,14 +344,19 @@ export class AccountGatewayModelTransport {
       let count = 0;
       const diagnostic: Buffer[] = [];
       const audit = isStream
-        ? responsesStreamAudit((model) => {
-            if (
-              !model ||
-              (this.observedModel !== undefined && this.observedModel !== model)
-            )
-              this.modelUncertain = true;
-            else this.observedModel = model;
-          }, this.directOpenRouter?.streamFrameBytes)
+        ? responsesStreamAudit(
+            (model) => {
+              if (
+                !model ||
+                (this.observedModel !== undefined &&
+                  this.observedModel !== model)
+              )
+                this.modelUncertain = true;
+              else this.observedModel = model;
+            },
+            this.directOpenRouter?.streamFrameBytes,
+            usage?.observe
+          )
         : undefined;
       const bounded = new Transform({
         highWaterMark: ACCOUNT_GATEWAY_BOUNDS.bufferBytes,
@@ -429,6 +445,7 @@ export class AccountGatewayModelTransport {
         signal: controller.signal,
       }).then(
         () => {
+          usage?.finish(status !== 200, controller.signal.aborted);
           if (!isStream) {
             this.failure = failureFact(
               Buffer.concat(diagnostic),
@@ -454,6 +471,7 @@ export class AccountGatewayModelTransport {
             error.code === 'ECONNRESET'
           )
             return;
+          usage?.finish(true, controller.signal.aborted);
           fail(error);
         }
       );
@@ -465,6 +483,7 @@ export class AccountGatewayModelTransport {
         cancel: abort,
       };
     } catch (error) {
+      usage?.finish(true, controller.signal.aborted);
       observeTransport(
         this.observe,
         responseReceived ? 'upstream_headers' : 'upstream_request',
@@ -583,7 +602,8 @@ export class AccountGatewayModelTransport {
     method: string,
     route: string,
     body: Buffer | Readable | undefined,
-    signal: AbortSignal
+    signal: AbortSignal,
+    onDispatch?: () => void
   ): Promise<IncomingMessage> {
     if (
       this.directOpenRouter &&
@@ -594,6 +614,7 @@ export class AccountGatewayModelTransport {
     if (signal.aborted || !/^[A-Za-z0-9._~-]{1,16377}$/.test(token))
       throw new Error('account_gateway_authorization_unavailable');
     return await new Promise((resolve, reject) => {
+      onDispatch?.();
       const request = (
         this.origin.protocol === 'https:' ? httpsRequest : httpRequest
       )(
@@ -949,7 +970,8 @@ function failureFact(
  * configured-model guess. This observer never changes a payload or tool event. */
 function responsesStreamAudit(
   observe: (model: string | undefined) => void,
-  maximumFrameBytes: number = ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes
+  maximumFrameBytes: number = ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes,
+  observeUsage?: (frame: unknown) => void
 ) {
   const decoder = new TextDecoder('utf-8', { fatal: true });
   let line = '';
@@ -974,6 +996,7 @@ function responsesStreamAudit(
           )
             throw new Error();
           if (event && event !== raw.type) throw new Error();
+          observeUsage?.(raw);
           if (raw.type === 'response.completed') {
             if (
               completed ||

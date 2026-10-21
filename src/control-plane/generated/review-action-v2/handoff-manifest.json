@@ -1,7 +1,7 @@
 {
   "canonicalizerDigest": "12408727c244f65242534d3060983b87221715f2086631ab743c2c6f6248629a",
   "contractExportVersion": 1,
-  "expectedPublicActionBaseCommit": "106ec47acd297818e3cbdf9c9f9b9b7354a79843",
+  "expectedPublicActionBaseCommit": "9e494fb9b8809dc5c91c9f4159edcca13b89fbde",
   "generatedFileDigests": {
     "companion-contracts.ts": "16bd170f9d56dce048e8a137e1c02c1e72279b9c0a01ab52bbad9a817e2f372c",
     "fixtures/provider-invocation-manifest-v1.golden.json": "9e0369a80cb91c458befaf0b2aeb41be5b98246e0217b032e8fca414dab579bb",
@@ -51,10 +51,14 @@
     "schemas/review_publication_status.schema.json": "c9180e69b098f9a534a744f6cd854684f1775e5b813597e0c4f8a2c2107b186c",
     "schemas/review_run_authorize.schema.json": "a9238768bf1ca0863a240124d76475443b5558793e75932fc6ac52a443644411",
     "schemas/review_run_renew.schema.json": "111f2da451ebdf7cf7946be71e0617b9700d737ebea120eb3d3a6a9c01dc1ad4",
-    "schemas/review_snapshot_restore.schema.json": "b939feda8cfdc2d4b5d35cdbfb38fd6ed631377c65686f8bb60dab7764aac2d8"
+    "schemas/review_snapshot_restore.schema.json": "b939feda8cfdc2d4b5d35cdbfb38fd6ed631377c65686f8bb60dab7764aac2d8",
+    "usage-price-v1.ts": "e6b8dba84ed5032f4c68fb7d29f4802a51173faa956de20a47683ef0a6075cf4",
+    "usage-producer-v1.ts": "62757092d80bd472f1c4d64125ee8152acf2bb450148acd18539cd5372cfd1f2",
+    "usage-responses-v1.ts": "00c2c3d916530e07341afc1b8369999e228f193f1579265991c43afcb0b4881e",
+    "usage-v1.ts": "74e2217620e72cfd6bfddde732bfa548e76b8cc81f974b6e358320ced7ed8585"
   },
   "goldenFixtureDigest": "d6d5a918ce9e5e01a14aa9714a77d6557fcaee90c68e272cbc3f925f3e4c94a4",
   "protocolVersion": "2",
-  "saasSourceCommit": "0942e251c85f8531aaa6bb30ad8d8e934cb26f27",
+  "saasSourceCommit": "884baefd9c7db90530b4b79a289786e32f61fe50",
   "schemaDigest": "32bb25cd3490660dbaeecaa168f162ba97ff171e2dfab69e1bd435bc2e1cf3d3"
 }

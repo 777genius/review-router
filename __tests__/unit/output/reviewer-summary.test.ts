@@ -41,17 +41,19 @@ describe('reviewer summary markdown', () => {
       ],
     });
 
-    expect(markdown).toContain('# ReviewRouter');
-    expect(markdown).toContain('## Summary');
-    expect(markdown).toContain('## Findings');
+    expect(markdown).not.toContain('# ReviewRouter');
+    expect(markdown).not.toContain('## Summary');
+    expect(markdown).not.toContain('## Findings');
     expect(markdown).toContain('Performance Metrics');
     expect(markdown).toContain('<!-- reviewrouter:review-status:complete -->');
-    expect(markdown).toContain('## 1 finding (1 major)');
+    expect(markdown).toContain('🟡 **1 major**');
+    expect(markdown).not.toContain('0 critical');
+    expect(markdown).not.toContain('0 minor');
     expect(markdown).toContain(
-      '<summary>major · src/auth.ts:44 · Auth bypass</summary>'
+      '- **major · Auth bypass** · <code>src/auth.ts:44</code>'
     );
     expect(markdown).toContain('The query no longer filters by email.');
-    expect(markdown).toContain('**Location:** `src/auth.ts:44`');
+    expect(markdown).toContain('**Location:** <code>src/auth.ts:44</code>');
     expect(markdown).toContain('**Fix**');
     expect(markdown).toContain('return deny();');
     expect(markdown).not.toContain('Review complete');
@@ -90,7 +92,7 @@ describe('reviewer summary markdown', () => {
     expect(markdown).toContain(
       '&lt;details&gt;&lt;summary&gt;trap&lt;/summary&gt;'
     );
-    expect(markdown).toContain('<summary>major · b.ts:2 · Second</summary>');
+    expect(markdown).toContain('- **major · Second** · <code>b.ts:2</code>');
     expect(markdown).toContain('still visible');
     expect(markdown.match(/<details>/g)?.length).toBe(
       markdown.match(/<\/details>/g)?.length
@@ -395,7 +397,9 @@ describe('reviewer summary markdown', () => {
     });
 
     expect(markdown).toContain('- <code>src/file-000.ts</code> - compacted');
-    expect(markdown).not.toContain('- <code>src/file-100.ts</code> - compacted');
+    expect(markdown).not.toContain(
+      '- <code>src/file-100.ts</code> - compacted'
+    );
     expect(markdown).toContain('20 more files not shown.');
   });
 
@@ -417,7 +421,10 @@ describe('reviewer summary markdown', () => {
             `path_coverage:src/${'b'.repeat(170)}-${String(index).padStart(3, '0')}.ts:metadata_only`
         ),
         files: Array.from({ length: 100 }, (_, index) => ({
-          path: longPath.replace('.ts', `-${String(index).padStart(3, '0')}.ts`),
+          path: longPath.replace(
+            '.ts',
+            `-${String(index).padStart(3, '0')}.ts`
+          ),
           status: 'metadata-only' as const,
           reason: 'metadata-only content in prompt',
         })),
@@ -471,9 +478,12 @@ describe('reviewer summary markdown', () => {
     ['French', '**1 fichier supplémentaire non affiché.**'],
     ['German', '**1 weitere Datei wird nicht angezeigt.**'],
     ['Italian', '**1 file aggiuntivo non mostrato.**'],
-  ])('uses singular file wording when one manifest line is hidden: %s', (language, expected) => {
-    expect(reviewerSummaryCopy(language).moreFiles(1)).toBe(expected);
-  });
+  ])(
+    'uses singular file wording when one manifest line is hidden: %s',
+    (language, expected) => {
+      expect(reviewerSummaryCopy(language).moreFiles(1)).toBe(expected);
+    }
+  );
 
   it.each([
     { totalFiles: 1, reviewedFiles: 1, unreviewedFiles: 0 },
@@ -522,4 +532,346 @@ describe('reviewer summary markdown', () => {
     );
     expect(markdown).toContain('Больше не воспроизводится.');
   });
+});
+
+describe('compact summary publication contract', () => {
+  const metrics = {
+    totalFindings: 1,
+    critical: 1,
+    major: 0,
+    minor: 0,
+    providersUsed: 1,
+    providersSuccess: 1,
+  };
+  const finding = {
+    severity: 'critical' as const,
+    title: 'Guard the tenant boundary',
+    message: 'The tenant filter is missing. Requests can read another tenant.',
+    file: 'src/auth.ts',
+    line: 44,
+  };
+  const outsideDetails = (markdown: string) =>
+    markdown.replace(/<details>[\s\S]*?<\/details>/g, '');
+
+  it('shows a bounded ordinary paragraph and retains the full original body and fix', () => {
+    const paragraph =
+      'A request can cross tenant boundaries without this filter. '
+        .repeat(60)
+        .trim();
+    const original = {
+      ...finding,
+      message: `${paragraph}\n\nSecond paragraph with the full explanation.`,
+      suggestion: 'return deny();',
+    };
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [original],
+    });
+    const visible = outsideDetails(markdown);
+    const excerpt = visible
+      .split('\n\n')
+      .find((block) => block.startsWith('A request'))!;
+
+    expect(excerpt.length).toBeLessThanOrEqual(320);
+    expect(excerpt).toMatch(/\S…$/);
+    expect(paragraph.startsWith(excerpt.slice(0, -1))).toBe(true);
+    expect(markdown).toContain(paragraph);
+    expect(visible).not.toContain('Second paragraph');
+    expect(visible).not.toContain('return deny();');
+    expect(markdown).toContain('return deny();');
+    expect(original.message).toBe(
+      `${paragraph}\n\nSecond paragraph with the full explanation.`
+    );
+  });
+
+  it.each([
+    '    const indentedCode = true;',
+    '<img\n src=x onerror=alert(1)>',
+    '```ts\nconst x = 1;\n```',
+    '| Name | Value |\n|---|---|\n| a | b |',
+    '<div>Private HTML</div>',
+  ])(
+    'does not turn an initial non-prose block into a preview: %s',
+    (message) => {
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message }],
+      });
+      const visible = outsideDetails(markdown);
+      expect(visible).not.toContain('const x');
+      expect(visible).not.toContain('| Name');
+      expect(visible).not.toContain('Private HTML');
+      expect(visible).not.toContain('indentedCode');
+      expect(markdown).not.toContain('<img\n');
+      expect(markdown).not.toContain('<div>');
+      expect(markdown).toContain(finding.title);
+    }
+  );
+
+  it('preserves indented first-block code in full finding and lifecycle details without a prose preview', () => {
+    const code = '    const tenant = getTenant();\n    return tenant;';
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message: code, suggestion: code }],
+    });
+    expect(outsideDetails(markdown)).not.toContain('getTenant');
+    expect(markdown).toContain(`\n\n${code}\n\n**Location:**`);
+    expect(markdown).toContain(`\`\`\`\n${code}\n\`\`\``);
+    const lifecycle = renderReviewerLifecycleMarkdown({
+      language: 'en',
+      lines: [
+        {
+          kind: 'active',
+          title: 'Previous tenant issue',
+          message: code,
+          locationLabel: 'src/auth.ts:44',
+        },
+      ],
+    });
+    expect(lifecycle).toContain(`\n\n${code}\n\n<code>`);
+  });
+
+  it('keeps all same-location findings in severity/stable order and uses compact previews for four findings', () => {
+    const findings = [
+      { ...finding, title: 'Z last', severity: 'minor' as const },
+      { ...finding, title: 'B second' },
+      { ...finding, title: 'A first' },
+      { ...finding, title: 'C third', severity: 'major' as const },
+    ];
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics: {
+        ...metrics,
+        totalFindings: 4,
+        critical: 2,
+        major: 1,
+        minor: 1,
+      },
+      findings,
+    });
+    const visible = outsideDetails(markdown);
+    expect(visible).not.toContain(finding.message);
+    expect(visible.match(/<code>src\/auth.ts:44<\/code>/g)).toHaveLength(4);
+    expect(visible.indexOf('A first')).toBeLessThan(
+      visible.indexOf('B second')
+    );
+    expect(visible.indexOf('B second')).toBeLessThan(
+      visible.indexOf('C third')
+    );
+    expect(visible.indexOf('C third')).toBeLessThan(visible.indexOf('Z last'));
+    expect(markdown.match(/The tenant filter is missing/g)).toHaveLength(4);
+  });
+
+  it('reserves visible incomplete, provider, coverage and lifecycle warnings against oversized Unicode/code/evidence blocks', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics: { ...metrics, providersUsed: 2 },
+      findings: [
+        {
+          ...finding,
+          message: `\`\`\`ts\n${'😀'.repeat(30_000)}\n\`\`\``,
+          evidence: {
+            confidence: 0.9,
+            badge: 'High',
+            reasoning: 'я'.repeat(70_000),
+          },
+        },
+      ],
+      coverage: {
+        complete: false,
+        totalFiles: 3,
+        reviewedFiles: 1,
+        unreviewedFiles: 2,
+        mode: 'full',
+        limitations: ['Required auth.ts was not reviewed.'],
+      },
+      lifecycleAttention: true,
+      lifecycleWarnings: ['A human reply requires attention.'],
+      lifecycle: [
+        {
+          kind: 'uncertain',
+          title: 'Previous authentication issue',
+          message: 'Still needs a decision.',
+          locationLabel: 'src/old.ts:2',
+        },
+      ],
+    });
+    const visible = outsideDetails(markdown);
+    expect(Buffer.byteLength(markdown)).toBeLessThanOrEqual(60_000);
+    expect(visible).toContain('Review incomplete');
+    expect(visible).toContain('1 of 2 review providers failed.');
+    expect(visible).toContain('Required auth.ts was not reviewed.');
+    expect(visible).toContain('A human reply requires attention.');
+    expect(visible).toContain('needs attention');
+    expect(visible).toContain('Previous authentication issue');
+    expect(visible).toContain(
+      'Full findings remain in the review JSON artifact.'
+    );
+    expect(markdown.match(/<details>/g)?.length ?? 0).toBe(
+      markdown.match(/<\/details>/g)?.length ?? 0
+    );
+    expect(markdown.match(/^`{3,}/gm)?.length ?? 0).toBe(0);
+  });
+
+  it('keeps code fences balanced and all diagnostics under one unnested disclosure', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [
+        {
+          ...finding,
+          message: 'Explanation\n\n```ts\nconst x = 1;',
+          suggestion: '```\nconst y = 2;\n```',
+        },
+      ],
+      analysis: {
+        averageLikelihood: 0.5,
+        consensus: 'Mixed',
+        providerEstimates: { one: 0.5 },
+      },
+      diagram: 'graph TD\nA --> B',
+      measurements: { durationSeconds: 2, tokens: 100, providers: [] },
+      coverage: {
+        complete: true,
+        totalFiles: 1,
+        reviewedFiles: 1,
+        unreviewedFiles: 0,
+        mode: 'full',
+        limitations: [],
+      },
+    });
+    expect(markdown.match(/<summary>Review details<\/summary>/g)).toHaveLength(
+      1
+    );
+    expect(markdown).not.toMatch(
+      /<details>(?:(?!<\/details>)[\s\S])*<details>/
+    );
+    expect(markdown).toContain('const x = 1;\n```');
+    expect(markdown).toContain('````\n```\nconst y = 2;\n```\n````');
+    expect(markdown).toContain('### Review Scope');
+    expect(markdown).toContain('### Performance Metrics');
+    expect(markdown).toContain('### AI-Generated Code Analysis');
+    expect(markdown).toContain('### Impact Analysis Graph');
+  });
+
+  it('links only safe files at the reviewed head and keeps paths escaped in the fallback', () => {
+    const file = "src/a #](x)' файл.ts";
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, file, startLine: 40, endLine: 44 }],
+      source: {
+        repositoryHtmlUrl: 'https://github.com/owner/repo',
+        headSha: 'a'.repeat(40),
+      },
+    });
+    expect(markdown).toContain(
+      `/blob/${'a'.repeat(40)}/src/a%20%23%5D%28x%29%27%20%D1%84%D0%B0%D0%B9%D0%BB.ts#L40-L44`
+    );
+    for (const source of [
+      { repositoryHtmlUrl: 'javascript:alert(1)', headSha: 'a'.repeat(40) },
+      { repositoryHtmlUrl: 'https://github.com/owner/repo', headSha: 'main' },
+      {
+        repositoryHtmlUrl: 'https://github.com/owner/repo?token=secret',
+        headSha: 'a'.repeat(40),
+      },
+      {
+        repositoryHtmlUrl: 'https://github.com/owner/repo',
+        headSha: 'a'.repeat(40),
+        availablePaths: [],
+      },
+    ]) {
+      const fallback = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [finding],
+        source,
+      });
+      expect(fallback).not.toContain('/blob/');
+      expect(fallback).toContain('<code>src/auth.ts:44</code>');
+    }
+  });
+
+  it('uses only public count/enumeration parameters in optional theme banners and rewrites their incomplete state', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'Russian',
+      metrics,
+      findings: [finding],
+      bannerBaseUrl: 'https://reviewrouter.org',
+      previousCounts: { critical: 2, major: 0, minor: 0 },
+    });
+    const urls = [...markdown.matchAll(/(?:src|srcset)="([^"]+)"/g)].map(
+      (match) => new URL(match[1].replaceAll('&amp;', '&'))
+    );
+    expect(urls).toHaveLength(3);
+    for (const url of urls) {
+      expect(url.pathname).toBe('/review-banner/v1.svg');
+      expect([...url.searchParams.keys()]).toEqual([
+        'state',
+        'critical',
+        'major',
+        'minor',
+        'info',
+        'lang',
+        'theme',
+      ]);
+      expect(url.searchParams.get('critical')).toBe('3');
+      expect(url.searchParams.get('lang')).toBe('ru');
+      expect(url.searchParams.get('state')).toBe('complete');
+      expect(url.href).not.toContain('auth');
+    }
+    expect(urls.map((url) => url.searchParams.get('theme'))).toEqual([
+      'dark',
+      'light',
+      'light',
+    ]);
+    const revised = markReviewSummaryIncomplete({
+      summary: markdown,
+      language: 'ru',
+      preliminaryFindingCount: 1,
+    });
+    expect(revised).not.toContain('state=complete');
+    expect(revised.match(/state=incomplete/g)).toHaveLength(3);
+    expect(outsideDetails(revised)).toContain('Guard the tenant boundary');
+    expect(
+      renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [finding],
+      })
+    ).not.toContain('<picture>');
+  });
+
+  it.each([
+    'http://reviewrouter.org',
+    'https://secret@reviewrouter.org',
+    'https://reviewrouter.org?token=secret',
+    'https://reviewrouter.org/path',
+  ])('omits an unsafe optional banner origin: %s', (bannerBaseUrl) => {
+    expect(
+      renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [finding],
+        bannerBaseUrl,
+      })
+    ).not.toContain('<picture>');
+  });
+
+  it.each([-1, 1.5, 10_000, NaN, Infinity])(
+    'falls back to text for out-of-contract banner counts: %s',
+    (critical) => {
+      expect(
+        renderReviewerSummaryMarkdown({
+          language: 'en',
+          metrics: { ...metrics, critical },
+          findings: [finding],
+          bannerBaseUrl: 'https://reviewrouter.org',
+        })
+      ).not.toContain('<picture>');
+    }
+  );
 });

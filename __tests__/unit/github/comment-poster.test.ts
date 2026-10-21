@@ -1,3 +1,4 @@
+import { renderReviewerSummaryMarkdown } from '../../../src/output/reviewer-summary';
 import { CommentPoster } from '../../../src/github/comment-poster';
 import { GitHubClient } from '../../../src/github/client';
 import { InlineComment, FileChange } from '../../../src/types';
@@ -1245,6 +1246,72 @@ describe('CommentPoster', () => {
         )
       ).rejects.toThrow('Resource not accessible by integration');
       expect(mockOctokit.rest.issues.createComment).not.toHaveBeenCalled();
+    });
+
+    it('publishes a budgeted Unicode review in one balanced comment and updates it on repeat', async () => {
+      const findings = Array.from({ length: 50 }, (_, index) => ({
+        severity: 'critical' as const,
+        title: `Security issue ${index}`,
+        file: `src/file-${index}.ts`,
+        line: 1,
+        message: `Full explanation: ${'🛡️'.repeat(800)}`,
+        suggestion: 'return deny();',
+      }));
+      const body = renderReviewerSummaryMarkdown({
+        language: 'en',
+        findings,
+        metrics: {
+          totalFindings: 50,
+          critical: 50,
+          major: 0,
+          minor: 0,
+          providersUsed: 2,
+          providersSuccess: 1,
+        },
+        coverage: {
+          complete: false,
+          totalFiles: 51,
+          reviewedFiles: 50,
+          unreviewedFiles: 1,
+          mode: 'full',
+          limitations: ['One required file was not reviewed.'],
+        },
+      });
+      const metadata = {
+        reviewedHeadSha: 'a'.repeat(40),
+        workflowRunId: '123456789',
+        workflowRunAttempt: 1,
+        lifecycleMode: 'resolve' as const,
+        lifecycleSchemaVersion: 'review-thread-lifecycle-v1',
+        summaryGeneratedAt: '2026-10-21T00:00:00.000Z',
+      };
+      mockOctokit.rest.pulls.get.mockResolvedValue({
+        data: { head: { sha: metadata.reviewedHeadSha } },
+      });
+      const poster = new CommentPoster(mockClient, false);
+      await poster.postSummary(123, body, true, metadata);
+      expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
+      const posted: string =
+        mockOctokit.rest.issues.createComment.mock.calls[0][0].body;
+      expect(Buffer.byteLength(posted)).toBeLessThanOrEqual(60_000);
+      expect(posted).toMatch(/^<!-- review-router-bot -->/);
+      expect(posted).toContain('review-router-summary:');
+      expect(posted).toContain('Review incomplete');
+      expect(posted).toContain('One required file was not reviewed.');
+      expect(posted).toContain(
+        'Full findings remain in the review JSON artifact.'
+      );
+      expect(posted.match(/<details>/g)?.length).toBe(
+        posted.match(/<\/details>/g)?.length
+      );
+      mockOctokit.rest.issues.listComments.mockResolvedValue({
+        data: [{ id: 99, body: posted }],
+      });
+      await poster.postSummary(123, body, true, metadata);
+      expect(mockOctokit.rest.issues.createComment).toHaveBeenCalledTimes(1);
+      expect(mockOctokit.rest.issues.updateComment).toHaveBeenCalledWith(
+        expect.objectContaining({ comment_id: 99, body: posted })
+      );
     });
 
     it('splits large comments into chunks', async () => {

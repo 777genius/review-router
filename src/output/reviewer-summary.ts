@@ -1,4 +1,4 @@
-import { Finding, Review, ReviewMetrics, Severity } from '../types';
+import { Finding, PRContext, Review, ReviewMetrics, Severity } from '../types';
 import { isLinkedCurrentFinding } from '../analysis/thread-lifecycle';
 import { coverageManifestFileStatusRank } from '../review-projection/domain';
 import { countMaxConsecutiveBackticks } from '../utils/suggestion-formatter';
@@ -9,8 +9,8 @@ export const REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER =
   '<!-- reviewrouter:review-status:incomplete -->';
 
 const statusHeadingMarker = '<!-- reviewrouter:summary-status -->';
-const maxSummaryBytes = 60_000;
-const maxFindingBodyChars = 2_500;
+// Keep the final posted comment under 60KB after publisher markers/metadata.
+const maxSummaryBytes = 59_000;
 const maxCoverageFileLines = 100;
 
 export type ReviewerSummaryLocale =
@@ -178,12 +178,7 @@ export function limitReviewerPostedMarkdown(
   value: string,
   maxChars = 65_000
 ): string {
-  if (value.length <= maxChars) {
-    return value;
-  }
-  const suffix = '\n\n[truncated]';
-  const budget = Math.max(0, maxChars - suffix.length);
-  return `${dropIncompleteDetails(value.slice(0, budget)).trimEnd()}${suffix}`;
+  return limitUtf8(value, Math.min(maxSummaryBytes, maxChars));
 }
 
 export function neutralizeDetailsMarkup(value: string): string {
@@ -192,7 +187,28 @@ export function neutralizeDetailsMarkup(value: string): string {
   );
 }
 
-export type ReviewerSummaryInput = {
+export type ReviewerSummaryOptions = {
+  /** Trusted SCM metadata, never model output. Links always use the reviewed revision. */
+  readonly source?: NonNullable<Review['sourceRevision']>;
+  /** Trusted public origin; absent by default. Publication never fetches the image. */
+  readonly bannerBaseUrl?: string;
+};
+
+/** Reuse trusted target metadata without assigning links to deleted/unknown head paths. */
+export function reviewerSummarySourceFromPr(
+  pr: PRContext
+): Review['sourceRevision'] {
+  if (!pr.sourceRepositoryUrl) return undefined;
+  return {
+    repositoryHtmlUrl: pr.sourceRepositoryUrl,
+    headSha: pr.headSha,
+    availablePaths: pr.files
+      .filter((file) => file.status !== 'removed')
+      .map((file) => file.filename),
+  };
+}
+
+export type ReviewerSummaryInput = ReviewerSummaryOptions & {
   readonly language: string | undefined;
   readonly findings: readonly ReviewerSummaryFinding[];
   readonly metrics: Pick<
@@ -276,37 +292,48 @@ export function renderReviewerSummaryMarkdown(
       (input.coverage.metadataOnlyFiles ?? 0) > 0 ||
       (input.coverage.skippedFiles ?? 0) > 0 ||
       input.coverage.limitations.length > 0);
+  const severityLine = (['critical', 'major', 'minor'] as const)
+    .map((severity, i) => {
+      const count = counts[severity] + (previous?.[severity] ?? 0);
+      return count > 0
+        ? `${['🔴', '🟡', '🔵'][i]} **${count} ${severity}**`
+        : '';
+    })
+    .filter(Boolean)
+    .join(' · ');
   const heading = incomplete
     ? copy.incompleteHeading(counts.total)
-    : counts.total > 0
-      ? copy.findingsHeading(counts)
-      : historical
-        ? `## ${labels.previous}`
-        : input.dismissedFindings
-          ? `## ${labels.dismissed}`
-          : limitedScope
-            ? copy.limitedNoFindingsHeading
-            : copy.noFindingsHeading;
+    : severityLine ||
+      (counts.total > 0
+        ? copy.findingsHeading(counts)
+        : historical
+          ? `## ${labels.previous}`
+          : input.dismissedFindings
+            ? `## ${labels.dismissed}`
+            : limitedScope
+              ? copy.limitedNoFindingsHeading
+              : copy.noFindingsHeading);
   const lines = [
     incomplete
       ? REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER
       : REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
     `<!-- reviewrouter:summary-locale:${locale} -->`,
-    '# ReviewRouter',
-    '',
-    (['critical', 'major', 'minor'] as const)
-      .map((severity, i) => {
-        const count = counts[severity] + (previous?.[severity] ?? 0);
-        return `${['🔴', '🟡', '🔵'][i]} **${count} ${severity}**`;
-      })
-      .join(' · '),
-    '',
-    `## ${labels.summary}`,
-    '',
     statusHeadingMarker,
     heading,
   ];
   if (incomplete) lines.push('', copy.incompleteNote);
+  if (incomplete && severityLine) lines.push('', severityLine);
+  const chrome = compactCopy[locale];
+  const banner = renderReviewerBanner(input, locale, incomplete, counts);
+  if (banner) lines.push('', banner);
+  let omitted = false;
+  // Allocate before optional bodies: state and actionable warnings can never be
+  // displaced by an oversized finding, evidence, manifest, or provider trace.
+  const pushWarning = (value: string) => {
+    if (utf8Bytes([...lines, '', value].join('\n')) <= 12_000)
+      lines.push('', value);
+    else omitted = true;
+  };
   const failed = Math.max(
     0,
     input.metrics.providersUsed - input.metrics.providersSuccess
@@ -320,12 +347,40 @@ export function renderReviewerSummaryMarkdown(
       '',
       copy.dismissedNote(input.dismissedFindings)
     );
-  if (input.coverage) {
-    const coverage = input.coverage;
+  if (limitedScope && input.coverage) {
     lines.push(
       '',
-      '<details>',
-      `<summary>${labels.scope}</summary>`,
+      `**${labels.scope}: ${input.coverage.reviewedFiles}/${input.coverage.totalFiles} · ${labels.unreviewed}: ${input.coverage.unreviewedFiles}**`
+    );
+    for (const warning of input.coverage.limitations.slice(0, 3))
+      pushWarning(escapeMarkdownText(warning));
+  }
+  if (input.lifecycleAttention) {
+    lines.push('', `**${labels.attention}**`);
+    for (const warning of input.lifecycleWarnings ?? [])
+      pushWarning(escapeMarkdownText(warning));
+  }
+  const visibleLifecycle = (input.lifecycle ?? []).filter(
+    (line) =>
+      line.kind === 'active' ||
+      line.kind === 'uncertain' ||
+      line.kind === 'carried'
+  );
+  if (visibleLifecycle.length) {
+    lines.push('', `**${labels.previous} (${visibleLifecycle.length})**`);
+    for (const line of visibleLifecycle) {
+      pushWarning(
+        `- **${copy.lifecycle[line.kind]}** · ${escapeMarkdownText(line.title)} · ${escapeCoverageManifestPath(line.locationLabel)}`
+      );
+    }
+  }
+  const diagnostics: string[] = [];
+  const warningLines = lines.splice(0);
+  if (input.coverage) {
+    const coverage = input.coverage;
+    diagnostics.push(
+      '',
+      `### ${labels.scope}`,
       '',
       `| ${labels.metric} | ${labels.value} |`,
       '|---|---:|',
@@ -346,7 +401,7 @@ export function renderReviewerSummaryMarkdown(
       Number.isSafeInteger(excludedFiles) &&
       excludedFiles > 0
     ) {
-      lines.push(
+      diagnostics.push(
         `| ${scopeCopy[locale].excludedByPolicy} | ${excludedFiles} |`
       );
     }
@@ -358,15 +413,15 @@ export function renderReviewerSummaryMarkdown(
       ['skipped', coverage.skippedFiles],
     ] as const) {
       if (value !== undefined)
-        lines.push(`| ${scopeCopy[locale][key]} | ${value} |`);
+        diagnostics.push(`| ${scopeCopy[locale][key]} | ${value} |`);
     }
     if (coverage.agenticContext !== undefined)
-      lines.push(
+      diagnostics.push(
         `| ${scopeCopy[locale].context} | ${coverage.agenticContext ? '✓' : '—'} |`
       );
-    lines.push('');
-    if (!coverage.complete) lines.push(copy.coverageHeading, '');
-    lines.push(
+    diagnostics.push('');
+    if (!coverage.complete) diagnostics.push(copy.coverageHeading, '');
+    diagnostics.push(
       ...coverage.limitations.map((value) => `- ${escapeMarkdownText(value)}`)
     );
     const manifestFiles = incomplete
@@ -379,7 +434,6 @@ export function renderReviewerSummaryMarkdown(
       // cap can never cut inside the coverage <details> block; a mid-block cut
       // would drop the counts, limitations, and manifest together.
       const projected = [
-        ...lines,
         ...(incomplete && manifestLines.length === 0
           ? [copy.manifestHeading, '']
           : []),
@@ -387,96 +441,55 @@ export function renderReviewerSummaryMarkdown(
         line,
         '',
         copy.moreFiles(manifestFiles.length - manifestLines.length),
-        '',
-        '</details>',
       ];
-      if (utf8Bytes(projected.join('\n')) > maxSummaryBytes - 2_000) {
+      if (utf8Bytes(projected.join('\n')) > 16_000) {
         break;
       }
       manifestLines.push(line);
     }
-    if (incomplete && manifestLines.length > 0)
-      lines.push(copy.manifestHeading, '');
-    lines.push(...manifestLines);
+    if (incomplete && manifestFiles.length > 0)
+      diagnostics.push(copy.manifestHeading, '');
+    diagnostics.push(...manifestLines);
     const hiddenFiles = manifestFiles.length - manifestLines.length;
-    if (hiddenFiles > 0) lines.push('', copy.moreFiles(hiddenFiles));
-    lines.push('', '</details>');
+    if (hiddenFiles > 0) diagnostics.push('', copy.moreFiles(hiddenFiles));
   }
-  const releaseNotes = input.findings.filter(
-    (finding) => finding.category && finding.severity !== 'minor'
-  );
-  if (releaseNotes.length) {
-    lines.push('', `## ${scopeCopy[locale].release}`);
-    for (const category of new Set(
-      releaseNotes.map((finding) => finding.category!)
-    )) {
-      lines.push(
-        '',
-        `**${escapeMarkdownText(category)}:**`,
-        ...releaseNotes
-          .filter((finding) => finding.category === category)
-          .map(
-            (finding) =>
-              `- ${finding.severity === 'critical' ? '🔴' : '🟡'} ${escapeMarkdownText(finding.title)}`
-          )
-      );
-    }
-  }
-  if (input.findings.length > 0) lines.push('', `## ${labels.findings}`);
-  const remaining: string[] = [];
-  for (const finding of [...input.findings].sort(compareSummaryFindings)) {
-    const block = renderFindingDetails(copy, finding);
-    if (utf8Bytes([...lines, '', block].join('\n')) > maxSummaryBytes - 2_000) {
-      remaining.push(compactFindingLine(finding));
-    } else lines.push('', block);
-  }
-  if (remaining.length > 0)
-    lines.push('', copy.moreFindings(remaining.length), ...remaining);
-  if (input.lifecycle?.length)
-    lines.push(
+  const history = input.lifecycle ?? [];
+  if (history.length)
+    diagnostics.push(
       '',
-      `## ${labels.previous}`,
+      `### ${labels.previous}`,
       '',
-      renderReviewerLifecycleMarkdown({
-        language: input.language,
-        lines: input.lifecycle,
-      })
-    );
-  if (input.lifecycleAttention)
-    lines.push(
-      '',
-      `**${labels.attention}**`,
-      ...(input.lifecycleWarnings ?? []).map(
-        (value) => `- ${escapeMarkdownText(value)}`
+      ...history.map(
+        (line) =>
+          `- **${copy.lifecycle[line.kind]}** · ${escapeMarkdownText(line.title)} · ${escapeCoverageManifestPath(line.locationLabel)}\n\n${safeFindingBody(line.message)}`
       )
     );
   const measured = input.measurements;
-  lines.push(
+  diagnostics.push(
     '',
-    '<details>',
-    `<summary>${labels.performance}</summary>`,
+    `### ${labels.performance}`,
     '',
     `| ${labels.metric} | ${labels.value} |`,
     '|---|---:|',
     `| ${labels.providers} | ${input.metrics.providersSuccess}/${input.metrics.providersUsed} |`
   );
   if (measured?.durationSeconds !== undefined)
-    lines.push(
+    diagnostics.push(
       `| ${labels.duration} | ${measured.durationSeconds.toFixed(2)}s |`
     );
   if (measured?.tokens !== undefined)
-    lines.push(
+    diagnostics.push(
       `| ${labels.tokens} | ${measured.tokens.toLocaleString('en-US')} |`
     );
   if (measured?.cost !== undefined)
-    lines.push(`| ${labels.cost} | $${measured.cost.toFixed(4)} |`);
+    diagnostics.push(`| ${labels.cost} | $${measured.cost.toFixed(4)} |`);
   else
-    lines.push(
+    diagnostics.push(
       `| ${scopeCopy[locale].billing} | ${scopeCopy[locale].unknown} |`
     );
-  if (measured?.cacheHit) lines.push(`| ${labels.cache} | ✓ |`);
+  if (measured?.cacheHit) diagnostics.push(`| ${labels.cache} | ✓ |`);
   if (measured?.providers?.length)
-    lines.push('', `**${scopeCopy[locale].providerPerformance}:**`);
+    diagnostics.push('', `**${scopeCopy[locale].providerPerformance}:**`);
   for (const provider of measured?.providers ?? []) {
     const facts = [
       `${provider.durationSeconds.toFixed(2)}s`,
@@ -495,71 +508,97 @@ export function renderReviewerSummaryMarkdown(
           : provider.status === 'rate-limited'
             ? '⏸️'
             : '❌';
-    lines.push(
+    diagnostics.push(
       '',
       `- ${icon} **${escapeMarkdownText(provider.name)}${provider.requiredHealthy ? ` (${scopeCopy[locale].required})` : ''}** (${facts.join(', ')})`
     );
     if (provider.errorMessage)
-      lines.push(`  ${escapeMarkdownText(provider.errorMessage)}`);
+      diagnostics.push(`  ${escapeMarkdownText(provider.errorMessage)}`);
   }
-  lines.push('', '</details>');
   if (input.analysis) {
     const analysis = input.analysis;
-    lines.push(
+    diagnostics.push(
       '',
-      '<details>',
-      `<summary>${labels.analysis}</summary>`,
+      `### ${labels.analysis}`,
       '',
       `${(analysis.averageLikelihood * 100).toFixed(1)}% · ${escapeMarkdownText(analysis.consensus)}`,
       ...Object.entries(analysis.providerEstimates).map(
         ([name, likelihood]) =>
           `- ${escapeMarkdownText(name)}: ${(likelihood * 100).toFixed(1)}%`
       ),
-      '',
-      '</details>'
+      ''
     );
   }
   if (input.diagram?.trim() && /(?:-->|---|-.->|==>)/.test(input.diagram)) {
-    lines.push(
+    diagnostics.push(
       '',
-      '<details>',
-      `<summary>${labels.impact}</summary>`,
+      `### ${labels.impact}`,
       '',
       formatCodeFence(neutralizeDetailsMarkup(input.diagram), 'mermaid'),
-      '',
-      '</details>'
+      ''
     );
   }
   if (input.testHints?.length)
-    lines.push(
+    diagnostics.push(
       '',
-      '<details>',
-      `<summary>${scopeCopy[locale].tests}</summary>`,
+      `### ${scopeCopy[locale].tests}`,
       '',
       ...input.testHints.map(
         (hint) =>
-          `- \`${escapeMarkdownInline(hint.file)}\` → \`${escapeMarkdownInline(hint.suggestedTestFile)}\`: ${escapeMarkdownText(hint.testPattern)}`
+          `- ${escapeCoverageManifestPath(hint.file)} → ${escapeCoverageManifestPath(hint.suggestedTestFile)}: ${escapeMarkdownText(hint.testPattern)}`
       ),
-      '',
-      '</details>'
+      ''
     );
-  const measuredFooter = [
-    measured?.durationSeconds !== undefined
-      ? `${measured.durationSeconds.toFixed(1)}s`
-      : '',
-    measured?.cost !== undefined ? `$${measured.cost.toFixed(4)}` : '',
-  ].filter(Boolean);
-  lines.push(
-    '',
-    '---',
-    '',
-    `<sub>${[...measuredFooter, 'Powered by ReviewRouter'].join(' • ')}</sub>`
-  );
-  return limitUtf8(lines.join('\n'), maxSummaryBytes);
+  lines.push(...warningLines);
+  // Every optional append is atomic. The final notice and closing tag are reserved.
+  const notice = `**${chrome.omitted}**`;
+  const reserve = utf8Bytes(notice) + 500;
+  const append = (block: string, budget = maxSummaryBytes): boolean => {
+    if (utf8Bytes([...lines, '', block].join('\n')) + reserve > budget) {
+      omitted = true;
+      return false;
+    }
+    lines.push('', block);
+    return true;
+  };
+  const findings = [...input.findings].sort(compareSummaryFindings);
+  for (const finding of findings) {
+    const overview = compactFindingLine(finding, input.source);
+    const excerpt = findings.length <= 3 ? findingExcerpt(finding.message) : '';
+    const preview = [
+      overview,
+      ...(excerpt ? ['', escapeMarkdownText(excerpt)] : []),
+    ].join('\n');
+    const details = renderFindingDetails(copy, finding, chrome);
+    if (!append(`${preview}\n\n${details}`, maxSummaryBytes - 6_000)) {
+      append(preview, maxSummaryBytes - 6_000);
+    }
+  }
+  // Keep the diagnostic header/table even when a later large block does not fit.
+  const details: string[] = [];
+  for (const block of markdownBlocks(diagnostics.join('\n'))) {
+    const candidate = `<details>\n<summary>${chrome.details}</summary>\n\n${[...details, block].join('\n\n')}\n\n</details>`;
+    if (
+      utf8Bytes([...lines, '', candidate].join('\n')) + reserve <=
+      maxSummaryBytes
+    )
+      details.push(block);
+    else omitted = true;
+  }
+  if (details.length)
+    append(
+      `<details>\n<summary>${chrome.details}</summary>\n\n${details.join('\n\n')}\n\n</details>`
+    );
+  if (omitted) lines.push('', notice);
+  return lines.join('\n');
 }
 
 /** Legacy compatibility mapping only; presentation stays in the normalized renderer. */
-export function renderReviewSummary(review: Review, language?: string): string {
+export function renderReviewSummary(
+  review: Review,
+  language?: string,
+  options: ReviewerSummaryOptions = {}
+): string {
   const retainedLocale = review.summary.match(
     /<!-- reviewrouter:summary-locale:([a-z]{2}) -->/
   )?.[1];
@@ -620,6 +659,8 @@ export function renderReviewSummary(review: Review, language?: string): string {
     review.metrics.totalTokens > 0 ||
     review.metrics.totalCost > 0;
   return renderReviewerSummaryMarkdown({
+    ...(review.sourceRevision ? { source: review.sourceRevision } : {}),
+    ...options,
     language: language ?? retainedLocale,
     findings: review.findings.map(toReviewerSummaryFinding),
     metrics: review.metrics,
@@ -709,8 +750,8 @@ export function renderReviewerLifecycleMarkdown(input: {
       `${label} · ${line.locationLabel} · ${line.title}`.trim()
     );
     const body = [
-      neutralizeDetailsMarkup(line.message.trim()),
-      line.locationLabel,
+      safeFindingBody(line.message.trimEnd()),
+      escapeCoverageManifestPath(line.locationLabel),
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -744,7 +785,11 @@ export function markReviewSummaryIncomplete(input: {
       REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
       REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER
     )
-    .replace(new RegExp(`${status}## [^\\n]+`), `${status}${heading}`);
+    .replace(new RegExp(`${status}[^\\n]+`), `${status}${heading}`)
+    .replace(
+      /(\/review-banner\/v1\.svg\?state=)complete(?=&amp;|&)/g,
+      '$1incomplete'
+    );
   if (rewritten.includes(copy.incompleteNote)) {
     return rewritten;
   }
@@ -796,52 +841,97 @@ export function findingLocationLabel(finding: {
 
 function renderFindingDetails(
   copy: ReviewerSummaryCopy,
-  finding: ReviewerSummaryFinding
+  finding: ReviewerSummaryFinding,
+  chrome: CompactCopy
 ): string {
-  const location = findingLocationLabel(finding);
-  const summary = escapeHtml(
-    `${finding.severity} · ${location} · ${finding.title.trim()}`
-  );
-  const message = truncateChars(
-    neutralizeDetailsMarkup(finding.message.trim()),
-    maxFindingBodyChars
-  );
   const parts = [
     '<details>',
-    `<summary>${summary}</summary>`,
+    `<summary>${escapeHtml(chrome.findingDetails)}</summary>`,
     '',
-    message,
+    safeFindingBody(finding.message.trimEnd()),
     '',
-    `**${copy.location}:** \`${escapeMarkdownInline(location)}\``,
+    `**${copy.location}:** ${escapeCoverageManifestPath(findingLocationLabel(finding))}`,
   ];
-  if (finding.suggestion?.trim()) {
+  if (finding.suggestion?.trim())
     parts.push(
       '',
       `**${copy.fix}**`,
       '',
-      formatCodeFence(finding.suggestion.trim())
+      formatCodeFence(neutralizeDetailsMarkup(finding.suggestion.trimEnd()))
     );
-  }
   if (finding.evidence)
     parts.push(
       '',
-      `**Evidence:** ${escapeMarkdownText(finding.evidence.badge)} (${Math.round(finding.evidence.confidence * 100)}%)`,
+      `**${chrome.evidence}:** ${escapeMarkdownText(finding.evidence.badge)} (${Math.round(finding.evidence.confidence * 100)}%)`,
       '',
-      neutralizeDetailsMarkup(finding.evidence.reasoning ?? '')
+      safeFindingBody(finding.evidence.reasoning ?? '')
     );
   if (finding.attribution?.length)
     parts.push(
       '',
       finding.attribution.length === 1
-        ? `<sub>Model: ${escapeHtml(finding.attribution[0])}</sub>`
-        : `<sub>Models: ${escapeHtml(finding.attribution.join(', '))} · agreement ${finding.attribution.length}/${Math.max(finding.attributionPoolSize ?? finding.attribution.length, finding.attribution.length)}</sub>`
+        ? `<sub>${chrome.model}: ${escapeHtml(finding.attribution[0])}</sub>`
+        : `<sub>${chrome.models}: ${escapeHtml(finding.attribution.join(', '))} · ${chrome.agreement} ${finding.attribution.length}/${Math.max(finding.attributionPoolSize ?? finding.attribution.length, finding.attribution.length)}</sub>`
     );
   parts.push('', '</details>');
   return parts.join('\n');
 }
 
-function compactFindingLine(finding: ReviewerSummaryFinding): string {
-  return `- **${finding.severity}** \`${escapeMarkdownInline(findingLocationLabel(finding))}\` ${escapeMarkdownInline(finding.title.trim())}`;
+function compactFindingLine(
+  finding: ReviewerSummaryFinding,
+  source?: ReviewerSummaryOptions['source']
+): string {
+  const location = escapeCoverageManifestPath(findingLocationLabel(finding));
+  const url = findingSourceUrl(finding, source);
+  return `- **${finding.severity} · ${escapeMarkdownText(singleLineText(finding.title).trim())}** · ${url ? `[${location}](${url})` : location}`;
+}
+
+function findingSourceUrl(
+  finding: ReviewerSummaryFinding,
+  source?: ReviewerSummaryOptions['source']
+): string | undefined {
+  if (!source || !/^[a-f0-9]{40,64}$/i.test(source.headSha)) return undefined;
+  try {
+    const repo = new URL(source.repositoryHtmlUrl);
+    if (
+      repo.protocol !== 'https:' ||
+      repo.username ||
+      repo.password ||
+      repo.search ||
+      repo.hash ||
+      !/^\/[^/]+\/[^/]+\/?$/.test(repo.pathname)
+    )
+      return undefined;
+    if (source.availablePaths && !source.availablePaths.includes(finding.file))
+      return undefined;
+    if (
+      !finding.file ||
+      finding.file.includes('\\') ||
+      hasControlCharacters(finding.file) ||
+      finding.file
+        .split('/')
+        .some((part) => !part || part === '.' || part === '..')
+    )
+      return undefined;
+    const path = finding.file
+      .split('/')
+      .map((part) =>
+        encodeURIComponent(part).replace(
+          /[!'()*]/g,
+          (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`
+        )
+      )
+      .join('/');
+    const start = finding.startLine ?? finding.line;
+    const end = finding.endLine ?? start;
+    const anchor =
+      Number.isSafeInteger(start) && start > 0
+        ? `#L${start}${Number.isSafeInteger(end) && end > start ? `-L${end}` : ''}`
+        : '';
+    return `${repo.origin}${repo.pathname.replace(/\/$/, '')}/blob/${source.headSha}/${path}${anchor}`;
+  } catch {
+    return undefined;
+  }
 }
 
 function compareSummaryFindings(
@@ -852,7 +942,9 @@ function compareSummaryFindings(
   return (
     rank[right.severity] - rank[left.severity] ||
     left.file.localeCompare(right.file) ||
-    left.line - right.line
+    left.line - right.line ||
+    left.title.localeCompare(right.title) ||
+    left.message.localeCompare(right.message)
   );
 }
 
@@ -1698,10 +1790,6 @@ function escapeHtml(value: string): string {
     .replaceAll('"', '&quot;');
 }
 
-function escapeMarkdownInline(value: string): string {
-  return value.replaceAll('\\', '\\\\').replaceAll('`', '\\`');
-}
-
 // Coverage paths are attacker-controlled PR filenames: a backtick, @, or
 // newline must never break out of the manifest line into raw markdown/HTML.
 function escapeCoverageManifestPath(value: string): string {
@@ -1717,39 +1805,304 @@ function escapeCoverageManifestPath(value: string): string {
   return `<code>${escaped}</code>`;
 }
 
-function dropIncompleteDetails(value: string): string {
-  const openTags = Array.from(value.matchAll(/<details\b[^>]*>/gi));
-  const closeTags = Array.from(value.matchAll(/<\/details>/gi));
-  if (openTags.length <= closeTags.length) {
-    return value;
-  }
-  const lastOpen = openTags[openTags.length - 1];
-  if (lastOpen?.index === undefined) {
-    return value;
-  }
-  return value.slice(0, lastOpen.index).trimEnd();
-}
-
 function limitUtf8(value: string, maxBytes: number): string {
-  if (utf8Bytes(value) <= maxBytes) {
-    return value;
-  }
+  if (utf8Bytes(value) <= maxBytes) return value;
   const suffix = '\n\n[truncated]';
-  const budget = Math.max(0, maxBytes - utf8Bytes(suffix));
-  let cut = Buffer.from(value, 'utf8').subarray(0, budget).toString('utf8');
-  if (cut.endsWith('\uFFFD')) {
-    cut = cut.slice(0, -1);
+  const retained: string[] = [];
+  let block: string[] = [];
+  let depth = 0;
+  let fence: string | undefined;
+  for (const line of value.split('\n')) {
+    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (match && !fence) fence = match[1];
+    else if (
+      fence &&
+      new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line)
+    )
+      fence = undefined;
+    if (!fence) {
+      depth += (line.match(/<details\b[^>]*>/gi) ?? []).length;
+      depth -= (line.match(/<\/details>/gi) ?? []).length;
+    }
+    block.push(line);
+    if (
+      !fence &&
+      depth === 0 &&
+      (!line.trim() || line.includes('</details>'))
+    ) {
+      const candidate = [...retained, ...block].join('\n');
+      if (utf8Bytes(candidate + suffix) > maxBytes) break;
+      retained.push(...block);
+      block = [];
+    }
   }
-  return `${dropIncompleteDetails(cut).trimEnd()}${suffix}`;
-}
-
-function truncateChars(value: string, maxChars: number): string {
-  if (value.length <= maxChars) {
-    return value;
-  }
-  return `${value.slice(0, maxChars - 12).trimEnd()}\n\n[truncated]`;
+  if (
+    !fence &&
+    depth === 0 &&
+    utf8Bytes([...retained, ...block].join('\n') + suffix) <= maxBytes
+  )
+    retained.push(...block);
+  return retained.join('\n').trimEnd() + suffix;
 }
 
 function utf8Bytes(value: string): number {
   return Buffer.byteLength(value, 'utf8');
+}
+
+type CompactCopy = {
+  readonly details: string;
+  readonly findingDetails: string;
+  readonly omitted: string;
+  readonly evidence: string;
+  readonly model: string;
+  readonly models: string;
+  readonly agreement: string;
+};
+const compactWords: Record<ReviewerSummaryLocale, readonly string[]> = {
+  en: [
+    'Review details',
+    'Some content was omitted to fit the comment limit. Full findings remain in the review JSON artifact.',
+    'Evidence',
+    'Model',
+    'Models',
+    'agreement',
+    'Details',
+  ],
+  ru: [
+    'Подробности ревью',
+    'Часть содержимого пропущена из-за лимита комментария. Полные замечания сохранены в JSON-артефакте ревью.',
+    'Доказательства',
+    'Модель',
+    'Модели',
+    'согласие',
+    'Подробности',
+  ],
+  uk: [
+    'Подробиці рев’ю',
+    'Частину вмісту пропущено через ліміт коментаря. Повні зауваження збережено в JSON-артефакті рев’ю.',
+    'Докази',
+    'Модель',
+    'Моделі',
+    'згода',
+    'Подробиці',
+  ],
+  es: [
+    'Detalles de revisión',
+    'Se omitió contenido por el límite del comentario. Los hallazgos completos se conservan en el artefacto JSON.',
+    'Evidencia',
+    'Modelo',
+    'Modelos',
+    'acuerdo',
+    'Detalles',
+  ],
+  pt: [
+    'Detalhes da revisão',
+    'Parte do conteúdo foi omitida pelo limite do comentário. Os achados completos estão no artefato JSON.',
+    'Evidência',
+    'Modelo',
+    'Modelos',
+    'concordância',
+    'Detalhes',
+  ],
+  fr: [
+    'Détails de la revue',
+    'Du contenu a été omis à cause de la limite du commentaire. Les anomalies complètes restent dans l’artefact JSON.',
+    'Preuves',
+    'Modèle',
+    'Modèles',
+    'accord',
+    'Détails',
+  ],
+  de: [
+    'Review-Details',
+    'Inhalte wurden wegen des Kommentarlimits ausgelassen. Vollständige Befunde bleiben im JSON-Artefakt.',
+    'Nachweise',
+    'Modell',
+    'Modelle',
+    'Übereinstimmung',
+    'Details',
+  ],
+  it: [
+    'Dettagli della review',
+    'Parte del contenuto è omessa per il limite del commento. I riscontri completi restano nell’artefatto JSON.',
+    'Evidenze',
+    'Modello',
+    'Modelli',
+    'accordo',
+    'Dettagli',
+  ],
+  zh: [
+    '审查详情',
+    '受评论长度限制，部分内容已省略。完整问题保留在审查 JSON 产物中。',
+    '证据',
+    '模型',
+    '模型',
+    '一致',
+    '详情',
+  ],
+  ja: [
+    'レビューの詳細',
+    'コメントの上限により一部を省略しました。完全な指摘はレビューの JSON 成果物に残っています。',
+    '根拠',
+    'モデル',
+    'モデル',
+    '一致',
+    '詳細',
+  ],
+  ko: [
+    '리뷰 상세',
+    '댓글 크기 제한으로 일부 내용을 생략했습니다. 전체 이슈는 리뷰 JSON 결과물에 보존됩니다.',
+    '근거',
+    '모델',
+    '모델',
+    '일치',
+    '상세',
+  ],
+};
+const compactCopy = Object.fromEntries(
+  Object.entries(compactWords).map(([locale, words]) => [
+    locale,
+    Object.fromEntries(
+      [
+        'details',
+        'omitted',
+        'evidence',
+        'model',
+        'models',
+        'agreement',
+        'findingDetails',
+      ].map((key, i) => [key, words[i]])
+    ),
+  ])
+) as Record<ReviewerSummaryLocale, CompactCopy>;
+
+function plainExcerpt(value: string, maxChars: number): string {
+  const chars = Array.from(value);
+  if (chars.length <= maxChars) return value;
+  const candidate = chars.slice(0, maxChars - 1).join('');
+  const lastSpace = candidate.search(/\s+\S*$/u);
+  return lastSpace > 0 ? `${candidate.slice(0, lastSpace).trimEnd()}…` : '';
+}
+
+function findingExcerpt(message: string): string {
+  const first =
+    message
+      .replace(/^(?:[ \t]*\r?\n)+/, '')
+      .trimEnd()
+      .split(/\r?\n\s*\r?\n/)[0] ?? '';
+  if (
+    /^(?: {4}|\t|\s*(?:`{3}|~{3}|<|\||#{1,6}\s|>|[-*+]\s|\d+[.)]\s))/.test(
+      first
+    ) ||
+    /\n\s*\|?\s*:?-{3}/.test(first)
+  )
+    return '';
+  return plainExcerpt(first.replace(/\s+/g, ' ').trim(), 320);
+}
+
+/** Split only at paragraph boundaries outside code fences. */
+function markdownBlocks(value: string): string[] {
+  const blocks: string[] = [];
+  let lines: string[] = [];
+  let fence: { char: string; length: number } | undefined;
+  for (const line of value.split('\n')) {
+    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (match && !fence) fence = { char: match[1][0], length: match[1].length };
+    else if (
+      fence &&
+      new RegExp(`^\\s{0,3}${fence.char}{${fence.length},}\\s*$`).test(line)
+    )
+      fence = undefined;
+    if (!line.trim() && !fence) {
+      if (lines.length) blocks.push(lines.join('\n'));
+      lines = [];
+    } else lines.push(line);
+  }
+  if (fence) lines.push(fence.char.repeat(fence.length));
+  if (lines.length) blocks.push(lines.join('\n'));
+  return blocks;
+}
+
+function singleLineText(value: string): string {
+  return Array.from(value, (char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return code < 0x20 || code === 0x7f ? ' ' : char;
+  }).join('');
+}
+
+function hasControlCharacters(value: string): boolean {
+  return Array.from(value).some((char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return code < 0x20 || code === 0x7f;
+  });
+}
+
+function safeFindingBody(value: string): string {
+  // Escape prose HTML, preserve fenced source, and neutralize attempts to close
+  // the generated disclosures. The original body remains in the JSON artifact.
+  let fence: string | undefined;
+  const lines = neutralizeDetailsMarkup(value)
+    .split('\n')
+    .map((line) => {
+      const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+      if (match && !fence) {
+        fence = match[1];
+        return line;
+      }
+      if (fence) {
+        if (
+          new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line)
+        )
+          fence = undefined;
+        return line;
+      }
+      return line.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    });
+  return markdownBlocks(lines.join('\n')).join('\n\n');
+}
+
+function renderReviewerBanner(
+  input: ReviewerSummaryInput,
+  locale: ReviewerSummaryLocale,
+  incomplete: boolean,
+  counts: SeverityCounts
+): string {
+  if (!input.bannerBaseUrl) return '';
+  const displayed = {
+    critical: counts.critical + (input.previousCounts?.critical ?? 0),
+    major: counts.major + (input.previousCounts?.major ?? 0),
+    minor: counts.minor + (input.previousCounts?.minor ?? 0),
+    info: 0,
+  };
+  if (
+    !Object.values(displayed).every(
+      (value) => Number.isSafeInteger(value) && value >= 0 && value <= 9999
+    )
+  )
+    return '';
+  try {
+    const base = new URL(input.bannerBaseUrl);
+    if (
+      base.protocol !== 'https:' ||
+      base.username ||
+      base.password ||
+      base.search ||
+      base.hash ||
+      base.pathname !== '/'
+    )
+      return '';
+    const url = new URL('/review-banner/v1.svg', base);
+    url.search = new URLSearchParams({
+      state: incomplete ? 'incomplete' : 'complete',
+      ...Object.fromEntries(
+        Object.entries(displayed).map(([key, value]) => [key, String(value)])
+      ),
+      lang: locale,
+    }).toString();
+    const light = escapeHtml(`${url}&theme=light`);
+    const dark = escapeHtml(`${url}&theme=dark`);
+    return `<picture>\n<source media="(prefers-color-scheme: dark)" srcset="${dark}">\n<source media="(prefers-color-scheme: light)" srcset="${light}">\n<img src="${light}" alt="ReviewRouter" width="640" height="110">\n</picture>`;
+  } catch {
+    return '';
+  }
 }

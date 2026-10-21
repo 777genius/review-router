@@ -93,10 +93,32 @@ export class LegacyReviewProjectionPolicyAdapter
   async selectCurrent(
     query: SelectCurrentFindingsQuery
   ): Promise<readonly SelectedCurrentFinding[]> {
+    // Provider identities here come from accepted observations. Require every
+    // original contributor, since dedup can retain one source's category while
+    // replacing its text with another source's explanation.
+    const producerClassifiedBugIds = new Set(
+      query.findings
+        .filter(
+          (finding) =>
+            finding.category === 'bug' &&
+            finding.providerIds.length > 0 &&
+            finding.providerIds.every((provider) => provider === 'ocr')
+        )
+        .map((finding) => finding.sourceFindingId)
+    );
     const legacyFindings = query.findings.map(toLegacyFinding);
     const deduped = new Deduplicator().dedupe(legacyFindings);
     const consensus = this.consensus.filter(deduped);
-    const filtered = new FindingFilter().filter(consensus, query.diff).findings;
+    const filtered = new FindingFilter().filter(consensus, query.diff, {
+      allowUnanchoredFindings: true,
+      isProducerClassifiedBug: (finding) => {
+        const sourceIds = finding.sourceFindingIds ?? [];
+        return (
+          sourceIds.length > 0 &&
+          sourceIds.every((id) => producerClassifiedBugIds.has(id))
+        );
+      },
+    }).findings;
 
     return filtered.map((finding) => {
       const metadata = finding as FindingWithProjectionMetadata;
@@ -113,12 +135,33 @@ export class LegacyReviewProjectionPolicyAdapter
         throw new Error('legacy finding policy returned an unknown finding');
       }
 
-      return {
+      const requiresVerifiedAnchor = contributors.some(
+        (candidate) => candidate.anchorVerified !== undefined
+      );
+      // Legacy dedup may union nearby ranges and retain only one source's
+      // suggestion. A union is not proof for that replacement: every source
+      // must agree with the final exact range before it can remain inline.
+      const anchorVerified =
+        finding.startLine !== undefined &&
+        finding.endLine !== undefined &&
+        contributors.every(
+          (candidate) =>
+            candidate.anchorVerified === true &&
+            candidate.filePath === finding.file &&
+            candidate.startLine === finding.startLine &&
+            candidate.endLine === finding.endLine
+        ) &&
+        (!finding.suggestion ||
+          contributors.some(
+            (candidate) => candidate.suggestion === finding.suggestion
+          ));
+      const selected = {
         ...representative,
         sourceFindingId: representative.sourceFindingId,
         sourceFindingIds: sortedUnique(
           contributors.map((candidate) => candidate.sourceFindingId)
         ),
+        ...(requiresVerifiedAnchor ? { anchorVerified } : {}),
         severity: toProjectionSeverity(finding.severity),
         title: finding.title,
         message: finding.message,
@@ -142,6 +185,17 @@ export class LegacyReviewProjectionPolicyAdapter
           contributors.flatMap((candidate) => candidate.observationIds)
         ),
       };
+      if (requiresVerifiedAnchor && !anchorVerified) {
+        const {
+          startLine: _startLine,
+          line: _line,
+          endLine: _endLine,
+          suggestion: _suggestion,
+          ...unanchored
+        } = selected;
+        return unanchored;
+      }
+      return selected;
     });
   }
 
@@ -229,9 +283,15 @@ export class LegacyReviewProjectionPolicyAdapter
         occurrence.state !== FindingOccurrenceState.SuppressedByHuman
     );
     const currentOccurrences = activeOccurrences.filter(isCurrentOccurrence);
+    const legacyFindings = new Map(
+      currentOccurrences.map((occurrence) => [
+        occurrence,
+        toLegacyFinding(occurrence),
+      ])
+    );
     const pr = toLegacyPrContext(query);
     const review = this.synthesis.synthesizeWithProviderExecutionSummary(
-      currentOccurrences.map(toLegacyFinding),
+      [...legacyFindings.values()],
       pr,
       {
         planned: query.providerExecution.plannedProviders,
@@ -239,7 +299,12 @@ export class LegacyReviewProjectionPolicyAdapter
       }
     );
     const placements = query.occurrences.map((occurrence) =>
-      this.placeOccurrence(occurrence, review, query.revisionFiles)
+      this.placeOccurrence(
+        occurrence,
+        review,
+        query.revisionFiles,
+        legacyFindings.get(occurrence)
+      )
     );
     const incomplete = isReviewerSummaryIncomplete({
       incomplete: query.coverage.state === ProjectionCoverageState.Partial,
@@ -331,7 +396,8 @@ export class LegacyReviewProjectionPolicyAdapter
   private placeOccurrence(
     occurrence: FindingOccurrence,
     review: Review,
-    revisionFiles: readonly RevisionFile[]
+    revisionFiles: readonly RevisionFile[],
+    sourceFinding: Finding | undefined
   ): FindingPlacementDecision {
     if (!isCurrentOccurrence(occurrence)) {
       return summaryPlacement(occurrence, 'historical lifecycle occurrence');
@@ -342,6 +408,14 @@ export class LegacyReviewProjectionPolicyAdapter
     }
     if (revisionFile.status === RevisionFileStatus.Removed) {
       return summaryPlacement(occurrence, 'file was deleted');
+    }
+    if (occurrence.anchorVerified === false) {
+      return {
+        lineageId: occurrence.lineageId,
+        kind: FindingPlacementKind.File,
+        path: revisionFile.path,
+        reason: 'finding has no verified current span',
+      };
     }
     const line = occurrence.line ?? occurrence.endLine;
     if (line === undefined) {
@@ -354,8 +428,8 @@ export class LegacyReviewProjectionPolicyAdapter
     }
     const inline = review.inlineComments.find(
       (comment) =>
-        normalizePath(comment.path) === normalizePath(occurrence.filePath) &&
-        comment.line === line
+        sourceFinding !== undefined &&
+        this.synthesis.sourceFindingForInlineComment(comment) === sourceFinding
     );
     if (!inline) {
       return {
@@ -363,6 +437,41 @@ export class LegacyReviewProjectionPolicyAdapter
         kind: FindingPlacementKind.File,
         path: revisionFile.path,
         reason: 'legacy synthesis did not select inline placement',
+      };
+    }
+    if (occurrence.anchorVerified === true) {
+      // §8.2: a verified HEAD span must survive to the final placement
+      // verbatim; chooseBestAddedLineForComment may never move it to a
+      // neighboring added line. If the full range is not provably placeable
+      // in the current diff, degrade to file placement without the
+      // committable suggested patch.
+      const positions = mapLinesToPositions(revisionFile.patch);
+      const rangeStart = occurrence.startLine ?? line;
+      const rangeEnd = occurrence.endLine ?? line;
+      const low = Math.min(rangeStart, rangeEnd);
+      const high = Math.max(rangeStart, rangeEnd);
+      let rangePlaceable = positions.has(line);
+      for (let current = low; rangePlaceable && current <= high; current += 1) {
+        rangePlaceable = positions.has(current);
+      }
+      if (!rangePlaceable) {
+        return {
+          lineageId: occurrence.lineageId,
+          kind: FindingPlacementKind.File,
+          path: revisionFile.path,
+          reason:
+            'verified span range is not provably placeable in the current diff',
+        };
+      }
+      return {
+        lineageId: occurrence.lineageId,
+        kind: FindingPlacementKind.Inline,
+        path: revisionFile.path,
+        ...(rangeStart < rangeEnd ? { startLine: rangeStart } : {}),
+        // GitHub's publication line is the end of a multiline range.
+        line: rangeEnd,
+        endLine: rangeEnd,
+        body: inline.body,
       };
     }
     const correctedLine = chooseBestAddedLineForComment(
@@ -496,7 +605,10 @@ function toLegacyFinding(
     ...(finding.startLine !== undefined
       ? { startLine: finding.startLine }
       : {}),
-    line: finding.line ?? finding.endLine ?? 1,
+    line:
+      finding.line ??
+      finding.endLine ??
+      (finding.anchorVerified === false ? 0 : 1),
     ...(finding.endLine !== undefined ? { endLine: finding.endLine } : {}),
     severity: toLegacySeverity(finding.severity),
     title: finding.title,

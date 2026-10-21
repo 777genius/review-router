@@ -3258,8 +3258,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path14) {
-      let input = path14;
+    function removeDotSegments(path15) {
+      let input = path15;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3664,8 +3664,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path14 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path14 && path14 !== "/" ? path14 : void 0;
+        const path15 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path15 && path15 !== "/" ? path15 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -7995,12 +7995,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats2(ajv, list, fs6, exportName) {
+    function addFormats2(ajv, list, fs7, exportName) {
       var _a;
       var _b;
       (_a = (_b = ajv.opts.code).formats) !== null && _a !== void 0 ? _a : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs6[f]);
+        ajv.addFormat(f, fs7[f]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -9315,15 +9315,15 @@ var require_dist_node9 = __commonJS({
         octokit.log.debug("request", options);
         const start = Date.now();
         const requestOptions = octokit.request.endpoint.parse(options);
-        const path14 = requestOptions.url.replace(options.baseUrl, "");
+        const path15 = requestOptions.url.replace(options.baseUrl, "");
         return request(options).then((response) => {
           octokit.log.info(
-            `${requestOptions.method} ${path14} - ${response.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path15} - ${response.status} in ${Date.now() - start}ms`
           );
           return response;
         }).catch((error) => {
           octokit.log.info(
-            `${requestOptions.method} ${path14} - ${error.status} in ${Date.now() - start}ms`
+            `${requestOptions.method} ${path15} - ${error.status} in ${Date.now() - start}ms`
           );
           throw error;
         });
@@ -12021,12 +12021,13 @@ __export(production_t0_review_runner_exports, {
   resolveProductionContextGatewayPolicyVersion: () => resolveProductionContextGatewayPolicyVersion,
   resolveProductionContextGatewaySessionFactoryOptions: () => resolveProductionContextGatewaySessionFactoryOptions,
   resolveProductionInvestigationReasoningEffort: () => resolveProductionInvestigationReasoningEffort,
-  resolveT0AttemptBudget: () => resolveT0AttemptBudget
+  resolveT0AttemptBudget: () => resolveT0AttemptBudget,
+  selectDirectOpenRouterProvider: () => selectDirectOpenRouterProvider
 });
 module.exports = __toCommonJS(production_t0_review_runner_exports);
-var import_crypto33 = require("crypto");
-var import_child_process11 = require("child_process");
-var path13 = __toESM(require("path"));
+var import_crypto34 = require("crypto");
+var import_child_process12 = require("child_process");
+var path14 = __toESM(require("path"));
 var import_util11 = require("util");
 var import_promises8 = require("node:timers/promises");
 
@@ -12436,12 +12437,12 @@ function formatSummaryOnlyChunk(chunk, file) {
 function shellQuote(value) {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
-function unquoteGitPath(path14) {
-  if (path14.startsWith('"') && path14.endsWith('"')) {
-    path14 = path14.slice(1, -1);
+function unquoteGitPath(path15) {
+  if (path15.startsWith('"') && path15.endsWith('"')) {
+    path15 = path15.slice(1, -1);
   }
   try {
-    path14 = path14.replace(/\\([\\"tnr])/g, (_m, ch) => {
+    path15 = path15.replace(/\\([\\"tnr])/g, (_m, ch) => {
       switch (ch) {
         case "\\":
           return "\\";
@@ -12459,7 +12460,7 @@ function unquoteGitPath(path14) {
     });
   } catch {
   }
-  return path14;
+  return path15;
 }
 
 // src/utils/token-estimation.ts
@@ -13526,8 +13527,8 @@ var HIGH_RISK_PATH_TOKENS = /* @__PURE__ */ new Set([
   "workflow",
   "workflows"
 ]);
-function changedPathSemanticRiskPriority(path14) {
-  const normalized = path14.trim().replaceAll("\\", "/").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+function changedPathSemanticRiskPriority(path15) {
+  const normalized = path15.trim().replaceAll("\\", "/").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   if (normalized.length === 0) {
     throw new Error("review_investigation_changed_path_missing");
   }
@@ -13938,7 +13939,7 @@ function normalizeProviderObligationProposal(record) {
     "obligation_proposal"
   );
   const kind = requireProviderProposableObligationKind(record.kind);
-  const path14 = requireRepositoryRelativePath(
+  const path15 = requireRepositoryRelativePath(
     record.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
@@ -13948,7 +13949,7 @@ function normalizeProviderObligationProposal(record) {
     ReviewTurnProposalRevision,
     "obligation_requirement_revision"
   );
-  const pathHash = sha256(path14);
+  const pathHash = sha256(path15);
   return Object.freeze({
     kind,
     canonicalSubject: canonicalJson({
@@ -13959,7 +13960,7 @@ function normalizeProviderObligationProposal(record) {
     }),
     canonicalRequirement: canonicalJson({
       kind: COMPLETE_FILE_REQUIREMENT_KIND,
-      path: path14,
+      path: path15,
       pathHash,
       requirementVersion: COMPLETE_FILE_REQUIREMENT_VERSION,
       revision
@@ -13973,14 +13974,14 @@ function normalizeProviderObligationProposal(record) {
   });
 }
 function requireRepositoryRelativePath(value, field, maxLength) {
-  const path14 = requireString(value, field, maxLength);
-  const segments = path14.split("/");
-  if (path14.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path14) || path14.includes("\\") || segments.some(
+  const path15 = requireString(value, field, maxLength);
+  const segments = path15.split("/");
+  if (path15.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(path15) || path15.includes("\\") || segments.some(
     (segment) => segment === "" || segment === "." || segment === ".."
   )) {
     throw new Error(`review_agent_${field}_invalid`);
   }
-  return path14;
+  return path15;
 }
 function parseCanonicalCompleteFileRequirement(value) {
   let parsed;
@@ -13998,7 +13999,7 @@ function parseCanonicalCompleteFileRequirement(value) {
   if (requirement.kind !== COMPLETE_FILE_REQUIREMENT_KIND || requirement.requirementVersion !== COMPLETE_FILE_REQUIREMENT_VERSION) {
     throw new Error("review_agent_obligation_requirement_unsupported");
   }
-  const path14 = requireString(
+  const path15 = requireString(
     requirement.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
@@ -14007,7 +14008,7 @@ function parseCanonicalCompleteFileRequirement(value) {
     requirement.pathHash,
     "obligation_requirement_path_hash"
   );
-  if (pathHash !== sha256(path14)) {
+  if (pathHash !== sha256(path15)) {
     throw new Error("review_agent_obligation_requirement_path_hash_mismatch");
   }
   const revision = requireEnum(
@@ -14018,7 +14019,7 @@ function parseCanonicalCompleteFileRequirement(value) {
   const normalized = Object.freeze({
     requirementVersion: COMPLETE_FILE_REQUIREMENT_VERSION,
     kind: COMPLETE_FILE_REQUIREMENT_KIND,
-    path: path14,
+    path: path15,
     pathHash,
     revision
   });
@@ -14365,13 +14366,13 @@ function reviewInvestigationSearchOperationInputHash(query) {
     })
   );
 }
-function reviewInvestigationBasenameFallbackQuery(path14) {
-  assertPath(path14, "review_investigation_probe_path_invalid");
-  const basename3 = basenameWithoutExtension(path14);
+function reviewInvestigationBasenameFallbackQuery(path15) {
+  assertPath(path15, "review_investigation_probe_path_invalid");
+  const basename3 = basenameWithoutExtension(path15);
   return isSpecificProbeQuery(
     "basename_fallback" /* BasenameFallback */,
     basename3
-  ) ? basename3 : path14;
+  ) ? basename3 : path15;
 }
 function createProbe(candidate) {
   const obligationKind = obligationKindFor(candidate);
@@ -14460,8 +14461,8 @@ function extractImportExportRelations(line, add) {
     }
   }
 }
-function extractStructuredRelations(path14, line, add) {
-  const dartSource = /\.dart$/iu.test(path14);
+function extractStructuredRelations(path15, line, add) {
+  const dartSource = /\.dart$/iu.test(path15);
   const keyPatterns = [
     // Dart's unquoted labels and assignments are arguments/variables, not
     // external keys. Quoted map/JSON keys still provide contract evidence.
@@ -14478,7 +14479,7 @@ function extractStructuredRelations(path14, line, add) {
       add("structured_key" /* StructuredKey */, match[1]);
     }
   }
-  if (STRUCTURED_PATH_PATTERN.test(path14)) {
+  if (STRUCTURED_PATH_PATTERN.test(path15)) {
     for (const literal of quotedLiterals(line)) {
       if (isContractLiteral(literal)) {
         add("structured_key" /* StructuredKey */, literal);
@@ -14580,24 +14581,24 @@ function splitDiffByDestinationPath(diff) {
   for (let index = 0; index < matches.length; index += 1) {
     const match = matches[index];
     if (match.index === void 0) continue;
-    const path14 = unquoteGitPath2(match[2].trim());
+    const path15 = unquoteGitPath2(match[2].trim());
     const end = matches[index + 1]?.index ?? diff.length;
-    if (path14.length === 0 || chunks.has(path14)) continue;
-    chunks.set(path14, diff.slice(match.index, end));
+    if (path15.length === 0 || chunks.has(path15)) continue;
+    chunks.set(path15, diff.slice(match.index, end));
   }
   return chunks;
 }
 function unquoteGitPath2(value) {
-  const path14 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-  return path14.replace(/\\([\\"tnr])/gu, (_match, char) => {
+  const path15 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path15.replace(/\\([\\"tnr])/gu, (_match, char) => {
     if (char === "t") return "	";
     if (char === "n") return "\n";
     if (char === "r") return "\r";
     return char;
   });
 }
-function basenameWithoutExtension(path14) {
-  const fileName = path14.split("/").at(-1) ?? path14;
+function basenameWithoutExtension(path15) {
+  const fileName = path15.split("/").at(-1) ?? path15;
   const extension = fileName.lastIndexOf(".");
   return extension > 0 ? fileName.slice(0, extension) : fileName;
 }
@@ -15196,16 +15197,16 @@ function splitDiffByDestinationPath2(diff) {
   for (let index = 0; index < matches.length; index += 1) {
     const match = matches[index];
     if (match.index === void 0) continue;
-    const path14 = unquoteGitPath3(match[2].trim());
+    const path15 = unquoteGitPath3(match[2].trim());
     const end = matches[index + 1]?.index ?? diff.length;
-    if (!path14 || chunks.has(path14)) continue;
-    chunks.set(path14, diff.slice(match.index, end).replace(/\n+$/, ""));
+    if (!path15 || chunks.has(path15)) continue;
+    chunks.set(path15, diff.slice(match.index, end).replace(/\n+$/, ""));
   }
   return chunks;
 }
 function unquoteGitPath3(value) {
-  const path14 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
-  return path14.replace(/\\([\\"tnr])/g, (_match, char) => {
+  const path15 = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  return path15.replace(/\\([\\"tnr])/g, (_match, char) => {
     if (char === "t") return "	";
     if (char === "n") return "\n";
     if (char === "r") return "\r";
@@ -19011,8 +19012,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path14, errorMaps, issueData } = params;
-  const fullPath = [...path14, ...issueData.path || []];
+  const { data, path: path15, errorMaps, issueData } = params;
+  const fullPath = [...path15, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -19128,11 +19129,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path14, key) {
+  constructor(parent, value, path15, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path14;
+    this._path = path15;
     this._key = key;
   }
   get path() {
@@ -23330,7 +23331,7 @@ var ConfigLoader = class {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.184",
+  version: "1.0.187",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -23464,21 +23465,27 @@ function parseReviewAgentProfiles(value) {
         row.packageVersion
       ) || refs.has(row.profileRef))
         invalid("review_agent_profile_invalid");
-      if (row.agentKind !== "codex" && row.agentKind !== "claude" || row.contextGateway !== true || row.cancellation !== true)
+      const agentKind = row.agentKind;
+      if (agentKind !== "codex" && agentKind !== "claude" && agentKind !== "ocr")
+        invalid("review_agent_profile_capabilities_invalid");
+      const contextGateway = agentKind === "ocr" ? false : true;
+      if (row.contextGateway !== contextGateway || row.cancellation !== true)
         invalid("review_agent_profile_capabilities_invalid");
       const transports = row.modelTransports;
       if (!Array.isArray(transports) || transports.length < 1 || transports.length > 2 || new Set(transports).size !== transports.length || transports.some((t) => t !== "account_gateway" && t !== "provider_api"))
         invalid("review_agent_profile_transport_invalid");
+      if (agentKind === "ocr" && (transports.length !== 1 || transports[0] !== "account_gateway"))
+        invalid("review_agent_profile_transport_invalid");
       refs.add(row.profileRef);
       return Object.freeze({
         profileRef: row.profileRef,
-        agentKind: row.agentKind,
+        agentKind,
         binarySha256: row.binarySha256,
         packageVersion: row.packageVersion,
         modelTransports: Object.freeze([
           ...transports
         ]),
-        contextGateway: true,
+        contextGateway,
         cancellation: true
       });
     })
@@ -23785,8 +23792,8 @@ async function readSafeErrorCode(response) {
   }
   return void 0;
 }
-function joinApiPath(apiUrl, path14) {
-  return new URL(path14, ensureTrailingSlash(apiUrl)).toString();
+function joinApiPath(apiUrl, path15) {
+  return new URL(path15, ensureTrailingSlash(apiUrl)).toString();
 }
 function ensureTrailingSlash(value) {
   return value.endsWith("/") ? value : `${value}/`;
@@ -56381,12 +56388,12 @@ var manifest_default = {
   protocolVersion: "2",
   schemaDigest: "32bb25cd3490660dbaeecaa168f162ba97ff171e2dfab69e1bd435bc2e1cf3d3",
   goldenFixtureDigest: "d6d5a918ce9e5e01a14aa9714a77d6557fcaee90c68e272cbc3f925f3e4c94a4",
-  canonicalizerDigest: "95a43332ccff5c8ccf8f6f9cb67d901d5efd3e91522c047c48f83b65c70cb03a",
+  canonicalizerDigest: "12408727c244f65242534d3060983b87221715f2086631ab743c2c6f6248629a",
   extensions: [
     {
       extensionId: "review-investigation-shadow.v1",
       schemaDigest: "9ab22a39cc983b88ae50576ece6a777d72d904d09654d3f4c51a20fc13c29003",
-      canonicalizerDigest: "20dc769dd28947fe6ee0c7770199fbb6c5cd490a7d7f71785159da99d793ff77",
+      canonicalizerDigest: "5dc6b98d93527381c4337c9e05ea58a910b3b26342140300992077884f4d04ec",
       operationIds: [
         "review_investigation_open_v2",
         "review_investigation_lease_acquire",
@@ -59288,7 +59295,7 @@ var reviewActionV2PublishedSchemaDigest = "32bb25cd3490660dbaeecaa168f162ba97ff1
 var reviewInvestigationExtensionV1 = {
   extensionId: "review-investigation-shadow.v1",
   schemaDigest: "9ab22a39cc983b88ae50576ece6a777d72d904d09654d3f4c51a20fc13c29003",
-  canonicalizerDigest: "20dc769dd28947fe6ee0c7770199fbb6c5cd490a7d7f71785159da99d793ff77",
+  canonicalizerDigest: "5dc6b98d93527381c4337c9e05ea58a910b3b26342140300992077884f4d04ec",
   operationIds: [
     "review_investigation_open_v2",
     "review_investigation_lease_acquire",
@@ -62852,10 +62859,10 @@ var review_investigation_capability_v1_golden_default = {
       probePolicyVersion: "review-investigation-probe-policy.v3",
       runtimeProfileVersion: "gateway-attested-agent.v1",
       searchPolicyVersion: "review-investigation-fixed-string-search.v1",
-      turnPromptContractHash: "a185e50ee887e3351d1c1eccb135a2d48030fe56ef5ec2e1411002d4c1a76ef6"
+      turnPromptContractHash: "48a3a67d11904996957416757bc82cdc2e7ddca13510bf9b4a441bd6f946bf82"
     },
-    canonicalJson: '{"coverageContractVersion":"review-investigation-coverage.v1","criticPolicyVersion":"review-investigation-critic.v2","expansionRulesVersion":"review-investigation-expansion.v3","gatewayPolicyVersion":"context-gateway-v4","probePolicyVersion":"review-investigation-probe-policy.v3","runtimeProfileVersion":"gateway-attested-agent.v1","searchPolicyVersion":"review-investigation-fixed-string-search.v1","turnPromptContractHash":"a185e50ee887e3351d1c1eccb135a2d48030fe56ef5ec2e1411002d4c1a76ef6"}',
-    sha256: "86a68eda454aff14d596da321ad635c7e67b3d6f18b990c2c1e02dfb3f9298b8"
+    canonicalJson: '{"coverageContractVersion":"review-investigation-coverage.v1","criticPolicyVersion":"review-investigation-critic.v2","expansionRulesVersion":"review-investigation-expansion.v3","gatewayPolicyVersion":"context-gateway-v4","probePolicyVersion":"review-investigation-probe-policy.v3","runtimeProfileVersion":"gateway-attested-agent.v1","searchPolicyVersion":"review-investigation-fixed-string-search.v1","turnPromptContractHash":"48a3a67d11904996957416757bc82cdc2e7ddca13510bf9b4a441bd6f946bf82"}',
+    sha256: "359b9499b5cf7244bc734c2c8f352ce63ea99b285e67136f1214148ef0dd8dba"
   },
   policy: {
     value: {
@@ -64789,6 +64796,10 @@ function buildCliSafeEnv(options = {}) {
 }
 
 // src/providers/codex-confinement-policy.ts
+var CODEX_SHELL_ENVIRONMENT_POLICY = Object.freeze([
+  "shell_environment_policy.ignore_default_excludes=false",
+  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",OPENROUTER_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}'
+]);
 var CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([
   "shell_tool",
   "unified_exec",
@@ -64798,6 +64809,7 @@ var CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([
   "tool_search",
   // Native delegation cannot share the gateway's fenced execution session.
   "multi_agent",
+  "multi_agent_v2",
   // Codex 0.145 starts the built-in codex_apps MCP unless this is explicit.
   "apps",
   "plugins",
@@ -64807,6 +64819,14 @@ var CODEX_CONFINEMENT_DISABLED_FEATURES = Object.freeze([
   "memories",
   "external_agent_memory_import",
   "chronicle"
+]);
+
+// src/providers/codex-model-provider-configuration.ts
+var CODEX_OPENROUTER_CONFIGURATION = Object.freeze([
+  'model_provider="openrouter"',
+  'model_providers.openrouter.name="openrouter"',
+  'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
+  'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
 ]);
 
 // src/codex-oauth/codex-cli.ts
@@ -65044,6 +65064,120 @@ function safeOutput(value) {
 // src/codex-oauth/account-gateway-mimo-catalog.ts
 var fs4 = __toESM(require("fs/promises"));
 var path3 = __toESM(require("path"));
+
+// src/codex-oauth/gpt-5.6-sol-model-0.147.0.json
+var gpt_5_6_sol_model_0_147_0_default = {
+  slug: "gpt-5.6-sol",
+  prefer_websockets: true,
+  support_verbosity: true,
+  default_verbosity: "low",
+  apply_patch_tool_type: "freeform",
+  web_search_tool_type: "text_and_image",
+  input_modalities: ["text", "image"],
+  supports_image_detail_original: true,
+  truncation_policy: {
+    mode: "tokens",
+    limit: 1e4
+  },
+  supports_parallel_tool_calls: true,
+  tool_mode: "code_mode_only",
+  multi_agent_version: "v2",
+  use_responses_lite: true,
+  include_skills_usage_instructions: false,
+  include_plugin_usage_instructions: true,
+  include_apps_usage_instructions: true,
+  auto_review_model_override: null,
+  context_window: 272e3,
+  max_context_window: 272e3,
+  auto_compact_token_limit: null,
+  comp_hash: "3000",
+  reasoning_summary_format: "experimental",
+  default_reasoning_summary: "none",
+  display_name: "GPT-5.6-Sol",
+  description: "Latest frontier agentic coding model.",
+  default_reasoning_level: "low",
+  supported_reasoning_levels: [
+    {
+      effort: "low",
+      description: "Fast responses with lighter reasoning"
+    },
+    {
+      effort: "medium",
+      description: "Balances speed and reasoning depth for everyday tasks"
+    },
+    {
+      effort: "high",
+      description: "Greater reasoning depth for complex problems"
+    },
+    {
+      effort: "xhigh",
+      description: "Extra high reasoning depth for complex problems"
+    },
+    {
+      effort: "max",
+      description: "Maximum reasoning depth for the hardest problems"
+    },
+    {
+      effort: "ultra",
+      description: "Maximum reasoning with automatic task delegation"
+    }
+  ],
+  shell_type: "shell_command",
+  visibility: "list",
+  minimal_client_version: "0.144.0",
+  supported_in_api: true,
+  availability_nux: {
+    message: "Our most capable model yet. GPT-5.6 Sol can tackle complex code changes, dig into research, produce polished documents, and take on your most ambitious work. Sol is highly capable at lower reasoning efforts\u2014try starting lower, then turn it up for harder jobs."
+  },
+  upgrade: null,
+  priority: 1,
+  model_messages: {
+    instructions_template: "You are Codex, an agent based on GPT-5. You and the user share one workspace, and your job is to collaborate with them until their goal is genuinely handled.\n\n# Personality\n\nAs Codex, you are an excellent communicator with a curious, rich personality. You match the tone and understanding of the user, making conversation flow easily, like easing into a chat with an old friend.\n\nYou have tastes, preferences, and your own way of seeing the world. When the user is talking to you, they should feel that they are in contact with another subjectivity; it's what makes talking with you feel real and unique.\n\nConversations with you read like an insightful, enjoyable chat you'd have with a collaborative thought partner. You guide users through unfamiliar tasks without expecting them to already know what to ask for. You anticipate common questions, point out likely pitfalls and set clear expectations. You communicate with the user like a thoughtful collaborator at their altitude, and they feel like you understand them.\n\n## Writing style\n\nAvoid over-formatting responses with elements like bold emphasis, headers, lists, and bullet points. Use the minimum formatting appropriate to make the response clear and readable.\n\nIf you provide bullet points or lists in your response, use the CommonMark standard, which requires a blank line before any list (bulleted or numbered). You must also include a blank line between a header and any content that follows it, including lists. This blank line separation is required for correct rendering.\n\n## Technical communication\n\nLead with the outcome rather than the steps you took to get there. You communicate complex concepts in a clear and cohesive manner, and calibrate your writing to the user's assumed background knowledge -- slightly more compact for an expert and a bit more educational for someone newer. Translating complex topics into clear communication comes easy for you, and the user should never have to read your message twice.\n\nYou prefer using plain language over jargon. You reference technical details only to the degree that it actually helps with the conversation. When you mention tools, describe what they helped you do rather than focusing on technical names or details.\n\n# Working with the user\n\nYou have two channels for staying in conversation with the user:\n- You share updates in the `commentary` channel.\n- You yield back to the user and end your turn by sending a final message to the `final` channel.\n\nThe user may send a new message while you are still working. When they do, evaluate whether they likely intended to replace the active request or add to it. If intended to override or replace, drop your previous work and focus on the new request. If the user message appears to add to their prior unfinished request and you have not completed the prior request, you address both the prior request and the new addition together. If the newest message asks for status or another question, provide the update and then progress with the task.\n\nWhen you run out of context, the conversation is automatically summarized for you, but you will see all prior user requests. Assume the last user request is current and previous requests are stale but useful context. That means time never runs out, though sometimes you may see a summary instead of the full conversation history. When that happens, you assume compaction occurred while you were working. Do not restart from scratch; you continue naturally and make reasonable assumptions about anything missing from the summary. Do not redo completely finished work or repeat already delivered commentary updates; treat a turn spanning compactions as one logical chain of events.\n\n## Intermediate commentary\n\nAs you work, you send messages to the `commentary` channel. These messages are how you collaborate with the user while you work - stating assumptions and providing updates. These messages should be concise and quickly scannable. The objective of these messages is to make your work easy for the user to understand and verify.\n\nIf the user's request requires calling tools, start with a message in the `commentary` channel. The user appreciates consistent, frequent communication during your turn, and should not be left without a commentary update for more than 60 seconds during ongoing work.\n\nDo NOT put a final response (e.g. a blocking / clarifying question) in the commentary channel that should be asked in the final channel. Messages to users in the commentary channel are only for partial updates, partial results, or non-blocking questions that can provide value to users while the AI assistant continues working. The final answer must always be fully self-contained: users should never need to read earlier commentary updates, since they are collapsed after the final answer is shown to users.\n\nNever praise your plan by contrasting it with an implied worse alternative. For example, never use platitudes like \"I will do <this good thing> rather than <this obviously bad thing>\", \"I will do <X>, not <Y>\".\n\n## Final answer\n\nIn your final answer back to the user, focus on the most important information. Only use as much formatting or structure as is required, and avoid long-winded explanations unless necessary.\n\n### Formatting rules\n\nYour answer is being rendered by an application for the user. Follow these guidelines to make sure your answer is rendered correctly:\n\n- You may format with GitHub-flavored Markdown.\n- When referencing a real local file, prefer a clickable markdown link.\n  * Clickable file links should look like [app.py](/abs/path/app.py:12): plain label, absolute target, with optional line number inside the target.\n  * If a file path has spaces, wrap the target in angle brackets: [My Report.md](</abs/path/My Project/My Report.md:3>).\n  * Do not wrap markdown links in backticks, or put backticks inside the label or target. This confuses the markdown renderer.\n  * Do not use URIs like file://, vscode://, or https:// for file links.\n  * Do not provide ranges of lines.\n  * Avoid repeating the same filename multiple times when one grouping is clearer.\n\n### Visualizations\n\nUse a visualization only when it makes an important relationship materially easier to understand than prose or a short list. Do not add one merely because an answer has components or steps.\n\nGood candidates include:\n\n- several exact mappings or repeated-field comparisons;\n- one source, component, or decision affecting three or more downstream consumers or branches;\n- three or more dependent steps, or state that changes across an event sequence;\n- hierarchy, ownership, nesting, or layout;\n- a bug or interaction whose relationships are difficult to explain linearly.\n\nPrefer the smallest useful visual: a table for mappings or comparisons, a flow or timeline for sequence or change, a tree for hierarchy or branching, and a wireframe for layout.\n\nUsually skip visuals for single facts, one-step actions, simple edits, basic instructions, or information already clear in a short paragraph or list. Compact notation and small examples do not count as visualizations.\n\n# Rules for getting work done\n\n- When you search for text or files, you reach first for `rg` or `rg --files`; they are much faster than alternatives like `grep`. If `rg` is unavailable, you use the next best tool without fuss.\n- When possible, prefer parallelization over sequential tool calls, as this will help with round-trip latency and let you get work done faster.\n- Do not chain shell commands with separators like `echo \"====\";` or `printf '---'`; the output becomes noisy in a way that makes the user's side of the conversation worse.\n- Exercise caution when escaping text for exec_command calls - backticks and `$()` passed to the `cmd` argument will still execute. DO NOT use escape sequences that risk accidental exposure of sensitive data in tool call outputs.\n- Avoid performing blocking sleep or wait calls longer than 60 seconds, as they may prevent you from communicating with the user for their duration.\n- When declaring env vars or script variables, always avoid common system options. Never repurpose `$HOME`, `$home`, or `$CODEX_HOME`. Instead, use a task-specific variable name.\n\n## File editing constraints\n\nUse `apply_patch` for local file edits. Do not create or edit files with `cat` or other shell write tricks. Formatting commands and bulk mechanical rewrites do not need `apply_patch`. Do not use Python to read or write files when a simple shell command or `apply_patch` is enough.\n\nYou may find yourself working in a dirty worktree. Existing or new changes belong to the user unless you know otherwise, so you preserve them, ignore unrelated edits, and work carefully with anything that overlaps your task. If you cannot work around them you escalate to the user.\n\nNever use destructive commands like `git reset --hard` or `git checkout --` unless the user has clearly asked for that operation. If the request is ambiguous, ask for approval first. You prefer non-interactive git commands.\n\n## Autonomy and persistence\n\nAdapt accordingly based on the user\u2019s request type. When asked to:\n\n- Answer, explain, review, or report status: inspect the task and provide an evidence-backed response. These user requests do not authorize external writes, messages, PR changes, or other expansive mutations unless the user also asks for a change. Reversible, non-mutating diagnostic checks are allowed when they are relevant.\n- Diagnose: determine the cause and explain it. Do not implement the fix unless the user asks for a fix or the request otherwise clearly includes implementation.\n- Change or build: implement the requested change, verify it in proportion to risk, and hand off the completed result while a safe, relevant next step remains.\n- Monitor or wait: use the recurring-monitoring or wait mechanism provided by the product. Unchanged external state is expected and is not by itself a blocker.\n\nYou avoid inferring authorization for a materially different action to the user\u2019s request. Bias towards taking action in the following circumstances:\na) the action is read-only, doesn\u2019t change state, or impacts only the systems, data, and people the user placed in scope.\nb) the action is a normal implementation step within the requested workflow. You do not need to ask for clarification from the user if your action is scoped within the user\u2019s task and does not cause significant external state change (e.g. tool calls to external applications).\n\nA terminal condition such as \u201Cfinish,\u201D \u201Cbabysit,\u201D or \u201Cdo not stop\u201D requires persistence toward the outcome, but does not broaden the set of authorized actions. When blocked, exhaust safe in-scope checks and alternatives.\n\nYou make informed assumptions that help you make progress towards the user\u2019s task, as long as they don\u2019t result in divergence from the user\u2019s intent and the scope of the task. If an assumption would cause the task or current course of action to change beyond what was specified by the user, make sure to flag the available context, the assumption made, and the reasons for doing so explicitly to the user.\n\nWhen presented with clarifying questions or objections from the user, lead with concrete evidence and diligent reasoning rather than unsubstantiated deference. You communicate your reasoning explicitly and concretely, so decisions and tradeoffs are easy for the user to evaluate upfront.\n\nIf completion requires new authority, external coordination, or a meaningful expansion beyond the user\u2019s implied intent and task scope (e.g. a missing user choice that would materially change the result), stop the current turn, report the blocker, and request direction from the user rather than assuming permission.\n\n# Destructive Actions\n\nBe cautious with commands or API calls that can delete, overwrite, or otherwise make data difficult to recover.\n\nBefore taking a destructive action:\n\n- Make sure the action is clearly within the user's request.\n- Resolve the exact targets with read-only checks when necessary.\n- Do not use `$HOME`, `~`, `/`, a workspace root, or another broad directory as the target of a recursive or destructive command.\n- When creating temporary directories, prefer using `mktemp -d`, or `New-Item` in Powershell.\n- When declaring env vars or script variables, always avoid common system options. Never repurpose `$HOME`, `$home`, or `$CODEX_HOME`. Instead, use a task-specific variable name.\n- When possible, avoid relying on unresolved environment variables, globs, or command substitutions to identify destructive targets. Use explicit, validated paths.\n- Prefer recoverable operations, such as moving files to trash, when practical.\n- If the target or scope is unclear, stop and ask the user.\n\nNever run commands such as `rm -rf $HOME` or equivalent operations that could erase a home directory, repository, workspace, or other broad collection of user data.\n\nAfter deleting anything material, briefly tell the user what was removed and whether it can be recovered.\n\n# Using skills\n\nA skill is a set of instructions provided through a `SKILL.md` source. The skills available to you will be listed in the \u201C## Skills\u201D section under \u201C### Available skills\u201D.\n\n### How to use skills\n\n- Discovery: When a `## Skills` section is present, it lists the skills available in the current session. Each entry includes a name, description, and location for its `SKILL.md`. The location may be an absolute filesystem path, a short aliased path, or a non-filesystem reference that must be read using its indicated tool or provider. When short aliased paths are used, the available-skills catalog also provides a mapping from aliases such as `r0` to their filesystem roots. Expand the alias before accessing the skill.\n- Trigger rules: If the user names an available skill (with `$SkillName` or plain text) OR the task clearly matches an available skill's description, you must use that skill for that turn. Multiple mentions mean use them all. Do not carry skills across turns unless re-mentioned.\n- Missing/blocked: If a named skill is not available or its `SKILL.md` cannot be read, say so briefly and continue with the best fallback.\n- How to use a skill:\n  1) After deciding to use a skill, the main agent must read its `SKILL.md` completely before taking task actions. If its location is a short aliased path, expand the matching root alias first from `### Skill roots`, then open and read its `SKILL.md` completely before taking task actions. For a filesystem path, open the file. For an environment-owned file, use the filesystem of the owning environment. For an orchestrator reference, call `skills.list` with `{\"authority\":{\"kind\":\"orchestrator\"}}`, select the matching package, and pass its `main_resource` to `skills.read`. For another non-filesystem reference, use its indicated tool or provider. If a read is truncated or paginated, continue until EOF.\n  2) When `SKILL.md` references another file or resource, use the same access mechanism. Resolve relative paths against the directory containing a filesystem-backed `SKILL.md`. For orchestrator skills, pass the exact referenced resource identifier with the same authority and package to `skills.read`; do not treat `skill://` identifiers as filesystem paths.\n  3) If `SKILL.md` points to extra folders such as `references/`, use its routing instructions to identify what is required for the task. The main agent must read each required instruction or reference itself before acting on it. Do not delegate reading, summarizing, or interpreting skill instructions to a subagent. Subagents may still perform task work when the selected skill allows it.\n  4) For filesystem-backed skills (or if `scripts/` exist), prefer running or patching provided scripts instead of retyping large code blocks. For orchestrator skills, use `skills.read` and the available tools; do not invent a local path.\n  5) Reuse provided assets or templates through the same access mechanism instead of recreating them (including if `assets/` or templates exist).\n- Coordination and sequencing:\n  - If multiple skills apply, choose the minimal set that covers the request and state the order you'll use them.\n  - Announce which skills you're using and why. If you skip an obvious skill, say why.\n- Context hygiene:\n  - Progressive disclosure applies to selecting relevant resources, not partially reading a selected instruction file. Do not load unrelated references, scripts, or assets.\n  - Avoid deep reference-chasing: prefer files or resources directly linked from `SKILL.md` unless blocked.\n  - When variants exist, select only the relevant references and note the choice.\n- Safety and fallback: If a skill cannot be applied cleanly, state the issue, choose the best alternative, and continue.\n\nWhen the user names a skill in their request, you must add the usage of that skill to your current working plan and use it faithfully. The user's instructions should take precedence over guidelines provided in a skill.\n\nExplicitly tell the user in the `commentary` channel whenever a skill causes you to take an action or pause your work.\n\nWhen using a skill the user did not explicitly name, follow this procedure:\n\n- First, tell the user in the commentary channel **why** you are using the skill.\n- Then, use the skill as long as it stays within the scope of the task.\n- Next, if using the skill resulted in material changes (especially when this requires non-trivial judgment), mention how it influenced your work (but only in the final response).\n\nIf a skill causes the current turn to pause or otherwise blocks the continuation of the task, cite the skill and provide a concise explanation to the user in your final response. Do not cite skills you merely inspected.\n",
+    instructions_variables: {
+      personality_default: "",
+      personality_friendly: "",
+      personality_pragmatic: ""
+    },
+    approvals: null
+  },
+  experimental_supported_tools: [],
+  available_in_plans: [
+    "business",
+    "edu",
+    "edu_plus",
+    "edu_pro",
+    "education",
+    "enterprise",
+    "enterprise_cbp_automation",
+    "enterprise_cbp_usage_based",
+    "finserv",
+    "free",
+    "free_workspace",
+    "go",
+    "hc",
+    "k12",
+    "plus",
+    "pro",
+    "prolite",
+    "quorum",
+    "sci",
+    "self_serve_business_usage_based",
+    "team"
+  ],
+  supports_search_tool: true,
+  default_service_tier: null,
+  service_tiers: [
+    {
+      id: "priority",
+      name: "Fast",
+      description: "1.5x speed, increased usage"
+    }
+  ],
+  additional_speed_tiers: ["fast"],
+  supports_reasoning_summaries: true
+};
+
+// src/codex-oauth/account-gateway-mimo-catalog.ts
 var mimoModel = {
   slug: "mimo-v2.6-pro",
   display_name: "MiMo-V2.6-Pro",
@@ -65091,14 +65225,15 @@ function isAccountGatewayMiMoModel(model) {
   return model === mimoModel.slug;
 }
 async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfiguration) {
-  if (!isAccountGatewayMiMoModel(model)) return void 0;
+  const catalogModel = model === gpt_5_6_sol_model_0_147_0_default.slug ? { ...gpt_5_6_sol_model_0_147_0_default, tool_mode: "direct", supports_search_tool: false } : isAccountGatewayMiMoModel(model) ? mimoModel : void 0;
+  if (!catalogModel) return void 0;
   if (!codexHome || !path3.isAbsolute(codexHome))
     throw new Error("account_gateway_catalog_home_unavailable");
   const catalogPath = path3.join(codexHome, "reviewrouter-model-catalog.json");
   const setting = `model_catalog_json=${JSON.stringify(catalogPath)}`;
   await fs4.writeFile(
     catalogPath,
-    JSON.stringify({ models: [mimoModel] }) + "\n",
+    JSON.stringify({ models: [catalogModel] }) + "\n",
     { mode: 384 }
   );
   await fs4.chmod(catalogPath, 384);
@@ -65112,11 +65247,21 @@ async function prepareAccountGatewayModelCatalog(model, codexHome, gatewayConfig
   return setting;
 }
 
+// src/control-plane/generated/review-action-v2/companion-contracts.ts
+var providerApiCheckoutCompanionContract = Object.freeze({
+  path: "/api/action/v2/provider-api/checkout",
+  providerApiAuthMode: "openrouter-api",
+  workflowSchemaVersion: 2
+});
+
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
 var LOCAL_MODEL_CAPABILITY_ENV = "REVIEWROUTER_LOCAL_MODEL_TOKEN";
 var ACCOUNT_GATEWAY_BOUNDS = Object.freeze({
   requestBytes: 16777216,
   outputBytes: 1048576,
+  // Raw SSE includes repeated deltas/tool events; final review files remain bounded above.
+  streamOutputBytes: 8388608,
+  streamFrameBytes: 1048576,
   jsonBytes: 65536,
   headerBytes: 16384,
   bufferBytes: 65536,
@@ -65454,10 +65599,6 @@ function isPlainObject(value) {
 
 // src/providers/codex.ts
 var MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS = 24e3;
-var SHELL_ENVIRONMENT_POLICY_ARGS = [
-  "shell_environment_policy.ignore_default_excludes=false",
-  'shell_environment_policy.filters={OPENAI_API_KEY="exclude",MIMO_TOKEN_PLAN_API_KEY="exclude"}'
-];
 var REVIEW_OUTPUT_CONTRACT = [
   "FINAL OUTPUT CONTRACT:",
   'Return exactly one JSON object with exactly two top-level arrays: "findings" and "revalidations".',
@@ -65700,7 +65841,8 @@ var CodexProvider = class _CodexProvider extends Provider {
         outputLastMessageFile: CODEX_OUTPUT_FILE_PLACEHOLDER,
         outputSchemaFile: CODEX_SCHEMA_FILE_PLACEHOLDER,
         eventAudit,
-        jsonEvents: auditMode !== "off" || contextGateway !== void 0
+        jsonEvents: auditMode !== "off" || contextGateway !== void 0,
+        disableTools: this.options.disableBuiltinTools
       },
       frozenCliConfig,
       contextGateway
@@ -65717,7 +65859,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       jsonEvents: auditMode !== "off" || contextGateway !== void 0,
       auditMode,
       optionalAgenticRetryMaxPromptTokens: MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
-      acceptReviewOutputOnNonZero: !this.options.accountGateway,
+      acceptReviewOutputOnNonZero: !this.options.accountGateway && !this.options.waitForProcessClose,
       ...contextGateway ? { contextGateway } : {}
     };
     return createPreparedProviderInvocation({
@@ -65945,6 +66087,9 @@ ${JSON.stringify(outputSchema)}` : prompt;
       }
       args.push("--disable", "web_search_request");
     }
+    if (this.options.disableBuiltinTools && !contextGateway) {
+      args.push("-c", "mcp_servers={}");
+    }
     if (contextGateway) {
       args.push(
         "-c",
@@ -65984,16 +66129,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
       }
     }
     if (!this.options.accountGateway && config.modelProvider === "openrouter") {
-      args.push(
-        "-c",
-        'model_provider="openrouter"',
-        "-c",
-        'model_providers.openrouter.name="openrouter"',
-        "-c",
-        'model_providers.openrouter.base_url="https://openrouter.ai/api/v1"',
-        "-c",
-        'model_providers.openrouter.env_key="OPENROUTER_API_KEY"'
-      );
+      for (const setting of CODEX_OPENROUTER_CONFIGURATION)
+        args.push("-c", setting);
     }
     if (!this.options.accountGateway && config.modelProvider === "mimo") {
       args.push(
@@ -66014,7 +66151,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         'web_search="disabled"'
       );
     }
-    for (const configOverride of SHELL_ENVIRONMENT_POLICY_ARGS) {
+    for (const configOverride of CODEX_SHELL_ENVIRONMENT_POLICY) {
       args.push("-c", configOverride);
     }
     if (this.options.accountGateway) {
@@ -66032,6 +66169,9 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const outputFile = path4.join(os2.tmpdir(), `codex-output-${runId}.txt`);
     const cliSchemaEnabled = prepared ? prepared.argsTemplate.includes("--output-schema") : supportsCliOutputSchema(this.options.modelProvider);
     const schemaFile = options.outputSchema && cliSchemaEnabled ? path4.join(os2.tmpdir(), `codex-schema-${runId}.json`) : void 0;
+    const waitForProcessClose = Boolean(
+      this.options.accountGateway || this.options.waitForProcessClose
+    );
     let fd;
     try {
       await fs5.writeFile(tmpFile, stdin, { encoding: "utf8", mode: 384 });
@@ -66084,7 +66224,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         };
         const fail = (error) => {
           if (settled) return;
-          if (this.options.accountGateway) {
+          if (waitForProcessClose) {
             if (!failed) {
               pendingFailure = error;
               failed = true;
@@ -66128,7 +66268,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           stderr2 += chunk.toString();
         });
         proc.on("error", (err) => {
-          if (this.options.accountGateway && proc.pid) terminate();
+          if (waitForProcessClose && proc.pid) terminate();
           fail(err);
         });
         proc.on("close", (code) => {
@@ -66145,7 +66285,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           }
         });
       }).catch(async (error) => {
-        if (this.options.accountGateway || options.signal?.aborted) throw error;
+        if (waitForProcessClose || options.signal?.aborted) throw error;
         const lastMessage2 = await this.readOptionalFile(outputFile);
         if (options.acceptReviewOutputOnNonZero && this.isUsableReviewOutput(lastMessage2)) {
           const exitError = error instanceof CodexCliExitError ? error : void 0;
@@ -66474,6 +66614,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     }
   }
   shouldUseForkSandboxCodexHomeConfig() {
+    if (this.options.disableBuiltinTools) return false;
     return this.parseBooleanEnv(
       process.env.REVIEWROUTER_FORK_AGENTIC_SANDBOX,
       false
@@ -67520,6 +67661,7 @@ var ReviewExecutionProviderKind = /* @__PURE__ */ ((ReviewExecutionProviderKind2
   ReviewExecutionProviderKind2["Codex"] = "codex";
   ReviewExecutionProviderKind2["ClaudeCode"] = "claude_code";
   ReviewExecutionProviderKind2["OpenRouter"] = "openrouter";
+  ReviewExecutionProviderKind2["Ocr"] = "ocr";
   return ReviewExecutionProviderKind2;
 })(ReviewExecutionProviderKind || {});
 var ReviewTaskKind = /* @__PURE__ */ ((ReviewTaskKind2) => {
@@ -67734,10 +67876,10 @@ function createReviewPromptCoverageManifest(input) {
     }
     byPath.set(fact.path, fact);
   }
-  if (byPath.size !== assigned.length || assigned.some((path14) => !byPath.has(path14))) {
+  if (byPath.size !== assigned.length || assigned.some((path15) => !byPath.has(path15))) {
     throw new Error("review_prompt_coverage_path_set_mismatch");
   }
-  const paths = Object.freeze(assigned.map((path14) => byPath.get(path14)));
+  const paths = Object.freeze(assigned.map((path15) => byPath.get(path15)));
   const canonicalFacts = canonicalJson5({
     paths,
     reviewRevisionHash: input.reviewRevisionHash,
@@ -67754,7 +67896,7 @@ function createReviewPromptCoverageManifest(input) {
 }
 function isReviewPromptCoverageComplete(manifest) {
   return manifest.paths.length > 0 && manifest.paths.every(
-    (path14) => path14.kind === "full_patch" /* FullPatch */ || path14.kind === "policy_excluded" /* PolicyExcluded */
+    (path15) => path15.kind === "full_patch" /* FullPatch */ || path15.kind === "policy_excluded" /* PolicyExcluded */
   );
 }
 function createProviderVisibleReviewCoverage(manifest) {
@@ -67972,16 +68114,16 @@ function createStableReviewAssignmentManifest(input) {
   const uncoveredPaths = canonicalPaths(input.uncoveredPaths);
   const excludedPaths = canonicalPaths(input.excludedPaths);
   const eligible = new Set(eligiblePaths);
-  for (const path14 of uncoveredPaths) {
-    if (!eligible.has(path14)) {
+  for (const path15 of uncoveredPaths) {
+    if (!eligible.has(path15)) {
       throw new Error("review_assignment_manifest_uncovered_not_eligible");
     }
   }
   const assignments = input.assignments.map((assignment) => {
     requireIdentity2(assignment.workSlotId, "work_slot_id");
     const paths = canonicalPaths(assignment.paths);
-    for (const path14 of paths) {
-      if (!eligible.has(path14)) {
+    for (const path15 of paths) {
+      if (!eligible.has(path15)) {
         throw new Error("review_assignment_manifest_assignment_not_eligible");
       }
     }
@@ -67996,19 +68138,19 @@ function createStableReviewAssignmentManifest(input) {
   const assignedPaths = new Set(
     assignments.flatMap((assignment) => assignment.paths)
   );
-  for (const path14 of uncoveredPaths) {
-    if (assignedPaths.has(path14)) {
+  for (const path15 of uncoveredPaths) {
+    if (assignedPaths.has(path15)) {
       throw new Error("review_assignment_manifest_uncovered_assigned_overlap");
     }
   }
   const uncovered = new Set(uncoveredPaths);
-  for (const path14 of eligiblePaths) {
-    if (!assignedPaths.has(path14) && !uncovered.has(path14)) {
+  for (const path15 of eligiblePaths) {
+    if (!assignedPaths.has(path15) && !uncovered.has(path15)) {
       throw new Error("review_assignment_manifest_eligible_unaccounted");
     }
   }
-  for (const path14 of excludedPaths) {
-    if (eligible.has(path14)) {
+  for (const path15 of excludedPaths) {
+    if (eligible.has(path15)) {
       throw new Error("review_assignment_manifest_excluded_eligible_overlap");
     }
   }
@@ -68037,11 +68179,11 @@ function createStableReviewAssignmentManifest(input) {
   });
 }
 function canonicalPaths(paths) {
-  for (const path14 of paths) requireNormalizedRepoPath(path14);
+  for (const path15 of paths) requireNormalizedRepoPath(path15);
   return Object.freeze([...new Set(paths)].sort(compareCodePoints4));
 }
-function requireNormalizedRepoPath(path14) {
-  if (path14.length === 0 || path14.length > assignmentManifestMaxPathLength || path14.includes("\0") || path14.includes("\\") || path14.startsWith("/") || path14.endsWith("/") || path14.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+function requireNormalizedRepoPath(path15) {
+  if (path15.length === 0 || path15.length > assignmentManifestMaxPathLength || path15.includes("\0") || path15.includes("\\") || path15.startsWith("/") || path15.endsWith("/") || path15.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
     throw new Error("review_assignment_manifest_path_invalid");
   }
 }
@@ -68608,6 +68750,7 @@ var RunInvestigationWorkSlot = class {
       }
     }
     legacyFallbackGate.close();
+    let conclusionAttempted = false;
     for (let transition = 0; transition < input.maxStateTransitions; transition += 1) {
       throwIfAborted(input.signal);
       if (isSuperseded(snapshot)) {
@@ -68634,12 +68777,13 @@ var RunInvestigationWorkSlot = class {
         continue;
       }
       if (snapshot.nextAction === "conclude" /* Conclude */) {
+        conclusionAttempted = true;
         snapshot = await this.dependencies.controlPlane.conclude({
           authorizationToken: input.authorizationToken,
           snapshot,
           certificateTtlMs: input.certificateTtlMs
         });
-        continue;
+        break;
       }
       if (snapshot.turn === null || snapshot.turn.turnCapability.length === 0) {
         snapshot = await this.dependencies.controlPlane.planTurn({
@@ -68728,6 +68872,17 @@ var RunInvestigationWorkSlot = class {
         } catch {
         }
       }
+    }
+    if (isSuperseded(snapshot)) {
+      return { status: "superseded" /* Superseded */, snapshot };
+    }
+    if (input.maxStateTransitions > 0 && !conclusionAttempted && snapshot.nextAction === "conclude" /* Conclude */) {
+      throwIfAborted(input.signal);
+      snapshot = await this.dependencies.controlPlane.conclude({
+        authorizationToken: input.authorizationToken,
+        snapshot,
+        certificateTtlMs: input.certificateTtlMs
+      });
     }
     if (isSuperseded(snapshot)) {
       return { status: "superseded" /* Superseded */, snapshot };
@@ -70773,7 +70928,7 @@ var providerInvocationManifestV1CanonicalizerDescriptor = {
     {
       name: "providerKind",
       kind: "enum",
-      values: ["codex", "claude_code", "openrouter"],
+      values: ["codex", "claude_code", "openrouter", "ocr"],
       unknownValue: "unknown",
       unknownErrorCode: "provider_kind_unknown",
       invalidErrorCode: "provider_kind_invalid"
@@ -71213,7 +71368,7 @@ function buildReviewInvestigationSeedEnvelope(input) {
   if (changedPathFacts.size !== input.probePlan.changedPaths.length) {
     throw new Error("review_investigation_seed_changed_path_duplicate");
   }
-  if (changedPathFacts.size !== paths.length || paths.some((path14) => !changedPathFacts.has(path14))) {
+  if (changedPathFacts.size !== paths.length || paths.some((path15) => !changedPathFacts.has(path15))) {
     throw new Error("review_investigation_seed_path_set_mismatch");
   }
   const inventory = prepareCanonicalInventory(input.canonicalInventory);
@@ -71733,7 +71888,7 @@ function compareCodeUnits2(left, right) {
 }
 
 // src/review-investigation/application/review-investigation-turn-prompt.ts
-var REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT = "review_investigation_turn_prompt.v4";
+var REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT = "review_investigation_turn_prompt.v5";
 var TURN_INSTRUCTIONS = Object.freeze([
   "REVIEW INVESTIGATION TURN CONTRACT:",
   "Use only the reviewrouter Context Gateway tools. Investigate every obligation in the authenticated turn brief.",
@@ -71747,6 +71902,8 @@ var TURN_INSTRUCTIONS = Object.freeze([
   "When inspected evidence reveals additional review scope, add a provider-neutral obligationProposals entry instead of silently broadening an existing obligation.",
   "Each obligation proposal must contain exactly kind, path, revision, and riskPriority. Use the repository-relative path and either head or merge_base revision; the control plane derives canonical identities and hashes. Use only schema-listed kinds; never provide an obligation ID, state, authority decision, or receipt claim.",
   "Obligation proposals are non-authoritative and remain open until the control plane validates and independently closes them with accepted evidence.",
+  'Each finding must include in its own evidenceOperationReceiptIds every receipt in a contiguous file_read chain for that exact finding path at revision="head", starting at startByte=0 and covering the file through EOF; the terminal read must report eof=true, making its authenticated receipt complete=true. Search results, merge_base reads, and partial snippets do not satisfy this requirement.',
+  "If you cannot obtain that complete HEAD receipt chain, omit the finding and leave its related obligation open. Never fabricate receipts or claim unread coverage.",
   "Do not close an obligation without complete operation receipt evidence.",
   "Set criticDecision to null during discovery turns. During critic turns, set it to exactly accept, veto, or abstain."
 ]);
@@ -71754,7 +71911,7 @@ var REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH = sha256(
   canonicalJson({
     contract: REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT,
     instructions: TURN_INSTRUCTIONS,
-    turnBriefEncoding: "REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:<canonical-json-base64url>",
+    turnBriefEncoding: "REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:<canonical-json>",
     operationBudgetEncoding: "REVIEWROUTER_CONTEXT_OPERATION_BUDGET:<positive-integer>"
   })
 );
@@ -71765,16 +71922,13 @@ function buildReviewInvestigationTurnPrompt(input) {
   if (!Number.isSafeInteger(input.maxGatewayOperations) || input.maxGatewayOperations < 1) {
     throw new Error("review_investigation_operation_budget_invalid");
   }
-  const encodedBrief = Buffer.from(
-    canonicalJson(input.turnBrief),
-    "utf8"
-  ).toString("base64url");
+  const canonicalBrief = canonicalJson(input.turnBrief);
   return [
     input.reviewContextPrompt,
     "",
     ...TURN_INSTRUCTIONS,
     `REVIEWROUTER_CONTEXT_OPERATION_BUDGET:${input.maxGatewayOperations}`,
-    `REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:${encodedBrief}`
+    `REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:${canonicalBrief}`
   ].join("\n");
 }
 
@@ -71857,7 +72011,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
   });
 }
 var CodexReviewInvocationAdapter = class {
-  constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false, investigationReasoningEffort = "xhigh") {
+  constructor(provider, promptBuilder, assignments, timeoutMs, agenticContext, contextGateway, investigationManifestBindingEnabled = false, investigationReasoningEffort = "xhigh", directCredentialLease) {
     this.provider = provider;
     this.promptBuilder = promptBuilder;
     this.timeoutMs = timeoutMs;
@@ -71865,6 +72019,7 @@ var CodexReviewInvocationAdapter = class {
     this.contextGateway = contextGateway;
     this.investigationManifestBindingEnabled = investigationManifestBindingEnabled;
     this.investigationReasoningEffort = investigationReasoningEffort;
+    this.directCredentialLease = directCredentialLease;
     for (const assignment of assignments) {
       if (this.assignments.has(assignment.workSlot.workSlotId)) {
         throw new Error("review_action_v2_assignment_duplicate");
@@ -71874,6 +72029,17 @@ var CodexReviewInvocationAdapter = class {
   }
   assignments = /* @__PURE__ */ new Map();
   prepared = /* @__PURE__ */ new WeakMap();
+  credentialsForInvocation(session) {
+    if (!this.directCredentialLease) return session;
+    const direct = this.directCredentialLease();
+    const environment = direct.environment;
+    if (direct.bearerToken !== void 0 || !environment || Object.keys(environment).join(",") !== "OPENROUTER_API_KEY" || !environment.OPENROUTER_API_KEY || session?.environment?.OPENROUTER_API_KEY !== void 0)
+      throw new Error("review_action_v2_direct_credential_lease_invalid");
+    return {
+      ...session,
+      environment: Object.freeze({ ...environment, ...session?.environment })
+    };
+  }
   async prepare(input) {
     const assignment = this.assignments.get(input.workSlot.workSlotId);
     if (!assignment || assignment.workSlot !== input.workSlot) {
@@ -72031,7 +72197,7 @@ var CodexReviewInvocationAdapter = class {
     if (!this.contextGateway) {
       const result2 = await this.provider.executePreparedInvocation(
         prepared,
-        void 0,
+        this.credentialsForInvocation(),
         input.signal
       );
       return normalizeReviewObservation({
@@ -72077,7 +72243,7 @@ var CodexReviewInvocationAdapter = class {
       }
       const result2 = await this.provider.executePreparedInvocation(
         runtimePrepared,
-        session.credentialLease,
+        this.credentialsForInvocation(session.credentialLease),
         input.signal
       );
       logger.info(
@@ -72539,18 +72705,18 @@ function parseRawInventory(raw) {
       tokens[index],
       "canonical_inventory_raw_record_encoding_invalid"
     );
-    const path14 = decodeUtf8(
+    const path15 = decodeUtf8(
       tokens[index + 1],
       "canonical_inventory_path_encoding_invalid"
     );
     const match = RAW_RECORD.exec(record);
-    if (!match || !path14 || path14.includes("\0")) {
+    if (!match || !path15 || path15.includes("\0")) {
       throw new Error("canonical_inventory_raw_record_invalid");
     }
     entries.push(
       Object.freeze({
         status: rawStatus(match[5]),
-        path: path14,
+        path: path15,
         beforeMode: match[1],
         afterMode: match[2],
         beforeOid: requireGitOidOrZero2(match[3]),
@@ -77543,8 +77709,8 @@ var import_crypto22 = require("crypto");
 function canonicalizeReviewProjection(envelope) {
   return JSON.stringify(toCanonicalValue(envelope));
 }
-function hashReviewProjectionCanonicalJson(canonicalJson13) {
-  return (0, import_crypto22.createHash)("sha256").update(canonicalJson13, "utf8").digest("hex");
+function hashReviewProjectionCanonicalJson(canonicalJson14) {
+  return (0, import_crypto22.createHash)("sha256").update(canonicalJson14, "utf8").digest("hex");
 }
 function hashProjectionFact(value) {
   return (0, import_crypto22.createHash)("sha256").update(JSON.stringify(toCanonicalValue(value)), "utf8").digest("hex");
@@ -77603,6 +77769,7 @@ var CurrentReviewProjector = class {
         normalizedFailureModeHash: finding.normalizedFailureModeHash,
         ...finding.symbolAnchor ? { symbolAnchor: finding.symbolAnchor } : {},
         ...finding.trustedMarker ? { trustedMarker: finding.trustedMarker } : {},
+        ...finding.anchorVerified !== void 0 ? { anchorVerified: finding.anchorVerified } : {},
         title: finding.title,
         message: finding.message,
         ...finding.suggestion ? { suggestion: finding.suggestion } : {},
@@ -77727,11 +77894,11 @@ function hasValidTrustedResolutionMarker(target) {
     marker && marker.trust === "trusted" /* Trusted */ && marker.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker.targetId === target.targetId && marker.fingerprint === target.trustedMarker
   );
 }
-function summaryPlacement(lineageId, path14, reason) {
+function summaryPlacement(lineageId, path15, reason) {
   return {
     lineageId,
     kind: "summary" /* Summary */,
-    path: path14,
+    path: path15,
     reason
   };
 }
@@ -77754,8 +77921,8 @@ function sortOccurrences(occurrences) {
     (left, right) => stateOrder[left.state] - stateOrder[right.state] || severityOrder[left.severity] - severityOrder[right.severity] || left.filePath.localeCompare(right.filePath) || (left.line ?? 0) - (right.line ?? 0) || left.lineageId.localeCompare(right.lineageId)
   );
 }
-function normalizePath(path14) {
-  return path14.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath(path15) {
+  return path15.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique(values) {
   return Array.from(new Set(values)).sort(
@@ -78817,13 +78984,13 @@ var BuildCurrentReviewProjection = class {
       },
       snapshot: coverageOnly ? { occurrenceProvenance: [], lineageHints: [] } : buildSnapshotFacts(occurrences)
     });
-    const canonicalJson13 = canonicalizeReviewProjection(envelope);
-    const byteCount = Buffer.byteLength(canonicalJson13, "utf8");
+    const canonicalJson14 = canonicalizeReviewProjection(envelope);
+    const byteCount = Buffer.byteLength(canonicalJson14, "utf8");
     assertWithinProjectionLimit("maxProjectionBytes", byteCount, this.limits);
     return deepFreezeProjection({
       envelope,
-      canonicalJson: canonicalJson13,
-      projectionHash: hashReviewProjectionCanonicalJson(canonicalJson13),
+      canonicalJson: canonicalJson14,
+      projectionHash: hashReviewProjectionCanonicalJson(canonicalJson14),
       byteCount,
       findingCount: occurrences.length
     });
@@ -79100,7 +79267,7 @@ function buildLifecycleFacts(inventory, decisions, hints, coverage, occurrences,
       ...decision?.reasonCodes ?? [],
       ...!revisionFiles.some(
         (file) => [file.path, file.previousPath].some(
-          (path14) => path14 !== void 0 && (target.currentPath === path14 || target.originalPath === path14)
+          (path15) => path15 !== void 0 && (target.currentPath === path15 || target.originalPath === path15)
         )
       ) ? ["outside_review_scope"] : [],
       ...target.disposition === "human_reply" /* HumanReply */ ? ["human_reply"] : [],
@@ -79208,11 +79375,11 @@ function countOccurrenceStates(occurrences) {
 function publicationMarker(kind, scope) {
   return `reviewrouter:${kind}:v2:${scope.reviewRevisionHash}`;
 }
-function summaryPlacement2(lineageId, path14, reason) {
+function summaryPlacement2(lineageId, path15, reason) {
   return {
     lineageId,
     kind: "summary" /* Summary */,
-    path: path14,
+    path: path15,
     reason
   };
 }
@@ -79338,8 +79505,8 @@ function validateGateDecision(occurrences, gate) {
 function assertNonEmpty(name, value) {
   if (!value.trim()) throw new Error(`${name} must not be empty`);
 }
-function normalizePath2(path14) {
-  return path14.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath2(path15) {
+  return path15.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique2(values) {
   return Array.from(new Set(values)).sort(
@@ -80203,7 +80370,7 @@ var FindingFilter = class {
   /**
    * Filter and adjust findings to reduce false positives
    */
-  filter(findings, diffContent) {
+  filter(findings, diffContent, options = {}) {
     const stats = {
       total: findings.length,
       filtered: 0,
@@ -80214,10 +80381,22 @@ var FindingFilter = class {
     };
     const filtered = [];
     for (const finding of findings) {
-      const action = this.shouldFilter(finding, diffContent);
+      const unanchored = options.allowUnanchoredFindings === true && finding.line === 0 && finding.startLine === void 0 && finding.endLine === void 0;
+      const producerClassifiedBug = options.isProducerClassifiedBug?.(finding) === true;
+      const action = this.shouldFilter(
+        finding,
+        diffContent,
+        unanchored,
+        producerClassifiedBug
+      );
       if (action === "filter") {
         stats.filtered++;
-        const reason = this.getFilterReason(finding, diffContent);
+        const reason = this.getFilterReason(
+          finding,
+          diffContent,
+          unanchored,
+          producerClassifiedBug
+        );
         stats.reasons[reason] = (stats.reasons[reason] || 0) + 1;
         if (stats.filteredExamples.length < 5) {
           stats.filteredExamples.push(
@@ -80260,11 +80439,11 @@ var FindingFilter = class {
     }
     return { findings: deduplicated, stats };
   }
-  shouldFilter(finding, diffContent) {
-    if (this.hasInvalidLineNumber(finding)) {
+  shouldFilter(finding, diffContent, unanchored = false, producerClassifiedBug = false) {
+    if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return "filter";
     }
-    if (this.isLineNumberIssue(finding, diffContent)) {
+    if (!unanchored && this.isLineNumberIssue(finding, diffContent)) {
       return "filter";
     }
     if (this.isDocumentationFile(finding.file)) {
@@ -80298,7 +80477,7 @@ var FindingFilter = class {
     if (this.isConcreteRuntimeRegression(finding)) {
       return "keep";
     }
-    if (!this.isConcreteRuntimeRegression(finding) && this.isSuggestionOrOptimization(finding)) {
+    if (!producerClassifiedBug && !this.isConcreteRuntimeRegression(finding) && this.isSuggestionOrOptimization(finding)) {
       return "filter";
     }
     if (this.isAboutAddedFileFalsePositive(finding)) {
@@ -80307,7 +80486,7 @@ var FindingFilter = class {
     if (this.isSubjectiveCodeOpinion(finding)) {
       return "filter";
     }
-    if (this.isCodeQualityIssue(finding)) {
+    if (!producerClassifiedBug && this.isCodeQualityIssue(finding)) {
       return "filter";
     }
     if (this.isLintOrStyleIssue(finding)) {
@@ -80321,11 +80500,11 @@ var FindingFilter = class {
     }
     return "keep";
   }
-  getFilterReason(finding, diffContent) {
-    if (this.hasInvalidLineNumber(finding)) {
+  getFilterReason(finding, diffContent, unanchored = false, producerClassifiedBug = false) {
+    if (!unanchored && this.hasInvalidLineNumber(finding)) {
       return "invalid/suspicious line number";
     }
-    if (this.isLineNumberIssue(finding, diffContent)) {
+    if (!unanchored && this.isLineNumberIssue(finding, diffContent)) {
       return "line number points to blank/brace/comment";
     }
     if (this.isDocumentationFile(finding.file) && this.isStyleOrFormattingIssue(finding)) {
@@ -80346,7 +80525,7 @@ var FindingFilter = class {
     if (this.isWorkflowSecurityFalsePositive(finding, diffContent)) {
       return "workflow security already handled/config issue";
     }
-    if (this.isSuggestionOrOptimization(finding)) {
+    if (!producerClassifiedBug && this.isSuggestionOrOptimization(finding)) {
       return "suggestion/optimization (not a bug)";
     }
     if (this.isSubjectiveCodeOpinion(finding)) {
@@ -80358,7 +80537,7 @@ var FindingFilter = class {
     if (this.isMissingMethodFalsePositive(finding, diffContent)) {
       return "method exists in code";
     }
-    if (this.isCodeQualityIssue(finding)) {
+    if (!producerClassifiedBug && this.isCodeQualityIssue(finding)) {
       return "code quality (not a concrete bug)";
     }
     if (this.isLintOrStyleIssue(finding)) {
@@ -81586,6 +81765,7 @@ function toReviewerSummaryFinding(finding) {
   };
 }
 function findingLocationLabel(finding) {
+  if (finding.line <= 0) return finding.file;
   return finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine ? `${finding.file}:${finding.startLine}-${finding.endLine}` : `${finding.file}:${finding.line}`;
 }
 function renderFindingDetails(copy, finding) {
@@ -82425,6 +82605,11 @@ var SynthesisEngine = class {
   constructor(config) {
     this.config = config;
   }
+  // Keep provenance off serialized comments; locations are not finding identities.
+  inlineSourceFindings = /* @__PURE__ */ new WeakMap();
+  sourceFindingForInlineComment(comment) {
+    return this.inlineSourceFindings.get(comment);
+  }
   synthesize(findings, pr, testHints, aiAnalysis, providerResults, runDetails, impactAnalysis, mermaidDiagram) {
     const metrics = this.buildMetrics(findings, providerResults, runDetails);
     return this.buildReview({
@@ -82527,22 +82712,26 @@ var SynthesisEngine = class {
     const sorted = findings.filter((f) => compareSeverityDesc(minSeverity, f.severity) >= 0).sort(
       (a, b) => compareSeverityDesc(a.severity, b.severity) || a.file.localeCompare(b.file) || a.line - b.line
     ).slice(0, this.config.inlineMaxComments);
-    return sorted.map((f) => ({
-      path: f.file,
-      startLine: f.startLine,
-      line: f.line,
-      endLine: f.endLine,
-      side: "RIGHT",
-      body: this.commentBody(f),
-      severity: f.severity,
-      title: f.title,
-      category: f.category,
-      provider: f.provider,
-      providers: f.providers,
-      confidence: f.confidence,
-      hasConsensus: f.hasConsensus,
-      suggestion: f.suggestion
-    }));
+    return sorted.map((f) => {
+      const comment = {
+        path: f.file,
+        startLine: f.startLine,
+        line: f.line,
+        endLine: f.endLine,
+        side: "RIGHT",
+        body: this.commentBody(f),
+        severity: f.severity,
+        title: f.title,
+        category: f.category,
+        provider: f.provider,
+        providers: f.providers,
+        confidence: f.confidence,
+        hasConsensus: f.hasConsensus,
+        suggestion: f.suggestion
+      };
+      this.inlineSourceFindings.set(comment, f);
+      return comment;
+    });
   }
   commentBody(finding) {
     const parts = [
@@ -82739,10 +82928,21 @@ var LegacyReviewProjectionPolicyAdapter = class {
   consensus;
   synthesis;
   async selectCurrent(query) {
+    const producerClassifiedBugIds = new Set(
+      query.findings.filter(
+        (finding) => finding.category === "bug" && finding.providerIds.length > 0 && finding.providerIds.every((provider) => provider === "ocr")
+      ).map((finding) => finding.sourceFindingId)
+    );
     const legacyFindings = query.findings.map(toLegacyFinding);
     const deduped = new Deduplicator().dedupe(legacyFindings);
     const consensus = this.consensus.filter(deduped);
-    const filtered = new FindingFilter().filter(consensus, query.diff).findings;
+    const filtered = new FindingFilter().filter(consensus, query.diff, {
+      allowUnanchoredFindings: true,
+      isProducerClassifiedBug: (finding) => {
+        const sourceIds = finding.sourceFindingIds ?? [];
+        return sourceIds.length > 0 && sourceIds.every((id) => producerClassifiedBugIds.has(id));
+      }
+    }).findings;
     return filtered.map((finding) => {
       const metadata = finding;
       const memberIds = new Set(finding.sourceFindingIds);
@@ -82755,12 +82955,21 @@ var LegacyReviewProjectionPolicyAdapter = class {
       if (!representative) {
         throw new Error("legacy finding policy returned an unknown finding");
       }
-      return {
+      const requiresVerifiedAnchor = contributors.some(
+        (candidate) => candidate.anchorVerified !== void 0
+      );
+      const anchorVerified = finding.startLine !== void 0 && finding.endLine !== void 0 && contributors.every(
+        (candidate) => candidate.anchorVerified === true && candidate.filePath === finding.file && candidate.startLine === finding.startLine && candidate.endLine === finding.endLine
+      ) && (!finding.suggestion || contributors.some(
+        (candidate) => candidate.suggestion === finding.suggestion
+      ));
+      const selected = {
         ...representative,
         sourceFindingId: representative.sourceFindingId,
         sourceFindingIds: sortedUnique3(
           contributors.map((candidate) => candidate.sourceFindingId)
         ),
+        ...requiresVerifiedAnchor ? { anchorVerified } : {},
         severity: toProjectionSeverity2(finding.severity),
         title: finding.title,
         message: finding.message,
@@ -82780,6 +82989,17 @@ var LegacyReviewProjectionPolicyAdapter = class {
           contributors.flatMap((candidate) => candidate.observationIds)
         )
       };
+      if (requiresVerifiedAnchor && !anchorVerified) {
+        const {
+          startLine: _startLine,
+          line: _line,
+          endLine: _endLine,
+          suggestion: _suggestion,
+          ...unanchored
+        } = selected;
+        return unanchored;
+      }
+      return selected;
     });
   }
   async projectLifecycle(query) {
@@ -82846,9 +83066,15 @@ var LegacyReviewProjectionPolicyAdapter = class {
       (occurrence) => occurrence.state !== "resolved" /* Resolved */ && occurrence.state !== "suppressed_by_human" /* SuppressedByHuman */
     );
     const currentOccurrences = activeOccurrences.filter(isCurrentOccurrence);
+    const legacyFindings = new Map(
+      currentOccurrences.map((occurrence) => [
+        occurrence,
+        toLegacyFinding(occurrence)
+      ])
+    );
     const pr = toLegacyPrContext(query);
     const review = this.synthesis.synthesizeWithProviderExecutionSummary(
-      currentOccurrences.map(toLegacyFinding),
+      [...legacyFindings.values()],
       pr,
       {
         planned: query.providerExecution.plannedProviders,
@@ -82856,7 +83082,12 @@ var LegacyReviewProjectionPolicyAdapter = class {
       }
     );
     const placements = query.occurrences.map(
-      (occurrence) => this.placeOccurrence(occurrence, review, query.revisionFiles)
+      (occurrence) => this.placeOccurrence(
+        occurrence,
+        review,
+        query.revisionFiles,
+        legacyFindings.get(occurrence)
+      )
     );
     const incomplete = isReviewerSummaryIncomplete({
       incomplete: query.coverage.state === "partial" /* Partial */,
@@ -82923,7 +83154,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
     const review = minimalLegacyReview([toLegacyFinding(occurrence)]);
     return getBlockingFindingBreakdown(review, toLegacySeverity(threshold)).total > 0;
   }
-  placeOccurrence(occurrence, review, revisionFiles) {
+  placeOccurrence(occurrence, review, revisionFiles, sourceFinding) {
     if (!isCurrentOccurrence(occurrence)) {
       return summaryPlacement3(occurrence, "historical lifecycle occurrence");
     }
@@ -82933,6 +83164,14 @@ var LegacyReviewProjectionPolicyAdapter = class {
     }
     if (revisionFile.status === "removed" /* Removed */) {
       return summaryPlacement3(occurrence, "file was deleted");
+    }
+    if (occurrence.anchorVerified === false) {
+      return {
+        lineageId: occurrence.lineageId,
+        kind: "file" /* File */,
+        path: revisionFile.path,
+        reason: "finding has no verified current span"
+      };
     }
     const line = occurrence.line ?? occurrence.endLine;
     if (line === void 0) {
@@ -82944,7 +83183,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
       };
     }
     const inline = review.inlineComments.find(
-      (comment) => normalizePath3(comment.path) === normalizePath3(occurrence.filePath) && comment.line === line
+      (comment) => sourceFinding !== void 0 && this.synthesis.sourceFindingForInlineComment(comment) === sourceFinding
     );
     if (!inline) {
       return {
@@ -82952,6 +83191,35 @@ var LegacyReviewProjectionPolicyAdapter = class {
         kind: "file" /* File */,
         path: revisionFile.path,
         reason: "legacy synthesis did not select inline placement"
+      };
+    }
+    if (occurrence.anchorVerified === true) {
+      const positions = mapLinesToPositions(revisionFile.patch);
+      const rangeStart = occurrence.startLine ?? line;
+      const rangeEnd = occurrence.endLine ?? line;
+      const low = Math.min(rangeStart, rangeEnd);
+      const high = Math.max(rangeStart, rangeEnd);
+      let rangePlaceable = positions.has(line);
+      for (let current = low; rangePlaceable && current <= high; current += 1) {
+        rangePlaceable = positions.has(current);
+      }
+      if (!rangePlaceable) {
+        return {
+          lineageId: occurrence.lineageId,
+          kind: "file" /* File */,
+          path: revisionFile.path,
+          reason: "verified span range is not provably placeable in the current diff"
+        };
+      }
+      return {
+        lineageId: occurrence.lineageId,
+        kind: "inline" /* Inline */,
+        path: revisionFile.path,
+        ...rangeStart < rangeEnd ? { startLine: rangeStart } : {},
+        // GitHub's publication line is the end of a multiline range.
+        line: rangeEnd,
+        endLine: rangeEnd,
+        body: inline.body
       };
     }
     const correctedLine = chooseBestAddedLineForComment(
@@ -83049,7 +83317,7 @@ function toLegacyFinding(finding) {
   return {
     file: "filePath" in finding ? finding.filePath : "",
     ...finding.startLine !== void 0 ? { startLine: finding.startLine } : {},
-    line: finding.line ?? finding.endLine ?? 1,
+    line: finding.line ?? finding.endLine ?? (finding.anchorVerified === false ? 0 : 1),
     ...finding.endLine !== void 0 ? { endLine: finding.endLine } : {},
     severity: toLegacySeverity(finding.severity),
     title: finding.title,
@@ -83163,8 +83431,8 @@ function minimalLegacyReview(findings) {
     }
   };
 }
-function findRevisionFile(path14, revisionFiles) {
-  const normalized = normalizePath3(path14);
+function findRevisionFile(path15, revisionFiles) {
+  const normalized = normalizePath3(path15);
   return revisionFiles.find(
     (file) => normalizePath3(file.path) === normalized || file.previousPath && normalizePath3(file.previousPath) === normalized
   );
@@ -83186,8 +83454,8 @@ function toProjectionSeverity2(severity) {
 function toLegacySeverity(severity) {
   return severity;
 }
-function normalizePath3(path14) {
-  return path14.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+function normalizePath3(path15) {
+  return path15.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
 }
 function sortedUnique3(values) {
   return Array.from(new Set(values)).sort(
@@ -83325,10 +83593,10 @@ var ProductionReviewProjectionCommandFactory = class {
       const accepted = evidence.get(assignment.workSlotId);
       if (!accepted) {
         if (assignment.required) {
-          for (const path14 of assignment.filePaths) {
+          for (const path15 of assignment.filePaths) {
             recordManifestFile(
               {
-                path: path14,
+                path: path15,
                 status: "unreviewed",
                 reason: exhaustedWorkSlots.has(assignment.workSlotId) ? "required work slot exhausted before producing accepted evidence" : "required work slot produced no accepted evidence"
               },
@@ -83338,17 +83606,17 @@ var ProductionReviewProjectionCommandFactory = class {
         }
         continue;
       }
-      for (const path14 of accepted.coverageManifest.paths) {
+      for (const path15 of accepted.coverageManifest.paths) {
         recordManifestFile(
-          promptCoverageToManifestFile(path14),
+          promptCoverageToManifestFile(path15),
           assignment.required
         );
       }
     }
-    for (const path14 of this.input.uncoveredPaths) {
+    for (const path15 of this.input.uncoveredPaths) {
       recordManifestFile(
         {
-          path: path14,
+          path: path15,
           status: "unreviewed",
           reason: "no review work slot covered this file"
         },
@@ -83386,13 +83654,13 @@ var ProductionReviewProjectionCommandFactory = class {
           `work_slot_investigation_inconclusive:${assignment.workSlotId}`
         );
       }
-      for (const path14 of manifest.paths) {
-        if (path14.kind === "full_patch" /* FullPatch */) {
-          reviewedFiles.add(path14.path);
-        } else if (path14.kind === "policy_excluded" /* PolicyExcluded */) {
-          policyExcludedFiles.add(path14.path);
+      for (const path15 of manifest.paths) {
+        if (path15.kind === "full_patch" /* FullPatch */) {
+          reviewedFiles.add(path15.path);
+        } else if (path15.kind === "policy_excluded" /* PolicyExcluded */) {
+          policyExcludedFiles.add(path15.path);
         } else {
-          coverageLimitations.push(`path_coverage:${path14.path}:${path14.kind}`);
+          coverageLimitations.push(`path_coverage:${path15.path}:${path15.kind}`);
         }
       }
       if (!isReviewPromptCoverageComplete(manifest)) {
@@ -83410,7 +83678,7 @@ var ProductionReviewProjectionCommandFactory = class {
         (omission) => `pull_request_load:${omission.reason}`
       ) : [],
       ...requiredExhaustedWorkSlotIds.map((id) => `work_slot_exhausted:${id}`),
-      ...this.input.uncoveredPaths.map((path14) => `work_slot_uncovered:${path14}`),
+      ...this.input.uncoveredPaths.map((path15) => `work_slot_uncovered:${path15}`),
       ...this.input.uncoveredLifecycleTargetIds.map(
         (targetId) => `lifecycle_target_uncovered:${targetId}`
       ),
@@ -83542,6 +83810,9 @@ function toFinding(observation, value, index) {
     value.normalizedFailureModeHash,
     "finding_failure_mode_hash"
   );
+  const startLine = optionalPositiveInteger(value.startLine);
+  const endLine = optionalPositiveInteger(value.endLine);
+  const anchorVerified = observation.providerKind === "ocr" /* Ocr */ && startLine !== void 0 && endLine !== void 0;
   return Object.freeze({
     sourceFindingId: deterministicId("finding", [
       observation.observationId,
@@ -83549,14 +83820,15 @@ function toFinding(observation, value, index) {
     ]),
     category,
     normalizedFailureModeHash,
+    ...observation.providerKind === "ocr" /* Ocr */ ? { anchorVerified } : {},
     severity: toFindingSeverity(value.severity),
     title,
     message,
     ...optionalString(value.suggestion) ? { suggestion: optionalString(value.suggestion) } : {},
     filePath,
-    ...optionalPositiveInteger(value.startLine) !== void 0 ? { startLine: optionalPositiveInteger(value.startLine) } : {},
-    ...optionalPositiveInteger(value.startLine) !== void 0 ? { line: optionalPositiveInteger(value.startLine) } : {},
-    ...optionalPositiveInteger(value.endLine) !== void 0 ? { endLine: optionalPositiveInteger(value.endLine) } : {},
+    ...startLine !== void 0 ? { startLine } : {},
+    ...startLine !== void 0 ? { line: startLine } : {},
+    ...endLine !== void 0 ? { endLine } : {},
     ...optionalConfidence(value.placementConfidence) !== void 0 ? { confidence: optionalConfidence(value.placementConfidence) } : {},
     providerIds: Object.freeze([observation.providerKind]),
     providerVoteKeys: Object.freeze([observation.providerVoteIdentityHash]),
@@ -83687,50 +83959,50 @@ function compareCodeUnits8(left, right) {
   if (left > right) return 1;
   return 0;
 }
-function promptCoverageToManifestFile(path14) {
-  switch (path14.kind) {
+function promptCoverageToManifestFile(path15) {
+  switch (path15.kind) {
     case "full_patch" /* FullPatch */:
-      return { path: path14.path, status: "full" };
+      return { path: path15.path, status: "full" };
     case "policy_excluded" /* PolicyExcluded */:
       return {
-        path: path14.path,
+        path: path15.path,
         status: "skipped",
         reason: "excluded by review policy"
       };
     case "summary_only" /* SummaryOnly */:
       return {
-        path: path14.path,
+        path: path15.path,
         status: "compacted",
         reason: "summary-only content in prompt"
       };
     case "trusted_read" /* TrustedRead */:
       return {
-        path: path14.path,
+        path: path15.path,
         status: "compacted",
         reason: "trusted read without full patch"
       };
     case "trimmed" /* Trimmed */:
       return {
-        path: path14.path,
+        path: path15.path,
         status: "metadata-only",
         reason: "diff trimmed in prompt"
       };
     case "metadata_only" /* MetadataOnly */:
       return {
-        path: path14.path,
+        path: path15.path,
         status: "metadata-only",
         reason: "metadata-only content in prompt"
       };
     case "unavailable" /* Unavailable */:
       return {
-        path: path14.path,
+        path: path15.path,
         status: "unreviewed",
         reason: "file content unavailable"
       };
   }
 }
-function normalizeManifestPath(path14) {
-  return path14.startsWith("./") ? path14.slice(2) : path14;
+function normalizeManifestPath(path15) {
+  return path15.startsWith("./") ? path15.slice(2) : path15;
 }
 function sha25615(value) {
   return (0, import_crypto27.createHash)("sha256").update(value).digest("hex");
@@ -85420,12 +85692,1471 @@ function deterministicIdempotencyKey(purpose, parts) {
   )}`;
 }
 
+// src/review-orchestration/infrastructure/ocr-review-invocation-adapter.ts
+var import_crypto30 = require("crypto");
+var import_child_process9 = require("child_process");
+var fs6 = __toESM(require("fs"));
+var path12 = __toESM(require("path"));
+
+// src/review-orchestration/infrastructure/ocr-review-normalization.ts
+var OCR_NORMALIZATION_LIMITS = Object.freeze({
+  maxPayloadBytes: 512 * 1024,
+  maxFindings: 200,
+  maxPathChars: 1024,
+  maxMessageChars: 16384,
+  maxTitleChars: 512
+});
+function normalizeEol(value) {
+  return value.split(/\r\n|\r|\n/u);
+}
+function verifyOcrSpan(input) {
+  const { existingCode, startLine, endLine } = input.comment;
+  if (existingCode === null)
+    return { verified: false, reason: "missing_existing_code" };
+  if (startLine === null || endLine === null || endLine < startLine) {
+    return { verified: false, reason: "invalid_range" };
+  }
+  const fileLines = normalizeEol(input.headContent);
+  if (startLine < 1 || endLine > fileLines.length) {
+    return { verified: false, reason: "invalid_range" };
+  }
+  const blockLines = normalizeEol(existingCode.replace(/\s+$/u, ""));
+  const headBlock = fileLines.slice(startLine - 1, endLine);
+  if (blockLines.length !== headBlock.length || blockLines.some((line, index) => line !== headBlock[index])) {
+    return { verified: false, reason: "content_mismatch" };
+  }
+  let occurrences = 0;
+  for (let index = 0; index + blockLines.length <= fileLines.length; index++) {
+    let matches = true;
+    for (let offset = 0; offset < blockLines.length; offset++) {
+      if (fileLines[index + offset] !== blockLines[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) occurrences++;
+    if (occurrences > 1) break;
+  }
+  if (occurrences !== 1) return { verified: false, reason: "ambiguous_match" };
+  if (input.diffPositions) {
+    for (let line = startLine; line <= endLine; line++) {
+      if (!input.diffPositions.has(line)) {
+        return { verified: false, reason: "outside_diff" };
+      }
+    }
+  }
+  return { verified: true, startLine, endLine };
+}
+var OcrOutputTooLargeError = class extends Error {
+  constructor(bound) {
+    super(`ocr_review_output_too_large: ${bound}`);
+    this.bound = bound;
+    this.name = "OcrOutputTooLargeError";
+  }
+};
+var SEVERITY_MAP = {
+  critical: "critical",
+  high: "major",
+  medium: "minor",
+  low: "minor"
+};
+function normalizeOcrRepoPath(raw) {
+  const path15 = raw.replace(/^\.\//u, "");
+  if (path15.length === 0 || path15.length > OCR_NORMALIZATION_LIMITS.maxPathChars || path15.includes("\\") || path15.includes("\0") || path15.startsWith("/") || path15.split("/").some((segment) => segment === ".." || segment === "")) {
+    return null;
+  }
+  return path15;
+}
+function plainTitleLine(content) {
+  const firstLine = content.split(/\r\n|\r|\n/u).map((line) => line.replace(/[^\P{Z}\u00a0]/gu, " ").trim()).find((line) => line.length > 0) ?? "";
+  return firstLine.replace(/[`#>*_~[\]]/gu, "").replace(/\s+/gu, " ").trim().slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
+}
+function normalizeOcrFindings(input) {
+  const findings = [];
+  const skipped = [];
+  const reasons = /* @__PURE__ */ new Set();
+  const assignedPaths = input.assignedPaths ? new Set(input.assignedPaths) : void 0;
+  input.comments.forEach((comment, index) => {
+    const path15 = normalizeOcrRepoPath(comment.path);
+    const content = comment.content.trim();
+    if (path15 === null || content.length === 0 || assignedPaths && !assignedPaths.has(path15)) {
+      skipped.push({ index, reason: "invalid_native_finding" });
+      return;
+    }
+    if (content.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
+      throw new OcrOutputTooLargeError("message");
+    }
+    const headContent = input.headFiles.get(path15);
+    const span = headContent !== void 0 ? verifyOcrSpan({
+      comment,
+      headContent,
+      ...input.diffPositions ? { diffPositions: input.diffPositions.get(path15) } : {}
+    }) : { verified: false, reason: "invalid_range" };
+    if (!span.verified && span.reason !== "missing_existing_code") {
+      reasons.add("unverified_native_span");
+    }
+    const mappedSeverity = comment.severity ? SEVERITY_MAP[comment.severity] : void 0;
+    const severity = mappedSeverity ?? "minor";
+    if (mappedSeverity === void 0) {
+      reasons.add("unclassified_native_severity");
+    }
+    findings.push({
+      file: path15,
+      ...span.verified ? {
+        startLine: span.startLine,
+        line: span.startLine,
+        endLine: span.endLine
+      } : {
+        // No current-line anchor for unverified spans: the existing
+        // normalizer maps line 0 to null and placement stays file/summary.
+        line: 0
+      },
+      severity,
+      title: plainTitleLine(content),
+      message: content,
+      category: comment.category ?? "correctness",
+      ...span.verified && comment.suggestionCode !== null ? { suggestion: comment.suggestionCode } : {}
+    });
+  });
+  if (findings.length > OCR_NORMALIZATION_LIMITS.maxFindings) {
+    throw new OcrOutputTooLargeError("findings");
+  }
+  for (const finding of findings) {
+    if (finding.file.length > OCR_NORMALIZATION_LIMITS.maxPathChars) {
+      throw new OcrOutputTooLargeError("path");
+    }
+    if (finding.message.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
+      throw new OcrOutputTooLargeError("message");
+    }
+  }
+  return Object.freeze({
+    findings: Object.freeze(findings),
+    diagnostics: Object.freeze({
+      skipped: Object.freeze(skipped),
+      reasons: Object.freeze([...reasons].sort()),
+      partialFlagsRequired: reasons.size > 0 || skipped.length > 0
+    })
+  });
+}
+
+// src/review-orchestration/infrastructure/ocr-review-outcome-contract.ts
+var OCR_OUTCOME_SCHEMA_VERSION = "reviewrouter.ocr-outcome/v1";
+var OCR_PHASE_STATES = [
+  "completed",
+  "not_applicable",
+  "failed",
+  "cancelled"
+];
+var OCR_STOP_CAUSES = [
+  "max_rounds",
+  "empty_rounds",
+  "compression",
+  "token_budget",
+  "prompt_budget",
+  "provider_error",
+  "input_error",
+  "internal_error",
+  "cancelled",
+  "deadline"
+];
+var OCR_STOP_CAUSE_ALIASES = {
+  review_limit_reached: "max_rounds"
+};
+var OcrManagedContractViolation = class extends Error {
+  issues;
+  constructor(issues) {
+    super(
+      `ocr_managed_outcome_contract_violation: ${issues.map((issue) => issue.code).join(",")}`
+    );
+    this.name = "OcrManagedContractViolation";
+    this.issues = Object.freeze([...issues]);
+  }
+};
+var OcrNativeResultContractViolation = class extends Error {
+  issues;
+  constructor(issues) {
+    super(
+      `ocr_native_result_contract_violation: ${issues.map((issue) => issue.code).join(",")}`
+    );
+    this.name = "OcrNativeResultContractViolation";
+    this.issues = Object.freeze([...issues]);
+  }
+};
+var REASON_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
+function isRecord8(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function parseOcrReviewOutcome(value) {
+  const issues = [];
+  const violation = () => {
+    throw new OcrManagedContractViolation(issues);
+  };
+  if (!isRecord8(value)) {
+    issues.push({ code: "outcome_not_an_object", detail: "reviewrouter_outcome" });
+    return violation();
+  }
+  if (value.schema_version !== OCR_OUTCOME_SCHEMA_VERSION) {
+    issues.push({
+      code: "outcome_schema_version",
+      detail: `expected ${OCR_OUTCOME_SCHEMA_VERSION}`
+    });
+    return violation();
+  }
+  const parseStopCause = (raw, field) => {
+    if (raw === null || raw === void 0) return null;
+    if (typeof raw === "string" && OCR_STOP_CAUSES.includes(raw)) {
+      return raw;
+    }
+    if (typeof raw === "string" && OCR_STOP_CAUSE_ALIASES[raw] !== void 0) {
+      return OCR_STOP_CAUSE_ALIASES[raw];
+    }
+    issues.push({ code: "outcome_stop_cause_unknown", detail: field });
+    return null;
+  };
+  const parseReason = (raw, field) => {
+    if (raw === null || raw === void 0) return null;
+    if (typeof raw === "string" && REASON_PATTERN.test(raw)) return raw;
+    issues.push({ code: "outcome_reason_invalid", detail: field });
+    return null;
+  };
+  const parseState = (raw, field) => {
+    if (typeof raw === "string" && OCR_PHASE_STATES.includes(raw)) {
+      return raw;
+    }
+    issues.push({ code: "outcome_phase_state_unknown", detail: field });
+    return null;
+  };
+  const runStopCause = parseStopCause(value.run_stop_cause, "run_stop_cause");
+  if (value.run_stop_cause === void 0) {
+    issues.push({ code: "outcome_stop_cause_missing", detail: "run_stop_cause" });
+    return violation();
+  }
+  if (value.run_stop_cause !== null && value.run_stop_cause !== void 0 && runStopCause === null) {
+    return violation();
+  }
+  const groupingRaw = value.grouping;
+  if (!isRecord8(groupingRaw)) {
+    issues.push({ code: "outcome_grouping_missing", detail: "grouping" });
+    return violation();
+  }
+  const groupingState = parseState(groupingRaw.state, "grouping.state");
+  const groupingReason = parseReason(groupingRaw.reason, "grouping.reason");
+  if (groupingState === null) return violation();
+  const groupsRaw = value.groups;
+  if (!Array.isArray(groupsRaw)) {
+    issues.push({ code: "outcome_groups_missing", detail: "groups" });
+    return violation();
+  }
+  const seenPaths = /* @__PURE__ */ new Set();
+  const groups = groupsRaw.map((groupRaw, groupIndex) => {
+    const field = (name) => `groups[${groupIndex}].${name}`;
+    if (!isRecord8(groupRaw)) {
+      issues.push({ code: "outcome_group_invalid", detail: field("group") });
+      return violation();
+    }
+    const pathsRaw = groupRaw.paths;
+    const paths = [];
+    if (!Array.isArray(pathsRaw) || pathsRaw.length === 0) {
+      issues.push({ code: "outcome_group_paths_invalid", detail: field("paths") });
+    } else {
+      for (const path15 of pathsRaw) {
+        if (typeof path15 !== "string" || path15.length === 0) {
+          issues.push({ code: "outcome_group_paths_invalid", detail: field("paths") });
+          continue;
+        }
+        if (paths.includes(path15) || seenPaths.has(path15)) {
+          issues.push({ code: "outcome_group_paths_duplicate", detail: path15 });
+          continue;
+        }
+        paths.push(path15);
+        seenPaths.add(path15);
+      }
+    }
+    const mainCompleted = groupRaw.main_completed;
+    if (typeof mainCompleted !== "boolean") {
+      issues.push({
+        code: "outcome_main_completed_invalid",
+        detail: field("main_completed")
+      });
+      return violation();
+    }
+    const stopCause = parseStopCause(groupRaw.stop_cause, field("stop_cause"));
+    if (groupRaw.stop_cause === void 0) {
+      issues.push({
+        code: "outcome_stop_cause_missing",
+        detail: field("stop_cause")
+      });
+      return violation();
+    }
+    if (groupRaw.stop_cause !== null && groupRaw.stop_cause !== void 0 && stopCause === null) {
+      return violation();
+    }
+    const roundsRaw = groupRaw.rounds;
+    if (!isRecord8(roundsRaw)) {
+      issues.push({ code: "outcome_rounds_invalid", detail: field("rounds") });
+      return violation();
+    }
+    const roundCount = (raw) => Number.isSafeInteger(raw) && raw >= 0 ? raw : null;
+    const configured = roundCount(roundsRaw.configured);
+    const started = roundCount(roundsRaw.started);
+    const completed = roundCount(roundsRaw.completed);
+    if (configured === null || started === null || completed === null) {
+      issues.push({ code: "outcome_rounds_invalid", detail: field("rounds") });
+      return violation();
+    }
+    if (!(completed <= started && started <= configured)) {
+      issues.push({
+        code: "outcome_rounds_inconsistent",
+        detail: field("rounds")
+      });
+      return violation();
+    }
+    const phasesRaw = groupRaw.phases;
+    if (!isRecord8(phasesRaw)) {
+      issues.push({ code: "outcome_phases_invalid", detail: field("phases") });
+      return violation();
+    }
+    const parsePhase = (name) => {
+      const raw = phasesRaw[name];
+      if (!isRecord8(raw)) {
+        issues.push({ code: "outcome_phase_invalid", detail: field(`phases.${name}`) });
+        return null;
+      }
+      const state = parseState(raw.state, field(`phases.${name}.state`));
+      const reason = parseReason(raw.reason, field(`phases.${name}.reason`));
+      if (state === null) return null;
+      return Object.freeze({ state, reason });
+    };
+    const plan = parsePhase("plan");
+    const compression = parsePhase("compression");
+    const relocation = parsePhase("relocation");
+    const filter = parsePhase("filter");
+    const filterDecisionValidRaw = groupRaw.filter_decision_valid;
+    let filterDecisionValid = null;
+    if (filterDecisionValidRaw === void 0) {
+      issues.push({
+        code: "outcome_filter_decision_valid_invalid",
+        detail: field("filter_decision_valid")
+      });
+    } else if (filterDecisionValidRaw !== null && typeof filterDecisionValidRaw !== "boolean") {
+      issues.push({
+        code: "outcome_filter_decision_valid_invalid",
+        detail: field("filter_decision_valid")
+      });
+    } else if (filterDecisionValidRaw !== null) {
+      filterDecisionValid = filterDecisionValidRaw;
+    }
+    if (plan === null || compression === null || relocation === null || filter === null) {
+      return violation();
+    }
+    if (mainCompleted && stopCause !== null) {
+      issues.push({
+        code: "outcome_main_completed_contradiction",
+        detail: field("main_completed")
+      });
+    }
+    if (mainCompleted && completed === 0) {
+      issues.push({
+        code: "outcome_main_completed_contradiction",
+        detail: field("rounds.completed")
+      });
+    }
+    if (!mainCompleted && stopCause === null) {
+      issues.push({
+        code: "outcome_main_incomplete_without_stop",
+        detail: field("stop_cause")
+      });
+    }
+    if (filter.state === "completed" && filterDecisionValid !== true) {
+      issues.push({
+        code: "outcome_filter_decision_contradiction",
+        detail: field("filter_decision_valid")
+      });
+    }
+    if (filterDecisionValid === false && filter.state !== "failed" && filter.state !== "cancelled") {
+      issues.push({
+        code: "outcome_filter_decision_contradiction",
+        detail: field("filter_decision_valid")
+      });
+    }
+    if (filter.state === "not_applicable" && filterDecisionValid !== null) {
+      issues.push({
+        code: "outcome_filter_decision_contradiction",
+        detail: field("filter_decision_valid")
+      });
+    }
+    return Object.freeze({
+      paths: Object.freeze(paths),
+      mainCompleted,
+      stopCause,
+      rounds: Object.freeze({ configured, started, completed }),
+      phases: Object.freeze({ plan, compression, relocation, filter }),
+      filterDecisionValid
+    });
+  });
+  if (issues.length > 0) return violation();
+  return Object.freeze({
+    schemaVersion: OCR_OUTCOME_SCHEMA_VERSION,
+    runStopCause,
+    grouping: Object.freeze({ state: groupingState, reason: groupingReason }),
+    groups: Object.freeze(groups)
+  });
+}
+var OCR_OUTCOME_DIAGNOSTIC_REASONS = [
+  "missing_required_main",
+  "late_round_stop",
+  "review_limit",
+  "missing_paths",
+  "phase_failed",
+  "invalid_filter_decision",
+  "grouping_fallback"
+];
+var STOP_CAUSE_REASONS = {
+  max_rounds: "review_limit",
+  empty_rounds: "missing_required_main",
+  compression: "phase_failed",
+  token_budget: "late_round_stop",
+  prompt_budget: "late_round_stop",
+  provider_error: "missing_required_main",
+  input_error: "missing_required_main",
+  internal_error: "missing_required_main",
+  cancelled: "missing_required_main",
+  deadline: "missing_required_main"
+};
+function classifyOcrReviewOutcome(outcome) {
+  const reasons = /* @__PURE__ */ new Set();
+  if (outcome.runStopCause !== null) {
+    reasons.add(STOP_CAUSE_REASONS[outcome.runStopCause]);
+  }
+  if (outcome.grouping.state === "failed" || outcome.grouping.state === "cancelled") {
+    reasons.add("grouping_fallback");
+  }
+  for (const group of outcome.groups) {
+    if (!group.mainCompleted) {
+      reasons.add(
+        group.stopCause !== null ? STOP_CAUSE_REASONS[group.stopCause] : "missing_required_main"
+      );
+    }
+    const phases = [
+      group.phases.plan,
+      group.phases.compression,
+      group.phases.relocation,
+      group.phases.filter
+    ];
+    if (phases.some((phase) => phase.state === "failed" || phase.state === "cancelled")) {
+      reasons.add("phase_failed");
+    }
+    if (group.filterDecisionValid === false) {
+      reasons.add("invalid_filter_decision");
+    }
+    if (group.rounds.completed < group.rounds.started) {
+      reasons.add("late_round_stop");
+    }
+  }
+  return Object.freeze({
+    reasons: Object.freeze([...reasons].sort()),
+    partial: reasons.size > 0
+  });
+}
+function optionalInt(value) {
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+function optionalText(value) {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+function sameSha(observed, expected) {
+  return typeof observed === "string" && observed.toLowerCase() === expected.toLowerCase();
+}
+function parseOcrNativeReviewResult(raw, admission) {
+  const issues = [];
+  const violation = () => {
+    throw new OcrNativeResultContractViolation(issues);
+  };
+  if (!isRecord8(raw)) {
+    issues.push({ code: "native_result_not_an_object", detail: "result" });
+    return violation();
+  }
+  const manifestRaw = raw.manifest;
+  if (!isRecord8(manifestRaw)) {
+    issues.push({ code: "native_manifest_missing", detail: "manifest" });
+    return violation();
+  }
+  const manifestInput = isRecord8(manifestRaw.input) ? manifestRaw.input : null;
+  if (manifestInput === null) {
+    issues.push({ code: "native_manifest_input_missing", detail: "manifest.input" });
+    return violation();
+  }
+  const manifest = Object.freeze({
+    schemaVersion: typeof manifestRaw.schema_version === "string" ? manifestRaw.schema_version : "",
+    operation: typeof manifestRaw.operation === "string" ? manifestRaw.operation : "",
+    terminalState: optionalText(manifestRaw.terminal_state),
+    input: Object.freeze({
+      mode: typeof manifestInput.mode === "string" ? manifestInput.mode : "",
+      resolvedBase: optionalText(manifestInput.resolved_base),
+      resolvedHead: optionalText(manifestInput.resolved_head)
+    })
+  });
+  if (manifest.schemaVersion !== "ocr.run-manifest/v1") {
+    issues.push({ code: "native_manifest_schema_version", detail: manifest.schemaVersion });
+  }
+  if (manifest.operation !== "review") {
+    issues.push({ code: "native_manifest_operation", detail: manifest.operation });
+  }
+  if (manifest.input.mode !== "range") {
+    issues.push({ code: "native_manifest_mode", detail: manifest.input.mode });
+  }
+  if (!sameSha(manifest.input.resolvedBase, admission.mergeBaseSha)) {
+    issues.push({ code: "native_manifest_refs_mismatch", detail: "resolved_base" });
+  }
+  if (!sameSha(manifest.input.resolvedHead, admission.headSha)) {
+    issues.push({ code: "native_manifest_refs_mismatch", detail: "resolved_head" });
+  }
+  const outcomeRaw = raw.reviewrouter_outcome;
+  if (outcomeRaw === void 0 || outcomeRaw === null) {
+    issues.push({ code: "managed_outcome_missing", detail: "reviewrouter_outcome" });
+    return violation();
+  }
+  let outcome;
+  try {
+    outcome = parseOcrReviewOutcome(outcomeRaw);
+  } catch (error) {
+    if (error instanceof OcrManagedContractViolation) {
+      issues.push(...error.issues);
+      return violation();
+    }
+    throw error;
+  }
+  const llmRaw = isRecord8(raw.llm) ? raw.llm : null;
+  const summaryRaw = isRecord8(raw.summary) ? raw.summary : null;
+  const usage = Object.freeze({
+    inputTokens: summaryRaw ? optionalInt(summaryRaw.input_tokens) : null,
+    outputTokens: summaryRaw ? optionalInt(summaryRaw.output_tokens) : null,
+    totalTokens: summaryRaw ? optionalInt(summaryRaw.total_tokens) : null
+  });
+  const comments = [];
+  const commentsRaw = raw.comments;
+  if (commentsRaw !== void 0 && commentsRaw !== null) {
+    if (!Array.isArray(commentsRaw)) {
+      issues.push({ code: "native_comments_invalid", detail: "comments" });
+    } else {
+      commentsRaw.forEach((comment, index) => {
+        if (!isRecord8(comment)) {
+          issues.push({
+            code: "native_comment_invalid",
+            detail: `comments[${index}]`
+          });
+          return;
+        }
+        comments.push(
+          Object.freeze({
+            path: typeof comment.path === "string" ? comment.path : "",
+            content: typeof comment.content === "string" ? comment.content : "",
+            suggestionCode: optionalText(comment.suggestion_code),
+            existingCode: optionalText(comment.existing_code),
+            startLine: optionalInt(comment.start_line),
+            endLine: optionalInt(comment.end_line),
+            category: optionalText(comment.category),
+            severity: optionalText(comment.severity)
+            // Native thinking is intentionally never captured (§8.2).
+          })
+        );
+      });
+    }
+  }
+  const warnings = [];
+  const warningsRaw = raw.warnings;
+  if (Array.isArray(warningsRaw)) {
+    for (const warning2 of warningsRaw) {
+      if (typeof warning2 === "string") {
+        warnings.push(warning2);
+      } else if (isRecord8(warning2) && typeof warning2.message === "string") {
+        warnings.push(warning2.message);
+      }
+    }
+  }
+  if (issues.length > 0) return violation();
+  return Object.freeze({
+    status: optionalText(raw.status),
+    requestedModel: llmRaw ? optionalText(llmRaw.model) : null,
+    usage,
+    budgetExceeded: summaryRaw && typeof summaryRaw.budget_exceeded === "boolean" ? summaryRaw.budget_exceeded : false,
+    comments: Object.freeze(comments),
+    warnings: Object.freeze(warnings),
+    manifest,
+    outcome
+  });
+}
+
+// src/review-orchestration/infrastructure/ocr-review-managed-run.ts
+var OCR_RESULT_FILE_LIMIT_BYTES = 16 * 1024 * 1024;
+var OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES = 64 * 1024;
+function requirePositiveSetting(value, field) {
+  if (value === void 0) return;
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`review_action_v2_ocr_limit_invalid:${field}`);
+  }
+}
+function buildOcrReviewArgv(input) {
+  requirePositiveSetting(input.limits.timeoutMinutes, "timeout");
+  requirePositiveSetting(input.limits.maxTokens, "max_tokens");
+  requirePositiveSetting(input.limits.maxTokensBudget, "max_tokens_budget");
+  if (!Number.isSafeInteger(input.limits.requestTimeoutSec) || input.limits.requestTimeoutSec <= 0) {
+    throw new Error("review_action_v2_ocr_limit_invalid:timeout_sec");
+  }
+  if (!/^[a-f0-9]{40}$/i.test(input.mergeBaseSha) || !/^[a-f0-9]{40}$/i.test(input.headSha)) {
+    throw new Error("review_action_v2_ocr_argv_refs_invalid");
+  }
+  const argv = [
+    "review",
+    "--reviewrouter-managed",
+    "--repo",
+    input.repoPath,
+    "--from",
+    input.mergeBaseSha.toLowerCase(),
+    "--to",
+    input.headSha.toLowerCase(),
+    "--provider",
+    "reviewrouter",
+    "--model",
+    input.model,
+    "--rule",
+    input.rulePath
+  ];
+  if (input.backgroundPath !== null) {
+    argv.push("--background-file", input.backgroundPath);
+  }
+  argv.push(
+    "--effort",
+    input.effort,
+    "--concurrency",
+    "1",
+    "--format",
+    "json",
+    "--audience",
+    "agent"
+  );
+  if (input.limits.timeoutMinutes !== void 0) {
+    argv.push("--timeout", String(input.limits.timeoutMinutes));
+  }
+  if (input.limits.maxTokens !== void 0) {
+    argv.push("--max-tokens", String(input.limits.maxTokens));
+  }
+  if (input.limits.maxTokensBudget !== void 0) {
+    argv.push("--max-tokens-budget", String(input.limits.maxTokensBudget));
+  }
+  if (input.preview) argv.push("--preview");
+  argv.push("--output", input.outputPath);
+  return Object.freeze(argv);
+}
+function buildOcrChildEnvironment(input) {
+  if (!/^Bearer [A-Za-z0-9._~+/=-]{16,512}$/.test(input.capabilityAuthorization)) {
+    throw new Error("review_action_v2_ocr_capability_format_invalid");
+  }
+  return Object.freeze({
+    PATH: input.path ?? "/usr/local/bin:/usr/bin:/bin",
+    HOME: input.homeDirectory,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_TERMINAL_PROMPT: "0",
+    REVIEWROUTER_LOCAL_MODEL_TOKEN: input.capabilityAuthorization
+  });
+}
+async function readOcrOutputFileAfterClose(readFile9, statSize, outputPath) {
+  const size = await statSize(outputPath);
+  if (!Number.isSafeInteger(size) || size < 0) {
+    throw new Error("review_action_v2_ocr_output_stat_invalid");
+  }
+  if (size > OCR_RESULT_FILE_LIMIT_BYTES) {
+    throw new OcrOutputTooLargeError("result_file");
+  }
+  const bytes = await readFile9(outputPath);
+  if (bytes.length > OCR_RESULT_FILE_LIMIT_BYTES) {
+    throw new OcrOutputTooLargeError("result_file");
+  }
+  return bytes;
+}
+function truncateDiagnosticTail(value) {
+  const bytes = Buffer.from(value, "utf8");
+  if (bytes.length <= OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES) return value;
+  return bytes.subarray(0, OCR_DIAGNOSTIC_TAIL_LIMIT_BYTES).toString("utf8");
+}
+var OcrReviewAcceptanceError = class extends Error {
+  constructor(code, detail) {
+    super(`review_action_v2_ocr_${code}${detail ? `:${detail}` : ""}`);
+    this.code = code;
+    this.name = "OcrReviewAcceptanceError";
+  }
+};
+function acceptOcrManagedReviewResult(input) {
+  if (input.effectFacts && input.effectFacts.effect !== "none") {
+    if (input.effectFacts.effect === "not_dispatched") {
+      throw new OcrReviewAcceptanceError(
+        "review_agent_not_dispatched",
+        input.effectFacts.effect
+      );
+    }
+    throw new OcrReviewAcceptanceError(
+      "gateway_effect_unknown",
+      input.effectFacts.effect
+    );
+  }
+  if (input.process.spawnError !== void 0 || input.process.exitCode !== 0 || input.process.signal !== null || !input.process.closed) {
+    throw new OcrReviewAcceptanceError(
+      "process_failed",
+      `exit=${input.process.exitCode ?? "none"}${input.process.signal ? ` signal=${input.process.signal}` : ""}${input.process.spawnError ? " spawn_error" : ""}`
+    );
+  }
+  let native;
+  let raw;
+  try {
+    raw = JSON.parse(input.resultBytes.toString("utf8"));
+  } catch {
+    throw new OcrReviewAcceptanceError("result_contract", "unparsable_json");
+  }
+  try {
+    native = parseOcrNativeReviewResult(raw, input.admission);
+  } catch (error) {
+    if (error instanceof OcrNativeResultContractViolation) {
+      throw new OcrReviewAcceptanceError(
+        "result_contract",
+        error.issues.map((issue) => issue.code).join(",")
+      );
+    }
+    throw error;
+  }
+  if (input.observedRequestCount === 0) {
+    throw new OcrReviewAcceptanceError("no_model_requests", "");
+  }
+  if (input.observedActualModel === void 0) {
+    throw new OcrReviewAcceptanceError("actual_model_missing", "");
+  }
+  const expected = new Set(input.expectedPaths);
+  const observed = /* @__PURE__ */ new Set();
+  for (const group of native.outcome.groups) {
+    for (const path15 of group.paths) {
+      if (!expected.has(path15) || observed.has(path15)) {
+        throw new OcrReviewAcceptanceError("coverage_mismatch", path15);
+      }
+      observed.add(path15);
+    }
+  }
+  const uncoveredPaths = Object.freeze(
+    [...expected].filter((path15) => !observed.has(path15)).sort()
+  );
+  let normalized;
+  try {
+    normalized = normalizeOcrFindings({
+      comments: native.comments,
+      assignedPaths: input.expectedPaths,
+      headFiles: input.headFiles,
+      ...input.diffPositions ? { diffPositions: input.diffPositions } : {}
+    });
+  } catch (error) {
+    if (error instanceof OcrOutputTooLargeError) {
+      throw new OcrReviewAcceptanceError(
+        "result_contract",
+        `bound=${error.bound}`
+      );
+    }
+    throw error;
+  }
+  const classification = classifyOcrReviewOutcome(native.outcome);
+  const reasons = [
+    .../* @__PURE__ */ new Set([
+      ...classification.reasons,
+      ...normalized.diagnostics.reasons,
+      ...uncoveredPaths.length > 0 ? ["missing_paths"] : []
+    ])
+  ].sort();
+  const usage = {
+    promptTokens: native.usage.inputTokens ?? 0,
+    completionTokens: native.usage.outputTokens ?? 0,
+    totalTokens: native.usage.totalTokens ?? (native.usage.inputTokens ?? 0) + (native.usage.outputTokens ?? 0)
+  };
+  return Object.freeze({
+    native,
+    classification,
+    normalized,
+    actualModel: input.observedActualModel,
+    usage,
+    reasons: Object.freeze(reasons),
+    partial: classification.partial || normalized.diagnostics.partialFlagsRequired || uncoveredPaths.length > 0,
+    uncoveredPaths
+  });
+}
+
+// src/review-orchestration/infrastructure/ocr-review-invocation-adapter.ts
+var OCR_ADAPTER_CONTRACT_VERSION = "ocr-managed-review.v1";
+var OCR_RETRY_POLICY_VERSION = "ocr-managed-no-replay.v1";
+var OCR_ACCEPTANCE_DIAGNOSTIC_REASONS = [
+  ...OCR_OUTCOME_DIAGNOSTIC_REASONS,
+  "unverified_native_span",
+  "unclassified_native_severity"
+];
+function buildOcrControlledRuleText(input) {
+  const rule = [
+    "ReviewRouter managed additive policy (reviewrouter-managed-v1).",
+    "Report only issues material to this change: introduced or aggravated by the base-to-head diff.",
+    "For every finding describe the causal base-to-head change that creates or worsens the issue.",
+    "Allowed finding scope is the reviewed changed paths assigned to this run.",
+    input.language !== null ? `Write finding titles and messages in ${input.language}.` : "Write finding titles and messages in the repository language."
+  ].join("\n");
+  return `${JSON.stringify(
+    {
+      merge_system_rule: true,
+      include: [...input.assignedPaths].sort(),
+      rules: [{ id: "reviewrouter-managed-v1", content: rule }]
+    },
+    null,
+    2
+  )}
+`;
+}
+function buildOcrSemanticInvocationPreimage(input) {
+  return canonicalJson12({
+    contract: "ocr-semantic-identity.v1",
+    revision: {
+      baseSha: input.revision.baseSha.toLowerCase(),
+      mergeBaseSha: input.revision.mergeBaseSha.toLowerCase(),
+      headSha: input.revision.headSha.toLowerCase()
+    },
+    assignedPaths: [...new Set(input.assignedPaths)].sort(),
+    engine: {
+      profileRef: input.binary.profileRef,
+      binarySha256: input.binary.sha256,
+      packageVersion: input.binary.packageVersion
+    },
+    rules: {
+      ruleTextHash: sha25616(input.ruleText),
+      backgroundTextHash: input.backgroundText === null ? null : sha25616(input.backgroundText)
+    },
+    model: {
+      model: input.model,
+      ocrEffort: input.ocrEffort,
+      modelReasoningEffort: input.modelReasoningEffort,
+      language: input.language
+    },
+    budgets: {
+      timeoutMinutes: input.limits.timeoutMinutes ?? null,
+      maxTokens: input.limits.maxTokens ?? null,
+      maxTokensBudget: input.limits.maxTokensBudget ?? null,
+      requestTimeoutSec: input.limits.requestTimeoutSec
+    },
+    transportPolicy: "account-gateway-loopback-v1",
+    outputContract: OCR_OUTCOME_SCHEMA_VERSION,
+    retryPolicyVersion: OCR_RETRY_POLICY_VERSION,
+    attemptBudget: 1
+  });
+}
+function planOcrReviewAssignments(input) {
+  const ocrLanes = input.authorization.facts.providerVoteLanes.filter(
+    (lane) => lane.providerKind === "ocr" /* Ocr */
+  );
+  if (ocrLanes.length !== 1) {
+    throw new Error("review_action_v2_ocr_vote_lane_ambiguous");
+  }
+  const files = [...input.pr.files].sort(
+    (left, right) => left.filename < right.filename ? -1 : left.filename > right.filename ? 1 : 0
+  );
+  const paths = files.map((file) => file.filename);
+  const inScope = (target) => files.some(
+    (file) => [file.filename, file.previousFilename].some(
+      (candidate) => candidate !== void 0 && (target.currentPath === candidate || target.originalPath === candidate)
+    )
+  );
+  const uncoveredLifecycleTargetIds = Object.freeze(
+    input.lifecycleTargets.filter(inScope).map((target) => target.targetId).sort()
+  );
+  const plan = createStableReviewWorkPlan({
+    reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
+    compatibilityKey: input.compatibilityKey,
+    providers: [
+      {
+        providerName: "ocr/managed",
+        providerKind: "ocr" /* Ocr */,
+        providerVoteIdentityHash: ocrLanes[0].providerVoteIdentityHash,
+        required: true,
+        attemptBudget: 1,
+        retryPolicyVersion: OCR_RETRY_POLICY_VERSION
+      }
+    ],
+    batches: [
+      {
+        batchId: createStableReviewBatchId({
+          taskKind: "finding_discovery" /* FindingDiscovery */,
+          members: files
+        }),
+        taskKind: "finding_discovery" /* FindingDiscovery */,
+        required: true,
+        paths,
+        schedulingOrdinal: 0
+      }
+    ],
+    eligiblePaths: paths,
+    uncoveredPaths: [],
+    excludedPaths: [],
+    maxWorkSlots: Math.max(1, input.authorization.limits.maxWorkSlots),
+    maxAttemptsPerSlot: input.authorization.limits.maxAttemptsPerSlot
+  });
+  const assignments = plan.assignments.map(
+    (assignment) => Object.freeze({
+      workSlot: assignment.workSlot,
+      reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
+      mergeBaseSha: input.authorization.facts.mergeBaseSha,
+      context: input.pr,
+      lifecycleTargets: Object.freeze([]),
+      liveLifecycleStateHash: input.liveLifecycleStateHash
+    })
+  );
+  return Object.freeze({
+    plan,
+    assignments: Object.freeze(assignments),
+    uncoveredPaths: Object.freeze([]),
+    uncoveredLifecycleTargetIds
+  });
+}
+function runOcrReviewProcess(input) {
+  return new Promise((resolve4) => {
+    const child = (0, import_child_process9.spawn)(input.binaryPath, [...input.argv], {
+      cwd: input.cwd,
+      env: { ...input.env },
+      shell: false,
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let spawnError;
+    let stdout = "";
+    let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let done = false;
+    const killGroup = () => {
+      try {
+        if (process.platform !== "win32" && child.pid)
+          process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    const cancel = () => killGroup();
+    input.signal.addEventListener("abort", cancel, { once: true });
+    if (input.signal.aborted) killGroup();
+    child.stdout?.on("data", (chunk) => {
+      stdoutBytes += chunk.length;
+      if (stdoutBytes <= 64 * 1024) stdout += chunk.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderrBytes += chunk.length;
+      if (stderrBytes <= 64 * 1024) stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error) => {
+      spawnError = error.name;
+    });
+    child.on("close", (exitCode, signal) => {
+      if (done) return;
+      done = true;
+      input.signal.removeEventListener("abort", cancel);
+      resolve4({
+        closed: true,
+        exitCode,
+        signal,
+        ...spawnError !== void 0 ? { spawnError } : {},
+        stdoutTail: truncateDiagnosticTail(stdout),
+        stderrTail: truncateDiagnosticTail(stderr)
+      });
+    });
+  });
+}
+var OcrReviewInvocationAdapter = class {
+  constructor(assignments, options) {
+    this.options = options;
+    for (const assignment of assignments) {
+      if (this.assignments.has(assignment.workSlot.workSlotId)) {
+        throw new Error("review_action_v2_assignment_duplicate");
+      }
+      this.assignments.set(assignment.workSlot.workSlotId, assignment);
+    }
+  }
+  assignments = /* @__PURE__ */ new Map();
+  prepared = /* @__PURE__ */ new WeakMap();
+  preimages = /* @__PURE__ */ new WeakMap();
+  inFlight = Promise.resolve();
+  running = false;
+  /** Model-free: deterministic preview and semantic capture only (§5.2). */
+  async prepare(input) {
+    this.options.signal?.throwIfAborted();
+    const assignment = this.assignments.get(input.workSlot.workSlotId);
+    if (!assignment || assignment.workSlot !== input.workSlot) {
+      throw new Error("review_action_v2_assignment_missing");
+    }
+    if (assignment.workSlot.attemptBudget !== 1 || assignment.workSlot.taskKind !== "finding_discovery" /* FindingDiscovery */) {
+      throw new Error("review_action_v2_ocr_slot_contract_invalid");
+    }
+    const assignedPaths = Object.freeze(
+      assignment.context.files.map((file) => file.filename).sort()
+    );
+    if (assignedPaths.length === 0) {
+      throw new Error("review_action_v2_ocr_nothing_to_review");
+    }
+    const ruleText = this.options.ruleText;
+    const backgroundText = this.options.backgroundText;
+    const revision = Object.freeze({
+      baseSha: assignment.context.baseSha,
+      mergeBaseSha: assignment.mergeBaseSha,
+      headSha: assignment.context.headSha
+    });
+    const semanticPreimage = buildOcrSemanticInvocationPreimage({
+      revision,
+      assignedPaths,
+      ruleText,
+      backgroundText,
+      binary: {
+        profileRef: this.options.profileRef,
+        sha256: this.options.binarySha256,
+        packageVersion: this.options.packageVersion
+      },
+      model: this.options.model,
+      ocrEffort: this.options.ocrEffort,
+      modelReasoningEffort: this.options.modelReasoningEffort,
+      language: this.options.language,
+      limits: this.options.limits
+    });
+    fs6.writeFileSync(this.options.run.rulePath, ruleText, { mode: 384 });
+    if (backgroundText !== null && this.options.run.backgroundPath !== null) {
+      fs6.writeFileSync(this.options.run.backgroundPath, backgroundText, {
+        mode: 384
+      });
+    }
+    const previewOutputPath = path12.join(
+      this.options.run.runDirectory,
+      "preview.json"
+    );
+    const timeoutMs = this.options.previewTimeoutMs?.() ?? this.options.limits.requestTimeoutSec * 1e3;
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+      throw new Error("review_action_v2_ocr_preview_timeout");
+    }
+    const previewSignal = AbortSignal.any([
+      ...this.options.signal ? [this.options.signal] : [],
+      AbortSignal.timeout(timeoutMs)
+    ]);
+    previewSignal.throwIfAborted();
+    const previewResult = await this.options.previewRunner({
+      binaryPath: this.options.binaryPath,
+      argv: buildOcrReviewArgv({
+        binaryPath: this.options.binaryPath,
+        repoPath: this.options.checkoutRoot,
+        mergeBaseSha: revision.mergeBaseSha,
+        headSha: revision.headSha,
+        model: this.options.model,
+        rulePath: this.options.run.rulePath,
+        backgroundPath: backgroundText !== null ? this.options.run.backgroundPath : null,
+        outputPath: previewOutputPath,
+        effort: this.options.ocrEffort,
+        limits: this.options.limits,
+        preview: true
+      }),
+      env: buildOcrChildEnvironment({
+        homeDirectory: this.options.run.homeDirectory,
+        capabilityAuthorization: this.options.bridge.capabilityAuthorization,
+        path: process.env.PATH
+      }),
+      cwd: this.options.run.runDirectory,
+      signal: previewSignal,
+      outputPath: previewOutputPath
+    });
+    previewSignal.throwIfAborted();
+    if (previewResult.exitCode !== 0 || previewResult.spawnError !== void 0) {
+      throw new Error("review_action_v2_ocr_preview_failed");
+    }
+    const previewSelectedPaths = Object.freeze(
+      parseOcrPreviewSelection(readPreviewOutput(previewOutputPath))
+    );
+    const pathCoverage = assignedPaths.map((path15) => {
+      const file = assignment.context.files.find(
+        (candidate) => candidate.filename === path15
+      );
+      return {
+        path: path15,
+        // The full canonical patch of every assigned path is in the exact
+        // revision OCR reviews; a preview-skipped path stays visible as
+        // unreviewed, never as an RR policy exclusion (§8.1).
+        kind: previewSelectedPaths.includes(path15) ? "full_patch" /* FullPatch */ : "unavailable" /* Unavailable */,
+        contentHash: sha25616(
+          canonicalJson12({
+            filename: path15,
+            patch: file?.patch ?? null,
+            status: file?.status ?? null
+          })
+        )
+      };
+    });
+    const coverageManifest = createReviewPromptCoverageManifest({
+      workSlotId: input.workSlot.workSlotId,
+      reviewRevisionHash: assignment.reviewRevisionHash,
+      assignedPaths,
+      pathCoverage
+    });
+    const manifestPreimages = Object.freeze({
+      semanticIdentityPreimage: semanticPreimage,
+      providerCapabilityHash: canonicalJson12({
+        adapterVersion: OCR_ADAPTER_CONTRACT_VERSION,
+        preparedInvocationContract: PROVIDER_EXECUTION_CONTRACT_VERSION,
+        outputContract: OCR_OUTCOME_SCHEMA_VERSION,
+        binary: {
+          profileRef: this.options.profileRef,
+          sha256: this.options.binarySha256,
+          packageVersion: this.options.packageVersion
+        },
+        modelTransport: "account_gateway"
+      }),
+      outputSchemaHash: canonicalJson12({
+        outputContract: OCR_OUTCOME_SCHEMA_VERSION,
+        nativeManifestSchema: "ocr.run-manifest/v1"
+      }),
+      filePatchManifestHash: canonicalJson12(
+        assignment.context.files.map((file) => ({
+          additions: file.additions,
+          changes: file.changes,
+          deletions: file.deletions,
+          filename: file.filename,
+          patch: file.patch ?? null,
+          previousFilename: file.previousFilename ?? null,
+          status: file.status
+        }))
+      ),
+      contextManifestHash: canonicalJson12({
+        author: assignment.context.author,
+        body: assignment.context.body,
+        coverageHash: coverageManifest.coverageHash,
+        lifecycleTargetIds: [],
+        number: assignment.context.number,
+        title: assignment.context.title
+      }),
+      toolPolicyHash: canonicalJson12({
+        sandbox: "read-only",
+        network: "loopback-only",
+        workspaceMutation: false,
+        builtinTools: "native_embedded",
+        concurrency: 1
+      }),
+      environmentContractHash: canonicalJson12({
+        credentialKeys: ["REVIEWROUTER_LOCAL_MODEL_TOKEN"],
+        gitConfigGlobal: "/dev/null",
+        gitConfigNoSystem: "1",
+        homeMode: "0700",
+        configMode: "0600"
+      })
+    });
+    const immutableRequest = Object.freeze({
+      kind: OCR_ADAPTER_CONTRACT_VERSION,
+      revision,
+      assignedPaths,
+      ruleTextHash: sha25616(ruleText),
+      backgroundTextHash: backgroundText === null ? null : sha25616(backgroundText),
+      binary: Object.freeze({
+        profileRef: this.options.profileRef,
+        sha256: this.options.binarySha256,
+        packageVersion: this.options.packageVersion
+      }),
+      model: this.options.model,
+      ocrEffort: this.options.ocrEffort,
+      modelReasoningEffort: this.options.modelReasoningEffort,
+      language: this.options.language,
+      limits: this.options.limits,
+      outputContract: OCR_OUTCOME_SCHEMA_VERSION,
+      retryPolicyVersion: OCR_RETRY_POLICY_VERSION
+    });
+    const prepared = Object.freeze({
+      workSlotId: input.workSlot.workSlotId,
+      attemptOrdinal: input.attemptOrdinal,
+      provider: `ocr/${this.options.profileRef}`,
+      requestedModel: this.options.model,
+      // Additive controlled rule text only (§4.2).
+      reviewPrompt: ruleText,
+      investigationContextPrompt: null,
+      immutableRequest,
+      coverageManifest,
+      // OCR performs no RR model investigation; no fabricated plan (§4.2).
+      investigationProbePlan: null,
+      investigationSeedEnvelope: null,
+      manifestPreimages,
+      semanticIdentityHash: sha25616(semanticPreimage),
+      previewSelectedPaths,
+      manifestFacts: Object.freeze({
+        taskKindSet: Object.freeze(["finding_discovery" /* FindingDiscovery */]),
+        providerKind: "ocr" /* Ocr */,
+        providerCapabilityHash: sha25616(
+          manifestPreimages.providerCapabilityHash
+        ),
+        providerRequestEnvelopeHash: sha25616(semanticPreimage),
+        outputSchemaHash: sha25616(manifestPreimages.outputSchemaHash),
+        filePatchManifestHash: sha25616(manifestPreimages.filePatchManifestHash),
+        contextManifestHash: sha25616(manifestPreimages.contextManifestHash),
+        lifecycleTargetSetHash: null,
+        liveLifecycleStateHash: null,
+        toolPolicyHash: sha25616(manifestPreimages.toolPolicyHash),
+        executionProfile: "agentic_unbounded_v1",
+        baseTreeHash: null,
+        environmentContractHash: sha25616(
+          manifestPreimages.environmentContractHash
+        )
+      })
+    });
+    this.prepared.set(prepared, assignment);
+    this.preimages.set(prepared, prepared);
+    return prepared;
+  }
+  async execute(input) {
+    const assignment = this.prepared.get(input.invocation);
+    const preimages = this.preimages.get(input.invocation);
+    if (!assignment || !preimages || input.invocation.investigationProbePlan !== null || input.invocation.manifestFacts.providerKind !== "ocr" /* Ocr */) {
+      throw new Error("review_action_v2_prepared_invocation_identity_mismatch");
+    }
+    assertOcrInvocationLive(input);
+    const effectBefore = this.options.bridge.effectFacts?.();
+    if (effectBefore && effectBefore.effect !== "none") {
+      if (effectBefore.effect === "not_dispatched") {
+        throw new Error("review_action_v2_ocr_not_dispatched");
+      }
+      throw new Error("review_action_v2_ocr_gateway_effect_unknown");
+    }
+    const run = this.gate(() => this.runInvocation(input, assignment));
+    return await run;
+  }
+  gate(operation) {
+    const next = this.inFlight.then(async () => {
+      if (this.running) throw new Error("review_action_v2_ocr_invocation_busy");
+      this.running = true;
+      try {
+        return await operation();
+      } finally {
+        this.running = false;
+      }
+    });
+    this.inFlight = next.catch(() => void 0);
+    return next;
+  }
+  async runInvocation(input, assignment) {
+    assertOcrInvocationLive(input);
+    const outputPath = path12.join(this.options.run.runDirectory, "result.json");
+    const argv = buildOcrReviewArgv({
+      binaryPath: this.options.binaryPath,
+      repoPath: this.options.checkoutRoot,
+      mergeBaseSha: assignment.mergeBaseSha,
+      headSha: assignment.context.headSha,
+      model: this.options.model,
+      rulePath: this.options.run.rulePath,
+      backgroundPath: this.options.backgroundText !== null ? this.options.run.backgroundPath : null,
+      outputPath,
+      effort: this.options.ocrEffort,
+      limits: this.options.limits,
+      preview: false
+    });
+    const processResult2 = await this.options.processRunner({
+      binaryPath: this.options.binaryPath,
+      argv,
+      env: buildOcrChildEnvironment({
+        homeDirectory: this.options.run.homeDirectory,
+        capabilityAuthorization: this.options.bridge.capabilityAuthorization,
+        path: process.env.PATH
+      }),
+      cwd: this.options.run.runDirectory,
+      signal: input.signal
+    });
+    assertOcrInvocationLive(input);
+    const failedProcess = processResult2.spawnError !== void 0 || processResult2.exitCode !== 0 || processResult2.signal !== null || !processResult2.closed;
+    const resultBytes = failedProcess ? Buffer.alloc(0) : await readOcrOutputFileAfterClose(
+      async (file) => fs6.readFileSync(file),
+      async (file) => fs6.statSync(file).size,
+      outputPath
+    );
+    assertOcrInvocationLive(input);
+    const headFiles = {
+      get: (file) => {
+        const resolved = path12.join(this.options.checkoutRoot, file);
+        try {
+          return fs6.readFileSync(resolved, "utf8");
+        } catch {
+          return void 0;
+        }
+      }
+    };
+    const diffPositions = new Map(
+      assignment.context.files.map((file) => [
+        file.filename,
+        mapLinesToPositions(file.patch)
+      ])
+    );
+    const accepted = acceptOcrManagedReviewResult({
+      admission: {
+        baseSha: assignment.context.baseSha,
+        mergeBaseSha: assignment.mergeBaseSha,
+        headSha: assignment.context.headSha
+      },
+      effectFacts: this.options.bridge.effectFacts?.(),
+      process: processResult2,
+      resultBytes,
+      observedActualModel: this.options.bridge.actualModel(),
+      observedRequestCount: this.options.bridge.requestCount(),
+      expectedPaths: assignment.context.files.map((file) => file.filename),
+      headFiles,
+      diffPositions
+    });
+    try {
+      this.options.acceptanceDiagnostic?.({
+        reasons: Object.freeze(
+          OCR_ACCEPTANCE_DIAGNOSTIC_REASONS.filter(
+            (reason) => accepted.reasons.includes(reason)
+          )
+        ),
+        acceptedPartial: accepted.partial,
+        classificationPartial: accepted.classification.partial,
+        normalizationPartial: accepted.normalized.diagnostics.partialFlagsRequired,
+        skippedFindingCount: accepted.normalized.diagnostics.skipped.length,
+        uncoveredPathCount: accepted.uncoveredPaths.length,
+        nativeCommentCount: accepted.native.comments.length,
+        normalizedFindingCount: accepted.normalized.findings.length
+      });
+    } catch {
+    }
+    const result2 = {
+      content: accepted.reasons.join(","),
+      findings: [...accepted.normalized.findings],
+      usage: accepted.usage,
+      actualModel: accepted.actualModel,
+      // One engine invocation; model calls are accounted separately (§9).
+      transportAttemptCount: 1
+    };
+    const qualityFlags = accepted.partial ? ["context_inspection_incomplete", "provider_warning"] : [];
+    const observation = normalizeReviewObservation({
+      workSlotId: input.invocation.workSlotId,
+      attemptOrdinal: input.invocation.attemptOrdinal,
+      providerName: input.invocation.provider,
+      requestedModel: input.invocation.requestedModel,
+      result: result2,
+      transportAttemptCount: 1,
+      qualityFlags
+    });
+    if (observation.byteCount > OCR_NORMALIZATION_LIMITS.maxPayloadBytes) {
+      throw new OcrOutputTooLargeError("payload");
+    }
+    return observation;
+  }
+};
+function assertOcrInvocationLive(input) {
+  input.signal.throwIfAborted();
+  const lease = input.currentLease?.() ?? input.lease;
+  const expiresAt = Date.parse(lease.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    throw new Error("review_action_v2_lease_expired");
+  }
+}
+function readPreviewOutput(outputPath) {
+  try {
+    const bytes = fs6.readFileSync(outputPath);
+    if (bytes.length > 4 * 1024 * 1024) return void 0;
+    return JSON.parse(bytes.toString("utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function parseOcrPreviewSelection(raw) {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return [];
+  const value = raw;
+  const collect = (candidate) => Array.isArray(candidate) ? candidate.filter((item) => typeof item === "string") : [];
+  const direct = [
+    ...collect(value.paths),
+    ...collect(value.selected_paths),
+    ...collect(value.selectedPaths)
+  ];
+  if (direct.length > 0) return Object.freeze([...new Set(direct)]);
+  if (Array.isArray(value.files)) {
+    const selected = value.files.flatMap((file) => {
+      if (typeof file !== "object" || file === null) return [];
+      const entry = file;
+      const path15 = entry.path;
+      if (typeof path15 !== "string") return [];
+      return entry.will_review === true ? [path15] : [];
+    });
+    return Object.freeze([...new Set(selected)]);
+  }
+  if (Array.isArray(value.groups)) {
+    return Object.freeze([
+      ...new Set(
+        value.groups.flatMap(
+          (group) => collect(
+            typeof group === "object" && group !== null ? group.paths : void 0
+          )
+        )
+      )
+    ]);
+  }
+  return Object.freeze([]);
+}
+function canonicalJson12(value) {
+  if (value === void 0) return "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson12).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map(
+      (key) => `${JSON.stringify(key)}:${canonicalJson12(value[key])}`
+    ).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function sha25616(value) {
+  return (0, import_crypto30.createHash)("sha256").update(value).digest("hex");
+}
+
+// src/codex-oauth/ocr-managed-bootstrap.ts
+var import_node_crypto2 = require("node:crypto");
+function readApprovedReviewAgentKind(json2, digest3) {
+  if (Buffer.byteLength(json2) > 16384 || !/^[a-f0-9]{64}$/.test(digest3) || (0, import_node_crypto2.createHash)("sha256").update(json2).digest("hex") !== digest3) {
+    throw new Error("review_agent_profile_digest_mismatch");
+  }
+  const row = JSON.parse(json2);
+  const kind = row?.agentKind;
+  if (kind !== "codex" && kind !== "claude" && kind !== "ocr") {
+    throw new Error("review_agent_profile_invalid");
+  }
+  return kind;
+}
+function readApprovedOcrReviewAgent(json2, digest3) {
+  if (readApprovedReviewAgentKind(json2, digest3) !== "ocr") {
+    throw new Error("review_agent_profile_invalid");
+  }
+  const row = JSON.parse(json2);
+  const keys = [
+    "agentKind",
+    "binarySha256",
+    "cancellation",
+    "contextGateway",
+    "modelTransports",
+    "packageVersion",
+    "profileRef"
+  ];
+  const transports = row.modelTransports;
+  if (Object.keys(row).sort().join(",") !== keys.join(",") || typeof row.profileRef !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(row.profileRef) || typeof row.binarySha256 !== "string" || !/^[a-f0-9]{64}$/.test(row.binarySha256) || typeof row.packageVersion !== "string" || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(row.packageVersion) || row.contextGateway !== false || row.cancellation !== true || !Array.isArray(transports) || transports.length !== 1 || transports[0] !== "account_gateway") {
+    throw new Error("review_agent_profile_capabilities_invalid");
+  }
+  return Object.freeze({
+    profileRef: row.profileRef,
+    agentKind: "ocr",
+    binarySha256: row.binarySha256,
+    packageVersion: row.packageVersion,
+    modelTransports: Object.freeze(["account_gateway"]),
+    contextGateway: false,
+    cancellation: true
+  });
+}
+var OCR_BINARY_ASSET_LIMIT_BYTES = 128 * 1024 * 1024;
+
 // src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
-var import_child_process10 = require("child_process");
+var import_child_process11 = require("child_process");
 var import_util10 = require("util");
 
 // src/review-investigation/infrastructure/review-agent-process-runner.ts
-var import_child_process9 = require("child_process");
+var import_child_process10 = require("child_process");
 var NodeReviewAgentProcessRunner = class {
   active = /* @__PURE__ */ new Map();
   async run(request) {
@@ -85449,7 +87180,7 @@ var NodeReviewAgentProcessRunner = class {
       }
       let child;
       try {
-        child = (0, import_child_process9.spawn)(request.binary, request.args, {
+        child = (0, import_child_process10.spawn)(request.binary, request.args, {
           cwd: request.cwd,
           env: { ...request.environment },
           detached: true,
@@ -85566,7 +87297,7 @@ function sanitizeProcessText(value) {
 }
 
 // src/review-investigation/infrastructure/codex-app-server-protocol.ts
-var import_crypto30 = require("crypto");
+var import_crypto31 = require("crypto");
 var import_path4 = __toESM(require("path"));
 var CODEX_APP_SERVER_VERSION = "0.147.0";
 var CODEX_APP_SERVER_MCP_NAME = "reviewrouter";
@@ -86191,9 +87922,9 @@ var CodexAppServerProtocolClient = class {
       }
       return;
     }
-    const completed = item.status === "completed" && item.error === null && isRecord8(item.result);
-    const failedWithResult = item.status === "failed" && item.error === null && isRecord8(item.result);
-    const failedWithTransportError = item.status === "failed" && item.result === null && isRecord8(item.error) && hasOnlyKeys(item.error, ["message"]) && typeof item.error.message === "string" && Buffer.byteLength(item.error.message, "utf8") <= MAX_NOTIFICATION_STRING_BYTES;
+    const completed = item.status === "completed" && item.error === null && isRecord9(item.result);
+    const failedWithResult = item.status === "failed" && item.error === null && isRecord9(item.result);
+    const failedWithTransportError = item.status === "failed" && item.result === null && isRecord9(item.error) && hasOnlyKeys(item.error, ["message"]) && typeof item.error.message === "string" && Buffer.byteLength(item.error.message, "utf8") <= MAX_NOTIFICATION_STRING_BYTES;
     if (!completed && !failedWithResult && !failedWithTransportError) {
       throw streamFailure();
     }
@@ -86605,14 +88336,14 @@ function parseTurnError(value) {
       "turn_error",
       codexErrorInfo
     ),
-    fingerprint: (0, import_crypto30.createHash)("sha256").update(canonical).digest("hex")
+    fingerprint: (0, import_crypto31.createHash)("sha256").update(canonical).digest("hex")
   });
 }
 function withProtocolProcessDetail(failure, origin, validatedCodexErrorInfo) {
   if (failure.failureClass !== "process_failure" /* ProcessFailure */ || failure.message !== "review_agent_process_failure") {
     return failure;
   }
-  const variant = typeof validatedCodexErrorInfo === "string" ? validatedCodexErrorInfo : isRecord8(validatedCodexErrorInfo) ? Object.keys(validatedCodexErrorInfo)[0] : void 0;
+  const variant = typeof validatedCodexErrorInfo === "string" ? validatedCodexErrorInfo : isRecord9(validatedCodexErrorInfo) ? Object.keys(validatedCodexErrorInfo)[0] : void 0;
   const suffix = variant && (CODEX_ERROR_INFO_STRING_VARIANTS.has(variant) || CODEX_ERROR_INFO_HTTP_VARIANTS.has(variant) || variant === "activeTurnNotSteerable") ? `_${variant.toLowerCase()}` : "";
   return new ReviewAgentExecutionError(
     failure.failureClass,
@@ -86667,10 +88398,10 @@ function normalizeProtocolFailure(error) {
   return error instanceof ReviewAgentExecutionError ? error : streamFailure();
 }
 function requireRecord2(value, _field) {
-  if (!isRecord8(value)) throw streamFailure();
+  if (!isRecord9(value)) throw streamFailure();
   return value;
 }
-function isRecord8(value) {
+function isRecord9(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 function requireRequestId(value) {
@@ -86789,7 +88520,7 @@ function validateBoundedJson(value) {
       }
       continue;
     }
-    if (!isRecord8(candidate)) throw streamFailure();
+    if (!isRecord9(candidate)) throw streamFailure();
     const prototype = Object.getPrototypeOf(candidate);
     if (prototype !== Object.prototype && prototype !== null) {
       throw streamFailure();
@@ -86832,7 +88563,7 @@ function hasAbsentOrNullProperty(value, key) {
   return !Object.prototype.hasOwnProperty.call(value, key) || value[key] === null;
 }
 function isReadOnlySandbox(value) {
-  return isRecord8(value) && value.type === "readOnly" && value.networkAccess === false;
+  return isRecord9(value) && value.type === "readOnly" && value.networkAccess === false;
 }
 function safeJson(value) {
   try {
@@ -86897,7 +88628,7 @@ function notificationDiagnosticStage(value) {
       if (typeof value === "string" && IGNORED_NOTIFICATION_METHODS.has(value)) {
         return "ignored_notification" /* IgnoredNotification */;
       }
-      return typeof value === "string" ? `unknown_notification_${(0, import_crypto30.createHash)("sha256").update(value).digest("hex").slice(0, 12)}` : "unknown_notification" /* UnknownNotification */;
+      return typeof value === "string" ? `unknown_notification_${(0, import_crypto31.createHash)("sha256").update(value).digest("hex").slice(0, 12)}` : "unknown_notification" /* UnknownNotification */;
   }
 }
 function withStreamDiagnosticStage(error, stage) {
@@ -87042,7 +88773,7 @@ var NodeCodexAppServerTurnRunner = class {
       if (remainingMs < 1) throw timeoutFailure();
       let child;
       try {
-        child = (0, import_child_process10.spawn)(request.binary, [...request.args], {
+        child = (0, import_child_process11.spawn)(request.binary, [...request.args], {
           cwd: request.cwd,
           env: { ...request.environment },
           detached: true,
@@ -87109,7 +88840,7 @@ var NodeCodexAppServerVersionProbe = class {
     return new Promise((resolve4, reject) => {
       let child;
       try {
-        child = (0, import_child_process10.spawn)(request.binary, ["--version"], {
+        child = (0, import_child_process11.spawn)(request.binary, ["--version"], {
           cwd: request.cwd,
           env: { ...request.environment },
           detached: false,
@@ -88074,6 +89805,12 @@ Return exactly one JSON object matching this schema, with no markdown or prose.`
     for (const feature of CODEX_CONFINEMENT_DISABLED_FEATURES) {
       args.push("--disable", feature);
     }
+    for (const setting of CODEX_SHELL_ENVIRONMENT_POLICY)
+      args.push("-c", setting);
+    if (this.options.modelProvider === "openrouter") {
+      for (const setting of CODEX_OPENROUTER_CONFIGURATION)
+        args.push("-c", setting);
+    }
     args.push(
       "-c",
       'approval_policy="never"',
@@ -88959,7 +90696,7 @@ function verifyTerminalPayload(snapshot) {
   } catch {
     throw invalidResponse("investigation_terminal_payload_invalid");
   }
-  if (!isRecord9(value)) {
+  if (!isRecord10(value)) {
     throw invalidResponse("investigation_terminal_payload_invalid");
   }
   const findings = value.normalizedFindings;
@@ -88974,7 +90711,7 @@ function verifyTerminalPayload(snapshot) {
   }
 }
 function isNormalizedFinding(value) {
-  return isRecord9(value) && hasExactKeys2(value, [
+  return isRecord10(value) && hasExactKeys2(value, [
     "category",
     "endLine",
     "evidence",
@@ -88989,7 +90726,7 @@ function isNormalizedFinding(value) {
   ]) && typeof value.category === "string" && isNullablePositiveInteger(value.endLine) && isStringArray(value.evidence) && typeof value.message === "string" && isSha256Digest(value.normalizedFailureModeHash) && typeof value.path === "string" && isNullableConfidence(value.placementConfidence) && isFindingSeverity(value.severity) && isNullablePositiveInteger(value.startLine) && (value.suggestion === null || typeof value.suggestion === "string") && typeof value.title === "string";
 }
 function isNormalizedLifecycleRevalidation(value) {
-  return isRecord9(value) && hasExactKeys2(value, [
+  return isRecord10(value) && hasExactKeys2(value, [
     "confidence",
     "evidence",
     "fingerprint",
@@ -88999,7 +90736,7 @@ function isNormalizedLifecycleRevalidation(value) {
   ]) && isNullableConfidence(value.confidence) && Array.isArray(value.evidence) && value.evidence.every(isNormalizedLifecycleEvidence) && (value.fingerprint === null || typeof value.fingerprint === "string") && (value.rationale === null || typeof value.rationale === "string") && typeof value.targetId === "string" && isLifecycleVerdict(value.verdict);
 }
 function isNormalizedLifecycleEvidence(value) {
-  return isRecord9(value) && hasExactKeys2(value, ["endLine", "path", "reason", "startLine"]) && isNullablePositiveInteger(value.endLine) && typeof value.path === "string" && typeof value.reason === "string" && isNullablePositiveInteger(value.startLine);
+  return isRecord10(value) && hasExactKeys2(value, ["endLine", "path", "reason", "startLine"]) && isNullablePositiveInteger(value.endLine) && typeof value.path === "string" && typeof value.reason === "string" && isNullablePositiveInteger(value.startLine);
 }
 function isFindingSeverity(value) {
   return value === "critical" || value === "major" || value === "minor";
@@ -89020,7 +90757,7 @@ function isNullableConfidence(value) {
   return value === null || typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 function isSafeUsage(value) {
-  if (!isRecord9(value) || !hasExactKeys2(value, ["inputTokens", "outputTokens", "totalTokens"]) || !isNullableNonNegativeInteger(value.inputTokens) || !isNullableNonNegativeInteger(value.outputTokens) || !isNullableNonNegativeInteger(value.totalTokens)) {
+  if (!isRecord10(value) || !hasExactKeys2(value, ["inputTokens", "outputTokens", "totalTokens"]) || !isNullableNonNegativeInteger(value.inputTokens) || !isNullableNonNegativeInteger(value.outputTokens) || !isNullableNonNegativeInteger(value.totalTokens)) {
     return false;
   }
   return !(typeof value.inputTokens === "number" && typeof value.outputTokens === "number" && typeof value.totalTokens === "number" && value.totalTokens !== value.inputTokens + value.outputTokens);
@@ -89084,6 +90821,9 @@ function transportError(error, operationId, mutation) {
 var providerOutputInvariantViolations = /* @__PURE__ */ new Set([
   "turn_obligation_claim_invalid",
   "investigation_obligation_evidence_mismatch",
+  "investigation_finding_evidence_invalid",
+  "investigation_finding_evidence_path_invalid",
+  "investigation_finding_evidence_line_invalid",
   "investigation_operation_backed_discovery_invalid",
   "investigation_operation_backed_discovery_limit_exceeded"
 ]);
@@ -89100,12 +90840,12 @@ function invalidResponse(message) {
   );
 }
 function requireRecord3(value, field) {
-  if (!isRecord9(value)) {
+  if (!isRecord10(value)) {
     throw invalidResponse(`${field}_invalid`);
   }
   return value;
 }
-function isRecord9(value) {
+function isRecord10(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function requireExactKeys4(value, keys) {
@@ -89213,9 +90953,9 @@ function nullableTimestamp(value, field) {
 }
 
 // src/review-investigation/infrastructure/review-action-v2-investigation-lease-adapter.ts
-var import_crypto31 = require("crypto");
+var import_crypto32 = require("crypto");
 var ReviewActionV2InvestigationLeaseAdapter = class {
-  constructor(client, requestId = import_crypto31.randomUUID) {
+  constructor(client, requestId = import_crypto32.randomUUID) {
     this.client = client;
     this.requestId = requestId;
   }
@@ -89384,7 +91124,7 @@ function leaseFromAcquire(input) {
   return lease;
 }
 function deterministicId2(namespace, parts) {
-  const digest3 = (0, import_crypto31.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  const digest3 = (0, import_crypto32.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
   return `rr:${namespace}:${digest3}`;
 }
 function requireString5(value, field) {
@@ -90013,6 +91753,8 @@ function reviewAgentProviderKind(providerKind) {
       return "claude_code" /* ClaudeCode */;
     case "openrouter" /* OpenRouter */:
       return null;
+    case "ocr" /* Ocr */:
+      return null;
   }
 }
 function requireReviewAgentProviderKind(providerKind) {
@@ -90057,7 +91799,7 @@ function reviewInvestigationRecordingSupportDecision(input, policy) {
   const bindingFailure = investigationPromptBindingFailure(input.invocation);
   if (bindingFailure !== null) return unsupported(bindingFailure);
   const plan = input.invocation.investigationProbePlan;
-  if (plan.status !== "complete" /* Complete */) {
+  if (plan === null || plan.status !== "complete" /* Complete */) {
     return unsupported(
       "probe_plan_incomplete" /* ProbePlanIncomplete */
     );
@@ -90473,7 +92215,7 @@ function capabilityUnavailable(message) {
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-investigation-context-attestation-adapter.ts
-var import_crypto32 = require("crypto");
+var import_crypto33 = require("crypto");
 var ReviewActionV2InvestigationContextAttestationAdapter = class {
   constructor(client, authorizationToken) {
     this.client = client;
@@ -90605,7 +92347,7 @@ var ReviewActionV2InvestigationContextAttestationAdapter = class {
   }
 };
 function deterministicId3(namespace, parts) {
-  const digest3 = (0, import_crypto32.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  const digest3 = (0, import_crypto33.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
   return `rr:${namespace}:${digest3}`;
 }
 function requireString6(value, field) {
@@ -90630,7 +92372,7 @@ function requireTimestamp4(value, field) {
 }
 
 // src/review-orchestration/infrastructure/production-t0-review-runner.ts
-var execFileAsync7 = (0, import_util11.promisify)(import_child_process11.execFile);
+var execFileAsync7 = (0, import_util11.promisify)(import_child_process12.execFile);
 var CODEX_RETRY_POLICY_VERSION = "codex-semantic-retry.v1";
 var SCM_READ_TOKEN_EXPIRY_MARGIN_MS = 3e4;
 var ProductionT0ReviewRunner = class {
@@ -90639,10 +92381,10 @@ var ProductionT0ReviewRunner = class {
     this.progress = progress;
   }
   async run(input) {
-    if (input.codexBinaryPath && path13.basename(input.codexBinaryPath) !== input.codexBinaryPath) {
+    if (input.codexBinaryPath && path14.basename(input.codexBinaryPath) !== input.codexBinaryPath) {
       input = {
         ...input,
-        codexBinaryPath: path13.resolve(process.cwd(), input.codexBinaryPath)
+        codexBinaryPath: path14.resolve(process.cwd(), input.codexBinaryPath)
       };
     }
     return withRunnerEnvironment(input, async () => {
@@ -90656,14 +92398,23 @@ var ProductionT0ReviewRunner = class {
     });
   }
   async runInWorkspace(input) {
-    const signal = input.accountGateway?.signal;
+    const signal = input.accountGateway?.signal ?? input.providerApi?.signal;
     signal?.throwIfAborted();
     const fetchImpl = signal ? createAccountGatewayRunFetch(this.fetchImpl, signal) : this.fetchImpl;
     validateInput(input);
-    const approvedAgent = input.accountGateway ? readApprovedReviewAgent(
-      input.accountGateway.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
-      input.accountGateway.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
-    ) : void 0;
+    if (input.providerApi && (input.accountGateway || input.ocr || input.providerInstanceId)) {
+      throw new Error("review_action_v2_direct_auth_route_invalid");
+    }
+    if (input.ocr && !input.accountGateway) {
+      throw new Error("review_action_v2_ocr_account_gateway_required");
+    }
+    const admittedRuntime = input.accountGateway?.runtimeConfig ?? input.providerApi?.runtimeConfig;
+    const agentProfile = admittedRuntime ? {
+      json: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON,
+      digest: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST
+    } : void 0;
+    const approvedOcrAgent = input.ocr ? readApprovedOcrReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
+    const approvedAgent = agentProfile && !input.ocr ? readApprovedReviewAgent(agentProfile.json, agentProfile.digest) : void 0;
     if (approvedAgent && approvedAgent.agentKind !== "codex")
       throw new Error("review_investigation_approved_agent_unavailable");
     const authoritativeDeadlineEpochMs = process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY];
@@ -90681,16 +92432,19 @@ var ProductionT0ReviewRunner = class {
       process.env[REVIEW_EXECUTION_DEADLINE_ENV_KEY] = authoritativeDeadlineEpochMs;
     }
     signal?.throwIfAborted();
-    const loadedConfig = ConfigLoader.load();
+    const loadedConfig = input.providerApi ? ConfigLoader.loadRuntimeEnvironment(
+      input.providerApi.runtimeConfig.runtimeEnv
+    ) : ConfigLoader.load();
     const config = input.accountGateway ? { ...loadedConfig, providerRetries: 1 } : loadedConfig;
-    const codexProviderName = selectCodexProvider(config);
-    const model = codexProviderName.slice("codex/".length);
+    const codexProviderName = input.ocr ? "" : input.providerApi ? selectDirectOpenRouterProvider(config) : selectCodexProvider(config);
+    const model = codexProviderName.slice(codexProviderName.indexOf("/") + 1);
     const reasoningEffort = resolveProductionInvestigationReasoningEffort({
       codexModel: model,
       accountGateway: input.accountGateway !== void 0,
+      providerApi: input.providerApi !== void 0,
       serverReasoningEffort
     });
-    if (input.accountGateway && model === "mimo-v2.6-pro") {
+    if (input.providerApi || input.accountGateway && model === "mimo-v2.6-pro") {
       process.env.CODEX_REASONING_EFFORT = reasoningEffort;
     }
     const executionDeadline = createExecutionDeadlineFromEnvironment();
@@ -90703,8 +92457,8 @@ var ProductionT0ReviewRunner = class {
       apiUrl: input.apiUrl,
       fetchImpl
     });
-    const controlPlane = input.accountGateway?.controlPlane ?? new ReviewActionV2ControlPlaneAdapter(reviewActionClient);
-    const authorization = input.accountGateway ? controlPlane.currentAuthorization() : await controlPlane.authorize({
+    const controlPlane = input.accountGateway?.controlPlane ?? input.providerApi?.controlPlane ?? new ReviewActionV2ControlPlaneAdapter(reviewActionClient);
+    const authorization = input.accountGateway || input.providerApi ? controlPlane.currentAuthorization() : await controlPlane.authorize({
       oidcToken: await oidc.requestToken(input.audience)
     });
     validateAuthorizationInput(input, authorization);
@@ -90757,7 +92511,7 @@ var ProductionT0ReviewRunner = class {
       } : void 0
     );
     await materializer.ensureAvailable({
-      checkoutRoot: path13.resolve(input.workspacePath),
+      checkoutRoot: path14.resolve(input.workspacePath),
       repository: input.repository,
       scmReadToken: await scmReadTokenProvider.getToken(),
       commitShas: [
@@ -90775,6 +92529,152 @@ var ProductionT0ReviewRunner = class {
       authorization.facts.headSha
     );
     signal?.throwIfAborted();
+    if (input.ocr) {
+      const ocrRuntimeEnv = input.accountGateway.runtimeConfig.runtimeEnv;
+      const ocrModel = ocrRuntimeEnv.CODEX_MODEL;
+      if (!ocrModel || !approvedOcrAgent) {
+        throw new Error("review_action_v2_ocr_model_missing");
+      }
+      const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
+      const ocrModelReasoningEffort = ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
+      const modelTransport = input.accountGateway.modelTransport;
+      const capabilityAuthorization = modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
+      if (!capabilityAuthorization) {
+        throw new Error("review_action_v2_ocr_capability_missing");
+      }
+      const ocrCompatibilityKey = hashIncrementalCompatibility(
+        config,
+        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
+      );
+      const ocrBackgroundParts = [pr.title, pr.body].filter(
+        (part) => part.trim().length > 0
+      );
+      const planned2 = planOcrReviewAssignments({
+        authorization,
+        pr,
+        config,
+        compatibilityKey: ocrCompatibilityKey,
+        lifecycleTargets: initialLifecycle.promptTargets,
+        liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash
+      });
+      const bridge = {
+        baseUrl: modelTransport.baseUrl,
+        capabilityAuthorization,
+        actualModel: () => modelTransport.actualModel(),
+        requestCount: () => modelTransport.requestCount?.(),
+        effectFacts: input.ocr.effectFacts
+      };
+      const invocationAdapter2 = new OcrReviewInvocationAdapter(
+        planned2.assignments,
+        {
+          ...signal ? { signal } : {},
+          previewTimeoutMs: () => Math.floor(
+            executionDeadline.clampProviderTimeout(providerTimeoutMs)
+          ),
+          model: ocrModel,
+          binaryPath: input.ocr.run.binaryPath,
+          binarySha256: approvedOcrAgent.binarySha256,
+          packageVersion: approvedOcrAgent.packageVersion,
+          profileRef: approvedOcrAgent.profileRef,
+          run: input.ocr.run,
+          bridge,
+          limits: {
+            requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3
+          },
+          ocrEffort: "medium",
+          modelReasoningEffort: ocrModelReasoningEffort,
+          language: ocrLanguage,
+          ruleText: buildOcrControlledRuleText({
+            language: ocrLanguage,
+            assignedPaths: pr.files.map((file) => file.filename).sort()
+          }),
+          backgroundText: ocrBackgroundParts.length > 0 ? ocrBackgroundParts.join("\n\n") : null,
+          checkoutRoot: path14.resolve(input.workspacePath),
+          processRunner: runOcrReviewProcess,
+          previewRunner: runOcrReviewProcess,
+          acceptanceDiagnostic: (diagnostic) => logger.info("Managed OCR acceptance", diagnostic)
+        }
+      );
+      const identities2 = new DeterministicReviewOrchestrationIdentity();
+      const useCase2 = new RunT0ReviewOrchestration({
+        controlPlane,
+        revisionGuard,
+        oidc: {
+          getToken: () => oidc.requestToken(input.audience)
+        },
+        invocationManifestAssembler: new GeneratedProviderInvocationManifestAssembler(
+          authorization,
+          config,
+          ocrCompatibilityKey
+        ),
+        invocations: invocationAdapter2,
+        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+          modelTransport.failureFact
+        ),
+        invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
+        investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
+          logger
+        ),
+        leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+        projectionBuilder: createProductionReviewProjectionBuilder({
+          authorizationFacts: authorization.facts,
+          pr,
+          config,
+          protocolLimits: authorization.limits,
+          assignments: planned2.assignments.map((assignment) => ({
+            workSlotId: assignment.workSlot.workSlotId,
+            taskKind: assignment.workSlot.taskKind,
+            providerKind: assignment.workSlot.providerKind,
+            required: assignment.workSlot.required,
+            filePaths: assignment.context.files.map((file) => file.filename)
+          })),
+          uncoveredPaths: planned2.uncoveredPaths,
+          uncoveredLifecycleTargetIds: planned2.uncoveredLifecycleTargetIds,
+          lifecycleInventory
+        }),
+        identities: identities2,
+        clock: new SystemReviewOrchestrationClock(),
+        delay: new CancellableReviewOrchestrationDelay(),
+        executionDeadline,
+        signal,
+        ...this.progress ? { progress: this.progress } : {}
+      });
+      const result3 = await useCase2.executeAuthorized(
+        {
+          executionId: identities2.deterministicId("execution", [
+            authorization.authorizationId,
+            authorization.facts.reviewRevisionHash,
+            planned2.plan.planHash
+          ]),
+          baseSha: authorization.facts.baseSha,
+          mergeBaseSha: authorization.facts.mergeBaseSha,
+          headSha: authorization.facts.headSha,
+          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          compatibilityKey: ocrCompatibilityKey,
+          planHash: planned2.plan.planHash,
+          workSlotsCanonicalJson: planned2.plan.workSlotsCanonicalJson,
+          assignmentManifestCanonicalJson: planned2.plan.assignmentManifestCanonicalJson,
+          assignmentManifestHash: planned2.plan.assignmentManifestHash,
+          workSlots: planned2.plan.assignments.map(
+            (assignment) => assignment.workSlot
+          ),
+          sourceRunId: authorization.facts.sourceRunId,
+          sourceRunAttempt: authorization.facts.sourceRunAttempt,
+          ownerIdHash: sha25617(
+            canonicalJson13({
+              authorizationId: authorization.authorizationId,
+              providerInstanceId: input.providerInstanceId,
+              sourceRunAttempt: authorization.facts.sourceRunAttempt,
+              sourceRunId: authorization.facts.sourceRunId
+            })
+          ),
+          allowPartial: true
+        },
+        authorization
+      );
+      signal?.throwIfAborted();
+      return mapOrchestrationResultToCodexOutcome(result3);
+    }
     const agenticContext = config.codexAgenticContext ?? true;
     const investigationRolloutResolution = resolveProductionReviewInvestigationRolloutResolution({
       flags: readProductionReviewInvestigationRolloutFlags(),
@@ -90793,11 +92693,16 @@ var ProductionT0ReviewRunner = class {
     const provider = new CodexProvider(model, {
       agenticContext,
       eventAudit: config.codexEventAudit,
-      modelProvider: resolveAccountGatewayModelProvider(
+      modelProvider: input.providerApi ? "openrouter" : resolveAccountGatewayModelProvider(
         model,
         input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
         input.accountGateway?.modelTransport
       ),
+      ...input.providerApi ? {
+        providerNamePrefix: "openrouter",
+        disableBuiltinTools: true,
+        waitForProcessClose: true
+      } : {},
       ...input.accountGateway ? { accountGateway: input.accountGateway.modelTransport } : {}
     });
     const compatibilityKey = hashIncrementalCompatibility(
@@ -90809,7 +92714,7 @@ var ProductionT0ReviewRunner = class {
     const contextGatewayOptions = resolveProductionContextGatewaySessionFactoryOptions({
       agenticContext,
       investigationRecordingEnabled,
-      checkoutRoot: path13.resolve(input.workspacePath),
+      checkoutRoot: path14.resolve(input.workspacePath),
       gatewayBundlePath
     });
     const contextGateway = contextGatewayOptions ? new ContextGatewayInvocationSessionFactory(
@@ -90818,7 +92723,7 @@ var ProductionT0ReviewRunner = class {
       requiredContextWitness
     ) : void 0;
     const contextReplayRunner = contextGateway ? new ContextAttestationReplayRunner({
-      checkoutRoot: path13.resolve(input.workspacePath),
+      checkoutRoot: path14.resolve(input.workspacePath),
       gatewayBundlePath
     }) : void 0;
     const planned = planAssignments({
@@ -90838,7 +92743,9 @@ var ProductionT0ReviewRunner = class {
       providerTimeoutMs,
       agenticContext,
       contextGateway,
-      false
+      false,
+      input.providerApi ? reasoningEffort : "xhigh",
+      input.providerApi?.credentialLease
     );
     const investigationInvocationAdapter = createProductionReviewInvestigationInvocation({
       rollout: investigationRollout,
@@ -90850,7 +92757,8 @@ var ProductionT0ReviewRunner = class {
         agenticContext,
         contextGateway,
         true,
-        reasoningEffort
+        reasoningEffort,
+        input.providerApi?.credentialLease
       )
     });
     const identities = new DeterministicReviewOrchestrationIdentity();
@@ -90898,6 +92806,9 @@ var ProductionT0ReviewRunner = class {
           contextCriticEnabled: investigationRollout.contextCriticEnabled,
           agents: createConfiguredProductionInvestigationAgents({
             approvedAgent,
+            ...input.providerApi ? {
+              directCredentialLease: input.providerApi.credentialLease
+            } : {},
             codexModel: model,
             codexBinaryPath: input.codexBinaryPath,
             executionSessions: gateway,
@@ -90933,7 +92844,7 @@ var ProductionT0ReviewRunner = class {
         });
       },
       {
-        workingDirectory: path13.resolve(input.workspacePath),
+        workingDirectory: path14.resolve(input.workspacePath),
         leaseDurationMs: providerTimeoutMs + 5 * 6e4,
         providerTimeoutMs,
         certificateTtlMs: 24 * 60 * 6e4,
@@ -91016,8 +92927,8 @@ var ProductionT0ReviewRunner = class {
         ),
         sourceRunId: authorization.facts.sourceRunId,
         sourceRunAttempt: authorization.facts.sourceRunAttempt,
-        ownerIdHash: sha25616(
-          canonicalJson12({
+        ownerIdHash: sha25617(
+          canonicalJson13({
             authorizationId: authorization.authorizationId,
             providerInstanceId: input.providerInstanceId,
             sourceRunAttempt: authorization.facts.sourceRunAttempt,
@@ -91128,13 +93039,19 @@ function publicInvestigationProcessDiagnostic(stderr) {
   ];
   return Object.freeze({
     stderrByteCount: Buffer.byteLength(stderr, "utf8"),
-    stderrDigest: (0, import_crypto33.createHash)("sha256").update(stderr).digest("hex").slice(0, 16),
+    stderrDigest: (0, import_crypto34.createHash)("sha256").update(stderr).digest("hex").slice(0, 16),
     diagnosticKinds: Object.freeze(
       diagnosticKinds.filter(([pattern]) => pattern.test(stderr)).map(([, kind]) => kind)
     )
   });
 }
 function resolveProductionInvestigationReasoningEffort(input) {
+  if (input.providerApi) {
+    const effort2 = input.serverReasoningEffort ?? "xhigh";
+    if (effort2 !== "low" && effort2 !== "medium" && effort2 !== "high" && effort2 !== "xhigh")
+      throw new Error("provider_api_reasoning_effort_unsupported");
+    return effort2;
+  }
   if (!input.accountGateway || input.codexModel !== "mimo-v2.6-pro") {
     return "xhigh";
   }
@@ -91171,12 +93088,15 @@ function createConfiguredProductionInvestigationAgents(input) {
       requestedModel: input.codexModel,
       agent: new CodexReviewAgentAdapter(processRunner, {
         executionSessions: input.executionSessions,
-        modelProvider: resolveAccountGatewayModelProvider(
+        modelProvider: input.directCredentialLease ? "openrouter" : resolveAccountGatewayModelProvider(
           input.codexModel,
           input.admittedGatewayModel,
           input.modelTransport
         ),
-        providerCredentialEnvironment: input.modelTransport ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME }) : codexCredentialEnvironment,
+        providerCredentialEnvironment: input.directCredentialLease ? () => Object.freeze({
+          CODEX_HOME: process.env.CODEX_HOME,
+          ...input.directCredentialLease().environment
+        }) : input.modelTransport ? () => Object.freeze({ CODEX_HOME: process.env.CODEX_HOME }) : codexCredentialEnvironment,
         ...appServer && input.modelTransport ? {
           appServerRunner: {
             executeTurn: async (request) => {
@@ -91424,8 +93344,8 @@ function resolveContextGatewayBundlePath() {
   if (!entrypoint) {
     throw new Error("review_action_v2_runtime_entrypoint_missing");
   }
-  return path13.join(
-    path13.dirname(path13.resolve(entrypoint)),
+  return path14.join(
+    path14.dirname(path14.resolve(entrypoint)),
     "context-gateway.js"
   );
 }
@@ -91446,12 +93366,12 @@ async function prepareSingleT0NativeInputs(receipt, trusted) {
     throw new Error("review_action_v2_single_plan_repository_invalid");
   }
   const validateProcessContext = () => {
-    if (path13.resolve(process.cwd()) !== path13.resolve(runner.workspacePath) || process.env.CODEX_HOME !== runner.codexHome || runner.codexBinaryPath !== void 0 && process.env.REVIEWROUTER_CODEX_BINARY !== runner.codexBinaryPath) {
+    if (path14.resolve(process.cwd()) !== path14.resolve(runner.workspacePath) || process.env.CODEX_HOME !== runner.codexHome || runner.codexBinaryPath !== void 0 && process.env.REVIEWROUTER_CODEX_BINARY !== runner.codexBinaryPath) {
       throw new Error("review_action_v2_single_plan_checkout_process_required");
     }
   };
   validateProcessContext();
-  if (!path13.isAbsolute(gatewayBundlePath)) {
+  if (!path14.isAbsolute(gatewayBundlePath)) {
     throw new Error("review_action_v2_gateway_bundle_path_invalid");
   }
   const controlPlane = ReviewActionV2ControlPlaneAdapter.fromFreshAuthorizationReceipt(
@@ -91495,7 +93415,7 @@ async function prepareSingleT0NativeInputs(receipt, trusted) {
   if (pr.baseSha.toLowerCase() !== authorization.facts.baseSha || pr.headSha.toLowerCase() !== authorization.facts.headSha) {
     throw new Error("review_action_v2_single_plan_revision_not_current");
   }
-  const checkoutRoot = path13.resolve(runner.workspacePath);
+  const checkoutRoot = path14.resolve(runner.workspacePath);
   await new GitReviewRevisionMaterializer().ensureAvailable({
     checkoutRoot,
     repository: runner.repository,
@@ -91549,7 +93469,7 @@ async function prepareSingleT0ReviewPlan(input) {
   const provider = input.provider;
   const contextGateway = input.contextGateway;
   const runtimeConfigVersion = input.runtimeConfigVersion;
-  if (!authorization.facts.workflowIdentityHash || !/^[a-f0-9]{64}$/u.test(authorization.facts.workflowIdentityHash) || pr.number !== authorization.facts.pullRequestNumber || pr.baseSha !== authorization.facts.baseSha || pr.headSha !== authorization.facts.headSha || provider.name !== selectCodexProvider(config) || config.codexAgenticContext === false) {
+  if (!authorization.facts.workflowIdentityHash || !/^[a-f0-9]{64}$/u.test(authorization.facts.workflowIdentityHash) || pr.number !== authorization.facts.pullRequestNumber || pr.baseSha !== authorization.facts.baseSha || pr.headSha !== authorization.facts.headSha || provider.name !== (config.providers[0]?.startsWith("openrouter/") ? selectDirectOpenRouterProvider(config) : selectCodexProvider(config)) || config.codexAgenticContext === false) {
     throw new Error("review_action_v2_single_plan_authority_mismatch");
   }
   const compatibilityKey = hashIncrementalCompatibility(
@@ -91580,7 +93500,7 @@ async function prepareSingleT0ReviewPlan(input) {
   ).prepare({ workSlot: assignment.workSlot, attemptOrdinal: 1 });
   const invocation = await prepare(false);
   const investigation = await prepare(true);
-  if (!investigation.investigationSeedEnvelope || investigation.manifestFacts.executionProfile !== "investigation_gateway_v1") {
+  if (!investigation.investigationSeedEnvelope || !investigation.investigationProbePlan || investigation.manifestFacts.executionProfile !== "investigation_gateway_v1") {
     throw new Error("review_action_v2_single_plan_investigation_ineligible");
   }
   const assembler = new GeneratedProviderInvocationManifestAssembler(
@@ -91590,7 +93510,7 @@ async function prepareSingleT0ReviewPlan(input) {
   );
   const invocationManifest = await assembler.assemble(invocation);
   const investigationManifest = await assembler.assemble(investigation);
-  const reviewConfigPreimage = canonicalJson12(config);
+  const reviewConfigPreimage = canonicalJson13(config);
   const compatibilityPreimage = incrementalCompatibilityPreimage(
     config,
     runtimeConfigVersion
@@ -91604,8 +93524,8 @@ async function prepareSingleT0ReviewPlan(input) {
     liveLifecycleStateHash: null
   });
   const { planHash: probePlanHash, ...probePayload } = investigation.investigationProbePlan;
-  const probePlanPreimage = canonicalJson12(probePayload);
-  const hash = (value) => (0, import_crypto33.createHash)("sha256").update(value).digest("hex");
+  const probePlanPreimage = canonicalJson13(probePayload);
+  const hash = (value) => (0, import_crypto34.createHash)("sha256").update(value).digest("hex");
   if (hash(probePlanPreimage) !== probePlanHash || hash(investigation.investigationContextPrompt ?? "") !== investigation.investigationSeedEnvelope.envelope.reviewPromptHash) {
     throw new Error("review_action_v2_single_plan_seed_preimage_mismatch");
   }
@@ -91697,7 +93617,7 @@ function planAssignments(input) {
     const lifecycleTargets = input.lifecycleTargets.filter(
       (target) => batch.some(
         (file) => [file.filename, file.previousFilename].some(
-          (path14) => path14 !== void 0 && (target.currentPath === path14 || target.originalPath === path14)
+          (path15) => path15 !== void 0 && (target.currentPath === path15 || target.originalPath === path15)
         )
       )
     );
@@ -91721,7 +93641,7 @@ function planAssignments(input) {
     input.lifecycleTargets.filter(
       (target) => !assignedLifecycleTargetIds.has(target.targetId) && files.some(
         (file) => [file.filename, file.previousFilename].some(
-          (path14) => path14 !== void 0 && (target.currentPath === path14 || target.originalPath === path14)
+          (path15) => path15 !== void 0 && (target.currentPath === path15 || target.originalPath === path15)
         )
       )
     ).map((target) => target.targetId).sort()
@@ -91808,9 +93728,17 @@ function selectCodexProvider(config) {
   }
   return selected;
 }
+function selectDirectOpenRouterProvider(config) {
+  const selected = config.providers[0];
+  if (config.providers.length !== 1 || !selected || !/^openrouter\/[A-Za-z0-9_.:~-]+(?:\/[A-Za-z0-9_.:~-]+)+$/.test(selected) || config.providerLimit !== 1 || config.providerMaxParallel !== 1 || config.inlineMinAgreement !== 1 || config.synthesisModel !== selected || config.fallbackProviders.length !== 0 || config.requiredHealthyProviders?.length !== 1 || config.requiredHealthyProviders[0] !== selected)
+    throw new Error("review_action_v2_direct_provider_policy_invalid");
+  return selected;
+}
 async function applyReviewRuntimeConfig(input, fetchImpl, oidc) {
-  if (input.accountGateway) {
-    return applyAdmittedRuntimeConfig(input.accountGateway.runtimeConfig);
+  if (input.accountGateway || input.providerApi) {
+    return applyAdmittedRuntimeConfig(
+      (input.accountGateway ?? input.providerApi).runtimeConfig
+    );
   }
   process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE = "oidc";
   process.env.REVIEWROUTER_API_URL = input.apiUrl;
@@ -91833,17 +93761,17 @@ async function withRunnerEnvironment(input, operation) {
     previous.set(key, process.env[key]);
     process.env[key] = value;
   };
-  set2("CODEX_HOME", input.codexHome);
+  if (input.codexHome !== void 0) set2("CODEX_HOME", input.codexHome);
   set2("CODEX_HEALTHCHECK_MODE", "binary");
   set2("REVIEW_ROUTER_PROGRESS_COMMENTS", "never");
   set2("GITHUB_REPOSITORY", input.repository);
   set2("REVIEWROUTER_HEAD_SHA", input.headSha.toLowerCase());
   if (input.codexBinaryPath) {
     set2("REVIEWROUTER_CODEX_BINARY", input.codexBinaryPath);
-    if (path13.isAbsolute(input.codexBinaryPath)) {
+    if (path14.isAbsolute(input.codexBinaryPath)) {
       set2(
         "PATH",
-        `${path13.dirname(input.codexBinaryPath)}${path13.delimiter}${process.env.PATH ?? ""}`
+        `${path14.dirname(input.codexBinaryPath)}${path14.delimiter}${process.env.PATH ?? ""}`
       );
     }
   }
@@ -91892,23 +93820,23 @@ async function readCheckedOutHead(workspacePath, signal) {
   }
   return head;
 }
-function canonicalJson12(value) {
+function canonicalJson13(value) {
   if (value === void 0) return "null";
-  if (Array.isArray(value)) return `[${value.map(canonicalJson12).join(",")}]`;
+  if (Array.isArray(value)) return `[${value.map(canonicalJson13).join(",")}]`;
   if (value && typeof value === "object") {
     return `{${Object.keys(value).sort().map(
-      (key) => `${JSON.stringify(key)}:${canonicalJson12(value[key])}`
+      (key) => `${JSON.stringify(key)}:${canonicalJson13(value[key])}`
     ).join(",")}}`;
   }
   return JSON.stringify(value);
 }
-function sha25616(value) {
-  return (0, import_crypto33.createHash)("sha256").update(value).digest("hex");
+function sha25617(value) {
+  return (0, import_crypto34.createHash)("sha256").update(value).digest("hex");
 }
 function runAccountGatewayGit(args, options, signal, timeoutMs = 6e4) {
   signal.throwIfAborted();
   return new Promise((resolve4, reject) => {
-    const child = (0, import_child_process11.spawn)("git", args, {
+    const child = (0, import_child_process12.spawn)("git", args, {
       ...options,
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"]
@@ -91989,5 +93917,6 @@ var CancellableReviewOrchestrationDelay = class extends SystemReviewOrchestratio
   resolveProductionContextGatewayPolicyVersion,
   resolveProductionContextGatewaySessionFactoryOptions,
   resolveProductionInvestigationReasoningEffort,
-  resolveT0AttemptBudget
+  resolveT0AttemptBudget,
+  selectDirectOpenRouterProvider
 });

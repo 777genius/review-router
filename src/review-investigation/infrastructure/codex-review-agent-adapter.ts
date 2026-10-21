@@ -31,7 +31,11 @@ import {
   assertJsonMatchesSchema,
   type CodexModelProvider,
 } from '../../providers/codex-output-schema';
-import { CODEX_CONFINEMENT_DISABLED_FEATURES } from '../../providers/codex-confinement-policy';
+import {
+  CODEX_CONFINEMENT_DISABLED_FEATURES,
+  CODEX_SHELL_ENVIRONMENT_POLICY,
+} from '../../providers/codex-confinement-policy';
+import { CODEX_OPENROUTER_CONFIGURATION } from '../../providers/codex-model-provider-configuration';
 
 export type CodexReviewAgentAdapterOptions = Readonly<{
   executionSessions: ReviewAgentExecutionSessionResolverPort;
@@ -161,6 +165,12 @@ export class CodexReviewAgentAdapter extends StrictCliReviewAgent {
     const args = ['app-server', '--stdio', '--strict-config'];
     for (const feature of CODEX_CONFINEMENT_DISABLED_FEATURES) {
       args.push('--disable', feature);
+    }
+    for (const setting of CODEX_SHELL_ENVIRONMENT_POLICY)
+      args.push('-c', setting);
+    if (this.options.modelProvider === 'openrouter') {
+      for (const setting of CODEX_OPENROUTER_CONFIGURATION)
+        args.push('-c', setting);
     }
     args.push(
       '-c',

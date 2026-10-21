@@ -10,6 +10,7 @@ import { CodexProvider } from '../../providers/codex';
 import {
   PROVIDER_EXECUTION_CONTRACT_VERSION,
   type PreparedProviderInvocation,
+  type ProviderCredentialLease,
 } from '../../providers/prepared-invocation';
 import type { LifecycleTarget, PRContext, ReviewConfig } from '../../types';
 import { logger } from '../../utils/logger';
@@ -181,7 +182,8 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     private readonly agenticContext: boolean,
     private readonly contextGateway?: ContextGatewayInvocationSessionFactoryPort,
     private readonly investigationManifestBindingEnabled = false,
-    private readonly investigationReasoningEffort: CodexAppServerReasoningEffort = 'xhigh'
+    private readonly investigationReasoningEffort: CodexAppServerReasoningEffort = 'xhigh',
+    private readonly directCredentialLease?: () => ProviderCredentialLease
   ) {
     for (const assignment of assignments) {
       if (this.assignments.has(assignment.workSlot.workSlotId)) {
@@ -189,6 +191,26 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
       }
       this.assignments.set(assignment.workSlot.workSlotId, assignment);
     }
+  }
+
+  private credentialsForInvocation(
+    session?: ProviderCredentialLease
+  ): ProviderCredentialLease | undefined {
+    if (!this.directCredentialLease) return session;
+    const direct = this.directCredentialLease();
+    const environment = direct.environment;
+    if (
+      direct.bearerToken !== undefined ||
+      !environment ||
+      Object.keys(environment).join(',') !== 'OPENROUTER_API_KEY' ||
+      !environment.OPENROUTER_API_KEY ||
+      session?.environment?.OPENROUTER_API_KEY !== undefined
+    )
+      throw new Error('review_action_v2_direct_credential_lease_invalid');
+    return {
+      ...session,
+      environment: Object.freeze({ ...environment, ...session?.environment }),
+    };
   }
 
   async prepare(input: {
@@ -420,7 +442,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     if (!this.contextGateway) {
       const result = await this.provider.executePreparedInvocation(
         prepared,
-        undefined,
+        this.credentialsForInvocation(),
         input.signal
       );
       return normalizeReviewObservation({
@@ -470,7 +492,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
       }
       const result = await this.provider.executePreparedInvocation(
         runtimePrepared,
-        session.credentialLease,
+        this.credentialsForInvocation(session.credentialLease),
         input.signal
       );
       logger.info(

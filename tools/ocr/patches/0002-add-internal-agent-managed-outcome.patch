@@ -1,0 +1,677 @@
+diff --git a/internal/agent/managed_outcome.go b/internal/agent/managed_outcome.go
+new file mode 100644
+index 0000000..f93e7fc
+--- /dev/null
++++ b/internal/agent/managed_outcome.go
+@@ -0,0 +1,671 @@
++// SPDX-License-Identifier: Apache-2.0
++// Copyright 2026 alibaba/open-code-review Contributors
++
++package agent
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"sort"
++	"strings"
++	"sync"
++
++	"github.com/alibaba/open-code-review/internal/llm"
++	"github.com/alibaba/open-code-review/internal/llmloop"
++)
++
++// Producer side of the managed Review Router outcome contract (plan §7.3–§7.4,
++// schema "reviewrouter.ocr-outcome/v1"). The recorder is created only for
++// --reviewrouter-managed runs, is written by the same execution branches that
++// drive the native flow (every latch happens at its trigger point, before the
++// branch's break), and is frozen once — after every group, comment and
++// compression worker has been joined — so the serialized JSON can never change
++// after capture.
++//
++// Invariants this file enforces at freeze time (plan §7.4, "check field
++// consistency"): main_completed=true implies stop_cause=null and
++// rounds.completed>0; a completed filter implies filter_decision_valid=true;
++// filter_decision_valid=false implies a failed/cancelled filter; a
++// not_applicable filter carries no parsed decision; 0<=completed<=started<=
++// configured; group paths are unique and, without resume, exactly the native
++// selected set. A violated invariant is a contract failure: nothing is frozen
++// and the managed field is absent from the JSON, so a consumer rejects the run.
++
++// managedOutcomeSchemaVersion is the one schema version this producer emits.
++const managedOutcomeSchemaVersion = "reviewrouter.ocr-outcome/v1"
++
++// ManagedStopCause is the closed stop-cause enum of the outcome contract
++// (plan §7.4 rule 4). Wire values are fixed; unknown values must be rejected
++// by consumers.
++type ManagedStopCause string
++
++const (
++	ManagedStopMaxRounds     ManagedStopCause = "max_rounds"
++	ManagedStopEmptyRounds   ManagedStopCause = "empty_rounds"
++	ManagedStopCompression   ManagedStopCause = "compression"
++	ManagedStopTokenBudget   ManagedStopCause = "token_budget"
++	ManagedStopPromptBudget  ManagedStopCause = "prompt_budget"
++	ManagedStopProviderError ManagedStopCause = "provider_error"
++	ManagedStopInputError    ManagedStopCause = "input_error"
++	ManagedStopInternalError ManagedStopCause = "internal_error"
++	ManagedStopCancelled     ManagedStopCause = "cancelled"
++	ManagedStopDeadline      ManagedStopCause = "deadline"
++)
++
++// managedState* are the closed phase/grouping state enum values (plan §7.4
++// rule 1). They mirror llmloop.ManagedPhaseState without importing it into the
++// wire types.
++const (
++	managedStateCompleted     = "completed"
++	managedStateNotApplicable = "not_applicable"
++	managedStateFailed        = "failed"
++	managedStateCancelled     = "cancelled"
++)
++
++// Short reason codes (plan §7.4 rule 1): null or one of this allowlist, never
++// free model/provider text.
++const (
++	reasonDisabled      = "disabled"
++	reasonThreshold     = "threshold"
++	reasonNoCandidates  = "no_candidates"
++	reasonNoZone        = "no_zone"
++	reasonNotDispatched = "not_dispatched"
++	reasonFallback      = "fallback"
++	reasonSingleFile    = "single_file"
++	reasonNoSelection   = "no_selection"
++	reasonMalformed     = "malformed"
++	reasonError         = "error"
++	reasonCancelled     = "cancelled"
++)
++
++var managedReasonAllowlist = map[string]bool{
++	reasonDisabled: true, reasonThreshold: true, reasonNoCandidates: true,
++	reasonNoZone: true, reasonNotDispatched: true, reasonFallback: true,
++	reasonSingleFile: true, reasonNoSelection: true, reasonMalformed: true,
++	reasonError: true, reasonCancelled: true,
++}
++
++// managedPhases are the four tracked phases of one group (plan §7.4 shape).
++type managedPhases string
++
++const (
++	phasePlan        managedPhases = "plan"
++	phaseCompression managedPhases = "compression"
++	phaseRelocation  managedPhases = "relocation"
++	phaseFilter      managedPhases = "filter"
++)
++
++// ManagedPhaseOutcome is one phase's aggregate outcome: state plus null-or-code
++// reason.
++type ManagedPhaseOutcome struct {
++	State  string  `json:"state"`
++	Reason *string `json:"reason"`
++}
++
++// ManagedRounds counts actual review rounds — not HTTP requests, not tool
++// turns (plan §7.4 rule 3).
++type ManagedRounds struct {
++	Configured int `json:"configured"`
++	Started    int `json:"started"`
++	Completed  int `json:"completed"`
++}
++
++// ManagedGroupPhases holds the four phase outcomes of one group.
++type ManagedGroupPhases struct {
++	Plan        ManagedPhaseOutcome `json:"plan"`
++	Compression ManagedPhaseOutcome `json:"compression"`
++	Relocation  ManagedPhaseOutcome `json:"relocation"`
++	Filter      ManagedPhaseOutcome `json:"filter"`
++}
++
++// ManagedGroupOutcome is one group's frozen outcome record.
++type ManagedGroupOutcome struct {
++	Paths         []string           `json:"paths"`
++	MainCompleted bool               `json:"main_completed"`
++	StopCause     *ManagedStopCause  `json:"stop_cause"`
++	Rounds        ManagedRounds      `json:"rounds"`
++	Phases        ManagedGroupPhases `json:"phases"`
++	// FilterDecisionValid is null when no filter decision was required or
++	// received, true only when every received decision parsed, and false
++	// (latched) after the first malformed one.
++	FilterDecisionValid *bool `json:"filter_decision_valid"`
++}
++
++// ManagedGroupingOutcome is the run-level grouping record.
++type ManagedGroupingOutcome struct {
++	State  string  `json:"state"`
++	Reason *string `json:"reason"`
++}
++
++// ManagedOutcome is the frozen `reviewrouter_outcome` payload, added as one
++// field of the native JSON output and only in managed mode (plan §7.4).
++type ManagedOutcome struct {
++	SchemaVersion string                 `json:"schema_version"`
++	RunStopCause  *ManagedStopCause      `json:"run_stop_cause"`
++	Grouping      ManagedGroupingOutcome `json:"grouping"`
++	Groups        []ManagedGroupOutcome  `json:"groups"`
++}
++
++// managedPhaseRecord is one phase's mutable aggregate.
++type managedPhaseRecord struct {
++	state  string
++	reason string // "" marshals as null
++}
++
++// managedGroupState is one group's mutable record.
++type managedGroupState struct {
++	key            string
++	paths          []string
++	configured     int
++	started        int
++	completed      int
++	touched        bool // any round or phase event observed
++	stopCause      ManagedStopCause
++	phases         map[managedPhases]*managedPhaseRecord
++	filterDecision *bool // latched: false never reverts
++}
++
++// managedRecorder accumulates outcome facts during the run. Safe for
++// concurrent use: group subtasks and comment workers record in parallel.
++type managedRecorder struct {
++	mu         sync.Mutex
++	groups     map[string]*managedGroupState
++	order      []string
++	grouping   ManagedGroupingOutcome
++	runStop    ManagedStopCause
++	expected   []string // native selected paths; nil = no set check (resume)
++	frozen     *ManagedOutcome
++	freezeErr  error
++	frozenOnce bool
++}
++
++func newManagedRecorder() *managedRecorder {
++	return &managedRecorder{
++		groups:   make(map[string]*managedGroupState),
++		grouping: ManagedGroupingOutcome{State: managedStateNotApplicable, Reason: reasonPtr(reasonNoSelection)},
++	}
++}
++
++func reasonPtr(code string) *string {
++	if code == "" {
++		return nil
++	}
++	return &code
++}
++
++func stopPtr(cause ManagedStopCause) *ManagedStopCause {
++	if cause == "" {
++		return nil
++	}
++	return &cause
++}
++
++func boolPtr(b bool) *bool { return &b }
++
++// managedPhasePriority orders aggregate states (plan §7.4 rule 5): a late
++// success or skip never erases an earlier failure or cancellation.
++func managedPhasePriority(state string) int {
++	switch state {
++	case managedStateCancelled:
++		return 3
++	case managedStateFailed:
++		return 2
++	case managedStateCompleted:
++		return 1
++	default:
++		return 0
++	}
++}
++
++// runStopPriority orders run-level stop causes: the most terminal observed
++// cause wins, so a cancellation is never hidden by an earlier budget stop.
++func runStopPriority(cause ManagedStopCause) int {
++	switch cause {
++	case ManagedStopCancelled:
++		return 5
++	case ManagedStopDeadline:
++		return 4
++	case ManagedStopTokenBudget:
++		return 3
++	case ManagedStopInputError:
++		return 2
++	case ManagedStopInternalError, ManagedStopProviderError:
++		return 1
++	default:
++		return 0
++	}
++}
++
++func (r *managedRecorder) groupLocked(key string) *managedGroupState {
++	g, ok := r.groups[key]
++	if !ok {
++		g = &managedGroupState{key: key, phases: make(map[managedPhases]*managedPhaseRecord)}
++		r.groups[key] = g
++		r.order = append(r.order, key)
++	}
++	return g
++}
++
++// registerGroup records a planned group before dispatch (plan §7.4 rule 2).
++func (r *managedRecorder) registerGroup(key string, paths []string, configured int) {
++	if r == nil {
++		return
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	g := r.groupLocked(key)
++	g.paths = append([]string(nil), paths...)
++	g.configured = configured
++}
++
++// expectPaths freezes the native selected-set denominator for the group/path
++// equality check. Nil disables the check (resume runs).
++func (r *managedRecorder) expectPaths(paths []string) {
++	if r == nil {
++		return
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	r.expected = append([]string(nil), paths...)
++}
++
++// setGrouping records how the run's grouping was decided.
++func (r *managedRecorder) setGrouping(state, reason string) {
++	if r == nil {
++		return
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	r.grouping = ManagedGroupingOutcome{State: state, Reason: reasonPtr(reason)}
++}
++
++// setRunStop latches a run-level stop cause (plan §7.4 rule 6) by priority: a
++// more terminal cause (cancellation, deadline) outranks an earlier budget stop,
++// while equal-priority causes keep the first one — the run stopped there first.
++func (r *managedRecorder) setRunStop(cause ManagedStopCause) {
++	if r == nil || cause == "" {
++		return
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	if r.runStop == "" || runStopPriority(cause) > runStopPriority(r.runStop) {
++		r.runStop = cause
++	}
++}
++
++// markNotDispatched records a planned group that was never started: incomplete
++// main workflow, the dispatch-level stop, and cancelled/not_dispatched for
++// every unexecuted phase (plan §7.4 rule 2).
++func (r *managedRecorder) markNotDispatched(key string, stop ManagedStopCause) {
++	if r == nil {
++		return
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	g := r.groupLocked(key)
++	if g.stopCause == "" {
++		g.stopCause = stop
++	}
++	if !g.touched {
++		for _, ph := range []managedPhases{phasePlan, phaseCompression, phaseRelocation, phaseFilter} {
++			g.phases[ph] = &managedPhaseRecord{state: managedStateCancelled, reason: reasonNotDispatched}
++		}
++	}
++}
++
++// latchStop records the group's main-workflow stop at its trigger point. The
++// first stop wins: a later task_done never erases an earlier stop (plan §7.4
++// rules 4 and 6).
++func (r *managedRecorder) latchStop(key string, cause ManagedStopCause) {
++	if r == nil || cause == "" {
++		return
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	g := r.groupLocked(key)
++	g.touched = true
++	if g.stopCause == "" {
++		g.stopCause = cause
++	}
++}
++
++// roundStarted counts the round before its preparation begins (plan §7.4
++// rule 3): a prompt-budget overflow during preparation still counts as
++// started.
++func (r *managedRecorder) roundStarted(key string) {
++	if r == nil {
++		return
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	g := r.groupLocked(key)
++	g.touched = true
++	g.started++
++}
++
++// roundCompleted counts a round only after its main task_done was confirmed.
++func (r *managedRecorder) roundCompleted(key string) {
++	if r == nil {
++		return
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	g := r.groupLocked(key)
++	g.touched = true
++	g.completed++
++}
++
++// recordPhase applies one phase event with the aggregate priority of plan
++// §7.4 rule 5.
++func (r *managedRecorder) recordPhase(key string, phase managedPhases, state, reason string) {
++	if r == nil {
++		return
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	g := r.groupLocked(key)
++	g.touched = true
++	cur, ok := g.phases[phase]
++	if !ok || managedPhasePriority(state) > managedPhasePriority(cur.state) {
++		g.phases[phase] = &managedPhaseRecord{state: state, reason: reason}
++	}
++}
++
++// RecordPhaseOutcome implements llmloop.ManagedPhaseRecorder for the
++// loop-owned phase facts (compression and relocation).
++func (r *managedRecorder) RecordPhaseOutcome(taskKey string, phase llmloop.ManagedPhase, state llmloop.ManagedPhaseState, reason string) {
++	if r == nil {
++		return
++	}
++	var ph managedPhases
++	switch phase {
++	case llmloop.PhaseCompression:
++		ph = phaseCompression
++	case llmloop.PhaseRelocation:
++		ph = phaseRelocation
++	default:
++		return
++	}
++	r.recordPhase(taskKey, ph, string(state), reason)
++}
++
++// recordFilterDecision latches filter decision validity: false never reverts
++// (plan §7.4 rule 5).
++func (r *managedRecorder) recordFilterDecision(key string, valid bool) {
++	if r == nil {
++		return
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	g := r.groupLocked(key)
++	g.touched = true
++	if g.filterDecision == nil {
++		g.filterDecision = boolPtr(valid)
++		return
++	}
++	if !valid {
++		g.filterDecision = boolPtr(false)
++	}
++}
++
++// managedMainLoopStopCause maps a native main-loop stop to the wire enum
++// (plan §7.4 rule 4: native review_limit_reached -> max_rounds).
++func managedMainLoopStopCause(stop llmloop.MainLoopStop) ManagedStopCause {
++	switch stop {
++	case llmloop.StopMaxRounds:
++		return ManagedStopMaxRounds
++	case llmloop.StopEmptyRounds:
++		return ManagedStopEmptyRounds
++	case llmloop.StopCompression:
++		return ManagedStopCompression
++	case llmloop.StopTokenBudget:
++		return ManagedStopTokenBudget
++	default:
++		return ManagedStopInternalError
++	}
++}
++
++// managedErrorStopCause maps a hard error to the wire enum. An unknown
++// internal cause becomes internal_error only for panics; provider/transport
++// failures are provider_error, the empty-template precondition input_error,
++// and context state maps to cancelled/deadline.
++func managedErrorStopCause(err error) ManagedStopCause {
++	switch {
++	case errors.Is(err, context.DeadlineExceeded):
++		return ManagedStopDeadline
++	case errors.Is(err, context.Canceled):
++		return ManagedStopCancelled
++	case errors.Is(err, llm.ErrRequestTimeout):
++		return ManagedStopProviderError
++	case errors.Is(err, errMainTaskEmpty):
++		return ManagedStopInputError
++	default:
++		return ManagedStopProviderError
++	}
++}
++
++// freeze renders the immutable outcome and validates it against the contract's
++// consistency rules. Returns nil when nothing may be published (not managed,
++// already frozen, or a violated invariant): a contradictory terminal result is
++// a contract failure, and the managed field then stays absent so consumers
++// reject the run instead of reading a convenient half of the facts.
++func (r *managedRecorder) freeze() *ManagedOutcome {
++	if r == nil {
++		return nil
++	}
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	if r.frozenOnce {
++		return r.frozen
++	}
++	r.frozenOnce = true
++
++	seenPaths := make(map[string]bool)
++	var groups []ManagedGroupOutcome
++	for _, key := range r.order {
++		g := r.groups[key]
++
++		// A group that stopped before any round or phase ran was effectively
++		// never executed: every unexecuted phase reads cancelled/not_dispatched,
++		// not as a natural not-applicable skip (plan §7.4 rule 2).
++		if !g.touched && g.stopCause != "" {
++			for _, ph := range []managedPhases{phasePlan, phaseCompression, phaseRelocation, phaseFilter} {
++				g.phases[ph] = &managedPhaseRecord{state: managedStateCancelled, reason: reasonNotDispatched}
++			}
++		}
++		// A stopped group's plan/filter phases that never fired read
++		// cancelled/not_dispatched for the same reason. Trigger-based phases
++		// (compression, relocation) keep their natural defaults: their absence
++		// means no compressible zone / no candidates ever arose.
++		if g.stopCause != "" {
++			for _, ph := range []managedPhases{phasePlan, phaseFilter} {
++				if _, ok := g.phases[ph]; !ok {
++					g.phases[ph] = &managedPhaseRecord{state: managedStateCancelled, reason: reasonNotDispatched}
++				}
++			}
++		}
++		// main_completed is only ever true for a natural completion with no
++		// latched stop and at least one confirmed round (plan §7.4 rule 6).
++		mainCompleted := g.stopCause == "" && g.completed > 0
++		// An incomplete main workflow always names its cause; null never
++		// stands in for a hidden error branch (plan §7.4 rule 4).
++		if !mainCompleted && g.stopCause == "" {
++			g.stopCause = ManagedStopInternalError
++		}
++
++		paths := uniqueSortedPaths(g.paths)
++		if len(paths) == 0 {
++			r.freezeErr = fmt.Errorf("managed outcome: group %q has no paths", key)
++			return nil
++		}
++		for _, p := range paths {
++			if seenPaths[p] {
++				r.freezeErr = fmt.Errorf("managed outcome: path %q appears in more than one group", p)
++				return nil
++			}
++			seenPaths[p] = true
++		}
++
++		phaseOut := func(ph managedPhases, defReason string) (ManagedPhaseOutcome, error) {
++			rec, ok := g.phases[ph]
++			if !ok {
++				return ManagedPhaseOutcome{State: managedStateNotApplicable, Reason: reasonPtr(defReason)}, nil
++			}
++			if !managedReasonAllowlist[rec.reason] && rec.reason != "" {
++				return ManagedPhaseOutcome{}, fmt.Errorf("managed outcome: group %q phase %s has non-allowlisted reason %q", key, ph, rec.reason)
++			}
++			return ManagedPhaseOutcome{State: rec.state, Reason: reasonPtr(rec.reason)}, nil
++		}
++		plan, err := phaseOut(phasePlan, reasonThreshold)
++		if err != nil {
++			r.freezeErr = err
++			return nil
++		}
++		compression, err := phaseOut(phaseCompression, reasonNoZone)
++		if err != nil {
++			r.freezeErr = err
++			return nil
++		}
++		relocation, err := phaseOut(phaseRelocation, reasonNoCandidates)
++		if err != nil {
++			r.freezeErr = err
++			return nil
++		}
++		filter, err := phaseOut(phaseFilter, reasonNoCandidates)
++		if err != nil {
++			r.freezeErr = err
++			return nil
++		}
++
++		// Consistency rules (plan §7.4, "check field consistency").
++		if mainCompleted && (g.stopCause != "" || g.completed == 0) {
++			r.freezeErr = fmt.Errorf("managed outcome: group %q claims main_completed with stop=%q completed=%d", key, g.stopCause, g.completed)
++			return nil
++		}
++		if g.completed < 0 || g.started < g.completed || g.configured < g.started {
++			r.freezeErr = fmt.Errorf("managed outcome: group %q rounds violate 0<=completed<=started<=configured (%d/%d/%d)",
++				key, g.completed, g.started, g.configured)
++			return nil
++		}
++		switch filter.State {
++		case managedStateCompleted:
++			if g.filterDecision == nil || !*g.filterDecision {
++				r.freezeErr = fmt.Errorf("managed outcome: group %q filter completed without a valid decision", key)
++				return nil
++			}
++		case managedStateNotApplicable:
++			if g.filterDecision != nil {
++				r.freezeErr = fmt.Errorf("managed outcome: group %q filter not_applicable but a decision was parsed", key)
++				return nil
++			}
++		case managedStateFailed, managedStateCancelled:
++			// filter_decision_valid=false requires exactly this; null (no
++			// decision received) is allowed here too.
++		default:
++			r.freezeErr = fmt.Errorf("managed outcome: group %q filter has unknown state %q", key, filter.State)
++			return nil
++		}
++		if g.filterDecision != nil && !*g.filterDecision &&
++			filter.State != managedStateFailed && filter.State != managedStateCancelled {
++			r.freezeErr = fmt.Errorf("managed outcome: group %q has filter_decision_valid=false with filter state %q", key, filter.State)
++			return nil
++		}
++
++		groups = append(groups, ManagedGroupOutcome{
++			Paths:               paths,
++			MainCompleted:       mainCompleted,
++			StopCause:           stopPtr(g.stopCause),
++			Rounds:              ManagedRounds{Configured: g.configured, Started: g.started, Completed: g.completed},
++			Phases:              ManagedGroupPhases{Plan: plan, Compression: compression, Relocation: relocation, Filter: filter},
++			FilterDecisionValid: g.filterDecision,
++		})
++	}
++
++	// Without resume the group/path set must equal the native selected set:
++	// a missing, extra or duplicated path is a contract failure (plan §7.4
++	// rule 2).
++	if r.expected != nil {
++		want := make(map[string]bool, len(r.expected))
++		for _, p := range r.expected {
++			want[p] = true
++		}
++		if len(want) != len(seenPaths) {
++			r.freezeErr = fmt.Errorf("managed outcome: group paths (%d) do not match the selected set (%d)", len(seenPaths), len(want))
++			return nil
++		}
++		for p := range want {
++			if !seenPaths[p] {
++				r.freezeErr = fmt.Errorf("managed outcome: selected path %q missing from groups", p)
++				return nil
++			}
++		}
++	}
++
++	if r.grouping.State != managedStateCompleted && r.grouping.State != managedStateNotApplicable && r.grouping.State != managedStateFailed && r.grouping.State != managedStateCancelled {
++		r.freezeErr = fmt.Errorf("managed outcome: grouping has unknown state %q", r.grouping.State)
++		return nil
++	}
++
++	// groups is always a non-nil slice: a no-selection run emits groups=[].
++	r.frozen = &ManagedOutcome{
++		SchemaVersion: managedOutcomeSchemaVersion,
++		RunStopCause:  stopPtr(r.runStop),
++		Grouping:      r.grouping,
++		Groups:        groups,
++	}
++	if r.frozen.Groups == nil {
++		r.frozen.Groups = []ManagedGroupOutcome{}
++	}
++	return r.frozen
++}
++
++func uniqueSortedPaths(paths []string) []string {
++	seen := make(map[string]bool, len(paths))
++	out := make([]string, 0, len(paths))
++	for _, p := range paths {
++		if p == "" || seen[p] {
++			continue
++		}
++		seen[p] = true
++		out = append(out, p)
++	}
++	sort.Strings(out)
++	return out
++}
++
++// managedFilterParse is the outcome-side verdict of one filter response.
++type managedFilterParse struct {
++	// received is true when the response carried any decision material (tool
++	// calls or non-empty text).
++	received bool
++	// parsed is true when a decision was successfully parsed.
++	parsed bool
++	// malformed is true when decision material arrived but failed to parse.
++	malformed bool
++}
++
++// parseFilterToolCalls and parseFilterResponse live in agent.go beside the
++// native filter flow; they additionally report the managed outcome verdict
++// (see classifyFilterResponse).
++
++// classifyFilterResponse decides the managed outcome of one filter response:
++// a valid approve-all / empty removal set is success, malformed tool
++// arguments or unparseable text is degradation, and a response that carried
++// no decision material at all never counts as a parsed decision (plan §7.3).
++func classifyFilterResponse(calls []llm.ToolCall, content string, total int) (indices map[int]struct{}, verdict managedFilterParse) {
++	toolIndices, toolDecision, toolMalformed := parseFilterToolCalls(calls, total)
++	indices = toolIndices
++	textParsed := false
++	if indices == nil {
++		indices = parseFilterResponse(content, total)
++		textParsed = indices != nil
++	}
++	verdict.received = len(calls) > 0 || strings.TrimSpace(content) != ""
++	verdict.malformed = toolMalformed
++	if !toolDecision && !textParsed && verdict.received {
++		verdict.malformed = true
++	}
++	verdict.parsed = (toolDecision || textParsed) && !verdict.malformed
++	return indices, verdict
++}

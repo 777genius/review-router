@@ -1,4 +1,8 @@
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
+import { acceptOcrManagedReviewResult } from '../../../src/review-orchestration/infrastructure/ocr-review-managed-run';
+import type { OcrNativeComment } from '../../../src/review-orchestration/infrastructure/ocr-review-outcome-contract';
+import { normalizeReviewObservation } from '../../../src/review-orchestration/infrastructure/review-observation-normalizer';
+import { mapLinesToPositions } from '../../../src/utils/diff';
 import {
   ReviewExecutionProviderKind,
   ReviewTaskKind,
@@ -90,6 +94,247 @@ describe('production review projection coverage', () => {
       ]);
     }
   );
+
+  it('retains the two producer-classified production bugs from five accepted OCR findings', async () => {
+    // Sanitized actual OCR messages: prose such as "validation"/"Add ... test"
+    // does not reverse the producer's bug classification. Test policy still applies.
+    const findings = [
+      {
+        path: 'general-ledger/src/modules/ledger-entries/services/ledger-processor.service.ts',
+        content:
+          'This read detects only collisions that have already committed; it does not make the new global source identity atomic with creation. Two concurrent batch messages with the same `(source_type_id, source_id)` but different accounts can both get an empty result, lock different account rows, and both insert successfully because the existing unique constraint also includes `account_id`. The in-batch validation does not cover concurrent/separate requests, and the added concurrency test uses one account, so that constraint masks the race. Enforce uniqueness for `(source_type_id, source_id)` in the database (after handling existing collisions), or serialize/check-and-insert that pair transactionally before documenting it as globally unique.',
+      },
+      {
+        path: 'general-ledger/src/modules/ledger-entries/services/ledger.service.ts',
+        content:
+          'Canonicalize `source_id` before checking uniqueness. `source_id` is accepted as a UUID by `@IsUUID`, which permits upper-case hex, while PostgreSQL stores/compares the `UUID` column canonically. Thus the same UUID in lower- and upper-case produces different Set keys and this check accepts the batch; after the first item is written, the consumer resolves the second to that same ledger entry and acknowledges it without creating its own posting. This reintroduces the silent batch-item loss this guard is intended to prevent. Add a mixed-case UUID test as well.',
+      },
+      {
+        path: 'general-ledger/src/modules/ledger-entries/consumers/create-transaction.consumer.batch.spec.ts',
+        content:
+          'These assertions pass if both deliveries are nacked and no completion event is published, because the loop is vacuously true.',
+      },
+      {
+        path: 'general-ledger/src/modules/ledger-entries/consumers/create-transaction.consumer.batch.spec.ts',
+        content:
+          'This final assertion can be satisfied by the completion event from the first delivery even if the post-reversal retry publishes no event.',
+      },
+      {
+        path: 'general-ledger/src/modules/ledger-entries/consumers/dlx.consumer.spec.ts',
+        content:
+          'Despite the test name, mockMessage has no batchid, so this expectation requires retrying a COMPLETED standalone request.',
+      },
+    ];
+    const paths = [...new Set(findings.map((finding) => finding.path))];
+    const envelope = await projectNativeOcrComments(
+      findings.map((finding) =>
+        nativeOcrComment({ ...finding, category: 'bug' })
+      ),
+      'unsafe_a();\nunsafe_b();',
+      paths
+    );
+    expect(envelope.coverage.state).toBe('complete');
+    expect(envelope.occurrences).toHaveLength(2);
+    expect(
+      envelope.occurrences.map(
+        (finding: { severity: string }) => finding.severity
+      )
+    ).toEqual(['major', 'major']);
+    expect(envelope.publishing.summary.allClear).toBe(false);
+    expect(envelope.publishing.summary.body).not.toContain('## No findings');
+    expect(envelope.publishing.summary.body).not.toContain('.spec.ts');
+    expect(envelope.mergeGate.conclusion).toBe('fail');
+  });
+
+  it('marks OCR verified spans and never re-anchors them through projection', async () => {
+    // §8.2: an OCR verified HEAD span keeps its exact range in the final
+    // placement. The colliding patch makes the legacy heuristic prefer the
+    // added line 2 (see the Codex control below).
+    const ocrFacts = {
+      ...authorizationFacts,
+      providerVoteLanes: [
+        {
+          providerKind: ReviewExecutionProviderKind.Ocr,
+          providerVoteIdentityHash: '6'.repeat(64),
+        },
+      ],
+    };
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts: ocrFacts,
+      pr: collidingPr(),
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [
+        {
+          workSlotId: 'ocr-slot',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Ocr,
+          required: true,
+          filePaths: ['src/a.ts'],
+        },
+      ],
+      uncoveredPaths: [],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const result = await builder.build({
+      acceptedEvidence: [
+        spanEvidence(
+          'ocr-slot',
+          ReviewExecutionProviderKind.Ocr,
+          ocrFacts.providerVoteLanes[0].providerVoteIdentityHash
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: ocrFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].anchorVerified).toBe(true);
+    expect(envelope.occurrences[0].placement).toMatchObject({
+      kind: 'inline',
+      path: 'src/a.ts',
+      line: 1,
+      endLine: 1,
+    });
+  });
+
+  it('drops committable suggestions when dedup expands separately verified OCR spans', async () => {
+    const envelope = await projectNativeOcrComments([
+      nativeOcrComment({
+        existingCode: 'unsafe_a();',
+        endLine: 1,
+        suggestionCode: 'safe_a();',
+      }),
+      nativeOcrComment({
+        existingCode: 'unsafe_b();',
+        startLine: 2,
+        suggestionCode: 'safe_b();',
+      }),
+    ]);
+
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].placement.kind).toBe('file');
+    expect(envelope.occurrences[0].suggestion).toBeUndefined();
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+    expect(envelope.publishing.summary.body).toContain(
+      'Unsafe user data corrupts stored record'
+    );
+  });
+
+  it.each([
+    { existingCode: null },
+    { existingCode: 'old_a();' },
+    { startLine: 2, endLine: 1 },
+  ])(
+    'keeps unverified OCR findings in file placement: %j',
+    async (unverified) => {
+      const envelope = await projectNativeOcrComments([
+        nativeOcrComment(unverified),
+      ]);
+
+      expect(envelope.occurrences).toHaveLength(1);
+      expect(envelope.occurrences[0].line).toBeUndefined();
+      expect(envelope.occurrences[0].placement.kind).toBe('file');
+      expect(envelope.occurrences[0].suggestion).toBeUndefined();
+      expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+      expect(envelope.publishing.summary.body).toContain(
+        'Unsafe user data corrupts stored record'
+      );
+      expect(envelope.publishing.summary.body).not.toContain('src/a.ts:1');
+    }
+  );
+
+  it('preserves an unanchored finding when the first added line is a comment', async () => {
+    const envelope = await projectNativeOcrComments(
+      [nativeOcrComment({ existingCode: null })],
+      '// New file header\nunsafe_b();'
+    );
+
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].placement.kind).toBe('file');
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+    expect(envelope.publishing.summary.body).not.toContain('src/a.ts:1');
+  });
+
+  it.each([
+    {
+      comment: nativeOcrComment(),
+      expected: { startLine: 1, line: 2, endLine: 2 },
+    },
+    {
+      comment: nativeOcrComment({
+        existingCode: 'unsafe_a();',
+        endLine: 1,
+        suggestionCode: 'safe_a();',
+      }),
+      expected: { line: 1, endLine: 1 },
+    },
+  ])(
+    'emits the verified OCR range in publication coordinates: $expected',
+    async ({ comment, expected }) => {
+      const envelope = await projectNativeOcrComments([comment]);
+      const [published] = envelope.publishing.inlineReviewChunks.flatMap(
+        (chunk: { comments: Record<string, unknown>[] }) => chunk.comments
+      );
+
+      expect(published).toMatchObject({ path: 'src/a.ts', ...expected });
+      if (!('startLine' in expected))
+        expect(published.startLine).toBeUndefined();
+      expect(envelope.occurrences[0].anchorVerified).toBe(true);
+      expect(envelope.occurrences[0].suggestion).toBe(comment.suggestionCode);
+    }
+  );
+
+  it('skips OCR comments outside assigned inventory without creating a blocking finding', async () => {
+    const envelope = await projectNativeOcrComments([
+      nativeOcrComment({
+        path: 'src/outside.ts',
+        existingCode: 'outside_unsafe();',
+        startLine: 0,
+        endLine: 0,
+      }),
+    ]);
+
+    expect(envelope.occurrences).toEqual([]);
+    expect(envelope.coverage.state).toBe('partial');
+    expect(envelope.mergeGate.blockingLineageIds).toEqual([]);
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+  });
+
+  it('keeps the legacy heuristic for non-verified Codex spans', async () => {
+    // Control: without the OCR verified marker the same span is re-anchored
+    // to the competing added line exactly as before (byte-identical legacy).
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts,
+      pr: collidingPr(),
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [assignment('codex-slot', true)],
+      uncoveredPaths: [],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const result = await builder.build({
+      acceptedEvidence: [
+        spanEvidence(
+          'codex-slot',
+          ReviewExecutionProviderKind.Codex,
+          authorizationFacts.providerVoteLanes[0].providerVoteIdentityHash
+        ),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].anchorVerified).toBeUndefined();
+    expect(envelope.occurrences[0].placement).toMatchObject({
+      kind: 'inline',
+      path: 'src/a.ts',
+      line: 2,
+    });
+  });
 
   it('still rejects required lifecycle coverage omitted by the current-diff plan', async () => {
     const builder = createProductionReviewProjectionBuilder({
@@ -887,6 +1132,78 @@ function acceptedEvidence(
   };
 }
 
+/** PR whose diff collides: the heuristic prefers the added line 2. */
+function collidingPr() {
+  const patch = [
+    '@@ -1,2 +1,2 @@',
+    '-function old() {',
+    '-  return old();',
+    '+function neu() {',
+    '+  return neu();',
+  ].join('\n');
+  return {
+    ...pr,
+    files: [
+      {
+        filename: 'src/a.ts',
+        status: 'modified' as const,
+        additions: 2,
+        deletions: 2,
+        changes: 4,
+        patch,
+      },
+    ],
+    diff: `diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n${patch}`,
+  };
+}
+
+/** One normalized finding with a verified single-line span at new line 1. */
+function spanEvidence(
+  workSlotId: string,
+  providerKind: ReviewExecutionProviderKind,
+  providerVoteIdentityHash: string
+) {
+  const payloadCanonicalJson = JSON.stringify({
+    payloadVersion: 2,
+    normalizedFindings: [
+      {
+        category: 'correctness',
+        endLine: 1,
+        evidence: [],
+        message: 'The return value is wrong.',
+        normalizedFailureModeHash: '9'.repeat(64),
+        path: 'src/a.ts',
+        placementConfidence: null,
+        severity: 'major',
+        startLine: 1,
+        suggestion: 'return ok();',
+        title: 'Wrong return value',
+      },
+    ],
+    normalizedLifecycleRevalidations: [],
+  });
+  return {
+    workSlotId,
+    coverageManifest: fullCoverageManifest(workSlotId),
+    observation: {
+      observationId: `observation-${workSlotId}`,
+      eligibilityPolicyVersion: 'eligibility.v1',
+      providerKind,
+      providerInvocationKey: '7'.repeat(64),
+      providerVoteIdentityHash,
+      payloadCanonicalJson,
+      payloadHash: '8'.repeat(64),
+      byteCount: Buffer.byteLength(payloadCanonicalJson),
+      findingCount: 1,
+      actualModel: 'observed-model',
+      qualityFlags: [],
+      transportAttemptCount: 1,
+      schemaValidated: true,
+      fullyConsumed: true,
+    },
+  };
+}
+
 const authorizationFacts = {
   workspaceId: 'workspace-1',
   repositoryConnectionId: 'connection-1',
@@ -949,3 +1266,190 @@ const protocolLimits = {
   maxResultReportDurationMs: 60_000,
   maxReconciliationDurationMs: 60_000,
 };
+
+function nativeOcrComment(
+  overrides: Partial<OcrNativeComment> = {}
+): OcrNativeComment {
+  return {
+    path: 'src/a.ts',
+    content:
+      'Unsafe user data corrupts stored record\nThe changed runtime writes unsafe data and causes data loss for users.',
+    existingCode: 'unsafe_a();\nunsafe_b();',
+    suggestionCode: 'safe_a();\nsafe_b();',
+    startLine: 1,
+    endLine: 2,
+    category: 'correctness',
+    severity: 'high',
+    ...overrides,
+  };
+}
+
+async function projectNativeOcrComments(
+  comments: readonly OcrNativeComment[],
+  headContent = 'unsafe_a();\nunsafe_b();',
+  paths: readonly string[] = ['src/a.ts']
+) {
+  const patch = [
+    '@@ -1,2 +1,2 @@',
+    '-old_a();',
+    '-old_b();',
+    ...headContent.split('\n').map((line) => `+${line}`),
+  ].join('\n');
+  const context = {
+    ...pr,
+    files: paths.map((filename) => ({
+      ...pr.files[0],
+      filename,
+      additions: 2,
+      deletions: 2,
+      changes: 4,
+      patch,
+    })),
+    diff: paths
+      .map(
+        (filename) =>
+          `diff --git a/${filename} b/${filename}\n--- a/${filename}\n+++ b/${filename}\n${patch}`
+      )
+      .join('\n'),
+  };
+  const accepted = acceptOcrManagedReviewResult({
+    admission: authorizationFacts,
+    effectFacts: { effect: 'none' },
+    process: {
+      closed: true,
+      exitCode: 0,
+      signal: null,
+      stdoutTail: '',
+      stderrTail: '',
+    },
+    observedActualModel: 'observed-model',
+    observedRequestCount: 1,
+    expectedPaths: paths,
+    headFiles: new Map([
+      ...paths.map((filename) => [filename, headContent] as const),
+      ['src/outside.ts', 'outside_unsafe();'],
+    ]),
+    diffPositions: new Map(
+      paths.map((filename) => [filename, mapLinesToPositions(patch)])
+    ),
+    resultBytes: Buffer.from(
+      JSON.stringify({
+        comments: comments.map((comment) => ({
+          path: comment.path,
+          content: comment.content,
+          existing_code: comment.existingCode,
+          suggestion_code: comment.suggestionCode,
+          start_line: comment.startLine,
+          end_line: comment.endLine,
+          category: comment.category,
+          severity: comment.severity,
+        })),
+        manifest: {
+          schema_version: 'ocr.run-manifest/v1',
+          operation: 'review',
+          input: {
+            mode: 'range',
+            resolved_base: authorizationFacts.mergeBaseSha,
+            resolved_head: authorizationFacts.headSha,
+          },
+        },
+        reviewrouter_outcome: {
+          schema_version: 'reviewrouter.ocr-outcome/v1',
+          run_stop_cause: null,
+          grouping:
+            paths.length === 1
+              ? { state: 'not_applicable', reason: 'single_file' }
+              : { state: 'completed', reason: null },
+          groups: [
+            {
+              paths,
+              main_completed: true,
+              stop_cause: null,
+              rounds: { configured: 2, started: 1, completed: 1 },
+              phases: {
+                plan: { state: 'not_applicable', reason: 'threshold' },
+                compression: { state: 'not_applicable', reason: 'no_zone' },
+                relocation: { state: 'completed', reason: null },
+                filter: { state: 'completed', reason: null },
+              },
+              filter_decision_valid: true,
+            },
+          ],
+        },
+      })
+    ),
+  });
+  expect(accepted.normalized.findings).toHaveLength(
+    comments.filter((comment) => paths.includes(comment.path)).length
+  );
+  const payload = normalizeReviewObservation({
+    workSlotId: 'ocr-slot',
+    attemptOrdinal: 1,
+    providerName: 'ocr/managed',
+    requestedModel: 'requested-model',
+    result: {
+      content: '',
+      findings: [...accepted.normalized.findings],
+      actualModel: accepted.actualModel,
+      usage: accepted.usage,
+    },
+    qualityFlags: accepted.partial
+      ? ['context_inspection_incomplete', 'provider_warning']
+      : [],
+  });
+  const evidence = acceptedEvidence(
+    'ocr-slot',
+    createReviewPromptCoverageManifest({
+      workSlotId: 'ocr-slot',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      assignedPaths: paths,
+      pathCoverage: paths.map((filename) => ({
+        path: filename,
+        kind: ReviewPromptPathCoverageKind.FullPatch,
+        contentHash: '8'.repeat(64),
+      })),
+    })
+  );
+  const builder = createProductionReviewProjectionBuilder({
+    authorizationFacts: {
+      ...authorizationFacts,
+      providerVoteLanes: [
+        {
+          providerKind: ReviewExecutionProviderKind.Ocr,
+          providerVoteIdentityHash:
+            authorizationFacts.providerVoteLanes[0].providerVoteIdentityHash,
+        },
+      ],
+    },
+    pr: context,
+    config: { ...DEFAULT_CONFIG, failOnSeverity: 'major' },
+    protocolLimits,
+    assignments: [
+      {
+        workSlotId: 'ocr-slot',
+        taskKind: ReviewTaskKind.FindingDiscovery,
+        providerKind: ReviewExecutionProviderKind.Ocr,
+        required: true,
+        filePaths: paths,
+      },
+    ],
+    uncoveredPaths: [],
+    uncoveredLifecycleTargetIds: [],
+    lifecycleInventory: completeLifecycleInventory(),
+  });
+  const projection = await builder.build({
+    acceptedEvidence: [
+      {
+        ...evidence,
+        observation: {
+          ...evidence.observation,
+          ...payload,
+          providerKind: ReviewExecutionProviderKind.Ocr,
+        },
+      },
+    ],
+    exhaustedWorkSlotIds: [],
+    reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+  });
+  return JSON.parse(projection.projectionEnvelopeCanonicalJson);
+}

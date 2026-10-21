@@ -2,7 +2,7 @@ import type { ReviewInvestigationTurnBrief } from '../domain/investigation-state
 import { canonicalJson, sha256 } from '../domain/canonical-json';
 
 export const REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT =
-  'review_investigation_turn_prompt.v4' as const;
+  'review_investigation_turn_prompt.v5' as const;
 
 const TURN_INSTRUCTIONS = Object.freeze([
   'REVIEW INVESTIGATION TURN CONTRACT:',
@@ -17,6 +17,8 @@ const TURN_INSTRUCTIONS = Object.freeze([
   'When inspected evidence reveals additional review scope, add a provider-neutral obligationProposals entry instead of silently broadening an existing obligation.',
   'Each obligation proposal must contain exactly kind, path, revision, and riskPriority. Use the repository-relative path and either head or merge_base revision; the control plane derives canonical identities and hashes. Use only schema-listed kinds; never provide an obligation ID, state, authority decision, or receipt claim.',
   'Obligation proposals are non-authoritative and remain open until the control plane validates and independently closes them with accepted evidence.',
+  'Each finding must include in its own evidenceOperationReceiptIds every receipt in a contiguous file_read chain for that exact finding path at revision="head", starting at startByte=0 and covering the file through EOF; the terminal read must report eof=true, making its authenticated receipt complete=true. Search results, merge_base reads, and partial snippets do not satisfy this requirement.',
+  'If you cannot obtain that complete HEAD receipt chain, omit the finding and leave its related obligation open. Never fabricate receipts or claim unread coverage.',
   'Do not close an obligation without complete operation receipt evidence.',
   'Set criticDecision to null during discovery turns. During critic turns, set it to exactly accept, veto, or abstain.',
 ]);
@@ -26,7 +28,7 @@ export const REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT_HASH = sha256(
     contract: REVIEW_INVESTIGATION_TURN_PROMPT_CONTRACT,
     instructions: TURN_INSTRUCTIONS,
     turnBriefEncoding:
-      'REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:<canonical-json-base64url>',
+      'REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:<canonical-json>',
     operationBudgetEncoding:
       'REVIEWROUTER_CONTEXT_OPERATION_BUDGET:<positive-integer>',
   })
@@ -46,15 +48,12 @@ export function buildReviewInvestigationTurnPrompt(input: {
   ) {
     throw new Error('review_investigation_operation_budget_invalid');
   }
-  const encodedBrief = Buffer.from(
-    canonicalJson(input.turnBrief),
-    'utf8'
-  ).toString('base64url');
+  const canonicalBrief = canonicalJson(input.turnBrief);
   return [
     input.reviewContextPrompt,
     '',
     ...TURN_INSTRUCTIONS,
     `REVIEWROUTER_CONTEXT_OPERATION_BUDGET:${input.maxGatewayOperations}`,
-    `REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_BASE64URL:${encodedBrief}`,
+    `REVIEWROUTER_INVESTIGATION_TURN_BRIEF_V1_JSON:${canonicalBrief}`,
   ].join('\n');
 }

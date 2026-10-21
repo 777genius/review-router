@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import gptSolModel from './gpt-5.6-sol-model-0.147.0.json';
 
 // Private, bounded ModelInfo subset for Codex rust-v0.147.0 / be6e8eac.
 // Values: frozen action-mimo-0147-bounded-catalog-input.json (SHA256 b6190be1...).
@@ -98,7 +99,17 @@ export async function prepareAccountGatewayModelCatalog(
   codexHome: string | undefined,
   gatewayConfiguration: readonly string[]
 ): Promise<string | undefined> {
-  if (!isAccountGatewayMiMoModel(model)) return undefined;
+  // Frozen GPT metadata from codex-rs/models-manager/models.json at be6e8eac.
+  // Source SHA256: 384ff2e0ca67f65d2866e422e2ec7dfa5ed9e3fec7a84fe14005247a7087a302.
+  // Preserve all other model metadata and instructions; expose the gateway's
+  // MCP tools directly instead of code execution or deferred tool search.
+  const catalogModel =
+    model === gptSolModel.slug
+      ? { ...gptSolModel, tool_mode: 'direct', supports_search_tool: false }
+      : isAccountGatewayMiMoModel(model)
+        ? mimoModel
+        : undefined;
+  if (!catalogModel) return undefined;
   if (!codexHome || !path.isAbsolute(codexHome))
     throw new Error('account_gateway_catalog_home_unavailable');
 
@@ -106,7 +117,7 @@ export async function prepareAccountGatewayModelCatalog(
   const setting = `model_catalog_json=${JSON.stringify(catalogPath)}`;
   await fs.writeFile(
     catalogPath,
-    JSON.stringify({ models: [mimoModel] }) + '\n',
+    JSON.stringify({ models: [catalogModel] }) + '\n',
     { mode: 0o600 }
   );
   await fs.chmod(catalogPath, 0o600);

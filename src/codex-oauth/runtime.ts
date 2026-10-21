@@ -138,19 +138,36 @@ export interface CodexOAuthV2ReviewRunnerPort {
   run(input: {
     readonly apiUrl: string;
     readonly audience: string;
-    readonly providerInstanceId: string;
+    readonly providerInstanceId?: string;
     readonly workflowSchemaVersion: number;
     readonly repository: string;
     readonly pullRequestNumber: number;
     readonly headSha: string;
     readonly workspacePath: string;
-    readonly codexHome: string;
+    /** Absent on the managed OCR path: no Codex home exists there. */
+    readonly codexHome?: string;
     readonly codexBinaryPath?: string;
+    /** Direct API credentials remain local; authenticated capture owns policy. */
+    readonly providerApi?: {
+      readonly runtimeConfig: import('../control-plane/runtime-config').AdmittedRuntimeConfig;
+      readonly signal: AbortSignal;
+      readonly controlPlane: import('../review-orchestration/infrastructure/review-action-v2-control-plane-adapter').ReviewActionV2ControlPlaneAdapter;
+      readonly credentialLease: () => import('../providers/prepared-invocation').ProviderCredentialLease;
+    };
     readonly accountGateway?: {
       readonly runtimeConfig: import('../control-plane/runtime-config').AdmittedRuntimeConfig;
       readonly signal?: AbortSignal;
       readonly controlPlane: import('../review-orchestration/infrastructure/review-action-v2-control-plane-adapter').ReviewActionV2ControlPlaneAdapter;
       readonly modelTransport: import('../review-orchestration/infrastructure/account-gateway-model-transport').LocalGatewayModelTransport;
+    };
+    /**
+     * Managed OCR run seam (plan 56). Present only for a captured approved
+     * agentKind=ocr; Codex runs never receive it and never see its layout.
+     */
+    readonly ocr?: {
+      readonly run: import('./ocr-managed-bootstrap').OcrManagedRunHandle;
+      /** Terminal Gateway effect facts of this run; undefined = no failure fact. */
+      readonly effectFacts: () => Readonly<{ effect: string }> | undefined;
     };
     /**
      * Short-lived GitHub capability restricted by the control plane to

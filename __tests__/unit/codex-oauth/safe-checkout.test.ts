@@ -3,7 +3,12 @@ import { validateAccountGatewayCheckout } from '../../../src/codex-oauth/account
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { createIsolatedCheckoutWorkspace } from '../../../src/codex-oauth/safe-checkout';
+import childProcess from 'child_process';
+import { pathToFileURL } from 'url';
+import {
+  createIsolatedCheckoutWorkspace,
+  safeCheckoutRepository,
+} from '../../../src/codex-oauth/safe-checkout';
 
 describe('Codex OAuth safe checkout workspace', () => {
   let tempRoot: string;
@@ -13,8 +18,134 @@ describe('Codex OAuth safe checkout workspace', () => {
   });
 
   afterEach(async () => {
+    jest.restoreAllMocks();
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
+
+  it.each([true, false])(
+    'checks out exact Git objects with OCR range=%s and no unrelated refs',
+    async (range) => {
+      const origin = path.join(tempRoot, 'origin');
+      const workspace = path.join(tempRoot, 'checkout');
+      await fs.mkdir(origin);
+      const gitEnv = Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))
+      );
+      const git = (cwd: string, ...args: string[]) =>
+        childProcess
+          .execFileSync(
+            'git',
+            [
+              '-C',
+              cwd,
+              '-c',
+              'user.name=iliya',
+              '-c',
+              'user.email=iliyazelenkog@gmail.com',
+              ...args,
+            ],
+            {
+              encoding: 'utf8',
+              stdio: ['ignore', 'pipe', 'pipe'],
+              env: {
+                ...gitEnv,
+                GIT_CONFIG_NOSYSTEM: '1',
+                GIT_CONFIG_GLOBAL: '/dev/null',
+              },
+            }
+          )
+          .trim();
+      git(origin, 'init');
+      await fs.writeFile(path.join(origin, 'calc.ts'), 'export const x = 1;\n');
+      git(origin, 'add', '.');
+      git(origin, 'commit', '-m', 'base');
+      const mergeBaseSha = git(origin, 'rev-parse', 'HEAD');
+      for (const value of [2, 3]) {
+        await fs.writeFile(
+          path.join(origin, 'calc.ts'),
+          `export const x = ${value};\n`
+        );
+        git(origin, 'commit', '-am', 'change');
+      }
+      const headSha = git(origin, 'rev-parse', 'HEAD');
+      git(origin, 'checkout', '-b', 'unrelated', mergeBaseSha);
+      await fs.writeFile(path.join(origin, 'unrelated.ts'), 'not assigned\n');
+      git(origin, 'add', '.');
+      git(origin, 'commit', '-m', 'unrelated');
+      const unrelatedSha = git(origin, 'rev-parse', 'HEAD');
+      git(origin, 'tag', 'unrelated-tag');
+      const actualSpawn = childProcess.spawn;
+      // Only replace transport to the local synthetic remote; production still
+      // constructs its exact Git commands, strips ambient auth and selects refs.
+      jest.spyOn(childProcess, 'spawn').mockImplementation(((
+        command: string,
+        args: readonly string[],
+        options: childProcess.SpawnOptions
+      ) =>
+        actualSpawn(
+          command,
+          args.map((arg) =>
+            arg === 'https://github.com/fixture/repository.git'
+              ? pathToFileURL(origin).href
+              : arg === 'protocol.file.allow=never'
+                ? 'protocol.file.allow=always'
+                : arg
+          ),
+          options
+        )) as typeof childProcess.spawn);
+      const input = {
+        repository: 'fixture/repository',
+        headSha,
+        workspacePath: workspace,
+        token: 'synthetic-token',
+        signal: new AbortController().signal,
+        ...(range ? { mergeBaseSha } : {}),
+      };
+      await safeCheckoutRepository(input);
+      expect(git(workspace, 'rev-parse', 'HEAD')).toBe(headSha);
+      expect(await fs.readFile(path.join(workspace, 'calc.ts'), 'utf8')).toBe(
+        'export const x = 3;\n'
+      );
+      if (range) {
+        expect(git(workspace, 'merge-base', mergeBaseSha, headSha)).toBe(
+          mergeBaseSha
+        );
+        expect(git(workspace, 'rev-parse', '--is-shallow-repository')).toBe(
+          'false'
+        );
+      } else {
+        expect(git(workspace, 'rev-parse', '--is-shallow-repository')).toBe(
+          'true'
+        );
+      }
+      expect(() => git(workspace, 'cat-file', '-e', unrelatedSha)).toThrow();
+      expect(git(workspace, 'tag', '--list')).toBe('');
+      const config = await fs.readFile(
+        path.join(workspace, '.git/config'),
+        'utf8'
+      );
+      expect(config).not.toContain('synthetic-token');
+      expect(config).not.toContain('extraheader');
+    }
+  );
+
+  it.each(['--all', 'a'.repeat(39), `${'a'.repeat(40)}\n`])(
+    'rejects an invalid OCR merge-base before spawning Git (%p)',
+    async (mergeBaseSha) => {
+      const spawn = jest.spyOn(childProcess, 'spawn');
+      const input = {
+        repository: 'fixture/repository',
+        headSha: 'a'.repeat(40),
+        mergeBaseSha,
+        workspacePath: path.join(tempRoot, 'checkout'),
+        token: 'synthetic-token',
+      };
+      await expect(safeCheckoutRepository(input)).rejects.toThrow(
+        'codex_oauth_invalid_head_sha'
+      );
+      expect(spawn).not.toHaveBeenCalled();
+    }
+  );
 
   it('requires an immutable safe admitted config on gateway checkout', () => {
     const runtimeConfig = {

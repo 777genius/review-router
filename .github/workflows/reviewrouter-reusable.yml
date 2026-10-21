@@ -38,6 +38,11 @@ on:
         required: false
         type: string
         default: ''
+      review_request_id:
+        description: 'Durable App review request identifier'
+        required: false
+        type: string
+        default: ''
       review_app_client_id:
         description: 'Optional user-owned GitHub App client ID for static-mode bot comments'
         required: false
@@ -55,6 +60,11 @@ on:
         default: disabled
       provider_instance_id:
         description: 'Server-registered provider instance used by the T0 lane'
+        required: false
+        type: string
+        default: ''
+      provider_api_auth_mode:
+        description: 'Captured direct provider API authentication: empty or openrouter-api'
         required: false
         type: string
         default: ''
@@ -114,6 +124,8 @@ jobs:
         env:
           REVIEW_ACTION_V2_MODE: ${{ inputs.review_action_v2_mode }}
           PROVIDER_INSTANCE_ID: ${{ inputs.provider_instance_id }}
+          PROVIDER_API_AUTH_MODE: ${{ inputs.provider_api_auth_mode }}
+          REVIEW_REQUEST_ID: ${{ inputs.review_request_id }}
           REVIEW_HEAD_SHA: ${{ inputs.review_head_sha }}
           WORKFLOW_SCHEMA_VERSION: ${{ inputs.workflow_schema_version }}
           RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
@@ -126,8 +138,22 @@ jobs:
               exit 1
               ;;
           esac
+          case "$PROVIDER_API_AUTH_MODE" in
+            ''|openrouter-api) ;;
+            *) echo "::error::Invalid provider_api_auth_mode."; exit 1 ;;
+          esac
+          if [ -n "$PROVIDER_API_AUTH_MODE" ]; then
+            if [ "$REVIEW_ACTION_V2_MODE" != "t0" ] || [ -n "$PROVIDER_INSTANCE_ID" ]; then
+              echo "::error::Direct provider API execution requires T0 without rotating provider inputs."
+              exit 1
+            fi
+            if ! [[ "$REVIEW_REQUEST_ID" =~ ^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$ ]]; then
+              echo "::error::Direct provider API execution requires a durable review_request_id."
+              exit 1
+            fi
+          fi
           if [ "$REVIEW_ACTION_V2_MODE" = "t0" ]; then
-            if [ -z "$PROVIDER_INSTANCE_ID" ]; then
+            if [ -z "$PROVIDER_INSTANCE_ID" ] && [ -z "$PROVIDER_API_AUTH_MODE" ]; then
               echo "::error::provider_instance_id is required for the t0 lane."
               exit 1
             fi
@@ -163,9 +189,11 @@ jobs:
       static_runtime_env_json: ${{ inputs.static_runtime_env_json }}
       pr_number: ${{ inputs.pr_number }}
       review_head_sha: ${{ inputs.review_head_sha }}
+      review_request_id: ${{ inputs.review_request_id }}
       review_app_client_id: ''
       review_app_repository: ''
       provider_instance_id: ${{ inputs.provider_instance_id }}
+      provider_api_auth_mode: ${{ inputs.provider_api_auth_mode }}
       workflow_schema_version: ${{ inputs.workflow_schema_version }}
       review_timeout_minutes: ${{ inputs.review_timeout_minutes }}
       max_changed_lines: ${{ inputs.max_changed_lines }}

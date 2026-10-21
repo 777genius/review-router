@@ -201,7 +201,10 @@ describe('production reusable workflows', () => {
         [original.replace('contents: read', 'contents: write'), 1],
         [original.replace('required: false', 'required: true'), 1],
         [
-          original.replace(`        default: ${REVIEW_ROUTER_API_ORIGIN}\n`, ''),
+          original.replace(
+            `        default: ${REVIEW_ROUTER_API_ORIGIN}\n`,
+            ''
+          ),
           1,
         ],
         [
@@ -285,6 +288,92 @@ describe('production reusable workflows', () => {
         REVIEWROUTER_RUNTIME_CONFIG_MODE: 'static',
       }).status
     ).toBe(1);
+  });
+
+  it('isolates direct provider API T0 from OAuth preparation and rejects alternate authority', () => {
+    for (const source of [
+      '.github/workflows/reviewrouter-reusable.yml',
+      '.github/workflows/reviewrouter-execution-reusable.yml',
+    ]) {
+      expect(
+        parseWorkflow(source).on?.workflow_call?.inputs?.provider_api_auth_mode
+          ?.default
+      ).toBe('');
+    }
+    const env: NodeJS.ProcessEnv = {
+      RR_REVIEW_ACTION_LANE: 't0',
+      RR_PROVIDER_API_AUTH_MODE: 'openrouter-api',
+      RR_REVIEW_REQUEST_ID: 'review-request-1',
+      RR_RUNTIME_REF: '0123456789abcdef0123456789abcdef01234567',
+      RR_WORKFLOW_REPOSITORY: '777genius/review-router',
+      RR_WORKFLOW_SHA: '0123456789abcdef0123456789abcdef01234567',
+      RR_REVIEW_TIMEOUT_MINUTES: '240',
+      REVIEWROUTER_RUNTIME_CONFIG_MODE: 'oidc',
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: 'false',
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_REPOSITORY: 'owner/repo',
+    };
+    const admitted = runExecutionPreparation(env);
+    expect(admitted.status).toBe(0);
+    expect(admitted.output).toContain('can_run=true\n');
+    const steps =
+      parseWorkflow('.github/workflows/reviewrouter-execution-reusable.yml')
+        .jobs?.review?.steps ?? [];
+    const selected = steps.filter((step) =>
+      runInNewContext(
+        (step.if ?? '${{ true }}')
+          .slice(3, -2)
+          .replaceAll('steps.provider-tooling', 'steps["provider-tooling"]'),
+        {
+          inputs: {
+            review_action_lane: 't0',
+            codex_session_mode: '',
+            provider_api_auth_mode: 'openrouter-api',
+          },
+          steps: {
+            runtime: {
+              outputs: { can_run: 'true', app_token_needed: 'false' },
+            },
+            'provider-tooling': { outputs: {} },
+          },
+          env: {},
+        }
+      )
+    );
+    expect(
+      selected
+        .filter((step) => step.uses?.startsWith('actions/checkout@'))
+        .map((step) => step.name)
+    ).toEqual(['Checkout ReviewRouter runtime']);
+    expect(
+      selected
+        .filter((step) => step.name?.startsWith('Run ReviewRouter'))
+        .map((step) => step.name)
+    ).toEqual(['Run ReviewRouter T0 provider API']);
+    expect(
+      selected.some(
+        (step) => step.name === 'Resolve ReviewRouter runtime provider tooling'
+      )
+    ).toBe(false);
+    expect(
+      selected.find((step) => step.name === 'Run ReviewRouter T0 provider API')
+        ?.env
+    ).toMatchObject({
+      REVIEW_ROUTER_MODE: 'provider-api',
+      INPUT_OPENROUTER_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}',
+    });
+    for (const mismatch of [
+      { RR_PROVIDER_INSTANCE_ID: 'codex-rotating:1' },
+      { RR_CODEX_SESSION_MODE: 'account-gateway' },
+      { CODEX_AUTH_JSON_PRESENT: '1' },
+      { CODEX_CONFIG_TOML_PRESENT: '1' },
+      { OPENAI_API_KEY_PRESENT: '1' },
+      { REVIEW_APP_PRIVATE_KEY_PRESENT: '1' },
+      { RR_STATIC_RUNTIME_ENV_JSON: '{"CODEX_MODEL":"other"}' },
+      { REVIEWROUTER_RUNTIME_CONFIG_MODE: 'static' },
+      { RR_REVIEW_REQUEST_ID: '' },
+    ])
+      expect(runExecutionPreparation({ ...env, ...mismatch }).status).toBe(1);
   });
 
   it.each(['', 'codex-oauth', 'openai-api', 'mimo-token-plan-api'])(
@@ -646,7 +735,11 @@ describe('production reusable workflows', () => {
             .slice(3, -2)
             .replaceAll('steps.provider-tooling', 'steps["provider-tooling"]'),
           {
-            inputs: { review_action_lane: lane, codex_session_mode: mode },
+            inputs: {
+              review_action_lane: lane,
+              codex_session_mode: mode,
+              provider_api_auth_mode: '',
+            },
             steps: {
               runtime: { outputs: { can_run: canRun } },
               'provider-tooling': {

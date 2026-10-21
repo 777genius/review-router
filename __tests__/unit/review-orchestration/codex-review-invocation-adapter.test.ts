@@ -10,6 +10,7 @@ import {
 import type { CodexProvider } from '../../../src/providers/codex';
 import { PromptBuilder } from '../../../src/analysis/llm/prompt-builder';
 import type { ReviewConfig } from '../../../src/types';
+import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import type { ContextGatewayInvocationSessionFactoryPort } from '../../../src/review-orchestration/infrastructure/context-gateway-invocation-session';
 import { logger } from '../../../src/utils/logger';
 import {
@@ -55,181 +56,292 @@ const emptyProbePlan = createReviewInvestigationProbePlan({
 });
 
 describe('Codex T0 prepared invocation', () => {
-  it('composes the native single plan and two manifests without executing a provider', async () => {
-    const config = {
-      providers: ['codex/gpt-test'],
-      providerRetries: 1,
-      runTimeoutSeconds: 10,
-      diffMaxBytes: 50_000,
-      smartDiffCompaction: true,
-    } as ReviewConfig;
-    const auth = {
-      ...authorization,
-      facts: { ...authorization.facts, workflowIdentityHash: hash('workflow') },
-    };
-    const patch = '@@ -0,0 +1 @@\n+return price + taxRatePercent;';
-    const pr = {
-      ...assignment.context,
-      files: [
-        {
-          filename: 'tax.js',
-          status: 'added' as const,
-          additions: 1,
-          deletions: 0,
-          changes: 1,
-          patch,
-        },
-      ],
-      diff: patch,
-      additions: 1,
-    };
-    const prepareProvider = jest.fn(async () => preparedInvocation('request'));
-    const provider = {
-      name: 'codex/gpt-test',
-      describePreparedEnvironmentContract: jest.fn().mockReturnValue({}),
-      prepareInvocation: prepareProvider,
-      executePreparedInvocation: jest.fn(),
-    } as unknown as CodexProvider;
-    const inventoryValue = {
-      inventoryVersion: 2 as const,
-      mergeBaseTreeOid: '5'.repeat(40),
-      headTreeOid: '4'.repeat(40),
-      entries: [
-        {
-          status: 'added' as const,
-          beforePath: null,
-          afterPath: 'tax.js',
-          beforeMode: '000000',
-          afterMode: '100644',
-          beforeOid: '0'.repeat(40),
-          afterOid: '6'.repeat(40),
-          beforeContentKind: 'absent' as const,
-          beforeByteCount: null,
-          beforeLineCount: null,
-          afterContentKind: 'text' as const,
-          afterByteCount: 32,
-          afterLineCount: 1,
-          contentKind: 'text' as const,
-          byteCount: 32,
-          lineCount: 1,
-          generated: false,
-          generatedPolicySource: null,
-        },
-      ],
-    };
-    const gateway = {
-      planningConfig: jest.fn().mockResolvedValue(gatewayConfig),
-      canonicalInventory: jest.fn().mockResolvedValue({
-        ...inventoryValue,
-        itemCount: 1,
-        inventoryHash: hash(canonicalJson(inventoryValue)),
-      }),
-      open: jest.fn(),
-    } as unknown as ContextGatewayInvocationSessionFactoryPort;
-    const input = {
-      authorization: auth,
-      pr,
-      config,
-      provider,
-      contextGateway: gateway,
-      lifecycleTargets: [],
-      liveLifecycleStateHash: hash('lifecycle'),
-      runtimeConfigVersion: ' test ',
-    };
-    prepareProvider.mockImplementationOnce(async () => {
-      // Simulate replacement while the first native preparation is awaiting.
-      input.runtimeConfigVersion = 'changed-during-preparation';
-      input.provider = {
-        name: 'codex/replaced',
-        prepareInvocation: async () => {
-          throw new Error('replaced provider');
-        },
+  it.each([false, true])(
+    'leases a direct model key only at execution, with Context Gateway=%s',
+    async (withContext) => {
+      const prepared = preparedInvocation('prepared prompt');
+      const execute = jest.fn().mockResolvedValue({
+        content: '{}',
+        findings: [],
+        revalidations: [],
+        actualModel: 'gpt-test',
+      });
+      const provider = {
+        name: prepared.providerName,
+        describePreparedEnvironmentContract: jest
+          .fn()
+          .mockReturnValue({ PATH: '/usr/bin' }),
+        prepareInvocation: jest.fn().mockResolvedValue(prepared),
+        executePreparedInvocation: execute,
       } as unknown as CodexProvider;
-      input.contextGateway = {
-        planningConfig: async () => {
-          throw new Error('replaced gateway');
+      const promptBuilder = {
+        buildPreparedV2: jest.fn().mockResolvedValue({
+          version: 'prepared_review_prompt.v3',
+          investigationContextPrompt: 'context',
+          prompt: 'prepared prompt',
+          pathCoverage: [],
+          investigationProbePlan: emptyProbePlan,
+        }),
+      } as unknown as PromptBuilder;
+      const session = {
+        providerConfig: gatewayConfig,
+        credentialLease: {
+          environment: {
+            REVIEWROUTER_CONTEXT_GATEWAY_SECRET: 'context-capability',
+          },
         },
-      } as unknown as ContextGatewayInvocationSessionFactoryPort;
-      return preparedInvocation('request');
-    });
-    const result = await prepareSingleT0ReviewPlan(input);
-    input.runtimeConfigVersion = ' test ';
-    input.provider = provider;
-    input.contextGateway = gateway;
-    const compatibilityKey = hashIncrementalCompatibility(config, ' test ');
-    expect(result.planned).toEqual(
-      planAssignments({
-        ...input,
-        providerName: provider.name,
-        compatibilityKey,
-      })
-    );
-    expect(result.compatibilityKey).toBe(hash(result.compatibilityPreimage));
-    const ordinary = new GeneratedProviderInvocationManifestAssembler(
-      auth,
-      config,
-      compatibilityKey
-    );
-    expect(result.invocationManifest).toEqual(
-      await ordinary.assemble(result.invocation)
-    );
-    expect(result.investigationManifest).toEqual(
-      await ordinary.assemble(result.investigation)
-    );
-    expect(
-      JSON.parse(result.invocationManifest.manifestCanonicalJson)
-        .reviewConfigHash
-    ).toBe(hash(result.reviewConfigPreimage));
-    expect(result.investigation.investigationSeedEnvelope).not.toBeNull();
-    expect(result.handoff.assignmentManifestCanonicalJson).toBe(
-      result.planned.plan.assignmentManifestCanonicalJson
-    );
-    expect(result.handoff.invocationManifestCanonicalJson).toBe(
-      result.invocationManifest.manifestCanonicalJson
-    );
-    expect(result.handoff.investigationManifestCanonicalJson).toBe(
-      result.investigationManifest.manifestCanonicalJson
-    );
-    expect(hash(result.handoff.probePlan)).toBe(
-      result.handoff.seedEnvelope.probePlanHash
-    );
-    expect(JSON.parse(result.handoff.probePlan)).not.toHaveProperty('planHash');
-    expect(hash(result.handoff.reviewPrompt)).toBe(
-      result.handoff.seedEnvelope.reviewPromptHash
-    );
-    expect(result.handoff.scope.workspaceId).toBe(auth.facts.workspaceId);
-    expect(result.handoff.revision.headSha).toBe(auth.facts.headSha);
-    expect(result.handoff.sourceRunId).toBe(auth.facts.sourceRunId);
-    for (const kind of ['invocation', 'investigation'] as const) {
-      const manifest = JSON.parse(
-        result.handoff[`${kind}ManifestCanonicalJson`]
+        seal: jest.fn().mockResolvedValue({
+          attestationId: 'attestation-1',
+          attestationHash: hash('attestation'),
+        }),
+        dispose: jest.fn().mockResolvedValue(undefined),
+      };
+      const gateway = withContext
+        ? ({
+            planningConfig: jest.fn().mockResolvedValue(gatewayConfig),
+            open: jest.fn().mockResolvedValue(session),
+          } as unknown as ContextGatewayInvocationSessionFactoryPort)
+        : undefined;
+      const lease = jest.fn(() => ({
+        environment: { OPENROUTER_API_KEY: 'unit-direct-key' },
+      }));
+      const adapter = new CodexReviewInvocationAdapter(
+        provider,
+        promptBuilder,
+        [assignment],
+        10_000,
+        true,
+        gateway,
+        false,
+        'xhigh',
+        lease
       );
-      for (const [key, preimage] of Object.entries(
-        result.handoff.components[kind]
-      )) {
-        expect(manifest[key]).toBe(preimage === null ? null : hash(preimage));
-      }
+      const invocation = await adapter.prepare({
+        workSlot: assignment.workSlot,
+        attemptOrdinal: 1,
+      });
+      expect(lease).not.toHaveBeenCalled();
+      expect(JSON.stringify(invocation)).not.toContain('unit-direct-key');
+      expect(JSON.stringify(gatewayConfig)).not.toContain('OPENROUTER_API_KEY');
+      await adapter.execute({
+        invocation,
+        manifest: manifestFixture,
+        lease: leaseFixture,
+        sourceExecutionId: 'execution-1',
+        sourceReviewRevisionHash: hash('revision'),
+        signal: new AbortController().signal,
+      });
+      expect(execute).toHaveBeenCalledWith(
+        prepared,
+        {
+          environment: {
+            OPENROUTER_API_KEY: 'unit-direct-key',
+            ...(withContext
+              ? { REVIEWROUTER_CONTEXT_GATEWAY_SECRET: 'context-capability' }
+              : {}),
+          },
+        },
+        expect.any(AbortSignal)
+      );
+      expect(session.credentialLease.environment).toEqual({
+        REVIEWROUTER_CONTEXT_GATEWAY_SECRET: 'context-capability',
+      });
+      expect(JSON.stringify(invocation)).not.toContain('unit-direct-key');
     }
-    expect(
-      result.planned.assignments[0]!.workSlot.providerVoteIdentityHash
-    ).toBe(hash('vote'));
-    expect(provider.prepareInvocation).toHaveBeenCalledTimes(2);
-    expect(provider.executePreparedInvocation).not.toHaveBeenCalled();
-    expect(gateway.open).not.toHaveBeenCalled();
-    await expect(
-      prepareSingleT0ReviewPlan({
-        ...input,
-        pr: { ...pr, headSha: 'f'.repeat(40) },
-      })
-    ).rejects.toThrow('single_plan_authority_mismatch');
-    await expect(
-      prepareSingleT0ReviewPlan({
-        ...input,
-        config: { ...config, providerRetries: 2 },
-      })
-    ).rejects.toThrow('single_plan_scope_incomplete');
-    expect(provider.prepareInvocation).toHaveBeenCalledTimes(2);
-  });
+  );
+
+  it.each(['codex/gpt-test', 'openrouter/vendor/model'])(
+    'composes the native single %s plan and two manifests without executing a provider',
+    async (providerName) => {
+      const config = {
+        ...DEFAULT_CONFIG,
+        providers: [providerName],
+        synthesisModel: providerName,
+        providerLimit: 1,
+        providerMaxParallel: 1,
+        inlineMinAgreement: 1,
+        requiredHealthyProviders: [providerName],
+        fallbackProviders: [],
+        providerRetries: 1,
+        runTimeoutSeconds: 10,
+        diffMaxBytes: 50_000,
+        smartDiffCompaction: true,
+      } as ReviewConfig;
+      const auth = {
+        ...authorization,
+        facts: {
+          ...authorization.facts,
+          workflowIdentityHash: hash('workflow'),
+        },
+      };
+      const patch = '@@ -0,0 +1 @@\n+return price + taxRatePercent;';
+      const pr = {
+        ...assignment.context,
+        files: [
+          {
+            filename: 'tax.js',
+            status: 'added' as const,
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+            patch,
+          },
+        ],
+        diff: patch,
+        additions: 1,
+      };
+      const prepareProvider = jest.fn(async () =>
+        preparedInvocation('request', providerName)
+      );
+      const provider = {
+        name: providerName,
+        describePreparedEnvironmentContract: jest.fn().mockReturnValue({}),
+        prepareInvocation: prepareProvider,
+        executePreparedInvocation: jest.fn(),
+      } as unknown as CodexProvider;
+      const inventoryValue = {
+        inventoryVersion: 2 as const,
+        mergeBaseTreeOid: '5'.repeat(40),
+        headTreeOid: '4'.repeat(40),
+        entries: [
+          {
+            status: 'added' as const,
+            beforePath: null,
+            afterPath: 'tax.js',
+            beforeMode: '000000',
+            afterMode: '100644',
+            beforeOid: '0'.repeat(40),
+            afterOid: '6'.repeat(40),
+            beforeContentKind: 'absent' as const,
+            beforeByteCount: null,
+            beforeLineCount: null,
+            afterContentKind: 'text' as const,
+            afterByteCount: 32,
+            afterLineCount: 1,
+            contentKind: 'text' as const,
+            byteCount: 32,
+            lineCount: 1,
+            generated: false,
+            generatedPolicySource: null,
+          },
+        ],
+      };
+      const gateway = {
+        planningConfig: jest.fn().mockResolvedValue(gatewayConfig),
+        canonicalInventory: jest.fn().mockResolvedValue({
+          ...inventoryValue,
+          itemCount: 1,
+          inventoryHash: hash(canonicalJson(inventoryValue)),
+        }),
+        open: jest.fn(),
+      } as unknown as ContextGatewayInvocationSessionFactoryPort;
+      const input = {
+        authorization: auth,
+        pr,
+        config,
+        provider,
+        contextGateway: gateway,
+        lifecycleTargets: [],
+        liveLifecycleStateHash: hash('lifecycle'),
+        runtimeConfigVersion: ' test ',
+      };
+      prepareProvider.mockImplementationOnce(async () => {
+        // Simulate replacement while the first native preparation is awaiting.
+        input.runtimeConfigVersion = 'changed-during-preparation';
+        input.provider = {
+          name: 'codex/replaced',
+          prepareInvocation: async () => {
+            throw new Error('replaced provider');
+          },
+        } as unknown as CodexProvider;
+        input.contextGateway = {
+          planningConfig: async () => {
+            throw new Error('replaced gateway');
+          },
+        } as unknown as ContextGatewayInvocationSessionFactoryPort;
+        return preparedInvocation('request', providerName);
+      });
+      const result = await prepareSingleT0ReviewPlan(input);
+      input.runtimeConfigVersion = ' test ';
+      input.provider = provider;
+      input.contextGateway = gateway;
+      const compatibilityKey = hashIncrementalCompatibility(config, ' test ');
+      expect(result.planned).toEqual(
+        planAssignments({
+          ...input,
+          providerName: provider.name,
+          compatibilityKey,
+        })
+      );
+      expect(result.compatibilityKey).toBe(hash(result.compatibilityPreimage));
+      const ordinary = new GeneratedProviderInvocationManifestAssembler(
+        auth,
+        config,
+        compatibilityKey
+      );
+      expect(result.invocationManifest).toEqual(
+        await ordinary.assemble(result.invocation)
+      );
+      expect(result.investigationManifest).toEqual(
+        await ordinary.assemble(result.investigation)
+      );
+      expect(
+        JSON.parse(result.invocationManifest.manifestCanonicalJson)
+          .reviewConfigHash
+      ).toBe(hash(result.reviewConfigPreimage));
+      expect(result.investigation.investigationSeedEnvelope).not.toBeNull();
+      expect(result.handoff.assignmentManifestCanonicalJson).toBe(
+        result.planned.plan.assignmentManifestCanonicalJson
+      );
+      expect(result.handoff.invocationManifestCanonicalJson).toBe(
+        result.invocationManifest.manifestCanonicalJson
+      );
+      expect(result.handoff.investigationManifestCanonicalJson).toBe(
+        result.investigationManifest.manifestCanonicalJson
+      );
+      expect(hash(result.handoff.probePlan)).toBe(
+        result.handoff.seedEnvelope.probePlanHash
+      );
+      expect(JSON.parse(result.handoff.probePlan)).not.toHaveProperty(
+        'planHash'
+      );
+      expect(hash(result.handoff.reviewPrompt)).toBe(
+        result.handoff.seedEnvelope.reviewPromptHash
+      );
+      expect(result.handoff.scope.workspaceId).toBe(auth.facts.workspaceId);
+      expect(result.handoff.revision.headSha).toBe(auth.facts.headSha);
+      expect(result.handoff.sourceRunId).toBe(auth.facts.sourceRunId);
+      for (const kind of ['invocation', 'investigation'] as const) {
+        const manifest = JSON.parse(
+          result.handoff[`${kind}ManifestCanonicalJson`]
+        );
+        for (const [key, preimage] of Object.entries(
+          result.handoff.components[kind]
+        )) {
+          expect(manifest[key]).toBe(preimage === null ? null : hash(preimage));
+        }
+      }
+      expect(
+        result.planned.assignments[0]!.workSlot.providerVoteIdentityHash
+      ).toBe(hash('vote'));
+      expect(provider.prepareInvocation).toHaveBeenCalledTimes(2);
+      expect(provider.executePreparedInvocation).not.toHaveBeenCalled();
+      expect(gateway.open).not.toHaveBeenCalled();
+      await expect(
+        prepareSingleT0ReviewPlan({
+          ...input,
+          pr: { ...pr, headSha: 'f'.repeat(40) },
+        })
+      ).rejects.toThrow('single_plan_authority_mismatch');
+      await expect(
+        prepareSingleT0ReviewPlan({
+          ...input,
+          config: { ...config, providerRetries: 2 },
+        })
+      ).rejects.toThrow('single_plan_scope_incomplete');
+      expect(provider.prepareInvocation).toHaveBeenCalledTimes(2);
+    }
+  );
   it.each([false, true])(
     'shares real prompt/coverage bytes before provider preparation (investigation=%s)',
     async (investigationEnabled) => {
@@ -508,7 +620,7 @@ describe('Codex T0 prepared invocation', () => {
       attemptOrdinal: 1,
     });
 
-    expect(invocation.investigationProbePlan.status).toBe(
+    expect(invocation.investigationProbePlan!.status).toBe(
       ReviewInvestigationProbePlanStatus.LimitExceeded
     );
     expect(invocation.manifestFacts.executionProfile).toBe(
@@ -1796,11 +1908,11 @@ const emptyCanonicalInventory = Object.freeze({
   inventoryHash: hash(canonicalJson(emptyCanonicalInventoryValue)),
 });
 
-function preparedInvocation(prompt: string) {
+function preparedInvocation(prompt: string, providerName = 'codex/gpt-test') {
   return createPreparedProviderInvocation({
     providerKind: ProviderKind.CodexCli,
-    providerName: 'codex/gpt-test',
-    requestedModel: 'gpt-test',
+    providerName,
+    requestedModel: providerName.slice(providerName.indexOf('/') + 1),
     timeoutMs: 10_000,
     request: {
       prompt,

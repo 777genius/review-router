@@ -50,6 +50,7 @@ import { countPreviousStillValidBySeverity } from './analysis/thread-lifecycle';
 import { formatBlockingFindingFailure } from './output/severity-gate';
 import {
   runCodexOAuthRotatingAction,
+  runProviderApiAction,
   shouldEnterCodexOAuthRotatingAction,
 } from './codex-oauth/action';
 import {
@@ -58,6 +59,7 @@ import {
   clearCodexRotatingProcessAuthEnv,
 } from './codex-oauth/auth-input';
 import { ACCOUNT_GATEWAY_ACTION_MODE } from './codex-oauth/account-gateway-runtime';
+import { PROVIDER_API_ACTION_MODE } from './codex-oauth/provider-api-runtime';
 import {
   resolveReviewActionV2Activation,
   ReviewActionV2RuntimeMode,
@@ -183,12 +185,18 @@ async function run(): Promise<void> {
       core.getInput('mode') ||
       process.env.REVIEW_ROUTER_MODE ||
       core.getInput('REVIEW_ROUTER_MODE');
-    gatewaySelected = requestedMode === ACCOUNT_GATEWAY_ACTION_MODE;
+    gatewaySelected =
+      requestedMode === ACCOUNT_GATEWAY_ACTION_MODE ||
+      requestedMode === PROVIDER_API_ACTION_MODE;
     const reviewActionV2Activation = resolveReviewActionV2Activation({
       env: process.env,
     });
     if (reviewActionV2Activation.mode === ReviewActionV2RuntimeMode.T0) {
       scrubAndAssertReviewActionV2ScmMutationEnv(process.env);
+    }
+    if (requestedMode === PROVIDER_API_ACTION_MODE) {
+      await runProviderApiAction(reviewActionV2Activation);
+      return;
     }
     const lifecycleResolveTokenFromEnv =
       process.env.REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN?.trim() || undefined;

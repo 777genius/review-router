@@ -31,6 +31,10 @@ on:
         required: false
         type: string
         default: ''
+      review_request_id:
+        required: false
+        type: string
+        default: ''
       review_app_client_id:
         required: false
         type: string
@@ -40,6 +44,10 @@ on:
         type: string
         default: ''
       provider_instance_id:
+        required: false
+        type: string
+        default: ''
+      provider_api_auth_mode:
         required: false
         type: string
         default: ''
@@ -143,14 +151,18 @@ jobs:
       RR_RUNTIME_REF: ${{ inputs.runtime_ref }}
       RR_STATIC_RUNTIME_ENV_JSON: ${{ inputs.static_runtime_env_json }}
       RR_CODEX_SESSION_MODE: ${{ inputs.codex_session_mode }}
+      RR_PROVIDER_API_AUTH_MODE: ${{ inputs.provider_api_auth_mode }}
+      RR_PROVIDER_INSTANCE_ID: ${{ inputs.provider_instance_id }}
+      RR_REVIEW_REQUEST_ID: ${{ inputs.review_request_id }}
       RR_SESSION_BINDING_ID: ${{ inputs.session_binding_id }}
       RR_SESSION_BINDING_VERSION: ${{ inputs.session_binding_version }}
       REVIEWROUTER_API_URL: ${{ inputs.control_plane_url || inputs.api_url }}
       REVIEWROUTER_CONTROL_PLANE_URL: ${{ inputs.control_plane_url || inputs.api_url }}
       REVIEWROUTER_OIDC_AUDIENCE: reviewrouter
       REVIEWROUTER_RUNTIME_CONFIG_MODE: ${{ inputs.runtime_config_mode }}
-      REVIEWROUTER_STATIC_CONFIG_FALLBACK: ${{ inputs.codex_session_mode == 'account-gateway' && 'false' || 'true' }}
+      REVIEWROUTER_STATIC_CONFIG_FALLBACK: ${{ (inputs.codex_session_mode == 'account-gateway' || inputs.provider_api_auth_mode != '') && 'false' || 'true' }}
       CODEX_AUTH_JSON_PRESENT: ${{ secrets.CODEX_AUTH_JSON != '' && '1' || '0' }}
+      CODEX_CONFIG_TOML_PRESENT: ${{ secrets.CODEX_CONFIG_TOML != '' && '1' || '0' }}
       CLAUDE_CODE_OAUTH_TOKEN_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && '1' || '0' }}
       OPENAI_API_KEY_PRESENT: ${{ secrets.OPENAI_API_KEY != '' && '1' || '0' }}
       REVIEW_APP_PRIVATE_KEY_PRESENT: ${{ secrets.REVIEW_APP_PRIVATE_KEY != '' && '1' || '0' }}
@@ -185,6 +197,24 @@ jobs:
           const codexSessionMode = rawCodexSessionMode.trim();
           const hostedPoolSessionMode = 'codex_subscription_oauth_hosted_pool';
           const accountGateway = codexSessionMode === 'account-gateway';
+          const providerApiAuthMode = process.env.RR_PROVIDER_API_AUTH_MODE || '';
+          if (!['', 'openrouter-api'].includes(providerApiAuthMode)) {
+            fail('Invalid provider_api_auth_mode.');
+          }
+          const providerApi = providerApiAuthMode === 'openrouter-api';
+          if (providerApi) {
+            if (reviewActionLane !== 't0' || codexSessionMode ||
+                process.env.RR_PROVIDER_INSTANCE_ID ||
+                process.env.REVIEWROUTER_RUNTIME_CONFIG_MODE !== 'oidc' ||
+                process.env.REVIEWROUTER_STATIC_CONFIG_FALLBACK !== 'false' ||
+                !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$/.test(process.env.RR_REVIEW_REQUEST_ID || '')) {
+              fail('Direct provider API execution requires an OIDC T0 request without rotating inputs.');
+            }
+            for (const key of ['CODEX_AUTH_JSON_PRESENT', 'CODEX_CONFIG_TOML_PRESENT',
+              'CLAUDE_CODE_OAUTH_TOKEN_PRESENT', 'OPENAI_API_KEY_PRESENT', 'REVIEW_APP_PRIVATE_KEY_PRESENT']) {
+              if (process.env[key] === '1') fail('Direct provider API execution rejects alternate authentication inputs.');
+            }
+          }
           if (accountGateway && rawCodexSessionMode !== codexSessionMode) {
             fail('Invalid codex_session_mode.');
           }
@@ -306,10 +336,10 @@ jobs:
             fail('static_runtime_env_json must be a JSON object.');
           }
           const staticEnv = parsedStaticEnv as Record<string, unknown>;
-          if (accountGateway && Object.keys(staticEnv).length > 0) {
-            fail('Account gateway execution does not accept static runtime env.');
+          if ((accountGateway || providerApi) && Object.keys(staticEnv).length > 0) {
+            fail('Admitted execution does not accept static runtime env.');
           }
-          if (!accountGateway && staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS === undefined) {
+          if (!accountGateway && !providerApi && staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS === undefined) {
             staticEnv.FAIL_ON_NO_HEALTHY_PROVIDERS = 'true';
           }
           const staticRuntimeEnvAllowlist = new Set(['TARGET_TOKENS_PER_BATCH']);
@@ -373,7 +403,7 @@ jobs:
           fi
 
       - name: Checkout exact T0 review revision
-        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == '' && steps.runtime.outputs.can_run == 'true' }}
+        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == '' && inputs.provider_api_auth_mode == '' && steps.runtime.outputs.can_run == 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.review_head_sha }}
@@ -404,7 +434,7 @@ jobs:
 
       - name: Resolve ReviewRouter runtime provider tooling
         id: provider-tooling
-        if: ${{ inputs.codex_session_mode != 'codex_subscription_oauth_hosted_pool' && !(inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') && steps.runtime.outputs.can_run == 'true' }}
+        if: ${{ inputs.provider_api_auth_mode == '' && inputs.codex_session_mode != 'codex_subscription_oauth_hosted_pool' && !(inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway') && steps.runtime.outputs.can_run == 'true' }}
         shell: bash
         env:
           REVIEW_ROUTER_MODE: runtime-preflight
@@ -479,7 +509,7 @@ jobs:
           fi
 
       - name: Run ReviewRouter T0
-        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == '' && steps.runtime.outputs.can_run == 'true' }}
+        if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == '' && inputs.provider_api_auth_mode == '' && steps.runtime.outputs.can_run == 'true' }}
         shell: bash
         env:
           REVIEWROUTER_ACTION_V2_MODE: t0
@@ -499,6 +529,21 @@ jobs:
           REVIEW_ROUTER_MEMORY_PROTOCOL_VERSION: '1'
           REVIEW_ROUTER_MEMORY_BUNDLE_ENDPOINT: /api/action/v1/memory
           CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}
+        run: node .reviewrouter-runtime/dist/index.js
+
+      - name: Run ReviewRouter T0 provider API
+        if: ${{ inputs.review_action_lane == 't0' && inputs.provider_api_auth_mode == 'openrouter-api' && steps.runtime.outputs.can_run == 'true' }}
+        shell: bash
+        env:
+          REVIEWROUTER_ACTION_V2_MODE: t0
+          REVIEW_ROUTER_MODE: provider-api
+          INPUT_API_URL: ${{ inputs.api_url }}
+          INPUT_CONTROL_PLANE_URL: ${{ inputs.control_plane_url }}
+          INPUT_PROVIDER_API_AUTH_MODE: ${{ inputs.provider_api_auth_mode }}
+          INPUT_OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          REVIEW_REQUEST_ID: ${{ inputs.review_request_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.review_head_sha }}
         run: node .reviewrouter-runtime/dist/index.js
 
       # Server checkout capability materializes the exact head in isolation.

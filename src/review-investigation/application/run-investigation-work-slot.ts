@@ -165,6 +165,7 @@ export class RunInvestigationWorkSlot {
     // From this point the investigation open/replay has acquired authority;
     // no later failure may authorize legacy effects for this work slot.
     legacyFallbackGate.close();
+    let conclusionAttempted = false;
     for (
       let transition = 0;
       transition < input.maxStateTransitions;
@@ -205,12 +206,13 @@ export class RunInvestigationWorkSlot {
         continue;
       }
       if (snapshot.nextAction === ReviewInvestigationNextAction.Conclude) {
+        conclusionAttempted = true;
         snapshot = await this.dependencies.controlPlane.conclude({
           authorizationToken: input.authorizationToken,
           snapshot,
           certificateTtlMs: input.certificateTtlMs,
         });
-        continue;
+        break;
       }
       if (snapshot.turn === null || snapshot.turn.turnCapability.length === 0) {
         snapshot = await this.dependencies.controlPlane.planTurn({
@@ -307,6 +309,24 @@ export class RunInvestigationWorkSlot {
           // The fenced turn mutation is durable; lease expiry is the cleanup fallback.
         }
       }
+    }
+    if (isSuperseded(snapshot)) {
+      return { status: ReviewInvestigationRunStatus.Superseded, snapshot };
+    }
+    // A final successful turn may consume the transition budget while making
+    // the aggregate ready. Finish that admitted work without planning or
+    // executing another provider turn; the control plane still owns conclusion.
+    if (
+      input.maxStateTransitions > 0 &&
+      !conclusionAttempted &&
+      snapshot.nextAction === ReviewInvestigationNextAction.Conclude
+    ) {
+      throwIfAborted(input.signal);
+      snapshot = await this.dependencies.controlPlane.conclude({
+        authorizationToken: input.authorizationToken,
+        snapshot,
+        certificateTtlMs: input.certificateTtlMs,
+      });
     }
     if (isSuperseded(snapshot)) {
       return { status: ReviewInvestigationRunStatus.Superseded, snapshot };

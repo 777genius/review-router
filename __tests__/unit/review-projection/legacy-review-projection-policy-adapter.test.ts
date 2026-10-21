@@ -20,6 +20,63 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     inlineMinAgreement: 1,
   });
 
+  it.each([
+    { providerIds: ['codex'], category: 'bug' },
+    { providerIds: ['ocr'], category: 'maintainability' },
+    { providerIds: ['ocr'], category: 'bug', line: -1 },
+    {
+      providerIds: ['ocr'],
+      category: 'bug',
+      message: 'Consider using const instead of let for this variable.',
+    },
+  ])(
+    'retains legacy exclusions outside the producer bug language exception: %j',
+    async (overrides) => {
+      const selected = await adapter.selectCurrent({
+        findings: [
+          candidate({
+            title: 'Canonicalize the identifier',
+            message: 'Add a mixed-case UUID test as well.',
+            ...overrides,
+          }),
+        ],
+        revisionFiles: [revisionFile()],
+        diff: diff(),
+        limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+      });
+      expect(selected).toEqual([]);
+    }
+  );
+
+  it.each([
+    [
+      { providerIds: ['ocr'], category: 'bug' },
+      { providerIds: ['codex'], category: 'bug' },
+    ],
+    [
+      { providerIds: ['ocr'], category: 'maintainability' },
+      { providerIds: ['codex'], category: 'bug' },
+    ],
+  ])(
+    'does not inherit producer bug classification across mixed contributors: %j',
+    async (first, second) => {
+      const selected = await adapter.selectCurrent({
+        findings: [first, second].map((overrides, index) =>
+          candidate({
+            sourceFindingId: `source-${index}`,
+            title: 'Canonicalize the identifier',
+            message: 'Add a mixed-case UUID test as well.',
+            ...overrides,
+          })
+        ),
+        revisionFiles: [revisionFile()],
+        diff: diff(),
+        limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+      });
+      expect(selected).toEqual([]);
+    }
+  );
+
   it('reuses filtering and consensus while preserving projection provenance', async () => {
     const selected = await adapter.selectCurrent({
       findings: [
@@ -444,6 +501,320 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
         }),
       ])
     );
+  });
+
+  async function projectWithFixture(
+    occurrences: readonly FindingOccurrence[],
+    revisionFiles: readonly {
+      path: string;
+      previousPath?: string;
+      status: RevisionFileStatus;
+      patch?: string;
+    }[],
+    presentationAdapter = adapter
+  ) {
+    return presentationAdapter.projectPresentation({
+      scope: {
+        scmRepositoryIdentityId: 'repo-1',
+        pullRequestNumber: 252,
+        baseSha: '0'.repeat(40),
+        reviewedHeadSha: '1'.repeat(40),
+        reviewRevisionHash: 'revision-verified-span',
+      },
+      presentation: {
+        title: 'Verified spans',
+        author: 'author',
+        additions: 2,
+        deletions: 2,
+      },
+      providerExecution: {
+        plannedProviders: 1,
+        succeededProviders: 1,
+      },
+      coverage: {
+        state: ProjectionCoverageState.Complete,
+        mode: 'full',
+        totalFiles: revisionFiles.length,
+        reviewedFiles: revisionFiles.length,
+        unreviewedFiles: 0,
+        limitations: [],
+      },
+      occurrences,
+      revisionFiles,
+      limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+    });
+  }
+
+  it('keeps distinct same-start OCR findings paired with their own bodies and the global inline budget', async () => {
+    const minor = occurrence({
+      lineageId: 'ocr-minor',
+      sourceFindingIds: ['ocr-source-minor'],
+      severity: FindingSeverity.Minor,
+      title: 'Minor range issue',
+      message: 'The narrow range omits the optional status label.',
+      line: 1322,
+      startLine: 1322,
+      endLine: 1323,
+      anchorVerified: true,
+    });
+    const major = occurrence({
+      lineageId: 'ocr-major',
+      sourceFindingIds: ['ocr-source-major'],
+      severity: FindingSeverity.Major,
+      title: 'Major range issue',
+      message: 'The broader range bypasses the authorization check.',
+      line: 1322,
+      startLine: 1322,
+      endLine: 1327,
+      anchorVerified: true,
+    });
+    const files = [
+      {
+        path: minor.filePath,
+        status: RevisionFileStatus.Modified,
+        patch:
+          '@@ -1321,0 +1322,6 @@\n+one();\n+two();\n+three();\n+four();\n+five();\n+six();',
+      },
+    ];
+    const projected = await projectWithFixture([minor, major], files);
+    expect(projected.placements).toEqual([
+      expect.objectContaining({
+        lineageId: minor.lineageId,
+        kind: FindingPlacementKind.Inline,
+        startLine: 1322,
+        line: 1323,
+        endLine: 1323,
+        body: expect.stringContaining(minor.message),
+      }),
+      expect.objectContaining({
+        lineageId: major.lineageId,
+        kind: FindingPlacementKind.Inline,
+        startLine: 1322,
+        line: 1327,
+        endLine: 1327,
+        body: expect.stringContaining(major.message),
+      }),
+    ]);
+    expect(projected.placements[0].body).toMatch(/^_🔵 Minor_/);
+    expect(projected.placements[0].body).not.toContain(major.message);
+    expect(projected.placements[1].body).toMatch(/^_🟡 Major_/);
+    expect(projected.placements[1].body).not.toContain(minor.message);
+
+    const limited = await projectWithFixture(
+      [minor, major],
+      files,
+      new LegacyReviewProjectionPolicyAdapter({
+        ...DEFAULT_CONFIG,
+        inlineMinSeverity: 'minor',
+        inlineMaxComments: 1,
+      })
+    );
+    expect(limited.placements).toEqual([
+      expect.objectContaining({
+        lineageId: minor.lineageId,
+        kind: FindingPlacementKind.File,
+      }),
+      expect.objectContaining({
+        lineageId: major.lineageId,
+        kind: FindingPlacementKind.Inline,
+        startLine: 1322,
+        line: 1327,
+        endLine: 1327,
+        body: expect.stringContaining(major.message),
+      }),
+    ]);
+    expect(limited.placements[0].body).toBeUndefined();
+  });
+
+  it('keeps a verified anchor on its exact line instead of a competing added line', async () => {
+    // §8.2: for an OCR verified span the projection must NOT run
+    // chooseBestAddedLineForComment. The reported line 1 is a context line and
+    // the heuristic moves it to the added line 2 (see the control below).
+    const patch = '@@ -1 +1,2 @@\n const safe = true;\n+dangerous();';
+    const verified = await projectWithFixture(
+      [
+        occurrence({
+          lineageId: 'verified-context-collision',
+          startLine: 1,
+          line: 1,
+          endLine: 1,
+          anchorVerified: true,
+          suggestion: 'const safe = false;',
+        }),
+      ],
+      [{ path: 'src/service.ts', status: RevisionFileStatus.Modified, patch }]
+    );
+    expect(verified.placements).toEqual([
+      expect.objectContaining({
+        lineageId: 'verified-context-collision',
+        kind: FindingPlacementKind.Inline,
+        path: 'src/service.ts',
+        line: 1,
+        endLine: 1,
+      }),
+    ]);
+
+    // Control: without the verified marker the legacy heuristic still moves
+    // the comment to the neighboring added line (byte-identical legacy path).
+    const legacy = await projectWithFixture(
+      [
+        occurrence({
+          lineageId: 'legacy-context-collision',
+          startLine: 1,
+          line: 1,
+          endLine: 1,
+          suggestion: 'const safe = false;',
+        }),
+      ],
+      [{ path: 'src/service.ts', status: RevisionFileStatus.Modified, patch }]
+    );
+    expect(legacy.placements).toEqual([
+      expect.objectContaining({
+        lineageId: 'legacy-context-collision',
+        kind: FindingPlacementKind.Inline,
+        path: 'src/service.ts',
+        line: 2,
+      }),
+    ]);
+  });
+
+  it('never re-anchors a verified span onto a higher-scoring competing added line', async () => {
+    // Both target lines are added lines; the scoring heuristic prefers the
+    // second one for this body. A verified anchor must stay verbatim.
+    const patch = [
+      '@@ -1,2 +1,2 @@',
+      '-function old() {',
+      '-  return old();',
+      '+function neu() {',
+      '+  return neu();',
+    ].join('\n');
+    const revisionFiles = [
+      { path: 'src/service.ts', status: RevisionFileStatus.Modified, patch },
+    ];
+    const verified = await projectWithFixture(
+      [
+        occurrence({
+          lineageId: 'verified-competing-added',
+          startLine: 1,
+          line: 1,
+          endLine: 1,
+          anchorVerified: true,
+          message: 'The return value is wrong.',
+          suggestion: 'return ok();',
+        }),
+      ],
+      revisionFiles
+    );
+    expect(verified.placements).toEqual([
+      expect.objectContaining({
+        lineageId: 'verified-competing-added',
+        kind: FindingPlacementKind.Inline,
+        path: 'src/service.ts',
+        line: 1,
+        endLine: 1,
+      }),
+    ]);
+
+    // Control: the legacy heuristic moves the same anchor to line 2.
+    const legacy = await projectWithFixture(
+      [
+        occurrence({
+          lineageId: 'legacy-competing-added',
+          startLine: 1,
+          line: 1,
+          endLine: 1,
+          message: 'The return value is wrong.',
+          suggestion: 'return ok();',
+        }),
+      ],
+      revisionFiles
+    );
+    expect(legacy.placements).toEqual([
+      expect.objectContaining({
+        lineageId: 'legacy-competing-added',
+        kind: FindingPlacementKind.Inline,
+        path: 'src/service.ts',
+        line: 2,
+      }),
+    ]);
+  });
+
+  it('preserves a multi-line verified range verbatim in the final placement', async () => {
+    const patch = '@@ -1 +1,2 @@\n const safe = true;\n+dangerous();';
+    const verified = await projectWithFixture(
+      [
+        occurrence({
+          lineageId: 'verified-multi-line',
+          startLine: 1,
+          line: 1,
+          endLine: 2,
+          anchorVerified: true,
+          suggestion: 'const safe = false;',
+        }),
+      ],
+      [{ path: 'src/service.ts', status: RevisionFileStatus.Modified, patch }]
+    );
+    // The full verified range survives; no coordinate is heuristically moved.
+    expect(verified.placements).toEqual([
+      expect.objectContaining({
+        lineageId: 'verified-multi-line',
+        kind: FindingPlacementKind.Inline,
+        path: 'src/service.ts',
+        startLine: 1,
+        line: 2,
+        endLine: 2,
+      }),
+    ]);
+  });
+
+  it('degrades an unplaceable verified range to file placement without a committable suggestion', async () => {
+    // Line 3 of the verified range is not part of the current diff, so the
+    // range cannot be preserved verbatim: fall back to file placement and
+    // drop the committable suggested patch entirely (§8.2).
+    const patch = '@@ -1 +1,2 @@\n const safe = true;\n+dangerous();';
+    const projected = await projectWithFixture(
+      [
+        occurrence({
+          lineageId: 'verified-unplaceable',
+          startLine: 1,
+          line: 1,
+          endLine: 3,
+          anchorVerified: true,
+          suggestion: 'const safe = false;',
+        }),
+        occurrence({
+          lineageId: 'verified-deleted-file',
+          filePath: 'src/deleted.ts',
+          startLine: 1,
+          line: 1,
+          endLine: 1,
+          anchorVerified: true,
+          suggestion: 'keep();',
+        }),
+      ],
+      [
+        { path: 'src/service.ts', status: RevisionFileStatus.Modified, patch },
+        {
+          path: 'src/deleted.ts',
+          status: RevisionFileStatus.Removed,
+          patch: '@@ -1 +0,0 @@\n-keep();',
+        },
+      ]
+    );
+    expect(projected.placements).toEqual([
+      expect.objectContaining({
+        lineageId: 'verified-unplaceable',
+        kind: FindingPlacementKind.File,
+        path: 'src/service.ts',
+      }),
+      expect.objectContaining({
+        lineageId: 'verified-deleted-file',
+        kind: FindingPlacementKind.Summary,
+      }),
+    ]);
+    for (const placement of projected.placements) {
+      expect(placement.body).toBeUndefined();
+    }
   });
 
   it.each([0, 1])(

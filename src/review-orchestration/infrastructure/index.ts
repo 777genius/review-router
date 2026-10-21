@@ -11,3 +11,7 @@ export * from './production-review-projection';
 export * from './production-t0-review-runner';
 export * from './provider-invocation-failure-classifier';
 export * from './review-invocation-diagnostics';
+export * from './ocr-review-outcome-contract';
+export * from './ocr-review-normalization';
+export * from './ocr-review-managed-run';
+export * from './ocr-review-invocation-adapter';

@@ -22944,7 +22944,7 @@ var AccountGatewayModelTransport = class _AccountGatewayModelTransport {
         "service_tier",
         "max_output_tokens"
       ].includes(key)
-    ) || typeof request.model !== "string" || !request.model || typeof request.instructions !== "string" || typeof request.input !== "string" || !Array.isArray(request.tools) || request.tools.length !== 0 || request.tool_choice !== "none" || request.store !== false || request.stream !== true || request.service_tier !== "default" || request.max_output_tokens !== prDescriptionContract.maxOutputTokens)
+    ) || typeof request.model !== "string" || !request.model || typeof request.instructions !== "string" || !isPrDescriptionMessageInput(request.input) || !Array.isArray(request.tools) || request.tools.length !== 0 || request.tool_choice !== "none" || request.store !== false || request.stream !== true || request.service_tier !== "default" || request.max_output_tokens !== prDescriptionContract.maxOutputTokens)
       throw new Error("pr_description_request_invalid");
     let markdown;
     const auxiliary = new _AccountGatewayModelTransport(
@@ -23655,6 +23655,14 @@ function completedPrDescriptionText(raw) {
   if (hasOwnedPrDescriptionMarker(markdown))
     throw new Error("pr_description_output_reserved_marker");
   return markdown;
+}
+function isPrDescriptionMessageInput(value) {
+  if (!Array.isArray(value) || value.length !== 1) return false;
+  const message = value[0];
+  if (!message || typeof message !== "object" || Array.isArray(message) || Object.keys(message).sort().join(",") !== "content,role" || message.role !== "user" || !Array.isArray(message.content) || message.content.length !== 1)
+    return false;
+  const content = message.content[0];
+  return !!content && typeof content === "object" && !Array.isArray(content) && Object.keys(content).sort().join(",") === "text,type" && content.type === "input_text" && typeof content.text === "string";
 }
 
 // src/context-gateway/context-gateway-contract.ts
@@ -113303,7 +113311,7 @@ function createPrDescriptionGeneration(input) {
       "Return Markdown with a short Summary and useful change bullets. No review verdict or bug findings.",
       "Do not claim tests were run. Do not reproduce secrets. Do not use tools."
     ].join("\n"),
-    input: context,
+    input: [{ role: "user", content: [{ type: "input_text", text: context }] }],
     tools: [],
     tool_choice: "none",
     store: false,

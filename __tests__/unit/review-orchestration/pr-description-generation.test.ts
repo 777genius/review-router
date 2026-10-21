@@ -228,7 +228,13 @@ describe('parent AI PR description', () => {
     });
     const bytes = request.mock.calls[0][0].requestBody;
     const envelope = JSON.parse(Buffer.from(bytes).toString('utf8'));
-    const context = JSON.parse(envelope.input);
+    expect(envelope.input).toEqual([
+      {
+        role: 'user',
+        content: [{ type: 'input_text', text: expect.any(String) }],
+      },
+    ]);
+    const context = JSON.parse(envelope.input[0].content[0].text);
     expect(context.authorDescription).toBe(`${outside}\nAuthor footer. `);
     expect(
       context.files.map((file: { filename: string }) => file.filename)

@@ -84,7 +84,7 @@ export function createPrDescriptionGeneration(input: {
       'Return Markdown with a short Summary and useful change bullets. No review verdict or bug findings.',
       'Do not claim tests were run. Do not reproduce secrets. Do not use tools.',
     ].join('\n'),
-    input: context,
+    input: [{ role: 'user', content: [{ type: 'input_text', text: context }] }],
     tools: [],
     tool_choice: 'none',
     store: false,

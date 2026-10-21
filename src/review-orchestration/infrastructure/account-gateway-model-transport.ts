@@ -255,7 +255,7 @@ export class AccountGatewayModelTransport {
       typeof request.model !== 'string' ||
       !request.model ||
       typeof request.instructions !== 'string' ||
-      typeof request.input !== 'string' ||
+      !isPrDescriptionMessageInput(request.input) ||
       !Array.isArray(request.tools) ||
       request.tools.length !== 0 ||
       request.tool_choice !== 'none' ||
@@ -1197,4 +1197,28 @@ function completedPrDescriptionText(raw: unknown): string {
   if (hasOwnedPrDescriptionMarker(markdown))
     throw new Error('pr_description_output_reserved_marker');
   return markdown;
+}
+
+function isPrDescriptionMessageInput(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length !== 1) return false;
+  const message = value[0] as Record<string, unknown> | null;
+  if (
+    !message ||
+    typeof message !== 'object' ||
+    Array.isArray(message) ||
+    Object.keys(message).sort().join(',') !== 'content,role' ||
+    message.role !== 'user' ||
+    !Array.isArray(message.content) ||
+    message.content.length !== 1
+  )
+    return false;
+  const content = message.content[0] as Record<string, unknown> | null;
+  return (
+    !!content &&
+    typeof content === 'object' &&
+    !Array.isArray(content) &&
+    Object.keys(content).sort().join(',') === 'text,type' &&
+    content.type === 'input_text' &&
+    typeof content.text === 'string'
+  );
 }

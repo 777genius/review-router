@@ -641,6 +641,11 @@ describe('compact summary publication contract', () => {
     '```text\n---\nhiddenBlock\n```',
     '<div>hiddenBlock</div>',
     '<!-- hiddenBlock -->',
+    '<script>hiddenBlock</script>',
+    '<?hiddenBlock?>',
+    '<![CDATA[hiddenBlock]]>',
+    '<!DOCTYPE hiddenBlock>',
+    '</section>hiddenBlock',
     '# hiddenBlock',
     '> hiddenBlock',
     '- hiddenBlock',
@@ -691,6 +696,27 @@ describe('compact summary publication contract', () => {
     expect(outsideDetails(markdown)).not.toContain('hiddenBlock');
     expect(markdown).toContain(prose);
   });
+
+  it.each([
+    '<https://example.com/report>',
+    '< 10 requests per second',
+    '<custom-note>tenant evidence</custom-note>',
+  ])(
+    'keeps an inline angle-bracket continuation in prose: %s',
+    (continuation) => {
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [
+          { ...finding, message: `Check the limit:\n${continuation}` },
+        ],
+      });
+      const visible = outsideDetails(markdown);
+      expect(visible).toContain(
+        `Check the limit: ${continuation.replaceAll('<', '&lt;').replaceAll('>', '&gt;')}`
+      );
+    }
+  );
 
   it('uses word boundaries for a CJK paragraph without spaces', () => {
     const message = '安全检查'.repeat(100);

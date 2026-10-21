@@ -49106,6 +49106,7 @@ var ReviewOrchestrator = class {
           }
         }
       }
+      const hasUnnamedFileOmissions = loadLimitations.length > 0;
       let llmCoverageComplete = filesToReview.length === 0 && unreviewedFiles.size === 0 && loadLimitations.length === 0;
       const requiredHealthyProviders = this.requiredHealthyProviderNames(config);
       let providers = [];
@@ -50003,7 +50004,8 @@ var ReviewOrchestrator = class {
       await progressTracker?.updateProgress("synthesis", "completed");
       if (config.incrementalEnabled) {
         const unreviewedPaths = [...unreviewedFiles.keys()];
-        if (llmCoverageComplete || unreviewedPaths.length > 0) {
+        const gapsFullyNamed = unreviewedPaths.length > 0 && !hasUnnamedFileOmissions;
+        if (llmCoverageComplete || gapsFullyNamed) {
           if (await this.canAdvanceIncrementalSnapshot(pr2)) {
             try {
               await this.components.incrementalReviewer.saveReview(pr2, review, {
@@ -50019,7 +50021,7 @@ var ReviewOrchestrator = class {
           }
         } else {
           logger.warn(
-            "Incremental snapshot was not advanced because LLM batch coverage is incomplete and its gaps cannot be named"
+            "Incremental snapshot was not advanced because its coverage gaps cannot be fully named"
           );
         }
       }

@@ -23,9 +23,11 @@ Persist the snapshot even when coverage is incomplete, marked as partial:
   A newer head plans a delta over changed ∪ previously-uncovered paths.
 - A later run that reaches full coverage overwrites the snapshot with a
   complete one, restoring normal `ReuseCompleted` behavior.
-- Partial snapshots are persisted only when the gaps are named. When coverage
-  is incomplete but the gaps cannot be named (for example GitHub file
-  omissions), today's no-advance behavior stays in place.
+- Partial snapshots are persisted only when every gap is named. Any unnamed
+  gap (for example GitHub file omissions) keeps today's no-advance behavior,
+  even when other gaps are named: a partial snapshot whose gap list is not
+  exhaustive could later be finalized without the unnamed files ever being
+  reviewed.
 
 ## Consequences
 

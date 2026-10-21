@@ -623,6 +623,9 @@ export class ReviewOrchestrator {
           }
         }
       }
+      // GitHub file-list omissions cannot be named, so any partial snapshot
+      // saved alongside them would understate its own coverage gaps.
+      const hasUnnamedFileOmissions = loadLimitations.length > 0;
       let llmCoverageComplete =
         filesToReview.length === 0 &&
         unreviewedFiles.size === 0 &&
@@ -1731,11 +1734,14 @@ export class ReviewOrchestrator {
       await progressTracker?.updateProgress('synthesis', 'completed');
       if (config.incrementalEnabled) {
         const unreviewedPaths = [...unreviewedFiles.keys()];
-        if (llmCoverageComplete || unreviewedPaths.length > 0) {
+        const gapsFullyNamed =
+          unreviewedPaths.length > 0 && !hasUnnamedFileOmissions;
+        if (llmCoverageComplete || gapsFullyNamed) {
           if (await this.canAdvanceIncrementalSnapshot(pr)) {
             try {
-              // Named coverage gaps still advance a partial snapshot, so a
-              // re-run only spends provider capacity on the uncovered paths.
+              // Fully named coverage gaps still advance a partial snapshot,
+              // so a re-run only spends provider capacity on the uncovered
+              // paths. Any unnamed omission keeps the no-advance behavior.
               await this.components.incrementalReviewer.saveReview(pr, review, {
                 complete: llmCoverageComplete,
                 unreviewedPaths,
@@ -1749,7 +1755,7 @@ export class ReviewOrchestrator {
           }
         } else {
           logger.warn(
-            'Incremental snapshot was not advanced because LLM batch coverage is incomplete and its gaps cannot be named'
+            'Incremental snapshot was not advanced because its coverage gaps cannot be fully named'
           );
         }
       }

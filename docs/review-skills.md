@@ -60,6 +60,35 @@ with explicit path labels. Skills grant no additional tools, commands, network
 access or file scope. Provenance means the instructions were supplied; it does
 not certify that a model performed each requested check.
 
+## OCR rules and agent integrations
+
+OCR accepts `--rule <path>` for a JSON review-rule file, `--background` / `-b`
+for inline business context, and `--background-file` / `-B` for Markdown business
+context. The file takes precedence when both background flags are supplied.
+Neither the pinned upstream v1.13.1 nor the inspected current upstream has a
+`--skill` / `--skills` flag or an automatic project `SKILL.md` loader.
+
+Ordinary upstream OCR resolves the first matching entry from `--rule`, the
+repository-root `.opencodereview/rule.json`, the user's global rule file, then
+embedded language rules. It does not automatically read `AGENTS.md` / `agent.md`
+or inherit instructions from corresponding subdirectories. A JSON rule can
+explicitly supply Markdown instructions; that is different from loading an
+executable Agent Skill. Managed ReviewRouter suppresses the checkout's project
+rule file and supplies its captured, composed rules through `--rule` instead.
+
+The upstream `skills/open-code-review/SKILL.md` is a wrapper loaded by a host
+coding agent, which then invokes the OCR CLI. It does not add project-Skill
+discovery to the OCR engine. ReviewRouter's opt-in roots below are its explicit,
+text-only repository integration; web assignments retain their own path scopes.
+
+Sources checked on 2026-10-21: upstream
+[`shared_flags.go` at pinned `8eb83340`](https://github.com/alibaba/open-code-review/blob/8eb83340a487b1150af00701b94f01af97e4b4d6/cmd/opencodereview/shared_flags.go),
+[`system_rules.go` at current `375f64cd`](https://github.com/alibaba/open-code-review/blob/375f64cd6f67a48a135da83cfcf59c52669a09cb/internal/config/rules/system_rules.go),
+the [review-rule guide](https://github.com/alibaba/open-code-review/blob/375f64cd6f67a48a135da83cfcf59c52669a09cb/pages/src/content/docs/en/review-rules.md),
+and the [host-agent Skill guide](https://github.com/alibaba/open-code-review/blob/375f64cd6f67a48a135da83cfcf59c52669a09cb/pages/src/content/docs/en/integrations/agent-skill.md).
+The qualified rr.4 binary's `review --help` confirms these flags. Its version and
+digest remain recorded in the qualification manifest below.
+
 ## Repository Skills subset
 
 Repository managers can opt in to `.reviewrouter/skills` and/or `.agents/skills`.
@@ -73,9 +102,11 @@ Each Skill starts with YAML frontmatter containing nonblank string `name` and
 The remaining Markdown must be nonblank. Scripts and other executable resources
 are never executed or installed.
 
-References supported for materialization are `[text](relative.md)` and used
-reference-style links with `[id]: relative.md` definitions. An optional `#anchor`
-is accepted. Local paths cannot contain spaces, URL encoding or an optional
+References supported for materialization are `[text](relative.md)` and explicit
+reference-style links (`[text][id]` or `[id][]`) with `[id]: relative.md`
+definitions. Used shortcut links (`[id]`) to local Markdown are rejected; unused
+definitions and links inside backtick or tilde code fences are inert. An optional
+`#anchor` is accepted. Local paths cannot contain spaces, URL encoding or an optional
 Markdown title. They must resolve inside the originating Skill directory and
 are read from the same captured commit. External URLs and document anchors remain
 plain text and trigger no network request. Unsupported local resource syntax,

@@ -17537,7 +17537,7 @@ function parseGitReviewSkill(content) {
   };
 }
 function markdownReferences(text2) {
-  const withoutCode = text2.replace(/```[^\n]*\n[\s\S]*?```/gu, "").replace(/`[^`\n]*`/gu, "");
+  const withoutCode = text2.replace(/```[^\n]*\n[\s\S]*?```/gu, "").replace(/~~~[^\n]*\n[\s\S]*?~~~/gu, "").replace(/(`+)[^\n]*?\1/gu, "");
   const targets = [];
   const definitions = /* @__PURE__ */ new Map();
   const normalize2 = (id) => id.trim().replace(/\s+/gu, " ").toLowerCase();
@@ -17559,6 +17559,12 @@ function markdownReferences(text2) {
     const target = definitions.get(normalize2(matched[2] || matched[1]));
     if (!target) throw new Error("review_skills_reference_missing");
     targets.push(target);
+  }
+  const shortcutText = withoutCode.replace(/^\s{0,3}\[[^\]]+\]:\s*.+$/gmu, "").replace(/!?\[[^\]\n]*\]\([^\n)]*\)/gu, "").replace(/!?\[[^\]\n]*\]\[[^\]\n]*\]/gu, "");
+  for (const matched of shortcutText.matchAll(/(?<![!\\])\[([^\]\n]+)\]/gu)) {
+    const target = definitions.get(normalize2(matched[1]));
+    if (target && !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/iu.test(target) && /\.md(?:[?#\s>]|$)/iu.test(target))
+      throw new Error("review_skills_reference_unsupported");
   }
   const refs = /* @__PURE__ */ new Set();
   for (const target of targets) {

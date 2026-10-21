@@ -287,7 +287,8 @@ export function parseGitReviewSkill(content: string): Readonly<{
 export function markdownReferences(text: string): readonly string[] {
   const withoutCode = text
     .replace(/```[^\n]*\n[\s\S]*?```/gu, '')
-    .replace(/`[^`\n]*`/gu, '');
+    .replace(/~~~[^\n]*\n[\s\S]*?~~~/gu, '')
+    .replace(/(`+)[^\n]*?\1/gu, '');
   const targets: string[] = [];
   const definitions = new Map<string, string>();
   const normalize = (id: string) =>
@@ -311,6 +312,21 @@ export function markdownReferences(text: string): readonly string[] {
     if (!target) throw new Error('review_skills_reference_missing');
     targets.push(target);
   }
+  // Definitions alone are inert. Strip supported links (including image forms)
+  // before checking shortcuts so their labels and destinations are not uses.
+  const shortcutText = withoutCode
+    .replace(/^\s{0,3}\[[^\]]+\]:\s*.+$/gmu, '')
+    .replace(/!?\[[^\]\n]*\]\([^\n)]*\)/gu, '')
+    .replace(/!?\[[^\]\n]*\]\[[^\]\n]*\]/gu, '');
+  for (const matched of shortcutText.matchAll(/(?<![!\\])\[([^\]\n]+)\]/gu)) {
+    const target = definitions.get(normalize(matched[1]));
+    if (
+      target &&
+      !/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/iu.test(target) &&
+      /\.md(?:[?#\s>]|$)/iu.test(target)
+    )
+      throw new Error('review_skills_reference_unsupported');
+  }
   const refs = new Set<string>();
   for (const target of targets) {
     if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/iu.test(target)) continue;
@@ -321,8 +337,7 @@ export function markdownReferences(text: string): readonly string[] {
       throw new Error('review_skills_reference_unsupported');
     refs.add(target.split('#')[0]);
   }
-  // HTML local resource references and shortcut Markdown references are not a
-  // promise to load additional files; reject local .md forms explicitly.
+  // HTML local resource references do not materialize additional files.
   if (/<[^>]+(?:href|src)\s*=\s*["'][^"']*\.md/iu.test(withoutCode))
     throw new Error('review_skills_reference_unsupported');
   return [...refs].sort();

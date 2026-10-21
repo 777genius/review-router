@@ -313,6 +313,31 @@ describe('captured text-only review skills', () => {
     );
   });
 
+  it('rejects used local Markdown shortcuts without treating other link forms as shortcuts', () => {
+    expect(() =>
+      markdownReferences('Follow [checks].\n\n[checks]: required.md')
+    ).toThrow('reference_unsupported');
+    expect(() =>
+      markdownReferences('Follow [ CHECKS ].\n\n[checks]: required.md#section')
+    ).toThrow('reference_unsupported');
+    expect(
+      markdownReferences(
+        '[inline](inline.md) [full][checks] [collapsed][] [docs] [anchor]\n' +
+          '[checks]: required.md\n[collapsed]: collapsed.md\n' +
+          '[docs]: https://example.com/docs.md\n[anchor]: #section\n' +
+          '[unused]: unused.md'
+      )
+    ).toEqual(['collapsed.md', 'inline.md', 'required.md']);
+    expect(
+      markdownReferences(
+        '`[checks]` ``[checks]`` \\[checks]\n' +
+          '```md\n[checks]\n[example](missing.md)\n```\n' +
+          '~~~md\n[checks]\n[example](missing.md)\n~~~\n' +
+          '[checks]: required.md'
+      )
+    ).toEqual([]);
+  });
+
   it.each(['cycle', 'symlink', 'oversize', 'count'] as const)(
     'fails closed before inference on Git %s',
     async (scenario) => {

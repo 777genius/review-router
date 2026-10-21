@@ -249,6 +249,72 @@ describe('ReviewOrchestrator integration (offline)', () => {
     ).toBeTruthy();
   });
 
+  it('persists a partial incremental snapshot with its coverage gaps when LLM batches fail', async () => {
+    class FailingLLMExecutor extends StubLLMExecutor {
+      async execute(): Promise<ProviderResult[]> {
+        return [
+          {
+            name: 'fake/model',
+            status: 'error',
+            error: new Error('synthetic provider outage'),
+            durationSeconds: 0.1,
+          },
+        ];
+      }
+    }
+    const saveReview = jest.fn().mockResolvedValue(undefined);
+    const components: ReviewComponents = {
+      config: { ...config, incrementalEnabled: true },
+      providerRegistry: new StubProviderRegistry() as any,
+      promptBuilder: new PromptBuilder(config),
+      deduplicator: new Deduplicator(),
+      consensus: new ConsensusEngine({
+        minAgreement: 1,
+        minSeverity: 'minor',
+        maxComments: 100,
+      }),
+      synthesis: new SynthesisEngine(config),
+      testCoverage: new TestCoverageAnalyzer(),
+      astAnalyzer: new ASTAnalyzer(),
+      cache: new NoopCache(),
+      costTracker: new CostTracker({
+        getPricing: async () => ({
+          modelId: 'fake',
+          promptPrice: 0,
+          completionPrice: 0,
+          isFree: true,
+        }),
+      } as any),
+      security: new SecurityScanner(),
+      rules: new RulesEngine([]),
+      prLoader: new StubPRLoader() as unknown as PullRequestLoader,
+      commentPoster: new StubCommentPoster() as unknown as CommentPoster,
+      formatter: new MarkdownFormatter(),
+      contextRetriever: new ContextRetriever(),
+      impactAnalyzer: new ImpactAnalyzer(),
+      evidenceScorer: new EvidenceScorer(),
+      mermaidGenerator: new MermaidGenerator(),
+      feedbackFilter: new StubFeedbackFilter() as unknown as FeedbackFilter,
+      llmExecutor: new FailingLLMExecutor() as any,
+      incrementalReviewer: {
+        shouldUseIncremental: async () => false,
+        getLastReview: async () => null,
+        saveReview,
+        getChangedFilesSince: async () => [],
+        mergeFindings: (prev: any, curr: any) => curr,
+        generateIncrementalSummary: () => '',
+      } as any,
+    };
+
+    const orchestrator = new ReviewOrchestrator(components);
+    await orchestrator.execute(1);
+
+    expect(saveReview).toHaveBeenCalledTimes(1);
+    const coverage = saveReview.mock.calls[0][2];
+    expect(coverage.complete).toBe(false);
+    expect(coverage.unreviewedPaths).toEqual(['src/index.ts']);
+  });
+
   it('replaces the progress comment with the final summary when findings are posted', async () => {
     const createComment = jest.fn().mockResolvedValue({ data: { id: 456 } });
     const updateComment = jest.fn().mockResolvedValue({ data: {} });

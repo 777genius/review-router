@@ -13,6 +13,14 @@ export interface IncrementalCacheData {
   baseSha?: string;
   compatibilityKey?: string;
   expiresAt?: number;
+  /** Absent means complete: legacy snapshots predate coverage markers. */
+  coverageComplete?: boolean;
+  unreviewedPaths?: string[];
+}
+
+export interface ReviewCoverageFacts {
+  readonly complete: boolean;
+  readonly unreviewedPaths: readonly string[];
 }
 
 export interface IncrementalChangeSet {
@@ -119,7 +127,11 @@ export class IncrementalReviewer {
     }
     return {
       mode: IncrementalReviewPlanMode.Delta,
-      files: changeSet.files,
+      files: mergeUncoveredFiles(
+        changeSet.files,
+        decision.lastReview,
+        pr.files
+      ),
       invalidatedPaths: changeSet.invalidatedPaths,
       lastReview: decision.lastReview,
     };
@@ -173,12 +185,30 @@ export class IncrementalReviewer {
       return fullReviewDecision();
     }
 
-    if (lastReview.lastReviewedCommit === pr.headSha) {
+    const coverageComplete = lastReview.coverageComplete !== false;
+    const unreviewedPaths = lastReview.unreviewedPaths ?? [];
+    if (!coverageComplete && unreviewedPaths.length === 0) {
       logger.info(
-        `PR head ${pr.headSha.substring(0, 7)} already has a completed review snapshot; reusing it without provider execution`
+        'Partial review snapshot cannot name its coverage gaps; running full review'
+      );
+      return fullReviewDecision();
+    }
+
+    if (lastReview.lastReviewedCommit === pr.headSha) {
+      if (coverageComplete) {
+        logger.info(
+          `PR head ${pr.headSha.substring(0, 7)} already has a completed review snapshot; reusing it without provider execution`
+        );
+        return {
+          mode: IncrementalReviewPlanMode.ReuseCompleted,
+          lastReview,
+        };
+      }
+      logger.info(
+        `PR head ${pr.headSha.substring(0, 7)} has a partial review snapshot; re-reviewing its uncovered paths`
       );
       return {
-        mode: IncrementalReviewPlanMode.ReuseCompleted,
+        mode: IncrementalReviewPlanMode.Delta,
         lastReview,
       };
     }
@@ -212,9 +242,14 @@ export class IncrementalReviewer {
   /**
    * Save review data for incremental updates
    */
-  async saveReview(pr: PRContext, review: Review): Promise<void> {
+  async saveReview(
+    pr: PRContext,
+    review: Review,
+    coverage?: ReviewCoverageFacts
+  ): Promise<void> {
     const key = this.buildCacheKey(pr.number);
     const timestamp = Date.now();
+    const unreviewedPaths = [...(coverage?.unreviewedPaths ?? [])];
     const data: IncrementalCacheData = {
       prNumber: pr.number,
       lastReviewedCommit: pr.headSha,
@@ -223,6 +258,8 @@ export class IncrementalReviewer {
       reviewSummary: review.summary,
       schemaVersion: 1,
       baseSha: pr.baseSha,
+      coverageComplete: coverage?.complete ?? true,
+      unreviewedPaths,
       ...(this.config.compatibilityKey
         ? { compatibilityKey: this.config.compatibilityKey }
         : {}),
@@ -424,6 +461,31 @@ ${previousSummary}
   private buildCacheKey(prNumber: number): string {
     return `${IncrementalReviewer.CACHE_KEY_PREFIX}${prNumber}`;
   }
+}
+
+// A path that never got LLM coverage must rejoin the review set even when the
+// diff cannot show it as changed: an untouched uncovered file would otherwise
+// look clean after findings merging.
+function mergeUncoveredFiles(
+  changedFiles: FileChange[],
+  lastReview: IncrementalCacheData,
+  prFiles: FileChange[]
+): FileChange[] {
+  const unreviewedPaths = lastReview.unreviewedPaths ?? [];
+  if (unreviewedPaths.length === 0) return changedFiles;
+  const merged = [...changedFiles];
+  const known = new Set(changedFiles.map((file) => file.filename));
+  for (const file of prFiles) {
+    const matches =
+      unreviewedPaths.includes(file.filename) ||
+      (file.previousFilename !== undefined &&
+        unreviewedPaths.includes(file.previousFilename));
+    if (matches && !known.has(file.filename)) {
+      merged.push(file);
+      known.add(file.filename);
+    }
+  }
+  return merged;
 }
 
 function fullReviewPlan(files: FileChange[]): IncrementalReviewPlan {

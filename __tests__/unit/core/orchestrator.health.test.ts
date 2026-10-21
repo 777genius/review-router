@@ -1943,7 +1943,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(execute).toHaveBeenCalledTimes(2);
   });
 
-  it('publishes partial coverage without advancing the completed snapshot', async () => {
+  it('publishes partial coverage and advances only a partial snapshot with its gaps', async () => {
     const provider = {
       name: 'codex/gpt-5.5',
       review: jest.fn(),
@@ -2040,7 +2040,11 @@ describe('ReviewOrchestrator health check guard rails', () => {
         status: 'unreviewed',
       })
     );
-    expect(saveReview).not.toHaveBeenCalled();
+    expect(saveReview).toHaveBeenCalledTimes(1);
+    expect(saveReview.mock.calls[0][2]).toEqual({
+      complete: false,
+      unreviewedPaths: ['src/second.ts'],
+    });
     expect(
       format.mock.calls.some(
         ([formattedReview]) => formattedReview.coverage?.complete === false
@@ -2089,6 +2093,109 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(review.coverage).toMatchObject({
       complete: false,
       unreviewedFiles: 1,
+    });
+    expect(saveReview).not.toHaveBeenCalled();
+  });
+
+  it('does not advance a partial snapshot when unnamed omissions coexist with named batch gaps', async () => {
+    const provider = {
+      name: 'codex/gpt-5.5',
+      review: jest.fn(),
+      healthCheck: jest.fn(),
+    } as unknown as Provider;
+    const execute = jest
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          name: provider.name,
+          status: 'success',
+          result: {
+            content: '{"findings":[],"revalidations":[]}',
+            findings: [],
+            revalidations: [],
+          },
+          durationSeconds: 1,
+        } as ProviderResult,
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: provider.name,
+          status: 'error',
+          error: new Error('capacity_unavailable'),
+          durationSeconds: 1,
+        } as ProviderResult,
+      ]);
+    const saveReview = jest.fn();
+    const orchestrator = makeOrchestrator({
+      config: {
+        ...DEFAULT_CONFIG,
+        dryRun: true,
+        enableCaching: false,
+        analyticsEnabled: false,
+        graphEnabled: false,
+        incrementalEnabled: true,
+        providers: [provider.name],
+        requiredHealthyProviders: [],
+        fallbackProviders: [],
+        providerLimit: 1,
+        batchMaxFiles: 1,
+        enableTokenAwareBatching: false,
+      },
+      providerRegistry: {
+        createProviders: jest.fn().mockResolvedValue([provider]),
+        discoverAdditionalFreeProviders: jest.fn().mockResolvedValue([]),
+      } as any,
+      llmExecutor: {
+        filterHealthyProviders: jest.fn().mockResolvedValue({
+          healthy: [provider],
+          healthCheckResults: [],
+        }),
+        execute,
+      } as any,
+      incrementalReviewer: {
+        shouldUseIncremental: jest.fn().mockResolvedValue(false),
+        getLastReview: jest.fn(),
+        mergeFindings: jest.fn(),
+        generateIncrementalSummary: jest.fn(),
+        saveReview,
+        getChangedFilesSince: jest.fn(),
+        getIncrementalChangeSet: jest.fn(),
+      } as any,
+      formatter: { format: jest.fn().mockReturnValue('') } as any,
+    });
+
+    const pr: PRContext = {
+      ...makePR([
+        {
+          filename: 'src/first.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+        {
+          filename: 'src/second.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ]),
+      loadCompleteness: {
+        status: PullRequestLoadStatus.Truncated,
+        omissions: [
+          {
+            reason: PullRequestLoadOmissionReason.GitHubFileLimit,
+            omittedFileCount: 1,
+          },
+        ],
+      },
+    };
+
+    const review = await orchestrator.executeReview(pr);
+
+    expect(review.coverage).toMatchObject({
+      complete: false,
     });
     expect(saveReview).not.toHaveBeenCalled();
   });

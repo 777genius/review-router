@@ -52,6 +52,9 @@ secrets:
 The reusable workflow receives this exact logical map as JSON. Do not forward `toJSON(secrets)` or use `secrets: inherit`. GitHub credential bytes
 stay in the trusted runner parent. Dashboard credentials use authenticated,
 run-scoped delivery; Dashboard-only selections need no caller secret mapping.
+GitHub secret availability follows GitHub: fork pull requests and Dependabot
+runs usually receive empty secrets, so a selected GitHub credential is
+unavailable before inference. No automatic fork-secret access is provided.
 
 `github.issue.read` reads linked issues and bounded comments in the admitted
 repository. The GitHub App installation must already permit issues read. The
@@ -66,7 +69,8 @@ dispatch; a later transport failure makes the review fail with required context
 unavailable. A tool's ordinary query error allows a corrected query. Failed or
 uncertain dispatches are not automatically replayed.
 
-Only approved HTTPS endpoints on public addresses are supported. DNS answers and
+Only approved remote Streamable HTTP endpoints over HTTPS on public addresses
+are supported. DNS answers and
 the actual TLS destination are checked on each connection; redirects, automatic
 OAuth discovery, proxy environment routing, local stdio, setup commands and
 arbitrary environment configuration are unsupported. The selected server receives

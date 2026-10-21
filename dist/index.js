@@ -33933,7 +33933,11 @@ var IncrementalReviewer = class _IncrementalReviewer {
     }
     return {
       mode: "delta" /* Delta */,
-      files: changeSet.files,
+      files: mergeUncoveredFiles(
+        changeSet.files,
+        decision.lastReview,
+        pr2.files
+      ),
       invalidatedPaths: changeSet.invalidatedPaths,
       lastReview: decision.lastReview
     };
@@ -33971,12 +33975,29 @@ var IncrementalReviewer = class _IncrementalReviewer {
       );
       return fullReviewDecision();
     }
-    if (lastReview.lastReviewedCommit === pr2.headSha) {
+    const coverageComplete = lastReview.coverageComplete !== false;
+    const unreviewedPaths = lastReview.unreviewedPaths ?? [];
+    if (!coverageComplete && unreviewedPaths.length === 0) {
       logger.info(
-        `PR head ${pr2.headSha.substring(0, 7)} already has a completed review snapshot; reusing it without provider execution`
+        "Partial review snapshot cannot name its coverage gaps; running full review"
+      );
+      return fullReviewDecision();
+    }
+    if (lastReview.lastReviewedCommit === pr2.headSha) {
+      if (coverageComplete) {
+        logger.info(
+          `PR head ${pr2.headSha.substring(0, 7)} already has a completed review snapshot; reusing it without provider execution`
+        );
+        return {
+          mode: "reuse_completed" /* ReuseCompleted */,
+          lastReview
+        };
+      }
+      logger.info(
+        `PR head ${pr2.headSha.substring(0, 7)} has a partial review snapshot; re-reviewing its uncovered paths`
       );
       return {
-        mode: "reuse_completed" /* ReuseCompleted */,
+        mode: "delta" /* Delta */,
         lastReview
       };
     }
@@ -34006,9 +34027,10 @@ var IncrementalReviewer = class _IncrementalReviewer {
   /**
    * Save review data for incremental updates
    */
-  async saveReview(pr2, review) {
+  async saveReview(pr2, review, coverage) {
     const key = this.buildCacheKey(pr2.number);
     const timestamp3 = Date.now();
+    const unreviewedPaths = [...coverage?.unreviewedPaths ?? []];
     const data = {
       prNumber: pr2.number,
       lastReviewedCommit: pr2.headSha,
@@ -34017,6 +34039,8 @@ var IncrementalReviewer = class _IncrementalReviewer {
       reviewSummary: review.summary,
       schemaVersion: 1,
       baseSha: pr2.baseSha,
+      coverageComplete: coverage?.complete ?? true,
+      unreviewedPaths,
       ...this.config.compatibilityKey ? { compatibilityKey: this.config.compatibilityKey } : {},
       expiresAt: timestamp3 + this.config.cacheTtlDays * _IncrementalReviewer.MS_PER_DAY
     };
@@ -34164,6 +34188,20 @@ ${previousSummary}
     return `${_IncrementalReviewer.CACHE_KEY_PREFIX}${prNumber}`;
   }
 };
+function mergeUncoveredFiles(changedFiles, lastReview, prFiles) {
+  const unreviewedPaths = lastReview.unreviewedPaths ?? [];
+  if (unreviewedPaths.length === 0) return changedFiles;
+  const merged = [...changedFiles];
+  const known = new Set(changedFiles.map((file) => file.filename));
+  for (const file of prFiles) {
+    const matches = unreviewedPaths.includes(file.filename) || file.previousFilename !== void 0 && unreviewedPaths.includes(file.previousFilename);
+    if (matches && !known.has(file.filename)) {
+      merged.push(file);
+      known.add(file.filename);
+    }
+  }
+  return merged;
+}
 function fullReviewPlan(files) {
   return {
     mode: "full" /* Full */,
@@ -49905,10 +49943,14 @@ var ReviewOrchestrator = class {
       await this.writeReports(review);
       await progressTracker?.updateProgress("synthesis", "completed");
       if (config.incrementalEnabled) {
-        if (llmCoverageComplete) {
+        const unreviewedPaths = [...unreviewedFiles.keys()];
+        if (llmCoverageComplete || unreviewedPaths.length > 0) {
           if (await this.canAdvanceIncrementalSnapshot(pr2)) {
             try {
-              await this.components.incrementalReviewer.saveReview(pr2, review);
+              await this.components.incrementalReviewer.saveReview(pr2, review, {
+                complete: llmCoverageComplete,
+                unreviewedPaths
+              });
             } catch (error2) {
               logger.warn(
                 "Failed to save incremental review snapshot; review output remains valid",
@@ -49918,7 +49960,7 @@ var ReviewOrchestrator = class {
           }
         } else {
           logger.warn(
-            "Incremental snapshot was not advanced because LLM batch coverage is incomplete"
+            "Incremental snapshot was not advanced because LLM batch coverage is incomplete and its gaps cannot be named"
           );
         }
       }

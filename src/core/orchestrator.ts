@@ -1730,10 +1730,16 @@ export class ReviewOrchestrator {
       await this.writeReports(review);
       await progressTracker?.updateProgress('synthesis', 'completed');
       if (config.incrementalEnabled) {
-        if (llmCoverageComplete) {
+        const unreviewedPaths = [...unreviewedFiles.keys()];
+        if (llmCoverageComplete || unreviewedPaths.length > 0) {
           if (await this.canAdvanceIncrementalSnapshot(pr)) {
             try {
-              await this.components.incrementalReviewer.saveReview(pr, review);
+              // Named coverage gaps still advance a partial snapshot, so a
+              // re-run only spends provider capacity on the uncovered paths.
+              await this.components.incrementalReviewer.saveReview(pr, review, {
+                complete: llmCoverageComplete,
+                unreviewedPaths,
+              });
             } catch (error) {
               logger.warn(
                 'Failed to save incremental review snapshot; review output remains valid',
@@ -1743,7 +1749,7 @@ export class ReviewOrchestrator {
           }
         } else {
           logger.warn(
-            'Incremental snapshot was not advanced because LLM batch coverage is incomplete'
+            'Incremental snapshot was not advanced because LLM batch coverage is incomplete and its gaps cannot be named'
           );
         }
       }

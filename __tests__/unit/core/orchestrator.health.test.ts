@@ -1943,7 +1943,7 @@ describe('ReviewOrchestrator health check guard rails', () => {
     expect(execute).toHaveBeenCalledTimes(2);
   });
 
-  it('publishes partial coverage without advancing the completed snapshot', async () => {
+  it('publishes partial coverage and advances only a partial snapshot with its gaps', async () => {
     const provider = {
       name: 'codex/gpt-5.5',
       review: jest.fn(),
@@ -2040,7 +2040,11 @@ describe('ReviewOrchestrator health check guard rails', () => {
         status: 'unreviewed',
       })
     );
-    expect(saveReview).not.toHaveBeenCalled();
+    expect(saveReview).toHaveBeenCalledTimes(1);
+    expect(saveReview.mock.calls[0][2]).toEqual({
+      complete: false,
+      unreviewedPaths: ['src/second.ts'],
+    });
     expect(
       format.mock.calls.some(
         ([formattedReview]) => formattedReview.coverage?.complete === false

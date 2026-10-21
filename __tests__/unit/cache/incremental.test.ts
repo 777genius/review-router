@@ -181,6 +181,101 @@ describe('IncrementalReviewer', () => {
     });
   });
 
+  describe('partial coverage snapshots', () => {
+    it('plans a delta over still-uncovered paths instead of reusing a partial snapshot at the same head', async () => {
+      const snapshot = {
+        prNumber: 1,
+        lastReviewedCommit: 'b'.repeat(40),
+        baseSha: 'base-sha',
+        timestamp: Date.now(),
+        findings: [],
+        reviewSummary: 'Partial review',
+        coverageComplete: false,
+        unreviewedPaths: ['src/b.ts'],
+      };
+      mockStorage.read.mockResolvedValue(JSON.stringify(snapshot));
+      (execFileSync as jest.Mock).mockReturnValue('');
+      const covered = createMockFile({ filename: 'src/a.ts' });
+      const uncovered = createMockFile({ filename: 'src/b.ts' });
+
+      const plan = await reviewer.planReview(
+        createMockPR({ headSha: 'b'.repeat(40), files: [covered, uncovered] })
+      );
+
+      expect(plan.mode).toBe(IncrementalReviewPlanMode.Delta);
+      expect(plan.files).toEqual([uncovered]);
+      expect(plan.lastReview).toEqual(snapshot);
+    });
+
+    it('adds previously uncovered paths to the delta review of a newer head', async () => {
+      const snapshot = {
+        prNumber: 1,
+        lastReviewedCommit: 'a'.repeat(40),
+        baseSha: 'base-sha',
+        timestamp: Date.now(),
+        findings: [],
+        reviewSummary: 'Partial review',
+        coverageComplete: false,
+        unreviewedPaths: ['src/b.ts'],
+      };
+      mockStorage.read.mockResolvedValue(JSON.stringify(snapshot));
+      (execFileSync as jest.Mock).mockReturnValue('M\0src/a.ts\0');
+      const changed = createMockFile({ filename: 'src/a.ts' });
+      const uncovered = createMockFile({ filename: 'src/b.ts' });
+      const clean = createMockFile({ filename: 'src/c.ts' });
+
+      const plan = await reviewer.planReview(
+        createMockPR({
+          headSha: 'b'.repeat(40),
+          files: [changed, uncovered, clean],
+        })
+      );
+
+      expect(plan.mode).toBe(IncrementalReviewPlanMode.Delta);
+      expect(plan.files).toEqual([changed, uncovered]);
+      expect(plan.invalidatedPaths).toEqual(['src/a.ts']);
+    });
+
+    it('falls back to a full review when a partial snapshot cannot name its gaps', async () => {
+      const snapshot = {
+        prNumber: 1,
+        lastReviewedCommit: 'b'.repeat(40),
+        baseSha: 'base-sha',
+        timestamp: Date.now(),
+        findings: [],
+        reviewSummary: 'Partial review',
+        coverageComplete: false,
+        unreviewedPaths: [],
+      };
+      mockStorage.read.mockResolvedValue(JSON.stringify(snapshot));
+
+      const plan = await reviewer.planReview(
+        createMockPR({ headSha: 'b'.repeat(40) })
+      );
+
+      expect(plan).toMatchObject({
+        mode: IncrementalReviewPlanMode.Full,
+        lastReview: null,
+      });
+    });
+
+    it('persists the partial coverage marker with the snapshot', async () => {
+      const pr: PRContext = createMockPR({ headSha: 'new-sha' });
+      const review: Review = createMockReview();
+
+      await (reviewer as any).saveReview(pr, review, {
+        complete: false,
+        unreviewedPaths: ['src/b.ts'],
+      });
+
+      const written = JSON.parse(
+        (mockStorage.write as jest.Mock).mock.calls[0][1]
+      );
+      expect(written.coverageComplete).toBe(false);
+      expect(written.unreviewedPaths).toEqual(['src/b.ts']);
+    });
+  });
+
   describe('getLastReview', () => {
     it('returns null when no cached data exists', async () => {
       mockStorage.read.mockResolvedValue(null);

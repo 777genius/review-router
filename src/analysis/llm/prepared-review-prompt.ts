@@ -18,6 +18,7 @@ export type PreparedPromptPathCoverage = Readonly<{
 
 export type PreparedReviewPromptV3 = Readonly<{
   version: 'prepared_review_prompt.v3';
+  reviewSkills?: Readonly<{ capturedDigest: string; executionDigest: string }>;
   /** Shared review context without a terminal provider output contract. */
   investigationContextPrompt: string;
   /** Legacy single-turn review prompt, including its terminal output contract. */

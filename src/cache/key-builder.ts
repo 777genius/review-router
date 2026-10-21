@@ -52,10 +52,17 @@ export function hashConfig(config: ReviewConfig): string {
 
 export function hashIncrementalCompatibility(
   config: ReviewConfig,
-  runtimeConfigVersion?: string
+  runtimeConfigVersion?: string,
+  reviewSkills?: Readonly<{ capturedDigest: string; executionDigest: string }>
 ): string {
   return createHash('sha256')
-    .update(incrementalCompatibilityPreimage(config, runtimeConfigVersion))
+    .update(
+      incrementalCompatibilityPreimage(
+        config,
+        runtimeConfigVersion,
+        reviewSkills
+      )
+    )
     .digest('hex');
 }
 
@@ -63,10 +70,12 @@ export function hashIncrementalCompatibility(
  * No credential discovery, provider preparation, or side effects. */
 export function incrementalCompatibilityPreimage(
   config: ReviewConfig,
-  runtimeConfigVersion?: string
+  runtimeConfigVersion?: string,
+  reviewSkills?: Readonly<{ capturedDigest: string; executionDigest: string }>
 ): string {
   return JSON.stringify(
     sortObject({
+      ...(reviewSkills === undefined ? {} : { reviewSkills }),
       cacheVersion: CACHE_VERSION,
       reviewConfig: config,
       runtimeConfigVersion: runtimeConfigVersion?.trim() || null,

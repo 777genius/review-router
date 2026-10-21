@@ -1,7 +1,7 @@
 {
   "canonicalizerDigest": "12408727c244f65242534d3060983b87221715f2086631ab743c2c6f6248629a",
   "contractExportVersion": 1,
-  "expectedPublicActionBaseCommit": "106ec47acd297818e3cbdf9c9f9b9b7354a79843",
+  "expectedPublicActionBaseCommit": "4613e973268c0b8ac2a46ed432f33e85179e2426",
   "generatedFileDigests": {
     "companion-contracts.ts": "16bd170f9d56dce048e8a137e1c02c1e72279b9c0a01ab52bbad9a817e2f372c",
     "fixtures/provider-invocation-manifest-v1.golden.json": "9e0369a80cb91c458befaf0b2aeb41be5b98246e0217b032e8fca414dab579bb",
@@ -14,8 +14,9 @@
     "review-action-v2-negotiation.ts": "75e62e3295e345760ff4c6372d03f2f9e4117b42bbe006183984cc68ffd6ee3b",
     "review-action-v2.schema.json": "320d21e381a2aebd28830be2a17131c12f3af5b76a961307ce58dfac10483557",
     "review-action-v2.ts": "5be4f58794ec87eb4cf1d127189bdd12ca0df690cd2775ea0e10fd4246bd2e44",
-    "review-agent-profile.ts": "ed6d45283ddf113f29df97e9f33d75f6e0f621a6b4606174640bdfd6c6800387",
+    "review-agent-profile.ts": "45f0f7a5c2c3e23cb4b92f10e6717197070bcfe9c991ae928465f8ad0fd8b757",
     "review-investigation-extension-v1.schema.json": "ede5bf90e3bc74c6332e36dbfacf71841343662ccf764314386dffb85bcca358",
+    "review-skills-contract.ts": "8e01fc7a250907a2d778a3b4a15fea1960d82cab6194d653f7144b7f1c14c19a",
     "schemas/review_context_gateway_open.schema.json": "fa248d09ea4464978408a81911f0f5243c2ab8fee01e6f90e2e06d8be70ffaed",
     "schemas/review_context_gateway_seal.schema.json": "8378b3f6e36ed6fdc470d7696dbc51058ffc0b38b8fc3c0750773175f8159812",
     "schemas/review_context_receipt_replay_commit.schema.json": "6828b2d7797543a12d1c8fd7bf3ea2079bd5a98ae7481fd552a06ab6c1513356",
@@ -55,6 +56,6 @@
   },
   "goldenFixtureDigest": "d6d5a918ce9e5e01a14aa9714a77d6557fcaee90c68e272cbc3f925f3e4c94a4",
   "protocolVersion": "2",
-  "saasSourceCommit": "0942e251c85f8531aaa6bb30ad8d8e934cb26f27",
+  "saasSourceCommit": "63677ff1f59c6f423bc4f4cfdeea47470940c3e7",
   "schemaDigest": "32bb25cd3490660dbaeecaa168f162ba97ff171e2dfab69e1bd435bc2e1cf3d3"
 }

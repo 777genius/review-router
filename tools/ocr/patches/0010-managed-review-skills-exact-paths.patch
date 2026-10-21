@@ -1,0 +1,198 @@
+diff --git a/internal/config/rules/system_rules.go b/internal/config/rules/system_rules.go
+--- a/internal/config/rules/system_rules.go
++++ b/internal/config/rules/system_rules.go
+@@ -207,20 +207,24 @@
+ 	Path            string `json:"path"`
+ 	Rule            string `json:"rule"`
+ 	MergeSystemRule bool   `json:"merge_system_rule,omitempty"`
++	ExactPath       bool   `json:"reviewrouter_exact_path,omitempty"`
+ }
+ 
+ // ProjectRule holds rules loaded from <repoDir>/.opencodereview/rule.json.
+ type ProjectRule struct {
+-	Rules   []ProjectRuleEntry `json:"rules"`
+-	Include []string           `json:"include,omitempty"`
+-	Exclude []string           `json:"exclude,omitempty"`
++	Rules        []ProjectRuleEntry `json:"rules"`
++	ManagedPaths *[]string          `json:"reviewrouter_managed_paths,omitempty"`
++	Include      []string           `json:"include,omitempty"`
++	Exclude      []string           `json:"exclude,omitempty"`
+ }
+ 
+ // FileFilter holds the merged user-configured include/exclude glob patterns
+ // collected from all rule.json layers (custom, project, global).
+ type FileFilter struct {
+-	Include []string
+-	Exclude []string
++	// Non-nil only for a trusted managed exact inventory. Empty denies all.
++	ManagedPaths map[string]bool
++	Include      []string
++	Exclude      []string
+ }
+ 
+ // HasInclude reports whether any include patterns are configured.
+@@ -321,6 +325,23 @@
+ 		if err != nil {
+ 			return nil, nil, err
+ 		}
++		if cr.ManagedPaths != nil && !opts.SkipProjectRules {
++			return nil, nil, fmt.Errorf("managed path inventory requires managed mode")
++		}
++		if cr.ManagedPaths != nil {
++			seen := make(map[string]bool)
++			for _, path := range *cr.ManagedPaths {
++				if path == "" || strings.HasPrefix(path, "/") || strings.Contains(path, "\\") || strings.Contains(path, "\x00") || seen[path] {
++					return nil, nil, fmt.Errorf("invalid managed path inventory")
++				}
++				seen[path] = true
++			}
++			for _, entry := range cr.Rules {
++				if !entry.ExactPath || !seen[entry.Path] || !entry.MergeSystemRule || entry.Rule == "" {
++					return nil, nil, fmt.Errorf("invalid managed exact rule")
++				}
++			}
++		}
+ 		customRule = cr
+ 	}
+ 
+@@ -339,6 +360,15 @@
+ 	}
+ 
+ 	filter := buildFileFilter(customRule, projectRule, globalRule)
++	if customRule != nil && customRule.ManagedPaths != nil {
++		if filter == nil {
++			filter = &FileFilter{}
++		}
++		filter.ManagedPaths = make(map[string]bool)
++		for _, path := range *customRule.ManagedPaths {
++			filter.ManagedPaths[path] = true
++		}
++	}
+ 
+ 	return &composedResolver{
+ 		custom:  customRule,
+@@ -477,7 +507,16 @@
+ 		if pr == nil {
+ 			return
+ 		}
++		if pr.ManagedPaths != nil {
++			fields = append(fields, "managed-paths-v1")
++			for _, path := range *pr.ManagedPaths {
++				fields = append(fields, "managed-path", path)
++			}
++		}
+ 		for _, e := range pr.Rules {
++			if e.ExactPath {
++				fields = append(fields, "exact-path-v1")
++			}
+ 			merge := "0"
+ 			if e.MergeSystemRule {
+ 				merge = "1"
+@@ -548,6 +587,12 @@
+ 	for i := range pr.Rules {
+ 		entry := &pr.Rules[i]
+ 		if entry.Rule == "" && !entry.MergeSystemRule {
++			continue
++		}
++		if entry.ExactPath {
++			if entry.Path == path {
++				return entry
++			}
+ 			continue
+ 		}
+ 		expanded := expandBraces(entry.Path)
+diff --git a/internal/agent/selection.go b/internal/agent/selection.go
+--- a/internal/agent/selection.go
++++ b/internal/agent/selection.go
+@@ -81,6 +81,16 @@
+ 		return ExcludeSecret
+ 	}
+ 
++	// Admission inventory is enforced before grouping or any model request.
++	// Native includes are force-includes, not allowlists. Preserve the hard
++	// binary/credential gates above, then select only exact admitted paths.
++	if f != nil && f.ManagedPaths != nil {
++		if !f.ManagedPaths[path] {
++			return ExcludeUserRule
++		}
++		return ExcludeNone
++	}
++
+ 	if f != nil && f.IsUserExcluded(path) {
+ 		return ExcludeUserRule
+ 	}
+diff --git a/internal/config/rules/reviewrouter_skills_test.go b/internal/config/rules/reviewrouter_skills_test.go
+new file mode 100644
+--- /dev/null
++++ b/internal/config/rules/reviewrouter_skills_test.go
+@@ -0,0 +1,41 @@
++package rules
++
++import (
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++)
++
++func TestReviewRouterManagedExactRules(t *testing.T) {
++	dir := t.TempDir()
++	setTestHome(t, dir)
++	file := filepath.Join(dir, "rule.json")
++	content := `{"reviewrouter_managed_paths":["src/Foo.go","src/foo.go","src/[x].go"],"rules":[{"path":"src/Foo.go","rule":"upper\nSKILL_A\nSKILL_B","merge_system_rule":true,"reviewrouter_exact_path":true},{"path":"src/foo.go","rule":"lower\n","merge_system_rule":true,"reviewrouter_exact_path":true},{"path":"src/[x].go","rule":"literal\n","merge_system_rule":true,"reviewrouter_exact_path":true}]}`
++	if err := os.WriteFile(file, []byte(content), 0600); err != nil {
++		t.Fatal(err)
++	}
++	resolver, filter, err := NewResolver(dir, file, ResolverOptions{SkipProjectRules: true})
++	if err != nil {
++		t.Fatal(err)
++	}
++	upper := resolver.Resolve("src/Foo.go")
++	if !strings.Contains(upper, "SKILL_A\nSKILL_B") || !strings.Contains(upper, "System-Specific Rules") {
++		t.Fatal("lost additive or built-in rules", upper)
++	}
++	if strings.Contains(resolver.Resolve("src/foo.go"), "SKILL_A") {
++		t.Fatal("case bleed")
++	}
++	if strings.Contains(resolver.Resolve("src/x.go"), "literal") {
++		t.Fatal("glob bleed")
++	}
++	if !strings.Contains(resolver.Resolve("src/[x].go"), "literal") {
++		t.Fatal("literal path missed")
++	}
++	if filter.ManagedPaths["src/x.go"] || !filter.ManagedPaths["src/[x].go"] {
++		t.Fatal("incorrect exact inventory")
++	}
++	if _, _, err := NewResolver(dir, file, ResolverOptions{}); err == nil {
++		t.Fatal("managed inventory accepted outside managed mode")
++	}
++}
+diff --git a/internal/agent/reviewrouter_skills_test.go b/internal/agent/reviewrouter_skills_test.go
+new file mode 100644
+--- /dev/null
++++ b/internal/agent/reviewrouter_skills_test.go
+@@ -0,0 +1,24 @@
++package agent
++
++import (
++	"github.com/alibaba/open-code-review/internal/config/rules"
++	"github.com/alibaba/open-code-review/internal/model"
++	"testing"
++)
++
++func TestReviewRouterManagedSelectionBeforeDispatch(t *testing.T) {
++	agent := New(Args{FileFilter: &rules.FileFilter{ManagedPaths: map[string]bool{"src/Foo.go": true, "src/[x].go": true, ".env": true}}})
++	for _, path := range []string{"src/foo.go", "src/x.go", "unassigned.go"} {
++		if agent.whyExcluded(model.Diff{NewPath: path}) != ExcludeUserRule {
++			t.Fatalf("unassigned selected: %s", path)
++		}
++	}
++	for _, path := range []string{"src/Foo.go", "src/[x].go"} {
++		if agent.whyExcluded(model.Diff{NewPath: path}) != ExcludeNone {
++			t.Fatalf("assigned excluded: %s", path)
++		}
++	}
++	if agent.whyExcluded(model.Diff{NewPath: ".env"}) != ExcludeSecret {
++		t.Fatal("hard credential gate lost")
++	}
++}

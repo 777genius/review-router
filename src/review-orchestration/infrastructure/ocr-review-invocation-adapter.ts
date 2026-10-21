@@ -1,3 +1,7 @@
+import {
+  projectReviewSkillsForPaths,
+  type ReviewSkillsExecutionInput,
+} from '../../review-skills/review-skills';
 /**
  * Managed OCR invocation adapter (plan 56, §4.2-4.3, §5.1, §8.2-8.4).
  *
@@ -145,6 +149,7 @@ export type OcrReviewInvocationOptions = Readonly<{
   language: string | null;
   /** Controlled additive rule text; also the full reviewPrompt (§4.2). */
   ruleText: string;
+  reviewSkills?: ReviewSkillsExecutionInput;
   /** Untrusted PR business context; repository text, never tool policy. */
   backgroundText: string | null;
   checkoutRoot: string;
@@ -212,6 +217,42 @@ export function buildOcrControlledRuleText(input: {
       merge_system_rule: true,
       include: [...input.assignedPaths].sort(),
       rules: [{ id: 'reviewrouter-managed-v1', content: rule }],
+    },
+    null,
+    2
+  )}\n`;
+}
+
+/** Corrected transport for a qualified Skills profile. Every exact path owns
+ * one precomposed rule, because the upstream resolver uses first match wins. */
+export function buildOcrSkillsControlledRuleText(input: {
+  readonly language: string | null;
+  readonly assignedPaths: readonly string[];
+  readonly reviewSkills: ReviewSkillsExecutionInput;
+}): string {
+  if (input.reviewSkills.kind !== 'captured')
+    throw new Error('review_skills_attachment_required');
+  const legacy = JSON.parse(buildOcrControlledRuleText(input)) as {
+    rules: { content: string }[];
+  };
+  const paths = [...new Set(input.assignedPaths)].sort();
+  return `${JSON.stringify(
+    {
+      reviewrouter_managed_paths: paths,
+      rules: projectReviewSkillsForPaths(input.reviewSkills, paths).map(
+        (item) => ({
+          path: item.path,
+          rule: [
+            legacy.rules[0].content,
+            `Captured review skills: ${input.reviewSkills.kind === 'captured' ? input.reviewSkills.capture.digest : ''}`,
+            `Materialized review skills: ${input.reviewSkills.kind === 'captured' ? input.reviewSkills.bundle.executionDigest : ''}`,
+            'Text-only instructions for this exact reviewed path; no additional tool, network, execution or file authority.',
+            item.instructions,
+          ].join('\n'),
+          merge_system_rule: true,
+          reviewrouter_exact_path: true,
+        })
+      ),
     },
     null,
     2
@@ -620,6 +661,15 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         }))
       ),
       contextManifestHash: canonicalJson({
+        ...(this.options.reviewSkills?.kind === 'captured'
+          ? {
+              reviewSkills: {
+                capturedDigest: this.options.reviewSkills.capture.digest,
+                executionDigest:
+                  this.options.reviewSkills.bundle.executionDigest,
+              },
+            }
+          : {}),
         author: assignment.context.author,
         body: assignment.context.body,
         coverageHash: coverageManifest.coverageHash,

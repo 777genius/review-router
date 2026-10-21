@@ -1,3 +1,6 @@
+import profiles from '../../../src/control-plane/review-agent-profiles.json';
+import { parseReviewAgentProfiles } from '../../../src/control-plane/generated/review-action-v2/review-agent-profile';
+import { LEGACY_REVIEW_SKILLS } from '../../../src/review-skills/review-skills';
 import { createHash } from 'crypto';
 import {
   canonicalizeProviderInvocationManifestV1,
@@ -272,6 +275,8 @@ describe('Codex T0 prepared invocation', () => {
         open: jest.fn(),
       } as unknown as ContextGatewayInvocationSessionFactoryPort;
       const input = {
+        admittedAgent: parseReviewAgentProfiles(profiles)[0],
+        reviewSkills: LEGACY_REVIEW_SKILLS,
         authorization: auth,
         pr,
         config,
@@ -375,6 +380,12 @@ describe('Codex T0 prepared invocation', () => {
           config: { ...config, providerRetries: 2 },
         })
       ).rejects.toThrow('single_plan_scope_incomplete');
+      await expect(
+        prepareSingleT0ReviewPlan({
+          ...input,
+          admittedAgent: { ...input.admittedAgent, reviewSkillsVersion: 1 },
+        })
+      ).rejects.toThrow('review_skills_attachment_required');
       expect(provider.prepareInvocation).toHaveBeenCalledTimes(2);
     }
   );

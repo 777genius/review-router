@@ -127,6 +127,9 @@ export async function prepareCodexReviewPrompt(
       }))
     ),
     contextManifestHash: canonicalJson({
+      ...(preparedPrompt.reviewSkills === undefined
+        ? {}
+        : { reviewSkills: preparedPrompt.reviewSkills }),
       author: assignment.context.author,
       body: assignment.context.body,
       coverageHash: providerVisibleCoverage.coverageHash,

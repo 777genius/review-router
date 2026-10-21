@@ -1,3 +1,12 @@
+import type { ReviewAgentProfile } from '../../control-plane/generated/review-action-v2/review-agent-profile';
+import { fetchCapturedReviewSkills } from '../../review-skills/review-skills-transport';
+import { materializeReviewSkills } from '../../review-skills/materialize-review-skills';
+import {
+  LEGACY_REVIEW_SKILLS,
+  assertReviewSkillsExecutionInput,
+  reviewSkillsCacheIdentity,
+  type ReviewSkillsExecutionInput,
+} from '../../review-skills/review-skills';
 import { createHash } from 'crypto';
 import { execFile, spawn } from 'child_process';
 import * as path from 'path';
@@ -103,6 +112,7 @@ import {
 } from './account-gateway-model-transport';
 import {
   buildOcrControlledRuleText,
+  buildOcrSkillsControlledRuleText,
   OcrReviewInvocationAdapter,
   planOcrReviewAssignments,
   runOcrReviewProcess,
@@ -362,6 +372,28 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         authorization.facts.headSha,
       ],
     });
+    const admittedAgent = approvedOcrAgent ?? approvedAgent;
+    const reviewSkills: ReviewSkillsExecutionInput =
+      admittedAgent?.reviewSkillsVersion === 1
+        ? await materializeReviewSkills({
+            capture: await fetchCapturedReviewSkills({
+              apiUrl: input.apiUrl,
+              authorizationToken: authorization.authorizationToken,
+              baseSha: authorization.facts.baseSha,
+              signal,
+              timeoutMs: executionDeadline.clampProviderTimeout(30_000),
+              fetchImpl,
+            }),
+            baseSha: authorization.facts.baseSha,
+            checkoutRoot: path.resolve(input.workspacePath),
+            signal,
+          })
+        : LEGACY_REVIEW_SKILLS;
+    assertReviewSkillsExecutionInput(
+      reviewSkills,
+      admittedAgent ?? {},
+      authorization.facts.baseSha
+    );
     const lifecycleInventory = new FreshGitHubLifecycleInventory(
       github,
       new ReviewLedger(github, process.env.REVIEW_ROUTER_LEDGER_KEY)
@@ -391,7 +423,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       }
       const ocrCompatibilityKey = hashIncrementalCompatibility(
         config,
-        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
+        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
+        reviewSkillsCacheIdentity(reviewSkills)
       );
       const ocrBackgroundParts = [pr.title, pr.body].filter(
         (part) => part.trim().length > 0
@@ -432,10 +465,18 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           ocrEffort: 'medium',
           modelReasoningEffort: ocrModelReasoningEffort,
           language: ocrLanguage,
-          ruleText: buildOcrControlledRuleText({
-            language: ocrLanguage,
-            assignedPaths: pr.files.map((file) => file.filename).sort(),
-          }),
+          reviewSkills,
+          ruleText:
+            reviewSkills.kind === 'legacy'
+              ? buildOcrControlledRuleText({
+                  language: ocrLanguage,
+                  assignedPaths: pr.files.map((file) => file.filename).sort(),
+                })
+              : buildOcrSkillsControlledRuleText({
+                  language: ocrLanguage,
+                  assignedPaths: pr.files.map((file) => file.filename).sort(),
+                  reviewSkills,
+                }),
           backgroundText:
             ocrBackgroundParts.length > 0
               ? ocrBackgroundParts.join('\n\n')
@@ -569,7 +610,8 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     });
     const compatibilityKey = hashIncrementalCompatibility(
       config,
-      process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
+      process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
+      reviewSkillsCacheIdentity(reviewSkills)
     );
     const gatewayBundlePath = resolveContextGatewayBundlePath();
     const requiredContextWitness = new SubprocessRequiredContextWitnessRunner();
@@ -605,7 +647,14 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     });
     const invocationAdapter = new CodexReviewInvocationAdapter(
       provider,
-      new PromptBuilder(config),
+      new PromptBuilder(
+        config,
+        'standard',
+        undefined,
+        undefined,
+        undefined,
+        reviewSkills
+      ),
       planned.assignments,
       providerTimeoutMs,
       agenticContext,
@@ -620,7 +669,14 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         create: () =>
           new CodexReviewInvocationAdapter(
             provider,
-            new PromptBuilder(config),
+            new PromptBuilder(
+              config,
+              'standard',
+              undefined,
+              undefined,
+              undefined,
+              reviewSkills
+            ),
             planned.assignments,
             providerTimeoutMs,
             agenticContext,
@@ -1495,6 +1551,8 @@ export async function prepareSingleT0NativeInputs(
         >
       >;
     readonly config: ReviewConfig;
+    readonly admittedAgent: ReviewAgentProfile;
+    readonly fetchImpl?: typeof fetch;
     readonly client: ReviewActionV2Client;
     readonly gatewayBundlePath: string;
     /** Numeric identity already bound to this receipt by the trusted root. */
@@ -1507,6 +1565,7 @@ export async function prepareSingleT0NativeInputs(
   // environment or issuing another authorization/provider operation.
   const snapshot = structuredClone(receipt);
   const config = structuredClone(trusted.config);
+  const admittedAgent = structuredClone(trusted.admittedAgent);
   const runner = { ...trusted.runner };
   const client = trusted.client;
   const gatewayBundlePath = trusted.gatewayBundlePath;
@@ -1595,6 +1654,24 @@ export async function prepareSingleT0NativeInputs(
       authorization.facts.headSha,
     ],
   });
+  const reviewSkills =
+    admittedAgent.reviewSkillsVersion === 1
+      ? await materializeReviewSkills({
+          capture: await fetchCapturedReviewSkills({
+            apiUrl: runner.apiUrl,
+            authorizationToken: authorization.authorizationToken,
+            baseSha: authorization.facts.baseSha,
+            fetchImpl: trusted.fetchImpl,
+          }),
+          baseSha: authorization.facts.baseSha,
+          checkoutRoot,
+        })
+      : LEGACY_REVIEW_SKILLS;
+  assertReviewSkillsExecutionInput(
+    reviewSkills,
+    admittedAgent,
+    authorization.facts.baseSha
+  );
   const lifecycle = await new FreshGitHubLifecycleInventory(
     github,
     new ReviewLedger(github, ledgerKey)
@@ -1620,6 +1697,8 @@ export async function prepareSingleT0NativeInputs(
     authorization,
     pr,
     config,
+    admittedAgent,
+    reviewSkills,
     provider,
     contextGateway: new ContextGatewayInvocationSessionFactory(
       controlPlane,
@@ -1633,6 +1712,8 @@ export async function prepareSingleT0NativeInputs(
 }
 
 export async function prepareSingleT0ReviewPlan(input: {
+  readonly admittedAgent: ReviewAgentProfile;
+  readonly reviewSkills: ReviewSkillsExecutionInput;
   readonly authorization: ReviewRunAuthorization;
   readonly pr: PRContext;
   readonly config: ReviewConfig;
@@ -1644,6 +1725,13 @@ export async function prepareSingleT0ReviewPlan(input: {
 }) {
   const config = structuredClone(input.config);
   const authorization = structuredClone(input.authorization);
+  const admittedAgent = structuredClone(input.admittedAgent);
+  const reviewSkills = structuredClone(input.reviewSkills);
+  assertReviewSkillsExecutionInput(
+    reviewSkills,
+    admittedAgent,
+    authorization.facts.baseSha
+  );
   const pr = structuredClone(input.pr);
   const provider = input.provider;
   const contextGateway = input.contextGateway;
@@ -1664,7 +1752,8 @@ export async function prepareSingleT0ReviewPlan(input: {
   }
   const compatibilityKey = hashIncrementalCompatibility(
     config,
-    runtimeConfigVersion
+    runtimeConfigVersion,
+    reviewSkillsCacheIdentity(reviewSkills)
   );
   const planned = planAssignments({
     authorization,
@@ -1691,7 +1780,14 @@ export async function prepareSingleT0ReviewPlan(input: {
   const prepare = (investigation: boolean) =>
     new CodexReviewInvocationAdapter(
       provider,
-      new PromptBuilder(config),
+      new PromptBuilder(
+        config,
+        'standard',
+        undefined,
+        undefined,
+        undefined,
+        reviewSkills
+      ),
       planned.assignments,
       Math.max(1_000, config.runTimeoutSeconds * 1_000),
       true,
@@ -1717,7 +1813,8 @@ export async function prepareSingleT0ReviewPlan(input: {
   const reviewConfigPreimage = canonicalJson(config);
   const compatibilityPreimage = incrementalCompatibilityPreimage(
     config,
-    runtimeConfigVersion
+    runtimeConfigVersion,
+    reviewSkillsCacheIdentity(reviewSkills)
   );
   const components = (prepared: typeof invocation) =>
     Object.freeze({

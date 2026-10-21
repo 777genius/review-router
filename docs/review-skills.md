@@ -29,6 +29,16 @@ and cache identities. The corrected OCR transport belongs to `ocr-managed-v3`
 supporting profile is `codex-skills-v1`, with the already verified Codex 0.147.0
 binary. Captured explicit profile choices are never silently replaced.
 
+| Admitted execution route                                           | Skills delivery                                                                                                |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Account Gateway, managed OCR or native                             | Supporting registered profiles receive the captured input.                                                     |
+| Verified direct OpenRouter provider API                            | Supporting native profile receives the captured input.                                                         |
+| Older GitHub Secrets/Hosted caller without the admitted-input seam | Retained legacy profile; new admissions with assignments or Git sources fail with `skills_engine_unsupported`. |
+
+The broad `provider_api` model transport label is insufficient to select a
+supporting profile. The control plane requires the verified direct OpenRouter
+route; an absent or ambiguous legacy profile fails closed on older callers.
+
 ## Scope
 
 Web bindings use repository-relative, case-sensitive POSIX patterns. Supported
@@ -93,6 +103,14 @@ The synthetic Git/loopback Responses test checks actual main and plan request
 content, merged built-ins, two applicable Skills, case-distinct paths and excluded
 inventory. It uses deterministic local responses, with no paid model calls.
 `REVIEWROUTER_OCR_REQUIRED=1` makes a missing binary fail instead of skipping.
+
+The runtime CI installs Go 1.26.9 through an immutable `actions/setup-go` pin,
+builds rr.4 under `RUNNER_TEMP`, and compares its complete manifest with the
+checked-in qualification manifest, including the Linux amd64 binary digest.
+Its ordinary full Jest step receives the absolute binary path and
+`REVIEWROUTER_OCR_REQUIRED=1`, so the real CLI suite runs once and cannot silently
+skip. The upstream checkout, build output and temporary files stay outside the
+repository; qualification does not change tracked artifacts.
 
 Focused unit tests cover exact-base Git bodies and resources, scope projection,
 bounded transport, native prompt parity, missing supporting inputs and unchanged

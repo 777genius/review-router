@@ -12090,7 +12090,10 @@ function patterns(value, includes) {
     fail("scope_invalid");
   const result2 = value.map((item) => {
     const pattern = text(item, reviewSkillsLimits.patternBytes, true);
-    if (encoder.encode(pattern).length > reviewSkillsLimits.patternBytes || pattern.startsWith("/") || /[\\\\:\[\]{}()!#\x00-\x1f\x7f]/.test(pattern) || pattern.split("/").some(
+    if (encoder.encode(pattern).length > reviewSkillsLimits.patternBytes || pattern.startsWith("/") || [...pattern].some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127 || "\\:[]{}()!#".includes(character);
+    }) || pattern.split("/").some(
       (part) => part === "" || part === "." || part === ".." || part.includes("**") && part !== "**"
     ))
       fail("scope_invalid");

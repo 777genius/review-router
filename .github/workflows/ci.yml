@@ -25,6 +25,18 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.9'
+          cache: false
+      - name: Qualify managed OCR binary
+        timeout-minutes: 10
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          test "$(go env GOOS)/$(go env GOARCH)" = linux/amd64
+          tools/ocr/build.sh --out "$RUNNER_TEMP/reviewrouter-ocr"
+          diff -u tools/ocr/qualifications/review-skills-v1.manifest "$RUNNER_TEMP/reviewrouter-ocr/MANIFEST"
       - name: Prepare review-quality fixture prerequisites
         timeout-minutes: 5
         run: |
@@ -35,7 +47,11 @@ jobs:
       # --maxWorkers=2: Limit parallelism to reduce resource contention
       # --detectOpenHandles surfaces lingering async resources
       # Use per-test timeout and open-handle detection to avoid hangs
-      - run: npm run test -- --maxWorkers=2 --detectOpenHandles --testTimeout=20000
+      - name: Run tests with required managed OCR qualification
+        env:
+          REVIEWROUTER_OCR_REQUIRED: '1'
+          REVIEWROUTER_OCR_BINARY: ${{ runner.temp }}/reviewrouter-ocr/opencodereview
+        run: npm run test -- --maxWorkers=2 --detectOpenHandles --testTimeout=20000
       - run: npm run build
       - name: Verify committed runtime artifacts
         run: |

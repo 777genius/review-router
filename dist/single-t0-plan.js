@@ -144919,7 +144919,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.192",
+  version: "1.0.193",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -204869,10 +204869,9 @@ function limitUtf8(value, maxBytes) {
   let depth = 0;
   let fence;
   for (const line of value.split("\n")) {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) fence = match[1];
-    else if (fence && new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
-      fence = void 0;
+    const next = advanceMarkdownFence(line, fence);
+    if (next.closing) block.push(next.closing);
+    fence = next.fence;
     if (!fence) {
       depth += (line.match(/<details\b[^>]*>/gi) ?? []).length;
       depth -= (line.match(/<\/details>/gi) ?? []).length;
@@ -205053,7 +205052,7 @@ function findingExcerpt(message, locale) {
   );
 }
 function markdownInterruptsParagraph(line) {
-  return /^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
+  return !!readMarkdownFenceOpening(line) || /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
     line
   ) || htmlInterruptsParagraph(line);
 }
@@ -205062,21 +205061,44 @@ function htmlInterruptsParagraph(line) {
     line
   );
 }
+function readMarkdownFenceOpening(line) {
+  const match = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match || match[2][0] === "`" && match[3].includes("`"))
+    return void 0;
+  return { delimiter: match[2], indent: match[1].length };
+}
+function closeMarkdownFence(fence) {
+  return " ".repeat(fence.indent) + fence.delimiter;
+}
+function advanceMarkdownFence(line, fence) {
+  if (fence) {
+    if (new RegExp(
+      `^ {0,3}${fence.delimiter[0]}{${fence.delimiter.length},}[ \\t]*\\r?$`
+    ).test(line))
+      return {};
+    if (!line.trim() || line.match(/^ */)[0].length >= fence.indent)
+      return { fence };
+    return {
+      fence: readMarkdownFenceOpening(line),
+      closing: closeMarkdownFence(fence)
+    };
+  }
+  return { fence: readMarkdownFenceOpening(line) };
+}
 function markdownBlocks(value) {
   const blocks2 = [];
   let lines = [];
   let fence;
   for (const line of value.split("\n")) {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) fence = { char: match[1][0], length: match[1].length };
-    else if (fence && new RegExp(`^\\s{0,3}${fence.char}{${fence.length},}\\s*$`).test(line))
-      fence = void 0;
+    const next = advanceMarkdownFence(line, fence);
+    if (next.closing) lines.push(next.closing);
+    fence = next.fence;
     if (!line.trim() && !fence) {
       if (lines.length) blocks2.push(lines.join("\n"));
       lines = [];
     } else lines.push(line);
   }
-  if (fence) lines.push(fence.char.repeat(fence.length));
+  if (fence) lines.push(closeMarkdownFence(fence));
   if (lines.length) blocks2.push(lines.join("\n"));
   return blocks2;
 }
@@ -205101,14 +205123,16 @@ function safeFindingBody(value) {
     prose = [];
   };
   for (const line of neutralizeDetailsMarkup(value).split("\n")) {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) {
-      flush();
-      fence = match[1];
+    const previous = fence;
+    const next = advanceMarkdownFence(line, fence);
+    fence = next.fence;
+    if (previous && !next.closing) {
       lines.push(line);
-    } else if (fence) {
-      if (new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
-        fence = void 0;
+      continue;
+    }
+    if (next.closing) lines.push(next.closing);
+    if (fence) {
+      flush();
       lines.push(line);
     } else if (markdownInterruptsParagraph(line)) {
       flush();

@@ -35,8 +35,13 @@ The complete commands and shared acceptance evidence are maintained in the paire
 | Context gateway artifact                                  | Unchanged SHA256 `37f54bbd18d5348221e4d4bad29eaa455e1f97fd4372ea9ba07ad42358425d2e`                 |
 | Paired signed API to runtime HTTP proof                   | Passed in SaaS: scope, retained old capture, changed new-run cache identity and forged-token denial |
 | Existing direct OpenRouter paired regression              | 2/2 passed in SaaS                                                                                  |
+| Paired lifecycle and committed production artifact        | 58/58 passed, with explicit retained legacy and Skills profile identities                           |
+| Direct-provider setup and approved-profile selection      | 45/45 passed                                                                                        |
+| All three failures found by the full remote Jest run      | 49/49 passed together after fixes: artifact smoke, setup preview and workflow audit                 |
 
 The ordinary runtime CI now builds the pinned OCR binary in its temporary directory, compares the complete manifest, and sets `REVIEWROUTER_OCR_REQUIRED=1` on its existing Jest run. A missing binary cannot silently skip that suite.
+
+The remote run on `4aae5bd` exposed three stale regression assumptions: a single approved Codex profile/digest occurrence, the old direct-provider profile selection, and the new pinned `actions/setup-go` missing from the exact audit table. The corrections retain both profile identities, require Skills capability for the supporting route, and audit exactly one use of setup-go `b7ad1dad31e06c5925ef5d2fc7ad053ef454303e` with Go `1.26.9` and cache disabled. All three affected files passed together locally; the latest complete remote run remains a separate check.
 
 The [user/runtime documentation](../../docs/review-skills.md) defines the supported Markdown subset and limits. No paid model request was needed for deterministic qualification. A supplied prompt is evidence of delivery, not proof that a model complied with every instruction.
 

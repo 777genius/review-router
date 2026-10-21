@@ -1,3 +1,5 @@
+import type { UsageDelivery } from '../../../src/provider-usage/delivery';
+import type { UsageFact } from '../../../src/provider-usage/usage-contract';
 import { createHash } from 'crypto';
 import nock from 'nock';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
@@ -72,12 +74,14 @@ const hash = (bytes: Uint8Array) =>
   createHash('sha256').update(bytes).digest('hex');
 const completed = (
   actualModel?: string,
-  text = '## Summary\nPreserve invoice ownership.'
+  text = '## Summary\nPreserve invoice ownership.',
+  usage?: { input_tokens: number; output_tokens: number }
 ) =>
   `event: response.completed\ndata: ${JSON.stringify({
     type: 'response.completed',
     response: {
       status: 'completed',
+      ...(usage ? { usage } : {}),
       ...(actualModel ? { model: actualModel } : {}),
       output: [
         {
@@ -401,14 +405,44 @@ describe('parent AI PR description', () => {
 
   it('uses the direct OpenRouter parent connection without exposing its key in a prepared request', async () => {
     const key = 'synthetic-direct-parent-only-key';
+    const facts: UsageFact[] = [];
+    const delivery = {
+      scope: {
+        sourceInstance: 'action:review',
+        callIdPrefix: 'review:',
+        provider: 'openrouter',
+        requestedModel: model,
+        runtimeType: 'codex',
+        route: 'direct',
+        purpose: 'review',
+      },
+      scopeIdentity: () => ({
+        workspaceId: 'workspace',
+        repositoryId: '12',
+        actorId: null,
+        runId: '34',
+        runAttempt: 1,
+        invocationId: 'review',
+        bindingId: null,
+        authorizationId: 'authorization',
+      }),
+      record: (fact: UsageFact) => {
+        facts.push(fact);
+      },
+    } as unknown as UsageDelivery;
     const transport = await startDirectOpenRouterModelTransport(() => key, {
       requestMs: 60_000,
       streamFrameBytes: 8 * 1024 * 1024,
+      usage: { delivery, requestedModel: model },
     });
     const upstream = nock('https://openrouter.ai')
       .post('/api/v1/responses')
       .matchHeader('authorization', `Bearer ${key}`)
-      .reply(200, completed(model), { 'content-type': 'text/event-stream' });
+      .reply(
+        200,
+        completed(model, undefined, { input_tokens: 11, output_tokens: 3 }),
+        { 'content-type': 'text/event-stream' }
+      );
     try {
       const parent = generator(transport)!;
       const invocation = await parent.prepare({
@@ -430,6 +464,16 @@ describe('parent AI PR description', () => {
       expect(upstream.isDone()).toBe(true);
       expect(transport.requestCount!()).toBe(0);
       expect(transport.actualModel()).toBeUndefined();
+      expect(facts.map((fact) => fact.state)).toEqual([
+        'dispatched',
+        'completed',
+      ]);
+      expect(facts[1]?.identity.callId).toBe(facts[0]?.identity.callId);
+      expect(facts[1]).toMatchObject({
+        identity: { purpose: 'review' },
+        actualModel: model,
+        tokens: { inputTotal: 11, outputTotal: 3, total: 14 },
+      });
     } finally {
       await transport.dispose();
     }

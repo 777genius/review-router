@@ -454,7 +454,13 @@ export async function createComponents(
   const reliabilityTracker = new ReliabilityTracker(cacheStorage);
   const providerRegistry = new ProviderRegistry(
     pluginLoader,
-    reliabilityTracker
+    reliabilityTracker,
+    options.runtimeConfig?.status === 'applied'
+      ? {
+          deliveries: options.runtimeConfig.usageDeliveries ?? [],
+          authMode: options.runtimeConfig.usageAuthMode,
+        }
+      : undefined
   );
   bindDeadlineAwareProviderDiscovery(providerRegistry, llmExecutor);
   const metricsCollector = config.analyticsEnabled

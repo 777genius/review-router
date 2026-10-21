@@ -20,6 +20,8 @@ import {
   CODEX_SHELL_ENVIRONMENT_POLICY,
 } from './codex-confinement-policy';
 import { CODEX_OPENROUTER_CONFIGURATION } from './codex-model-provider-configuration';
+import type { UsageDelivery } from '../provider-usage/delivery';
+import { startCodexUsageRelay } from '../provider-usage/codex-relay';
 import { prepareCodexCliBeforeAuthRead } from '../codex-oauth/codex-cli';
 import { prepareAccountGatewayModelCatalog } from '../codex-oauth/account-gateway-mimo-catalog';
 import {
@@ -54,6 +56,11 @@ import {
 } from '../context-gateway/context-gateway-v4-contract';
 
 export interface CodexProviderOptions {
+  usageDelivery?: UsageDelivery;
+  /** Trusted T0 composition selects the existing authorized OpenAI endpoint. */
+  usageUpstreamBaseUrl?:
+    | 'https://api.openai.com/v1'
+    | 'https://chatgpt.com/backend-api/codex';
   /** Internal T0 composition only; no user URL/account/provider-key override. */
   accountGateway?: LocalGatewayModelTransport;
   /** Direct OpenRouter wire attestation; contains only a loopback capability. */
@@ -893,6 +900,9 @@ export class CodexProvider extends Provider {
       this.modelTransport || this.options.waitForProcessClose
     );
     let fd: fs.FileHandle | undefined;
+    let usageRelay:
+      | Awaited<ReturnType<typeof startCodexUsageRelay>>
+      | undefined;
     try {
       await fs.writeFile(tmpFile, stdin, { encoding: 'utf8', mode: 0o600 });
       await fs.writeFile(outputFile, '', { encoding: 'utf8', mode: 0o600 });
@@ -918,6 +928,41 @@ export class CodexProvider extends Provider {
             disableTools: options.disableTools,
             skipGitRepoCheck: options.skipGitRepoCheck,
           });
+
+      if (this.options.usageDelivery && !this.modelTransport) {
+        const provider =
+          this.options.modelProvider === 'mimo'
+            ? 'mimo'
+            : this.options.modelProvider === 'openrouter'
+              ? 'openrouter'
+              : 'openai';
+        const upstreamBaseUrl =
+          provider === 'mimo'
+            ? 'https://token-plan-sgp.xiaomimimo.com/v1'
+            : provider === 'openrouter'
+              ? 'https://openrouter.ai/api/v1'
+              : this.options.usageUpstreamBaseUrl;
+        if (upstreamBaseUrl) {
+          usageRelay = await startCodexUsageRelay({
+            upstreamBaseUrl,
+            model: this.model,
+            delivery: this.options.usageDelivery,
+            timeoutMs,
+            provider:
+              provider === 'openai' && upstreamBaseUrl.includes('chatgpt.com')
+                ? 'codex'
+                : provider,
+          });
+          // Override only the existing provider's endpoint; its auth.json or
+          // env_key, retry policy and fork confinement remain authoritative.
+          args.splice(
+            args.length - 1,
+            0,
+            '-c',
+            `model_providers.${provider}.base_url=${JSON.stringify(usageRelay.baseUrl)}`
+          );
+        }
+      }
 
       // Use stdin redirection via file descriptor instead of shell
       // This avoids both "stdin is not a terminal" error and shell injection
@@ -1062,6 +1107,7 @@ export class CodexProvider extends Provider {
             : undefined,
       };
     } finally {
+      await usageRelay?.close();
       // Clean up temp file and file descriptor
       try {
         if (fd) {

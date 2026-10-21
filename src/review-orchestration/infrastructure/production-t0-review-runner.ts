@@ -1,3 +1,6 @@
+import { tmpdir } from 'os';
+import { UsageDelivery } from '../../provider-usage/delivery';
+import { uploadUsageArtifact } from '../../provider-usage/github-artifact';
 import { writeFile } from 'node:fs/promises';
 import { prepareOcrContextTools } from '../../context-tools/ocr-session';
 import {
@@ -334,676 +337,721 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           });
     validateAuthorizationInput(input, authorization);
 
-    const scmReadTokenProvider = createScmReadTokenProvider({
-      token: input.scmReadToken,
-      expiresAt: input.scmReadTokenExpiresAt,
-      refresh: input.refreshScmReadToken,
-    });
-    const github = createScmReadGitHubClient({
-      tokenProvider: scmReadTokenProvider,
-      token: input.scmReadToken,
-      expiresAt: input.scmReadTokenExpiresAt,
-      refresh: input.refreshScmReadToken,
-      signal,
-    });
-    const revisionGuard = new GitHubReviewRevisionGuard(github, {
-      workspaceId: authorization.facts.workspaceId,
-      repositoryConnectionId: authorization.facts.repositoryConnectionId,
-      scmRepositoryIdentityId: authorization.facts.scmRepositoryIdentityId,
-      pullRequestNumber: authorization.facts.pullRequestNumber,
-    });
-    const checkedOutHead = await readCheckedOutHead(
-      input.workspacePath,
-      signal
-    );
-    if (checkedOutHead !== authorization.facts.headSha) {
-      throw new Error('review_action_v2_checked_out_revision_mismatch');
-    }
-    const currentRevision = await revisionGuard.loadCurrentRevision();
-    if (currentRevision.pullRequestState === 'closed') {
-      return {
-        outcome: CodexOAuthV2ReviewOutcome.Cancelled,
-        reason: CodexOAuthV2CancellationReason.PullRequestClosed,
-      };
-    }
-    if (!sameAuthorizedRevision(currentRevision, authorization)) {
-      return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
-    }
-
-    const pr = await new PullRequestLoader(github).load(
-      authorization.facts.pullRequestNumber
-    );
-    if (
-      pr.baseSha.toLowerCase() !== authorization.facts.baseSha ||
-      pr.headSha.toLowerCase() !== authorization.facts.headSha
-    ) {
-      return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
-    }
-    signal?.throwIfAborted();
-    const materializer = new GitReviewRevisionMaterializer(
-      signal
-        ? async (args, options) => {
-            signal.throwIfAborted();
-            await runAccountGatewayGit(args, options, signal);
-          }
-        : undefined
-    );
-    await materializer.ensureAvailable({
-      checkoutRoot: path.resolve(input.workspacePath),
-      repository: input.repository,
-      scmReadToken: await scmReadTokenProvider.getToken(),
-      commitShas: [
-        authorization.facts.baseSha,
-        authorization.facts.mergeBaseSha,
-        authorization.facts.headSha,
-      ],
-    });
-    const lifecycleInventory = new FreshGitHubLifecycleInventory(
-      github,
-      new ReviewLedger(github, process.env.REVIEW_ROUTER_LEDGER_KEY)
-    );
-    const initialLifecycle = await lifecycleInventory.loadForPrompt(
-      pr.number,
-      authorization.facts.headSha
-    );
-    signal?.throwIfAborted();
-    if (input.ocr) {
-      // Managed OCR review (plan 56): one FindingDiscovery slot over the whole
-      // inventory, no CodexProvider/PromptBuilder/Context Gateway and no RR
-      // investigation composition on this path.
-      const ocrRuntimeEnv = input.accountGateway!.runtimeConfig.runtimeEnv;
-      const ocrModel = ocrRuntimeEnv.CODEX_MODEL;
-      if (!ocrModel || !approvedOcrAgent) {
-        throw new Error('review_action_v2_ocr_model_missing');
-      }
-      const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
-      const ocrModelReasoningEffort =
-        ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
-      const modelTransport = input.accountGateway!.modelTransport;
-      const capabilityAuthorization =
-        modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
-      if (!capabilityAuthorization) {
-        throw new Error('review_action_v2_ocr_capability_missing');
-      }
-      const contextTools = await prepareOcrContextTools({
-        runtimeEnv: ocrRuntimeEnv,
-        githubJson: process.env[CONTEXT_TOOLS_CREDENTIALS_ENV],
-        apiUrl: input.apiUrl,
-        authorization: () => controlPlane.currentAuthorization(),
-        fetchImpl,
-        mask: core.setSecret,
-        checkoutRoot: path.resolve(input.workspacePath),
-        headSha: authorization.facts.headSha,
-        mergeBaseSha: authorization.facts.mergeBaseSha,
-        deadlineMs:
-          Date.now() +
-          executionDeadline.clampProviderTimeout(providerTimeoutMs),
-        ...(signal ? { signal } : {}),
-      });
+    let usageDelivery: UsageDelivery | undefined;
+    if (!input.accountGateway && !input.providerApi) {
       try {
-        if (contextTools) {
-          if (!modelTransport.setContextToolsGuard)
-            throw contextToolsError('transport_guard_unavailable');
-          modelTransport.setContextToolsGuard(() => {
-            const receipt = contextTools.receipt();
-            if (!receipt.nativeConnected || receipt.hadFailure)
-              throw contextToolsError('required_context_unavailable');
+        usageDelivery = await UsageDelivery.create({
+          apiUrl: input.apiUrl,
+          executionToken: authorization.authorizationToken,
+          invocationId: `${authorization.authorizationId}-provider-api`,
+          temporaryDirectory: process.env.RUNNER_TEMP || tmpdir(),
+          fetchImpl: this.fetchImpl,
+          uploadArtifact: uploadUsageArtifact,
+          status: (status) => core.setOutput('provider_usage_status', status),
+        });
+      } catch {
+        core.setOutput('provider_usage_status', 'unavailable');
+      }
+    }
+    try {
+      const scmReadTokenProvider = createScmReadTokenProvider({
+        token: input.scmReadToken,
+        expiresAt: input.scmReadTokenExpiresAt,
+        refresh: input.refreshScmReadToken,
+      });
+      const github = createScmReadGitHubClient({
+        tokenProvider: scmReadTokenProvider,
+        token: input.scmReadToken,
+        expiresAt: input.scmReadTokenExpiresAt,
+        refresh: input.refreshScmReadToken,
+        signal,
+      });
+      const revisionGuard = new GitHubReviewRevisionGuard(github, {
+        workspaceId: authorization.facts.workspaceId,
+        repositoryConnectionId: authorization.facts.repositoryConnectionId,
+        scmRepositoryIdentityId: authorization.facts.scmRepositoryIdentityId,
+        pullRequestNumber: authorization.facts.pullRequestNumber,
+      });
+      const checkedOutHead = await readCheckedOutHead(
+        input.workspacePath,
+        signal
+      );
+      if (checkedOutHead !== authorization.facts.headSha) {
+        throw new Error('review_action_v2_checked_out_revision_mismatch');
+      }
+      const currentRevision = await revisionGuard.loadCurrentRevision();
+      if (currentRevision.pullRequestState === 'closed') {
+        return {
+          outcome: CodexOAuthV2ReviewOutcome.Cancelled,
+          reason: CodexOAuthV2CancellationReason.PullRequestClosed,
+        };
+      }
+      if (!sameAuthorizedRevision(currentRevision, authorization)) {
+        return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
+      }
+
+      const pr = await new PullRequestLoader(github).load(
+        authorization.facts.pullRequestNumber
+      );
+      if (
+        pr.baseSha.toLowerCase() !== authorization.facts.baseSha ||
+        pr.headSha.toLowerCase() !== authorization.facts.headSha
+      ) {
+        return { outcome: CodexOAuthV2ReviewOutcome.Superseded };
+      }
+      signal?.throwIfAborted();
+      const materializer = new GitReviewRevisionMaterializer(
+        signal
+          ? async (args, options) => {
+              signal.throwIfAborted();
+              await runAccountGatewayGit(args, options, signal);
+            }
+          : undefined
+      );
+      await materializer.ensureAvailable({
+        checkoutRoot: path.resolve(input.workspacePath),
+        repository: input.repository,
+        scmReadToken: await scmReadTokenProvider.getToken(),
+        commitShas: [
+          authorization.facts.baseSha,
+          authorization.facts.mergeBaseSha,
+          authorization.facts.headSha,
+        ],
+      });
+      const lifecycleInventory = new FreshGitHubLifecycleInventory(
+        github,
+        new ReviewLedger(github, process.env.REVIEW_ROUTER_LEDGER_KEY)
+      );
+      const initialLifecycle = await lifecycleInventory.loadForPrompt(
+        pr.number,
+        authorization.facts.headSha
+      );
+      signal?.throwIfAborted();
+      if (input.ocr) {
+        // Managed OCR review (plan 56): one FindingDiscovery slot over the whole
+        // inventory, no CodexProvider/PromptBuilder/Context Gateway and no RR
+        // investigation composition on this path.
+        const ocrRuntimeEnv = input.accountGateway!.runtimeConfig.runtimeEnv;
+        const ocrModel = ocrRuntimeEnv.CODEX_MODEL;
+        if (!ocrModel || !approvedOcrAgent) {
+          throw new Error('review_action_v2_ocr_model_missing');
+        }
+        const ocrLanguage = ocrRuntimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null;
+        const ocrModelReasoningEffort =
+          ocrRuntimeEnv.CODEX_REASONING_EFFORT ?? null;
+        const modelTransport = input.accountGateway!.modelTransport;
+        const capabilityAuthorization =
+          modelTransport.environment[LOCAL_MODEL_CAPABILITY_ENV];
+        if (!capabilityAuthorization) {
+          throw new Error('review_action_v2_ocr_capability_missing');
+        }
+        const contextTools = await prepareOcrContextTools({
+          runtimeEnv: ocrRuntimeEnv,
+          githubJson: process.env[CONTEXT_TOOLS_CREDENTIALS_ENV],
+          apiUrl: input.apiUrl,
+          authorization: () => controlPlane.currentAuthorization(),
+          fetchImpl,
+          mask: core.setSecret,
+          checkoutRoot: path.resolve(input.workspacePath),
+          headSha: authorization.facts.headSha,
+          mergeBaseSha: authorization.facts.mergeBaseSha,
+          deadlineMs:
+            Date.now() +
+            executionDeadline.clampProviderTimeout(providerTimeoutMs),
+          ...(signal ? { signal } : {}),
+        });
+        try {
+          if (contextTools) {
+            if (!modelTransport.setContextToolsGuard)
+              throw contextToolsError('transport_guard_unavailable');
+            modelTransport.setContextToolsGuard(() => {
+              const receipt = contextTools.receipt();
+              if (!receipt.nativeConnected || receipt.hadFailure)
+                throw contextToolsError('required_context_unavailable');
+            });
+            await writeFile(
+              input.ocr.run.configPath,
+              buildOcrManagedConfigJson({
+                baseUrl: modelTransport.baseUrl,
+                rawCapability: extractRawLoopbackCapability(
+                  capabilityAuthorization
+                ),
+                model: ocrModel,
+                limits: {
+                  requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
+                },
+                modelReasoningEffort: ocrModelReasoningEffort,
+                language: ocrLanguage,
+                contextTools: contextTools.config,
+              }),
+              { mode: 0o600 }
+            );
+          }
+          const baseOcrCompatibilityKey = hashIncrementalCompatibility(
+            config,
+            process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
+          );
+          const contextReceipt = contextTools?.receipt();
+          const ocrCompatibilityKey = contextReceipt
+            ? sha256(
+                canonicalJson({
+                  baseOcrCompatibilityKey,
+                  contextTools: {
+                    planDigest: contextReceipt.planDigest,
+                    schemaDigest: contextReceipt.schemaDigest,
+                  },
+                })
+              )
+            : baseOcrCompatibilityKey;
+          const ocrBackgroundParts = [
+            pr.title,
+            stripOwnedPrDescriptionBlocks(pr.body),
+          ].filter((part) => part.trim().length > 0);
+          const prDescription = createPrDescriptionGeneration({
+            enabled: config.updatePrDescription,
+            capabilityJson:
+              admittedRuntime?.runtimeEnv[
+                prDescriptionContract.capabilityRuntimeEnvKey
+              ],
+            pr,
+            reviewRevisionHash: authorization.facts.reviewRevisionHash,
+            requestedModel: ocrModel,
+            providerKind: ReviewExecutionProviderKind.Ocr,
+            language: config.outputLanguage,
+            config,
+            transport: modelTransport,
+            warn: core.warning,
           });
-          await writeFile(
-            input.ocr.run.configPath,
-            buildOcrManagedConfigJson({
-              baseUrl: modelTransport.baseUrl,
-              rawCapability: extractRawLoopbackCapability(
-                capabilityAuthorization
-              ),
+          const planned = planOcrReviewAssignments({
+            prDescriptionEnabled: prDescription !== undefined,
+            authorization,
+            pr,
+            config,
+            compatibilityKey: ocrCompatibilityKey,
+            lifecycleTargets: initialLifecycle.promptTargets,
+            liveLifecycleStateHash:
+              initialLifecycle.inventory.lifecycleStateHash,
+          });
+          const bridge: OcrLoopbackBridge = {
+            baseUrl: modelTransport.baseUrl,
+            capabilityAuthorization,
+            actualModel: () => modelTransport.actualModel(),
+            requestCount: () => modelTransport.requestCount?.(),
+            effectFacts: input.ocr.effectFacts,
+          };
+          const invocationAdapter = new OcrReviewInvocationAdapter(
+            planned.assignments,
+            {
+              ...(signal ? { signal } : {}),
+              previewTimeoutMs: () =>
+                Math.floor(
+                  executionDeadline.clampProviderTimeout(providerTimeoutMs)
+                ),
               model: ocrModel,
+              binaryPath: input.ocr.run.binaryPath,
+              binarySha256: approvedOcrAgent.binarySha256,
+              packageVersion: approvedOcrAgent.packageVersion,
+              profileRef: approvedOcrAgent.profileRef,
+              run: input.ocr.run,
+              ...(contextTools
+                ? {
+                    contextTools,
+                    contextToolsReceipt: (
+                      receipt: import('../../context-tools/broker').ContextToolsReceipt
+                    ) =>
+                      logger.info('Managed OCR context tools', {
+                        planDigest: receipt.planDigest,
+                        schemaDigest: receipt.schemaDigest,
+                        selectedTools: receipt.availableTools,
+                        nativeConnected: receipt.nativeConnected,
+                        calls: receipt.calls,
+                        hadFailure: receipt.hadFailure,
+                      }),
+                  }
+                : {}),
+              bridge,
               limits: {
                 requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
               },
+              ocrEffort: 'medium',
               modelReasoningEffort: ocrModelReasoningEffort,
               language: ocrLanguage,
-              contextTools: contextTools.config,
-            }),
-            { mode: 0o600 }
+              ruleText: buildOcrControlledRuleText({
+                language: ocrLanguage,
+                assignedPaths: pr.files.map((file) => file.filename).sort(),
+              }),
+              backgroundText:
+                ocrBackgroundParts.length > 0
+                  ? ocrBackgroundParts.join('\n\n')
+                  : null,
+              checkoutRoot: path.resolve(input.workspacePath),
+              processRunner: runOcrReviewProcess,
+              previewRunner: runOcrReviewProcess,
+              acceptanceDiagnostic: (diagnostic) =>
+                logger.info('Managed OCR acceptance', diagnostic),
+            }
           );
-        }
-        const baseOcrCompatibilityKey = hashIncrementalCompatibility(
-          config,
-          process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
-        );
-        const contextReceipt = contextTools?.receipt();
-        const ocrCompatibilityKey = contextReceipt
-          ? sha256(
-              canonicalJson({
-                baseOcrCompatibilityKey,
-                contextTools: {
-                  planDigest: contextReceipt.planDigest,
-                  schemaDigest: contextReceipt.schemaDigest,
-                },
-              })
+          const identities = new DeterministicReviewOrchestrationIdentity();
+          if (
+            prDescription &&
+            !planned.plan.assignments.some(
+              (assignment) =>
+                assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
             )
-          : baseOcrCompatibilityKey;
-        const ocrBackgroundParts = [
-          pr.title,
-          stripOwnedPrDescriptionBlocks(pr.body),
-        ].filter((part) => part.trim().length > 0);
-        const prDescription = createPrDescriptionGeneration({
-          enabled: config.updatePrDescription,
-          capabilityJson:
-            admittedRuntime?.runtimeEnv[
-              prDescriptionContract.capabilityRuntimeEnvKey
-            ],
-          pr,
-          reviewRevisionHash: authorization.facts.reviewRevisionHash,
-          requestedModel: ocrModel,
-          providerKind: ReviewExecutionProviderKind.Ocr,
-          language: config.outputLanguage,
-          config,
-          transport: modelTransport,
-          warn: core.warning,
-        });
-        const planned = planOcrReviewAssignments({
-          prDescriptionEnabled: prDescription !== undefined,
-          authorization,
-          pr,
-          config,
-          compatibilityKey: ocrCompatibilityKey,
-          lifecycleTargets: initialLifecycle.promptTargets,
-          liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
-        });
-        const bridge: OcrLoopbackBridge = {
-          baseUrl: modelTransport.baseUrl,
-          capabilityAuthorization,
-          actualModel: () => modelTransport.actualModel(),
-          requestCount: () => modelTransport.requestCount?.(),
-          effectFacts: input.ocr.effectFacts,
-        };
-        const invocationAdapter = new OcrReviewInvocationAdapter(
-          planned.assignments,
-          {
-            ...(signal ? { signal } : {}),
-            previewTimeoutMs: () =>
-              Math.floor(
-                executionDeadline.clampProviderTimeout(providerTimeoutMs)
-              ),
-            model: ocrModel,
-            binaryPath: input.ocr.run.binaryPath,
-            binarySha256: approvedOcrAgent.binarySha256,
-            packageVersion: approvedOcrAgent.packageVersion,
-            profileRef: approvedOcrAgent.profileRef,
-            run: input.ocr.run,
-            ...(contextTools
-              ? {
-                  contextTools,
-                  contextToolsReceipt: (
-                    receipt: import('../../context-tools/broker').ContextToolsReceipt
-                  ) =>
-                    logger.info('Managed OCR context tools', {
-                      planDigest: receipt.planDigest,
-                      schemaDigest: receipt.schemaDigest,
-                      selectedTools: receipt.availableTools,
-                      nativeConnected: receipt.nativeConnected,
-                      calls: receipt.calls,
-                      hadFailure: receipt.hadFailure,
-                    }),
-                }
-              : {}),
-            bridge,
-            limits: {
-              requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
-            },
-            ocrEffort: 'medium',
-            modelReasoningEffort: ocrModelReasoningEffort,
-            language: ocrLanguage,
-            ruleText: buildOcrControlledRuleText({
-              language: ocrLanguage,
-              assignedPaths: pr.files.map((file) => file.filename).sort(),
-            }),
-            backgroundText:
-              ocrBackgroundParts.length > 0
-                ? ocrBackgroundParts.join('\n\n')
-                : null,
-            checkoutRoot: path.resolve(input.workspacePath),
-            processRunner: runOcrReviewProcess,
-            previewRunner: runOcrReviewProcess,
-            acceptanceDiagnostic: (diagnostic) =>
-              logger.info('Managed OCR acceptance', diagnostic),
-          }
-        );
-        const identities = new DeterministicReviewOrchestrationIdentity();
-        if (
-          prDescription &&
-          !planned.plan.assignments.some(
-            (assignment) =>
-              assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
           )
-        )
-          core.warning(
-            'AI PR description omitted: no optional task budget remains.'
-          );
-        const useCase = new RunT0ReviewOrchestration({
-          ...(prDescription ? { prDescription } : {}),
-          controlPlane,
-          revisionGuard,
-          oidc: {
-            getToken: () => oidc.requestToken(input.audience),
-          },
-          invocationManifestAssembler:
-            new GeneratedProviderInvocationManifestAssembler(
-              authorization,
+            core.warning(
+              'AI PR description omitted: no optional task budget remains.'
+            );
+          const useCase = new RunT0ReviewOrchestration({
+            ...(prDescription ? { prDescription } : {}),
+            controlPlane,
+            revisionGuard,
+            oidc: {
+              getToken: () => oidc.requestToken(input.audience),
+            },
+            invocationManifestAssembler:
+              new GeneratedProviderInvocationManifestAssembler(
+                authorization,
+                config,
+                ocrCompatibilityKey
+              ),
+            invocations: invocationAdapter,
+            invocationFailureClassifier:
+              new ProviderInvocationFailureClassifier(
+                modelTransport.failureFact
+              ),
+            invocationDiagnostics: new LoggingReviewInvocationDiagnostics(
+              logger
+            ),
+            investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
+              logger
+            ),
+            leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+            projectionBuilder: createProductionReviewProjectionBuilder({
+              authorizationFacts: authorization.facts,
+              pr,
               config,
-              ocrCompatibilityKey
-            ),
-          invocations: invocationAdapter,
-          invocationFailureClassifier: new ProviderInvocationFailureClassifier(
-            modelTransport.failureFact
-          ),
-          invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
-          investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
-            logger
-          ),
-          leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
-          projectionBuilder: createProductionReviewProjectionBuilder({
-            authorizationFacts: authorization.facts,
-            pr,
-            config,
-            protocolLimits: authorization.limits,
-            assignments: planned.assignments.map((assignment) => ({
-              workSlotId: assignment.workSlot.workSlotId,
-              taskKind: assignment.workSlot.taskKind,
-              providerKind: assignment.workSlot.providerKind,
-              required: assignment.workSlot.required,
-              filePaths: assignment.context.files.map((file) => file.filename),
-            })),
-            uncoveredPaths: planned.uncoveredPaths,
-            uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
-            lifecycleInventory,
-          }),
-          identities,
-          clock: new SystemReviewOrchestrationClock(),
-          delay: new CancellableReviewOrchestrationDelay(),
-          executionDeadline,
-          signal,
-          ...(this.progress ? { progress: this.progress } : {}),
-        });
-        const result = await useCase.executeAuthorized(
-          {
-            executionId: identities.deterministicId('execution', [
-              authorization.authorizationId,
-              authorization.facts.reviewRevisionHash,
-              planned.plan.planHash,
-            ]),
-            baseSha: authorization.facts.baseSha,
-            mergeBaseSha: authorization.facts.mergeBaseSha,
-            headSha: authorization.facts.headSha,
-            reviewRevisionHash: authorization.facts.reviewRevisionHash,
-            compatibilityKey: ocrCompatibilityKey,
-            planHash: planned.plan.planHash,
-            workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
-            assignmentManifestCanonicalJson:
-              planned.plan.assignmentManifestCanonicalJson,
-            assignmentManifestHash: planned.plan.assignmentManifestHash,
-            workSlots: planned.plan.assignments.map(
-              (assignment) => assignment.workSlot
-            ),
-            sourceRunId: authorization.facts.sourceRunId,
-            sourceRunAttempt: authorization.facts.sourceRunAttempt,
-            ownerIdHash: sha256(
-              canonicalJson({
-                authorizationId: authorization.authorizationId,
-                providerInstanceId: input.providerInstanceId,
-                sourceRunAttempt: authorization.facts.sourceRunAttempt,
-                sourceRunId: authorization.facts.sourceRunId,
-              })
-            ),
-            allowPartial: true,
-          },
-          authorization
-        );
-        signal?.throwIfAborted();
-        return mapOrchestrationResultToCodexOutcome(result);
-      } finally {
-        modelTransport.setContextToolsGuard?.(undefined);
-        await contextTools?.close();
+              protocolLimits: authorization.limits,
+              assignments: planned.assignments.map((assignment) => ({
+                workSlotId: assignment.workSlot.workSlotId,
+                taskKind: assignment.workSlot.taskKind,
+                providerKind: assignment.workSlot.providerKind,
+                required: assignment.workSlot.required,
+                filePaths: assignment.context.files.map(
+                  (file) => file.filename
+                ),
+              })),
+              uncoveredPaths: planned.uncoveredPaths,
+              uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
+              lifecycleInventory,
+            }),
+            identities,
+            clock: new SystemReviewOrchestrationClock(),
+            delay: new CancellableReviewOrchestrationDelay(),
+            executionDeadline,
+            signal,
+            ...(this.progress ? { progress: this.progress } : {}),
+          });
+          const result = await useCase.executeAuthorized(
+            {
+              executionId: identities.deterministicId('execution', [
+                authorization.authorizationId,
+                authorization.facts.reviewRevisionHash,
+                planned.plan.planHash,
+              ]),
+              baseSha: authorization.facts.baseSha,
+              mergeBaseSha: authorization.facts.mergeBaseSha,
+              headSha: authorization.facts.headSha,
+              reviewRevisionHash: authorization.facts.reviewRevisionHash,
+              compatibilityKey: ocrCompatibilityKey,
+              planHash: planned.plan.planHash,
+              workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
+              assignmentManifestCanonicalJson:
+                planned.plan.assignmentManifestCanonicalJson,
+              assignmentManifestHash: planned.plan.assignmentManifestHash,
+              workSlots: planned.plan.assignments.map(
+                (assignment) => assignment.workSlot
+              ),
+              sourceRunId: authorization.facts.sourceRunId,
+              sourceRunAttempt: authorization.facts.sourceRunAttempt,
+              ownerIdHash: sha256(
+                canonicalJson({
+                  authorizationId: authorization.authorizationId,
+                  providerInstanceId: input.providerInstanceId,
+                  sourceRunAttempt: authorization.facts.sourceRunAttempt,
+                  sourceRunId: authorization.facts.sourceRunId,
+                })
+              ),
+              allowPartial: true,
+            },
+            authorization
+          );
+          signal?.throwIfAborted();
+          return mapOrchestrationResultToCodexOutcome(result);
+        } finally {
+          modelTransport.setContextToolsGuard?.(undefined);
+          await contextTools?.close();
+        }
       }
-    }
-    const agenticContext = config.codexAgenticContext ?? true;
-    const investigationRolloutResolution =
-      resolveProductionReviewInvestigationRolloutResolution({
-        flags: readProductionReviewInvestigationRolloutFlags(),
-        agenticContext,
-        authorization,
-        primaryProviderKind: ReviewExecutionProviderKind.Codex,
-        reviewDepth: config.reviewDepth,
-      });
-    const investigationRollout = investigationRolloutResolution.rollout;
-    emitReviewInvestigationTelemetry(
-      formatProductionReviewInvestigationRolloutTelemetry(
-        investigationRolloutResolution
-      )
-    );
-    const investigationRecordingEnabled = investigationRollout.recordingEnabled;
-    const provider = new CodexProvider(model, {
-      agenticContext,
-      eventAudit: config.codexEventAudit,
-      modelProvider: input.providerApi
-        ? 'openrouter'
-        : resolveAccountGatewayModelProvider(
-            model,
-            input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
-            input.accountGateway?.modelTransport
-          ),
-      ...(input.providerApi
-        ? {
-            providerNamePrefix: 'openrouter' as const,
-            providerApiTransport: input.providerApi.modelTransport,
-            disableBuiltinTools: true,
-            waitForProcessClose: true,
-          }
-        : {}),
-      ...(input.accountGateway
-        ? { accountGateway: input.accountGateway.modelTransport }
-        : {}),
-    });
-    const compatibilityKey = hashIncrementalCompatibility(
-      config,
-      process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
-    );
-    const gatewayBundlePath = resolveContextGatewayBundlePath();
-    const requiredContextWitness = new SubprocessRequiredContextWitnessRunner();
-    const contextGatewayOptions =
-      resolveProductionContextGatewaySessionFactoryOptions({
-        agenticContext,
-        investigationRecordingEnabled,
-        checkoutRoot: path.resolve(input.workspacePath),
-        gatewayBundlePath,
-      });
-    const contextGateway = contextGatewayOptions
-      ? new ContextGatewayInvocationSessionFactory(
-          controlPlane,
-          contextGatewayOptions,
-          requiredContextWitness
+      const agenticContext = config.codexAgenticContext ?? true;
+      const investigationRolloutResolution =
+        resolveProductionReviewInvestigationRolloutResolution({
+          flags: readProductionReviewInvestigationRolloutFlags(),
+          agenticContext,
+          authorization,
+          primaryProviderKind: ReviewExecutionProviderKind.Codex,
+          reviewDepth: config.reviewDepth,
+        });
+      const investigationRollout = investigationRolloutResolution.rollout;
+      emitReviewInvestigationTelemetry(
+        formatProductionReviewInvestigationRolloutTelemetry(
+          investigationRolloutResolution
         )
-      : undefined;
-    const contextReplayRunner = contextGateway
-      ? new ContextAttestationReplayRunner({
+      );
+      const investigationRecordingEnabled =
+        investigationRollout.recordingEnabled;
+      const provider = new CodexProvider(model, {
+        ...(usageDelivery
+          ? {
+              usageDelivery,
+              usageUpstreamBaseUrl:
+                process.env.REVIEW_AUTH_MODE === 'openai-api'
+                  ? 'https://api.openai.com/v1'
+                  : input.providerInstanceId ||
+                      process.env.REVIEW_AUTH_MODE === 'codex-oauth'
+                    ? 'https://chatgpt.com/backend-api/codex'
+                    : undefined,
+            }
+          : {}),
+
+        agenticContext,
+        eventAudit: config.codexEventAudit,
+        modelProvider: input.providerApi
+          ? 'openrouter'
+          : resolveAccountGatewayModelProvider(
+              model,
+              input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
+              input.accountGateway?.modelTransport
+            ),
+        ...(input.providerApi
+          ? {
+              providerNamePrefix: 'openrouter' as const,
+              providerApiTransport: input.providerApi.modelTransport,
+              disableBuiltinTools: true,
+              waitForProcessClose: true,
+            }
+          : {}),
+        ...(input.accountGateway
+          ? { accountGateway: input.accountGateway.modelTransport }
+          : {}),
+      });
+      const compatibilityKey = hashIncrementalCompatibility(
+        config,
+        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
+      );
+      const gatewayBundlePath = resolveContextGatewayBundlePath();
+      const requiredContextWitness =
+        new SubprocessRequiredContextWitnessRunner();
+      const contextGatewayOptions =
+        resolveProductionContextGatewaySessionFactoryOptions({
+          agenticContext,
+          investigationRecordingEnabled,
           checkoutRoot: path.resolve(input.workspacePath),
           gatewayBundlePath,
-        })
-      : undefined;
-    const prDescription = createPrDescriptionGeneration({
-      enabled: config.updatePrDescription,
-      capabilityJson:
-        admittedRuntime?.runtimeEnv[
-          prDescriptionContract.capabilityRuntimeEnvKey
-        ],
-      pr,
-      reviewRevisionHash: authorization.facts.reviewRevisionHash,
-      requestedModel: model,
-      providerKind: ReviewExecutionProviderKind.Codex,
-      language: config.outputLanguage,
-      config,
-      transport:
-        input.providerApi?.modelTransport ??
-        input.accountGateway?.modelTransport,
-      warn: core.warning,
-    });
-    const planned = planAssignments({
-      prDescriptionEnabled: prDescription !== undefined,
-      authorization,
-      pr,
-      config,
-      providerName: provider.name,
-      compatibilityKey,
-      lifecycleTargets: initialLifecycle.promptTargets,
-      liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
-      accountGateway: input.accountGateway !== undefined,
-    });
-    const invocationAdapter = new CodexReviewInvocationAdapter(
-      provider,
-      new PromptBuilder(config),
-      planned.assignments,
-      providerTimeoutMs,
-      agenticContext,
-      contextGateway,
-      false,
-      input.providerApi ? reasoningEffort : 'xhigh',
-      input.providerApi?.credentialLease
-    );
-    const investigationInvocationAdapter =
-      createProductionReviewInvestigationInvocation({
-        rollout: investigationRollout,
-        create: () =>
-          new CodexReviewInvocationAdapter(
-            provider,
-            new PromptBuilder(config),
-            planned.assignments,
-            providerTimeoutMs,
-            agenticContext,
-            contextGateway,
-            true,
-            reasoningEffort,
-            input.providerApi?.credentialLease
-          ),
-      });
-    const identities = new DeterministicReviewOrchestrationIdentity();
-    const investigationProtocol = investigationRecordingEnabled
-      ? new ReviewActionV2InvestigationAdapter(reviewActionClient)
-      : undefined;
-    const investigationRecording =
-      investigationProtocol && contextGatewayOptions
-        ? new ReviewInvestigationRecordingAdapter(
-            (recordingInput) => {
-              const legacyFallbackGate =
-                new ReviewInvestigationLegacyFallbackGate();
-              if (input.accountGateway) legacyFallbackGate.close();
-              const investigationControlPlane =
-                new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
-                  investigationProtocol,
-                  legacyFallbackGate
-                );
-              const currency = new RevisionGuardInvestigationCurrencyAdapter(
-                revisionGuard
-              );
-              const investigationGatewayFactory =
-                createProductionReviewInvestigationGatewayFactory(
-                  new ContextGatewayInvocationSessionFactory(
-                    new ReviewActionV2InvestigationContextAttestationAdapter(
-                      reviewActionClient,
-                      recordingInput.authorization.authorizationToken
-                    ),
-                    contextGatewayOptions,
-                    requiredContextWitness
-                  )
-                );
-              const gateway = new ContextGatewayV4InvestigationAdapter(
-                investigationGatewayFactory,
-                {
-                  revision: {
-                    baseSha: authorization.facts.baseSha,
-                    mergeBaseSha: authorization.facts.mergeBaseSha,
-                    headSha: authorization.facts.headSha,
-                  },
-                  preparedManifestKey: recordingInput.manifest.manifestKey,
-                  providerKind:
-                    recordingInput.invocation.manifestFacts.providerKind,
-                  requestedModel: recordingInput.invocation.requestedModel,
-                  executionProfile:
-                    recordingInput.invocation.manifestFacts.executionProfile,
-                  providerInvocationKey:
-                    recordingInput.manifest.providerInvocationKey,
-                  toolPolicyHash:
-                    recordingInput.invocation.manifestFacts.toolPolicyHash,
-                }
-              );
-              const agents = createProductionReviewInvestigationAgentSelector({
-                authorization,
-                primaryProviderKind: ReviewAgentProviderKind.Codex,
-                contextCriticEnabled: investigationRollout.contextCriticEnabled,
-                agents: createConfiguredProductionInvestigationAgents({
-                  approvedAgent,
-                  ...(input.providerApi
-                    ? {
-                        directCredentialLease:
-                          input.providerApi.credentialLease,
-                      }
-                    : {}),
-                  codexModel: model,
-                  codexBinaryPath: input.codexBinaryPath,
-                  executionSessions: gateway,
-                  modelTransport:
-                    input.providerApi?.modelTransport ??
-                    input.accountGateway?.modelTransport,
-                  admittedGatewayModel:
-                    input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
-                  reasoningEffort,
-                }),
-              });
-              return new RunInvestigationWorkSlot({
-                controlPlane: investigationControlPlane,
-                legacyFallbackGate,
-                delay: new CancellableReviewOrchestrationDelay(),
-                leases: new ReviewActionV2InvestigationLeaseAdapter(
-                  reviewActionClient
-                ),
-                ...(investigationRollout.crossRevisionReplayEnabled &&
-                contextReplayRunner
-                  ? {
-                      replay: new ReplayInvestigationOnRevision({
-                        controlPlane: investigationControlPlane,
-                        receipts: contextReplayRunner,
-                        currency,
-                      }),
-                    }
-                  : {}),
-                turnRunner: new RunInvestigationTurn({
-                  controlPlane: investigationControlPlane,
-                  currency,
-                  gateway,
-                  agents,
-                  diagnostics: new LoggingInvestigationOperationalDiagnostics(
-                    logger
-                  ),
-                  now: () => new Date(),
-                }),
-              });
-            },
-            {
-              workingDirectory: path.resolve(input.workspacePath),
-              leaseDurationMs: providerTimeoutMs + 5 * 60_000,
-              providerTimeoutMs: providerTimeoutMs,
-              certificateTtlMs: 24 * 60 * 60_000,
-              minimumCapacityParkMs: 60_000,
-              actionBudget: reviewInvestigationActionBudgetForDepth(
-                config.reviewDepth
-              ),
-              policy: REVIEW_INVESTIGATION_PRODUCTION_POLICY,
-            },
-            productionReviewInvestigationRecordingMode(investigationRollout),
-            investigationRollout.verifiedCleanEnabled
+        });
+      const contextGateway = contextGatewayOptions
+        ? new ContextGatewayInvocationSessionFactory(
+            controlPlane,
+            contextGatewayOptions,
+            requiredContextWitness
           )
         : undefined;
-    if (
-      prDescription &&
-      !planned.plan.assignments.some(
-        (assignment) =>
-          assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
-      )
-    )
-      core.warning(
-        'AI PR description omitted: no optional task budget remains.'
-      );
-    const useCase = new RunT0ReviewOrchestration({
-      ...(prDescription ? { prDescription } : {}),
-      controlPlane,
-      revisionGuard,
-      oidc: {
-        getToken: () => oidc.requestToken(input.audience),
-      },
-      invocationManifestAssembler:
-        new GeneratedProviderInvocationManifestAssembler(
-          authorization,
-          config,
-          compatibilityKey
-        ),
-      invocations: invocationAdapter,
-      ...(investigationInvocationAdapter
-        ? { investigationInvocations: investigationInvocationAdapter }
-        : {}),
-      invocationFailureClassifier: new ProviderInvocationFailureClassifier(
-        input.accountGateway?.modelTransport.failureFact
-      ),
-      invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
-      investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
-        logger
-      ),
-      leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
-      ...(investigationRecording ? { investigationRecording } : {}),
-      projectionBuilder: createProductionReviewProjectionBuilder({
-        authorizationFacts: authorization.facts,
+      const contextReplayRunner = contextGateway
+        ? new ContextAttestationReplayRunner({
+            checkoutRoot: path.resolve(input.workspacePath),
+            gatewayBundlePath,
+          })
+        : undefined;
+      const prDescription = createPrDescriptionGeneration({
+        enabled: config.updatePrDescription,
+        capabilityJson:
+          admittedRuntime?.runtimeEnv[
+            prDescriptionContract.capabilityRuntimeEnvKey
+          ],
+        pr,
+        reviewRevisionHash: authorization.facts.reviewRevisionHash,
+        requestedModel: model,
+        providerKind: ReviewExecutionProviderKind.Codex,
+        language: config.outputLanguage,
+        config,
+        transport:
+          input.providerApi?.modelTransport ??
+          input.accountGateway?.modelTransport,
+        warn: core.warning,
+      });
+      const planned = planAssignments({
+        prDescriptionEnabled: prDescription !== undefined,
+        authorization,
         pr,
         config,
-        protocolLimits: authorization.limits,
-        assignments: planned.assignments.map((assignment) => ({
-          workSlotId: assignment.workSlot.workSlotId,
-          taskKind: assignment.workSlot.taskKind,
-          providerKind: assignment.workSlot.providerKind,
-          required: assignment.workSlot.required,
-          filePaths: assignment.context.files.map((file) => file.filename),
-        })),
-        uncoveredPaths: planned.uncoveredPaths,
-        uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
-        lifecycleInventory,
-      }),
-      ...(contextGateway
-        ? {
-            contextReplay: contextReplayRunner,
-            contextAttestations: controlPlane,
-          }
-        : {}),
-      identities,
-      clock: new SystemReviewOrchestrationClock(),
-      delay: new CancellableReviewOrchestrationDelay(),
-      executionDeadline,
-      signal,
-      ...(this.progress ? { progress: this.progress } : {}),
-    });
-    const result = await useCase.executeAuthorized(
-      {
-        executionId: identities.deterministicId('execution', [
-          authorization.authorizationId,
-          authorization.facts.reviewRevisionHash,
-          planned.plan.planHash,
-        ]),
-        baseSha: authorization.facts.baseSha,
-        mergeBaseSha: authorization.facts.mergeBaseSha,
-        headSha: authorization.facts.headSha,
-        reviewRevisionHash: authorization.facts.reviewRevisionHash,
+        providerName: provider.name,
         compatibilityKey,
-        planHash: planned.plan.planHash,
-        workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
-        assignmentManifestCanonicalJson:
-          planned.plan.assignmentManifestCanonicalJson,
-        assignmentManifestHash: planned.plan.assignmentManifestHash,
-        workSlots: planned.plan.assignments.map(
-          (assignment) => assignment.workSlot
+        lifecycleTargets: initialLifecycle.promptTargets,
+        liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+        accountGateway: input.accountGateway !== undefined,
+      });
+      const invocationAdapter = new CodexReviewInvocationAdapter(
+        provider,
+        new PromptBuilder(config),
+        planned.assignments,
+        providerTimeoutMs,
+        agenticContext,
+        contextGateway,
+        false,
+        input.providerApi ? reasoningEffort : 'xhigh',
+        input.providerApi?.credentialLease
+      );
+      const investigationInvocationAdapter =
+        createProductionReviewInvestigationInvocation({
+          rollout: investigationRollout,
+          create: () =>
+            new CodexReviewInvocationAdapter(
+              provider,
+              new PromptBuilder(config),
+              planned.assignments,
+              providerTimeoutMs,
+              agenticContext,
+              contextGateway,
+              true,
+              reasoningEffort,
+              input.providerApi?.credentialLease
+            ),
+        });
+      const identities = new DeterministicReviewOrchestrationIdentity();
+      const investigationProtocol = investigationRecordingEnabled
+        ? new ReviewActionV2InvestigationAdapter(reviewActionClient)
+        : undefined;
+      const investigationRecording =
+        investigationProtocol && contextGatewayOptions
+          ? new ReviewInvestigationRecordingAdapter(
+              (recordingInput) => {
+                const legacyFallbackGate =
+                  new ReviewInvestigationLegacyFallbackGate();
+                if (input.accountGateway) legacyFallbackGate.close();
+                const investigationControlPlane =
+                  new LegacyFallbackBeforeInvestigationAuthorityControlPlane(
+                    investigationProtocol,
+                    legacyFallbackGate
+                  );
+                const currency = new RevisionGuardInvestigationCurrencyAdapter(
+                  revisionGuard
+                );
+                const investigationGatewayFactory =
+                  createProductionReviewInvestigationGatewayFactory(
+                    new ContextGatewayInvocationSessionFactory(
+                      new ReviewActionV2InvestigationContextAttestationAdapter(
+                        reviewActionClient,
+                        recordingInput.authorization.authorizationToken
+                      ),
+                      contextGatewayOptions,
+                      requiredContextWitness
+                    )
+                  );
+                const gateway = new ContextGatewayV4InvestigationAdapter(
+                  investigationGatewayFactory,
+                  {
+                    revision: {
+                      baseSha: authorization.facts.baseSha,
+                      mergeBaseSha: authorization.facts.mergeBaseSha,
+                      headSha: authorization.facts.headSha,
+                    },
+                    preparedManifestKey: recordingInput.manifest.manifestKey,
+                    providerKind:
+                      recordingInput.invocation.manifestFacts.providerKind,
+                    requestedModel: recordingInput.invocation.requestedModel,
+                    executionProfile:
+                      recordingInput.invocation.manifestFacts.executionProfile,
+                    providerInvocationKey:
+                      recordingInput.manifest.providerInvocationKey,
+                    toolPolicyHash:
+                      recordingInput.invocation.manifestFacts.toolPolicyHash,
+                  }
+                );
+                const agents = createProductionReviewInvestigationAgentSelector(
+                  {
+                    authorization,
+                    primaryProviderKind: ReviewAgentProviderKind.Codex,
+                    contextCriticEnabled:
+                      investigationRollout.contextCriticEnabled,
+                    agents: createConfiguredProductionInvestigationAgents({
+                      approvedAgent,
+                      ...(input.providerApi
+                        ? {
+                            directCredentialLease:
+                              input.providerApi.credentialLease,
+                          }
+                        : {}),
+                      codexModel: model,
+                      codexBinaryPath: input.codexBinaryPath,
+                      executionSessions: gateway,
+                      modelTransport:
+                        input.providerApi?.modelTransport ??
+                        input.accountGateway?.modelTransport,
+                      admittedGatewayModel:
+                        input.accountGateway?.runtimeConfig.runtimeEnv
+                          .CODEX_MODEL,
+                      reasoningEffort,
+                    }),
+                  }
+                );
+                return new RunInvestigationWorkSlot({
+                  controlPlane: investigationControlPlane,
+                  legacyFallbackGate,
+                  delay: new CancellableReviewOrchestrationDelay(),
+                  leases: new ReviewActionV2InvestigationLeaseAdapter(
+                    reviewActionClient
+                  ),
+                  ...(investigationRollout.crossRevisionReplayEnabled &&
+                  contextReplayRunner
+                    ? {
+                        replay: new ReplayInvestigationOnRevision({
+                          controlPlane: investigationControlPlane,
+                          receipts: contextReplayRunner,
+                          currency,
+                        }),
+                      }
+                    : {}),
+                  turnRunner: new RunInvestigationTurn({
+                    controlPlane: investigationControlPlane,
+                    currency,
+                    gateway,
+                    agents,
+                    diagnostics: new LoggingInvestigationOperationalDiagnostics(
+                      logger
+                    ),
+                    now: () => new Date(),
+                  }),
+                });
+              },
+              {
+                workingDirectory: path.resolve(input.workspacePath),
+                leaseDurationMs: providerTimeoutMs + 5 * 60_000,
+                providerTimeoutMs: providerTimeoutMs,
+                certificateTtlMs: 24 * 60 * 60_000,
+                minimumCapacityParkMs: 60_000,
+                actionBudget: reviewInvestigationActionBudgetForDepth(
+                  config.reviewDepth
+                ),
+                policy: REVIEW_INVESTIGATION_PRODUCTION_POLICY,
+              },
+              productionReviewInvestigationRecordingMode(investigationRollout),
+              investigationRollout.verifiedCleanEnabled
+            )
+          : undefined;
+      if (
+        prDescription &&
+        !planned.plan.assignments.some(
+          (assignment) =>
+            assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
+        )
+      )
+        core.warning(
+          'AI PR description omitted: no optional task budget remains.'
+        );
+      const useCase = new RunT0ReviewOrchestration({
+        ...(prDescription ? { prDescription } : {}),
+        controlPlane,
+        revisionGuard,
+        oidc: {
+          getToken: () => oidc.requestToken(input.audience),
+        },
+        invocationManifestAssembler:
+          new GeneratedProviderInvocationManifestAssembler(
+            authorization,
+            config,
+            compatibilityKey
+          ),
+        invocations: invocationAdapter,
+        ...(investigationInvocationAdapter
+          ? { investigationInvocations: investigationInvocationAdapter }
+          : {}),
+        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+          input.accountGateway?.modelTransport.failureFact
         ),
-        sourceRunId: authorization.facts.sourceRunId,
-        sourceRunAttempt: authorization.facts.sourceRunAttempt,
-        ownerIdHash: sha256(
-          canonicalJson({
-            authorizationId: authorization.authorizationId,
-            providerInstanceId: input.providerInstanceId,
-            sourceRunAttempt: authorization.facts.sourceRunAttempt,
-            sourceRunId: authorization.facts.sourceRunId,
-          })
+        invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
+        investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
+          logger
         ),
-        allowPartial: true,
-      },
-      authorization
-    );
-    signal?.throwIfAborted();
-    return mapOrchestrationResultToCodexOutcome(result);
+        leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+        ...(investigationRecording ? { investigationRecording } : {}),
+        projectionBuilder: createProductionReviewProjectionBuilder({
+          authorizationFacts: authorization.facts,
+          pr,
+          config,
+          protocolLimits: authorization.limits,
+          assignments: planned.assignments.map((assignment) => ({
+            workSlotId: assignment.workSlot.workSlotId,
+            taskKind: assignment.workSlot.taskKind,
+            providerKind: assignment.workSlot.providerKind,
+            required: assignment.workSlot.required,
+            filePaths: assignment.context.files.map((file) => file.filename),
+          })),
+          uncoveredPaths: planned.uncoveredPaths,
+          uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
+          lifecycleInventory,
+        }),
+        ...(contextGateway
+          ? {
+              contextReplay: contextReplayRunner,
+              contextAttestations: controlPlane,
+            }
+          : {}),
+        identities,
+        clock: new SystemReviewOrchestrationClock(),
+        delay: new CancellableReviewOrchestrationDelay(),
+        executionDeadline,
+        signal,
+        ...(this.progress ? { progress: this.progress } : {}),
+      });
+      const result = await useCase.executeAuthorized(
+        {
+          executionId: identities.deterministicId('execution', [
+            authorization.authorizationId,
+            authorization.facts.reviewRevisionHash,
+            planned.plan.planHash,
+          ]),
+          baseSha: authorization.facts.baseSha,
+          mergeBaseSha: authorization.facts.mergeBaseSha,
+          headSha: authorization.facts.headSha,
+          reviewRevisionHash: authorization.facts.reviewRevisionHash,
+          compatibilityKey,
+          planHash: planned.plan.planHash,
+          workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
+          assignmentManifestCanonicalJson:
+            planned.plan.assignmentManifestCanonicalJson,
+          assignmentManifestHash: planned.plan.assignmentManifestHash,
+          workSlots: planned.plan.assignments.map(
+            (assignment) => assignment.workSlot
+          ),
+          sourceRunId: authorization.facts.sourceRunId,
+          sourceRunAttempt: authorization.facts.sourceRunAttempt,
+          ownerIdHash: sha256(
+            canonicalJson({
+              authorizationId: authorization.authorizationId,
+              providerInstanceId: input.providerInstanceId,
+              sourceRunAttempt: authorization.facts.sourceRunAttempt,
+              sourceRunId: authorization.facts.sourceRunId,
+            })
+          ),
+          allowPartial: true,
+        },
+        authorization
+      );
+      signal?.throwIfAborted();
+      return mapOrchestrationResultToCodexOutcome(result);
+    } finally {
+      await usageDelivery?.cleanup();
+    }
   }
 }
 

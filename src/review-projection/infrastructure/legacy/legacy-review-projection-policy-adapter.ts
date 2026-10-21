@@ -325,6 +325,7 @@ export class LegacyReviewProjectionPolicyAdapter
           unreviewedFiles: query.coverage.unreviewedFiles,
           mode: query.coverage.mode,
           limitations: query.coverage.limitations,
+          files: query.coverage.files,
         },
         lifecycle: lifecycleLinesForSummary(query.occurrences, query.lifecycle),
       })

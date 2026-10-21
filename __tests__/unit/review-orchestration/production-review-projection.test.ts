@@ -673,6 +673,273 @@ describe('production review projection coverage', () => {
     });
   });
 
+  it('publishes a per-file coverage manifest in the partial summary body', async () => {
+    const partialPr = {
+      ...pr,
+      files: [
+        ...pr.files,
+        {
+          filename: 'src/b.ts',
+          status: 'modified' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -1 +1 @@\n+more',
+        },
+        {
+          filename: 'src/c.ts',
+          status: 'modified' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -1 +1 @@\n+other',
+        },
+      ],
+    };
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts,
+      pr: partialPr,
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [
+        {
+          workSlotId: 'slot-1',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Codex,
+          required: true,
+          filePaths: ['src/a.ts', 'src/b.ts'],
+        },
+      ],
+      uncoveredPaths: ['src/c.ts'],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const coverageManifest = createReviewPromptCoverageManifest({
+      workSlotId: 'slot-1',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      assignedPaths: ['src/a.ts', 'src/b.ts'],
+      pathCoverage: [
+        {
+          path: 'src/a.ts',
+          kind: ReviewPromptPathCoverageKind.SummaryOnly,
+          contentHash: '9'.repeat(64),
+        },
+        {
+          path: 'src/b.ts',
+          kind: ReviewPromptPathCoverageKind.FullPatch,
+          contentHash: '8'.repeat(64),
+        },
+      ],
+    });
+
+    const projection = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence('slot-1', coverageManifest, [], [
+          {
+            title: 'Preliminary finding from partial lane',
+            message: 'Concrete failure message for the partial run.',
+            path: 'src/b.ts',
+            severity: 'major',
+            normalizedFailureModeHash: 'a'.repeat(64),
+          },
+        ]),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
+
+    expect(envelope.coverage.state).toBe('partial');
+    expect(envelope.coverage.files).toEqual([
+      {
+        path: 'src/a.ts',
+        status: 'compacted',
+        reason: 'summary-only content in prompt',
+      },
+      { path: 'src/b.ts', status: 'full' },
+      {
+        path: 'src/c.ts',
+        status: 'unreviewed',
+        reason: 'no review work slot covered this file',
+      },
+    ]);
+    const body = envelope.publishing.summary.body;
+    expect(body).toContain(
+      '- <code>src/a.ts</code> - compacted — summary-only content in prompt'
+    );
+    expect(body).toContain('- <code>src/b.ts</code> - full');
+    expect(body).toContain(
+      '- <code>src/c.ts</code> - unreviewed — no review work slot covered this file'
+    );
+    // Findings surface in the summary body but stay out of inline comments
+    // while coverage is partial.
+    expect(body).toContain('Preliminary finding from partial lane');
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+  });
+
+  it('keeps a required coverage gap visible when another required slot covers the same path', async () => {
+    const sharedPr = {
+      ...pr,
+      files: [
+        ...pr.files,
+        {
+          filename: 'src/b.ts',
+          status: 'modified' as const,
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+          patch: '@@ -1 +1 @@\n+more',
+        },
+      ],
+    };
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts,
+      pr: sharedPr,
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [
+        {
+          workSlotId: 'slot-1',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Codex,
+          required: true,
+          filePaths: ['src/a.ts'],
+        },
+        {
+          workSlotId: 'slot-2',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Codex,
+          required: true,
+          filePaths: ['src/a.ts', 'src/b.ts'],
+        },
+      ],
+      uncoveredPaths: [],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const summaryOnlyManifest = createReviewPromptCoverageManifest({
+      workSlotId: 'slot-1',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      assignedPaths: ['src/a.ts'],
+      pathCoverage: [
+        {
+          path: 'src/a.ts',
+          kind: ReviewPromptPathCoverageKind.SummaryOnly,
+          contentHash: '9'.repeat(64),
+        },
+      ],
+    });
+    const fullPatchManifest = createReviewPromptCoverageManifest({
+      workSlotId: 'slot-2',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      assignedPaths: ['src/a.ts', 'src/b.ts'],
+      pathCoverage: [
+        {
+          path: 'src/a.ts',
+          kind: ReviewPromptPathCoverageKind.FullPatch,
+          contentHash: '8'.repeat(64),
+        },
+        {
+          path: 'src/b.ts',
+          kind: ReviewPromptPathCoverageKind.FullPatch,
+          contentHash: '7'.repeat(64),
+        },
+      ],
+    });
+
+    const projection = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence('slot-1', summaryOnlyManifest),
+        acceptedEvidence('slot-2', fullPatchManifest),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
+
+    expect(envelope.coverage.state).toBe('partial');
+    // The summary-only gap from slot-1 must survive slot-2's full patch proof.
+    expect(envelope.coverage.files).toEqual([
+      {
+        path: 'src/a.ts',
+        status: 'compacted',
+        reason: 'summary-only content in prompt',
+      },
+      { path: 'src/b.ts', status: 'full' },
+    ]);
+  });
+
+  it('does not let an optional lane full patch erase a required work slot gap', async () => {
+    const builder = createProductionReviewProjectionBuilder({
+      authorizationFacts,
+      pr,
+      config: DEFAULT_CONFIG,
+      protocolLimits,
+      assignments: [
+        {
+          workSlotId: 'slot-1',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Codex,
+          required: true,
+          filePaths: ['src/a.ts'],
+        },
+        {
+          workSlotId: 'slot-2',
+          taskKind: ReviewTaskKind.FindingDiscovery,
+          providerKind: ReviewExecutionProviderKind.Codex,
+          required: false,
+          filePaths: ['src/a.ts'],
+        },
+      ],
+      uncoveredPaths: [],
+      uncoveredLifecycleTargetIds: [],
+      lifecycleInventory: completeLifecycleInventory(),
+    });
+    const summaryOnlyManifest = createReviewPromptCoverageManifest({
+      workSlotId: 'slot-1',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      assignedPaths: ['src/a.ts'],
+      pathCoverage: [
+        {
+          path: 'src/a.ts',
+          kind: ReviewPromptPathCoverageKind.SummaryOnly,
+          contentHash: '9'.repeat(64),
+        },
+      ],
+    });
+    const fullPatchManifest = createReviewPromptCoverageManifest({
+      workSlotId: 'slot-2',
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      assignedPaths: ['src/a.ts'],
+      pathCoverage: [
+        {
+          path: 'src/a.ts',
+          kind: ReviewPromptPathCoverageKind.FullPatch,
+          contentHash: '8'.repeat(64),
+        },
+      ],
+    });
+
+    const projection = await builder.build({
+      acceptedEvidence: [
+        acceptedEvidence('slot-1', summaryOnlyManifest),
+        acceptedEvidence('slot-2', fullPatchManifest),
+      ],
+      exhaustedWorkSlotIds: [],
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const envelope = JSON.parse(projection.projectionEnvelopeCanonicalJson);
+
+    expect(envelope.coverage.state).toBe('partial');
+    expect(envelope.coverage.files).toEqual([
+      {
+        path: 'src/a.ts',
+        status: 'compacted',
+        reason: 'summary-only content in prompt',
+      },
+    ]);
+  });
+
   it('does not make coverage partial for an exhausted optional vote lane', async () => {
     const builder = createProductionReviewProjectionBuilder({
       authorizationFacts,
@@ -834,11 +1101,12 @@ function fullCoverageManifest(workSlotId: string) {
 function acceptedEvidence(
   workSlotId: string,
   coverageManifest: ReturnType<typeof createReviewPromptCoverageManifest>,
-  qualityFlags: string[] = []
+  qualityFlags: string[] = [],
+  normalizedFindings: Record<string, unknown>[] = []
 ) {
   const payloadCanonicalJson = JSON.stringify({
     payloadVersion: 2,
-    normalizedFindings: [],
+    normalizedFindings,
     normalizedLifecycleRevalidations: [],
   });
   return {
@@ -854,7 +1122,7 @@ function acceptedEvidence(
       payloadCanonicalJson,
       payloadHash: '8'.repeat(64),
       byteCount: Buffer.byteLength(payloadCanonicalJson),
-      findingCount: 0,
+      findingCount: normalizedFindings.length,
       actualModel: 'gpt-5.6-sol',
       qualityFlags,
       transportAttemptCount: 1,

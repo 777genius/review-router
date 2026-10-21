@@ -119,6 +119,36 @@ export interface RevisionFile {
   readonly patch?: string;
 }
 
+export interface ReviewCoverageManifestFile {
+  readonly path: string;
+  readonly status:
+    | 'full'
+    | 'compacted'
+    | 'metadata-only'
+    | 'skipped'
+    | 'unreviewed';
+  readonly reason?: string;
+}
+
+// Gaps rank lowest so incomplete summaries surface them first; unknown
+// statuses rank highest and sort last without breaking rendering.
+export function coverageManifestFileStatusRank(status: string): number {
+  switch (status) {
+    case 'unreviewed':
+      return 0;
+    case 'skipped':
+      return 1;
+    case 'metadata-only':
+      return 2;
+    case 'compacted':
+      return 3;
+    case 'full':
+      return 4;
+    default:
+      return 5;
+  }
+}
+
 export interface ReviewCoverageFact {
   readonly state: ProjectionCoverageState;
   readonly mode: 'full' | 'incremental';
@@ -126,6 +156,7 @@ export interface ReviewCoverageFact {
   readonly reviewedFiles: number;
   readonly unreviewedFiles: number;
   readonly limitations: readonly string[];
+  readonly files?: readonly ReviewCoverageManifestFile[];
 }
 
 export interface PriorLineageHint {

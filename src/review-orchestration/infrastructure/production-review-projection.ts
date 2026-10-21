@@ -13,8 +13,10 @@ import {
   ProjectionCoverageState,
   REVIEW_PROJECTION_ABSOLUTE_LIMITS,
   RevisionFileStatus,
+  coverageManifestFileStatusRank,
   type CurrentFindingCandidate,
   type LifecycleRevalidation,
+  type ReviewCoverageManifestFile,
   type ReviewProjectionLimits,
 } from '../../review-projection/domain';
 import { LegacyReviewProjectionPolicyAdapter } from '../../review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter';
@@ -128,6 +130,80 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
     const reviewedFiles = new Set<string>();
     const policyExcludedFiles = new Set<string>();
     const coverageLimitations: string[] = [];
+    const manifestByPath = new Map<
+      string,
+      { entry: ReviewCoverageManifestFile; required: boolean }
+    >();
+    const recordManifestFile = (
+      entry: ReviewCoverageManifestFile,
+      required: boolean
+    ) => {
+      const key = normalizeManifestPath(entry.path);
+      const existing = manifestByPath.get(key);
+      if (!existing) {
+        manifestByPath.set(key, { entry, required });
+        return;
+      }
+      if (required !== existing.required) {
+        if (required) manifestByPath.set(key, { entry, required });
+        return;
+      }
+      const rank = coverageManifestFileStatusRank(entry.status);
+      const existingRank = coverageManifestFileStatusRank(existing.entry.status);
+      // Required work slots keep their weakest coverage so a required gap can
+      // never be erased by a stronger view from another lane; optional lanes
+      // keep their strongest coverage.
+      if (required ? rank < existingRank : rank > existingRank) {
+        manifestByPath.set(key, { entry, required });
+      }
+    };
+    const exhaustedWorkSlots = new Set(input.exhaustedWorkSlotIds);
+    for (const assignment of this.input.assignments) {
+      const accepted = evidence.get(assignment.workSlotId);
+      if (!accepted) {
+        if (assignment.required) {
+          for (const path of assignment.filePaths) {
+            recordManifestFile(
+              {
+                path,
+                status: 'unreviewed',
+                reason: exhaustedWorkSlots.has(assignment.workSlotId)
+                  ? 'required work slot exhausted before producing accepted evidence'
+                  : 'required work slot produced no accepted evidence',
+              },
+              true
+            );
+          }
+        }
+        continue;
+      }
+      for (const path of accepted.coverageManifest.paths) {
+        recordManifestFile(
+          promptCoverageToManifestFile(path),
+          assignment.required
+        );
+      }
+    }
+    for (const path of this.input.uncoveredPaths) {
+      recordManifestFile(
+        {
+          path,
+          status: 'unreviewed',
+          reason: 'no review work slot covered this file',
+        },
+        false
+      );
+    }
+    for (const file of this.input.pr.files) {
+      recordManifestFile(
+        {
+          path: file.filename,
+          status: 'unreviewed',
+          reason: 'no review work slot covered this file',
+        },
+        false
+      );
+    }
     for (const assignment of requiredAssignments) {
       const accepted = evidence.get(assignment.workSlotId);
       if (!accepted) {
@@ -197,6 +273,11 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       this.input.assignments,
       evidence
     );
+    const manifestFiles = Object.freeze(
+      [...manifestByPath.values()]
+        .map(({ entry }) => entry)
+        .sort((left, right) => compareCodeUnits(left.path, right.path))
+    );
 
     return Object.freeze({
       projectionPolicyVersion: productionReviewProjectionPolicyVersion,
@@ -241,6 +322,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
             policyExcludedFiles.size
         ),
         limitations: Object.freeze(limitations),
+        files: manifestFiles,
       },
       revisionFiles: Object.freeze(
         this.input.pr.files.map((file) => ({
@@ -553,6 +635,58 @@ export function compareCodeUnits(left: string, right: string): number {
   if (left < right) return -1;
   if (left > right) return 1;
   return 0;
+}
+
+function promptCoverageToManifestFile(path: {
+  readonly path: string;
+  readonly kind: ReviewPromptPathCoverageKind;
+}): ReviewCoverageManifestFile {
+  switch (path.kind) {
+    case ReviewPromptPathCoverageKind.FullPatch:
+      return { path: path.path, status: 'full' };
+    case ReviewPromptPathCoverageKind.PolicyExcluded:
+      return {
+        path: path.path,
+        status: 'skipped',
+        reason: 'excluded by review policy',
+      };
+    case ReviewPromptPathCoverageKind.SummaryOnly:
+      return {
+        path: path.path,
+        status: 'compacted',
+        reason: 'summary-only content in prompt',
+      };
+    case ReviewPromptPathCoverageKind.TrustedRead:
+      // TrustedRead facts are rejected by createReviewPromptCoverageManifest
+      // today; the mapping keeps the union exhaustive.
+      return {
+        path: path.path,
+        status: 'compacted',
+        reason: 'trusted read without full patch',
+      };
+    case ReviewPromptPathCoverageKind.Trimmed:
+      return {
+        path: path.path,
+        status: 'metadata-only',
+        reason: 'diff trimmed in prompt',
+      };
+    case ReviewPromptPathCoverageKind.MetadataOnly:
+      return {
+        path: path.path,
+        status: 'metadata-only',
+        reason: 'metadata-only content in prompt',
+      };
+    case ReviewPromptPathCoverageKind.Unavailable:
+      return {
+        path: path.path,
+        status: 'unreviewed',
+        reason: 'file content unavailable',
+      };
+  }
+}
+
+function normalizeManifestPath(path: string): string {
+  return path.startsWith('./') ? path.slice(2) : path;
 }
 
 function sha256(value: string): string {

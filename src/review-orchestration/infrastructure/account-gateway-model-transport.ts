@@ -77,6 +77,10 @@ export type GatewayTransportDiagnostic = Readonly<{
     | 'Error'
     | 'other';
 }>;
+type DirectOpenRouterLimits = Readonly<{
+  requestMs: number;
+  streamFrameBytes: number;
+}>;
 type ObserveTransport = (
   diagnostic: GatewayTransportDiagnostic
 ) => void | Promise<void>;
@@ -180,9 +184,12 @@ export class AccountGatewayModelTransport {
   constructor(
     apiUrl: string,
     private readonly authorization: () => string,
-    private readonly observe?: ObserveTransport
+    private readonly observe?: ObserveTransport,
+    private readonly directOpenRouter?: DirectOpenRouterLimits
   ) {
     this.origin = trustedGatewayOrigin(apiUrl);
+    if (directOpenRouter && this.origin.origin !== 'https://openrouter.ai')
+      throw new Error('provider_api_origin_invalid');
   }
 
   get lastFailure(): GatewayFailureFact | undefined {
@@ -198,7 +205,7 @@ export class AccountGatewayModelTransport {
   }
 
   async responses(
-    bytes: Uint8Array,
+    bytes: Uint8Array | Readable,
     signal?: AbortSignal
   ): Promise<GatewayResponses> {
     if (
@@ -211,8 +218,15 @@ export class AccountGatewayModelTransport {
       throw error;
     }
     // Snapshot before awaiting authorization; no mutable caller payload.
-    const body = Buffer.from(bytes);
-    if (body.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes) {
+    const body =
+      this.directOpenRouter && bytes instanceof Readable
+        ? bytes
+        : Buffer.from(bytes as Uint8Array);
+    if (
+      !this.directOpenRouter &&
+      Buffer.isBuffer(body) &&
+      body.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes
+    ) {
       const error = new Error('account_gateway_request_bound');
       observeTransport(this.observe, 'upstream_request', false, null, error);
       throw error;
@@ -222,7 +236,10 @@ export class AccountGatewayModelTransport {
     const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) abort();
-    const timer = setTimeout(abort, ACCOUNT_GATEWAY_BOUNDS.requestMs);
+    const timer = setTimeout(
+      abort,
+      this.directOpenRouter?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs
+    );
     const dispose = () => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', abort);
@@ -234,7 +251,6 @@ export class AccountGatewayModelTransport {
     try {
       const waitUntil = performance.now() + ACCOUNT_GATEWAY_BOUNDS.waitBudgetMs;
       let waits = 0;
-      let transientAttempts = 0;
       let response: IncomingMessage;
       let denial: Buffer | undefined;
       for (;;) {
@@ -245,29 +261,13 @@ export class AccountGatewayModelTransport {
         currentRequestRef = undefined;
         denial = undefined;
         // Admission/model headers retain the existing whole-request deadline.
-        try {
-          response = await this.request(
-            'POST',
-            `${BASE}/responses`,
-            body,
-            controller.signal
-          );
-        } catch (error) {
-          if (
-            controller.signal.aborted ||
-            !transientRequestFailure(error) ||
-            transientAttempts >= TRANSIENT_RETRY_DELAYS.length ||
-            performance.now() + TRANSIENT_RETRY_DELAYS[transientAttempts] >
-              waitUntil
-          )
-            throw error;
-          observeTransport(this.observe, 'upstream_request', false, null, error);
-          await wait(TRANSIENT_RETRY_DELAYS[transientAttempts], undefined, {
-            signal: controller.signal,
-          });
-          transientAttempts++;
-          continue;
-        }
+        // Socket errors can happen after application dispatch. Never infer non-entry.
+        response = await this.request(
+          'POST',
+          this.directOpenRouter ? '/api/v1/responses' : `${BASE}/responses`,
+          body,
+          controller.signal
+        );
         responseReceived = true;
         httpStatus = response.statusCode ?? 502;
         currentRequestRef = safeReference(
@@ -291,13 +291,12 @@ export class AccountGatewayModelTransport {
         } finally {
           clearTimeout(controlTimer);
         }
-        // Only fixed-origin failures provably before application dispatch
-        // permit another POST: this positive pre-request denial, or a rejection
-        // carrying no request reference (the application assigns references at
-        // admission). Any request reference or unknown effect stays terminal.
+        // Only the closed, positive pre-request denial permits another POST.
+        // Missing response headers/references and bare proxy errors prove nothing.
         const referenced =
           response.headers['x-reviewrouter-request-ref'] !== undefined;
         if (
+          !this.directOpenRouter &&
           httpStatus === 503 &&
           !referenced &&
           /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
@@ -314,20 +313,6 @@ export class AccountGatewayModelTransport {
           await wait(1000, undefined, { signal: controller.signal });
           waits++;
           if (performance.now() >= waitUntil) break;
-          continue;
-        }
-        if (
-          !referenced &&
-          (httpStatus === 502 || httpStatus === 504) &&
-          transientAttempts < TRANSIENT_RETRY_DELAYS.length &&
-          performance.now() + TRANSIENT_RETRY_DELAYS[transientAttempts] <=
-            waitUntil
-        ) {
-          observeTransport(this.observe, 'upstream_headers', true, httpStatus);
-          await wait(TRANSIENT_RETRY_DELAYS[transientAttempts], undefined, {
-            signal: controller.signal,
-          });
-          transientAttempts++;
           continue;
         }
         break;
@@ -355,14 +340,16 @@ export class AccountGatewayModelTransport {
             )
               this.modelUncertain = true;
             else this.observedModel = model;
-          })
+          }, this.directOpenRouter?.streamFrameBytes)
         : undefined;
       const bounded = new Transform({
         highWaterMark: ACCOUNT_GATEWAY_BOUNDS.bufferBytes,
         transform: (chunk: Buffer, _encoding, done) => {
           count += chunk.length;
           const maximum = isStream
-            ? ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes
+            ? this.directOpenRouter
+              ? Infinity
+              : ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes
             : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
           if (count > maximum) done(new Error('account_gateway_output_bound'));
           else
@@ -595,9 +582,14 @@ export class AccountGatewayModelTransport {
   private async request(
     method: string,
     route: string,
-    body: Buffer | undefined,
+    body: Buffer | Readable | undefined,
     signal: AbortSignal
   ): Promise<IncomingMessage> {
+    if (
+      this.directOpenRouter &&
+      (method !== 'POST' || route !== '/api/v1/responses')
+    )
+      throw new Error('provider_api_control_route_denied');
     const token = this.authorization();
     if (signal.aborted || !/^[A-Za-z0-9._~-]{1,16377}$/.test(token))
       throw new Error('account_gateway_authorization_unavailable');
@@ -617,13 +609,18 @@ export class AccountGatewayModelTransport {
             accept: route.endsWith('/responses')
               ? 'text/event-stream'
               : 'application/json',
-            ...(body ? { 'content-length': String(body.length) } : {}),
+            ...(Buffer.isBuffer(body)
+              ? { 'content-length': String(body.length) }
+              : {}),
           },
         },
         resolve
       );
       request.once('error', reject);
-      request.end(body);
+      if (body instanceof Readable) {
+        // One upload only, with backpressure and cancellation in both directions.
+        void pipeline(body, request, { signal }).catch(reject);
+      } else request.end(body);
     });
   }
 }
@@ -665,7 +662,8 @@ export function normalizeCodexGatewayServiceTier(bytes: Uint8Array): Buffer {
  * POST /responses exists; destinations/headers are never supplied by the CLI. */
 export async function startLocalGatewayModelTransport(
   transport: AccountGatewayModelTransport,
-  observe?: ObserveTransport
+  observe?: ObserveTransport,
+  directOpenRouter?: DirectOpenRouterLimits
 ): Promise<LocalGatewayModelTransport> {
   const capability = randomBytes(32).toString('hex');
   let stopping = false;
@@ -712,18 +710,24 @@ export async function startLocalGatewayModelTransport(
         const downstreamClosed = () => {
           if (!reply.writableFinished) abort();
         };
-        const timer = setTimeout(abort, ACCOUNT_GATEWAY_BOUNDS.requestMs);
+        const timer = setTimeout(
+          abort,
+          directOpenRouter?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs
+        );
         request.once('aborted', abort);
         reply.once('close', downstreamClosed);
         let upstream: GatewayResponses | undefined;
         let stage: GatewayTransportDiagnostic['stage'] = 'request_body';
         try {
-          const bytes = await boundedBytes(
-            request,
-            ACCOUNT_GATEWAY_BOUNDS.requestBytes,
-            controller.signal
-          );
-          const normalized = normalizeCodexGatewayServiceTier(bytes);
+          const normalized = directOpenRouter
+            ? request
+            : normalizeCodexGatewayServiceTier(
+                await boundedBytes(
+                  request,
+                  ACCOUNT_GATEWAY_BOUNDS.requestBytes,
+                  controller.signal
+                )
+              );
           stage = 'upstream_request';
           dispatchedRequests++;
           upstream = await transport.responses(normalized, controller.signal);
@@ -769,7 +773,8 @@ export async function startLocalGatewayModelTransport(
   server.maxConnections = ACCOUNT_GATEWAY_BOUNDS.localConnections;
   server.maxRequestsPerSocket = 1;
   server.headersTimeout = 10_000;
-  server.requestTimeout = ACCOUNT_GATEWAY_BOUNDS.requestMs;
+  server.requestTimeout =
+    directOpenRouter?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs;
   server.keepAliveTimeout = 1_000;
   server.setTimeout(ACCOUNT_GATEWAY_BOUNDS.idleMs, (socket) =>
     socket.destroy()
@@ -790,7 +795,13 @@ export async function startLocalGatewayModelTransport(
     environment: Object.freeze({
       [LOCAL_MODEL_CAPABILITY_ENV]: `Bearer ${capability}`,
     }),
-    configuration: codexGatewayConfiguration(baseUrl),
+    configuration: directOpenRouter
+      ? codexGatewayConfiguration(baseUrl).map((setting) =>
+          setting
+            .replaceAll('reviewrouter_account_gateway', 'openrouter')
+            .replaceAll('ReviewRouter account gateway', 'OpenRouter')
+        )
+      : codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
     requestCount: () => dispatchedRequests,
     failureFact: () => transport.lastFailure,
@@ -803,6 +814,30 @@ export async function startLocalGatewayModelTransport(
       });
     },
   });
+}
+
+/** Fixed upstream, local credential and passive wire evidence. No Gateway control API. */
+export function startDirectOpenRouterModelTransport(
+  credential: () => string,
+  limits: DirectOpenRouterLimits
+): Promise<LocalGatewayModelTransport> {
+  if (
+    !Number.isSafeInteger(limits.requestMs) ||
+    limits.requestMs < 1 ||
+    !Number.isSafeInteger(limits.streamFrameBytes) ||
+    limits.streamFrameBytes < 1
+  )
+    throw new Error('provider_api_limits_invalid');
+  return startLocalGatewayModelTransport(
+    new AccountGatewayModelTransport(
+      'https://openrouter.ai',
+      credential,
+      undefined,
+      limits
+    ),
+    undefined,
+    limits
+  );
 }
 
 /** Verified in rust-v0.147.0 model-provider-info/src/lib.rs + codex-client/src/retry.rs.
@@ -867,29 +902,6 @@ function safeReference(value: unknown): string | undefined {
     ? value
     : undefined;
 }
-// A request-stage socket failure or a rejection without any request reference
-// is provably before application dispatch (the gateway assigns references at
-// admission), so one bounded re-dispatch cannot duplicate an unknown effect.
-const TRANSIENT_RETRY_DELAYS = [1000, 2000, 4000] as const;
-const TRANSIENT_ERRNO = new Set([
-  'ECONNABORTED',
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'EHOSTUNREACH',
-  'EPIPE',
-  'ETIMEDOUT',
-  'ENETUNREACH',
-  'ENOTFOUND',
-  'EAI_AGAIN',
-]);
-function transientRequestFailure(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.name !== 'AbortError' &&
-    typeof (error as NodeJS.ErrnoException).code === 'string' &&
-    TRANSIENT_ERRNO.has((error as NodeJS.ErrnoException).code as string)
-  );
-}
 function relaySaturated(bytes: Buffer): boolean {
   try {
     // Closed JSON envelope: no extra fields, duplicate keys or requestRef.
@@ -935,7 +947,10 @@ function failureFact(
 /** Passive bounded SSE terminal/model evidence. Codex 0.147 ignores the ordinary
  * response.model field; T0 context attestation needs wire evidence instead of a
  * configured-model guess. This observer never changes a payload or tool event. */
-function responsesStreamAudit(observe: (model: string | undefined) => void) {
+function responsesStreamAudit(
+  observe: (model: string | undefined) => void,
+  maximumFrameBytes: number = ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes
+) {
   const decoder = new TextDecoder('utf-8', { fatal: true });
   let line = '';
   let skipLf = false;
@@ -1011,7 +1026,7 @@ function responsesStreamAudit(observe: (model: string | undefined) => void) {
       // toward the current event before its terminating blank line resets it.
       for (const byte of bytes) {
         frameBytes++;
-        if (frameBytes > ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes)
+        if (frameBytes > maximumFrameBytes)
           throw new Error('account_gateway_stream_frame_bound');
         if (byte === 0x0a) {
           if (

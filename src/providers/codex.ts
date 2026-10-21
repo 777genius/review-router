@@ -56,6 +56,8 @@ import {
 export interface CodexProviderOptions {
   /** Internal T0 composition only; no user URL/account/provider-key override. */
   accountGateway?: LocalGatewayModelTransport;
+  /** Direct OpenRouter wire attestation; contains only a loopback capability. */
+  providerApiTransport?: LocalGatewayModelTransport;
   /** Trusted provider API T0 composition; context access remains RR MCP-only. */
   disableBuiltinTools?: boolean;
   /** Trusted isolated runtime cleanup must follow child closure. */
@@ -210,12 +212,16 @@ export class CodexProvider extends Provider {
     );
   }
 
+  private get modelTransport(): LocalGatewayModelTransport | undefined {
+    return this.options.accountGateway ?? this.options.providerApiTransport;
+  }
+
   // Verify the CLI is available. Model/auth failures are surfaced by the real
   // review call; a model-exec health check costs an extra Codex subscription
   // request and can exhaust limited OAuth usage before review starts.
   async healthCheck(_timeoutMs: number = 5000): Promise<boolean> {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5000);
-    const mode = this.options.accountGateway
+    const mode = this.modelTransport
       ? 'binary'
       : (process.env.CODEX_HEALTHCHECK_MODE || 'binary').toLowerCase();
 
@@ -294,7 +300,7 @@ export class CodexProvider extends Provider {
       }
 
       if (
-        !this.options.accountGateway &&
+        !this.modelTransport &&
         this.shouldRetryForMissingAgenticExploration(
           execution.parsed,
           execution.runResult.audit,
@@ -425,8 +431,7 @@ export class CodexProvider extends Provider {
       agenticContext && !contextGateway ? this.agenticAuditMode() : 'off';
     const eventAudit = contextGateway ? true : this.shouldUseEventAudit();
     const forkSandbox =
-      !this.options.accountGateway &&
-      this.shouldUseForkSandboxCodexHomeConfig();
+      !this.modelTransport && this.shouldUseForkSandboxCodexHomeConfig();
     const reasoningEffort = this.resolveReasoningEffort(false);
     const gateway = this.options.accountGateway;
     const modelCatalogSetting = gateway
@@ -479,7 +484,7 @@ export class CodexProvider extends Provider {
       optionalAgenticRetryMaxPromptTokens:
         MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
       acceptReviewOutputOnNonZero:
-        !this.options.accountGateway && !this.options.waitForProcessClose,
+        !this.modelTransport && !this.options.waitForProcessClose,
       ...(contextGateway ? { contextGateway } : {}),
     };
     return createPreparedProviderInvocation({
@@ -583,18 +588,17 @@ export class CodexProvider extends Provider {
         cwd: request.cwd,
         environment: mergeCredentialEnvironment(
           request.environment,
-          this.options.accountGateway
+          this.modelTransport
             ? {
                 ...credentialLease?.environment,
-                ...splitProviderEnvironment(
-                  this.options.accountGateway.environment
-                ).credentialEnvironment,
+                ...splitProviderEnvironment(this.modelTransport.environment)
+                  .credentialEnvironment,
               }
             : credentialLease?.environment
         ),
       }
     );
-    if (this.options.accountGateway && !runResult.lastMessage.trim())
+    if (this.modelTransport && !runResult.lastMessage.trim())
       throw new Error('account_gateway_final_missing');
     const content = this.sanitizeReviewContent(
       (runResult.lastMessage || runResult.stdout).trim(),
@@ -627,11 +631,10 @@ export class CodexProvider extends Provider {
   private captureCredentialLease(
     invocation: PreparedProviderInvocation<CodexPreparedRequest>
   ): ProviderCredentialLease {
-    if (this.options.accountGateway) {
+    if (this.modelTransport) {
       return {
-        environment: splitProviderEnvironment(
-          this.options.accountGateway.environment
-        ).credentialEnvironment,
+        environment: splitProviderEnvironment(this.modelTransport.environment)
+          .credentialEnvironment,
       };
     }
     const environment: NodeJS.ProcessEnv = {};
@@ -823,12 +826,12 @@ export class CodexProvider extends Provider {
       }
     }
 
-    if (!this.options.accountGateway && config.modelProvider === 'openrouter') {
+    if (!this.modelTransport && config.modelProvider === 'openrouter') {
       for (const setting of CODEX_OPENROUTER_CONFIGURATION)
         args.push('-c', setting);
     }
 
-    if (!this.options.accountGateway && config.modelProvider === 'mimo') {
+    if (!this.modelTransport && config.modelProvider === 'mimo') {
       args.push(
         '-c',
         'model_provider="mimo"',
@@ -852,8 +855,8 @@ export class CodexProvider extends Provider {
       args.push('-c', configOverride);
     }
 
-    if (this.options.accountGateway) {
-      for (const setting of this.options.accountGateway.configuration)
+    if (this.modelTransport) {
+      for (const setting of this.modelTransport.configuration)
         args.push('-c', setting);
       if (config.modelCatalogSetting)
         args.push('-c', config.modelCatalogSetting);
@@ -887,7 +890,7 @@ export class CodexProvider extends Provider {
         ? path.join(os.tmpdir(), `codex-schema-${runId}.json`)
         : undefined;
     const waitForProcessClose = Boolean(
-      this.options.accountGateway || this.options.waitForProcessClose
+      this.modelTransport || this.options.waitForProcessClose
     );
     let fd: fs.FileHandle | undefined;
     try {
@@ -1200,12 +1203,14 @@ export class CodexProvider extends Provider {
     const gateway = request.contextGateway;
     const environment = this.observablePreparedEnvironment(request);
     const replacements = [
-      ...(this.options.accountGateway
+      ...(this.modelTransport
         ? [
             [request.environment.CODEX_HOME ?? '', '<codex-home>'] as const,
             [
-              this.options.accountGateway.baseUrl,
-              '<account-gateway-loopback>',
+              this.modelTransport.baseUrl,
+              this.options.providerApiTransport
+                ? '<provider-api-loopback>'
+                : '<account-gateway-loopback>',
             ] as const,
           ]
         : []),
@@ -1447,23 +1452,22 @@ export class CodexProvider extends Provider {
       includeWorkspaceEnv: includeWorkspaceEnv && !forkSandbox,
       extraAllowedKeys: [
         'CODEX_HOME',
-        ...(this.options.accountGateway ? [] : ['OPENAI_API_KEY']),
-        ...(!this.options.accountGateway && modelProvider === 'openrouter'
+        ...(this.modelTransport ? [] : ['OPENAI_API_KEY']),
+        ...(!this.modelTransport && modelProvider === 'openrouter'
           ? ['OPENROUTER_API_KEY']
           : []),
-        ...(!this.options.accountGateway && modelProvider === 'mimo'
+        ...(!this.modelTransport && modelProvider === 'mimo'
           ? [MIMO_TOKEN_PLAN_API_KEY]
           : []),
       ],
-      ...(this.options.accountGateway
-        ? { overrides: this.options.accountGateway.environment }
+      ...(this.modelTransport
+        ? { overrides: this.modelTransport.environment }
         : {}),
     });
   }
 
   private requireModelProviderCredential(): void {
-    if (this.options.accountGateway || this.options.modelProvider !== 'mimo')
-      return;
+    if (this.modelTransport || this.options.modelProvider !== 'mimo') return;
     if (!process.env[MIMO_TOKEN_PLAN_API_KEY]?.trim()) {
       const error = new Error(
         `codex_mimo_api_key_missing: ${MIMO_TOKEN_PLAN_API_KEY} is required for ${this.name}`
@@ -2213,8 +2217,7 @@ export class CodexProvider extends Provider {
     requestedModel: string
   ): string | undefined {
     // Session configuration proves the CLI pin, not the backend's executed model.
-    if (this.options.accountGateway)
-      return this.options.accountGateway.actualModel();
+    if (this.modelTransport) return this.modelTransport.actualModel();
     if (observation.kind === CodexActualModelObservationKind.Observed) {
       return observation.model;
     }
@@ -2707,7 +2710,7 @@ export class CodexProvider extends Provider {
   }
 
   private withActionableAuthHint(message: string): string {
-    if (this.options.accountGateway) return message;
+    if (this.modelTransport) return message;
     if (!message) return message;
     if (
       !/(401|unauthorized|access token|refresh token|auth|login)/i.test(message)

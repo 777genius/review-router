@@ -14,8 +14,11 @@ import {
 } from '../../providers/prepared-invocation';
 import type { LifecycleTarget, PRContext, ReviewConfig } from '../../types';
 import { logger } from '../../utils/logger';
+import { LOCAL_MODEL_CAPABILITY_ENV } from './account-gateway-model-transport';
 import { emitReviewInvestigationTelemetry } from './review-investigation-telemetry';
 import {
+  ReviewInvocationConfigurationMismatchError,
+  ReviewInvocationConfigurationMismatchReason,
   ReviewContextInspectionFailure,
   ReviewContextInspectionFailureReason,
   ReviewExecutionProviderKind,
@@ -202,9 +205,12 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     if (
       direct.bearerToken !== undefined ||
       !environment ||
-      Object.keys(environment).join(',') !== 'OPENROUTER_API_KEY' ||
-      !environment.OPENROUTER_API_KEY ||
-      session?.environment?.OPENROUTER_API_KEY !== undefined
+      Object.keys(environment).join(',') !== LOCAL_MODEL_CAPABILITY_ENV ||
+      !/^Bearer [a-f0-9]{64}$/.test(
+        environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ''
+      ) ||
+      session?.environment?.OPENROUTER_API_KEY !== undefined ||
+      session?.environment?.[LOCAL_MODEL_CAPABILITY_ENV] !== undefined
     )
       throw new Error('review_action_v2_direct_credential_lease_invalid');
     return {
@@ -418,6 +424,14 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
     });
   }
 
+  private assertDirectActualModel(actualModel: string | undefined): void {
+    if (this.directCredentialLease && !actualModel) {
+      throw new ReviewInvocationConfigurationMismatchError(
+        ReviewInvocationConfigurationMismatchReason.ActualModelEvidenceUnavailable
+      );
+    }
+  }
+
   async execute(input: {
     readonly invocation: PreparedReviewInvocation;
     readonly manifest: import('../application').ProviderInvocationManifest;
@@ -445,6 +459,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
         this.credentialsForInvocation(),
         input.signal
       );
+      this.assertDirectActualModel(result.actualModel);
       return normalizeReviewObservation({
         workSlotId: input.invocation.workSlotId,
         attemptOrdinal: input.invocation.attemptOrdinal,
@@ -495,6 +510,7 @@ export class CodexReviewInvocationAdapter implements PreparedReviewInvocationPor
         this.credentialsForInvocation(session.credentialLease),
         input.signal
       );
+      this.assertDirectActualModel(result.actualModel);
       logger.info(
         `Codex execution model: requested=${input.invocation.requestedModel}, actual=${
           result.actualModel ?? 'unreported'

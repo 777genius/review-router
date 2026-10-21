@@ -602,14 +602,7 @@ async function failedResponseDiagnostic(upstream502: boolean): Promise<void> {
         ? upstreamBody
         : '{"error":{"code":"relay_unknown","effect":"effect_unknown"}}'
     );
-    // A provable pre-dispatch failure receives exactly one bounded transient
-    // re-dispatch budget (1 + 3); every attempt keeps a closed diagnostic and
-    // the final failed status/body is still forwarded unchanged.
-    assert.equal(
-      requests,
-      4,
-      'failed Responses are re-dispatched only within the bounded transient budget'
-    );
+    assert.equal(requests, 1, 'unknown effects must never be re-dispatched');
     if (upstream502)
       assert.deepEqual(diagnostics, [
         {
@@ -618,35 +611,16 @@ async function failedResponseDiagnostic(upstream502: boolean): Promise<void> {
           httpStatus: 502,
           errorCategory: 'none',
         },
-        {
-          stage: 'upstream_headers',
-          responseReceived: true,
-          httpStatus: 502,
-          errorCategory: 'none',
-        },
-        {
-          stage: 'upstream_headers',
-          responseReceived: true,
-          httpStatus: 502,
-          errorCategory: 'none',
-        },
-        {
-          stage: 'upstream_headers',
-          responseReceived: true,
-          httpStatus: 502,
-          errorCategory: 'none',
-        },
       ]);
-    else {
-      assert.equal(diagnostics.length, 4);
-      for (const diagnostic of diagnostics)
-        assert.deepEqual(diagnostic, {
+    else
+      assert.deepEqual(diagnostics, [
+        {
           stage: 'upstream_request',
           responseReceived: false,
           httpStatus: null,
           errorCategory: 'Error',
-        });
-    }
+        },
+      ]);
     for (const privateValue of [
       token,
       upstreamBody,

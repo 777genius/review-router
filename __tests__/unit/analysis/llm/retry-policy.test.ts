@@ -102,6 +102,19 @@ describe('LLM retry policy', () => {
     ).toBe(false);
   });
 
+  it.each([
+    'upstream lane_saturated',
+    'upstream relay_saturated not_dispatched',
+    'upstream {"error":{"code":"lane_saturated","effect":"not_dispatched"}} then {"error":{"code":"relay_saturated","effect":"effect_unknown"}}',
+  ])(
+    'requires consistent positive envelopes before saturation retry: %s',
+    (message) => {
+      const error = new Error(message);
+      expect(shouldRetryProviderReviewError(error)).toBe(false);
+      expect(providerReviewRetryDelayMs(error)).toBe(0);
+    }
+  );
+
   it('keeps terminal budget exhaustion non-retryable', () => {
     expect(
       shouldRetryProviderReviewError(

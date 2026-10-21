@@ -23331,7 +23331,7 @@ var ConfigLoader = class {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.187",
+  version: "1.0.188",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -65644,12 +65644,15 @@ var CodexProvider = class _CodexProvider extends Provider {
     this.options = options;
   }
   static preparedBinaryPath;
+  get modelTransport() {
+    return this.options.accountGateway ?? this.options.providerApiTransport;
+  }
   // Verify the CLI is available. Model/auth failures are surfaced by the real
   // review call; a model-exec health check costs an extra Codex subscription
   // request and can exhaust limited OAuth usage before review starts.
   async healthCheck(_timeoutMs = 5e3) {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5e3);
-    const mode = this.options.accountGateway ? "binary" : (process.env.CODEX_HEALTHCHECK_MODE || "binary").toLowerCase();
+    const mode = this.modelTransport ? "binary" : (process.env.CODEX_HEALTHCHECK_MODE || "binary").toLowerCase();
     if (mode === "none" || mode === "binary") {
       return true;
     }
@@ -65712,7 +65715,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       if (execution.runResult.audit) {
         this.logAgenticAudit(execution.runResult.audit, false);
       }
-      if (!this.options.accountGateway && this.shouldRetryForMissingAgenticExploration(
+      if (!this.modelTransport && this.shouldRetryForMissingAgenticExploration(
         execution.parsed,
         execution.runResult.audit,
         prompt,
@@ -65811,7 +65814,7 @@ var CodexProvider = class _CodexProvider extends Provider {
     ) : agenticContext ? await this.wrapAgenticReviewPrompt(prompt) : this.wrapPromptOnlyReviewPrompt(prompt);
     const auditMode = agenticContext && !contextGateway ? this.agenticAuditMode() : "off";
     const eventAudit = contextGateway ? true : this.shouldUseEventAudit();
-    const forkSandbox = !this.options.accountGateway && this.shouldUseForkSandboxCodexHomeConfig();
+    const forkSandbox = !this.modelTransport && this.shouldUseForkSandboxCodexHomeConfig();
     const reasoningEffort = this.resolveReasoningEffort(false);
     const gateway = this.options.accountGateway;
     const modelCatalogSetting = gateway ? await prepareAccountGatewayModelCatalog(
@@ -65859,7 +65862,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       jsonEvents: auditMode !== "off" || contextGateway !== void 0,
       auditMode,
       optionalAgenticRetryMaxPromptTokens: MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
-      acceptReviewOutputOnNonZero: !this.options.accountGateway && !this.options.waitForProcessClose,
+      acceptReviewOutputOnNonZero: !this.modelTransport && !this.options.waitForProcessClose,
       ...contextGateway ? { contextGateway } : {}
     };
     return createPreparedProviderInvocation({
@@ -65939,16 +65942,14 @@ var CodexProvider = class _CodexProvider extends Provider {
         cwd: request.cwd,
         environment: mergeCredentialEnvironment(
           request.environment,
-          this.options.accountGateway ? {
+          this.modelTransport ? {
             ...credentialLease?.environment,
-            ...splitProviderEnvironment(
-              this.options.accountGateway.environment
-            ).credentialEnvironment
+            ...splitProviderEnvironment(this.modelTransport.environment).credentialEnvironment
           } : credentialLease?.environment
         )
       }
     );
-    if (this.options.accountGateway && !runResult.lastMessage.trim())
+    if (this.modelTransport && !runResult.lastMessage.trim())
       throw new Error("account_gateway_final_missing");
     const content = this.sanitizeReviewContent(
       (runResult.lastMessage || runResult.stdout).trim(),
@@ -65978,11 +65979,9 @@ var CodexProvider = class _CodexProvider extends Provider {
     };
   }
   captureCredentialLease(invocation) {
-    if (this.options.accountGateway) {
+    if (this.modelTransport) {
       return {
-        environment: splitProviderEnvironment(
-          this.options.accountGateway.environment
-        ).credentialEnvironment
+        environment: splitProviderEnvironment(this.modelTransport.environment).credentialEnvironment
       };
     }
     const environment = {};
@@ -66128,11 +66127,11 @@ ${JSON.stringify(outputSchema)}` : prompt;
         args.push("-c", `model_reasoning_effort="${normalized}"`);
       }
     }
-    if (!this.options.accountGateway && config.modelProvider === "openrouter") {
+    if (!this.modelTransport && config.modelProvider === "openrouter") {
       for (const setting of CODEX_OPENROUTER_CONFIGURATION)
         args.push("-c", setting);
     }
-    if (!this.options.accountGateway && config.modelProvider === "mimo") {
+    if (!this.modelTransport && config.modelProvider === "mimo") {
       args.push(
         "-c",
         'model_provider="mimo"',
@@ -66154,8 +66153,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
     for (const configOverride of CODEX_SHELL_ENVIRONMENT_POLICY) {
       args.push("-c", configOverride);
     }
-    if (this.options.accountGateway) {
-      for (const setting of this.options.accountGateway.configuration)
+    if (this.modelTransport) {
+      for (const setting of this.modelTransport.configuration)
         args.push("-c", setting);
       if (config.modelCatalogSetting)
         args.push("-c", config.modelCatalogSetting);
@@ -66170,7 +66169,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const cliSchemaEnabled = prepared ? prepared.argsTemplate.includes("--output-schema") : supportsCliOutputSchema(this.options.modelProvider);
     const schemaFile = options.outputSchema && cliSchemaEnabled ? path4.join(os2.tmpdir(), `codex-schema-${runId}.json`) : void 0;
     const waitForProcessClose = Boolean(
-      this.options.accountGateway || this.options.waitForProcessClose
+      this.modelTransport || this.options.waitForProcessClose
     );
     let fd;
     try {
@@ -66407,11 +66406,11 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const gateway = request.contextGateway;
     const environment = this.observablePreparedEnvironment(request);
     const replacements = [
-      ...this.options.accountGateway ? [
+      ...this.modelTransport ? [
         [request.environment.CODEX_HOME ?? "", "<codex-home>"],
         [
-          this.options.accountGateway.baseUrl,
-          "<account-gateway-loopback>"
+          this.modelTransport.baseUrl,
+          this.options.providerApiTransport ? "<provider-api-loopback>" : "<account-gateway-loopback>"
         ]
       ] : [],
       ...gateway ? [
@@ -66595,16 +66594,15 @@ ${JSON.stringify(outputSchema)}` : prompt;
       includeWorkspaceEnv: includeWorkspaceEnv && !forkSandbox,
       extraAllowedKeys: [
         "CODEX_HOME",
-        ...this.options.accountGateway ? [] : ["OPENAI_API_KEY"],
-        ...!this.options.accountGateway && modelProvider === "openrouter" ? ["OPENROUTER_API_KEY"] : [],
-        ...!this.options.accountGateway && modelProvider === "mimo" ? [MIMO_TOKEN_PLAN_API_KEY] : []
+        ...this.modelTransport ? [] : ["OPENAI_API_KEY"],
+        ...!this.modelTransport && modelProvider === "openrouter" ? ["OPENROUTER_API_KEY"] : [],
+        ...!this.modelTransport && modelProvider === "mimo" ? [MIMO_TOKEN_PLAN_API_KEY] : []
       ],
-      ...this.options.accountGateway ? { overrides: this.options.accountGateway.environment } : {}
+      ...this.modelTransport ? { overrides: this.modelTransport.environment } : {}
     });
   }
   requireModelProviderCredential() {
-    if (this.options.accountGateway || this.options.modelProvider !== "mimo")
-      return;
+    if (this.modelTransport || this.options.modelProvider !== "mimo") return;
     if (!process.env[MIMO_TOKEN_PLAN_API_KEY]?.trim()) {
       const error = new Error(
         `codex_mimo_api_key_missing: ${MIMO_TOKEN_PLAN_API_KEY} is required for ${this.name}`
@@ -67159,8 +67157,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     return Object.freeze({ kind: "ambiguous" /* Ambiguous */ });
   }
   resolveEffectiveActualModel(observation, requestedModel) {
-    if (this.options.accountGateway)
-      return this.options.accountGateway.actualModel();
+    if (this.modelTransport) return this.modelTransport.actualModel();
     if (observation.kind === "observed" /* Observed */) {
       return observation.model;
     }
@@ -67500,7 +67497,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     );
   }
   withActionableAuthHint(message) {
-    if (this.options.accountGateway) return message;
+    if (this.modelTransport) return message;
     if (!message) return message;
     if (!/(401|unauthorized|access token|refresh token|auth|login)/i.test(message)) {
       return message;
@@ -72033,7 +72030,9 @@ var CodexReviewInvocationAdapter = class {
     if (!this.directCredentialLease) return session;
     const direct = this.directCredentialLease();
     const environment = direct.environment;
-    if (direct.bearerToken !== void 0 || !environment || Object.keys(environment).join(",") !== "OPENROUTER_API_KEY" || !environment.OPENROUTER_API_KEY || session?.environment?.OPENROUTER_API_KEY !== void 0)
+    if (direct.bearerToken !== void 0 || !environment || Object.keys(environment).join(",") !== LOCAL_MODEL_CAPABILITY_ENV || !/^Bearer [a-f0-9]{64}$/.test(
+      environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ""
+    ) || session?.environment?.OPENROUTER_API_KEY !== void 0 || session?.environment?.[LOCAL_MODEL_CAPABILITY_ENV] !== void 0)
       throw new Error("review_action_v2_direct_credential_lease_invalid");
     return {
       ...session,
@@ -72188,6 +72187,13 @@ var CodexReviewInvocationAdapter = class {
       })
     });
   }
+  assertDirectActualModel(actualModel) {
+    if (this.directCredentialLease && !actualModel) {
+      throw new ReviewInvocationConfigurationMismatchError(
+        "actual_model_evidence_unavailable" /* ActualModelEvidenceUnavailable */
+      );
+    }
+  }
   async execute(input) {
     const prepared = input.invocation.immutableRequest;
     if (!prepared || typeof prepared !== "object" || !this.prepared.has(prepared) || prepared.providerName !== input.invocation.provider || prepared.requestedModel !== input.invocation.requestedModel) {
@@ -72200,6 +72206,7 @@ var CodexReviewInvocationAdapter = class {
         this.credentialsForInvocation(),
         input.signal
       );
+      this.assertDirectActualModel(result2.actualModel);
       return normalizeReviewObservation({
         workSlotId: input.invocation.workSlotId,
         attemptOrdinal: input.invocation.attemptOrdinal,
@@ -72246,6 +72253,7 @@ var CodexReviewInvocationAdapter = class {
         this.credentialsForInvocation(session.credentialLease),
         input.signal
       );
+      this.assertDirectActualModel(result2.actualModel);
       logger.info(
         `Codex execution model: requested=${input.invocation.requestedModel}, actual=${result2.actualModel ?? "unreported"}`
       );
@@ -89710,14 +89718,16 @@ var CLAUDE_NATIVE_TOOLS = Object.freeze([
 // src/review-investigation/infrastructure/codex-review-agent-adapter.ts
 var CODEX_APP_SERVER_EVENT_STREAM_OUTPUT_MULTIPLIER = 32;
 var CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER = 2;
+var CODEX_REVIEW_AGENT_PROFILE = createGatewayAttestedRuntimeProfile({
+  providerKind: "codex" /* Codex */,
+  eventStream: "json_lines" /* JsonLines */,
+  maxPromptBytes: 8 * 1024 * 1024
+});
+var CODEX_REVIEW_AGENT_MAX_EVENT_BYTES = CODEX_REVIEW_AGENT_PROFILE.maxOutputBytes * CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER;
 var CodexReviewAgentAdapter = class extends StrictCliReviewAgent {
   constructor(runner, options) {
     super(
-      createGatewayAttestedRuntimeProfile({
-        providerKind: "codex" /* Codex */,
-        eventStream: "json_lines" /* JsonLines */,
-        maxPromptBytes: 8 * 1024 * 1024
-      }),
+      CODEX_REVIEW_AGENT_PROFILE,
       runner,
       options.executionSessions,
       options.providerCredentialEnvironment ?? (() => ({}))
@@ -89753,7 +89763,7 @@ Return exactly one JSON object matching this schema, with no markdown or prose.`
       environment: this.executionEnvironment(execution),
       timeoutMs: request.timeoutMs,
       maxEventStreamBytes: this.profile.maxOutputBytes * CODEX_APP_SERVER_EVENT_STREAM_OUTPUT_MULTIPLIER,
-      maxEventBytes: this.profile.maxOutputBytes * CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER,
+      maxEventBytes: CODEX_REVIEW_AGENT_MAX_EVENT_BYTES,
       signal: request.signal,
       protocol: {
         cwd: execution.gateway.cwd,
@@ -92700,6 +92710,7 @@ var ProductionT0ReviewRunner = class {
       ),
       ...input.providerApi ? {
         providerNamePrefix: "openrouter",
+        providerApiTransport: input.providerApi.modelTransport,
         disableBuiltinTools: true,
         waitForProcessClose: true
       } : {},
@@ -92812,7 +92823,7 @@ var ProductionT0ReviewRunner = class {
             codexModel: model,
             codexBinaryPath: input.codexBinaryPath,
             executionSessions: gateway,
-            modelTransport: input.accountGateway?.modelTransport,
+            modelTransport: input.providerApi?.modelTransport ?? input.accountGateway?.modelTransport,
             admittedGatewayModel: input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
             reasoningEffort
           })

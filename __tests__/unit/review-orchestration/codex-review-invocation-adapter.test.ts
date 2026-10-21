@@ -49,6 +49,7 @@ import {
   planAssignments,
 } from '../../../src/review-orchestration/infrastructure/production-t0-review-runner';
 import { hashIncrementalCompatibility } from '../../../src/cache/key-builder';
+import { ProviderInvocationFailureClassifier } from '../../../src/review-orchestration/infrastructure/provider-invocation-failure-classifier';
 
 const emptyProbePlan = createReviewInvestigationProbePlan({
   files: [],
@@ -57,8 +58,9 @@ const emptyProbePlan = createReviewInvestigationProbePlan({
 
 describe('Codex T0 prepared invocation', () => {
   it.each([false, true])(
-    'leases a direct model key only at execution, with Context Gateway=%s',
+    'leases a direct local capability only at execution, with Context Gateway=%s',
     async (withContext) => {
+      const directCapability = `Bearer ${'a'.repeat(64)}`;
       const prepared = preparedInvocation('prepared prompt');
       const execute = jest.fn().mockResolvedValue({
         content: '{}',
@@ -103,7 +105,9 @@ describe('Codex T0 prepared invocation', () => {
           } as unknown as ContextGatewayInvocationSessionFactoryPort)
         : undefined;
       const lease = jest.fn(() => ({
-        environment: { OPENROUTER_API_KEY: 'unit-direct-key' },
+        environment: {
+          REVIEWROUTER_LOCAL_MODEL_TOKEN: directCapability,
+        },
       }));
       const adapter = new CodexReviewInvocationAdapter(
         provider,
@@ -121,8 +125,10 @@ describe('Codex T0 prepared invocation', () => {
         attemptOrdinal: 1,
       });
       expect(lease).not.toHaveBeenCalled();
-      expect(JSON.stringify(invocation)).not.toContain('unit-direct-key');
-      expect(JSON.stringify(gatewayConfig)).not.toContain('OPENROUTER_API_KEY');
+      expect(JSON.stringify(invocation)).not.toContain(directCapability);
+      expect(JSON.stringify(gatewayConfig)).not.toContain(
+        'REVIEWROUTER_LOCAL_MODEL_TOKEN'
+      );
       await adapter.execute({
         invocation,
         manifest: manifestFixture,
@@ -135,7 +141,7 @@ describe('Codex T0 prepared invocation', () => {
         prepared,
         {
           environment: {
-            OPENROUTER_API_KEY: 'unit-direct-key',
+            REVIEWROUTER_LOCAL_MODEL_TOKEN: directCapability,
             ...(withContext
               ? { REVIEWROUTER_CONTEXT_GATEWAY_SECRET: 'context-capability' }
               : {}),
@@ -146,7 +152,37 @@ describe('Codex T0 prepared invocation', () => {
       expect(session.credentialLease.environment).toEqual({
         REVIEWROUTER_CONTEXT_GATEWAY_SECRET: 'context-capability',
       });
-      expect(JSON.stringify(invocation)).not.toContain('unit-direct-key');
+      expect(JSON.stringify(invocation)).not.toContain(directCapability);
+
+      execute.mockResolvedValueOnce({
+        content: '{}',
+        findings: [],
+        revalidations: [],
+      });
+      const failure = await adapter
+        .execute({
+          invocation,
+          manifest: manifestFixture,
+          lease: leaseFixture,
+          sourceExecutionId: 'execution-1',
+          sourceReviewRevisionHash: hash('revision'),
+          signal: new AbortController().signal,
+        })
+        .then(
+          () => undefined,
+          (error: unknown) => error
+        );
+      expect(failure).toBeInstanceOf(
+        ReviewInvocationConfigurationMismatchError
+      );
+      expect(failure).toMatchObject({
+        reason:
+          ReviewInvocationConfigurationMismatchReason.ActualModelEvidenceUnavailable,
+      });
+      expect(new ProviderInvocationFailureClassifier().classify(failure)).toBe(
+        'configuration_mismatch'
+      );
+      expect(session.seal).toHaveBeenCalledTimes(withContext ? 1 : 0);
     }
   );
 

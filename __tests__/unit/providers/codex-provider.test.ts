@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import nock from 'nock';
 import { randomBytes } from 'crypto';
 import fs from 'fs';
 import os from 'os';
@@ -18,6 +19,7 @@ import {
   LOCAL_MODEL_CAPABILITY_ENV,
   normalizeCodexGatewayServiceTier,
   startLocalGatewayModelTransport,
+  startDirectOpenRouterModelTransport,
   type LocalGatewayModelTransport,
 } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 
@@ -2284,6 +2286,172 @@ describe('CodexProvider', () => {
     const result = await provider.review('review prompt', 1000);
 
     expect(result.actualModel).toBeUndefined();
+  });
+
+  it.each(['upstream/actual-model', undefined])(
+    'binds direct OpenRouter actual model only to terminal upstream wire evidence (%s)',
+    async (upstreamModel) => {
+      const key = 'synthetic-openrouter-parent-only-key';
+      process.env.OPENROUTER_API_KEY = key;
+      const payload = JSON.stringify({
+        model: 'vendor/requested-model',
+        input: upstreamModel
+          ? 'x'.repeat(ACCOUNT_GATEWAY_BOUNDS.requestBytes + 1)
+          : [],
+        stream: true,
+      });
+      const prefix = upstreamModel
+        ? `:${'x'.repeat(8192)}\n\n`.repeat(1100)
+        : '';
+      const stream =
+        prefix +
+        `event: response.completed\ndata: ${JSON.stringify({
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            ...(upstreamModel ? { model: upstreamModel } : {}),
+          },
+        })}\n\n`;
+      const upstream = nock('https://openrouter.ai')
+        .post('/api/v1/responses', payload)
+        .matchHeader('authorization', `Bearer ${key}`)
+        .reply(200, stream, { 'content-type': 'text/event-stream' });
+      const transport = await startDirectOpenRouterModelTransport(() => key, {
+        requestMs: 7_200_000,
+        streamFrameBytes: 8 * 1024 * 1024,
+      });
+      const info = jest.spyOn(logger, 'info');
+      const timers = jest.spyOn(global, 'setTimeout');
+      let childEnvironment: NodeJS.ProcessEnv | undefined;
+      spawnMock.mockImplementation(
+        (_cmd: string, args: string[], options: { env: NodeJS.ProcessEnv }) => {
+          if (args.includes('--version')) return createMockProcess();
+          childEnvironment = options.env;
+          expect(args).toContain('--ephemeral');
+          expect(args.join(' ')).not.toContain(key);
+          const proc = Object.assign(new EventEmitter(), {
+            stdout: new EventEmitter(),
+            stderr: new EventEmitter(),
+            pid: 12345,
+            kill: jest.fn(),
+          });
+          process.nextTick(async () => {
+            try {
+              const response = await fetch(`${transport.baseUrl}/responses`, {
+                method: 'POST',
+                headers: {
+                  authorization: options.env[LOCAL_MODEL_CAPABILITY_ENV]!,
+                  'content-type': 'application/json',
+                },
+                body: payload,
+              });
+              expect(await response.text()).toBe(stream);
+              fs.writeFileSync(
+                args[args.indexOf('--output-last-message') + 1],
+                '{"findings":[],"revalidations":[]}'
+              );
+              proc.stdout.emit(
+                'data',
+                JSON.stringify({
+                  type: 'session_configured',
+                  model: 'untrusted/configured-model',
+                })
+              );
+              proc.emit('close', 0);
+            } catch (error) {
+              proc.emit('error', error);
+              proc.emit('close', 1);
+            }
+          });
+          return proc;
+        }
+      );
+      try {
+        const options = {
+          modelProvider: 'openrouter' as const,
+          providerApiTransport: transport,
+          providerNamePrefix: 'openrouter' as const,
+          agenticContext: false,
+          disableBuiltinTools: true,
+          waitForProcessClose: true,
+        };
+        const provider = new CodexProvider('vendor/requested-model', options);
+        const prepared = await provider.prepareInvocation(
+          'review prompt',
+          5000
+        );
+        expect(prepared.observableInputPreimage).not.toContain(key);
+        const result = await provider.executePreparedInvocation(prepared, {
+          environment: transport.environment,
+        });
+        expect(result.actualModel).toBe(upstreamModel);
+        const execArgs = spawnMock.mock.calls.find(
+          (call: unknown[]) => !(call[1] as string[]).includes('--version')
+        )![1] as string[];
+        expect(execArgs.join(' ')).not.toContain('https://openrouter.ai');
+        expect(childEnvironment?.OPENROUTER_API_KEY).toBeUndefined();
+        expect(childEnvironment?.OPENAI_API_KEY).toBeUndefined();
+        expect(childEnvironment?.[LOCAL_MODEL_CAPABILITY_ENV]).toMatch(
+          /^Bearer [a-f0-9]{64}$/
+        );
+        expect(JSON.stringify(childEnvironment)).not.toContain(key);
+        expect(JSON.stringify(info.mock.calls)).not.toContain(key);
+        expect(upstream.isDone()).toBe(true);
+        expect(transport.requestCount!()).toBe(1);
+        expect(timers).toHaveBeenCalledWith(expect.any(Function), 7_200_000);
+      } finally {
+        await transport.dispose();
+        info.mockRestore();
+        timers.mockRestore();
+        nock.cleanAll();
+      }
+    }
+  );
+
+  it('cancels a direct streamed request awaiting upstream headers without replay', async () => {
+    const key = 'synthetic-abort-parent-key';
+    let accepted!: () => void;
+    const received = new Promise<void>((resolve) => {
+      accepted = resolve;
+    });
+    let requests = 0;
+    const upstream = nock('https://openrouter.ai')
+      .post('/api/v1/responses')
+      .delayConnection(1000)
+      .reply(200, 'never consumed', { 'content-type': 'text/event-stream' })
+      .on('request', () => {
+        requests++;
+        accepted();
+      });
+    const transport = await startDirectOpenRouterModelTransport(() => key, {
+      requestMs: 7_200_000,
+      streamFrameBytes: 8 * 1024 * 1024,
+    });
+    const controller = new AbortController();
+    const operation = fetch(`${transport.baseUrl}/responses`, {
+      method: 'POST',
+      headers: {
+        authorization: transport.environment[LOCAL_MODEL_CAPABILITY_ENV]!,
+        'content-type': 'application/json',
+      },
+      body: '{"model":"vendor/model","stream":true}',
+      signal: controller.signal,
+    });
+    const rejected = expect(operation).rejects.toThrow();
+    try {
+      await received;
+      controller.abort();
+      await rejected;
+      await transport.dispose();
+      expect(requests).toBe(1);
+      expect(transport.actualModel()).toBeUndefined();
+      expect(upstream.isDone()).toBe(true);
+    } finally {
+      controller.abort();
+      await transport.dispose();
+      nock.abortPendingRequests();
+      nock.cleanAll();
+    }
   });
 
   it('does not infer an actual model for routed OpenRouter executions', async () => {

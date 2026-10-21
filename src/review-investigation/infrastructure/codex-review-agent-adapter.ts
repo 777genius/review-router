@@ -52,6 +52,15 @@ export type CodexReviewAgentAdapterOptions = Readonly<{
 const CODEX_APP_SERVER_EVENT_STREAM_OUTPUT_MULTIPLIER = 32;
 const CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER = 2;
 
+const CODEX_REVIEW_AGENT_PROFILE = createGatewayAttestedRuntimeProfile({
+  providerKind: ReviewAgentProviderKind.Codex,
+  eventStream: ReviewAgentEventStreamSupport.JsonLines,
+  maxPromptBytes: 8 * 1024 * 1024,
+});
+export const CODEX_REVIEW_AGENT_MAX_EVENT_BYTES =
+  CODEX_REVIEW_AGENT_PROFILE.maxOutputBytes *
+  CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER;
+
 export class CodexReviewAgentAdapter extends StrictCliReviewAgent {
   private readonly appServerRunner: CodexAppServerTurnRunnerPort;
 
@@ -60,11 +69,7 @@ export class CodexReviewAgentAdapter extends StrictCliReviewAgent {
     private readonly options: CodexReviewAgentAdapterOptions
   ) {
     super(
-      createGatewayAttestedRuntimeProfile({
-        providerKind: ReviewAgentProviderKind.Codex,
-        eventStream: ReviewAgentEventStreamSupport.JsonLines,
-        maxPromptBytes: 8 * 1024 * 1024,
-      }),
+      CODEX_REVIEW_AGENT_PROFILE,
       runner,
       options.executionSessions,
       options.providerCredentialEnvironment ?? (() => ({}))
@@ -107,9 +112,7 @@ export class CodexReviewAgentAdapter extends StrictCliReviewAgent {
       maxEventStreamBytes:
         this.profile.maxOutputBytes *
         CODEX_APP_SERVER_EVENT_STREAM_OUTPUT_MULTIPLIER,
-      maxEventBytes:
-        this.profile.maxOutputBytes *
-        CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER,
+      maxEventBytes: CODEX_REVIEW_AGENT_MAX_EVENT_BYTES,
       signal: request.signal,
       protocol: {
         cwd: execution.gateway.cwd,

@@ -103,19 +103,14 @@ function isTransientLaneSaturation(error: Error): boolean {
   // Structured gateway facts decide alone when present: flattened text can
   // carry `not_dispatched` inside a message field while the envelope's effect
   // is unknown, and unknown effects must stay terminal.
-  const saturationFacts = parseGatewayFactEnvelopes(text).filter(
-    (fact) => fact.code === 'lane_saturated' || fact.code === 'relay_saturated'
-  );
-  if (saturationFacts.length > 0) {
-    return saturationFacts.some((fact) => fact.effect === 'not_dispatched');
-  }
-  const lower = text.toLowerCase();
-  // The forwarded relay envelope keeps its relay_saturated code after the
-  // transport's in-transport waits; only the not_dispatched effect proves
-  // non-entry (effect_unknown stays terminal).
+  const facts = parseGatewayFactEnvelopes(text);
   return (
-    lower.includes('lane_saturated') ||
-    (lower.includes('relay_saturated') && lower.includes('not_dispatched'))
+    facts.length > 0 &&
+    facts.every(
+      (fact) =>
+        (fact.code === 'lane_saturated' || fact.code === 'relay_saturated') &&
+        fact.effect === 'not_dispatched'
+    )
   );
 }
 

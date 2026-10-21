@@ -31161,6 +31161,399 @@ function unique(values) {
   return Array.from(new Set(values));
 }
 
+// src/review-projection/domain/review-projection.ts
+var LifecycleRevalidationVerdict = /* @__PURE__ */ ((LifecycleRevalidationVerdict2) => {
+  LifecycleRevalidationVerdict2["Resolved"] = "resolved";
+  LifecycleRevalidationVerdict2["StillValid"] = "still_valid";
+  LifecycleRevalidationVerdict2["Uncertain"] = "uncertain";
+  return LifecycleRevalidationVerdict2;
+})(LifecycleRevalidationVerdict || {});
+function coverageManifestFileStatusRank(status) {
+  switch (status) {
+    case "unreviewed":
+      return 0;
+    case "skipped":
+      return 1;
+    case "metadata-only":
+      return 2;
+    case "compacted":
+      return 3;
+    case "full":
+      return 4;
+    default:
+      return 5;
+  }
+}
+
+// src/review-projection/domain/review-projection-canonicalizer.ts
+var import_crypto7 = require("crypto");
+function canonicalizeReviewProjection(envelope) {
+  return JSON.stringify(toCanonicalValue(envelope));
+}
+function hashReviewProjectionCanonicalJson(canonicalJson14) {
+  return (0, import_crypto7.createHash)("sha256").update(canonicalJson14, "utf8").digest("hex");
+}
+function hashProjectionFact(value) {
+  return (0, import_crypto7.createHash)("sha256").update(JSON.stringify(toCanonicalValue(value)), "utf8").digest("hex");
+}
+function deepFreezeProjection(value) {
+  if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
+    return value;
+  }
+  for (const child of Object.values(value)) {
+    deepFreezeProjection(child);
+  }
+  return Object.freeze(value);
+}
+function toCanonicalValue(value) {
+  if (value === null || typeof value !== "object") {
+    if (typeof value === "number" && !Number.isFinite(value)) {
+      throw new Error("review projection contains a non-finite number");
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(toCanonicalValue);
+  }
+  const canonical = {};
+  for (const key of Object.keys(value).sort()) {
+    const child = value[key];
+    if (child !== void 0) {
+      canonical[key] = toCanonicalValue(child);
+    }
+  }
+  return canonical;
+}
+
+// src/review-projection/domain/current-review-projector.ts
+var CurrentReviewProjector = class {
+  projectOccurrences(input) {
+    const occurrences = [];
+    const matchedLineages = /* @__PURE__ */ new Set();
+    for (const finding of input.selectedFindings) {
+      const hint = this.matchPriorLineage(finding, input.priorLineageHints);
+      const lineageId = hint?.lineageId ?? this.createLineageId(input.scope, finding);
+      if (hint) matchedLineages.add(hint.lineageId);
+      const target = this.findTargetForFinding(
+        finding,
+        input.inventory.targets
+      );
+      const suppressed = target?.disposition === "command_suppressed" /* CommandSuppressed */;
+      const state = suppressed ? "suppressed_by_human" /* SuppressedByHuman */ : hint ? hint.severity === finding.severity ? "reconfirmed" /* Reconfirmed */ : "changed" /* Changed */ : "new" /* New */;
+      occurrences.push({
+        lineageId,
+        sourceFindingIds: sortedUnique(finding.sourceFindingIds),
+        state,
+        severity: finding.severity,
+        ...hint && hint.severity !== finding.severity ? { previousSeverity: hint.severity } : {},
+        category: finding.category,
+        normalizedFailureModeHash: finding.normalizedFailureModeHash,
+        ...finding.symbolAnchor ? { symbolAnchor: finding.symbolAnchor } : {},
+        ...finding.trustedMarker ? { trustedMarker: finding.trustedMarker } : {},
+        title: finding.title,
+        message: finding.message,
+        ...finding.suggestion ? { suggestion: finding.suggestion } : {},
+        filePath: finding.filePath,
+        ...finding.startLine !== void 0 ? { startLine: finding.startLine } : {},
+        ...finding.line !== void 0 ? { line: finding.line } : {},
+        ...finding.endLine !== void 0 ? { endLine: finding.endLine } : {},
+        placement: summaryPlacement(lineageId, finding.filePath, "pending"),
+        providerVoteKeys: sortedUnique(finding.providerVoteKeys),
+        observationIds: sortedUnique(finding.observationIds),
+        firstSeenHeadSha: hint?.firstSeenHeadSha ?? input.scope.reviewedHeadSha,
+        sourceHeadSha: input.scope.reviewedHeadSha,
+        blocking: false
+      });
+    }
+    const decisionByTarget = new Map(
+      input.lifecycleDecisions.map((decision) => [decision.targetId, decision])
+    );
+    for (const hint of input.priorLineageHints) {
+      if (matchedLineages.has(hint.lineageId) || !hint.active) continue;
+      const target = this.findTargetForHint(hint, input.inventory.targets);
+      if (!target) continue;
+      const decision = decisionByTarget.get(target.targetId);
+      const state = this.priorOccurrenceState(target, decision?.verdict);
+      occurrences.push({
+        lineageId: hint.lineageId,
+        sourceFindingIds: [],
+        state,
+        severity: hint.severity,
+        category: hint.category,
+        normalizedFailureModeHash: hint.normalizedFailureModeHash,
+        ...hint.symbolAnchor ? { symbolAnchor: hint.symbolAnchor } : {},
+        ...hint.trustedMarker ? { trustedMarker: hint.trustedMarker } : {},
+        title: hint.title,
+        message: hint.message,
+        filePath: target.currentPath ?? hint.filePath,
+        ...hint.startLine !== void 0 ? { startLine: hint.startLine } : {},
+        ...target.currentLine !== void 0 ? { line: target.currentLine } : hint.line !== void 0 ? { line: hint.line } : {},
+        ...hint.endLine !== void 0 ? { endLine: hint.endLine } : {},
+        placement: summaryPlacement(
+          hint.lineageId,
+          target.currentPath ?? hint.filePath,
+          "historical occurrence"
+        ),
+        providerVoteKeys: [],
+        observationIds: [],
+        firstSeenHeadSha: hint.firstSeenHeadSha,
+        sourceHeadSha: input.scope.reviewedHeadSha,
+        blocking: false
+      });
+    }
+    return sortOccurrences(occurrences);
+  }
+  priorOccurrenceState(target, verdict) {
+    if (target.disposition === "command_suppressed" /* CommandSuppressed */) {
+      return "suppressed_by_human" /* SuppressedByHuman */;
+    }
+    if (hasValidTrustedResolutionMarker(target)) {
+      return "resolved" /* Resolved */;
+    }
+    if (target.disposition === "human_reply" /* HumanReply */) {
+      return "uncertain" /* Uncertain */;
+    }
+    if (verdict === "resolved" /* Resolved */) {
+      return "resolved" /* Resolved */;
+    }
+    if (verdict === "still_valid" /* StillValid */) {
+      return "carried_unverified" /* CarriedUnverified */;
+    }
+    return "uncertain" /* Uncertain */;
+  }
+  matchPriorLineage(finding, hints) {
+    const byMarker = finding.trustedMarker ? hints.filter(
+      (hint) => hint.trustedMarker === finding.trustedMarker && hint.normalizedFailureModeHash === finding.normalizedFailureModeHash
+    ) : [];
+    if (byMarker.length === 1) return byMarker[0];
+    if (byMarker.length > 1) return void 0;
+    const byAnchor = hints.filter(
+      (hint) => hint.category === finding.category && hint.normalizedFailureModeHash === finding.normalizedFailureModeHash && Boolean(hint.symbolAnchor) && hint.symbolAnchor === finding.symbolAnchor
+    );
+    if (byAnchor.length === 1) return byAnchor[0];
+    if (byAnchor.length > 1) return void 0;
+    const byLocation = hints.filter(
+      (hint) => hint.category === finding.category && hint.normalizedFailureModeHash === finding.normalizedFailureModeHash && normalizePath(hint.filePath) === normalizePath(finding.filePath) && hint.line !== void 0 && finding.line !== void 0 && Math.abs(hint.line - finding.line) <= 2
+    );
+    return byLocation.length === 1 ? byLocation[0] : void 0;
+  }
+  findTargetForFinding(finding, targets) {
+    if (finding.trustedMarker) {
+      const markerMatches = targets.filter(
+        (target) => target.trustedMarker === finding.trustedMarker
+      );
+      if (markerMatches.length === 1) return markerMatches[0];
+    }
+    const locationMatches = targets.filter(
+      (target) => normalizePath(target.currentPath ?? target.originalPath) === normalizePath(finding.filePath) && target.currentLine !== void 0 && finding.line !== void 0 && Math.abs(target.currentLine - finding.line) <= 2
+    );
+    return locationMatches.length === 1 ? locationMatches[0] : void 0;
+  }
+  findTargetForHint(hint, targets) {
+    if (!hint.trustedMarker) return void 0;
+    const markerMatches = targets.filter(
+      (target) => target.trustedMarker === hint.trustedMarker
+    );
+    return markerMatches.length === 1 ? markerMatches[0] : void 0;
+  }
+  createLineageId(scope, finding) {
+    return `rrl_${hashProjectionFact({
+      scmRepositoryIdentityId: scope.scmRepositoryIdentityId,
+      pullRequestNumber: scope.pullRequestNumber,
+      category: finding.category,
+      normalizedFailureModeHash: finding.normalizedFailureModeHash,
+      symbolAnchor: finding.symbolAnchor ?? null,
+      firstSeenHeadSha: scope.reviewedHeadSha,
+      trustedMarker: finding.trustedMarker ?? null
+    }).slice(0, 32)}`;
+  }
+};
+function hasValidTrustedResolutionMarker(target) {
+  const marker = target.resolutionMarker;
+  return Boolean(
+    marker && marker.trust === "trusted" /* Trusted */ && marker.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker.targetId === target.targetId && marker.fingerprint === target.trustedMarker
+  );
+}
+function summaryPlacement(lineageId, path31, reason) {
+  return {
+    lineageId,
+    kind: "summary" /* Summary */,
+    path: path31,
+    reason
+  };
+}
+function sortOccurrences(occurrences) {
+  const stateOrder = {
+    ["new" /* New */]: 0,
+    ["changed" /* Changed */]: 1,
+    ["reconfirmed" /* Reconfirmed */]: 2,
+    ["carried_unverified" /* CarriedUnverified */]: 3,
+    ["uncertain" /* Uncertain */]: 4,
+    ["resolved" /* Resolved */]: 5,
+    ["suppressed_by_human" /* SuppressedByHuman */]: 6
+  };
+  const severityOrder = {
+    critical: 0,
+    major: 1,
+    minor: 2
+  };
+  return [...occurrences].sort(
+    (left, right) => stateOrder[left.state] - stateOrder[right.state] || severityOrder[left.severity] - severityOrder[right.severity] || left.filePath.localeCompare(right.filePath) || (left.line ?? 0) - (right.line ?? 0) || left.lineageId.localeCompare(right.lineageId)
+  );
+}
+function normalizePath(path31) {
+  return path31.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+}
+function sortedUnique(values) {
+  return Array.from(new Set(values)).sort(
+    (left, right) => left.localeCompare(right)
+  );
+}
+
+// src/review-projection/domain/review-lifecycle-observation.ts
+var import_crypto8 = require("crypto");
+var REVIEW_LIFECYCLE_THREAD_STATE_VERSION = "review_lifecycle_thread_state.v1";
+var REVIEW_LIFECYCLE_MARKER_FINGERPRINT = /^(?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64})$/;
+var RFC3339_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+function isReviewLifecycleMarkerFingerprint(value) {
+  return typeof value === "string" && REVIEW_LIFECYCLE_MARKER_FINGERPRINT.test(value);
+}
+function hashReviewLifecycleThreadState(input) {
+  requireIdentifier(input.threadId, "thread_id");
+  if (input.comments.length === 0) {
+    throw new Error("review_lifecycle_thread_state_comments_missing");
+  }
+  const seenCommentIds = /* @__PURE__ */ new Set();
+  const comments = [...input.comments].sort((left, right) => compareCodeUnits2(left.id, right.id)).map((comment) => {
+    const commentId = requireIdentifier(comment.id, "comment_id");
+    if (seenCommentIds.has(commentId)) {
+      throw new Error("review_lifecycle_thread_state_comment_id_duplicate");
+    }
+    seenCommentIds.add(commentId);
+    return [
+      commentId,
+      normalizeAuthorLogin(comment.authorLogin),
+      sha2564(comment.body ?? ""),
+      normalizeTimestamp(comment.createdAt),
+      normalizeTimestamp(comment.updatedAt ?? comment.createdAt)
+    ];
+  });
+  const preimage = JSON.stringify([
+    REVIEW_LIFECYCLE_THREAD_STATE_VERSION,
+    input.threadId,
+    comments
+  ]);
+  return sha2564(preimage);
+}
+function requireIdentifier(value, field) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`review_lifecycle_thread_state_${field}_invalid`);
+  }
+  return value;
+}
+function normalizeAuthorLogin(value) {
+  if (value === null || value === void 0) return null;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error("review_lifecycle_thread_state_author_login_invalid");
+  }
+  return value.toLowerCase();
+}
+function normalizeTimestamp(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error("review_lifecycle_thread_state_timestamp_invalid");
+  }
+  const match2 = RFC3339_TIMESTAMP.exec(value);
+  if (match2 === null || !hasValidTimestampFields(match2)) {
+    throw new Error("review_lifecycle_thread_state_timestamp_invalid");
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("review_lifecycle_thread_state_timestamp_invalid");
+  }
+  return parsed.toISOString();
+}
+function hasValidTimestampFields(match2) {
+  const year = Number(match2[1]);
+  const month = Number(match2[2]);
+  const day = Number(match2[3]);
+  const hour = Number(match2[4]);
+  const minute = Number(match2[5]);
+  const second = Number(match2[6]);
+  const offset = match2[7];
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59 || second > 59) {
+    return false;
+  }
+  if (offset !== "Z") {
+    const offsetHour = Number(offset.slice(1, 3));
+    const offsetMinute = Number(offset.slice(4, 6));
+    if (offsetHour > 23 || offsetMinute > 59) return false;
+  }
+  return true;
+}
+function daysInMonth(year, month) {
+  if (month === 2) {
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    return leapYear ? 29 : 28;
+  }
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+function sha2564(value) {
+  return (0, import_crypto8.createHash)("sha256").update(value, "utf8").digest("hex");
+}
+function compareCodeUnits2(left, right) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+// src/review-projection/domain/review-projection-limits.ts
+var REVIEW_PROJECTION_ABSOLUTE_LIMITS = {
+  maxProjectionBytes: 2e6,
+  maxFindings: 1e3,
+  maxReferencesPerFinding: 100,
+  maxLineageHints: 2e3,
+  maxLifecycleTargets: 2e3,
+  maxRevisionFiles: 5e3,
+  maxDiffBytes: 2e6,
+  maxSummaryBytes: 65e3,
+  maxCheckSummaryBytes: 65e3,
+  maxInlineComments: 500,
+  maxInlineCommentsPerChunk: 50,
+  maxInlineChunks: 20,
+  maxInlineCommentBodyBytes: 65e3,
+  maxStringBytes: 65e3
+};
+var ReviewProjectionLimitError = class extends Error {
+  constructor(limitName, actual, maximum) {
+    super(
+      `review projection ${limitName} exceeded: ${actual} is greater than ${maximum}`
+    );
+    this.limitName = limitName;
+    this.actual = actual;
+    this.maximum = maximum;
+    this.name = "ReviewProjectionLimitError";
+  }
+};
+function validateReviewProjectionLimits(limits) {
+  for (const key of Object.keys(REVIEW_PROJECTION_ABSOLUTE_LIMITS)) {
+    const value = limits[key];
+    const absoluteMaximum = REVIEW_PROJECTION_ABSOLUTE_LIMITS[key];
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new Error(`review projection ${key} must be a positive integer`);
+    }
+    if (value > absoluteMaximum) {
+      throw new ReviewProjectionLimitError(key, value, absoluteMaximum);
+    }
+  }
+  return Object.freeze({ ...limits });
+}
+function assertWithinProjectionLimit(limitName, actual, limits) {
+  const maximum = limits[limitName];
+  if (actual > maximum) {
+    throw new ReviewProjectionLimitError(limitName, actual, maximum);
+  }
+}
+
 // src/utils/suggestion-formatter.ts
 function countMaxConsecutiveBackticks(str2) {
   const backtickSequences = str2.match(/`+/g);
@@ -31334,14 +31727,28 @@ function renderReviewerSummaryMarkdown(input) {
       ...coverage.limitations.map((value) => `- ${escapeMarkdownText(value)}`)
     );
     const manifestFiles = incomplete ? [...coverage.files ?? []].sort(compareCoverageManifestFiles) : (coverage.files ?? []).filter((file) => file.status !== "full");
-    const shownFiles = manifestFiles.slice(0, maxCoverageFileLines);
-    if (incomplete && shownFiles.length > 0)
+    const manifestLines = [];
+    for (const file of manifestFiles.slice(0, maxCoverageFileLines)) {
+      const line = `- ${escapeCoverageManifestPath(file.path)} - ${escapeMarkdownText(file.status)}${file.reason ? ` \u2014 ${escapeMarkdownText(file.reason)}` : ""}`;
+      const projected = [
+        ...lines,
+        ...incomplete && manifestLines.length === 0 ? [copy.manifestHeading, ""] : [],
+        ...manifestLines,
+        line,
+        "",
+        copy.moreFiles(manifestFiles.length - manifestLines.length),
+        "",
+        "</details>"
+      ];
+      if (utf8Bytes(projected.join("\n")) > maxSummaryBytes - 2e3) {
+        break;
+      }
+      manifestLines.push(line);
+    }
+    if (incomplete && manifestLines.length > 0)
       lines.push(copy.manifestHeading, "");
-    for (const file of shownFiles)
-      lines.push(
-        `- \`${escapeMarkdownInline(file.path)}\` - ${escapeMarkdownText(file.status)}${file.reason ? ` \u2014 ${escapeMarkdownText(file.reason)}` : ""}`
-      );
-    const hiddenFiles = manifestFiles.length - shownFiles.length;
+    lines.push(...manifestLines);
+    const hiddenFiles = manifestFiles.length - manifestLines.length;
     if (hiddenFiles > 0) lines.push("", copy.moreFiles(hiddenFiles));
     lines.push("", "</details>");
   }
@@ -31722,7 +32129,7 @@ var copies = {
     incompleteNote: "Inline comments and lifecycle changes were withheld because required coverage did not complete.",
     coverageHeading: "### Coverage not completed",
     manifestHeading: "### File coverage",
-    moreFiles: (count) => `**${count} more files not shown.**`,
+    moreFiles: (count) => `**${count} more ${count === 1 ? "file" : "files"} not shown.**`,
     moreFindings: (count) => `**${count} more ${englishFindingWord(count)} omitted from this summary because of size limits.**`,
     lifecycle: {
       resolved: "resolved",
@@ -31744,7 +32151,7 @@ var copies = {
     incompleteNote: "\u0418\u043D\u043B\u0430\u0439\u043D-\u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0438 \u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F lifecycle \u043D\u0435 \u043F\u0443\u0431\u043B\u0438\u043A\u043E\u0432\u0430\u043B\u0438\u0441\u044C: \u043F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E.",
     coverageHeading: "### \u041F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
     manifestHeading: "### \u041F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u0444\u0430\u0439\u043B\u043E\u0432",
-    moreFiles: (count) => `**\u0415\u0449\u0451 ${count} \u0444\u0430\u0439\u043B\u043E\u0432 \u043D\u0435 \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u043E.**`,
+    moreFiles: (count) => `**\u0415\u0449\u0451 ${count} ${slavicFindingWord(count, ["\u0444\u0430\u0439\u043B", "\u0444\u0430\u0439\u043B\u0430", "\u0444\u0430\u0439\u043B\u043E\u0432"])} \u043D\u0435 \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u043E.**`,
     moreFindings: (count) => `**\u0415\u0449\u0451 ${count} ${slavicFindingWord(count, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} \u043D\u0435 \u0432\u043B\u0435\u0437\u043B\u0438 \u0432 \u044D\u0442\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435 \u0438\u0437\u2011\u0437\u0430 \u043B\u0438\u043C\u0438\u0442\u0430 \u0440\u0430\u0437\u043C\u0435\u0440\u0430.**`,
     lifecycle: {
       resolved: "\u0441\u043D\u044F\u0442\u043E",
@@ -31766,7 +32173,7 @@ var copies = {
     incompleteNote: "\u0406\u043D\u043B\u0430\u0439\u043D-\u043A\u043E\u043C\u0435\u043D\u0442\u0430\u0440\u0456 \u0442\u0430 \u0437\u043C\u0456\u043D\u0438 lifecycle \u043D\u0435 \u043F\u0443\u0431\u043B\u0456\u043A\u0443\u0432\u0430\u043B\u0438\u0441\u044F: \u043F\u043E\u043A\u0440\u0438\u0442\u0442\u044F \u0440\u0435\u0432\u2019\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E.",
     coverageHeading: "### \u041F\u043E\u043A\u0440\u0438\u0442\u0442\u044F \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
     manifestHeading: "### \u041F\u043E\u043A\u0440\u0438\u0442\u0442\u044F \u0444\u0430\u0439\u043B\u0456\u0432",
-    moreFiles: (count) => `**\u0429\u0435 ${count} \u0444\u0430\u0439\u043B\u0456\u0432 \u043D\u0435 \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u043E.**`,
+    moreFiles: (count) => `**\u0429\u0435 ${count} ${slavicFindingWord(count, ["\u0444\u0430\u0439\u043B", "\u0444\u0430\u0439\u043B\u0438", "\u0444\u0430\u0439\u043B\u0456\u0432"])} \u043D\u0435 \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u043E.**`,
     moreFindings: (count) => `**\u0429\u0435 ${count} ${slavicFindingWord(count, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} \u043D\u0435 \u0432\u043C\u0456\u0441\u0442\u0438\u043B\u0438\u0441\u044F \u0432 \u0446\u0435 \u043F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u043D\u044F \u0447\u0435\u0440\u0435\u0437 \u043B\u0456\u043C\u0456\u0442 \u0440\u043E\u0437\u043C\u0456\u0440\u0443.**`,
     lifecycle: {
       resolved: "\u0437\u043D\u044F\u0442\u043E",
@@ -31788,7 +32195,7 @@ var copies = {
     incompleteNote: "No se publicaron comentarios en l\xEDnea ni cambios de ciclo de vida porque la cobertura no se complet\xF3.",
     coverageHeading: "### Cobertura incompleta",
     manifestHeading: "### Cobertura de archivos",
-    moreFiles: (count) => `**${count} archivos m\xE1s no se muestran.**`,
+    moreFiles: (count) => `**${count} ${count === 1 ? "archivo m\xE1s no se muestra." : "archivos m\xE1s no se muestran."}**`,
     moreFindings: (count) => `**${count} ${count === 1 ? "hallazgo m\xE1s omitido" : "hallazgos m\xE1s omitidos"} de este resumen por el l\xEDmite de tama\xF1o.**`,
     lifecycle: {
       resolved: "resuelto",
@@ -31810,7 +32217,7 @@ var copies = {
     incompleteNote: "Coment\xE1rios inline e mudan\xE7as de ciclo de vida n\xE3o foram publicados porque a cobertura n\xE3o foi conclu\xEDda.",
     coverageHeading: "### Cobertura n\xE3o conclu\xEDda",
     manifestHeading: "### Cobertura de arquivos",
-    moreFiles: (count) => `**Mais ${count} arquivos n\xE3o exibidos.**`,
+    moreFiles: (count) => `**Mais ${count} ${count === 1 ? "arquivo n\xE3o exibido." : "arquivos n\xE3o exibidos."}**`,
     moreFindings: (count) => `**Mais ${count} ${count === 1 ? "achado omitido" : "achados omitidos"} deste resumo por limite de tamanho.**`,
     lifecycle: {
       resolved: "resolvido",
@@ -31832,7 +32239,7 @@ var copies = {
     incompleteNote: "Les commentaires inline et les changements de cycle de vie n\u2019ont pas \xE9t\xE9 publi\xE9s car la couverture est incompl\xE8te.",
     coverageHeading: "### Couverture incompl\xE8te",
     manifestHeading: "### Couverture des fichiers",
-    moreFiles: (count) => `**${count} fichiers suppl\xE9mentaires non affich\xE9s.**`,
+    moreFiles: (count) => `**${count} ${count === 1 ? "fichier suppl\xE9mentaire non affich\xE9." : "fichiers suppl\xE9mentaires non affich\xE9s."}**`,
     moreFindings: (count) => `**${count} ${count === 1 ? "anomalie suppl\xE9mentaire omise" : "anomalies suppl\xE9mentaires omises"} de ce r\xE9sum\xE9 \xE0 cause de la limite de taille.**`,
     lifecycle: {
       resolved: "r\xE9solu",
@@ -31854,7 +32261,7 @@ var copies = {
     incompleteNote: "Inline-Kommentare und Lifecycle-\xC4nderungen wurden nicht ver\xF6ffentlicht, weil die Abdeckung unvollst\xE4ndig ist.",
     coverageHeading: "### Abdeckung unvollst\xE4ndig",
     manifestHeading: "### Dateiabdeckung",
-    moreFiles: (count) => `**${count} weitere Dateien werden nicht angezeigt.**`,
+    moreFiles: (count) => count === 1 ? "**1 weitere Datei wird nicht angezeigt.**" : `**${count} weitere Dateien werden nicht angezeigt.**`,
     moreFindings: (count) => `**${count} weitere ${count === 1 ? "Befund" : "Befunde"} fehlen in dieser Zusammenfassung wegen des Gr\xF6\xDFenlimits.**`,
     lifecycle: {
       active: "weiterhin g\xFCltig",
@@ -31876,7 +32283,7 @@ var copies = {
     incompleteNote: "I commenti inline e le modifiche di lifecycle non sono stati pubblicati perch\xE9 la copertura non \xE8 completa.",
     coverageHeading: "### Copertura non completata",
     manifestHeading: "### Copertura dei file",
-    moreFiles: (count) => `**${count} file aggiuntivi non mostrati.**`,
+    moreFiles: (count) => `**${count} ${count === 1 ? "file aggiuntivo non mostrato." : "file aggiuntivi non mostrati."}**`,
     moreFindings: (count) => `**Altri ${count} ${count === 1 ? "rilievo omesso" : "rilievi omessi"} da questo riassunto per il limite di dimensione.**`,
     lifecycle: {
       resolved: "risolto",
@@ -32369,16 +32776,9 @@ var scopeCopy = {
     tests: "\uAD8C\uC7A5 \uD14C\uC2A4\uD2B8"
   }
 };
-var coverageFileStatusOrder = {
-  unreviewed: 0,
-  skipped: 1,
-  "metadata-only": 2,
-  compacted: 3,
-  full: 4
-};
 function compareCoverageManifestFiles(left, right) {
-  const leftRank = coverageFileStatusOrder[left.status] ?? 5;
-  const rightRank = coverageFileStatusOrder[right.status] ?? 5;
+  const leftRank = coverageManifestFileStatusRank(left.status);
+  const rightRank = coverageManifestFileStatusRank(right.status);
   if (leftRank !== rightRank) return leftRank - rightRank;
   if (left.path < right.path) return -1;
   if (left.path > right.path) return 1;
@@ -32395,6 +32795,14 @@ function escapeHtml(value) {
 }
 function escapeMarkdownInline(value) {
   return value.replaceAll("\\", "\\\\").replaceAll("`", "\\`");
+}
+function escapeCoverageManifestPath(value) {
+  const sanitized = Array.from(value, (char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return code < 32 || code === 127 ? " " : char;
+  }).join("");
+  const escaped = escapeHtml(sanitized).replaceAll("`", "&#96;").replaceAll("@", "&#64;").replaceAll("[", "&#91;").replaceAll("]", "&#93;");
+  return `<code>${escaped}</code>`;
 }
 function dropIncompleteDetails(value) {
   const openTags = Array.from(value.matchAll(/<details\b[^>]*>/gi));
@@ -33080,7 +33488,7 @@ var CacheStorage = class {
 };
 
 // src/cache/key-builder.ts
-var import_crypto7 = require("crypto");
+var import_crypto9 = require("crypto");
 
 // src/cache/version.ts
 var CACHE_VERSION = 8;
@@ -33117,7 +33525,7 @@ function unversionCache(cached, maxAge) {
 
 // src/cache/key-builder.ts
 function buildCacheKey(pr2, configHash) {
-  const hash = (0, import_crypto7.createHash)("sha1").update(`${pr2.baseSha}:${pr2.headSha}`).digest("hex").slice(0, 12);
+  const hash = (0, import_crypto9.createHash)("sha1").update(`${pr2.baseSha}:${pr2.headSha}`).digest("hex").slice(0, 12);
   const suffix = configHash ? `-${configHash}` : "";
   return `mpr-${hash}${suffix}`;
 }
@@ -33143,11 +33551,11 @@ function hashConfig(config) {
     pathDefaultIntensity: config.pathDefaultIntensity
   };
   const stableJson = JSON.stringify(sortObject(relevantConfig));
-  const hash = (0, import_crypto7.createHash)("sha256").update(stableJson).digest("hex");
+  const hash = (0, import_crypto9.createHash)("sha256").update(stableJson).digest("hex");
   return hash.slice(0, 16);
 }
 function hashIncrementalCompatibility(config, runtimeConfigVersion) {
-  return (0, import_crypto7.createHash)("sha256").update(incrementalCompatibilityPreimage(config, runtimeConfigVersion)).digest("hex");
+  return (0, import_crypto9.createHash)("sha256").update(incrementalCompatibilityPreimage(config, runtimeConfigVersion)).digest("hex");
 }
 function incrementalCompatibilityPreimage(config, runtimeConfigVersion) {
   return JSON.stringify(
@@ -37105,383 +37513,6 @@ var MermaidGenerator = class {
     return label.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/]/g, "&#93;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 };
-
-// src/review-projection/domain/review-projection.ts
-var LifecycleRevalidationVerdict = /* @__PURE__ */ ((LifecycleRevalidationVerdict2) => {
-  LifecycleRevalidationVerdict2["Resolved"] = "resolved";
-  LifecycleRevalidationVerdict2["StillValid"] = "still_valid";
-  LifecycleRevalidationVerdict2["Uncertain"] = "uncertain";
-  return LifecycleRevalidationVerdict2;
-})(LifecycleRevalidationVerdict || {});
-
-// src/review-projection/domain/review-projection-canonicalizer.ts
-var import_crypto8 = require("crypto");
-function canonicalizeReviewProjection(envelope) {
-  return JSON.stringify(toCanonicalValue(envelope));
-}
-function hashReviewProjectionCanonicalJson(canonicalJson14) {
-  return (0, import_crypto8.createHash)("sha256").update(canonicalJson14, "utf8").digest("hex");
-}
-function hashProjectionFact(value) {
-  return (0, import_crypto8.createHash)("sha256").update(JSON.stringify(toCanonicalValue(value)), "utf8").digest("hex");
-}
-function deepFreezeProjection(value) {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
-    return value;
-  }
-  for (const child of Object.values(value)) {
-    deepFreezeProjection(child);
-  }
-  return Object.freeze(value);
-}
-function toCanonicalValue(value) {
-  if (value === null || typeof value !== "object") {
-    if (typeof value === "number" && !Number.isFinite(value)) {
-      throw new Error("review projection contains a non-finite number");
-    }
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.map(toCanonicalValue);
-  }
-  const canonical = {};
-  for (const key of Object.keys(value).sort()) {
-    const child = value[key];
-    if (child !== void 0) {
-      canonical[key] = toCanonicalValue(child);
-    }
-  }
-  return canonical;
-}
-
-// src/review-projection/domain/current-review-projector.ts
-var CurrentReviewProjector = class {
-  projectOccurrences(input) {
-    const occurrences = [];
-    const matchedLineages = /* @__PURE__ */ new Set();
-    for (const finding of input.selectedFindings) {
-      const hint = this.matchPriorLineage(finding, input.priorLineageHints);
-      const lineageId = hint?.lineageId ?? this.createLineageId(input.scope, finding);
-      if (hint) matchedLineages.add(hint.lineageId);
-      const target = this.findTargetForFinding(
-        finding,
-        input.inventory.targets
-      );
-      const suppressed = target?.disposition === "command_suppressed" /* CommandSuppressed */;
-      const state = suppressed ? "suppressed_by_human" /* SuppressedByHuman */ : hint ? hint.severity === finding.severity ? "reconfirmed" /* Reconfirmed */ : "changed" /* Changed */ : "new" /* New */;
-      occurrences.push({
-        lineageId,
-        sourceFindingIds: sortedUnique(finding.sourceFindingIds),
-        state,
-        severity: finding.severity,
-        ...hint && hint.severity !== finding.severity ? { previousSeverity: hint.severity } : {},
-        category: finding.category,
-        normalizedFailureModeHash: finding.normalizedFailureModeHash,
-        ...finding.symbolAnchor ? { symbolAnchor: finding.symbolAnchor } : {},
-        ...finding.trustedMarker ? { trustedMarker: finding.trustedMarker } : {},
-        title: finding.title,
-        message: finding.message,
-        ...finding.suggestion ? { suggestion: finding.suggestion } : {},
-        filePath: finding.filePath,
-        ...finding.startLine !== void 0 ? { startLine: finding.startLine } : {},
-        ...finding.line !== void 0 ? { line: finding.line } : {},
-        ...finding.endLine !== void 0 ? { endLine: finding.endLine } : {},
-        placement: summaryPlacement(lineageId, finding.filePath, "pending"),
-        providerVoteKeys: sortedUnique(finding.providerVoteKeys),
-        observationIds: sortedUnique(finding.observationIds),
-        firstSeenHeadSha: hint?.firstSeenHeadSha ?? input.scope.reviewedHeadSha,
-        sourceHeadSha: input.scope.reviewedHeadSha,
-        blocking: false
-      });
-    }
-    const decisionByTarget = new Map(
-      input.lifecycleDecisions.map((decision) => [decision.targetId, decision])
-    );
-    for (const hint of input.priorLineageHints) {
-      if (matchedLineages.has(hint.lineageId) || !hint.active) continue;
-      const target = this.findTargetForHint(hint, input.inventory.targets);
-      if (!target) continue;
-      const decision = decisionByTarget.get(target.targetId);
-      const state = this.priorOccurrenceState(target, decision?.verdict);
-      occurrences.push({
-        lineageId: hint.lineageId,
-        sourceFindingIds: [],
-        state,
-        severity: hint.severity,
-        category: hint.category,
-        normalizedFailureModeHash: hint.normalizedFailureModeHash,
-        ...hint.symbolAnchor ? { symbolAnchor: hint.symbolAnchor } : {},
-        ...hint.trustedMarker ? { trustedMarker: hint.trustedMarker } : {},
-        title: hint.title,
-        message: hint.message,
-        filePath: target.currentPath ?? hint.filePath,
-        ...hint.startLine !== void 0 ? { startLine: hint.startLine } : {},
-        ...target.currentLine !== void 0 ? { line: target.currentLine } : hint.line !== void 0 ? { line: hint.line } : {},
-        ...hint.endLine !== void 0 ? { endLine: hint.endLine } : {},
-        placement: summaryPlacement(
-          hint.lineageId,
-          target.currentPath ?? hint.filePath,
-          "historical occurrence"
-        ),
-        providerVoteKeys: [],
-        observationIds: [],
-        firstSeenHeadSha: hint.firstSeenHeadSha,
-        sourceHeadSha: input.scope.reviewedHeadSha,
-        blocking: false
-      });
-    }
-    return sortOccurrences(occurrences);
-  }
-  priorOccurrenceState(target, verdict) {
-    if (target.disposition === "command_suppressed" /* CommandSuppressed */) {
-      return "suppressed_by_human" /* SuppressedByHuman */;
-    }
-    if (hasValidTrustedResolutionMarker(target)) {
-      return "resolved" /* Resolved */;
-    }
-    if (target.disposition === "human_reply" /* HumanReply */) {
-      return "uncertain" /* Uncertain */;
-    }
-    if (verdict === "resolved" /* Resolved */) {
-      return "resolved" /* Resolved */;
-    }
-    if (verdict === "still_valid" /* StillValid */) {
-      return "carried_unverified" /* CarriedUnverified */;
-    }
-    return "uncertain" /* Uncertain */;
-  }
-  matchPriorLineage(finding, hints) {
-    const byMarker = finding.trustedMarker ? hints.filter(
-      (hint) => hint.trustedMarker === finding.trustedMarker && hint.normalizedFailureModeHash === finding.normalizedFailureModeHash
-    ) : [];
-    if (byMarker.length === 1) return byMarker[0];
-    if (byMarker.length > 1) return void 0;
-    const byAnchor = hints.filter(
-      (hint) => hint.category === finding.category && hint.normalizedFailureModeHash === finding.normalizedFailureModeHash && Boolean(hint.symbolAnchor) && hint.symbolAnchor === finding.symbolAnchor
-    );
-    if (byAnchor.length === 1) return byAnchor[0];
-    if (byAnchor.length > 1) return void 0;
-    const byLocation = hints.filter(
-      (hint) => hint.category === finding.category && hint.normalizedFailureModeHash === finding.normalizedFailureModeHash && normalizePath(hint.filePath) === normalizePath(finding.filePath) && hint.line !== void 0 && finding.line !== void 0 && Math.abs(hint.line - finding.line) <= 2
-    );
-    return byLocation.length === 1 ? byLocation[0] : void 0;
-  }
-  findTargetForFinding(finding, targets) {
-    if (finding.trustedMarker) {
-      const markerMatches = targets.filter(
-        (target) => target.trustedMarker === finding.trustedMarker
-      );
-      if (markerMatches.length === 1) return markerMatches[0];
-    }
-    const locationMatches = targets.filter(
-      (target) => normalizePath(target.currentPath ?? target.originalPath) === normalizePath(finding.filePath) && target.currentLine !== void 0 && finding.line !== void 0 && Math.abs(target.currentLine - finding.line) <= 2
-    );
-    return locationMatches.length === 1 ? locationMatches[0] : void 0;
-  }
-  findTargetForHint(hint, targets) {
-    if (!hint.trustedMarker) return void 0;
-    const markerMatches = targets.filter(
-      (target) => target.trustedMarker === hint.trustedMarker
-    );
-    return markerMatches.length === 1 ? markerMatches[0] : void 0;
-  }
-  createLineageId(scope, finding) {
-    return `rrl_${hashProjectionFact({
-      scmRepositoryIdentityId: scope.scmRepositoryIdentityId,
-      pullRequestNumber: scope.pullRequestNumber,
-      category: finding.category,
-      normalizedFailureModeHash: finding.normalizedFailureModeHash,
-      symbolAnchor: finding.symbolAnchor ?? null,
-      firstSeenHeadSha: scope.reviewedHeadSha,
-      trustedMarker: finding.trustedMarker ?? null
-    }).slice(0, 32)}`;
-  }
-};
-function hasValidTrustedResolutionMarker(target) {
-  const marker = target.resolutionMarker;
-  return Boolean(
-    marker && marker.trust === "trusted" /* Trusted */ && marker.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker.targetId === target.targetId && marker.fingerprint === target.trustedMarker
-  );
-}
-function summaryPlacement(lineageId, path31, reason) {
-  return {
-    lineageId,
-    kind: "summary" /* Summary */,
-    path: path31,
-    reason
-  };
-}
-function sortOccurrences(occurrences) {
-  const stateOrder = {
-    ["new" /* New */]: 0,
-    ["changed" /* Changed */]: 1,
-    ["reconfirmed" /* Reconfirmed */]: 2,
-    ["carried_unverified" /* CarriedUnverified */]: 3,
-    ["uncertain" /* Uncertain */]: 4,
-    ["resolved" /* Resolved */]: 5,
-    ["suppressed_by_human" /* SuppressedByHuman */]: 6
-  };
-  const severityOrder = {
-    critical: 0,
-    major: 1,
-    minor: 2
-  };
-  return [...occurrences].sort(
-    (left, right) => stateOrder[left.state] - stateOrder[right.state] || severityOrder[left.severity] - severityOrder[right.severity] || left.filePath.localeCompare(right.filePath) || (left.line ?? 0) - (right.line ?? 0) || left.lineageId.localeCompare(right.lineageId)
-  );
-}
-function normalizePath(path31) {
-  return path31.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
-}
-function sortedUnique(values) {
-  return Array.from(new Set(values)).sort(
-    (left, right) => left.localeCompare(right)
-  );
-}
-
-// src/review-projection/domain/review-lifecycle-observation.ts
-var import_crypto9 = require("crypto");
-var REVIEW_LIFECYCLE_THREAD_STATE_VERSION = "review_lifecycle_thread_state.v1";
-var REVIEW_LIFECYCLE_MARKER_FINGERPRINT = /^(?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64})$/;
-var RFC3339_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
-function isReviewLifecycleMarkerFingerprint(value) {
-  return typeof value === "string" && REVIEW_LIFECYCLE_MARKER_FINGERPRINT.test(value);
-}
-function hashReviewLifecycleThreadState(input) {
-  requireIdentifier(input.threadId, "thread_id");
-  if (input.comments.length === 0) {
-    throw new Error("review_lifecycle_thread_state_comments_missing");
-  }
-  const seenCommentIds = /* @__PURE__ */ new Set();
-  const comments = [...input.comments].sort((left, right) => compareCodeUnits2(left.id, right.id)).map((comment) => {
-    const commentId = requireIdentifier(comment.id, "comment_id");
-    if (seenCommentIds.has(commentId)) {
-      throw new Error("review_lifecycle_thread_state_comment_id_duplicate");
-    }
-    seenCommentIds.add(commentId);
-    return [
-      commentId,
-      normalizeAuthorLogin(comment.authorLogin),
-      sha2564(comment.body ?? ""),
-      normalizeTimestamp(comment.createdAt),
-      normalizeTimestamp(comment.updatedAt ?? comment.createdAt)
-    ];
-  });
-  const preimage = JSON.stringify([
-    REVIEW_LIFECYCLE_THREAD_STATE_VERSION,
-    input.threadId,
-    comments
-  ]);
-  return sha2564(preimage);
-}
-function requireIdentifier(value, field) {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`review_lifecycle_thread_state_${field}_invalid`);
-  }
-  return value;
-}
-function normalizeAuthorLogin(value) {
-  if (value === null || value === void 0) return null;
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error("review_lifecycle_thread_state_author_login_invalid");
-  }
-  return value.toLowerCase();
-}
-function normalizeTimestamp(value) {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error("review_lifecycle_thread_state_timestamp_invalid");
-  }
-  const match2 = RFC3339_TIMESTAMP.exec(value);
-  if (match2 === null || !hasValidTimestampFields(match2)) {
-    throw new Error("review_lifecycle_thread_state_timestamp_invalid");
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error("review_lifecycle_thread_state_timestamp_invalid");
-  }
-  return parsed.toISOString();
-}
-function hasValidTimestampFields(match2) {
-  const year = Number(match2[1]);
-  const month = Number(match2[2]);
-  const day = Number(match2[3]);
-  const hour = Number(match2[4]);
-  const minute = Number(match2[5]);
-  const second = Number(match2[6]);
-  const offset = match2[7];
-  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59 || second > 59) {
-    return false;
-  }
-  if (offset !== "Z") {
-    const offsetHour = Number(offset.slice(1, 3));
-    const offsetMinute = Number(offset.slice(4, 6));
-    if (offsetHour > 23 || offsetMinute > 59) return false;
-  }
-  return true;
-}
-function daysInMonth(year, month) {
-  if (month === 2) {
-    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-    return leapYear ? 29 : 28;
-  }
-  return [4, 6, 9, 11].includes(month) ? 30 : 31;
-}
-function sha2564(value) {
-  return (0, import_crypto9.createHash)("sha256").update(value, "utf8").digest("hex");
-}
-function compareCodeUnits2(left, right) {
-  if (left < right) return -1;
-  if (left > right) return 1;
-  return 0;
-}
-
-// src/review-projection/domain/review-projection-limits.ts
-var REVIEW_PROJECTION_ABSOLUTE_LIMITS = {
-  maxProjectionBytes: 2e6,
-  maxFindings: 1e3,
-  maxReferencesPerFinding: 100,
-  maxLineageHints: 2e3,
-  maxLifecycleTargets: 2e3,
-  maxRevisionFiles: 5e3,
-  maxDiffBytes: 2e6,
-  maxSummaryBytes: 65e3,
-  maxCheckSummaryBytes: 65e3,
-  maxInlineComments: 500,
-  maxInlineCommentsPerChunk: 50,
-  maxInlineChunks: 20,
-  maxInlineCommentBodyBytes: 65e3,
-  maxStringBytes: 65e3
-};
-var ReviewProjectionLimitError = class extends Error {
-  constructor(limitName, actual, maximum) {
-    super(
-      `review projection ${limitName} exceeded: ${actual} is greater than ${maximum}`
-    );
-    this.limitName = limitName;
-    this.actual = actual;
-    this.maximum = maximum;
-    this.name = "ReviewProjectionLimitError";
-  }
-};
-function validateReviewProjectionLimits(limits) {
-  for (const key of Object.keys(REVIEW_PROJECTION_ABSOLUTE_LIMITS)) {
-    const value = limits[key];
-    const absoluteMaximum = REVIEW_PROJECTION_ABSOLUTE_LIMITS[key];
-    if (!Number.isSafeInteger(value) || value <= 0) {
-      throw new Error(`review projection ${key} must be a positive integer`);
-    }
-    if (value > absoluteMaximum) {
-      throw new ReviewProjectionLimitError(key, value, absoluteMaximum);
-    }
-  }
-  return Object.freeze({ ...limits });
-}
-function assertWithinProjectionLimit(limitName, actual, limits) {
-  const maximum = limits[limitName];
-  if (actual > maximum) {
-    throw new ReviewProjectionLimitError(limitName, actual, maximum);
-  }
-}
 
 // src/github/feedback.ts
 var FeedbackFilter = class {
@@ -112957,43 +112988,67 @@ var ProductionReviewProjectionCommandFactory = class {
     const policyExcludedFiles = /* @__PURE__ */ new Set();
     const coverageLimitations = [];
     const manifestByPath = /* @__PURE__ */ new Map();
-    const recordManifestFile = (entry) => {
-      const existing = manifestByPath.get(entry.path);
-      if (!existing || manifestFileStatusRank(entry.status) > manifestFileStatusRank(existing.status)) {
-        manifestByPath.set(entry.path, entry);
+    const recordManifestFile = (entry, required) => {
+      const key = normalizeManifestPath(entry.path);
+      const existing = manifestByPath.get(key);
+      if (!existing) {
+        manifestByPath.set(key, { entry, required });
+        return;
+      }
+      if (required !== existing.required) {
+        if (required) manifestByPath.set(key, { entry, required });
+        return;
+      }
+      const rank = coverageManifestFileStatusRank(entry.status);
+      const existingRank = coverageManifestFileStatusRank(existing.entry.status);
+      if (required ? rank < existingRank : rank > existingRank) {
+        manifestByPath.set(key, { entry, required });
       }
     };
+    const exhaustedWorkSlots = new Set(input.exhaustedWorkSlotIds);
     for (const assignment of this.input.assignments) {
       const accepted = evidence.get(assignment.workSlotId);
       if (!accepted) {
         if (assignment.required) {
           for (const path31 of assignment.filePaths) {
-            recordManifestFile({
-              path: path31,
-              status: "unreviewed",
-              reason: "required work slot produced no accepted evidence"
-            });
+            recordManifestFile(
+              {
+                path: path31,
+                status: "unreviewed",
+                reason: exhaustedWorkSlots.has(assignment.workSlotId) ? "required work slot exhausted before producing accepted evidence" : "required work slot produced no accepted evidence"
+              },
+              true
+            );
           }
         }
         continue;
       }
       for (const path31 of accepted.coverageManifest.paths) {
-        recordManifestFile(promptCoverageToManifestFile(path31));
+        recordManifestFile(
+          promptCoverageToManifestFile(path31),
+          assignment.required
+        );
       }
     }
     for (const path31 of this.input.uncoveredPaths) {
-      recordManifestFile({
-        path: path31,
-        status: "unreviewed",
-        reason: "no review work slot covered this file"
-      });
+      recordManifestFile(
+        {
+          path: path31,
+          status: "unreviewed",
+          reason: "no review work slot covered this file"
+        },
+        false
+      );
     }
     for (const file of this.input.pr.files) {
-      recordManifestFile({
-        path: file.filename,
-        status: "unreviewed",
-        reason: "no review work slot covered this file"
-      });
+      recordManifestFile(
+        {
+          path: file.filename,
+          status: "unreviewed",
+          reason: "no review work slot covered this file"
+        },
+        false
+      );
     }
     for (const assignment of requiredAssignments) {
       const accepted = evidence.get(assignment.workSlotId);
@@ -113051,9 +113106,7 @@ var ProductionReviewProjectionCommandFactory = class {
       evidence
     );
     const manifestFiles = Object.freeze(
-      [...manifestByPath.values()].sort(
-        (left, right) => compareCodeUnits8(left.path, right.path)
-      )
+      [...manifestByPath.values()].map(({ entry }) => entry).sort((left, right) => compareCodeUnits8(left.path, right.path))
     );
     return Object.freeze({
       projectionPolicyVersion: productionReviewProjectionPolicyVersion,
@@ -113361,19 +113414,8 @@ function promptCoverageToManifestFile(path31) {
       };
   }
 }
-function manifestFileStatusRank(status) {
-  switch (status) {
-    case "full":
-      return 4;
-    case "compacted":
-      return 3;
-    case "metadata-only":
-      return 2;
-    case "skipped":
-      return 1;
-    case "unreviewed":
-      return 0;
-  }
+function normalizeManifestPath(path31) {
+  return path31.startsWith("./") ? path31.slice(2) : path31;
 }
 function sha25616(value) {
   return (0, import_crypto39.createHash)("sha256").update(value).digest("hex");

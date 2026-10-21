@@ -4,6 +4,7 @@ import {
   renderReviewerLifecycleMarkdown,
   renderReviewerSummaryMarkdown,
   resolveReviewerSummaryLocale,
+  reviewerSummaryCopy,
 } from '../../../src/output/reviewer-summary';
 
 describe('reviewer summary markdown', () => {
@@ -331,20 +332,20 @@ describe('reviewer summary markdown', () => {
     });
 
     expect(markdown).toContain('### File coverage');
-    expect(markdown).toContain('- `src/full-1.ts` - full');
-    expect(markdown).toContain('- `src/full-2.ts` - full');
+    expect(markdown).toContain('- <code>src/full-1.ts</code> - full');
+    expect(markdown).toContain('- <code>src/full-2.ts</code> - full');
     expect(markdown).toContain(
-      '- `src/compacted.ts` - compacted — summary-only content in prompt'
+      '- <code>src/compacted.ts</code> - compacted — summary-only content in prompt'
     );
     expect(markdown).toContain(
-      '- `src/missed.ts` - unreviewed — no review work slot covered this file'
+      '- <code>src/missed.ts</code> - unreviewed — no review work slot covered this file'
     );
     // Gaps surface before fully reviewed files.
-    expect(markdown.indexOf('- `src/missed.ts`')).toBeLessThan(
-      markdown.indexOf('- `src/full-1.ts`')
+    expect(markdown.indexOf('- <code>src/missed.ts</code>')).toBeLessThan(
+      markdown.indexOf('- <code>src/full-1.ts</code>')
     );
-    expect(markdown.indexOf('- `src/compacted.ts`')).toBeLessThan(
-      markdown.indexOf('- `src/full-1.ts`')
+    expect(markdown.indexOf('- <code>src/compacted.ts</code>')).toBeLessThan(
+      markdown.indexOf('- <code>src/full-1.ts</code>')
     );
   });
 
@@ -367,9 +368,9 @@ describe('reviewer summary markdown', () => {
       },
     });
 
-    expect(markdown).toContain('- `src/file-000.ts` - full');
-    expect(markdown).toContain('- `src/file-099.ts` - full');
-    expect(markdown).not.toContain('- `src/file-100.ts` - full');
+    expect(markdown).toContain('- <code>src/file-000.ts</code> - full');
+    expect(markdown).toContain('- <code>src/file-099.ts</code> - full');
+    expect(markdown).not.toContain('- <code>src/file-100.ts</code> - full');
     expect(markdown).toContain('20 more files not shown.');
   });
 
@@ -393,9 +394,85 @@ describe('reviewer summary markdown', () => {
       },
     });
 
-    expect(markdown).toContain('- `src/file-000.ts` - compacted');
-    expect(markdown).not.toContain('- `src/file-100.ts` - compacted');
+    expect(markdown).toContain('- <code>src/file-000.ts</code> - compacted');
+    expect(markdown).not.toContain('- <code>src/file-100.ts</code> - compacted');
     expect(markdown).toContain('20 more files not shown.');
+  });
+
+  it('keeps the coverage block intact when manifest lines would exceed the summary byte budget', () => {
+    const longPath = `src/${'a'.repeat(180)}.ts`;
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      coverage: {
+        complete: false,
+        totalFiles: 300,
+        reviewedFiles: 100,
+        unreviewedFiles: 200,
+        mode: 'full',
+        limitations: Array.from(
+          { length: 200 },
+          (_, index) =>
+            `path_coverage:src/${'b'.repeat(170)}-${String(index).padStart(3, '0')}.ts:metadata_only`
+        ),
+        files: Array.from({ length: 100 }, (_, index) => ({
+          path: longPath.replace('.ts', `-${String(index).padStart(3, '0')}.ts`),
+          status: 'metadata-only' as const,
+          reason: 'metadata-only content in prompt',
+        })),
+      },
+    });
+
+    // The byte cap must fall between manifest lines, never inside the
+    // coverage <details> block, or the whole block is dropped.
+    expect(Buffer.byteLength(markdown, 'utf8')).toBeLessThanOrEqual(60_000);
+    expect(markdown).toContain('| Files reviewed | 100/300 |');
+    expect(markdown).toContain('### File coverage');
+    expect(markdown).toContain('more files not shown.');
+    expect(markdown).toContain('</details>');
+  });
+
+  it('neutralizes html and markdown breakout in manifest file paths', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      coverage: {
+        complete: false,
+        totalFiles: 1,
+        reviewedFiles: 0,
+        unreviewedFiles: 1,
+        mode: 'full',
+        limitations: [],
+        files: [
+          {
+            path: 'src/evil`<img src=x onerror=alert(1)>@mention\n- fake item.ts',
+            status: 'unreviewed',
+            reason: 'no review work slot covered this file',
+          },
+        ],
+      },
+    });
+
+    expect(markdown).not.toContain('<img');
+    expect(markdown).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(markdown).not.toMatch(/(^|[\s>])@mention/m);
+    expect(markdown).not.toMatch(/^- fake item/m);
+    expect(markdown).not.toContain('`src/evil');
+  });
+
+  it.each([
+    ['English', '**1 more file not shown.**'],
+    ['Russian', '**Ещё 1 файл не показано.**'],
+    ['Ukrainian', '**Ще 1 файл не показано.**'],
+    ['Spanish', '**1 archivo más no se muestra.**'],
+    ['Portuguese', '**Mais 1 arquivo não exibido.**'],
+    ['French', '**1 fichier supplémentaire non affiché.**'],
+    ['German', '**1 weitere Datei wird nicht angezeigt.**'],
+    ['Italian', '**1 file aggiuntivo non mostrato.**'],
+  ])('uses singular file wording when one manifest line is hidden: %s', (language, expected) => {
+    expect(reviewerSummaryCopy(language).moreFiles(1)).toBe(expected);
   });
 
   it.each([

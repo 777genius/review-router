@@ -77521,6 +77521,22 @@ var LifecycleRevalidationVerdict = /* @__PURE__ */ ((LifecycleRevalidationVerdic
   LifecycleRevalidationVerdict2["Uncertain"] = "uncertain";
   return LifecycleRevalidationVerdict2;
 })(LifecycleRevalidationVerdict || {});
+function coverageManifestFileStatusRank(status) {
+  switch (status) {
+    case "unreviewed":
+      return 0;
+    case "skipped":
+      return 1;
+    case "metadata-only":
+      return 2;
+    case "compacted":
+      return 3;
+    case "full":
+      return 4;
+    default:
+      return 5;
+  }
+}
 
 // src/review-projection/domain/review-projection-canonicalizer.ts
 var import_crypto22 = require("crypto");
@@ -81263,14 +81279,28 @@ function renderReviewerSummaryMarkdown(input) {
       ...coverage.limitations.map((value) => `- ${escapeMarkdownText(value)}`)
     );
     const manifestFiles = incomplete ? [...coverage.files ?? []].sort(compareCoverageManifestFiles) : (coverage.files ?? []).filter((file) => file.status !== "full");
-    const shownFiles = manifestFiles.slice(0, maxCoverageFileLines);
-    if (incomplete && shownFiles.length > 0)
+    const manifestLines = [];
+    for (const file of manifestFiles.slice(0, maxCoverageFileLines)) {
+      const line = `- ${escapeCoverageManifestPath(file.path)} - ${escapeMarkdownText(file.status)}${file.reason ? ` \u2014 ${escapeMarkdownText(file.reason)}` : ""}`;
+      const projected = [
+        ...lines,
+        ...incomplete && manifestLines.length === 0 ? [copy.manifestHeading, ""] : [],
+        ...manifestLines,
+        line,
+        "",
+        copy.moreFiles(manifestFiles.length - manifestLines.length),
+        "",
+        "</details>"
+      ];
+      if (utf8Bytes(projected.join("\n")) > maxSummaryBytes - 2e3) {
+        break;
+      }
+      manifestLines.push(line);
+    }
+    if (incomplete && manifestLines.length > 0)
       lines.push(copy.manifestHeading, "");
-    for (const file of shownFiles)
-      lines.push(
-        `- \`${escapeMarkdownInline(file.path)}\` - ${escapeMarkdownText(file.status)}${file.reason ? ` \u2014 ${escapeMarkdownText(file.reason)}` : ""}`
-      );
-    const hiddenFiles = manifestFiles.length - shownFiles.length;
+    lines.push(...manifestLines);
+    const hiddenFiles = manifestFiles.length - manifestLines.length;
     if (hiddenFiles > 0) lines.push("", copy.moreFiles(hiddenFiles));
     lines.push("", "</details>");
   }
@@ -81651,7 +81681,7 @@ var copies = {
     incompleteNote: "Inline comments and lifecycle changes were withheld because required coverage did not complete.",
     coverageHeading: "### Coverage not completed",
     manifestHeading: "### File coverage",
-    moreFiles: (count) => `**${count} more files not shown.**`,
+    moreFiles: (count) => `**${count} more ${count === 1 ? "file" : "files"} not shown.**`,
     moreFindings: (count) => `**${count} more ${englishFindingWord(count)} omitted from this summary because of size limits.**`,
     lifecycle: {
       resolved: "resolved",
@@ -81673,7 +81703,7 @@ var copies = {
     incompleteNote: "\u0418\u043D\u043B\u0430\u0439\u043D-\u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0438 \u0438 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F lifecycle \u043D\u0435 \u043F\u0443\u0431\u043B\u0438\u043A\u043E\u0432\u0430\u043B\u0438\u0441\u044C: \u043F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E.",
     coverageHeading: "### \u041F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
     manifestHeading: "### \u041F\u043E\u043A\u0440\u044B\u0442\u0438\u0435 \u0444\u0430\u0439\u043B\u043E\u0432",
-    moreFiles: (count) => `**\u0415\u0449\u0451 ${count} \u0444\u0430\u0439\u043B\u043E\u0432 \u043D\u0435 \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u043E.**`,
+    moreFiles: (count) => `**\u0415\u0449\u0451 ${count} ${slavicFindingWord(count, ["\u0444\u0430\u0439\u043B", "\u0444\u0430\u0439\u043B\u0430", "\u0444\u0430\u0439\u043B\u043E\u0432"])} \u043D\u0435 \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u043E.**`,
     moreFindings: (count) => `**\u0415\u0449\u0451 ${count} ${slavicFindingWord(count, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} \u043D\u0435 \u0432\u043B\u0435\u0437\u043B\u0438 \u0432 \u044D\u0442\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435 \u0438\u0437\u2011\u0437\u0430 \u043B\u0438\u043C\u0438\u0442\u0430 \u0440\u0430\u0437\u043C\u0435\u0440\u0430.**`,
     lifecycle: {
       resolved: "\u0441\u043D\u044F\u0442\u043E",
@@ -81695,7 +81725,7 @@ var copies = {
     incompleteNote: "\u0406\u043D\u043B\u0430\u0439\u043D-\u043A\u043E\u043C\u0435\u043D\u0442\u0430\u0440\u0456 \u0442\u0430 \u0437\u043C\u0456\u043D\u0438 lifecycle \u043D\u0435 \u043F\u0443\u0431\u043B\u0456\u043A\u0443\u0432\u0430\u043B\u0438\u0441\u044F: \u043F\u043E\u043A\u0440\u0438\u0442\u0442\u044F \u0440\u0435\u0432\u2019\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E.",
     coverageHeading: "### \u041F\u043E\u043A\u0440\u0438\u0442\u0442\u044F \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E",
     manifestHeading: "### \u041F\u043E\u043A\u0440\u0438\u0442\u0442\u044F \u0444\u0430\u0439\u043B\u0456\u0432",
-    moreFiles: (count) => `**\u0429\u0435 ${count} \u0444\u0430\u0439\u043B\u0456\u0432 \u043D\u0435 \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u043E.**`,
+    moreFiles: (count) => `**\u0429\u0435 ${count} ${slavicFindingWord(count, ["\u0444\u0430\u0439\u043B", "\u0444\u0430\u0439\u043B\u0438", "\u0444\u0430\u0439\u043B\u0456\u0432"])} \u043D\u0435 \u043F\u043E\u043A\u0430\u0437\u0430\u043D\u043E.**`,
     moreFindings: (count) => `**\u0429\u0435 ${count} ${slavicFindingWord(count, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} \u043D\u0435 \u0432\u043C\u0456\u0441\u0442\u0438\u043B\u0438\u0441\u044F \u0432 \u0446\u0435 \u043F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u043D\u044F \u0447\u0435\u0440\u0435\u0437 \u043B\u0456\u043C\u0456\u0442 \u0440\u043E\u0437\u043C\u0456\u0440\u0443.**`,
     lifecycle: {
       resolved: "\u0437\u043D\u044F\u0442\u043E",
@@ -81717,7 +81747,7 @@ var copies = {
     incompleteNote: "No se publicaron comentarios en l\xEDnea ni cambios de ciclo de vida porque la cobertura no se complet\xF3.",
     coverageHeading: "### Cobertura incompleta",
     manifestHeading: "### Cobertura de archivos",
-    moreFiles: (count) => `**${count} archivos m\xE1s no se muestran.**`,
+    moreFiles: (count) => `**${count} ${count === 1 ? "archivo m\xE1s no se muestra." : "archivos m\xE1s no se muestran."}**`,
     moreFindings: (count) => `**${count} ${count === 1 ? "hallazgo m\xE1s omitido" : "hallazgos m\xE1s omitidos"} de este resumen por el l\xEDmite de tama\xF1o.**`,
     lifecycle: {
       resolved: "resuelto",
@@ -81739,7 +81769,7 @@ var copies = {
     incompleteNote: "Coment\xE1rios inline e mudan\xE7as de ciclo de vida n\xE3o foram publicados porque a cobertura n\xE3o foi conclu\xEDda.",
     coverageHeading: "### Cobertura n\xE3o conclu\xEDda",
     manifestHeading: "### Cobertura de arquivos",
-    moreFiles: (count) => `**Mais ${count} arquivos n\xE3o exibidos.**`,
+    moreFiles: (count) => `**Mais ${count} ${count === 1 ? "arquivo n\xE3o exibido." : "arquivos n\xE3o exibidos."}**`,
     moreFindings: (count) => `**Mais ${count} ${count === 1 ? "achado omitido" : "achados omitidos"} deste resumo por limite de tamanho.**`,
     lifecycle: {
       resolved: "resolvido",
@@ -81761,7 +81791,7 @@ var copies = {
     incompleteNote: "Les commentaires inline et les changements de cycle de vie n\u2019ont pas \xE9t\xE9 publi\xE9s car la couverture est incompl\xE8te.",
     coverageHeading: "### Couverture incompl\xE8te",
     manifestHeading: "### Couverture des fichiers",
-    moreFiles: (count) => `**${count} fichiers suppl\xE9mentaires non affich\xE9s.**`,
+    moreFiles: (count) => `**${count} ${count === 1 ? "fichier suppl\xE9mentaire non affich\xE9." : "fichiers suppl\xE9mentaires non affich\xE9s."}**`,
     moreFindings: (count) => `**${count} ${count === 1 ? "anomalie suppl\xE9mentaire omise" : "anomalies suppl\xE9mentaires omises"} de ce r\xE9sum\xE9 \xE0 cause de la limite de taille.**`,
     lifecycle: {
       resolved: "r\xE9solu",
@@ -81783,7 +81813,7 @@ var copies = {
     incompleteNote: "Inline-Kommentare und Lifecycle-\xC4nderungen wurden nicht ver\xF6ffentlicht, weil die Abdeckung unvollst\xE4ndig ist.",
     coverageHeading: "### Abdeckung unvollst\xE4ndig",
     manifestHeading: "### Dateiabdeckung",
-    moreFiles: (count) => `**${count} weitere Dateien werden nicht angezeigt.**`,
+    moreFiles: (count) => count === 1 ? "**1 weitere Datei wird nicht angezeigt.**" : `**${count} weitere Dateien werden nicht angezeigt.**`,
     moreFindings: (count) => `**${count} weitere ${count === 1 ? "Befund" : "Befunde"} fehlen in dieser Zusammenfassung wegen des Gr\xF6\xDFenlimits.**`,
     lifecycle: {
       active: "weiterhin g\xFCltig",
@@ -81805,7 +81835,7 @@ var copies = {
     incompleteNote: "I commenti inline e le modifiche di lifecycle non sono stati pubblicati perch\xE9 la copertura non \xE8 completa.",
     coverageHeading: "### Copertura non completata",
     manifestHeading: "### Copertura dei file",
-    moreFiles: (count) => `**${count} file aggiuntivi non mostrati.**`,
+    moreFiles: (count) => `**${count} ${count === 1 ? "file aggiuntivo non mostrato." : "file aggiuntivi non mostrati."}**`,
     moreFindings: (count) => `**Altri ${count} ${count === 1 ? "rilievo omesso" : "rilievi omessi"} da questo riassunto per il limite di dimensione.**`,
     lifecycle: {
       resolved: "risolto",
@@ -82298,16 +82328,9 @@ var scopeCopy = {
     tests: "\uAD8C\uC7A5 \uD14C\uC2A4\uD2B8"
   }
 };
-var coverageFileStatusOrder = {
-  unreviewed: 0,
-  skipped: 1,
-  "metadata-only": 2,
-  compacted: 3,
-  full: 4
-};
 function compareCoverageManifestFiles(left, right) {
-  const leftRank = coverageFileStatusOrder[left.status] ?? 5;
-  const rightRank = coverageFileStatusOrder[right.status] ?? 5;
+  const leftRank = coverageManifestFileStatusRank(left.status);
+  const rightRank = coverageManifestFileStatusRank(right.status);
   if (leftRank !== rightRank) return leftRank - rightRank;
   if (left.path < right.path) return -1;
   if (left.path > right.path) return 1;
@@ -82324,6 +82347,14 @@ function escapeHtml(value) {
 }
 function escapeMarkdownInline(value) {
   return value.replaceAll("\\", "\\\\").replaceAll("`", "\\`");
+}
+function escapeCoverageManifestPath(value) {
+  const sanitized = Array.from(value, (char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return code < 32 || code === 127 ? " " : char;
+  }).join("");
+  const escaped = escapeHtml(sanitized).replaceAll("`", "&#96;").replaceAll("@", "&#64;").replaceAll("[", "&#91;").replaceAll("]", "&#93;");
+  return `<code>${escaped}</code>`;
 }
 function dropIncompleteDetails(value) {
   const openTags = Array.from(value.matchAll(/<details\b[^>]*>/gi));
@@ -83272,43 +83303,67 @@ var ProductionReviewProjectionCommandFactory = class {
     const policyExcludedFiles = /* @__PURE__ */ new Set();
     const coverageLimitations = [];
     const manifestByPath = /* @__PURE__ */ new Map();
-    const recordManifestFile = (entry) => {
-      const existing = manifestByPath.get(entry.path);
-      if (!existing || manifestFileStatusRank(entry.status) > manifestFileStatusRank(existing.status)) {
-        manifestByPath.set(entry.path, entry);
+    const recordManifestFile = (entry, required) => {
+      const key = normalizeManifestPath(entry.path);
+      const existing = manifestByPath.get(key);
+      if (!existing) {
+        manifestByPath.set(key, { entry, required });
+        return;
+      }
+      if (required !== existing.required) {
+        if (required) manifestByPath.set(key, { entry, required });
+        return;
+      }
+      const rank = coverageManifestFileStatusRank(entry.status);
+      const existingRank = coverageManifestFileStatusRank(existing.entry.status);
+      if (required ? rank < existingRank : rank > existingRank) {
+        manifestByPath.set(key, { entry, required });
       }
     };
+    const exhaustedWorkSlots = new Set(input.exhaustedWorkSlotIds);
     for (const assignment of this.input.assignments) {
       const accepted = evidence.get(assignment.workSlotId);
       if (!accepted) {
         if (assignment.required) {
           for (const path14 of assignment.filePaths) {
-            recordManifestFile({
-              path: path14,
-              status: "unreviewed",
-              reason: "required work slot produced no accepted evidence"
-            });
+            recordManifestFile(
+              {
+                path: path14,
+                status: "unreviewed",
+                reason: exhaustedWorkSlots.has(assignment.workSlotId) ? "required work slot exhausted before producing accepted evidence" : "required work slot produced no accepted evidence"
+              },
+              true
+            );
           }
         }
         continue;
       }
       for (const path14 of accepted.coverageManifest.paths) {
-        recordManifestFile(promptCoverageToManifestFile(path14));
+        recordManifestFile(
+          promptCoverageToManifestFile(path14),
+          assignment.required
+        );
       }
     }
     for (const path14 of this.input.uncoveredPaths) {
-      recordManifestFile({
-        path: path14,
-        status: "unreviewed",
-        reason: "no review work slot covered this file"
-      });
+      recordManifestFile(
+        {
+          path: path14,
+          status: "unreviewed",
+          reason: "no review work slot covered this file"
+        },
+        false
+      );
     }
     for (const file of this.input.pr.files) {
-      recordManifestFile({
-        path: file.filename,
-        status: "unreviewed",
-        reason: "no review work slot covered this file"
-      });
+      recordManifestFile(
+        {
+          path: file.filename,
+          status: "unreviewed",
+          reason: "no review work slot covered this file"
+        },
+        false
+      );
     }
     for (const assignment of requiredAssignments) {
       const accepted = evidence.get(assignment.workSlotId);
@@ -83366,9 +83421,7 @@ var ProductionReviewProjectionCommandFactory = class {
       evidence
     );
     const manifestFiles = Object.freeze(
-      [...manifestByPath.values()].sort(
-        (left, right) => compareCodeUnits8(left.path, right.path)
-      )
+      [...manifestByPath.values()].map(({ entry }) => entry).sort((left, right) => compareCodeUnits8(left.path, right.path))
     );
     return Object.freeze({
       projectionPolicyVersion: productionReviewProjectionPolicyVersion,
@@ -83676,19 +83729,8 @@ function promptCoverageToManifestFile(path14) {
       };
   }
 }
-function manifestFileStatusRank(status) {
-  switch (status) {
-    case "full":
-      return 4;
-    case "compacted":
-      return 3;
-    case "metadata-only":
-      return 2;
-    case "skipped":
-      return 1;
-    case "unreviewed":
-      return 0;
-  }
+function normalizeManifestPath(path14) {
+  return path14.startsWith("./") ? path14.slice(2) : path14;
 }
 function sha25615(value) {
   return (0, import_crypto27.createHash)("sha256").update(value).digest("hex");

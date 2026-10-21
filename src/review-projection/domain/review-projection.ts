@@ -124,6 +124,25 @@ export interface ReviewCoverageManifestFile {
   readonly reason?: string;
 }
 
+// Gaps rank lowest so incomplete summaries surface them first; unknown
+// statuses rank highest and sort last without breaking rendering.
+export function coverageManifestFileStatusRank(status: string): number {
+  switch (status) {
+    case 'unreviewed':
+      return 0;
+    case 'skipped':
+      return 1;
+    case 'metadata-only':
+      return 2;
+    case 'compacted':
+      return 3;
+    case 'full':
+      return 4;
+    default:
+      return 5;
+  }
+}
+
 export interface ReviewCoverageFact {
   readonly state: ProjectionCoverageState;
   readonly mode: 'full' | 'incremental';

@@ -151,8 +151,8 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('| Metadata-only or trimmed | 1 |');
       expect(output).toContain('| Skipped before LLM review | 1 |');
       expect(output).toContain('| Agentic context | ✓ |');
-      expect(output).toContain('`db/migrations/001.sql` - compacted');
-      expect(output).toContain('`package-lock.json` - skipped');
+      expect(output).toContain('<code>db/migrations/001.sql</code> - compacted');
+      expect(output).toContain('<code>package-lock.json</code> - skipped');
     });
 
     it('should not claim all clear when findings were dismissed by command override', () => {

@@ -186,9 +186,7 @@ export async function prepareOcrContextTools(input: {
           ) ||
           file
             .split('/')
-            .some(
-              (segment) => segment.startsWith('.') || segment === ''
-            )
+            .some((segment) => segment.startsWith('.') || segment === '')
         )
           throw contextToolsError('scope_denied');
         const sha = args.revision === 'head' ? input.headSha : input.baseSha;
@@ -211,7 +209,8 @@ export async function prepareOcrContextTools(input: {
               },
             }
           );
-          if(result.stdout.includes('\0'))throw contextToolsError('scope_denied');
+          if (result.stdout.includes('\0'))
+            throw contextToolsError('scope_denied');
           return {
             content: [
               {

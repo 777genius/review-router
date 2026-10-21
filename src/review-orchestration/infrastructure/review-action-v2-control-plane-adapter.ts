@@ -43,6 +43,7 @@ import {
   ReviewPublicationRequestOutcomeStatus,
   ReviewPublicationUnavailableFact,
   ReviewPublicationState,
+  ReviewTaskKind,
   RestoredReviewExecutionState,
   RestoredReviewWorkSlotState,
   type AcceptedReviewObservation,
@@ -436,28 +437,29 @@ export class ReviewActionV2ControlPlaneAdapter
     readonly authorization: ReviewRunAuthorization;
     readonly reviewRevisionHash: string;
   }): Promise<void> {
-    await this.client.execute(ReviewActionV2OperationId.ReviewSnapshotRestore, {
-      authorizationToken: input.authorization.authorizationToken,
-      reviewRevisionHash: input.reviewRevisionHash,
-    }).catch((error: unknown) => {
-      throw controlPlaneFailure(error);
-    });
+    await this.client
+      .execute(ReviewActionV2OperationId.ReviewSnapshotRestore, {
+        authorizationToken: input.authorization.authorizationToken,
+        reviewRevisionHash: input.reviewRevisionHash,
+      })
+      .catch((error: unknown) => {
+        throw controlPlaneFailure(error);
+      });
   }
 
   async restoreExecution(input: {
     readonly authorization: ReviewRunAuthorization;
     readonly reviewRevisionHash: string;
   }): Promise<RestoredReviewExecution | null> {
-    const result = await this.client.execute(
-      ReviewActionV2OperationId.ReviewExecutionRestore,
-      {
+    const result = await this.client
+      .execute(ReviewActionV2OperationId.ReviewExecutionRestore, {
         authorizationToken: input.authorization.authorizationToken,
         authorizationId: input.authorization.authorizationId,
         reviewRevisionHash: input.reviewRevisionHash,
-      }
-    ).catch((error: unknown) => {
-      throw controlPlaneFailure(error);
-    });
+      })
+      .catch((error: unknown) => {
+        throw controlPlaneFailure(error);
+      });
     if (
       result.status === ReviewExecutionRestoreResultStatus.Missing ||
       result.status === ReviewExecutionRestoreResultStatus.NotRestorable
@@ -504,9 +506,8 @@ export class ReviewActionV2ControlPlaneAdapter
     readonly sourceRunId: string;
     readonly sourceRunAttempt: string;
   }): Promise<ReviewExecutionAdmission> {
-    const result = await this.client.execute(
-      ReviewActionV2OperationId.ReviewExecutionStart,
-      {
+    const result = await this.client
+      .execute(ReviewActionV2OperationId.ReviewExecutionStart, {
         authorizationToken: input.authorization.authorizationToken,
         idempotencyKey: input.idempotencyKey,
         authorizationId: input.authorization.authorizationId,
@@ -519,10 +520,10 @@ export class ReviewActionV2ControlPlaneAdapter
         workSlotsCanonicalJson: input.workSlotsCanonicalJson,
         sourceRunId: input.sourceRunId,
         sourceRunAttempt: input.sourceRunAttempt,
-      }
-    ).catch((error: unknown) => {
-      throw controlPlaneFailure(error);
-    });
+      })
+      .catch((error: unknown) => {
+        throw controlPlaneFailure(error);
+      });
     if (
       result.status !== ReviewExecutionStartResultStatus.Admitted &&
       result.status !== ReviewExecutionStartResultStatus.Restored
@@ -722,6 +723,13 @@ export class ReviewActionV2ControlPlaneAdapter
     );
     if (result.status === ReviewInvocationLeaseResultStatus.Busy) {
       return { status: ReviewInvocationLeaseAcquireOutcomeStatus.Busy };
+    }
+    if (
+      input.workSlot.taskKind === ReviewTaskKind.PrDescription &&
+      result.status === ReviewInvocationLeaseResultStatus.Restored
+    ) {
+      // Joining an active optional lease never authorizes another model POST.
+      return { status: ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable };
     }
     if (result.status === ReviewInvocationLeaseResultStatus.Rejected) {
       return leaseAcquireRejectedOutcome(result.rejectionReason);

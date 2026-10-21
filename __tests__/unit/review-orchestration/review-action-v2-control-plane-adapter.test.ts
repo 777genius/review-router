@@ -1438,22 +1438,34 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     ReviewActionV2OperationId.ReviewSnapshotRestore,
     ReviewActionV2OperationId.ReviewExecutionRestore,
     ReviewActionV2OperationId.ReviewExecutionStart,
-  ])('preserves closed client errors for %s without arbitrary diagnostics', async (operation) => {
-    const original = new ReviewActionV2ClientError(
-      ReviewActionV2ClientFailureCode.InvalidResponse, operation,
-      { issues: ['private-sentinel-MUST-NOT-APPEAR'] }
-    );
-    const execute = jest.fn().mockRejectedValue(original);
-    const adapter = createAdapter(execute);
-    const call = operation === ReviewActionV2OperationId.ReviewSnapshotRestore
-      ? adapter.restoreSnapshot({ authorization, reviewRevisionHash: startInput.reviewRevisionHash })
-      : operation === ReviewActionV2OperationId.ReviewExecutionRestore
-        ? adapter.restoreExecution({ authorization, reviewRevisionHash: startInput.reviewRevisionHash })
-        : adapter.startExecution(startInput);
-    await expect(call).rejects.toMatchObject({
-      message: `review_action_v2:${operation}:invalid_response`, cause: original,
-    });
-  });
+  ])(
+    'preserves closed client errors for %s without arbitrary diagnostics',
+    async (operation) => {
+      const original = new ReviewActionV2ClientError(
+        ReviewActionV2ClientFailureCode.InvalidResponse,
+        operation,
+        { issues: ['private-sentinel-MUST-NOT-APPEAR'] }
+      );
+      const execute = jest.fn().mockRejectedValue(original);
+      const adapter = createAdapter(execute);
+      const call =
+        operation === ReviewActionV2OperationId.ReviewSnapshotRestore
+          ? adapter.restoreSnapshot({
+              authorization,
+              reviewRevisionHash: startInput.reviewRevisionHash,
+            })
+          : operation === ReviewActionV2OperationId.ReviewExecutionRestore
+            ? adapter.restoreExecution({
+                authorization,
+                reviewRevisionHash: startInput.reviewRevisionHash,
+              })
+            : adapter.startExecution(startInput);
+      await expect(call).rejects.toMatchObject({
+        message: `review_action_v2:${operation}:invalid_response`,
+        cause: original,
+      });
+    }
+  );
 
   it('restores a bounded exact-revision execution instead of dropping it', async () => {
     const execute = jest.fn().mockResolvedValue({
@@ -1538,6 +1550,29 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
       status: ReviewInvocationLeaseAcquireOutcomeStatus.AttemptBudgetExhausted,
     });
   });
+
+  it.each([ReviewTaskKind.FindingDiscovery, ReviewTaskKind.PrDescription])(
+    'does not execute joined description leases while preserving ordinary joins (%s)',
+    async (taskKind) => {
+      const execute = jest.fn().mockResolvedValue({
+        status: ReviewInvocationLeaseResultStatus.Restored,
+        ...baseLease,
+      });
+      const input = leaseAcquireInput();
+      const result = await createAdapter(execute).acquireInvocationLease({
+        ...input,
+        workSlot: { ...input.workSlot, taskKind },
+      });
+      expect(result).toEqual(
+        taskKind === ReviewTaskKind.PrDescription
+          ? { status: ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable }
+          : {
+              status: ReviewInvocationLeaseAcquireOutcomeStatus.Acquired,
+              lease: baseLease,
+            }
+      );
+    }
+  );
 
   it('fails closed on an ambiguous invocation lease rejection', async () => {
     const execute = jest.fn().mockResolvedValue({

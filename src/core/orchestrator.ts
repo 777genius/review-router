@@ -2575,6 +2575,10 @@ export class ReviewOrchestrator {
       return;
     }
 
+    logger.info(
+      'AI PR description is unavailable for this execution path; the existing heuristic change summary is retained.'
+    );
+
     try {
       await this.components.prDescriptionUpdater.update(pr);
     } catch (error) {

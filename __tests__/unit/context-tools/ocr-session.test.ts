@@ -9,7 +9,7 @@ import {
 } from '../../../src/context-gateway/context-gateway-contract';
 import { prepareOcrContextTools } from '../../../src/context-tools/ocr-session';
 
-const capture = (builtinTools=['github.issue.read']) => {
+const capture = (builtinTools = ['github.issue.read']) => {
   const preimage = {
     version: 1,
     builtinTools,
@@ -118,26 +118,80 @@ test('unavailable installation entitlement prevents broker/model startup without
   ).rejects.toThrow('context_tools_server_unavailable');
 });
 
-
-test('immutable documentation read denies secret files and redacts a known secret pattern',async()=>{
-  fs.mkdirSync('tmp',{recursive:true});
-  const repo=fs.mkdtempSync(path.resolve('tmp/context-docs-'));
-  const git=(...args:string[])=>execFileSync('git',['-C',repo,...args],{encoding:'utf8',env:{PATH:process.env.PATH,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_AUTHOR_NAME:'iliya',GIT_AUTHOR_EMAIL:'iliyazelenkog@gmail.com',GIT_COMMITTER_NAME:'iliya',GIT_COMMITTER_EMAIL:'iliyazelenkog@gmail.com'}}).trim();
-  git('init','-q');fs.mkdirSync(path.join(repo,'docs'));
-  const pattern='sk-'+ 'A'.repeat(20);
-  fs.writeFileSync(path.join(repo,'docs','read.md'),`Admitted documentation ${pattern}`);
-  fs.writeFileSync(path.join(repo,'docs','.env'),'SYNTHETIC_PRIVATE_FILE');
-  git('add','.');git('commit','-qm','test: documentation fixture');const sha=git('rev-parse','HEAD');
-  fs.writeFileSync(path.join(repo,'docs','read.md'),'UNCOMMITTED_CONTENT');
-  const fetchImpl=jest.fn();
-  const broker=await prepareOcrContextTools({...defaults,deadlineMs:Date.now()+10000,runtimeEnv:{REVIEW_ROUTER_CONTEXT_TOOLS_PLAN_JSON:capture(['repository.docs.read'])},checkoutRoot:repo,headSha:sha,baseSha:sha,fetchImpl});
-  if(!broker)throw new Error('broker missing');
-  const client=new Client({name:'test',version:'1'},{capabilities:{}});
-  try{
-    await client.connect(new StreamableHTTPClientTransport(new URL(broker.config.url),{requestInit:{headers:{Authorization:`Bearer ${broker.config.capability}`}}}));
-    await expect(client.callTool({name:'rr_repository_docs_read',arguments:{path:'docs/.env',revision:'head'}})).rejects.toThrow('context_tools_scope_denied');
-    const result=JSON.stringify(await client.callTool({name:'rr_repository_docs_read',arguments:{path:'docs/read.md',revision:'head'}}));
-    expect(result).toContain('Admitted documentation');expect(result).toContain('sk-***');expect(result).not.toContain(pattern);expect(result).not.toContain('UNCOMMITTED_CONTENT');
-    expect(broker.receipt().hadFailure).toBe(false);expect(fetchImpl).not.toHaveBeenCalled();
-  }finally{await client.close();await broker.close();fs.rmSync(repo,{recursive:true,force:true});}
+test('immutable documentation read denies secret files and redacts a known secret pattern', async () => {
+  fs.mkdirSync('tmp', { recursive: true });
+  const repo = fs.mkdtempSync(path.resolve('tmp/context-docs-'));
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-C', repo, ...args], {
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH,
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_AUTHOR_NAME: 'iliya',
+        GIT_AUTHOR_EMAIL: 'iliyazelenkog@gmail.com',
+        GIT_COMMITTER_NAME: 'iliya',
+        GIT_COMMITTER_EMAIL: 'iliyazelenkog@gmail.com',
+      },
+    }).trim();
+  git('init', '-q');
+  fs.mkdirSync(path.join(repo, 'docs'));
+  const pattern = 'sk-' + 'A'.repeat(20);
+  fs.writeFileSync(
+    path.join(repo, 'docs', 'read.md'),
+    `Admitted documentation ${pattern}`
+  );
+  fs.writeFileSync(path.join(repo, 'docs', '.env'), 'SYNTHETIC_PRIVATE_FILE');
+  git('add', '.');
+  git('commit', '-qm', 'test: documentation fixture');
+  const sha = git('rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(repo, 'docs', 'read.md'), 'UNCOMMITTED_CONTENT');
+  const fetchImpl = jest.fn();
+  const broker = await prepareOcrContextTools({
+    ...defaults,
+    deadlineMs: Date.now() + 10000,
+    runtimeEnv: {
+      REVIEW_ROUTER_CONTEXT_TOOLS_PLAN_JSON: capture(['repository.docs.read']),
+    },
+    checkoutRoot: repo,
+    headSha: sha,
+    baseSha: sha,
+    fetchImpl,
+  });
+  if (!broker) throw new Error('broker missing');
+  const client = new Client(
+    { name: 'test', version: '1' },
+    { capabilities: {} }
+  );
+  try {
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(broker.config.url), {
+        requestInit: {
+          headers: { Authorization: `Bearer ${broker.config.capability}` },
+        },
+      })
+    );
+    await expect(
+      client.callTool({
+        name: 'rr_repository_docs_read',
+        arguments: { path: 'docs/.env', revision: 'head' },
+      })
+    ).rejects.toThrow('context_tools_scope_denied');
+    const result = JSON.stringify(
+      await client.callTool({
+        name: 'rr_repository_docs_read',
+        arguments: { path: 'docs/read.md', revision: 'head' },
+      })
+    );
+    expect(result).toContain('Admitted documentation');
+    expect(result).toContain('sk-***');
+    expect(result).not.toContain(pattern);
+    expect(result).not.toContain('UNCOMMITTED_CONTENT');
+    expect(broker.receipt().hadFailure).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  } finally {
+    await client.close();
+    await broker.close();
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
 });

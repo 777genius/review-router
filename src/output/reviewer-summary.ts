@@ -2039,19 +2039,21 @@ function findingExcerpt(
     if (/^ {0,3}(?:=+[ \t]*$|-+[ \t]*$|\|?\s*:?-{3})/.test(line)) return '';
     // Block constructs can interrupt a paragraph without a preceding blank
     // line. Keep soft-wrapped prose together, but never expose the next block.
-    if (
-      /^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|(?:[-*_][ \t]*){3,}$)/.test(
-        line
-      ) ||
-      htmlInterruptsParagraph(line)
-    )
-      break;
+    if (markdownInterruptsParagraph(line)) break;
     paragraph.push(line);
   }
   return plainExcerpt(
     paragraph.join(' ').replace(/\s+/g, ' ').trim(),
     320,
     locale
+  );
+}
+
+function markdownInterruptsParagraph(line: string): boolean {
+  return (
+    /^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
+      line
+    ) || htmlInterruptsParagraph(line)
   );
 }
 
@@ -2120,6 +2122,11 @@ function safeFindingBody(value: string): string {
       if (new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
         fence = undefined;
       lines.push(line);
+    } else if (markdownInterruptsParagraph(line)) {
+      // A block interruptor ends a paragraph even without a blank line. Never
+      // preserve raw HTML through backticks that GFM cannot match across it.
+      flush();
+      lines.push(escapeHtmlOutsideCodeSpans(line));
     } else prose.push(line);
   }
   flush();

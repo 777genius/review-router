@@ -141864,10 +141864,7 @@ function findingExcerpt(message, locale) {
   const paragraph = [];
   for (const line of lines) {
     if (/^ {0,3}(?:=+[ \t]*$|-+[ \t]*$|\|?\s*:?-{3})/.test(line)) return "";
-    if (/^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|(?:[-*_][ \t]*){3,}$)/.test(
-      line
-    ) || htmlInterruptsParagraph(line))
-      break;
+    if (markdownInterruptsParagraph(line)) break;
     paragraph.push(line);
   }
   return plainExcerpt(
@@ -141875,6 +141872,11 @@ function findingExcerpt(message, locale) {
     320,
     locale
   );
+}
+function markdownInterruptsParagraph(line) {
+  return /^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
+    line
+  ) || htmlInterruptsParagraph(line);
 }
 function htmlInterruptsParagraph(line) {
   return /^ {0,3}<(?:!--|\?|!\[CDATA\[|![A-Z]|\/?(?:script|pre|style|textarea|address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t]|\/?>|$))/i.test(
@@ -141929,6 +141931,9 @@ function safeFindingBody(value) {
       if (new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
         fence = void 0;
       lines.push(line);
+    } else if (markdownInterruptsParagraph(line)) {
+      flush();
+      lines.push(escapeHtmlOutsideCodeSpans(line));
     } else prose.push(line);
   }
   flush();

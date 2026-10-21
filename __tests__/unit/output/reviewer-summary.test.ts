@@ -667,6 +667,9 @@ describe('compact summary publication contract', () => {
     '`unmatched<T> with ``another<U>',
     '\\`<b>escaped backticks</b>\\`',
     '`first<T>\n\nsecond<U>`',
+    '`before\n<div>unsafe token</div>\nafter`',
+    '`before\n# Heading <b>unsafe token</b>\nafter`',
+    '`before<T>\n===\nafter`',
   ])('escapes HTML outside valid inline code spans: %s', (message) => {
     const markdown = renderReviewerSummaryMarkdown({
       language: 'en',
@@ -674,7 +677,7 @@ describe('compact summary publication contract', () => {
       findings: [{ ...finding, message }],
     });
     const details = markdown.slice(markdown.indexOf('<details>'));
-    expect(details).not.toMatch(/<(?:T|U|b)>/);
+    expect(details).not.toMatch(/<(?:T|U|b|div)>/);
     expect(details).toContain('&lt;');
   });
 

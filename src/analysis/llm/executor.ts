@@ -270,6 +270,21 @@ export class LLMExecutor {
               deadlineError.code = 'REVIEW_DEADLINE_REACHED';
               throw deadlineError;
             }
+            // A saturation retry waits before re-entering the runner; recheck
+            // the optional-retry window after that delay so a retry can never
+            // start past its cutoff.
+            if (
+              attempt > 1 &&
+              this.providerExecutionPolicy &&
+              !this.providerExecutionPolicy.canStartOptionalRetry()
+            ) {
+              const deadlineError = new Error(
+                'Review execution deadline reached before the optional provider retry'
+              ) as ErrorWithCode;
+              deadlineError.name = 'TimeoutError';
+              deadlineError.code = 'REVIEW_DEADLINE_REACHED';
+              throw deadlineError;
+            }
             const actualTimeoutMs =
               this.providerExecutionPolicy?.clampTimeoutMs(
                 requestedTimeoutMs

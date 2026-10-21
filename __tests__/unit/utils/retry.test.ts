@@ -35,4 +35,18 @@ describe('withRetry per-error delay', () => {
     );
     expect(Date.now() - started).toBeGreaterThanOrEqual(50);
   });
+
+  it('applies the per-error delay floor when retryOn is omitted', async () => {
+    let calls = 0;
+    const started = Date.now();
+    await withRetry(
+      async () => {
+        calls += 1;
+        if (calls < 2) throw new Error('transient');
+        return 'ok';
+      },
+      { retries: 2, minTimeout: 0, maxTimeout: 0, retryDelayMs: () => 120 }
+    );
+    expect(Date.now() - started).toBeGreaterThanOrEqual(120);
+  });
 });

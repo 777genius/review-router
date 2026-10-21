@@ -29395,7 +29395,8 @@ async function pRetry(input, options) {
 
 // src/utils/retry.ts
 async function withRetry(fn, options) {
-  if (options.retryOn) {
+  const retryOn = options.retryOn ?? ((error2) => error2.name !== "AbortError");
+  if (options.retryOn || options.retryDelayMs) {
     const maxAttempts = options.retries + 1;
     const minTimeout = options.minTimeout ?? 500;
     const factor = options.factor ?? 2;
@@ -29405,7 +29406,7 @@ async function withRetry(fn, options) {
         return await fn();
       } catch (error2) {
         const err = error2;
-        if (!options.retryOn(err) || attempt === maxAttempts) {
+        if (!retryOn(err) || attempt === maxAttempts) {
           throw err;
         }
         logger.warn(
@@ -29527,9 +29528,41 @@ function buildProviderReviewPromptForAttempt(basePrompt, attempt, previousError)
   ].join("\n");
 }
 function isTransientLaneSaturation(error2) {
-  const text = formatErrorForClassification(error2).toLowerCase();
-  if (text.includes("lane_saturated")) return true;
-  return text.includes("relay_saturated") && text.includes("not_dispatched");
+  const text = formatErrorForClassification(error2);
+  const saturationFacts = parseGatewayFactEnvelopes(text).filter(
+    (fact) => fact.code === "lane_saturated" || fact.code === "relay_saturated"
+  );
+  if (saturationFacts.length > 0) {
+    return saturationFacts.some((fact) => fact.effect === "not_dispatched");
+  }
+  const lower = text.toLowerCase();
+  return lower.includes("lane_saturated") || lower.includes("relay_saturated") && lower.includes("not_dispatched");
+}
+function parseGatewayFactEnvelopes(text) {
+  const facts = [];
+  for (let start = text.indexOf("{"); start !== -1; start = text.indexOf("{", start + 1)) {
+    for (let end = text.indexOf("}", start); end !== -1; end = text.indexOf("}", end + 1)) {
+      let parsed;
+      try {
+        parsed = JSON.parse(text.slice(start, end + 1));
+      } catch {
+        continue;
+      }
+      const error2 = parsed.error;
+      if (error2 && typeof error2 === "object") {
+        const code = error2.code;
+        const effect = error2.effect;
+        if (typeof code === "string") {
+          facts.push({
+            code,
+            effect: typeof effect === "string" ? effect : ""
+          });
+        }
+      }
+      break;
+    }
+  }
+  return facts;
 }
 var LANE_SATURATION_RETRY_DELAY_MS = 1e3;
 function providerReviewRetryDelayMs(error2) {
@@ -29768,6 +29801,14 @@ var LLMExecutor = class {
             if (attempt === 1 && this.policy.deadline && !this.policy.deadline.canStartInitialInvocation()) {
               const deadlineError = new Error(
                 "Review execution deadline reached while waiting for provider capacity"
+              );
+              deadlineError.name = "TimeoutError";
+              deadlineError.code = "REVIEW_DEADLINE_REACHED";
+              throw deadlineError;
+            }
+            if (attempt > 1 && this.providerExecutionPolicy && !this.providerExecutionPolicy.canStartOptionalRetry()) {
+              const deadlineError = new Error(
+                "Review execution deadline reached before the optional provider retry"
               );
               deadlineError.name = "TimeoutError";
               deadlineError.code = "REVIEW_DEADLINE_REACHED";

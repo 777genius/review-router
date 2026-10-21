@@ -16,7 +16,9 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   options: RetryOptions
 ): Promise<T> {
-  if (options.retryOn) {
+  const retryOn =
+    options.retryOn ?? ((error: Error) => error.name !== 'AbortError');
+  if (options.retryOn || options.retryDelayMs) {
     const maxAttempts = options.retries + 1;
     const minTimeout = options.minTimeout ?? 500;
     const factor = options.factor ?? 2;
@@ -27,7 +29,7 @@ export async function withRetry<T>(
         return await fn();
       } catch (error) {
         const err = error as Error;
-        if (!options.retryOn(err) || attempt === maxAttempts) {
+        if (!retryOn(err) || attempt === maxAttempts) {
           throw err;
         }
         logger.warn(

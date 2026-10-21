@@ -85,6 +85,23 @@ describe('LLM retry policy', () => {
     ).toBe(0);
   });
 
+  it('keeps a forwarded unknown-effect envelope terminal even when its message mentions not_dispatched', () => {
+    expect(
+      shouldRetryProviderReviewError(
+        new Error(
+          'upstream 503 {"error":{"code":"relay_saturated","effect":"effect_unknown","message":"admission not_dispatched marker"}}'
+        )
+      )
+    ).toBe(false);
+    expect(
+      shouldRetryProviderReviewError(
+        new Error(
+          'upstream 503 {"error":{"code":"lane_saturated","effect":"effect_unknown","message":"not_dispatched"}}'
+        )
+      )
+    ).toBe(false);
+  });
+
   it('keeps terminal budget exhaustion non-retryable', () => {
     expect(
       shouldRetryProviderReviewError(

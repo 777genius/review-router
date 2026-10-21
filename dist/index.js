@@ -141689,11 +141689,11 @@ function limitUtf8(value, maxBytes) {
   let block = [];
   let depth = 0;
   let fence;
-  for (const line of value.split("\n")) {
-    const match2 = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match2 && !fence) fence = match2[1];
-    else if (fence && new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
-      fence = void 0;
+  for (const original of value.split("\n")) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
+    if (next.closing) block.push(next.closing);
+    fence = next.fence;
     if (!fence) {
       depth += (line.match(/<details\b[^>]*>/gi) ?? []).length;
       depth -= (line.match(/<\/details>/gi) ?? []).length;
@@ -141874,7 +141874,7 @@ function findingExcerpt(message, locale) {
   );
 }
 function markdownInterruptsParagraph(line) {
-  return /^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
+  return !!readMarkdownFenceOpening(line) || /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
     line
   ) || htmlInterruptsParagraph(line);
 }
@@ -141883,21 +141883,46 @@ function htmlInterruptsParagraph(line) {
     line
   );
 }
+function readMarkdownFenceOpening(line) {
+  const match2 = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match2 || match2[2][0] === "`" && match2[3].includes("`"))
+    return void 0;
+  return { delimiter: match2[2], indent: match2[1].length };
+}
+function closeMarkdownFence(fence) {
+  return " ".repeat(fence.indent) + fence.delimiter;
+}
+function advanceMarkdownFence(line, fence) {
+  if (fence) {
+    const closer = /^( *)(`{3,}|~{3,})[ \t]*\r?$/.exec(line);
+    if (closer && closer[2][0] === fence.delimiter[0] && closer[2].length >= fence.delimiter.length && closer[1].length <= fence.indent + 3)
+      return {
+        normalized: closer[1].length < fence.indent || closer[1].length > 3 ? closeMarkdownFence(fence) : void 0
+      };
+    if (!line.trim() || line.match(/^ */)[0].length >= fence.indent)
+      return { fence };
+    return {
+      fence: readMarkdownFenceOpening(line),
+      closing: closeMarkdownFence(fence)
+    };
+  }
+  return { fence: readMarkdownFenceOpening(line) };
+}
 function markdownBlocks(value) {
   const blocks2 = [];
   let lines = [];
   let fence;
-  for (const line of value.split("\n")) {
-    const match2 = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match2 && !fence) fence = { char: match2[1][0], length: match2[1].length };
-    else if (fence && new RegExp(`^\\s{0,3}${fence.char}{${fence.length},}\\s*$`).test(line))
-      fence = void 0;
+  for (const original of value.split("\n")) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
+    if (next.closing) lines.push(next.closing);
+    fence = next.fence;
     if (!line.trim() && !fence) {
       if (lines.length) blocks2.push(lines.join("\n"));
       lines = [];
     } else lines.push(line);
   }
-  if (fence) lines.push(fence.char.repeat(fence.length));
+  if (fence) lines.push(closeMarkdownFence(fence));
   if (lines.length) blocks2.push(lines.join("\n"));
   return blocks2;
 }
@@ -141922,14 +141947,16 @@ function safeFindingBody(value) {
     prose = [];
   };
   for (const line of neutralizeDetailsMarkup(value).split("\n")) {
-    const match2 = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match2 && !fence) {
+    const previous = fence;
+    const next = advanceMarkdownFence(line, fence);
+    fence = next.fence;
+    if (previous && !next.closing) {
+      lines.push(next.normalized ?? line);
+      continue;
+    }
+    if (next.closing) lines.push(next.closing);
+    if (fence) {
       flush();
-      fence = match2[1];
-      lines.push(line);
-    } else if (fence) {
-      if (new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
-        fence = void 0;
       lines.push(line);
     } else if (markdownInterruptsParagraph(line)) {
       flush();
@@ -162403,7 +162430,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.192",
+  version: "1.0.193",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

@@ -699,9 +699,75 @@ describe('compact summary publication contract', () => {
   });
 
   it.each([
+    '```bad`info\n<img src=x alt=unsafeBoundary>\n```',
+    '- container\n  ```html\n  code\n<img src=x alt=unsafeBoundary>\n  ```',
+    '\t```html\n<img src=x alt=unsafeBoundary>\n```',
+    '- container\n  ```html\n  code\n    ```\n  <img src=x alt=unsafeBoundary>',
+    '  ```html\n  code\n    ```\n  <img src=x alt=unsafeBoundary>',
+    '- container\n  ```html\n  code\n```\nAfter fence <img src=x alt=unsafeBoundary>',
+    '  ```html\n  code\n```\nAfter fence <img src=x alt=unsafeBoundary>',
+  ])('escapes HTML beyond an invalid or dedented fence: %s', (message) => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    expect(markdown).not.toContain('<img src=x alt=unsafeBoundary>');
+    expect(markdown).toContain('&lt;img src=x alt=unsafeBoundary&gt;');
+    if (message.includes('\n```\nAfter fence'))
+      expect(markdown).toContain('  code\n  ```\nAfter fence');
+    if (message.includes('\n    ```\n')) {
+      expect(markdown).toContain('  code\n  ```\n  &lt;img');
+      const limited = limitReviewerPostedMarkdown(markdown, 350);
+      expect(limited.match(/<details>/g)?.length ?? 0).toBe(
+        limited.match(/<\/details>/g)?.length ?? 0
+      );
+      expect(Buffer.byteLength(limited)).toBeLessThanOrEqual(350);
+    }
+    expect(markdown.match(/<details>/g)?.length).toBe(
+      markdown.match(/<\/details>/g)?.length
+    );
+  });
+
+  it.each(['```ts', '~~~info`allowed'])(
+    'preserves valid zero-indent fences and inline code: %s',
+    (opener) => {
+      const closer = opener.startsWith('`') ? '```' : '~~~';
+      const message = `Use \`Promise<void>\`.\n\n${opener}\nconst html = '<img src=x>';\n${closer}`;
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message }],
+      });
+      expect(markdown).toContain(message);
+    }
+  );
+
+  it('closes container fences at their original indent before dedents and at EOF', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [
+        {
+          ...finding,
+          message:
+            '- container\n  ~~~html\n  <b>inside</b>\n<img src=x>\n  ~~~text\n  remaining code',
+        },
+      ],
+    });
+    expect(markdown).toContain('  <b>inside</b>\n  ~~~\n&lt;img src=x&gt;');
+    expect(markdown).toContain('  remaining code\n  ~~~\n\n**Location:**');
+    const limited = limitReviewerPostedMarkdown(markdown, 350);
+    expect(limited.match(/<details>/g)?.length ?? 0).toBe(
+      limited.match(/<\/details>/g)?.length ?? 0
+    );
+    expect(Buffer.byteLength(limited)).toBeLessThanOrEqual(350);
+  });
+
+  it.each([
     '```ts\nconst hiddenBlock = true;\n```',
     '~~~ts\nconst hiddenBlock = true;\n~~~',
-    '   ```ts\nconst hiddenBlock = true;\n   ```',
+    '   ```ts\n   const hiddenBlock = true;\n   ```',
     '```text\n---\nhiddenBlock\n```',
     '<div>hiddenBlock</div>',
     '<!-- hiddenBlock -->',

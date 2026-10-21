@@ -1817,15 +1817,12 @@ function limitUtf8(value: string, maxBytes: number): string {
   const retained: string[] = [];
   let block: string[] = [];
   let depth = 0;
-  let fence: string | undefined;
-  for (const line of value.split('\n')) {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) fence = match[1];
-    else if (
-      fence &&
-      new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line)
-    )
-      fence = undefined;
+  let fence: MarkdownFence | undefined;
+  for (const original of value.split('\n')) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
+    if (next.closing) block.push(next.closing);
+    fence = next.fence;
     if (!fence) {
       depth += (line.match(/<details\b[^>]*>/gi) ?? []).length;
       depth -= (line.match(/<\/details>/gi) ?? []).length;
@@ -2051,9 +2048,11 @@ function findingExcerpt(
 
 function markdownInterruptsParagraph(line: string): boolean {
   return (
-    /^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
+    !!readMarkdownFenceOpening(line) ||
+    /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
       line
-    ) || htmlInterruptsParagraph(line)
+    ) ||
+    htmlInterruptsParagraph(line)
   );
 }
 
@@ -2065,25 +2064,71 @@ function htmlInterruptsParagraph(line: string): boolean {
   );
 }
 
+type MarkdownFence = { readonly delimiter: string; readonly indent: number };
+
+function readMarkdownFenceOpening(line: string): MarkdownFence | undefined {
+  const match = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match || (match[2][0] === '`' && match[3].includes('`')))
+    return undefined;
+  return { delimiter: match[2], indent: match[1].length };
+}
+
+function closeMarkdownFence(fence: MarkdownFence): string {
+  return ' '.repeat(fence.indent) + fence.delimiter;
+}
+
+function advanceMarkdownFence(
+  line: string,
+  fence: MarkdownFence | undefined
+): {
+  readonly fence?: MarkdownFence;
+  readonly closing?: string;
+  readonly normalized?: string;
+} {
+  if (fence) {
+    const closer = /^( *)(`{3,}|~{3,})[ \t]*\r?$/.exec(line);
+    if (
+      closer &&
+      closer[2][0] === fence.delimiter[0] &&
+      closer[2].length >= fence.delimiter.length &&
+      closer[1].length <= fence.indent + 3
+    )
+      // Wider or dedented closers may cross a container boundary. Normalize
+      // the physical line too, so GFM and our fence state cannot disagree.
+      return {
+        normalized:
+          closer[1].length < fence.indent || closer[1].length > 3
+            ? closeMarkdownFence(fence)
+            : undefined,
+      };
+    // A container can end at a dedent even though a top-level fence would
+    // continue. Close conservatively at the original indent before prose.
+    if (!line.trim() || line.match(/^ */)![0].length >= fence.indent)
+      return { fence };
+    return {
+      fence: readMarkdownFenceOpening(line),
+      closing: closeMarkdownFence(fence),
+    };
+  }
+  return { fence: readMarkdownFenceOpening(line) };
+}
+
 /** Split only at paragraph boundaries outside code fences. */
 function markdownBlocks(value: string): string[] {
   const blocks: string[] = [];
   let lines: string[] = [];
-  let fence: { char: string; length: number } | undefined;
-  for (const line of value.split('\n')) {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) fence = { char: match[1][0], length: match[1].length };
-    else if (
-      fence &&
-      new RegExp(`^\\s{0,3}${fence.char}{${fence.length},}\\s*$`).test(line)
-    )
-      fence = undefined;
+  let fence: MarkdownFence | undefined;
+  for (const original of value.split('\n')) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
+    if (next.closing) lines.push(next.closing);
+    fence = next.fence;
     if (!line.trim() && !fence) {
       if (lines.length) blocks.push(lines.join('\n'));
       lines = [];
     } else lines.push(line);
   }
-  if (fence) lines.push(fence.char.repeat(fence.length));
+  if (fence) lines.push(closeMarkdownFence(fence));
   if (lines.length) blocks.push(lines.join('\n'));
   return blocks;
 }
@@ -2105,7 +2150,7 @@ function hasControlCharacters(value: string): boolean {
 function safeFindingBody(value: string): string {
   // Escape prose HTML, preserve code, and neutralize attempts to close the
   // generated disclosures. The original body remains in the JSON artifact.
-  let fence: string | undefined;
+  let fence: MarkdownFence | undefined;
   const lines: string[] = [];
   let prose: string[] = [];
   const flush = () => {
@@ -2113,14 +2158,16 @@ function safeFindingBody(value: string): string {
     prose = [];
   };
   for (const line of neutralizeDetailsMarkup(value).split('\n')) {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) {
+    const previous = fence;
+    const next = advanceMarkdownFence(line, fence);
+    fence = next.fence;
+    if (previous && !next.closing) {
+      lines.push(next.normalized ?? line);
+      continue;
+    }
+    if (next.closing) lines.push(next.closing);
+    if (fence) {
       flush();
-      fence = match[1];
-      lines.push(line);
-    } else if (fence) {
-      if (new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
-        fence = undefined;
       lines.push(line);
     } else if (markdownInterruptsParagraph(line)) {
       // A block interruptor ends a paragraph even without a blank line. Never

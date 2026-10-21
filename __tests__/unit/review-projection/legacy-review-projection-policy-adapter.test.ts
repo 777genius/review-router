@@ -510,9 +510,10 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
       previousPath?: string;
       status: RevisionFileStatus;
       patch?: string;
-    }[]
+    }[],
+    presentationAdapter = adapter
   ) {
-    return adapter.projectPresentation({
+    return presentationAdapter.projectPresentation({
       scope: {
         scmRepositoryIdentityId: 'repo-1',
         pullRequestNumber: 252,
@@ -543,6 +544,87 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
       limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
     });
   }
+
+  it('keeps distinct same-start OCR findings paired with their own bodies and the global inline budget', async () => {
+    const minor = occurrence({
+      lineageId: 'ocr-minor',
+      sourceFindingIds: ['ocr-source-minor'],
+      severity: FindingSeverity.Minor,
+      title: 'Minor range issue',
+      message: 'The narrow range omits the optional status label.',
+      line: 1322,
+      startLine: 1322,
+      endLine: 1323,
+      anchorVerified: true,
+    });
+    const major = occurrence({
+      lineageId: 'ocr-major',
+      sourceFindingIds: ['ocr-source-major'],
+      severity: FindingSeverity.Major,
+      title: 'Major range issue',
+      message: 'The broader range bypasses the authorization check.',
+      line: 1322,
+      startLine: 1322,
+      endLine: 1327,
+      anchorVerified: true,
+    });
+    const files = [
+      {
+        path: minor.filePath,
+        status: RevisionFileStatus.Modified,
+        patch:
+          '@@ -1321,0 +1322,6 @@\n+one();\n+two();\n+three();\n+four();\n+five();\n+six();',
+      },
+    ];
+    const projected = await projectWithFixture([minor, major], files);
+    expect(projected.placements).toEqual([
+      expect.objectContaining({
+        lineageId: minor.lineageId,
+        kind: FindingPlacementKind.Inline,
+        startLine: 1322,
+        line: 1323,
+        endLine: 1323,
+        body: expect.stringContaining(minor.message),
+      }),
+      expect.objectContaining({
+        lineageId: major.lineageId,
+        kind: FindingPlacementKind.Inline,
+        startLine: 1322,
+        line: 1327,
+        endLine: 1327,
+        body: expect.stringContaining(major.message),
+      }),
+    ]);
+    expect(projected.placements[0].body).toMatch(/^_🔵 Minor_/);
+    expect(projected.placements[0].body).not.toContain(major.message);
+    expect(projected.placements[1].body).toMatch(/^_🟡 Major_/);
+    expect(projected.placements[1].body).not.toContain(minor.message);
+
+    const limited = await projectWithFixture(
+      [minor, major],
+      files,
+      new LegacyReviewProjectionPolicyAdapter({
+        ...DEFAULT_CONFIG,
+        inlineMinSeverity: 'minor',
+        inlineMaxComments: 1,
+      })
+    );
+    expect(limited.placements).toEqual([
+      expect.objectContaining({
+        lineageId: minor.lineageId,
+        kind: FindingPlacementKind.File,
+      }),
+      expect.objectContaining({
+        lineageId: major.lineageId,
+        kind: FindingPlacementKind.Inline,
+        startLine: 1322,
+        line: 1327,
+        endLine: 1327,
+        body: expect.stringContaining(major.message),
+      }),
+    ]);
+    expect(limited.placements[0].body).toBeUndefined();
+  });
 
   it('keeps a verified anchor on its exact line instead of a competing added line', async () => {
     // §8.2: for an OCR verified span the projection must NOT run

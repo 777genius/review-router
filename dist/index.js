@@ -32646,6 +32646,11 @@ var SynthesisEngine = class {
   constructor(config) {
     this.config = config;
   }
+  // Keep provenance off serialized comments; locations are not finding identities.
+  inlineSourceFindings = /* @__PURE__ */ new WeakMap();
+  sourceFindingForInlineComment(comment) {
+    return this.inlineSourceFindings.get(comment);
+  }
   synthesize(findings, pr2, testHints, aiAnalysis, providerResults, runDetails, impactAnalysis, mermaidDiagram) {
     const metrics = this.buildMetrics(findings, providerResults, runDetails);
     return this.buildReview({
@@ -32748,22 +32753,26 @@ var SynthesisEngine = class {
     const sorted = findings.filter((f2) => compareSeverityDesc(minSeverity, f2.severity) >= 0).sort(
       (a2, b2) => compareSeverityDesc(a2.severity, b2.severity) || a2.file.localeCompare(b2.file) || a2.line - b2.line
     ).slice(0, this.config.inlineMaxComments);
-    return sorted.map((f2) => ({
-      path: f2.file,
-      startLine: f2.startLine,
-      line: f2.line,
-      endLine: f2.endLine,
-      side: "RIGHT",
-      body: this.commentBody(f2),
-      severity: f2.severity,
-      title: f2.title,
-      category: f2.category,
-      provider: f2.provider,
-      providers: f2.providers,
-      confidence: f2.confidence,
-      hasConsensus: f2.hasConsensus,
-      suggestion: f2.suggestion
-    }));
+    return sorted.map((f2) => {
+      const comment = {
+        path: f2.file,
+        startLine: f2.startLine,
+        line: f2.line,
+        endLine: f2.endLine,
+        side: "RIGHT",
+        body: this.commentBody(f2),
+        severity: f2.severity,
+        title: f2.title,
+        category: f2.category,
+        provider: f2.provider,
+        providers: f2.providers,
+        confidence: f2.confidence,
+        hasConsensus: f2.hasConsensus,
+        suggestion: f2.suggestion
+      };
+      this.inlineSourceFindings.set(comment, f2);
+      return comment;
+    });
   }
   commentBody(finding) {
     const parts = [
@@ -52731,7 +52740,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.186",
+  version: "1.0.187",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -108807,9 +108816,15 @@ var LegacyReviewProjectionPolicyAdapter = class {
       (occurrence) => occurrence.state !== "resolved" /* Resolved */ && occurrence.state !== "suppressed_by_human" /* SuppressedByHuman */
     );
     const currentOccurrences = activeOccurrences.filter(isCurrentOccurrence);
+    const legacyFindings = new Map(
+      currentOccurrences.map((occurrence) => [
+        occurrence,
+        toLegacyFinding(occurrence)
+      ])
+    );
     const pr2 = toLegacyPrContext(query);
     const review = this.synthesis.synthesizeWithProviderExecutionSummary(
-      currentOccurrences.map(toLegacyFinding),
+      [...legacyFindings.values()],
       pr2,
       {
         planned: query.providerExecution.plannedProviders,
@@ -108817,7 +108832,12 @@ var LegacyReviewProjectionPolicyAdapter = class {
       }
     );
     const placements = query.occurrences.map(
-      (occurrence) => this.placeOccurrence(occurrence, review, query.revisionFiles)
+      (occurrence) => this.placeOccurrence(
+        occurrence,
+        review,
+        query.revisionFiles,
+        legacyFindings.get(occurrence)
+      )
     );
     const incomplete = isReviewerSummaryIncomplete({
       incomplete: query.coverage.state === "partial" /* Partial */,
@@ -108883,7 +108903,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
     const review = minimalLegacyReview([toLegacyFinding(occurrence)]);
     return getBlockingFindingBreakdown(review, toLegacySeverity(threshold)).total > 0;
   }
-  placeOccurrence(occurrence, review, revisionFiles) {
+  placeOccurrence(occurrence, review, revisionFiles, sourceFinding) {
     if (!isCurrentOccurrence(occurrence)) {
       return summaryPlacement3(occurrence, "historical lifecycle occurrence");
     }
@@ -108912,7 +108932,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
       };
     }
     const inline = review.inlineComments.find(
-      (comment) => normalizePath3(comment.path) === normalizePath3(occurrence.filePath) && comment.line === line
+      (comment) => sourceFinding !== void 0 && this.synthesis.sourceFindingForInlineComment(comment) === sourceFinding
     );
     if (!inline) {
       return {

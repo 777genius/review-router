@@ -57,7 +57,7 @@ unavailable before inference. No automatic fork-secret access is provided.
 
 `github.issue.read` reads linked issues and bounded comments in the admitted
 repository. The GitHub App installation must already permit issues read. The
-optional `repository.docs.read` reads admitted head/base README, `docs/`, or
+optional `repository.docs.read` reads admitted head/review diff base (merge-base) README, `docs/`, or
 `ai-docs/` files from Git objects, with a 64 KiB file limit. Only README or
 Markdown, MDX, reStructuredText and plain-text documentation is admitted; hidden
 paths are denied and known secret patterns are redacted. Native OCR repository

@@ -34,7 +34,7 @@ const defaults = {
   }),
   checkoutRoot: '/unused',
   headSha: '1'.repeat(40),
-  baseSha: '2'.repeat(40),
+  mergeBaseSha: '2'.repeat(40),
   mask: jest.fn(),
   deadlineMs: Date.now() + 10000,
 };
@@ -142,9 +142,26 @@ test('immutable documentation read denies secret files and redacts a known secre
     `Admitted documentation ${pattern}`
   );
   fs.writeFileSync(path.join(repo, 'docs', '.env'), 'SYNTHETIC_PRIVATE_FILE');
+  fs.writeFileSync(path.join(repo, 'docs', 'large.md'), 'x'.repeat(65537));
   git('add', '.');
   git('commit', '-qm', 'test: documentation fixture');
   const sha = git('rev-parse', 'HEAD');
+  git('checkout', '-qb', 'advanced-base');
+  fs.writeFileSync(path.join(repo, 'advanced.md'), 'advanced target tip');
+  git('add', '.');
+  git('commit', '-qm', 'test: advanced base');
+  const advancedBase = git('rev-parse', 'HEAD');
+  git('checkout', '--detach', sha);
+  fs.rmSync(
+    path.join(
+      repo,
+      '.git',
+      'objects',
+      advancedBase.slice(0, 2),
+      advancedBase.slice(2)
+    )
+  );
+  expect(() => git('cat-file', '-e', `${advancedBase}^{commit}`)).toThrow();
   fs.writeFileSync(path.join(repo, 'docs', 'read.md'), 'UNCOMMITTED_CONTENT');
   const fetchImpl = jest.fn();
   const broker = await prepareOcrContextTools({
@@ -155,7 +172,7 @@ test('immutable documentation read denies secret files and redacts a known secre
     },
     checkoutRoot: repo,
     headSha: sha,
-    baseSha: sha,
+    mergeBaseSha: sha,
     fetchImpl,
   });
   if (!broker) throw new Error('broker missing');
@@ -177,10 +194,22 @@ test('immutable documentation read denies secret files and redacts a known secre
         arguments: { path: 'docs/.env', revision: 'head' },
       })
     ).rejects.toThrow('context_tools_scope_denied');
+    await expect(
+      client.callTool({
+        name: 'rr_repository_docs_read',
+        arguments: { path: 'docs/missing.md', revision: 'base' },
+      })
+    ).rejects.toThrow('context_tools_scope_denied');
+    await expect(
+      client.callTool({
+        name: 'rr_repository_docs_read',
+        arguments: { path: 'docs/large.md', revision: 'base' },
+      })
+    ).rejects.toThrow('context_tools_scope_denied');
     const result = JSON.stringify(
       await client.callTool({
         name: 'rr_repository_docs_read',
-        arguments: { path: 'docs/read.md', revision: 'head' },
+        arguments: { path: 'docs/read.md', revision: 'base' },
       })
     );
     expect(result).toContain('Admitted documentation');
@@ -189,6 +218,17 @@ test('immutable documentation read denies secret files and redacts a known secre
     expect(result).not.toContain('UNCOMMITTED_CONTENT');
     expect(broker.receipt().hadFailure).toBe(false);
     expect(fetchImpl).not.toHaveBeenCalled();
+    fs.renameSync(
+      path.join(repo, '.git'),
+      path.join(repo, '.git-backend-down')
+    );
+    await expect(
+      client.callTool({
+        name: 'rr_repository_docs_read',
+        arguments: { path: 'docs/read.md', revision: 'head' },
+      })
+    ).rejects.toThrow('context_tools_tool_unavailable');
+    expect(broker.receipt().hadFailure).toBe(true);
   } finally {
     await client.close();
     await broker.close();

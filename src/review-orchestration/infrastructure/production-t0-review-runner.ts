@@ -434,7 +434,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         mask: core.setSecret,
         checkoutRoot: path.resolve(input.workspacePath),
         headSha: authorization.facts.headSha,
-        baseSha: authorization.facts.baseSha,
+        mergeBaseSha: authorization.facts.mergeBaseSha,
         deadlineMs:
           Date.now() +
           executionDeadline.clampProviderTimeout(providerTimeoutMs),

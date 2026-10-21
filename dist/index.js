@@ -2044,7 +2044,7 @@ var require_fast_deep_equal = __commonJS({
       if (a2 === b2) return true;
       if (a2 && b2 && typeof a2 == "object" && typeof b2 == "object") {
         if (a2.constructor !== b2.constructor) return false;
-        var length, i2, keys;
+        var length, i2, keys2;
         if (Array.isArray(a2)) {
           length = a2.length;
           if (length != b2.length) return false;
@@ -2055,13 +2055,13 @@ var require_fast_deep_equal = __commonJS({
         if (a2.constructor === RegExp) return a2.source === b2.source && a2.flags === b2.flags;
         if (a2.valueOf !== Object.prototype.valueOf) return a2.valueOf() === b2.valueOf();
         if (a2.toString !== Object.prototype.toString) return a2.toString() === b2.toString();
-        keys = Object.keys(a2);
-        length = keys.length;
+        keys2 = Object.keys(a2);
+        length = keys2.length;
         if (length !== Object.keys(b2).length) return false;
         for (i2 = length; i2-- !== 0; )
-          if (!Object.prototype.hasOwnProperty.call(b2, keys[i2])) return false;
+          if (!Object.prototype.hasOwnProperty.call(b2, keys2[i2])) return false;
         for (i2 = length; i2-- !== 0; ) {
-          var key = keys[i2];
+          var key = keys2[i2];
           if (!equal(a2[key], b2[key])) return false;
         }
         return true;
@@ -4609,7 +4609,7 @@ var require_core = __commonJS({
       errorsText(errors = this.errors, { separator = ", ", dataVar = "data" } = {}) {
         if (!errors || errors.length === 0)
           return "No errors";
-        return errors.map((e) => `${dataVar}${e.instancePath} ${e.message}`).reduce((text, msg) => text + separator + msg);
+        return errors.map((e) => `${dataVar}${e.instancePath} ${e.message}`).reduce((text2, msg) => text2 + separator + msg);
       }
       $dataMetaSchema(metaSchema, keywordsJsonPointers) {
         const rules = this.RULES.all;
@@ -6048,9 +6048,9 @@ var require_patternProperties = __commonJS({
       code(cxt) {
         const { gen, schema: schema2, data, parentSchema, it: it2 } = cxt;
         const { opts } = it2;
-        const patterns = (0, code_1.allSchemaProperties)(schema2);
-        const alwaysValidPatterns = patterns.filter((p2) => (0, util_1.alwaysValidSchema)(it2, schema2[p2]));
-        if (patterns.length === 0 || alwaysValidPatterns.length === patterns.length && (!it2.opts.unevaluated || it2.props === true)) {
+        const patterns2 = (0, code_1.allSchemaProperties)(schema2);
+        const alwaysValidPatterns = patterns2.filter((p2) => (0, util_1.alwaysValidSchema)(it2, schema2[p2]));
+        if (patterns2.length === 0 || alwaysValidPatterns.length === patterns2.length && (!it2.opts.unevaluated || it2.props === true)) {
           return;
         }
         const checkProperties = opts.strictSchema && !opts.allowMatchingProperties && parentSchema.properties;
@@ -6061,7 +6061,7 @@ var require_patternProperties = __commonJS({
         const { props } = it2;
         validatePatternProperties();
         function validatePatternProperties() {
-          for (const pat of patterns) {
+          for (const pat of patterns2) {
             if (checkProperties)
               checkMatchingProperties(pat);
             if (it2.allErrors) {
@@ -11669,8 +11669,8 @@ var require_formats = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.formatNames = exports2.fastFormats = exports2.fullFormats = void 0;
-    function fmtDef(validate, compare) {
-      return { validate, compare };
+    function fmtDef(validate, compare3) {
+      return { validate, compare: compare3 };
     }
     exports2.fullFormats = {
       // date: http://tools.ietf.org/html/rfc3339#section-5.6
@@ -13223,9 +13223,9 @@ function requirePairs() {
     for (let index = 0, length = object.length; index < length; index += 1) {
       const pair = object[index];
       if (_toString.call(pair) !== "[object Object]") return false;
-      const keys = Object.keys(pair);
-      if (keys.length !== 1) return false;
-      result2[index] = [keys[0], pair[keys[0]]];
+      const keys2 = Object.keys(pair);
+      if (keys2.length !== 1) return false;
+      result2[index] = [keys2[0], pair[keys2[0]]];
     }
     return true;
   }
@@ -13235,8 +13235,8 @@ function requirePairs() {
     const result2 = new Array(object.length);
     for (let index = 0, length = object.length; index < length; index += 1) {
       const pair = object[index];
-      const keys = Object.keys(pair);
-      result2[index] = [keys[0], pair[keys[0]]];
+      const keys2 = Object.keys(pair);
+      result2[index] = [keys2[0], pair[keys2[0]]];
     }
     return result2;
   }
@@ -14745,9 +14745,9 @@ function requireDumper() {
   function compileStyleMap(schema2, map2) {
     if (map2 === null) return {};
     const result2 = {};
-    const keys = Object.keys(map2);
-    for (let index = 0, length = keys.length; index < length; index += 1) {
-      let tag = keys[index];
+    const keys2 = Object.keys(map2);
+    for (let index = 0, length = keys2.length; index < length; index += 1) {
+      let tag = keys2[index];
       let style = String(map2[tag]);
       if (tag.slice(0, 2) === "!!") {
         tag = "tag:yaml.org,2002:" + tag.slice(2);
@@ -15775,13 +15775,13 @@ var util;
     });
   };
   util2.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object) => {
-    const keys = [];
+    const keys2 = [];
     for (const key in object) {
       if (Object.prototype.hasOwnProperty.call(object, key)) {
-        keys.push(key);
+        keys2.push(key);
       }
     }
-    return keys;
+    return keys2;
   };
   util2.find = (arr, checker) => {
     for (const item of arr) {
@@ -18009,8 +18009,8 @@ var ZodObject = class _ZodObject extends ZodType {
     if (this._cached !== null)
       return this._cached;
     const shape = this._def.shape();
-    const keys = util.objectKeys(shape);
-    this._cached = { shape, keys };
+    const keys2 = util.objectKeys(shape);
+    this._cached = { shape, keys: keys2 };
     return this._cached;
   }
   _parse(input) {
@@ -21266,7 +21266,7 @@ function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchR
   const bestScore = score(best);
   return bestScore > currentScore + 1 ? best.line : reportedLine;
 }
-function tokenizeForLineScoring(text) {
+function tokenizeForLineScoring(text2) {
   const stopWords = /* @__PURE__ */ new Set([
     "the",
     "and",
@@ -21286,7 +21286,7 @@ function tokenizeForLineScoring(text) {
     "severity"
   ]);
   return new Set(
-    text.toLowerCase().replace(/[^a-z0-9_$]+/g, " ").split(/\s+/).filter((token) => token.length >= 3 && !stopWords.has(token))
+    text2.toLowerCase().replace(/[^a-z0-9_$]+/g, " ").split(/\s+/).filter((token) => token.length >= 3 && !stopWords.has(token))
   );
 }
 function getRiskTerms(commentBody) {
@@ -21556,11 +21556,11 @@ function unquoteGitPath(path34) {
 }
 
 // src/utils/token-estimation.ts
-function estimateTokensSimple(text) {
-  const characters = text.length;
-  const bytes = Buffer.byteLength(text, "utf8");
+function estimateTokensSimple(text2) {
+  const characters = text2.length;
+  const bytes = Buffer.byteLength(text2, "utf8");
   let tokens = Math.ceil(characters / 4);
-  const codeIndicators = (text.match(/[{}()[\];]/g) || []).length;
+  const codeIndicators = (text2.match(/[{}()[\];]/g) || []).length;
   const isCodeHeavy = codeIndicators > characters * 0.05;
   if (isCodeHeavy) {
     tokens = Math.ceil(characters / 3);
@@ -21572,8 +21572,8 @@ function estimateTokensSimple(text) {
     method: "simple"
   };
 }
-function estimateTokensConservative(text) {
-  const simple = estimateTokensSimple(text);
+function estimateTokensConservative(text2) {
+  const simple = estimateTokensSimple(text2);
   const SAFETY_MARGIN = 1.1;
   return {
     ...simple,
@@ -22084,10 +22084,10 @@ var ClaudeCodeProvider = class extends Provider {
     };
   }
   formatCliError(stderr, stdout) {
-    const text = `${stderr || stdout || "no output"}`.trim();
-    const hint = this.authHintFor(text);
-    const message = hint ? `${text}
-${hint}` : text;
+    const text2 = `${stderr || stdout || "no output"}`.trim();
+    const hint = this.authHintFor(text2);
+    const message = hint ? `${text2}
+${hint}` : text2;
     return message.length > 1600 ? `${message.slice(0, 1600)}
 ... truncated ...` : message;
   }
@@ -22246,10 +22246,7 @@ var review_agent_profiles_default = [
     binarySha256: "cb0a15567e9a60a5820d54b0f6ae86d504dc3805c1eab21a47f70e3eb7b73a40",
     cancellation: true,
     contextGateway: true,
-    modelTransports: [
-      "account_gateway",
-      "provider_api"
-    ],
+    modelTransports: ["account_gateway", "provider_api"],
     packageVersion: "0.147.0",
     profileRef: "codex-default"
   },
@@ -22258,9 +22255,7 @@ var review_agent_profiles_default = [
     binarySha256: "97aa184122b1ca8fbfdbe4bfb28e175cf371c4402ab8ecfd1914d68547f13745",
     cancellation: true,
     contextGateway: false,
-    modelTransports: [
-      "account_gateway"
-    ],
+    modelTransports: ["account_gateway"],
     packageVersion: "1.13.1-rr.2",
     profileRef: "ocr-managed-v1"
   },
@@ -22269,11 +22264,29 @@ var review_agent_profiles_default = [
     binarySha256: "2f62d6fbb326e74d0fe9377f0224f1b56520bcefee688c58073fa1a30e45f1c9",
     cancellation: true,
     contextGateway: false,
-    modelTransports: [
-      "account_gateway"
-    ],
+    modelTransports: ["account_gateway"],
     packageVersion: "1.13.1-rr.3",
     profileRef: "ocr-managed-v2"
+  },
+  {
+    agentKind: "codex",
+    binarySha256: "cb0a15567e9a60a5820d54b0f6ae86d504dc3805c1eab21a47f70e3eb7b73a40",
+    cancellation: true,
+    contextGateway: true,
+    modelTransports: ["account_gateway", "provider_api"],
+    packageVersion: "0.147.0",
+    profileRef: "codex-skills-v1",
+    reviewSkillsVersion: 1
+  },
+  {
+    agentKind: "ocr",
+    binarySha256: "0553daafe39d7a9d7608f0d37b26d55c11d07b9d5bbfc5b36b0778f9cd9f3df5",
+    cancellation: true,
+    contextGateway: false,
+    modelTransports: ["account_gateway"],
+    packageVersion: "1.13.1-rr.4",
+    profileRef: "ocr-managed-v3",
+    reviewSkillsVersion: 1
   }
 ];
 
@@ -22296,6 +22309,11 @@ function parseReviewAgentProfiles(value) {
         "contextGateway",
         "cancellation"
       ];
+      if (Object.hasOwn(row, "reviewSkillsVersion")) {
+        if (row.reviewSkillsVersion !== 1)
+          invalid("review_agent_skills_capability_invalid");
+        names.push("reviewSkillsVersion");
+      }
       if (Object.keys(row).length !== names.length || names.some((name) => !Object.hasOwn(row, name)))
         invalid("review_agent_profile_invalid");
       if (typeof row.profileRef !== "string" || typeof row.binarySha256 !== "string" || typeof row.packageVersion !== "string")
@@ -22329,7 +22347,8 @@ function parseReviewAgentProfiles(value) {
           ...transports
         ]),
         contextGateway,
-        cancellation: true
+        cancellation: true,
+        ...row.reviewSkillsVersion === 1 ? { reviewSkillsVersion: 1 } : {}
       });
     })
   );
@@ -22343,9 +22362,13 @@ function bundledReviewAgentForTransport(transport) {
   const profiles = parseReviewAgentProfiles(review_agent_profiles_default).filter(
     (profile) => profile.agentKind === "codex" && profile.modelTransports.includes(transport)
   );
-  if (profiles.length !== 1)
+  const supporting = profiles.filter(
+    (profile) => profile.reviewSkillsVersion === 1
+  );
+  const candidates = supporting.length > 0 ? supporting : profiles;
+  if (candidates.length !== 1)
     throw new Error("review_agent_profile_unavailable");
-  return profiles[0];
+  return candidates[0];
 }
 function readApprovedReviewAgent(json2, digest3) {
   if (Buffer.byteLength(json2) > 16384 || !/^[a-f0-9]{64}$/.test(digest3) || (0, import_node_crypto.createHash)("sha256").update(json2).digest("hex") !== digest3)
@@ -23008,7 +23031,7 @@ var AccountGatewayModelTransport = class {
         });
       let terminalCancellation = false;
       let streamFailureObserved = false;
-      const fail = (error2) => {
+      const fail2 = (error2) => {
         if (audit?.hasCompleted() && controller.signal.aborted && signal?.aborted && error2 instanceof Error && error2.name === "AbortError" && "code" in error2 && error2.code === "ABORT_ERR" && error2.cause === controller.signal.reason) {
           terminalCancellation = true;
           return;
@@ -23038,7 +23061,7 @@ var AccountGatewayModelTransport = class {
         };
         controller.abort();
       };
-      bounded.once("error", fail);
+      bounded.once("error", fail2);
       bounded.once("end", dispose);
       bounded.once("close", dispose);
       void (0, import_promises.pipeline)(isStream ? response : import_stream.Readable.from([denial]), bounded, {
@@ -23061,7 +23084,7 @@ var AccountGatewayModelTransport = class {
         (error2) => {
           if (terminalCancellation && audit?.hasCompleted() && controller.signal.aborted && signal?.aborted && error2 instanceof Error && "code" in error2 && error2.code === "ECONNRESET")
             return;
-          fail(error2);
+          fail2(error2);
         }
       );
       return {
@@ -23439,7 +23462,7 @@ function failureFact(bytes, ref) {
   }
 }
 function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes) {
-  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const decoder2 = new TextDecoder("utf-8", { fatal: true });
   let line = "";
   let skipLf = false;
   let data = [];
@@ -23475,8 +23498,8 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
     else if (line.startsWith("event:")) event = line.slice(6).replace(/^ /, "");
     line = "";
   }
-  function consume(text) {
-    for (const character of text) {
+  function consume(text2) {
+    for (const character of text2) {
       if (skipLf && character === "\n") {
         skipLf = false;
         continue;
@@ -23504,10 +23527,10 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
           rawLineLastByte = byte;
         }
       }
-      consume(decoder.decode(bytes, { stream: true }));
+      consume(decoder2.decode(bytes, { stream: true }));
     },
     finish() {
-      consume(decoder.decode());
+      consume(decoder2.decode());
       if (line || data.length || !completed) throw new Error();
     }
   };
@@ -23618,8 +23641,8 @@ function canonicalJson(value) {
     return `[${value.map(canonicalJson).join(",")}]`;
   }
   if (typeof value === "object") {
-    const record = value;
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+    const record2 = value;
+    return `{${Object.keys(record2).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record2[key])}`).join(",")}}`;
   }
   throw new Error("context_gateway_canonical_value_invalid");
 }
@@ -24465,7 +24488,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           clearTimeout(timer);
           options.signal?.removeEventListener("abort", onAbort);
         };
-        const fail = (error2) => {
+        const fail2 = (error2) => {
           if (settled) return;
           if (waitForProcessClose) {
             if (!failed) {
@@ -24481,14 +24504,14 @@ ${JSON.stringify(outputSchema)}` : prompt;
         };
         const onAbort = () => {
           terminate();
-          fail(abortError());
+          fail2(abortError());
         };
         const timer = setTimeout(() => {
           logger.warn(
             `Codex CLI timeout (${timeoutMs}ms), killing process and all children`
           );
           terminate();
-          fail(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
+          fail2(new Error(`Codex CLI timed out after ${timeoutMs}ms`));
         }, timeoutMs);
         options.signal?.addEventListener("abort", onAbort, { once: true });
         if (options.signal?.aborted) onAbort();
@@ -24497,7 +24520,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           outputBytes += Buffer.byteLength(chunk);
           if (this.options.accountGateway && outputBytes > ACCOUNT_GATEWAY_BOUNDS.cliOutputBytes) {
             terminate();
-            fail(new Error("account_gateway_cli_output_bound"));
+            fail2(new Error("account_gateway_cli_output_bound"));
             return false;
           }
           return true;
@@ -24512,7 +24535,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         });
         proc.on("error", (err) => {
           if (waitForProcessClose && proc.pid) terminate();
-          fail(err);
+          fail2(err);
         });
         proc.on("close", (code) => {
           if (settled) return;
@@ -25203,9 +25226,9 @@ ${JSON.stringify(outputSchema)}` : prompt;
       const content = this.readRepoFileSync(file);
       if (!content) continue;
       let score = 0;
-      for (const identifier of identifiers) {
-        if (content.includes(identifier))
-          score += this.contextIdentifierWeight(identifier);
+      for (const identifier2 of identifiers) {
+        if (content.includes(identifier2))
+          score += this.contextIdentifierWeight(identifier2);
       }
       if (score > 0) {
         scored.push({ file, score });
@@ -25227,15 +25250,15 @@ ${JSON.stringify(outputSchema)}` : prompt;
         identifiers.add(match2[0]);
       }
     }
-    return [...identifiers].filter((identifier) => identifier.length >= 5).filter((identifier) => !this.isNoisyContextIdentifier(identifier)).slice(0, 40);
+    return [...identifiers].filter((identifier2) => identifier2.length >= 5).filter((identifier2) => !this.isNoisyContextIdentifier(identifier2)).slice(0, 40);
   }
-  contextIdentifierWeight(identifier) {
-    if (identifier.startsWith("Dw")) return 4;
-    if (identifier.startsWith("UpdateChannels.")) return 4;
-    if (/(Config|Repository|Endpoint|Wrapper)$/.test(identifier)) return 3;
+  contextIdentifierWeight(identifier2) {
+    if (identifier2.startsWith("Dw")) return 4;
+    if (identifier2.startsWith("UpdateChannels.")) return 4;
+    if (/(Config|Repository|Endpoint|Wrapper)$/.test(identifier2)) return 3;
     return 1;
   }
-  isNoisyContextIdentifier(identifier) {
+  isNoisyContextIdentifier(identifier2) {
     return [
       "BuildContext",
       "ConsumerWidget",
@@ -25245,7 +25268,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
       "StatefulWidget",
       "StatelessWidget",
       "Widget"
-    ].includes(identifier);
+    ].includes(identifier2);
   }
   findContextCandidateFiles(root, maxDepth) {
     const files = [];
@@ -25654,22 +25677,22 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const visit = (value, depth) => {
       if (depth > 4 || value === null || value === void 0) return;
       if (typeof value === "string") {
-        const text = value.trim();
-        if (!text || seen.has(text)) return;
-        seen.add(text);
-        if (text.startsWith("{") && text.endsWith("}") || text.startsWith("[") && text.endsWith("]")) {
+        const text2 = value.trim();
+        if (!text2 || seen.has(text2)) return;
+        seen.add(text2);
+        if (text2.startsWith("{") && text2.endsWith("}") || text2.startsWith("[") && text2.endsWith("]")) {
           try {
-            visit(JSON.parse(text), depth + 1);
+            visit(JSON.parse(text2), depth + 1);
             return;
           } catch {
           }
         }
-        const nestedValues = this.extractJsonStringFields(text);
+        const nestedValues = this.extractJsonStringFields(text2);
         if (nestedValues.length > 0) {
           nestedValues.forEach((nested) => visit(nested, depth + 1));
           return;
         }
-        messages.push(text);
+        messages.push(text2);
         return;
       }
       if (Array.isArray(value)) {
@@ -25677,7 +25700,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         return;
       }
       if (typeof value === "object") {
-        const record = value;
+        const record2 = value;
         for (const key of [
           "message",
           "error",
@@ -25686,7 +25709,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
           "code",
           "status"
         ]) {
-          if (key in record) visit(record[key], depth + 1);
+          if (key in record2) visit(record2[key], depth + 1);
         }
       }
     };
@@ -26795,6 +26818,2168 @@ var ProviderRegistry = class {
   }
 };
 
+// src/review-skills/review-skills.ts
+var import_node_crypto3 = require("node:crypto");
+
+// node_modules/brace-expansion/node_modules/balanced-match/dist/esm/index.js
+var balanced = (a2, b2, str2) => {
+  const ma2 = a2 instanceof RegExp ? maybeMatch(a2, str2) : a2;
+  const mb = b2 instanceof RegExp ? maybeMatch(b2, str2) : b2;
+  const r2 = ma2 !== null && mb != null && range(ma2, mb, str2);
+  return r2 && {
+    start: r2[0],
+    end: r2[1],
+    pre: str2.slice(0, r2[0]),
+    body: str2.slice(r2[0] + ma2.length, r2[1]),
+    post: str2.slice(r2[1] + mb.length)
+  };
+};
+var maybeMatch = (reg, str2) => {
+  const m2 = str2.match(reg);
+  return m2 ? m2[0] : null;
+};
+var range = (a2, b2, str2) => {
+  let begs, beg, left, right = void 0, result2;
+  let ai = str2.indexOf(a2);
+  let bi = str2.indexOf(b2, ai + 1);
+  let i2 = ai;
+  if (ai >= 0 && bi > 0) {
+    if (a2 === b2) {
+      return [ai, bi];
+    }
+    begs = [];
+    left = str2.length;
+    while (i2 >= 0 && !result2) {
+      if (i2 === ai) {
+        begs.push(i2);
+        ai = str2.indexOf(a2, i2 + 1);
+      } else if (begs.length === 1) {
+        const r2 = begs.pop();
+        if (r2 !== void 0)
+          result2 = [r2, bi];
+      } else {
+        beg = begs.pop();
+        if (beg !== void 0 && beg < left) {
+          left = beg;
+          right = bi;
+        }
+        bi = str2.indexOf(b2, i2 + 1);
+      }
+      i2 = ai < bi && ai >= 0 ? ai : bi;
+    }
+    if (begs.length && right !== void 0) {
+      result2 = [left, right];
+    }
+  }
+  return result2;
+};
+
+// node_modules/brace-expansion/dist/esm/index.js
+var escSlash = "\0SLASH" + Math.random() + "\0";
+var escOpen = "\0OPEN" + Math.random() + "\0";
+var escClose = "\0CLOSE" + Math.random() + "\0";
+var escComma = "\0COMMA" + Math.random() + "\0";
+var escPeriod = "\0PERIOD" + Math.random() + "\0";
+var escSlashPattern = new RegExp(escSlash, "g");
+var escOpenPattern = new RegExp(escOpen, "g");
+var escClosePattern = new RegExp(escClose, "g");
+var escCommaPattern = new RegExp(escComma, "g");
+var escPeriodPattern = new RegExp(escPeriod, "g");
+var slashPattern = /\\\\/g;
+var openPattern = /\\{/g;
+var closePattern = /\\}/g;
+var commaPattern = /\\,/g;
+var periodPattern = /\\\./g;
+var EXPANSION_MAX = 1e5;
+var EXPANSION_MAX_LENGTH = 4e6;
+function numeric(str2) {
+  return !isNaN(str2) ? parseInt(str2, 10) : str2.charCodeAt(0);
+}
+function escapeBraces(str2) {
+  return str2.replace(slashPattern, escSlash).replace(openPattern, escOpen).replace(closePattern, escClose).replace(commaPattern, escComma).replace(periodPattern, escPeriod);
+}
+function unescapeBraces(str2) {
+  return str2.replace(escSlashPattern, "\\").replace(escOpenPattern, "{").replace(escClosePattern, "}").replace(escCommaPattern, ",").replace(escPeriodPattern, ".");
+}
+function parseCommaParts(str2) {
+  if (!str2) {
+    return [""];
+  }
+  const parts = [];
+  const m2 = balanced("{", "}", str2);
+  if (!m2) {
+    return str2.split(",");
+  }
+  const { pre, body, post } = m2;
+  const p2 = pre.split(",");
+  p2[p2.length - 1] += "{" + body + "}";
+  const postParts = parseCommaParts(post);
+  if (post.length) {
+    ;
+    p2[p2.length - 1] += postParts.shift();
+    p2.push.apply(p2, postParts);
+  }
+  parts.push.apply(parts, p2);
+  return parts;
+}
+function expand(str2, options = {}) {
+  if (!str2) {
+    return [];
+  }
+  const { max = EXPANSION_MAX, maxLength = EXPANSION_MAX_LENGTH } = options;
+  if (str2.slice(0, 2) === "{}") {
+    str2 = "\\{\\}" + str2.slice(2);
+  }
+  return expand_(escapeBraces(str2), max, maxLength, true).map(unescapeBraces);
+}
+function embrace(str2) {
+  return "{" + str2 + "}";
+}
+function isPadded(el) {
+  return /^-?0\d/.test(el);
+}
+function lte(i2, y2) {
+  return i2 <= y2;
+}
+function gte(i2, y2) {
+  return i2 >= y2;
+}
+function combine(acc, pre, values, max, maxLength, dropEmpties) {
+  const out = [];
+  let length = 0;
+  for (let a2 = 0; a2 < acc.length; a2++) {
+    for (let v2 = 0; v2 < values.length; v2++) {
+      if (out.length >= max)
+        return out;
+      const expansion = acc[a2] + pre + values[v2];
+      if (dropEmpties && !expansion)
+        continue;
+      if (length + expansion.length > maxLength)
+        return out;
+      out.push(expansion);
+      length += expansion.length;
+    }
+  }
+  return out;
+}
+function expandSequence(body, isAlphaSequence, max, maxLength) {
+  const n2 = body.split(/\.\./);
+  const N2 = [];
+  if (n2[0] === void 0 || n2[1] === void 0) {
+    return N2;
+  }
+  const x2 = numeric(n2[0]);
+  const y2 = numeric(n2[1]);
+  const width = Math.max(n2[0].length, n2[1].length);
+  let incr = n2.length === 3 && n2[2] !== void 0 ? Math.max(Math.abs(numeric(n2[2])), 1) : 1;
+  let test = lte;
+  const reverse = y2 < x2;
+  if (reverse) {
+    incr *= -1;
+    test = gte;
+  }
+  const pad = n2.some(isPadded);
+  let length = 0;
+  for (let i2 = x2; test(i2, y2) && N2.length < max; i2 += incr) {
+    let c2;
+    if (isAlphaSequence) {
+      c2 = String.fromCharCode(i2);
+      if (c2 === "\\") {
+        c2 = "";
+      }
+    } else {
+      c2 = String(i2);
+      if (pad) {
+        const need = width - c2.length;
+        if (need > 0) {
+          const z2 = new Array(need + 1).join("0");
+          if (i2 < 0) {
+            c2 = "-" + z2 + c2.slice(1);
+          } else {
+            c2 = z2 + c2;
+          }
+        }
+      }
+    }
+    if (length + c2.length > maxLength)
+      break;
+    N2.push(c2);
+    length += c2.length;
+  }
+  return N2;
+}
+function expand_(str2, max, maxLength, isTop) {
+  let acc = [""];
+  let dropEmpties = false;
+  let firstGroup = true;
+  for (; ; ) {
+    const m2 = balanced("{", "}", str2);
+    if (!m2) {
+      return combine(acc, str2, [""], max, maxLength, dropEmpties);
+    }
+    const pre = m2.pre;
+    if (/\$$/.test(pre)) {
+      acc = combine(acc, pre + "{" + m2.body + "}", [""], max, maxLength, dropEmpties && !m2.post.length);
+      firstGroup = false;
+      if (!m2.post.length)
+        break;
+      str2 = m2.post;
+      continue;
+    }
+    const isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m2.body);
+    const isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m2.body);
+    const isSequence = isNumericSequence || isAlphaSequence;
+    const isOptions = m2.body.indexOf(",") >= 0;
+    if (!isSequence && !isOptions) {
+      if (m2.post.match(/,(?!,).*\}/)) {
+        str2 = m2.pre + "{" + m2.body + escClose + m2.post;
+        isTop = true;
+        continue;
+      }
+      return combine(acc, pre + "{" + m2.body + "}" + m2.post, [""], max, maxLength, dropEmpties);
+    }
+    if (firstGroup) {
+      dropEmpties = isTop && !isSequence;
+      firstGroup = false;
+    }
+    let values;
+    if (isSequence) {
+      values = expandSequence(m2.body, isAlphaSequence, max, maxLength);
+    } else {
+      let n2 = parseCommaParts(m2.body);
+      if (n2.length === 1 && n2[0] !== void 0) {
+        n2 = expand_(n2[0], max, maxLength, false).map(embrace);
+        if (n2.length === 1) {
+          acc = combine(acc, pre + n2[0], [""], max, maxLength, dropEmpties && !m2.post.length);
+          if (!m2.post.length)
+            break;
+          str2 = m2.post;
+          continue;
+        }
+      }
+      let dropsEmpties = dropEmpties && !m2.post.length && !pre;
+      for (let d2 = 0; dropsEmpties && d2 < acc.length; d2++) {
+        if (acc[d2]) {
+          dropsEmpties = false;
+        }
+      }
+      values = [];
+      let valuesLength = 0;
+      outer: for (let j2 = 0; j2 < n2.length; j2++) {
+        const expanded = expand_(n2[j2], max, maxLength, false);
+        for (let k2 = 0; k2 < expanded.length; k2++) {
+          const v2 = expanded[k2];
+          if (dropsEmpties && !v2)
+            continue;
+          if (values.length >= max || valuesLength + v2.length > maxLength) {
+            break outer;
+          }
+          values.push(v2);
+          valuesLength += v2.length;
+        }
+      }
+    }
+    acc = combine(acc, pre, values, max, maxLength, dropEmpties && !m2.post.length);
+    if (!m2.post.length)
+      break;
+    str2 = m2.post;
+  }
+  return acc;
+}
+
+// node_modules/minimatch/dist/esm/assert-valid-pattern.js
+var MAX_PATTERN_LENGTH = 1024 * 64;
+var assertValidPattern = (pattern) => {
+  if (typeof pattern !== "string") {
+    throw new TypeError("invalid pattern");
+  }
+  if (pattern.length > MAX_PATTERN_LENGTH) {
+    throw new TypeError("pattern is too long");
+  }
+};
+
+// node_modules/minimatch/dist/esm/brace-expressions.js
+var posixClasses = {
+  "[:alnum:]": ["\\p{L}\\p{Nl}\\p{Nd}", true],
+  "[:alpha:]": ["\\p{L}\\p{Nl}", true],
+  "[:ascii:]": ["\\x00-\\x7f", false],
+  "[:blank:]": ["\\p{Zs}\\t", true],
+  "[:cntrl:]": ["\\p{Cc}", true],
+  "[:digit:]": ["\\p{Nd}", true],
+  "[:graph:]": ["\\p{Z}\\p{C}", true, true],
+  "[:lower:]": ["\\p{Ll}", true],
+  "[:print:]": ["\\p{C}", true],
+  "[:punct:]": ["\\p{P}", true],
+  "[:space:]": ["\\p{Z}\\t\\r\\n\\v\\f", true],
+  "[:upper:]": ["\\p{Lu}", true],
+  "[:word:]": ["\\p{L}\\p{Nl}\\p{Nd}\\p{Pc}", true],
+  "[:xdigit:]": ["A-Fa-f0-9", false]
+};
+var braceEscape = (s2) => s2.replace(/[[\]\\-]/g, "\\$&");
+var regexpEscape = (s2) => s2.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+var rangesToString = (ranges) => ranges.join("");
+var parseClass = (glob, position) => {
+  const pos = position;
+  if (glob.charAt(pos) !== "[") {
+    throw new Error("not in a brace expression");
+  }
+  const ranges = [];
+  const negs = [];
+  let i2 = pos + 1;
+  let sawStart = false;
+  let uflag = false;
+  let escaping = false;
+  let negate = false;
+  let endPos = pos;
+  let rangeStart = "";
+  WHILE: while (i2 < glob.length) {
+    const c2 = glob.charAt(i2);
+    if ((c2 === "!" || c2 === "^") && i2 === pos + 1) {
+      negate = true;
+      i2++;
+      continue;
+    }
+    if (c2 === "]" && sawStart && !escaping) {
+      endPos = i2 + 1;
+      break;
+    }
+    sawStart = true;
+    if (c2 === "\\") {
+      if (!escaping) {
+        escaping = true;
+        i2++;
+        continue;
+      }
+    }
+    if (c2 === "[" && !escaping) {
+      for (const [cls, [unip, u2, neg]] of Object.entries(posixClasses)) {
+        if (glob.startsWith(cls, i2)) {
+          if (rangeStart) {
+            return ["$.", false, glob.length - pos, true];
+          }
+          i2 += cls.length;
+          if (neg)
+            negs.push(unip);
+          else
+            ranges.push(unip);
+          uflag = uflag || u2;
+          continue WHILE;
+        }
+      }
+    }
+    escaping = false;
+    if (rangeStart) {
+      if (c2 > rangeStart) {
+        ranges.push(braceEscape(rangeStart) + "-" + braceEscape(c2));
+      } else if (c2 === rangeStart) {
+        ranges.push(braceEscape(c2));
+      }
+      rangeStart = "";
+      i2++;
+      continue;
+    }
+    if (glob.startsWith("-]", i2 + 1)) {
+      ranges.push(braceEscape(c2 + "-"));
+      i2 += 2;
+      continue;
+    }
+    if (glob.startsWith("-", i2 + 1)) {
+      rangeStart = c2;
+      i2 += 2;
+      continue;
+    }
+    ranges.push(braceEscape(c2));
+    i2++;
+  }
+  if (endPos < i2) {
+    return ["", false, 0, false];
+  }
+  if (!ranges.length && !negs.length) {
+    return ["$.", false, glob.length - pos, true];
+  }
+  if (negs.length === 0 && ranges.length === 1 && /^\\?.$/.test(ranges[0]) && !negate) {
+    const r2 = ranges[0].length === 2 ? ranges[0].slice(-1) : ranges[0];
+    return [regexpEscape(r2), false, endPos - pos, false];
+  }
+  const sranges = "[" + (negate ? "^" : "") + rangesToString(ranges) + "]";
+  const snegs = "[" + (negate ? "" : "^") + rangesToString(negs) + "]";
+  const comb = ranges.length && negs.length ? "(" + sranges + "|" + snegs + ")" : ranges.length ? sranges : snegs;
+  return [comb, uflag, endPos - pos, true];
+};
+
+// node_modules/minimatch/dist/esm/unescape.js
+var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}) => {
+  if (magicalBraces) {
+    return windowsPathsNoEscape ? s2.replace(/\[([^/\\])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\])\]/g, "$1$2").replace(/\\([^/])/g, "$1");
+  }
+  return windowsPathsNoEscape ? s2.replace(/\[([^/\\{}])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\{}])\]/g, "$1$2").replace(/\\([^/{}])/g, "$1");
+};
+
+// node_modules/minimatch/dist/esm/ast.js
+var _a;
+var types2 = /* @__PURE__ */ new Set(["!", "?", "+", "*", "@"]);
+var isExtglobType = (c2) => types2.has(c2);
+var isExtglobAST = (c2) => isExtglobType(c2.type);
+var adoptionMap = /* @__PURE__ */ new Map([
+  ["!", ["@"]],
+  ["?", ["?", "@"]],
+  ["@", ["@"]],
+  ["*", ["*", "+", "?", "@"]],
+  ["+", ["+", "@"]]
+]);
+var adoptionWithSpaceMap = /* @__PURE__ */ new Map([
+  ["!", ["?"]],
+  ["@", ["?"]],
+  ["+", ["?", "*"]]
+]);
+var adoptionAnyMap = /* @__PURE__ */ new Map([
+  ["!", ["?", "@"]],
+  ["?", ["?", "@"]],
+  ["@", ["?", "@"]],
+  ["*", ["*", "+", "?", "@"]],
+  ["+", ["+", "@", "?", "*"]]
+]);
+var usurpMap = /* @__PURE__ */ new Map([
+  ["!", /* @__PURE__ */ new Map([["!", "@"]])],
+  [
+    "?",
+    /* @__PURE__ */ new Map([
+      ["*", "*"],
+      ["+", "*"]
+    ])
+  ],
+  [
+    "@",
+    /* @__PURE__ */ new Map([
+      ["!", "!"],
+      ["?", "?"],
+      ["@", "@"],
+      ["*", "*"],
+      ["+", "+"]
+    ])
+  ],
+  [
+    "+",
+    /* @__PURE__ */ new Map([
+      ["?", "*"],
+      ["*", "*"]
+    ])
+  ]
+]);
+var startNoTraversal = "(?!(?:^|/)\\.\\.?(?:$|/))";
+var startNoDot = "(?!\\.)";
+var addPatternStart = /* @__PURE__ */ new Set(["[", "."]);
+var justDots = /* @__PURE__ */ new Set(["..", "."]);
+var reSpecials = new Set("().*{}+?[]^$\\!");
+var regExpEscape = (s2) => s2.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+var qmark = "[^/]";
+var star = qmark + "*?";
+var starNoEmpty = qmark + "+?";
+var ID = 0;
+var AST = class {
+  type;
+  #root;
+  #hasMagic;
+  #uflag = false;
+  #parts = [];
+  #parent;
+  #parentIndex;
+  #negs;
+  #filledNegs = false;
+  #options;
+  #toString;
+  // set to true if it's an extglob with no children
+  // (which really means one child of '')
+  #emptyExt = false;
+  id = ++ID;
+  get depth() {
+    return (this.#parent?.depth ?? -1) + 1;
+  }
+  [Symbol.for("nodejs.util.inspect.custom")]() {
+    return {
+      "@@type": "AST",
+      id: this.id,
+      type: this.type,
+      root: this.#root.id,
+      parent: this.#parent?.id,
+      depth: this.depth,
+      partsLength: this.#parts.length,
+      parts: this.#parts
+    };
+  }
+  constructor(type2, parent, options = {}) {
+    this.type = type2;
+    if (type2)
+      this.#hasMagic = true;
+    this.#parent = parent;
+    this.#root = this.#parent ? this.#parent.#root : this;
+    this.#options = this.#root === this ? options : this.#root.#options;
+    this.#negs = this.#root === this ? [] : this.#root.#negs;
+    if (type2 === "!" && !this.#root.#filledNegs)
+      this.#negs.push(this);
+    this.#parentIndex = this.#parent ? this.#parent.#parts.length : 0;
+  }
+  get hasMagic() {
+    if (this.#hasMagic !== void 0)
+      return this.#hasMagic;
+    for (const p2 of this.#parts) {
+      if (typeof p2 === "string")
+        continue;
+      if (p2.type || p2.hasMagic)
+        return this.#hasMagic = true;
+    }
+    return this.#hasMagic;
+  }
+  // reconstructs the pattern
+  toString() {
+    return this.#toString !== void 0 ? this.#toString : !this.type ? this.#toString = this.#parts.map((p2) => String(p2)).join("") : this.#toString = this.type + "(" + this.#parts.map((p2) => String(p2)).join("|") + ")";
+  }
+  #fillNegs() {
+    if (this !== this.#root)
+      throw new Error("should only call on root");
+    if (this.#filledNegs)
+      return this;
+    this.toString();
+    this.#filledNegs = true;
+    let n2;
+    while (n2 = this.#negs.pop()) {
+      if (n2.type !== "!")
+        continue;
+      let p2 = n2;
+      let pp = p2.#parent;
+      while (pp) {
+        for (let i2 = p2.#parentIndex + 1; !pp.type && i2 < pp.#parts.length; i2++) {
+          for (const part of n2.#parts) {
+            if (typeof part === "string") {
+              throw new Error("string part in extglob AST??");
+            }
+            part.copyIn(pp.#parts[i2]);
+          }
+        }
+        p2 = pp;
+        pp = p2.#parent;
+      }
+    }
+    return this;
+  }
+  push(...parts) {
+    for (const p2 of parts) {
+      if (p2 === "")
+        continue;
+      if (typeof p2 !== "string" && !(p2 instanceof _a && p2.#parent === this)) {
+        throw new Error("invalid part: " + p2);
+      }
+      this.#parts.push(p2);
+    }
+  }
+  toJSON() {
+    const ret = this.type === null ? this.#parts.slice().map((p2) => typeof p2 === "string" ? p2 : p2.toJSON()) : [this.type, ...this.#parts.map((p2) => p2.toJSON())];
+    if (this.isStart() && !this.type)
+      ret.unshift([]);
+    if (this.isEnd() && (this === this.#root || this.#root.#filledNegs && this.#parent?.type === "!")) {
+      ret.push({});
+    }
+    return ret;
+  }
+  isStart() {
+    if (this.#root === this)
+      return true;
+    if (!this.#parent?.isStart())
+      return false;
+    if (this.#parentIndex === 0)
+      return true;
+    const p2 = this.#parent;
+    for (let i2 = 0; i2 < this.#parentIndex; i2++) {
+      const pp = p2.#parts[i2];
+      if (!(pp instanceof _a && pp.type === "!")) {
+        return false;
+      }
+    }
+    return true;
+  }
+  isEnd() {
+    if (this.#root === this)
+      return true;
+    if (this.#parent?.type === "!")
+      return true;
+    if (!this.#parent?.isEnd())
+      return false;
+    if (!this.type)
+      return this.#parent?.isEnd();
+    const pl = this.#parent ? this.#parent.#parts.length : 0;
+    return this.#parentIndex === pl - 1;
+  }
+  copyIn(part) {
+    if (typeof part === "string")
+      this.push(part);
+    else
+      this.push(part.clone(this));
+  }
+  clone(parent) {
+    const c2 = new _a(this.type, parent);
+    for (const p2 of this.#parts) {
+      c2.copyIn(p2);
+    }
+    return c2;
+  }
+  static #parseAST(str2, ast, pos, opt, extDepth) {
+    const maxDepth = opt.maxExtglobRecursion ?? 2;
+    let escaping = false;
+    let inBrace = false;
+    let braceStart = -1;
+    let braceNeg = false;
+    if (ast.type === null) {
+      let i3 = pos;
+      let acc2 = "";
+      while (i3 < str2.length) {
+        const c2 = str2.charAt(i3++);
+        if (escaping || c2 === "\\") {
+          escaping = !escaping;
+          acc2 += c2;
+          continue;
+        }
+        if (inBrace) {
+          if (i3 === braceStart + 1) {
+            if (c2 === "^" || c2 === "!") {
+              braceNeg = true;
+            }
+          } else if (c2 === "]" && !(i3 === braceStart + 2 && braceNeg)) {
+            inBrace = false;
+          }
+          acc2 += c2;
+          continue;
+        } else if (c2 === "[") {
+          inBrace = true;
+          braceStart = i3;
+          braceNeg = false;
+          acc2 += c2;
+          continue;
+        }
+        const doRecurse = !opt.noext && isExtglobType(c2) && str2.charAt(i3) === "(" && extDepth <= maxDepth;
+        if (doRecurse) {
+          ast.push(acc2);
+          acc2 = "";
+          const ext2 = new _a(c2, ast);
+          i3 = _a.#parseAST(str2, ext2, i3, opt, extDepth + 1);
+          ast.push(ext2);
+          continue;
+        }
+        acc2 += c2;
+      }
+      ast.push(acc2);
+      return i3;
+    }
+    let i2 = pos + 1;
+    let part = new _a(null, ast);
+    const parts = [];
+    let acc = "";
+    while (i2 < str2.length) {
+      const c2 = str2.charAt(i2++);
+      if (escaping || c2 === "\\") {
+        escaping = !escaping;
+        acc += c2;
+        continue;
+      }
+      if (inBrace) {
+        if (i2 === braceStart + 1) {
+          if (c2 === "^" || c2 === "!") {
+            braceNeg = true;
+          }
+        } else if (c2 === "]" && !(i2 === braceStart + 2 && braceNeg)) {
+          inBrace = false;
+        }
+        acc += c2;
+        continue;
+      } else if (c2 === "[") {
+        inBrace = true;
+        braceStart = i2;
+        braceNeg = false;
+        acc += c2;
+        continue;
+      }
+      const doRecurse = !opt.noext && isExtglobType(c2) && str2.charAt(i2) === "(" && /* c8 ignore start - the maxDepth is sufficient here */
+      (extDepth <= maxDepth || ast && ast.#canAdoptType(c2));
+      if (doRecurse) {
+        const depthAdd = ast && ast.#canAdoptType(c2) ? 0 : 1;
+        part.push(acc);
+        acc = "";
+        const ext2 = new _a(c2, part);
+        part.push(ext2);
+        i2 = _a.#parseAST(str2, ext2, i2, opt, extDepth + depthAdd);
+        continue;
+      }
+      if (c2 === "|") {
+        part.push(acc);
+        acc = "";
+        parts.push(part);
+        part = new _a(null, ast);
+        continue;
+      }
+      if (c2 === ")") {
+        if (acc === "" && ast.#parts.length === 0) {
+          ast.#emptyExt = true;
+        }
+        part.push(acc);
+        acc = "";
+        ast.push(...parts, part);
+        return i2;
+      }
+      acc += c2;
+    }
+    ast.type = null;
+    ast.#hasMagic = void 0;
+    ast.#parts = [str2.substring(pos - 1)];
+    return i2;
+  }
+  #canAdoptWithSpace(child) {
+    return this.#canAdopt(child, adoptionWithSpaceMap);
+  }
+  #canAdopt(child, map2 = adoptionMap) {
+    if (!child || typeof child !== "object" || child.type !== null || child.#parts.length !== 1 || this.type === null) {
+      return false;
+    }
+    const gc = child.#parts[0];
+    if (!gc || typeof gc !== "object" || gc.type === null) {
+      return false;
+    }
+    return this.#canAdoptType(gc.type, map2);
+  }
+  #canAdoptType(c2, map2 = adoptionAnyMap) {
+    return !!map2.get(this.type)?.includes(c2);
+  }
+  #adoptWithSpace(child, index) {
+    const gc = child.#parts[0];
+    const blank = new _a(null, gc, this.options);
+    blank.#parts.push("");
+    gc.push(blank);
+    this.#adopt(child, index);
+  }
+  #adopt(child, index) {
+    const gc = child.#parts[0];
+    this.#parts.splice(index, 1, ...gc.#parts);
+    for (const p2 of gc.#parts) {
+      if (typeof p2 === "object")
+        p2.#parent = this;
+    }
+    this.#toString = void 0;
+  }
+  #canUsurpType(c2) {
+    const m2 = usurpMap.get(this.type);
+    return !!m2?.has(c2);
+  }
+  #canUsurp(child) {
+    if (!child || typeof child !== "object" || child.type !== null || child.#parts.length !== 1 || this.type === null || this.#parts.length !== 1) {
+      return false;
+    }
+    const gc = child.#parts[0];
+    if (!gc || typeof gc !== "object" || gc.type === null) {
+      return false;
+    }
+    return this.#canUsurpType(gc.type);
+  }
+  #usurp(child) {
+    const m2 = usurpMap.get(this.type);
+    const gc = child.#parts[0];
+    const nt2 = m2?.get(gc.type);
+    if (!nt2)
+      return false;
+    this.#parts = gc.#parts;
+    for (const p2 of this.#parts) {
+      if (typeof p2 === "object") {
+        p2.#parent = this;
+      }
+    }
+    this.type = nt2;
+    this.#toString = void 0;
+    this.#emptyExt = false;
+  }
+  static fromGlob(pattern, options = {}) {
+    const ast = new _a(null, void 0, options);
+    _a.#parseAST(pattern, ast, 0, options, 0);
+    return ast;
+  }
+  // returns the regular expression if there's magic, or the unescaped
+  // string if not.
+  toMMPattern() {
+    if (this !== this.#root)
+      return this.#root.toMMPattern();
+    const glob = this.toString();
+    const [re2, body, hasMagic, uflag] = this.toRegExpSource();
+    const anyMagic = hasMagic || this.#hasMagic || this.#options.nocase && !this.#options.nocaseMagicOnly && glob.toUpperCase() !== glob.toLowerCase();
+    if (!anyMagic) {
+      return body;
+    }
+    const flags = (this.#options.nocase ? "i" : "") + (uflag ? "u" : "");
+    return Object.assign(new RegExp(`^${re2}$`, flags), {
+      _src: re2,
+      _glob: glob
+    });
+  }
+  get options() {
+    return this.#options;
+  }
+  // returns the string match, the regexp source, whether there's magic
+  // in the regexp (so a regular expression is required) and whether or
+  // not the uflag is needed for the regular expression (for posix classes)
+  // TODO: instead of injecting the start/end at this point, just return
+  // the BODY of the regexp, along with the start/end portions suitable
+  // for binding the start/end in either a joined full-path makeRe context
+  // (where we bind to (^|/), or a standalone matchPart context (where
+  // we bind to ^, and not /).  Otherwise slashes get duped!
+  //
+  // In part-matching mode, the start is:
+  // - if not isStart: nothing
+  // - if traversal possible, but not allowed: ^(?!\.\.?$)
+  // - if dots allowed or not possible: ^
+  // - if dots possible and not allowed: ^(?!\.)
+  // end is:
+  // - if not isEnd(): nothing
+  // - else: $
+  //
+  // In full-path matching mode, we put the slash at the START of the
+  // pattern, so start is:
+  // - if first pattern: same as part-matching mode
+  // - if not isStart(): nothing
+  // - if traversal possible, but not allowed: /(?!\.\.?(?:$|/))
+  // - if dots allowed or not possible: /
+  // - if dots possible and not allowed: /(?!\.)
+  // end is:
+  // - if last pattern, same as part-matching mode
+  // - else nothing
+  //
+  // Always put the (?:$|/) on negated tails, though, because that has to be
+  // there to bind the end of the negated pattern portion, and it's easier to
+  // just stick it in now rather than try to inject it later in the middle of
+  // the pattern.
+  //
+  // We can just always return the same end, and leave it up to the caller
+  // to know whether it's going to be used joined or in parts.
+  // And, if the start is adjusted slightly, can do the same there:
+  // - if not isStart: nothing
+  // - if traversal possible, but not allowed: (?:/|^)(?!\.\.?$)
+  // - if dots allowed or not possible: (?:/|^)
+  // - if dots possible and not allowed: (?:/|^)(?!\.)
+  //
+  // But it's better to have a simpler binding without a conditional, for
+  // performance, so probably better to return both start options.
+  //
+  // Then the caller just ignores the end if it's not the first pattern,
+  // and the start always gets applied.
+  //
+  // But that's always going to be $ if it's the ending pattern, or nothing,
+  // so the caller can just attach $ at the end of the pattern when building.
+  //
+  // So the todo is:
+  // - better detect what kind of start is needed
+  // - return both flavors of starting pattern
+  // - attach $ at the end of the pattern when creating the actual RegExp
+  //
+  // Ah, but wait, no, that all only applies to the root when the first pattern
+  // is not an extglob. If the first pattern IS an extglob, then we need all
+  // that dot prevention biz to live in the extglob portions, because eg
+  // +(*|.x*) can match .xy but not .yx.
+  //
+  // So, return the two flavors if it's #root and the first child is not an
+  // AST, otherwise leave it to the child AST to handle it, and there,
+  // use the (?:^|/) style of start binding.
+  //
+  // Even simplified further:
+  // - Since the start for a join is eg /(?!\.) and the start for a part
+  // is ^(?!\.), we can just prepend (?!\.) to the pattern (either root
+  // or start or whatever) and prepend ^ or / at the Regexp construction.
+  toRegExpSource(allowDot) {
+    const dot = allowDot ?? !!this.#options.dot;
+    if (this.#root === this) {
+      this.#flatten();
+      this.#fillNegs();
+    }
+    if (!isExtglobAST(this)) {
+      const noEmpty = this.isStart() && this.isEnd() && !this.#parts.some((s2) => typeof s2 !== "string");
+      const src = this.#parts.map((p2) => {
+        const [re2, _2, hasMagic, uflag] = typeof p2 === "string" ? _a.#parseGlob(p2, this.#hasMagic, noEmpty) : p2.toRegExpSource(allowDot);
+        this.#hasMagic = this.#hasMagic || hasMagic;
+        this.#uflag = this.#uflag || uflag;
+        return re2;
+      }).join("");
+      let start2 = "";
+      if (this.isStart()) {
+        if (typeof this.#parts[0] === "string") {
+          const dotTravAllowed = this.#parts.length === 1 && justDots.has(this.#parts[0]);
+          if (!dotTravAllowed) {
+            const aps = addPatternStart;
+            const needNoTrav = (
+              // dots are allowed, and the pattern starts with [ or .
+              dot && aps.has(src.charAt(0)) || // the pattern starts with \., and then [ or .
+              src.startsWith("\\.") && aps.has(src.charAt(2)) || // the pattern starts with \.\., and then [ or .
+              src.startsWith("\\.\\.") && aps.has(src.charAt(4))
+            );
+            const needNoDot = !dot && !allowDot && aps.has(src.charAt(0));
+            start2 = needNoTrav ? startNoTraversal : needNoDot ? startNoDot : "";
+          }
+        }
+      }
+      let end = "";
+      if (this.isEnd() && this.#root.#filledNegs && this.#parent?.type === "!") {
+        end = "(?:$|\\/)";
+      }
+      const final2 = start2 + src + end;
+      return [
+        final2,
+        unescape2(src),
+        this.#hasMagic = !!this.#hasMagic,
+        this.#uflag
+      ];
+    }
+    const repeated = this.type === "*" || this.type === "+";
+    const start = this.type === "!" ? "(?:(?!(?:" : "(?:";
+    let body = this.#partsToRegExp(dot);
+    if (this.isStart() && this.isEnd() && !body && this.type !== "!") {
+      const s2 = this.toString();
+      const me2 = this;
+      me2.#parts = [s2];
+      me2.type = null;
+      me2.#hasMagic = void 0;
+      return [s2, unescape2(this.toString()), false, false];
+    }
+    let bodyDotAllowed = !repeated || allowDot || dot || !startNoDot ? "" : this.#partsToRegExp(true);
+    if (bodyDotAllowed === body) {
+      bodyDotAllowed = "";
+    }
+    if (bodyDotAllowed) {
+      body = `(?:${body})(?:${bodyDotAllowed})*?`;
+    }
+    let final = "";
+    if (this.type === "!" && this.#emptyExt) {
+      final = (this.isStart() && !dot ? startNoDot : "") + starNoEmpty;
+    } else {
+      const close = this.type === "!" ? (
+        // !() must match something,but !(x) can match ''
+        "))" + (this.isStart() && !dot && !allowDot ? startNoDot : "") + star + ")"
+      ) : this.type === "@" ? ")" : this.type === "?" ? ")?" : this.type === "+" && bodyDotAllowed ? ")" : this.type === "*" && bodyDotAllowed ? `)?` : `)${this.type}`;
+      final = start + body + close;
+    }
+    return [
+      final,
+      unescape2(body),
+      this.#hasMagic = !!this.#hasMagic,
+      this.#uflag
+    ];
+  }
+  #flatten() {
+    if (!isExtglobAST(this)) {
+      for (const p2 of this.#parts) {
+        if (typeof p2 === "object") {
+          p2.#flatten();
+        }
+      }
+    } else {
+      let iterations = 0;
+      let done = false;
+      do {
+        done = true;
+        for (let i2 = 0; i2 < this.#parts.length; i2++) {
+          const c2 = this.#parts[i2];
+          if (typeof c2 === "object") {
+            c2.#flatten();
+            if (this.#canAdopt(c2)) {
+              done = false;
+              this.#adopt(c2, i2);
+            } else if (this.#canAdoptWithSpace(c2)) {
+              done = false;
+              this.#adoptWithSpace(c2, i2);
+            } else if (this.#canUsurp(c2)) {
+              done = false;
+              this.#usurp(c2);
+            }
+          }
+        }
+      } while (!done && ++iterations < 10);
+    }
+    this.#toString = void 0;
+  }
+  #partsToRegExp(dot) {
+    return this.#parts.map((p2) => {
+      if (typeof p2 === "string") {
+        throw new Error("string type in extglob ast??");
+      }
+      const [re2, _2, _hasMagic, uflag] = p2.toRegExpSource(dot);
+      this.#uflag = this.#uflag || uflag;
+      return re2;
+    }).filter((p2) => !(this.isStart() && this.isEnd()) || !!p2).join("|");
+  }
+  static #parseGlob(glob, hasMagic, noEmpty = false) {
+    let escaping = false;
+    let re2 = "";
+    let uflag = false;
+    let inStar = false;
+    for (let i2 = 0; i2 < glob.length; i2++) {
+      const c2 = glob.charAt(i2);
+      if (escaping) {
+        escaping = false;
+        re2 += (reSpecials.has(c2) ? "\\" : "") + c2;
+        continue;
+      }
+      if (c2 === "*") {
+        if (inStar)
+          continue;
+        inStar = true;
+        re2 += noEmpty && /^[*]+$/.test(glob) ? starNoEmpty : star;
+        hasMagic = true;
+        continue;
+      } else {
+        inStar = false;
+      }
+      if (c2 === "\\") {
+        if (i2 === glob.length - 1) {
+          re2 += "\\\\";
+        } else {
+          escaping = true;
+        }
+        continue;
+      }
+      if (c2 === "[") {
+        const [src, needUflag, consumed, magic] = parseClass(glob, i2);
+        if (consumed) {
+          re2 += src;
+          uflag = uflag || needUflag;
+          i2 += consumed - 1;
+          hasMagic = hasMagic || magic;
+          continue;
+        }
+      }
+      if (c2 === "?") {
+        re2 += qmark;
+        hasMagic = true;
+        continue;
+      }
+      re2 += regExpEscape(c2);
+    }
+    return [re2, unescape2(glob), !!hasMagic, uflag];
+  }
+};
+_a = AST;
+
+// node_modules/minimatch/dist/esm/escape.js
+var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {}) => {
+  if (magicalBraces) {
+    return windowsPathsNoEscape ? s2.replace(/[?*()[\]{}]/g, "[$&]") : s2.replace(/[?*()[\]\\{}]/g, "\\$&");
+  }
+  return windowsPathsNoEscape ? s2.replace(/[?*()[\]]/g, "[$&]") : s2.replace(/[?*()[\]\\]/g, "\\$&");
+};
+
+// node_modules/minimatch/dist/esm/index.js
+var minimatch = (p2, pattern, options = {}) => {
+  assertValidPattern(pattern);
+  if (!options.nocomment && pattern.charAt(0) === "#") {
+    return false;
+  }
+  return new Minimatch(pattern, options).match(p2);
+};
+var starDotExtRE = /^\*+([^+@!?*[(]*)$/;
+var starDotExtTest = (ext2) => (f2) => !f2.startsWith(".") && f2.endsWith(ext2);
+var starDotExtTestDot = (ext2) => (f2) => f2.endsWith(ext2);
+var starDotExtTestNocase = (ext2) => {
+  ext2 = ext2.toLowerCase();
+  return (f2) => !f2.startsWith(".") && f2.toLowerCase().endsWith(ext2);
+};
+var starDotExtTestNocaseDot = (ext2) => {
+  ext2 = ext2.toLowerCase();
+  return (f2) => f2.toLowerCase().endsWith(ext2);
+};
+var starDotStarRE = /^\*+\.\*+$/;
+var starDotStarTest = (f2) => !f2.startsWith(".") && f2.includes(".");
+var starDotStarTestDot = (f2) => f2 !== "." && f2 !== ".." && f2.includes(".");
+var dotStarRE = /^\.\*+$/;
+var dotStarTest = (f2) => f2 !== "." && f2 !== ".." && f2.startsWith(".");
+var starRE = /^\*+$/;
+var starTest = (f2) => f2.length !== 0 && !f2.startsWith(".");
+var starTestDot = (f2) => f2.length !== 0 && f2 !== "." && f2 !== "..";
+var qmarksRE = /^\?+([^+@!?*[(]*)?$/;
+var qmarksTestNocase = ([$0, ext2 = ""]) => {
+  const noext = qmarksTestNoExt([$0]);
+  if (!ext2)
+    return noext;
+  ext2 = ext2.toLowerCase();
+  return (f2) => noext(f2) && f2.toLowerCase().endsWith(ext2);
+};
+var qmarksTestNocaseDot = ([$0, ext2 = ""]) => {
+  const noext = qmarksTestNoExtDot([$0]);
+  if (!ext2)
+    return noext;
+  ext2 = ext2.toLowerCase();
+  return (f2) => noext(f2) && f2.toLowerCase().endsWith(ext2);
+};
+var qmarksTestDot = ([$0, ext2 = ""]) => {
+  const noext = qmarksTestNoExtDot([$0]);
+  return !ext2 ? noext : (f2) => noext(f2) && f2.endsWith(ext2);
+};
+var qmarksTest = ([$0, ext2 = ""]) => {
+  const noext = qmarksTestNoExt([$0]);
+  return !ext2 ? noext : (f2) => noext(f2) && f2.endsWith(ext2);
+};
+var qmarksTestNoExt = ([$0]) => {
+  const len = $0.length;
+  return (f2) => f2.length === len && !f2.startsWith(".");
+};
+var qmarksTestNoExtDot = ([$0]) => {
+  const len = $0.length;
+  return (f2) => f2.length === len && f2 !== "." && f2 !== "..";
+};
+var defaultPlatform = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
+var path9 = {
+  win32: { sep: "\\" },
+  posix: { sep: "/" }
+};
+var sep3 = defaultPlatform === "win32" ? path9.win32.sep : path9.posix.sep;
+minimatch.sep = sep3;
+var GLOBSTAR = Symbol("globstar **");
+minimatch.GLOBSTAR = GLOBSTAR;
+var qmark2 = "[^/]";
+var star2 = qmark2 + "*?";
+var twoStarDot = "(?:(?!(?:\\/|^)(?:\\.{1,2})($|\\/)).)*?";
+var twoStarNoDot = "(?:(?!(?:\\/|^)\\.).)*?";
+var filter = (pattern, options = {}) => (p2) => minimatch(p2, pattern, options);
+minimatch.filter = filter;
+var ext = (a2, b2 = {}) => Object.assign({}, a2, b2);
+var defaults = (def) => {
+  if (!def || typeof def !== "object" || !Object.keys(def).length) {
+    return minimatch;
+  }
+  const orig = minimatch;
+  const m2 = (p2, pattern, options = {}) => orig(p2, pattern, ext(def, options));
+  return Object.assign(m2, {
+    Minimatch: class Minimatch extends orig.Minimatch {
+      constructor(pattern, options = {}) {
+        super(pattern, ext(def, options));
+      }
+      static defaults(options) {
+        return orig.defaults(ext(def, options)).Minimatch;
+      }
+    },
+    AST: class AST extends orig.AST {
+      /* c8 ignore start */
+      constructor(type2, parent, options = {}) {
+        super(type2, parent, ext(def, options));
+      }
+      /* c8 ignore stop */
+      static fromGlob(pattern, options = {}) {
+        return orig.AST.fromGlob(pattern, ext(def, options));
+      }
+    },
+    unescape: (s2, options = {}) => orig.unescape(s2, ext(def, options)),
+    escape: (s2, options = {}) => orig.escape(s2, ext(def, options)),
+    filter: (pattern, options = {}) => orig.filter(pattern, ext(def, options)),
+    defaults: (options) => orig.defaults(ext(def, options)),
+    makeRe: (pattern, options = {}) => orig.makeRe(pattern, ext(def, options)),
+    braceExpand: (pattern, options = {}) => orig.braceExpand(pattern, ext(def, options)),
+    match: (list, pattern, options = {}) => orig.match(list, pattern, ext(def, options)),
+    sep: orig.sep,
+    GLOBSTAR
+  });
+};
+minimatch.defaults = defaults;
+var braceExpand = (pattern, options = {}) => {
+  assertValidPattern(pattern);
+  if (options.nobrace || !/\{(?:(?!\{).)*\}/.test(pattern)) {
+    return [pattern];
+  }
+  return expand(pattern, { max: options.braceExpandMax });
+};
+minimatch.braceExpand = braceExpand;
+var makeRe = (pattern, options = {}) => new Minimatch(pattern, options).makeRe();
+minimatch.makeRe = makeRe;
+var match = (list, pattern, options = {}) => {
+  const mm = new Minimatch(pattern, options);
+  list = list.filter((f2) => mm.match(f2));
+  if (mm.options.nonull && !list.length) {
+    list.push(pattern);
+  }
+  return list;
+};
+minimatch.match = match;
+var globMagic = /[?*]|[+@!]\(.*?\)|\[|\]/;
+var regExpEscape2 = (s2) => s2.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+var Minimatch = class {
+  options;
+  set;
+  pattern;
+  windowsPathsNoEscape;
+  nonegate;
+  negate;
+  comment;
+  empty;
+  preserveMultipleSlashes;
+  partial;
+  globSet;
+  globParts;
+  nocase;
+  isWindows;
+  platform;
+  windowsNoMagicRoot;
+  maxGlobstarRecursion;
+  regexp;
+  constructor(pattern, options = {}) {
+    assertValidPattern(pattern);
+    options = options || {};
+    this.options = options;
+    this.maxGlobstarRecursion = options.maxGlobstarRecursion ?? 200;
+    this.pattern = pattern;
+    this.platform = options.platform || defaultPlatform;
+    this.isWindows = this.platform === "win32";
+    const awe = "allowWindowsEscape";
+    this.windowsPathsNoEscape = !!options.windowsPathsNoEscape || options[awe] === false;
+    if (this.windowsPathsNoEscape) {
+      this.pattern = this.pattern.replace(/\\/g, "/");
+    }
+    this.preserveMultipleSlashes = !!options.preserveMultipleSlashes;
+    this.regexp = null;
+    this.negate = false;
+    this.nonegate = !!options.nonegate;
+    this.comment = false;
+    this.empty = false;
+    this.partial = !!options.partial;
+    this.nocase = !!this.options.nocase;
+    this.windowsNoMagicRoot = options.windowsNoMagicRoot !== void 0 ? options.windowsNoMagicRoot : !!(this.isWindows && this.nocase);
+    this.globSet = [];
+    this.globParts = [];
+    this.set = [];
+    this.make();
+  }
+  hasMagic() {
+    if (this.options.magicalBraces && this.set.length > 1) {
+      return true;
+    }
+    for (const pattern of this.set) {
+      for (const part of pattern) {
+        if (typeof part !== "string")
+          return true;
+      }
+    }
+    return false;
+  }
+  debug(..._2) {
+  }
+  make() {
+    const pattern = this.pattern;
+    const options = this.options;
+    if (!options.nocomment && pattern.charAt(0) === "#") {
+      this.comment = true;
+      return;
+    }
+    if (!pattern) {
+      this.empty = true;
+      return;
+    }
+    this.parseNegate();
+    this.globSet = [...new Set(this.braceExpand())];
+    if (options.debug) {
+      this.debug = (...args) => console.error(...args);
+    }
+    this.debug(this.pattern, this.globSet);
+    const rawGlobParts = this.globSet.map((s2) => this.slashSplit(s2));
+    this.globParts = this.preprocess(rawGlobParts);
+    this.debug(this.pattern, this.globParts);
+    let set2 = this.globParts.map((s2, _2, __2) => {
+      if (this.isWindows && this.windowsNoMagicRoot) {
+        const isUNC = s2[0] === "" && s2[1] === "" && (s2[2] === "?" || !globMagic.test(s2[2])) && !globMagic.test(s2[3]);
+        const isDrive = /^[a-z]:/i.test(s2[0]);
+        if (isUNC) {
+          return [
+            ...s2.slice(0, 4),
+            ...s2.slice(4).map((ss) => this.parse(ss))
+          ];
+        } else if (isDrive) {
+          return [s2[0], ...s2.slice(1).map((ss) => this.parse(ss))];
+        }
+      }
+      return s2.map((ss) => this.parse(ss));
+    });
+    this.debug(this.pattern, set2);
+    this.set = set2.filter((s2) => s2.indexOf(false) === -1);
+    if (this.isWindows) {
+      for (let i2 = 0; i2 < this.set.length; i2++) {
+        const p2 = this.set[i2];
+        if (p2[0] === "" && p2[1] === "" && this.globParts[i2][2] === "?" && typeof p2[3] === "string" && /^[a-z]:$/i.test(p2[3])) {
+          p2[2] = "?";
+        }
+      }
+    }
+    this.debug(this.pattern, this.set);
+  }
+  // various transforms to equivalent pattern sets that are
+  // faster to process in a filesystem walk.  The goal is to
+  // eliminate what we can, and push all ** patterns as far
+  // to the right as possible, even if it increases the number
+  // of patterns that we have to process.
+  preprocess(globParts) {
+    if (this.options.noglobstar) {
+      for (const partset of globParts) {
+        for (let j2 = 0; j2 < partset.length; j2++) {
+          if (partset[j2] === "**") {
+            partset[j2] = "*";
+          }
+        }
+      }
+    }
+    const { optimizationLevel = 1 } = this.options;
+    if (optimizationLevel >= 2) {
+      globParts = this.firstPhasePreProcess(globParts);
+      globParts = this.secondPhasePreProcess(globParts);
+    } else if (optimizationLevel >= 1) {
+      globParts = this.levelOneOptimize(globParts);
+    } else {
+      globParts = this.adjascentGlobstarOptimize(globParts);
+    }
+    return globParts;
+  }
+  // just get rid of adjascent ** portions
+  adjascentGlobstarOptimize(globParts) {
+    return globParts.map((parts) => {
+      let gs = -1;
+      while (-1 !== (gs = parts.indexOf("**", gs + 1))) {
+        let i2 = gs;
+        while (parts[i2 + 1] === "**") {
+          i2++;
+        }
+        if (i2 !== gs) {
+          parts.splice(gs, i2 - gs);
+        }
+      }
+      return parts;
+    });
+  }
+  // get rid of adjascent ** and resolve .. portions
+  levelOneOptimize(globParts) {
+    return globParts.map((parts) => {
+      parts = parts.reduce((set2, part) => {
+        const prev = set2[set2.length - 1];
+        if (part === "**" && prev === "**") {
+          return set2;
+        }
+        if (part === "..") {
+          if (prev && prev !== ".." && prev !== "." && prev !== "**") {
+            set2.pop();
+            return set2;
+          }
+        }
+        set2.push(part);
+        return set2;
+      }, []);
+      return parts.length === 0 ? [""] : parts;
+    });
+  }
+  levelTwoFileOptimize(parts) {
+    if (!Array.isArray(parts)) {
+      parts = this.slashSplit(parts);
+    }
+    let didSomething = false;
+    do {
+      didSomething = false;
+      if (!this.preserveMultipleSlashes) {
+        for (let i2 = 1; i2 < parts.length - 1; i2++) {
+          const p2 = parts[i2];
+          if (i2 === 1 && p2 === "" && parts[0] === "")
+            continue;
+          if (p2 === "." || p2 === "") {
+            didSomething = true;
+            parts.splice(i2, 1);
+            i2--;
+          }
+        }
+        if (parts[0] === "." && parts.length === 2 && (parts[1] === "." || parts[1] === "")) {
+          didSomething = true;
+          parts.pop();
+        }
+      }
+      let dd = 0;
+      while (-1 !== (dd = parts.indexOf("..", dd + 1))) {
+        const p2 = parts[dd - 1];
+        if (p2 && p2 !== "." && p2 !== ".." && p2 !== "**" && !(this.isWindows && /^[a-z]:$/i.test(p2))) {
+          didSomething = true;
+          parts.splice(dd - 1, 2);
+          dd -= 2;
+        }
+      }
+    } while (didSomething);
+    return parts.length === 0 ? [""] : parts;
+  }
+  // First phase: single-pattern processing
+  // <pre> is 1 or more portions
+  // <rest> is 1 or more portions
+  // <p> is any portion other than ., .., '', or **
+  // <e> is . or ''
+  //
+  // **/.. is *brutal* for filesystem walking performance, because
+  // it effectively resets the recursive walk each time it occurs,
+  // and ** cannot be reduced out by a .. pattern part like a regexp
+  // or most strings (other than .., ., and '') can be.
+  //
+  // <pre>/**/../<p>/<p>/<rest> -> {<pre>/../<p>/<p>/<rest>,<pre>/**/<p>/<p>/<rest>}
+  // <pre>/<e>/<rest> -> <pre>/<rest>
+  // <pre>/<p>/../<rest> -> <pre>/<rest>
+  // **/**/<rest> -> **/<rest>
+  //
+  // **/*/<rest> -> */**/<rest> <== not valid because ** doesn't follow
+  // this WOULD be allowed if ** did follow symlinks, or * didn't
+  firstPhasePreProcess(globParts) {
+    let didSomething = false;
+    do {
+      didSomething = false;
+      for (let parts of globParts) {
+        let gs = -1;
+        while (-1 !== (gs = parts.indexOf("**", gs + 1))) {
+          let gss = gs;
+          while (parts[gss + 1] === "**") {
+            gss++;
+          }
+          if (gss > gs) {
+            parts.splice(gs + 1, gss - gs);
+          }
+          let next = parts[gs + 1];
+          const p2 = parts[gs + 2];
+          const p22 = parts[gs + 3];
+          if (next !== "..")
+            continue;
+          if (!p2 || p2 === "." || p2 === ".." || !p22 || p22 === "." || p22 === "..") {
+            continue;
+          }
+          didSomething = true;
+          parts.splice(gs, 1);
+          const other = parts.slice(0);
+          other[gs] = "**";
+          globParts.push(other);
+          gs--;
+        }
+        if (!this.preserveMultipleSlashes) {
+          for (let i2 = 1; i2 < parts.length - 1; i2++) {
+            const p2 = parts[i2];
+            if (i2 === 1 && p2 === "" && parts[0] === "")
+              continue;
+            if (p2 === "." || p2 === "") {
+              didSomething = true;
+              parts.splice(i2, 1);
+              i2--;
+            }
+          }
+          if (parts[0] === "." && parts.length === 2 && (parts[1] === "." || parts[1] === "")) {
+            didSomething = true;
+            parts.pop();
+          }
+        }
+        let dd = 0;
+        while (-1 !== (dd = parts.indexOf("..", dd + 1))) {
+          const p2 = parts[dd - 1];
+          if (p2 && p2 !== "." && p2 !== ".." && p2 !== "**") {
+            didSomething = true;
+            const needDot = dd === 1 && parts[dd + 1] === "**";
+            const splin = needDot ? ["."] : [];
+            parts.splice(dd - 1, 2, ...splin);
+            if (parts.length === 0)
+              parts.push("");
+            dd -= 2;
+          }
+        }
+      }
+    } while (didSomething);
+    return globParts;
+  }
+  // second phase: multi-pattern dedupes
+  // {<pre>/*/<rest>,<pre>/<p>/<rest>} -> <pre>/*/<rest>
+  // {<pre>/<rest>,<pre>/<rest>} -> <pre>/<rest>
+  // {<pre>/**/<rest>,<pre>/<rest>} -> <pre>/**/<rest>
+  //
+  // {<pre>/**/<rest>,<pre>/**/<p>/<rest>} -> <pre>/**/<rest>
+  // ^-- not valid because ** doens't follow symlinks
+  secondPhasePreProcess(globParts) {
+    for (let i2 = 0; i2 < globParts.length - 1; i2++) {
+      for (let j2 = i2 + 1; j2 < globParts.length; j2++) {
+        const matched = this.partsMatch(globParts[i2], globParts[j2], !this.preserveMultipleSlashes);
+        if (matched) {
+          globParts[i2] = [];
+          globParts[j2] = matched;
+          break;
+        }
+      }
+    }
+    return globParts.filter((gs) => gs.length);
+  }
+  partsMatch(a2, b2, emptyGSMatch = false) {
+    let ai = 0;
+    let bi = 0;
+    let result2 = [];
+    let which = "";
+    while (ai < a2.length && bi < b2.length) {
+      if (a2[ai] === b2[bi]) {
+        result2.push(which === "b" ? b2[bi] : a2[ai]);
+        ai++;
+        bi++;
+      } else if (emptyGSMatch && a2[ai] === "**" && b2[bi] === a2[ai + 1]) {
+        result2.push(a2[ai]);
+        ai++;
+      } else if (emptyGSMatch && b2[bi] === "**" && a2[ai] === b2[bi + 1]) {
+        result2.push(b2[bi]);
+        bi++;
+      } else if (a2[ai] === "*" && b2[bi] && (this.options.dot || !b2[bi].startsWith(".")) && b2[bi] !== "**") {
+        if (which === "b")
+          return false;
+        which = "a";
+        result2.push(a2[ai]);
+        ai++;
+        bi++;
+      } else if (b2[bi] === "*" && a2[ai] && (this.options.dot || !a2[ai].startsWith(".")) && a2[ai] !== "**") {
+        if (which === "a")
+          return false;
+        which = "b";
+        result2.push(b2[bi]);
+        ai++;
+        bi++;
+      } else {
+        return false;
+      }
+    }
+    return a2.length === b2.length && result2;
+  }
+  parseNegate() {
+    if (this.nonegate)
+      return;
+    const pattern = this.pattern;
+    let negate = false;
+    let negateOffset = 0;
+    for (let i2 = 0; i2 < pattern.length && pattern.charAt(i2) === "!"; i2++) {
+      negate = !negate;
+      negateOffset++;
+    }
+    if (negateOffset)
+      this.pattern = pattern.slice(negateOffset);
+    this.negate = negate;
+  }
+  // set partial to true to test if, for example,
+  // "/a/b" matches the start of "/*/b/*/d"
+  // Partial means, if you run out of file before you run
+  // out of pattern, then that's fine, as long as all
+  // the parts match.
+  matchOne(file, pattern, partial = false) {
+    let fileStartIndex = 0;
+    let patternStartIndex = 0;
+    if (this.isWindows) {
+      const fileDrive = typeof file[0] === "string" && /^[a-z]:$/i.test(file[0]);
+      const fileUNC = !fileDrive && file[0] === "" && file[1] === "" && file[2] === "?" && /^[a-z]:$/i.test(file[3]);
+      const patternDrive = typeof pattern[0] === "string" && /^[a-z]:$/i.test(pattern[0]);
+      const patternUNC = !patternDrive && pattern[0] === "" && pattern[1] === "" && pattern[2] === "?" && typeof pattern[3] === "string" && /^[a-z]:$/i.test(pattern[3]);
+      const fdi = fileUNC ? 3 : fileDrive ? 0 : void 0;
+      const pdi = patternUNC ? 3 : patternDrive ? 0 : void 0;
+      if (typeof fdi === "number" && typeof pdi === "number") {
+        const [fd, pd] = [
+          file[fdi],
+          pattern[pdi]
+        ];
+        if (fd.toLowerCase() === pd.toLowerCase()) {
+          pattern[pdi] = fd;
+          patternStartIndex = pdi;
+          fileStartIndex = fdi;
+        }
+      }
+    }
+    const { optimizationLevel = 1 } = this.options;
+    if (optimizationLevel >= 2) {
+      file = this.levelTwoFileOptimize(file);
+    }
+    if (pattern.includes(GLOBSTAR)) {
+      return this.#matchGlobstar(file, pattern, partial, fileStartIndex, patternStartIndex);
+    }
+    return this.#matchOne(file, pattern, partial, fileStartIndex, patternStartIndex);
+  }
+  #matchGlobstar(file, pattern, partial, fileIndex, patternIndex) {
+    const firstgs = pattern.indexOf(GLOBSTAR, patternIndex);
+    const lastgs = pattern.lastIndexOf(GLOBSTAR);
+    const [head, body, tail] = partial ? [
+      pattern.slice(patternIndex, firstgs),
+      pattern.slice(firstgs + 1),
+      []
+    ] : [
+      pattern.slice(patternIndex, firstgs),
+      pattern.slice(firstgs + 1, lastgs),
+      pattern.slice(lastgs + 1)
+    ];
+    if (head.length) {
+      const fileHead = file.slice(fileIndex, fileIndex + head.length);
+      if (!this.#matchOne(fileHead, head, partial, 0, 0)) {
+        return false;
+      }
+      fileIndex += head.length;
+      patternIndex += head.length;
+    }
+    let fileTailMatch = 0;
+    if (tail.length) {
+      if (tail.length + fileIndex > file.length)
+        return false;
+      let tailStart = file.length - tail.length;
+      if (this.#matchOne(file, tail, partial, tailStart, 0)) {
+        fileTailMatch = tail.length;
+      } else {
+        if (file[file.length - 1] !== "" || fileIndex + tail.length === file.length) {
+          return false;
+        }
+        tailStart--;
+        if (!this.#matchOne(file, tail, partial, tailStart, 0)) {
+          return false;
+        }
+        fileTailMatch = tail.length + 1;
+      }
+    }
+    if (!body.length) {
+      let sawSome = !!fileTailMatch;
+      for (let i3 = fileIndex; i3 < file.length - fileTailMatch; i3++) {
+        const f2 = String(file[i3]);
+        sawSome = true;
+        if (f2 === "." || f2 === ".." || !this.options.dot && f2.startsWith(".")) {
+          return false;
+        }
+      }
+      return partial || sawSome;
+    }
+    const bodySegments = [[[], 0]];
+    let currentBody = bodySegments[0];
+    let nonGsParts = 0;
+    const nonGsPartsSums = [0];
+    for (const b2 of body) {
+      if (b2 === GLOBSTAR) {
+        nonGsPartsSums.push(nonGsParts);
+        currentBody = [[], 0];
+        bodySegments.push(currentBody);
+      } else {
+        currentBody[0].push(b2);
+        nonGsParts++;
+      }
+    }
+    let i2 = bodySegments.length - 1;
+    const fileLength = file.length - fileTailMatch;
+    for (const b2 of bodySegments) {
+      b2[1] = fileLength - (nonGsPartsSums[i2--] + b2[0].length);
+    }
+    return !!this.#matchGlobStarBodySections(file, bodySegments, fileIndex, 0, partial, 0, !!fileTailMatch);
+  }
+  // return false for "nope, not matching"
+  // return null for "not matching, cannot keep trying"
+  #matchGlobStarBodySections(file, bodySegments, fileIndex, bodyIndex, partial, globStarDepth, sawTail) {
+    const bs = bodySegments[bodyIndex];
+    if (!bs) {
+      for (let i2 = fileIndex; i2 < file.length; i2++) {
+        sawTail = true;
+        const f2 = file[i2];
+        if (f2 === "." || f2 === ".." || !this.options.dot && f2.startsWith(".")) {
+          return false;
+        }
+      }
+      return sawTail;
+    }
+    const [body, after] = bs;
+    while (fileIndex <= after) {
+      const m2 = this.#matchOne(file.slice(0, fileIndex + body.length), body, partial, fileIndex, 0);
+      if (m2 && globStarDepth < this.maxGlobstarRecursion) {
+        const sub = this.#matchGlobStarBodySections(file, bodySegments, fileIndex + body.length, bodyIndex + 1, partial, globStarDepth + 1, sawTail);
+        if (sub !== false) {
+          return sub;
+        }
+      }
+      const f2 = file[fileIndex];
+      if (f2 === "." || f2 === ".." || !this.options.dot && f2.startsWith(".")) {
+        return false;
+      }
+      fileIndex++;
+    }
+    return partial || null;
+  }
+  #matchOne(file, pattern, partial, fileIndex, patternIndex) {
+    let fi;
+    let pi;
+    let pl;
+    let fl;
+    for (fi = fileIndex, pi = patternIndex, fl = file.length, pl = pattern.length; fi < fl && pi < pl; fi++, pi++) {
+      this.debug("matchOne loop");
+      let p2 = pattern[pi];
+      let f2 = file[fi];
+      this.debug(pattern, p2, f2);
+      if (p2 === false || p2 === GLOBSTAR) {
+        return false;
+      }
+      let hit;
+      if (typeof p2 === "string") {
+        hit = f2 === p2;
+        this.debug("string match", p2, f2, hit);
+      } else {
+        hit = p2.test(f2);
+        this.debug("pattern match", p2, f2, hit);
+      }
+      if (!hit)
+        return false;
+    }
+    if (fi === fl && pi === pl) {
+      return true;
+    } else if (fi === fl) {
+      return partial;
+    } else if (pi === pl) {
+      return fi === fl - 1 && file[fi] === "";
+    } else {
+      throw new Error("wtf?");
+    }
+  }
+  braceExpand() {
+    return braceExpand(this.pattern, this.options);
+  }
+  parse(pattern) {
+    assertValidPattern(pattern);
+    const options = this.options;
+    if (pattern === "**")
+      return GLOBSTAR;
+    if (pattern === "")
+      return "";
+    let m2;
+    let fastTest = null;
+    if (m2 = pattern.match(starRE)) {
+      fastTest = options.dot ? starTestDot : starTest;
+    } else if (m2 = pattern.match(starDotExtRE)) {
+      fastTest = (options.nocase ? options.dot ? starDotExtTestNocaseDot : starDotExtTestNocase : options.dot ? starDotExtTestDot : starDotExtTest)(m2[1]);
+    } else if (m2 = pattern.match(qmarksRE)) {
+      fastTest = (options.nocase ? options.dot ? qmarksTestNocaseDot : qmarksTestNocase : options.dot ? qmarksTestDot : qmarksTest)(m2);
+    } else if (m2 = pattern.match(starDotStarRE)) {
+      fastTest = options.dot ? starDotStarTestDot : starDotStarTest;
+    } else if (m2 = pattern.match(dotStarRE)) {
+      fastTest = dotStarTest;
+    }
+    const re2 = AST.fromGlob(pattern, this.options).toMMPattern();
+    if (fastTest && typeof re2 === "object") {
+      Reflect.defineProperty(re2, "test", { value: fastTest });
+    }
+    return re2;
+  }
+  makeRe() {
+    if (this.regexp || this.regexp === false)
+      return this.regexp;
+    const set2 = this.set;
+    if (!set2.length) {
+      this.regexp = false;
+      return this.regexp;
+    }
+    const options = this.options;
+    const twoStar = options.noglobstar ? star2 : options.dot ? twoStarDot : twoStarNoDot;
+    const flags = new Set(options.nocase ? ["i"] : []);
+    let re2 = set2.map((pattern) => {
+      const pp = pattern.map((p2) => {
+        if (p2 instanceof RegExp) {
+          for (const f2 of p2.flags.split(""))
+            flags.add(f2);
+        }
+        return typeof p2 === "string" ? regExpEscape2(p2) : p2 === GLOBSTAR ? GLOBSTAR : p2._src;
+      });
+      pp.forEach((p2, i2) => {
+        const next = pp[i2 + 1];
+        const prev = pp[i2 - 1];
+        if (p2 !== GLOBSTAR || prev === GLOBSTAR) {
+          return;
+        }
+        if (prev === void 0) {
+          if (next !== void 0 && next !== GLOBSTAR) {
+            pp[i2 + 1] = "(?:\\/|" + twoStar + "\\/)?" + next;
+          } else {
+            pp[i2] = twoStar;
+          }
+        } else if (next === void 0) {
+          pp[i2 - 1] = prev + "(?:\\/|\\/" + twoStar + ")?";
+        } else if (next !== GLOBSTAR) {
+          pp[i2 - 1] = prev + "(?:\\/|\\/" + twoStar + "\\/)" + next;
+          pp[i2 + 1] = GLOBSTAR;
+        }
+      });
+      const filtered = pp.filter((p2) => p2 !== GLOBSTAR);
+      if (this.partial && filtered.length >= 1) {
+        const prefixes = [];
+        for (let i2 = 1; i2 <= filtered.length; i2++) {
+          prefixes.push(filtered.slice(0, i2).join("/"));
+        }
+        return "(?:" + prefixes.join("|") + ")";
+      }
+      return filtered.join("/");
+    }).join("|");
+    const [open4, close] = set2.length > 1 ? ["(?:", ")"] : ["", ""];
+    re2 = "^" + open4 + re2 + close + "$";
+    if (this.partial) {
+      re2 = "^(?:\\/|" + open4 + re2.slice(1, -1) + close + ")$";
+    }
+    if (this.negate)
+      re2 = "^(?!" + re2 + ").+$";
+    try {
+      this.regexp = new RegExp(re2, [...flags].join(""));
+    } catch {
+      this.regexp = false;
+    }
+    return this.regexp;
+  }
+  slashSplit(p2) {
+    if (this.preserveMultipleSlashes) {
+      return p2.split("/");
+    } else if (this.isWindows && /^\/\/[^/]+/.test(p2)) {
+      return ["", ...p2.split(/\/+/)];
+    } else {
+      return p2.split(/\/+/);
+    }
+  }
+  match(f2, partial = this.partial) {
+    this.debug("match", f2, this.pattern);
+    if (this.comment) {
+      return false;
+    }
+    if (this.empty) {
+      return f2 === "";
+    }
+    if (f2 === "/" && partial) {
+      return true;
+    }
+    const options = this.options;
+    if (this.isWindows) {
+      f2 = f2.split("\\").join("/");
+    }
+    const ff = this.slashSplit(f2);
+    this.debug(this.pattern, "split", ff);
+    const set2 = this.set;
+    this.debug(this.pattern, "set", set2);
+    let filename = ff[ff.length - 1];
+    if (!filename) {
+      for (let i2 = ff.length - 2; !filename && i2 >= 0; i2--) {
+        filename = ff[i2];
+      }
+    }
+    for (const pattern of set2) {
+      let file = ff;
+      if (options.matchBase && pattern.length === 1) {
+        file = [filename];
+      }
+      const hit = this.matchOne(file, pattern, partial);
+      if (hit) {
+        if (options.flipNegate) {
+          return true;
+        }
+        return !this.negate;
+      }
+    }
+    if (options.flipNegate) {
+      return false;
+    }
+    return this.negate;
+  }
+  static defaults(def) {
+    return minimatch.defaults(def).Minimatch;
+  }
+};
+minimatch.AST = AST;
+minimatch.Minimatch = Minimatch;
+minimatch.escape = escape2;
+minimatch.unescape = unescape2;
+
+// src/control-plane/generated/review-action-v2/review-skills-contract.ts
+var import_node_crypto2 = require("node:crypto");
+var reviewSkillsCompanionContract = Object.freeze({
+  method: "POST",
+  path: "/api/action/v2/skills",
+  requestMaxBytes: 1024,
+  responseMaxBytes: 256 * 1024,
+  schemaVersion: "reviewrouter.review-skills/v1"
+});
+var reviewSkillsLimits = Object.freeze({
+  nameCharacters: 120,
+  descriptionCharacters: 1024,
+  instructionsBytes: 32 * 1024,
+  referenceBytes: 16 * 1024,
+  referencesPerSkill: 8,
+  referenceDepth: 4,
+  skillsPerRun: 32,
+  patternsPerList: 16,
+  patternBytes: 256,
+  bundleBytes: 256 * 1024,
+  treeBytes: 1024 * 1024,
+  treeEntries: 4096,
+  repositoryIdsPerOperation: 1e3,
+  skillIdsPerOperation: 100,
+  pageSize: 50
+});
+var defaultReviewSkillScope = Object.freeze({
+  includePaths: Object.freeze(["**"]),
+  excludePaths: Object.freeze([])
+});
+var encoder = new TextEncoder();
+var compare = (a2, b2) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0;
+function fail(reason) {
+  throw new Error(`review_skills_${reason}`);
+}
+function record(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function keys(value, names) {
+  if (Object.keys(value).length !== names.length || names.some((name) => !Object.hasOwn(value, name)))
+    fail("unknown_or_missing_fields");
+}
+function text(value, characters, nonblank) {
+  if (typeof value !== "string" || Array.from(value).length > characters || value.includes("\0") || nonblank && !value.trim())
+    fail("text_invalid");
+  for (let i2 = 0; i2 < value.length; i2 += 1) {
+    const code = value.charCodeAt(i2);
+    if (code >= 55296 && code <= 56319) {
+      const next = value.charCodeAt(++i2);
+      if (!(next >= 56320 && next <= 57343)) fail("text_invalid");
+    } else if (code >= 56320 && code <= 57343) fail("text_invalid");
+  }
+  return value;
+}
+function identifier(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(value))
+    fail("identifier_invalid");
+  return value;
+}
+function patterns(value, includes) {
+  if (!Array.isArray(value) || value.length > reviewSkillsLimits.patternsPerList || includes && value.length === 0)
+    fail("scope_invalid");
+  const result2 = value.map((item) => {
+    const pattern = text(item, reviewSkillsLimits.patternBytes, true);
+    if (encoder.encode(pattern).length > reviewSkillsLimits.patternBytes || pattern.startsWith("/") || /[\\\\:\[\]{}()!#\x00-\x1f\x7f]/.test(pattern) || pattern.split("/").some(
+      (part) => part === "" || part === "." || part === ".." || part.includes("**") && part !== "**"
+    ))
+      fail("scope_invalid");
+    return pattern;
+  });
+  if (new Set(result2).size !== result2.length) fail("scope_duplicate");
+  return Object.freeze(result2.sort(compare));
+}
+function parseReviewSkillScope(value) {
+  if (!record(value)) fail("scope_invalid");
+  keys(value, ["includePaths", "excludePaths"]);
+  return Object.freeze({
+    includePaths: patterns(value.includePaths, true),
+    excludePaths: patterns(value.excludePaths, false)
+  });
+}
+function canonicalReviewSkillsJson(value) {
+  if (value === null || typeof value === "boolean" || typeof value === "string")
+    return JSON.stringify(value);
+  if (typeof value === "number" && Number.isFinite(value))
+    return JSON.stringify(value);
+  if (Array.isArray(value))
+    return `[${value.map(canonicalReviewSkillsJson).join(",")}]`;
+  if (record(value))
+    return `{${Object.keys(value).sort(compare).map(
+      (key) => `${JSON.stringify(key)}:${canonicalReviewSkillsJson(value[key])}`
+    ).join(",")}}`;
+  return fail("canonical_value_invalid");
+}
+function normalizePayload(value) {
+  if (!record(value)) fail("capture_invalid");
+  keys(value, ["schemaVersion", "baseSha", "webSkills", "gitSources"]);
+  if (value.schemaVersion !== reviewSkillsCompanionContract.schemaVersion)
+    fail("schema_unsupported");
+  if (typeof value.baseSha !== "string" || !/^[a-f0-9]{40}$/.test(value.baseSha))
+    fail("base_sha_invalid");
+  if (!Array.isArray(value.webSkills) || value.webSkills.length > reviewSkillsLimits.skillsPerRun)
+    fail("too_many_skills");
+  const seen = /* @__PURE__ */ new Set();
+  const webSkills = value.webSkills.map((raw) => {
+    if (!record(raw)) fail("skill_invalid");
+    keys(raw, [
+      "skillId",
+      "revisionId",
+      "sourceWorkspaceId",
+      "name",
+      "description",
+      "instructions",
+      "includePaths",
+      "excludePaths"
+    ]);
+    const skillId = identifier(raw.skillId);
+    if (seen.has(skillId)) fail("duplicate_skill");
+    seen.add(skillId);
+    const instructions = text(
+      raw.instructions,
+      reviewSkillsLimits.instructionsBytes,
+      true
+    );
+    if (encoder.encode(instructions).length > reviewSkillsLimits.instructionsBytes)
+      fail("instructions_too_large");
+    const scope = parseReviewSkillScope({
+      includePaths: raw.includePaths,
+      excludePaths: raw.excludePaths
+    });
+    return Object.freeze({
+      skillId,
+      revisionId: identifier(raw.revisionId),
+      sourceWorkspaceId: identifier(raw.sourceWorkspaceId),
+      name: text(raw.name, reviewSkillsLimits.nameCharacters, true),
+      description: text(
+        raw.description,
+        reviewSkillsLimits.descriptionCharacters,
+        false
+      ),
+      instructions,
+      ...scope
+    });
+  }).sort((a2, b2) => compare(a2.skillId, b2.skillId));
+  if (!Array.isArray(value.gitSources) || value.gitSources.length > 2)
+    fail("git_sources_invalid");
+  const roots = /* @__PURE__ */ new Set();
+  const gitSources = value.gitSources.map((raw) => {
+    if (!record(raw)) fail("git_sources_invalid");
+    keys(raw, ["root"]);
+    if (raw.root !== ".reviewrouter/skills" && raw.root !== ".agents/skills")
+      fail("git_sources_invalid");
+    if (roots.has(raw.root)) fail("git_source_duplicate");
+    roots.add(raw.root);
+    return Object.freeze({ root: raw.root });
+  }).sort((a2, b2) => compare(a2.root, b2.root));
+  return Object.freeze({
+    schemaVersion: reviewSkillsCompanionContract.schemaVersion,
+    baseSha: value.baseSha,
+    webSkills: Object.freeze(webSkills),
+    gitSources: Object.freeze(gitSources)
+  });
+}
+function createCapturedReviewSkills(value) {
+  const payload = normalizePayload({
+    schemaVersion: reviewSkillsCompanionContract.schemaVersion,
+    ...value
+  });
+  const digest3 = `sha256:${(0, import_node_crypto2.createHash)("sha256").update(canonicalReviewSkillsJson(payload), "utf8").digest("hex")}`;
+  const result2 = Object.freeze({ ...payload, digest: digest3 });
+  if (encoder.encode(canonicalReviewSkillsJson(result2)).length > reviewSkillsLimits.bundleBytes)
+    fail("capture_too_large");
+  return result2;
+}
+function parseCapturedReviewSkills(value) {
+  if (!record(value)) fail("capture_invalid");
+  keys(value, [
+    "schemaVersion",
+    "baseSha",
+    "webSkills",
+    "gitSources",
+    "digest"
+  ]);
+  if (typeof value.digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.digest))
+    fail("digest_invalid");
+  const { digest: digest3, ...payload } = value;
+  const normalized = normalizePayload(payload);
+  const expected = createCapturedReviewSkills(normalized);
+  if (expected.digest !== digest3) fail("digest_mismatch");
+  return expected;
+}
+
+// src/review-skills/review-skills.ts
+var LEGACY_REVIEW_SKILLS = Object.freeze({
+  kind: "legacy"
+});
+function reviewSkillsCacheIdentity(input) {
+  return input.kind === "legacy" ? void 0 : Object.freeze({
+    capturedDigest: input.capture.digest,
+    executionDigest: input.bundle.executionDigest
+  });
+}
+function reviewSkillsDigest(value) {
+  return `sha256:${(0, import_node_crypto3.createHash)("sha256").update(canonicalReviewSkillsJson(value)).digest("hex")}`;
+}
+function createMaterializedReviewSkills(captured, gitSkills) {
+  const capture = parseCapturedReviewSkills(captured);
+  const skills = [
+    ...capture.webSkills.map((skill) => ({
+      skillId: skill.skillId,
+      revisionId: skill.revisionId,
+      origin: "web",
+      name: skill.name,
+      description: skill.description,
+      instructions: skill.instructions,
+      includePaths: [...skill.includePaths],
+      excludePaths: [...skill.excludePaths],
+      resources: []
+    })),
+    ...structuredClone(gitSkills)
+  ].sort((left, right) => compare2(left.skillId, right.skillId));
+  if (skills.length > reviewSkillsLimits.skillsPerRun || new Set(skills.map((item) => item.skillId)).size !== skills.length)
+    throw new Error("review_skills_count_invalid");
+  const preimage = { capturedDigest: capture.digest, skills };
+  if (Buffer.byteLength(canonicalReviewSkillsJson(preimage), "utf8") > reviewSkillsLimits.bundleBytes)
+    throw new Error("review_skills_bundle_too_large");
+  return deepFreeze({
+    kind: "captured",
+    capture,
+    bundle: { ...preimage, executionDigest: reviewSkillsDigest(preimage) }
+  });
+}
+function assertReviewSkillsExecutionInput(input, profile, baseSha) {
+  if (!input || profile.reviewSkillsVersion === 1 !== (input.kind === "captured"))
+    throw new Error("review_skills_attachment_required");
+  if (input.kind === "legacy") return;
+  const capture = parseCapturedReviewSkills(input.capture);
+  if (capture.baseSha !== baseSha.toLowerCase() || input.bundle.capturedDigest !== capture.digest)
+    throw new Error("review_skills_capture_mismatch");
+  const { executionDigest, ...preimage } = input.bundle;
+  if (executionDigest !== reviewSkillsDigest(preimage))
+    throw new Error("review_skills_bundle_digest_mismatch");
+}
+function reviewSkillMatchesPath(scope, path34) {
+  const parsed = parseReviewSkillScope({
+    includePaths: scope.includePaths,
+    excludePaths: scope.excludePaths
+  });
+  const options = {
+    dot: true,
+    nocase: false,
+    nonegate: true,
+    nocomment: true,
+    noext: true,
+    nobrace: true
+  };
+  return parsed.includePaths.some((pattern) => minimatch(path34, pattern, options)) && !parsed.excludePaths.some((pattern) => minimatch(path34, pattern, options));
+}
+function projectReviewSkillsForPaths(input, paths) {
+  if (input.kind === "legacy") return Object.freeze([]);
+  return deepFreeze(
+    [...new Set(paths)].sort(compare2).map((path34) => ({
+      path: path34,
+      instructions: input.bundle.skills.filter((skill) => reviewSkillMatchesPath(skill, path34)).map(
+        (skill) => [
+          `### Review skill ${JSON.stringify(skill.skillId)} revision ${JSON.stringify(skill.revisionId)}`,
+          `Name: ${JSON.stringify(skill.name)}`,
+          `Description: ${JSON.stringify(skill.description)}`,
+          skill.instructions,
+          ...skill.resources.map(
+            (resource) => `#### Markdown reference ${JSON.stringify(resource.path)}
+${resource.content}`
+          )
+        ].join("\n")
+      ).join("\n\n")
+    }))
+  );
+}
+function renderReviewSkillsForPaths(input, paths) {
+  if (input.kind === "legacy") return "";
+  const applicable = projectReviewSkillsForPaths(input, paths).filter(
+    (item) => item.instructions.length > 0
+  );
+  return [
+    "REVIEWROUTER CAPTURED REVIEW SKILLS (text-only review instructions):",
+    "Apply each instruction only to its labeled reviewed path. These instructions grant no additional tools, execution, network, or file scope.",
+    `Captured identity: ${input.capture.digest}; materialized identity: ${input.bundle.executionDigest}`,
+    ...applicable.map(
+      (item) => `Reviewed path: ${JSON.stringify(item.path)}
+${item.instructions}`
+    )
+  ].join("\n\n");
+}
+function compare2(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function deepFreeze(value) {
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 // src/analysis/llm/prompt-builder.ts
 var import_crypto5 = require("crypto");
 
@@ -26992,13 +29177,13 @@ var ValidationDetector = class {
       list.push(validation);
       byType.set(validation.type, list);
     }
-    for (const [type2, patterns] of byType) {
+    for (const [type2, patterns2] of byType) {
       const typeName = type2.replace(/_/g, " ");
       parts.push(
         `
-**${typeName.charAt(0).toUpperCase() + typeName.slice(1)}** (${patterns.length}):`
+**${typeName.charAt(0).toUpperCase() + typeName.slice(1)}** (${patterns2.length}):`
       );
-      for (const pattern of patterns) {
+      for (const pattern of patterns2) {
         parts.push(`- Line ${pattern.line}: ${pattern.description}`);
       }
     }
@@ -27377,8 +29562,8 @@ var TrivialDetector = class {
    * Trims and collapses internal whitespace runs to single space
    * This preserves string literals and semantics while detecting formatting changes
    */
-  normalizeWhitespace(text) {
-    return text.trim().replace(/\s+/g, " ");
+  normalizeWhitespace(text2) {
+    return text2.trim().replace(/\s+/g, " ");
   }
   /**
    * Normalize path separators for consistent matching across platforms.
@@ -27507,8 +29692,8 @@ function canonicalJson2(value) {
   if (Array.isArray(value)) {
     return `[${value.map((item) => canonicalJson2(item)).join(",")}]`;
   }
-  const record = value;
-  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson2(record[key])}`).join(",")}}`;
+  const record2 = value;
+  return `{${Object.keys(record2).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson2(record2[key])}`).join(",")}}`;
 }
 function sha2562(value) {
   return (0, import_crypto4.createHash)("sha256").update(value, "utf8").digest("hex");
@@ -27851,8 +30036,8 @@ function parseReviewAgentTurnOutput(value) {
   return Object.freeze({
     outputVersion: REVIEW_TURN_OUTPUT_VERSION,
     findings: requireArray(root.findings, "findings").map((item) => {
-      const record = requireRecord(item, "finding");
-      requireExactKeys(record, [
+      const record2 = requireRecord(item, "finding");
+      requireExactKeys(record2, [
         "severity",
         "title",
         "body",
@@ -27862,16 +30047,16 @@ function parseReviewAgentTurnOutput(value) {
       ]);
       return Object.freeze({
         severity: requireEnum(
-          record.severity,
+          record2.severity,
           ReviewTurnFindingSeverity,
           "finding_severity"
         ),
-        title: requireString(record.title, "finding_title", 240),
-        body: requireString(record.body, "finding_body", 16e3),
-        path: requireString(record.path, "finding_path", 2e3),
-        line: requireNullablePositiveInteger(record.line, "finding_line"),
+        title: requireString(record2.title, "finding_title", 240),
+        body: requireString(record2.body, "finding_body", 16e3),
+        path: requireString(record2.path, "finding_path", 2e3),
+        line: requireNullablePositiveInteger(record2.line, "finding_line"),
         evidenceOperationReceiptIds: requireDigestArray(
-          record.evidenceOperationReceiptIds,
+          record2.evidenceOperationReceiptIds,
           "finding_receipts"
         )
       });
@@ -27881,17 +30066,17 @@ function parseReviewAgentTurnOutput(value) {
     ),
     closureClaims: requireArray(root.closureClaims, "closure_claims").map(
       (item) => {
-        const record = requireRecord(item, "closure_claim");
-        requireExactKeys(record, ["obligationId", "operationReceiptIds"]);
+        const record2 = requireRecord(item, "closure_claim");
+        requireExactKeys(record2, ["obligationId", "operationReceiptIds"]);
         const operationReceiptIds = requireDigestArray(
-          record.operationReceiptIds,
+          record2.operationReceiptIds,
           "closure_receipts"
         );
         if (operationReceiptIds.length === 0) {
           throw new Error("review_agent_closure_receipts_required");
         }
         return Object.freeze({
-          obligationId: requireDigest(record.obligationId, "obligation_id"),
+          obligationId: requireDigest(record2.obligationId, "obligation_id"),
           operationReceiptIds
         });
       }
@@ -27900,14 +30085,14 @@ function parseReviewAgentTurnOutput(value) {
       root.operationBackedDiscoveryClaims,
       "operation_backed_discovery_claims"
     ).map((item) => {
-      const record = requireRecord(item, "operation_backed_discovery_claim");
-      requireExactKeys(record, [
+      const record2 = requireRecord(item, "operation_backed_discovery_claim");
+      requireExactKeys(record2, [
         "sourceObligationId",
         "query",
         "operationReceiptIds"
       ]);
       const operationReceiptIds = requireDigestArray(
-        record.operationReceiptIds,
+        record2.operationReceiptIds,
         "operation_backed_discovery_receipts"
       );
       if (operationReceiptIds.length === 0) {
@@ -27917,11 +30102,11 @@ function parseReviewAgentTurnOutput(value) {
       }
       return Object.freeze({
         sourceObligationId: requireDigest(
-          record.sourceObligationId,
+          record2.sourceObligationId,
           "source_obligation_id"
         ),
         query: requireStrictString(
-          record.query,
+          record2.query,
           "operation_backed_discovery_query",
           1024
         ),
@@ -27932,17 +30117,17 @@ function parseReviewAgentTurnOutput(value) {
       root.unresolvableClaims,
       "unresolvable_claims"
     ).map((item) => {
-      const record = requireRecord(item, "unresolvable_claim");
-      requireExactKeys(record, [
+      const record2 = requireRecord(item, "unresolvable_claim");
+      requireExactKeys(record2, [
         "obligationId",
         "reason",
         "evidenceOperationReceiptIds"
       ]);
       return Object.freeze({
-        obligationId: requireDigest(record.obligationId, "obligation_id"),
-        reason: requireString(record.reason, "unresolvable_reason", 2e3),
+        obligationId: requireDigest(record2.obligationId, "obligation_id"),
+        reason: requireString(record2.reason, "unresolvable_reason", 2e3),
         evidenceOperationReceiptIds: requireDigestArray(
-          record.evidenceOperationReceiptIds,
+          record2.evidenceOperationReceiptIds,
           "unresolvable_receipts"
         )
       });
@@ -27976,19 +30161,19 @@ function parseReviewTurnObligationProposals(value) {
   return Object.freeze(proposals);
 }
 function parseReviewTurnObligationProposal(value) {
-  const record = requireRecord(value, "obligation_proposal");
-  if (!Object.prototype.hasOwnProperty.call(record, "canonicalSubject") && !Object.prototype.hasOwnProperty.call(record, "canonicalRequirement")) {
-    return normalizeProviderObligationProposal(record);
+  const record2 = requireRecord(value, "obligation_proposal");
+  if (!Object.prototype.hasOwnProperty.call(record2, "canonicalSubject") && !Object.prototype.hasOwnProperty.call(record2, "canonicalRequirement")) {
+    return normalizeProviderObligationProposal(record2);
   }
-  requireExactKeys(record, [
+  requireExactKeys(record2, [
     "kind",
     "canonicalSubject",
     "canonicalRequirement",
     "riskPriority"
   ]);
-  const kind = requireProviderProposableObligationKind(record.kind);
+  const kind = requireProviderProposableObligationKind(record2.kind);
   const canonicalRequirement = requireCanonicalText(
-    record.canonicalRequirement,
+    record2.canonicalRequirement,
     "obligation_requirement",
     MAX_CANONICAL_REQUIREMENT_LENGTH
   );
@@ -28000,7 +30185,7 @@ function parseReviewTurnObligationProposal(value) {
     subjectVersion: FILE_READ_SUBJECT_VERSION
   });
   const canonicalSubject = requireCanonicalText(
-    record.canonicalSubject,
+    record2.canonicalSubject,
     "obligation_subject",
     MAX_CANONICAL_SUBJECT_LENGTH
   );
@@ -28012,27 +30197,27 @@ function parseReviewTurnObligationProposal(value) {
     canonicalSubject: expectedSubject,
     canonicalRequirement,
     riskPriority: requireBoundedInteger(
-      record.riskPriority,
+      record2.riskPriority,
       "risk_priority",
       0,
       MAX_RISK_PRIORITY
     )
   });
 }
-function normalizeProviderObligationProposal(record) {
+function normalizeProviderObligationProposal(record2) {
   requireExactKeysForField(
-    record,
+    record2,
     ["kind", "path", "revision", "riskPriority"],
     "obligation_proposal"
   );
-  const kind = requireProviderProposableObligationKind(record.kind);
+  const kind = requireProviderProposableObligationKind(record2.kind);
   const path34 = requireRepositoryRelativePath(
-    record.path,
+    record2.path,
     "obligation_requirement_path",
     MAX_PROPOSAL_PATH_LENGTH
   );
   const revision = requireEnum(
-    record.revision,
+    record2.revision,
     ReviewTurnProposalRevision,
     "obligation_requirement_revision"
   );
@@ -28053,7 +30238,7 @@ function normalizeProviderObligationProposal(record) {
       revision
     }),
     riskPriority: requireBoundedInteger(
-      record.riskPriority,
+      record2.riskPriority,
       "risk_priority",
       0,
       MAX_RISK_PRIORITY
@@ -28129,16 +30314,16 @@ function requireRecord(value, field) {
   }
   return value;
 }
-function requireExactKeys(record, keys) {
-  const actual = Object.keys(record).sort();
-  const expected = [...keys].sort();
+function requireExactKeys(record2, keys2) {
+  const actual = Object.keys(record2).sort();
+  const expected = [...keys2].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     throw new Error("review_agent_output_fields_invalid");
   }
 }
-function requireExactKeysForField(record, keys, field) {
-  const actual = Object.keys(record).sort();
-  const expected = [...keys].sort();
+function requireExactKeysForField(record2, keys2, field) {
+  const actual = Object.keys(record2).sort();
+  const expected = [...keys2].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     throw new Error(`review_agent_${field}_invalid`);
   }
@@ -28773,12 +30958,13 @@ function assertPath(value, code) {
 
 // src/analysis/llm/prompt-builder.ts
 var PromptBuilder = class {
-  constructor(config, intensity = "standard", promptEnricher, codeGraph, memoryPromptContext) {
+  constructor(config, intensity = "standard", promptEnricher, codeGraph, memoryPromptContext, reviewSkills = LEGACY_REVIEW_SKILLS) {
     this.config = config;
     this.intensity = intensity;
     this.promptEnricher = promptEnricher;
     this.codeGraph = codeGraph;
     this.memoryPromptContext = memoryPromptContext;
+    this.reviewSkills = reviewSkills;
     const validIntensities = [
       "light",
       "standard",
@@ -29008,6 +31194,15 @@ var PromptBuilder = class {
       ...fileList,
       ""
     );
+    if (this.reviewSkills.kind === "captured") {
+      pushShared(
+        renderReviewSkillsForPaths(
+          this.reviewSkills,
+          pr2.files.map((file) => file.filename)
+        ),
+        ""
+      );
+    }
     if (this.memoryPromptContext) {
       pushShared(this.memoryPromptContext, "");
     }
@@ -29101,6 +31296,12 @@ ${sanitizeLifecyclePromptField(target.diffHunk, 2e3)}` : "diffHunk: unavailable"
     const renderPrompt = (includeLegacy) => promptSegments.filter((segment) => includeLegacy || segment.audience === "shared").flatMap((segment) => segment.lines).join("\n");
     return Object.freeze({
       version: "prepared_review_prompt.v3",
+      ...this.reviewSkills.kind === "legacy" ? {} : {
+        reviewSkills: {
+          capturedDigest: this.reviewSkills.capture.digest,
+          executionDigest: this.reviewSkills.bundle.executionDigest
+        }
+      },
       investigationContextPrompt: renderPrompt(false),
       prompt: renderPrompt(true),
       pathCoverage,
@@ -29533,12 +31734,12 @@ function shouldRetryProviderReviewError(error2) {
   if (error2 instanceof RateLimitError || error2.name === "RateLimitError") {
     return false;
   }
-  const text = formatErrorForClassification(error2).toLowerCase();
-  if (NON_RETRY_PATTERNS.some((pattern) => text.includes(pattern))) {
+  const text2 = formatErrorForClassification(error2).toLowerCase();
+  if (NON_RETRY_PATTERNS.some((pattern) => text2.includes(pattern))) {
     return false;
   }
   return STRUCTURED_OUTPUT_RETRY_PATTERNS.some(
-    (pattern) => text.includes(pattern)
+    (pattern) => text2.includes(pattern)
   );
 }
 function buildProviderReviewPromptForAttempt(basePrompt, attempt, previousError) {
@@ -29560,19 +31761,19 @@ function buildProviderReviewPromptForAttempt(basePrompt, attempt, previousError)
   ].join("\n");
 }
 function isTransientLaneSaturation(error2) {
-  const text = formatErrorForClassification(error2);
-  const facts = parseGatewayFactEnvelopes(text);
+  const text2 = formatErrorForClassification(error2);
+  const facts = parseGatewayFactEnvelopes(text2);
   return facts.length > 0 && facts.every(
     (fact) => (fact.code === "lane_saturated" || fact.code === "relay_saturated") && fact.effect === "not_dispatched"
   );
 }
-function parseGatewayFactEnvelopes(text) {
+function parseGatewayFactEnvelopes(text2) {
   const facts = [];
-  for (let start = text.indexOf("{"); start !== -1; start = text.indexOf("{", start + 1)) {
-    for (let end = text.indexOf("}", start); end !== -1; end = text.indexOf("}", end + 1)) {
+  for (let start = text2.indexOf("{"); start !== -1; start = text2.indexOf("{", start + 1)) {
+    for (let end = text2.indexOf("}", start); end !== -1; end = text2.indexOf("}", end + 1)) {
       let parsed;
       try {
-        parsed = JSON.parse(text.slice(start, end + 1));
+        parsed = JSON.parse(text2.slice(start, end + 1));
       } catch {
         continue;
       }
@@ -29929,45 +32130,45 @@ function normalizeProviderVoteKey(provider, actualModel) {
   return normalizedProvider;
 }
 function getProviderVoteKeys(finding) {
-  const keys = /* @__PURE__ */ new Set();
+  const keys2 = /* @__PURE__ */ new Set();
   for (const key of finding.providerVoteKeys || []) {
     const normalized = normalizeProviderVoteKey(key);
-    if (normalized) keys.add(normalized);
+    if (normalized) keys2.add(normalized);
   }
-  if (keys.size > 0) return Array.from(keys);
+  if (keys2.size > 0) return Array.from(keys2);
   const attributedProviders = new Set(
     (finding.providerModels || []).map((item) => item.provider)
   );
   for (const item of finding.providerModels || []) {
     const key = normalizeProviderVoteKey(item.provider, item.actualModel);
-    if (key) keys.add(key);
+    if (key) keys2.add(key);
   }
   for (const provider of finding.providers || []) {
     if (attributedProviders.has(provider)) continue;
     const key = normalizeProviderVoteKey(provider);
-    if (key) keys.add(key);
+    if (key) keys2.add(key);
   }
   if (!finding.provider || !attributedProviders.has(finding.provider)) {
     const primaryKey = normalizeProviderVoteKey(
       finding.provider,
       finding.actualModel
     );
-    if (primaryKey) keys.add(primaryKey);
+    if (primaryKey) keys2.add(primaryKey);
   }
-  if (keys.size === 0) keys.add("static");
-  return Array.from(keys);
+  if (keys2.size === 0) keys2.add("static");
+  return Array.from(keys2);
 }
 function getProviderVoteCount(finding) {
   return getProviderVoteKeys(finding).length;
 }
 function countProviderVotePool(providers) {
-  const keys = /* @__PURE__ */ new Set();
+  const keys2 = /* @__PURE__ */ new Set();
   for (const provider of providers) {
     const name = typeof provider === "string" ? provider : provider.name;
     const key = normalizeProviderVoteKey(name);
-    if (key) keys.add(key);
+    if (key) keys2.add(key);
   }
-  return keys.size;
+  return keys2.size;
 }
 function mergeProviderModels(left, right) {
   const merged = /* @__PURE__ */ new Map();
@@ -30121,30 +32322,30 @@ function chooseBetterText(left, right) {
   return rightScore > leftScore ? right : left;
 }
 function classifyIssue(finding) {
-  const text = `${finding.category || ""} ${finding.title} ${finding.message}`.toLowerCase();
-  if (/\b(null|undefined|nil|none)\b/.test(text) && /\b(reference|dereference|guard|check|pointer|value)\b/.test(text)) {
+  const text2 = `${finding.category || ""} ${finding.title} ${finding.message}`.toLowerCase();
+  if (/\b(null|undefined|nil|none)\b/.test(text2) && /\b(reference|dereference|guard|check|pointer|value)\b/.test(text2)) {
     return "null_reference";
   }
   if (/\b(referenceerror|not defined|undefined identifier|missing import|not imported)\b/.test(
-    text
+    text2
   )) {
     return "undefined_identifier";
   }
-  if (/\b(path traversal|directory traversal|zip slip)\b/.test(text)) {
+  if (/\b(path traversal|directory traversal|zip slip)\b/.test(text2)) {
     return "path_traversal";
   }
   if (/\b(auth|authorization|authentication|permission|access control)\b/.test(
-    text
+    text2
   )) {
     return "access_control";
   }
-  if (/\b(race|concurrency|deadlock|lock)\b/.test(text)) {
+  if (/\b(race|concurrency|deadlock|lock)\b/.test(text2)) {
     return "concurrency";
   }
-  if (/\b(cache|stale|invalidate|invalidation)\b/.test(text)) {
+  if (/\b(cache|stale|invalidate|invalidation)\b/.test(text2)) {
     return "stale_cache";
   }
-  if (/\b(data loss|corrupt|overwrite|delete|destructive)\b/.test(text)) {
+  if (/\b(data loss|corrupt|overwrite|delete|destructive)\b/.test(text2)) {
     return "data_loss";
   }
   return "generic";
@@ -31111,10 +33312,10 @@ var ThreadLifecycleAggregator = class {
     );
     const votes = this.collectVotes(input, thresholds);
     const assignmentByTarget = new Map(
-      (input.assignmentRecords ?? []).map((record) => [record.targetId, record])
+      (input.assignmentRecords ?? []).map((record2) => [record2.targetId, record2])
     );
     const commandDismissedTargetIds = new Set(
-      (input.skipped ?? []).filter((record) => record.reasonCodes.includes("command_dismissed")).map((record) => record.target.targetId)
+      (input.skipped ?? []).filter((record2) => record2.reasonCodes.includes("command_dismissed")).map((record2) => record2.target.targetId)
     );
     const result2 = {
       mode: input.mode,
@@ -31125,7 +33326,7 @@ var ThreadLifecycleAggregator = class {
       previousStillValid: [],
       previousUncertain: [],
       manualAttention: (input.initialManualAttention ?? []).filter(
-        (record) => !commandDismissedTargetIds.has(record.target.targetId)
+        (record2) => !commandDismissedTargetIds.has(record2.target.targetId)
       ),
       mutationSkipped: [],
       mutationFailed: [],
@@ -31150,7 +33351,7 @@ var ThreadLifecycleAggregator = class {
       const targetVotes = Array.from(
         votes.get(target.targetId)?.values() ?? []
       );
-      const record = (reasonCodes) => ({
+      const record2 = (reasonCodes) => ({
         target,
         reasonCodes: unique([
           ...target.reasonCodes ?? [],
@@ -31162,20 +33363,20 @@ var ThreadLifecycleAggregator = class {
         const reasonCodes = [];
         if (target.hasHumanReply) reasonCodes.push("human_reply");
         if (!target.trustedAuthor) reasonCodes.push("untrusted_author");
-        result2.manualAttention.push(record(reasonCodes));
+        result2.manualAttention.push(record2(reasonCodes));
         continue;
       }
       if (currentFingerprints.has(target.fingerprint) || input.currentFindings.some(
         (finding) => currentFindingMatchesTarget(finding, target)
       )) {
-        result2.previousStillValid.push(record(["current_finding_present"]));
+        result2.previousStillValid.push(record2(["current_finding_present"]));
         continue;
       }
       if (providerCurrentFindings.some(
         (finding) => currentFindingMatchesTarget(finding, target)
       )) {
         result2.previousStillValid.push(
-          record(["provider_current_finding_present"])
+          record2(["provider_current_finding_present"])
         );
         continue;
       }
@@ -31184,7 +33385,7 @@ var ThreadLifecycleAggregator = class {
       const missingProviderReasons = plannedProviders.filter((provider) => !assignedProviders.includes(provider)).map(() => "outside_review_scope");
       if (assignment && (assignment.scopeStatus !== "in_scope" || assignedProviders.length === 0)) {
         result2.previousUncertain.push(
-          record(
+          record2(
             unique([
               ...missingProviderReasons,
               "outside_review_scope",
@@ -31198,7 +33399,7 @@ var ThreadLifecycleAggregator = class {
         (vote) => vote.valid && vote.verdict === "still_valid"
       );
       if (stillValidVotes.length > 0) {
-        result2.previousStillValid.push(record(["still_valid_vote"]));
+        result2.previousStillValid.push(record2(["still_valid_vote"]));
         continue;
       }
       const expectedProviders = plannedProviders.filter(
@@ -31229,14 +33430,14 @@ var ThreadLifecycleAggregator = class {
       const hasResolvedQuorum = quorumMode === "single-provider" ? resolvedVotes.length === 1 && plannedProviders.length === 1 : resolvedVotes.length >= 2;
       if (hasResolvedQuorum) {
         if (input.mode === "report") {
-          result2.mutationSkipped.push(record(["report_mode"]));
+          result2.mutationSkipped.push(record2(["report_mode"]));
         } else {
-          result2.resolvedCandidates.push(record([]));
+          result2.resolvedCandidates.push(record2([]));
         }
         continue;
       }
       result2.previousUncertain.push(
-        record(
+        record2(
           unique([
             ...missingOrFailedReasons,
             ...invalidVoteReasons,
@@ -31347,17 +33548,17 @@ function countPreviousStillValidBySeverity(lifecycle) {
     major: 0,
     minor: 0
   };
-  for (const record of lifecycle?.previousStillValid ?? []) {
-    if (isLinkedCurrentFinding(record)) continue;
-    const severity = record.target.severity;
+  for (const record2 of lifecycle?.previousStillValid ?? []) {
+    if (isLinkedCurrentFinding(record2)) continue;
+    const severity = record2.target.severity;
     if (severity === "critical" || severity === "major" || severity === "minor") {
       counts[severity] += 1;
     }
   }
   return counts;
 }
-function isLinkedCurrentFinding(record) {
-  return record.reasonCodes.includes("current_finding_present");
+function isLinkedCurrentFinding(record2) {
+  return record2.reasonCodes.includes("current_finding_present");
 }
 function reconcileCarriedFindingsWithLifecycle(input) {
   if (input.carriedFindings.length === 0 || input.lifecycle.inventoryFailed) {
@@ -31365,9 +33566,9 @@ function reconcileCarriedFindingsWithLifecycle(input) {
   }
   const carried = new Set(input.carriedFindings);
   const projectionInactiveTargets = [
-    ...input.lifecycle.resolvedByLifecycle.map((record) => record.target),
-    ...input.lifecycle.mutationFailed.filter((record) => hasTrustedResolutionFallback(record, input.lifecycle)).map((record) => record.target),
-    ...allLifecycleRecords(input.lifecycle).filter((record) => hasTrustedRecordedResolution(record.target)).map((record) => record.target)
+    ...input.lifecycle.resolvedByLifecycle.map((record2) => record2.target),
+    ...input.lifecycle.mutationFailed.filter((record2) => hasTrustedResolutionFallback(record2, input.lifecycle)).map((record2) => record2.target),
+    ...allLifecycleRecords(input.lifecycle).filter((record2) => hasTrustedRecordedResolution(record2.target)).map((record2) => record2.target)
   ];
   if (projectionInactiveTargets.length === 0) {
     return { findings: [...input.mergedFindings], removed: [] };
@@ -31401,15 +33602,15 @@ function hasTrustedRecordedResolution(target) {
     marker && target.trustedAuthor && !target.hasHumanReply && marker.schemaVersion === "reviewrouter-lifecycle-resolution.v1" && marker.targetId === target.targetId && marker.fingerprint === target.fingerprint
   );
 }
-function hasTrustedResolutionFallback(record, lifecycle) {
-  const reasonCodes = new Set(record.reasonCodes);
-  if (lifecycle.mode !== "resolve" || !record.target.trustedAuthor || record.target.hasHumanReply || !reasonCodes.has("mutation_permission_denied") || !reasonCodes.has("resolution_comment_posted") || Array.from(reasonCodes).some(
+function hasTrustedResolutionFallback(record2, lifecycle) {
+  const reasonCodes = new Set(record2.reasonCodes);
+  if (lifecycle.mode !== "resolve" || !record2.target.trustedAuthor || record2.target.hasHumanReply || !reasonCodes.has("mutation_permission_denied") || !reasonCodes.has("resolution_comment_posted") || Array.from(reasonCodes).some(
     (reason) => reason !== "mutation_permission_denied" && reason !== "resolution_comment_posted"
   )) {
     return false;
   }
   const resolvedProviders = new Set(
-    (record.providerVotes ?? []).filter((vote) => vote.valid && vote.verdict === "resolved").map((vote) => vote.providerId)
+    (record2.providerVotes ?? []).filter((vote) => vote.valid && vote.verdict === "resolved").map((vote) => vote.providerId)
   );
   return lifecycle.quorumMode === "single-provider" ? resolvedProviders.size >= 1 : resolvedProviders.size >= 2;
 }
@@ -32202,44 +34403,44 @@ function renderReviewSummary(review, language) {
   );
   const lifecycle = review.threadLifecycle?.mode === "off" ? void 0 : review.threadLifecycle;
   const stillValid = lifecycle?.previousStillValid.filter(
-    (record) => !isLinkedCurrentFinding(record)
+    (record2) => !isLinkedCurrentFinding(record2)
   ) ?? [];
   const appliedResolutions = new Set(
-    lifecycle?.resolvedByLifecycle.map((record) => record.target.targetId)
+    lifecycle?.resolvedByLifecycle.map((record2) => record2.target.targetId)
   );
   const attention = lifecycle ? [
     ...lifecycle.resolvedCandidates.filter(
-      (record) => !appliedResolutions.has(record.target.targetId)
+      (record2) => !appliedResolutions.has(record2.target.targetId)
     ),
     ...lifecycle.previousUncertain,
     ...lifecycle.manualAttention,
     ...lifecycle.mutationSkipped,
     ...lifecycle.mutationFailed,
     ...lifecycle.skipped.filter(
-      (record) => !record.reasonCodes.every(
+      (record2) => !record2.reasonCodes.every(
         (reason) => reason === "command_dismissed"
       )
     )
   ] : [];
   const lifecycleLines = [];
   const add = (records, kind) => {
-    for (const record of records)
+    for (const record2 of records)
       lifecycleLines.push({
         kind,
-        title: record.target.title,
+        title: record2.target.title,
         message: [
-          record.target.message,
-          ...record.reasonCodes.map((reason) => reason.replaceAll("_", " "))
+          record2.target.message,
+          ...record2.reasonCodes.map((reason) => reason.replaceAll("_", " "))
         ].join("\n\n"),
-        locationLabel: `${record.target.currentPath ?? record.target.originalPath}:${record.target.currentLine ?? record.target.originalLine ?? 1}`
+        locationLabel: `${record2.target.currentPath ?? record2.target.originalPath}:${record2.target.currentLine ?? record2.target.originalLine ?? 1}`
       });
   };
   add(stillValid, "active");
   add(lifecycle?.resolvedByLifecycle ?? [], "resolved");
   add(attention, "uncertain");
   const scope = review.coverage;
-  const run2 = review.runDetails;
-  const measured = run2 !== void 0 || (review.providerResults?.length ?? 0) > 0 || review.metrics.durationSeconds > 0 || review.metrics.totalTokens > 0 || review.metrics.totalCost > 0;
+  const run3 = review.runDetails;
+  const measured = run3 !== void 0 || (review.providerResults?.length ?? 0) > 0 || review.metrics.durationSeconds > 0 || review.metrics.totalTokens > 0 || review.metrics.totalCost > 0;
   return renderReviewerSummaryMarkdown({
     language: language ?? retainedLocale,
     findings: review.findings.map(toReviewerSummaryFinding),
@@ -32271,18 +34472,18 @@ function renderReviewSummary(review, language) {
     lifecycleAttention: attention.length > 0 || lifecycle?.inventoryFailed === true || (lifecycle?.warnings.length ?? 0) > 0,
     previousCounts: {
       critical: stillValid.filter(
-        (record) => record.target.severity === "critical"
+        (record2) => record2.target.severity === "critical"
       ).length,
-      major: stillValid.filter((record) => record.target.severity === "major").length,
-      minor: stillValid.filter((record) => record.target.severity === "minor").length
+      major: stillValid.filter((record2) => record2.target.severity === "major").length,
+      minor: stillValid.filter((record2) => record2.target.severity === "minor").length
     },
     ...review.metrics.dismissedFindings ? { dismissedFindings: review.metrics.dismissedFindings } : {},
     ...measured ? {
       measurements: {
-        ...run2 || (review.providerResults?.length ?? 0) > 0 || review.metrics.durationSeconds > 0 ? { durationSeconds: review.metrics.durationSeconds } : {},
+        ...run3 || (review.providerResults?.length ?? 0) > 0 || review.metrics.durationSeconds > 0 ? { durationSeconds: review.metrics.durationSeconds } : {},
         ...review.metrics.totalTokens > 0 ? { tokens: review.metrics.totalTokens } : {},
         ...review.metrics.totalCost > 0 ? { cost: review.metrics.totalCost } : {},
-        ...run2 ? { providers: run2.providers, cacheHit: run2.cacheHit } : {}
+        ...run3 ? { providers: run3.providers, cacheHit: run3.cacheHit } : {}
       }
     } : {},
     ...review.aiAnalysis ? { analysis: review.aiAnalysis } : {},
@@ -33447,7 +35648,7 @@ function isSingleLineSuggestion(suggestion) {
 
 // src/analysis/test-coverage.ts
 var fs10 = __toESM(require("fs"));
-var path9 = __toESM(require("path"));
+var path10 = __toESM(require("path"));
 var TestCoverageAnalyzer = class _TestCoverageAnalyzer {
   static MAX_HINTS = 20;
   analyze(files) {
@@ -33480,37 +35681,37 @@ var TestCoverageAnalyzer = class _TestCoverageAnalyzer {
     ].some((ext2) => filename.endsWith(ext2));
   }
   isTestFile(filename) {
-    const patterns = [".test.", ".spec.", "__tests__", "tests/", "test_"];
-    return patterns.some((pattern) => filename.includes(pattern));
+    const patterns2 = [".test.", ".spec.", "__tests__", "tests/", "test_"];
+    return patterns2.some((pattern) => filename.includes(pattern));
   }
   findTestFile(filename) {
-    const dir = path9.dirname(filename);
-    const base = path9.basename(filename, path9.extname(filename));
-    const ext2 = path9.extname(filename);
+    const dir = path10.dirname(filename);
+    const base = path10.basename(filename, path10.extname(filename));
+    const ext2 = path10.extname(filename);
     const candidates = [
       `${base}.test${ext2}`,
       `${base}.spec${ext2}`,
       `${base}_test${ext2}`,
       `test_${base}${ext2}`,
-      path9.join("__tests__", `${base}.test${ext2}`)
+      path10.join("__tests__", `${base}.test${ext2}`)
     ];
     for (const candidate of candidates) {
-      const full = path9.join(dir, candidate);
+      const full = path10.join(dir, candidate);
       if (fs10.existsSync(full)) return full;
     }
     return null;
   }
   suggestTestFile(filename) {
-    const dir = path9.dirname(filename);
-    const base = path9.basename(filename, path9.extname(filename));
-    const ext2 = path9.extname(filename);
+    const dir = path10.dirname(filename);
+    const base = path10.basename(filename, path10.extname(filename));
+    const ext2 = path10.extname(filename);
     if (ext2 === ".ts" || ext2 === ".tsx")
-      return path9.join(dir, `${base}.test.ts`);
-    if (ext2 === ".py") return path9.join(dir, `test_${base}.py`);
-    return path9.join(dir, `${base}.test${ext2}`);
+      return path10.join(dir, `${base}.test.ts`);
+    if (ext2 === ".py") return path10.join(dir, `test_${base}.py`);
+    return path10.join(dir, `${base}.test${ext2}`);
   }
   getPattern(filename) {
-    const ext2 = path9.extname(filename);
+    const ext2 = path10.extname(filename);
     if (ext2 === ".ts" || ext2 === ".tsx")
       return "Jest: *.test.ts or __tests__/*.ts";
     if (ext2 === ".py") return "pytest: test_*.py or *_test.py";
@@ -33710,14 +35911,14 @@ var ASTAnalyzer = class {
 
 // src/cache/storage.ts
 var fs11 = __toESM(require("fs/promises"));
-var path10 = __toESM(require("path"));
+var path11 = __toESM(require("path"));
 var CacheStorage = class {
-  constructor(baseDir = path10.join(process.cwd(), ".mpr-cache")) {
+  constructor(baseDir = path11.join(process.cwd(), ".mpr-cache")) {
     this.baseDir = baseDir;
   }
   locks = /* @__PURE__ */ new Map();
   async read(key) {
-    const file = path10.join(this.baseDir, `${key}.json`);
+    const file = path11.join(this.baseDir, `${key}.json`);
     try {
       return await fs11.readFile(file, "utf8");
     } catch {
@@ -33727,7 +35928,7 @@ var CacheStorage = class {
   async write(key, value) {
     await this.acquireLock(key);
     try {
-      const file = path10.join(this.baseDir, `${key}.json`);
+      const file = path11.join(this.baseDir, `${key}.json`);
       await fs11.mkdir(this.baseDir, { recursive: true });
       await fs11.writeFile(file, value, "utf8");
       logger.info(`Cached results at ${file}`);
@@ -33758,7 +35959,7 @@ var CacheStorage = class {
       let deletedCount = 0;
       for (const file of matchingFiles) {
         try {
-          await fs11.unlink(path10.join(this.baseDir, file));
+          await fs11.unlink(path11.join(this.baseDir, file));
           deletedCount++;
         } catch (error2) {
           logger.warn(`Failed to delete cache file ${file}`, error2);
@@ -33868,12 +36069,19 @@ function hashConfig(config) {
   const hash = (0, import_crypto9.createHash)("sha256").update(stableJson).digest("hex");
   return hash.slice(0, 16);
 }
-function hashIncrementalCompatibility(config, runtimeConfigVersion) {
-  return (0, import_crypto9.createHash)("sha256").update(incrementalCompatibilityPreimage(config, runtimeConfigVersion)).digest("hex");
+function hashIncrementalCompatibility(config, runtimeConfigVersion, reviewSkills) {
+  return (0, import_crypto9.createHash)("sha256").update(
+    incrementalCompatibilityPreimage(
+      config,
+      runtimeConfigVersion,
+      reviewSkills
+    )
+  ).digest("hex");
 }
-function incrementalCompatibilityPreimage(config, runtimeConfigVersion) {
+function incrementalCompatibilityPreimage(config, runtimeConfigVersion, reviewSkills) {
   return JSON.stringify(
     sortObject({
+      ...reviewSkills === void 0 ? {} : { reviewSkills },
       cacheVersion: CACHE_VERSION,
       reviewConfig: config,
       runtimeConfigVersion: runtimeConfigVersion?.trim() || null
@@ -36006,7 +38214,7 @@ ${content.substring(0, 500)}...`
     return body.includes(_CommentPoster.BOT_COMMENT_MARKER) && body.includes("# ReviewRouter") && !body.includes(_CommentPoster.INLINE_FALLBACK_MARKER) && !body.includes(_CommentPoster.INLINE_SKIP_HELP_MARKER);
   }
   async loadActiveInlineComments(prNumber) {
-    const keys = /* @__PURE__ */ new Set();
+    const keys2 = /* @__PURE__ */ new Set();
     const activeComments = [];
     const { octokit, owner, repo } = this.client;
     try {
@@ -36028,10 +38236,10 @@ ${content.substring(0, 500)}...`
           line: activeLine,
           body
         });
-        keys.add(signatureFromInlineComment(comment.path, activeLine, body));
-        keys.add(fingerprintFromInlineComment(comment.path, activeLine, body));
+        keys2.add(signatureFromInlineComment(comment.path, activeLine, body));
+        keys2.add(fingerprintFromInlineComment(comment.path, activeLine, body));
         const marker = extractInlineFingerprint(body);
-        if (marker) keys.add(marker);
+        if (marker) keys2.add(marker);
       }
     } catch (error2) {
       logger.warn(
@@ -36039,7 +38247,7 @@ ${content.substring(0, 500)}...`
         error2
       );
     }
-    return { keys, comments: activeComments };
+    return { keys: keys2, comments: activeComments };
   }
   hasInlineDuplicate(activeComments, path34, line, body) {
     const marker = extractInlineFingerprint(body);
@@ -36401,17 +38609,17 @@ ${comment.body.substring(0, 200)}...`
     }
   }
   static activeInlineCommentsFromReferences(references) {
-    const keys = /* @__PURE__ */ new Set();
+    const keys2 = /* @__PURE__ */ new Set();
     const comments = [];
     for (const comment of references) {
       const body = comment.body || "";
       comments.push(comment);
-      keys.add(signatureFromInlineComment(comment.path, comment.line, body));
-      keys.add(fingerprintFromInlineComment(comment.path, comment.line, body));
+      keys2.add(signatureFromInlineComment(comment.path, comment.line, body));
+      keys2.add(fingerprintFromInlineComment(comment.path, comment.line, body));
       const marker = extractInlineFingerprint(body);
-      if (marker) keys.add(marker);
+      if (marker) keys2.add(marker);
     }
-    return { keys, comments };
+    return { keys: keys2, comments };
   }
   async postIndividualInlineComments(prNumber, comments, headSha, originalError) {
     const { octokit, owner, repo } = this.client;
@@ -37073,7 +39281,7 @@ ${generatedBlock}` : generatedBlock;
   extractSymbols(lines) {
     const primary = [];
     const secondary = [];
-    const patterns = [
+    const patterns2 = [
       {
         pattern: /\b(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/,
         primary: true
@@ -37090,7 +39298,7 @@ ${generatedBlock}` : generatedBlock;
       }
     ];
     for (const line of lines) {
-      for (const { pattern, primary: isPrimary } of patterns) {
+      for (const { pattern, primary: isPrimary } of patterns2) {
         const match2 = line.match(pattern);
         if (match2?.[1]) {
           const symbol = match2[1];
@@ -37183,15 +39391,15 @@ ${deleted}`;
     ].includes(symbol.toLowerCase());
   }
   extractConfigKeys(lines) {
-    const keys = [];
+    const keys2 = [];
     for (const line of lines) {
       const trimmed = line.trim();
       const match2 = trimmed.match(/^["']?([A-Za-z0-9_.-]+)["']?\s*[:=]/);
       if (match2?.[1] && !match2[1].match(/^\d+$/)) {
-        keys.push(this.truncate(match2[1], 48));
+        keys2.push(this.truncate(match2[1], 48));
       }
     }
-    return this.unique(keys);
+    return this.unique(keys2);
   }
   sentenceFromParts(parts) {
     if (parts.length === 0) return "Updates pull request automation.";
@@ -38374,8 +40582,8 @@ function canonicalJson3(value) {
   if (Array.isArray(value)) {
     return `[${value.map((item) => canonicalJson3(item)).join(",")}]`;
   }
-  const record = value;
-  return `{${Object.keys(record).sort().filter((key) => record[key] !== void 0).map((key) => `${JSON.stringify(key)}:${canonicalJson3(record[key])}`).join(",")}}`;
+  const record2 = value;
+  return `{${Object.keys(record2).sort().filter((key) => record2[key] !== void 0).map((key) => `${JSON.stringify(key)}:${canonicalJson3(record2[key])}`).join(",")}}`;
 }
 function safeEqualHex(a2, b2) {
   if (!/^[a-f0-9]{64}$/i.test(a2) || !/^[a-f0-9]{64}$/i.test(b2)) {
@@ -38407,7 +40615,7 @@ var FeedbackTracker = class _FeedbackTracker {
    */
   async recordReaction(findingId, category, severity, reaction, prNumber) {
     const data = await this.loadData();
-    const record = {
+    const record2 = {
       findingId,
       category,
       severity,
@@ -38415,7 +40623,7 @@ var FeedbackTracker = class _FeedbackTracker {
       timestamp: Date.now(),
       prNumber
     };
-    data.records.push(record);
+    data.records.push(record2);
     const timeSinceAggregation = Date.now() - data.lastAggregation;
     if (timeSinceAggregation > _FeedbackTracker.AGGREGATION_INTERVAL_MS) {
       await this.aggregateAndAdjust(data);
@@ -38528,10 +40736,10 @@ var FeedbackTracker = class _FeedbackTracker {
   async aggregateAndAdjust(data) {
     logger.info("Aggregating feedback and adjusting confidence thresholds");
     const categoryGroups = /* @__PURE__ */ new Map();
-    for (const record of data.records) {
-      const group = categoryGroups.get(record.category) || [];
-      group.push(record);
-      categoryGroups.set(record.category, group);
+    for (const record2 of data.records) {
+      const group = categoryGroups.get(record2.category) || [];
+      group.push(record2);
+      categoryGroups.set(record2.category, group);
     }
     for (const [category, records] of categoryGroups) {
       const positiveCount = records.filter((r2) => r2.reaction === "\u{1F44D}").length;
@@ -38669,12 +40877,12 @@ var QuietModeFilter = class {
 };
 
 // src/analysis/context/graph-builder.ts
-var path11 = __toESM(require("path"));
+var path12 = __toESM(require("path"));
 function resolveImportPath(importerFile, moduleSpecifier) {
   if (moduleSpecifier.startsWith(".")) {
-    const importerDir = path11.dirname(importerFile);
+    const importerDir = path12.dirname(importerFile);
     if (importerDir && importerDir !== "." && importerDir !== importerFile) {
-      const resolved = path11.join(importerDir, moduleSpecifier);
+      const resolved = path12.join(importerDir, moduleSpecifier);
       return resolved.replace(/\\/g, "/");
     }
   }
@@ -39892,7 +42100,7 @@ var CircuitBreaker = class _CircuitBreaker {
         this.locks.delete(lockKey);
       }
     }, _CircuitBreaker.LOCK_CLEANUP_MS);
-    const run2 = (async () => {
+    const run3 = (async () => {
       try {
         await previous;
         return await fn();
@@ -39904,7 +42112,7 @@ var CircuitBreaker = class _CircuitBreaker {
         }
       }
     })();
-    return run2;
+    return run3;
   }
 };
 
@@ -40505,7 +42713,7 @@ var MetricsCollector = class _MetricsCollector {
 
 // src/plugins/plugin-loader.ts
 var fs14 = __toESM(require("fs/promises"));
-var path12 = __toESM(require("path"));
+var path13 = __toESM(require("path"));
 var crypto5 = __toESM(require("crypto"));
 var import_url = require("url");
 var PluginLoader = class {
@@ -40537,7 +42745,7 @@ var PluginLoader = class {
       "\u2713 Plugin security acknowledged - loading plugins with full system access"
     );
     try {
-      const pluginDir = path12.resolve(this.config.pluginDir);
+      const pluginDir = path13.resolve(this.config.pluginDir);
       logger.info(`Loading plugins from: ${pluginDir}`);
       try {
         await fs14.access(pluginDir);
@@ -40548,7 +42756,7 @@ var PluginLoader = class {
       const entries = await fs14.readdir(pluginDir, { withFileTypes: true });
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        const pluginPath = path12.join(pluginDir, entry.name);
+        const pluginPath = path13.join(pluginDir, entry.name);
         await this.loadPlugin(pluginPath);
       }
       logger.info(`Loaded ${this.plugins.size} plugins`);
@@ -40562,7 +42770,7 @@ var PluginLoader = class {
    */
   async loadPlugin(pluginPath) {
     try {
-      const indexPath = path12.join(pluginPath, "index.js");
+      const indexPath = path13.join(pluginPath, "index.js");
       try {
         await fs14.access(indexPath);
       } catch {
@@ -40661,7 +42869,7 @@ var PluginLoader = class {
    * }
    */
   async verifyPluginIntegrity(pluginPath, indexPath) {
-    const manifestPath = path12.join(pluginPath, "plugin-manifest.json");
+    const manifestPath = path13.join(pluginPath, "plugin-manifest.json");
     try {
       await fs14.access(manifestPath);
     } catch {
@@ -42315,11 +44523,11 @@ var ReviewThreadResolver = class {
     }
     return { kind: "ready" };
   }
-  withReason(record, reasonCodes) {
+  withReason(record2, reasonCodes) {
     return {
-      ...record,
+      ...record2,
       reasonCodes: unique2([
-        ...record.reasonCodes,
+        ...record2.reasonCodes,
         ...reasonCodes
       ])
     };
@@ -43008,22 +45216,22 @@ function createReviewCheckpointPlanIdentity(input) {
   });
 }
 function normalizeReviewCheckpointBatchPayload(input) {
-  const record = asRecord(input);
-  const rawProviderResults = Array.isArray(input) ? input : Array.isArray(record?.providerResults) ? record.providerResults : [];
+  const record2 = asRecord(input);
+  const rawProviderResults = Array.isArray(input) ? input : Array.isArray(record2?.providerResults) ? record2.providerResults : [];
   assertCollectionWithinLimit(
     rawProviderResults,
     MAX_PROVIDER_RESULTS,
     "providerResults"
   );
   const providerResults = rawProviderResults.map(normalizeProviderResult).map((result2) => requireNormalized(result2, "providerResult"));
-  const rawFindings = Array.isArray(record?.findings) ? record.findings : rawProviderResults.flatMap((providerResult) => {
+  const rawFindings = Array.isArray(record2?.findings) ? record2.findings : rawProviderResults.flatMap((providerResult) => {
     const provider = asRecord(providerResult);
     const result2 = asRecord(provider?.result);
     return Array.isArray(result2?.findings) ? result2.findings : [];
   });
   assertCollectionWithinLimit(rawFindings, MAX_FINDINGS, "findings");
   return reviewCheckpointBatchPayloadSchema.parse({
-    filePaths: normalizeFilePaths(record),
+    filePaths: normalizeFilePaths(record2),
     findings: rawFindings.map(normalizeFinding2).map((finding) => requireNormalized(finding, "finding")),
     providerResults
   });
@@ -43038,9 +45246,9 @@ function checkpointPlansMatch(left, right) {
 function checkpointPayloadsMatch(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
-function normalizeFilePaths(record) {
-  const explicitPaths = Array.isArray(record?.filePaths) ? record.filePaths : [];
-  const fileObjects = Array.isArray(record?.files) ? record.files : [];
+function normalizeFilePaths(record2) {
+  const explicitPaths = Array.isArray(record2?.filePaths) ? record2.filePaths : [];
+  const fileObjects = Array.isArray(record2?.files) ? record2.files : [];
   const values = [
     ...explicitPaths,
     ...fileObjects.map((file) => asRecord(file)?.filename)
@@ -43218,8 +45426,8 @@ function requireNormalized(value, field) {
 function messageFromUnknown(value) {
   if (typeof value === "string") return value;
   if (value instanceof Error) return value.message;
-  const record = asRecord(value);
-  return typeof record?.message === "string" ? record.message : void 0;
+  const record2 = asRecord(value);
+  return typeof record2?.message === "string" ? record2.message : void 0;
 }
 function isProbability(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
@@ -43863,9 +46071,9 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
           "unsupported_endpoint" /* UnsupportedEndpoint */
         );
       }
-      let text;
+      let text2;
       try {
-        text = await this.readBoundedResponseText(
+        text2 = await this.readBoundedResponseText(
           response,
           timeoutFailure2,
           abortController
@@ -43883,7 +46091,7 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
       }
       let decoded;
       try {
-        decoded = JSON.parse(text);
+        decoded = JSON.parse(text2);
       } catch {
         throw new ReviewCheckpointHttpError(
           "invalid_response" /* InvalidResponse */
@@ -43906,14 +46114,14 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
   }
   async readBoundedResponseText(response, timeoutFailure2, abortController) {
     if (!response.body) {
-      const text2 = await Promise.race([response.text(), timeoutFailure2]);
-      this.assertResponseSize(text2);
-      return text2;
+      const text3 = await Promise.race([response.text(), timeoutFailure2]);
+      this.assertResponseSize(text3);
+      return text3;
     }
     const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+    const decoder2 = new TextDecoder();
     let byteCount = 0;
-    let text = "";
+    let text2 = "";
     let completed = false;
     let endOfBody = false;
     try {
@@ -43929,17 +46137,17 @@ var HttpReviewCheckpointClient = class _HttpReviewCheckpointClient {
             "response_too_large" /* ResponseTooLarge */
           );
         }
-        text += decoder.decode(chunk.value, { stream: true });
+        text2 += decoder2.decode(chunk.value, { stream: true });
       }
-      text += decoder.decode();
+      text2 += decoder2.decode();
       completed = true;
-      return text;
+      return text2;
     } finally {
       if (completed) reader.releaseLock();
     }
   }
-  assertResponseSize(text) {
-    if (Buffer.byteLength(text, "utf8") > RESPONSE_MAX_BYTES) {
+  assertResponseSize(text2) {
+    if (Buffer.byteLength(text2, "utf8") > RESPONSE_MAX_BYTES) {
       throw new ReviewCheckpointHttpError(
         "response_too_large" /* ResponseTooLarge */
       );
@@ -44531,32 +46739,32 @@ var FindingFilter = class {
     );
   }
   isWorkflowConfigurationIssue(finding) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
     return (
       // Fork PR / secrets issues (very common false positives)
-      text.includes("fork") && (text.includes("secret") || text.includes("pr") || text.includes("pull request") || text.includes("security")) || text.includes("pull request") && text.includes("secret") || text.includes("repository setting") || text.includes("send secrets to workflows") || text.includes("secret validation") || text.includes("secret exposure") || text.includes("secrets exposure") || text.includes("secret access") || text.includes("security gating") || text.includes("security guardrails") || text.includes("security assumption") || text.includes("fork pr") && (text.includes("access") || text.includes("gating") || text.includes("condition") || text.includes("handling") || text.includes("risk")) || text.includes("security risk") && text.includes("fork") || text.includes("security vulnerability") && text.includes("fork") || text.includes("security: fork prs") || // Workflow event/condition configuration
-      text.includes("workflow relies on") || text.includes("timeout") && (text.includes("workflow") || text.includes("test") || text.includes("ci")) || text.includes("testtimeout") || text.includes("runner configuration") || text.includes("concurrency") && (text.includes("group") || text.includes("grouping") || text.includes("issue") || text.includes("strategy")) || text.includes("fork pr detection") || text.includes("fork pr handling") || text.includes("conditional logic") && text.includes("workflow") || text.includes("job condition") || text.includes("workflow") && text.includes("logic") || text.includes("condition") && (text.includes("fork") || text.includes("event")) || text.includes("doesn't account for") && text.includes("event") || text.includes("modify condition to") || text.includes("event type") && text.includes("check") || text.includes("simplify the logic to") || text.includes("fail the workflow") || // CI-specific issues
-      text.includes("detectopenhandles") || text.includes("--detectopenhandles") || text.includes("--testtimeout") || text.includes("ci test flags") || text.includes("test execution control") || text.includes("test execution flags") || text.includes("--forceexit") || text.includes("test execution") && text.includes("improved")
+      text2.includes("fork") && (text2.includes("secret") || text2.includes("pr") || text2.includes("pull request") || text2.includes("security")) || text2.includes("pull request") && text2.includes("secret") || text2.includes("repository setting") || text2.includes("send secrets to workflows") || text2.includes("secret validation") || text2.includes("secret exposure") || text2.includes("secrets exposure") || text2.includes("secret access") || text2.includes("security gating") || text2.includes("security guardrails") || text2.includes("security assumption") || text2.includes("fork pr") && (text2.includes("access") || text2.includes("gating") || text2.includes("condition") || text2.includes("handling") || text2.includes("risk")) || text2.includes("security risk") && text2.includes("fork") || text2.includes("security vulnerability") && text2.includes("fork") || text2.includes("security: fork prs") || // Workflow event/condition configuration
+      text2.includes("workflow relies on") || text2.includes("timeout") && (text2.includes("workflow") || text2.includes("test") || text2.includes("ci")) || text2.includes("testtimeout") || text2.includes("runner configuration") || text2.includes("concurrency") && (text2.includes("group") || text2.includes("grouping") || text2.includes("issue") || text2.includes("strategy")) || text2.includes("fork pr detection") || text2.includes("fork pr handling") || text2.includes("conditional logic") && text2.includes("workflow") || text2.includes("job condition") || text2.includes("workflow") && text2.includes("logic") || text2.includes("condition") && (text2.includes("fork") || text2.includes("event")) || text2.includes("doesn't account for") && text2.includes("event") || text2.includes("modify condition to") || text2.includes("event type") && text2.includes("check") || text2.includes("simplify the logic to") || text2.includes("fail the workflow") || // CI-specific issues
+      text2.includes("detectopenhandles") || text2.includes("--detectopenhandles") || text2.includes("--testtimeout") || text2.includes("ci test flags") || text2.includes("test execution control") || text2.includes("test execution flags") || text2.includes("--forceexit") || text2.includes("test execution") && text2.includes("improved")
     );
   }
   isTrueSecurityIssue(finding) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
     const file = finding.file.toLowerCase();
-    const mentionsSqlSink = /\b(sql|query|database)\b/.test(text) || text.includes("db.query");
+    const mentionsSqlSink = /\b(sql|query|database)\b/.test(text2) || text2.includes("db.query");
     const mentionsUntrustedInput = /\b(user input|untrusted|attacker|crafted|request|email|parameter|input)\b/.test(
-      text
+      text2
     );
-    const mentionsUnsafeSqlConstruction = text.includes("interpolat") || text.includes("concatenat") || text.includes("template literal") || text.includes("raw sql") || text.includes("unescaped") || text.includes("unsanitized") || text.includes("directly") || text.includes("not parameterized") || text.includes("parameterized query") || text.includes("${");
+    const mentionsUnsafeSqlConstruction = text2.includes("interpolat") || text2.includes("concatenat") || text2.includes("template literal") || text2.includes("raw sql") || text2.includes("unescaped") || text2.includes("unsanitized") || text2.includes("directly") || text2.includes("not parameterized") || text2.includes("parameterized query") || text2.includes("${");
     const mentionsAuthBoundary = /\b(auth|authenticate|authentication|authorization|login|signin|sign-in|session|credential|permission|privilege)\b/.test(
-      text
-    ) || text.includes("access control") || text.includes("canlogin") || text.includes("finduserbyemail");
+      text2
+    ) || text2.includes("access control") || text2.includes("canlogin") || text2.includes("finduserbyemail");
     const authRelatedFile = /(^|\/)(auth|authentication|login|session|user|users)\.[jt]sx?$/.test(
       file
     );
-    const mentionsAuthBypass = text.includes("bypass") || text.includes("unauthorized") || text.includes("without checking") || text.includes("without verifying") || text.includes("without arguments") || text.includes("without sql") || text.includes("no sql") || text.includes("no parameters") || text.includes("unconditional") || text.includes("unconditionally") || text.includes("any email") || text.includes("any input") || text.includes("any user") || text.includes("ignores email") || text.includes("ignores the email") || text.includes("first row") || text.includes("truthy") || text.includes("returns a user") || text.includes("returns the first user") || text.includes("allows login") || text.includes("login succeeds") || text.includes("logged in as");
-    const mentionsPrivilegedDefaultUser = (text.includes("admin") || text.includes("privilege") || text.includes("privileged") || text.includes("role")) && (text.includes("default") || text.includes("fallback") || text.includes("hard-coded") || text.includes("hardcoded") || text.includes("first row") || text.includes("fabricated")) && (text.includes("user") || text.includes("row") || text.includes("record"));
-    const mentionsNoQueryArguments = text.includes("no arguments") || text.includes("without arguments") || text.includes("without sql") || text.includes("without parameters") || text.includes("missing sql") || text.includes("missing parameters") || text.includes("called with no args") || text.includes("called without args");
-    return text.includes("sql injection") || mentionsSqlSink && text.includes("injection") || mentionsSqlSink && mentionsUntrustedInput && mentionsUnsafeSqlConstruction || text.includes("login bypass") || text.includes("authentication bypass") || mentionsAuthBoundary && mentionsAuthBypass || authRelatedFile && mentionsSqlSink && mentionsAuthBypass || mentionsSqlSink && mentionsPrivilegedDefaultUser && mentionsNoQueryArguments || authRelatedFile && mentionsPrivilegedDefaultUser || text.includes("xss") || text.includes("cross-site scripting") || text.includes("command injection") || text.includes("path traversal") || text.includes("remote code execution") || text.includes("arbitrary code") || text.includes("prototype pollution") || text.includes("wrong throttle") || text.includes("wrong throttling") || text.includes("rate limit bypass") || text.includes("password reset") && (text.includes("rate limit") || text.includes("throttl") || text.includes("lockout")) || (text.includes("authorization") || text.includes("permission") || text.includes("privilege") || text.includes("access control")) && (text.includes("bypass") || text.includes("unauthorized") || text.includes("allows"));
+    const mentionsAuthBypass = text2.includes("bypass") || text2.includes("unauthorized") || text2.includes("without checking") || text2.includes("without verifying") || text2.includes("without arguments") || text2.includes("without sql") || text2.includes("no sql") || text2.includes("no parameters") || text2.includes("unconditional") || text2.includes("unconditionally") || text2.includes("any email") || text2.includes("any input") || text2.includes("any user") || text2.includes("ignores email") || text2.includes("ignores the email") || text2.includes("first row") || text2.includes("truthy") || text2.includes("returns a user") || text2.includes("returns the first user") || text2.includes("allows login") || text2.includes("login succeeds") || text2.includes("logged in as");
+    const mentionsPrivilegedDefaultUser = (text2.includes("admin") || text2.includes("privilege") || text2.includes("privileged") || text2.includes("role")) && (text2.includes("default") || text2.includes("fallback") || text2.includes("hard-coded") || text2.includes("hardcoded") || text2.includes("first row") || text2.includes("fabricated")) && (text2.includes("user") || text2.includes("row") || text2.includes("record"));
+    const mentionsNoQueryArguments = text2.includes("no arguments") || text2.includes("without arguments") || text2.includes("without sql") || text2.includes("without parameters") || text2.includes("missing sql") || text2.includes("missing parameters") || text2.includes("called with no args") || text2.includes("called without args");
+    return text2.includes("sql injection") || mentionsSqlSink && text2.includes("injection") || mentionsSqlSink && mentionsUntrustedInput && mentionsUnsafeSqlConstruction || text2.includes("login bypass") || text2.includes("authentication bypass") || mentionsAuthBoundary && mentionsAuthBypass || authRelatedFile && mentionsSqlSink && mentionsAuthBypass || mentionsSqlSink && mentionsPrivilegedDefaultUser && mentionsNoQueryArguments || authRelatedFile && mentionsPrivilegedDefaultUser || text2.includes("xss") || text2.includes("cross-site scripting") || text2.includes("command injection") || text2.includes("path traversal") || text2.includes("remote code execution") || text2.includes("arbitrary code") || text2.includes("prototype pollution") || text2.includes("wrong throttle") || text2.includes("wrong throttling") || text2.includes("rate limit bypass") || text2.includes("password reset") && (text2.includes("rate limit") || text2.includes("throttl") || text2.includes("lockout")) || (text2.includes("authorization") || text2.includes("permission") || text2.includes("privilege") || text2.includes("access control")) && (text2.includes("bypass") || text2.includes("unauthorized") || text2.includes("allows"));
   }
   formatReasonSummary(reasons) {
     const entries = Object.entries(reasons).sort(
@@ -44573,39 +46781,39 @@ var FindingFilter = class {
     return `${location} "${title}" (${reason})`;
   }
   isTestCodeQualityIssue(finding) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
     return (
       // Test coverage and completeness
-      text.includes("missing edge case") || text.includes("missing test case") || text.includes("missing test") || text.includes("test coverage") || text.includes("not tested") || text.includes("add tests") || text.includes("add targeted") && text.includes("test") || text.includes("tests rely") || text.includes("test reliance") || // Test structure and organization
-      text.includes("test structure") || text.includes("test organization") || text.includes("test duplicate") || // Test data and mocks
-      text.includes("mock") || text.includes("stub") || text.includes("fixture") || text.includes("test data") || text.includes("inconsistent") && text.includes("test") || text.includes("mismatch") || // Test assertions
-      text.includes("assertion") || text.includes("expect") || // Documentation in tests
-      text.includes("test documentation") || text.includes("test comment") || // Test isolation and shared state
-      text.includes("test isolation") || text.includes("shared mock") || text.includes("mock") && text.includes("across tests") || // Test implementation details
-      text.includes("hard-coded") && text.includes("test") || text.includes("stat-key brittleness") || text.includes("brittleness") && text.includes("test") || text.includes("brittle test") || text.includes("tightly coupled") && text.includes("test") || text.includes("test expectations") || text.includes("deduplication heuristic") || text.includes("reason keys") || // Test refactoring suggestions
-      text.includes("parameterized tests") || text.includes("downgrade-path constants") || text.includes("reduce brittleness") || // Test validation suggestions
-      text.includes("validate mocks") || text.includes("validate") && text.includes("test") && text.includes("reflect") || text.includes("concurrency scenarios") && text.includes("test") || text.includes("comprehensive") && text.includes("test") || text.includes("serialization") && text.includes("circular") && text.includes("graph") || // Test-related suggestions
-      text.includes("without explicit type contracts") || text.includes("api docs and unit tests")
+      text2.includes("missing edge case") || text2.includes("missing test case") || text2.includes("missing test") || text2.includes("test coverage") || text2.includes("not tested") || text2.includes("add tests") || text2.includes("add targeted") && text2.includes("test") || text2.includes("tests rely") || text2.includes("test reliance") || // Test structure and organization
+      text2.includes("test structure") || text2.includes("test organization") || text2.includes("test duplicate") || // Test data and mocks
+      text2.includes("mock") || text2.includes("stub") || text2.includes("fixture") || text2.includes("test data") || text2.includes("inconsistent") && text2.includes("test") || text2.includes("mismatch") || // Test assertions
+      text2.includes("assertion") || text2.includes("expect") || // Documentation in tests
+      text2.includes("test documentation") || text2.includes("test comment") || // Test isolation and shared state
+      text2.includes("test isolation") || text2.includes("shared mock") || text2.includes("mock") && text2.includes("across tests") || // Test implementation details
+      text2.includes("hard-coded") && text2.includes("test") || text2.includes("stat-key brittleness") || text2.includes("brittleness") && text2.includes("test") || text2.includes("brittle test") || text2.includes("tightly coupled") && text2.includes("test") || text2.includes("test expectations") || text2.includes("deduplication heuristic") || text2.includes("reason keys") || // Test refactoring suggestions
+      text2.includes("parameterized tests") || text2.includes("downgrade-path constants") || text2.includes("reduce brittleness") || // Test validation suggestions
+      text2.includes("validate mocks") || text2.includes("validate") && text2.includes("test") && text2.includes("reflect") || text2.includes("concurrency scenarios") && text2.includes("test") || text2.includes("comprehensive") && text2.includes("test") || text2.includes("serialization") && text2.includes("circular") && text2.includes("graph") || // Test-related suggestions
+      text2.includes("without explicit type contracts") || text2.includes("api docs and unit tests")
     );
   }
   isStyleOrFormattingIssue(finding) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
-    return text.includes("formatting") || text.includes("markdown") || text.includes("heading") || text.includes("whitespace") || text.includes("indentation") || text.includes("spacing") || text.includes("bare url") || text.includes("language specified") || text.includes("code block") || text.includes("fenced code") || text.includes("emphasis") || text.includes("hyphen");
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
+    return text2.includes("formatting") || text2.includes("markdown") || text2.includes("heading") || text2.includes("whitespace") || text2.includes("indentation") || text2.includes("spacing") || text2.includes("bare url") || text2.includes("language specified") || text2.includes("code block") || text2.includes("fenced code") || text2.includes("emphasis") || text2.includes("hyphen");
   }
   isLintOrStyleIssue(finding) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
-    return text.includes("unused variable") || text.includes("unused parameter") || text.includes("no-unused") || text.includes("escape character") || text.includes("no-useless-escape") || text.includes("const instead of let") || text.includes("prefer const") || text.includes("naming convention") || text.includes("camelcase") || text.includes("snake_case") || text.includes("magic string") || text.includes("magic number") || text.includes("eslint") || text.includes("lint") || text.includes("unsafe type assertion") || text.includes("unsafe non-null assertion") || text.includes("type assertion") && !this.isTrueSecurityIssue(finding) || text.includes("non-null assertion") && !this.isTrueSecurityIssue(finding) || text.includes("bypasses type checking") || text.includes("casting") && text.includes("any");
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
+    return text2.includes("unused variable") || text2.includes("unused parameter") || text2.includes("no-unused") || text2.includes("escape character") || text2.includes("no-useless-escape") || text2.includes("const instead of let") || text2.includes("prefer const") || text2.includes("naming convention") || text2.includes("camelcase") || text2.includes("snake_case") || text2.includes("magic string") || text2.includes("magic number") || text2.includes("eslint") || text2.includes("lint") || text2.includes("unsafe type assertion") || text2.includes("unsafe non-null assertion") || text2.includes("type assertion") && !this.isTrueSecurityIssue(finding) || text2.includes("non-null assertion") && !this.isTrueSecurityIssue(finding) || text2.includes("bypasses type checking") || text2.includes("casting") && text2.includes("any");
   }
   isIntentionalTestPattern(finding) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
-    return text.includes("test") && (text.includes("inconsistent") || text.includes("empty") || text.includes("mock") || text.includes("mismatch") || text.includes("intentional"));
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
+    return text2.includes("test") && (text2.includes("inconsistent") || text2.includes("empty") || text2.includes("mock") || text2.includes("mismatch") || text2.includes("intentional"));
   }
   isMissingMethodFalsePositive(finding, diffContent) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
-    if (!text.includes("missing") && !text.includes("lacks") && !text.includes("no ")) {
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
+    if (!text2.includes("missing") && !text2.includes("lacks") && !text2.includes("no ")) {
       return false;
     }
-    const methodMatch = text.match(
+    const methodMatch = text2.match(
       /\b(serialize|deserialize|clone|copyfrom|remove|add|get|set)\w*\b/
     );
     if (!methodMatch) {
@@ -44628,66 +46836,66 @@ var FindingFilter = class {
     if (this.isTrueSecurityIssue(finding)) {
       return false;
     }
-    const text = (finding.title + " " + finding.message).toLowerCase();
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
     return (
       // Explicit suggestions
-      text.includes("consider") || text.includes("suggestion") || text.includes("could") || text.includes("should") || text.includes("might want to") || text.includes("might be") || text.includes("may be") || text.includes("can be") || text.includes("optimization") || text.includes("improvement") || // Opinion words (not factual bugs)
-      text.includes("overly") || text.includes("too aggressive") || text.includes("less aggressive") || // Imperatives that are suggestions, not bugs
-      text.includes("ensure that") || text.includes("ensure") && (text.includes("consistent") || text.includes("handle") || text.includes("uniqueness") || text.includes("comprehensive") || text.includes("proper") || text.includes("correct")) || text.includes("verify that") || text.includes("validate") && !text.includes("unvalidated") || text.includes("establish") || text.includes("monitor") || text.includes("integrate") && (text.includes("into") || text.includes("the")) || text.includes("add") && (text.includes("check") || text.includes("validation") || text.includes("logging") || text.includes("documentation") || text.includes("test") || text.includes("explicit") || text.includes("specific") || text.includes("handling") || text.includes("support") || text.includes("targeted") || text.includes("regression") || text.includes("metrics") || text.includes("warning") || text.includes("prominent") || text.includes("additional") || text.includes("more tests") || text.includes("security")) || // Configuration suggestions
-      text.includes("adjust") || text.includes("configure") || text.includes("making") && text.includes("configurable") || // Refactoring suggestions
-      text.includes("refactor") || text.includes("introduce") && (text.includes("enum") || text.includes("constant")) || text.includes("extract") && (text.includes("method") || text.includes("class") || text.includes("separate")) || text.includes("use a more") || text.includes("using a more") || text.includes("implement") && (text.includes("iterative") || text.includes("approach")) || text.includes("recursive approach") && text.includes("performance") || // Opinion-based characterizations
-      text.includes("overly permissive") || text.includes("overly restrictive") || text.includes("overly aggressive") || text.includes("too generous") || text.includes("too strict") || // Completeness/quality suggestions (not bugs)
-      text.includes("incomplete") || text.includes("lacks sufficient") || text.includes("lacks") && text.includes("validation") || text.includes("does not adequately") || text.includes("not adequately") || text.includes("missing") && text.includes("validation") && !this.isTrueSecurityIssue(finding) || text.includes("missing") && text.includes("timeout") && text.includes("validation") || text.includes("inconsistent") && !this.isTrueSecurityIssue(finding) || text.includes("incorrect handling") && !text.includes("crash") || text.includes("incomplete validation") || // Potential issues (not actual bugs)
-      text.includes("potential") && !text.includes("sql injection") && !text.includes("rce") || text.includes("brittleness") || text.includes("brittle") || text.includes("tightly coupled") || text.includes("genuine bugs") || // "can be genuine bugs" = uncertainty
-      text.includes("genuine issues") || text.includes("may occur") || text.includes("could occur") || text.includes("may lead to") || text.includes("could lead to") || // Review/analysis suggestions
-      text.includes("review") && !text.includes("code review tool") || text.includes("audit") || text.includes("substantial diff") || text.includes("comprehensive") && (text.includes("test") || text.includes("testing")) || text.includes("investigate") || text.includes("profile") || text.includes("thorough") || text.includes("write thorough") || // Efficiency/performance suggestions (not bugs)
-      text.includes("more efficient") || text.includes("could be more") || text.includes("more concise") || text.includes("inefficient") && !text.includes("exponential") || text.includes("potentially inefficient") || text.includes("time-consuming") && !text.includes("will hang") || // Implementation suggestions
-      text.includes("explore using") || text.includes("alternatively") || text.includes("using a different approach") || text.includes("using a more") || // Documentation suggestions
-      text.includes("document") && !text.includes("undocumented vulnerability")
+      text2.includes("consider") || text2.includes("suggestion") || text2.includes("could") || text2.includes("should") || text2.includes("might want to") || text2.includes("might be") || text2.includes("may be") || text2.includes("can be") || text2.includes("optimization") || text2.includes("improvement") || // Opinion words (not factual bugs)
+      text2.includes("overly") || text2.includes("too aggressive") || text2.includes("less aggressive") || // Imperatives that are suggestions, not bugs
+      text2.includes("ensure that") || text2.includes("ensure") && (text2.includes("consistent") || text2.includes("handle") || text2.includes("uniqueness") || text2.includes("comprehensive") || text2.includes("proper") || text2.includes("correct")) || text2.includes("verify that") || text2.includes("validate") && !text2.includes("unvalidated") || text2.includes("establish") || text2.includes("monitor") || text2.includes("integrate") && (text2.includes("into") || text2.includes("the")) || text2.includes("add") && (text2.includes("check") || text2.includes("validation") || text2.includes("logging") || text2.includes("documentation") || text2.includes("test") || text2.includes("explicit") || text2.includes("specific") || text2.includes("handling") || text2.includes("support") || text2.includes("targeted") || text2.includes("regression") || text2.includes("metrics") || text2.includes("warning") || text2.includes("prominent") || text2.includes("additional") || text2.includes("more tests") || text2.includes("security")) || // Configuration suggestions
+      text2.includes("adjust") || text2.includes("configure") || text2.includes("making") && text2.includes("configurable") || // Refactoring suggestions
+      text2.includes("refactor") || text2.includes("introduce") && (text2.includes("enum") || text2.includes("constant")) || text2.includes("extract") && (text2.includes("method") || text2.includes("class") || text2.includes("separate")) || text2.includes("use a more") || text2.includes("using a more") || text2.includes("implement") && (text2.includes("iterative") || text2.includes("approach")) || text2.includes("recursive approach") && text2.includes("performance") || // Opinion-based characterizations
+      text2.includes("overly permissive") || text2.includes("overly restrictive") || text2.includes("overly aggressive") || text2.includes("too generous") || text2.includes("too strict") || // Completeness/quality suggestions (not bugs)
+      text2.includes("incomplete") || text2.includes("lacks sufficient") || text2.includes("lacks") && text2.includes("validation") || text2.includes("does not adequately") || text2.includes("not adequately") || text2.includes("missing") && text2.includes("validation") && !this.isTrueSecurityIssue(finding) || text2.includes("missing") && text2.includes("timeout") && text2.includes("validation") || text2.includes("inconsistent") && !this.isTrueSecurityIssue(finding) || text2.includes("incorrect handling") && !text2.includes("crash") || text2.includes("incomplete validation") || // Potential issues (not actual bugs)
+      text2.includes("potential") && !text2.includes("sql injection") && !text2.includes("rce") || text2.includes("brittleness") || text2.includes("brittle") || text2.includes("tightly coupled") || text2.includes("genuine bugs") || // "can be genuine bugs" = uncertainty
+      text2.includes("genuine issues") || text2.includes("may occur") || text2.includes("could occur") || text2.includes("may lead to") || text2.includes("could lead to") || // Review/analysis suggestions
+      text2.includes("review") && !text2.includes("code review tool") || text2.includes("audit") || text2.includes("substantial diff") || text2.includes("comprehensive") && (text2.includes("test") || text2.includes("testing")) || text2.includes("investigate") || text2.includes("profile") || text2.includes("thorough") || text2.includes("write thorough") || // Efficiency/performance suggestions (not bugs)
+      text2.includes("more efficient") || text2.includes("could be more") || text2.includes("more concise") || text2.includes("inefficient") && !text2.includes("exponential") || text2.includes("potentially inefficient") || text2.includes("time-consuming") && !text2.includes("will hang") || // Implementation suggestions
+      text2.includes("explore using") || text2.includes("alternatively") || text2.includes("using a different approach") || text2.includes("using a more") || // Documentation suggestions
+      text2.includes("document") && !text2.includes("undocumented vulnerability")
     );
   }
   isConcreteRuntimeRegression(finding) {
     if (this.isStyleOrFormattingIssue(finding) || this.isLintOrStyleIssue(finding)) {
       return false;
     }
-    const text = (finding.title + " " + finding.message).toLowerCase();
-    if (this.isRuntimeStateOrDiagnosticRegression(text)) {
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
+    if (this.isRuntimeStateOrDiagnosticRegression(text2)) {
       return true;
     }
     const hasConcreteImpact = /\b(will|now|always|never|no longer|cannot|can't|fails?|breaks?|drops?|discards?|loses?|lose|removes?|throws?|skips?|ignores?|returns?|receives?|rethrows?|falls? through|misclassif(?:y|ies)|hides?|hidden|masks?|suppresses?|overrides?|forces?|promotes?|clears?|rewrites?|labels?|reports?|treats?|marks?|shows?|surfaces?|false positive|false negative|data loss|stale|dead-end)\b/.test(
-      text
+      text2
     );
     const hasRegressionSurface = /\b(regression|inverted|contract|caller|helper|filters?|filtered|filtering|ignore|draft|recovery|delete|deletion|enoent|cache|stale|auth|permission|workflow|config|configuration|persistence|route|ipc|mcp|api|ui|editor|token|secret|repository|classification|runtime|diagnostic|diagnostics|liveness|launch|state|status|summary|projection|progress|prompt|error|failure|outage|crash|healthy|health|stopped|degraded)\b/.test(
-      text
+      text2
     );
     if (hasConcreteImpact && hasRegressionSurface) {
       return true;
     }
-    return /\b(inverted|reversed|flipped)\b/.test(text) && /\b(condition|comparison|predicate|boolean|check|guard|branch|semantics)\b/.test(
-      text
+    return /\b(inverted|reversed|flipped)\b/.test(text2) && /\b(condition|comparison|predicate|boolean|check|guard|branch|semantics)\b/.test(
+      text2
     );
   }
-  isRuntimeStateOrDiagnosticRegression(text) {
+  isRuntimeStateOrDiagnosticRegression(text2) {
     const hasRuntimeStateSurface = /\b(runtime|diagnostic|diagnostics|runtimeDiagnosticSeverity|liveness|launch|state|status|summary|projection|progress|prompt|health|healthy|stopped|degraded|outage|failure|error|crash)\b/i.test(
-      text
+      text2
     );
     if (!hasRuntimeStateSurface) {
       return false;
     }
     const hidesOrMisreportsFailure = /\b(hides?|hidden|masks?|suppresses?|overrides?|forces?|promotes?|clears?|rewrites?|labels?|reports?|treats?|marks?|shows?)\b/.test(
-      text
+      text2
     ) && /\b(error|failure|failed|stopped|degraded|outage|crash|diagnostic|unhealthy|not alive)\b/.test(
-      text
+      text2
     );
     const contradictoryHealthyState = /\b(healthy|success|confirmed_alive|running|bootstrap confirmed|online)\b/.test(
-      text
+      text2
     ) && /\b(error|failure|failed|stopped|degraded|outage|crash|not alive|runtimeDiagnosticSeverity)\b/i.test(
-      text
+      text2
     );
     const missingRuntimeGuard = /\b(without checking|without preserving|does not gate|not gate|before checking|ignores?|skips?)\b/.test(
-      text
+      text2
     ) && /\b(runtime|diagnostic|diagnostics|liveness|error|failure|stopped)\b/.test(
-      text
+      text2
     );
     return hidesOrMisreportsFailure || contradictoryHealthyState || missingRuntimeGuard;
   }
@@ -44695,15 +46903,15 @@ var FindingFilter = class {
     if (!finding.file.includes(".github/workflows/")) {
       return false;
     }
-    const text = (finding.title + " " + finding.message).toLowerCase();
-    const isForkSecurityFinding = text.includes("fork") && (text.includes("secret") || text.includes("pr")) || text.includes("pull request") && text.includes("secret");
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
+    const isForkSecurityFinding = text2.includes("fork") && (text2.includes("secret") || text2.includes("pr")) || text2.includes("pull request") && text2.includes("secret");
     if (isForkSecurityFinding) {
       const hasForkSecurityCheck = diffContent.includes("SECURITY VIOLATION") || diffContent.includes("Fork PR has access to secrets") || diffContent.includes('if [ -n "$OPENROUTER_API_KEY" ]') || diffContent.includes("fork_pr_has_secrets") || diffContent.includes("github.event.pull_request.head.repo.fork");
       if (hasForkSecurityCheck) {
         logger.debug(`Workflow security already implemented: ${finding.title}`);
         return true;
       }
-      const isGeneralConfigFinding = text.includes("repository setting") || text.includes("settings -> actions") || text.includes("workflow relies on") || text.includes("disable 'send secrets");
+      const isGeneralConfigFinding = text2.includes("repository setting") || text2.includes("settings -> actions") || text2.includes("workflow relies on") || text2.includes("disable 'send secrets");
       if (isGeneralConfigFinding) {
         logger.debug(
           `General workflow config finding, not specific to diff: ${finding.title}`
@@ -44807,8 +47015,8 @@ var FindingFilter = class {
       return true;
     }
     if (finding.line === 1) {
-      const text = (finding.title + " " + finding.message).toLowerCase();
-      const isVeryGenericFinding = text.includes("entire file") || text.includes("file lacks") || text.includes("class lacks") && !this.isTrueSecurityIssue(finding);
+      const text2 = (finding.title + " " + finding.message).toLowerCase();
+      const isVeryGenericFinding = text2.includes("entire file") || text2.includes("file lacks") || text2.includes("class lacks") && !this.isTrueSecurityIssue(finding);
       if (isVeryGenericFinding) {
         logger.debug(
           `Very generic line:1 finding for ${finding.file}, likely invalid, filtering`
@@ -44832,9 +47040,9 @@ var FindingFilter = class {
   deduplicateFindings(findings) {
     const seen = /* @__PURE__ */ new Map();
     for (const finding of findings) {
-      const text = finding.title.toLowerCase();
-      const normalizedTitle = text.replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
-      const keywords = this.extractSemanticKeywords(text);
+      const text2 = finding.title.toLowerCase();
+      const normalizedTitle = text2.replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+      const keywords = this.extractSemanticKeywords(text2);
       const semanticKey = keywords.sort().join("_");
       const dedupKey = semanticKey || normalizedTitle;
       const key = `${finding.file}:${dedupKey}`;
@@ -44864,74 +47072,74 @@ var FindingFilter = class {
    * Extract semantic keywords from finding title for better deduplication
    * Groups similar concepts like "fork pr security", "missing validation", etc.
    */
-  extractSemanticKeywords(text) {
+  extractSemanticKeywords(text2) {
     const keywords = [];
-    if (text.includes("fork") && (text.includes("pr") || text.includes("pull request")) && text.includes("secret")) {
+    if (text2.includes("fork") && (text2.includes("pr") || text2.includes("pull request")) && text2.includes("secret")) {
       keywords.push("fork_pr_secret");
     }
-    if (text.includes("sql") && text.includes("injection")) {
+    if (text2.includes("sql") && text2.includes("injection")) {
       keywords.push("sql_injection");
     }
-    if (text.includes("xss") || text.includes("cross") && text.includes("site")) {
+    if (text2.includes("xss") || text2.includes("cross") && text2.includes("site")) {
       keywords.push("xss");
     }
-    if (text.includes("missing") && text.includes("validation")) {
+    if (text2.includes("missing") && text2.includes("validation")) {
       keywords.push("missing_validation");
     }
-    if (text.includes("missing") && text.includes("error") && text.includes("handling")) {
+    if (text2.includes("missing") && text2.includes("error") && text2.includes("handling")) {
       keywords.push("missing_error_handling");
     }
-    if (text.includes("race") && text.includes("condition")) {
+    if (text2.includes("race") && text2.includes("condition")) {
       keywords.push("race_condition");
     }
-    if (text.includes("inefficient") || text.includes("performance")) {
+    if (text2.includes("inefficient") || text2.includes("performance")) {
       keywords.push("performance");
     }
-    if (text.includes("missing") && text.includes("test")) {
+    if (text2.includes("missing") && text2.includes("test")) {
       keywords.push("missing_test");
     }
     return keywords;
   }
   isAboutAddedFileFalsePositive(finding) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
-    if (text.includes("added without") && text.includes("test")) {
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
+    if (text2.includes("added without") && text2.includes("test")) {
       return true;
     }
-    if (text.includes("without visible test")) {
+    if (text2.includes("without visible test")) {
       return true;
     }
     return false;
   }
   isSubjectiveCodeOpinion(finding) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
     return (
       // Complexity/readability complaints (subjective)
-      text.includes("complex") && text.includes("difficult to read") || text.includes("complexity") && !text.includes("exponential") && !text.includes("o(n") || text.includes("readability") || // Code structure opinions
-      text.includes("should be broken down") || text.includes("should be split") || text.includes("consider using an enum") || text.includes("consider using constants") || text.includes("magic strings") || text.includes("refactor") && !text.includes("refactor to fix") || text.includes("substantial diff") || text.includes("significant logic changes") || text.includes("review") && text.includes("algorithm changes") || text.includes("review") && text.includes("implications") || // Path normalization suggestions (not bugs)
-      text.includes("path normalization") && !text.includes("security") || text.includes("inconsistent") && text.includes("path") && !text.includes("vulnerability") || // Documentation/commenting suggestions
-      text.includes("add tests") && !text.includes("untested") || text.includes("add unit test") || text.includes("add regression test") || text.includes("document") && text.includes("policy")
+      text2.includes("complex") && text2.includes("difficult to read") || text2.includes("complexity") && !text2.includes("exponential") && !text2.includes("o(n") || text2.includes("readability") || // Code structure opinions
+      text2.includes("should be broken down") || text2.includes("should be split") || text2.includes("consider using an enum") || text2.includes("consider using constants") || text2.includes("magic strings") || text2.includes("refactor") && !text2.includes("refactor to fix") || text2.includes("substantial diff") || text2.includes("significant logic changes") || text2.includes("review") && text2.includes("algorithm changes") || text2.includes("review") && text2.includes("implications") || // Path normalization suggestions (not bugs)
+      text2.includes("path normalization") && !text2.includes("security") || text2.includes("inconsistent") && text2.includes("path") && !text2.includes("vulnerability") || // Documentation/commenting suggestions
+      text2.includes("add tests") && !text2.includes("untested") || text2.includes("add unit test") || text2.includes("add regression test") || text2.includes("document") && text2.includes("policy")
     );
   }
   isCodeQualityIssue(finding) {
-    const text = (finding.title + " " + finding.message).toLowerCase();
+    const text2 = (finding.title + " " + finding.message).toLowerCase();
     return (
       // Input validation (unless security-related)
-      text.includes("missing") && text.includes("validation") && !this.isTrueSecurityIssue(finding) || text.includes("missing") && text.includes("input validation") && !this.isTrueSecurityIssue(finding) || text.includes("missing") && text.includes("error handling") && !text.includes("crash") || text.includes("missing") && text.includes("type safety") && !this.isTrueSecurityIssue(finding) || text.includes("missing") && text.includes("runtime") && !this.isTrueSecurityIssue(finding) || text.includes("lacks") && text.includes("validation") || text.includes("inconsistent") && text.includes("error handling") || text.includes("inconsistency") && !this.isTrueSecurityIssue(finding) || // Hard-coded values
-      text.includes("hard-coded") && !this.isTrueSecurityIssue(finding) || text.includes("hardcoded") && !this.isTrueSecurityIssue(finding) || // Inefficiency (unless extreme)
-      text.includes("inefficient") && !text.includes("exponential") || text.includes("performance issue") || text.includes("potential performance") || // Monolithic / structure
-      text.includes("monolithic") || text.includes("complexity") || text.includes("cyclomatic") || text.includes("readability") || text.includes("code complexity") || text.includes("excessive") || text.includes("duplication") || text.includes("duplicate") || text.includes("conditional statements") || text.includes("conditional logic") || text.includes("flaky test") || text.includes("race condition") && !text.includes("crash") && !this.isTrueSecurityIssue(finding) || text.includes("timing") && (text.includes("assumption") || text.includes("dependent")) || // Comments
-      text.includes("comment") || text.includes("documentation") || // Pattern validation complaints (TypeScript/library already validates)
-      text.includes("insecure") && text.includes("pattern validation") || text.includes("pattern") && text.includes("not properly validate") || text.includes("unsafe") && text.includes("glob pattern") || // Path handling (unless security)
-      text.includes("path normalization") && !text.includes("vulnerability") || text.includes("path") && text.includes("consistency") && !text.includes("vulnerability") || text.includes("path quoting") && !text.includes("vulnerability") || text.includes("quoting") && text.includes("not fully handled") || // Serialization/deserialization implementation
-      text.includes("circular reference") && text.includes("serialization") || text.includes("deep clone") && text.includes("independence") || // Rate limiting / error handling implementation details
-      text.includes("rate limit handling") && !text.includes("bypass") || text.includes("health check implementation") && !text.includes("fail") || text.includes("handling 402") || // Payment errors are expected
-      text.includes("payment required not handled") || text.includes("lightweight healthcheck") || text.includes("introduce lightweight") || // Concurrency/synchronization (unless actual crash)
-      text.includes("concurrency") && !text.includes("crash") || text.includes("synchronization") && !text.includes("crash") || text.includes("atomic operation") || text.includes("mutex") || text.includes("cleanup") && text.includes("timeout") && !text.includes("memory leak") || text.includes("cancellation") && !text.includes("crash") || // Timeout/cleanup implementation details
-      text.includes("timeout") && text.includes("validation") && text.includes("missing") || text.includes("timeout") && text.includes("configurable") || text.includes("timeout handling") || text.includes("timeout value") || text.includes("promise") && text.includes("leak") && text.includes("potential") || text.includes("doesn't clean up properly") || // Batch validation (implementation detail)
-      text.includes("batch size validation") || text.includes("token-aware batching") || text.includes("batch override") || text.includes("provider batch override") || text.includes("clamping behavior") || // Model selection (not a bug)
-      text.includes("model ranking") || text.includes("model selection") || // Completeness suggestions (not bugs)
-      text.includes("incomplete") && !this.isTrueSecurityIssue(finding) || text.includes("not handled") && !this.isTrueSecurityIssue(finding) || text.includes("lacks sufficient validation") && !this.isTrueSecurityIssue(finding) || text.includes("could be more efficient") || text.includes("more efficient") && !text.includes("must") || // Implementation changes (not bugs)
-      text.includes("api change") || text.includes("graph builder changes") || text.includes("cache versioning") || text.includes("new graphcache") || text.includes("diff excerpt truncated") || text.includes("normalized paths") || text.includes("use normalized") || text.includes("circular graphs") || text.includes("deep copying") || text.includes("security hardening") || text.includes("aggressive pattern validation")
+      text2.includes("missing") && text2.includes("validation") && !this.isTrueSecurityIssue(finding) || text2.includes("missing") && text2.includes("input validation") && !this.isTrueSecurityIssue(finding) || text2.includes("missing") && text2.includes("error handling") && !text2.includes("crash") || text2.includes("missing") && text2.includes("type safety") && !this.isTrueSecurityIssue(finding) || text2.includes("missing") && text2.includes("runtime") && !this.isTrueSecurityIssue(finding) || text2.includes("lacks") && text2.includes("validation") || text2.includes("inconsistent") && text2.includes("error handling") || text2.includes("inconsistency") && !this.isTrueSecurityIssue(finding) || // Hard-coded values
+      text2.includes("hard-coded") && !this.isTrueSecurityIssue(finding) || text2.includes("hardcoded") && !this.isTrueSecurityIssue(finding) || // Inefficiency (unless extreme)
+      text2.includes("inefficient") && !text2.includes("exponential") || text2.includes("performance issue") || text2.includes("potential performance") || // Monolithic / structure
+      text2.includes("monolithic") || text2.includes("complexity") || text2.includes("cyclomatic") || text2.includes("readability") || text2.includes("code complexity") || text2.includes("excessive") || text2.includes("duplication") || text2.includes("duplicate") || text2.includes("conditional statements") || text2.includes("conditional logic") || text2.includes("flaky test") || text2.includes("race condition") && !text2.includes("crash") && !this.isTrueSecurityIssue(finding) || text2.includes("timing") && (text2.includes("assumption") || text2.includes("dependent")) || // Comments
+      text2.includes("comment") || text2.includes("documentation") || // Pattern validation complaints (TypeScript/library already validates)
+      text2.includes("insecure") && text2.includes("pattern validation") || text2.includes("pattern") && text2.includes("not properly validate") || text2.includes("unsafe") && text2.includes("glob pattern") || // Path handling (unless security)
+      text2.includes("path normalization") && !text2.includes("vulnerability") || text2.includes("path") && text2.includes("consistency") && !text2.includes("vulnerability") || text2.includes("path quoting") && !text2.includes("vulnerability") || text2.includes("quoting") && text2.includes("not fully handled") || // Serialization/deserialization implementation
+      text2.includes("circular reference") && text2.includes("serialization") || text2.includes("deep clone") && text2.includes("independence") || // Rate limiting / error handling implementation details
+      text2.includes("rate limit handling") && !text2.includes("bypass") || text2.includes("health check implementation") && !text2.includes("fail") || text2.includes("handling 402") || // Payment errors are expected
+      text2.includes("payment required not handled") || text2.includes("lightweight healthcheck") || text2.includes("introduce lightweight") || // Concurrency/synchronization (unless actual crash)
+      text2.includes("concurrency") && !text2.includes("crash") || text2.includes("synchronization") && !text2.includes("crash") || text2.includes("atomic operation") || text2.includes("mutex") || text2.includes("cleanup") && text2.includes("timeout") && !text2.includes("memory leak") || text2.includes("cancellation") && !text2.includes("crash") || // Timeout/cleanup implementation details
+      text2.includes("timeout") && text2.includes("validation") && text2.includes("missing") || text2.includes("timeout") && text2.includes("configurable") || text2.includes("timeout handling") || text2.includes("timeout value") || text2.includes("promise") && text2.includes("leak") && text2.includes("potential") || text2.includes("doesn't clean up properly") || // Batch validation (implementation detail)
+      text2.includes("batch size validation") || text2.includes("token-aware batching") || text2.includes("batch override") || text2.includes("provider batch override") || text2.includes("clamping behavior") || // Model selection (not a bug)
+      text2.includes("model ranking") || text2.includes("model selection") || // Completeness suggestions (not bugs)
+      text2.includes("incomplete") && !this.isTrueSecurityIssue(finding) || text2.includes("not handled") && !this.isTrueSecurityIssue(finding) || text2.includes("lacks sufficient validation") && !this.isTrueSecurityIssue(finding) || text2.includes("could be more efficient") || text2.includes("more efficient") && !text2.includes("must") || // Implementation changes (not bugs)
+      text2.includes("api change") || text2.includes("graph builder changes") || text2.includes("cache versioning") || text2.includes("new graphcache") || text2.includes("diff excerpt truncated") || text2.includes("normalized paths") || text2.includes("use normalized") || text2.includes("circular graphs") || text2.includes("deep copying") || text2.includes("security hardening") || text2.includes("aggressive pattern validation")
     );
   }
 };
@@ -45055,1861 +47263,6 @@ var GraphCache = class _GraphCache {
     return `${_GraphCache.CACHE_KEY_PREFIX}${prNumber}-${headSha}`;
   }
 };
-
-// node_modules/brace-expansion/node_modules/balanced-match/dist/esm/index.js
-var balanced = (a2, b2, str2) => {
-  const ma2 = a2 instanceof RegExp ? maybeMatch(a2, str2) : a2;
-  const mb = b2 instanceof RegExp ? maybeMatch(b2, str2) : b2;
-  const r2 = ma2 !== null && mb != null && range(ma2, mb, str2);
-  return r2 && {
-    start: r2[0],
-    end: r2[1],
-    pre: str2.slice(0, r2[0]),
-    body: str2.slice(r2[0] + ma2.length, r2[1]),
-    post: str2.slice(r2[1] + mb.length)
-  };
-};
-var maybeMatch = (reg, str2) => {
-  const m2 = str2.match(reg);
-  return m2 ? m2[0] : null;
-};
-var range = (a2, b2, str2) => {
-  let begs, beg, left, right = void 0, result2;
-  let ai = str2.indexOf(a2);
-  let bi = str2.indexOf(b2, ai + 1);
-  let i2 = ai;
-  if (ai >= 0 && bi > 0) {
-    if (a2 === b2) {
-      return [ai, bi];
-    }
-    begs = [];
-    left = str2.length;
-    while (i2 >= 0 && !result2) {
-      if (i2 === ai) {
-        begs.push(i2);
-        ai = str2.indexOf(a2, i2 + 1);
-      } else if (begs.length === 1) {
-        const r2 = begs.pop();
-        if (r2 !== void 0)
-          result2 = [r2, bi];
-      } else {
-        beg = begs.pop();
-        if (beg !== void 0 && beg < left) {
-          left = beg;
-          right = bi;
-        }
-        bi = str2.indexOf(b2, i2 + 1);
-      }
-      i2 = ai < bi && ai >= 0 ? ai : bi;
-    }
-    if (begs.length && right !== void 0) {
-      result2 = [left, right];
-    }
-  }
-  return result2;
-};
-
-// node_modules/brace-expansion/dist/esm/index.js
-var escSlash = "\0SLASH" + Math.random() + "\0";
-var escOpen = "\0OPEN" + Math.random() + "\0";
-var escClose = "\0CLOSE" + Math.random() + "\0";
-var escComma = "\0COMMA" + Math.random() + "\0";
-var escPeriod = "\0PERIOD" + Math.random() + "\0";
-var escSlashPattern = new RegExp(escSlash, "g");
-var escOpenPattern = new RegExp(escOpen, "g");
-var escClosePattern = new RegExp(escClose, "g");
-var escCommaPattern = new RegExp(escComma, "g");
-var escPeriodPattern = new RegExp(escPeriod, "g");
-var slashPattern = /\\\\/g;
-var openPattern = /\\{/g;
-var closePattern = /\\}/g;
-var commaPattern = /\\,/g;
-var periodPattern = /\\\./g;
-var EXPANSION_MAX = 1e5;
-var EXPANSION_MAX_LENGTH = 4e6;
-function numeric(str2) {
-  return !isNaN(str2) ? parseInt(str2, 10) : str2.charCodeAt(0);
-}
-function escapeBraces(str2) {
-  return str2.replace(slashPattern, escSlash).replace(openPattern, escOpen).replace(closePattern, escClose).replace(commaPattern, escComma).replace(periodPattern, escPeriod);
-}
-function unescapeBraces(str2) {
-  return str2.replace(escSlashPattern, "\\").replace(escOpenPattern, "{").replace(escClosePattern, "}").replace(escCommaPattern, ",").replace(escPeriodPattern, ".");
-}
-function parseCommaParts(str2) {
-  if (!str2) {
-    return [""];
-  }
-  const parts = [];
-  const m2 = balanced("{", "}", str2);
-  if (!m2) {
-    return str2.split(",");
-  }
-  const { pre, body, post } = m2;
-  const p2 = pre.split(",");
-  p2[p2.length - 1] += "{" + body + "}";
-  const postParts = parseCommaParts(post);
-  if (post.length) {
-    ;
-    p2[p2.length - 1] += postParts.shift();
-    p2.push.apply(p2, postParts);
-  }
-  parts.push.apply(parts, p2);
-  return parts;
-}
-function expand(str2, options = {}) {
-  if (!str2) {
-    return [];
-  }
-  const { max = EXPANSION_MAX, maxLength = EXPANSION_MAX_LENGTH } = options;
-  if (str2.slice(0, 2) === "{}") {
-    str2 = "\\{\\}" + str2.slice(2);
-  }
-  return expand_(escapeBraces(str2), max, maxLength, true).map(unescapeBraces);
-}
-function embrace(str2) {
-  return "{" + str2 + "}";
-}
-function isPadded(el) {
-  return /^-?0\d/.test(el);
-}
-function lte(i2, y2) {
-  return i2 <= y2;
-}
-function gte(i2, y2) {
-  return i2 >= y2;
-}
-function combine(acc, pre, values, max, maxLength, dropEmpties) {
-  const out = [];
-  let length = 0;
-  for (let a2 = 0; a2 < acc.length; a2++) {
-    for (let v2 = 0; v2 < values.length; v2++) {
-      if (out.length >= max)
-        return out;
-      const expansion = acc[a2] + pre + values[v2];
-      if (dropEmpties && !expansion)
-        continue;
-      if (length + expansion.length > maxLength)
-        return out;
-      out.push(expansion);
-      length += expansion.length;
-    }
-  }
-  return out;
-}
-function expandSequence(body, isAlphaSequence, max, maxLength) {
-  const n2 = body.split(/\.\./);
-  const N2 = [];
-  if (n2[0] === void 0 || n2[1] === void 0) {
-    return N2;
-  }
-  const x2 = numeric(n2[0]);
-  const y2 = numeric(n2[1]);
-  const width = Math.max(n2[0].length, n2[1].length);
-  let incr = n2.length === 3 && n2[2] !== void 0 ? Math.max(Math.abs(numeric(n2[2])), 1) : 1;
-  let test = lte;
-  const reverse = y2 < x2;
-  if (reverse) {
-    incr *= -1;
-    test = gte;
-  }
-  const pad = n2.some(isPadded);
-  let length = 0;
-  for (let i2 = x2; test(i2, y2) && N2.length < max; i2 += incr) {
-    let c2;
-    if (isAlphaSequence) {
-      c2 = String.fromCharCode(i2);
-      if (c2 === "\\") {
-        c2 = "";
-      }
-    } else {
-      c2 = String(i2);
-      if (pad) {
-        const need = width - c2.length;
-        if (need > 0) {
-          const z2 = new Array(need + 1).join("0");
-          if (i2 < 0) {
-            c2 = "-" + z2 + c2.slice(1);
-          } else {
-            c2 = z2 + c2;
-          }
-        }
-      }
-    }
-    if (length + c2.length > maxLength)
-      break;
-    N2.push(c2);
-    length += c2.length;
-  }
-  return N2;
-}
-function expand_(str2, max, maxLength, isTop) {
-  let acc = [""];
-  let dropEmpties = false;
-  let firstGroup = true;
-  for (; ; ) {
-    const m2 = balanced("{", "}", str2);
-    if (!m2) {
-      return combine(acc, str2, [""], max, maxLength, dropEmpties);
-    }
-    const pre = m2.pre;
-    if (/\$$/.test(pre)) {
-      acc = combine(acc, pre + "{" + m2.body + "}", [""], max, maxLength, dropEmpties && !m2.post.length);
-      firstGroup = false;
-      if (!m2.post.length)
-        break;
-      str2 = m2.post;
-      continue;
-    }
-    const isNumericSequence = /^-?\d+\.\.-?\d+(?:\.\.-?\d+)?$/.test(m2.body);
-    const isAlphaSequence = /^[a-zA-Z]\.\.[a-zA-Z](?:\.\.-?\d+)?$/.test(m2.body);
-    const isSequence = isNumericSequence || isAlphaSequence;
-    const isOptions = m2.body.indexOf(",") >= 0;
-    if (!isSequence && !isOptions) {
-      if (m2.post.match(/,(?!,).*\}/)) {
-        str2 = m2.pre + "{" + m2.body + escClose + m2.post;
-        isTop = true;
-        continue;
-      }
-      return combine(acc, pre + "{" + m2.body + "}" + m2.post, [""], max, maxLength, dropEmpties);
-    }
-    if (firstGroup) {
-      dropEmpties = isTop && !isSequence;
-      firstGroup = false;
-    }
-    let values;
-    if (isSequence) {
-      values = expandSequence(m2.body, isAlphaSequence, max, maxLength);
-    } else {
-      let n2 = parseCommaParts(m2.body);
-      if (n2.length === 1 && n2[0] !== void 0) {
-        n2 = expand_(n2[0], max, maxLength, false).map(embrace);
-        if (n2.length === 1) {
-          acc = combine(acc, pre + n2[0], [""], max, maxLength, dropEmpties && !m2.post.length);
-          if (!m2.post.length)
-            break;
-          str2 = m2.post;
-          continue;
-        }
-      }
-      let dropsEmpties = dropEmpties && !m2.post.length && !pre;
-      for (let d2 = 0; dropsEmpties && d2 < acc.length; d2++) {
-        if (acc[d2]) {
-          dropsEmpties = false;
-        }
-      }
-      values = [];
-      let valuesLength = 0;
-      outer: for (let j2 = 0; j2 < n2.length; j2++) {
-        const expanded = expand_(n2[j2], max, maxLength, false);
-        for (let k2 = 0; k2 < expanded.length; k2++) {
-          const v2 = expanded[k2];
-          if (dropsEmpties && !v2)
-            continue;
-          if (values.length >= max || valuesLength + v2.length > maxLength) {
-            break outer;
-          }
-          values.push(v2);
-          valuesLength += v2.length;
-        }
-      }
-    }
-    acc = combine(acc, pre, values, max, maxLength, dropEmpties && !m2.post.length);
-    if (!m2.post.length)
-      break;
-    str2 = m2.post;
-  }
-  return acc;
-}
-
-// node_modules/minimatch/dist/esm/assert-valid-pattern.js
-var MAX_PATTERN_LENGTH = 1024 * 64;
-var assertValidPattern = (pattern) => {
-  if (typeof pattern !== "string") {
-    throw new TypeError("invalid pattern");
-  }
-  if (pattern.length > MAX_PATTERN_LENGTH) {
-    throw new TypeError("pattern is too long");
-  }
-};
-
-// node_modules/minimatch/dist/esm/brace-expressions.js
-var posixClasses = {
-  "[:alnum:]": ["\\p{L}\\p{Nl}\\p{Nd}", true],
-  "[:alpha:]": ["\\p{L}\\p{Nl}", true],
-  "[:ascii:]": ["\\x00-\\x7f", false],
-  "[:blank:]": ["\\p{Zs}\\t", true],
-  "[:cntrl:]": ["\\p{Cc}", true],
-  "[:digit:]": ["\\p{Nd}", true],
-  "[:graph:]": ["\\p{Z}\\p{C}", true, true],
-  "[:lower:]": ["\\p{Ll}", true],
-  "[:print:]": ["\\p{C}", true],
-  "[:punct:]": ["\\p{P}", true],
-  "[:space:]": ["\\p{Z}\\t\\r\\n\\v\\f", true],
-  "[:upper:]": ["\\p{Lu}", true],
-  "[:word:]": ["\\p{L}\\p{Nl}\\p{Nd}\\p{Pc}", true],
-  "[:xdigit:]": ["A-Fa-f0-9", false]
-};
-var braceEscape = (s2) => s2.replace(/[[\]\\-]/g, "\\$&");
-var regexpEscape = (s2) => s2.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-var rangesToString = (ranges) => ranges.join("");
-var parseClass = (glob, position) => {
-  const pos = position;
-  if (glob.charAt(pos) !== "[") {
-    throw new Error("not in a brace expression");
-  }
-  const ranges = [];
-  const negs = [];
-  let i2 = pos + 1;
-  let sawStart = false;
-  let uflag = false;
-  let escaping = false;
-  let negate = false;
-  let endPos = pos;
-  let rangeStart = "";
-  WHILE: while (i2 < glob.length) {
-    const c2 = glob.charAt(i2);
-    if ((c2 === "!" || c2 === "^") && i2 === pos + 1) {
-      negate = true;
-      i2++;
-      continue;
-    }
-    if (c2 === "]" && sawStart && !escaping) {
-      endPos = i2 + 1;
-      break;
-    }
-    sawStart = true;
-    if (c2 === "\\") {
-      if (!escaping) {
-        escaping = true;
-        i2++;
-        continue;
-      }
-    }
-    if (c2 === "[" && !escaping) {
-      for (const [cls, [unip, u2, neg]] of Object.entries(posixClasses)) {
-        if (glob.startsWith(cls, i2)) {
-          if (rangeStart) {
-            return ["$.", false, glob.length - pos, true];
-          }
-          i2 += cls.length;
-          if (neg)
-            negs.push(unip);
-          else
-            ranges.push(unip);
-          uflag = uflag || u2;
-          continue WHILE;
-        }
-      }
-    }
-    escaping = false;
-    if (rangeStart) {
-      if (c2 > rangeStart) {
-        ranges.push(braceEscape(rangeStart) + "-" + braceEscape(c2));
-      } else if (c2 === rangeStart) {
-        ranges.push(braceEscape(c2));
-      }
-      rangeStart = "";
-      i2++;
-      continue;
-    }
-    if (glob.startsWith("-]", i2 + 1)) {
-      ranges.push(braceEscape(c2 + "-"));
-      i2 += 2;
-      continue;
-    }
-    if (glob.startsWith("-", i2 + 1)) {
-      rangeStart = c2;
-      i2 += 2;
-      continue;
-    }
-    ranges.push(braceEscape(c2));
-    i2++;
-  }
-  if (endPos < i2) {
-    return ["", false, 0, false];
-  }
-  if (!ranges.length && !negs.length) {
-    return ["$.", false, glob.length - pos, true];
-  }
-  if (negs.length === 0 && ranges.length === 1 && /^\\?.$/.test(ranges[0]) && !negate) {
-    const r2 = ranges[0].length === 2 ? ranges[0].slice(-1) : ranges[0];
-    return [regexpEscape(r2), false, endPos - pos, false];
-  }
-  const sranges = "[" + (negate ? "^" : "") + rangesToString(ranges) + "]";
-  const snegs = "[" + (negate ? "" : "^") + rangesToString(negs) + "]";
-  const comb = ranges.length && negs.length ? "(" + sranges + "|" + snegs + ")" : ranges.length ? sranges : snegs;
-  return [comb, uflag, endPos - pos, true];
-};
-
-// node_modules/minimatch/dist/esm/unescape.js
-var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}) => {
-  if (magicalBraces) {
-    return windowsPathsNoEscape ? s2.replace(/\[([^/\\])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\])\]/g, "$1$2").replace(/\\([^/])/g, "$1");
-  }
-  return windowsPathsNoEscape ? s2.replace(/\[([^/\\{}])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\{}])\]/g, "$1$2").replace(/\\([^/{}])/g, "$1");
-};
-
-// node_modules/minimatch/dist/esm/ast.js
-var _a;
-var types2 = /* @__PURE__ */ new Set(["!", "?", "+", "*", "@"]);
-var isExtglobType = (c2) => types2.has(c2);
-var isExtglobAST = (c2) => isExtglobType(c2.type);
-var adoptionMap = /* @__PURE__ */ new Map([
-  ["!", ["@"]],
-  ["?", ["?", "@"]],
-  ["@", ["@"]],
-  ["*", ["*", "+", "?", "@"]],
-  ["+", ["+", "@"]]
-]);
-var adoptionWithSpaceMap = /* @__PURE__ */ new Map([
-  ["!", ["?"]],
-  ["@", ["?"]],
-  ["+", ["?", "*"]]
-]);
-var adoptionAnyMap = /* @__PURE__ */ new Map([
-  ["!", ["?", "@"]],
-  ["?", ["?", "@"]],
-  ["@", ["?", "@"]],
-  ["*", ["*", "+", "?", "@"]],
-  ["+", ["+", "@", "?", "*"]]
-]);
-var usurpMap = /* @__PURE__ */ new Map([
-  ["!", /* @__PURE__ */ new Map([["!", "@"]])],
-  [
-    "?",
-    /* @__PURE__ */ new Map([
-      ["*", "*"],
-      ["+", "*"]
-    ])
-  ],
-  [
-    "@",
-    /* @__PURE__ */ new Map([
-      ["!", "!"],
-      ["?", "?"],
-      ["@", "@"],
-      ["*", "*"],
-      ["+", "+"]
-    ])
-  ],
-  [
-    "+",
-    /* @__PURE__ */ new Map([
-      ["?", "*"],
-      ["*", "*"]
-    ])
-  ]
-]);
-var startNoTraversal = "(?!(?:^|/)\\.\\.?(?:$|/))";
-var startNoDot = "(?!\\.)";
-var addPatternStart = /* @__PURE__ */ new Set(["[", "."]);
-var justDots = /* @__PURE__ */ new Set(["..", "."]);
-var reSpecials = new Set("().*{}+?[]^$\\!");
-var regExpEscape = (s2) => s2.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-var qmark = "[^/]";
-var star = qmark + "*?";
-var starNoEmpty = qmark + "+?";
-var ID = 0;
-var AST = class {
-  type;
-  #root;
-  #hasMagic;
-  #uflag = false;
-  #parts = [];
-  #parent;
-  #parentIndex;
-  #negs;
-  #filledNegs = false;
-  #options;
-  #toString;
-  // set to true if it's an extglob with no children
-  // (which really means one child of '')
-  #emptyExt = false;
-  id = ++ID;
-  get depth() {
-    return (this.#parent?.depth ?? -1) + 1;
-  }
-  [Symbol.for("nodejs.util.inspect.custom")]() {
-    return {
-      "@@type": "AST",
-      id: this.id,
-      type: this.type,
-      root: this.#root.id,
-      parent: this.#parent?.id,
-      depth: this.depth,
-      partsLength: this.#parts.length,
-      parts: this.#parts
-    };
-  }
-  constructor(type2, parent, options = {}) {
-    this.type = type2;
-    if (type2)
-      this.#hasMagic = true;
-    this.#parent = parent;
-    this.#root = this.#parent ? this.#parent.#root : this;
-    this.#options = this.#root === this ? options : this.#root.#options;
-    this.#negs = this.#root === this ? [] : this.#root.#negs;
-    if (type2 === "!" && !this.#root.#filledNegs)
-      this.#negs.push(this);
-    this.#parentIndex = this.#parent ? this.#parent.#parts.length : 0;
-  }
-  get hasMagic() {
-    if (this.#hasMagic !== void 0)
-      return this.#hasMagic;
-    for (const p2 of this.#parts) {
-      if (typeof p2 === "string")
-        continue;
-      if (p2.type || p2.hasMagic)
-        return this.#hasMagic = true;
-    }
-    return this.#hasMagic;
-  }
-  // reconstructs the pattern
-  toString() {
-    return this.#toString !== void 0 ? this.#toString : !this.type ? this.#toString = this.#parts.map((p2) => String(p2)).join("") : this.#toString = this.type + "(" + this.#parts.map((p2) => String(p2)).join("|") + ")";
-  }
-  #fillNegs() {
-    if (this !== this.#root)
-      throw new Error("should only call on root");
-    if (this.#filledNegs)
-      return this;
-    this.toString();
-    this.#filledNegs = true;
-    let n2;
-    while (n2 = this.#negs.pop()) {
-      if (n2.type !== "!")
-        continue;
-      let p2 = n2;
-      let pp = p2.#parent;
-      while (pp) {
-        for (let i2 = p2.#parentIndex + 1; !pp.type && i2 < pp.#parts.length; i2++) {
-          for (const part of n2.#parts) {
-            if (typeof part === "string") {
-              throw new Error("string part in extglob AST??");
-            }
-            part.copyIn(pp.#parts[i2]);
-          }
-        }
-        p2 = pp;
-        pp = p2.#parent;
-      }
-    }
-    return this;
-  }
-  push(...parts) {
-    for (const p2 of parts) {
-      if (p2 === "")
-        continue;
-      if (typeof p2 !== "string" && !(p2 instanceof _a && p2.#parent === this)) {
-        throw new Error("invalid part: " + p2);
-      }
-      this.#parts.push(p2);
-    }
-  }
-  toJSON() {
-    const ret = this.type === null ? this.#parts.slice().map((p2) => typeof p2 === "string" ? p2 : p2.toJSON()) : [this.type, ...this.#parts.map((p2) => p2.toJSON())];
-    if (this.isStart() && !this.type)
-      ret.unshift([]);
-    if (this.isEnd() && (this === this.#root || this.#root.#filledNegs && this.#parent?.type === "!")) {
-      ret.push({});
-    }
-    return ret;
-  }
-  isStart() {
-    if (this.#root === this)
-      return true;
-    if (!this.#parent?.isStart())
-      return false;
-    if (this.#parentIndex === 0)
-      return true;
-    const p2 = this.#parent;
-    for (let i2 = 0; i2 < this.#parentIndex; i2++) {
-      const pp = p2.#parts[i2];
-      if (!(pp instanceof _a && pp.type === "!")) {
-        return false;
-      }
-    }
-    return true;
-  }
-  isEnd() {
-    if (this.#root === this)
-      return true;
-    if (this.#parent?.type === "!")
-      return true;
-    if (!this.#parent?.isEnd())
-      return false;
-    if (!this.type)
-      return this.#parent?.isEnd();
-    const pl = this.#parent ? this.#parent.#parts.length : 0;
-    return this.#parentIndex === pl - 1;
-  }
-  copyIn(part) {
-    if (typeof part === "string")
-      this.push(part);
-    else
-      this.push(part.clone(this));
-  }
-  clone(parent) {
-    const c2 = new _a(this.type, parent);
-    for (const p2 of this.#parts) {
-      c2.copyIn(p2);
-    }
-    return c2;
-  }
-  static #parseAST(str2, ast, pos, opt, extDepth) {
-    const maxDepth = opt.maxExtglobRecursion ?? 2;
-    let escaping = false;
-    let inBrace = false;
-    let braceStart = -1;
-    let braceNeg = false;
-    if (ast.type === null) {
-      let i3 = pos;
-      let acc2 = "";
-      while (i3 < str2.length) {
-        const c2 = str2.charAt(i3++);
-        if (escaping || c2 === "\\") {
-          escaping = !escaping;
-          acc2 += c2;
-          continue;
-        }
-        if (inBrace) {
-          if (i3 === braceStart + 1) {
-            if (c2 === "^" || c2 === "!") {
-              braceNeg = true;
-            }
-          } else if (c2 === "]" && !(i3 === braceStart + 2 && braceNeg)) {
-            inBrace = false;
-          }
-          acc2 += c2;
-          continue;
-        } else if (c2 === "[") {
-          inBrace = true;
-          braceStart = i3;
-          braceNeg = false;
-          acc2 += c2;
-          continue;
-        }
-        const doRecurse = !opt.noext && isExtglobType(c2) && str2.charAt(i3) === "(" && extDepth <= maxDepth;
-        if (doRecurse) {
-          ast.push(acc2);
-          acc2 = "";
-          const ext2 = new _a(c2, ast);
-          i3 = _a.#parseAST(str2, ext2, i3, opt, extDepth + 1);
-          ast.push(ext2);
-          continue;
-        }
-        acc2 += c2;
-      }
-      ast.push(acc2);
-      return i3;
-    }
-    let i2 = pos + 1;
-    let part = new _a(null, ast);
-    const parts = [];
-    let acc = "";
-    while (i2 < str2.length) {
-      const c2 = str2.charAt(i2++);
-      if (escaping || c2 === "\\") {
-        escaping = !escaping;
-        acc += c2;
-        continue;
-      }
-      if (inBrace) {
-        if (i2 === braceStart + 1) {
-          if (c2 === "^" || c2 === "!") {
-            braceNeg = true;
-          }
-        } else if (c2 === "]" && !(i2 === braceStart + 2 && braceNeg)) {
-          inBrace = false;
-        }
-        acc += c2;
-        continue;
-      } else if (c2 === "[") {
-        inBrace = true;
-        braceStart = i2;
-        braceNeg = false;
-        acc += c2;
-        continue;
-      }
-      const doRecurse = !opt.noext && isExtglobType(c2) && str2.charAt(i2) === "(" && /* c8 ignore start - the maxDepth is sufficient here */
-      (extDepth <= maxDepth || ast && ast.#canAdoptType(c2));
-      if (doRecurse) {
-        const depthAdd = ast && ast.#canAdoptType(c2) ? 0 : 1;
-        part.push(acc);
-        acc = "";
-        const ext2 = new _a(c2, part);
-        part.push(ext2);
-        i2 = _a.#parseAST(str2, ext2, i2, opt, extDepth + depthAdd);
-        continue;
-      }
-      if (c2 === "|") {
-        part.push(acc);
-        acc = "";
-        parts.push(part);
-        part = new _a(null, ast);
-        continue;
-      }
-      if (c2 === ")") {
-        if (acc === "" && ast.#parts.length === 0) {
-          ast.#emptyExt = true;
-        }
-        part.push(acc);
-        acc = "";
-        ast.push(...parts, part);
-        return i2;
-      }
-      acc += c2;
-    }
-    ast.type = null;
-    ast.#hasMagic = void 0;
-    ast.#parts = [str2.substring(pos - 1)];
-    return i2;
-  }
-  #canAdoptWithSpace(child) {
-    return this.#canAdopt(child, adoptionWithSpaceMap);
-  }
-  #canAdopt(child, map2 = adoptionMap) {
-    if (!child || typeof child !== "object" || child.type !== null || child.#parts.length !== 1 || this.type === null) {
-      return false;
-    }
-    const gc = child.#parts[0];
-    if (!gc || typeof gc !== "object" || gc.type === null) {
-      return false;
-    }
-    return this.#canAdoptType(gc.type, map2);
-  }
-  #canAdoptType(c2, map2 = adoptionAnyMap) {
-    return !!map2.get(this.type)?.includes(c2);
-  }
-  #adoptWithSpace(child, index) {
-    const gc = child.#parts[0];
-    const blank = new _a(null, gc, this.options);
-    blank.#parts.push("");
-    gc.push(blank);
-    this.#adopt(child, index);
-  }
-  #adopt(child, index) {
-    const gc = child.#parts[0];
-    this.#parts.splice(index, 1, ...gc.#parts);
-    for (const p2 of gc.#parts) {
-      if (typeof p2 === "object")
-        p2.#parent = this;
-    }
-    this.#toString = void 0;
-  }
-  #canUsurpType(c2) {
-    const m2 = usurpMap.get(this.type);
-    return !!m2?.has(c2);
-  }
-  #canUsurp(child) {
-    if (!child || typeof child !== "object" || child.type !== null || child.#parts.length !== 1 || this.type === null || this.#parts.length !== 1) {
-      return false;
-    }
-    const gc = child.#parts[0];
-    if (!gc || typeof gc !== "object" || gc.type === null) {
-      return false;
-    }
-    return this.#canUsurpType(gc.type);
-  }
-  #usurp(child) {
-    const m2 = usurpMap.get(this.type);
-    const gc = child.#parts[0];
-    const nt2 = m2?.get(gc.type);
-    if (!nt2)
-      return false;
-    this.#parts = gc.#parts;
-    for (const p2 of this.#parts) {
-      if (typeof p2 === "object") {
-        p2.#parent = this;
-      }
-    }
-    this.type = nt2;
-    this.#toString = void 0;
-    this.#emptyExt = false;
-  }
-  static fromGlob(pattern, options = {}) {
-    const ast = new _a(null, void 0, options);
-    _a.#parseAST(pattern, ast, 0, options, 0);
-    return ast;
-  }
-  // returns the regular expression if there's magic, or the unescaped
-  // string if not.
-  toMMPattern() {
-    if (this !== this.#root)
-      return this.#root.toMMPattern();
-    const glob = this.toString();
-    const [re2, body, hasMagic, uflag] = this.toRegExpSource();
-    const anyMagic = hasMagic || this.#hasMagic || this.#options.nocase && !this.#options.nocaseMagicOnly && glob.toUpperCase() !== glob.toLowerCase();
-    if (!anyMagic) {
-      return body;
-    }
-    const flags = (this.#options.nocase ? "i" : "") + (uflag ? "u" : "");
-    return Object.assign(new RegExp(`^${re2}$`, flags), {
-      _src: re2,
-      _glob: glob
-    });
-  }
-  get options() {
-    return this.#options;
-  }
-  // returns the string match, the regexp source, whether there's magic
-  // in the regexp (so a regular expression is required) and whether or
-  // not the uflag is needed for the regular expression (for posix classes)
-  // TODO: instead of injecting the start/end at this point, just return
-  // the BODY of the regexp, along with the start/end portions suitable
-  // for binding the start/end in either a joined full-path makeRe context
-  // (where we bind to (^|/), or a standalone matchPart context (where
-  // we bind to ^, and not /).  Otherwise slashes get duped!
-  //
-  // In part-matching mode, the start is:
-  // - if not isStart: nothing
-  // - if traversal possible, but not allowed: ^(?!\.\.?$)
-  // - if dots allowed or not possible: ^
-  // - if dots possible and not allowed: ^(?!\.)
-  // end is:
-  // - if not isEnd(): nothing
-  // - else: $
-  //
-  // In full-path matching mode, we put the slash at the START of the
-  // pattern, so start is:
-  // - if first pattern: same as part-matching mode
-  // - if not isStart(): nothing
-  // - if traversal possible, but not allowed: /(?!\.\.?(?:$|/))
-  // - if dots allowed or not possible: /
-  // - if dots possible and not allowed: /(?!\.)
-  // end is:
-  // - if last pattern, same as part-matching mode
-  // - else nothing
-  //
-  // Always put the (?:$|/) on negated tails, though, because that has to be
-  // there to bind the end of the negated pattern portion, and it's easier to
-  // just stick it in now rather than try to inject it later in the middle of
-  // the pattern.
-  //
-  // We can just always return the same end, and leave it up to the caller
-  // to know whether it's going to be used joined or in parts.
-  // And, if the start is adjusted slightly, can do the same there:
-  // - if not isStart: nothing
-  // - if traversal possible, but not allowed: (?:/|^)(?!\.\.?$)
-  // - if dots allowed or not possible: (?:/|^)
-  // - if dots possible and not allowed: (?:/|^)(?!\.)
-  //
-  // But it's better to have a simpler binding without a conditional, for
-  // performance, so probably better to return both start options.
-  //
-  // Then the caller just ignores the end if it's not the first pattern,
-  // and the start always gets applied.
-  //
-  // But that's always going to be $ if it's the ending pattern, or nothing,
-  // so the caller can just attach $ at the end of the pattern when building.
-  //
-  // So the todo is:
-  // - better detect what kind of start is needed
-  // - return both flavors of starting pattern
-  // - attach $ at the end of the pattern when creating the actual RegExp
-  //
-  // Ah, but wait, no, that all only applies to the root when the first pattern
-  // is not an extglob. If the first pattern IS an extglob, then we need all
-  // that dot prevention biz to live in the extglob portions, because eg
-  // +(*|.x*) can match .xy but not .yx.
-  //
-  // So, return the two flavors if it's #root and the first child is not an
-  // AST, otherwise leave it to the child AST to handle it, and there,
-  // use the (?:^|/) style of start binding.
-  //
-  // Even simplified further:
-  // - Since the start for a join is eg /(?!\.) and the start for a part
-  // is ^(?!\.), we can just prepend (?!\.) to the pattern (either root
-  // or start or whatever) and prepend ^ or / at the Regexp construction.
-  toRegExpSource(allowDot) {
-    const dot = allowDot ?? !!this.#options.dot;
-    if (this.#root === this) {
-      this.#flatten();
-      this.#fillNegs();
-    }
-    if (!isExtglobAST(this)) {
-      const noEmpty = this.isStart() && this.isEnd() && !this.#parts.some((s2) => typeof s2 !== "string");
-      const src = this.#parts.map((p2) => {
-        const [re2, _2, hasMagic, uflag] = typeof p2 === "string" ? _a.#parseGlob(p2, this.#hasMagic, noEmpty) : p2.toRegExpSource(allowDot);
-        this.#hasMagic = this.#hasMagic || hasMagic;
-        this.#uflag = this.#uflag || uflag;
-        return re2;
-      }).join("");
-      let start2 = "";
-      if (this.isStart()) {
-        if (typeof this.#parts[0] === "string") {
-          const dotTravAllowed = this.#parts.length === 1 && justDots.has(this.#parts[0]);
-          if (!dotTravAllowed) {
-            const aps = addPatternStart;
-            const needNoTrav = (
-              // dots are allowed, and the pattern starts with [ or .
-              dot && aps.has(src.charAt(0)) || // the pattern starts with \., and then [ or .
-              src.startsWith("\\.") && aps.has(src.charAt(2)) || // the pattern starts with \.\., and then [ or .
-              src.startsWith("\\.\\.") && aps.has(src.charAt(4))
-            );
-            const needNoDot = !dot && !allowDot && aps.has(src.charAt(0));
-            start2 = needNoTrav ? startNoTraversal : needNoDot ? startNoDot : "";
-          }
-        }
-      }
-      let end = "";
-      if (this.isEnd() && this.#root.#filledNegs && this.#parent?.type === "!") {
-        end = "(?:$|\\/)";
-      }
-      const final2 = start2 + src + end;
-      return [
-        final2,
-        unescape2(src),
-        this.#hasMagic = !!this.#hasMagic,
-        this.#uflag
-      ];
-    }
-    const repeated = this.type === "*" || this.type === "+";
-    const start = this.type === "!" ? "(?:(?!(?:" : "(?:";
-    let body = this.#partsToRegExp(dot);
-    if (this.isStart() && this.isEnd() && !body && this.type !== "!") {
-      const s2 = this.toString();
-      const me2 = this;
-      me2.#parts = [s2];
-      me2.type = null;
-      me2.#hasMagic = void 0;
-      return [s2, unescape2(this.toString()), false, false];
-    }
-    let bodyDotAllowed = !repeated || allowDot || dot || !startNoDot ? "" : this.#partsToRegExp(true);
-    if (bodyDotAllowed === body) {
-      bodyDotAllowed = "";
-    }
-    if (bodyDotAllowed) {
-      body = `(?:${body})(?:${bodyDotAllowed})*?`;
-    }
-    let final = "";
-    if (this.type === "!" && this.#emptyExt) {
-      final = (this.isStart() && !dot ? startNoDot : "") + starNoEmpty;
-    } else {
-      const close = this.type === "!" ? (
-        // !() must match something,but !(x) can match ''
-        "))" + (this.isStart() && !dot && !allowDot ? startNoDot : "") + star + ")"
-      ) : this.type === "@" ? ")" : this.type === "?" ? ")?" : this.type === "+" && bodyDotAllowed ? ")" : this.type === "*" && bodyDotAllowed ? `)?` : `)${this.type}`;
-      final = start + body + close;
-    }
-    return [
-      final,
-      unescape2(body),
-      this.#hasMagic = !!this.#hasMagic,
-      this.#uflag
-    ];
-  }
-  #flatten() {
-    if (!isExtglobAST(this)) {
-      for (const p2 of this.#parts) {
-        if (typeof p2 === "object") {
-          p2.#flatten();
-        }
-      }
-    } else {
-      let iterations = 0;
-      let done = false;
-      do {
-        done = true;
-        for (let i2 = 0; i2 < this.#parts.length; i2++) {
-          const c2 = this.#parts[i2];
-          if (typeof c2 === "object") {
-            c2.#flatten();
-            if (this.#canAdopt(c2)) {
-              done = false;
-              this.#adopt(c2, i2);
-            } else if (this.#canAdoptWithSpace(c2)) {
-              done = false;
-              this.#adoptWithSpace(c2, i2);
-            } else if (this.#canUsurp(c2)) {
-              done = false;
-              this.#usurp(c2);
-            }
-          }
-        }
-      } while (!done && ++iterations < 10);
-    }
-    this.#toString = void 0;
-  }
-  #partsToRegExp(dot) {
-    return this.#parts.map((p2) => {
-      if (typeof p2 === "string") {
-        throw new Error("string type in extglob ast??");
-      }
-      const [re2, _2, _hasMagic, uflag] = p2.toRegExpSource(dot);
-      this.#uflag = this.#uflag || uflag;
-      return re2;
-    }).filter((p2) => !(this.isStart() && this.isEnd()) || !!p2).join("|");
-  }
-  static #parseGlob(glob, hasMagic, noEmpty = false) {
-    let escaping = false;
-    let re2 = "";
-    let uflag = false;
-    let inStar = false;
-    for (let i2 = 0; i2 < glob.length; i2++) {
-      const c2 = glob.charAt(i2);
-      if (escaping) {
-        escaping = false;
-        re2 += (reSpecials.has(c2) ? "\\" : "") + c2;
-        continue;
-      }
-      if (c2 === "*") {
-        if (inStar)
-          continue;
-        inStar = true;
-        re2 += noEmpty && /^[*]+$/.test(glob) ? starNoEmpty : star;
-        hasMagic = true;
-        continue;
-      } else {
-        inStar = false;
-      }
-      if (c2 === "\\") {
-        if (i2 === glob.length - 1) {
-          re2 += "\\\\";
-        } else {
-          escaping = true;
-        }
-        continue;
-      }
-      if (c2 === "[") {
-        const [src, needUflag, consumed, magic] = parseClass(glob, i2);
-        if (consumed) {
-          re2 += src;
-          uflag = uflag || needUflag;
-          i2 += consumed - 1;
-          hasMagic = hasMagic || magic;
-          continue;
-        }
-      }
-      if (c2 === "?") {
-        re2 += qmark;
-        hasMagic = true;
-        continue;
-      }
-      re2 += regExpEscape(c2);
-    }
-    return [re2, unescape2(glob), !!hasMagic, uflag];
-  }
-};
-_a = AST;
-
-// node_modules/minimatch/dist/esm/escape.js
-var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {}) => {
-  if (magicalBraces) {
-    return windowsPathsNoEscape ? s2.replace(/[?*()[\]{}]/g, "[$&]") : s2.replace(/[?*()[\]\\{}]/g, "\\$&");
-  }
-  return windowsPathsNoEscape ? s2.replace(/[?*()[\]]/g, "[$&]") : s2.replace(/[?*()[\]\\]/g, "\\$&");
-};
-
-// node_modules/minimatch/dist/esm/index.js
-var minimatch = (p2, pattern, options = {}) => {
-  assertValidPattern(pattern);
-  if (!options.nocomment && pattern.charAt(0) === "#") {
-    return false;
-  }
-  return new Minimatch(pattern, options).match(p2);
-};
-var starDotExtRE = /^\*+([^+@!?*[(]*)$/;
-var starDotExtTest = (ext2) => (f2) => !f2.startsWith(".") && f2.endsWith(ext2);
-var starDotExtTestDot = (ext2) => (f2) => f2.endsWith(ext2);
-var starDotExtTestNocase = (ext2) => {
-  ext2 = ext2.toLowerCase();
-  return (f2) => !f2.startsWith(".") && f2.toLowerCase().endsWith(ext2);
-};
-var starDotExtTestNocaseDot = (ext2) => {
-  ext2 = ext2.toLowerCase();
-  return (f2) => f2.toLowerCase().endsWith(ext2);
-};
-var starDotStarRE = /^\*+\.\*+$/;
-var starDotStarTest = (f2) => !f2.startsWith(".") && f2.includes(".");
-var starDotStarTestDot = (f2) => f2 !== "." && f2 !== ".." && f2.includes(".");
-var dotStarRE = /^\.\*+$/;
-var dotStarTest = (f2) => f2 !== "." && f2 !== ".." && f2.startsWith(".");
-var starRE = /^\*+$/;
-var starTest = (f2) => f2.length !== 0 && !f2.startsWith(".");
-var starTestDot = (f2) => f2.length !== 0 && f2 !== "." && f2 !== "..";
-var qmarksRE = /^\?+([^+@!?*[(]*)?$/;
-var qmarksTestNocase = ([$0, ext2 = ""]) => {
-  const noext = qmarksTestNoExt([$0]);
-  if (!ext2)
-    return noext;
-  ext2 = ext2.toLowerCase();
-  return (f2) => noext(f2) && f2.toLowerCase().endsWith(ext2);
-};
-var qmarksTestNocaseDot = ([$0, ext2 = ""]) => {
-  const noext = qmarksTestNoExtDot([$0]);
-  if (!ext2)
-    return noext;
-  ext2 = ext2.toLowerCase();
-  return (f2) => noext(f2) && f2.toLowerCase().endsWith(ext2);
-};
-var qmarksTestDot = ([$0, ext2 = ""]) => {
-  const noext = qmarksTestNoExtDot([$0]);
-  return !ext2 ? noext : (f2) => noext(f2) && f2.endsWith(ext2);
-};
-var qmarksTest = ([$0, ext2 = ""]) => {
-  const noext = qmarksTestNoExt([$0]);
-  return !ext2 ? noext : (f2) => noext(f2) && f2.endsWith(ext2);
-};
-var qmarksTestNoExt = ([$0]) => {
-  const len = $0.length;
-  return (f2) => f2.length === len && !f2.startsWith(".");
-};
-var qmarksTestNoExtDot = ([$0]) => {
-  const len = $0.length;
-  return (f2) => f2.length === len && f2 !== "." && f2 !== "..";
-};
-var defaultPlatform = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-var path13 = {
-  win32: { sep: "\\" },
-  posix: { sep: "/" }
-};
-var sep3 = defaultPlatform === "win32" ? path13.win32.sep : path13.posix.sep;
-minimatch.sep = sep3;
-var GLOBSTAR = Symbol("globstar **");
-minimatch.GLOBSTAR = GLOBSTAR;
-var qmark2 = "[^/]";
-var star2 = qmark2 + "*?";
-var twoStarDot = "(?:(?!(?:\\/|^)(?:\\.{1,2})($|\\/)).)*?";
-var twoStarNoDot = "(?:(?!(?:\\/|^)\\.).)*?";
-var filter = (pattern, options = {}) => (p2) => minimatch(p2, pattern, options);
-minimatch.filter = filter;
-var ext = (a2, b2 = {}) => Object.assign({}, a2, b2);
-var defaults = (def) => {
-  if (!def || typeof def !== "object" || !Object.keys(def).length) {
-    return minimatch;
-  }
-  const orig = minimatch;
-  const m2 = (p2, pattern, options = {}) => orig(p2, pattern, ext(def, options));
-  return Object.assign(m2, {
-    Minimatch: class Minimatch extends orig.Minimatch {
-      constructor(pattern, options = {}) {
-        super(pattern, ext(def, options));
-      }
-      static defaults(options) {
-        return orig.defaults(ext(def, options)).Minimatch;
-      }
-    },
-    AST: class AST extends orig.AST {
-      /* c8 ignore start */
-      constructor(type2, parent, options = {}) {
-        super(type2, parent, ext(def, options));
-      }
-      /* c8 ignore stop */
-      static fromGlob(pattern, options = {}) {
-        return orig.AST.fromGlob(pattern, ext(def, options));
-      }
-    },
-    unescape: (s2, options = {}) => orig.unescape(s2, ext(def, options)),
-    escape: (s2, options = {}) => orig.escape(s2, ext(def, options)),
-    filter: (pattern, options = {}) => orig.filter(pattern, ext(def, options)),
-    defaults: (options) => orig.defaults(ext(def, options)),
-    makeRe: (pattern, options = {}) => orig.makeRe(pattern, ext(def, options)),
-    braceExpand: (pattern, options = {}) => orig.braceExpand(pattern, ext(def, options)),
-    match: (list, pattern, options = {}) => orig.match(list, pattern, ext(def, options)),
-    sep: orig.sep,
-    GLOBSTAR
-  });
-};
-minimatch.defaults = defaults;
-var braceExpand = (pattern, options = {}) => {
-  assertValidPattern(pattern);
-  if (options.nobrace || !/\{(?:(?!\{).)*\}/.test(pattern)) {
-    return [pattern];
-  }
-  return expand(pattern, { max: options.braceExpandMax });
-};
-minimatch.braceExpand = braceExpand;
-var makeRe = (pattern, options = {}) => new Minimatch(pattern, options).makeRe();
-minimatch.makeRe = makeRe;
-var match = (list, pattern, options = {}) => {
-  const mm = new Minimatch(pattern, options);
-  list = list.filter((f2) => mm.match(f2));
-  if (mm.options.nonull && !list.length) {
-    list.push(pattern);
-  }
-  return list;
-};
-minimatch.match = match;
-var globMagic = /[?*]|[+@!]\(.*?\)|\[|\]/;
-var regExpEscape2 = (s2) => s2.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-var Minimatch = class {
-  options;
-  set;
-  pattern;
-  windowsPathsNoEscape;
-  nonegate;
-  negate;
-  comment;
-  empty;
-  preserveMultipleSlashes;
-  partial;
-  globSet;
-  globParts;
-  nocase;
-  isWindows;
-  platform;
-  windowsNoMagicRoot;
-  maxGlobstarRecursion;
-  regexp;
-  constructor(pattern, options = {}) {
-    assertValidPattern(pattern);
-    options = options || {};
-    this.options = options;
-    this.maxGlobstarRecursion = options.maxGlobstarRecursion ?? 200;
-    this.pattern = pattern;
-    this.platform = options.platform || defaultPlatform;
-    this.isWindows = this.platform === "win32";
-    const awe = "allowWindowsEscape";
-    this.windowsPathsNoEscape = !!options.windowsPathsNoEscape || options[awe] === false;
-    if (this.windowsPathsNoEscape) {
-      this.pattern = this.pattern.replace(/\\/g, "/");
-    }
-    this.preserveMultipleSlashes = !!options.preserveMultipleSlashes;
-    this.regexp = null;
-    this.negate = false;
-    this.nonegate = !!options.nonegate;
-    this.comment = false;
-    this.empty = false;
-    this.partial = !!options.partial;
-    this.nocase = !!this.options.nocase;
-    this.windowsNoMagicRoot = options.windowsNoMagicRoot !== void 0 ? options.windowsNoMagicRoot : !!(this.isWindows && this.nocase);
-    this.globSet = [];
-    this.globParts = [];
-    this.set = [];
-    this.make();
-  }
-  hasMagic() {
-    if (this.options.magicalBraces && this.set.length > 1) {
-      return true;
-    }
-    for (const pattern of this.set) {
-      for (const part of pattern) {
-        if (typeof part !== "string")
-          return true;
-      }
-    }
-    return false;
-  }
-  debug(..._2) {
-  }
-  make() {
-    const pattern = this.pattern;
-    const options = this.options;
-    if (!options.nocomment && pattern.charAt(0) === "#") {
-      this.comment = true;
-      return;
-    }
-    if (!pattern) {
-      this.empty = true;
-      return;
-    }
-    this.parseNegate();
-    this.globSet = [...new Set(this.braceExpand())];
-    if (options.debug) {
-      this.debug = (...args) => console.error(...args);
-    }
-    this.debug(this.pattern, this.globSet);
-    const rawGlobParts = this.globSet.map((s2) => this.slashSplit(s2));
-    this.globParts = this.preprocess(rawGlobParts);
-    this.debug(this.pattern, this.globParts);
-    let set2 = this.globParts.map((s2, _2, __2) => {
-      if (this.isWindows && this.windowsNoMagicRoot) {
-        const isUNC = s2[0] === "" && s2[1] === "" && (s2[2] === "?" || !globMagic.test(s2[2])) && !globMagic.test(s2[3]);
-        const isDrive = /^[a-z]:/i.test(s2[0]);
-        if (isUNC) {
-          return [
-            ...s2.slice(0, 4),
-            ...s2.slice(4).map((ss) => this.parse(ss))
-          ];
-        } else if (isDrive) {
-          return [s2[0], ...s2.slice(1).map((ss) => this.parse(ss))];
-        }
-      }
-      return s2.map((ss) => this.parse(ss));
-    });
-    this.debug(this.pattern, set2);
-    this.set = set2.filter((s2) => s2.indexOf(false) === -1);
-    if (this.isWindows) {
-      for (let i2 = 0; i2 < this.set.length; i2++) {
-        const p2 = this.set[i2];
-        if (p2[0] === "" && p2[1] === "" && this.globParts[i2][2] === "?" && typeof p2[3] === "string" && /^[a-z]:$/i.test(p2[3])) {
-          p2[2] = "?";
-        }
-      }
-    }
-    this.debug(this.pattern, this.set);
-  }
-  // various transforms to equivalent pattern sets that are
-  // faster to process in a filesystem walk.  The goal is to
-  // eliminate what we can, and push all ** patterns as far
-  // to the right as possible, even if it increases the number
-  // of patterns that we have to process.
-  preprocess(globParts) {
-    if (this.options.noglobstar) {
-      for (const partset of globParts) {
-        for (let j2 = 0; j2 < partset.length; j2++) {
-          if (partset[j2] === "**") {
-            partset[j2] = "*";
-          }
-        }
-      }
-    }
-    const { optimizationLevel = 1 } = this.options;
-    if (optimizationLevel >= 2) {
-      globParts = this.firstPhasePreProcess(globParts);
-      globParts = this.secondPhasePreProcess(globParts);
-    } else if (optimizationLevel >= 1) {
-      globParts = this.levelOneOptimize(globParts);
-    } else {
-      globParts = this.adjascentGlobstarOptimize(globParts);
-    }
-    return globParts;
-  }
-  // just get rid of adjascent ** portions
-  adjascentGlobstarOptimize(globParts) {
-    return globParts.map((parts) => {
-      let gs = -1;
-      while (-1 !== (gs = parts.indexOf("**", gs + 1))) {
-        let i2 = gs;
-        while (parts[i2 + 1] === "**") {
-          i2++;
-        }
-        if (i2 !== gs) {
-          parts.splice(gs, i2 - gs);
-        }
-      }
-      return parts;
-    });
-  }
-  // get rid of adjascent ** and resolve .. portions
-  levelOneOptimize(globParts) {
-    return globParts.map((parts) => {
-      parts = parts.reduce((set2, part) => {
-        const prev = set2[set2.length - 1];
-        if (part === "**" && prev === "**") {
-          return set2;
-        }
-        if (part === "..") {
-          if (prev && prev !== ".." && prev !== "." && prev !== "**") {
-            set2.pop();
-            return set2;
-          }
-        }
-        set2.push(part);
-        return set2;
-      }, []);
-      return parts.length === 0 ? [""] : parts;
-    });
-  }
-  levelTwoFileOptimize(parts) {
-    if (!Array.isArray(parts)) {
-      parts = this.slashSplit(parts);
-    }
-    let didSomething = false;
-    do {
-      didSomething = false;
-      if (!this.preserveMultipleSlashes) {
-        for (let i2 = 1; i2 < parts.length - 1; i2++) {
-          const p2 = parts[i2];
-          if (i2 === 1 && p2 === "" && parts[0] === "")
-            continue;
-          if (p2 === "." || p2 === "") {
-            didSomething = true;
-            parts.splice(i2, 1);
-            i2--;
-          }
-        }
-        if (parts[0] === "." && parts.length === 2 && (parts[1] === "." || parts[1] === "")) {
-          didSomething = true;
-          parts.pop();
-        }
-      }
-      let dd = 0;
-      while (-1 !== (dd = parts.indexOf("..", dd + 1))) {
-        const p2 = parts[dd - 1];
-        if (p2 && p2 !== "." && p2 !== ".." && p2 !== "**" && !(this.isWindows && /^[a-z]:$/i.test(p2))) {
-          didSomething = true;
-          parts.splice(dd - 1, 2);
-          dd -= 2;
-        }
-      }
-    } while (didSomething);
-    return parts.length === 0 ? [""] : parts;
-  }
-  // First phase: single-pattern processing
-  // <pre> is 1 or more portions
-  // <rest> is 1 or more portions
-  // <p> is any portion other than ., .., '', or **
-  // <e> is . or ''
-  //
-  // **/.. is *brutal* for filesystem walking performance, because
-  // it effectively resets the recursive walk each time it occurs,
-  // and ** cannot be reduced out by a .. pattern part like a regexp
-  // or most strings (other than .., ., and '') can be.
-  //
-  // <pre>/**/../<p>/<p>/<rest> -> {<pre>/../<p>/<p>/<rest>,<pre>/**/<p>/<p>/<rest>}
-  // <pre>/<e>/<rest> -> <pre>/<rest>
-  // <pre>/<p>/../<rest> -> <pre>/<rest>
-  // **/**/<rest> -> **/<rest>
-  //
-  // **/*/<rest> -> */**/<rest> <== not valid because ** doesn't follow
-  // this WOULD be allowed if ** did follow symlinks, or * didn't
-  firstPhasePreProcess(globParts) {
-    let didSomething = false;
-    do {
-      didSomething = false;
-      for (let parts of globParts) {
-        let gs = -1;
-        while (-1 !== (gs = parts.indexOf("**", gs + 1))) {
-          let gss = gs;
-          while (parts[gss + 1] === "**") {
-            gss++;
-          }
-          if (gss > gs) {
-            parts.splice(gs + 1, gss - gs);
-          }
-          let next = parts[gs + 1];
-          const p2 = parts[gs + 2];
-          const p22 = parts[gs + 3];
-          if (next !== "..")
-            continue;
-          if (!p2 || p2 === "." || p2 === ".." || !p22 || p22 === "." || p22 === "..") {
-            continue;
-          }
-          didSomething = true;
-          parts.splice(gs, 1);
-          const other = parts.slice(0);
-          other[gs] = "**";
-          globParts.push(other);
-          gs--;
-        }
-        if (!this.preserveMultipleSlashes) {
-          for (let i2 = 1; i2 < parts.length - 1; i2++) {
-            const p2 = parts[i2];
-            if (i2 === 1 && p2 === "" && parts[0] === "")
-              continue;
-            if (p2 === "." || p2 === "") {
-              didSomething = true;
-              parts.splice(i2, 1);
-              i2--;
-            }
-          }
-          if (parts[0] === "." && parts.length === 2 && (parts[1] === "." || parts[1] === "")) {
-            didSomething = true;
-            parts.pop();
-          }
-        }
-        let dd = 0;
-        while (-1 !== (dd = parts.indexOf("..", dd + 1))) {
-          const p2 = parts[dd - 1];
-          if (p2 && p2 !== "." && p2 !== ".." && p2 !== "**") {
-            didSomething = true;
-            const needDot = dd === 1 && parts[dd + 1] === "**";
-            const splin = needDot ? ["."] : [];
-            parts.splice(dd - 1, 2, ...splin);
-            if (parts.length === 0)
-              parts.push("");
-            dd -= 2;
-          }
-        }
-      }
-    } while (didSomething);
-    return globParts;
-  }
-  // second phase: multi-pattern dedupes
-  // {<pre>/*/<rest>,<pre>/<p>/<rest>} -> <pre>/*/<rest>
-  // {<pre>/<rest>,<pre>/<rest>} -> <pre>/<rest>
-  // {<pre>/**/<rest>,<pre>/<rest>} -> <pre>/**/<rest>
-  //
-  // {<pre>/**/<rest>,<pre>/**/<p>/<rest>} -> <pre>/**/<rest>
-  // ^-- not valid because ** doens't follow symlinks
-  secondPhasePreProcess(globParts) {
-    for (let i2 = 0; i2 < globParts.length - 1; i2++) {
-      for (let j2 = i2 + 1; j2 < globParts.length; j2++) {
-        const matched = this.partsMatch(globParts[i2], globParts[j2], !this.preserveMultipleSlashes);
-        if (matched) {
-          globParts[i2] = [];
-          globParts[j2] = matched;
-          break;
-        }
-      }
-    }
-    return globParts.filter((gs) => gs.length);
-  }
-  partsMatch(a2, b2, emptyGSMatch = false) {
-    let ai = 0;
-    let bi = 0;
-    let result2 = [];
-    let which = "";
-    while (ai < a2.length && bi < b2.length) {
-      if (a2[ai] === b2[bi]) {
-        result2.push(which === "b" ? b2[bi] : a2[ai]);
-        ai++;
-        bi++;
-      } else if (emptyGSMatch && a2[ai] === "**" && b2[bi] === a2[ai + 1]) {
-        result2.push(a2[ai]);
-        ai++;
-      } else if (emptyGSMatch && b2[bi] === "**" && a2[ai] === b2[bi + 1]) {
-        result2.push(b2[bi]);
-        bi++;
-      } else if (a2[ai] === "*" && b2[bi] && (this.options.dot || !b2[bi].startsWith(".")) && b2[bi] !== "**") {
-        if (which === "b")
-          return false;
-        which = "a";
-        result2.push(a2[ai]);
-        ai++;
-        bi++;
-      } else if (b2[bi] === "*" && a2[ai] && (this.options.dot || !a2[ai].startsWith(".")) && a2[ai] !== "**") {
-        if (which === "a")
-          return false;
-        which = "b";
-        result2.push(b2[bi]);
-        ai++;
-        bi++;
-      } else {
-        return false;
-      }
-    }
-    return a2.length === b2.length && result2;
-  }
-  parseNegate() {
-    if (this.nonegate)
-      return;
-    const pattern = this.pattern;
-    let negate = false;
-    let negateOffset = 0;
-    for (let i2 = 0; i2 < pattern.length && pattern.charAt(i2) === "!"; i2++) {
-      negate = !negate;
-      negateOffset++;
-    }
-    if (negateOffset)
-      this.pattern = pattern.slice(negateOffset);
-    this.negate = negate;
-  }
-  // set partial to true to test if, for example,
-  // "/a/b" matches the start of "/*/b/*/d"
-  // Partial means, if you run out of file before you run
-  // out of pattern, then that's fine, as long as all
-  // the parts match.
-  matchOne(file, pattern, partial = false) {
-    let fileStartIndex = 0;
-    let patternStartIndex = 0;
-    if (this.isWindows) {
-      const fileDrive = typeof file[0] === "string" && /^[a-z]:$/i.test(file[0]);
-      const fileUNC = !fileDrive && file[0] === "" && file[1] === "" && file[2] === "?" && /^[a-z]:$/i.test(file[3]);
-      const patternDrive = typeof pattern[0] === "string" && /^[a-z]:$/i.test(pattern[0]);
-      const patternUNC = !patternDrive && pattern[0] === "" && pattern[1] === "" && pattern[2] === "?" && typeof pattern[3] === "string" && /^[a-z]:$/i.test(pattern[3]);
-      const fdi = fileUNC ? 3 : fileDrive ? 0 : void 0;
-      const pdi = patternUNC ? 3 : patternDrive ? 0 : void 0;
-      if (typeof fdi === "number" && typeof pdi === "number") {
-        const [fd, pd] = [
-          file[fdi],
-          pattern[pdi]
-        ];
-        if (fd.toLowerCase() === pd.toLowerCase()) {
-          pattern[pdi] = fd;
-          patternStartIndex = pdi;
-          fileStartIndex = fdi;
-        }
-      }
-    }
-    const { optimizationLevel = 1 } = this.options;
-    if (optimizationLevel >= 2) {
-      file = this.levelTwoFileOptimize(file);
-    }
-    if (pattern.includes(GLOBSTAR)) {
-      return this.#matchGlobstar(file, pattern, partial, fileStartIndex, patternStartIndex);
-    }
-    return this.#matchOne(file, pattern, partial, fileStartIndex, patternStartIndex);
-  }
-  #matchGlobstar(file, pattern, partial, fileIndex, patternIndex) {
-    const firstgs = pattern.indexOf(GLOBSTAR, patternIndex);
-    const lastgs = pattern.lastIndexOf(GLOBSTAR);
-    const [head, body, tail] = partial ? [
-      pattern.slice(patternIndex, firstgs),
-      pattern.slice(firstgs + 1),
-      []
-    ] : [
-      pattern.slice(patternIndex, firstgs),
-      pattern.slice(firstgs + 1, lastgs),
-      pattern.slice(lastgs + 1)
-    ];
-    if (head.length) {
-      const fileHead = file.slice(fileIndex, fileIndex + head.length);
-      if (!this.#matchOne(fileHead, head, partial, 0, 0)) {
-        return false;
-      }
-      fileIndex += head.length;
-      patternIndex += head.length;
-    }
-    let fileTailMatch = 0;
-    if (tail.length) {
-      if (tail.length + fileIndex > file.length)
-        return false;
-      let tailStart = file.length - tail.length;
-      if (this.#matchOne(file, tail, partial, tailStart, 0)) {
-        fileTailMatch = tail.length;
-      } else {
-        if (file[file.length - 1] !== "" || fileIndex + tail.length === file.length) {
-          return false;
-        }
-        tailStart--;
-        if (!this.#matchOne(file, tail, partial, tailStart, 0)) {
-          return false;
-        }
-        fileTailMatch = tail.length + 1;
-      }
-    }
-    if (!body.length) {
-      let sawSome = !!fileTailMatch;
-      for (let i3 = fileIndex; i3 < file.length - fileTailMatch; i3++) {
-        const f2 = String(file[i3]);
-        sawSome = true;
-        if (f2 === "." || f2 === ".." || !this.options.dot && f2.startsWith(".")) {
-          return false;
-        }
-      }
-      return partial || sawSome;
-    }
-    const bodySegments = [[[], 0]];
-    let currentBody = bodySegments[0];
-    let nonGsParts = 0;
-    const nonGsPartsSums = [0];
-    for (const b2 of body) {
-      if (b2 === GLOBSTAR) {
-        nonGsPartsSums.push(nonGsParts);
-        currentBody = [[], 0];
-        bodySegments.push(currentBody);
-      } else {
-        currentBody[0].push(b2);
-        nonGsParts++;
-      }
-    }
-    let i2 = bodySegments.length - 1;
-    const fileLength = file.length - fileTailMatch;
-    for (const b2 of bodySegments) {
-      b2[1] = fileLength - (nonGsPartsSums[i2--] + b2[0].length);
-    }
-    return !!this.#matchGlobStarBodySections(file, bodySegments, fileIndex, 0, partial, 0, !!fileTailMatch);
-  }
-  // return false for "nope, not matching"
-  // return null for "not matching, cannot keep trying"
-  #matchGlobStarBodySections(file, bodySegments, fileIndex, bodyIndex, partial, globStarDepth, sawTail) {
-    const bs = bodySegments[bodyIndex];
-    if (!bs) {
-      for (let i2 = fileIndex; i2 < file.length; i2++) {
-        sawTail = true;
-        const f2 = file[i2];
-        if (f2 === "." || f2 === ".." || !this.options.dot && f2.startsWith(".")) {
-          return false;
-        }
-      }
-      return sawTail;
-    }
-    const [body, after] = bs;
-    while (fileIndex <= after) {
-      const m2 = this.#matchOne(file.slice(0, fileIndex + body.length), body, partial, fileIndex, 0);
-      if (m2 && globStarDepth < this.maxGlobstarRecursion) {
-        const sub = this.#matchGlobStarBodySections(file, bodySegments, fileIndex + body.length, bodyIndex + 1, partial, globStarDepth + 1, sawTail);
-        if (sub !== false) {
-          return sub;
-        }
-      }
-      const f2 = file[fileIndex];
-      if (f2 === "." || f2 === ".." || !this.options.dot && f2.startsWith(".")) {
-        return false;
-      }
-      fileIndex++;
-    }
-    return partial || null;
-  }
-  #matchOne(file, pattern, partial, fileIndex, patternIndex) {
-    let fi;
-    let pi;
-    let pl;
-    let fl;
-    for (fi = fileIndex, pi = patternIndex, fl = file.length, pl = pattern.length; fi < fl && pi < pl; fi++, pi++) {
-      this.debug("matchOne loop");
-      let p2 = pattern[pi];
-      let f2 = file[fi];
-      this.debug(pattern, p2, f2);
-      if (p2 === false || p2 === GLOBSTAR) {
-        return false;
-      }
-      let hit;
-      if (typeof p2 === "string") {
-        hit = f2 === p2;
-        this.debug("string match", p2, f2, hit);
-      } else {
-        hit = p2.test(f2);
-        this.debug("pattern match", p2, f2, hit);
-      }
-      if (!hit)
-        return false;
-    }
-    if (fi === fl && pi === pl) {
-      return true;
-    } else if (fi === fl) {
-      return partial;
-    } else if (pi === pl) {
-      return fi === fl - 1 && file[fi] === "";
-    } else {
-      throw new Error("wtf?");
-    }
-  }
-  braceExpand() {
-    return braceExpand(this.pattern, this.options);
-  }
-  parse(pattern) {
-    assertValidPattern(pattern);
-    const options = this.options;
-    if (pattern === "**")
-      return GLOBSTAR;
-    if (pattern === "")
-      return "";
-    let m2;
-    let fastTest = null;
-    if (m2 = pattern.match(starRE)) {
-      fastTest = options.dot ? starTestDot : starTest;
-    } else if (m2 = pattern.match(starDotExtRE)) {
-      fastTest = (options.nocase ? options.dot ? starDotExtTestNocaseDot : starDotExtTestNocase : options.dot ? starDotExtTestDot : starDotExtTest)(m2[1]);
-    } else if (m2 = pattern.match(qmarksRE)) {
-      fastTest = (options.nocase ? options.dot ? qmarksTestNocaseDot : qmarksTestNocase : options.dot ? qmarksTestDot : qmarksTest)(m2);
-    } else if (m2 = pattern.match(starDotStarRE)) {
-      fastTest = options.dot ? starDotStarTestDot : starDotStarTest;
-    } else if (m2 = pattern.match(dotStarRE)) {
-      fastTest = dotStarTest;
-    }
-    const re2 = AST.fromGlob(pattern, this.options).toMMPattern();
-    if (fastTest && typeof re2 === "object") {
-      Reflect.defineProperty(re2, "test", { value: fastTest });
-    }
-    return re2;
-  }
-  makeRe() {
-    if (this.regexp || this.regexp === false)
-      return this.regexp;
-    const set2 = this.set;
-    if (!set2.length) {
-      this.regexp = false;
-      return this.regexp;
-    }
-    const options = this.options;
-    const twoStar = options.noglobstar ? star2 : options.dot ? twoStarDot : twoStarNoDot;
-    const flags = new Set(options.nocase ? ["i"] : []);
-    let re2 = set2.map((pattern) => {
-      const pp = pattern.map((p2) => {
-        if (p2 instanceof RegExp) {
-          for (const f2 of p2.flags.split(""))
-            flags.add(f2);
-        }
-        return typeof p2 === "string" ? regExpEscape2(p2) : p2 === GLOBSTAR ? GLOBSTAR : p2._src;
-      });
-      pp.forEach((p2, i2) => {
-        const next = pp[i2 + 1];
-        const prev = pp[i2 - 1];
-        if (p2 !== GLOBSTAR || prev === GLOBSTAR) {
-          return;
-        }
-        if (prev === void 0) {
-          if (next !== void 0 && next !== GLOBSTAR) {
-            pp[i2 + 1] = "(?:\\/|" + twoStar + "\\/)?" + next;
-          } else {
-            pp[i2] = twoStar;
-          }
-        } else if (next === void 0) {
-          pp[i2 - 1] = prev + "(?:\\/|\\/" + twoStar + ")?";
-        } else if (next !== GLOBSTAR) {
-          pp[i2 - 1] = prev + "(?:\\/|\\/" + twoStar + "\\/)" + next;
-          pp[i2 + 1] = GLOBSTAR;
-        }
-      });
-      const filtered = pp.filter((p2) => p2 !== GLOBSTAR);
-      if (this.partial && filtered.length >= 1) {
-        const prefixes = [];
-        for (let i2 = 1; i2 <= filtered.length; i2++) {
-          prefixes.push(filtered.slice(0, i2).join("/"));
-        }
-        return "(?:" + prefixes.join("|") + ")";
-      }
-      return filtered.join("/");
-    }).join("|");
-    const [open4, close] = set2.length > 1 ? ["(?:", ")"] : ["", ""];
-    re2 = "^" + open4 + re2 + close + "$";
-    if (this.partial) {
-      re2 = "^(?:\\/|" + open4 + re2.slice(1, -1) + close + ")$";
-    }
-    if (this.negate)
-      re2 = "^(?!" + re2 + ").+$";
-    try {
-      this.regexp = new RegExp(re2, [...flags].join(""));
-    } catch {
-      this.regexp = false;
-    }
-    return this.regexp;
-  }
-  slashSplit(p2) {
-    if (this.preserveMultipleSlashes) {
-      return p2.split("/");
-    } else if (this.isWindows && /^\/\/[^/]+/.test(p2)) {
-      return ["", ...p2.split(/\/+/)];
-    } else {
-      return p2.split(/\/+/);
-    }
-  }
-  match(f2, partial = this.partial) {
-    this.debug("match", f2, this.pattern);
-    if (this.comment) {
-      return false;
-    }
-    if (this.empty) {
-      return f2 === "";
-    }
-    if (f2 === "/" && partial) {
-      return true;
-    }
-    const options = this.options;
-    if (this.isWindows) {
-      f2 = f2.split("\\").join("/");
-    }
-    const ff = this.slashSplit(f2);
-    this.debug(this.pattern, "split", ff);
-    const set2 = this.set;
-    this.debug(this.pattern, "set", set2);
-    let filename = ff[ff.length - 1];
-    if (!filename) {
-      for (let i2 = ff.length - 2; !filename && i2 >= 0; i2--) {
-        filename = ff[i2];
-      }
-    }
-    for (const pattern of set2) {
-      let file = ff;
-      if (options.matchBase && pattern.length === 1) {
-        file = [filename];
-      }
-      const hit = this.matchOne(file, pattern, partial);
-      if (hit) {
-        if (options.flipNegate) {
-          return true;
-        }
-        return !this.negate;
-      }
-    }
-    if (options.flipNegate) {
-      return false;
-    }
-    return this.negate;
-  }
-  static defaults(def) {
-    return minimatch.defaults(def).Minimatch;
-  }
-};
-minimatch.AST = AST;
-minimatch.Minimatch = Minimatch;
-minimatch.escape = escape2;
-minimatch.unescape = unescape2;
 
 // src/analysis/path-matcher.ts
 var MAX_PATTERN_LENGTH2 = 500;
@@ -47486,10 +47839,10 @@ function messageFromError(error2) {
   if (typeof error2 === "string") return error2;
   if (typeof error2 === "object" && error2 !== null) {
     try {
-      const record = error2;
+      const record2 = error2;
       const serialized = JSON.stringify({
-        ...record,
-        ..."message" in record && typeof record.message === "string" ? { message: record.message } : error2 instanceof Error ? { message: error2.message } : {}
+        ...record2,
+        ..."message" in record2 && typeof record2.message === "string" ? { message: record2.message } : error2 instanceof Error ? { message: error2.message } : {}
       });
       if (serialized !== "{}") return serialized;
     } catch {
@@ -47530,11 +47883,11 @@ function collectKnownCapacityFields(value, depth = 0) {
       { values: [], definitive: false }
     );
   }
-  const record = value;
+  const record2 = value;
   const fields = [];
   let definitive = false;
   for (const key of ["error", "status", "message", "code"]) {
-    const field = record[key];
+    const field = record2[key];
     if (typeof field === "string" || typeof field === "number") {
       const normalized = String(field);
       fields.push(normalized);
@@ -48871,7 +49224,7 @@ var ReviewOrchestrator = class {
       }
       let reviewIntensity = config.pathDefaultIntensity ?? "standard";
       if (config.pathBasedIntensity) {
-        let patterns = [];
+        let patterns2 = [];
         if (config.pathIntensityPatterns) {
           try {
             const parsed = JSON.parse(config.pathIntensityPatterns);
@@ -48879,7 +49232,7 @@ var ReviewOrchestrator = class {
               logger.warn(
                 "pathIntensityPatterns is not an array, using defaults"
               );
-              patterns = createDefaultPathMatcherConfig().patterns;
+              patterns2 = createDefaultPathMatcherConfig().patterns;
             } else {
               const PathPatternSchema = external_exports.object({
                 pattern: external_exports.string(),
@@ -48899,9 +49252,9 @@ var ReviewOrchestrator = class {
               }
               if (validPatterns.length === 0) {
                 logger.warn("No valid path patterns found, using defaults");
-                patterns = createDefaultPathMatcherConfig().patterns;
+                patterns2 = createDefaultPathMatcherConfig().patterns;
               } else {
-                patterns = validPatterns;
+                patterns2 = validPatterns;
               }
             }
           } catch (error2) {
@@ -48909,15 +49262,15 @@ var ReviewOrchestrator = class {
               "Failed to parse pathIntensityPatterns, using defaults",
               error2
             );
-            patterns = createDefaultPathMatcherConfig().patterns;
+            patterns2 = createDefaultPathMatcherConfig().patterns;
           }
         } else {
-          patterns = createDefaultPathMatcherConfig().patterns;
+          patterns2 = createDefaultPathMatcherConfig().patterns;
         }
         const pathMatcher = new PathMatcher({
           enabled: true,
           defaultIntensity: config.pathDefaultIntensity ?? "standard",
-          patterns
+          patterns: patterns2
         });
         const intensityResult = pathMatcher.determineIntensity(
           reviewContext.files
@@ -49902,10 +50255,10 @@ var ReviewOrchestrator = class {
             }
           } else {
             lifecycle.mutationSkipped.push(
-              ...lifecycle.resolvedCandidates.map((record) => ({
-                ...record,
+              ...lifecycle.resolvedCandidates.map((record2) => ({
+                ...record2,
                 reasonCodes: [
-                  ...record.reasonCodes,
+                  ...record2.reasonCodes,
                   "mutation_failed"
                 ]
               }))
@@ -50197,7 +50550,7 @@ var ReviewOrchestrator = class {
   filterCommandDismissedLifecycleTargets(targets, reviewCommentState, skipped) {
     const active = [];
     const alreadySkipped = new Set(
-      skipped.map((record) => record.target.targetId)
+      skipped.map((record2) => record2.target.targetId)
     );
     for (const target of targets) {
       if (this.isLifecycleTargetCommandDismissed(target, reviewCommentState)) {
@@ -50214,25 +50567,25 @@ var ReviewOrchestrator = class {
   filterCommandDismissedLifecycleRecords(records, reviewCommentState, skipped) {
     const active = [];
     const alreadySkipped = new Set(
-      skipped.map((record) => record.target.targetId)
+      skipped.map((record2) => record2.target.targetId)
     );
-    for (const record of records) {
+    for (const record2 of records) {
       if (this.isLifecycleTargetCommandDismissed(
-        record.target,
+        record2.target,
         reviewCommentState
       )) {
-        if (!alreadySkipped.has(record.target.targetId)) {
+        if (!alreadySkipped.has(record2.target.targetId)) {
           skipped.push(
-            this.lifecycleRecord(record.target, [
-              ...record.reasonCodes,
+            this.lifecycleRecord(record2.target, [
+              ...record2.reasonCodes,
               "command_dismissed"
             ])
           );
-          alreadySkipped.add(record.target.targetId);
+          alreadySkipped.add(record2.target.targetId);
         }
         continue;
       }
-      active.push(record);
+      active.push(record2);
     }
     return active;
   }
@@ -50277,7 +50630,7 @@ var ReviewOrchestrator = class {
   }
   removeResolvedLifecycleDedupeRefs(dedupeComments, resolvedRecords) {
     const resolvedFingerprints = new Set(
-      resolvedRecords.map((record) => record.target.fingerprint)
+      resolvedRecords.map((record2) => record2.target.fingerprint)
     );
     if (resolvedFingerprints.size === 0) return dedupeComments;
     return dedupeComments.filter((comment) => {
@@ -50324,17 +50677,17 @@ var ReviewOrchestrator = class {
     }
   }
   applyLifecycleBatchProviderFailures(records, failuresByTarget) {
-    for (const record of records) {
-      const failures = failuresByTarget.get(record.targetId);
+    for (const record2 of records) {
+      const failures = failuresByTarget.get(record2.targetId);
       if (failures && failures.size > 0) {
-        record.failedProviderIds = Array.from(failures);
+        record2.failedProviderIds = Array.from(failures);
       }
     }
   }
   applyLifecycleMutationResult(lifecycle, mutationResult) {
     const handled = /* @__PURE__ */ new Set();
     const mark = (records) => {
-      records.forEach((record) => handled.add(record.target.targetId));
+      records.forEach((record2) => handled.add(record2.target.targetId));
     };
     lifecycle.resolvedByLifecycle.push(...mutationResult.resolved);
     lifecycle.manualAttention.push(...mutationResult.manualAttention);
@@ -50346,7 +50699,7 @@ var ReviewOrchestrator = class {
     mark(mutationResult.skipped);
     mark(mutationResult.failed);
     lifecycle.resolvedCandidates = lifecycle.resolvedCandidates.filter(
-      (record) => !handled.has(record.target.targetId)
+      (record2) => !handled.has(record2.target.targetId)
     );
   }
   async buildUnreviewedLifecycleForSkippedReview(pr2, configuredLifecycleMode, reason, currentFindings = [], loadedReviewCommentState) {
@@ -50486,11 +50839,11 @@ var ReviewOrchestrator = class {
   failUnconfirmedLifecycleCandidates(lifecycle) {
     if (lifecycle.resolvedCandidates.length === 0) return;
     lifecycle.mutationFailed.push(
-      ...lifecycle.resolvedCandidates.map((record) => ({
-        ...record,
+      ...lifecycle.resolvedCandidates.map((record2) => ({
+        ...record2,
         reasonCodes: Array.from(
           /* @__PURE__ */ new Set([
-            ...record.reasonCodes,
+            ...record2.reasonCodes,
             "mutation_failed"
           ])
         ),
@@ -50913,7 +51266,7 @@ ${markdown}`;
     const lifecycle = review.threadLifecycle;
     if (!lifecycle) return false;
     return lifecycle.inventoryFailed === true || lifecycle.previousStillValid.some(
-      (record) => !isLinkedCurrentFinding(record)
+      (record2) => !isLinkedCurrentFinding(record2)
     ) || lifecycle.previousUncertain.length > 0 || lifecycle.manualAttention.length > 0 || lifecycle.mutationSkipped.length > 0 || lifecycle.mutationFailed.length > 0 || lifecycle.skipped.length > 0 || lifecycle.warnings.length > 0;
   }
   async ensureBudget(config) {
@@ -50925,8 +51278,8 @@ ${markdown}`;
       );
     }
   }
-  estimateTokens(text) {
-    return Math.ceil(Buffer.byteLength(text, "utf8") / 4);
+  estimateTokens(text2) {
+    return Math.ceil(Buffer.byteLength(text2, "utf8") / 4);
   }
   /**
    * Sanitize filename to prevent path traversal attacks
@@ -51446,7 +51799,7 @@ function isReviewFailureComment(body) {
 }
 function isFailedProgressComment(body) {
   const isProgressComment = PROGRESS_COMMENT_HEADERS.some((header) => body.startsWith(header)) || PROGRESS_TRACKER_MARKERS.some((marker) => body.includes(marker));
-  return isProgressComment && FAILED_PROGRESS_TEXT.some((text) => body.includes(text));
+  return isProgressComment && FAILED_PROGRESS_TEXT.some((text2) => body.includes(text2));
 }
 function hasReviewRouterBotMarker(body) {
   return body.includes(REVIEW_ROUTER_BOT_MARKER) || LEGACY_BOT_MARKERS.some((marker) => body.includes(marker));
@@ -51681,8 +52034,8 @@ function isExplicitlyUnsupported(value) {
   const code = errorCode(value);
   if (code === "review_request_intent_disabled") return true;
   if (!value || typeof value !== "object") return false;
-  const record = value;
-  return record.error === "Not Found" && typeof record.message === "string" && record.message.includes("/api/action/v1/review-requests/manual") && record.message.includes("not found");
+  const record2 = value;
+  return record2.error === "Not Found" && typeof record2.message === "string" && record2.message.includes("/api/action/v1/review-requests/manual") && record2.message.includes("not found");
 }
 function errorCode(value) {
   if (!value || typeof value !== "object") return null;
@@ -52257,10 +52610,10 @@ ${this.ledger.statusText(loaded.payload, headSha)}` : `ReviewRouter override led
         repo: this.actionsClient.repo,
         run_id: runId
       });
-      const run2 = response.data;
-      lastRun = run2;
-      if (run2.status === "completed" || Date.now() >= deadline) {
-        return run2;
+      const run3 = response.data;
+      lastRun = run3;
+      if (run3.status === "completed" || Date.now() >= deadline) {
+        return run3;
       }
       await sleep(Math.min(5e3, Math.max(250, deadline - Date.now())));
     } while (Date.now() < deadline);
@@ -52384,8 +52737,8 @@ function isFailedWorkflowConclusion(conclusion) {
 function compareWorkflowRunsNewestFirst(a2, b2) {
   return workflowRunTime(b2) - workflowRunTime(a2);
 }
-function workflowRunTime(run2) {
-  const value = run2.updated_at || run2.run_started_at || run2.created_at || "";
+function workflowRunTime(run3) {
+  const value = run3.updated_at || run3.run_started_at || run3.created_at || "";
   const time = Date.parse(value);
   return Number.isFinite(time) ? time : 0;
 }
@@ -53854,9 +54207,9 @@ function getBlockingFindingBreakdown(review, threshold) {
     attributedCarriedForward
   );
   const unclassifiedCurrent = current - fromCurrentReview - carriedForward;
-  const previousStillValid = (review.threadLifecycle?.previousStillValid ?? []).filter((record) => {
-    if (isLinkedCurrentFinding(record)) return false;
-    const severity = record.target.severity;
+  const previousStillValid = (review.threadLifecycle?.previousStillValid ?? []).filter((record2) => {
+    if (isLinkedCurrentFinding(record2)) return false;
+    const severity = record2.target.severity;
     return (severity === "critical" || severity === "major" || severity === "minor") && severityRank[severity] >= minRank;
   }).length;
   return {
@@ -53926,11 +54279,11 @@ function pluralize(word, count) {
 var fs26 = __toESM(require("fs"));
 
 // src/codex-oauth/provider-api-runtime.ts
-var import_node_child_process2 = require("node:child_process");
+var import_node_child_process3 = require("node:child_process");
 var fs23 = __toESM(require("node:fs/promises"));
 var os12 = __toESM(require("node:os"));
 var path30 = __toESM(require("node:path"));
-var import_node_util2 = require("node:util");
+var import_node_util3 = require("node:util");
 
 // src/review-investigation/application/review-agent-port.ts
 var REVIEW_INVESTIGATION_GATEWAY_TOOLS = Object.freeze([
@@ -54770,12 +55123,12 @@ var CodexAppServerProtocolClient = class {
   captureFinalMessage(item) {
     const phase = itemFieldOrDefault(item, "phase", null);
     if (phase === "commentary") return;
-    const text = item.text;
-    if (!text.trim()) throw schemaFailure();
+    const text2 = item.text;
+    if (!text2.trim()) throw schemaFailure();
     this.finalMessageCandidates.push({
       id: item.id,
       phase,
-      text
+      text: text2
     });
   }
   captureTerminalSummaryFinalMessage(items, latestObserved) {
@@ -54974,8 +55327,8 @@ var CodexAppServerProtocolClient = class {
     requireRequestId(params.requestId);
     this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
   }
-  assertActiveTurnMetadata(params, keys) {
-    if (!this.threadStarted || this.turnCompleted || !hasOnlyKeys(params, keys)) {
+  assertActiveTurnMetadata(params, keys2) {
+    if (!this.threadStarted || this.turnCompleted || !hasOnlyKeys(params, keys2)) {
       throw streamFailure();
     }
     this.assertTurnFence(params);
@@ -55227,9 +55580,9 @@ function canonicalProtocolValue(value) {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalProtocolValue).join(",")}]`;
   }
-  const record = value;
-  return `{${Object.keys(record).sort().map(
-    (key) => `${JSON.stringify(key)}:${canonicalProtocolValue(record[key])}`
+  const record2 = value;
+  return `{${Object.keys(record2).sort().map(
+    (key) => `${JSON.stringify(key)}:${canonicalProtocolValue(record2[key])}`
   ).join(",")}}`;
 }
 function normalizeProtocolFailure(error2) {
@@ -55389,9 +55742,9 @@ function requireTokenCount(value) {
   return value;
 }
 function hasOnlyKeys(value, allowed) {
-  const keys = Object.keys(value).sort();
+  const keys2 = Object.keys(value).sort();
   const expected = [...allowed].sort();
-  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  return keys2.length === expected.length && keys2.every((key, index) => key === expected[index]);
 }
 function hasRequiredAndOptionalKeys(value, required, optional) {
   const allowed = /* @__PURE__ */ new Set([...required, ...optional]);
@@ -100392,7 +100745,7 @@ function leaseAcquireRejectedOutcome(reason) {
 }
 function parseProtocolLimits(value) {
   const parsed = parseCanonicalObject(value);
-  const keys = [
+  const keys2 = [
     "maxAttemptsPerSlot",
     "maxLeaseDurationMs",
     "maxObservationBytes",
@@ -100407,11 +100760,11 @@ function parseProtocolLimits(value) {
     "maxResultReportDurationMs",
     "maxWorkSlots"
   ];
-  if (Object.keys(parsed).sort().join(",") !== [...keys].sort().join(",")) {
+  if (Object.keys(parsed).sort().join(",") !== [...keys2].sort().join(",")) {
     throw new Error("review_action_v2_protocol_limits_fields_invalid");
   }
   return Object.fromEntries(
-    keys.map((key) => [key, requirePositiveInteger3(parsed[key], key)])
+    keys2.map((key) => [key, requirePositiveInteger3(parsed[key], key)])
   );
 }
 function parsePublicationOutcome(value) {
@@ -100614,6 +100967,319 @@ function deterministicIdempotencyKey(purpose, parts) {
       purpose
     })
   )}`;
+}
+
+// src/review-skills/review-skills-transport.ts
+async function fetchCapturedReviewSkills(input) {
+  const controller = new AbortController();
+  const abort = () => controller.abort(input.signal?.reason);
+  input.signal?.addEventListener("abort", abort, { once: true });
+  if (input.signal?.aborted) abort();
+  const timer = setTimeout(
+    () => controller.abort(),
+    Math.max(1, Math.min(input.timeoutMs ?? 3e4, 3e4))
+  );
+  let reader;
+  const cancelRead = () => {
+    void reader?.cancel().catch(() => void 0);
+  };
+  controller.signal.addEventListener("abort", cancelRead);
+  try {
+    const response = await (input.fetchImpl ?? fetch)(
+      new URL(reviewSkillsCompanionContract.path, input.apiUrl),
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${input.authorizationToken}`,
+          "content-type": "application/json",
+          accept: "application/json"
+        },
+        body: "{}",
+        redirect: "error",
+        cache: "no-store",
+        signal: controller.signal
+      }
+    );
+    if (!response.ok || !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+      response.headers.get("content-type") ?? ""
+    ) || !response.body)
+      throw new Error("review_skills_transport_unavailable");
+    const length = response.headers.get("content-length");
+    if (length !== null && (!/^\d+$/.test(length) || Number(length) > reviewSkillsCompanionContract.responseMaxBytes))
+      throw new Error("review_skills_response_too_large");
+    reader = response.body.getReader();
+    if (controller.signal.aborted) cancelRead();
+    const chunks = [];
+    let size = 0;
+    for (; ; ) {
+      const next = await reader.read();
+      if (next.done) break;
+      size += next.value.byteLength;
+      if (size > reviewSkillsCompanionContract.responseMaxBytes)
+        throw new Error("review_skills_response_too_large");
+      chunks.push(next.value);
+    }
+    controller.signal.throwIfAborted();
+    let value;
+    try {
+      const text2 = new TextDecoder("utf-8", { fatal: true }).decode(
+        Buffer.concat(chunks)
+      );
+      value = JSON.parse(text2);
+    } catch {
+      throw new Error("review_skills_response_invalid");
+    }
+    const capture = parseCapturedReviewSkills(value);
+    if (capture.baseSha !== input.baseSha.toLowerCase())
+      throw new Error("review_skills_capture_mismatch");
+    return capture;
+  } finally {
+    void reader?.cancel().catch(() => void 0);
+    clearTimeout(timer);
+    input.signal?.removeEventListener("abort", abort);
+    controller.signal.removeEventListener("abort", cancelRead);
+    controller.abort();
+  }
+}
+
+// src/review-skills/materialize-review-skills.ts
+var import_node_child_process = require("node:child_process");
+var import_node_path = require("node:path");
+var import_node_util = require("node:util");
+var run = (0, import_node_util.promisify)(import_node_child_process.execFile);
+var TREE_BYTES = reviewSkillsLimits.treeBytes;
+var decoder = new TextDecoder("utf-8", { fatal: true });
+async function materializeReviewSkills(input) {
+  const capture = structuredClone(input.capture);
+  if (!/^[a-f0-9]{40}$/.test(input.baseSha) || capture.baseSha !== input.baseSha)
+    throw new Error("review_skills_capture_mismatch");
+  const trees = /* @__PURE__ */ new Map();
+  const git = async (args, maxBuffer) => {
+    input.signal?.throwIfAborted();
+    try {
+      const result2 = await run(
+        "git",
+        ["-c", "core.hooksPath=/dev/null", "-C", input.checkoutRoot, ...args],
+        {
+          encoding: "buffer",
+          maxBuffer,
+          timeout: 3e4,
+          signal: input.signal,
+          killSignal: "SIGKILL",
+          env: {
+            ...process.env,
+            GIT_CONFIG_NOSYSTEM: "1",
+            GIT_CONFIG_GLOBAL: "/dev/null",
+            GIT_NO_REPLACE_OBJECTS: "1"
+          }
+        }
+      );
+      return result2.stdout;
+    } catch {
+      input.signal?.throwIfAborted();
+      throw new Error("review_skills_git_read_failed");
+    }
+  };
+  const tree = async (oid) => {
+    const previous = trees.get(oid);
+    if (previous) return previous;
+    const bytes = await git(["ls-tree", "-z", oid], TREE_BYTES);
+    const entries = decoder.decode(bytes).split("\0").filter(Boolean).map((row) => {
+      const matched = /^(\d{6}) (blob|tree|commit) ([a-f0-9]{40})\t([^\0]+)$/u.exec(row);
+      if (!matched || [...matched[4]].some(
+        (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127 || character === "/" || character === "\\"
+      ))
+        throw new Error("review_skills_git_path_invalid");
+      return {
+        mode: matched[1],
+        type: matched[2],
+        oid: matched[3],
+        name: matched[4]
+      };
+    });
+    if (entries.length > reviewSkillsLimits.treeEntries)
+      throw new Error("review_skills_git_tree_too_large");
+    trees.set(oid, entries);
+    return entries;
+  };
+  const find = async (path34) => {
+    let oid = input.baseSha;
+    const parts = path34.split("/");
+    for (let i2 = 0; i2 < parts.length; i2++) {
+      const entry = (await tree(oid)).find((item) => item.name === parts[i2]);
+      if (!entry) return null;
+      if (i2 === parts.length - 1) return entry;
+      if (entry.mode !== "040000" || entry.type !== "tree")
+        throw new Error("review_skills_git_nonregular");
+      oid = entry.oid;
+    }
+    return null;
+  };
+  const read = async (path34, limit) => {
+    const entry = await find(path34);
+    if (!entry) throw new Error("review_skills_reference_missing");
+    if (!/^100(?:644|755)$/.test(entry.mode) || entry.type !== "blob")
+      throw new Error("review_skills_git_nonregular");
+    const size = Number(
+      decoder.decode(await git(["cat-file", "-s", entry.oid], 128)).trim()
+    );
+    if (!Number.isSafeInteger(size) || size > limit)
+      throw new Error("review_skills_git_blob_too_large");
+    const content = decoder.decode(
+      await git(["cat-file", "blob", entry.oid], limit + 1)
+    );
+    if (content.includes("\0"))
+      throw new Error("review_skills_git_text_invalid");
+    return content;
+  };
+  const sources = [];
+  for (const source of capture.gitSources) {
+    if (source.root !== ".reviewrouter/skills" && source.root !== ".agents/skills")
+      throw new Error("review_skills_git_root_invalid");
+    const root = await find(source.root);
+    if (!root) continue;
+    if (root.mode !== "040000" || root.type !== "tree")
+      throw new Error("review_skills_git_nonregular");
+    for (const child of await tree(root.oid)) {
+      if (child.mode === "120000" || child.mode === "160000")
+        throw new Error("review_skills_git_nonregular");
+      if (child.type !== "tree") continue;
+      const skill = (await tree(child.oid)).find(
+        (entry) => entry.name === "SKILL.md"
+      );
+      if (!skill) continue;
+      if (!/^100(?:644|755)$/.test(skill.mode) || skill.type !== "blob")
+        throw new Error("review_skills_git_nonregular");
+      const directory = `${source.root}/${child.name}`;
+      sources.push({ directory, path: `${directory}/SKILL.md` });
+      if (sources.length + capture.webSkills.length > reviewSkillsLimits.skillsPerRun)
+        throw new Error("review_skills_count_invalid");
+    }
+  }
+  let totalBytes = Buffer.byteLength(JSON.stringify(capture));
+  const skills = [];
+  for (const source of sources.sort(
+    (a2, b2) => a2.path < b2.path ? -1 : a2.path > b2.path ? 1 : 0
+  )) {
+    const content = await read(
+      source.path,
+      reviewSkillsLimits.instructionsBytes
+    );
+    const parsed = parseGitReviewSkill(content);
+    const resources = /* @__PURE__ */ new Map();
+    const visiting = /* @__PURE__ */ new Set([source.path]);
+    const visit = async (current, text2, depth) => {
+      totalBytes += Buffer.byteLength(text2);
+      if (totalBytes > reviewSkillsLimits.bundleBytes)
+        throw new Error("review_skills_bundle_too_large");
+      for (const target of markdownReferences(text2)) {
+        if (depth >= reviewSkillsLimits.referenceDepth)
+          throw new Error("review_skills_reference_depth");
+        const resolved = import_node_path.posix.normalize(
+          import_node_path.posix.join(import_node_path.posix.dirname(current), target)
+        );
+        if (!resolved.startsWith(`${source.directory}/`) || resolved === source.directory)
+          throw new Error("review_skills_reference_traversal");
+        if (visiting.has(resolved))
+          throw new Error("review_skills_reference_cycle");
+        if (resources.has(resolved)) continue;
+        if (resources.size >= reviewSkillsLimits.referencesPerSkill)
+          throw new Error("review_skills_reference_count");
+        const reference = await read(
+          resolved,
+          reviewSkillsLimits.referenceBytes
+        );
+        resources.set(resolved, reference);
+        visiting.add(resolved);
+        await visit(resolved, reference, depth + 1);
+        visiting.delete(resolved);
+      }
+    };
+    await visit(source.path, parsed.instructions, 0);
+    skills.push({
+      skillId: `git:${source.directory}`,
+      revisionId: capture.baseSha,
+      origin: "git",
+      ...parsed,
+      includePaths: ["**"],
+      excludePaths: [],
+      resources: [...resources.entries()].sort(([a2], [b2]) => a2 < b2 ? -1 : a2 > b2 ? 1 : 0).map(([path34, content2]) => ({ path: path34, content: content2 }))
+    });
+  }
+  return createMaterializedReviewSkills(capture, skills);
+}
+function parseGitReviewSkill(content) {
+  const match2 = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u.exec(
+    content
+  );
+  if (!match2 || /(?:^|[\s:[,{])[&*][A-Za-z0-9_-]+/mu.test(match2[1]))
+    throw new Error("review_skills_frontmatter_invalid");
+  let value;
+  try {
+    value = load(match2[1], { schema: JSON_SCHEMA });
+  } catch {
+    throw new Error("review_skills_frontmatter_invalid");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("review_skills_frontmatter_invalid");
+  const row = value;
+  if (Object.keys(row).some(
+    (key) => ![
+      "name",
+      "description",
+      "license",
+      "compatibility",
+      "metadata"
+    ].includes(key)
+  ))
+    throw new Error("review_skills_frontmatter_unsupported");
+  if (typeof row.name !== "string" || !row.name.trim() || [...row.name].length > reviewSkillsLimits.nameCharacters || typeof row.description !== "string" || !row.description.trim() || [...row.description].length > reviewSkillsLimits.descriptionCharacters || !match2[2].trim())
+    throw new Error("review_skills_frontmatter_invalid");
+  for (const key of ["license", "compatibility"])
+    if (row[key] !== void 0 && typeof row[key] !== "string")
+      throw new Error("review_skills_frontmatter_invalid");
+  if (row.metadata !== void 0 && (!row.metadata || typeof row.metadata !== "object" || Array.isArray(row.metadata) || Object.values(row.metadata).some((item) => typeof item !== "string")))
+    throw new Error("review_skills_frontmatter_invalid");
+  return {
+    name: row.name,
+    description: row.description,
+    instructions: match2[2]
+  };
+}
+function markdownReferences(text2) {
+  const withoutCode = text2.replace(/```[^\n]*\n[\s\S]*?```/gu, "").replace(/`[^`\n]*`/gu, "");
+  const targets = [];
+  const definitions = /* @__PURE__ */ new Map();
+  const normalize2 = (id) => id.trim().replace(/\s+/gu, " ").toLowerCase();
+  for (const matched of withoutCode.matchAll(
+    /^\s{0,3}\[([^\]]+)\]:\s*(.+)$/gmu
+  )) {
+    const key = normalize2(matched[1]);
+    if (definitions.has(key))
+      throw new Error("review_skills_reference_invalid");
+    definitions.set(key, matched[2].trim());
+  }
+  for (const matched of withoutCode.matchAll(
+    /(?<!!)\[([^\]\n]+)\]\(([^)\n]*)\)/gu
+  ))
+    targets.push(matched[2]);
+  for (const matched of withoutCode.matchAll(
+    /(?<!!)\[([^\]\n]+)\]\[([^\]\n]*)\]/gu
+  )) {
+    const target = definitions.get(normalize2(matched[2] || matched[1]));
+    if (!target) throw new Error("review_skills_reference_missing");
+    targets.push(target);
+  }
+  const refs = /* @__PURE__ */ new Set();
+  for (const target of targets) {
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/iu.test(target)) continue;
+    if (!/^[^\s%<>\\?#]+\.md(?:#[^\s]*)?$/iu.test(target) || target.startsWith("/"))
+      throw new Error("review_skills_reference_unsupported");
+    refs.add(target.split("#")[0]);
+  }
+  if (/<[^>]+(?:href|src)\s*=\s*["'][^"']*\.md/iu.test(withoutCode))
+    throw new Error("review_skills_reference_unsupported");
+  return [...refs].sort();
 }
 
 // src/review-orchestration/infrastructure/production-t0-review-runner.ts
@@ -104435,11 +105101,11 @@ function assertCodexChatGptAuth(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("codex_auth_json_invalid_shape");
   }
-  const record = value;
-  if (record.auth_mode !== "chatgpt") {
+  const record2 = value;
+  if (record2.auth_mode !== "chatgpt") {
     throw new Error("codex_auth_json_auth_mode_not_chatgpt");
   }
-  if (!record.tokens || typeof record.tokens.refresh_token !== "string" || record.tokens.refresh_token.length === 0) {
+  if (!record2.tokens || typeof record2.tokens.refresh_token !== "string" || record2.tokens.refresh_token.length === 0) {
     throw new Error("codex_auth_json_refresh_token_missing");
   }
 }
@@ -105766,6 +106432,7 @@ REVIEWROUTER_COVERAGE_MANIFEST_V3_BASE64URL:${Buffer.from(
       }))
     ),
     contextManifestHash: canonicalJson9({
+      ...preparedPrompt.reviewSkills === void 0 ? {} : { reviewSkills: preparedPrompt.reviewSkills },
       author: assignment.context.author,
       body: assignment.context.body,
       coverageHash: providerVisibleCoverage.coverageHash,
@@ -106422,8 +107089,8 @@ function classifyUtf8Content(value) {
     return Object.freeze({ kind: "binary", text: null, lineCount: null });
   }
   try {
-    const text = fatalUtf8Decoder.decode(value);
-    return Object.freeze({ kind: "text", text, lineCount: countLines(text) });
+    const text2 = fatalUtf8Decoder.decode(value);
+    return Object.freeze({ kind: "text", text: text2, lineCount: countLines(text2) });
   } catch {
     return Object.freeze({ kind: "binary", text: null, lineCount: null });
   }
@@ -106498,7 +107165,7 @@ function parseRawInventory(raw) {
   }
   const entries = [];
   for (let index = 0; index < tokens.length; index += 2) {
-    const record = decodeUtf8(
+    const record2 = decodeUtf8(
       tokens[index],
       "canonical_inventory_raw_record_encoding_invalid"
     );
@@ -106506,7 +107173,7 @@ function parseRawInventory(raw) {
       tokens[index + 1],
       "canonical_inventory_path_encoding_invalid"
     );
-    const match2 = RAW_RECORD.exec(record);
+    const match2 = RAW_RECORD.exec(record2);
     if (!match2 || !path34 || path34.includes("\0")) {
       throw new Error("canonical_inventory_raw_record_invalid");
     }
@@ -106684,8 +107351,8 @@ async function classifyObject(root, mode, oid) {
       lineCount: null
     };
   }
-  const text = classified.text;
-  if (text.startsWith("version https://git-lfs.github.com/spec/v1\n")) {
+  const text2 = classified.text;
+  if (text2.startsWith("version https://git-lfs.github.com/spec/v1\n")) {
     return {
       contentKind: "lfs_pointer" /* LfsPointer */,
       byteCount: content.byteLength,
@@ -110464,11 +111131,11 @@ function classifySafeInvestigationFailureReason(error2) {
   if (error2 instanceof ReviewInvocationConfigurationMismatchError) {
     return error2.reason;
   }
-  const text = diagnosticText(error2);
-  if (/review_investigation_recording_unsupported/i.test(text)) {
+  const text2 = diagnosticText(error2);
+  if (/review_investigation_recording_unsupported/i.test(text2)) {
     return "investigation_recording_unsupported";
   }
-  if (/review_investigation_(?:manifest|recording)_.*mismatch/i.test(text)) {
+  if (/review_investigation_(?:manifest|recording)_.*mismatch/i.test(text2)) {
     return "investigation_contract_mismatch";
   }
   return "investigation_failed";
@@ -110479,7 +111146,7 @@ function classifySafeInvocationFailureReason(error2, failureClass) {
     return "authentication_unavailable";
   }
   if (failureClass === "admission_limited") return "admission_limited";
-  const text = diagnosticText(error2);
+  const text2 = diagnosticText(error2);
   if (error2 instanceof ReviewInvocationConfigurationMismatchError) {
     return error2.reason;
   }
@@ -110487,18 +111154,18 @@ function classifySafeInvocationFailureReason(error2, failureClass) {
     return "configuration_mismatch";
   }
   if (/\b(?:unknown|unsupported|invalid|unavailable)\s+model\b(?!\s+metadata\b)|\bmodel\b(?!\s+metadata\b).{0,80}\b(?:not found|not supported|does not exist|unavailable)\b/i.test(
-    text
+    text2
   )) {
     return "model_unavailable";
   }
-  if (/prepared_invocation_(?:identity_mismatch|invalid|missing)/i.test(text)) {
+  if (/prepared_invocation_(?:identity_mismatch|invalid|missing)/i.test(text2)) {
     return "prepared_invocation_invalid";
   }
-  if (/\b(?:timed out|timeout)\b/i.test(text)) return "provider_timeout";
-  if (/\b(?:schema|structured output|valid review JSON)\b/i.test(text)) {
+  if (/\b(?:timed out|timeout)\b/i.test(text2)) return "provider_timeout";
+  if (/\b(?:schema|structured output|valid review JSON)\b/i.test(text2)) {
     return "provider_output_invalid";
   }
-  if (/\b(?:aborted|aborterror)\b/i.test(text)) return "provider_aborted";
+  if (/\b(?:aborted|aborterror)\b/i.test(text2)) return "provider_aborted";
   return "provider_invocation_failed";
 }
 function diagnosticText(error2) {
@@ -110507,14 +111174,14 @@ function diagnosticText(error2) {
   if (typeof error2 !== "object" || error2 === null || Array.isArray(error2)) {
     return "";
   }
-  const record = error2;
-  return [record.name, record.code, record.message].filter((value) => typeof value === "string").join(" ");
+  const record2 = error2;
+  return [record2.name, record2.code, record2.message].filter((value) => typeof value === "string").join(" ");
 }
 
 // src/review-orchestration/infrastructure/git-review-revision-materializer.ts
-var import_node_child_process = require("node:child_process");
-var import_node_util = require("node:util");
-var execFileAsync7 = (0, import_node_util.promisify)(import_node_child_process.execFile);
+var import_node_child_process2 = require("node:child_process");
+var import_node_util2 = require("node:util");
+var execFileAsync7 = (0, import_node_util2.promisify)(import_node_child_process2.execFile);
 var COMMIT_SHA = /^[a-f0-9]{40}$/;
 var GITHUB_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 var GitReviewRevisionMaterializer = class {
@@ -110713,7 +111380,7 @@ var FreshGitHubLifecycleInventory = class {
       inventory,
       promptTargets: Object.freeze([
         ...raw.candidates,
-        ...raw.manualAttention.map((record) => record.target)
+        ...raw.manualAttention.map((record2) => record2.target)
       ])
     });
   }
@@ -110733,9 +111400,9 @@ function mapFreshInventory(raw, expectedHeadSha, ledger) {
     ...raw.candidates.map((target) => ({ target, manual: false })),
     // Include server-authorized observation-only parents without mutation trust.
     ...raw.manualAttention.filter(
-      (record) => record.target.trustedAuthor || record.target.managedObservation
-    ).map((record) => ({
-      target: record.target,
+      (record2) => record2.target.trustedAuthor || record2.target.managedObservation
+    ).map((record2) => ({
+      target: record2.target,
       manual: true
     }))
   ].sort(
@@ -111693,11 +112360,11 @@ var LegacyReviewProjectionPolicyAdapter = class {
     });
     const decisions = /* @__PURE__ */ new Map();
     const collect = (records, verdict) => {
-      for (const record of records) {
-        decisions.set(record.target.targetId, {
-          targetId: record.target.targetId,
+      for (const record2 of records) {
+        decisions.set(record2.target.targetId, {
+          targetId: record2.target.targetId,
           verdict,
-          reasonCodes: sortedUnique3(record.reasonCodes)
+          reasonCodes: sortedUnique3(record2.reasonCodes)
         });
       }
     };
@@ -113526,6 +114193,34 @@ function buildOcrControlledRuleText(input) {
   )}
 `;
 }
+function buildOcrSkillsControlledRuleText(input) {
+  if (input.reviewSkills.kind !== "captured")
+    throw new Error("review_skills_attachment_required");
+  const legacy = JSON.parse(buildOcrControlledRuleText(input));
+  const paths = [...new Set(input.assignedPaths)].sort();
+  return `${JSON.stringify(
+    {
+      reviewrouter_managed_paths: paths,
+      rules: projectReviewSkillsForPaths(input.reviewSkills, paths).map(
+        (item) => ({
+          path: item.path,
+          rule: [
+            legacy.rules[0].content,
+            `Captured review skills: ${input.reviewSkills.kind === "captured" ? input.reviewSkills.capture.digest : ""}`,
+            `Materialized review skills: ${input.reviewSkills.kind === "captured" ? input.reviewSkills.bundle.executionDigest : ""}`,
+            "Text-only instructions for this exact reviewed path; no additional tool, network, execution or file authority.",
+            item.instructions
+          ].join("\n"),
+          merge_system_rule: true,
+          reviewrouter_exact_path: true
+        })
+      )
+    },
+    null,
+    2
+  )}
+`;
+}
 function buildOcrSemanticInvocationPreimage(input) {
   return canonicalJson12({
     contract: "ocr-semantic-identity.v1",
@@ -113840,6 +114535,12 @@ var OcrReviewInvocationAdapter = class {
         }))
       ),
       contextManifestHash: canonicalJson12({
+        ...this.options.reviewSkills?.kind === "captured" ? {
+          reviewSkills: {
+            capturedDigest: this.options.reviewSkills.capture.digest,
+            executionDigest: this.options.reviewSkills.bundle.executionDigest
+          }
+        } : {},
         author: assignment.context.author,
         body: assignment.context.body,
         coverageHash: coverageManifest.coverageHash,
@@ -113935,8 +114636,8 @@ var OcrReviewInvocationAdapter = class {
       }
       throw new Error("review_action_v2_ocr_gateway_effect_unknown");
     }
-    const run2 = this.gate(() => this.runInvocation(input, assignment));
-    return await run2;
+    const run3 = this.gate(() => this.runInvocation(input, assignment));
+    return await run3;
   }
   gate(operation) {
     const next = this.inFlight.then(async () => {
@@ -114124,13 +114825,13 @@ function sha25616(value) {
 
 // src/codex-oauth/ocr-managed-bootstrap.ts
 var import_child_process18 = require("child_process");
-var import_node_crypto2 = require("node:crypto");
+var import_node_crypto4 = require("node:crypto");
 var fs20 = __toESM(require("fs/promises"));
 var os9 = __toESM(require("os"));
 var path26 = __toESM(require("path"));
 var import_util13 = require("util");
 function readApprovedReviewAgentKind(json2, digest3) {
-  if (Buffer.byteLength(json2) > 16384 || !/^[a-f0-9]{64}$/.test(digest3) || (0, import_node_crypto2.createHash)("sha256").update(json2).digest("hex") !== digest3) {
+  if (Buffer.byteLength(json2) > 16384 || !/^[a-f0-9]{64}$/.test(digest3) || (0, import_node_crypto4.createHash)("sha256").update(json2).digest("hex") !== digest3) {
     throw new Error("review_agent_profile_digest_mismatch");
   }
   const row = JSON.parse(json2);
@@ -114145,7 +114846,7 @@ function readApprovedOcrReviewAgent(json2, digest3) {
     throw new Error("review_agent_profile_invalid");
   }
   const row = JSON.parse(json2);
-  const keys = [
+  const keys2 = [
     "agentKind",
     "binarySha256",
     "cancellation",
@@ -114154,11 +114855,15 @@ function readApprovedOcrReviewAgent(json2, digest3) {
     "packageVersion",
     "profileRef"
   ];
+  if (Object.hasOwn(row, "reviewSkillsVersion"))
+    keys2.push("reviewSkillsVersion");
+  keys2.sort();
   const transports = row.modelTransports;
-  if (Object.keys(row).sort().join(",") !== keys.join(",") || typeof row.profileRef !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(row.profileRef) || typeof row.binarySha256 !== "string" || !/^[a-f0-9]{64}$/.test(row.binarySha256) || typeof row.packageVersion !== "string" || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(row.packageVersion) || row.contextGateway !== false || row.cancellation !== true || !Array.isArray(transports) || transports.length !== 1 || transports[0] !== "account_gateway") {
+  if (Object.keys(row).sort().join(",") !== keys2.join(",") || typeof row.profileRef !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(row.profileRef) || typeof row.binarySha256 !== "string" || !/^[a-f0-9]{64}$/.test(row.binarySha256) || typeof row.packageVersion !== "string" || !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(row.packageVersion) || Object.hasOwn(row, "reviewSkillsVersion") && row.reviewSkillsVersion !== 1 || row.contextGateway !== false || row.cancellation !== true || !Array.isArray(transports) || transports.length !== 1 || transports[0] !== "account_gateway") {
     throw new Error("review_agent_profile_capabilities_invalid");
   }
   return Object.freeze({
+    ...row.reviewSkillsVersion === 1 ? { reviewSkillsVersion: 1 } : {},
     profileRef: row.profileRef,
     agentKind: "ocr",
     binarySha256: row.binarySha256,
@@ -115366,14 +116071,14 @@ function requireRecord3(value, field) {
 function isRecord10(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function requireExactKeys4(value, keys) {
-  if (!hasExactKeys2(value, keys)) {
+function requireExactKeys4(value, keys2) {
+  if (!hasExactKeys2(value, keys2)) {
     throw invalidResponse("investigation_shape_invalid");
   }
 }
-function hasExactKeys2(value, keys) {
+function hasExactKeys2(value, keys2) {
   const actual = Object.keys(value).sort();
-  const expected = [...keys].sort();
+  const expected = [...keys2].sort();
   return !(actual.length !== expected.length || actual.some((key, index) => key !== expected[index]));
 }
 function requireString4(value, field) {
@@ -117038,6 +117743,25 @@ var ProductionT0ReviewRunner = class {
         authorization.facts.headSha
       ]
     });
+    const admittedAgent = approvedOcrAgent ?? approvedAgent;
+    const reviewSkills = admittedAgent?.reviewSkillsVersion === 1 ? await materializeReviewSkills({
+      capture: await fetchCapturedReviewSkills({
+        apiUrl: input.apiUrl,
+        authorizationToken: authorization.authorizationToken,
+        baseSha: authorization.facts.baseSha,
+        signal,
+        timeoutMs: executionDeadline.clampProviderTimeout(3e4),
+        fetchImpl
+      }),
+      baseSha: authorization.facts.baseSha,
+      checkoutRoot: path27.resolve(input.workspacePath),
+      signal
+    }) : LEGACY_REVIEW_SKILLS;
+    assertReviewSkillsExecutionInput(
+      reviewSkills,
+      admittedAgent ?? {},
+      authorization.facts.baseSha
+    );
     const lifecycleInventory = new FreshGitHubLifecycleInventory(
       github,
       new ReviewLedger(github, process.env.REVIEW_ROUTER_LEDGER_KEY)
@@ -117062,7 +117786,8 @@ var ProductionT0ReviewRunner = class {
       }
       const ocrCompatibilityKey = hashIncrementalCompatibility(
         config,
-        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
+        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
+        reviewSkillsCacheIdentity(reviewSkills)
       );
       const ocrBackgroundParts = [pr2.title, pr2.body].filter(
         (part) => part.trim().length > 0
@@ -117102,9 +117827,14 @@ var ProductionT0ReviewRunner = class {
           ocrEffort: "medium",
           modelReasoningEffort: ocrModelReasoningEffort,
           language: ocrLanguage,
-          ruleText: buildOcrControlledRuleText({
+          reviewSkills,
+          ruleText: reviewSkills.kind === "legacy" ? buildOcrControlledRuleText({
             language: ocrLanguage,
             assignedPaths: pr2.files.map((file) => file.filename).sort()
+          }) : buildOcrSkillsControlledRuleText({
+            language: ocrLanguage,
+            assignedPaths: pr2.files.map((file) => file.filename).sort(),
+            reviewSkills
           }),
           backgroundText: ocrBackgroundParts.length > 0 ? ocrBackgroundParts.join("\n\n") : null,
           checkoutRoot: path27.resolve(input.workspacePath),
@@ -117226,7 +117956,8 @@ var ProductionT0ReviewRunner = class {
     });
     const compatibilityKey = hashIncrementalCompatibility(
       config,
-      process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
+      process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION,
+      reviewSkillsCacheIdentity(reviewSkills)
     );
     const gatewayBundlePath = resolveContextGatewayBundlePath();
     const requiredContextWitness = new SubprocessRequiredContextWitnessRunner();
@@ -117257,7 +117988,14 @@ var ProductionT0ReviewRunner = class {
     });
     const invocationAdapter = new CodexReviewInvocationAdapter(
       provider,
-      new PromptBuilder(config),
+      new PromptBuilder(
+        config,
+        "standard",
+        void 0,
+        void 0,
+        void 0,
+        reviewSkills
+      ),
       planned.assignments,
       providerTimeoutMs,
       agenticContext,
@@ -117270,7 +118008,14 @@ var ProductionT0ReviewRunner = class {
       rollout: investigationRollout,
       create: () => new CodexReviewInvocationAdapter(
         provider,
-        new PromptBuilder(config),
+        new PromptBuilder(
+          config,
+          "standard",
+          void 0,
+          void 0,
+          void 0,
+          reviewSkills
+        ),
         planned.assignments,
         providerTimeoutMs,
         agenticContext,
@@ -118425,10 +119170,10 @@ async function runAccountGatewayRuntime(input, ports) {
 async function runAccountGatewayRuntimeInternal(input, ports) {
   clearCodexRotatingProviderSecretEnv();
   clearCodexRotatingProcessAuthEnv();
-  const run2 = new AbortController();
+  const run3 = new AbortController();
   const fetchImpl = createAccountGatewayRunFetch(
     ports.fetchImpl ?? fetch,
-    run2.signal
+    run3.signal
   );
   const controlPlane = new ReviewActionV2ControlPlaneAdapter(
     new ReviewActionV2Client({
@@ -118456,7 +119201,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
   let reason = "failed";
   const onSignal = () => {
     reason = "cancelled";
-    run2.abort(new Error("account_gateway_cancelled"));
+    run3.abort(new Error("account_gateway_cancelled"));
     transport.cancelInference();
   };
   process.on("SIGTERM", onSignal);
@@ -118477,9 +119222,9 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         providerInstanceId: input.providerInstanceId,
         workflowSchemaVersion: input.workflowSchemaVersion
       };
-      run2.signal.throwIfAborted();
-      const result2 = await transport.checkoutCapability(request, run2.signal);
-      run2.signal.throwIfAborted();
+      run3.signal.throwIfAborted();
+      const result2 = await transport.checkoutCapability(request, run3.signal);
+      run3.signal.throwIfAborted();
       const capability2 = validateAccountGatewayCheckout(
         result2,
         input.repository,
@@ -118501,7 +119246,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     };
     phase = "checkout_capability";
     const capability = await readCapability();
-    run2.signal.throwIfAborted();
+    run3.signal.throwIfAborted();
     const agentProfileJson = capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON;
     const agentProfileDigest = capability.runtimeConfig.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_DIGEST;
     const agentKind = readApprovedReviewAgentKind(
@@ -118517,7 +119262,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       phase = "prepare_ocr";
       ocrBinary = await resolveApprovedOcrBinary({
         approvedAgent: ocrAgent,
-        signal: run2.signal
+        signal: run3.signal
       });
     } else {
       const agentProfile = readApprovedReviewAgent(
@@ -118526,13 +119271,13 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       );
       phase = "prepare_cli";
       cli = await prepareCodexCliBeforeAuthRead({
-        signal: run2.signal,
+        signal: run3.signal,
         approvedAgent: agentProfile,
         logger: { info, warn: warning }
       });
       phase = "version";
       const version = await (0, import_util15.promisify)(import_child_process21.execFile)(cli.binaryPath, ["--version"], {
-        signal: run2.signal,
+        signal: run3.signal,
         killSignal: "SIGKILL",
         timeout: 1e4,
         maxBuffer: 16384,
@@ -118560,7 +119305,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         minimumMaxTurns: 1
       });
     }
-    run2.signal.throwIfAborted();
+    run3.signal.throwIfAborted();
     phase = "create_workspace";
     workspacePath = await createIsolatedCheckoutWorkspace({
       runnerTempPath: process.env.RUNNER_TEMP,
@@ -118573,9 +119318,9 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
       ...ocrAgent ? { mergeBaseSha: authorization.facts.mergeBaseSha } : {},
       workspacePath,
       token: capability.token,
-      signal: run2.signal
+      signal: run3.signal
     });
-    run2.signal.throwIfAborted();
+    run3.signal.throwIfAborted();
     phase = "local_transport";
     bridge = await startLocalGatewayModelTransport(transport, observeTransport2);
     if (ocrAgent) {
@@ -118591,7 +119336,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1e3,
         modelReasoningEffort: capability.runtimeConfig.runtimeEnv.CODEX_REASONING_EFFORT ?? null,
         language: capability.runtimeConfig.runtimeEnv.REVIEW_OUTPUT_LANGUAGE ?? null,
-        signal: run2.signal,
+        signal: run3.signal,
         env: {
           ...process.env,
           REVIEWROUTER_OCR_BINARY: ocrBinary.binaryPath
@@ -118611,7 +119356,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
         { mode: 384 }
       );
     }
-    run2.signal.throwIfAborted();
+    run3.signal.throwIfAborted();
     phase = "runner";
     const review = await ports.review.run({
       ...input,
@@ -118633,7 +119378,7 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
             CODEX_HOME: codexHome
           })
         } : bridge,
-        signal: run2.signal
+        signal: run3.signal
       },
       ...ocrRun ? {
         ocr: {
@@ -118647,16 +119392,16 @@ async function runAccountGatewayRuntimeInternal(input, ports) {
     });
     phase = "terminal";
     ports.observeRelay(transport.lastFailure);
-    run2.signal.throwIfAborted();
-    await ports.terminalReview(review, run2.signal);
-    run2.signal.throwIfAborted();
+    run3.signal.throwIfAborted();
+    await ports.terminalReview(review, run3.signal);
+    run3.signal.throwIfAborted();
     reason = review.outcome === "cancelled" /* Cancelled */ || review.outcome === "superseded" /* Superseded */ ? "cancelled" : review.outcome === "completed" /* Completed */ ? "completed" : "failed";
   } catch (error2) {
     failed = true;
     warning(`Account gateway runtime failed: phase=${phase}`);
     ports.observeRelay(transport.lastFailure);
     await ports.terminalFailure(
-      run2.signal.aborted ? run2.signal.reason : error2,
+      run3.signal.aborted ? run3.signal.reason : error2,
       { authorized }
     );
   } finally {
@@ -118779,8 +119524,8 @@ function approvedProviderApiAgent(runtime) {
   return agent;
 }
 async function runProviderApiRuntime(input, ports) {
-  const run2 = new AbortController();
-  const cancel = () => run2.abort(new Error("provider_api_cancelled"));
+  const run3 = new AbortController();
+  const cancel = () => run3.abort(new Error("provider_api_cancelled"));
   process.on("SIGTERM", cancel);
   process.on("SIGINT", cancel);
   let cli;
@@ -118792,7 +119537,7 @@ async function runProviderApiRuntime(input, ports) {
   try {
     const fetchImpl = createAccountGatewayRunFetch(
       ports.fetchImpl ?? fetch,
-      run2.signal
+      run3.signal
     );
     const controlPlane = new ReviewActionV2ControlPlaneAdapter(
       new ReviewActionV2Client({ apiUrl: input.apiUrl, fetchImpl })
@@ -118818,9 +119563,9 @@ async function runProviderApiRuntime(input, ports) {
     phase = "checkout_capability";
     let admitted;
     const readCapability = async () => {
-      run2.signal.throwIfAborted();
+      run3.signal.throwIfAborted();
       const capability2 = validateAccountGatewayCheckout(
-        await transport.providerApiCheckoutCapability(run2.signal),
+        await transport.providerApiCheckoutCapability(run3.signal),
         input.repository,
         input.headSha
       );
@@ -118838,12 +119583,12 @@ async function runProviderApiRuntime(input, ports) {
     const agent = approvedProviderApiAgent(capability.runtimeConfig);
     phase = "prepare_cli";
     cli = await prepareCodexCliBeforeAuthRead({
-      signal: run2.signal,
+      signal: run3.signal,
       approvedAgent: agent,
       logger: { info, warn: warning }
     });
-    const version = await (0, import_node_util2.promisify)(import_node_child_process2.execFile)(cli.binaryPath, ["--version"], {
-      signal: run2.signal,
+    const version = await (0, import_node_util3.promisify)(import_node_child_process3.execFile)(cli.binaryPath, ["--version"], {
+      signal: run3.signal,
       killSignal: "SIGKILL",
       timeout: 1e4,
       maxBuffer: 16384,
@@ -118863,7 +119608,7 @@ async function runProviderApiRuntime(input, ports) {
       headSha: capability.headSha,
       workspacePath,
       token: capability.token,
-      signal: run2.signal
+      signal: run3.signal
     });
     codexHome = await fs23.mkdtemp(
       path30.join(
@@ -118879,7 +119624,7 @@ async function runProviderApiRuntime(input, ports) {
       throw new Error("provider_api_credential_missing");
     modelTransport = await startDirectOpenRouterModelTransport(
       () => {
-        run2.signal.throwIfAborted();
+        run3.signal.throwIfAborted();
         if (!apiKey) throw new Error("provider_api_credential_closed");
         return apiKey;
       },
@@ -118913,9 +119658,9 @@ async function runProviderApiRuntime(input, ports) {
         modelTransport,
         runtimeConfig: capability.runtimeConfig,
         controlPlane,
-        signal: run2.signal,
+        signal: run3.signal,
         credentialLease: () => {
-          run2.signal.throwIfAborted();
+          run3.signal.throwIfAborted();
           if (!apiKey) throw new Error("provider_api_credential_closed");
           return { environment: modelTransport.environment };
         }
@@ -118925,8 +119670,8 @@ async function runProviderApiRuntime(input, ports) {
     await modelTransport.dispose();
     modelTransport = void 0;
     phase = "terminal";
-    run2.signal.throwIfAborted();
-    await ports.terminalReview(review, run2.signal);
+    run3.signal.throwIfAborted();
+    await ports.terminalReview(review, run3.signal);
   } catch {
     warning(`Direct provider API runtime failed: phase=${phase}`);
     throw new Error(`provider_api_runtime_failed:${phase}`);
@@ -121326,7 +122071,7 @@ function syncEnvFromInputs() {
     }
   }
 }
-async function run() {
+async function run2() {
   let token;
   let githubTokenProvider;
   let prNumber;
@@ -121622,7 +122367,7 @@ function parsePositiveInteger(value, defaultValue) {
   const parsed = Number.parseInt(value || "", 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : defaultValue;
 }
-run().catch((error2) => {
+run2().catch((error2) => {
   setFailed(`Unhandled error: ${error2.message}`);
 });
 //# sourceMappingURL=index.js.map

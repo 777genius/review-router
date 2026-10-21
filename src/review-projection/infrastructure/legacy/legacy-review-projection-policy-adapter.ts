@@ -44,6 +44,7 @@ import {
   renderReviewerSummaryMarkdown,
   toReviewerSummaryFinding,
   type ReviewerLifecycleLine,
+  type ReviewerSummaryOptions,
 } from '../../../output/reviewer-summary';
 import {
   CurrentFindingPolicyPort,
@@ -81,7 +82,10 @@ export class LegacyReviewProjectionPolicyAdapter
   private readonly consensus: ConsensusEngine;
   private readonly synthesis: SynthesisEngine;
 
-  constructor(private readonly config: ReviewConfig) {
+  constructor(
+    private readonly config: ReviewConfig,
+    private readonly summaryOptions: ReviewerSummaryOptions = {}
+  ) {
     this.consensus = new ConsensusEngine({
       minAgreement: Math.max(1, config.inlineMinAgreement),
       minSeverity: 'minor',
@@ -312,6 +316,15 @@ export class LegacyReviewProjectionPolicyAdapter
     });
     const summaryBody = limitReviewerPostedMarkdown(
       renderReviewerSummaryMarkdown({
+        ...this.summaryOptions,
+        ...(this.summaryOptions.source
+          ? {
+              source: {
+                ...this.summaryOptions.source,
+                headSha: query.scope.reviewedHeadSha,
+              },
+            }
+          : {}),
         language: this.config.outputLanguage,
         findings: currentOccurrences
           .map(toLegacyFinding)

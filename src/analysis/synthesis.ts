@@ -13,6 +13,7 @@ import {
 } from '../types';
 import {
   renderReviewSummary,
+  reviewerSummarySourceFromPr,
   neutralizeDetailsMarkup,
 } from '../output/reviewer-summary';
 import { compareSeverityDesc, getSeverityDisplay } from '../utils/severity';
@@ -89,6 +90,7 @@ export class SynthesisEngine {
     const actionItems = this.buildActionItems(input.findings);
 
     const review: Review = {
+      sourceRevision: reviewerSummarySourceFromPr(input.pr),
       summary: '',
       findings: input.findings,
       inlineComments,

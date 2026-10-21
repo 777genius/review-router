@@ -37,7 +37,21 @@ function validateAbi(source: string): void {
   const events = record(workflow.on);
   need(isDeepStrictEqual(Object.keys(events), ['workflow_call']));
   const call = record(events.workflow_call);
-  need(isDeepStrictEqual(Object.keys(call), ['inputs']));
+  need(
+    isDeepStrictEqual(Object.keys(call).sort(), ['inputs']) ||
+      isDeepStrictEqual(Object.keys(call).sort(), ['inputs', 'secrets'])
+  );
+  if (call.secrets !== undefined) {
+    const secrets = record(call.secrets);
+    need(isDeepStrictEqual(Object.keys(secrets), ['mcp_secrets_json']));
+    const binding = record(secrets.mcp_secrets_json);
+    need(
+      binding.required === false &&
+        Object.keys(binding).every(
+          (key) => key === 'required' || key === 'description'
+        )
+    );
+  }
   const inputs = record(call.inputs);
   need(
     isDeepStrictEqual(Object.keys(inputs).sort(), [

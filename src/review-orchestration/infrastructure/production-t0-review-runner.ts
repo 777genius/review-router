@@ -1,3 +1,15 @@
+import { writeFile } from 'node:fs/promises';
+import { prepareOcrContextTools } from '../../context-tools/ocr-session';
+import {
+  CONTEXT_TOOLS_PLAN_ENV,
+  CONTEXT_TOOLS_CREDENTIALS_ENV,
+  ContextToolsError,
+  contextToolsError,
+} from '../../context-tools/contract';
+import {
+  buildOcrManagedConfigJson,
+  extractRawLoopbackCapability,
+} from './ocr-review-managed-run';
 import { createHash } from 'crypto';
 import { execFile, spawn } from 'child_process';
 import * as path from 'path';
@@ -183,6 +195,10 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       try {
         return await this.runInWorkspace(input);
       } catch (error) {
+        if (error instanceof ContextToolsError)
+          core.warning(
+            'Required review context tools are unavailable; review could not complete.'
+          );
         const revisionFailure = mapRevisionGuardErrorToCodexOutcome(error);
         if (revisionFailure) return revisionFailure;
         throw error;
@@ -211,6 +227,11 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
     }
     const admittedRuntime =
       input.accountGateway?.runtimeConfig ?? input.providerApi?.runtimeConfig;
+    if (
+      admittedRuntime?.runtimeEnv[CONTEXT_TOOLS_PLAN_ENV] !== undefined &&
+      !input.ocr
+    )
+      throw contextToolsError('agent_unsupported');
     const agentProfile = admittedRuntime
       ? {
           json: admittedRuntime.runtimeEnv.REVIEW_ROUTER_AGENT_PROFILE_JSON!,
@@ -389,145 +410,219 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       if (!capabilityAuthorization) {
         throw new Error('review_action_v2_ocr_capability_missing');
       }
-      const ocrCompatibilityKey = hashIncrementalCompatibility(
-        config,
-        process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
-      );
-      const ocrBackgroundParts = [pr.title, pr.body].filter(
-        (part) => part.trim().length > 0
-      );
-      const planned = planOcrReviewAssignments({
-        authorization,
-        pr,
-        config,
-        compatibilityKey: ocrCompatibilityKey,
-        lifecycleTargets: initialLifecycle.promptTargets,
-        liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+      const contextTools = await prepareOcrContextTools({
+        runtimeEnv: ocrRuntimeEnv,
+        githubJson: process.env[CONTEXT_TOOLS_CREDENTIALS_ENV],
+        apiUrl: input.apiUrl,
+        authorization: () => controlPlane.currentAuthorization(),
+        fetchImpl,
+        mask: core.setSecret,
+        checkoutRoot: path.resolve(input.workspacePath),
+        headSha: authorization.facts.headSha,
+        baseSha: authorization.facts.baseSha,
+        deadlineMs:
+          Date.now() +
+          executionDeadline.clampProviderTimeout(providerTimeoutMs),
+        ...(signal ? { signal } : {}),
       });
-      const bridge: OcrLoopbackBridge = {
-        baseUrl: modelTransport.baseUrl,
-        capabilityAuthorization,
-        actualModel: () => modelTransport.actualModel(),
-        requestCount: () => modelTransport.requestCount?.(),
-        effectFacts: input.ocr.effectFacts,
-      };
-      const invocationAdapter = new OcrReviewInvocationAdapter(
-        planned.assignments,
-        {
-          ...(signal ? { signal } : {}),
-          previewTimeoutMs: () =>
-            Math.floor(
-              executionDeadline.clampProviderTimeout(providerTimeoutMs)
-            ),
-          model: ocrModel,
-          binaryPath: input.ocr.run.binaryPath,
-          binarySha256: approvedOcrAgent.binarySha256,
-          packageVersion: approvedOcrAgent.packageVersion,
-          profileRef: approvedOcrAgent.profileRef,
-          run: input.ocr.run,
-          bridge,
-          limits: {
-            requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
-          },
-          ocrEffort: 'medium',
-          modelReasoningEffort: ocrModelReasoningEffort,
-          language: ocrLanguage,
-          ruleText: buildOcrControlledRuleText({
-            language: ocrLanguage,
-            assignedPaths: pr.files.map((file) => file.filename).sort(),
-          }),
-          backgroundText:
-            ocrBackgroundParts.length > 0
-              ? ocrBackgroundParts.join('\n\n')
-              : null,
-          checkoutRoot: path.resolve(input.workspacePath),
-          processRunner: runOcrReviewProcess,
-          previewRunner: runOcrReviewProcess,
-          acceptanceDiagnostic: (diagnostic) =>
-            logger.info('Managed OCR acceptance', diagnostic),
+      try {
+        if (contextTools) {
+          if (!modelTransport.setContextToolsGuard)
+            throw contextToolsError('transport_guard_unavailable');
+          modelTransport.setContextToolsGuard(() => {
+            const receipt = contextTools.receipt();
+            if (!receipt.nativeConnected || receipt.hadFailure)
+              throw contextToolsError('required_context_unavailable');
+          });
+          await writeFile(
+            input.ocr.run.configPath,
+            buildOcrManagedConfigJson({
+              baseUrl: modelTransport.baseUrl,
+              rawCapability: extractRawLoopbackCapability(
+                capabilityAuthorization
+              ),
+              model: ocrModel,
+              limits: {
+                requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
+              },
+              modelReasoningEffort: ocrModelReasoningEffort,
+              language: ocrLanguage,
+              contextTools: contextTools.config,
+            }),
+            { mode: 0o600 }
+          );
         }
-      );
-      const identities = new DeterministicReviewOrchestrationIdentity();
-      const useCase = new RunT0ReviewOrchestration({
-        controlPlane,
-        revisionGuard,
-        oidc: {
-          getToken: () => oidc.requestToken(input.audience),
-        },
-        invocationManifestAssembler:
-          new GeneratedProviderInvocationManifestAssembler(
-            authorization,
-            config,
-            ocrCompatibilityKey
-          ),
-        invocations: invocationAdapter,
-        invocationFailureClassifier: new ProviderInvocationFailureClassifier(
-          modelTransport.failureFact
-        ),
-        invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
-        investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
-          logger
-        ),
-        leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
-        projectionBuilder: createProductionReviewProjectionBuilder({
-          authorizationFacts: authorization.facts,
+        const baseOcrCompatibilityKey = hashIncrementalCompatibility(
+          config,
+          process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
+        );
+        const contextReceipt = contextTools?.receipt();
+        const ocrCompatibilityKey = contextReceipt
+          ? sha256(
+              canonicalJson({
+                baseOcrCompatibilityKey,
+                contextTools: {
+                  planDigest: contextReceipt.planDigest,
+                  schemaDigest: contextReceipt.schemaDigest,
+                },
+              })
+            )
+          : baseOcrCompatibilityKey;
+        const ocrBackgroundParts = [pr.title, pr.body].filter(
+          (part) => part.trim().length > 0
+        );
+        const planned = planOcrReviewAssignments({
+          authorization,
           pr,
           config,
-          protocolLimits: authorization.limits,
-          assignments: planned.assignments.map((assignment) => ({
-            workSlotId: assignment.workSlot.workSlotId,
-            taskKind: assignment.workSlot.taskKind,
-            providerKind: assignment.workSlot.providerKind,
-            required: assignment.workSlot.required,
-            filePaths: assignment.context.files.map((file) => file.filename),
-          })),
-          uncoveredPaths: planned.uncoveredPaths,
-          uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
-          lifecycleInventory,
-        }),
-        identities,
-        clock: new SystemReviewOrchestrationClock(),
-        delay: new CancellableReviewOrchestrationDelay(),
-        executionDeadline,
-        signal,
-        ...(this.progress ? { progress: this.progress } : {}),
-      });
-      const result = await useCase.executeAuthorized(
-        {
-          executionId: identities.deterministicId('execution', [
-            authorization.authorizationId,
-            authorization.facts.reviewRevisionHash,
-            planned.plan.planHash,
-          ]),
-          baseSha: authorization.facts.baseSha,
-          mergeBaseSha: authorization.facts.mergeBaseSha,
-          headSha: authorization.facts.headSha,
-          reviewRevisionHash: authorization.facts.reviewRevisionHash,
           compatibilityKey: ocrCompatibilityKey,
-          planHash: planned.plan.planHash,
-          workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
-          assignmentManifestCanonicalJson:
-            planned.plan.assignmentManifestCanonicalJson,
-          assignmentManifestHash: planned.plan.assignmentManifestHash,
-          workSlots: planned.plan.assignments.map(
-            (assignment) => assignment.workSlot
+          lifecycleTargets: initialLifecycle.promptTargets,
+          liveLifecycleStateHash: initialLifecycle.inventory.lifecycleStateHash,
+        });
+        const bridge: OcrLoopbackBridge = {
+          baseUrl: modelTransport.baseUrl,
+          capabilityAuthorization,
+          actualModel: () => modelTransport.actualModel(),
+          requestCount: () => modelTransport.requestCount?.(),
+          effectFacts: input.ocr.effectFacts,
+        };
+        const invocationAdapter = new OcrReviewInvocationAdapter(
+          planned.assignments,
+          {
+            ...(signal ? { signal } : {}),
+            previewTimeoutMs: () =>
+              Math.floor(
+                executionDeadline.clampProviderTimeout(providerTimeoutMs)
+              ),
+            model: ocrModel,
+            binaryPath: input.ocr.run.binaryPath,
+            binarySha256: approvedOcrAgent.binarySha256,
+            packageVersion: approvedOcrAgent.packageVersion,
+            profileRef: approvedOcrAgent.profileRef,
+            run: input.ocr.run,
+            ...(contextTools
+              ? {
+                  contextTools,
+                  contextToolsReceipt: (
+                    receipt: import('../../context-tools/broker').ContextToolsReceipt
+                  ) =>
+                    logger.info('Managed OCR context tools', {
+                      planDigest: receipt.planDigest,
+                      schemaDigest: receipt.schemaDigest,
+                      selectedTools: receipt.availableTools,
+                      nativeConnected: receipt.nativeConnected,
+                      calls: receipt.calls,
+                      hadFailure: receipt.hadFailure,
+                    }),
+                }
+              : {}),
+            bridge,
+            limits: {
+              requestTimeoutSec: ACCOUNT_GATEWAY_BOUNDS.requestMs / 1000,
+            },
+            ocrEffort: 'medium',
+            modelReasoningEffort: ocrModelReasoningEffort,
+            language: ocrLanguage,
+            ruleText: buildOcrControlledRuleText({
+              language: ocrLanguage,
+              assignedPaths: pr.files.map((file) => file.filename).sort(),
+            }),
+            backgroundText:
+              ocrBackgroundParts.length > 0
+                ? ocrBackgroundParts.join('\n\n')
+                : null,
+            checkoutRoot: path.resolve(input.workspacePath),
+            processRunner: runOcrReviewProcess,
+            previewRunner: runOcrReviewProcess,
+            acceptanceDiagnostic: (diagnostic) =>
+              logger.info('Managed OCR acceptance', diagnostic),
+          }
+        );
+        const identities = new DeterministicReviewOrchestrationIdentity();
+        const useCase = new RunT0ReviewOrchestration({
+          controlPlane,
+          revisionGuard,
+          oidc: {
+            getToken: () => oidc.requestToken(input.audience),
+          },
+          invocationManifestAssembler:
+            new GeneratedProviderInvocationManifestAssembler(
+              authorization,
+              config,
+              ocrCompatibilityKey
+            ),
+          invocations: invocationAdapter,
+          invocationFailureClassifier: new ProviderInvocationFailureClassifier(
+            modelTransport.failureFact
           ),
-          sourceRunId: authorization.facts.sourceRunId,
-          sourceRunAttempt: authorization.facts.sourceRunAttempt,
-          ownerIdHash: sha256(
-            canonicalJson({
-              authorizationId: authorization.authorizationId,
-              providerInstanceId: input.providerInstanceId,
-              sourceRunAttempt: authorization.facts.sourceRunAttempt,
-              sourceRunId: authorization.facts.sourceRunId,
-            })
+          invocationDiagnostics: new LoggingReviewInvocationDiagnostics(logger),
+          investigationDiagnostics: new LoggingReviewInvestigationDiagnostics(
+            logger
           ),
-          allowPartial: true,
-        },
-        authorization
-      );
-      signal?.throwIfAborted();
-      return mapOrchestrationResultToCodexOutcome(result);
+          leaseSupervisor: new CooperativeReviewLeaseSupervisor(),
+          projectionBuilder: createProductionReviewProjectionBuilder({
+            authorizationFacts: authorization.facts,
+            pr,
+            config,
+            protocolLimits: authorization.limits,
+            assignments: planned.assignments.map((assignment) => ({
+              workSlotId: assignment.workSlot.workSlotId,
+              taskKind: assignment.workSlot.taskKind,
+              providerKind: assignment.workSlot.providerKind,
+              required: assignment.workSlot.required,
+              filePaths: assignment.context.files.map((file) => file.filename),
+            })),
+            uncoveredPaths: planned.uncoveredPaths,
+            uncoveredLifecycleTargetIds: planned.uncoveredLifecycleTargetIds,
+            lifecycleInventory,
+          }),
+          identities,
+          clock: new SystemReviewOrchestrationClock(),
+          delay: new CancellableReviewOrchestrationDelay(),
+          executionDeadline,
+          signal,
+          ...(this.progress ? { progress: this.progress } : {}),
+        });
+        const result = await useCase.executeAuthorized(
+          {
+            executionId: identities.deterministicId('execution', [
+              authorization.authorizationId,
+              authorization.facts.reviewRevisionHash,
+              planned.plan.planHash,
+            ]),
+            baseSha: authorization.facts.baseSha,
+            mergeBaseSha: authorization.facts.mergeBaseSha,
+            headSha: authorization.facts.headSha,
+            reviewRevisionHash: authorization.facts.reviewRevisionHash,
+            compatibilityKey: ocrCompatibilityKey,
+            planHash: planned.plan.planHash,
+            workSlotsCanonicalJson: planned.plan.workSlotsCanonicalJson,
+            assignmentManifestCanonicalJson:
+              planned.plan.assignmentManifestCanonicalJson,
+            assignmentManifestHash: planned.plan.assignmentManifestHash,
+            workSlots: planned.plan.assignments.map(
+              (assignment) => assignment.workSlot
+            ),
+            sourceRunId: authorization.facts.sourceRunId,
+            sourceRunAttempt: authorization.facts.sourceRunAttempt,
+            ownerIdHash: sha256(
+              canonicalJson({
+                authorizationId: authorization.authorizationId,
+                providerInstanceId: input.providerInstanceId,
+                sourceRunAttempt: authorization.facts.sourceRunAttempt,
+                sourceRunId: authorization.facts.sourceRunId,
+              })
+            ),
+            allowPartial: true,
+          },
+          authorization
+        );
+        signal?.throwIfAborted();
+        return mapOrchestrationResultToCodexOutcome(result);
+      } finally {
+        modelTransport.setContextToolsGuard?.(undefined);
+        await contextTools?.close();
+      }
     }
     const agenticContext = config.codexAgenticContext ?? true;
     const investigationRolloutResolution =

@@ -134,6 +134,7 @@ export type LocalGatewayModelTransport = Readonly<{
    * requests, so acceptance reads this instead of guessing from exit status. */
   requestCount?(): number;
   failureFact(): GatewayFailureFact | undefined;
+  setContextToolsGuard?(guard: (() => void) | undefined): void;
   dispose(): Promise<void>;
 }>;
 
@@ -669,6 +670,8 @@ export async function startLocalGatewayModelTransport(
   let stopping = false;
   let inFlight = 0;
   let dispatchedRequests = 0;
+  let contextToolsGuard: (() => void) | undefined;
+  let contextToolsFailure: GatewayFailureFact | undefined;
   const server = createServer(
     { maxHeaderSize: ACCOUNT_GATEWAY_BOUNDS.headerBytes },
     (request, reply) => {
@@ -691,6 +694,20 @@ export async function startLocalGatewayModelTransport(
           reply.writeHead(403, { 'content-type': 'application/json' });
           reply.end(
             '{"error":{"code":"authorization_denied","effect":"not_dispatched"}}'
+          );
+          return;
+        }
+        try {
+          contextToolsGuard?.();
+        } catch {
+          contextToolsFailure = {
+            code: 'context_tools_unavailable',
+            effect: 'not_dispatched',
+          };
+          request.resume();
+          reply.writeHead(503, { 'content-type': 'application/json' });
+          reply.end(
+            '{"error":{"code":"context_tools_unavailable","effect":"not_dispatched"}}'
           );
           return;
         }
@@ -804,7 +821,10 @@ export async function startLocalGatewayModelTransport(
       : codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
     requestCount: () => dispatchedRequests,
-    failureFact: () => transport.lastFailure,
+    failureFact: () => contextToolsFailure ?? transport.lastFailure,
+    setContextToolsGuard: (guard: (() => void) | undefined) => {
+      contextToolsGuard = guard;
+    },
     async dispose() {
       stopping = true;
       transport.cancelHeldStreams();

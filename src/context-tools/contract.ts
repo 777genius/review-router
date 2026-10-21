@@ -3,36 +3,21 @@ import {
   sha256,
 } from '../context-gateway/context-gateway-contract';
 
-export type CredentialBinding =
-  | Readonly<{ source: 'github-secret'; name: string }>
-  | Readonly<{
-      source: 'dashboard-secret';
-      credentialRef: string;
-      version: number;
-    }>;
-export type ContextToolsServer = Readonly<{
-  id: string;
-  version: number;
-  url: string;
-  headers: Readonly<Record<string, string>>;
-  tools: readonly string[];
-  credentials: Readonly<Record<string, CredentialBinding>>;
-}>;
-export type ContextToolsPlan = Readonly<{
-  version: 1;
-  builtinTools: readonly ('github.issue.read' | 'repository.docs.read')[];
-  servers: readonly ContextToolsServer[];
-  limits: Readonly<{
-    startupTimeoutMs: 30000;
-    callTimeoutMs: 30000;
-    responseBytes: 1048576;
-    maxCalls: 128;
-  }>;
-  planDigest: string;
-}>;
+import {
+  contextToolsContract,
+  type ContextToolsPlanV1,
+} from '../control-plane/generated/review-action-v2/companion-contracts';
+export { contextToolsContract };
+export type ContextToolsPlan = ContextToolsPlanV1;
+export type ContextToolsServer = ContextToolsPlan['servers'][number];
+export type CredentialBinding = ContextToolsServer['credentials'][string];
+export const CONTEXT_TOOLS_PROFILE = Object.freeze({
+  extensionId: contextToolsContract.extensionId,
+  descriptorDigest: `sha256:${sha256(canonicalJson(contextToolsContract))}`,
+});
 export const CONTEXT_TOOLS_CREDENTIALS_ENV =
-  'REVIEWROUTER_MCP_CREDENTIALS_JSON';
-export const CONTEXT_TOOLS_PLAN_ENV = 'REVIEW_ROUTER_CONTEXT_TOOLS_PLAN_JSON';
+  contextToolsContract.runnerSecretEnvKey;
+export const CONTEXT_TOOLS_PLAN_ENV = contextToolsContract.runtimeEnvKey;
 export const logicalNamePattern = /^[A-Z][A-Z0-9_]{0,63}$/;
 export const toolNamePattern = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/;
 export class ContextToolsError extends Error {
@@ -72,7 +57,8 @@ export function approvedEndpoint(value: string): URL {
 }
 /** Validate metadata received through the captured runtime configuration, never a PR file. */
 export function parseContextToolsPlan(json: string): ContextToolsPlan {
-  if (Buffer.byteLength(json) > 131072) throw contextToolsError('plan_invalid');
+  if (Buffer.byteLength(json) > contextToolsContract.maxPlanBytes)
+    throw contextToolsError('plan_invalid');
   let value: unknown;
   try {
     value = JSON.parse(json);
@@ -96,7 +82,7 @@ export function parseContextToolsPlan(json: string): ContextToolsPlan {
       (x) => x !== 'github.issue.read' && x !== 'repository.docs.read'
     ) ||
     !Array.isArray(value.servers) ||
-    value.servers.length > 4 ||
+    value.servers.length > contextToolsContract.maxServers ||
     !record(value.limits) ||
     !keys(value.limits, [
       'startupTimeoutMs',
@@ -104,10 +90,11 @@ export function parseContextToolsPlan(json: string): ContextToolsPlan {
       'responseBytes',
       'maxCalls',
     ]) ||
-    value.limits.startupTimeoutMs !== 30000 ||
-    value.limits.callTimeoutMs !== 30000 ||
-    value.limits.responseBytes !== 1048576 ||
-    value.limits.maxCalls !== 128 ||
+    value.limits.startupTimeoutMs !==
+      contextToolsContract.limits.startupTimeoutMs ||
+    value.limits.callTimeoutMs !== contextToolsContract.limits.callTimeoutMs ||
+    value.limits.responseBytes !== contextToolsContract.limits.responseBytes ||
+    value.limits.maxCalls !== contextToolsContract.limits.maxCalls ||
     typeof value.planDigest !== 'string'
   )
     throw contextToolsError('plan_invalid');
@@ -131,12 +118,14 @@ export function parseContextToolsPlan(json: string): ContextToolsPlan {
       Number(server.version) < 1 ||
       typeof server.url !== 'string' ||
       !record(server.headers) ||
-      Object.keys(server.headers).length > 16 ||
+      Object.keys(server.headers).length >
+        contextToolsContract.maxHeadersPerServer ||
       !record(server.credentials) ||
-      Object.keys(server.credentials).length > 16 ||
+      Object.keys(server.credentials).length >
+        contextToolsContract.maxCredentialBindingsPerServer ||
       !Array.isArray(server.tools) ||
       server.tools.length < 1 ||
-      server.tools.length > 20 ||
+      server.tools.length > contextToolsContract.maxToolsPerServer ||
       new Set(server.tools).size !== server.tools.length ||
       server.tools.some(
         (x) => typeof x !== 'string' || !toolNamePattern.test(x)
@@ -172,14 +161,17 @@ export function parseContextToolsPlan(json: string): ContextToolsPlan {
     const headerNames = new Set<string>();
     for (const [name, template] of Object.entries(server.headers)) {
       if (
-        !/^(Authorization|X-[A-Za-z0-9-]+|CONTEXT7_API_KEY)$/i.test(name) ||
-        /^(x-forwarded-|x-real-|x-http-method|x-original-|x-rewrite-|x-host|x-proxy|x-mcp-)/i.test(
+        !new RegExp(contextToolsContract.headerNamePattern).test(name) ||
+        contextToolsContract.forbiddenHeaderNames.some(
+          (header) => header === name.toLowerCase()
+        ) ||
+        new RegExp(contextToolsContract.forbiddenHeaderPrefixPattern, 'i').test(
           name
         ) ||
         headerNames.has(name.toLowerCase()) ||
         typeof template !== 'string' ||
         !template.length ||
-        template.length > 4096 ||
+        template.length > contextToolsContract.maxHeaderValueChars ||
         /[\r\n\0]/.test(template)
       )
         throw contextToolsError('header_invalid');

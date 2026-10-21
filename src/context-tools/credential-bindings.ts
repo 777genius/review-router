@@ -4,6 +4,7 @@ import {
   contextToolsError,
   logicalNamePattern,
   record,
+  contextToolsContract,
 } from './contract';
 
 /** Parent-only closure. No values, secret hashes or header values are exposed in receipts. */
@@ -25,7 +26,11 @@ export function bindContextToolCredentials(input: {
     }
   let github: unknown = {};
   try {
-    if (input.githubJson && Buffer.byteLength(input.githubJson) > 131072)
+    if (
+      input.githubJson &&
+      Buffer.byteLength(input.githubJson) >
+        contextToolsContract.maxCredentialMapBytes
+    )
       throw new Error();
     github = input.githubJson ? JSON.parse(input.githubJson) : {};
   } catch {
@@ -37,6 +42,8 @@ export function bindContextToolCredentials(input: {
   ): Map<string, string> => {
     if (
       !record(values) ||
+      Buffer.byteLength(JSON.stringify(values)) >
+        contextToolsContract.maxCredentialMapBytes ||
       Object.keys(values).some((key) => !selected.has(key))
     )
       throw contextToolsError('credentials_invalid');
@@ -47,7 +54,7 @@ export function bindContextToolCredentials(input: {
         !logicalNamePattern.test(name) ||
         typeof value !== 'string' ||
         !value.trim() ||
-        value.length > 8192 ||
+        Buffer.byteLength(value) > contextToolsContract.maxCredentialBytes ||
         /[\r\n\0]/.test(value)
       )
         throw contextToolsError('credentials_unavailable');
@@ -96,7 +103,7 @@ export function bindContextToolCredentials(input: {
           return secret;
         }
       );
-      if (/[\r\n\0]/.test(value) || value.length > 16384)
+      if (/[\r\n\0]/.test(value) || Buffer.byteLength(value) > 16384)
         throw contextToolsError('template_invalid');
       headers[header] = value;
     }

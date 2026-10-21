@@ -8,7 +8,6 @@ import {
   type Tool,
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
-import Ajv from 'ajv';
 import {
   canonicalJson,
   sha256,
@@ -27,6 +26,7 @@ import {
 
 export type ContextTool = Readonly<{
   definition: Tool;
+  validateArguments?: (args: Record<string, unknown>) => boolean;
   call: (args: Record<string, unknown>) => Promise<CallToolResult>;
 }>;
 export type ContextToolsReceipt = Readonly<{
@@ -64,7 +64,34 @@ export async function startContextToolsBroker(input: {
   const bindings = new Map<string, ContextTool>();
   const add = (name: string, tool: ContextTool): void => {
     if (bindings.has(name)) throw contextToolsError('tool_collision');
-    bindings.set(name, { ...tool, definition: { ...tool.definition, name } });
+    bindings.set(name, {
+      ...tool,
+      definition: { ...tool.definition, name },
+      call: async (args) => {
+        const result = await tool.call(args);
+        return {
+          content: result.content.map((block) =>
+            block.type === 'text'
+              ? {
+                  type: 'text' as const,
+                  text: credentials.redact(block.text) as string,
+                }
+              : {
+                  type: 'text' as const,
+                  text: JSON.stringify(credentials.redact(block)),
+                }
+          ),
+          ...(result.isError === true ? { isError: true } : {}),
+          ...(result.structuredContent
+            ? {
+                structuredContent: credentials.redact(
+                  result.structuredContent
+                ) as Record<string, unknown>,
+              }
+            : {}),
+        };
+      },
+    });
   };
   const startupDeadline = Math.min(
     input.deadlineMs,
@@ -84,6 +111,7 @@ export async function startContextToolsBroker(input: {
         headers: credentials.headersFor(server),
         responseBytes: input.plan.limits.responseBytes,
         timeoutMs: remaining,
+        callTimeoutMs: input.plan.limits.callTimeoutMs,
       });
       remotes.push(remote);
       for (const definition of remote.tools) {
@@ -94,10 +122,7 @@ export async function startContextToolsBroker(input: {
             : `${fullName.slice(0, 48)}_${sha256(fullName).slice(0, 15)}`;
         add(name, {
           definition: credentials.redact(definition) as Tool,
-          call: async (args) =>
-            credentials.redact(
-              await remote.call(definition.name, args)
-            ) as CallToolResult,
+          call: (args) => remote.call(definition.name, args),
         });
       }
     }
@@ -127,22 +152,6 @@ async function serveContextTools(input: {
     (tool) => tool.definition
   );
   const schemaDigest = `sha256:${sha256(canonicalJson(definitions))}`;
-  const validators = new Map(
-    [...input.bindings].map(([name, tool]) => {
-      try {
-        return [
-          name,
-          new Ajv({
-            strict: false,
-            allErrors: false,
-            validateFormats: false,
-          }).compile(tool.definition.inputSchema),
-        ] as const;
-      } catch {
-        throw contextToolsError('schema_invalid');
-      }
-    })
-  );
   const cache = new Map<string, Promise<CallToolResult>>();
   let calls = 0;
   let hadFailure = false;
@@ -162,6 +171,7 @@ async function serveContextTools(input: {
   server.requestTimeout = 30000;
   server.headersTimeout = 10000;
   server.maxHeadersCount = 32;
+  server.maxConnections = 8;
   async function handle(
     req: IncomingMessage,
     res: ServerResponse
@@ -186,7 +196,10 @@ async function serveContextTools(input: {
       res.end();
       return;
     }
-    if (!req.headers['content-type']?.startsWith('application/json')) {
+    if (
+      req.headers['content-encoding'] !== undefined ||
+      !req.headers['content-type']?.startsWith('application/json')
+    ) {
       res.writeHead(415);
       res.end();
       return;
@@ -217,11 +230,15 @@ async function serveContextTools(input: {
       return { tools: definitions };
     });
     sdk.setRequestHandler(CallToolRequestSchema, async (request) => {
+      if (hadFailure) throw contextToolsError('tool_unavailable');
       const name = request.params.name;
       const args = request.params.arguments ?? {};
       const binding = input.bindings.get(name);
-      const validate = validators.get(name);
-      if (!binding || !validate?.(args))
+      if (
+        !binding ||
+        !boundedArguments(args) ||
+        (binding.validateArguments && !binding.validateArguments(args))
+      )
         throw contextToolsError('arguments_invalid');
       const key = sha256(canonicalJson({ name, args }));
       const cached = cache.get(key);
@@ -253,12 +270,12 @@ async function serveContextTools(input: {
             input.plan.limits.responseBytes
           )
             throw contextToolsError('response_too_large');
-          if (result.isError) hadFailure = true;
           return result;
         } catch (error) {
           if (
             error instanceof ContextToolsError &&
-            error.code === 'scope_denied'
+            (error.code === 'scope_denied' ||
+              error.code === 'arguments_invalid')
           )
             throw error;
           hadFailure = true;
@@ -293,6 +310,7 @@ async function serveContextTools(input: {
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
+    nativeConnected = false;
     clearTimeout(expiry);
     await Promise.allSettled(
       [...transports].map((transport) => transport.close())
@@ -328,4 +346,24 @@ async function serveContextTools(input: {
     }),
     close,
   };
+}
+
+// Untrusted remote schemas remain metadata: never compile/evaluate their patterns in the parent.
+function boundedArguments(args: Record<string, unknown>): boolean {
+  const stack: Array<{ value: unknown; depth: number }> = [
+    { value: args, depth: 0 },
+  ];
+  let nodes = 0;
+  while (stack.length) {
+    const item = stack.pop()!;
+    if (++nodes > 2048 || item.depth > 16) return false;
+    if (typeof item.value === 'string' && Buffer.byteLength(item.value) > 65536)
+      return false;
+    if (item.value && typeof item.value === 'object') {
+      const values = Object.values(item.value);
+      if (values.length > 128) return false;
+      for (const value of values) stack.push({ value, depth: item.depth + 1 });
+    }
+  }
+  return true;
 }

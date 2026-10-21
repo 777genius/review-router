@@ -31,6 +31,8 @@ describe('pinned HTTPS MCP transport', () => {
     'fe80::1',
     'fc00::1',
     '2001:db8::1',
+    '2001::1',
+    '2001:0:1::1',
     '2002:0808:0808::1',
   ])('rejects special/reserved and transition destination %s', (address) => {
     expect(isPublicAddress(address)).toBe(false);
@@ -50,55 +52,101 @@ describe('pinned HTTPS MCP transport', () => {
     ).rejects.toThrow('context_tools_address_forbidden');
     expect(dial).not.toHaveBeenCalled();
   });
-  test('pins the validated address at lookup, disables pooled/default proxy routing, rejects redirects without replay', async () => {
+  test.each([
+    [302, 'context_tools_redirect_forbidden'],
+    [700, 'context_tools_response_invalid'],
+  ] as const)(
+    'pins the validated address and rejects unsafe HTTP status %s without replay',
+    async (status, errorCode) => {
+      jest
+        .spyOn(dns, 'lookup')
+        .mockResolvedValue([{ address: '8.8.8.8', family: 4 }] as never);
+      const request = jest.spyOn(https, 'request').mockImplementation(((
+        _url: unknown,
+        options: https.RequestOptions,
+        response: (res: unknown) => void
+      ) => {
+        expect(options.agent).toBe(false);
+        expect(options.family).toBe(4);
+        expect(options.servername).toBe('docs.example.com');
+        expect(options.rejectUnauthorized).toBe(true);
+        const lookup = options.lookup as (
+          hostname: string,
+          options: unknown,
+          callback: (err: unknown, address: string, family: number) => void
+        ) => void;
+        lookup('docs.example.com', {}, (error, address, family) => {
+          expect(error).toBeNull();
+          expect(address).toBe('8.8.8.8');
+          expect(family).toBe(4);
+        });
+        const req = new EventEmitter() as EventEmitter & {
+          end: () => void;
+          destroy: () => void;
+        };
+        req.destroy = () => {
+          req.emit('close');
+        };
+        req.end = () => {
+          const res = new PassThrough() as PassThrough & {
+            statusCode: number;
+            headers: Record<string, string>;
+          };
+          res.statusCode = status;
+          res.headers = { location: 'https://metadata.invalid/steal' };
+          response(res);
+          req.emit('close');
+        };
+        return req;
+      }) as typeof https.request);
+      await expect(
+        fetchRemote()(endpoint, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer PRIVATE' },
+          body: '{}',
+        })
+      ).rejects.toThrow(errorCode);
+      expect(request).toHaveBeenCalledTimes(1);
+    }
+  );
+  test('compares IPv6 peers by numeric address instead of textual compression', async () => {
     jest
       .spyOn(dns, 'lookup')
-      .mockResolvedValue([{ address: '8.8.8.8', family: 4 }] as never);
-    const request = jest.spyOn(https, 'request').mockImplementation(((
+      .mockResolvedValue([
+        { address: '2001:4860:4860::8888', family: 6 },
+      ] as never);
+    jest.spyOn(https, 'request').mockImplementation(((
       _url: unknown,
-      options: https.RequestOptions,
+      _options: unknown,
       response: (res: unknown) => void
     ) => {
-      expect(options.agent).toBe(false);
-      expect(options.servername).toBe('docs.example.com');
-      expect(options.rejectUnauthorized).toBe(true);
-      const lookup = options.lookup as (
-        hostname: string,
-        options: unknown,
-        callback: (err: unknown, address: string, family: number) => void
-      ) => void;
-      lookup('docs.example.com', {}, (error, address, family) => {
-        expect(error).toBeNull();
-        expect(address).toBe('8.8.8.8');
-        expect(family).toBe(4);
-      });
       const req = new EventEmitter() as EventEmitter & {
         end: () => void;
         destroy: () => void;
       };
-      req.destroy = () => {
-        req.emit('close');
-      };
+      req.destroy = () => req.emit('close');
       req.end = () => {
+        const socket = new EventEmitter() as EventEmitter & {
+          remoteAddress: string;
+        };
+        socket.remoteAddress = '2001:4860:4860:0:0:0:0:8888';
+        req.emit('socket', socket);
+        socket.emit('secureConnect');
         const res = new PassThrough() as PassThrough & {
           statusCode: number;
           headers: Record<string, string>;
         };
-        res.statusCode = 302;
-        res.headers = { location: 'https://metadata.invalid/steal' };
+        res.statusCode = 200;
+        res.headers = { 'content-type': 'application/json' };
         response(res);
-        req.emit('close');
+        res.end('{}');
+        res.on('end', () => req.emit('close'));
       };
       return req;
     }) as typeof https.request);
-    await expect(
-      fetchRemote()(endpoint, {
-        method: 'POST',
-        headers: { Authorization: 'Bearer PRIVATE' },
-        body: '{}',
-      })
-    ).rejects.toThrow('context_tools_redirect_forbidden');
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(
+      (await fetchRemote()(endpoint, { method: 'POST', body: '{}' })).status
+    ).toBe(200);
   });
   test('preserves certificate checks and rejects a socket reaching a different address even with trusted TLS', async () => {
     fs.mkdirSync(path.resolve('tmp'), { recursive: true });

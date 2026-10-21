@@ -4,7 +4,14 @@ import { isIP } from 'node:net';
 import { TLSSocket } from 'node:tls';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolResultSchema,
+  ListToolsResultSchema,
+  McpError,
+  ErrorCode,
+  type CallToolResult,
+  type Tool,
+} from '@modelcontextprotocol/sdk/types.js';
 import {
   approvedEndpoint,
   ContextToolsServer,
@@ -29,15 +36,24 @@ export function isPublicAddress(address: string): boolean {
       (a === 203 && b === 0 && c === 113)
     );
   }
-  if (isIP(address) !== 6 || address.includes('.')) return false;
-  // Only global unicast 2000::/3; exclude IETF special/transition and documentation ranges.
-  const first = parseInt(address.split(':')[0], 16);
+  if (isIP(address) !== 6 || address.includes('.') || address.includes('%'))
+    return false;
+  // Expand compressed words before testing prefixes (2001::/23 must not bypass the policy).
+  const parts = address.split('::');
+  const head = parts[0] ? parts[0].split(':') : [];
+  const tail = parts.length === 2 && parts[1] ? parts[1].split(':') : [];
+  const words = [
+    ...head,
+    ...Array(8 - head.length - tail.length).fill('0'),
+    ...tail,
+  ].map((word) => parseInt(word, 16));
+  const [first, second] = words;
   return (
     first >= 0x2000 &&
     first <= 0x3fff &&
-    !/^2001:(?:0*[0-1]?[0-9a-f]{1,2}:|0*db8:)/i.test(address) &&
-    !/^2002:/i.test(address) &&
-    !/^3fff:/i.test(address)
+    first !== 0x2002 &&
+    first !== 0x3fff &&
+    !(first === 0x2001 && (second < 0x0200 || second === 0x0db8))
   );
 }
 
@@ -54,6 +70,7 @@ export function createPinnedHttpsFetch(input: {
     );
     if (url.href !== endpoint.href)
       throw contextToolsError('destination_changed');
+    if (init?.signal?.aborted) throw contextToolsError('aborted');
     const began = Date.now();
     const addresses = isIP(url.hostname)
       ? [{ address: url.hostname, family: isIP(url.hostname) }]
@@ -63,7 +80,10 @@ export function createPinnedHttpsFetch(input: {
       addresses.some((item) => !isPublicAddress(item.address))
     )
       throw contextToolsError('address_forbidden');
-    const address = addresses[0];
+    if (init?.signal?.aborted) throw contextToolsError('aborted');
+    if (Date.now() - began >= input.timeoutMs)
+      throw contextToolsError('deadline');
+    const address = addresses.find((item) => item.family === 4) ?? addresses[0];
     const headers = Object.fromEntries(new Headers(init?.headers).entries());
     const body = init?.body;
     if (body !== undefined && body !== null && typeof body !== 'string')
@@ -87,7 +107,7 @@ export function createPinnedHttpsFetch(input: {
           method: init?.method ?? 'GET',
           headers,
           agent: false,
-        autoSelectFamily: false,
+          family: address.family,
           servername: isIP(url.hostname) ? undefined : url.hostname,
           rejectUnauthorized: true,
           lookup: (_hostname, _options, callback) =>
@@ -95,6 +115,11 @@ export function createPinnedHttpsFetch(input: {
         },
         (res) => {
           const status = res.statusCode ?? 0;
+          if (status < 200 || status > 599) {
+            res.destroy();
+            fail('response_invalid');
+            return;
+          }
           if (status >= 300 && status < 400) {
             res.destroy();
             fail('redirect_forbidden');
@@ -125,12 +150,17 @@ export function createPinnedHttpsFetch(input: {
               'mcp-protocol-version',
             ]) {
               const value = res.headers[name];
-              if (typeof value === 'string' && value.length <= 1024)
+              if (
+                typeof value === 'string' &&
+                /^[\x20-\x7e]{1,1024}$/.test(value)
+              )
                 responseHeaders.set(name, value);
             }
             resolve(
               new Response(
-                status === 204 || status === 304 ? null : Buffer.concat(chunks),
+                status === 204 || status === 205 || status === 304
+                  ? null
+                  : Buffer.concat(chunks),
                 { status, headers: responseHeaders }
               )
             );
@@ -153,7 +183,10 @@ export function createPinnedHttpsFetch(input: {
       req.on('socket', (socket) => {
         (socket as TLSSocket).once('secureConnect', () => {
           const actual = socket.remoteAddress?.replace(/^::ffff:/, '');
-          if (!actual || actual !== address.address) {
+          if (
+            !actual ||
+            normalizeAddress(actual) !== normalizeAddress(address.address)
+          ) {
             fail('destination_changed');
             req.destroy();
           }
@@ -186,6 +219,7 @@ export async function connectHttpsContextTools(input: {
   headers: Readonly<Record<string, string>>;
   responseBytes: number;
   timeoutMs: number;
+  callTimeoutMs: number;
 }): Promise<RemoteContextTools> {
   const client = new Client(
     { name: 'reviewrouter-context', version: '1' },
@@ -198,7 +232,7 @@ export async function connectHttpsContextTools(input: {
       fetch: createPinnedHttpsFetch({
         endpoint: input.server.url,
         responseBytes: input.responseBytes,
-        timeoutMs: input.timeoutMs,
+        timeoutMs: input.callTimeoutMs,
       }),
       reconnectionOptions: {
         maxRetries: 0,
@@ -208,9 +242,29 @@ export async function connectHttpsContextTools(input: {
       },
     }
   );
+  const startupDeadline = Date.now() + input.timeoutMs;
+  let startupTimer: NodeJS.Timeout | undefined;
   try {
-    await client.connect(transport, { timeout: input.timeoutMs });
-    const discovery = await client.listTools({}, { timeout: input.timeoutMs });
+    const discovery = await Promise.race([
+      (async () => {
+        await client.connect(transport, {
+          timeout: Math.max(1, startupDeadline - Date.now()),
+        });
+        if (Date.now() >= startupDeadline) throw contextToolsError('deadline');
+        return await client.request(
+          { method: 'tools/list', params: {} },
+          ListToolsResultSchema,
+          { timeout: startupDeadline - Date.now() }
+        );
+      })(),
+      new Promise<never>((_resolve, reject) => {
+        startupTimer = setTimeout(
+          () => reject(contextToolsError('deadline')),
+          input.timeoutMs
+        );
+      }),
+    ]);
+    if (startupTimer) clearTimeout(startupTimer);
     if (
       discovery.nextCursor ||
       discovery.tools.length > 100 ||
@@ -222,7 +276,8 @@ export async function connectHttpsContextTools(input: {
       if (
         matches.length !== 1 ||
         Buffer.byteLength(JSON.stringify(matches[0].inputSchema)) > 65536 ||
-        (matches[0].description?.length ?? 0) > 8192
+        (matches[0].description?.length ?? 0) > 8192 ||
+        matches[0].execution?.taskSupport === 'required'
       )
         throw contextToolsError('tool_unavailable');
       // Explicit selection is authority; remote readOnlyHint is never treated as permission.
@@ -233,11 +288,22 @@ export async function connectHttpsContextTools(input: {
       call: async (name, args) => {
         if (!input.server.tools.includes(name))
           throw contextToolsError('tool_forbidden');
-        const result = await client.callTool(
-          { name, arguments: args },
-          undefined,
-          { timeout: input.timeoutMs }
-        );
+        let result: CallToolResult;
+        try {
+          // Low-level SDK request validates the MCP envelope without executing untrusted JSON-schema regexes.
+          result = await client.request(
+            { method: 'tools/call', params: { name, arguments: args } },
+            CallToolResultSchema,
+            { timeout: input.callTimeoutMs }
+          );
+        } catch (error) {
+          if (
+            error instanceof McpError &&
+            error.code === ErrorCode.InvalidParams
+          )
+            throw contextToolsError('arguments_invalid');
+          throw contextToolsError('tool_unavailable');
+        }
         if (Buffer.byteLength(JSON.stringify(result)) > input.responseBytes)
           throw contextToolsError('response_too_large');
         return result as CallToolResult;
@@ -245,6 +311,7 @@ export async function connectHttpsContextTools(input: {
       close: () => client.close(),
     };
   } catch {
+    if (startupTimer) clearTimeout(startupTimer);
     await client.close().catch(() => undefined);
     throw contextToolsError('remote_unavailable');
   }
@@ -269,5 +336,14 @@ async function boundedLookup(
     throw contextToolsError('dns_failed');
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+function normalizeAddress(value: string): string {
+  if (isIP(value) === 4) return value;
+  try {
+    return new URL(`http://[${value}]/`).hostname;
+  } catch {
+    return '';
   }
 }

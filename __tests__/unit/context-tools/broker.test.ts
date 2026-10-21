@@ -1,3 +1,4 @@
+import canonicalFixture from '../../../src/control-plane/generated/review-action-v2/fixtures/context-tools-v1.json';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
@@ -5,7 +6,10 @@ import {
   sha256,
 } from '../../../src/context-gateway/context-gateway-contract';
 import { startContextToolsBroker } from '../../../src/context-tools/broker';
-import { parseContextToolsPlan } from '../../../src/context-tools/contract';
+import {
+  parseContextToolsPlan,
+  CONTEXT_TOOLS_PROFILE,
+} from '../../../src/context-tools/contract';
 import { bindContextToolCredentials } from '../../../src/context-tools/credential-bindings';
 
 function plan(servers: unknown[] = []) {
@@ -40,6 +44,16 @@ const remote = {
 };
 
 describe('captured context tool credential boundary', () => {
+  test('consumes the canonical generated fixture and exact qualified descriptor', () => {
+    expect(parseContextToolsPlan(JSON.stringify(canonicalFixture))).toEqual(
+      canonicalFixture
+    );
+    expect(CONTEXT_TOOLS_PROFILE).toEqual({
+      extensionId: 'context-tools.v1',
+      descriptorDigest:
+        'sha256:c188ad0a29581317f23b6aec3f103a7419f67576bea6fb3dc9910cf9ca3a3f7a',
+    });
+  });
   test('substitutes only explicit logical keys, masks values, and redacts nested quoted secret echoes', () => {
     const selected = plan([remote]);
     const value = 'test-"{token}"';
@@ -64,8 +78,9 @@ describe('captured context tool credential boundary', () => {
     '{"TOKEN":""}',
     '{"TOKEN":"x\\r\\nInjected: y"}',
     '{"TOKEN":"valid","UNSELECTED":"secret"}',
+    JSON.stringify({ TOKEN: '💡'.repeat(2049) }),
   ])(
-    'fails missing, empty, injection or unsolicited credentials before connection: %s',
+    'fails missing, empty, oversized, injection or unsolicited credentials before connection',
     (githubJson) => {
       expect(() =>
         bindContextToolCredentials({
@@ -122,6 +137,8 @@ describe('SDK 1.29 stateless loopback broker interop', () => {
               additionalProperties: false,
             },
           },
+          validateArguments: (args) =>
+            Object.keys(args).length === 1 && typeof args.path === 'string',
           call,
         },
       },
@@ -181,6 +198,72 @@ describe('SDK 1.29 stateless loopback broker interop', () => {
       await broker.close();
     }
     await expect(fetch(broker.config.url)).rejects.toThrow();
+  });
+  test('keeps a read capability available after a query-domain isError and treats 2020 schemas only as metadata', async () => {
+    const call = jest.fn(async (args: Record<string, unknown>) =>
+      args.query === 'bad'
+        ? {
+            isError: true,
+            content: [{ type: 'text' as const, text: 'query not found' }],
+          }
+        : {
+            content: [
+              { type: 'text' as const, text: 'corrected query result' },
+            ],
+          }
+    );
+    const broker = await startContextToolsBroker({
+      plan: plan(),
+      mask: jest.fn(),
+      deadlineMs: Date.now() + 10000,
+      builtins: {
+        'repository.docs.read': {
+          definition: {
+            name: 'query',
+            inputSchema: {
+              $schema: 'https://json-schema.org/draft/2020-12/schema',
+              type: 'object',
+              properties: { query: { type: 'string', pattern: '(a+)+$' } },
+            },
+          },
+          call,
+        },
+      },
+    });
+    const client = new Client(
+      { name: 'test', version: '1' },
+      { capabilities: {} }
+    );
+    try {
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(broker.config.url), {
+          requestInit: {
+            headers: { Authorization: `Bearer ${broker.config.capability}` },
+          },
+        })
+      );
+      expect(
+        (
+          await client.callTool({
+            name: 'rr_repository_docs_read',
+            arguments: { query: 'bad' },
+          })
+        ).isError
+      ).toBe(true);
+      expect(
+        (
+          await client.callTool({
+            name: 'rr_repository_docs_read',
+            arguments: { query: 'corrected!' },
+          })
+        ).isError
+      ).toBeUndefined();
+      expect(call).toHaveBeenCalledTimes(2);
+      expect(broker.receipt()).toMatchObject({ calls: 2, hadFailure: false });
+    } finally {
+      await client.close();
+      await broker.close();
+    }
   });
   test('caches unknown delivery failures and honestly refuses absent selected builtin tools', async () => {
     await expect(

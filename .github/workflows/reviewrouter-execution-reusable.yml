@@ -73,6 +73,9 @@ on:
         required: true
         type: string
     secrets:
+      mcp_secrets_json:
+        description: 'Explicit selected MCP credential map; parent broker only'
+        required: false
       REVIEW_ROUTER_LEDGER_KEY:
         required: false
       REVIEW_THREAD_LIFECYCLE_RESOLVE_TOKEN:
@@ -552,6 +555,7 @@ jobs:
         if: ${{ inputs.review_action_lane == 't0' && inputs.codex_session_mode == 'account-gateway' && steps.runtime.outputs.can_run == 'true' }}
         shell: bash
         env:
+          REVIEWROUTER_MCP_CREDENTIALS_JSON: ${{ secrets.mcp_secrets_json }}
           REVIEWROUTER_ACTION_V2_MODE: t0
           REVIEW_ROUTER_MODE: account-gateway
           INPUT_API_URL: ${{ inputs.api_url }}

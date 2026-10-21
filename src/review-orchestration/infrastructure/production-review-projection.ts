@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import type { PRContext, ReviewConfig } from '../../types';
 import { PullRequestLoadStatus } from '../../types';
 import { trimDiff } from '../../utils/diff';
+import { logger } from '../../utils/logger';
 import {
   BuildCurrentReviewProjection,
   type BuildCurrentReviewProjectionCommand,
@@ -74,7 +75,17 @@ export function createProductionReviewProjectionBuilder(input: {
     new ProductionReviewProjectionCommandFactory({
       ...input,
       limits,
-    })
+    }),
+    {
+      limits: {
+        ...input.protocolLimits,
+        maxProjectionBytes: limits.maxProjectionBytes,
+      },
+      unavailable: () =>
+        logger.warn(
+          'AI PR description omitted: publication limits leave no optional space.'
+        ),
+    }
   );
 }
 
@@ -149,7 +160,9 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         return;
       }
       const rank = coverageManifestFileStatusRank(entry.status);
-      const existingRank = coverageManifestFileStatusRank(existing.entry.status);
+      const existingRank = coverageManifestFileStatusRank(
+        existing.entry.status
+      );
       // Required work slots keep their weakest coverage so a required gap can
       // never be erased by a stronger view from another lane; optional lanes
       // keep their strongest coverage.

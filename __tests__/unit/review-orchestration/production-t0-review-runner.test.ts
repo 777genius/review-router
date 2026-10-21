@@ -1185,6 +1185,52 @@ process.stdin.once('data', () => {
     ).toEqual(new Set(pr.files.map((file) => file.filename)));
   });
 
+  it('reserves one optional description without displacing review or feeding owned body blocks back', () => {
+    const pr = pullRequest(['src/a.ts', 'src/b.ts']);
+    const author = '  Author requirement.\n';
+    pr.body = `${author}<!-- review-router-summary:start -->generated requirement<!-- review-router-summary:end -->\n<!-- ai-robot-review-summary:start -->legacy generated<!-- ai-robot-review-summary:end -->Author footer. `;
+    const options = {
+      prDescriptionEnabled: true,
+      pr,
+      config: {
+        ...DEFAULT_CONFIG,
+        batchMaxFiles: 1,
+        enableTokenAwareBatching: false,
+      },
+      providerName: 'codex/gpt-test',
+      compatibilityKey: '7'.repeat(64),
+      lifecycleTargets: [],
+      liveLifecycleStateHash: '8'.repeat(64),
+    };
+    const planned = planAssignments({
+      ...options,
+      authorization: authorization(3),
+    });
+    expect(planned.assignments).toHaveLength(2);
+    expect(
+      planned.assignments.map((assignment) => assignment.context.body)
+    ).toEqual([`${author}\nAuthor footer. `, `${author}\nAuthor footer. `]);
+    const optional = planned.plan.assignments.filter(
+      (assignment) =>
+        assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
+    );
+    expect(optional).toHaveLength(1);
+    expect(optional[0].workSlot).toMatchObject({
+      required: false,
+      attemptBudget: 1,
+    });
+    const full = planAssignments({
+      ...options,
+      authorization: authorization(2),
+    });
+    expect(full.plan.assignments).toHaveLength(2);
+    expect(
+      full.plan.assignments.every((assignment) => assignment.workSlot.required)
+    ).toBe(true);
+    expect(full.uncoveredPaths).toEqual([]);
+    expect(pr.body).toContain('generated requirement');
+  });
+
   it('uses locale-independent code-unit ordering for v2 projection inputs', () => {
     expect(['ä', 'z', 'A'].sort(compareCodeUnits)).toEqual(['A', 'z', 'ä']);
   });

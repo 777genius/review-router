@@ -142,13 +142,21 @@ export function createStableReviewWorkPlan(input: {
   );
 
   const assignments: StableReviewWorkAssignment[] = [];
+  if (
+    batches.filter((batch) => batch.taskKind === ReviewTaskKind.PrDescription)
+      .length > 1
+  )
+    throw new Error('review_description_slot_duplicate');
   for (const batch of batches) {
     requireIdentity(batch.batchId, 'batch_id');
     requireNonNegativeInteger(
       batch.schedulingOrdinal,
       'batch_scheduling_ordinal'
     );
-    for (const provider of providers) {
+    const description = batch.taskKind === ReviewTaskKind.PrDescription;
+    if (description && (batch.required || batch.paths.length))
+      throw new Error('review_description_slot_scope_invalid');
+    for (const provider of description ? [input.providers[0]] : providers) {
       requireIdentity(provider.providerName, 'provider_name');
       requireIdentity(provider.retryPolicyVersion, 'retry_policy_version');
       if (
@@ -191,8 +199,10 @@ export function createStableReviewWorkPlan(input: {
           providerVoteIdentityHash: provider.providerVoteIdentityHash,
           shardKey: batch.batchId,
           required: batch.required && provider.required,
-          attemptBudget: provider.attemptBudget,
-          retryPolicyVersion: provider.retryPolicyVersion,
+          attemptBudget: description ? 1 : provider.attemptBudget,
+          retryPolicyVersion: description
+            ? 'pr-description-no-replay.v1'
+            : provider.retryPolicyVersion,
         },
       });
     }

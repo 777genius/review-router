@@ -4,10 +4,15 @@ import {
   type BuildCurrentReviewProjectionCommand,
 } from '../../review-projection/application';
 import { ProjectionCoverageState } from '../../review-projection/domain';
+import {
+  canonicalizeReviewProjection,
+  hashReviewProjectionCanonicalJson,
+} from '../../review-projection/domain/review-projection-canonicalizer';
 import type {
   AcceptedReviewWorkSlotEvidence,
   CurrentReviewProjection,
   CurrentReviewProjectionBuilderPort,
+  ReviewProtocolLimits,
 } from '../application';
 
 export interface ReviewProjectionCommandFactoryPort {
@@ -26,7 +31,11 @@ export interface ReviewProjectionCommandFactoryPort {
 export class CurrentReviewProjectionBuilderAdapter implements CurrentReviewProjectionBuilderPort {
   constructor(
     private readonly projection: BuildCurrentReviewProjection,
-    private readonly commands: ReviewProjectionCommandFactoryPort
+    private readonly commands: ReviewProjectionCommandFactoryPort,
+    private readonly description?: {
+      limits: ReviewProtocolLimits;
+      unavailable(): void;
+    }
   ) {}
 
   async build(
@@ -37,19 +46,48 @@ export class CurrentReviewProjectionBuilderAdapter implements CurrentReviewProje
       throw new Error('review_projection_command_revision_mismatch');
     }
     const built = await this.projection.execute(command);
-    const operationsCanonicalJson = canonicalJson(built.envelope.publishing);
+    let envelope = built.envelope;
+    let projectionCanonicalJson = built.canonicalJson;
+    let projectionHash = built.projectionHash;
+    if (input.prDescription && this.description) {
+      const candidate = {
+        ...envelope,
+        publishing: {
+          ...envelope.publishing,
+          prDescription: input.prDescription,
+        },
+      };
+      const candidateJson = canonicalizeReviewProjection(candidate);
+      const candidateOperations = canonicalJson(candidate.publishing);
+      const count =
+        3 +
+        candidate.publishing.inlineReviewChunks.length +
+        candidate.publishing.lifecycle.length;
+      if (
+        Buffer.byteLength(candidateJson, 'utf8') <=
+          this.description.limits.maxProjectionBytes &&
+        Buffer.byteLength(candidateOperations, 'utf8') <=
+          this.description.limits.maxPublicationBodyBytes &&
+        count <= this.description.limits.maxPublicationOperations
+      ) {
+        envelope = candidate;
+        projectionCanonicalJson = candidateJson;
+        projectionHash = hashReviewProjectionCanonicalJson(candidateJson);
+      } else this.description.unavailable();
+    }
+    const operationsCanonicalJson = canonicalJson(envelope.publishing);
     const artifactHash = sha256(
       `rr.review-artifact.v1\0${canonicalJson({
         operationsCanonicalJson,
-        projectionHash: built.projectionHash,
+        projectionHash,
       })}`
     );
     return Object.freeze({
       artifactId: `rr:artifact:${artifactHash}`,
       artifactHash,
       projectionEnvelopeVersion: 1,
-      projectionEnvelopeCanonicalJson: built.canonicalJson,
-      projectionHash: built.projectionHash,
+      projectionEnvelopeCanonicalJson: projectionCanonicalJson,
+      projectionHash,
       lifecycleStateHash: built.envelope.lifecycleStateHash,
       commandLedgerWatermark: built.envelope.commandLedgerWatermark,
       operationsCanonicalJson,
@@ -57,6 +95,7 @@ export class CurrentReviewProjectionBuilderAdapter implements CurrentReviewProje
       mergeGateConclusion: built.envelope.mergeGate.conclusion,
       publicationOperationCount:
         2 +
+        (envelope.publishing.prDescription ? 1 : 0) +
         built.envelope.publishing.inlineReviewChunks.length +
         built.envelope.publishing.lifecycle.length,
       publicationChunkCount:

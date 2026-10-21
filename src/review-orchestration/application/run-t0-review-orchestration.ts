@@ -1,5 +1,9 @@
 import { createHash } from 'crypto';
 import {
+  prDescriptionContract,
+  type GeneratedPrDescription,
+} from '../../control-plane/generated/review-action-v2/companion-contracts';
+import {
   createReviewOrchestrationState,
   evolveReviewOrchestration,
   ReviewOrchestrationEventType,
@@ -23,6 +27,7 @@ import {
   type CurrentReviewProjectionBuilderPort,
   type ContextDependencyReplayPort,
   type PreparedReviewInvocationPort,
+  type PrDescriptionGenerationPort,
   type PreparedReviewInvocation,
   type ProviderInvocationManifest,
   type ProviderInvocationManifestAssemblerPort,
@@ -125,6 +130,7 @@ export type RunT0ReviewOrchestrationDependencies = {
   readonly oidc: ReviewOidcTokenPort;
   readonly invocationManifestAssembler: ProviderInvocationManifestAssemblerPort;
   readonly invocations: PreparedReviewInvocationPort;
+  readonly prDescription?: PrDescriptionGenerationPort;
   readonly investigationInvocations?: PreparedReviewInvocationPort;
   readonly invocationFailureClassifier: ReviewInvocationFailureClassifierPort;
   readonly invocationDiagnostics?: ReviewInvocationDiagnosticsPort;
@@ -204,7 +210,9 @@ export class RunT0ReviewOrchestration {
     preauthorized?: ReviewRunAuthorization
   ): Promise<ReviewOrchestrationResult> {
     let state = createReviewOrchestrationState(
-      command.workSlots.map((slot) => slot.workSlotId)
+      command.workSlots
+        .filter((slot) => slot.taskKind !== ReviewTaskKind.PrDescription)
+        .map((slot) => slot.workSlotId)
     );
     let authorization: ReviewRunAuthorization | undefined;
     let execution: ReviewExecutionAdmission | undefined;
@@ -321,7 +329,19 @@ export class RunT0ReviewOrchestration {
           slot,
         ])
       );
-      for (const workSlot of command.workSlots) {
+      const descriptionSlots = command.workSlots.filter(
+        (slot) => slot.taskKind === ReviewTaskKind.PrDescription
+      );
+      if (
+        descriptionSlots.length > 1 ||
+        descriptionSlots.some(
+          (slot) => slot.required || slot.attemptBudget !== 1
+        )
+      )
+        throw new Error('review_orchestration_description_plan_invalid');
+      for (const workSlot of command.workSlots.filter(
+        (slot) => slot.taskKind !== ReviewTaskKind.PrDescription
+      )) {
         const restoredSlot = restoredSlots.get(workSlot.workSlotId);
         if (!restoredSlot) {
           throw new Error('review_orchestration_restored_work_slot_missing');
@@ -508,10 +528,20 @@ export class RunT0ReviewOrchestration {
         };
       }
 
+      const prDescription = descriptionSlots[0]
+        ? await this.generatePrDescription({
+            command,
+            authorization,
+            execution,
+            workSlot: descriptionSlots[0],
+            restored: restoredExecution !== null,
+          })
+        : undefined;
       const projection = await this.dependencies.projectionBuilder.build({
         acceptedEvidence,
         exhaustedWorkSlotIds,
         reviewRevisionHash: command.reviewRevisionHash,
+        ...(prDescription ? { prDescription } : {}),
       });
       this.dependencies.progress?.report({ type: 'assembling' });
       const partial =
@@ -1322,9 +1352,7 @@ export class RunT0ReviewOrchestration {
               ? error
               : new Error('review_invocation_configuration_mismatch');
           }
-          if (
-            failureClass === ReviewInvocationFailureClass.AdmissionLimited
-          ) {
+          if (failureClass === ReviewInvocationFailureClass.AdmissionLimited) {
             input.onEvent({
               type: ReviewOrchestrationEventType.SlotExhausted,
               workSlotId: input.workSlot.workSlotId,
@@ -1747,6 +1775,19 @@ export class RunT0ReviewOrchestration {
     readonly sourceExecutionId: string;
     readonly revision: ReviewRevisionFacts;
   }): Promise<ReviewObservationPayload> {
+    return this.withInvocationRevisionWatch(input, (signal) =>
+      this.executeLegacyInvocation(input, signal)
+    );
+  }
+
+  private async withInvocationRevisionWatch<T>(
+    input: {
+      readonly signal: AbortSignal;
+      readonly invocation: PreparedReviewInvocation;
+      readonly revision: ReviewRevisionFacts;
+    },
+    operation: (signal: AbortSignal) => Promise<T>
+  ): Promise<T> {
     const abort = new AbortController();
     // Joining a stopped monitor must not cancel a completed provider invocation.
     const monitorStop = new AbortController();
@@ -1794,10 +1835,7 @@ export class RunT0ReviewOrchestration {
       if (!stopped) abort.abort(error);
     });
     try {
-      const observation = await this.executeLegacyInvocation(
-        input,
-        abort.signal
-      );
+      const observation = await operation(abort.signal);
       this.dependencies.signal?.throwIfAborted();
       if (
         abort.signal.reason instanceof ReviewExecutionCancelledSignal ||
@@ -2005,6 +2043,135 @@ export class RunT0ReviewOrchestration {
     });
   }
 
+  private async generatePrDescription(input: {
+    command: RunT0ReviewOrchestrationCommand;
+    authorization: ReviewRunAuthorization;
+    execution: ReviewExecutionAdmission;
+    workSlot: ReviewWorkSlotPlan;
+    restored: boolean;
+  }): Promise<GeneratedPrDescription | undefined> {
+    const generator = this.dependencies.prDescription;
+    if (!generator) return undefined;
+    // An optional narrative is never replayed after recovery with uncertain effects.
+    if (input.restored || !this.canStartInvocation(2)) {
+      generator.unavailable();
+      return undefined;
+    }
+    let lease: ReviewInvocationLease | undefined;
+    let description: GeneratedPrDescription | undefined;
+    let released = false;
+    try {
+      await this.assertRevisionCurrent(input.command);
+      const invocation = await generator.prepare({
+        workSlot: input.workSlot,
+        attemptOrdinal: 1,
+      });
+      const manifest =
+        await this.dependencies.invocationManifestAssembler.assemble(
+          invocation
+        );
+      validateManifest(manifest);
+      if (
+        invocation.workSlotId !== input.workSlot.workSlotId ||
+        invocation.attemptOrdinal !== 1 ||
+        invocation.manifestFacts.taskKindSet.length !== 1 ||
+        invocation.manifestFacts.taskKindSet[0] !==
+          ReviewTaskKind.PrDescription ||
+        manifest.providerVoteIdentityHash !==
+          input.workSlot.providerVoteIdentityHash
+      )
+        throw new Error('pr_description_manifest_scope_mismatch');
+      const acquireRequestId = this.identity('description-lease-acquire', [
+        input.execution.executionId,
+        input.workSlot.workSlotId,
+        manifest.providerInvocationKey,
+      ]);
+      const acquired =
+        await this.dependencies.controlPlane.acquireInvocationLease({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey('description-lease-acquire', [
+            acquireRequestId,
+          ]),
+          execution: input.execution,
+          workSlot: input.workSlot,
+          manifest,
+          acquireRequestId,
+          ownerIdHash: input.command.ownerIdHash,
+        });
+      if (
+        acquired.status !== ReviewInvocationLeaseAcquireOutcomeStatus.Acquired
+      ) {
+        generator.unavailable();
+        return undefined;
+      }
+      lease = acquired.lease;
+      description = await this.dependencies.leaseSupervisor.run({
+        lease,
+        renew: async () => {
+          lease = await this.renewLease(lease!, input.command.ownerIdHash);
+          return lease;
+        },
+        operation: (signal, currentLease) =>
+          this.withInvocationRevisionWatch(
+            {
+              signal,
+              invocation,
+              revision: input.command,
+            },
+            (watchedSignal) =>
+              generator.execute({
+                invocation,
+                manifest,
+                lease: currentLease(),
+                signal: AbortSignal.any([
+                  watchedSignal,
+                  AbortSignal.timeout(
+                    Math.max(
+                      1,
+                      Math.floor(
+                        Math.min(
+                          prDescriptionContract.deadlineMs,
+                          this.providerOperationRemainingMs()
+                        )
+                      )
+                    )
+                  ),
+                ]),
+              })
+          ),
+      });
+      const provenance = description.generationProvenance;
+      if (
+        provenance.leaseId !== lease.leaseId ||
+        provenance.providerIndex !== 0 ||
+        provenance.requestedModel !== invocation.requestedModel ||
+        provenance.providerRequestEnvelopeHash !==
+          invocation.manifestFacts.providerRequestEnvelopeHash ||
+        !provenance.actualModel ||
+        provenance.actualModel !== invocation.requestedModel
+      )
+        throw new Error('pr_description_receipt_scope_mismatch');
+      await this.assertRevisionCurrent(input.command);
+    } catch (error) {
+      this.dependencies.signal?.throwIfAborted();
+      if (
+        error instanceof ReviewExecutionSupersededSignal ||
+        error instanceof ReviewExecutionCancelledSignal
+      )
+        throw error;
+      generator.unavailable();
+      description = undefined;
+    } finally {
+      if (lease)
+        released = await this.releaseLease(lease, input.command.ownerIdHash, 1);
+    }
+    if (description && !released) {
+      generator.unavailable();
+      return undefined;
+    }
+    return description;
+  }
+
   private canStartBatch(): boolean {
     return this.dependencies.executionDeadline?.canStartBatch() ?? true;
   }
@@ -2046,7 +2213,7 @@ export class RunT0ReviewOrchestration {
     lease: ReviewInvocationLease,
     ownerIdHash: string,
     attemptOrdinal: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     const releaseRequestId = this.identity('lease-release-request', [
       lease.leaseId,
       lease.fencingToken,
@@ -2063,8 +2230,10 @@ export class RunT0ReviewOrchestration {
         ownerIdHash,
         releaseRequestId,
       });
+      return true;
     } catch {
       // Expiry is the safety fallback; release is cleanup after durable reporting.
+      return false;
     }
   }
 

@@ -141897,7 +141897,7 @@ function advanceMarkdownFence(line, fence) {
     const closer = /^( *)(`{3,}|~{3,})[ \t]*\r?$/.exec(line);
     if (closer && closer[2][0] === fence.delimiter[0] && closer[2].length >= fence.delimiter.length && closer[1].length <= fence.indent + 3)
       return {
-        normalized: closer[1].length > 3 ? closeMarkdownFence(fence) : void 0
+        normalized: closer[1].length < fence.indent || closer[1].length > 3 ? closeMarkdownFence(fence) : void 0
       };
     if (!line.trim() || line.match(/^ */)[0].length >= fence.indent)
       return { fence };

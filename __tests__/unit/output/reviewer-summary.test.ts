@@ -704,6 +704,8 @@ describe('compact summary publication contract', () => {
     '\t```html\n<img src=x alt=unsafeBoundary>\n```',
     '- container\n  ```html\n  code\n    ```\n  <img src=x alt=unsafeBoundary>',
     '  ```html\n  code\n    ```\n  <img src=x alt=unsafeBoundary>',
+    '- container\n  ```html\n  code\n```\nAfter fence <img src=x alt=unsafeBoundary>',
+    '  ```html\n  code\n```\nAfter fence <img src=x alt=unsafeBoundary>',
   ])('escapes HTML beyond an invalid or dedented fence: %s', (message) => {
     const markdown = renderReviewerSummaryMarkdown({
       language: 'en',
@@ -712,6 +714,8 @@ describe('compact summary publication contract', () => {
     });
     expect(markdown).not.toContain('<img src=x alt=unsafeBoundary>');
     expect(markdown).toContain('&lt;img src=x alt=unsafeBoundary&gt;');
+    if (message.includes('\n```\nAfter fence'))
+      expect(markdown).toContain('  code\n  ```\nAfter fence');
     if (message.includes('\n    ```\n')) {
       expect(markdown).toContain('  code\n  ```\n  &lt;img');
       const limited = limitReviewerPostedMarkdown(markdown, 350);

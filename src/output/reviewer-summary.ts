@@ -2093,11 +2093,13 @@ function advanceMarkdownFence(
       closer[2].length >= fence.delimiter.length &&
       closer[1].length <= fence.indent + 3
     )
-      // Wider closers may be container-relative. Normalize the physical line
-      // too, so top-level GFM and our conservative fence state cannot disagree.
+      // Wider or dedented closers may cross a container boundary. Normalize
+      // the physical line too, so GFM and our fence state cannot disagree.
       return {
         normalized:
-          closer[1].length > 3 ? closeMarkdownFence(fence) : undefined,
+          closer[1].length < fence.indent || closer[1].length > 3
+            ? closeMarkdownFence(fence)
+            : undefined,
       };
     // A container can end at a dedent even though a top-level fence would
     // continue. Close conservatively at the original indent before prose.

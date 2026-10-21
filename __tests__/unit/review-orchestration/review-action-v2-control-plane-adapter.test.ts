@@ -1554,6 +1554,29 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     });
   });
 
+  it.each([ReviewTaskKind.FindingDiscovery, ReviewTaskKind.PrDescription])(
+    'does not execute joined description leases while preserving ordinary joins (%s)',
+    async (taskKind) => {
+      const execute = jest.fn().mockResolvedValue({
+        status: ReviewInvocationLeaseResultStatus.Restored,
+        ...baseLease,
+      });
+      const input = leaseAcquireInput();
+      const result = await createAdapter(execute).acquireInvocationLease({
+        ...input,
+        workSlot: { ...input.workSlot, taskKind },
+      });
+      expect(result).toEqual(
+        taskKind === ReviewTaskKind.PrDescription
+          ? { status: ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable }
+          : {
+              status: ReviewInvocationLeaseAcquireOutcomeStatus.Acquired,
+              lease: baseLease,
+            }
+      );
+    }
+  );
+
   it('fails closed on an ambiguous invocation lease rejection', async () => {
     const execute = jest.fn().mockResolvedValue({
       status: ReviewInvocationLeaseResultStatus.Rejected,

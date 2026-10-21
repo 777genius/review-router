@@ -19,6 +19,55 @@ import {
 } from '../../../src/review-projection/domain';
 
 describe('production review projection coverage', () => {
+  it.each([2, 3])(
+    'adds optional description only when publication budget %s permits it',
+    async (maxPublicationOperations) => {
+      const inventory = completeLifecycleInventory();
+      const builder = createProductionReviewProjectionBuilder({
+        authorizationFacts,
+        pr,
+        config: DEFAULT_CONFIG,
+        protocolLimits: { ...protocolLimits, maxPublicationOperations },
+        assignments: [assignment('required-slot', true)],
+        uncoveredPaths: [],
+        uncoveredLifecycleTargetIds: [],
+        lifecycleInventory: inventory,
+      });
+      const description = {
+        generatedMarkdown: '## Summary\nKeep ownership checks.',
+        generationProvenance: {
+          leaseId: 'description-lease',
+          providerIndex: 0 as const,
+          requestedModel: 'gpt-5.6-sol',
+          actualModel: 'gpt-5.6-sol',
+          providerRequestEnvelopeHash: 'a'.repeat(64),
+        },
+      };
+      const result = await builder.build({
+        acceptedEvidence: [
+          acceptedEvidence(
+            'required-slot',
+            fullCoverageManifest('required-slot')
+          ),
+        ],
+        exhaustedWorkSlotIds: [],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+        prDescription: description,
+      });
+      const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+      expect(envelope.publishing.prDescription).toEqual(
+        maxPublicationOperations === 3 ? description : undefined
+      );
+      expect(envelope.coverage.state).toBe('complete');
+      expect(envelope.authoritativeObservationIds).toEqual([
+        'observation-required-slot',
+      ]);
+      expect(result.publicationOperationCount).toBe(maxPublicationOperations);
+      expect(result.coverageComplete).toBe(true);
+      expect(inventory.loadCurrent).toHaveBeenCalledTimes(1);
+    }
+  );
+
   it.each([
     LifecycleTargetDisposition.Active,
     LifecycleTargetDisposition.HumanReply,
@@ -734,15 +783,20 @@ describe('production review projection coverage', () => {
 
     const projection = await builder.build({
       acceptedEvidence: [
-        acceptedEvidence('slot-1', coverageManifest, [], [
-          {
-            title: 'Preliminary finding from partial lane',
-            message: 'Concrete failure message for the partial run.',
-            path: 'src/b.ts',
-            severity: 'major',
-            normalizedFailureModeHash: 'a'.repeat(64),
-          },
-        ]),
+        acceptedEvidence(
+          'slot-1',
+          coverageManifest,
+          [],
+          [
+            {
+              title: 'Preliminary finding from partial lane',
+              message: 'Concrete failure message for the partial run.',
+              path: 'src/b.ts',
+              severity: 'major',
+              normalizedFailureModeHash: 'a'.repeat(64),
+            },
+          ]
+        ),
       ],
       exhaustedWorkSlotIds: [],
       reviewRevisionHash: authorizationFacts.reviewRevisionHash,

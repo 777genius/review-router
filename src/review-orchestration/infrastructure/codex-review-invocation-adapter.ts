@@ -6,6 +6,10 @@ import {
   providerInvocationIdentityPreimageV1,
   serializeProviderInvocationManifestV1CanonicalWireJson,
 } from '../../control-plane/generated/review-action-v2/provider-invocation-manifest-v1';
+import {
+  canonicalizePrDescriptionInvocationManifestV1,
+  serializePrDescriptionInvocationManifestV1CanonicalWireJson,
+} from '../../control-plane/generated/review-action-v2/pr-description-invocation-manifest-v1';
 import { CodexProvider } from '../../providers/codex';
 import {
   PROVIDER_EXECUTION_CONTRACT_VERSION,
@@ -674,6 +678,9 @@ export class GeneratedProviderInvocationManifestAssembler implements ProviderInv
 
   async assemble(invocation: PreparedReviewInvocation) {
     const facts = invocation.manifestFacts;
+    const description =
+      facts.taskKindSet.length === 1 &&
+      facts.taskKindSet[0] === ReviewTaskKind.PrDescription;
     const manifestInput = {
       manifestVersion: 1 as const,
       scopeHash: this.scopeHash,
@@ -681,7 +688,9 @@ export class GeneratedProviderInvocationManifestAssembler implements ProviderInv
       providerKind: facts.providerKind,
       providerCapabilityHash: facts.providerCapabilityHash,
       requestedModel: invocation.requestedModel,
-      providerPolicyVersion: 'codex-provider-policy.v2-t0',
+      providerPolicyVersion: description
+        ? 'pr-description-provider-policy.v1'
+        : 'codex-provider-policy.v2-t0',
       producerReleaseId: this.authorization.facts.producerReleaseId,
       selectedProtocolVersion: this.authorization.facts.selectedProtocolVersion,
       providerRequestEnvelopeHash: facts.providerRequestEnvelopeHash,
@@ -700,7 +709,9 @@ export class GeneratedProviderInvocationManifestAssembler implements ProviderInv
       environmentContractHash: facts.environmentContractHash,
     };
     const manifestKey = sha256Bytes(
-      canonicalizeProviderInvocationManifestV1(manifestInput)
+      description
+        ? canonicalizePrDescriptionInvocationManifestV1(manifestInput)
+        : canonicalizeProviderInvocationManifestV1(manifestInput)
     );
     const lane = this.authorization.facts.providerVoteLanes.find(
       (candidate) => candidate.providerKind === facts.providerKind
@@ -730,8 +741,11 @@ export class GeneratedProviderInvocationManifestAssembler implements ProviderInv
       ].join(' ')
     );
     return Object.freeze({
-      manifestCanonicalJson:
-        serializeProviderInvocationManifestV1CanonicalWireJson(manifestInput),
+      manifestCanonicalJson: description
+        ? serializePrDescriptionInvocationManifestV1CanonicalWireJson(
+            manifestInput
+          )
+        : serializeProviderInvocationManifestV1CanonicalWireJson(manifestInput),
       manifestKey,
       providerInvocationKey,
       providerVoteIdentityHash: lane.providerVoteIdentityHash,

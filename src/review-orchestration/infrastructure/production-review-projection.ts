@@ -3,6 +3,7 @@ import { reviewBannerBaseUrlFromEnvironment } from '../../config/review-router-e
 import type { PRContext, ReviewConfig } from '../../types';
 import { PullRequestLoadStatus } from '../../types';
 import { trimDiff } from '../../utils/diff';
+import { logger } from '../../utils/logger';
 import {
   BuildCurrentReviewProjection,
   type BuildCurrentReviewProjectionCommand,
@@ -79,7 +80,17 @@ export function createProductionReviewProjectionBuilder(input: {
     new ProductionReviewProjectionCommandFactory({
       ...input,
       limits,
-    })
+    }),
+    {
+      limits: {
+        ...input.protocolLimits,
+        maxProjectionBytes: limits.maxProjectionBytes,
+      },
+      unavailable: () =>
+        logger.warn(
+          'AI PR description omitted: publication limits leave no optional space.'
+        ),
+    }
   );
 }
 

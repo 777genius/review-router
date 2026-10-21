@@ -18,7 +18,7 @@ The authoritative implementation plan and three-round review log live in the Saa
 - `ocr-managed-v3`: managed `1.13.1-rr.4`, upstream commit `8eb83340a487b1150af00701b94f01af97e4b4d6`, ten pinned patches, Go `1.26.9`.
 - Linux amd64 binary SHA256: `0553daafe39d7a9d7608f0d37b26d55c11d07b9d5bbfc5b36b0778f9cd9f3df5`; exact build receipt in `tools/ocr/qualifications/review-skills-v1.manifest`.
 - Native supporting profile: `codex-skills-v1`, retaining the verified Codex `0.147.0` binary.
-- Published source export: SaaS `35ec3863c62b13095efdcc0083a180cea7ad6eba`; handoff digest `af9020733c465e66d748b6b80da57e148e3fe0622231d29e829bf98b5ca1aca1`.
+- Published source export: SaaS `8626bae253410668557829b95d1b6a45c6e76adc`; handoff digest `ca4fe0e788d97bb56a55bbbab434a0de6c6ca39d1fc0dc54031dc6618ffe5d4b`.
 - Gateway OCR/native and verified direct OpenRouter delivery are supported. Older Secrets/Hosted callers retain legacy profiles and refuse new admissions with assigned Skills; this does not silently omit instructions.
 
 ## Executed verification
@@ -91,3 +91,31 @@ SaaS signed-HTTP test also passed against this merged runtime. Its first
 attempt stopped in fixture reset with SQLSTATE 53100 because the shared disk
 was full; the successful repeat followed cleanup of our reproducible caches
 and compression of our stopped TEST databases with complete backups retained.
+
+## Final compatibility with optional PR descriptions
+
+Main advanced again to `98c442df791837087ef3eb516ad1c3227e78b334` (PR #299).
+The merged runtime now retains that implementation and Skills. Its auxiliary
+contract was added to the canonical SaaS generator without importing the separate
+SaaS description feature's execution, publication, UI, or migrations. Existing
+published protocol identities remain unchanged.
+
+The official export from `8626bae253410668557829b95d1b6a45c6e76adc` was committed
+before merging main. The combined exported handoff was retained; generated
+Action/plan bundles and the source map were regenerated through the normal build.
+There were no source conflicts. An independent GPT-6.1 Sol xhigh critic verified
+all 52 generated file digests and six integration seams: capture before engine
+selection/cache, both engine cache identities, native finding/investigation
+delivery, OCR exact rules with cleaned background, separate optional description
+slots/canonicalizer, and coexisting Skills/profile/description exports. No
+concrete integration defect remained in the inspected scope.
+
+The final affected runtime batch passed **252/252 across eight suites**, covering
+Skills, the generated contract, the rebuilt production entrypoint, OCR/native
+adapters, the parent runner, description generation, and the control-plane adapter.
+Full TypeScript, normal Action/CLI build, and diff checks passed. The SaaS signed
+HTTP paired case passed against these exact rebuilt artifacts (one selected test;
+four neighboring tests deliberately filtered). Local receipts are
+`tmp/skills-unified-main-{build,typecheck,tests}.log` in this repository and
+`tmp/skills-unified-main-paired-http.log` in the paired SaaS worktree. New-head
+remote CI remains separate from these completed local gates.

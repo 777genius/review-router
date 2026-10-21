@@ -325,6 +325,7 @@ export function buildOcrSemanticInvocationPreimage(input: {
  * OCR findings are not lifecycle verdicts.
  */
 export function planOcrReviewAssignments(input: {
+  readonly prDescriptionEnabled?: boolean;
   readonly authorization: ReviewRunAuthorization;
   readonly pr: PRContext;
   readonly config: ReviewConfig;
@@ -388,6 +389,21 @@ export function planOcrReviewAssignments(input: {
         paths,
         schedulingOrdinal: 0,
       },
+      ...(input.prDescriptionEnabled &&
+      input.authorization.limits.maxWorkSlots > 1
+        ? [
+            {
+              batchId: createStableReviewBatchId({
+                taskKind: ReviewTaskKind.PrDescription,
+                members: [],
+              }),
+              taskKind: ReviewTaskKind.PrDescription,
+              required: false,
+              paths: [] as readonly string[],
+              schedulingOrdinal: 1,
+            },
+          ]
+        : []),
     ],
     eligiblePaths: paths,
     uncoveredPaths: [],
@@ -395,16 +411,21 @@ export function planOcrReviewAssignments(input: {
     maxWorkSlots: Math.max(1, input.authorization.limits.maxWorkSlots),
     maxAttemptsPerSlot: input.authorization.limits.maxAttemptsPerSlot,
   });
-  const assignments = plan.assignments.map((assignment) =>
-    Object.freeze({
-      workSlot: assignment.workSlot,
-      reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
-      mergeBaseSha: input.authorization.facts.mergeBaseSha,
-      context: input.pr,
-      lifecycleTargets: Object.freeze([]) as readonly LifecycleTarget[],
-      liveLifecycleStateHash: input.liveLifecycleStateHash,
-    })
-  );
+  const assignments = plan.assignments
+    .filter(
+      (assignment) =>
+        assignment.workSlot.taskKind !== ReviewTaskKind.PrDescription
+    )
+    .map((assignment) =>
+      Object.freeze({
+        workSlot: assignment.workSlot,
+        reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
+        mergeBaseSha: input.authorization.facts.mergeBaseSha,
+        context: input.pr,
+        lifecycleTargets: Object.freeze([]) as readonly LifecycleTarget[],
+        liveLifecycleStateHash: input.liveLifecycleStateHash,
+      })
+    );
   return Object.freeze({
     plan,
     assignments: Object.freeze(assignments),

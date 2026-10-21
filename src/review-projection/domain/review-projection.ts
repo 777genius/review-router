@@ -1,4 +1,5 @@
 import { ReviewLifecycleObservationVersion } from './review-lifecycle-observation';
+import type { GeneratedPrDescription } from '../../control-plane/generated/review-action-v2/companion-contracts';
 
 export enum ReviewProjectionEnvelopeVersion {
   V1 = 'review_projection.v1',
@@ -341,6 +342,7 @@ export interface LineageHintFact {
 }
 
 export interface ReviewProjectionPublishingFacts {
+  readonly prDescription?: GeneratedPrDescription;
   readonly lifecycleObservationVersion: ReviewLifecycleObservationVersion.V1;
   readonly summary: ReviewProjectionSummaryFact;
   readonly check: ReviewProjectionCheckFact;

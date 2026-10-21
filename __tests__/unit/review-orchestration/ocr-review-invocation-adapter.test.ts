@@ -5,6 +5,7 @@
  * after a truncated/malformed managed result.
  */
 
+import type { ContextToolsBroker } from '../../../src/context-tools/broker';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -338,6 +339,13 @@ describe('OcrReviewInvocationAdapter', () => {
   }
 
   function adapterFixture(options: {
+    readonly contextTools?: Pick<
+      ContextToolsBroker,
+      'receipt' | 'beginNativeSession'
+    >;
+    readonly contextToolsReceipt?: (
+      receipt: ReturnType<ContextToolsBroker['receipt']>
+    ) => void;
     readonly bridge: OcrLoopbackBridge;
     readonly processRunner: OcrReviewProcessRunner;
     readonly previewRunner: OcrPreviewRunner;
@@ -365,6 +373,8 @@ describe('OcrReviewInvocationAdapter', () => {
       profileRef: 'ocr-managed-v1',
       run,
       bridge: options.bridge,
+      contextTools: options.contextTools,
+      contextToolsReceipt: options.contextToolsReceipt,
       limits: { requestTimeoutSec: 600 } as OcrManagedLimits,
       ocrEffort: 'medium',
       modelReasoningEffort: 'medium',
@@ -568,14 +578,56 @@ describe('OcrReviewInvocationAdapter', () => {
     const { bridge, requests } = bridgeFixture();
     requests.count = 1;
     const processRunner = processRunnerWriting(nativeResultBody());
+    const receipt = {
+      planDigest: 'sha256:' + 'a'.repeat(64),
+      schemaDigest: 'sha256:' + 'b'.repeat(64),
+      availableTools: ['rr_repository_docs_read'],
+      nativeConnected: true,
+      calls: 1,
+      hadFailure: false,
+    };
+    const recordReceipt = jest.fn();
     const { adapter, workSlot } = adapterFixture({
       bridge,
-      processRunner: processRunner.runner,
+      contextTools: { receipt: () => receipt, beginNativeSession: jest.fn() },
+      contextToolsReceipt: recordReceipt,
+      processRunner: async (input) => {
+        const probe = await runOcrReviewProcess({
+          ...input,
+          binaryPath: process.execPath,
+          argv: [
+            '-e',
+            'process.stdout.write(JSON.stringify({github:process.env.REVIEWROUTER_MCP_CREDENTIALS_JSON===undefined,dashboard:process.env.REVIEWROUTER_MCP_DASHBOARD_CREDENTIALS_JSON===undefined}))',
+          ],
+        });
+        expect(JSON.parse(probe.stdoutTail)).toEqual({
+          github: true,
+          dashboard: true,
+        });
+        return processRunner.runner(input);
+      },
       previewRunner: previewRunner().runner,
     });
     const prepared = await adapter.prepare({ workSlot, attemptOrdinal: 1 });
-    const observation = await adapter.execute(executionInput(prepared));
+    const secretKeys = [
+      'REVIEWROUTER_MCP_CREDENTIALS_JSON',
+      'REVIEWROUTER_MCP_DASHBOARD_CREDENTIALS_JSON',
+    ];
+    const previous = secretKeys.map((key) => process.env[key]);
+    for (const key of secretKeys)
+      process.env[key] = '{"TOKEN":"synthetic-parent-only"}';
+    let observation;
+    try {
+      observation = await adapter.execute(executionInput(prepared));
+    } finally {
+      secretKeys.forEach((key, index) => {
+        if (previous[index] === undefined) delete process.env[key];
+        else process.env[key] = previous[index];
+      });
+    }
     expect(processRunner.calls).toHaveLength(1);
+    expect(recordReceipt).toHaveBeenCalledTimes(1);
+    expect(recordReceipt).toHaveBeenCalledWith(receipt);
     expect(observation.actualModel).toBe('observed-model');
     expect(observation.transportAttemptCount).toBe(1);
     expect(observation.qualityFlags).toEqual([]);
@@ -585,6 +637,61 @@ describe('OcrReviewInvocationAdapter', () => {
     };
     // C9: usage is the observed sum, not a configured budget.
     expect(payload.safeUsage.totalTokens).toBe(15);
+  });
+
+  it('binds external context policy into semantic identity and rejects native success after required context failure', async () => {
+    const { bridge, requests } = bridgeFixture();
+    requests.count = 1;
+    const engine = processRunnerWriting(nativeResultBody());
+    const receipt = {
+      planDigest: 'sha256:' + 'a'.repeat(64),
+      schemaDigest: 'sha256:' + 'b'.repeat(64),
+      availableTools: ['rr_mcp_docs_read'],
+      nativeConnected: true,
+      calls: 1,
+      hadFailure: true,
+    };
+    const contextTools = {
+      receipt: () => receipt,
+      beginNativeSession: jest.fn(),
+    };
+    const recordReceipt = jest.fn();
+    const selected = adapterFixture({
+      bridge,
+      processRunner: engine.runner,
+      previewRunner: previewRunner().runner,
+      contextTools,
+      contextToolsReceipt: recordReceipt,
+    });
+    const base = adapterFixture({
+      bridge,
+      processRunner: engine.runner,
+      previewRunner: previewRunner().runner,
+    });
+    const selectedPrepared = await selected.adapter.prepare({
+      workSlot: selected.workSlot,
+      attemptOrdinal: 1,
+    });
+    const basePrepared = await base.adapter.prepare({
+      workSlot: base.workSlot,
+      attemptOrdinal: 1,
+    });
+    expect(selectedPrepared.semanticIdentityHash).not.toBe(
+      basePrepared.semanticIdentityHash
+    );
+    expect(selectedPrepared.manifestPreimages.toolPolicyHash).toContain(
+      receipt.planDigest
+    );
+    expect(
+      selectedPrepared.manifestPreimages.environmentContractHash
+    ).toContain(receipt.schemaDigest);
+    await expect(
+      selected.adapter.execute(executionInput(selectedPrepared))
+    ).rejects.toThrow('required_context_tools_unavailable');
+    expect(contextTools.beginNativeSession).toHaveBeenCalledTimes(1);
+    expect(recordReceipt).toHaveBeenCalledTimes(1);
+    expect(recordReceipt).toHaveBeenCalledWith(receipt);
+    expect(engine.calls).toHaveLength(1);
   });
 
   it('flags a degraded outcome with context_inspection_incomplete + provider_warning', async () => {

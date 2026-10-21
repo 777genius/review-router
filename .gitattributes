@@ -1,3 +1,5 @@
 # Bundled dependencies contain significant template-literal whitespace.
 # Preserve their bytes; the source-parity check validates this generated artifact.
 action-dist/conflict-runtime.cjs whitespace=-blank-at-eol linguist-generated=true
+dist/index.js whitespace=-blank-at-eol linguist-generated=true
+dist/single-t0-plan.js whitespace=-blank-at-eol linguist-generated=true

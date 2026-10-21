@@ -17,6 +17,11 @@ on:
         type: string
         default: https://api.reviewrouter.org
 
+    secrets:
+      mcp_secrets_json:
+        description: 'Explicit selected MCP credential map; parent broker only'
+        required: false
+
 permissions: {}
 
 jobs:
@@ -63,6 +68,7 @@ jobs:
       - name: Run ReviewRouter
         shell: bash
         env:
+          REVIEWROUTER_MCP_CREDENTIALS_JSON: ${{ secrets.mcp_secrets_json }}
           REVIEW_ROUTER_MODE: account-gateway
           REVIEWROUTER_ACTION_V2_MODE: t0
           REVIEWROUTER_RUNTIME_CONFIG_MODE: oidc

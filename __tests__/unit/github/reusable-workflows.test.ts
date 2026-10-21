@@ -199,6 +199,14 @@ describe('production reusable workflows', () => {
       for (const [source, expected] of [
         [original, 0],
         [original.replace('contents: read', 'contents: write'), 1],
+        [original.replace('mcp_secrets_json:', 'unexpected_secret:'), 1],
+        [
+          original.replace(
+            /(mcp_secrets_json:[\s\S]*?required:) false/,
+            '$1 true'
+          ),
+          1,
+        ],
         [original.replace('required: false', 'required: true'), 1],
         [
           original.replace(
@@ -1311,4 +1319,39 @@ describe('immutable Secrets runtime producer', () => {
       'producer_identity_invalid'
     );
   });
+});
+
+test('forwards only the explicitly named MCP secret to the trusted parent runner entrypoints', () => {
+  const runtime = parseWorkflow('.github/workflows/reviewrouter-runtime.yml');
+  const t0 = parseWorkflow('.github/workflows/reviewrouter-t0-reusable.yml');
+  const execution = parseWorkflow(
+    '.github/workflows/reviewrouter-execution-reusable.yml'
+  );
+  for (const workflow of [runtime, t0, execution])
+    expect(workflow.on?.workflow_call?.secrets?.mcp_secrets_json).toEqual(
+      expect.objectContaining({ required: false })
+    );
+  expect(
+    Object.values(t0.jobs ?? {}).some(
+      (job) =>
+        job.secrets?.mcp_secrets_json === '${{ secrets.mcp_secrets_json }}'
+    )
+  ).toBe(true);
+  expect(
+    traceSecretEnvBindings(runtime, 'mcp_secrets_json').map((binding) => [
+      binding.step,
+      binding.environmentVariable,
+    ])
+  ).toEqual([['Run ReviewRouter', 'REVIEWROUTER_MCP_CREDENTIALS_JSON']]);
+  expect(
+    traceSecretEnvBindings(execution, 'mcp_secrets_json').map((binding) => [
+      binding.step,
+      binding.environmentVariable,
+    ])
+  ).toEqual([
+    [
+      'Run ReviewRouter T0 account gateway',
+      'REVIEWROUTER_MCP_CREDENTIALS_JSON',
+    ],
+  ]);
 });

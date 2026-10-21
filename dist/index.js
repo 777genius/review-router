@@ -22901,7 +22901,6 @@ var AccountGatewayModelTransport = class {
       clearTimeout(timer);
       signal?.removeEventListener("abort", abort);
       this.held.delete(controller);
-      if (this.directOpenRouter) controller.abort();
     };
     let responseReceived = false;
     let httpStatus = null;
@@ -29428,7 +29427,8 @@ async function pRetry(input, options) {
 
 // src/utils/retry.ts
 async function withRetry(fn, options) {
-  if (options.retryOn) {
+  const retryOn = options.retryOn ?? ((error2) => error2.name !== "AbortError");
+  if (options.retryOn || options.retryDelayMs) {
     const maxAttempts = options.retries + 1;
     const minTimeout = options.minTimeout ?? 500;
     const factor = options.factor ?? 2;
@@ -29438,14 +29438,16 @@ async function withRetry(fn, options) {
         return await fn();
       } catch (error2) {
         const err = error2;
-        if (!options.retryOn(err) || attempt === maxAttempts) {
+        if (!retryOn(err) || attempt === maxAttempts) {
           throw err;
         }
         logger.warn(
           `Retryable error: attempt ${attempt} of ${maxAttempts}`,
           err.message
         );
-        await new Promise((resolve5) => setTimeout(resolve5, delay3));
+        await new Promise(
+          (resolve5) => setTimeout(resolve5, Math.max(delay3, options.retryDelayMs?.(err) ?? 0))
+        );
         delay3 = Math.min(delay3 * factor, options.maxTimeout ?? 4e3);
       }
     }
@@ -29525,6 +29527,9 @@ function getProviderReviewTotalAttempts(configuredAttempts) {
   return Math.max(1, Math.floor(configuredAttempts ?? 1));
 }
 function shouldRetryProviderReviewError(error2) {
+  if (isTransientLaneSaturation(error2)) {
+    return true;
+  }
   if (error2 instanceof RateLimitError || error2.name === "RateLimitError") {
     return false;
   }
@@ -29540,6 +29545,9 @@ function buildProviderReviewPromptForAttempt(basePrompt, attempt, previousError)
   if (attempt <= 1) {
     return basePrompt;
   }
+  if (previousError && isTransientLaneSaturation(previousError)) {
+    return basePrompt;
+  }
   const reason = previousError ? ` Reason: ${sanitizeRetryReason(previousError.message)}` : "";
   return [
     basePrompt,
@@ -29550,6 +29558,43 @@ function buildProviderReviewPromptForAttempt(basePrompt, attempt, previousError)
     "No markdown, no prose, no code fences, comments, trailing commas, or text before/after the JSON.",
     'If no findings, return exactly {"findings":[],"revalidations":[]}.'
   ].join("\n");
+}
+function isTransientLaneSaturation(error2) {
+  const text = formatErrorForClassification(error2);
+  const facts = parseGatewayFactEnvelopes(text);
+  return facts.length > 0 && facts.every(
+    (fact) => (fact.code === "lane_saturated" || fact.code === "relay_saturated") && fact.effect === "not_dispatched"
+  );
+}
+function parseGatewayFactEnvelopes(text) {
+  const facts = [];
+  for (let start = text.indexOf("{"); start !== -1; start = text.indexOf("{", start + 1)) {
+    for (let end = text.indexOf("}", start); end !== -1; end = text.indexOf("}", end + 1)) {
+      let parsed;
+      try {
+        parsed = JSON.parse(text.slice(start, end + 1));
+      } catch {
+        continue;
+      }
+      const error2 = parsed.error;
+      if (error2 && typeof error2 === "object") {
+        const code = error2.code;
+        const effect = error2.effect;
+        if (typeof code === "string") {
+          facts.push({
+            code,
+            effect: typeof effect === "string" ? effect : ""
+          });
+        }
+      }
+      break;
+    }
+  }
+  return facts;
+}
+var LANE_SATURATION_RETRY_DELAY_MS = 1e3;
+function providerReviewRetryDelayMs(error2) {
+  return isTransientLaneSaturation(error2) ? LANE_SATURATION_RETRY_DELAY_MS : 0;
 }
 function formatErrorForClassification(error2) {
   const errorWithCode = error2;
@@ -29789,6 +29834,14 @@ var LLMExecutor = class {
               deadlineError.code = "REVIEW_DEADLINE_REACHED";
               throw deadlineError;
             }
+            if (attempt > 1 && this.providerExecutionPolicy && !this.providerExecutionPolicy.canStartOptionalRetry()) {
+              const deadlineError = new Error(
+                "Review execution deadline reached before the optional provider retry"
+              );
+              deadlineError.name = "TimeoutError";
+              deadlineError.code = "REVIEW_DEADLINE_REACHED";
+              throw deadlineError;
+            }
             const actualTimeoutMs = this.providerExecutionPolicy?.clampTimeoutMs(
               requestedTimeoutMs
             ) ?? requestedTimeoutMs;
@@ -29815,6 +29868,7 @@ var LLMExecutor = class {
               retries: totalAttempts - 1,
               minTimeout: 0,
               maxTimeout: 0,
+              retryDelayMs: providerReviewRetryDelayMs,
               retryOn: (error2) => {
                 previousError = error2;
                 return shouldRetryProviderReviewError(error2) && (this.providerExecutionPolicy?.canStartOptionalRetry() ?? true);

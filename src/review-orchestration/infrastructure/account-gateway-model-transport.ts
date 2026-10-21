@@ -244,9 +244,6 @@ export class AccountGatewayModelTransport {
       clearTimeout(timer);
       signal?.removeEventListener('abort', abort);
       this.held.delete(controller);
-      // An upstream may finish before consuming the streamed upload. Once its
-      // response is drained, close the remaining upload without replacing HTTP facts.
-      if (this.directOpenRouter) controller.abort();
     };
     let responseReceived = false;
     let httpStatus: number | null = null;

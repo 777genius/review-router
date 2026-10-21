@@ -7,13 +7,18 @@ export interface RetryOptions {
   minTimeout?: number;
   maxTimeout?: number;
   retryOn?: (error: Error) => boolean;
+  /** Lower bound for the next delay after this failure; never shortens the
+   * existing exponential timing. */
+  retryDelayMs?: (error: Error) => number;
 }
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
   options: RetryOptions
 ): Promise<T> {
-  if (options.retryOn) {
+  const retryOn =
+    options.retryOn ?? ((error: Error) => error.name !== 'AbortError');
+  if (options.retryOn || options.retryDelayMs) {
     const maxAttempts = options.retries + 1;
     const minTimeout = options.minTimeout ?? 500;
     const factor = options.factor ?? 2;
@@ -24,14 +29,16 @@ export async function withRetry<T>(
         return await fn();
       } catch (error) {
         const err = error as Error;
-        if (!options.retryOn(err) || attempt === maxAttempts) {
+        if (!retryOn(err) || attempt === maxAttempts) {
           throw err;
         }
         logger.warn(
           `Retryable error: attempt ${attempt} of ${maxAttempts}`,
           err.message
         );
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.max(delay, options.retryDelayMs?.(err) ?? 0))
+        );
         delay = Math.min(delay * factor, options.maxTimeout ?? 4000);
       }
     }

@@ -1,7 +1,9 @@
 import { createHash } from 'crypto';
+import { reviewBannerBaseUrlFromEnvironment } from '../../config/review-router-endpoints';
 import type { PRContext, ReviewConfig } from '../../types';
 import { PullRequestLoadStatus } from '../../types';
 import { trimDiff } from '../../utils/diff';
+import { logger } from '../../utils/logger';
 import {
   BuildCurrentReviewProjection,
   type BuildCurrentReviewProjectionCommand,
@@ -20,6 +22,7 @@ import {
   type ReviewProjectionLimits,
 } from '../../review-projection/domain';
 import { LegacyReviewProjectionPolicyAdapter } from '../../review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter';
+import { reviewerSummarySourceFromPr } from '../../output/reviewer-summary';
 import { ReviewExecutionProviderKind } from '../application';
 import type {
   AcceptedReviewObservation,
@@ -60,7 +63,10 @@ export function createProductionReviewProjectionBuilder(input: {
   readonly lifecycleInventory: CurrentLifecycleInventoryPort;
 }) {
   const limits = projectionLimits(input.config, input.protocolLimits);
-  const policy = new LegacyReviewProjectionPolicyAdapter(input.config);
+  const policy = new LegacyReviewProjectionPolicyAdapter(input.config, {
+    bannerBaseUrl: reviewBannerBaseUrlFromEnvironment(),
+    source: reviewerSummarySourceFromPr(input.pr),
+  });
   const projection = new BuildCurrentReviewProjection({
     lifecycleInventory: input.lifecycleInventory,
     findingPolicy: policy,
@@ -74,7 +80,17 @@ export function createProductionReviewProjectionBuilder(input: {
     new ProductionReviewProjectionCommandFactory({
       ...input,
       limits,
-    })
+    }),
+    {
+      limits: {
+        ...input.protocolLimits,
+        maxProjectionBytes: limits.maxProjectionBytes,
+      },
+      unavailable: () =>
+        logger.warn(
+          'AI PR description omitted: publication limits leave no optional space.'
+        ),
+    }
   );
 }
 
@@ -149,7 +165,9 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         return;
       }
       const rank = coverageManifestFileStatusRank(entry.status);
-      const existingRank = coverageManifestFileStatusRank(existing.entry.status);
+      const existingRank = coverageManifestFileStatusRank(
+        existing.entry.status
+      );
       // Required work slots keep their weakest coverage so a required gap can
       // never be erased by a stronger view from another lane; optional lanes
       // keep their strongest coverage.

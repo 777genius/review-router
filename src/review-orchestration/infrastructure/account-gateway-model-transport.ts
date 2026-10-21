@@ -1,6 +1,6 @@
 import { createResponsesUsageObserver } from '../../provider-usage/responses-observer';
 import type { UsageDelivery } from '../../provider-usage/delivery';
-import { randomBytes, timingSafeEqual } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import {
   createServer,
   request as httpRequest,
@@ -10,7 +10,11 @@ import { request as httpsRequest } from 'https';
 import { performance } from 'perf_hooks';
 import { Readable, Transform } from 'stream';
 import { pipeline } from 'stream/promises';
-import { providerApiCheckoutCompanionContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
+import { hasOwnedPrDescriptionMarker } from '../../github/pr-description-markers';
+import {
+  providerApiCheckoutCompanionContract,
+  prDescriptionContract,
+} from '../../control-plane/generated/review-action-v2/companion-contracts';
 import { setTimeout as wait } from 'timers/promises';
 
 const BASE = '/api/action/v2/account-gateway';
@@ -137,7 +141,18 @@ export type LocalGatewayModelTransport = Readonly<{
    * requests, so acceptance reads this instead of guessing from exit status. */
   requestCount?(): number;
   failureFact(): GatewayFailureFact | undefined;
+  /** Trusted parent only; its receipt never contributes review-engine evidence. */
+  generatePrDescription?(input: {
+    requestBody: Uint8Array;
+    signal: AbortSignal;
+  }): Promise<PrDescriptionModelReceipt>;
   dispose(): Promise<void>;
+}>;
+
+export type PrDescriptionModelReceipt = Readonly<{
+  generatedMarkdown: string;
+  actualModel: string;
+  providerRequestEnvelopeHash: string;
 }>;
 
 /** Gateway lifecycle HTTP only. Failed seals/releases retain a bounded cleanup
@@ -188,7 +203,9 @@ export class AccountGatewayModelTransport {
     apiUrl: string,
     private readonly authorization: () => string,
     private readonly observe?: ObserveTransport,
-    private readonly directOpenRouter?: DirectOpenRouterLimits
+    private readonly directOpenRouter?: DirectOpenRouterLimits,
+    private readonly auxiliaryDescription: boolean = false,
+    private readonly completedDescriptionResponse?: (response: unknown) => void
   ) {
     this.origin = trustedGatewayOrigin(apiUrl);
     if (directOpenRouter && this.origin.origin !== 'https://openrouter.ai')
@@ -205,6 +222,96 @@ export class AccountGatewayModelTransport {
     return this.inferenceDenied || this.modelUncertain
       ? undefined
       : this.observedModel;
+  }
+
+  async generatePrDescription(input: {
+    requestBody: Uint8Array;
+    signal: AbortSignal;
+  }): Promise<PrDescriptionModelReceipt> {
+    input.signal.throwIfAborted();
+    if (this.terminal || this.inferenceDenied || this.held.size > 0)
+      throw new Error('pr_description_connection_unavailable');
+    const bytes = Buffer.from(input.requestBody);
+    if (bytes.length > prDescriptionContract.maxPromptBytes)
+      throw new Error('pr_description_input_bound');
+    const envelope: unknown = JSON.parse(
+      new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    );
+    if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope))
+      throw new Error('pr_description_request_invalid');
+    const request = envelope as Record<string, unknown>;
+    if (
+      Object.keys(request).some(
+        (key) =>
+          ![
+            'model',
+            'instructions',
+            'input',
+            'tools',
+            'tool_choice',
+            'store',
+            'stream',
+            'service_tier',
+            'max_output_tokens',
+          ].includes(key)
+      ) ||
+      typeof request.model !== 'string' ||
+      !request.model ||
+      typeof request.instructions !== 'string' ||
+      !isPrDescriptionMessageInput(request.input) ||
+      !Array.isArray(request.tools) ||
+      request.tools.length !== 0 ||
+      request.tool_choice !== 'none' ||
+      request.store !== false ||
+      request.stream !== true ||
+      request.service_tier !== 'default' ||
+      request.max_output_tokens !== prDescriptionContract.maxOutputTokens
+    )
+      throw new Error('pr_description_request_invalid');
+    let markdown: string | undefined;
+    // Same fixed endpoint/credential authority, independent evidence and failure state.
+    const auxiliary = new AccountGatewayModelTransport(
+      this.origin.origin,
+      this.authorization,
+      undefined,
+      this.directOpenRouter,
+      true,
+      (response) => {
+        markdown = completedPrDescriptionText(response);
+      }
+    );
+    const abort = new AbortController();
+    this.held.add(abort);
+    const signal = AbortSignal.any([input.signal, abort.signal]);
+    const timer = setTimeout(
+      () => abort.abort(),
+      prDescriptionContract.deadlineMs
+    );
+    try {
+      const response = await auxiliary.responses(bytes, signal);
+      if (response.httpStatus !== 200) {
+        response.cancel();
+        throw new Error('pr_description_http_unavailable');
+      }
+      // Drain through the existing strict, bounded SSE audit before accepting text.
+      for await (const _chunk of response.body) {
+        signal.throwIfAborted();
+      }
+      if (!markdown || !auxiliary.actualModel)
+        throw new Error('pr_description_model_evidence_unavailable');
+      return Object.freeze({
+        generatedMarkdown: markdown,
+        actualModel: auxiliary.actualModel,
+        providerRequestEnvelopeHash: createHash('sha256')
+          .update(bytes)
+          .digest('hex'),
+      });
+    } finally {
+      clearTimeout(timer);
+      this.held.delete(abort);
+      abort.abort();
+      auxiliary.cancelHeldStreams();
+    }
   }
 
   async responses(
@@ -308,6 +415,7 @@ export class AccountGatewayModelTransport {
           response.headers['x-reviewrouter-request-ref'] !== undefined;
         if (
           !this.directOpenRouter &&
+          !this.auxiliaryDescription &&
           httpStatus === 503 &&
           !referenced &&
           /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
@@ -354,8 +462,11 @@ export class AccountGatewayModelTransport {
                 this.modelUncertain = true;
               else this.observedModel = model;
             },
-            this.directOpenRouter?.streamFrameBytes,
-            usage?.observe
+            this.auxiliaryDescription
+              ? ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes
+              : this.directOpenRouter?.streamFrameBytes,
+            usage?.observe,
+            this.completedDescriptionResponse
           )
         : undefined;
       const bounded = new Transform({
@@ -363,7 +474,7 @@ export class AccountGatewayModelTransport {
         transform: (chunk: Buffer, _encoding, done) => {
           count += chunk.length;
           const maximum = isStream
-            ? this.directOpenRouter
+            ? this.directOpenRouter && !this.auxiliaryDescription
               ? Infinity
               : ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes
             : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
@@ -826,6 +937,7 @@ export async function startLocalGatewayModelTransport(
     actualModel: () => transport.actualModel,
     requestCount: () => dispatchedRequests,
     failureFact: () => transport.lastFailure,
+    generatePrDescription: (input) => transport.generatePrDescription(input),
     async dispose() {
       stopping = true;
       transport.cancelHeldStreams();
@@ -971,7 +1083,8 @@ function failureFact(
 function responsesStreamAudit(
   observe: (model: string | undefined) => void,
   maximumFrameBytes: number = ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes,
-  observeUsage?: (frame: unknown) => void
+  observeUsage?: (frame: unknown) => void,
+  observeCompleted?: (response: unknown) => void
 ) {
   const decoder = new TextDecoder('utf-8', { fatal: true });
   let line = '';
@@ -1014,6 +1127,7 @@ function responsesStreamAudit(
                 ? response.model
                 : undefined;
             observe(model);
+            observeCompleted?.(response);
           } else if (
             raw.type === 'response.failed' ||
             raw.type === 'response.incomplete' ||
@@ -1070,4 +1184,60 @@ function responsesStreamAudit(
       if (line || data.length || !completed) throw new Error();
     },
   };
+}
+
+function completedPrDescriptionText(raw: unknown): string {
+  const response = raw as { status?: unknown; output?: unknown } | null;
+  if (response?.status !== 'completed' || !Array.isArray(response.output))
+    throw new Error('pr_description_output_invalid');
+  const parts: string[] = [];
+  let bytes = 0;
+  for (const item of response.output) {
+    if (!item || typeof item !== 'object')
+      throw new Error('pr_description_output_invalid');
+    if (item.type === 'reasoning') continue;
+    if (
+      item.type !== 'message' ||
+      item.role !== 'assistant' ||
+      !Array.isArray(item.content)
+    )
+      throw new Error('pr_description_output_invalid');
+    for (const content of item.content) {
+      if (content?.type !== 'output_text' || typeof content.text !== 'string')
+        throw new Error('pr_description_output_invalid');
+      bytes += Buffer.byteLength(content.text, 'utf8');
+      if (bytes > prDescriptionContract.maxGeneratedMarkdownBytes)
+        throw new Error('pr_description_output_bound');
+      parts.push(content.text);
+    }
+  }
+  const markdown = parts.join('').trim();
+  if (!markdown) throw new Error('pr_description_output_empty');
+  if (hasOwnedPrDescriptionMarker(markdown))
+    throw new Error('pr_description_output_reserved_marker');
+  return markdown;
+}
+
+function isPrDescriptionMessageInput(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length !== 1) return false;
+  const message = value[0] as Record<string, unknown> | null;
+  if (
+    !message ||
+    typeof message !== 'object' ||
+    Array.isArray(message) ||
+    Object.keys(message).sort().join(',') !== 'content,role' ||
+    message.role !== 'user' ||
+    !Array.isArray(message.content) ||
+    message.content.length !== 1
+  )
+    return false;
+  const content = message.content[0] as Record<string, unknown> | null;
+  return (
+    !!content &&
+    typeof content === 'object' &&
+    !Array.isArray(content) &&
+    Object.keys(content).sort().join(',') === 'text,type' &&
+    content.type === 'input_text' &&
+    typeof content.text === 'string'
+  );
 }

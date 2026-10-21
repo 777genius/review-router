@@ -317,6 +317,8 @@ export interface PRContext {
   deletions: number;
   baseSha: string;
   headSha: string;
+  /** Trusted GitHub repository containing the exact reviewed head. */
+  sourceRepositoryUrl?: string;
   loadCompleteness?: PullRequestLoadCompleteness;
 }
 
@@ -411,6 +413,11 @@ export interface ReviewFindingProvenance {
 }
 
 export interface Review {
+  sourceRevision?: {
+    readonly repositoryHtmlUrl: string;
+    readonly headSha: string;
+    readonly availablePaths?: readonly string[];
+  };
   summary: string;
   findings: Finding[];
   inlineComments: InlineComment[];

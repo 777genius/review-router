@@ -221,9 +221,27 @@ describe('BuildCurrentReviewProjection', () => {
       FindingOccurrenceState.Uncertain
     );
     expect(result.envelope.publishing.summary.allClear).toBe(false);
-    expect(
-      result.envelope.publishing.summary.body.match(/Previous defect/g)
-    ).toHaveLength(1);
+    expect(result.envelope.occurrences[0].lineageId).toBe('lineage-1');
+    expect(result.envelope.publishing.lifecycle).toEqual([
+      expect.objectContaining({
+        targetId: 'target-1',
+        lineageId: 'lineage-1',
+        verdict: LifecycleRevalidationVerdict.Uncertain,
+        mutationEligible: false,
+      }),
+    ]);
+    const body = result.envelope.publishing.summary.body;
+    const visible = body.replace(/<details>[\s\S]*?<\/details>/g, '');
+    const details = body.match(/<details>[\s\S]*?<\/details>/g) ?? [];
+    // One semantic historical issue has a visible action row and one full
+    // diagnostic history row. A duplicated target would add rows to both.
+    const historicalRow = /^- \*\*needs attention\*\* · Previous defect ·/gm;
+    expect(visible.match(historicalRow)).toHaveLength(1);
+    expect(details).toHaveLength(1);
+    const diagnosticBody = details.join('\n');
+    expect(diagnosticBody).toContain('<summary>Review details</summary>');
+    expect(diagnosticBody.match(historicalRow)).toHaveLength(1);
+    expect(diagnosticBody).toContain('resolution not established');
   });
 
   it('keeps full coverage publishable while a current Major finding blocks the merge gate', async () => {

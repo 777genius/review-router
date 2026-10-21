@@ -26,6 +26,7 @@ import {
   type ReviewWorkSlotPlan,
   type RunT0ReviewOrchestrationCommand,
   type RunT0ReviewOrchestrationDependencies,
+  type PreparedReviewInvocationPort,
 } from '../../../src/review-orchestration/application';
 import {
   createReviewPromptCoverageManifest,
@@ -42,6 +43,114 @@ import { MergeGateConclusion } from '../../../src/review-projection/domain';
 import { ExecutionDeadline } from '../../../src/review-execution/domain/execution-deadline';
 
 describe('RunT0ReviewOrchestration', () => {
+  it.each(['generated', 'unknown', 'restored', 'joined', 'disabled'] as const)(
+    'runs an optional PR description once after review slots (%s)',
+    async (outcome) => {
+      const fixture = createFixture({ workSlotCount: 2 });
+      const descriptionSlot = {
+        ...fixture.command.workSlots[0],
+        workSlotId: 'description',
+        taskKind: ReviewTaskKind.PrDescription,
+        shardKey: 'description',
+        required: false,
+        attemptBudget: 1,
+      };
+      if (outcome !== 'disabled') {
+        const workSlots = [...fixture.command.workSlots, descriptionSlot];
+        Object.assign(fixture.command, {
+          workSlots,
+          workSlotsCanonicalJson: canonicalizeReviewWorkSlots(workSlots),
+        });
+      }
+      const description = {
+        generatedMarkdown: '## Summary\nPreserve invoice ownership.',
+        generationProvenance: {
+          leaseId: lease.leaseId,
+          providerIndex: 0 as const,
+          requestedModel: 'gpt-test',
+          actualModel: 'gpt-test',
+          providerRequestEnvelopeHash: hash('request'),
+        },
+      };
+      const generator = {
+        prepare: jest.fn(
+          async (
+            input: Parameters<PreparedReviewInvocationPort['prepare']>[0]
+          ) => ({
+            ...(await fixture.dependencies.invocations.prepare(input)),
+            investigationContextPrompt: null,
+            investigationProbePlan: null,
+          })
+        ),
+        execute: jest.fn(async () => {
+          expect(
+            fixture.dependencies.invocations.execute
+          ).toHaveBeenCalledTimes(2);
+          expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(2);
+          expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+          if (outcome === 'unknown')
+            throw new Error('synthetic_effect_unknown');
+          return description;
+        }),
+        unavailable: jest.fn(),
+      };
+      Object.assign(fixture.dependencies, { prDescription: generator });
+      if (outcome === 'joined') {
+        const acquire =
+          fixture.controlPlane.acquireInvocationLease.getMockImplementation()!;
+        fixture.controlPlane.acquireInvocationLease.mockImplementation(
+          async (input) =>
+            input.workSlot.taskKind === ReviewTaskKind.PrDescription
+              ? {
+                  status: ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable,
+                }
+              : acquire(input)
+        );
+      }
+      if (outcome === 'restored') {
+        const refresh =
+          fixture.controlPlane.restoreExecution.getMockImplementation()!;
+        fixture.controlPlane.restoreExecution
+          .mockReset()
+          .mockResolvedValueOnce(
+            restoredAdmission(fixture.command, {
+              state: RestoredReviewWorkSlotState.Pending,
+              acceptedObservationRefId: null,
+            }).restoredExecution
+          )
+          .mockImplementation(refresh);
+      }
+      const result = await fixture.useCase.execute(fixture.command);
+      expect([
+        result.status,
+        'failureCode' in result ? result.failureCode : null,
+      ]).toEqual([ReviewOrchestrationResultStatus.Completed, null]);
+      expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(2);
+      expect(fixture.controlPlane.attachObservation).toHaveBeenCalledTimes(2);
+      const invoked = outcome === 'generated' || outcome === 'unknown';
+      expect(generator.execute).toHaveBeenCalledTimes(invoked ? 1 : 0);
+      const descriptionAcquisitions =
+        fixture.controlPlane.acquireInvocationLease.mock.calls.filter(
+          ([input]) => input.workSlot.taskKind === ReviewTaskKind.PrDescription
+        );
+      expect(descriptionAcquisitions).toHaveLength(
+        invoked || outcome === 'joined' ? 1 : 0
+      );
+      expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+        invoked ? 3 : 2
+      );
+      const projectionInput = jest.mocked(
+        fixture.dependencies.projectionBuilder.build
+      ).mock.calls[0][0];
+      expect(projectionInput.prDescription).toEqual(
+        outcome === 'generated' ? description : undefined
+      );
+      expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledWith(
+        expect.objectContaining({ allowPartial: false })
+      );
+    }
+  );
+
   it('fails closed at the orchestration boundary when a provider aborts', async () => {
     const fixture = createFixture();
     const abort = new Error('provider aborted before terminal output');

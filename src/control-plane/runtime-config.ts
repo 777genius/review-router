@@ -234,17 +234,22 @@ async function exchangeActionSession(input: {
   readonly sessionToken: string;
   readonly providerUsageGrants?: readonly UsageGrant[];
 }> {
+  const usageKeyHeader = input.usagePublicKey
+    ? Buffer.from(input.usagePublicKey, 'utf8').toString('base64url')
+    : undefined;
   const response = await input.fetchImpl(
     joinApiPath(input.apiUrl, '/api/action/v1/session/exchange'),
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(usageKeyHeader && usageKeyHeader.length <= 2048
+          ? { 'x-reviewrouter-usage-public-key': usageKeyHeader }
+          : {}),
+      },
       body: JSON.stringify({
         oidcToken: input.oidcToken,
         audience: input.audience,
-        ...(input.usagePublicKey
-          ? { usagePublicKey: input.usagePublicKey }
-          : {}),
       }),
     }
   );

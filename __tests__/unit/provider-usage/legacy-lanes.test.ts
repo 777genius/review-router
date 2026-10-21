@@ -101,13 +101,18 @@ it('registers the ephemeral key in existing OIDC exchange and accepts only serve
   expect(exchanges[0]).toMatchObject({
     oidcToken: 'PRIVATE-OIDC',
     audience: 'reviewrouter',
-    usagePublicKey: expect.stringContaining('BEGIN PUBLIC KEY'),
   });
-  expect(Object.keys(exchanges[0]).sort()).toEqual([
-    'audience',
-    'oidcToken',
-    'usagePublicKey',
-  ]);
+  expect(Object.keys(exchanges[0]).sort()).toEqual(['audience', 'oidcToken']);
+  const exchangeCall = (fetchImpl as jest.Mock).mock.calls.find((call) =>
+    String(call[0]).includes('/session/exchange')
+  );
+  const encoded = new Headers(exchangeCall![1]?.headers).get(
+    'x-reviewrouter-usage-public-key'
+  )!;
+  expect(encoded).toMatch(/^[A-Za-z0-9_-]{1,2048}$/);
+  expect(Buffer.from(encoded, 'base64url').toString('utf8')).toContain(
+    'BEGIN PUBLIC KEY'
+  );
   expect(result.status).toBe('applied');
   if (result.status !== 'applied') throw new Error('expected applied');
   expect(result.usageDeliveries).toHaveLength(1);

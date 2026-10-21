@@ -12,3 +12,12 @@ export const REVIEW_ROUTER_API_ORIGIN = endpoints.apiOrigin;
 
 export const CODEX_SEED_SCRIPT_URL = `${REVIEW_ROUTER_WEB_ORIGIN}/install/codex`;
 export const NEWTEST_V4_ROOT_URL = `${REVIEW_ROUTER_API_ORIGIN}/__newtest_v4/`;
+
+/** Image chrome is an explicit GitHub presentation opt-in. */
+export function reviewBannerBaseUrlFromEnvironment(
+  env: NodeJS.ProcessEnv = process.env
+): string | undefined {
+  return env.REVIEW_ROUTER_REVIEW_BANNER === '1'
+    ? REVIEW_ROUTER_WEB_ORIGIN
+    : undefined;
+}

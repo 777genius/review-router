@@ -96,10 +96,10 @@ describe('MarkdownFormatterV2', () => {
       const review = createMockReview();
       const output = formatter.format(review);
 
-      expect(output).toContain('# ReviewRouter');
+      expect(output).not.toContain('# ReviewRouter');
       expect(output).toContain('## No findings');
       expect(output).toContain('| Providers | 2/2 |');
-      expect(output).toContain('## Summary');
+      expect(output).not.toContain('## Summary');
       expect(output).not.toContain('## All Clear!');
       expect(output).not.toContain('Great job');
       expect(output).toContain('Performance Metrics');
@@ -151,7 +151,9 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('| Metadata-only or trimmed | 1 |');
       expect(output).toContain('| Skipped before LLM review | 1 |');
       expect(output).toContain('| Agentic context | ✓ |');
-      expect(output).toContain('<code>db/migrations/001.sql</code> - compacted');
+      expect(output).toContain(
+        '<code>db/migrations/001.sql</code> - compacted'
+      );
       expect(output).toContain('<code>package-lock.json</code> - skipped');
     });
 
@@ -201,7 +203,7 @@ describe('MarkdownFormatterV2', () => {
       expect(output).toContain('🔴 **1 critical**');
       expect(output).toContain('🟡 **1 major**');
       expect(output).toContain('🔵 **1 minor**');
-      expect(output).toContain(
+      expect(output).not.toContain(
         '<sub>10.5s • $0.0100 • Powered by ReviewRouter</sub>'
       );
     });
@@ -309,7 +311,7 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('## Previous Review Threads');
-      expect(output).toContain('resolved ·');
+      expect(output).toContain('**resolved** ·');
       expect(output).toContain('Previous Major Bug');
     });
 
@@ -425,11 +427,11 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('## Findings');
+      expect(output).not.toContain('## Findings');
       expect(output).toContain(
-        '<summary>critical · src/auth.ts:123 · Security Vulnerability</summary>'
+        '- **critical · Security Vulnerability** · <code>src/auth.ts:123</code>'
       );
-      expect(output).toContain('**Location:** `src/auth.ts:123`');
+      expect(output).toContain('**Location:** <code>src/auth.ts:123</code>');
       expect(output).toContain('🔴 **1 critical**');
       expect(output).toContain('SQL injection risk detected');
     });
@@ -451,8 +453,8 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('## Findings');
-      expect(output).toContain('Performance Issue</summary>');
+      expect(output).not.toContain('## Findings');
+      expect(output).toContain('**major · Performance Issue**');
     });
 
     it('should format minor findings with emoji', () => {
@@ -472,8 +474,8 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('## Findings');
-      expect(output).toContain('Code Style</summary>');
+      expect(output).not.toContain('## Findings');
+      expect(output).toContain('**minor · Code Style**');
     });
 
     it('should omit suggested fixes from the summary comment', () => {
@@ -591,7 +593,7 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('## 2 findings (2 major)');
+      expect(output).toContain('🟡 **2 major**');
     });
 
     it('should omit duplicated action items from summary output', () => {
@@ -708,7 +710,7 @@ describe('MarkdownFormatterV2', () => {
       const output = formatter.format(review);
 
       expect(output).toContain('| Billing | Not reported |');
-      expect(output).toContain('<sub>0.2s • Powered by ReviewRouter</sub>');
+      expect(output).not.toContain('<sub>0.2s • Powered by ReviewRouter</sub>');
       expect(output).not.toContain('$0.0000');
       expect(output).not.toContain('| Tokens | 0 |');
     });
@@ -906,14 +908,16 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('## Summary');
-      expect(output).toContain('## 3 findings (1 critical, 1 major, 1 minor)');
+      expect(output).not.toContain('## Summary');
+      expect(output).toContain(
+        '🔴 **1 critical** · 🟡 **1 major** · 🔵 **1 minor**'
+      );
       expect(output).toContain('major');
       expect(output).toContain('minor');
-      expect(output).toContain('## Findings');
+      expect(output).not.toContain('## Findings');
     });
 
-    it('should generate release notes for significant changes', () => {
+    it('keeps significant findings without duplicate release notes', () => {
       const review = createMockReview({
         findings: [
           createMockFinding({
@@ -943,11 +947,11 @@ describe('MarkdownFormatterV2', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('## Release Notes');
-      expect(output).toContain('**Security:**');
-      expect(output).toContain('🔴 Security fix required');
-      expect(output).toContain('**API:**');
-      expect(output).toContain('🟡 Breaking API change');
+      expect(output).not.toContain('## Release Notes');
+      expect(output).not.toContain('**Security:**');
+      expect(output).toContain('**critical · Security fix required**');
+      expect(output).not.toContain('**API:**');
+      expect(output).toContain('**major · Breaking API change**');
     });
 
     it('should omit empty release notes when significant findings have no categories', () => {
@@ -970,7 +974,7 @@ describe('MarkdownFormatterV2', () => {
       expect(output).not.toContain('## Release Notes');
     });
 
-    it('should include footer with branding', () => {
+    it('omits duplicate footer branding', () => {
       const review = createMockReview({
         findings: [createMockFinding({ severity: 'major' })],
         metrics: {
@@ -981,8 +985,8 @@ describe('MarkdownFormatterV2', () => {
       });
       const output = formatter.format(review);
 
-      expect(output).toContain('Powered by ReviewRouter');
-      expect(output).toContain(
+      expect(output).not.toContain('Powered by ReviewRouter');
+      expect(output).not.toContain(
         '<sub>5.5s • $0.0050 • Powered by ReviewRouter</sub>'
       );
       expect(output).not.toContain('react 👎');
@@ -1007,7 +1011,7 @@ describe('MarkdownFormatterV2', () => {
       });
       const output = formatter.format(review);
 
-      expect(output).toContain('Powered by ReviewRouter');
+      expect(output).not.toContain('Powered by ReviewRouter');
       expect(output).not.toContain('suppress an inline finding');
       expect(output).not.toContain('react 👎');
     });

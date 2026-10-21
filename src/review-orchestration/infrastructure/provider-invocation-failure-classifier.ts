@@ -1,3 +1,4 @@
+import { ContextToolsError } from '../../context-tools/contract';
 import { normalizeReviewError } from '../../errors/review-router-error';
 import {
   CapacitySignal,
@@ -12,13 +13,20 @@ import type { GatewayFailureFact } from './account-gateway-model-transport';
 
 export class ProviderInvocationFailureClassifier implements ReviewInvocationFailureClassifierPort {
   constructor(
-    private readonly gatewayFailureFact: () => GatewayFailureFact | undefined = () => undefined
+    private readonly gatewayFailureFact: () =>
+      | GatewayFailureFact
+      | undefined = () => undefined
   ) {}
 
   classify(error: unknown): ReviewInvocationFailureClass {
     // The gateway fact is authoritative: error text cannot tell a terminal
     // admission refusal apart from an ordinary retryable provider failure.
     const fact = this.gatewayFailureFact();
+    if (
+      error instanceof ContextToolsError ||
+      fact?.code === 'context_tools_unavailable'
+    )
+      return ReviewInvocationFailureClass.ConfigurationMismatch;
     if (
       fact?.code === 'admission_limited' &&
       (fact.effect === 'not_dispatched' ||

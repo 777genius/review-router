@@ -394,6 +394,7 @@ The workflow validates that it is running on `main`, the exact tag does not alre
 ## Documentation
 
 - [Installer guide](./docs/install.md)
+- [HTTPS context tools for managed OCR](./docs/https-mcp-context.md)
 - [Troubleshooting](./docs/TROUBLESHOOTING.md)
 - [Security guide](./docs/SECURITY.md)
 - [Performance guide](./docs/PERFORMANCE.md)

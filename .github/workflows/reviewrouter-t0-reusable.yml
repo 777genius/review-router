@@ -69,6 +69,9 @@ on:
         type: string
         default: '0'
     secrets:
+      mcp_secrets_json:
+        description: 'Explicit selected MCP credential map; parent broker only'
+        required: false
       REVIEW_ROUTER_LEDGER_KEY:
         required: false
       CODEX_AUTH_JSON:
@@ -110,6 +113,7 @@ jobs:
       review_timeout_minutes: ${{ inputs.review_timeout_minutes }}
       max_changed_lines: ${{ inputs.max_changed_lines }}
     secrets:
+      mcp_secrets_json: ${{ secrets.mcp_secrets_json }}
       REVIEW_ROUTER_LEDGER_KEY: ${{ secrets.REVIEW_ROUTER_LEDGER_KEY }}
       CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
       CODEX_CONFIG_TOML: ${{ secrets.CODEX_CONFIG_TOML }}

@@ -48,6 +48,9 @@ export function getProviderReviewTotalAttempts(
 }
 
 export function shouldRetryProviderReviewError(error: Error): boolean {
+  if (isTransientLaneSaturation(error)) {
+    return true;
+  }
   if (error instanceof RateLimitError || error.name === 'RateLimitError') {
     return false;
   }
@@ -70,6 +73,11 @@ export function buildProviderReviewPromptForAttempt(
   if (attempt <= 1) {
     return basePrompt;
   }
+  // A transient saturation retry re-runs the same prompt; the JSON retry notice
+  // would falsely claim the previous response produced malformed output.
+  if (previousError && isTransientLaneSaturation(previousError)) {
+    return basePrompt;
+  }
 
   const reason = previousError
     ? ` Reason: ${sanitizeRetryReason(previousError.message)}`
@@ -84,6 +92,16 @@ export function buildProviderReviewPromptForAttempt(
     'No markdown, no prose, no code fences, comments, trailing commas, or text before/after the JSON.',
     'If no findings, return exactly {"findings":[],"revalidations":[]}.',
   ].join('\n');
+}
+
+// A saturated relay lane is transient: the grant keeps its request budget and a
+// later attempt can succeed once an in-flight slot frees. The closed fact
+// envelope outranks textual non-retry patterns, which cannot otherwise tell
+// transient saturation apart from terminal budget exhaustion.
+function isTransientLaneSaturation(error: Error): boolean {
+  return formatErrorForClassification(error)
+    .toLowerCase()
+    .includes('lane_saturated');
 }
 
 function formatErrorForClassification(error: Error): string {

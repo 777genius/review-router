@@ -318,6 +318,55 @@ describe('LLMExecutor', () => {
     );
   });
 
+  it('retries transient lane saturation and succeeds without the JSON notice', async () => {
+    const provider = new SequenceProvider('codex/gpt-5.5', [
+      new Error(
+        'Codex CLI failed with exit code 1: upstream 503 {"error":{"code":"lane_saturated","effect":"not_dispatched"}}'
+      ),
+      {
+        content: '{"findings":[],"revalidations":[]}',
+        findings: [],
+        revalidations: [],
+        durationSeconds: 0.01,
+      },
+    ]);
+    const executor = new LLMExecutor({
+      ...DEFAULT_CONFIG,
+      providerRetries: 3,
+    });
+
+    const results = await executor.execute([provider], 'base prompt', 1000);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe('success');
+    expect(provider.prompts).toHaveLength(2);
+    expect(provider.prompts[0]).toBe('base prompt');
+    expect(provider.prompts[1]).toBe('base prompt');
+  });
+
+  it('does not retry terminal budget exhaustion facts', async () => {
+    const provider = new SequenceProvider('codex/gpt-5.5', [
+      new Error(
+        'Codex CLI failed with exit code 1: upstream 429 {"error":{"code":"budget_exhausted","effect":"not_dispatched"}}'
+      ),
+      {
+        content: '{"findings":[]}',
+        findings: [],
+        revalidations: [],
+        durationSeconds: 0.01,
+      },
+    ]);
+    const executor = new LLMExecutor({
+      ...DEFAULT_CONFIG,
+      providerRetries: 3,
+    });
+
+    const results = await executor.execute([provider], 'prompt', 1000);
+
+    expect(provider.prompts).toHaveLength(1);
+    expect(results[0].status).toBe('error');
+  });
+
   it('does not retry timeout errors', async () => {
     const provider = new SequenceProvider('codex/gpt-5.5', [
       new Error('Provider timed out after 600000ms'),

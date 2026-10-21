@@ -37,6 +37,38 @@ describe('LLM retry policy', () => {
     expect(shouldRetryProviderReviewError(new Error(message))).toBe(false);
   });
 
+  it('retries transient lane saturation carrying the gateway fact', () => {
+    expect(
+      shouldRetryProviderReviewError(
+        new Error(
+          'Codex CLI failed with exit code 1: upstream 503 {"error":{"code":"lane_saturated","effect":"not_dispatched"}}'
+        )
+      )
+    ).toBe(true);
+  });
+
+  it('keeps terminal budget exhaustion non-retryable', () => {
+    expect(
+      shouldRetryProviderReviewError(
+        new Error(
+          'upstream 429 {"error":{"code":"budget_exhausted","effect":"not_dispatched"}}'
+        )
+      )
+    ).toBe(false);
+  });
+
+  it('omits the JSON retry notice for transient saturation retries', () => {
+    const prompt = buildProviderReviewPromptForAttempt(
+      'base prompt',
+      2,
+      new Error(
+        'upstream 503 {"error":{"code":"lane_saturated","effect":"not_dispatched"}}'
+      )
+    );
+
+    expect(prompt).toBe('base prompt');
+  });
+
   it('treats provider retries as total attempts', () => {
     expect(getProviderReviewTotalAttempts(3)).toBe(3);
     expect(getProviderReviewTotalAttempts(0)).toBe(1);

@@ -141913,20 +141913,52 @@ function hasControlCharacters(value) {
 }
 function safeFindingBody(value) {
   let fence;
-  const lines = neutralizeDetailsMarkup(value).split("\n").map((line) => {
+  const lines = [];
+  let prose = [];
+  const flush = () => {
+    if (prose.length) lines.push(escapeHtmlOutsideCodeSpans(prose.join("\n")));
+    prose = [];
+  };
+  for (const line of neutralizeDetailsMarkup(value).split("\n")) {
     const match2 = line.match(/^\s{0,3}(`{3,}|~{3,})/);
     if (match2 && !fence) {
+      flush();
       fence = match2[1];
-      return line;
-    }
-    if (fence) {
+      lines.push(line);
+    } else if (fence) {
       if (new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
         fence = void 0;
-      return line;
-    }
-    return line.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-  });
+      lines.push(line);
+    } else prose.push(line);
+  }
+  flush();
   return markdownBlocks(lines.join("\n")).join("\n\n");
+}
+function escapeHtmlOutsideCodeSpans(value) {
+  const escape4 = (text2) => text2.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return value.split(/(\r?\n[ \t]*\r?\n)/).map((paragraph) => {
+    const ticks = Array.from(paragraph.matchAll(/`+/g));
+    let result2 = "";
+    let cursor = 0;
+    for (let index = 0; index < ticks.length; index++) {
+      const opening = ticks[index];
+      let slashes = 0;
+      for (let position = opening.index - 1; position >= 0 && paragraph[position] === "\\"; position--)
+        slashes++;
+      const start = opening.index + slashes % 2;
+      const delimiterLength = opening[0].length - slashes % 2;
+      if (delimiterLength === 0) continue;
+      const closing = ticks.findIndex(
+        (tick, candidate) => candidate > index && tick[0].length === delimiterLength
+      );
+      if (closing < 0) continue;
+      const end = ticks[closing].index + ticks[closing][0].length;
+      result2 += escape4(paragraph.slice(cursor, start)) + paragraph.slice(start, end);
+      cursor = end;
+      index = closing;
+    }
+    return result2 + escape4(paragraph.slice(cursor));
+  }).join("");
 }
 function renderReviewerBanner(input, locale, incomplete, counts) {
   if (!input.bannerBaseUrl) return "";
@@ -162366,7 +162398,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.191",
+  version: "1.0.192",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

@@ -558,6 +558,7 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
       ...(input.providerApi
         ? {
             providerNamePrefix: 'openrouter' as const,
+            providerApiTransport: input.providerApi.modelTransport,
             disableBuiltinTools: true,
             waitForProcessClose: true,
           }
@@ -694,7 +695,9 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
                   codexModel: model,
                   codexBinaryPath: input.codexBinaryPath,
                   executionSessions: gateway,
-                  modelTransport: input.accountGateway?.modelTransport,
+                  modelTransport:
+                    input.providerApi?.modelTransport ??
+                    input.accountGateway?.modelTransport,
                   admittedGatewayModel:
                     input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
                   reasoningEffort,

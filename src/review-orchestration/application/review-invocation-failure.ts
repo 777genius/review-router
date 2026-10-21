@@ -1,4 +1,5 @@
 export enum ReviewInvocationConfigurationMismatchReason {
+  ActualModelEvidenceUnavailable = 'actual_model_evidence_unavailable',
   ContextGatewayPolicyMismatch = 'context_gateway_policy_mismatch',
   InvestigationLegacyFallbackManifestMismatch = 'investigation_legacy_fallback_manifest_mismatch',
 }

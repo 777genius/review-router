@@ -8,6 +8,7 @@ import { CodexProvider } from '../../../src/providers/codex';
 import * as core from '../../../src/actions/core';
 import { bundledReviewAgentForTransport } from '../../../src/control-plane/approved-review-agent';
 import { AccountGatewayModelTransport } from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
+import * as modelTransports from '../../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 import { ReviewActionV2ControlPlaneAdapter } from '../../../src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
 import { GitHubActionsOidcTokenProvider } from '../../../src/codex-oauth/github-actions-oidc';
 import { prepareCodexCliBeforeAuthRead } from '../../../src/codex-oauth/codex-cli';
@@ -41,6 +42,7 @@ describe('direct provider API bootstrap', () => {
     configVersion: 7,
     runtimeEnv: {
       REVIEW_AUTH_MODE: 'openrouter-api',
+      RUN_TIMEOUT_SECONDS: '7200',
       REVIEW_PROVIDERS: 'openrouter/vendor/model',
       REQUIRED_HEALTHY_PROVIDERS: 'openrouter/vendor/model',
       SYNTHESIS_MODEL: 'openrouter/vendor/model',
@@ -147,6 +149,10 @@ describe('direct provider API bootstrap', () => {
   });
 
   it('uses captured API-key authority without OAuth rotation and closes the local lease before terminal publication', async () => {
+    const startTransport = jest.spyOn(
+      modelTransports,
+      'startDirectOpenRouterModelTransport'
+    );
     let localLease: NonNullable<
       Parameters<CodexOAuthV2ReviewRunnerPort['run']>[0]['providerApi']
     >['credentialLease'];
@@ -160,9 +166,13 @@ describe('direct provider API bootstrap', () => {
           expect(input.ocr).toBeUndefined();
           expect(input.providerApi?.runtimeConfig).toEqual(runtimeConfig());
           localLease = input.providerApi!.credentialLease;
-          expect(localLease()).toEqual({
-            environment: { OPENROUTER_API_KEY: 'unit-provider-key' },
-          });
+          expect(localLease().environment).toEqual(
+            input.providerApi!.modelTransport.environment
+          );
+          expect(localLease().environment?.OPENROUTER_API_KEY).toBeUndefined();
+          expect(
+            localLease().environment?.REVIEWROUTER_LOCAL_MODEL_TOKEN
+          ).toMatch(/^Bearer [a-f0-9]{64}$/);
           expect(process.env.OPENROUTER_API_KEY).toBeUndefined();
           expect(process.env.INPUT_OPENROUTER_API_KEY).toBeUndefined();
           home = input.codexHome!;
@@ -177,6 +187,11 @@ describe('direct provider API bootstrap', () => {
           expect(configuration).toContain('model_provider="openrouter"');
           expect(configuration).toContain('OPENROUTER_API_KEY="exclude"');
           expect(configuration).not.toContain('unit-provider-key');
+          expect(configuration).not.toContain('https://openrouter.ai');
+          expect(configuration).toContain(
+            input.providerApi!.modelTransport.baseUrl
+          );
+          expect(configuration).not.toContain('env_key=');
           await input.refreshScmReadToken();
           return completed;
         }
@@ -186,6 +201,10 @@ describe('direct provider API bootstrap', () => {
       expect(() => localLease()).toThrow('provider_api_credential_closed');
     });
     await runProviderApiRuntime(inputs(), { review, terminalReview });
+    expect(startTransport).toHaveBeenCalledWith(expect.any(Function), {
+      requestMs: 7_200_000,
+      streamFrameBytes: 8 * 1024 * 1024,
+    });
     expect(terminalReview).toHaveBeenCalledWith(
       completed,
       expect.any(AbortSignal)

@@ -149,6 +149,7 @@ export interface CodexOAuthV2ReviewRunnerPort {
     readonly codexBinaryPath?: string;
     /** Direct API credentials remain local; authenticated capture owns policy. */
     readonly providerApi?: {
+      readonly modelTransport: import('../review-orchestration/infrastructure/account-gateway-model-transport').LocalGatewayModelTransport;
       readonly runtimeConfig: import('../control-plane/runtime-config').AdmittedRuntimeConfig;
       readonly signal: AbortSignal;
       readonly controlPlane: import('../review-orchestration/infrastructure/review-action-v2-control-plane-adapter').ReviewActionV2ControlPlaneAdapter;

@@ -14,9 +14,8 @@ import {
   type GatewayTransportDiagnostic,
 } from '../../src/review-orchestration/infrastructure/account-gateway-model-transport';
 
-// Red: a transient request-stage failure or a ref-less edge rejection burns the
-// whole provider run (social-monitor PR 573 class). Referenced responses and
-// started streams stay terminal: unknown effects are never replayed.
+// Red: a fully accepted POST followed by lost headers or a bare proxy timeout
+// was re-dispatched. Only positive closed not_dispatched denial permits replay.
 const token = 'synthetic-transient-retry-token';
 const body = JSON.stringify({
   model: 'fixture-model',
@@ -72,8 +71,9 @@ async function drain(response: Readable): Promise<string> {
 }
 
 type ProbeMode =
-  | 'edge-rejection-recovery'
-  | 'connection-failure-recovery'
+  | 'positive-denial-recovery'
+  | 'accepted-socket-loss-terminal'
+  | 'unreferenced-timeout-terminal'
   | 'referenced-rejection-terminal'
   | 'mid-stream-terminal';
 
@@ -95,7 +95,7 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         const chunks: Buffer[] = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
         assert.equal(Buffer.concat(chunks).toString('utf8'), body);
-        if (mode === 'connection-failure-recovery' && requests === 1) {
+        if (mode === 'accepted-socket-loss-terminal' && requests === 1) {
           request.socket.destroy();
           return;
         }
@@ -104,9 +104,11 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
             'content-type': 'text/event-stream',
             'x-reviewrouter-request-ref': 'synthetic-mid-stream',
           });
-          reply.write('event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"partial"}\n\n');
+          reply.write(
+            'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"partial"}\n\n'
+          );
           // Destroy only after the started stream reached the consumer; a
-          // request-stage death would be a different (retryable) case.
+          // request-stage death is also terminal without non-dispatch proof.
           await new Promise((resolve) => setTimeout(resolve, 150));
           reply.socket?.destroy();
           return;
@@ -119,9 +121,16 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
           reply.end('synthetic edge rejection');
           return;
         }
-        if (mode === 'edge-rejection-recovery' && requests === 1) {
-          reply.writeHead(502, { 'content-type': 'text/plain' });
-          reply.end('synthetic edge rejection');
+        if (mode === 'unreferenced-timeout-terminal' && requests === 1) {
+          reply.writeHead(504, { 'content-type': 'text/plain' });
+          reply.end('synthetic proxy timeout after dispatch');
+          return;
+        }
+        if (mode === 'positive-denial-recovery' && requests === 1) {
+          reply.writeHead(503, { 'content-type': 'application/json' });
+          reply.end(
+            '{"error":{"code":"relay_saturated","effect":"not_dispatched"}}'
+          );
           return;
         }
         reply.writeHead(200, {
@@ -150,11 +159,34 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         diagnostics.push(diagnostic);
       }
     );
+    if (mode === 'accepted-socket-loss-terminal') {
+      await assert.rejects(
+        bounded(transport.responses(Buffer.from(body)), 'accepted-post-loss')
+      );
+      assert.equal(
+        requests,
+        1,
+        'a fully received POST must never be replayed after header loss'
+      );
+      assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      return;
+    }
     const response = await bounded(
       transport.responses(Buffer.from(body)),
       'transient-responses'
     );
     const text = await bounded(drain(response.body), 'transient-drain');
+    if (mode === 'unreferenced-timeout-terminal') {
+      assert.equal(response.httpStatus, 504);
+      assert.equal(
+        requests,
+        1,
+        'missing proxy headers are not proof of non-dispatch'
+      );
+      assert.equal(text, 'synthetic proxy timeout after dispatch');
+      assert.equal(transport.lastFailure?.effect, 'effect_unknown');
+      return;
+    }
     if (mode === 'referenced-rejection-terminal') {
       assert.equal(response.httpStatus, 502);
       assert.equal(response.requestRef, 'synthetic-existing');
@@ -171,7 +203,7 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
     assert.equal(
       response.httpStatus,
       200,
-      'a transient request-stage failure or ref-less edge rejection must retry'
+      'positive closed not_dispatched denial may retry'
     );
     assert.equal(requests, 2, 'exactly one bounded retry recovers the stream');
     assert(text.includes('"type":"response.completed"'));
@@ -182,6 +214,8 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
         'diagnostics must retain only closed fields'
       );
   } finally {
+    transport?.cancelHeldStreams();
+    server.closeAllConnections();
     await bounded(
       new Promise<void>((done) => server.close(() => done())),
       'transient-close'
@@ -193,14 +227,19 @@ async function transientRetry(mode: ProbeMode): Promise<void> {
 // --probe marker travels in its env (see the jest shell below).
 if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
   nodeTest(
-    'a ref-less 502 edge rejection is re-dispatched and recovers the stream',
+    'positive closed not-dispatched denial recovers the stream',
     { timeout: 20_000 },
-    () => transientRetry('edge-rejection-recovery')
+    () => transientRetry('positive-denial-recovery')
   );
   nodeTest(
-    'a request-stage connection failure is re-dispatched and recovers the stream',
+    'an accepted POST with lost headers is not re-dispatched',
     { timeout: 20_000 },
-    () => transientRetry('connection-failure-recovery')
+    () => transientRetry('accepted-socket-loss-terminal')
+  );
+  nodeTest(
+    'a bare proxy timeout is not re-dispatched',
+    { timeout: 20_000 },
+    () => transientRetry('unreferenced-timeout-terminal')
   );
   nodeTest(
     'a referenced rejection stays terminal after one attempt',
@@ -282,8 +321,8 @@ if (process.env.RR_TRANSIENT_RETRY_PROBE === '--probe') {
           [error.message, error.stdout, error.stderr].filter(Boolean).join('\n')
         );
       });
-      expect(result.stdout).toMatch(/# tests 4\b/);
-      expect(result.stdout).toMatch(/# pass 4\b/);
+      expect(result.stdout).toMatch(/# tests 5\b/);
+      expect(result.stdout).toMatch(/# pass 5\b/);
       expect(result.stdout).toMatch(/# fail 0\b/);
     } finally {
       await rm(root, { recursive: true, force: true });

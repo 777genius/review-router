@@ -22851,10 +22851,13 @@ function createAccountGatewayRunFetch(fetchImpl, signal) {
   };
 }
 var AccountGatewayModelTransport = class {
-  constructor(apiUrl, authorization, observe) {
+  constructor(apiUrl, authorization, observe, directOpenRouter) {
     this.authorization = authorization;
     this.observe = observe;
+    this.directOpenRouter = directOpenRouter;
     this.origin = trustedGatewayOrigin(apiUrl);
+    if (directOpenRouter && this.origin.origin !== "https://openrouter.ai")
+      throw new Error("provider_api_origin_invalid");
   }
   origin;
   held = /* @__PURE__ */ new Set();
@@ -22879,8 +22882,8 @@ var AccountGatewayModelTransport = class {
       observeTransport(this.observe, "upstream_request", false, null, error2);
       throw error2;
     }
-    const body = Buffer.from(bytes);
-    if (body.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes) {
+    const body = this.directOpenRouter && bytes instanceof import_stream.Readable ? bytes : Buffer.from(bytes);
+    if (!this.directOpenRouter && Buffer.isBuffer(body) && body.length > ACCOUNT_GATEWAY_BOUNDS.requestBytes) {
       const error2 = new Error("account_gateway_request_bound");
       observeTransport(this.observe, "upstream_request", false, null, error2);
       throw error2;
@@ -22890,11 +22893,15 @@ var AccountGatewayModelTransport = class {
     const abort = () => controller.abort();
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) abort();
-    const timer = setTimeout(abort, ACCOUNT_GATEWAY_BOUNDS.requestMs);
+    const timer = setTimeout(
+      abort,
+      this.directOpenRouter?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs
+    );
     const dispose = () => {
       clearTimeout(timer);
       signal?.removeEventListener("abort", abort);
       this.held.delete(controller);
+      if (this.directOpenRouter) controller.abort();
     };
     let responseReceived = false;
     let httpStatus = null;
@@ -22902,7 +22909,6 @@ var AccountGatewayModelTransport = class {
     try {
       const waitUntil = import_perf_hooks.performance.now() + ACCOUNT_GATEWAY_BOUNDS.waitBudgetMs;
       let waits = 0;
-      let transientAttempts = 0;
       let response;
       let denial;
       for (; ; ) {
@@ -22912,23 +22918,12 @@ var AccountGatewayModelTransport = class {
         httpStatus = null;
         currentRequestRef = void 0;
         denial = void 0;
-        try {
-          response = await this.request(
-            "POST",
-            `${BASE}/responses`,
-            body,
-            controller.signal
-          );
-        } catch (error2) {
-          if (controller.signal.aborted || !transientRequestFailure(error2) || transientAttempts >= TRANSIENT_RETRY_DELAYS.length || import_perf_hooks.performance.now() + TRANSIENT_RETRY_DELAYS[transientAttempts] > waitUntil)
-            throw error2;
-          observeTransport(this.observe, "upstream_request", false, null, error2);
-          await (0, import_promises2.setTimeout)(TRANSIENT_RETRY_DELAYS[transientAttempts], void 0, {
-            signal: controller.signal
-          });
-          transientAttempts++;
-          continue;
-        }
+        response = await this.request(
+          "POST",
+          this.directOpenRouter ? "/api/v1/responses" : `${BASE}/responses`,
+          body,
+          controller.signal
+        );
         responseReceived = true;
         httpStatus = response.statusCode ?? 502;
         currentRequestRef = safeReference(
@@ -22952,7 +22947,7 @@ var AccountGatewayModelTransport = class {
           clearTimeout(controlTimer);
         }
         const referenced = response.headers["x-reviewrouter-request-ref"] !== void 0;
-        if (httpStatus === 503 && !referenced && /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+        if (!this.directOpenRouter && httpStatus === 503 && !referenced && /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
           response.headers["content-type"] ?? ""
         ) && denial !== void 0 && relaySaturated(denial)) {
           if (waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits || import_perf_hooks.performance.now() + 1e3 > waitUntil)
@@ -22960,14 +22955,6 @@ var AccountGatewayModelTransport = class {
           await (0, import_promises2.setTimeout)(1e3, void 0, { signal: controller.signal });
           waits++;
           if (import_perf_hooks.performance.now() >= waitUntil) break;
-          continue;
-        }
-        if (!referenced && (httpStatus === 502 || httpStatus === 504) && transientAttempts < TRANSIENT_RETRY_DELAYS.length && import_perf_hooks.performance.now() + TRANSIENT_RETRY_DELAYS[transientAttempts] <= waitUntil) {
-          observeTransport(this.observe, "upstream_headers", true, httpStatus);
-          await (0, import_promises2.setTimeout)(TRANSIENT_RETRY_DELAYS[transientAttempts], void 0, {
-            signal: controller.signal
-          });
-          transientAttempts++;
           continue;
         }
         break;
@@ -22989,12 +22976,12 @@ var AccountGatewayModelTransport = class {
         if (!model || this.observedModel !== void 0 && this.observedModel !== model)
           this.modelUncertain = true;
         else this.observedModel = model;
-      }) : void 0;
+      }, this.directOpenRouter?.streamFrameBytes) : void 0;
       const bounded = new import_stream.Transform({
         highWaterMark: ACCOUNT_GATEWAY_BOUNDS.bufferBytes,
         transform: (chunk, _encoding, done) => {
           count += chunk.length;
-          const maximum = isStream ? ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
+          const maximum = isStream ? this.directOpenRouter ? Infinity : ACCOUNT_GATEWAY_BOUNDS.streamOutputBytes : ACCOUNT_GATEWAY_BOUNDS.jsonBytes;
           if (count > maximum) done(new Error("account_gateway_output_bound"));
           else
             try {
@@ -23180,6 +23167,8 @@ var AccountGatewayModelTransport = class {
     }
   }
   async request(method, route, body, signal) {
+    if (this.directOpenRouter && (method !== "POST" || route !== "/api/v1/responses"))
+      throw new Error("provider_api_control_route_denied");
     const token = this.authorization();
     if (signal.aborted || !/^[A-Za-z0-9._~-]{1,16377}$/.test(token))
       throw new Error("account_gateway_authorization_unavailable");
@@ -23195,13 +23184,15 @@ var AccountGatewayModelTransport = class {
             authorization: `Bearer ${token}`,
             "content-type": "application/json",
             accept: route.endsWith("/responses") ? "text/event-stream" : "application/json",
-            ...body ? { "content-length": String(body.length) } : {}
+            ...Buffer.isBuffer(body) ? { "content-length": String(body.length) } : {}
           }
         },
         resolve5
       );
       request.once("error", reject);
-      request.end(body);
+      if (body instanceof import_stream.Readable) {
+        void (0, import_promises.pipeline)(body, request, { signal }).catch(reject);
+      } else request.end(body);
     });
   }
 };
@@ -23229,7 +23220,7 @@ function normalizeCodexGatewayServiceTier(bytes) {
     throw new Error("account_gateway_request_bound");
   return normalized;
 }
-async function startLocalGatewayModelTransport(transport, observe) {
+async function startLocalGatewayModelTransport(transport, observe, directOpenRouter) {
   const capability = (0, import_crypto.randomBytes)(32).toString("hex");
   let stopping = false;
   let inFlight = 0;
@@ -23266,18 +23257,22 @@ async function startLocalGatewayModelTransport(transport, observe) {
         const downstreamClosed = () => {
           if (!reply.writableFinished) abort();
         };
-        const timer = setTimeout(abort, ACCOUNT_GATEWAY_BOUNDS.requestMs);
+        const timer = setTimeout(
+          abort,
+          directOpenRouter?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs
+        );
         request.once("aborted", abort);
         reply.once("close", downstreamClosed);
         let upstream;
         let stage = "request_body";
         try {
-          const bytes = await boundedBytes(
-            request,
-            ACCOUNT_GATEWAY_BOUNDS.requestBytes,
-            controller.signal
+          const normalized = directOpenRouter ? request : normalizeCodexGatewayServiceTier(
+            await boundedBytes(
+              request,
+              ACCOUNT_GATEWAY_BOUNDS.requestBytes,
+              controller.signal
+            )
           );
-          const normalized = normalizeCodexGatewayServiceTier(bytes);
           stage = "upstream_request";
           dispatchedRequests++;
           upstream = await transport.responses(normalized, controller.signal);
@@ -23320,7 +23315,7 @@ async function startLocalGatewayModelTransport(transport, observe) {
   server.maxConnections = ACCOUNT_GATEWAY_BOUNDS.localConnections;
   server.maxRequestsPerSocket = 1;
   server.headersTimeout = 1e4;
-  server.requestTimeout = ACCOUNT_GATEWAY_BOUNDS.requestMs;
+  server.requestTimeout = directOpenRouter?.requestMs ?? ACCOUNT_GATEWAY_BOUNDS.requestMs;
   server.keepAliveTimeout = 1e3;
   server.setTimeout(
     ACCOUNT_GATEWAY_BOUNDS.idleMs,
@@ -23342,7 +23337,9 @@ async function startLocalGatewayModelTransport(transport, observe) {
     environment: Object.freeze({
       [LOCAL_MODEL_CAPABILITY_ENV]: `Bearer ${capability}`
     }),
-    configuration: codexGatewayConfiguration(baseUrl),
+    configuration: directOpenRouter ? codexGatewayConfiguration(baseUrl).map(
+      (setting) => setting.replaceAll("reviewrouter_account_gateway", "openrouter").replaceAll("ReviewRouter account gateway", "OpenRouter")
+    ) : codexGatewayConfiguration(baseUrl),
     actualModel: () => transport.actualModel,
     requestCount: () => dispatchedRequests,
     failureFact: () => transport.lastFailure,
@@ -23355,6 +23352,20 @@ async function startLocalGatewayModelTransport(transport, observe) {
       });
     }
   });
+}
+function startDirectOpenRouterModelTransport(credential, limits) {
+  if (!Number.isSafeInteger(limits.requestMs) || limits.requestMs < 1 || !Number.isSafeInteger(limits.streamFrameBytes) || limits.streamFrameBytes < 1)
+    throw new Error("provider_api_limits_invalid");
+  return startLocalGatewayModelTransport(
+    new AccountGatewayModelTransport(
+      "https://openrouter.ai",
+      credential,
+      void 0,
+      limits
+    ),
+    void 0,
+    limits
+  );
 }
 function codexGatewayConfiguration(baseUrl) {
   if (!/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(baseUrl) || Number(new URL(baseUrl).port) > 65535)
@@ -23399,21 +23410,6 @@ async function boundedBytes(body, maximum, signal) {
 function safeReference(value) {
   return typeof value === "string" && /^[A-Za-z0-9._~-]{1,200}$/.test(value) ? value : void 0;
 }
-var TRANSIENT_RETRY_DELAYS = [1e3, 2e3, 4e3];
-var TRANSIENT_ERRNO = /* @__PURE__ */ new Set([
-  "ECONNABORTED",
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "EHOSTUNREACH",
-  "EPIPE",
-  "ETIMEDOUT",
-  "ENETUNREACH",
-  "ENOTFOUND",
-  "EAI_AGAIN"
-]);
-function transientRequestFailure(error2) {
-  return error2 instanceof Error && error2.name !== "AbortError" && typeof error2.code === "string" && TRANSIENT_ERRNO.has(error2.code);
-}
 function relaySaturated(bytes) {
   try {
     const space = "[ \\t\\r\\n]*";
@@ -23443,7 +23439,7 @@ function failureFact(bytes, ref) {
     return void 0;
   }
 }
-function responsesStreamAudit(observe) {
+function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes) {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   let line = "";
   let skipLf = false;
@@ -23498,7 +23494,7 @@ function responsesStreamAudit(observe) {
     accept(bytes) {
       for (const byte of bytes) {
         frameBytes++;
-        if (frameBytes > ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes)
+        if (frameBytes > maximumFrameBytes)
           throw new Error("account_gateway_stream_frame_bound");
         if (byte === 10) {
           if (rawLineBytes === 0 || rawLineBytes === 1 && rawLineLastByte === 13)
@@ -23893,12 +23889,15 @@ var CodexProvider = class _CodexProvider extends Provider {
     this.options = options;
   }
   static preparedBinaryPath;
+  get modelTransport() {
+    return this.options.accountGateway ?? this.options.providerApiTransport;
+  }
   // Verify the CLI is available. Model/auth failures are surfaced by the real
   // review call; a model-exec health check costs an extra Codex subscription
   // request and can exhaust limited OAuth usage before review starts.
   async healthCheck(_timeoutMs = 5e3) {
     const timeoutMs = Math.max(500, _timeoutMs ?? 5e3);
-    const mode = this.options.accountGateway ? "binary" : (process.env.CODEX_HEALTHCHECK_MODE || "binary").toLowerCase();
+    const mode = this.modelTransport ? "binary" : (process.env.CODEX_HEALTHCHECK_MODE || "binary").toLowerCase();
     if (mode === "none" || mode === "binary") {
       return true;
     }
@@ -23961,7 +23960,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       if (execution.runResult.audit) {
         this.logAgenticAudit(execution.runResult.audit, false);
       }
-      if (!this.options.accountGateway && this.shouldRetryForMissingAgenticExploration(
+      if (!this.modelTransport && this.shouldRetryForMissingAgenticExploration(
         execution.parsed,
         execution.runResult.audit,
         prompt,
@@ -24060,7 +24059,7 @@ var CodexProvider = class _CodexProvider extends Provider {
     ) : agenticContext ? await this.wrapAgenticReviewPrompt(prompt) : this.wrapPromptOnlyReviewPrompt(prompt);
     const auditMode = agenticContext && !contextGateway ? this.agenticAuditMode() : "off";
     const eventAudit = contextGateway ? true : this.shouldUseEventAudit();
-    const forkSandbox = !this.options.accountGateway && this.shouldUseForkSandboxCodexHomeConfig();
+    const forkSandbox = !this.modelTransport && this.shouldUseForkSandboxCodexHomeConfig();
     const reasoningEffort = this.resolveReasoningEffort(false);
     const gateway = this.options.accountGateway;
     const modelCatalogSetting = gateway ? await prepareAccountGatewayModelCatalog(
@@ -24108,7 +24107,7 @@ var CodexProvider = class _CodexProvider extends Provider {
       jsonEvents: auditMode !== "off" || contextGateway !== void 0,
       auditMode,
       optionalAgenticRetryMaxPromptTokens: MAX_OPTIONAL_AGENTIC_RETRY_PROMPT_TOKENS,
-      acceptReviewOutputOnNonZero: !this.options.accountGateway && !this.options.waitForProcessClose,
+      acceptReviewOutputOnNonZero: !this.modelTransport && !this.options.waitForProcessClose,
       ...contextGateway ? { contextGateway } : {}
     };
     return createPreparedProviderInvocation({
@@ -24188,16 +24187,14 @@ var CodexProvider = class _CodexProvider extends Provider {
         cwd: request.cwd,
         environment: mergeCredentialEnvironment(
           request.environment,
-          this.options.accountGateway ? {
+          this.modelTransport ? {
             ...credentialLease?.environment,
-            ...splitProviderEnvironment(
-              this.options.accountGateway.environment
-            ).credentialEnvironment
+            ...splitProviderEnvironment(this.modelTransport.environment).credentialEnvironment
           } : credentialLease?.environment
         )
       }
     );
-    if (this.options.accountGateway && !runResult.lastMessage.trim())
+    if (this.modelTransport && !runResult.lastMessage.trim())
       throw new Error("account_gateway_final_missing");
     const content = this.sanitizeReviewContent(
       (runResult.lastMessage || runResult.stdout).trim(),
@@ -24227,11 +24224,9 @@ var CodexProvider = class _CodexProvider extends Provider {
     };
   }
   captureCredentialLease(invocation) {
-    if (this.options.accountGateway) {
+    if (this.modelTransport) {
       return {
-        environment: splitProviderEnvironment(
-          this.options.accountGateway.environment
-        ).credentialEnvironment
+        environment: splitProviderEnvironment(this.modelTransport.environment).credentialEnvironment
       };
     }
     const environment = {};
@@ -24377,11 +24372,11 @@ ${JSON.stringify(outputSchema)}` : prompt;
         args.push("-c", `model_reasoning_effort="${normalized}"`);
       }
     }
-    if (!this.options.accountGateway && config.modelProvider === "openrouter") {
+    if (!this.modelTransport && config.modelProvider === "openrouter") {
       for (const setting of CODEX_OPENROUTER_CONFIGURATION)
         args.push("-c", setting);
     }
-    if (!this.options.accountGateway && config.modelProvider === "mimo") {
+    if (!this.modelTransport && config.modelProvider === "mimo") {
       args.push(
         "-c",
         'model_provider="mimo"',
@@ -24403,8 +24398,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
     for (const configOverride of CODEX_SHELL_ENVIRONMENT_POLICY) {
       args.push("-c", configOverride);
     }
-    if (this.options.accountGateway) {
-      for (const setting of this.options.accountGateway.configuration)
+    if (this.modelTransport) {
+      for (const setting of this.modelTransport.configuration)
         args.push("-c", setting);
       if (config.modelCatalogSetting)
         args.push("-c", config.modelCatalogSetting);
@@ -24419,7 +24414,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const cliSchemaEnabled = prepared ? prepared.argsTemplate.includes("--output-schema") : supportsCliOutputSchema(this.options.modelProvider);
     const schemaFile = options.outputSchema && cliSchemaEnabled ? path6.join(os3.tmpdir(), `codex-schema-${runId}.json`) : void 0;
     const waitForProcessClose = Boolean(
-      this.options.accountGateway || this.options.waitForProcessClose
+      this.modelTransport || this.options.waitForProcessClose
     );
     let fd;
     try {
@@ -24656,11 +24651,11 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const gateway = request.contextGateway;
     const environment = this.observablePreparedEnvironment(request);
     const replacements = [
-      ...this.options.accountGateway ? [
+      ...this.modelTransport ? [
         [request.environment.CODEX_HOME ?? "", "<codex-home>"],
         [
-          this.options.accountGateway.baseUrl,
-          "<account-gateway-loopback>"
+          this.modelTransport.baseUrl,
+          this.options.providerApiTransport ? "<provider-api-loopback>" : "<account-gateway-loopback>"
         ]
       ] : [],
       ...gateway ? [
@@ -24844,16 +24839,15 @@ ${JSON.stringify(outputSchema)}` : prompt;
       includeWorkspaceEnv: includeWorkspaceEnv && !forkSandbox,
       extraAllowedKeys: [
         "CODEX_HOME",
-        ...this.options.accountGateway ? [] : ["OPENAI_API_KEY"],
-        ...!this.options.accountGateway && modelProvider === "openrouter" ? ["OPENROUTER_API_KEY"] : [],
-        ...!this.options.accountGateway && modelProvider === "mimo" ? [MIMO_TOKEN_PLAN_API_KEY] : []
+        ...this.modelTransport ? [] : ["OPENAI_API_KEY"],
+        ...!this.modelTransport && modelProvider === "openrouter" ? ["OPENROUTER_API_KEY"] : [],
+        ...!this.modelTransport && modelProvider === "mimo" ? [MIMO_TOKEN_PLAN_API_KEY] : []
       ],
-      ...this.options.accountGateway ? { overrides: this.options.accountGateway.environment } : {}
+      ...this.modelTransport ? { overrides: this.modelTransport.environment } : {}
     });
   }
   requireModelProviderCredential() {
-    if (this.options.accountGateway || this.options.modelProvider !== "mimo")
-      return;
+    if (this.modelTransport || this.options.modelProvider !== "mimo") return;
     if (!process.env[MIMO_TOKEN_PLAN_API_KEY]?.trim()) {
       const error2 = new Error(
         `codex_mimo_api_key_missing: ${MIMO_TOKEN_PLAN_API_KEY} is required for ${this.name}`
@@ -25408,8 +25402,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     return Object.freeze({ kind: "ambiguous" /* Ambiguous */ });
   }
   resolveEffectiveActualModel(observation, requestedModel) {
-    if (this.options.accountGateway)
-      return this.options.accountGateway.actualModel();
+    if (this.modelTransport) return this.modelTransport.actualModel();
     if (observation.kind === "observed" /* Observed */) {
       return observation.model;
     }
@@ -25749,7 +25742,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
     );
   }
   withActionableAuthHint(message) {
-    if (this.options.accountGateway) return message;
+    if (this.modelTransport) return message;
     if (!message) return message;
     if (!/(401|unauthorized|access token|refresh token|auth|login)/i.test(message)) {
       return message;
@@ -52855,7 +52848,7 @@ async function initializeEmptyGitRepository(cwd) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.187",
+  version: "1.0.188",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -53841,8 +53834,2758 @@ var os12 = __toESM(require("node:os"));
 var path30 = __toESM(require("node:path"));
 var import_node_util2 = require("node:util");
 
-// src/control-plane/review-action-v2-client.ts
+// src/review-investigation/application/review-agent-port.ts
+var REVIEW_INVESTIGATION_GATEWAY_TOOLS = Object.freeze([
+  "review_read_file",
+  "review_list_directory",
+  "review_search_text",
+  "review_canonical_inventory",
+  "review_git_fact"
+]);
+var ReviewAgentExecutionError = class extends Error {
+  constructor(failureClass, retryAfterMs, message) {
+    super(message);
+    this.failureClass = failureClass;
+    this.retryAfterMs = retryAfterMs;
+    this.name = "ReviewAgentExecutionError";
+  }
+};
+
+// src/review-investigation/domain/runtime-profile.ts
+var ReviewAgentProviderKind = /* @__PURE__ */ ((ReviewAgentProviderKind2) => {
+  ReviewAgentProviderKind2["Codex"] = "codex";
+  ReviewAgentProviderKind2["ClaudeCode"] = "claude_code";
+  return ReviewAgentProviderKind2;
+})(ReviewAgentProviderKind || {});
+function createGatewayAttestedRuntimeProfile(input) {
+  assertPositive(input.maxPromptBytes, "max_prompt_bytes");
+  assertPositive(input.maxOutputBytes ?? 4 * 1024 * 1024, "max_output_bytes");
+  assertPositive(input.maxToolCalls ?? 256, "max_tool_calls");
+  assertPositive(input.maxTurns ?? 12, "max_turns");
+  return Object.freeze({
+    profileVersion: 1,
+    providerKind: input.providerKind,
+    executionProfile: "gateway_attested_agent_v1" /* GatewayAttestedAgentV1 */,
+    toolTransport: "mcp_stdio" /* McpStdio */,
+    structuredOutput: "json_schema" /* JsonSchema */,
+    eventStream: input.eventStream,
+    continuation: "durable_dossier" /* DurableDossier */,
+    confinement: "gateway_only" /* GatewayOnly */,
+    actualModelAttribution: "observed" /* Observed */,
+    usageAttribution: "observed" /* Observed */,
+    cancellation: "process_group_fenced" /* ProcessGroupFenced */,
+    maxPromptBytes: input.maxPromptBytes,
+    maxOutputBytes: input.maxOutputBytes ?? 4 * 1024 * 1024,
+    maxToolCalls: input.maxToolCalls ?? 256,
+    maxTurns: input.maxTurns ?? 12
+  });
+}
+function assertRuntimeProfileSatisfies(profile, requirements) {
+  if (profile.providerKind !== requirements.providerKind || profile.executionProfile !== requirements.executionProfile || profile.confinement !== requirements.minimumConfinement || requirements.requireActualModelAttribution && profile.actualModelAttribution !== "observed" /* Observed */ || requirements.requireUsageAttribution && profile.usageAttribution !== "observed" /* Observed */ || requirements.requireFencedCancellation && profile.cancellation !== "process_group_fenced" /* ProcessGroupFenced */ || profile.maxTurns < requirements.minimumMaxTurns) {
+    throw new Error("review_agent_capability_requirements_unsatisfied");
+  }
+}
+function assertPositive(value, field) {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`review_agent_${field}_invalid`);
+  }
+}
+
+// src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
+var import_child_process11 = require("child_process");
+var import_util6 = require("util");
+
+// src/review-investigation/infrastructure/review-agent-process-runner.ts
+var import_child_process10 = require("child_process");
+var NodeReviewAgentProcessRunner = class {
+  active = /* @__PURE__ */ new Map();
+  async run(request) {
+    validateRequest(request);
+    if (this.active.has(request.invocationId)) {
+      throw new Error("review_agent_invocation_already_active");
+    }
+    const startedAt = Date.now();
+    return new Promise((resolve5) => {
+      if (request.signal?.aborted) {
+        resolve5(
+          result(
+            "cancelled" /* Cancelled */,
+            null,
+            "",
+            "",
+            startedAt
+          )
+        );
+        return;
+      }
+      let child;
+      try {
+        child = (0, import_child_process10.spawn)(request.binary, request.args, {
+          cwd: request.cwd,
+          env: { ...request.environment },
+          detached: true,
+          shell: false,
+          stdio: ["pipe", "pipe", "pipe"]
+        });
+      } catch (error2) {
+        resolve5(
+          result(
+            "startup_failed" /* StartupFailed */,
+            null,
+            "",
+            sanitizeProcessText(
+              error2 instanceof Error ? error2.message : String(error2)
+            ),
+            startedAt
+          )
+        );
+        return;
+      }
+      let stdout = "";
+      let stderr = "";
+      let outputBytes = 0;
+      let settled = false;
+      let forcedTermination = null;
+      const terminate = () => {
+        try {
+          if (child.pid) process.kill(-child.pid, "SIGKILL");
+          else child.kill("SIGKILL");
+        } catch {
+          child.kill("SIGKILL");
+        }
+      };
+      const cleanup = () => {
+        clearTimeout(timer);
+        request.signal?.removeEventListener("abort", onAbort);
+        this.active.delete(request.invocationId);
+      };
+      const settle = (termination, exitCode) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve5(result(termination, exitCode, stdout, stderr, startedAt));
+      };
+      const onAbort = () => {
+        forcedTermination = "cancelled" /* Cancelled */;
+        terminate();
+      };
+      const collect = (target) => (chunk) => {
+        outputBytes += chunk.byteLength;
+        if (outputBytes > request.maxOutputBytes) {
+          forcedTermination = "output_limit_exceeded" /* OutputLimitExceeded */;
+          terminate();
+          return;
+        }
+        if (target === "stdout") stdout += chunk.toString("utf8");
+        else stderr += chunk.toString("utf8");
+      };
+      const timer = setTimeout(() => {
+        forcedTermination = "timed_out" /* TimedOut */;
+        terminate();
+      }, request.timeoutMs);
+      this.active.set(
+        request.invocationId,
+        Object.freeze({
+          fencingToken: request.fencingToken,
+          terminate: () => {
+            forcedTermination = "cancelled" /* Cancelled */;
+            terminate();
+          }
+        })
+      );
+      request.signal?.addEventListener("abort", onAbort, { once: true });
+      child.stdout.on("data", collect("stdout"));
+      child.stderr.on("data", collect("stderr"));
+      child.stdin.on("error", () => {
+      });
+      child.on("error", (error2) => {
+        stderr = sanitizeProcessText(error2.message);
+        settle("startup_failed" /* StartupFailed */, null);
+      });
+      child.on(
+        "close",
+        (code) => settle(forcedTermination ?? "exited" /* Exited */, code)
+      );
+      child.stdin.end(request.stdin, "utf8");
+    });
+  }
+  async cancel(invocationId, fencingToken) {
+    const active = this.active.get(invocationId);
+    if (!active) return;
+    if (active.fencingToken !== fencingToken) {
+      throw new Error("review_agent_cancel_fencing_mismatch");
+    }
+    active.terminate();
+  }
+};
+function validateRequest(request) {
+  if (!request.invocationId || !request.fencingToken || !request.binary || !request.cwd || !Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1 || !Number.isSafeInteger(request.maxOutputBytes) || request.maxOutputBytes < 1) {
+    throw new Error("review_agent_process_request_invalid");
+  }
+}
+function result(termination, exitCode, stdout, stderr, startedAt) {
+  return Object.freeze({
+    termination,
+    exitCode,
+    stdout,
+    stderr,
+    durationMs: Math.max(0, Date.now() - startedAt)
+  });
+}
+function sanitizeProcessText(value) {
+  return value.replace(/[\r\n]+/gu, " ").slice(0, 400);
+}
+
+// src/review-investigation/infrastructure/codex-app-server-protocol.ts
 var import_crypto20 = require("crypto");
+var import_path2 = __toESM(require("path"));
+var CODEX_APP_SERVER_VERSION = "0.147.0";
+var CODEX_APP_SERVER_MCP_NAME = "reviewrouter";
+var OPTED_OUT_NOTIFICATIONS = Object.freeze([
+  "configWarning",
+  "thread/status/changed",
+  "thread/settings/updated",
+  "thread/name/updated",
+  "turn/plan/updated",
+  "rawResponseItem/completed",
+  "item/agentMessage/delta",
+  "item/plan/delta",
+  "item/reasoning/summaryTextDelta",
+  "item/reasoning/summaryPartAdded",
+  "item/reasoning/textDelta",
+  "item/mcpToolCall/progress",
+  "serverRequest/resolved",
+  "account/updated",
+  "account/rateLimits/updated",
+  "app/list/updated",
+  "remoteControl/status/changed",
+  "deprecationNotice"
+]);
+var IGNORED_NOTIFICATION_METHODS = new Set(OPTED_OUT_NOTIFICATIONS);
+var ALLOWED_ITEM_TYPES = /* @__PURE__ */ new Set([
+  "userMessage",
+  "agentMessage",
+  "reasoning",
+  "mcpToolCall",
+  "contextCompaction"
+]);
+var TERMINAL_SUMMARY_OMITTABLE_NON_EFFECTFUL_ITEM_TYPES = /* @__PURE__ */ new Set([
+  "userMessage",
+  "agentMessage",
+  "reasoning",
+  "contextCompaction"
+]);
+var FORBIDDEN_ITEM_TYPES = /* @__PURE__ */ new Set([
+  "hookPrompt",
+  "plan",
+  "commandExecution",
+  "fileChange",
+  "dynamicToolCall",
+  "collabAgentToolCall",
+  "subAgentActivity",
+  "webSearch",
+  "imageView",
+  "sleep",
+  "imageGeneration",
+  "enteredReviewMode",
+  "exitedReviewMode"
+]);
+var CODEX_ERROR_INFO_STRING_VARIANTS = /* @__PURE__ */ new Set([
+  "contextWindowExceeded",
+  "sessionBudgetExceeded",
+  "usageLimitExceeded",
+  "serverOverloaded",
+  "cyberPolicy",
+  "internalServerError",
+  "unauthorized",
+  "badRequest",
+  "threadRollbackFailed",
+  "sandboxError",
+  "other"
+]);
+var CODEX_ERROR_INFO_HTTP_VARIANTS = /* @__PURE__ */ new Set([
+  "httpConnectionFailed",
+  "responseStreamConnectionFailed",
+  "responseStreamDisconnected",
+  "responseTooManyFailedAttempts"
+]);
+var MAX_METADATA_JSON_BYTES = 32768;
+var MAX_METADATA_JSON_DEPTH = 16;
+var MAX_METADATA_JSON_NODES = 2048;
+var MAX_METADATA_COLLECTION_SIZE = 256;
+var MAX_METADATA_STRING_BYTES = 16384;
+var MAX_NOTIFICATION_STRING_ARRAY_SIZE = 64;
+var MAX_NOTIFICATION_STRING_BYTES = 1024;
+var MAX_WARNING_MESSAGE_BYTES = 16384;
+var CodexAppServerProtocolClient = class {
+  constructor(request, write) {
+    this.request = request;
+    this.write = write;
+    this.allowedTools = new Set(request.allowedTools);
+    void this.completion.promise.catch(() => void 0);
+    void this.threadStartedSignal.promise.catch(() => void 0);
+  }
+  completion = deferred();
+  threadStartedSignal = deferred();
+  pending = /* @__PURE__ */ new Map();
+  activeItems = /* @__PURE__ */ new Map();
+  completedItems = /* @__PURE__ */ new Map();
+  rawUsageByResponseId = /* @__PURE__ */ new Map();
+  allowedTools;
+  nextRequestId = 1;
+  failed = false;
+  initialized = false;
+  threadId = null;
+  provisionalThreadId = null;
+  turnId = null;
+  provisionalTurnId = null;
+  threadStarted = false;
+  turnStarted = false;
+  turnCompleted = false;
+  actualModel = null;
+  modelProvider = null;
+  finalMessageCandidates = [];
+  terminalSummaryFinalMessage = null;
+  aggregateUsage = null;
+  lastAggregateUsage = null;
+  completionResolved = false;
+  postCompletionFailure = null;
+  terminalFailure = null;
+  retainedTerminalError = null;
+  async run() {
+    await withProtocolRunStage(
+      "initialize_response" /* InitializeResponse */,
+      () => this.sendRequest("initialize", {
+        clientInfo: {
+          name: "review_router_action",
+          title: "ReviewRouter Action",
+          version: "1"
+        },
+        capabilities: {
+          experimentalApi: true,
+          requestAttestation: false,
+          mcpServerOpenaiFormElicitation: false,
+          optOutNotificationMethods: OPTED_OUT_NOTIFICATIONS
+        }
+      }).then((value) => {
+        validateInitializeResponse(value);
+        return value;
+      })
+    );
+    this.initialized = true;
+    await withProtocolRunStage(
+      "initialized_notification" /* InitializedNotification */,
+      () => this.sendNotification("initialized")
+    );
+    await withProtocolRunStage(
+      "thread_start_response" /* ThreadStartResponse */,
+      () => this.sendRequest("thread/start", {
+        model: this.request.requestedModel,
+        allowProviderModelFallback: false,
+        cwd: this.request.cwd,
+        runtimeWorkspaceRoots: [],
+        approvalPolicy: "never",
+        approvalsReviewer: "user",
+        sandbox: "read-only",
+        config: {
+          model_reasoning_effort: this.request.reasoningEffort
+        },
+        ephemeral: true,
+        environments: [],
+        dynamicTools: [],
+        selectedCapabilityRoots: [],
+        experimentalRawEvents: true
+      }).then((value) => this.bindThread(value))
+    );
+    await withProtocolRunStage(
+      "thread_started_wait" /* ThreadStartedWait */,
+      () => this.threadStartedSignal.promise
+    );
+    await withProtocolRunStage(
+      "turn_start_response" /* TurnStartResponse */,
+      () => this.sendRequest("turn/start", {
+        threadId: this.threadId,
+        clientUserMessageId: this.request.clientTurnId,
+        input: [
+          {
+            type: "text",
+            text: this.request.prompt,
+            text_elements: []
+          }
+        ],
+        environments: [],
+        runtimeWorkspaceRoots: [],
+        approvalPolicy: "never",
+        approvalsReviewer: "user",
+        sandboxPolicy: {
+          type: "readOnly",
+          networkAccess: false
+        },
+        effort: this.request.reasoningEffort,
+        ...this.request.outputSchema === void 0 ? {} : { outputSchema: this.request.outputSchema }
+      }).then((value) => this.bindTurn(value))
+    );
+    this.maybeComplete();
+    return withProtocolRunStage(
+      "completion" /* Completion */,
+      () => this.completion.promise
+    );
+  }
+  receive(value) {
+    if (this.failed) return;
+    let diagnosticStage = "envelope" /* Envelope */;
+    try {
+      const message = requireRecord2(value, "protocol_message");
+      const hasMethod = Object.prototype.hasOwnProperty.call(message, "method");
+      const hasId = Object.prototype.hasOwnProperty.call(message, "id");
+      if (hasMethod && hasId) {
+        throw confinementFailure("server_request");
+      }
+      if (hasId) {
+        diagnosticStage = "response" /* Response */;
+        this.receiveResponse(message);
+        return;
+      }
+      if (hasMethod) {
+        diagnosticStage = notificationDiagnosticStage(message.method);
+        this.receiveNotification(message);
+        return;
+      }
+      throw streamFailure();
+    } catch (error2) {
+      this.fail(withStreamDiagnosticStage(error2, diagnosticStage));
+    }
+  }
+  fail(error2) {
+    if (this.failed) return;
+    this.failed = true;
+    const failure = normalizeProtocolFailure(error2);
+    this.terminalFailure = failure;
+    if (this.completionResolved) {
+      this.postCompletionFailure = failure;
+    }
+    for (const pending of this.pending.values()) {
+      pending.deferred.reject(failure);
+    }
+    this.pending.clear();
+    this.threadStartedSignal.reject(failure);
+    this.completion.reject(failure);
+  }
+  end() {
+    if (!this.failed && !this.turnCompleted) {
+      this.fail(streamFailure("process_end" /* ProcessEnd */));
+    }
+  }
+  failureAfterCompletion() {
+    return this.postCompletionFailure;
+  }
+  canInterrupt() {
+    return this.threadId !== null && this.turnId !== null;
+  }
+  async interrupt() {
+    if (!this.threadId || !this.turnId || this.failed) return;
+    await this.sendRequest("turn/interrupt", {
+      threadId: this.threadId,
+      turnId: this.turnId
+    });
+  }
+  async sendRequest(method, params) {
+    if (this.failed) throw this.terminalFailure ?? streamFailure();
+    const id = this.nextRequestId++;
+    const response = deferred();
+    this.pending.set(requestIdKey(id), { deferred: response });
+    try {
+      await this.write({ method, id, params });
+    } catch {
+      this.pending.delete(requestIdKey(id));
+      throw processFailure();
+    }
+    return response.promise;
+  }
+  async sendNotification(method) {
+    if (this.failed) throw this.terminalFailure ?? streamFailure();
+    try {
+      await this.write({ method });
+    } catch (error2) {
+      if (this.failed) throw this.terminalFailure ?? streamFailure();
+      throw error2;
+    }
+    if (this.failed) throw this.terminalFailure ?? streamFailure();
+  }
+  receiveResponse(message) {
+    const hasResult = Object.prototype.hasOwnProperty.call(message, "result");
+    const hasError = Object.prototype.hasOwnProperty.call(message, "error");
+    if (hasResult === hasError || Object.prototype.hasOwnProperty.call(message, "method") || Object.prototype.hasOwnProperty.call(message, "params") || !hasOnlyKeys(message, hasResult ? ["id", "result"] : ["error", "id"])) {
+      throw streamFailure();
+    }
+    const id = requireRequestId(message.id);
+    const pending = this.pending.get(requestIdKey(id));
+    if (!pending) throw streamFailure();
+    this.pending.delete(requestIdKey(id));
+    if (hasError) {
+      pending.deferred.reject(responseFailure(message.error));
+      return;
+    }
+    pending.deferred.resolve(message.result);
+  }
+  receiveNotification(message) {
+    if (!hasRequiredAndOptionalKeys(
+      message,
+      ["method", "params"],
+      ["emittedAtMs"]
+    ) || message.emittedAtMs !== void 0 && (!Number.isSafeInteger(message.emittedAtMs) || message.emittedAtMs < 0)) {
+      throw streamFailure();
+    }
+    const method = requireNonEmptyString(message.method, "notification_method");
+    const params = requireRecord2(message.params, "notification_params");
+    switch (method) {
+      case "thread/started":
+        this.onThreadStarted(params);
+        return;
+      case "thread/name/updated":
+        this.onThreadNameUpdated(params);
+        return;
+      case "mcpServer/startupStatus/updated":
+        this.onMcpServerStatus(params);
+        return;
+      case "serverRequest/resolved":
+        this.onServerRequestResolved(params);
+        return;
+      case "turn/started":
+        this.onTurnStarted(params);
+        return;
+      case "item/started":
+        this.onItemStarted(params);
+        return;
+      case "item/completed":
+        this.onItemCompleted(params);
+        return;
+      case "rawResponse/completed":
+        this.onRawResponseCompleted(params);
+        return;
+      case "thread/tokenUsage/updated":
+        this.onTokenUsageUpdated(params);
+        return;
+      case "turn/completed":
+        this.onTurnCompleted(params);
+        return;
+      case "model/rerouted":
+        this.assertTurnFence(params);
+        throw modelFailure();
+      case "model/verification":
+        this.onModelVerification(params);
+        return;
+      case "turn/moderationMetadata":
+        this.onTurnModerationMetadata(params);
+        return;
+      case "model/safetyBuffering/updated":
+        this.onModelSafetyBufferingUpdated(params);
+        return;
+      case "configWarning":
+        this.onConfigWarning(params);
+        return;
+      case "warning":
+        this.onWarning(params);
+        return;
+      case "error":
+        this.onErrorNotification(params);
+        return;
+      default:
+        if (IGNORED_NOTIFICATION_METHODS.has(method)) return;
+        throw streamFailure();
+    }
+  }
+  bindThread(value) {
+    const response = requireRecord2(value, "thread_start_response");
+    const thread = requireRecord2(response.thread, "thread");
+    const threadId = requireIdentifier2(thread.id, "thread_id");
+    const actualModel = requireModel(response.model);
+    const responseModelProvider = requireModelProvider(response.modelProvider);
+    const threadModelProvider = requireModelProvider(thread.modelProvider);
+    if (responseModelProvider !== threadModelProvider || thread.ephemeral !== true || thread.path !== null || thread.cliVersion !== CODEX_APP_SERVER_VERSION || response.cwd !== this.request.cwd || thread.cwd !== this.request.cwd || response.approvalPolicy !== "never" || response.approvalsReviewer !== "user" || !isReadOnlySandbox(response.sandbox) || response.reasoningEffort !== this.request.reasoningEffort || !Array.isArray(response.instructionSources) || response.instructionSources.length !== 0 || !Array.isArray(thread.turns) || thread.turns.length !== 0 || this.provisionalThreadId !== null && this.provisionalThreadId !== threadId) {
+      throw confinementFailure("thread_start_contract");
+    }
+    this.threadId = threadId;
+    this.provisionalThreadId = threadId;
+    this.actualModel = actualModel;
+    this.modelProvider = responseModelProvider;
+  }
+  bindTurn(value) {
+    if (!this.threadId) throw streamFailure();
+    const response = requireRecord2(value, "turn_start_response");
+    const turn = requireRecord2(response.turn, "turn");
+    const turnId = requireIdentifier2(turn.id, "turn_id");
+    if (turn.status !== "inProgress" || !hasAbsentOrNullProperty(turn, "error") || !Array.isArray(turn.items) || turn.items.length !== 0 || this.provisionalTurnId !== null && this.provisionalTurnId !== turnId) {
+      throw streamFailure();
+    }
+    this.turnId = turnId;
+    this.provisionalTurnId = turnId;
+  }
+  onThreadStarted(params) {
+    if (!this.initialized || this.threadStarted) throw streamFailure();
+    const thread = requireRecord2(params.thread, "thread_started_thread");
+    const threadId = requireIdentifier2(thread.id, "thread_id");
+    if (this.provisionalThreadId !== null && this.provisionalThreadId !== threadId || thread.ephemeral !== true || thread.path !== null || thread.cliVersion !== CODEX_APP_SERVER_VERSION || thread.cwd !== this.request.cwd || !Array.isArray(thread.turns) || thread.turns.length !== 0) {
+      throw confinementFailure("thread_started_contract");
+    }
+    requireModelProvider(thread.modelProvider);
+    this.provisionalThreadId = threadId;
+    this.threadStarted = true;
+    this.threadStartedSignal.resolve();
+  }
+  onMcpServerStatus(params) {
+    const name = requireNonEmptyString(params.name, "mcp_server_name");
+    if (name !== CODEX_APP_SERVER_MCP_NAME) {
+      throw confinementFailure("mcp_server_identity");
+    }
+    if (params.threadId !== null) {
+      this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
+    }
+    if (params.status !== "starting" && params.status !== "ready" && params.status !== "failed" && params.status !== "cancelled") {
+      throw streamFailure();
+    }
+    if (params.status === "failed" || params.status === "cancelled") {
+      throw processFailure();
+    }
+  }
+  onThreadNameUpdated(params) {
+    if (!this.threadStarted || !hasRequiredAndOptionalKeys(params, ["threadId"], ["threadName"])) {
+      throw streamFailure();
+    }
+    this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
+    if (params.threadName !== null && params.threadName !== void 0) {
+      const threadName = requireNonEmptyString(
+        params.threadName,
+        "thread_name"
+      );
+      if (Buffer.byteLength(threadName, "utf8") > MAX_NOTIFICATION_STRING_BYTES) {
+        throw streamFailure();
+      }
+    }
+  }
+  onTurnStarted(params) {
+    if (!this.threadStarted || this.turnStarted) throw streamFailure();
+    this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
+    const turn = requireRecord2(params.turn, "turn_started_turn");
+    const turnId = requireIdentifier2(turn.id, "turn_id");
+    if (this.provisionalTurnId !== null && this.provisionalTurnId !== turnId || turn.status !== "inProgress" || !hasAbsentOrNullProperty(turn, "error") || !Array.isArray(turn.items) || turn.items.length !== 0) {
+      throw streamFailure();
+    }
+    this.provisionalTurnId = turnId;
+    this.turnStarted = true;
+  }
+  onItemStarted(params) {
+    let checkpoint = "fence";
+    let itemType = "other";
+    try {
+      this.assertTurnFence(params);
+      checkpoint = "lifecycle";
+      if (!this.turnStarted || this.turnCompleted) throw streamFailure();
+      checkpoint = "item_shape";
+      const item = requireRecord2(params.item, "item");
+      itemType = itemDiagnosticType(item.type);
+      checkpoint = "identity";
+      const id = requireIdentifier2(item.id, "item_id");
+      const type2 = requireNonEmptyString(item.type, "item_type");
+      checkpoint = "id_duplicate_active";
+      const previousActive = this.activeItems.get(id);
+      if (previousActive && (previousActive.type !== "agentMessage" || type2 !== "agentMessage")) {
+        throw streamFailure();
+      }
+      checkpoint = "id_duplicate_completed";
+      const completed = this.completedItems.get(id);
+      if (completed && (completed.type !== "agentMessage" || type2 !== "agentMessage")) {
+        throw streamFailure();
+      }
+      checkpoint = "item_shape";
+      this.validateAllowedItem(item, "started", (value) => {
+        checkpoint = value;
+      });
+      if (previousActive) return;
+      const active = type2 === "mcpToolCall" ? Object.freeze({
+        type: type2,
+        server: requireNonEmptyString(item.server, "mcp_server"),
+        tool: requireNonEmptyString(item.tool, "mcp_tool")
+      }) : Object.freeze({ type: type2 });
+      if (completed) this.completedItems.delete(id);
+      this.activeItems.set(id, active);
+    } catch (error2) {
+      throw withStreamDiagnosticStage(
+        error2,
+        `item_started_${itemType}_${checkpoint}`
+      );
+    }
+  }
+  onItemCompleted(params) {
+    this.assertTurnFence(params);
+    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
+    const item = requireRecord2(params.item, "item");
+    const id = requireIdentifier2(item.id, "item_id");
+    const type2 = requireNonEmptyString(item.type, "item_type");
+    const active = this.activeItems.get(id);
+    if (!active || active.type !== type2 || this.completedItems.has(id)) {
+      throw streamFailure();
+    }
+    this.validateAllowedItem(item, "completed");
+    if (type2 === "mcpToolCall" && (active.server !== item.server || active.tool !== item.tool)) {
+      throw confinementFailure("mcp_tool_identity_changed");
+    }
+    this.activeItems.delete(id);
+    this.completedItems.set(id, active);
+    if (type2 === "agentMessage") this.captureFinalMessage(item);
+  }
+  validateTurnItemSnapshot(items) {
+    const snapshotItemIds = /* @__PURE__ */ new Set();
+    for (const value of items) {
+      try {
+        const item = requireRecord2(value, "turn_snapshot_item");
+        const id = requireIdentifier2(item.id, "item_id");
+        const type2 = requireNonEmptyString(item.type, "item_type");
+        this.validateAllowedItem(item, "completed");
+        if (snapshotItemIds.has(id)) {
+          throw streamFailure();
+        }
+        const observed = this.completedItems.get(id);
+        if (!observed) {
+          this.reconcileTerminalNonEffectfulItem(item, id, type2);
+          snapshotItemIds.add(id);
+          continue;
+        }
+        if (observed.type !== type2) throw streamFailure();
+        if (type2 === "mcpToolCall" && (observed.server !== item.server || observed.tool !== item.tool)) {
+          throw confinementFailure("mcp_tool_identity_changed");
+        }
+        snapshotItemIds.add(id);
+      } catch (error2) {
+        if (error2 instanceof ReviewAgentExecutionError && error2.failureClass === "confinement_violation" /* ConfinementViolation */) {
+          throw error2;
+        }
+        throw streamFailure();
+      }
+    }
+  }
+  reconcileTerminalNonEffectfulItem(item, id, type2) {
+    if (type2 === "mcpToolCall") throw streamFailure();
+    const active = this.activeItems.get(id);
+    if (active && active.type !== type2) throw streamFailure();
+    this.activeItems.delete(id);
+    this.completedItems.set(id, Object.freeze({ type: type2 }));
+    if (type2 === "agentMessage") this.captureFinalMessage(item);
+  }
+  reconcileItemsOmittedFromTerminalSummary() {
+    for (const active of this.activeItems.values()) {
+      if (active.type !== "mcpToolCall") {
+        if (!TERMINAL_SUMMARY_OMITTABLE_NON_EFFECTFUL_ITEM_TYPES.has(active.type)) {
+          throw streamFailure();
+        }
+        continue;
+      }
+      if (active.server !== CODEX_APP_SERVER_MCP_NAME || active.tool === void 0 || !this.allowedTools.has(active.tool)) {
+        throw streamFailure();
+      }
+    }
+    this.activeItems.clear();
+  }
+  validateAllowedItem(item, lifecycle, mark) {
+    const type2 = requireNonEmptyString(item.type, "item_type");
+    if (FORBIDDEN_ITEM_TYPES.has(type2)) {
+      throw confinementFailure("forbidden_item_type");
+    }
+    mark?.("unsupported_item_type");
+    if (!ALLOWED_ITEM_TYPES.has(type2)) throw streamFailure();
+    switch (type2) {
+      case "userMessage":
+        this.validateUserMessage(item, mark);
+        return;
+      case "agentMessage":
+        this.validateAgentMessage(item, mark);
+        return;
+      case "reasoning":
+        mark?.("reasoning_summary");
+        requireStringArray(
+          itemFieldOrDefault(item, "summary", []),
+          "reasoning_summary"
+        );
+        mark?.("reasoning_content");
+        requireStringArray(
+          itemFieldOrDefault(item, "content", []),
+          "reasoning_content"
+        );
+        return;
+      case "mcpToolCall":
+        this.validateMcpToolCall(item, lifecycle, mark);
+        return;
+      case "contextCompaction":
+        return;
+    }
+  }
+  validateUserMessage(item, mark) {
+    mark?.("user_client_id");
+    if (item.clientId !== this.request.clientTurnId) throw streamFailure();
+    mark?.("user_content");
+    if (!Array.isArray(item.content) || item.content.length !== 1) {
+      throw streamFailure();
+    }
+    const content = requireRecord2(item.content[0], "user_message_content");
+    if (content.type !== "text" || content.text !== this.request.prompt || !Array.isArray(content.text_elements) || content.text_elements.length !== 0) {
+      throw streamFailure();
+    }
+  }
+  validateAgentMessage(item, mark) {
+    mark?.("agent_text");
+    if (typeof item.text !== "string") throw streamFailure();
+    mark?.("agent_phase");
+    const phase = itemFieldOrDefault(item, "phase", null);
+    if (phase !== null && phase !== "commentary" && phase !== "final_answer")
+      throw streamFailure();
+    mark?.("agent_memory_citation");
+    if (itemFieldOrDefault(item, "memoryCitation", null) !== null)
+      throw streamFailure();
+    if (Buffer.byteLength(item.text, "utf8") > this.request.maxOutputBytes) {
+      throw schemaFailure();
+    }
+  }
+  validateMcpToolCall(item, lifecycle, mark) {
+    mark?.("mcp_server");
+    const server = requireNonEmptyString(item.server, "mcp_server");
+    mark?.("mcp_tool");
+    const tool = requireNonEmptyString(item.tool, "mcp_tool");
+    if (server !== CODEX_APP_SERVER_MCP_NAME || !this.allowedTools.has(tool) || item.pluginId !== null || item.appContext !== null) {
+      throw confinementFailure("mcp_tool_authority");
+    }
+    mark?.("mcp_arguments");
+    requireRecord2(item.arguments, "mcp_arguments");
+    if (lifecycle === "started") {
+      mark?.("mcp_start_state");
+      if (item.status !== "inProgress" || item.result !== null || item.error !== null) {
+        throw streamFailure();
+      }
+      return;
+    }
+    const completed = item.status === "completed" && item.error === null && isRecord2(item.result);
+    const failedWithResult = item.status === "failed" && item.error === null && isRecord2(item.result);
+    const failedWithTransportError = item.status === "failed" && item.result === null && isRecord2(item.error) && hasOnlyKeys(item.error, ["message"]) && typeof item.error.message === "string" && Buffer.byteLength(item.error.message, "utf8") <= MAX_NOTIFICATION_STRING_BYTES;
+    if (!completed && !failedWithResult && !failedWithTransportError) {
+      throw streamFailure();
+    }
+  }
+  captureFinalMessage(item) {
+    const phase = itemFieldOrDefault(item, "phase", null);
+    if (phase === "commentary") return;
+    const text = item.text;
+    if (!text.trim()) throw schemaFailure();
+    this.finalMessageCandidates.push({
+      id: item.id,
+      phase,
+      text
+    });
+  }
+  captureTerminalSummaryFinalMessage(items, latestObserved) {
+    if (items.length !== 1) return;
+    const item = requireRecord2(items[0], "turn_summary_item");
+    if (item.type !== "agentMessage") return;
+    const latest = latestObserved ?? this.finalMessageCandidates.at(-1);
+    if (!latest || latest.id !== item.id || latest.phase !== itemFieldOrDefault(item, "phase", null) || latest.text !== item.text) {
+      throw streamFailure();
+    }
+    this.terminalSummaryFinalMessage = latest.text;
+  }
+  onRawResponseCompleted(params) {
+    this.assertTurnFence(params);
+    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
+    const responseId = requireIdentifier2(params.responseId, "response_id");
+    if (params.usage === null) throw usageFailure();
+    const usage = parseTokenUsage(params.usage);
+    const existing = this.rawUsageByResponseId.get(responseId);
+    if (existing) {
+      throw usageFailure();
+    }
+    this.rawUsageByResponseId.set(responseId, usage);
+  }
+  onTokenUsageUpdated(params) {
+    this.assertTurnFence(params);
+    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
+    const tokenUsage = requireRecord2(params.tokenUsage, "thread_token_usage");
+    this.aggregateUsage = parseTokenUsage(tokenUsage.total);
+    this.lastAggregateUsage = parseTokenUsage(tokenUsage.last);
+    if (tokenUsage.modelContextWindow !== null && (!Number.isSafeInteger(tokenUsage.modelContextWindow) || tokenUsage.modelContextWindow < 1)) {
+      throw usageFailure();
+    }
+  }
+  onErrorNotification(params) {
+    if (!this.turnStarted || this.turnCompleted || !hasOnlyKeys(params, ["error", "threadId", "turnId", "willRetry"]) || typeof params.willRetry !== "boolean") {
+      throw streamFailure();
+    }
+    this.assertTurnFence(params);
+    const parsed = parseTurnError(params.error);
+    if (params.willRetry) {
+      if (this.retainedTerminalError !== null) throw streamFailure();
+      return;
+    }
+    if (this.retainedTerminalError !== null) throw streamFailure();
+    this.retainedTerminalError = parsed;
+  }
+  onModelVerification(params) {
+    this.assertActiveTurnMetadata(params, [
+      "threadId",
+      "turnId",
+      "verifications"
+    ]);
+    if (!Array.isArray(params.verifications) || params.verifications.length > MAX_NOTIFICATION_STRING_ARRAY_SIZE || params.verifications.some(
+      (verification) => verification !== "trustedAccessForCyber"
+    )) {
+      throw streamFailure();
+    }
+  }
+  onTurnModerationMetadata(params) {
+    this.assertActiveTurnMetadata(params, ["metadata", "threadId", "turnId"]);
+    validateBoundedJson(params.metadata);
+  }
+  onModelSafetyBufferingUpdated(params) {
+    this.assertActiveTurnMetadata(params, [
+      "fasterModel",
+      "model",
+      "reasons",
+      "showBufferingUi",
+      "threadId",
+      "turnId",
+      "useCases"
+    ]);
+    requireModel(params.model);
+    requireBoundedStringArray(params.useCases);
+    requireBoundedStringArray(params.reasons);
+    if (params.showBufferingUi !== true && params.showBufferingUi !== false) {
+      throw streamFailure();
+    }
+    if (params.fasterModel !== null) requireModel(params.fasterModel);
+  }
+  onTurnCompleted(params) {
+    let checkpoint = "thread_fence";
+    try {
+      this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
+      checkpoint = "turn_shape";
+      const turn = requireRecord2(params.turn, "turn_completed_turn");
+      checkpoint = "turn_fence";
+      this.assertTurnId(requireIdentifier2(turn.id, "turn_id"));
+      checkpoint = "lifecycle";
+      if (!this.turnStarted || this.turnCompleted) throw streamFailure();
+      checkpoint = "items_shape";
+      if (!Array.isArray(turn.items)) throw streamFailure();
+      const latestObservedFinalMessage = this.finalMessageCandidates.at(-1);
+      checkpoint = "items_snapshot";
+      this.validateTurnItemSnapshot(turn.items);
+      const turnError = turn.error ?? null;
+      checkpoint = "status";
+      switch (turn.status) {
+        case "completed":
+          checkpoint = "completed_error";
+          if (turnError !== null || this.retainedTerminalError !== null) {
+            throw streamFailure();
+          }
+          if (turn.itemsView === "summary") {
+            checkpoint = "summary_witness";
+            this.captureTerminalSummaryFinalMessage(
+              turn.items,
+              latestObservedFinalMessage
+            );
+          }
+          if (this.activeItems.size !== 0 && turn.itemsView === "summary") {
+            checkpoint = "summary_reconcile";
+            this.reconcileItemsOmittedFromTerminalSummary();
+          }
+          checkpoint = "completed_active_items";
+          if (this.activeItems.size !== 0) throw streamFailure();
+          this.turnCompleted = true;
+          this.maybeComplete();
+          return;
+        case "failed": {
+          checkpoint = "failed_active_items";
+          if (this.activeItems.size !== 0) throw streamFailure();
+          checkpoint = "failed_error";
+          const completedError = parseTurnError(turnError);
+          const retained = this.retainedTerminalError;
+          checkpoint = "failed_retained_error";
+          if (retained === null || retained.fingerprint !== completedError.fingerprint) {
+            throw streamFailure();
+          }
+          this.turnCompleted = true;
+          this.fail(retained.failure);
+          return;
+        }
+        case "interrupted":
+          checkpoint = "interrupted_error";
+          if (turnError !== null) throw streamFailure();
+          checkpoint = "interrupted_active_items";
+          if (this.activeItems.size !== 0) throw streamFailure();
+          this.turnCompleted = true;
+          this.fail(cancelledFailure());
+          return;
+        default:
+          throw streamFailure();
+      }
+    } catch (error2) {
+      throw withStreamDiagnosticStage(error2, `turn_completed_${checkpoint}`);
+    }
+  }
+  maybeComplete() {
+    if (!this.turnCompleted || this.failed) return;
+    if (!this.threadId || !this.turnId) return;
+    if (!this.threadStarted || !this.turnStarted || !this.actualModel || !this.modelProvider) {
+      this.fail(streamFailure());
+      return;
+    }
+    if (this.rawUsageByResponseId.size === 0 || !this.aggregateUsage || !this.lastAggregateUsage) {
+      this.fail(usageFailure());
+      return;
+    }
+    const rawUsage = sumUsage([...this.rawUsageByResponseId.values()]);
+    const lastRawUsage = [...this.rawUsageByResponseId.values()].at(-1);
+    if (!sameUsage(rawUsage, this.aggregateUsage) || !lastRawUsage || !sameUsage(lastRawUsage, this.lastAggregateUsage)) {
+      this.fail(usageFailure());
+      return;
+    }
+    const finalMessage = this.terminalSummaryFinalMessage ?? selectFinalMessage(this.finalMessageCandidates);
+    if (finalMessage === null) {
+      this.fail(schemaFailure());
+      return;
+    }
+    this.completionResolved = true;
+    this.completion.resolve(
+      Object.freeze({
+        finalMessage,
+        actualModel: this.actualModel,
+        modelProvider: this.modelProvider,
+        usage: Object.freeze({
+          inputTokens: rawUsage.inputTokens,
+          cachedInputTokens: rawUsage.cachedInputTokens,
+          outputTokens: rawUsage.outputTokens,
+          reasoningOutputTokens: rawUsage.reasoningOutputTokens,
+          totalTokens: rawUsage.totalTokens
+        })
+      })
+    );
+  }
+  assertTurnFence(params) {
+    this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
+    this.assertTurnId(requireIdentifier2(params.turnId, "turn_id"));
+  }
+  onServerRequestResolved(params) {
+    if (!this.threadStarted || !hasOnlyKeys(params, ["requestId", "threadId"])) {
+      throw streamFailure();
+    }
+    requireRequestId(params.requestId);
+    this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
+  }
+  assertActiveTurnMetadata(params, keys) {
+    if (!this.threadStarted || this.turnCompleted || !hasOnlyKeys(params, keys)) {
+      throw streamFailure();
+    }
+    this.assertTurnFence(params);
+  }
+  onWarning(params) {
+    if (!hasRequiredAndOptionalKeys(params, ["message"], ["threadId"])) {
+      throw streamFailure();
+    }
+    if (params.threadId !== null && params.threadId !== void 0) {
+      const expectedThreadId = this.threadId ?? this.provisionalThreadId;
+      if (expectedThreadId === null) throw streamFailure();
+      const warningThreadId = requireIdentifier2(params.threadId, "thread_id");
+      if (warningThreadId !== expectedThreadId) throw streamFailure();
+    }
+    const message = requireNonEmptyString(params.message, "warning_message");
+    if (Buffer.byteLength(message, "utf8") > MAX_WARNING_MESSAGE_BYTES) {
+      throw streamFailure();
+    }
+  }
+  onConfigWarning(params) {
+    if (!hasRequiredAndOptionalKeys(
+      params,
+      ["summary"],
+      ["details", "path", "range"]
+    )) {
+      throw streamFailure();
+    }
+    requireBoundedMetadataString(params.summary, true);
+    requireNullableBoundedMetadataString(params.details);
+    requireNullableBoundedMetadataString(params.path);
+    if (params.range !== void 0 && params.range !== null) {
+      validateConfigWarningRange(params.range);
+    }
+  }
+  assertThreadId(threadId) {
+    const expected = this.threadId ?? this.provisionalThreadId;
+    if (expected !== null && expected !== threadId) throw streamFailure();
+    if (expected === null) this.provisionalThreadId = threadId;
+  }
+  assertTurnId(turnId) {
+    const expected = this.turnId ?? this.provisionalTurnId;
+    if (expected !== null && expected !== turnId) throw streamFailure();
+    if (expected === null) this.provisionalTurnId = turnId;
+  }
+};
+function selectFinalMessage(candidates) {
+  const finalAnswers = candidates.filter(
+    (candidate) => candidate.phase === "final_answer"
+  );
+  if (finalAnswers.length === 1) return finalAnswers[0].text;
+  if (finalAnswers.length > 1) return null;
+  const compatible = candidates.filter((candidate) => candidate.phase === null);
+  return compatible.length === 1 ? compatible[0].text : null;
+}
+function classifyCodexAppServerDiagnostic(diagnostic, fallback2 = "process_failure" /* ProcessFailure */) {
+  if (/(?:401|403|unauthorized|not logged in|refresh token|oauth|authentication)/iu.test(
+    diagnostic
+  )) {
+    return new ReviewAgentExecutionError(
+      "authentication_unavailable" /* AuthenticationUnavailable */,
+      null,
+      "review_agent_authentication_unavailable"
+    );
+  }
+  if (/(?:invalid_json_schema|invalid schema for response_format|(?:invalid|rejected|unsupported) structured output schema|structured output schema (?:is )?(?:invalid|rejected|unsupported))/iu.test(
+    diagnostic
+  )) {
+    return schemaFailure();
+  }
+  if (/(?:usage\s*limit|usageLimitExceeded|sessionBudgetExceeded|quota|insufficient_quota|billing limit)/iu.test(
+    diagnostic
+  )) {
+    return new ReviewAgentExecutionError(
+      "quota_unavailable" /* QuotaUnavailable */,
+      null,
+      "review_agent_quota_unavailable"
+    );
+  }
+  if (/(?:capacity[_ -]unavailable|serverOverloaded|overloaded|too many requests|\b429\b|rate limit)/iu.test(
+    diagnostic
+  )) {
+    return new ReviewAgentExecutionError(
+      "capacity_unavailable" /* CapacityUnavailable */,
+      null,
+      "review_agent_capacity_unavailable"
+    );
+  }
+  if (/(?:model cache|startup|failed to start|enoent|spawn)/iu.test(diagnostic)) {
+    return new ReviewAgentExecutionError(
+      "startup_failure" /* StartupFailure */,
+      null,
+      "review_agent_startup_failure"
+    );
+  }
+  return new ReviewAgentExecutionError(fallback2, null, failureCode(fallback2));
+}
+function validateInitializeResponse(value) {
+  const response = requireRecord2(value, "initialize_response");
+  const userAgent = requireNonEmptyString(response.userAgent, "user_agent");
+  const versionPattern = new RegExp(
+    `^[A-Za-z][A-Za-z0-9 ._-]{0,64}/${CODEX_APP_SERVER_VERSION.replaceAll(".", "\\.")}(?:\\s|$)`,
+    "u"
+  );
+  if (!versionPattern.test(userAgent) || !import_path2.default.isAbsolute(requireNonEmptyString(response.codexHome, "codex_home")) || !requireNonEmptyString(response.platformFamily, "platform_family") || !requireNonEmptyString(response.platformOs, "platform_os")) {
+    throw new ReviewAgentExecutionError(
+      "capability_unavailable" /* CapabilityUnavailable */,
+      null,
+      "review_agent_capability_unavailable"
+    );
+  }
+}
+function parseTokenUsage(value) {
+  const usage = requireRecord2(value, "token_usage");
+  if (!hasOnlyKeys(usage, [
+    "cacheWriteInputTokens",
+    "cachedInputTokens",
+    "inputTokens",
+    "outputTokens",
+    "reasoningOutputTokens",
+    "totalTokens"
+  ])) {
+    throw usageFailure();
+  }
+  const parsed = Object.freeze({
+    totalTokens: requireTokenCount(usage.totalTokens),
+    inputTokens: requireTokenCount(usage.inputTokens),
+    cachedInputTokens: requireTokenCount(usage.cachedInputTokens),
+    cacheWriteInputTokens: requireTokenCount(usage.cacheWriteInputTokens),
+    outputTokens: requireTokenCount(usage.outputTokens),
+    reasoningOutputTokens: requireTokenCount(usage.reasoningOutputTokens)
+  });
+  if (parsed.cachedInputTokens > parsed.inputTokens || parsed.cacheWriteInputTokens > parsed.inputTokens || parsed.reasoningOutputTokens > parsed.outputTokens || parsed.totalTokens !== parsed.inputTokens + parsed.outputTokens) {
+    throw usageFailure();
+  }
+  return parsed;
+}
+function sumUsage(values) {
+  const total = {
+    totalTokens: 0,
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    cacheWriteInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0
+  };
+  for (const usage of values) {
+    for (const key of Object.keys(total)) {
+      const next = total[key] + usage[key];
+      if (!Number.isSafeInteger(next)) throw usageFailure();
+      total[key] = next;
+    }
+  }
+  return Object.freeze(total);
+}
+function sameUsage(left, right) {
+  return left.totalTokens === right.totalTokens && left.inputTokens === right.inputTokens && left.cachedInputTokens === right.cachedInputTokens && left.cacheWriteInputTokens === right.cacheWriteInputTokens && left.outputTokens === right.outputTokens && left.reasoningOutputTokens === right.reasoningOutputTokens;
+}
+function responseFailure(value) {
+  const error2 = requireRecord2(value, "protocol_error");
+  if (!Number.isSafeInteger(error2.code) || typeof error2.message !== "string" || error2.message.length > 16384) {
+    return streamFailure();
+  }
+  const diagnostic = `${error2.code} ${error2.message} ${safeJson(error2.data)}`.slice(0, 16384);
+  return withProtocolProcessDetail(
+    classifyCodexAppServerDiagnostic(diagnostic),
+    "response_error"
+  );
+}
+function parseTurnError(value) {
+  const error2 = requireRecord2(value, "turn_error");
+  const additionalDetails = error2.additionalDetails ?? null;
+  const codexErrorInfo = parseCodexErrorInfo(error2.codexErrorInfo ?? null);
+  if (typeof error2.message !== "string" || error2.message.length > 16384 || additionalDetails !== null && (typeof additionalDetails !== "string" || additionalDetails.length > 16384)) {
+    throw streamFailure();
+  }
+  if (error2.message.length === 0 && !hasCodexErrorClassification(codexErrorInfo)) {
+    throw streamFailure();
+  }
+  const normalized = Object.freeze({
+    message: error2.message,
+    additionalDetails,
+    codexErrorInfo
+  });
+  const canonical = canonicalProtocolValue(normalized);
+  if (Buffer.byteLength(canonical, "utf8") > 32768) {
+    throw streamFailure();
+  }
+  const diagnostic = [
+    error2.message,
+    additionalDetails ?? "",
+    safeJson(codexErrorInfo)
+  ].join(" ").slice(0, 16384);
+  return Object.freeze({
+    failure: withProtocolProcessDetail(
+      classifyCodexAppServerDiagnostic(diagnostic),
+      "turn_error",
+      codexErrorInfo
+    ),
+    fingerprint: (0, import_crypto20.createHash)("sha256").update(canonical).digest("hex")
+  });
+}
+function withProtocolProcessDetail(failure, origin, validatedCodexErrorInfo) {
+  if (failure.failureClass !== "process_failure" /* ProcessFailure */ || failure.message !== "review_agent_process_failure") {
+    return failure;
+  }
+  const variant = typeof validatedCodexErrorInfo === "string" ? validatedCodexErrorInfo : isRecord2(validatedCodexErrorInfo) ? Object.keys(validatedCodexErrorInfo)[0] : void 0;
+  const suffix = variant && (CODEX_ERROR_INFO_STRING_VARIANTS.has(variant) || CODEX_ERROR_INFO_HTTP_VARIANTS.has(variant) || variant === "activeTurnNotSteerable") ? `_${variant.toLowerCase()}` : "";
+  return new ReviewAgentExecutionError(
+    failure.failureClass,
+    failure.retryAfterMs,
+    `review_agent_process_failure_${origin}${suffix}`
+  );
+}
+function hasCodexErrorClassification(value) {
+  return value !== null;
+}
+function parseCodexErrorInfo(value) {
+  if (value === null) return null;
+  if (typeof value === "string") {
+    if (!CODEX_ERROR_INFO_STRING_VARIANTS.has(value)) throw streamFailure();
+    return value;
+  }
+  const tagged = requireRecord2(value, "codex_error_info");
+  const variants = Object.keys(tagged);
+  if (variants.length !== 1) throw streamFailure();
+  const variant = variants[0];
+  const payload = requireRecord2(tagged[variant], "codex_error_info_payload");
+  if (CODEX_ERROR_INFO_HTTP_VARIANTS.has(variant)) {
+    if (!hasRequiredAndOptionalKeys(payload, [], ["httpStatusCode"])) {
+      throw streamFailure();
+    }
+    const status = payload.httpStatusCode;
+    if (status !== void 0 && status !== null && (!Number.isSafeInteger(status) || status < 0 || status > 65535)) {
+      throw streamFailure();
+    }
+    return value;
+  }
+  if (variant === "activeTurnNotSteerable" && hasOnlyKeys(payload, ["turnKind"]) && (payload.turnKind === "review" || payload.turnKind === "compact")) {
+    return value;
+  }
+  throw streamFailure();
+}
+function canonicalProtocolValue(value) {
+  if (value === null || typeof value !== "object") {
+    const encoded = JSON.stringify(value);
+    if (typeof encoded !== "string") throw streamFailure();
+    return encoded;
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalProtocolValue).join(",")}]`;
+  }
+  const record = value;
+  return `{${Object.keys(record).sort().map(
+    (key) => `${JSON.stringify(key)}:${canonicalProtocolValue(record[key])}`
+  ).join(",")}}`;
+}
+function normalizeProtocolFailure(error2) {
+  return error2 instanceof ReviewAgentExecutionError ? error2 : streamFailure();
+}
+function requireRecord2(value, _field) {
+  if (!isRecord2(value)) throw streamFailure();
+  return value;
+}
+function isRecord2(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+function requireRequestId(value) {
+  if (typeof value === "string" || Number.isSafeInteger(value) && typeof value === "number") {
+    return value;
+  }
+  throw streamFailure();
+}
+function requestIdKey(value) {
+  return `${typeof value}:${String(value)}`;
+}
+function requireNonEmptyString(value, _field) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 16384 || containsControlCharacter(value)) {
+    throw streamFailure();
+  }
+  return value;
+}
+function requireBoundedMetadataString(value, allowEmpty) {
+  if (typeof value !== "string" || !allowEmpty && value.length === 0 || Buffer.byteLength(value, "utf8") > MAX_METADATA_STRING_BYTES) {
+    throw streamFailure();
+  }
+  return value;
+}
+function requireNullableBoundedMetadataString(value) {
+  if (value === void 0 || value === null) return;
+  requireBoundedMetadataString(value, true);
+}
+function validateConfigWarningRange(value) {
+  const range2 = requireRecord2(value, "config_warning_range");
+  if (!hasOnlyKeys(range2, ["end", "start"])) throw streamFailure();
+  for (const key of ["start", "end"]) {
+    const position = requireRecord2(range2[key], "config_warning_position");
+    if (!hasOnlyKeys(position, ["column", "line"]) || !isUnsignedInteger(position.line) || !isUnsignedInteger(position.column)) {
+      throw streamFailure();
+    }
+  }
+}
+function isUnsignedInteger(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4294967295;
+}
+function containsControlCharacter(value) {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint !== void 0 && (codePoint <= 31 || codePoint === 127)) {
+      return true;
+    }
+  }
+  return false;
+}
+function requireIdentifier2(value, field) {
+  const result2 = requireNonEmptyString(value, field);
+  if (result2.length > 512) throw streamFailure();
+  return result2;
+}
+function requireModel(value) {
+  const model = requireNonEmptyString(value, "model");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/+#-]{0,199}$/u.test(model)) {
+    throw modelFailure();
+  }
+  return model;
+}
+function requireModelProvider(value) {
+  const provider = requireNonEmptyString(value, "model_provider");
+  if (provider.trim() !== provider || provider.length > 200) {
+    throw modelFailure();
+  }
+  return provider;
+}
+function itemFieldOrDefault(item, key, fallback2) {
+  return Object.prototype.hasOwnProperty.call(item, key) ? item[key] : fallback2;
+}
+function requireStringArray(value, _field) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw streamFailure();
+  }
+  return value;
+}
+function requireBoundedStringArray(value) {
+  if (!Array.isArray(value) || value.length > MAX_NOTIFICATION_STRING_ARRAY_SIZE) {
+    throw streamFailure();
+  }
+  for (const item of value) {
+    if (typeof item !== "string" || Buffer.byteLength(item, "utf8") > MAX_NOTIFICATION_STRING_BYTES || containsControlCharacter(item)) {
+      throw streamFailure();
+    }
+  }
+  return value;
+}
+function validateBoundedJson(value) {
+  const pending = [
+    { value, depth: 0 }
+  ];
+  let nodeCount = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || ++nodeCount > MAX_METADATA_JSON_NODES) {
+      throw streamFailure();
+    }
+    const candidate = current.value;
+    if (candidate === null || typeof candidate === "boolean" || typeof candidate === "number" && Number.isFinite(candidate)) {
+      continue;
+    }
+    if (typeof candidate === "string") {
+      if (Buffer.byteLength(candidate, "utf8") > MAX_METADATA_STRING_BYTES || containsControlCharacter(candidate)) {
+        throw streamFailure();
+      }
+      continue;
+    }
+    if (current.depth >= MAX_METADATA_JSON_DEPTH) throw streamFailure();
+    if (Array.isArray(candidate)) {
+      if (candidate.length > MAX_METADATA_COLLECTION_SIZE) {
+        throw streamFailure();
+      }
+      for (const item of candidate) {
+        pending.push({ value: item, depth: current.depth + 1 });
+      }
+      continue;
+    }
+    if (!isRecord2(candidate)) throw streamFailure();
+    const prototype = Object.getPrototypeOf(candidate);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw streamFailure();
+    }
+    const entries = Object.entries(candidate);
+    if (entries.length > MAX_METADATA_COLLECTION_SIZE) throw streamFailure();
+    for (const [key, item] of entries) {
+      if (Buffer.byteLength(key, "utf8") > MAX_NOTIFICATION_STRING_BYTES || containsControlCharacter(key)) {
+        throw streamFailure();
+      }
+      pending.push({ value: item, depth: current.depth + 1 });
+    }
+  }
+  let encoded;
+  try {
+    encoded = JSON.stringify(value);
+  } catch {
+    throw streamFailure();
+  }
+  if (Buffer.byteLength(encoded, "utf8") > MAX_METADATA_JSON_BYTES) {
+    throw streamFailure();
+  }
+}
+function requireTokenCount(value) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw usageFailure();
+  }
+  return value;
+}
+function hasOnlyKeys(value, allowed) {
+  const keys = Object.keys(value).sort();
+  const expected = [...allowed].sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+}
+function hasRequiredAndOptionalKeys(value, required, optional) {
+  const allowed = /* @__PURE__ */ new Set([...required, ...optional]);
+  return required.every((key) => Object.prototype.hasOwnProperty.call(value, key)) && Object.keys(value).every((key) => allowed.has(key));
+}
+function hasAbsentOrNullProperty(value, key) {
+  return !Object.prototype.hasOwnProperty.call(value, key) || value[key] === null;
+}
+function isReadOnlySandbox(value) {
+  return isRecord2(value) && value.type === "readOnly" && value.networkAccess === false;
+}
+function safeJson(value) {
+  try {
+    return JSON.stringify(value) ?? "";
+  } catch {
+    return "";
+  }
+}
+function itemDiagnosticType(value) {
+  switch (value) {
+    case "userMessage":
+      return "user_message";
+    case "agentMessage":
+      return "agent_message";
+    case "reasoning":
+      return "reasoning";
+    case "mcpToolCall":
+      return "mcp_tool_call";
+    case "contextCompaction":
+      return "context_compaction";
+    default:
+      return "other";
+  }
+}
+function notificationDiagnosticStage(value) {
+  switch (value) {
+    case "thread/started":
+      return "thread_started" /* ThreadStarted */;
+    case "thread/name/updated":
+      return "thread_name_updated" /* ThreadNameUpdated */;
+    case "mcpServer/startupStatus/updated":
+      return "mcp_server_status" /* McpServerStatus */;
+    case "serverRequest/resolved":
+      return "server_request_resolved" /* ServerRequestResolved */;
+    case "turn/started":
+      return "turn_started" /* TurnStarted */;
+    case "item/started":
+      return "item_started" /* ItemStarted */;
+    case "item/completed":
+      return "item_completed" /* ItemCompleted */;
+    case "rawResponse/completed":
+      return "raw_response_completed" /* RawResponseCompleted */;
+    case "thread/tokenUsage/updated":
+      return "token_usage_updated" /* TokenUsageUpdated */;
+    case "turn/completed":
+      return "turn_completed" /* TurnCompleted */;
+    case "model/rerouted":
+      return "model_rerouted" /* ModelRerouted */;
+    case "model/verification":
+      return "model_verification" /* ModelVerification */;
+    case "turn/moderationMetadata":
+      return "moderation_metadata" /* ModerationMetadata */;
+    case "model/safetyBuffering/updated":
+      return "model_safety" /* ModelSafety */;
+    case "configWarning":
+      return "config_warning" /* ConfigWarning */;
+    case "warning":
+      return "warning" /* Warning */;
+    case "error":
+      return "error" /* Error */;
+    default:
+      if (typeof value === "string" && IGNORED_NOTIFICATION_METHODS.has(value)) {
+        return "ignored_notification" /* IgnoredNotification */;
+      }
+      return typeof value === "string" ? `unknown_notification_${(0, import_crypto20.createHash)("sha256").update(value).digest("hex").slice(0, 12)}` : "unknown_notification" /* UnknownNotification */;
+  }
+}
+function withStreamDiagnosticStage(error2, stage) {
+  return error2 instanceof ReviewAgentExecutionError && error2.failureClass === "stream_incomplete" /* StreamIncomplete */ && error2.message === "review_agent_stream_incomplete" ? streamFailure(stage) : error2;
+}
+async function withProtocolRunStage(stage, operation) {
+  try {
+    return await operation();
+  } catch (error2) {
+    throw withStreamDiagnosticStage(error2, stage);
+  }
+}
+function streamFailure(stage) {
+  return new ReviewAgentExecutionError(
+    "stream_incomplete" /* StreamIncomplete */,
+    null,
+    stage ? `review_agent_stream_incomplete_${stage}` : "review_agent_stream_incomplete"
+  );
+}
+function schemaFailure() {
+  return new ReviewAgentExecutionError(
+    "schema_invalid_output" /* SchemaInvalidOutput */,
+    null,
+    "review_agent_output_invalid"
+  );
+}
+function usageFailure() {
+  return new ReviewAgentExecutionError(
+    "usage_attribution_missing" /* UsageAttributionMissing */,
+    null,
+    "review_agent_usage_attribution_missing"
+  );
+}
+function modelFailure() {
+  return new ReviewAgentExecutionError(
+    "model_attribution_missing" /* ModelAttributionMissing */,
+    null,
+    "review_agent_actual_model_unavailable"
+  );
+}
+function confinementFailure(reason) {
+  return new ReviewAgentExecutionError(
+    "confinement_violation" /* ConfinementViolation */,
+    null,
+    `review_agent_confinement_violation_${reason}`
+  );
+}
+function processFailure() {
+  return new ReviewAgentExecutionError(
+    "process_failure" /* ProcessFailure */,
+    null,
+    "review_agent_process_failure"
+  );
+}
+function cancelledFailure() {
+  return new ReviewAgentExecutionError(
+    "cancelled" /* Cancelled */,
+    null,
+    "review_agent_process_cancelled"
+  );
+}
+function failureCode(failureClass) {
+  switch (failureClass) {
+    case "capability_unavailable" /* CapabilityUnavailable */:
+      return "review_agent_capability_unavailable";
+    case "authentication_unavailable" /* AuthenticationUnavailable */:
+      return "review_agent_authentication_unavailable";
+    case "quota_unavailable" /* QuotaUnavailable */:
+      return "review_agent_quota_unavailable";
+    case "capacity_unavailable" /* CapacityUnavailable */:
+      return "review_agent_capacity_unavailable";
+    case "startup_failure" /* StartupFailure */:
+      return "review_agent_startup_failure";
+    case "process_failure" /* ProcessFailure */:
+      return "review_agent_process_failure";
+    case "timeout" /* Timeout */:
+      return "review_agent_process_timeout";
+    case "cancelled" /* Cancelled */:
+      return "review_agent_process_cancelled";
+    case "schema_invalid_output" /* SchemaInvalidOutput */:
+      return "review_agent_output_invalid";
+    case "stream_incomplete" /* StreamIncomplete */:
+      return "review_agent_stream_incomplete";
+    case "model_attribution_missing" /* ModelAttributionMissing */:
+      return "review_agent_actual_model_unavailable";
+    case "usage_attribution_missing" /* UsageAttributionMissing */:
+      return "review_agent_usage_attribution_missing";
+    case "confinement_violation" /* ConfinementViolation */:
+      return "review_agent_confinement_violation";
+  }
+}
+function deferred() {
+  let resolve5;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve5 = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve: resolve5, reject };
+}
+
+// src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
+var DEFAULT_INTERRUPT_GRACE_MS = 500;
+var MAX_DIAGNOSTIC_BYTES = 16384;
+var NodeCodexAppServerTurnRunner = class {
+  constructor(options = {}) {
+    this.options = options;
+    const grace = options.interruptGraceMs ?? DEFAULT_INTERRUPT_GRACE_MS;
+    if (!Number.isSafeInteger(grace) || grace < 1 || grace > 1e4) {
+      throw new Error("review_agent_codex_interrupt_grace_invalid");
+    }
+    this.interruptGraceMs = grace;
+  }
+  active = /* @__PURE__ */ new Map();
+  verifiedBinaries = /* @__PURE__ */ new Set();
+  interruptGraceMs;
+  async executeTurn(request) {
+    validateRequest2(request);
+    if (this.active.has(request.invocationId)) {
+      throw processFailure2();
+    }
+    if (request.signal?.aborted) throw cancelledFailure2();
+    const startedAt = Date.now();
+    const abortController = new AbortController();
+    const active = {
+      fencingToken: request.fencingToken,
+      abortController,
+      execution: null,
+      done: deferred2()
+    };
+    this.active.set(request.invocationId, active);
+    const abort = () => abortController.abort();
+    request.signal?.addEventListener("abort", abort, { once: true });
+    try {
+      await this.requireSupportedVersion({
+        ...request,
+        signal: abortController.signal,
+        timeoutMs: request.timeoutMs
+      });
+      if (abortController.signal.aborted) throw cancelledFailure2();
+      const remainingMs = request.timeoutMs - (Date.now() - startedAt);
+      if (remainingMs < 1) throw timeoutFailure();
+      let child;
+      try {
+        child = (0, import_child_process11.spawn)(request.binary, [...request.args], {
+          cwd: request.cwd,
+          env: { ...request.environment },
+          detached: true,
+          shell: false,
+          stdio: ["pipe", "pipe", "pipe"]
+        });
+      } catch {
+        const result2 = processResult(
+          "startup_failed" /* StartupFailed */,
+          null,
+          "",
+          startedAt
+        );
+        this.observe(result2);
+        throw startupFailure();
+      }
+      const execution = new CodexAppServerChildTurn({
+        child,
+        request: {
+          ...request,
+          timeoutMs: remainingMs,
+          signal: abortController.signal
+        },
+        interruptGraceMs: this.interruptGraceMs,
+        startedAt,
+        observe: (result2) => this.observe(result2)
+      });
+      active.execution = execution;
+      return await execution.run();
+    } finally {
+      request.signal?.removeEventListener("abort", abort);
+      const current = this.active.get(request.invocationId);
+      if (current === active) {
+        this.active.delete(request.invocationId);
+      }
+      active.done.resolve();
+    }
+  }
+  async cancel(invocationId, fencingToken) {
+    const active = this.active.get(invocationId);
+    if (!active) return;
+    if (active.fencingToken !== fencingToken) {
+      throw new Error("review_agent_cancel_fencing_mismatch");
+    }
+    active.abortController.abort();
+    await active.execution?.cancel();
+    await active.done.promise;
+  }
+  observe(result2) {
+    try {
+      this.options.processResultObserver?.(result2);
+    } catch {
+    }
+  }
+  async requireSupportedVersion(request) {
+    if (this.verifiedBinaries.has(request.binary)) return;
+    await (this.options.versionProbe ?? new NodeCodexAppServerVersionProbe()).assertSupported(request);
+    this.verifiedBinaries.add(request.binary);
+  }
+};
+var NodeCodexAppServerVersionProbe = class {
+  assertSupported(request) {
+    if (request.signal?.aborted) return Promise.reject(cancelledFailure2());
+    return new Promise((resolve5, reject) => {
+      let child;
+      try {
+        child = (0, import_child_process11.spawn)(request.binary, ["--version"], {
+          cwd: request.cwd,
+          env: { ...request.environment },
+          detached: false,
+          shell: false,
+          stdio: ["pipe", "pipe", "pipe"]
+        });
+      } catch {
+        reject(startupFailure());
+        return;
+      }
+      let output = Buffer.alloc(0);
+      let termination = null;
+      let settled = false;
+      const collect = (chunk) => {
+        if (output.byteLength >= 1024) return;
+        output = Buffer.concat([
+          output,
+          chunk.subarray(0, 1024 - output.byteLength)
+        ]);
+      };
+      child.stdout.on("data", collect);
+      child.stderr.on("data", collect);
+      child.stdin.end();
+      const kill = () => {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+        }
+      };
+      const timer = setTimeout(
+        () => {
+          if (termination !== null) return;
+          termination = "timed_out";
+          kill();
+        },
+        Math.min(request.timeoutMs, 1e4)
+      );
+      const onAbort = () => {
+        if (termination !== null) return;
+        termination = "cancelled";
+        clearTimeout(timer);
+        kill();
+      };
+      request.signal?.addEventListener("abort", onAbort, { once: true });
+      if (request.signal?.aborted) onAbort();
+      const settle = (error2) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        request.signal?.removeEventListener("abort", onAbort);
+        if (error2) reject(error2);
+        else resolve5();
+      };
+      child.on("error", () => {
+        settle(startupFailure());
+      });
+      child.on("close", (code) => {
+        if (termination === "cancelled") {
+          settle(cancelledFailure2());
+          return;
+        }
+        if (termination === "timed_out") {
+          settle(timeoutFailure());
+          return;
+        }
+        const version = output.toString("utf8").trim();
+        if (code === 0 && version === `codex-cli ${CODEX_APP_SERVER_VERSION}`) {
+          settle();
+          return;
+        }
+        settle(
+          new ReviewAgentExecutionError(
+            "capability_unavailable" /* CapabilityUnavailable */,
+            null,
+            "review_agent_codex_app_server_version_mismatch"
+          )
+        );
+      });
+    });
+  }
+};
+var CodexAppServerChildTurn = class {
+  constructor(input) {
+    this.input = input;
+    this.protocol = new CodexAppServerProtocolClient(
+      input.request.protocol,
+      (message) => this.write(message)
+    );
+    this.protocolRun = this.protocol.run();
+    void this.protocolRun.then(
+      () => this.closeInput(),
+      (error2) => this.onProtocolFailure(error2)
+    );
+    input.child.stdout.on("data", (chunk) => this.onStdout(chunk));
+    input.child.stderr.on("data", (chunk) => this.onStderr(chunk));
+    input.child.stdin.on("error", () => {
+    });
+    input.child.on("error", (error2) => {
+      this.terminalError = classifyCodexAppServerDiagnostic(
+        sanitizeDiagnostic(error2.message),
+        "startup_failure" /* StartupFailure */
+      );
+    });
+    input.child.on("close", (code) => void this.onClose(code));
+    this.overallTimer = setTimeout(
+      () => this.requestTermination("timed_out" /* TimedOut */),
+      input.request.timeoutMs
+    );
+    input.request.signal?.addEventListener("abort", this.onAbort, {
+      once: true
+    });
+  }
+  done = deferred2();
+  protocol;
+  protocolRun;
+  stdoutBuffer = Buffer.alloc(0);
+  stderr = Buffer.alloc(0);
+  eventStreamBytes = 0;
+  closed = false;
+  settled = false;
+  forcedTermination = null;
+  terminalError = null;
+  killTimer = null;
+  overallTimer;
+  run() {
+    return this.done.promise;
+  }
+  async cancel() {
+    this.requestTermination("cancelled" /* Cancelled */);
+    await this.done.promise.catch(() => void 0);
+  }
+  onAbort = () => {
+    this.requestTermination("cancelled" /* Cancelled */);
+  };
+  write(message) {
+    if (this.closed || !this.input.child.stdin.writable) {
+      return Promise.reject(processFailure2());
+    }
+    let line;
+    try {
+      line = `${JSON.stringify(message)}
+`;
+    } catch {
+      return Promise.reject(
+        streamFailure2("write_json" /* WriteJson */)
+      );
+    }
+    return new Promise((resolve5, reject) => {
+      this.input.child.stdin.write(line, "utf8", (error2) => {
+        if (error2) reject(processFailure2());
+        else resolve5();
+      });
+    });
+  }
+  onStdout(chunk) {
+    if (this.closed || this.settled || !this.collectEventStreamBytes(chunk.byteLength)) {
+      return;
+    }
+    this.stdoutBuffer = Buffer.concat([this.stdoutBuffer, chunk]);
+    try {
+      let newline = this.stdoutBuffer.indexOf(10);
+      while (newline >= 0) {
+        let line = this.stdoutBuffer.subarray(0, newline);
+        this.stdoutBuffer = this.stdoutBuffer.subarray(newline + 1);
+        if (line.at(-1) === 13) line = line.subarray(0, -1);
+        if (!this.acceptEvent(line.byteLength)) return;
+        this.receiveLine(line);
+        newline = this.stdoutBuffer.indexOf(10);
+      }
+      if (!this.acceptEvent(this.stdoutBuffer.byteLength)) return;
+    } catch (error2) {
+      this.onProtocolFailure(error2);
+    }
+  }
+  onStderr(chunk) {
+    if (this.closed || this.settled || !this.collectEventStreamBytes(chunk.byteLength)) {
+      return;
+    }
+    if (this.stderr.byteLength < MAX_DIAGNOSTIC_BYTES) {
+      this.stderr = Buffer.concat([
+        this.stderr,
+        chunk.subarray(0, MAX_DIAGNOSTIC_BYTES - this.stderr.byteLength)
+      ]);
+    }
+  }
+  collectEventStreamBytes(bytes) {
+    this.eventStreamBytes += bytes;
+    if (this.eventStreamBytes <= this.input.request.maxEventStreamBytes) {
+      return true;
+    }
+    return this.exceedOutputLimit();
+  }
+  acceptEvent(bytes) {
+    if (bytes <= this.input.request.maxEventBytes) return true;
+    return this.exceedOutputLimit();
+  }
+  exceedOutputLimit() {
+    this.forcedTermination = "output_limit_exceeded" /* OutputLimitExceeded */;
+    this.terminalError = processFailure2();
+    this.killProcessGroup();
+    return false;
+  }
+  receiveLine(line) {
+    if (line.byteLength === 0) return;
+    let decoded;
+    try {
+      decoded = new import_util6.TextDecoder("utf-8", {
+        fatal: true,
+        ignoreBOM: true
+      }).decode(line);
+    } catch {
+      throw streamFailure2("stdout_utf8" /* StdoutUtf8 */);
+    }
+    let message;
+    try {
+      message = JSON.parse(decoded);
+    } catch {
+      throw streamFailure2("stdout_json" /* StdoutJson */);
+    }
+    this.protocol.receive(message);
+    const postCompletionFailure = this.protocol.failureAfterCompletion();
+    if (postCompletionFailure) throw postCompletionFailure;
+  }
+  onProtocolFailure(error2) {
+    if (this.closed || this.settled || this.forcedTermination !== null) return;
+    this.terminalError = error2 instanceof ReviewAgentExecutionError ? error2 : streamFailure2("protocol_failure" /* ProtocolFailure */);
+    this.killProcessGroup();
+  }
+  requestTermination(termination) {
+    if (this.closed || this.settled || this.forcedTermination !== null) return;
+    this.forcedTermination = termination;
+    if (!this.protocol.canInterrupt()) {
+      this.killProcessGroup();
+      return;
+    }
+    this.killTimer = setTimeout(
+      () => this.killProcessGroup(),
+      this.input.interruptGraceMs
+    );
+    void this.protocol.interrupt().catch(() => void 0).finally(() => this.closeInput());
+  }
+  closeInput() {
+    if (!this.closed && !this.input.child.stdin.destroyed) {
+      this.input.child.stdin.end();
+    }
+  }
+  killProcessGroup() {
+    if (this.closed) return;
+    try {
+      if (this.input.child.pid) {
+        process.kill(-this.input.child.pid, "SIGKILL");
+      } else {
+        this.input.child.kill("SIGKILL");
+      }
+    } catch {
+      try {
+        this.input.child.kill("SIGKILL");
+      } catch {
+      }
+    }
+  }
+  async onClose(exitCode) {
+    if (this.closed || this.settled) return;
+    this.closed = true;
+    clearTimeout(this.overallTimer);
+    if (this.killTimer) clearTimeout(this.killTimer);
+    this.input.request.signal?.removeEventListener("abort", this.onAbort);
+    try {
+      if (this.forcedTermination === null && this.terminalError === null && this.stdoutBuffer.byteLength > 0) {
+        let line = this.stdoutBuffer;
+        if (line.at(-1) === 13) line = line.subarray(0, -1);
+        this.receiveLine(line);
+      }
+    } catch (error2) {
+      this.terminalError = error2 instanceof ReviewAgentExecutionError ? error2 : streamFailure2("trailing_stdout" /* TrailingStdout */);
+    }
+    this.stdoutBuffer = Buffer.alloc(0);
+    this.protocol.end();
+    const trailingFailure = this.protocol.failureAfterCompletion();
+    if (trailingFailure) this.terminalError = trailingFailure;
+    let protocolResult = null;
+    try {
+      protocolResult = await this.protocolRun;
+    } catch (error2) {
+      if (exitCode === 0 && !this.terminalError && error2 instanceof ReviewAgentExecutionError) {
+        this.terminalError = error2;
+      }
+    }
+    const observed = processResult(
+      this.forcedTermination ?? (this.terminalError?.failureClass === "startup_failure" /* StartupFailure */ ? "startup_failed" /* StartupFailed */ : "exited" /* Exited */),
+      exitCode,
+      sanitizeDiagnostic(this.stderr.toString("utf8")),
+      this.input.startedAt
+    );
+    this.input.observe(observed);
+    if (this.forcedTermination === "timed_out" /* TimedOut */) {
+      this.settleFailure(timeoutFailure());
+      return;
+    }
+    if (this.forcedTermination === "cancelled" /* Cancelled */) {
+      this.settleFailure(cancelledFailure2());
+      return;
+    }
+    if (this.terminalError) {
+      this.settleFailure(this.terminalError);
+      return;
+    }
+    if (exitCode !== 0) {
+      this.settleFailure(
+        classifyCodexAppServerDiagnostic(
+          sanitizeDiagnostic(this.stderr.toString("utf8"))
+        )
+      );
+      return;
+    }
+    if (!protocolResult) {
+      this.settleFailure(
+        streamFailure2("missing_protocol_result" /* MissingProtocolResult */)
+      );
+      return;
+    }
+    this.settled = true;
+    this.done.resolve(
+      Object.freeze({
+        ...protocolResult,
+        durationMs: Math.max(0, Date.now() - this.input.startedAt)
+      })
+    );
+  }
+  settleFailure(error2) {
+    if (this.settled) return;
+    this.settled = true;
+    this.done.reject(error2);
+  }
+};
+function validateRequest2(request) {
+  if (!request.invocationId || !request.fencingToken || !request.binary || !request.cwd || !Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1 || !Number.isSafeInteger(request.maxEventStreamBytes) || request.maxEventStreamBytes < 1 || !Number.isSafeInteger(request.maxEventBytes) || request.maxEventBytes < 1 || request.maxEventBytes > request.maxEventStreamBytes) {
+    throw processFailure2();
+  }
+}
+function processResult(termination, exitCode, stderr, startedAt) {
+  return Object.freeze({
+    termination,
+    exitCode,
+    stdout: "",
+    stderr: stderr.slice(0, 400),
+    durationMs: Math.max(0, Date.now() - startedAt)
+  });
+}
+function sanitizeDiagnostic(value) {
+  return value.replace(/(?:sk|sess|eyJ)[A-Za-z0-9._-]{12,}/gu, "<redacted>").replace(/[\r\n]+/gu, " ").trim().slice(0, MAX_DIAGNOSTIC_BYTES);
+}
+function startupFailure() {
+  return new ReviewAgentExecutionError(
+    "startup_failure" /* StartupFailure */,
+    null,
+    "review_agent_startup_failure"
+  );
+}
+function processFailure2() {
+  return new ReviewAgentExecutionError(
+    "process_failure" /* ProcessFailure */,
+    null,
+    "review_agent_process_failure"
+  );
+}
+function timeoutFailure() {
+  return new ReviewAgentExecutionError(
+    "timeout" /* Timeout */,
+    null,
+    "review_agent_process_timeout"
+  );
+}
+function cancelledFailure2() {
+  return new ReviewAgentExecutionError(
+    "cancelled" /* Cancelled */,
+    null,
+    "review_agent_process_cancelled"
+  );
+}
+function streamFailure2(stage) {
+  return new ReviewAgentExecutionError(
+    "stream_incomplete" /* StreamIncomplete */,
+    null,
+    stage ? `review_agent_stream_incomplete_${stage}` : "review_agent_stream_incomplete"
+  );
+}
+function deferred2() {
+  let resolve5;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve5 = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve: resolve5, reject };
+}
+
+// src/review-investigation/infrastructure/strict-cli-review-agent.ts
+var GATEWAY_RUNTIME_ENV_KEYS = /* @__PURE__ */ new Set([
+  "REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION",
+  "REVIEWROUTER_CONTEXT_SESSION_ID",
+  "REVIEWROUTER_CONTEXT_ROOT",
+  "REVIEWROUTER_CONTEXT_TRANSCRIPT_PATH",
+  "REVIEWROUTER_CONTEXT_REPLAY_MATERIAL_PATH",
+  "REVIEWROUTER_CONTEXT_GATEWAY_BINARY_HASH",
+  "REVIEWROUTER_CONTEXT_GATEWAY_MAX_OPERATIONS",
+  "REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID",
+  "REVIEWROUTER_CONTEXT_MERGE_BASE_TREE_OID",
+  "REVIEWROUTER_CONTEXT_EVENT_CHAIN_SEED_HASH",
+  "REVIEWROUTER_CONTEXT_BASE_SHA",
+  "REVIEWROUTER_CONTEXT_MERGE_BASE_SHA",
+  "REVIEWROUTER_CONTEXT_HEAD_SHA"
+]);
+var GATEWAY_CREDENTIAL_ENV_KEYS = /* @__PURE__ */ new Set([
+  "REVIEWROUTER_CONTEXT_GATEWAY_SECRET"
+]);
+var PROVIDER_ENV_KEYS = Object.freeze({
+  ["codex" /* Codex */]: /* @__PURE__ */ new Set([
+    "CODEX_HOME",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY"
+  ]),
+  ["claude_code" /* ClaudeCode */]: /* @__PURE__ */ new Set([
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CONFIG_DIR"
+  ])
+});
+var MAX_SAFE_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1e3;
+var SAFE_AGENT_ERROR_CODES = /* @__PURE__ */ new Set([
+  "review_agent_actual_model_invalid",
+  "review_agent_actual_model_unavailable",
+  "review_agent_authentication_unavailable",
+  "review_agent_cached_input_tokens_invalid",
+  "review_agent_cached_usage_invalid",
+  "review_agent_cancel_failure",
+  "review_agent_capability_requirements_unsatisfied",
+  "review_agent_capacity_unavailable",
+  "review_agent_claude_stream_incomplete",
+  "review_agent_claude_usage_missing",
+  "review_agent_codex_event_json_invalid",
+  "review_agent_codex_event_stream_empty",
+  "review_agent_codex_stream_incomplete",
+  "review_agent_codex_usage_missing",
+  "review_agent_critic_decision_invalid_for_turn",
+  "review_agent_execution_session_invalid",
+  "review_agent_gateway_credential_environment_invalid",
+  "review_agent_input_tokens_invalid",
+  "review_agent_output_invalid",
+  "review_agent_output_invalid_claims",
+  "review_agent_output_invalid_critic",
+  "review_agent_output_invalid_finding",
+  "review_agent_output_invalid_obligation_proposal",
+  "review_agent_output_invalid_shape",
+  "review_agent_output_tokens_invalid",
+  "review_agent_process_cancelled",
+  "review_agent_process_failure",
+  "review_agent_process_timeout",
+  "review_agent_provider_credential_environment_invalid",
+  "review_agent_quota_unavailable",
+  "review_agent_reasoning_output_tokens_invalid",
+  "review_agent_runtime_environment_invalid",
+  "review_agent_startup_failure",
+  "review_agent_turn_request_invalid",
+  "review_agent_turn_obligation_claim_invalid",
+  "review_agent_usage_attribution_missing",
+  "review_agent_workspace_authority_mismatch"
+]);
+var SAFE_DEFAULT_ERROR_CODE = Object.freeze({
+  ["capability_unavailable" /* CapabilityUnavailable */]: "review_agent_capability_unavailable",
+  ["authentication_unavailable" /* AuthenticationUnavailable */]: "review_agent_authentication_unavailable",
+  ["quota_unavailable" /* QuotaUnavailable */]: "review_agent_quota_unavailable",
+  ["capacity_unavailable" /* CapacityUnavailable */]: "review_agent_capacity_unavailable",
+  ["startup_failure" /* StartupFailure */]: "review_agent_startup_failure",
+  ["process_failure" /* ProcessFailure */]: "review_agent_process_failure",
+  ["timeout" /* Timeout */]: "review_agent_process_timeout",
+  ["cancelled" /* Cancelled */]: "review_agent_process_cancelled",
+  ["schema_invalid_output" /* SchemaInvalidOutput */]: "review_agent_output_invalid",
+  ["stream_incomplete" /* StreamIncomplete */]: "review_agent_stream_incomplete",
+  ["model_attribution_missing" /* ModelAttributionMissing */]: "review_agent_actual_model_unavailable",
+  ["usage_attribution_missing" /* UsageAttributionMissing */]: "review_agent_usage_attribution_missing",
+  ["confinement_violation" /* ConfinementViolation */]: "review_agent_confinement_violation"
+});
+var StrictCliReviewAgent = class {
+  constructor(profile, runner, executionSessions, providerCredentials) {
+    this.profile = profile;
+    this.runner = runner;
+    this.executionSessions = executionSessions;
+    this.providerCredentials = providerCredentials;
+  }
+  async negotiate(requirements) {
+    try {
+      assertRuntimeProfileSatisfies(this.profile, requirements);
+      return this.profile;
+    } catch {
+      throw new ReviewAgentExecutionError(
+        "capability_unavailable" /* CapabilityUnavailable */,
+        null,
+        "review_agent_capability_requirements_unsatisfied"
+      );
+    }
+  }
+  async cancel(invocationId, fencingToken) {
+    try {
+      await this.runner.cancel(invocationId, fencingToken);
+    } catch (error2) {
+      throw safeAgentError(
+        error2,
+        "process_failure" /* ProcessFailure */,
+        "review_agent_cancel_failure"
+      );
+    }
+  }
+  validateRequest(request) {
+    if (!request.invocationId || !request.fencingToken || !request.turnId || !Number.isSafeInteger(request.dossierVersion) || request.dossierVersion < 0 || !/^[a-f0-9]{64}$/u.test(request.dossierDigest) || !request.prompt || Buffer.byteLength(request.prompt, "utf8") > this.profile.maxPromptBytes || !request.workspaceRoot || request.requestedModel.length < 1 || request.requestedModel.length > 200 || !Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1 || !Number.isSafeInteger(request.maxTurns) || request.maxTurns < 1 || request.maxTurns > this.profile.maxTurns || !validAllowedObligationIds(request.allowedObligationIds)) {
+      throw new ReviewAgentExecutionError(
+        "capability_unavailable" /* CapabilityUnavailable */,
+        null,
+        "review_agent_turn_request_invalid"
+      );
+    }
+  }
+  prepareExecution(request) {
+    this.validateRequest(request);
+    const gateway = this.executionSessions.resolve(
+      request.executionSession,
+      this.profile.providerKind
+    );
+    const providerCredentialEnvironment = Object.freeze({
+      ...this.providerCredentials()
+    });
+    assertGatewayBinding(gateway);
+    if (gateway.cwd !== request.workspaceRoot) {
+      throw new ReviewAgentExecutionError(
+        "confinement_violation" /* ConfinementViolation */,
+        null,
+        "review_agent_workspace_authority_mismatch"
+      );
+    }
+    assertEnvironmentPartition(
+      gateway.runtimeEnvironment,
+      gateway.credentialEnvironment,
+      providerCredentialEnvironment,
+      this.profile.providerKind
+    );
+    return Object.freeze({ gateway, providerCredentialEnvironment });
+  }
+  executionEnvironment(execution) {
+    return {
+      ...this.providerOnlyExecutionEnvironment(execution),
+      ...execution.gateway.runtimeEnvironment,
+      REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION: "context-gateway-v4",
+      ...execution.gateway.credentialEnvironment
+    };
+  }
+  providerOnlyExecutionEnvironment(execution) {
+    return {
+      ...buildCliSafeEnv({ includeWorkspaceEnv: false }),
+      ...execution.providerCredentialEnvironment,
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_NO_REPLACE_OBJECTS: "1"
+    };
+  }
+  async runProcess(request, execution, input) {
+    const result2 = await this.runner.run({
+      invocationId: request.invocationId,
+      fencingToken: request.fencingToken,
+      cwd: execution.gateway.cwd,
+      environment: input.environment ?? this.executionEnvironment(execution),
+      stdin: request.prompt,
+      timeoutMs: request.timeoutMs,
+      maxOutputBytes: this.profile.maxOutputBytes,
+      signal: request.signal,
+      binary: input.binary,
+      args: input.args
+    });
+    assertSuccessfulProcess(result2);
+    return result2;
+  }
+  observation(request, parsed, durationMs) {
+    assertTurnObligationClaimsAllowed(request, parsed.output);
+    if (request.purpose === "discovery" /* Discovery */ && parsed.output.criticDecision !== null || request.purpose === "critic" /* Critic */ && parsed.output.criticDecision === null) {
+      throw new ReviewAgentExecutionError(
+        "schema_invalid_output" /* SchemaInvalidOutput */,
+        null,
+        "review_agent_critic_decision_invalid_for_turn"
+      );
+    }
+    return Object.freeze({
+      observationVersion: REVIEW_TURN_OBSERVATION_VERSION,
+      invocationId: request.invocationId,
+      turnId: request.turnId,
+      dossierVersion: request.dossierVersion,
+      purpose: request.purpose,
+      actualProviderKind: this.profile.providerKind,
+      actualModel: parsed.actualModel,
+      runtimeProfile: this.profile.executionProfile,
+      usage: parsed.usage,
+      durationMs,
+      schemaComplete: true,
+      streamComplete: true,
+      contextAttestationReference: null,
+      ...parsed.output
+    });
+  }
+};
+function validAllowedObligationIds(ids) {
+  return Array.isArray(ids) && ids.length <= 256 && new Set(ids).size === ids.length && ids.every((id) => /^[a-f0-9]{64}$/u.test(id));
+}
+function assertTurnObligationClaimsAllowed(request, output) {
+  const allowed = new Set(request.allowedObligationIds);
+  const closureIds = output.closureClaims.map((claim) => claim.obligationId);
+  const unresolvableIds = output.unresolvableClaims.map(
+    (claim) => claim.obligationId
+  );
+  const invalid2 = closureIds.some((id) => !allowed.has(id)) || unresolvableIds.some((id) => !allowed.has(id)) || new Set(closureIds).size !== closureIds.length || new Set(unresolvableIds).size !== unresolvableIds.length || closureIds.some((id) => unresolvableIds.includes(id));
+  if (invalid2) {
+    throw new ReviewAgentExecutionError(
+      "schema_invalid_output" /* SchemaInvalidOutput */,
+      null,
+      "review_agent_turn_obligation_claim_invalid"
+    );
+  }
+}
+function schemaFailure2(error2) {
+  if (error2 instanceof ReviewAgentExecutionError) {
+    return safeAgentError(
+      error2,
+      "schema_invalid_output" /* SchemaInvalidOutput */,
+      "review_agent_output_invalid"
+    );
+  }
+  return new ReviewAgentExecutionError(
+    "schema_invalid_output" /* SchemaInvalidOutput */,
+    null,
+    safeErrorCode(
+      error2 instanceof Error ? error2.message : "review_agent_output_invalid",
+      "schema_invalid_output" /* SchemaInvalidOutput */
+    )
+  );
+}
+function assertSuccessfulProcess(result2) {
+  if (result2.termination === "exited" /* Exited */ && result2.exitCode === 0) {
+    return;
+  }
+  if (result2.termination === "timed_out" /* TimedOut */) {
+    throw new ReviewAgentExecutionError(
+      "timeout" /* Timeout */,
+      null,
+      "review_agent_process_timeout"
+    );
+  }
+  if (result2.termination === "cancelled" /* Cancelled */) {
+    throw new ReviewAgentExecutionError(
+      "cancelled" /* Cancelled */,
+      null,
+      "review_agent_process_cancelled"
+    );
+  }
+  const failureSignals = boundedProviderFailureSignals(result2);
+  throw classifyProviderFailure(failureSignals, result2.termination);
+}
+function classifyProviderFailure(diagnostic, termination) {
+  if (/(?:401|403|unauthorized|not logged in|refresh token|oauth|authentication)/iu.test(
+    diagnostic
+  )) {
+    return new ReviewAgentExecutionError(
+      "authentication_unavailable" /* AuthenticationUnavailable */,
+      null,
+      "review_agent_authentication_unavailable"
+    );
+  }
+  if (/(?:invalid_json_schema|invalid schema for response_format|(?:invalid|rejected|unsupported) structured output schema|structured output schema (?:is )?(?:invalid|rejected|unsupported))/iu.test(
+    diagnostic
+  )) {
+    return new ReviewAgentExecutionError(
+      "schema_invalid_output" /* SchemaInvalidOutput */,
+      null,
+      "review_agent_output_invalid"
+    );
+  }
+  if (/(?:usage limit|quota|insufficient_quota|billing limit)/iu.test(diagnostic)) {
+    return new ReviewAgentExecutionError(
+      "quota_unavailable" /* QuotaUnavailable */,
+      null,
+      "review_agent_quota_unavailable"
+    );
+  }
+  if (/(?:capacity[_ -]unavailable|overloaded|too many requests|\b429\b|rate limit)/iu.test(
+    diagnostic
+  )) {
+    return new ReviewAgentExecutionError(
+      "capacity_unavailable" /* CapacityUnavailable */,
+      null,
+      "review_agent_capacity_unavailable"
+    );
+  }
+  if (/(?:model cache|startup|failed to start|enoent|spawn)/iu.test(diagnostic) || termination === "startup_failed" /* StartupFailed */) {
+    return new ReviewAgentExecutionError(
+      "startup_failure" /* StartupFailure */,
+      null,
+      "review_agent_startup_failure"
+    );
+  }
+  return new ReviewAgentExecutionError(
+    "process_failure" /* ProcessFailure */,
+    null,
+    "review_agent_process_failure"
+  );
+}
+function assertGatewayBinding(binding) {
+  const expectedTools = [...REVIEW_INVESTIGATION_GATEWAY_TOOLS].sort();
+  const actualTools = [...binding.enabledTools].sort();
+  if (binding.policyVersion !== "context-gateway-v4" || !/^[a-f0-9]{64}$/u.test(binding.binaryHash) || !binding.command || !binding.cwd || actualTools.length !== expectedTools.length || actualTools.some((tool, index) => tool !== expectedTools[index])) {
+    throw new ReviewAgentExecutionError(
+      "capability_unavailable" /* CapabilityUnavailable */,
+      null,
+      "review_agent_execution_session_invalid"
+    );
+  }
+}
+function assertEnvironmentPartition(runtime, gatewayCredentials, providerCredentials, providerKind) {
+  assertAllowlistedEnvironment(
+    runtime,
+    GATEWAY_RUNTIME_ENV_KEYS,
+    "review_agent_runtime_environment_invalid"
+  );
+  assertAllowlistedEnvironment(
+    gatewayCredentials,
+    GATEWAY_CREDENTIAL_ENV_KEYS,
+    "review_agent_gateway_credential_environment_invalid"
+  );
+  assertAllowlistedEnvironment(
+    providerCredentials,
+    PROVIDER_ENV_KEYS[providerKind],
+    "review_agent_provider_credential_environment_invalid"
+  );
+}
+function assertAllowlistedEnvironment(environment, allowedKeys, errorCode2) {
+  for (const key of Object.keys(environment)) {
+    if (!allowedKeys.has(key)) throw new Error(errorCode2);
+  }
+}
+function boundedProviderFailureSignals(result2) {
+  return `${result2.stderr.slice(0, 8192)}
+${result2.stdout.slice(0, 8192)}`.replace(/(?:sk|sess|eyJ)[A-Za-z0-9._-]{12,}/gu, "<redacted>").replace(/[\r\n]+/gu, " ").trim().slice(0, 16384);
+}
+function safeAgentError(error2, fallbackClass, fallbackCode) {
+  if (!(error2 instanceof ReviewAgentExecutionError)) {
+    return new ReviewAgentExecutionError(fallbackClass, null, fallbackCode);
+  }
+  return new ReviewAgentExecutionError(
+    error2.failureClass,
+    safeRetryAfterMs(error2.retryAfterMs),
+    safeErrorCode(error2.message, error2.failureClass)
+  );
+}
+function safeErrorCode(value, failureClass) {
+  return SAFE_AGENT_ERROR_CODES.has(value) ? value : SAFE_DEFAULT_ERROR_CODE[failureClass];
+}
+function safeRetryAfterMs(value) {
+  if (value === null || !Number.isSafeInteger(value) || value < 0 || value > MAX_SAFE_RETRY_AFTER_MS) {
+    return null;
+  }
+  return value;
+}
+
+// src/review-investigation/infrastructure/codex-review-agent-adapter.ts
+var CODEX_APP_SERVER_EVENT_STREAM_OUTPUT_MULTIPLIER = 32;
+var CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER = 2;
+var CODEX_REVIEW_AGENT_PROFILE = createGatewayAttestedRuntimeProfile({
+  providerKind: "codex" /* Codex */,
+  eventStream: "json_lines" /* JsonLines */,
+  maxPromptBytes: 8 * 1024 * 1024
+});
+var CODEX_REVIEW_AGENT_MAX_EVENT_BYTES = CODEX_REVIEW_AGENT_PROFILE.maxOutputBytes * CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER;
+var CodexReviewAgentAdapter = class extends StrictCliReviewAgent {
+  constructor(runner, options) {
+    super(
+      CODEX_REVIEW_AGENT_PROFILE,
+      runner,
+      options.executionSessions,
+      options.providerCredentialEnvironment ?? (() => ({}))
+    );
+    this.options = options;
+    this.appServerRunner = options.appServerRunner ?? new NodeCodexAppServerTurnRunner({
+      ...options.interruptGraceMs === void 0 ? {} : { interruptGraceMs: options.interruptGraceMs },
+      ...options.processResultObserver === void 0 ? {} : { processResultObserver: options.processResultObserver }
+    });
+  }
+  appServerRunner;
+  async executeTurn(request) {
+    this.validateRequest(request);
+    const outputSchema = buildReviewAgentTurnOutputSchema(
+      request.allowedObligationIds
+    );
+    const validateOutputLocally = !supportsCliOutputSchema(
+      this.options.modelProvider
+    );
+    const prompt = validateOutputLocally ? `${request.prompt}
+
+OUTPUT JSON SCHEMA:
+${JSON.stringify(outputSchema)}
+Return exactly one JSON object matching this schema, with no markdown or prose.` : request.prompt;
+    const execution = this.prepareExecution({ ...request, prompt });
+    const reasoningEffort = this.options.reasoningEffort ?? "xhigh";
+    const result2 = await this.appServerRunner.executeTurn({
+      invocationId: request.invocationId,
+      fencingToken: request.fencingToken,
+      binary: this.options.binary ?? "codex",
+      args: this.buildArguments(execution.gateway),
+      cwd: execution.gateway.cwd,
+      environment: this.executionEnvironment(execution),
+      timeoutMs: request.timeoutMs,
+      maxEventStreamBytes: this.profile.maxOutputBytes * CODEX_APP_SERVER_EVENT_STREAM_OUTPUT_MULTIPLIER,
+      maxEventBytes: CODEX_REVIEW_AGENT_MAX_EVENT_BYTES,
+      signal: request.signal,
+      protocol: {
+        cwd: execution.gateway.cwd,
+        prompt,
+        clientTurnId: request.turnId,
+        requestedModel: request.requestedModel,
+        reasoningEffort,
+        ...validateOutputLocally ? {} : { outputSchema },
+        allowedTools: execution.gateway.enabledTools,
+        maxOutputBytes: this.profile.maxOutputBytes
+      }
+    });
+    let output;
+    try {
+      if (validateOutputLocally) {
+        assertJsonMatchesSchema(
+          result2.finalMessage,
+          outputSchema,
+          "structured"
+        );
+      }
+      output = parseFinalTurnOutput(result2.finalMessage);
+    } catch (error2) {
+      throw schemaFailure2(error2);
+    }
+    return this.observation(
+      request,
+      {
+        output,
+        actualModel: result2.actualModel,
+        usage: result2.usage
+      },
+      result2.durationMs
+    );
+  }
+  async cancel(invocationId, fencingToken) {
+    try {
+      await this.appServerRunner.cancel(invocationId, fencingToken);
+    } catch {
+      throw new ReviewAgentExecutionError(
+        "process_failure" /* ProcessFailure */,
+        null,
+        "review_agent_cancel_failure"
+      );
+    }
+  }
+  buildArguments(gateway) {
+    const args = ["app-server", "--stdio", "--strict-config"];
+    for (const feature of CODEX_CONFINEMENT_DISABLED_FEATURES) {
+      args.push("--disable", feature);
+    }
+    for (const setting of CODEX_SHELL_ENVIRONMENT_POLICY)
+      args.push("-c", setting);
+    if (this.options.modelProvider === "openrouter") {
+      for (const setting of CODEX_OPENROUTER_CONFIGURATION)
+        args.push("-c", setting);
+    }
+    args.push(
+      "-c",
+      'approval_policy="never"',
+      "-c",
+      'sandbox_mode="read-only"',
+      "-c",
+      "project_doc_max_bytes=0",
+      "-c",
+      'web_search="disabled"',
+      "-c",
+      "mcp_servers={}",
+      "-c",
+      `mcp_servers.reviewrouter.command=${tomlString2(gateway.command)}`,
+      "-c",
+      `mcp_servers.reviewrouter.args=${tomlStringArray2(gateway.args)}`,
+      "-c",
+      `mcp_servers.reviewrouter.cwd=${tomlString2(gateway.cwd)}`,
+      "-c",
+      `mcp_servers.reviewrouter.env_vars=${tomlStringArray2(
+        Object.keys({
+          ...gateway.runtimeEnvironment,
+          ...gateway.credentialEnvironment,
+          REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION: "context-gateway-v4"
+        }).sort()
+      )}`,
+      "-c",
+      "mcp_servers.reviewrouter.required=true",
+      "-c",
+      "mcp_servers.reviewrouter.startup_timeout_sec=45",
+      "-c",
+      "mcp_servers.reviewrouter.tool_timeout_sec=30",
+      "-c",
+      `mcp_servers.reviewrouter.enabled_tools=${tomlStringArray2(
+        gateway.enabledTools
+      )}`
+    );
+    return Object.freeze(args);
+  }
+};
+function parseFinalTurnOutput(message) {
+  const trimmed = message.trim();
+  const valid = /* @__PURE__ */ new Map();
+  const validationFailures = /* @__PURE__ */ new Set();
+  let parsedPayloads = 0;
+  for (const candidate of extractJsonPayloadCandidates(trimmed)) {
+    let parsed;
+    try {
+      parsed = JSON.parse(candidate);
+      parsedPayloads += 1;
+    } catch {
+      continue;
+    }
+    try {
+      const output = parseReviewAgentTurnOutput(parsed);
+      valid.set(JSON.stringify(output), output);
+    } catch (error2) {
+      validationFailures.add(classifyOutputValidationFailure(error2));
+    }
+  }
+  if (valid.size !== 1) {
+    if (valid.size === 0 && parsedPayloads === 1 && validationFailures.size === 1) {
+      throw new Error([...validationFailures][0]);
+    }
+    throw new Error("review_agent_output_invalid");
+  }
+  return [...valid.values()][0];
+}
+function classifyOutputValidationFailure(error2) {
+  const message = error2 instanceof Error ? error2.message : "";
+  if (/obligation_(?:kind|proposal|requirement|subject)|risk_priority/u.test(
+    message
+  )) {
+    return "review_agent_output_invalid_obligation_proposal";
+  }
+  if (/finding/u.test(message)) {
+    return "review_agent_output_invalid_finding";
+  }
+  if (/critic/u.test(message)) {
+    return "review_agent_output_invalid_critic";
+  }
+  if (/closure|discovery|receipt|unresolvable|obligation_id/u.test(message)) {
+    return "review_agent_output_invalid_claims";
+  }
+  return "review_agent_output_invalid_shape";
+}
+function extractJsonPayloadCandidates(message) {
+  const candidates = /* @__PURE__ */ new Set();
+  if (message) candidates.add(message);
+  const fencedPattern = /```(?:json)?\s*\n([\s\S]*?)\n```/giu;
+  for (const match2 of message.matchAll(fencedPattern)) {
+    const payload = match2[1]?.trim();
+    if (payload) candidates.add(payload);
+  }
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < message.length; index += 1) {
+    const character = message[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"' && depth > 0) {
+      inString = true;
+      continue;
+    }
+    if (character === "{") {
+      if (depth === 0) start = index;
+      depth += 1;
+      continue;
+    }
+    if (character !== "}" || depth === 0) continue;
+    depth -= 1;
+    if (depth === 0 && start >= 0) {
+      candidates.add(message.slice(start, index + 1));
+      start = -1;
+    }
+  }
+  return Object.freeze([...candidates]);
+}
+function tomlString2(value) {
+  return JSON.stringify(value);
+}
+function tomlStringArray2(values) {
+  return `[${values.map(tomlString2).join(",")}]`;
+}
+
+// src/control-plane/review-action-v2-client.ts
+var import_crypto21 = require("crypto");
 var import__2 = __toESM(require__());
 var import_ajv_formats = __toESM(require_dist());
 
@@ -92231,7 +94974,7 @@ function parseReviewActionV2Request(operationId, input) {
     (item) => item.operationId === operationId
   );
   if (!descriptor) throw new Error("review_action_v2_operation_unknown");
-  if (!isRecord2(input)) return { ok: false, issues: ["body_not_object"] };
+  if (!isRecord3(input)) return { ok: false, issues: ["body_not_object"] };
   const requestId = readRequestId(input.requestId);
   const issues = [];
   const authorityFields = authorityFieldNames(descriptor.callerAuthority);
@@ -92358,7 +95101,7 @@ function validateProtocolOffers(value, issues) {
   }
   const identities = /* @__PURE__ */ new Set();
   for (const candidate of value) {
-    if (!isRecord2(candidate) || Object.keys(candidate).sort().join(",") !== "protocolVersion,schemaDigest" || typeof candidate.protocolVersion !== "string" || typeof candidate.schemaDigest !== "string" || !digestPattern.test(candidate.schemaDigest)) {
+    if (!isRecord3(candidate) || Object.keys(candidate).sort().join(",") !== "protocolVersion,schemaDigest" || typeof candidate.protocolVersion !== "string" || typeof candidate.schemaDigest !== "string" || !digestPattern.test(candidate.schemaDigest)) {
       issues.push("protocol_offer_invalid");
       continue;
     }
@@ -92393,11 +95136,11 @@ function isCanonicalJson(value) {
 }
 function canonicalJson4(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson4).join(",")}]`;
-  if (isRecord2(value))
+  if (isRecord3(value))
     return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson4(value[key])}`).join(",")}}`;
   return JSON.stringify(value);
 }
-function isRecord2(value) {
+function isRecord3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -92502,7 +95245,7 @@ var ReviewActionV2Client = class {
   constructor(options) {
     this.apiUrl = parseApiUrl(options.apiUrl, options.allowInsecureLocalhost);
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.requestIdFactory = options.requestIdFactory ?? (() => `rr:${(0, import_crypto20.randomUUID)()}`);
+    this.requestIdFactory = options.requestIdFactory ?? (() => `rr:${(0, import_crypto21.randomUUID)()}`);
     this.sleep = options.sleep ?? ((delayMs) => new Promise((resolve5) => setTimeout(resolve5, delayMs)));
     this.random = options.random ?? Math.random;
     this.monotonicNow = options.monotonicNow ?? (() => performance.now());
@@ -92899,7 +95642,7 @@ function readRetryAfterMs(response) {
   return Math.min(Math.max(0, at2 - Date.now()), 3e4);
 }
 function sha2566(value) {
-  return (0, import_crypto20.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto21.createHash)("sha256").update(value).digest("hex");
 }
 function clampInteger(value, minimum, maximum) {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
@@ -92909,7 +95652,7 @@ function clampInteger(value, minimum, maximum) {
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
-var import_crypto25 = require("crypto");
+var import_crypto26 = require("crypto");
 
 // src/review-orchestration/application/review-orchestration-ports.ts
 var ReviewExecutionProviderKind = /* @__PURE__ */ ((ReviewExecutionProviderKind2) => {
@@ -92978,7 +95721,7 @@ var ReviewInvocationConfigurationMismatchError = class extends Error {
 };
 
 // src/review-orchestration/application/run-t0-review-orchestration.ts
-var import_crypto23 = require("crypto");
+var import_crypto24 = require("crypto");
 
 // src/review-orchestration/domain/review-orchestration-state.ts
 function createReviewOrchestrationState(workSlotIds) {
@@ -93112,7 +95855,7 @@ function requireIdentity(value) {
 }
 
 // src/review-orchestration/domain/review-prompt-coverage.ts
-var import_crypto21 = require("crypto");
+var import_crypto22 = require("crypto");
 function createReviewPromptCoverageManifest(input) {
   if (!input.workSlotId || !/^[a-f0-9]{64}$/.test(input.reviewRevisionHash)) {
     throw new Error("review_prompt_coverage_scope_invalid");
@@ -93200,11 +95943,11 @@ function canonicalJson5(value) {
   return JSON.stringify(value);
 }
 function sha2567(value) {
-  return (0, import_crypto21.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto22.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/domain/stable-review-work-plan.ts
-var import_crypto22 = require("crypto");
+var import_crypto23 = require("crypto");
 var assignmentManifestMaxBytes = 512 * 1024;
 var assignmentManifestMaxPaths = 4096;
 var assignmentManifestMaxPathLength = 1024;
@@ -93457,7 +96200,7 @@ function compareCodePoints5(left, right) {
   return 0;
 }
 function sha2568(value) {
-  return (0, import_crypto22.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto23.createHash)("sha256").update(value).digest("hex");
 }
 function requireDigest2(value, field) {
   if (!/^[a-f0-9]{64}$/.test(value)) throw new Error(`${field}_invalid`);
@@ -93490,23 +96233,6 @@ var ReviewInvestigationControlPlaneError = class extends Error {
   }
 };
 
-// src/review-investigation/application/review-agent-port.ts
-var REVIEW_INVESTIGATION_GATEWAY_TOOLS = Object.freeze([
-  "review_read_file",
-  "review_list_directory",
-  "review_search_text",
-  "review_canonical_inventory",
-  "review_git_fact"
-]);
-var ReviewAgentExecutionError = class extends Error {
-  constructor(failureClass, retryAfterMs, message) {
-    super(message);
-    this.failureClass = failureClass;
-    this.retryAfterMs = retryAfterMs;
-    this.name = "ReviewAgentExecutionError";
-  }
-};
-
 // src/review-investigation/application/investigation-gateway-port.ts
 var ReviewInvestigationGatewayConfigurationError = class extends Error {
   constructor(reason, options = {}) {
@@ -93519,48 +96245,8 @@ var ReviewInvestigationGatewayConfigurationError = class extends Error {
   }
 };
 
-// src/review-investigation/domain/runtime-profile.ts
-var ReviewAgentProviderKind = /* @__PURE__ */ ((ReviewAgentProviderKind2) => {
-  ReviewAgentProviderKind2["Codex"] = "codex";
-  ReviewAgentProviderKind2["ClaudeCode"] = "claude_code";
-  return ReviewAgentProviderKind2;
-})(ReviewAgentProviderKind || {});
-function createGatewayAttestedRuntimeProfile(input) {
-  assertPositive(input.maxPromptBytes, "max_prompt_bytes");
-  assertPositive(input.maxOutputBytes ?? 4 * 1024 * 1024, "max_output_bytes");
-  assertPositive(input.maxToolCalls ?? 256, "max_tool_calls");
-  assertPositive(input.maxTurns ?? 12, "max_turns");
-  return Object.freeze({
-    profileVersion: 1,
-    providerKind: input.providerKind,
-    executionProfile: "gateway_attested_agent_v1" /* GatewayAttestedAgentV1 */,
-    toolTransport: "mcp_stdio" /* McpStdio */,
-    structuredOutput: "json_schema" /* JsonSchema */,
-    eventStream: input.eventStream,
-    continuation: "durable_dossier" /* DurableDossier */,
-    confinement: "gateway_only" /* GatewayOnly */,
-    actualModelAttribution: "observed" /* Observed */,
-    usageAttribution: "observed" /* Observed */,
-    cancellation: "process_group_fenced" /* ProcessGroupFenced */,
-    maxPromptBytes: input.maxPromptBytes,
-    maxOutputBytes: input.maxOutputBytes ?? 4 * 1024 * 1024,
-    maxToolCalls: input.maxToolCalls ?? 256,
-    maxTurns: input.maxTurns ?? 12
-  });
-}
-function assertRuntimeProfileSatisfies(profile, requirements) {
-  if (profile.providerKind !== requirements.providerKind || profile.executionProfile !== requirements.executionProfile || profile.confinement !== requirements.minimumConfinement || requirements.requireActualModelAttribution && profile.actualModelAttribution !== "observed" /* Observed */ || requirements.requireUsageAttribution && profile.usageAttribution !== "observed" /* Observed */ || requirements.requireFencedCancellation && profile.cancellation !== "process_group_fenced" /* ProcessGroupFenced */ || profile.maxTurns < requirements.minimumMaxTurns) {
-    throw new Error("review_agent_capability_requirements_unsatisfied");
-  }
-}
-function assertPositive(value, field) {
-  if (!Number.isSafeInteger(value) || value < 1) {
-    throw new Error(`review_agent_${field}_invalid`);
-  }
-}
-
 // src/review-investigation/application/run-investigation-turn.ts
-var MAX_SAFE_RETRY_AFTER_MS = 7 * 24 * 60 * 60 * 1e3;
+var MAX_SAFE_RETRY_AFTER_MS2 = 7 * 24 * 60 * 60 * 1e3;
 var RunInvestigationTurn = class {
   constructor(dependencies) {
     this.dependencies = dependencies;
@@ -93931,7 +96617,7 @@ function isNonRetryableProviderOutputFailure(failure) {
   ].includes(failure);
 }
 function boundedRetryAfterMs(value) {
-  if (value === null || !Number.isSafeInteger(value) || value < 0 || value > MAX_SAFE_RETRY_AFTER_MS) {
+  if (value === null || !Number.isSafeInteger(value) || value < 0 || value > MAX_SAFE_RETRY_AFTER_MS2) {
     return null;
   }
   return value;
@@ -96112,7 +98798,7 @@ function canonicalize2(value) {
   return value;
 }
 function sha2569(value) {
-  return (0, import_crypto23.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto24.createHash)("sha256").update(value).digest("hex");
 }
 function safeFailureCode(error2) {
   if (!(error2 instanceof Error)) return "unknown_failure";
@@ -96152,7 +98838,7 @@ function emitReviewInvestigationTelemetry(message) {
 }
 
 // src/review-orchestration/infrastructure/context-gateway-failed-seal.ts
-var import_crypto24 = require("crypto");
+var import_crypto25 = require("crypto");
 var emptyCanonicalJson = "{}";
 var emptyCanonicalJsonHash = digest(emptyCanonicalJson);
 var failedTerminalOutcomeHash = digest(
@@ -96177,7 +98863,7 @@ function createFailedContextGatewaySealPayload(input) {
   });
 }
 function digest(value) {
-  return (0, import_crypto24.createHash)("sha256").update(value, "utf8").digest("hex");
+  return (0, import_crypto25.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 
 // src/review-orchestration/infrastructure/review-action-v2-control-plane-adapter.ts
@@ -97171,7 +99857,7 @@ function parseLookupObservation(result2, input) {
       "finding_count"
     ),
     actualModel: requireString2(result2.actualModel, "actual_model"),
-    qualityFlags: requireStringArray(result2.qualityFlags, "quality_flags"),
+    qualityFlags: requireStringArray2(result2.qualityFlags, "quality_flags"),
     transportAttemptCount: requirePositiveInteger3(
       result2.transportAttemptCount,
       "transport_attempt_count"
@@ -97290,7 +99976,7 @@ function parseRestoredExecution(value, expected) {
   });
 }
 function parseRestoredWorkSlot(value) {
-  if (!isRecord3(value)) {
+  if (!isRecord4(value)) {
     throw new Error("review_action_v2_restored_work_slot_invalid");
   }
   requireExactKeys2(value, [
@@ -97431,7 +100117,7 @@ function parseProviderVoteLanes(value) {
   }
   return Object.freeze(
     value.map((lane) => {
-      if (!isRecord3(lane)) {
+      if (!isRecord4(lane)) {
         throw new Error("review_action_v2_provider_vote_lane_invalid");
       }
       const providerKind = requireString2(lane.providerKind, "provider_kind");
@@ -97467,7 +100153,7 @@ function safeInvestigationDescriptorRejectionReason(error2) {
   return /^review_action_v2_review_investigation_[a-z_]+$/u.test(reason) ? reason : "review_action_v2_review_investigation_invalid";
 }
 function parseReviewInvestigationCapability(value, providerVoteLanes) {
-  if (!isRecord3(value)) {
+  if (!isRecord4(value)) {
     throw new Error("review_action_v2_review_investigation_invalid");
   }
   return parseReviewInvestigationCapabilityV3(value, providerVoteLanes);
@@ -97497,7 +100183,7 @@ function parseReviewInvestigationCapabilityV3(value, providerVoteLanes) {
     );
   }
   const providerCapabilities = value.providerCapabilities.map((row) => {
-    if (!isRecord3(row)) {
+    if (!isRecord4(row)) {
       throw new Error(
         "review_action_v2_review_investigation_provider_capability_invalid"
       );
@@ -97723,7 +100409,7 @@ function parseCanonicalObject(value) {
       cause: error2
     });
   }
-  if (!isRecord3(parsed) || JSON.stringify(canonicalize3(parsed)) !== value) {
+  if (!isRecord4(parsed) || JSON.stringify(canonicalize3(parsed)) !== value) {
     throw new Error("review_action_v2_canonical_json_invalid");
   }
   return parsed;
@@ -97743,7 +100429,7 @@ function requireCanonicalJson(value, field) {
 }
 function canonicalize3(value) {
   if (Array.isArray(value)) return value.map(canonicalize3);
-  if (isRecord3(value)) {
+  if (isRecord4(value)) {
     return Object.fromEntries(
       Object.keys(value).sort().map((key) => [key, canonicalize3(value[key])])
     );
@@ -97792,7 +100478,7 @@ function requireCommitSha(value, field) {
   }
   return parsed;
 }
-function requireStringArray(value, field) {
+function requireStringArray2(value, field) {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
     throw new Error(`review_action_v2_${field}_invalid`);
   }
@@ -97817,11 +100503,11 @@ function requireNonNegativeInteger3(value, field) {
   }
   return value;
 }
-function isRecord3(value) {
+function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function digest2(value) {
-  return (0, import_crypto25.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto26.createHash)("sha256").update(value).digest("hex");
 }
 function deterministicIdempotencyKey(purpose, parts) {
   return `rr:${purpose}:${digest2(
@@ -98077,7 +100763,7 @@ function isReviewActionV2ScmMutationEnvName(name) {
 }
 
 // src/codex-oauth/crypto.ts
-var import_crypto26 = require("crypto");
+var import_crypto27 = require("crypto");
 
 // node_modules/libsodium/dist/modules-esm/libsodium.mjs
 var import_meta = {};
@@ -101531,7 +104217,7 @@ function compactCodexAuthJsonBytes(input) {
   return {
     compactAuthJsonBytes,
     byteLength: compactByteLength,
-    exactBytesSha256: (0, import_crypto26.createHash)("sha256").update(input.authJsonBytes, "utf8").digest("hex")
+    exactBytesSha256: (0, import_crypto27.createHash)("sha256").update(input.authJsonBytes, "utf8").digest("hex")
   };
 }
 function computeCodexAuthGenerationHash(input) {
@@ -101539,7 +104225,7 @@ function computeCodexAuthGenerationHash(input) {
   if (salt.length < 16) {
     throw new Error("generation_hash_salt_too_short");
   }
-  return (0, import_crypto26.createHmac)("sha256", salt).update(input.authJsonBytes, "utf8").digest("base64url");
+  return (0, import_crypto27.createHmac)("sha256", salt).update(input.authJsonBytes, "utf8").digest("base64url");
 }
 function computeCodexAccountIdentityHash(input) {
   const auth = JSON.parse(input.authJsonBytes);
@@ -101552,7 +104238,7 @@ function computeCodexAccountIdentityHash(input) {
   if (salt.length < 16) {
     throw new Error("codex_account_identity_salt_invalid");
   }
-  return (0, import_crypto26.createHmac)("sha256", salt).update(
+  return (0, import_crypto27.createHmac)("sha256", salt).update(
     JSON.stringify({
       issuer: identity.issuer,
       subject: identity.subject,
@@ -101628,7 +104314,7 @@ function buildCodexRotatingWritebackRequest(input) {
     accountIdentityAlgorithm: "provider_issuer_subject_account_v1",
     encryptedValue: input.encryptedValue,
     keyId: input.keyId,
-    idempotencyKey: input.idempotencyKey ?? `wrb:${(0, import_crypto26.randomUUID)()}`
+    idempotencyKey: input.idempotencyKey ?? `wrb:${(0, import_crypto27.randomUUID)()}`
   };
 }
 function requireStableIdentityClaim(value) {
@@ -101679,7 +104365,7 @@ function looksLikePlaintextAuthJson(value) {
 }
 
 // src/codex-oauth/runtime.ts
-var path16 = __toESM(require("path"));
+var path17 = __toESM(require("path"));
 async function runCodexOAuthRotatingRuntime(input, ports) {
   let refreshed;
   let preparedCodexCli;
@@ -101737,9 +104423,9 @@ async function runCodexOAuthRotatingRuntime(input, ports) {
     if (preparedCodexCli) {
       previousCodexBinary = process.env.REVIEWROUTER_CODEX_BINARY;
       previousPath = process.env.PATH;
-      const codexBinDir = path16.dirname(preparedCodexCli.binaryPath);
+      const codexBinDir = path17.dirname(preparedCodexCli.binaryPath);
       process.env.REVIEWROUTER_CODEX_BINARY = preparedCodexCli.binaryPath;
-      process.env.PATH = previousPath ? `${codexBinDir}${path16.delimiter}${previousPath}` : codexBinDir;
+      process.env.PATH = previousPath ? `${codexBinDir}${path17.delimiter}${previousPath}` : codexBinDir;
       preparedCodexCliEnvApplied = true;
     }
     const restoredAuth = readCodexRotatingAuthInput().authJsonBytes;
@@ -101891,7 +104577,7 @@ function assertScmReadToken(token, expectedRepository) {
 }
 
 // src/review-orchestration/infrastructure/codex-review-invocation-adapter.ts
-var import_crypto29 = require("crypto");
+var import_crypto30 = require("crypto");
 
 // src/control-plane/generated/review-action-v2/provider-invocation-manifest-v1.ts
 var providerInvocationManifestV1CanonicalizerDescriptor = {
@@ -102088,7 +104774,7 @@ var providerInvocationManifestV1CanonicalizerDescriptor = {
   }
 };
 function normalizeProviderInvocationManifestV1(input) {
-  if (!isRecord4(input)) throw new Error("provider_invocation_manifest_invalid");
+  if (!isRecord5(input)) throw new Error("provider_invocation_manifest_invalid");
   const fields = providerInvocationManifestV1CanonicalizerDescriptor.fields;
   const fieldNames = new Set(fields.map((field) => field.name));
   const unknownField = Object.keys(input).sort().find((field) => !fieldNames.has(field));
@@ -102184,19 +104870,19 @@ function normalizeManifestField(field, value) {
 }
 function canonicalJson7(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson7).join(",")}]`;
-  if (isRecord4(value)) {
+  if (isRecord5(value)) {
     return `{${Object.keys(value).sort().map(
       (key) => `${JSON.stringify(key)}:${canonicalJson7(value[key])}`
     ).join(",")}}`;
   }
   return JSON.stringify(value);
 }
-function isRecord4(value) {
+function isRecord5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // src/review-orchestration/infrastructure/review-observation-normalizer.ts
-var import_crypto28 = require("crypto");
+var import_crypto29 = require("crypto");
 var reviewEvidencePayloadVersion = 2;
 function normalizeReviewObservation(input) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(input.workSlotId)) {
@@ -102324,7 +105010,7 @@ function canonicalJson8(value) {
   return JSON.stringify(value);
 }
 function sha25610(value) {
-  return (0, import_crypto28.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto29.createHash)("sha256").update(value).digest("hex");
 }
 function redactSensitiveText2(value) {
   return value.replace(
@@ -103035,7 +105721,9 @@ var CodexReviewInvocationAdapter = class {
     if (!this.directCredentialLease) return session;
     const direct = this.directCredentialLease();
     const environment = direct.environment;
-    if (direct.bearerToken !== void 0 || !environment || Object.keys(environment).join(",") !== "OPENROUTER_API_KEY" || !environment.OPENROUTER_API_KEY || session?.environment?.OPENROUTER_API_KEY !== void 0)
+    if (direct.bearerToken !== void 0 || !environment || Object.keys(environment).join(",") !== LOCAL_MODEL_CAPABILITY_ENV || !/^Bearer [a-f0-9]{64}$/.test(
+      environment[LOCAL_MODEL_CAPABILITY_ENV] ?? ""
+    ) || session?.environment?.OPENROUTER_API_KEY !== void 0 || session?.environment?.[LOCAL_MODEL_CAPABILITY_ENV] !== void 0)
       throw new Error("review_action_v2_direct_credential_lease_invalid");
     return {
       ...session,
@@ -103190,6 +105878,13 @@ var CodexReviewInvocationAdapter = class {
       })
     });
   }
+  assertDirectActualModel(actualModel) {
+    if (this.directCredentialLease && !actualModel) {
+      throw new ReviewInvocationConfigurationMismatchError(
+        "actual_model_evidence_unavailable" /* ActualModelEvidenceUnavailable */
+      );
+    }
+  }
   async execute(input) {
     const prepared = input.invocation.immutableRequest;
     if (!prepared || typeof prepared !== "object" || !this.prepared.has(prepared) || prepared.providerName !== input.invocation.provider || prepared.requestedModel !== input.invocation.requestedModel) {
@@ -103202,6 +105897,7 @@ var CodexReviewInvocationAdapter = class {
         this.credentialsForInvocation(),
         input.signal
       );
+      this.assertDirectActualModel(result2.actualModel);
       return normalizeReviewObservation({
         workSlotId: input.invocation.workSlotId,
         attemptOrdinal: input.invocation.attemptOrdinal,
@@ -103248,6 +105944,7 @@ var CodexReviewInvocationAdapter = class {
         this.credentialsForInvocation(session.credentialLease),
         input.signal
       );
+      this.assertDirectActualModel(result2.actualModel);
       logger.info(
         `Codex execution model: requested=${input.invocation.requestedModel}, actual=${result2.actualModel ?? "unreported"}`
       );
@@ -103593,10 +106290,10 @@ function isSafeReviewActionV2Diagnostic(message) {
   return false;
 }
 function sha25611(value) {
-  return (0, import_crypto29.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto30.createHash)("sha256").update(value).digest("hex");
 }
 function sha256Bytes(value) {
-  return (0, import_crypto29.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto30.createHash)("sha256").update(value).digest("hex");
 }
 function compareCodeUnits4(left, right) {
   if (left < right) return -1;
@@ -103605,20 +106302,20 @@ function compareCodeUnits4(left, right) {
 }
 
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
-var import_child_process11 = require("child_process");
-var import_crypto32 = require("crypto");
+var import_child_process13 = require("child_process");
+var import_crypto33 = require("crypto");
 var import_promises5 = require("fs/promises");
 var os7 = __toESM(require("os"));
-var path19 = __toESM(require("path"));
-var import_util8 = require("util");
+var path20 = __toESM(require("path"));
+var import_util9 = require("util");
 
 // src/context-gateway/canonical-git-inventory.ts
-var import_child_process10 = require("child_process");
-var import_util7 = require("util");
+var import_child_process12 = require("child_process");
+var import_util8 = require("util");
 
 // src/context-gateway/utf8-content.ts
-var import_util6 = require("util");
-var fatalUtf8Decoder = new import_util6.TextDecoder("utf-8", {
+var import_util7 = require("util");
+var fatalUtf8Decoder = new import_util7.TextDecoder("utf-8", {
   fatal: true,
   ignoreBOM: true
 });
@@ -103639,7 +106336,7 @@ function countLines(value) {
 }
 
 // src/context-gateway/canonical-git-inventory.ts
-var execFileAsync2 = (0, import_util7.promisify)(import_child_process10.execFile);
+var execFileAsync2 = (0, import_util8.promisify)(import_child_process12.execFile);
 var RAW_RECORD = /^:(\d{6}) (\d{6}) ([0-9a-f]+) ([0-9a-f]+) ([A-Z])$/u;
 var MAX_CLASSIFIED_BLOB_BYTES = 2 * 1024 * 1024;
 var MAX_INVENTORY_ENTRIES = 25e4;
@@ -103744,7 +106441,7 @@ function splitNulTerminated(raw) {
 }
 function decodeUtf8(value, errorCode2) {
   try {
-    return new import_util7.TextDecoder("utf-8", {
+    return new import_util8.TextDecoder("utf-8", {
       fatal: true,
       ignoreBOM: true
     }).decode(value);
@@ -103966,9 +106663,9 @@ function gitOptions(root, encoding) {
 }
 
 // src/context-gateway/context-gateway-v4-replay-material.ts
-var import_crypto30 = require("crypto");
+var import_crypto31 = require("crypto");
 var import_promises3 = require("fs/promises");
-var import_path2 = __toESM(require("path"));
+var import_path3 = __toESM(require("path"));
 var MAX_ENTRIES = 2e3;
 var MAX_STATE_BYTES = 2 * 1024 * 1024;
 var MAX_ENCRYPTED_STATE_BYTES = Math.ceil(MAX_STATE_BYTES * 4 / 3) + 4096;
@@ -103982,7 +106679,7 @@ var ContextGatewayV4ReplayMaterialRecorder = class {
   entries = [];
   mutationTail = Promise.resolve();
   async initialize() {
-    await (0, import_promises3.mkdir)(import_path2.default.dirname(this.config.replayMaterialPath), {
+    await (0, import_promises3.mkdir)(import_path3.default.dirname(this.config.replayMaterialPath), {
       recursive: true,
       mode: 448
     });
@@ -104088,7 +106785,7 @@ function decryptContextGatewayV4ReplayMaterial(input) {
   } catch {
     throw new Error("context_gateway_v4_replay_envelope_invalid");
   }
-  if (canonicalJson(envelope) !== input.encryptedCanonicalJson || !isRecord5(envelope) || Object.keys(envelope).sort().join(",") !== "algorithm,authTag,ciphertext,encryptionVersion,nonce,sessionId" || envelope.encryptionVersion !== REPLAY_ENCRYPTION_VERSION || envelope.algorithm !== REPLAY_ENCRYPTION_ALGORITHM || envelope.sessionId !== input.sessionId || typeof envelope.nonce !== "string" || typeof envelope.authTag !== "string" || typeof envelope.ciphertext !== "string") {
+  if (canonicalJson(envelope) !== input.encryptedCanonicalJson || !isRecord6(envelope) || Object.keys(envelope).sort().join(",") !== "algorithm,authTag,ciphertext,encryptionVersion,nonce,sessionId" || envelope.encryptionVersion !== REPLAY_ENCRYPTION_VERSION || envelope.algorithm !== REPLAY_ENCRYPTION_ALGORITHM || envelope.sessionId !== input.sessionId || typeof envelope.nonce !== "string" || typeof envelope.authTag !== "string" || typeof envelope.ciphertext !== "string") {
     throw new Error("context_gateway_v4_replay_envelope_invalid");
   }
   try {
@@ -104098,7 +106795,7 @@ function decryptContextGatewayV4ReplayMaterial(input) {
     if (nonce.byteLength !== 12 || authTag.byteLength !== 16) {
       throw new Error("invalid_envelope");
     }
-    const decipher = (0, import_crypto30.createDecipheriv)(
+    const decipher = (0, import_crypto31.createDecipheriv)(
       REPLAY_ENCRYPTION_ALGORITHM,
       replayEncryptionKey(input.secret, input.sessionId),
       nonce
@@ -104122,8 +106819,8 @@ function encryptContextGatewayV4ReplayMaterial(input) {
   if (Buffer.byteLength(input.plaintextCanonicalJson, "utf8") > MAX_STATE_BYTES) {
     throw new Error("context_gateway_v4_replay_size_invalid");
   }
-  const nonce = (0, import_crypto30.randomBytes)(12);
-  const cipher = (0, import_crypto30.createCipheriv)(
+  const nonce = (0, import_crypto31.randomBytes)(12);
+  const cipher = (0, import_crypto31.createCipheriv)(
     REPLAY_ENCRYPTION_ALGORITHM,
     replayEncryptionKey(input.secret, input.sessionId),
     nonce
@@ -104143,7 +106840,7 @@ function encryptContextGatewayV4ReplayMaterial(input) {
   });
 }
 function replayEncryptionKey(secret, sessionId) {
-  return (0, import_crypto30.createHmac)("sha256", secret).update("reviewrouter.context-gateway-v4.replay-material.v1\0", "utf8").update(sessionId, "utf8").digest();
+  return (0, import_crypto31.createHmac)("sha256", secret).update("reviewrouter.context-gateway-v4.replay-material.v1\0", "utf8").update(sessionId, "utf8").digest();
 }
 function replayAssociatedData(sessionId) {
   return Buffer.from(
@@ -104204,7 +106901,7 @@ function operationForReplayInput(kind, replayInput) {
 function normalizeEntry(candidate, previousSequence) {
   if (!Number.isSafeInteger(candidate.sequence) || candidate.sequence <= previousSequence || !Object.values(ContextGatewayV4OperationKind).includes(
     candidate.operationKind
-  ) || candidate.operationKind === "unsupported_tool" /* UnsupportedTool */ || !isRecord5(candidate.replayInput)) {
+  ) || candidate.operationKind === "unsupported_tool" /* UnsupportedTool */ || !isRecord6(candidate.replayInput)) {
     throw new Error("context_gateway_v4_replay_entry_invalid");
   }
   requireSha256(candidate.operationReceiptId, "operation_receipt_id");
@@ -104214,20 +106911,20 @@ function normalizeEntry(candidate, previousSequence) {
     replayInput: Object.freeze({ ...candidate.replayInput })
   });
 }
-function isRecord5(value) {
+function isRecord6(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 async function atomicPrivateWrite(target, content) {
-  await (0, import_promises3.mkdir)(import_path2.default.dirname(target), { recursive: true, mode: 448 });
-  const temporary = `${target}.${process.pid}.${(0, import_crypto30.randomBytes)(6).toString("hex")}.tmp`;
+  await (0, import_promises3.mkdir)(import_path3.default.dirname(target), { recursive: true, mode: 448 });
+  const temporary = `${target}.${process.pid}.${(0, import_crypto31.randomBytes)(6).toString("hex")}.tmp`;
   await (0, import_promises3.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
   await (0, import_promises3.rename)(temporary, target);
 }
 
 // src/context-gateway/context-gateway-v4-recorder.ts
-var import_crypto31 = require("crypto");
+var import_crypto32 = require("crypto");
 var import_promises4 = require("fs/promises");
-var import_path3 = __toESM(require("path"));
+var import_path4 = __toESM(require("path"));
 var MAX_EVENTS = 2e3;
 var CONTEXT_GATEWAY_V4_MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
 var ContextGatewayV4Recorder = class {
@@ -104247,7 +106944,7 @@ var ContextGatewayV4Recorder = class {
   terminalFailureClass = null;
   now;
   async initialize() {
-    await (0, import_promises4.mkdir)(import_path3.default.dirname(this.config.transcriptPath), {
+    await (0, import_promises4.mkdir)(import_path4.default.dirname(this.config.transcriptPath), {
       recursive: true,
       mode: 448
     });
@@ -104456,14 +107153,14 @@ function sanitizeReason(value) {
   return value;
 }
 async function atomicPrivateWrite2(target, content) {
-  await (0, import_promises4.mkdir)(import_path3.default.dirname(target), { recursive: true, mode: 448 });
-  const temporary = `${target}.${process.pid}.${(0, import_crypto31.randomBytes)(6).toString("hex")}.tmp`;
+  await (0, import_promises4.mkdir)(import_path4.default.dirname(target), { recursive: true, mode: 448 });
+  const temporary = `${target}.${process.pid}.${(0, import_crypto32.randomBytes)(6).toString("hex")}.tmp`;
   await (0, import_promises4.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
   await (0, import_promises4.rename)(temporary, target);
 }
 
 // src/review-orchestration/infrastructure/context-gateway-invocation-session.ts
-var execFileAsync3 = (0, import_util8.promisify)(import_child_process11.execFile);
+var execFileAsync3 = (0, import_util9.promisify)(import_child_process13.execFile);
 var MAX_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
 var MAX_REPLAY_MATERIAL_BYTES = 2 * 1024 * 1024;
 var MAX_ENCRYPTED_REPLAY_MATERIAL_BYTES = Math.ceil(MAX_REPLAY_MATERIAL_BYTES * 4 / 3) + 4096;
@@ -104499,7 +107196,7 @@ var ContextGatewayInvocationSessionFactory = class {
     this.attestations = attestations;
     this.options = options;
     this.requiredWitnessRunner = requiredWitnessRunner;
-    if (!path19.isAbsolute(options.checkoutRoot) || !path19.isAbsolute(options.gatewayBundlePath)) {
+    if (!path20.isAbsolute(options.checkoutRoot) || !path20.isAbsolute(options.gatewayBundlePath)) {
       throw new Error("context_gateway_factory_path_invalid");
     }
   }
@@ -104516,8 +107213,8 @@ var ContextGatewayInvocationSessionFactory = class {
       eventChainSeedHash: "0".repeat(64),
       gatewayBinaryHash,
       ...revisionTreeOids,
-      transcriptPath: path19.join(os7.tmpdir(), "planning-transcript.json"),
-      replayMaterialPath: path19.join(os7.tmpdir(), "planning-replay.json"),
+      transcriptPath: path20.join(os7.tmpdir(), "planning-transcript.json"),
+      replayMaterialPath: path20.join(os7.tmpdir(), "planning-replay.json"),
       gatewayBundlePath: this.options.gatewayBundlePath
     });
   }
@@ -104539,11 +107236,11 @@ var ContextGatewayInvocationSessionFactory = class {
     const gatewayBinaryHash = sha25612(gatewayBundleSnapshot);
     const gatewayPolicyVersion = this.policyVersion();
     const directory = await (0, import_promises5.mkdtemp)(
-      path19.join(os7.tmpdir(), "reviewrouter-context-gateway-")
+      path20.join(os7.tmpdir(), "reviewrouter-context-gateway-")
     );
-    const gatewayBundlePath = path19.join(directory, "context-gateway.cjs");
-    const transcriptPath = path19.join(directory, "transcript.json");
-    const replayMaterialPath = path19.join(directory, "replay-material.json");
+    const gatewayBundlePath = path20.join(directory, "context-gateway.cjs");
+    const transcriptPath = path20.join(directory, "transcript.json");
+    const replayMaterialPath = path20.join(directory, "replay-material.json");
     let requiredWitness = null;
     try {
       await (0, import_promises5.writeFile)(gatewayBundlePath, gatewayBundleSnapshot, {
@@ -105223,7 +107920,7 @@ function createV4WireSealPayload(transcript) {
   });
 }
 function keyedSha2562(secret, value) {
-  return (0, import_crypto32.createHmac)("sha256", secret).update(value).digest("hex");
+  return (0, import_crypto33.createHmac)("sha256", secret).update(value).digest("hex");
 }
 function requireProviderKind(value) {
   switch (value) {
@@ -105260,21 +107957,21 @@ function requireContextGatewayMaxOperations(value) {
   return value;
 }
 function sha25612(value) {
-  return (0, import_crypto32.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto33.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
-var import_child_process14 = require("child_process");
-var import_crypto34 = require("crypto");
+var import_child_process16 = require("child_process");
+var import_crypto35 = require("crypto");
 var import_promises9 = require("fs/promises");
 var os8 = __toESM(require("os"));
-var path23 = __toESM(require("path"));
-var import_util11 = require("util");
+var path24 = __toESM(require("path"));
+var import_util12 = require("util");
 
 // src/context-gateway/context-gateway-recorder.ts
-var import_crypto33 = require("crypto");
+var import_crypto34 = require("crypto");
 var import_promises6 = require("fs/promises");
-var path20 = __toESM(require("path"));
+var path21 = __toESM(require("path"));
 var MAX_RECORDER_STATE_BYTES = 2 * 1024 * 1024;
 var ContextGatewayRecorder = class {
   constructor(config) {
@@ -105289,11 +107986,11 @@ var ContextGatewayRecorder = class {
   hadFailure = false;
   async initialize() {
     await Promise.all([
-      (0, import_promises6.mkdir)(path20.dirname(this.config.transcriptPath), {
+      (0, import_promises6.mkdir)(path21.dirname(this.config.transcriptPath), {
         recursive: true,
         mode: 448
       }),
-      (0, import_promises6.mkdir)(path20.dirname(this.config.replayMaterialPath), {
+      (0, import_promises6.mkdir)(path21.dirname(this.config.replayMaterialPath), {
         recursive: true,
         mode: 448
       })
@@ -105518,19 +108215,19 @@ function parseCanonicalState(raw, kind) {
   return parsed;
 }
 async function atomicPrivateWrite3(target, content) {
-  await (0, import_promises6.mkdir)(path20.dirname(target), { recursive: true, mode: 448 });
-  const temporary = `${target}.${process.pid}.${(0, import_crypto33.randomBytes)(6).toString("hex")}.tmp`;
+  await (0, import_promises6.mkdir)(path21.dirname(target), { recursive: true, mode: 448 });
+  const temporary = `${target}.${process.pid}.${(0, import_crypto34.randomBytes)(6).toString("hex")}.tmp`;
   await (0, import_promises6.writeFile)(temporary, content, { encoding: "utf8", mode: 384 });
   await (0, import_promises6.rename)(temporary, target);
 }
 
 // src/context-gateway/filesystem-context-gateway.ts
-var import_child_process12 = require("child_process");
+var import_child_process14 = require("child_process");
 var import_promises7 = require("fs/promises");
 var import_os = require("os");
-var path21 = __toESM(require("path"));
-var import_util9 = require("util");
-var execFileAsync4 = (0, import_util9.promisify)(import_child_process12.execFile);
+var path22 = __toESM(require("path"));
+var import_util10 = require("util");
+var execFileAsync4 = (0, import_util10.promisify)(import_child_process14.execFile);
 var MAX_FILE_BYTES = 2 * 1024 * 1024;
 var MAX_DIRECTORY_ENTRIES = 2e4;
 var MAX_SEARCH_RESULTS = 2e4;
@@ -105936,7 +108633,7 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
     if (gitPath.length === 0) {
       throw new Error("context_gateway_git_info_attributes_path_invalid");
     }
-    const attributesPath = path21.isAbsolute(gitPath) ? gitPath : path21.resolve(this.root, gitPath);
+    const attributesPath = path22.isAbsolute(gitPath) ? gitPath : path22.resolve(this.root, gitPath);
     let infoAttributes;
     try {
       infoAttributes = await (0, import_promises7.readFile)(attributesPath);
@@ -105978,23 +108675,23 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
   async createIsolatedGitDirectory(policy) {
     const gitDirectory = await (0, import_promises7.mkdtemp)(
-      path21.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
+      path22.join((0, import_os.tmpdir)(), "reviewrouter-context-git-")
     );
     try {
       const [objectsPathOutput, objectFormatOutput] = await Promise.all([
         this.gitText(["rev-parse", "--git-path", "objects"]),
         this.gitText(["rev-parse", "--show-object-format=storage"]),
-        (0, import_promises7.mkdir)(path21.join(gitDirectory, "objects", "info"), { recursive: true }),
-        (0, import_promises7.mkdir)(path21.join(gitDirectory, "refs", "heads"), { recursive: true }),
-        (0, import_promises7.mkdir)(path21.join(gitDirectory, "info"), { recursive: true }),
-        (0, import_promises7.mkdir)(path21.join(gitDirectory, "worktree"), { recursive: true })
+        (0, import_promises7.mkdir)(path22.join(gitDirectory, "objects", "info"), { recursive: true }),
+        (0, import_promises7.mkdir)(path22.join(gitDirectory, "refs", "heads"), { recursive: true }),
+        (0, import_promises7.mkdir)(path22.join(gitDirectory, "info"), { recursive: true }),
+        (0, import_promises7.mkdir)(path22.join(gitDirectory, "worktree"), { recursive: true })
       ]);
       const rawObjectsPath = objectsPathOutput.trim();
       if (rawObjectsPath.length === 0) {
         throw new Error("context_gateway_git_objects_path_invalid");
       }
       const objectsPath = await (0, import_promises7.realpath)(
-        path21.isAbsolute(rawObjectsPath) ? rawObjectsPath : path21.resolve(this.root, rawObjectsPath)
+        path22.isAbsolute(rawObjectsPath) ? rawObjectsPath : path22.resolve(this.root, rawObjectsPath)
       );
       if (objectsPath.includes("\0") || objectsPath.includes("\n")) {
         throw new Error("context_gateway_git_objects_path_invalid");
@@ -106005,20 +108702,20 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
       }
       const config = objectFormat === "sha256" ? "[core]\n	repositoryformatversion = 1\n	bare = false\n[extensions]\n	objectformat = sha256\n" : "[core]\n	repositoryformatversion = 0\n	bare = false\n";
       await Promise.all([
-        (0, import_promises7.writeFile)(path21.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
-        (0, import_promises7.writeFile)(path21.join(gitDirectory, "config"), config),
+        (0, import_promises7.writeFile)(path22.join(gitDirectory, "HEAD"), "ref: refs/heads/unused\n"),
+        (0, import_promises7.writeFile)(path22.join(gitDirectory, "config"), config),
         (0, import_promises7.writeFile)(
-          path21.join(gitDirectory, "objects", "info", "alternates"),
+          path22.join(gitDirectory, "objects", "info", "alternates"),
           `${objectsPath}
 `
         ),
         policy.infoAttributes === null ? Promise.resolve() : (0, import_promises7.writeFile)(
-          path21.join(gitDirectory, "info", "attributes"),
+          path22.join(gitDirectory, "info", "attributes"),
           policy.infoAttributes
         )
       ]);
-      const indexPath = path21.join(gitDirectory, "index");
-      const workTreePath = path21.join(gitDirectory, "worktree");
+      const indexPath = path22.join(gitDirectory, "index");
+      const workTreePath = path22.join(gitDirectory, "worktree");
       await this.gitText(["read-tree", "--reset", this.headSha], /* @__PURE__ */ new Set([0]), {
         GIT_DIR: gitDirectory,
         GIT_INDEX_FILE: indexPath,
@@ -106098,10 +108795,10 @@ var FilesystemContextGateway = class _FilesystemContextGateway {
   }
 };
 function normalizeRelativePath(value) {
-  if (typeof value !== "string" || value.length === 0 || value.length > 1024 || value.includes("\0") || value.includes("\\") || path21.isAbsolute(value)) {
+  if (typeof value !== "string" || value.length === 0 || value.length > 1024 || value.includes("\0") || value.includes("\\") || path22.isAbsolute(value)) {
     throw new Error("context_gateway_path_invalid");
   }
-  const normalized = path21.posix.normalize(value);
+  const normalized = path22.posix.normalize(value);
   if (normalized === ".." || normalized.startsWith("../") || normalized.split("/").some((segment) => segment === "..")) {
     throw new Error("context_gateway_path_invalid");
   }
@@ -106115,11 +108812,11 @@ function boundedInteger(value, minimum, maximum, field) {
 }
 
 // src/context-gateway/filesystem-context-gateway-v4.ts
-var import_child_process13 = require("child_process");
+var import_child_process15 = require("child_process");
 var import_promises8 = require("fs/promises");
-var import_path4 = __toESM(require("path"));
-var import_util10 = require("util");
-var execFileAsync5 = (0, import_util10.promisify)(import_child_process13.execFile);
+var import_path5 = __toESM(require("path"));
+var import_util11 = require("util");
+var execFileAsync5 = (0, import_util11.promisify)(import_child_process15.execFile);
 var MAX_FILE_RANGE_BYTES = 2 * 1024 * 1024;
 var MAX_FILE_TOTAL_BYTES = 32 * 1024 * 1024;
 var MAX_DIRECTORY_RESULTS = 25e4;
@@ -106865,10 +109562,10 @@ async function gitTreeEntry(root, revision, relativePath) {
   };
 }
 function normalizeRelativePath2(value) {
-  if (typeof value !== "string" || value.length < 1 || value.length > 1024 || value.includes("\0") || value.includes("\\") || import_path4.default.isAbsolute(value)) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 1024 || value.includes("\0") || value.includes("\\") || import_path5.default.isAbsolute(value)) {
     throw new Error("context_gateway_path_invalid");
   }
-  const normalized = import_path4.default.posix.normalize(value);
+  const normalized = import_path5.default.posix.normalize(value);
   if (normalized === ".." || normalized.startsWith("../") || normalized.split("/").some((segment) => segment === "..")) {
     throw new Error("context_gateway_path_invalid");
   }
@@ -106925,12 +109622,12 @@ function gitOptions2(root) {
 }
 
 // src/review-orchestration/infrastructure/context-attestation-replay-runner.ts
-var execFileAsync6 = (0, import_util11.promisify)(import_child_process14.execFile);
+var execFileAsync6 = (0, import_util12.promisify)(import_child_process16.execFile);
 var MAX_REPLAY_PLAN_BYTES = 512 * 1024;
 var ContextAttestationReplayRunner = class {
   constructor(options) {
     this.options = options;
-    if (!path23.isAbsolute(options.checkoutRoot) || !path23.isAbsolute(options.gatewayBundlePath)) {
+    if (!path24.isAbsolute(options.checkoutRoot) || !path24.isAbsolute(options.gatewayBundlePath)) {
       throw new Error("context_replay_path_invalid");
     }
   }
@@ -106971,9 +109668,9 @@ var ContextAttestationReplayRunner = class {
       return null;
     }
     const directory = await (0, import_promises9.mkdtemp)(
-      path23.join(os8.tmpdir(), "reviewrouter-context-replay-")
+      path24.join(os8.tmpdir(), "reviewrouter-context-replay-")
     );
-    const secret = (0, import_crypto34.randomBytes)(32);
+    const secret = (0, import_crypto35.randomBytes)(32);
     try {
       const eventChainSeedHash = sha256(
         canonicalizeReviewContextReplayChainSeed({
@@ -106985,8 +109682,8 @@ var ContextAttestationReplayRunner = class {
       );
       const recorder = new ContextGatewayRecorder({
         sessionId: `replay-${plan.attestationHash}`,
-        transcriptPath: path23.join(directory, "transcript.json"),
-        replayMaterialPath: path23.join(directory, "replay-material.json"),
+        transcriptPath: path24.join(directory, "transcript.json"),
+        replayMaterialPath: path24.join(directory, "replay-material.json"),
         secret,
         gatewayBinaryHash,
         checkoutTreeOid: targetCheckoutTreeOid,
@@ -107053,9 +109750,9 @@ var ContextAttestationReplayRunner = class {
   }
   async replayV4(input) {
     const directory = await (0, import_promises9.mkdtemp)(
-      path23.join(os8.tmpdir(), "reviewrouter-context-replay-v4-")
+      path24.join(os8.tmpdir(), "reviewrouter-context-replay-v4-")
     );
-    const secret = (0, import_crypto34.randomBytes)(32);
+    const secret = (0, import_crypto35.randomBytes)(32);
     try {
       const eventChainSeedHash = sha256(
         canonicalizeReviewContextReplayChainSeed({
@@ -107068,7 +109765,7 @@ var ContextAttestationReplayRunner = class {
       const sessionId = `replay-v4-${input.candidate.attestationHash.slice(0, 32)}`;
       const recorder = new ContextGatewayV4Recorder({
         sessionId,
-        transcriptPath: path23.join(directory, "transcript.json"),
+        transcriptPath: path24.join(directory, "transcript.json"),
         secret,
         gatewayBinaryHash: input.gatewayBinaryHash,
         checkoutTreeOid: input.targetCheckoutTreeOid,
@@ -107277,7 +109974,7 @@ async function replayAllPages(call) {
   let cursor = null;
   for (let page = 0; page < CONTEXT_GATEWAY_MAX_OPERATIONS; page += 1) {
     const response = await call(cursor);
-    if (!isRecord6(response)) {
+    if (!isRecord7(response)) {
       throw new Error("context_replay_v4_page_invalid");
     }
     if (response.complete === true) {
@@ -107353,7 +110050,7 @@ function parseReplayPlan(candidate) {
     throw new Error("context_replay_plan_identity_invalid");
   }
   const parsed = JSON.parse(candidate.replayPlanCanonicalJson);
-  if (!isRecord6(parsed)) throw new Error("context_replay_plan_invalid");
+  if (!isRecord7(parsed)) throw new Error("context_replay_plan_invalid");
   if (canonicalJson(parsed) !== candidate.replayPlanCanonicalJson) {
     throw new Error("context_replay_plan_not_canonical");
   }
@@ -107372,14 +110069,14 @@ function parseReplayPlan(candidate) {
     throw new Error("context_replay_plan_scope_invalid");
   }
   const dependencies = parsed.sourceDependencies.map((value, index) => {
-    if (!isRecord6(value)) throw new Error("context_replay_dependency_invalid");
+    if (!isRecord7(value)) throw new Error("context_replay_dependency_invalid");
     requireExactKeys3(value, [
       "operation",
       "operationKey",
       "replayQuery",
       "sequence"
     ]);
-    if (value.sequence !== index + 1 || !isRecord6(value.operation) || value.replayQuery !== null && typeof value.replayQuery !== "string") {
+    if (value.sequence !== index + 1 || !isRecord7(value.operation) || value.replayQuery !== null && typeof value.replayQuery !== "string") {
       throw new Error("context_replay_dependency_invalid");
     }
     const operationKey = requireSha256(
@@ -107439,7 +110136,7 @@ function parseReplayPlanV4(parsed, candidate) {
     throw new Error("context_replay_v4_plan_scope_invalid");
   }
   const operations = parsed.operations.map((value) => {
-    if (!isRecord6(value))
+    if (!isRecord7(value))
       throw new Error("context_replay_v4_operation_invalid");
     requireExactKeys3(value, ["operationKind", "replayInput"]);
     const operationKind = enumField(value, "operationKind", [
@@ -107449,7 +110146,7 @@ function parseReplayPlanV4(parsed, candidate) {
       "canonical_inventory" /* CanonicalInventory */,
       "git_fact" /* GitFact */
     ]);
-    if (!isRecord6(value.replayInput)) {
+    if (!isRecord7(value.replayInput)) {
       throw new Error("context_replay_v4_input_invalid");
     }
     return Object.freeze({
@@ -107585,7 +110282,7 @@ function compareCodeUnits6(left, right) {
   if (left > right) return 1;
   return 0;
 }
-function isRecord6(value) {
+function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -107807,7 +110504,7 @@ async function runGitCommand(args, options) {
 }
 
 // src/review-orchestration/infrastructure/github-review-state-adapter.ts
-var import_crypto35 = require("crypto");
+var import_crypto36 = require("crypto");
 var GitHubReviewRevisionGuard = class {
   constructor(client, scope) {
     this.client = client;
@@ -108088,7 +110785,7 @@ function canonicalJson10(value) {
   return JSON.stringify(value);
 }
 function sha25613(value) {
-  return (0, import_crypto35.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto36.createHash)("sha256").update(value).digest("hex");
 }
 function compareCodeUnits7(left, right) {
   if (left < right) return -1;
@@ -108097,7 +110794,7 @@ function compareCodeUnits7(left, right) {
 }
 
 // src/review-orchestration/infrastructure/production-review-projection.ts
-var import_crypto37 = require("crypto");
+var import_crypto38 = require("crypto");
 
 // src/review-projection/application/build-current-review-projection.ts
 var BuildCurrentReviewProjection = class {
@@ -109329,7 +112026,7 @@ function sortedUnique3(values) {
 }
 
 // src/review-orchestration/infrastructure/current-review-projection-builder-adapter.ts
-var import_crypto36 = require("crypto");
+var import_crypto37 = require("crypto");
 var CurrentReviewProjectionBuilderAdapter = class {
   constructor(projection, commands) {
     this.projection = projection;
@@ -109375,7 +112072,7 @@ function canonicalJson11(value) {
   return JSON.stringify(value);
 }
 function sha25614(value) {
-  return (0, import_crypto36.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto37.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/infrastructure/production-review-projection.ts
@@ -109658,7 +112355,7 @@ function providerExecutionSummary(assignments, evidence) {
 }
 function parseObservation(value) {
   const parsed = JSON.parse(value);
-  if (parsed.payloadVersion !== 2 || !Array.isArray(parsed.normalizedFindings) || !Array.isArray(parsed.normalizedLifecycleRevalidations) || parsed.normalizedFindings.some((item) => !isRecord7(item)) || parsed.normalizedLifecycleRevalidations.some((item) => !isRecord7(item))) {
+  if (parsed.payloadVersion !== 2 || !Array.isArray(parsed.normalizedFindings) || !Array.isArray(parsed.normalizedLifecycleRevalidations) || parsed.normalizedFindings.some((item) => !isRecord8(item)) || parsed.normalizedLifecycleRevalidations.some((item) => !isRecord8(item))) {
     throw new Error("review_action_v2_observation_payload_invalid");
   }
   return {
@@ -109813,7 +112510,7 @@ function requireDigest4(value, field) {
   }
   return parsed;
 }
-function isRecord7(value) {
+function isRecord8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function deterministicId(namespace, parts) {
@@ -109870,14 +112567,14 @@ function normalizeManifestPath(path34) {
   return path34.startsWith("./") ? path34.slice(2) : path34;
 }
 function sha25615(value) {
-  return (0, import_crypto37.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto38.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/review-orchestration/infrastructure/ocr-review-invocation-adapter.ts
-var import_crypto38 = require("crypto");
-var import_child_process15 = require("child_process");
+var import_crypto39 = require("crypto");
+var import_child_process17 = require("child_process");
 var fs19 = __toESM(require("fs"));
-var path24 = __toESM(require("path"));
+var path25 = __toESM(require("path"));
 
 // src/review-orchestration/infrastructure/ocr-review-normalization.ts
 var OCR_NORMALIZATION_LIMITS = Object.freeze({
@@ -110064,7 +112761,7 @@ var OcrNativeResultContractViolation = class extends Error {
   }
 };
 var REASON_PATTERN = /^[a-z][a-z0-9_]{0,63}$/u;
-function isRecord8(value) {
+function isRecord9(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function parseOcrReviewOutcome(value) {
@@ -110072,7 +112769,7 @@ function parseOcrReviewOutcome(value) {
   const violation = () => {
     throw new OcrManagedContractViolation(issues);
   };
-  if (!isRecord8(value)) {
+  if (!isRecord9(value)) {
     issues.push({ code: "outcome_not_an_object", detail: "reviewrouter_outcome" });
     return violation();
   }
@@ -110116,7 +112813,7 @@ function parseOcrReviewOutcome(value) {
     return violation();
   }
   const groupingRaw = value.grouping;
-  if (!isRecord8(groupingRaw)) {
+  if (!isRecord9(groupingRaw)) {
     issues.push({ code: "outcome_grouping_missing", detail: "grouping" });
     return violation();
   }
@@ -110131,7 +112828,7 @@ function parseOcrReviewOutcome(value) {
   const seenPaths = /* @__PURE__ */ new Set();
   const groups = groupsRaw.map((groupRaw, groupIndex) => {
     const field = (name) => `groups[${groupIndex}].${name}`;
-    if (!isRecord8(groupRaw)) {
+    if (!isRecord9(groupRaw)) {
       issues.push({ code: "outcome_group_invalid", detail: field("group") });
       return violation();
     }
@@ -110173,7 +112870,7 @@ function parseOcrReviewOutcome(value) {
       return violation();
     }
     const roundsRaw = groupRaw.rounds;
-    if (!isRecord8(roundsRaw)) {
+    if (!isRecord9(roundsRaw)) {
       issues.push({ code: "outcome_rounds_invalid", detail: field("rounds") });
       return violation();
     }
@@ -110193,13 +112890,13 @@ function parseOcrReviewOutcome(value) {
       return violation();
     }
     const phasesRaw = groupRaw.phases;
-    if (!isRecord8(phasesRaw)) {
+    if (!isRecord9(phasesRaw)) {
       issues.push({ code: "outcome_phases_invalid", detail: field("phases") });
       return violation();
     }
     const parsePhase = (name) => {
       const raw = phasesRaw[name];
-      if (!isRecord8(raw)) {
+      if (!isRecord9(raw)) {
         issues.push({ code: "outcome_phase_invalid", detail: field(`phases.${name}`) });
         return null;
       }
@@ -110353,16 +113050,16 @@ function parseOcrNativeReviewResult(raw, admission) {
   const violation = () => {
     throw new OcrNativeResultContractViolation(issues);
   };
-  if (!isRecord8(raw)) {
+  if (!isRecord9(raw)) {
     issues.push({ code: "native_result_not_an_object", detail: "result" });
     return violation();
   }
   const manifestRaw = raw.manifest;
-  if (!isRecord8(manifestRaw)) {
+  if (!isRecord9(manifestRaw)) {
     issues.push({ code: "native_manifest_missing", detail: "manifest" });
     return violation();
   }
-  const manifestInput = isRecord8(manifestRaw.input) ? manifestRaw.input : null;
+  const manifestInput = isRecord9(manifestRaw.input) ? manifestRaw.input : null;
   if (manifestInput === null) {
     issues.push({ code: "native_manifest_input_missing", detail: "manifest.input" });
     return violation();
@@ -110407,8 +113104,8 @@ function parseOcrNativeReviewResult(raw, admission) {
     }
     throw error2;
   }
-  const llmRaw = isRecord8(raw.llm) ? raw.llm : null;
-  const summaryRaw = isRecord8(raw.summary) ? raw.summary : null;
+  const llmRaw = isRecord9(raw.llm) ? raw.llm : null;
+  const summaryRaw = isRecord9(raw.summary) ? raw.summary : null;
   const usage = Object.freeze({
     inputTokens: summaryRaw ? optionalInt(summaryRaw.input_tokens) : null,
     outputTokens: summaryRaw ? optionalInt(summaryRaw.output_tokens) : null,
@@ -110421,7 +113118,7 @@ function parseOcrNativeReviewResult(raw, admission) {
       issues.push({ code: "native_comments_invalid", detail: "comments" });
     } else {
       commentsRaw.forEach((comment, index) => {
-        if (!isRecord8(comment)) {
+        if (!isRecord9(comment)) {
           issues.push({
             code: "native_comment_invalid",
             detail: `comments[${index}]`
@@ -110450,7 +113147,7 @@ function parseOcrNativeReviewResult(raw, admission) {
     for (const warning2 of warningsRaw) {
       if (typeof warning2 === "string") {
         warnings.push(warning2);
-      } else if (isRecord8(warning2) && typeof warning2.message === "string") {
+      } else if (isRecord9(warning2) && typeof warning2.message === "string") {
         warnings.push(warning2.message);
       }
     }
@@ -110836,7 +113533,7 @@ function planOcrReviewAssignments(input) {
 }
 function runOcrReviewProcess(input) {
   return new Promise((resolve5) => {
-    const child = (0, import_child_process15.spawn)(input.binaryPath, [...input.argv], {
+    const child = (0, import_child_process17.spawn)(input.binaryPath, [...input.argv], {
       cwd: input.cwd,
       env: { ...input.env },
       shell: false,
@@ -110947,7 +113644,7 @@ var OcrReviewInvocationAdapter = class {
         mode: 384
       });
     }
-    const previewOutputPath = path24.join(
+    const previewOutputPath = path25.join(
       this.options.run.runDirectory,
       "preview.json"
     );
@@ -111158,7 +113855,7 @@ var OcrReviewInvocationAdapter = class {
   }
   async runInvocation(input, assignment) {
     assertOcrInvocationLive(input);
-    const outputPath = path24.join(this.options.run.runDirectory, "result.json");
+    const outputPath = path25.join(this.options.run.runDirectory, "result.json");
     const argv = buildOcrReviewArgv({
       binaryPath: this.options.binaryPath,
       repoPath: this.options.checkoutRoot,
@@ -111193,7 +113890,7 @@ var OcrReviewInvocationAdapter = class {
     assertOcrInvocationLive(input);
     const headFiles = {
       get: (file) => {
-        const resolved = path24.join(this.options.checkoutRoot, file);
+        const resolved = path25.join(this.options.checkoutRoot, file);
         try {
           return fs19.readFileSync(resolved, "utf8");
         } catch {
@@ -111324,16 +114021,16 @@ function canonicalJson12(value) {
   return JSON.stringify(value);
 }
 function sha25616(value) {
-  return (0, import_crypto38.createHash)("sha256").update(value).digest("hex");
+  return (0, import_crypto39.createHash)("sha256").update(value).digest("hex");
 }
 
 // src/codex-oauth/ocr-managed-bootstrap.ts
-var import_child_process16 = require("child_process");
+var import_child_process18 = require("child_process");
 var import_node_crypto2 = require("node:crypto");
 var fs20 = __toESM(require("fs/promises"));
 var os9 = __toESM(require("os"));
-var path25 = __toESM(require("path"));
-var import_util12 = require("util");
+var path26 = __toESM(require("path"));
+var import_util13 = require("util");
 function readApprovedReviewAgentKind(json2, digest3) {
   if (Buffer.byteLength(json2) > 16384 || !/^[a-f0-9]{64}$/.test(digest3) || (0, import_node_crypto2.createHash)("sha256").update(json2).digest("hex") !== digest3) {
     throw new Error("review_agent_profile_digest_mismatch");
@@ -111383,13 +114080,13 @@ function extractReportedVersion(stdout) {
 async function verifyApprovedOcrBinary(input) {
   const env = input.env ?? process.env;
   const binaryPath = env.REVIEWROUTER_OCR_BINARY;
-  if (!binaryPath || !path25.isAbsolute(binaryPath)) {
+  if (!binaryPath || !path26.isAbsolute(binaryPath)) {
     throw new Error("review_action_v2_ocr_binary_unavailable");
   }
   input.signal?.throwIfAborted();
   const binaryBytes = await fs20.readFile(binaryPath);
   assertApprovedReviewAgentBinary(input.approvedAgent, binaryBytes);
-  const version = await (0, import_util12.promisify)(import_child_process16.execFile)(binaryPath, ["--version"], {
+  const version = await (0, import_util13.promisify)(import_child_process18.execFile)(binaryPath, ["--version"], {
     signal: input.signal,
     killSignal: "SIGKILL",
     timeout: 1e4,
@@ -111423,7 +114120,7 @@ async function resolveApprovedOcrBinary(input) {
     throw new Error("review_action_v2_ocr_asset_identity_invalid");
   }
   const directory = await fs20.mkdtemp(
-    path25.join(env.RUNNER_TEMP || os9.tmpdir(), "reviewrouter-ocr-binary-")
+    path26.join(env.RUNNER_TEMP || os9.tmpdir(), "reviewrouter-ocr-binary-")
   );
   let cleaned = false;
   const cleanup = async () => {
@@ -111433,7 +114130,7 @@ async function resolveApprovedOcrBinary(input) {
   };
   try {
     await fs20.chmod(directory, 448);
-    const binaryPath = path25.join(directory, "opencodereview");
+    const binaryPath = path26.join(directory, "opencodereview");
     const timeout = new AbortController();
     const signal = input.signal ? AbortSignal.any([input.signal, timeout.signal]) : timeout.signal;
     const timer = setTimeout(
@@ -111513,17 +114210,17 @@ async function prepareOcrManagedRun(input) {
     env
   });
   const runDirectory = await fs20.mkdtemp(
-    path25.join(process.env.RUNNER_TEMP || os9.tmpdir(), "reviewrouter-ocr-run-")
+    path26.join(process.env.RUNNER_TEMP || os9.tmpdir(), "reviewrouter-ocr-run-")
   );
   try {
     await fs20.chmod(runDirectory, 448);
-    const homeDirectory = path25.join(runDirectory, "home");
-    await fs20.mkdir(path25.join(homeDirectory, ".opencodereview"), {
+    const homeDirectory = path26.join(runDirectory, "home");
+    await fs20.mkdir(path26.join(homeDirectory, ".opencodereview"), {
       recursive: true,
       mode: 448
     });
     await fs20.chmod(homeDirectory, 448);
-    const configPath = path25.join(
+    const configPath = path26.join(
       homeDirectory,
       ".opencodereview",
       "config.json"
@@ -111540,9 +114237,9 @@ async function prepareOcrManagedRun(input) {
       }),
       { mode: 384 }
     );
-    const rulePath = path25.join(runDirectory, "rule.json");
+    const rulePath = path26.join(runDirectory, "rule.json");
     await fs20.writeFile(rulePath, "", { mode: 384 });
-    const backgroundPath = path25.join(runDirectory, "background.md");
+    const backgroundPath = path26.join(runDirectory, "background.md");
     await fs20.writeFile(backgroundPath, "", { mode: 384 });
     let cleaned = false;
     const cleanup = async () => {
@@ -111563,2093 +114260,6 @@ async function prepareOcrManagedRun(input) {
     await fs20.rm(runDirectory, { recursive: true, force: true });
     throw error2;
   }
-}
-
-// src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
-var import_child_process18 = require("child_process");
-var import_util13 = require("util");
-
-// src/review-investigation/infrastructure/review-agent-process-runner.ts
-var import_child_process17 = require("child_process");
-var NodeReviewAgentProcessRunner = class {
-  active = /* @__PURE__ */ new Map();
-  async run(request) {
-    validateRequest(request);
-    if (this.active.has(request.invocationId)) {
-      throw new Error("review_agent_invocation_already_active");
-    }
-    const startedAt = Date.now();
-    return new Promise((resolve5) => {
-      if (request.signal?.aborted) {
-        resolve5(
-          result(
-            "cancelled" /* Cancelled */,
-            null,
-            "",
-            "",
-            startedAt
-          )
-        );
-        return;
-      }
-      let child;
-      try {
-        child = (0, import_child_process17.spawn)(request.binary, request.args, {
-          cwd: request.cwd,
-          env: { ...request.environment },
-          detached: true,
-          shell: false,
-          stdio: ["pipe", "pipe", "pipe"]
-        });
-      } catch (error2) {
-        resolve5(
-          result(
-            "startup_failed" /* StartupFailed */,
-            null,
-            "",
-            sanitizeProcessText(
-              error2 instanceof Error ? error2.message : String(error2)
-            ),
-            startedAt
-          )
-        );
-        return;
-      }
-      let stdout = "";
-      let stderr = "";
-      let outputBytes = 0;
-      let settled = false;
-      let forcedTermination = null;
-      const terminate = () => {
-        try {
-          if (child.pid) process.kill(-child.pid, "SIGKILL");
-          else child.kill("SIGKILL");
-        } catch {
-          child.kill("SIGKILL");
-        }
-      };
-      const cleanup = () => {
-        clearTimeout(timer);
-        request.signal?.removeEventListener("abort", onAbort);
-        this.active.delete(request.invocationId);
-      };
-      const settle = (termination, exitCode) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve5(result(termination, exitCode, stdout, stderr, startedAt));
-      };
-      const onAbort = () => {
-        forcedTermination = "cancelled" /* Cancelled */;
-        terminate();
-      };
-      const collect = (target) => (chunk) => {
-        outputBytes += chunk.byteLength;
-        if (outputBytes > request.maxOutputBytes) {
-          forcedTermination = "output_limit_exceeded" /* OutputLimitExceeded */;
-          terminate();
-          return;
-        }
-        if (target === "stdout") stdout += chunk.toString("utf8");
-        else stderr += chunk.toString("utf8");
-      };
-      const timer = setTimeout(() => {
-        forcedTermination = "timed_out" /* TimedOut */;
-        terminate();
-      }, request.timeoutMs);
-      this.active.set(
-        request.invocationId,
-        Object.freeze({
-          fencingToken: request.fencingToken,
-          terminate: () => {
-            forcedTermination = "cancelled" /* Cancelled */;
-            terminate();
-          }
-        })
-      );
-      request.signal?.addEventListener("abort", onAbort, { once: true });
-      child.stdout.on("data", collect("stdout"));
-      child.stderr.on("data", collect("stderr"));
-      child.stdin.on("error", () => {
-      });
-      child.on("error", (error2) => {
-        stderr = sanitizeProcessText(error2.message);
-        settle("startup_failed" /* StartupFailed */, null);
-      });
-      child.on(
-        "close",
-        (code) => settle(forcedTermination ?? "exited" /* Exited */, code)
-      );
-      child.stdin.end(request.stdin, "utf8");
-    });
-  }
-  async cancel(invocationId, fencingToken) {
-    const active = this.active.get(invocationId);
-    if (!active) return;
-    if (active.fencingToken !== fencingToken) {
-      throw new Error("review_agent_cancel_fencing_mismatch");
-    }
-    active.terminate();
-  }
-};
-function validateRequest(request) {
-  if (!request.invocationId || !request.fencingToken || !request.binary || !request.cwd || !Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1 || !Number.isSafeInteger(request.maxOutputBytes) || request.maxOutputBytes < 1) {
-    throw new Error("review_agent_process_request_invalid");
-  }
-}
-function result(termination, exitCode, stdout, stderr, startedAt) {
-  return Object.freeze({
-    termination,
-    exitCode,
-    stdout,
-    stderr,
-    durationMs: Math.max(0, Date.now() - startedAt)
-  });
-}
-function sanitizeProcessText(value) {
-  return value.replace(/[\r\n]+/gu, " ").slice(0, 400);
-}
-
-// src/review-investigation/infrastructure/codex-app-server-protocol.ts
-var import_crypto39 = require("crypto");
-var import_path5 = __toESM(require("path"));
-var CODEX_APP_SERVER_VERSION = "0.147.0";
-var CODEX_APP_SERVER_MCP_NAME = "reviewrouter";
-var OPTED_OUT_NOTIFICATIONS = Object.freeze([
-  "configWarning",
-  "thread/status/changed",
-  "thread/settings/updated",
-  "thread/name/updated",
-  "turn/plan/updated",
-  "rawResponseItem/completed",
-  "item/agentMessage/delta",
-  "item/plan/delta",
-  "item/reasoning/summaryTextDelta",
-  "item/reasoning/summaryPartAdded",
-  "item/reasoning/textDelta",
-  "item/mcpToolCall/progress",
-  "serverRequest/resolved",
-  "account/updated",
-  "account/rateLimits/updated",
-  "app/list/updated",
-  "remoteControl/status/changed",
-  "deprecationNotice"
-]);
-var IGNORED_NOTIFICATION_METHODS = new Set(OPTED_OUT_NOTIFICATIONS);
-var ALLOWED_ITEM_TYPES = /* @__PURE__ */ new Set([
-  "userMessage",
-  "agentMessage",
-  "reasoning",
-  "mcpToolCall",
-  "contextCompaction"
-]);
-var TERMINAL_SUMMARY_OMITTABLE_NON_EFFECTFUL_ITEM_TYPES = /* @__PURE__ */ new Set([
-  "userMessage",
-  "agentMessage",
-  "reasoning",
-  "contextCompaction"
-]);
-var FORBIDDEN_ITEM_TYPES = /* @__PURE__ */ new Set([
-  "hookPrompt",
-  "plan",
-  "commandExecution",
-  "fileChange",
-  "dynamicToolCall",
-  "collabAgentToolCall",
-  "subAgentActivity",
-  "webSearch",
-  "imageView",
-  "sleep",
-  "imageGeneration",
-  "enteredReviewMode",
-  "exitedReviewMode"
-]);
-var CODEX_ERROR_INFO_STRING_VARIANTS = /* @__PURE__ */ new Set([
-  "contextWindowExceeded",
-  "sessionBudgetExceeded",
-  "usageLimitExceeded",
-  "serverOverloaded",
-  "cyberPolicy",
-  "internalServerError",
-  "unauthorized",
-  "badRequest",
-  "threadRollbackFailed",
-  "sandboxError",
-  "other"
-]);
-var CODEX_ERROR_INFO_HTTP_VARIANTS = /* @__PURE__ */ new Set([
-  "httpConnectionFailed",
-  "responseStreamConnectionFailed",
-  "responseStreamDisconnected",
-  "responseTooManyFailedAttempts"
-]);
-var MAX_METADATA_JSON_BYTES = 32768;
-var MAX_METADATA_JSON_DEPTH = 16;
-var MAX_METADATA_JSON_NODES = 2048;
-var MAX_METADATA_COLLECTION_SIZE = 256;
-var MAX_METADATA_STRING_BYTES = 16384;
-var MAX_NOTIFICATION_STRING_ARRAY_SIZE = 64;
-var MAX_NOTIFICATION_STRING_BYTES = 1024;
-var MAX_WARNING_MESSAGE_BYTES = 16384;
-var CodexAppServerProtocolClient = class {
-  constructor(request, write) {
-    this.request = request;
-    this.write = write;
-    this.allowedTools = new Set(request.allowedTools);
-    void this.completion.promise.catch(() => void 0);
-    void this.threadStartedSignal.promise.catch(() => void 0);
-  }
-  completion = deferred();
-  threadStartedSignal = deferred();
-  pending = /* @__PURE__ */ new Map();
-  activeItems = /* @__PURE__ */ new Map();
-  completedItems = /* @__PURE__ */ new Map();
-  rawUsageByResponseId = /* @__PURE__ */ new Map();
-  allowedTools;
-  nextRequestId = 1;
-  failed = false;
-  initialized = false;
-  threadId = null;
-  provisionalThreadId = null;
-  turnId = null;
-  provisionalTurnId = null;
-  threadStarted = false;
-  turnStarted = false;
-  turnCompleted = false;
-  actualModel = null;
-  modelProvider = null;
-  finalMessageCandidates = [];
-  terminalSummaryFinalMessage = null;
-  aggregateUsage = null;
-  lastAggregateUsage = null;
-  completionResolved = false;
-  postCompletionFailure = null;
-  terminalFailure = null;
-  retainedTerminalError = null;
-  async run() {
-    await withProtocolRunStage(
-      "initialize_response" /* InitializeResponse */,
-      () => this.sendRequest("initialize", {
-        clientInfo: {
-          name: "review_router_action",
-          title: "ReviewRouter Action",
-          version: "1"
-        },
-        capabilities: {
-          experimentalApi: true,
-          requestAttestation: false,
-          mcpServerOpenaiFormElicitation: false,
-          optOutNotificationMethods: OPTED_OUT_NOTIFICATIONS
-        }
-      }).then((value) => {
-        validateInitializeResponse(value);
-        return value;
-      })
-    );
-    this.initialized = true;
-    await withProtocolRunStage(
-      "initialized_notification" /* InitializedNotification */,
-      () => this.sendNotification("initialized")
-    );
-    await withProtocolRunStage(
-      "thread_start_response" /* ThreadStartResponse */,
-      () => this.sendRequest("thread/start", {
-        model: this.request.requestedModel,
-        allowProviderModelFallback: false,
-        cwd: this.request.cwd,
-        runtimeWorkspaceRoots: [],
-        approvalPolicy: "never",
-        approvalsReviewer: "user",
-        sandbox: "read-only",
-        config: {
-          model_reasoning_effort: this.request.reasoningEffort
-        },
-        ephemeral: true,
-        environments: [],
-        dynamicTools: [],
-        selectedCapabilityRoots: [],
-        experimentalRawEvents: true
-      }).then((value) => this.bindThread(value))
-    );
-    await withProtocolRunStage(
-      "thread_started_wait" /* ThreadStartedWait */,
-      () => this.threadStartedSignal.promise
-    );
-    await withProtocolRunStage(
-      "turn_start_response" /* TurnStartResponse */,
-      () => this.sendRequest("turn/start", {
-        threadId: this.threadId,
-        clientUserMessageId: this.request.clientTurnId,
-        input: [
-          {
-            type: "text",
-            text: this.request.prompt,
-            text_elements: []
-          }
-        ],
-        environments: [],
-        runtimeWorkspaceRoots: [],
-        approvalPolicy: "never",
-        approvalsReviewer: "user",
-        sandboxPolicy: {
-          type: "readOnly",
-          networkAccess: false
-        },
-        effort: this.request.reasoningEffort,
-        ...this.request.outputSchema === void 0 ? {} : { outputSchema: this.request.outputSchema }
-      }).then((value) => this.bindTurn(value))
-    );
-    this.maybeComplete();
-    return withProtocolRunStage(
-      "completion" /* Completion */,
-      () => this.completion.promise
-    );
-  }
-  receive(value) {
-    if (this.failed) return;
-    let diagnosticStage = "envelope" /* Envelope */;
-    try {
-      const message = requireRecord2(value, "protocol_message");
-      const hasMethod = Object.prototype.hasOwnProperty.call(message, "method");
-      const hasId = Object.prototype.hasOwnProperty.call(message, "id");
-      if (hasMethod && hasId) {
-        throw confinementFailure("server_request");
-      }
-      if (hasId) {
-        diagnosticStage = "response" /* Response */;
-        this.receiveResponse(message);
-        return;
-      }
-      if (hasMethod) {
-        diagnosticStage = notificationDiagnosticStage(message.method);
-        this.receiveNotification(message);
-        return;
-      }
-      throw streamFailure();
-    } catch (error2) {
-      this.fail(withStreamDiagnosticStage(error2, diagnosticStage));
-    }
-  }
-  fail(error2) {
-    if (this.failed) return;
-    this.failed = true;
-    const failure = normalizeProtocolFailure(error2);
-    this.terminalFailure = failure;
-    if (this.completionResolved) {
-      this.postCompletionFailure = failure;
-    }
-    for (const pending of this.pending.values()) {
-      pending.deferred.reject(failure);
-    }
-    this.pending.clear();
-    this.threadStartedSignal.reject(failure);
-    this.completion.reject(failure);
-  }
-  end() {
-    if (!this.failed && !this.turnCompleted) {
-      this.fail(streamFailure("process_end" /* ProcessEnd */));
-    }
-  }
-  failureAfterCompletion() {
-    return this.postCompletionFailure;
-  }
-  canInterrupt() {
-    return this.threadId !== null && this.turnId !== null;
-  }
-  async interrupt() {
-    if (!this.threadId || !this.turnId || this.failed) return;
-    await this.sendRequest("turn/interrupt", {
-      threadId: this.threadId,
-      turnId: this.turnId
-    });
-  }
-  async sendRequest(method, params) {
-    if (this.failed) throw this.terminalFailure ?? streamFailure();
-    const id = this.nextRequestId++;
-    const response = deferred();
-    this.pending.set(requestIdKey(id), { deferred: response });
-    try {
-      await this.write({ method, id, params });
-    } catch {
-      this.pending.delete(requestIdKey(id));
-      throw processFailure();
-    }
-    return response.promise;
-  }
-  async sendNotification(method) {
-    if (this.failed) throw this.terminalFailure ?? streamFailure();
-    try {
-      await this.write({ method });
-    } catch (error2) {
-      if (this.failed) throw this.terminalFailure ?? streamFailure();
-      throw error2;
-    }
-    if (this.failed) throw this.terminalFailure ?? streamFailure();
-  }
-  receiveResponse(message) {
-    const hasResult = Object.prototype.hasOwnProperty.call(message, "result");
-    const hasError = Object.prototype.hasOwnProperty.call(message, "error");
-    if (hasResult === hasError || Object.prototype.hasOwnProperty.call(message, "method") || Object.prototype.hasOwnProperty.call(message, "params") || !hasOnlyKeys(message, hasResult ? ["id", "result"] : ["error", "id"])) {
-      throw streamFailure();
-    }
-    const id = requireRequestId(message.id);
-    const pending = this.pending.get(requestIdKey(id));
-    if (!pending) throw streamFailure();
-    this.pending.delete(requestIdKey(id));
-    if (hasError) {
-      pending.deferred.reject(responseFailure(message.error));
-      return;
-    }
-    pending.deferred.resolve(message.result);
-  }
-  receiveNotification(message) {
-    if (!hasRequiredAndOptionalKeys(
-      message,
-      ["method", "params"],
-      ["emittedAtMs"]
-    ) || message.emittedAtMs !== void 0 && (!Number.isSafeInteger(message.emittedAtMs) || message.emittedAtMs < 0)) {
-      throw streamFailure();
-    }
-    const method = requireNonEmptyString(message.method, "notification_method");
-    const params = requireRecord2(message.params, "notification_params");
-    switch (method) {
-      case "thread/started":
-        this.onThreadStarted(params);
-        return;
-      case "thread/name/updated":
-        this.onThreadNameUpdated(params);
-        return;
-      case "mcpServer/startupStatus/updated":
-        this.onMcpServerStatus(params);
-        return;
-      case "serverRequest/resolved":
-        this.onServerRequestResolved(params);
-        return;
-      case "turn/started":
-        this.onTurnStarted(params);
-        return;
-      case "item/started":
-        this.onItemStarted(params);
-        return;
-      case "item/completed":
-        this.onItemCompleted(params);
-        return;
-      case "rawResponse/completed":
-        this.onRawResponseCompleted(params);
-        return;
-      case "thread/tokenUsage/updated":
-        this.onTokenUsageUpdated(params);
-        return;
-      case "turn/completed":
-        this.onTurnCompleted(params);
-        return;
-      case "model/rerouted":
-        this.assertTurnFence(params);
-        throw modelFailure();
-      case "model/verification":
-        this.onModelVerification(params);
-        return;
-      case "turn/moderationMetadata":
-        this.onTurnModerationMetadata(params);
-        return;
-      case "model/safetyBuffering/updated":
-        this.onModelSafetyBufferingUpdated(params);
-        return;
-      case "configWarning":
-        this.onConfigWarning(params);
-        return;
-      case "warning":
-        this.onWarning(params);
-        return;
-      case "error":
-        this.onErrorNotification(params);
-        return;
-      default:
-        if (IGNORED_NOTIFICATION_METHODS.has(method)) return;
-        throw streamFailure();
-    }
-  }
-  bindThread(value) {
-    const response = requireRecord2(value, "thread_start_response");
-    const thread = requireRecord2(response.thread, "thread");
-    const threadId = requireIdentifier2(thread.id, "thread_id");
-    const actualModel = requireModel(response.model);
-    const responseModelProvider = requireModelProvider(response.modelProvider);
-    const threadModelProvider = requireModelProvider(thread.modelProvider);
-    if (responseModelProvider !== threadModelProvider || thread.ephemeral !== true || thread.path !== null || thread.cliVersion !== CODEX_APP_SERVER_VERSION || response.cwd !== this.request.cwd || thread.cwd !== this.request.cwd || response.approvalPolicy !== "never" || response.approvalsReviewer !== "user" || !isReadOnlySandbox(response.sandbox) || response.reasoningEffort !== this.request.reasoningEffort || !Array.isArray(response.instructionSources) || response.instructionSources.length !== 0 || !Array.isArray(thread.turns) || thread.turns.length !== 0 || this.provisionalThreadId !== null && this.provisionalThreadId !== threadId) {
-      throw confinementFailure("thread_start_contract");
-    }
-    this.threadId = threadId;
-    this.provisionalThreadId = threadId;
-    this.actualModel = actualModel;
-    this.modelProvider = responseModelProvider;
-  }
-  bindTurn(value) {
-    if (!this.threadId) throw streamFailure();
-    const response = requireRecord2(value, "turn_start_response");
-    const turn = requireRecord2(response.turn, "turn");
-    const turnId = requireIdentifier2(turn.id, "turn_id");
-    if (turn.status !== "inProgress" || !hasAbsentOrNullProperty(turn, "error") || !Array.isArray(turn.items) || turn.items.length !== 0 || this.provisionalTurnId !== null && this.provisionalTurnId !== turnId) {
-      throw streamFailure();
-    }
-    this.turnId = turnId;
-    this.provisionalTurnId = turnId;
-  }
-  onThreadStarted(params) {
-    if (!this.initialized || this.threadStarted) throw streamFailure();
-    const thread = requireRecord2(params.thread, "thread_started_thread");
-    const threadId = requireIdentifier2(thread.id, "thread_id");
-    if (this.provisionalThreadId !== null && this.provisionalThreadId !== threadId || thread.ephemeral !== true || thread.path !== null || thread.cliVersion !== CODEX_APP_SERVER_VERSION || thread.cwd !== this.request.cwd || !Array.isArray(thread.turns) || thread.turns.length !== 0) {
-      throw confinementFailure("thread_started_contract");
-    }
-    requireModelProvider(thread.modelProvider);
-    this.provisionalThreadId = threadId;
-    this.threadStarted = true;
-    this.threadStartedSignal.resolve();
-  }
-  onMcpServerStatus(params) {
-    const name = requireNonEmptyString(params.name, "mcp_server_name");
-    if (name !== CODEX_APP_SERVER_MCP_NAME) {
-      throw confinementFailure("mcp_server_identity");
-    }
-    if (params.threadId !== null) {
-      this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
-    }
-    if (params.status !== "starting" && params.status !== "ready" && params.status !== "failed" && params.status !== "cancelled") {
-      throw streamFailure();
-    }
-    if (params.status === "failed" || params.status === "cancelled") {
-      throw processFailure();
-    }
-  }
-  onThreadNameUpdated(params) {
-    if (!this.threadStarted || !hasRequiredAndOptionalKeys(params, ["threadId"], ["threadName"])) {
-      throw streamFailure();
-    }
-    this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
-    if (params.threadName !== null && params.threadName !== void 0) {
-      const threadName = requireNonEmptyString(
-        params.threadName,
-        "thread_name"
-      );
-      if (Buffer.byteLength(threadName, "utf8") > MAX_NOTIFICATION_STRING_BYTES) {
-        throw streamFailure();
-      }
-    }
-  }
-  onTurnStarted(params) {
-    if (!this.threadStarted || this.turnStarted) throw streamFailure();
-    this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
-    const turn = requireRecord2(params.turn, "turn_started_turn");
-    const turnId = requireIdentifier2(turn.id, "turn_id");
-    if (this.provisionalTurnId !== null && this.provisionalTurnId !== turnId || turn.status !== "inProgress" || !hasAbsentOrNullProperty(turn, "error") || !Array.isArray(turn.items) || turn.items.length !== 0) {
-      throw streamFailure();
-    }
-    this.provisionalTurnId = turnId;
-    this.turnStarted = true;
-  }
-  onItemStarted(params) {
-    let checkpoint = "fence";
-    let itemType = "other";
-    try {
-      this.assertTurnFence(params);
-      checkpoint = "lifecycle";
-      if (!this.turnStarted || this.turnCompleted) throw streamFailure();
-      checkpoint = "item_shape";
-      const item = requireRecord2(params.item, "item");
-      itemType = itemDiagnosticType(item.type);
-      checkpoint = "identity";
-      const id = requireIdentifier2(item.id, "item_id");
-      const type2 = requireNonEmptyString(item.type, "item_type");
-      checkpoint = "id_duplicate_active";
-      const previousActive = this.activeItems.get(id);
-      if (previousActive && (previousActive.type !== "agentMessage" || type2 !== "agentMessage")) {
-        throw streamFailure();
-      }
-      checkpoint = "id_duplicate_completed";
-      const completed = this.completedItems.get(id);
-      if (completed && (completed.type !== "agentMessage" || type2 !== "agentMessage")) {
-        throw streamFailure();
-      }
-      checkpoint = "item_shape";
-      this.validateAllowedItem(item, "started", (value) => {
-        checkpoint = value;
-      });
-      if (previousActive) return;
-      const active = type2 === "mcpToolCall" ? Object.freeze({
-        type: type2,
-        server: requireNonEmptyString(item.server, "mcp_server"),
-        tool: requireNonEmptyString(item.tool, "mcp_tool")
-      }) : Object.freeze({ type: type2 });
-      if (completed) this.completedItems.delete(id);
-      this.activeItems.set(id, active);
-    } catch (error2) {
-      throw withStreamDiagnosticStage(
-        error2,
-        `item_started_${itemType}_${checkpoint}`
-      );
-    }
-  }
-  onItemCompleted(params) {
-    this.assertTurnFence(params);
-    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
-    const item = requireRecord2(params.item, "item");
-    const id = requireIdentifier2(item.id, "item_id");
-    const type2 = requireNonEmptyString(item.type, "item_type");
-    const active = this.activeItems.get(id);
-    if (!active || active.type !== type2 || this.completedItems.has(id)) {
-      throw streamFailure();
-    }
-    this.validateAllowedItem(item, "completed");
-    if (type2 === "mcpToolCall" && (active.server !== item.server || active.tool !== item.tool)) {
-      throw confinementFailure("mcp_tool_identity_changed");
-    }
-    this.activeItems.delete(id);
-    this.completedItems.set(id, active);
-    if (type2 === "agentMessage") this.captureFinalMessage(item);
-  }
-  validateTurnItemSnapshot(items) {
-    const snapshotItemIds = /* @__PURE__ */ new Set();
-    for (const value of items) {
-      try {
-        const item = requireRecord2(value, "turn_snapshot_item");
-        const id = requireIdentifier2(item.id, "item_id");
-        const type2 = requireNonEmptyString(item.type, "item_type");
-        this.validateAllowedItem(item, "completed");
-        if (snapshotItemIds.has(id)) {
-          throw streamFailure();
-        }
-        const observed = this.completedItems.get(id);
-        if (!observed) {
-          this.reconcileTerminalNonEffectfulItem(item, id, type2);
-          snapshotItemIds.add(id);
-          continue;
-        }
-        if (observed.type !== type2) throw streamFailure();
-        if (type2 === "mcpToolCall" && (observed.server !== item.server || observed.tool !== item.tool)) {
-          throw confinementFailure("mcp_tool_identity_changed");
-        }
-        snapshotItemIds.add(id);
-      } catch (error2) {
-        if (error2 instanceof ReviewAgentExecutionError && error2.failureClass === "confinement_violation" /* ConfinementViolation */) {
-          throw error2;
-        }
-        throw streamFailure();
-      }
-    }
-  }
-  reconcileTerminalNonEffectfulItem(item, id, type2) {
-    if (type2 === "mcpToolCall") throw streamFailure();
-    const active = this.activeItems.get(id);
-    if (active && active.type !== type2) throw streamFailure();
-    this.activeItems.delete(id);
-    this.completedItems.set(id, Object.freeze({ type: type2 }));
-    if (type2 === "agentMessage") this.captureFinalMessage(item);
-  }
-  reconcileItemsOmittedFromTerminalSummary() {
-    for (const active of this.activeItems.values()) {
-      if (active.type !== "mcpToolCall") {
-        if (!TERMINAL_SUMMARY_OMITTABLE_NON_EFFECTFUL_ITEM_TYPES.has(active.type)) {
-          throw streamFailure();
-        }
-        continue;
-      }
-      if (active.server !== CODEX_APP_SERVER_MCP_NAME || active.tool === void 0 || !this.allowedTools.has(active.tool)) {
-        throw streamFailure();
-      }
-    }
-    this.activeItems.clear();
-  }
-  validateAllowedItem(item, lifecycle, mark) {
-    const type2 = requireNonEmptyString(item.type, "item_type");
-    if (FORBIDDEN_ITEM_TYPES.has(type2)) {
-      throw confinementFailure("forbidden_item_type");
-    }
-    mark?.("unsupported_item_type");
-    if (!ALLOWED_ITEM_TYPES.has(type2)) throw streamFailure();
-    switch (type2) {
-      case "userMessage":
-        this.validateUserMessage(item, mark);
-        return;
-      case "agentMessage":
-        this.validateAgentMessage(item, mark);
-        return;
-      case "reasoning":
-        mark?.("reasoning_summary");
-        requireStringArray2(
-          itemFieldOrDefault(item, "summary", []),
-          "reasoning_summary"
-        );
-        mark?.("reasoning_content");
-        requireStringArray2(
-          itemFieldOrDefault(item, "content", []),
-          "reasoning_content"
-        );
-        return;
-      case "mcpToolCall":
-        this.validateMcpToolCall(item, lifecycle, mark);
-        return;
-      case "contextCompaction":
-        return;
-    }
-  }
-  validateUserMessage(item, mark) {
-    mark?.("user_client_id");
-    if (item.clientId !== this.request.clientTurnId) throw streamFailure();
-    mark?.("user_content");
-    if (!Array.isArray(item.content) || item.content.length !== 1) {
-      throw streamFailure();
-    }
-    const content = requireRecord2(item.content[0], "user_message_content");
-    if (content.type !== "text" || content.text !== this.request.prompt || !Array.isArray(content.text_elements) || content.text_elements.length !== 0) {
-      throw streamFailure();
-    }
-  }
-  validateAgentMessage(item, mark) {
-    mark?.("agent_text");
-    if (typeof item.text !== "string") throw streamFailure();
-    mark?.("agent_phase");
-    const phase = itemFieldOrDefault(item, "phase", null);
-    if (phase !== null && phase !== "commentary" && phase !== "final_answer")
-      throw streamFailure();
-    mark?.("agent_memory_citation");
-    if (itemFieldOrDefault(item, "memoryCitation", null) !== null)
-      throw streamFailure();
-    if (Buffer.byteLength(item.text, "utf8") > this.request.maxOutputBytes) {
-      throw schemaFailure();
-    }
-  }
-  validateMcpToolCall(item, lifecycle, mark) {
-    mark?.("mcp_server");
-    const server = requireNonEmptyString(item.server, "mcp_server");
-    mark?.("mcp_tool");
-    const tool = requireNonEmptyString(item.tool, "mcp_tool");
-    if (server !== CODEX_APP_SERVER_MCP_NAME || !this.allowedTools.has(tool) || item.pluginId !== null || item.appContext !== null) {
-      throw confinementFailure("mcp_tool_authority");
-    }
-    mark?.("mcp_arguments");
-    requireRecord2(item.arguments, "mcp_arguments");
-    if (lifecycle === "started") {
-      mark?.("mcp_start_state");
-      if (item.status !== "inProgress" || item.result !== null || item.error !== null) {
-        throw streamFailure();
-      }
-      return;
-    }
-    const completed = item.status === "completed" && item.error === null && isRecord9(item.result);
-    const failedWithResult = item.status === "failed" && item.error === null && isRecord9(item.result);
-    const failedWithTransportError = item.status === "failed" && item.result === null && isRecord9(item.error) && hasOnlyKeys(item.error, ["message"]) && typeof item.error.message === "string" && Buffer.byteLength(item.error.message, "utf8") <= MAX_NOTIFICATION_STRING_BYTES;
-    if (!completed && !failedWithResult && !failedWithTransportError) {
-      throw streamFailure();
-    }
-  }
-  captureFinalMessage(item) {
-    const phase = itemFieldOrDefault(item, "phase", null);
-    if (phase === "commentary") return;
-    const text = item.text;
-    if (!text.trim()) throw schemaFailure();
-    this.finalMessageCandidates.push({
-      id: item.id,
-      phase,
-      text
-    });
-  }
-  captureTerminalSummaryFinalMessage(items, latestObserved) {
-    if (items.length !== 1) return;
-    const item = requireRecord2(items[0], "turn_summary_item");
-    if (item.type !== "agentMessage") return;
-    const latest = latestObserved ?? this.finalMessageCandidates.at(-1);
-    if (!latest || latest.id !== item.id || latest.phase !== itemFieldOrDefault(item, "phase", null) || latest.text !== item.text) {
-      throw streamFailure();
-    }
-    this.terminalSummaryFinalMessage = latest.text;
-  }
-  onRawResponseCompleted(params) {
-    this.assertTurnFence(params);
-    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
-    const responseId = requireIdentifier2(params.responseId, "response_id");
-    if (params.usage === null) throw usageFailure();
-    const usage = parseTokenUsage(params.usage);
-    const existing = this.rawUsageByResponseId.get(responseId);
-    if (existing) {
-      throw usageFailure();
-    }
-    this.rawUsageByResponseId.set(responseId, usage);
-  }
-  onTokenUsageUpdated(params) {
-    this.assertTurnFence(params);
-    if (!this.turnStarted || this.turnCompleted) throw streamFailure();
-    const tokenUsage = requireRecord2(params.tokenUsage, "thread_token_usage");
-    this.aggregateUsage = parseTokenUsage(tokenUsage.total);
-    this.lastAggregateUsage = parseTokenUsage(tokenUsage.last);
-    if (tokenUsage.modelContextWindow !== null && (!Number.isSafeInteger(tokenUsage.modelContextWindow) || tokenUsage.modelContextWindow < 1)) {
-      throw usageFailure();
-    }
-  }
-  onErrorNotification(params) {
-    if (!this.turnStarted || this.turnCompleted || !hasOnlyKeys(params, ["error", "threadId", "turnId", "willRetry"]) || typeof params.willRetry !== "boolean") {
-      throw streamFailure();
-    }
-    this.assertTurnFence(params);
-    const parsed = parseTurnError(params.error);
-    if (params.willRetry) {
-      if (this.retainedTerminalError !== null) throw streamFailure();
-      return;
-    }
-    if (this.retainedTerminalError !== null) throw streamFailure();
-    this.retainedTerminalError = parsed;
-  }
-  onModelVerification(params) {
-    this.assertActiveTurnMetadata(params, [
-      "threadId",
-      "turnId",
-      "verifications"
-    ]);
-    if (!Array.isArray(params.verifications) || params.verifications.length > MAX_NOTIFICATION_STRING_ARRAY_SIZE || params.verifications.some(
-      (verification) => verification !== "trustedAccessForCyber"
-    )) {
-      throw streamFailure();
-    }
-  }
-  onTurnModerationMetadata(params) {
-    this.assertActiveTurnMetadata(params, ["metadata", "threadId", "turnId"]);
-    validateBoundedJson(params.metadata);
-  }
-  onModelSafetyBufferingUpdated(params) {
-    this.assertActiveTurnMetadata(params, [
-      "fasterModel",
-      "model",
-      "reasons",
-      "showBufferingUi",
-      "threadId",
-      "turnId",
-      "useCases"
-    ]);
-    requireModel(params.model);
-    requireBoundedStringArray(params.useCases);
-    requireBoundedStringArray(params.reasons);
-    if (params.showBufferingUi !== true && params.showBufferingUi !== false) {
-      throw streamFailure();
-    }
-    if (params.fasterModel !== null) requireModel(params.fasterModel);
-  }
-  onTurnCompleted(params) {
-    let checkpoint = "thread_fence";
-    try {
-      this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
-      checkpoint = "turn_shape";
-      const turn = requireRecord2(params.turn, "turn_completed_turn");
-      checkpoint = "turn_fence";
-      this.assertTurnId(requireIdentifier2(turn.id, "turn_id"));
-      checkpoint = "lifecycle";
-      if (!this.turnStarted || this.turnCompleted) throw streamFailure();
-      checkpoint = "items_shape";
-      if (!Array.isArray(turn.items)) throw streamFailure();
-      const latestObservedFinalMessage = this.finalMessageCandidates.at(-1);
-      checkpoint = "items_snapshot";
-      this.validateTurnItemSnapshot(turn.items);
-      const turnError = turn.error ?? null;
-      checkpoint = "status";
-      switch (turn.status) {
-        case "completed":
-          checkpoint = "completed_error";
-          if (turnError !== null || this.retainedTerminalError !== null) {
-            throw streamFailure();
-          }
-          if (turn.itemsView === "summary") {
-            checkpoint = "summary_witness";
-            this.captureTerminalSummaryFinalMessage(
-              turn.items,
-              latestObservedFinalMessage
-            );
-          }
-          if (this.activeItems.size !== 0 && turn.itemsView === "summary") {
-            checkpoint = "summary_reconcile";
-            this.reconcileItemsOmittedFromTerminalSummary();
-          }
-          checkpoint = "completed_active_items";
-          if (this.activeItems.size !== 0) throw streamFailure();
-          this.turnCompleted = true;
-          this.maybeComplete();
-          return;
-        case "failed": {
-          checkpoint = "failed_active_items";
-          if (this.activeItems.size !== 0) throw streamFailure();
-          checkpoint = "failed_error";
-          const completedError = parseTurnError(turnError);
-          const retained = this.retainedTerminalError;
-          checkpoint = "failed_retained_error";
-          if (retained === null || retained.fingerprint !== completedError.fingerprint) {
-            throw streamFailure();
-          }
-          this.turnCompleted = true;
-          this.fail(retained.failure);
-          return;
-        }
-        case "interrupted":
-          checkpoint = "interrupted_error";
-          if (turnError !== null) throw streamFailure();
-          checkpoint = "interrupted_active_items";
-          if (this.activeItems.size !== 0) throw streamFailure();
-          this.turnCompleted = true;
-          this.fail(cancelledFailure());
-          return;
-        default:
-          throw streamFailure();
-      }
-    } catch (error2) {
-      throw withStreamDiagnosticStage(error2, `turn_completed_${checkpoint}`);
-    }
-  }
-  maybeComplete() {
-    if (!this.turnCompleted || this.failed) return;
-    if (!this.threadId || !this.turnId) return;
-    if (!this.threadStarted || !this.turnStarted || !this.actualModel || !this.modelProvider) {
-      this.fail(streamFailure());
-      return;
-    }
-    if (this.rawUsageByResponseId.size === 0 || !this.aggregateUsage || !this.lastAggregateUsage) {
-      this.fail(usageFailure());
-      return;
-    }
-    const rawUsage = sumUsage([...this.rawUsageByResponseId.values()]);
-    const lastRawUsage = [...this.rawUsageByResponseId.values()].at(-1);
-    if (!sameUsage(rawUsage, this.aggregateUsage) || !lastRawUsage || !sameUsage(lastRawUsage, this.lastAggregateUsage)) {
-      this.fail(usageFailure());
-      return;
-    }
-    const finalMessage = this.terminalSummaryFinalMessage ?? selectFinalMessage(this.finalMessageCandidates);
-    if (finalMessage === null) {
-      this.fail(schemaFailure());
-      return;
-    }
-    this.completionResolved = true;
-    this.completion.resolve(
-      Object.freeze({
-        finalMessage,
-        actualModel: this.actualModel,
-        modelProvider: this.modelProvider,
-        usage: Object.freeze({
-          inputTokens: rawUsage.inputTokens,
-          cachedInputTokens: rawUsage.cachedInputTokens,
-          outputTokens: rawUsage.outputTokens,
-          reasoningOutputTokens: rawUsage.reasoningOutputTokens,
-          totalTokens: rawUsage.totalTokens
-        })
-      })
-    );
-  }
-  assertTurnFence(params) {
-    this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
-    this.assertTurnId(requireIdentifier2(params.turnId, "turn_id"));
-  }
-  onServerRequestResolved(params) {
-    if (!this.threadStarted || !hasOnlyKeys(params, ["requestId", "threadId"])) {
-      throw streamFailure();
-    }
-    requireRequestId(params.requestId);
-    this.assertThreadId(requireIdentifier2(params.threadId, "thread_id"));
-  }
-  assertActiveTurnMetadata(params, keys) {
-    if (!this.threadStarted || this.turnCompleted || !hasOnlyKeys(params, keys)) {
-      throw streamFailure();
-    }
-    this.assertTurnFence(params);
-  }
-  onWarning(params) {
-    if (!hasRequiredAndOptionalKeys(params, ["message"], ["threadId"])) {
-      throw streamFailure();
-    }
-    if (params.threadId !== null && params.threadId !== void 0) {
-      const expectedThreadId = this.threadId ?? this.provisionalThreadId;
-      if (expectedThreadId === null) throw streamFailure();
-      const warningThreadId = requireIdentifier2(params.threadId, "thread_id");
-      if (warningThreadId !== expectedThreadId) throw streamFailure();
-    }
-    const message = requireNonEmptyString(params.message, "warning_message");
-    if (Buffer.byteLength(message, "utf8") > MAX_WARNING_MESSAGE_BYTES) {
-      throw streamFailure();
-    }
-  }
-  onConfigWarning(params) {
-    if (!hasRequiredAndOptionalKeys(
-      params,
-      ["summary"],
-      ["details", "path", "range"]
-    )) {
-      throw streamFailure();
-    }
-    requireBoundedMetadataString(params.summary, true);
-    requireNullableBoundedMetadataString(params.details);
-    requireNullableBoundedMetadataString(params.path);
-    if (params.range !== void 0 && params.range !== null) {
-      validateConfigWarningRange(params.range);
-    }
-  }
-  assertThreadId(threadId) {
-    const expected = this.threadId ?? this.provisionalThreadId;
-    if (expected !== null && expected !== threadId) throw streamFailure();
-    if (expected === null) this.provisionalThreadId = threadId;
-  }
-  assertTurnId(turnId) {
-    const expected = this.turnId ?? this.provisionalTurnId;
-    if (expected !== null && expected !== turnId) throw streamFailure();
-    if (expected === null) this.provisionalTurnId = turnId;
-  }
-};
-function selectFinalMessage(candidates) {
-  const finalAnswers = candidates.filter(
-    (candidate) => candidate.phase === "final_answer"
-  );
-  if (finalAnswers.length === 1) return finalAnswers[0].text;
-  if (finalAnswers.length > 1) return null;
-  const compatible = candidates.filter((candidate) => candidate.phase === null);
-  return compatible.length === 1 ? compatible[0].text : null;
-}
-function classifyCodexAppServerDiagnostic(diagnostic, fallback2 = "process_failure" /* ProcessFailure */) {
-  if (/(?:401|403|unauthorized|not logged in|refresh token|oauth|authentication)/iu.test(
-    diagnostic
-  )) {
-    return new ReviewAgentExecutionError(
-      "authentication_unavailable" /* AuthenticationUnavailable */,
-      null,
-      "review_agent_authentication_unavailable"
-    );
-  }
-  if (/(?:invalid_json_schema|invalid schema for response_format|(?:invalid|rejected|unsupported) structured output schema|structured output schema (?:is )?(?:invalid|rejected|unsupported))/iu.test(
-    diagnostic
-  )) {
-    return schemaFailure();
-  }
-  if (/(?:usage\s*limit|usageLimitExceeded|sessionBudgetExceeded|quota|insufficient_quota|billing limit)/iu.test(
-    diagnostic
-  )) {
-    return new ReviewAgentExecutionError(
-      "quota_unavailable" /* QuotaUnavailable */,
-      null,
-      "review_agent_quota_unavailable"
-    );
-  }
-  if (/(?:capacity[_ -]unavailable|serverOverloaded|overloaded|too many requests|\b429\b|rate limit)/iu.test(
-    diagnostic
-  )) {
-    return new ReviewAgentExecutionError(
-      "capacity_unavailable" /* CapacityUnavailable */,
-      null,
-      "review_agent_capacity_unavailable"
-    );
-  }
-  if (/(?:model cache|startup|failed to start|enoent|spawn)/iu.test(diagnostic)) {
-    return new ReviewAgentExecutionError(
-      "startup_failure" /* StartupFailure */,
-      null,
-      "review_agent_startup_failure"
-    );
-  }
-  return new ReviewAgentExecutionError(fallback2, null, failureCode(fallback2));
-}
-function validateInitializeResponse(value) {
-  const response = requireRecord2(value, "initialize_response");
-  const userAgent = requireNonEmptyString(response.userAgent, "user_agent");
-  const versionPattern = new RegExp(
-    `^[A-Za-z][A-Za-z0-9 ._-]{0,64}/${CODEX_APP_SERVER_VERSION.replaceAll(".", "\\.")}(?:\\s|$)`,
-    "u"
-  );
-  if (!versionPattern.test(userAgent) || !import_path5.default.isAbsolute(requireNonEmptyString(response.codexHome, "codex_home")) || !requireNonEmptyString(response.platformFamily, "platform_family") || !requireNonEmptyString(response.platformOs, "platform_os")) {
-    throw new ReviewAgentExecutionError(
-      "capability_unavailable" /* CapabilityUnavailable */,
-      null,
-      "review_agent_capability_unavailable"
-    );
-  }
-}
-function parseTokenUsage(value) {
-  const usage = requireRecord2(value, "token_usage");
-  if (!hasOnlyKeys(usage, [
-    "cacheWriteInputTokens",
-    "cachedInputTokens",
-    "inputTokens",
-    "outputTokens",
-    "reasoningOutputTokens",
-    "totalTokens"
-  ])) {
-    throw usageFailure();
-  }
-  const parsed = Object.freeze({
-    totalTokens: requireTokenCount(usage.totalTokens),
-    inputTokens: requireTokenCount(usage.inputTokens),
-    cachedInputTokens: requireTokenCount(usage.cachedInputTokens),
-    cacheWriteInputTokens: requireTokenCount(usage.cacheWriteInputTokens),
-    outputTokens: requireTokenCount(usage.outputTokens),
-    reasoningOutputTokens: requireTokenCount(usage.reasoningOutputTokens)
-  });
-  if (parsed.cachedInputTokens > parsed.inputTokens || parsed.cacheWriteInputTokens > parsed.inputTokens || parsed.reasoningOutputTokens > parsed.outputTokens || parsed.totalTokens !== parsed.inputTokens + parsed.outputTokens) {
-    throw usageFailure();
-  }
-  return parsed;
-}
-function sumUsage(values) {
-  const total = {
-    totalTokens: 0,
-    inputTokens: 0,
-    cachedInputTokens: 0,
-    cacheWriteInputTokens: 0,
-    outputTokens: 0,
-    reasoningOutputTokens: 0
-  };
-  for (const usage of values) {
-    for (const key of Object.keys(total)) {
-      const next = total[key] + usage[key];
-      if (!Number.isSafeInteger(next)) throw usageFailure();
-      total[key] = next;
-    }
-  }
-  return Object.freeze(total);
-}
-function sameUsage(left, right) {
-  return left.totalTokens === right.totalTokens && left.inputTokens === right.inputTokens && left.cachedInputTokens === right.cachedInputTokens && left.cacheWriteInputTokens === right.cacheWriteInputTokens && left.outputTokens === right.outputTokens && left.reasoningOutputTokens === right.reasoningOutputTokens;
-}
-function responseFailure(value) {
-  const error2 = requireRecord2(value, "protocol_error");
-  if (!Number.isSafeInteger(error2.code) || typeof error2.message !== "string" || error2.message.length > 16384) {
-    return streamFailure();
-  }
-  const diagnostic = `${error2.code} ${error2.message} ${safeJson(error2.data)}`.slice(0, 16384);
-  return withProtocolProcessDetail(
-    classifyCodexAppServerDiagnostic(diagnostic),
-    "response_error"
-  );
-}
-function parseTurnError(value) {
-  const error2 = requireRecord2(value, "turn_error");
-  const additionalDetails = error2.additionalDetails ?? null;
-  const codexErrorInfo = parseCodexErrorInfo(error2.codexErrorInfo ?? null);
-  if (typeof error2.message !== "string" || error2.message.length > 16384 || additionalDetails !== null && (typeof additionalDetails !== "string" || additionalDetails.length > 16384)) {
-    throw streamFailure();
-  }
-  if (error2.message.length === 0 && !hasCodexErrorClassification(codexErrorInfo)) {
-    throw streamFailure();
-  }
-  const normalized = Object.freeze({
-    message: error2.message,
-    additionalDetails,
-    codexErrorInfo
-  });
-  const canonical = canonicalProtocolValue(normalized);
-  if (Buffer.byteLength(canonical, "utf8") > 32768) {
-    throw streamFailure();
-  }
-  const diagnostic = [
-    error2.message,
-    additionalDetails ?? "",
-    safeJson(codexErrorInfo)
-  ].join(" ").slice(0, 16384);
-  return Object.freeze({
-    failure: withProtocolProcessDetail(
-      classifyCodexAppServerDiagnostic(diagnostic),
-      "turn_error",
-      codexErrorInfo
-    ),
-    fingerprint: (0, import_crypto39.createHash)("sha256").update(canonical).digest("hex")
-  });
-}
-function withProtocolProcessDetail(failure, origin, validatedCodexErrorInfo) {
-  if (failure.failureClass !== "process_failure" /* ProcessFailure */ || failure.message !== "review_agent_process_failure") {
-    return failure;
-  }
-  const variant = typeof validatedCodexErrorInfo === "string" ? validatedCodexErrorInfo : isRecord9(validatedCodexErrorInfo) ? Object.keys(validatedCodexErrorInfo)[0] : void 0;
-  const suffix = variant && (CODEX_ERROR_INFO_STRING_VARIANTS.has(variant) || CODEX_ERROR_INFO_HTTP_VARIANTS.has(variant) || variant === "activeTurnNotSteerable") ? `_${variant.toLowerCase()}` : "";
-  return new ReviewAgentExecutionError(
-    failure.failureClass,
-    failure.retryAfterMs,
-    `review_agent_process_failure_${origin}${suffix}`
-  );
-}
-function hasCodexErrorClassification(value) {
-  return value !== null;
-}
-function parseCodexErrorInfo(value) {
-  if (value === null) return null;
-  if (typeof value === "string") {
-    if (!CODEX_ERROR_INFO_STRING_VARIANTS.has(value)) throw streamFailure();
-    return value;
-  }
-  const tagged = requireRecord2(value, "codex_error_info");
-  const variants = Object.keys(tagged);
-  if (variants.length !== 1) throw streamFailure();
-  const variant = variants[0];
-  const payload = requireRecord2(tagged[variant], "codex_error_info_payload");
-  if (CODEX_ERROR_INFO_HTTP_VARIANTS.has(variant)) {
-    if (!hasRequiredAndOptionalKeys(payload, [], ["httpStatusCode"])) {
-      throw streamFailure();
-    }
-    const status = payload.httpStatusCode;
-    if (status !== void 0 && status !== null && (!Number.isSafeInteger(status) || status < 0 || status > 65535)) {
-      throw streamFailure();
-    }
-    return value;
-  }
-  if (variant === "activeTurnNotSteerable" && hasOnlyKeys(payload, ["turnKind"]) && (payload.turnKind === "review" || payload.turnKind === "compact")) {
-    return value;
-  }
-  throw streamFailure();
-}
-function canonicalProtocolValue(value) {
-  if (value === null || typeof value !== "object") {
-    const encoded = JSON.stringify(value);
-    if (typeof encoded !== "string") throw streamFailure();
-    return encoded;
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalProtocolValue).join(",")}]`;
-  }
-  const record = value;
-  return `{${Object.keys(record).sort().map(
-    (key) => `${JSON.stringify(key)}:${canonicalProtocolValue(record[key])}`
-  ).join(",")}}`;
-}
-function normalizeProtocolFailure(error2) {
-  return error2 instanceof ReviewAgentExecutionError ? error2 : streamFailure();
-}
-function requireRecord2(value, _field) {
-  if (!isRecord9(value)) throw streamFailure();
-  return value;
-}
-function isRecord9(value) {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-function requireRequestId(value) {
-  if (typeof value === "string" || Number.isSafeInteger(value) && typeof value === "number") {
-    return value;
-  }
-  throw streamFailure();
-}
-function requestIdKey(value) {
-  return `${typeof value}:${String(value)}`;
-}
-function requireNonEmptyString(value, _field) {
-  if (typeof value !== "string" || value.length < 1 || value.length > 16384 || containsControlCharacter(value)) {
-    throw streamFailure();
-  }
-  return value;
-}
-function requireBoundedMetadataString(value, allowEmpty) {
-  if (typeof value !== "string" || !allowEmpty && value.length === 0 || Buffer.byteLength(value, "utf8") > MAX_METADATA_STRING_BYTES) {
-    throw streamFailure();
-  }
-  return value;
-}
-function requireNullableBoundedMetadataString(value) {
-  if (value === void 0 || value === null) return;
-  requireBoundedMetadataString(value, true);
-}
-function validateConfigWarningRange(value) {
-  const range2 = requireRecord2(value, "config_warning_range");
-  if (!hasOnlyKeys(range2, ["end", "start"])) throw streamFailure();
-  for (const key of ["start", "end"]) {
-    const position = requireRecord2(range2[key], "config_warning_position");
-    if (!hasOnlyKeys(position, ["column", "line"]) || !isUnsignedInteger(position.line) || !isUnsignedInteger(position.column)) {
-      throw streamFailure();
-    }
-  }
-}
-function isUnsignedInteger(value) {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4294967295;
-}
-function containsControlCharacter(value) {
-  for (const character of value) {
-    const codePoint = character.codePointAt(0);
-    if (codePoint !== void 0 && (codePoint <= 31 || codePoint === 127)) {
-      return true;
-    }
-  }
-  return false;
-}
-function requireIdentifier2(value, field) {
-  const result2 = requireNonEmptyString(value, field);
-  if (result2.length > 512) throw streamFailure();
-  return result2;
-}
-function requireModel(value) {
-  const model = requireNonEmptyString(value, "model");
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:/+#-]{0,199}$/u.test(model)) {
-    throw modelFailure();
-  }
-  return model;
-}
-function requireModelProvider(value) {
-  const provider = requireNonEmptyString(value, "model_provider");
-  if (provider.trim() !== provider || provider.length > 200) {
-    throw modelFailure();
-  }
-  return provider;
-}
-function itemFieldOrDefault(item, key, fallback2) {
-  return Object.prototype.hasOwnProperty.call(item, key) ? item[key] : fallback2;
-}
-function requireStringArray2(value, _field) {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw streamFailure();
-  }
-  return value;
-}
-function requireBoundedStringArray(value) {
-  if (!Array.isArray(value) || value.length > MAX_NOTIFICATION_STRING_ARRAY_SIZE) {
-    throw streamFailure();
-  }
-  for (const item of value) {
-    if (typeof item !== "string" || Buffer.byteLength(item, "utf8") > MAX_NOTIFICATION_STRING_BYTES || containsControlCharacter(item)) {
-      throw streamFailure();
-    }
-  }
-  return value;
-}
-function validateBoundedJson(value) {
-  const pending = [
-    { value, depth: 0 }
-  ];
-  let nodeCount = 0;
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (!current || ++nodeCount > MAX_METADATA_JSON_NODES) {
-      throw streamFailure();
-    }
-    const candidate = current.value;
-    if (candidate === null || typeof candidate === "boolean" || typeof candidate === "number" && Number.isFinite(candidate)) {
-      continue;
-    }
-    if (typeof candidate === "string") {
-      if (Buffer.byteLength(candidate, "utf8") > MAX_METADATA_STRING_BYTES || containsControlCharacter(candidate)) {
-        throw streamFailure();
-      }
-      continue;
-    }
-    if (current.depth >= MAX_METADATA_JSON_DEPTH) throw streamFailure();
-    if (Array.isArray(candidate)) {
-      if (candidate.length > MAX_METADATA_COLLECTION_SIZE) {
-        throw streamFailure();
-      }
-      for (const item of candidate) {
-        pending.push({ value: item, depth: current.depth + 1 });
-      }
-      continue;
-    }
-    if (!isRecord9(candidate)) throw streamFailure();
-    const prototype = Object.getPrototypeOf(candidate);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw streamFailure();
-    }
-    const entries = Object.entries(candidate);
-    if (entries.length > MAX_METADATA_COLLECTION_SIZE) throw streamFailure();
-    for (const [key, item] of entries) {
-      if (Buffer.byteLength(key, "utf8") > MAX_NOTIFICATION_STRING_BYTES || containsControlCharacter(key)) {
-        throw streamFailure();
-      }
-      pending.push({ value: item, depth: current.depth + 1 });
-    }
-  }
-  let encoded;
-  try {
-    encoded = JSON.stringify(value);
-  } catch {
-    throw streamFailure();
-  }
-  if (Buffer.byteLength(encoded, "utf8") > MAX_METADATA_JSON_BYTES) {
-    throw streamFailure();
-  }
-}
-function requireTokenCount(value) {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw usageFailure();
-  }
-  return value;
-}
-function hasOnlyKeys(value, allowed) {
-  const keys = Object.keys(value).sort();
-  const expected = [...allowed].sort();
-  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
-}
-function hasRequiredAndOptionalKeys(value, required, optional) {
-  const allowed = /* @__PURE__ */ new Set([...required, ...optional]);
-  return required.every((key) => Object.prototype.hasOwnProperty.call(value, key)) && Object.keys(value).every((key) => allowed.has(key));
-}
-function hasAbsentOrNullProperty(value, key) {
-  return !Object.prototype.hasOwnProperty.call(value, key) || value[key] === null;
-}
-function isReadOnlySandbox(value) {
-  return isRecord9(value) && value.type === "readOnly" && value.networkAccess === false;
-}
-function safeJson(value) {
-  try {
-    return JSON.stringify(value) ?? "";
-  } catch {
-    return "";
-  }
-}
-function itemDiagnosticType(value) {
-  switch (value) {
-    case "userMessage":
-      return "user_message";
-    case "agentMessage":
-      return "agent_message";
-    case "reasoning":
-      return "reasoning";
-    case "mcpToolCall":
-      return "mcp_tool_call";
-    case "contextCompaction":
-      return "context_compaction";
-    default:
-      return "other";
-  }
-}
-function notificationDiagnosticStage(value) {
-  switch (value) {
-    case "thread/started":
-      return "thread_started" /* ThreadStarted */;
-    case "thread/name/updated":
-      return "thread_name_updated" /* ThreadNameUpdated */;
-    case "mcpServer/startupStatus/updated":
-      return "mcp_server_status" /* McpServerStatus */;
-    case "serverRequest/resolved":
-      return "server_request_resolved" /* ServerRequestResolved */;
-    case "turn/started":
-      return "turn_started" /* TurnStarted */;
-    case "item/started":
-      return "item_started" /* ItemStarted */;
-    case "item/completed":
-      return "item_completed" /* ItemCompleted */;
-    case "rawResponse/completed":
-      return "raw_response_completed" /* RawResponseCompleted */;
-    case "thread/tokenUsage/updated":
-      return "token_usage_updated" /* TokenUsageUpdated */;
-    case "turn/completed":
-      return "turn_completed" /* TurnCompleted */;
-    case "model/rerouted":
-      return "model_rerouted" /* ModelRerouted */;
-    case "model/verification":
-      return "model_verification" /* ModelVerification */;
-    case "turn/moderationMetadata":
-      return "moderation_metadata" /* ModerationMetadata */;
-    case "model/safetyBuffering/updated":
-      return "model_safety" /* ModelSafety */;
-    case "configWarning":
-      return "config_warning" /* ConfigWarning */;
-    case "warning":
-      return "warning" /* Warning */;
-    case "error":
-      return "error" /* Error */;
-    default:
-      if (typeof value === "string" && IGNORED_NOTIFICATION_METHODS.has(value)) {
-        return "ignored_notification" /* IgnoredNotification */;
-      }
-      return typeof value === "string" ? `unknown_notification_${(0, import_crypto39.createHash)("sha256").update(value).digest("hex").slice(0, 12)}` : "unknown_notification" /* UnknownNotification */;
-  }
-}
-function withStreamDiagnosticStage(error2, stage) {
-  return error2 instanceof ReviewAgentExecutionError && error2.failureClass === "stream_incomplete" /* StreamIncomplete */ && error2.message === "review_agent_stream_incomplete" ? streamFailure(stage) : error2;
-}
-async function withProtocolRunStage(stage, operation) {
-  try {
-    return await operation();
-  } catch (error2) {
-    throw withStreamDiagnosticStage(error2, stage);
-  }
-}
-function streamFailure(stage) {
-  return new ReviewAgentExecutionError(
-    "stream_incomplete" /* StreamIncomplete */,
-    null,
-    stage ? `review_agent_stream_incomplete_${stage}` : "review_agent_stream_incomplete"
-  );
-}
-function schemaFailure() {
-  return new ReviewAgentExecutionError(
-    "schema_invalid_output" /* SchemaInvalidOutput */,
-    null,
-    "review_agent_output_invalid"
-  );
-}
-function usageFailure() {
-  return new ReviewAgentExecutionError(
-    "usage_attribution_missing" /* UsageAttributionMissing */,
-    null,
-    "review_agent_usage_attribution_missing"
-  );
-}
-function modelFailure() {
-  return new ReviewAgentExecutionError(
-    "model_attribution_missing" /* ModelAttributionMissing */,
-    null,
-    "review_agent_actual_model_unavailable"
-  );
-}
-function confinementFailure(reason) {
-  return new ReviewAgentExecutionError(
-    "confinement_violation" /* ConfinementViolation */,
-    null,
-    `review_agent_confinement_violation_${reason}`
-  );
-}
-function processFailure() {
-  return new ReviewAgentExecutionError(
-    "process_failure" /* ProcessFailure */,
-    null,
-    "review_agent_process_failure"
-  );
-}
-function cancelledFailure() {
-  return new ReviewAgentExecutionError(
-    "cancelled" /* Cancelled */,
-    null,
-    "review_agent_process_cancelled"
-  );
-}
-function failureCode(failureClass) {
-  switch (failureClass) {
-    case "capability_unavailable" /* CapabilityUnavailable */:
-      return "review_agent_capability_unavailable";
-    case "authentication_unavailable" /* AuthenticationUnavailable */:
-      return "review_agent_authentication_unavailable";
-    case "quota_unavailable" /* QuotaUnavailable */:
-      return "review_agent_quota_unavailable";
-    case "capacity_unavailable" /* CapacityUnavailable */:
-      return "review_agent_capacity_unavailable";
-    case "startup_failure" /* StartupFailure */:
-      return "review_agent_startup_failure";
-    case "process_failure" /* ProcessFailure */:
-      return "review_agent_process_failure";
-    case "timeout" /* Timeout */:
-      return "review_agent_process_timeout";
-    case "cancelled" /* Cancelled */:
-      return "review_agent_process_cancelled";
-    case "schema_invalid_output" /* SchemaInvalidOutput */:
-      return "review_agent_output_invalid";
-    case "stream_incomplete" /* StreamIncomplete */:
-      return "review_agent_stream_incomplete";
-    case "model_attribution_missing" /* ModelAttributionMissing */:
-      return "review_agent_actual_model_unavailable";
-    case "usage_attribution_missing" /* UsageAttributionMissing */:
-      return "review_agent_usage_attribution_missing";
-    case "confinement_violation" /* ConfinementViolation */:
-      return "review_agent_confinement_violation";
-  }
-}
-function deferred() {
-  let resolve5;
-  let reject;
-  const promise = new Promise((resolvePromise, rejectPromise) => {
-    resolve5 = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve: resolve5, reject };
-}
-
-// src/review-investigation/infrastructure/codex-app-server-turn-runner.ts
-var DEFAULT_INTERRUPT_GRACE_MS = 500;
-var MAX_DIAGNOSTIC_BYTES = 16384;
-var NodeCodexAppServerTurnRunner = class {
-  constructor(options = {}) {
-    this.options = options;
-    const grace = options.interruptGraceMs ?? DEFAULT_INTERRUPT_GRACE_MS;
-    if (!Number.isSafeInteger(grace) || grace < 1 || grace > 1e4) {
-      throw new Error("review_agent_codex_interrupt_grace_invalid");
-    }
-    this.interruptGraceMs = grace;
-  }
-  active = /* @__PURE__ */ new Map();
-  verifiedBinaries = /* @__PURE__ */ new Set();
-  interruptGraceMs;
-  async executeTurn(request) {
-    validateRequest2(request);
-    if (this.active.has(request.invocationId)) {
-      throw processFailure2();
-    }
-    if (request.signal?.aborted) throw cancelledFailure2();
-    const startedAt = Date.now();
-    const abortController = new AbortController();
-    const active = {
-      fencingToken: request.fencingToken,
-      abortController,
-      execution: null,
-      done: deferred2()
-    };
-    this.active.set(request.invocationId, active);
-    const abort = () => abortController.abort();
-    request.signal?.addEventListener("abort", abort, { once: true });
-    try {
-      await this.requireSupportedVersion({
-        ...request,
-        signal: abortController.signal,
-        timeoutMs: request.timeoutMs
-      });
-      if (abortController.signal.aborted) throw cancelledFailure2();
-      const remainingMs = request.timeoutMs - (Date.now() - startedAt);
-      if (remainingMs < 1) throw timeoutFailure();
-      let child;
-      try {
-        child = (0, import_child_process18.spawn)(request.binary, [...request.args], {
-          cwd: request.cwd,
-          env: { ...request.environment },
-          detached: true,
-          shell: false,
-          stdio: ["pipe", "pipe", "pipe"]
-        });
-      } catch {
-        const result2 = processResult(
-          "startup_failed" /* StartupFailed */,
-          null,
-          "",
-          startedAt
-        );
-        this.observe(result2);
-        throw startupFailure();
-      }
-      const execution = new CodexAppServerChildTurn({
-        child,
-        request: {
-          ...request,
-          timeoutMs: remainingMs,
-          signal: abortController.signal
-        },
-        interruptGraceMs: this.interruptGraceMs,
-        startedAt,
-        observe: (result2) => this.observe(result2)
-      });
-      active.execution = execution;
-      return await execution.run();
-    } finally {
-      request.signal?.removeEventListener("abort", abort);
-      const current = this.active.get(request.invocationId);
-      if (current === active) {
-        this.active.delete(request.invocationId);
-      }
-      active.done.resolve();
-    }
-  }
-  async cancel(invocationId, fencingToken) {
-    const active = this.active.get(invocationId);
-    if (!active) return;
-    if (active.fencingToken !== fencingToken) {
-      throw new Error("review_agent_cancel_fencing_mismatch");
-    }
-    active.abortController.abort();
-    await active.execution?.cancel();
-    await active.done.promise;
-  }
-  observe(result2) {
-    try {
-      this.options.processResultObserver?.(result2);
-    } catch {
-    }
-  }
-  async requireSupportedVersion(request) {
-    if (this.verifiedBinaries.has(request.binary)) return;
-    await (this.options.versionProbe ?? new NodeCodexAppServerVersionProbe()).assertSupported(request);
-    this.verifiedBinaries.add(request.binary);
-  }
-};
-var NodeCodexAppServerVersionProbe = class {
-  assertSupported(request) {
-    if (request.signal?.aborted) return Promise.reject(cancelledFailure2());
-    return new Promise((resolve5, reject) => {
-      let child;
-      try {
-        child = (0, import_child_process18.spawn)(request.binary, ["--version"], {
-          cwd: request.cwd,
-          env: { ...request.environment },
-          detached: false,
-          shell: false,
-          stdio: ["pipe", "pipe", "pipe"]
-        });
-      } catch {
-        reject(startupFailure());
-        return;
-      }
-      let output = Buffer.alloc(0);
-      let termination = null;
-      let settled = false;
-      const collect = (chunk) => {
-        if (output.byteLength >= 1024) return;
-        output = Buffer.concat([
-          output,
-          chunk.subarray(0, 1024 - output.byteLength)
-        ]);
-      };
-      child.stdout.on("data", collect);
-      child.stderr.on("data", collect);
-      child.stdin.end();
-      const kill = () => {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-        }
-      };
-      const timer = setTimeout(
-        () => {
-          if (termination !== null) return;
-          termination = "timed_out";
-          kill();
-        },
-        Math.min(request.timeoutMs, 1e4)
-      );
-      const onAbort = () => {
-        if (termination !== null) return;
-        termination = "cancelled";
-        clearTimeout(timer);
-        kill();
-      };
-      request.signal?.addEventListener("abort", onAbort, { once: true });
-      if (request.signal?.aborted) onAbort();
-      const settle = (error2) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        request.signal?.removeEventListener("abort", onAbort);
-        if (error2) reject(error2);
-        else resolve5();
-      };
-      child.on("error", () => {
-        settle(startupFailure());
-      });
-      child.on("close", (code) => {
-        if (termination === "cancelled") {
-          settle(cancelledFailure2());
-          return;
-        }
-        if (termination === "timed_out") {
-          settle(timeoutFailure());
-          return;
-        }
-        const version = output.toString("utf8").trim();
-        if (code === 0 && version === `codex-cli ${CODEX_APP_SERVER_VERSION}`) {
-          settle();
-          return;
-        }
-        settle(
-          new ReviewAgentExecutionError(
-            "capability_unavailable" /* CapabilityUnavailable */,
-            null,
-            "review_agent_codex_app_server_version_mismatch"
-          )
-        );
-      });
-    });
-  }
-};
-var CodexAppServerChildTurn = class {
-  constructor(input) {
-    this.input = input;
-    this.protocol = new CodexAppServerProtocolClient(
-      input.request.protocol,
-      (message) => this.write(message)
-    );
-    this.protocolRun = this.protocol.run();
-    void this.protocolRun.then(
-      () => this.closeInput(),
-      (error2) => this.onProtocolFailure(error2)
-    );
-    input.child.stdout.on("data", (chunk) => this.onStdout(chunk));
-    input.child.stderr.on("data", (chunk) => this.onStderr(chunk));
-    input.child.stdin.on("error", () => {
-    });
-    input.child.on("error", (error2) => {
-      this.terminalError = classifyCodexAppServerDiagnostic(
-        sanitizeDiagnostic(error2.message),
-        "startup_failure" /* StartupFailure */
-      );
-    });
-    input.child.on("close", (code) => void this.onClose(code));
-    this.overallTimer = setTimeout(
-      () => this.requestTermination("timed_out" /* TimedOut */),
-      input.request.timeoutMs
-    );
-    input.request.signal?.addEventListener("abort", this.onAbort, {
-      once: true
-    });
-  }
-  done = deferred2();
-  protocol;
-  protocolRun;
-  stdoutBuffer = Buffer.alloc(0);
-  stderr = Buffer.alloc(0);
-  eventStreamBytes = 0;
-  closed = false;
-  settled = false;
-  forcedTermination = null;
-  terminalError = null;
-  killTimer = null;
-  overallTimer;
-  run() {
-    return this.done.promise;
-  }
-  async cancel() {
-    this.requestTermination("cancelled" /* Cancelled */);
-    await this.done.promise.catch(() => void 0);
-  }
-  onAbort = () => {
-    this.requestTermination("cancelled" /* Cancelled */);
-  };
-  write(message) {
-    if (this.closed || !this.input.child.stdin.writable) {
-      return Promise.reject(processFailure2());
-    }
-    let line;
-    try {
-      line = `${JSON.stringify(message)}
-`;
-    } catch {
-      return Promise.reject(
-        streamFailure2("write_json" /* WriteJson */)
-      );
-    }
-    return new Promise((resolve5, reject) => {
-      this.input.child.stdin.write(line, "utf8", (error2) => {
-        if (error2) reject(processFailure2());
-        else resolve5();
-      });
-    });
-  }
-  onStdout(chunk) {
-    if (this.closed || this.settled || !this.collectEventStreamBytes(chunk.byteLength)) {
-      return;
-    }
-    this.stdoutBuffer = Buffer.concat([this.stdoutBuffer, chunk]);
-    try {
-      let newline = this.stdoutBuffer.indexOf(10);
-      while (newline >= 0) {
-        let line = this.stdoutBuffer.subarray(0, newline);
-        this.stdoutBuffer = this.stdoutBuffer.subarray(newline + 1);
-        if (line.at(-1) === 13) line = line.subarray(0, -1);
-        if (!this.acceptEvent(line.byteLength)) return;
-        this.receiveLine(line);
-        newline = this.stdoutBuffer.indexOf(10);
-      }
-      if (!this.acceptEvent(this.stdoutBuffer.byteLength)) return;
-    } catch (error2) {
-      this.onProtocolFailure(error2);
-    }
-  }
-  onStderr(chunk) {
-    if (this.closed || this.settled || !this.collectEventStreamBytes(chunk.byteLength)) {
-      return;
-    }
-    if (this.stderr.byteLength < MAX_DIAGNOSTIC_BYTES) {
-      this.stderr = Buffer.concat([
-        this.stderr,
-        chunk.subarray(0, MAX_DIAGNOSTIC_BYTES - this.stderr.byteLength)
-      ]);
-    }
-  }
-  collectEventStreamBytes(bytes) {
-    this.eventStreamBytes += bytes;
-    if (this.eventStreamBytes <= this.input.request.maxEventStreamBytes) {
-      return true;
-    }
-    return this.exceedOutputLimit();
-  }
-  acceptEvent(bytes) {
-    if (bytes <= this.input.request.maxEventBytes) return true;
-    return this.exceedOutputLimit();
-  }
-  exceedOutputLimit() {
-    this.forcedTermination = "output_limit_exceeded" /* OutputLimitExceeded */;
-    this.terminalError = processFailure2();
-    this.killProcessGroup();
-    return false;
-  }
-  receiveLine(line) {
-    if (line.byteLength === 0) return;
-    let decoded;
-    try {
-      decoded = new import_util13.TextDecoder("utf-8", {
-        fatal: true,
-        ignoreBOM: true
-      }).decode(line);
-    } catch {
-      throw streamFailure2("stdout_utf8" /* StdoutUtf8 */);
-    }
-    let message;
-    try {
-      message = JSON.parse(decoded);
-    } catch {
-      throw streamFailure2("stdout_json" /* StdoutJson */);
-    }
-    this.protocol.receive(message);
-    const postCompletionFailure = this.protocol.failureAfterCompletion();
-    if (postCompletionFailure) throw postCompletionFailure;
-  }
-  onProtocolFailure(error2) {
-    if (this.closed || this.settled || this.forcedTermination !== null) return;
-    this.terminalError = error2 instanceof ReviewAgentExecutionError ? error2 : streamFailure2("protocol_failure" /* ProtocolFailure */);
-    this.killProcessGroup();
-  }
-  requestTermination(termination) {
-    if (this.closed || this.settled || this.forcedTermination !== null) return;
-    this.forcedTermination = termination;
-    if (!this.protocol.canInterrupt()) {
-      this.killProcessGroup();
-      return;
-    }
-    this.killTimer = setTimeout(
-      () => this.killProcessGroup(),
-      this.input.interruptGraceMs
-    );
-    void this.protocol.interrupt().catch(() => void 0).finally(() => this.closeInput());
-  }
-  closeInput() {
-    if (!this.closed && !this.input.child.stdin.destroyed) {
-      this.input.child.stdin.end();
-    }
-  }
-  killProcessGroup() {
-    if (this.closed) return;
-    try {
-      if (this.input.child.pid) {
-        process.kill(-this.input.child.pid, "SIGKILL");
-      } else {
-        this.input.child.kill("SIGKILL");
-      }
-    } catch {
-      try {
-        this.input.child.kill("SIGKILL");
-      } catch {
-      }
-    }
-  }
-  async onClose(exitCode) {
-    if (this.closed || this.settled) return;
-    this.closed = true;
-    clearTimeout(this.overallTimer);
-    if (this.killTimer) clearTimeout(this.killTimer);
-    this.input.request.signal?.removeEventListener("abort", this.onAbort);
-    try {
-      if (this.forcedTermination === null && this.terminalError === null && this.stdoutBuffer.byteLength > 0) {
-        let line = this.stdoutBuffer;
-        if (line.at(-1) === 13) line = line.subarray(0, -1);
-        this.receiveLine(line);
-      }
-    } catch (error2) {
-      this.terminalError = error2 instanceof ReviewAgentExecutionError ? error2 : streamFailure2("trailing_stdout" /* TrailingStdout */);
-    }
-    this.stdoutBuffer = Buffer.alloc(0);
-    this.protocol.end();
-    const trailingFailure = this.protocol.failureAfterCompletion();
-    if (trailingFailure) this.terminalError = trailingFailure;
-    let protocolResult = null;
-    try {
-      protocolResult = await this.protocolRun;
-    } catch (error2) {
-      if (exitCode === 0 && !this.terminalError && error2 instanceof ReviewAgentExecutionError) {
-        this.terminalError = error2;
-      }
-    }
-    const observed = processResult(
-      this.forcedTermination ?? (this.terminalError?.failureClass === "startup_failure" /* StartupFailure */ ? "startup_failed" /* StartupFailed */ : "exited" /* Exited */),
-      exitCode,
-      sanitizeDiagnostic(this.stderr.toString("utf8")),
-      this.input.startedAt
-    );
-    this.input.observe(observed);
-    if (this.forcedTermination === "timed_out" /* TimedOut */) {
-      this.settleFailure(timeoutFailure());
-      return;
-    }
-    if (this.forcedTermination === "cancelled" /* Cancelled */) {
-      this.settleFailure(cancelledFailure2());
-      return;
-    }
-    if (this.terminalError) {
-      this.settleFailure(this.terminalError);
-      return;
-    }
-    if (exitCode !== 0) {
-      this.settleFailure(
-        classifyCodexAppServerDiagnostic(
-          sanitizeDiagnostic(this.stderr.toString("utf8"))
-        )
-      );
-      return;
-    }
-    if (!protocolResult) {
-      this.settleFailure(
-        streamFailure2("missing_protocol_result" /* MissingProtocolResult */)
-      );
-      return;
-    }
-    this.settled = true;
-    this.done.resolve(
-      Object.freeze({
-        ...protocolResult,
-        durationMs: Math.max(0, Date.now() - this.input.startedAt)
-      })
-    );
-  }
-  settleFailure(error2) {
-    if (this.settled) return;
-    this.settled = true;
-    this.done.reject(error2);
-  }
-};
-function validateRequest2(request) {
-  if (!request.invocationId || !request.fencingToken || !request.binary || !request.cwd || !Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1 || !Number.isSafeInteger(request.maxEventStreamBytes) || request.maxEventStreamBytes < 1 || !Number.isSafeInteger(request.maxEventBytes) || request.maxEventBytes < 1 || request.maxEventBytes > request.maxEventStreamBytes) {
-    throw processFailure2();
-  }
-}
-function processResult(termination, exitCode, stderr, startedAt) {
-  return Object.freeze({
-    termination,
-    exitCode,
-    stdout: "",
-    stderr: stderr.slice(0, 400),
-    durationMs: Math.max(0, Date.now() - startedAt)
-  });
-}
-function sanitizeDiagnostic(value) {
-  return value.replace(/(?:sk|sess|eyJ)[A-Za-z0-9._-]{12,}/gu, "<redacted>").replace(/[\r\n]+/gu, " ").trim().slice(0, MAX_DIAGNOSTIC_BYTES);
-}
-function startupFailure() {
-  return new ReviewAgentExecutionError(
-    "startup_failure" /* StartupFailure */,
-    null,
-    "review_agent_startup_failure"
-  );
-}
-function processFailure2() {
-  return new ReviewAgentExecutionError(
-    "process_failure" /* ProcessFailure */,
-    null,
-    "review_agent_process_failure"
-  );
-}
-function timeoutFailure() {
-  return new ReviewAgentExecutionError(
-    "timeout" /* Timeout */,
-    null,
-    "review_agent_process_timeout"
-  );
-}
-function cancelledFailure2() {
-  return new ReviewAgentExecutionError(
-    "cancelled" /* Cancelled */,
-    null,
-    "review_agent_process_cancelled"
-  );
-}
-function streamFailure2(stage) {
-  return new ReviewAgentExecutionError(
-    "stream_incomplete" /* StreamIncomplete */,
-    null,
-    stage ? `review_agent_stream_incomplete_${stage}` : "review_agent_stream_incomplete"
-  );
-}
-function deferred2() {
-  let resolve5;
-  let reject;
-  const promise = new Promise((resolvePromise, rejectPromise) => {
-    resolve5 = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve: resolve5, reject };
 }
 
 // src/review-orchestration/infrastructure/system-review-orchestration-clock.ts
@@ -113733,376 +114343,6 @@ function compareCodeUnits9(left, right) {
   return 0;
 }
 
-// src/review-investigation/infrastructure/strict-cli-review-agent.ts
-var GATEWAY_RUNTIME_ENV_KEYS = /* @__PURE__ */ new Set([
-  "REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION",
-  "REVIEWROUTER_CONTEXT_SESSION_ID",
-  "REVIEWROUTER_CONTEXT_ROOT",
-  "REVIEWROUTER_CONTEXT_TRANSCRIPT_PATH",
-  "REVIEWROUTER_CONTEXT_REPLAY_MATERIAL_PATH",
-  "REVIEWROUTER_CONTEXT_GATEWAY_BINARY_HASH",
-  "REVIEWROUTER_CONTEXT_GATEWAY_MAX_OPERATIONS",
-  "REVIEWROUTER_CONTEXT_CHECKOUT_TREE_OID",
-  "REVIEWROUTER_CONTEXT_MERGE_BASE_TREE_OID",
-  "REVIEWROUTER_CONTEXT_EVENT_CHAIN_SEED_HASH",
-  "REVIEWROUTER_CONTEXT_BASE_SHA",
-  "REVIEWROUTER_CONTEXT_MERGE_BASE_SHA",
-  "REVIEWROUTER_CONTEXT_HEAD_SHA"
-]);
-var GATEWAY_CREDENTIAL_ENV_KEYS = /* @__PURE__ */ new Set([
-  "REVIEWROUTER_CONTEXT_GATEWAY_SECRET"
-]);
-var PROVIDER_ENV_KEYS = Object.freeze({
-  ["codex" /* Codex */]: /* @__PURE__ */ new Set([
-    "CODEX_HOME",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY"
-  ]),
-  ["claude_code" /* ClaudeCode */]: /* @__PURE__ */ new Set([
-    "CLAUDE_CODE_OAUTH_TOKEN",
-    "CLAUDE_CONFIG_DIR"
-  ])
-});
-var MAX_SAFE_RETRY_AFTER_MS2 = 7 * 24 * 60 * 60 * 1e3;
-var SAFE_AGENT_ERROR_CODES = /* @__PURE__ */ new Set([
-  "review_agent_actual_model_invalid",
-  "review_agent_actual_model_unavailable",
-  "review_agent_authentication_unavailable",
-  "review_agent_cached_input_tokens_invalid",
-  "review_agent_cached_usage_invalid",
-  "review_agent_cancel_failure",
-  "review_agent_capability_requirements_unsatisfied",
-  "review_agent_capacity_unavailable",
-  "review_agent_claude_stream_incomplete",
-  "review_agent_claude_usage_missing",
-  "review_agent_codex_event_json_invalid",
-  "review_agent_codex_event_stream_empty",
-  "review_agent_codex_stream_incomplete",
-  "review_agent_codex_usage_missing",
-  "review_agent_critic_decision_invalid_for_turn",
-  "review_agent_execution_session_invalid",
-  "review_agent_gateway_credential_environment_invalid",
-  "review_agent_input_tokens_invalid",
-  "review_agent_output_invalid",
-  "review_agent_output_invalid_claims",
-  "review_agent_output_invalid_critic",
-  "review_agent_output_invalid_finding",
-  "review_agent_output_invalid_obligation_proposal",
-  "review_agent_output_invalid_shape",
-  "review_agent_output_tokens_invalid",
-  "review_agent_process_cancelled",
-  "review_agent_process_failure",
-  "review_agent_process_timeout",
-  "review_agent_provider_credential_environment_invalid",
-  "review_agent_quota_unavailable",
-  "review_agent_reasoning_output_tokens_invalid",
-  "review_agent_runtime_environment_invalid",
-  "review_agent_startup_failure",
-  "review_agent_turn_request_invalid",
-  "review_agent_turn_obligation_claim_invalid",
-  "review_agent_usage_attribution_missing",
-  "review_agent_workspace_authority_mismatch"
-]);
-var SAFE_DEFAULT_ERROR_CODE = Object.freeze({
-  ["capability_unavailable" /* CapabilityUnavailable */]: "review_agent_capability_unavailable",
-  ["authentication_unavailable" /* AuthenticationUnavailable */]: "review_agent_authentication_unavailable",
-  ["quota_unavailable" /* QuotaUnavailable */]: "review_agent_quota_unavailable",
-  ["capacity_unavailable" /* CapacityUnavailable */]: "review_agent_capacity_unavailable",
-  ["startup_failure" /* StartupFailure */]: "review_agent_startup_failure",
-  ["process_failure" /* ProcessFailure */]: "review_agent_process_failure",
-  ["timeout" /* Timeout */]: "review_agent_process_timeout",
-  ["cancelled" /* Cancelled */]: "review_agent_process_cancelled",
-  ["schema_invalid_output" /* SchemaInvalidOutput */]: "review_agent_output_invalid",
-  ["stream_incomplete" /* StreamIncomplete */]: "review_agent_stream_incomplete",
-  ["model_attribution_missing" /* ModelAttributionMissing */]: "review_agent_actual_model_unavailable",
-  ["usage_attribution_missing" /* UsageAttributionMissing */]: "review_agent_usage_attribution_missing",
-  ["confinement_violation" /* ConfinementViolation */]: "review_agent_confinement_violation"
-});
-var StrictCliReviewAgent = class {
-  constructor(profile, runner, executionSessions, providerCredentials) {
-    this.profile = profile;
-    this.runner = runner;
-    this.executionSessions = executionSessions;
-    this.providerCredentials = providerCredentials;
-  }
-  async negotiate(requirements) {
-    try {
-      assertRuntimeProfileSatisfies(this.profile, requirements);
-      return this.profile;
-    } catch {
-      throw new ReviewAgentExecutionError(
-        "capability_unavailable" /* CapabilityUnavailable */,
-        null,
-        "review_agent_capability_requirements_unsatisfied"
-      );
-    }
-  }
-  async cancel(invocationId, fencingToken) {
-    try {
-      await this.runner.cancel(invocationId, fencingToken);
-    } catch (error2) {
-      throw safeAgentError(
-        error2,
-        "process_failure" /* ProcessFailure */,
-        "review_agent_cancel_failure"
-      );
-    }
-  }
-  validateRequest(request) {
-    if (!request.invocationId || !request.fencingToken || !request.turnId || !Number.isSafeInteger(request.dossierVersion) || request.dossierVersion < 0 || !/^[a-f0-9]{64}$/u.test(request.dossierDigest) || !request.prompt || Buffer.byteLength(request.prompt, "utf8") > this.profile.maxPromptBytes || !request.workspaceRoot || request.requestedModel.length < 1 || request.requestedModel.length > 200 || !Number.isSafeInteger(request.timeoutMs) || request.timeoutMs < 1 || !Number.isSafeInteger(request.maxTurns) || request.maxTurns < 1 || request.maxTurns > this.profile.maxTurns || !validAllowedObligationIds(request.allowedObligationIds)) {
-      throw new ReviewAgentExecutionError(
-        "capability_unavailable" /* CapabilityUnavailable */,
-        null,
-        "review_agent_turn_request_invalid"
-      );
-    }
-  }
-  prepareExecution(request) {
-    this.validateRequest(request);
-    const gateway = this.executionSessions.resolve(
-      request.executionSession,
-      this.profile.providerKind
-    );
-    const providerCredentialEnvironment = Object.freeze({
-      ...this.providerCredentials()
-    });
-    assertGatewayBinding(gateway);
-    if (gateway.cwd !== request.workspaceRoot) {
-      throw new ReviewAgentExecutionError(
-        "confinement_violation" /* ConfinementViolation */,
-        null,
-        "review_agent_workspace_authority_mismatch"
-      );
-    }
-    assertEnvironmentPartition(
-      gateway.runtimeEnvironment,
-      gateway.credentialEnvironment,
-      providerCredentialEnvironment,
-      this.profile.providerKind
-    );
-    return Object.freeze({ gateway, providerCredentialEnvironment });
-  }
-  executionEnvironment(execution) {
-    return {
-      ...this.providerOnlyExecutionEnvironment(execution),
-      ...execution.gateway.runtimeEnvironment,
-      REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION: "context-gateway-v4",
-      ...execution.gateway.credentialEnvironment
-    };
-  }
-  providerOnlyExecutionEnvironment(execution) {
-    return {
-      ...buildCliSafeEnv({ includeWorkspaceEnv: false }),
-      ...execution.providerCredentialEnvironment,
-      GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_NO_REPLACE_OBJECTS: "1"
-    };
-  }
-  async runProcess(request, execution, input) {
-    const result2 = await this.runner.run({
-      invocationId: request.invocationId,
-      fencingToken: request.fencingToken,
-      cwd: execution.gateway.cwd,
-      environment: input.environment ?? this.executionEnvironment(execution),
-      stdin: request.prompt,
-      timeoutMs: request.timeoutMs,
-      maxOutputBytes: this.profile.maxOutputBytes,
-      signal: request.signal,
-      binary: input.binary,
-      args: input.args
-    });
-    assertSuccessfulProcess(result2);
-    return result2;
-  }
-  observation(request, parsed, durationMs) {
-    assertTurnObligationClaimsAllowed(request, parsed.output);
-    if (request.purpose === "discovery" /* Discovery */ && parsed.output.criticDecision !== null || request.purpose === "critic" /* Critic */ && parsed.output.criticDecision === null) {
-      throw new ReviewAgentExecutionError(
-        "schema_invalid_output" /* SchemaInvalidOutput */,
-        null,
-        "review_agent_critic_decision_invalid_for_turn"
-      );
-    }
-    return Object.freeze({
-      observationVersion: REVIEW_TURN_OBSERVATION_VERSION,
-      invocationId: request.invocationId,
-      turnId: request.turnId,
-      dossierVersion: request.dossierVersion,
-      purpose: request.purpose,
-      actualProviderKind: this.profile.providerKind,
-      actualModel: parsed.actualModel,
-      runtimeProfile: this.profile.executionProfile,
-      usage: parsed.usage,
-      durationMs,
-      schemaComplete: true,
-      streamComplete: true,
-      contextAttestationReference: null,
-      ...parsed.output
-    });
-  }
-};
-function validAllowedObligationIds(ids) {
-  return Array.isArray(ids) && ids.length <= 256 && new Set(ids).size === ids.length && ids.every((id) => /^[a-f0-9]{64}$/u.test(id));
-}
-function assertTurnObligationClaimsAllowed(request, output) {
-  const allowed = new Set(request.allowedObligationIds);
-  const closureIds = output.closureClaims.map((claim) => claim.obligationId);
-  const unresolvableIds = output.unresolvableClaims.map(
-    (claim) => claim.obligationId
-  );
-  const invalid2 = closureIds.some((id) => !allowed.has(id)) || unresolvableIds.some((id) => !allowed.has(id)) || new Set(closureIds).size !== closureIds.length || new Set(unresolvableIds).size !== unresolvableIds.length || closureIds.some((id) => unresolvableIds.includes(id));
-  if (invalid2) {
-    throw new ReviewAgentExecutionError(
-      "schema_invalid_output" /* SchemaInvalidOutput */,
-      null,
-      "review_agent_turn_obligation_claim_invalid"
-    );
-  }
-}
-function schemaFailure2(error2) {
-  if (error2 instanceof ReviewAgentExecutionError) {
-    return safeAgentError(
-      error2,
-      "schema_invalid_output" /* SchemaInvalidOutput */,
-      "review_agent_output_invalid"
-    );
-  }
-  return new ReviewAgentExecutionError(
-    "schema_invalid_output" /* SchemaInvalidOutput */,
-    null,
-    safeErrorCode(
-      error2 instanceof Error ? error2.message : "review_agent_output_invalid",
-      "schema_invalid_output" /* SchemaInvalidOutput */
-    )
-  );
-}
-function assertSuccessfulProcess(result2) {
-  if (result2.termination === "exited" /* Exited */ && result2.exitCode === 0) {
-    return;
-  }
-  if (result2.termination === "timed_out" /* TimedOut */) {
-    throw new ReviewAgentExecutionError(
-      "timeout" /* Timeout */,
-      null,
-      "review_agent_process_timeout"
-    );
-  }
-  if (result2.termination === "cancelled" /* Cancelled */) {
-    throw new ReviewAgentExecutionError(
-      "cancelled" /* Cancelled */,
-      null,
-      "review_agent_process_cancelled"
-    );
-  }
-  const failureSignals = boundedProviderFailureSignals(result2);
-  throw classifyProviderFailure(failureSignals, result2.termination);
-}
-function classifyProviderFailure(diagnostic, termination) {
-  if (/(?:401|403|unauthorized|not logged in|refresh token|oauth|authentication)/iu.test(
-    diagnostic
-  )) {
-    return new ReviewAgentExecutionError(
-      "authentication_unavailable" /* AuthenticationUnavailable */,
-      null,
-      "review_agent_authentication_unavailable"
-    );
-  }
-  if (/(?:invalid_json_schema|invalid schema for response_format|(?:invalid|rejected|unsupported) structured output schema|structured output schema (?:is )?(?:invalid|rejected|unsupported))/iu.test(
-    diagnostic
-  )) {
-    return new ReviewAgentExecutionError(
-      "schema_invalid_output" /* SchemaInvalidOutput */,
-      null,
-      "review_agent_output_invalid"
-    );
-  }
-  if (/(?:usage limit|quota|insufficient_quota|billing limit)/iu.test(diagnostic)) {
-    return new ReviewAgentExecutionError(
-      "quota_unavailable" /* QuotaUnavailable */,
-      null,
-      "review_agent_quota_unavailable"
-    );
-  }
-  if (/(?:capacity[_ -]unavailable|overloaded|too many requests|\b429\b|rate limit)/iu.test(
-    diagnostic
-  )) {
-    return new ReviewAgentExecutionError(
-      "capacity_unavailable" /* CapacityUnavailable */,
-      null,
-      "review_agent_capacity_unavailable"
-    );
-  }
-  if (/(?:model cache|startup|failed to start|enoent|spawn)/iu.test(diagnostic) || termination === "startup_failed" /* StartupFailed */) {
-    return new ReviewAgentExecutionError(
-      "startup_failure" /* StartupFailure */,
-      null,
-      "review_agent_startup_failure"
-    );
-  }
-  return new ReviewAgentExecutionError(
-    "process_failure" /* ProcessFailure */,
-    null,
-    "review_agent_process_failure"
-  );
-}
-function assertGatewayBinding(binding) {
-  const expectedTools = [...REVIEW_INVESTIGATION_GATEWAY_TOOLS].sort();
-  const actualTools = [...binding.enabledTools].sort();
-  if (binding.policyVersion !== "context-gateway-v4" || !/^[a-f0-9]{64}$/u.test(binding.binaryHash) || !binding.command || !binding.cwd || actualTools.length !== expectedTools.length || actualTools.some((tool, index) => tool !== expectedTools[index])) {
-    throw new ReviewAgentExecutionError(
-      "capability_unavailable" /* CapabilityUnavailable */,
-      null,
-      "review_agent_execution_session_invalid"
-    );
-  }
-}
-function assertEnvironmentPartition(runtime, gatewayCredentials, providerCredentials, providerKind) {
-  assertAllowlistedEnvironment(
-    runtime,
-    GATEWAY_RUNTIME_ENV_KEYS,
-    "review_agent_runtime_environment_invalid"
-  );
-  assertAllowlistedEnvironment(
-    gatewayCredentials,
-    GATEWAY_CREDENTIAL_ENV_KEYS,
-    "review_agent_gateway_credential_environment_invalid"
-  );
-  assertAllowlistedEnvironment(
-    providerCredentials,
-    PROVIDER_ENV_KEYS[providerKind],
-    "review_agent_provider_credential_environment_invalid"
-  );
-}
-function assertAllowlistedEnvironment(environment, allowedKeys, errorCode2) {
-  for (const key of Object.keys(environment)) {
-    if (!allowedKeys.has(key)) throw new Error(errorCode2);
-  }
-}
-function boundedProviderFailureSignals(result2) {
-  return `${result2.stderr.slice(0, 8192)}
-${result2.stdout.slice(0, 8192)}`.replace(/(?:sk|sess|eyJ)[A-Za-z0-9._-]{12,}/gu, "<redacted>").replace(/[\r\n]+/gu, " ").trim().slice(0, 16384);
-}
-function safeAgentError(error2, fallbackClass, fallbackCode) {
-  if (!(error2 instanceof ReviewAgentExecutionError)) {
-    return new ReviewAgentExecutionError(fallbackClass, null, fallbackCode);
-  }
-  return new ReviewAgentExecutionError(
-    error2.failureClass,
-    safeRetryAfterMs(error2.retryAfterMs),
-    safeErrorCode(error2.message, error2.failureClass)
-  );
-}
-function safeErrorCode(value, failureClass) {
-  return SAFE_AGENT_ERROR_CODES.has(value) ? value : SAFE_DEFAULT_ERROR_CODE[failureClass];
-}
-function safeRetryAfterMs(value) {
-  if (value === null || !Number.isSafeInteger(value) || value < 0 || value > MAX_SAFE_RETRY_AFTER_MS2) {
-    return null;
-  }
-  return value;
-}
-
 // src/review-investigation/infrastructure/claude-review-agent-adapter.ts
 var CLAUDE_NATIVE_TOOLS = Object.freeze([
   "Bash",
@@ -114120,240 +114360,6 @@ var CLAUDE_NATIVE_TOOLS = Object.freeze([
   "AskUserQuestion",
   "Skill"
 ]);
-
-// src/review-investigation/infrastructure/codex-review-agent-adapter.ts
-var CODEX_APP_SERVER_EVENT_STREAM_OUTPUT_MULTIPLIER = 32;
-var CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER = 2;
-var CodexReviewAgentAdapter = class extends StrictCliReviewAgent {
-  constructor(runner, options) {
-    super(
-      createGatewayAttestedRuntimeProfile({
-        providerKind: "codex" /* Codex */,
-        eventStream: "json_lines" /* JsonLines */,
-        maxPromptBytes: 8 * 1024 * 1024
-      }),
-      runner,
-      options.executionSessions,
-      options.providerCredentialEnvironment ?? (() => ({}))
-    );
-    this.options = options;
-    this.appServerRunner = options.appServerRunner ?? new NodeCodexAppServerTurnRunner({
-      ...options.interruptGraceMs === void 0 ? {} : { interruptGraceMs: options.interruptGraceMs },
-      ...options.processResultObserver === void 0 ? {} : { processResultObserver: options.processResultObserver }
-    });
-  }
-  appServerRunner;
-  async executeTurn(request) {
-    this.validateRequest(request);
-    const outputSchema = buildReviewAgentTurnOutputSchema(
-      request.allowedObligationIds
-    );
-    const validateOutputLocally = !supportsCliOutputSchema(
-      this.options.modelProvider
-    );
-    const prompt = validateOutputLocally ? `${request.prompt}
-
-OUTPUT JSON SCHEMA:
-${JSON.stringify(outputSchema)}
-Return exactly one JSON object matching this schema, with no markdown or prose.` : request.prompt;
-    const execution = this.prepareExecution({ ...request, prompt });
-    const reasoningEffort = this.options.reasoningEffort ?? "xhigh";
-    const result2 = await this.appServerRunner.executeTurn({
-      invocationId: request.invocationId,
-      fencingToken: request.fencingToken,
-      binary: this.options.binary ?? "codex",
-      args: this.buildArguments(execution.gateway),
-      cwd: execution.gateway.cwd,
-      environment: this.executionEnvironment(execution),
-      timeoutMs: request.timeoutMs,
-      maxEventStreamBytes: this.profile.maxOutputBytes * CODEX_APP_SERVER_EVENT_STREAM_OUTPUT_MULTIPLIER,
-      maxEventBytes: this.profile.maxOutputBytes * CODEX_APP_SERVER_SINGLE_EVENT_OUTPUT_MULTIPLIER,
-      signal: request.signal,
-      protocol: {
-        cwd: execution.gateway.cwd,
-        prompt,
-        clientTurnId: request.turnId,
-        requestedModel: request.requestedModel,
-        reasoningEffort,
-        ...validateOutputLocally ? {} : { outputSchema },
-        allowedTools: execution.gateway.enabledTools,
-        maxOutputBytes: this.profile.maxOutputBytes
-      }
-    });
-    let output;
-    try {
-      if (validateOutputLocally) {
-        assertJsonMatchesSchema(
-          result2.finalMessage,
-          outputSchema,
-          "structured"
-        );
-      }
-      output = parseFinalTurnOutput(result2.finalMessage);
-    } catch (error2) {
-      throw schemaFailure2(error2);
-    }
-    return this.observation(
-      request,
-      {
-        output,
-        actualModel: result2.actualModel,
-        usage: result2.usage
-      },
-      result2.durationMs
-    );
-  }
-  async cancel(invocationId, fencingToken) {
-    try {
-      await this.appServerRunner.cancel(invocationId, fencingToken);
-    } catch {
-      throw new ReviewAgentExecutionError(
-        "process_failure" /* ProcessFailure */,
-        null,
-        "review_agent_cancel_failure"
-      );
-    }
-  }
-  buildArguments(gateway) {
-    const args = ["app-server", "--stdio", "--strict-config"];
-    for (const feature of CODEX_CONFINEMENT_DISABLED_FEATURES) {
-      args.push("--disable", feature);
-    }
-    for (const setting of CODEX_SHELL_ENVIRONMENT_POLICY)
-      args.push("-c", setting);
-    if (this.options.modelProvider === "openrouter") {
-      for (const setting of CODEX_OPENROUTER_CONFIGURATION)
-        args.push("-c", setting);
-    }
-    args.push(
-      "-c",
-      'approval_policy="never"',
-      "-c",
-      'sandbox_mode="read-only"',
-      "-c",
-      "project_doc_max_bytes=0",
-      "-c",
-      'web_search="disabled"',
-      "-c",
-      "mcp_servers={}",
-      "-c",
-      `mcp_servers.reviewrouter.command=${tomlString2(gateway.command)}`,
-      "-c",
-      `mcp_servers.reviewrouter.args=${tomlStringArray2(gateway.args)}`,
-      "-c",
-      `mcp_servers.reviewrouter.cwd=${tomlString2(gateway.cwd)}`,
-      "-c",
-      `mcp_servers.reviewrouter.env_vars=${tomlStringArray2(
-        Object.keys({
-          ...gateway.runtimeEnvironment,
-          ...gateway.credentialEnvironment,
-          REVIEWROUTER_CONTEXT_GATEWAY_POLICY_VERSION: "context-gateway-v4"
-        }).sort()
-      )}`,
-      "-c",
-      "mcp_servers.reviewrouter.required=true",
-      "-c",
-      "mcp_servers.reviewrouter.startup_timeout_sec=45",
-      "-c",
-      "mcp_servers.reviewrouter.tool_timeout_sec=30",
-      "-c",
-      `mcp_servers.reviewrouter.enabled_tools=${tomlStringArray2(
-        gateway.enabledTools
-      )}`
-    );
-    return Object.freeze(args);
-  }
-};
-function parseFinalTurnOutput(message) {
-  const trimmed = message.trim();
-  const valid = /* @__PURE__ */ new Map();
-  const validationFailures = /* @__PURE__ */ new Set();
-  let parsedPayloads = 0;
-  for (const candidate of extractJsonPayloadCandidates(trimmed)) {
-    let parsed;
-    try {
-      parsed = JSON.parse(candidate);
-      parsedPayloads += 1;
-    } catch {
-      continue;
-    }
-    try {
-      const output = parseReviewAgentTurnOutput(parsed);
-      valid.set(JSON.stringify(output), output);
-    } catch (error2) {
-      validationFailures.add(classifyOutputValidationFailure(error2));
-    }
-  }
-  if (valid.size !== 1) {
-    if (valid.size === 0 && parsedPayloads === 1 && validationFailures.size === 1) {
-      throw new Error([...validationFailures][0]);
-    }
-    throw new Error("review_agent_output_invalid");
-  }
-  return [...valid.values()][0];
-}
-function classifyOutputValidationFailure(error2) {
-  const message = error2 instanceof Error ? error2.message : "";
-  if (/obligation_(?:kind|proposal|requirement|subject)|risk_priority/u.test(
-    message
-  )) {
-    return "review_agent_output_invalid_obligation_proposal";
-  }
-  if (/finding/u.test(message)) {
-    return "review_agent_output_invalid_finding";
-  }
-  if (/critic/u.test(message)) {
-    return "review_agent_output_invalid_critic";
-  }
-  if (/closure|discovery|receipt|unresolvable|obligation_id/u.test(message)) {
-    return "review_agent_output_invalid_claims";
-  }
-  return "review_agent_output_invalid_shape";
-}
-function extractJsonPayloadCandidates(message) {
-  const candidates = /* @__PURE__ */ new Set();
-  if (message) candidates.add(message);
-  const fencedPattern = /```(?:json)?\s*\n([\s\S]*?)\n```/giu;
-  for (const match2 of message.matchAll(fencedPattern)) {
-    const payload = match2[1]?.trim();
-    if (payload) candidates.add(payload);
-  }
-  let start = -1;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let index = 0; index < message.length; index += 1) {
-    const character = message[index];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (character === "\\") escaped = true;
-      else if (character === '"') inString = false;
-      continue;
-    }
-    if (character === '"' && depth > 0) {
-      inString = true;
-      continue;
-    }
-    if (character === "{") {
-      if (depth === 0) start = index;
-      depth += 1;
-      continue;
-    }
-    if (character !== "}" || depth === 0) continue;
-    depth -= 1;
-    if (depth === 0 && start >= 0) {
-      candidates.add(message.slice(start, index + 1));
-      start = -1;
-    }
-  }
-  return Object.freeze([...candidates]);
-}
-function tomlString2(value) {
-  return JSON.stringify(value);
-}
-function tomlStringArray2(values) {
-  return `[${values.map(tomlString2).join(",")}]`;
-}
 
 // src/review-investigation/infrastructure/review-action-v2-investigation-adapter.ts
 var ReviewActionV2InvestigationAdapter = class {
@@ -117114,6 +117120,7 @@ var ProductionT0ReviewRunner = class {
       ),
       ...input.providerApi ? {
         providerNamePrefix: "openrouter",
+        providerApiTransport: input.providerApi.modelTransport,
         disableBuiltinTools: true,
         waitForProcessClose: true
       } : {},
@@ -117226,7 +117233,7 @@ var ProductionT0ReviewRunner = class {
             codexModel: model,
             codexBinaryPath: input.codexBinaryPath,
             executionSessions: gateway,
-            modelTransport: input.accountGateway?.modelTransport,
+            modelTransport: input.providerApi?.modelTransport ?? input.accountGateway?.modelTransport,
             admittedGatewayModel: input.accountGateway?.runtimeConfig.runtimeEnv.CODEX_MODEL,
             reasoningEffort
           })
@@ -118682,6 +118689,7 @@ async function runProviderApiRuntime(input, ports) {
   let workspacePath;
   let codexHome;
   let apiKey;
+  let modelTransport;
   let phase = "authorization";
   try {
     const fetchImpl = createAccountGatewayRunFetch(
@@ -118766,19 +118774,34 @@ async function runProviderApiRuntime(input, ports) {
       )
     );
     await fs23.chmod(codexHome, 448);
-    await fs23.writeFile(
-      path30.join(codexHome, "config.toml"),
-      [
-        ...CODEX_SHELL_ENVIRONMENT_POLICY,
-        ...CODEX_OPENROUTER_CONFIGURATION
-      ].join("\n") + "\n",
-      { mode: 384 }
-    );
     phase = "local_credential";
     const secrets = readCodexRotatingProviderSecretInputs();
     apiKey = secrets.openRouterApiKey;
     if (!apiKey || secrets.claudeCodeOAuthToken)
       throw new Error("provider_api_credential_missing");
+    modelTransport = await startDirectOpenRouterModelTransport(
+      () => {
+        run2.signal.throwIfAborted();
+        if (!apiKey) throw new Error("provider_api_credential_closed");
+        return apiKey;
+      },
+      {
+        requestMs: Math.max(
+          1e3,
+          ConfigLoader.loadRuntimeEnvironment(
+            capability.runtimeConfig.runtimeEnv
+          ).runTimeoutSeconds * 1e3
+        ),
+        streamFrameBytes: CODEX_REVIEW_AGENT_MAX_EVENT_BYTES
+      }
+    );
+    await fs23.writeFile(
+      path30.join(codexHome, "config.toml"),
+      [...CODEX_SHELL_ENVIRONMENT_POLICY, ...modelTransport.configuration].join(
+        "\n"
+      ) + "\n",
+      { mode: 384 }
+    );
     phase = "runner";
     const review = await ports.review.run({
       ...input,
@@ -118789,17 +118812,20 @@ async function runProviderApiRuntime(input, ports) {
       scmReadTokenExpiresAt: capability.expiresAt,
       refreshScmReadToken: readCapability,
       providerApi: {
+        modelTransport,
         runtimeConfig: capability.runtimeConfig,
         controlPlane,
         signal: run2.signal,
         credentialLease: () => {
           run2.signal.throwIfAborted();
           if (!apiKey) throw new Error("provider_api_credential_closed");
-          return { environment: Object.freeze({ OPENROUTER_API_KEY: apiKey }) };
+          return { environment: modelTransport.environment };
         }
       }
     });
     apiKey = void 0;
+    await modelTransport.dispose();
+    modelTransport = void 0;
     phase = "terminal";
     run2.signal.throwIfAborted();
     await ports.terminalReview(review, run2.signal);
@@ -118813,6 +118839,9 @@ async function runProviderApiRuntime(input, ports) {
     process.removeListener("SIGTERM", cancel);
     process.removeListener("SIGINT", cancel);
     for (const cleanup of [
+      async () => {
+        await modelTransport?.dispose();
+      },
       async () => {
         if (codexHome) await fs23.rm(codexHome, { recursive: true, force: true });
       },

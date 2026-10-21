@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 import * as core from '../actions/core';
 import { ConfigLoader } from '../config/loader';
+import { CODEX_REVIEW_AGENT_MAX_EVENT_BYTES } from '../review-investigation/infrastructure/codex-review-agent-adapter';
 import {
   readApprovedReviewAgent,
   assertApprovedReviewAgentVersion,
@@ -13,10 +14,11 @@ import { providerApiCheckoutCompanionContract } from '../control-plane/generated
 import { ReviewActionV2Client } from '../control-plane/review-action-v2-client';
 import type { AdmittedRuntimeConfig } from '../control-plane/runtime-config';
 import { CODEX_SHELL_ENVIRONMENT_POLICY } from '../providers/codex-confinement-policy';
-import { CODEX_OPENROUTER_CONFIGURATION } from '../providers/codex-model-provider-configuration';
 import {
   AccountGatewayModelTransport,
   createAccountGatewayRunFetch,
+  startDirectOpenRouterModelTransport,
+  type LocalGatewayModelTransport,
 } from '../review-orchestration/infrastructure/account-gateway-model-transport';
 import { ReviewActionV2ControlPlaneAdapter } from '../review-orchestration/infrastructure/review-action-v2-control-plane-adapter';
 import {
@@ -128,6 +130,7 @@ export async function runProviderApiRuntime(
   let workspacePath: string | undefined;
   let codexHome: string | undefined;
   let apiKey: string | undefined;
+  let modelTransport: LocalGatewayModelTransport | undefined;
   let phase = 'authorization';
   try {
     const fetchImpl = createAccountGatewayRunFetch(
@@ -223,20 +226,35 @@ export async function runProviderApiRuntime(
       )
     );
     await fs.chmod(codexHome, 0o700);
-    // No auth.json. Both exec and app-server use this isolated provider setup.
-    await fs.writeFile(
-      path.join(codexHome, 'config.toml'),
-      [
-        ...CODEX_SHELL_ENVIRONMENT_POLICY,
-        ...CODEX_OPENROUTER_CONFIGURATION,
-      ].join('\n') + '\n',
-      { mode: 0o600 }
-    );
     phase = 'local_credential';
     const secrets = readCodexRotatingProviderSecretInputs();
     apiKey = secrets.openRouterApiKey;
     if (!apiKey || secrets.claudeCodeOAuthToken)
       throw new Error('provider_api_credential_missing');
+    modelTransport = await startDirectOpenRouterModelTransport(
+      () => {
+        run.signal.throwIfAborted();
+        if (!apiKey) throw new Error('provider_api_credential_closed');
+        return apiKey;
+      },
+      {
+        requestMs: Math.max(
+          1000,
+          ConfigLoader.loadRuntimeEnvironment(
+            capability.runtimeConfig.runtimeEnv
+          ).runTimeoutSeconds * 1000
+        ),
+        streamFrameBytes: CODEX_REVIEW_AGENT_MAX_EVENT_BYTES,
+      }
+    );
+    // No auth.json or upstream key: exec and app-server share only the local capability.
+    await fs.writeFile(
+      path.join(codexHome, 'config.toml'),
+      [...CODEX_SHELL_ENVIRONMENT_POLICY, ...modelTransport.configuration].join(
+        '\n'
+      ) + '\n',
+      { mode: 0o600 }
+    );
     phase = 'runner';
     const review = await ports.review.run({
       ...input,
@@ -247,17 +265,20 @@ export async function runProviderApiRuntime(
       scmReadTokenExpiresAt: capability.expiresAt,
       refreshScmReadToken: readCapability,
       providerApi: {
+        modelTransport,
         runtimeConfig: capability.runtimeConfig,
         controlPlane,
         signal: run.signal,
         credentialLease: () => {
           run.signal.throwIfAborted();
           if (!apiKey) throw new Error('provider_api_credential_closed');
-          return { environment: Object.freeze({ OPENROUTER_API_KEY: apiKey }) };
+          return { environment: modelTransport!.environment };
         },
       },
     });
     apiKey = undefined;
+    await modelTransport.dispose();
+    modelTransport = undefined;
     phase = 'terminal';
     run.signal.throwIfAborted();
     await ports.terminalReview(review, run.signal);
@@ -271,6 +292,9 @@ export async function runProviderApiRuntime(
     process.removeListener('SIGTERM', cancel);
     process.removeListener('SIGINT', cancel);
     for (const cleanup of [
+      async () => {
+        await modelTransport?.dispose();
+      },
       async () => {
         if (codexHome) await fs.rm(codexHome, { recursive: true, force: true });
       },

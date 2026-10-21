@@ -553,6 +553,14 @@ describe('ProductionT0ReviewRunner policy', () => {
               throw new Error('unexpected refresh');
             },
             providerApi: {
+              modelTransport: {
+                baseUrl: 'http://127.0.0.1:1234',
+                environment: {},
+                configuration: [],
+                actualModel: () => undefined,
+                failureFact: () => undefined,
+                dispose: async () => undefined,
+              },
               runtimeConfig: parseAdmittedRuntimeConfig({
                 protocolVersion: 1,
                 configVersion: 7,

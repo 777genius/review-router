@@ -29,9 +29,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/codegen/code.js
+// node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/codegen/code.js"(exports2) {
+  "node_modules/ajv/dist/compile/codegen/code.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.regexpCode = exports2.getEsmExportName = exports2.getProperty = exports2.safeStringify = exports2.stringify = exports2.strConcat = exports2.addCodeArg = exports2.str = exports2._ = exports2.nil = exports2._Code = exports2.Name = exports2.IDENTIFIER = exports2._CodeOrName = void 0;
@@ -183,9 +183,9 @@ var require_code = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/codegen/scope.js
+// node_modules/ajv/dist/compile/codegen/scope.js
 var require_scope = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/codegen/scope.js"(exports2) {
+  "node_modules/ajv/dist/compile/codegen/scope.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.ValueScope = exports2.ValueScopeName = exports2.Scope = exports2.varKinds = exports2.UsedValueState = void 0;
@@ -328,9 +328,9 @@ var require_scope = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/codegen/index.js
+// node_modules/ajv/dist/compile/codegen/index.js
 var require_codegen = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/codegen/index.js"(exports2) {
+  "node_modules/ajv/dist/compile/codegen/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.or = exports2.and = exports2.not = exports2.CodeGen = exports2.operators = exports2.varKinds = exports2.ValueScopeName = exports2.ValueScope = exports2.Scope = exports2.Name = exports2.regexpCode = exports2.stringify = exports2.getProperty = exports2.nil = exports2.strConcat = exports2.str = exports2._ = void 0;
@@ -1048,9 +1048,9 @@ var require_codegen = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/util.js
+// node_modules/ajv/dist/compile/util.js
 var require_util = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/util.js"(exports2) {
+  "node_modules/ajv/dist/compile/util.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.checkStrictMode = exports2.getErrorPath = exports2.Type = exports2.useFunc = exports2.setEvaluated = exports2.evaluatedPropsToName = exports2.mergeEvaluated = exports2.eachItem = exports2.unescapeJsonPointer = exports2.escapeJsonPointer = exports2.escapeFragment = exports2.unescapeFragment = exports2.schemaRefOrVal = exports2.schemaHasRulesButRef = exports2.schemaHasRules = exports2.checkUnknownRules = exports2.alwaysValidSchema = exports2.toHash = void 0;
@@ -1215,9 +1215,9 @@ var require_util = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/names.js
+// node_modules/ajv/dist/compile/names.js
 var require_names = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/names.js"(exports2) {
+  "node_modules/ajv/dist/compile/names.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -1254,9 +1254,9 @@ var require_names = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/errors.js
+// node_modules/ajv/dist/compile/errors.js
 var require_errors = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/errors.js"(exports2) {
+  "node_modules/ajv/dist/compile/errors.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.extendErrors = exports2.resetErrorsCount = exports2.reportExtraError = exports2.reportError = exports2.keyword$DataError = exports2.keywordError = void 0;
@@ -1376,9 +1376,9 @@ var require_errors = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/boolSchema.js
+// node_modules/ajv/dist/compile/validate/boolSchema.js
 var require_boolSchema = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/boolSchema.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/boolSchema.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.boolOrEmptySchema = exports2.topBoolOrEmptySchema = void 0;
@@ -1427,9 +1427,9 @@ var require_boolSchema = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/rules.js
+// node_modules/ajv/dist/compile/rules.js
 var require_rules = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/rules.js"(exports2) {
+  "node_modules/ajv/dist/compile/rules.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.getRules = exports2.isJSONType = void 0;
@@ -1458,9 +1458,9 @@ var require_rules = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/applicability.js
+// node_modules/ajv/dist/compile/validate/applicability.js
 var require_applicability = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/applicability.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/applicability.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.shouldUseRule = exports2.shouldUseGroup = exports2.schemaHasRulesForType = void 0;
@@ -1481,9 +1481,9 @@ var require_applicability = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/dataType.js
+// node_modules/ajv/dist/compile/validate/dataType.js
 var require_dataType = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/dataType.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/dataType.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.reportTypeError = exports2.checkDataTypes = exports2.checkDataType = exports2.coerceAndCheckDataType = exports2.getJSONTypes = exports2.getSchemaTypes = exports2.DataType = void 0;
@@ -1665,9 +1665,9 @@ var require_dataType = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/defaults.js
+// node_modules/ajv/dist/compile/validate/defaults.js
 var require_defaults = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/defaults.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/defaults.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.assignDefaults = void 0;
@@ -1702,9 +1702,9 @@ var require_defaults = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/code.js
+// node_modules/ajv/dist/vocabularies/code.js
 var require_code2 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/code.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/code.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateUnion = exports2.validateArray = exports2.usePattern = exports2.callValidateCode = exports2.schemaProperties = exports2.allSchemaProperties = exports2.noPropertyInData = exports2.propertyInData = exports2.isOwnProperty = exports2.hasPropFunc = exports2.reportMissingProp = exports2.checkMissingProp = exports2.checkReportMissingProp = void 0;
@@ -1835,9 +1835,9 @@ var require_code2 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/keyword.js
+// node_modules/ajv/dist/compile/validate/keyword.js
 var require_keyword = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/keyword.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/keyword.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateKeywordUsage = exports2.validSchemaType = exports2.funcKeywordCode = exports2.macroKeywordCode = void 0;
@@ -1953,9 +1953,9 @@ var require_keyword = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/subschema.js
+// node_modules/ajv/dist/compile/validate/subschema.js
 var require_subschema = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/subschema.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/subschema.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.extendSubschemaMode = exports2.extendSubschemaData = exports2.getSubschema = void 0;
@@ -2036,9 +2036,9 @@ var require_subschema = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/fast-deep-equal/index.js
+// node_modules/fast-deep-equal/index.js
 var require_fast_deep_equal = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/fast-deep-equal/index.js"(exports2, module2) {
+  "node_modules/fast-deep-equal/index.js"(exports2, module2) {
     "use strict";
     module2.exports = function equal(a2, b2) {
       if (a2 === b2) return true;
@@ -2071,9 +2071,9 @@ var require_fast_deep_equal = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/json-schema-traverse/index.js
+// node_modules/json-schema-traverse/index.js
 var require_json_schema_traverse = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/json-schema-traverse/index.js"(exports2, module2) {
+  "node_modules/json-schema-traverse/index.js"(exports2, module2) {
     "use strict";
     var traverse = module2.exports = function(schema2, opts, cb) {
       if (typeof opts == "function") {
@@ -2159,9 +2159,9 @@ var require_json_schema_traverse = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/resolve.js
+// node_modules/ajv/dist/compile/resolve.js
 var require_resolve = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/resolve.js"(exports2) {
+  "node_modules/ajv/dist/compile/resolve.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.getSchemaRefs = exports2.resolveUrl = exports2.normalizeId = exports2._getFullPath = exports2.getFullPath = exports2.inlineRef = void 0;
@@ -2315,9 +2315,9 @@ var require_resolve = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/index.js
+// node_modules/ajv/dist/compile/validate/index.js
 var require_validate = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/validate/index.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.getData = exports2.KeywordCxt = exports2.validateFunctionCode = void 0;
@@ -2823,9 +2823,9 @@ var require_validate = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/runtime/validation_error.js
+// node_modules/ajv/dist/runtime/validation_error.js
 var require_validation_error = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/runtime/validation_error.js"(exports2) {
+  "node_modules/ajv/dist/runtime/validation_error.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var ValidationError2 = class extends Error {
@@ -2839,9 +2839,9 @@ var require_validation_error = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/ref_error.js
+// node_modules/ajv/dist/compile/ref_error.js
 var require_ref_error = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/ref_error.js"(exports2) {
+  "node_modules/ajv/dist/compile/ref_error.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var resolve_1 = require_resolve();
@@ -2856,9 +2856,9 @@ var require_ref_error = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/index.js
+// node_modules/ajv/dist/compile/index.js
 var require_compile = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/compile/index.js"(exports2) {
+  "node_modules/ajv/dist/compile/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.resolveSchema = exports2.getCompilingSchema = exports2.resolveRef = exports2.compileSchema = exports2.SchemaEnv = void 0;
@@ -3080,9 +3080,9 @@ var require_compile = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/data.json
+// node_modules/ajv/dist/refs/data.json
 var require_data = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/data.json"(exports2, module2) {
+  "node_modules/ajv/dist/refs/data.json"(exports2, module2) {
     module2.exports = {
       $id: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#",
       description: "Meta-schema for $data reference (JSON AnySchema extension proposal)",
@@ -3099,9 +3099,9 @@ var require_data = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/fast-uri/lib/utils.js
+// node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/fast-uri/lib/utils.js"(exports2, module2) {
+  "node_modules/fast-uri/lib/utils.js"(exports2, module2) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
@@ -3596,9 +3596,9 @@ var require_utils = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/fast-uri/lib/schemes.js
+// node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
+  "node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
     "use strict";
     var { isUUID } = require_utils();
     var URN_REG = /^([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-./:;=@]|%[\da-f]{2})+)$/iu;
@@ -3807,9 +3807,9 @@ var require_schemes = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/fast-uri/index.js
+// node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/fast-uri/index.js"(exports2, module2) {
+  "node_modules/fast-uri/index.js"(exports2, module2) {
     "use strict";
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
@@ -4206,9 +4206,9 @@ var require_fast_uri = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/runtime/uri.js
+// node_modules/ajv/dist/runtime/uri.js
 var require_uri = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/runtime/uri.js"(exports2) {
+  "node_modules/ajv/dist/runtime/uri.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var uri = require_fast_uri();
@@ -4217,9 +4217,9 @@ var require_uri = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/core.js
+// node_modules/ajv/dist/core.js
 var require_core = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/core.js"(exports2) {
+  "node_modules/ajv/dist/core.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = void 0;
@@ -4828,9 +4828,9 @@ var require_core = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/core/id.js
+// node_modules/ajv/dist/vocabularies/core/id.js
 var require_id = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/core/id.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/core/id.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var def = {
@@ -4843,9 +4843,9 @@ var require_id = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/core/ref.js
+// node_modules/ajv/dist/vocabularies/core/ref.js
 var require_ref = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/core/ref.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/core/ref.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.callRef = exports2.getValidate = void 0;
@@ -4965,9 +4965,9 @@ var require_ref = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/core/index.js
+// node_modules/ajv/dist/vocabularies/core/index.js
 var require_core2 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/core/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/core/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var id_1 = require_id();
@@ -4986,9 +4986,9 @@ var require_core2 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/limitNumber.js
+// node_modules/ajv/dist/vocabularies/validation/limitNumber.js
 var require_limitNumber = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5018,9 +5018,9 @@ var require_limitNumber = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/multipleOf.js
+// node_modules/ajv/dist/vocabularies/validation/multipleOf.js
 var require_multipleOf = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5046,9 +5046,9 @@ var require_multipleOf = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/runtime/ucs2length.js
+// node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/runtime/ucs2length.js"(exports2) {
+  "node_modules/ajv/dist/runtime/ucs2length.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     function ucs2length(str2) {
@@ -5072,9 +5072,9 @@ var require_ucs2length = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/limitLength.js
+// node_modules/ajv/dist/vocabularies/validation/limitLength.js
 var require_limitLength = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5104,9 +5104,9 @@ var require_limitLength = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/pattern.js
+// node_modules/ajv/dist/vocabularies/validation/pattern.js
 var require_pattern = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -5141,9 +5141,9 @@ var require_pattern = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/limitProperties.js
+// node_modules/ajv/dist/vocabularies/validation/limitProperties.js
 var require_limitProperties = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5170,9 +5170,9 @@ var require_limitProperties = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/required.js
+// node_modules/ajv/dist/vocabularies/validation/required.js
 var require_required = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/required.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/required.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -5252,9 +5252,9 @@ var require_required = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/limitItems.js
+// node_modules/ajv/dist/vocabularies/validation/limitItems.js
 var require_limitItems = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5281,9 +5281,9 @@ var require_limitItems = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/runtime/equal.js
+// node_modules/ajv/dist/runtime/equal.js
 var require_equal = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/runtime/equal.js"(exports2) {
+  "node_modules/ajv/dist/runtime/equal.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var equal = require_fast_deep_equal();
@@ -5292,9 +5292,9 @@ var require_equal = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
+// node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
 var require_uniqueItems = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dataType_1 = require_dataType();
@@ -5359,9 +5359,9 @@ var require_uniqueItems = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/const.js
+// node_modules/ajv/dist/vocabularies/validation/const.js
 var require_const = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/const.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/const.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5388,9 +5388,9 @@ var require_const = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/enum.js
+// node_modules/ajv/dist/vocabularies/validation/enum.js
 var require_enum = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/enum.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/enum.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5437,9 +5437,9 @@ var require_enum = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/index.js
+// node_modules/ajv/dist/vocabularies/validation/index.js
 var require_validation = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var limitNumber_1 = require_limitNumber();
@@ -5475,9 +5475,9 @@ var require_validation = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
+// node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
 var require_additionalItems = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateAdditionalItems = void 0;
@@ -5528,9 +5528,9 @@ var require_additionalItems = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/items.js
+// node_modules/ajv/dist/vocabularies/applicator/items.js
 var require_items = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/items.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/items.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateTuple = void 0;
@@ -5585,9 +5585,9 @@ var require_items = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
+// node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
 var require_prefixItems = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var items_1 = require_items();
@@ -5602,9 +5602,9 @@ var require_prefixItems = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/items2020.js
+// node_modules/ajv/dist/vocabularies/applicator/items2020.js
 var require_items2020 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5637,9 +5637,9 @@ var require_items2020 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/contains.js
+// node_modules/ajv/dist/vocabularies/applicator/contains.js
 var require_contains = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5731,9 +5731,9 @@ var require_contains = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/dependencies.js
+// node_modules/ajv/dist/vocabularies/applicator/dependencies.js
 var require_dependencies = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.validateSchemaDeps = exports2.validatePropertyDeps = exports2.error = void 0;
@@ -5825,9 +5825,9 @@ var require_dependencies = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
+// node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
 var require_propertyNames = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -5868,9 +5868,9 @@ var require_propertyNames = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
+// node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
 var require_additionalProperties = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -5974,9 +5974,9 @@ var require_additionalProperties = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/properties.js
+// node_modules/ajv/dist/vocabularies/applicator/properties.js
 var require_properties = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var validate_1 = require_validate();
@@ -6032,9 +6032,9 @@ var require_properties = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
+// node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
 var require_patternProperties = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -6106,9 +6106,9 @@ var require_patternProperties = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/not.js
+// node_modules/ajv/dist/vocabularies/applicator/not.js
 var require_not = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/not.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/not.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6137,9 +6137,9 @@ var require_not = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/anyOf.js
+// node_modules/ajv/dist/vocabularies/applicator/anyOf.js
 var require_anyOf = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
@@ -6154,9 +6154,9 @@ var require_anyOf = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/oneOf.js
+// node_modules/ajv/dist/vocabularies/applicator/oneOf.js
 var require_oneOf = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6212,9 +6212,9 @@ var require_oneOf = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/allOf.js
+// node_modules/ajv/dist/vocabularies/applicator/allOf.js
 var require_allOf = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6239,9 +6239,9 @@ var require_allOf = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/if.js
+// node_modules/ajv/dist/vocabularies/applicator/if.js
 var require_if = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/if.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/if.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6308,9 +6308,9 @@ var require_if = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/thenElse.js
+// node_modules/ajv/dist/vocabularies/applicator/thenElse.js
 var require_thenElse = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6326,9 +6326,9 @@ var require_thenElse = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/index.js
+// node_modules/ajv/dist/vocabularies/applicator/index.js
 var require_applicator = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var additionalItems_1 = require_additionalItems();
@@ -6374,9 +6374,9 @@ var require_applicator = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js
+// node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js
 var require_dynamicAnchor = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/dynamic/dynamicAnchor.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.dynamicAnchor = void 0;
@@ -6409,9 +6409,9 @@ var require_dynamicAnchor = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js
+// node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js
 var require_dynamicRef = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/dynamic/dynamicRef.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.dynamicRef = void 0;
@@ -6455,9 +6455,9 @@ var require_dynamicRef = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js
+// node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js
 var require_recursiveAnchor = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/dynamic/recursiveAnchor.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dynamicAnchor_1 = require_dynamicAnchor();
@@ -6476,9 +6476,9 @@ var require_recursiveAnchor = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js
+// node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js
 var require_recursiveRef = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/dynamic/recursiveRef.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dynamicRef_1 = require_dynamicRef();
@@ -6491,9 +6491,9 @@ var require_recursiveRef = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/dynamic/index.js
+// node_modules/ajv/dist/vocabularies/dynamic/index.js
 var require_dynamic = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/dynamic/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/dynamic/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dynamicAnchor_1 = require_dynamicAnchor();
@@ -6505,9 +6505,9 @@ var require_dynamic = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/dependentRequired.js
+// node_modules/ajv/dist/vocabularies/validation/dependentRequired.js
 var require_dependentRequired = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/dependentRequired.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/dependentRequired.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dependencies_1 = require_dependencies();
@@ -6522,9 +6522,9 @@ var require_dependentRequired = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js
+// node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js
 var require_dependentSchemas = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/dependentSchemas.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dependencies_1 = require_dependencies();
@@ -6538,9 +6538,9 @@ var require_dependentSchemas = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/limitContains.js
+// node_modules/ajv/dist/vocabularies/validation/limitContains.js
 var require_limitContains = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/validation/limitContains.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/limitContains.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
@@ -6558,9 +6558,9 @@ var require_limitContains = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/next.js
+// node_modules/ajv/dist/vocabularies/next.js
 var require_next = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/next.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/next.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var dependentRequired_1 = require_dependentRequired();
@@ -6571,9 +6571,9 @@ var require_next = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js
+// node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js
 var require_unevaluatedProperties = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedProperties.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6637,9 +6637,9 @@ var require_unevaluatedProperties = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js
+// node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js
 var require_unevaluatedItems = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/unevaluated/unevaluatedItems.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6681,9 +6681,9 @@ var require_unevaluatedItems = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/unevaluated/index.js
+// node_modules/ajv/dist/vocabularies/unevaluated/index.js
 var require_unevaluated = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/unevaluated/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/unevaluated/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var unevaluatedProperties_1 = require_unevaluatedProperties();
@@ -6693,9 +6693,9 @@ var require_unevaluated = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/format/format.js
+// node_modules/ajv/dist/vocabularies/format/format.js
 var require_format = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/format/format.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/format/format.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6783,9 +6783,9 @@ var require_format = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/format/index.js
+// node_modules/ajv/dist/vocabularies/format/index.js
 var require_format2 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/format/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/format/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var format_1 = require_format();
@@ -6794,9 +6794,9 @@ var require_format2 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/metadata.js
+// node_modules/ajv/dist/vocabularies/metadata.js
 var require_metadata = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/metadata.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/metadata.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.contentVocabulary = exports2.metadataVocabulary = void 0;
@@ -6817,9 +6817,9 @@ var require_metadata = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/draft2020.js
+// node_modules/ajv/dist/vocabularies/draft2020.js
 var require_draft2020 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/draft2020.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/draft2020.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var core_1 = require_core2();
@@ -6845,9 +6845,9 @@ var require_draft2020 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/discriminator/types.js
+// node_modules/ajv/dist/vocabularies/discriminator/types.js
 var require_types = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.DiscrError = void 0;
@@ -6859,9 +6859,9 @@ var require_types = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/discriminator/index.js
+// node_modules/ajv/dist/vocabularies/discriminator/index.js
 var require_discriminator = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
@@ -6964,9 +6964,9 @@ var require_discriminator = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/schema.json
+// node_modules/ajv/dist/refs/json-schema-2020-12/schema.json
 var require_schema = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/schema.json"(exports2, module2) {
+  "node_modules/ajv/dist/refs/json-schema-2020-12/schema.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/schema",
@@ -7024,9 +7024,9 @@ var require_schema = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json
+// node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json
 var require_applicator2 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json"(exports2, module2) {
+  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/applicator",
@@ -7077,9 +7077,9 @@ var require_applicator2 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json
+// node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json
 var require_unevaluated2 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json"(exports2, module2) {
+  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/unevaluated",
@@ -7097,9 +7097,9 @@ var require_unevaluated2 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json
+// node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json
 var require_content = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json"(exports2, module2) {
+  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/content",
@@ -7118,9 +7118,9 @@ var require_content = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json
+// node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json
 var require_core3 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json"(exports2, module2) {
+  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/core",
@@ -7174,9 +7174,9 @@ var require_core3 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json
+// node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json
 var require_format_annotation = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json"(exports2, module2) {
+  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/format-annotation",
@@ -7193,9 +7193,9 @@ var require_format_annotation = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json
+// node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json
 var require_meta_data = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json"(exports2, module2) {
+  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/meta-data",
@@ -7234,9 +7234,9 @@ var require_meta_data = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json
+// node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json
 var require_validation2 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json"(exports2, module2) {
+  "node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json"(exports2, module2) {
     module2.exports = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://json-schema.org/draft/2020-12/meta/validation",
@@ -7329,9 +7329,9 @@ var require_validation2 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/index.js
+// node_modules/ajv/dist/refs/json-schema-2020-12/index.js
 var require_json_schema_2020_12 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-2020-12/index.js"(exports2) {
+  "node_modules/ajv/dist/refs/json-schema-2020-12/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var metaSchema = require_schema();
@@ -7364,9 +7364,9 @@ var require_json_schema_2020_12 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/2020.js
+// node_modules/ajv/dist/2020.js
 var require__ = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/2020.js"(exports2, module2) {
+  "node_modules/ajv/dist/2020.js"(exports2, module2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.MissingRefError = exports2.ValidationError = exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = exports2.Ajv2020 = void 0;
@@ -7441,9 +7441,9 @@ var require__ = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/retry/lib/retry_operation.js
+// node_modules/retry/lib/retry_operation.js
 var require_retry_operation = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/retry/lib/retry_operation.js"(exports2, module2) {
+  "node_modules/retry/lib/retry_operation.js"(exports2, module2) {
     function RetryOperation(timeouts, options) {
       if (typeof options === "boolean") {
         options = { forever: options };
@@ -7576,9 +7576,9 @@ var require_retry_operation = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/retry/lib/retry.js
+// node_modules/retry/lib/retry.js
 var require_retry = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/retry/lib/retry.js"(exports2) {
+  "node_modules/retry/lib/retry.js"(exports2) {
     var RetryOperation = require_retry_operation();
     exports2.operation = function(options) {
       var timeouts = exports2.timeouts(options);
@@ -7662,16 +7662,16 @@ var require_retry = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/retry/index.js
+// node_modules/retry/index.js
 var require_retry2 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/retry/index.js"(exports2, module2) {
+  "node_modules/retry/index.js"(exports2, module2) {
     module2.exports = require_retry();
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/universal-user-agent/dist-node/index.js
+// node_modules/universal-user-agent/dist-node/index.js
 var require_dist_node = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/universal-user-agent/dist-node/index.js"(exports2) {
+  "node_modules/universal-user-agent/dist-node/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     function getUserAgent() {
@@ -7687,9 +7687,9 @@ var require_dist_node = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/before-after-hook/lib/register.js
+// node_modules/before-after-hook/lib/register.js
 var require_register = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/before-after-hook/lib/register.js"(exports2, module2) {
+  "node_modules/before-after-hook/lib/register.js"(exports2, module2) {
     module2.exports = register;
     function register(state, name, method, options) {
       if (typeof method !== "function") {
@@ -7715,9 +7715,9 @@ var require_register = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/before-after-hook/lib/add.js
+// node_modules/before-after-hook/lib/add.js
 var require_add = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/before-after-hook/lib/add.js"(exports2, module2) {
+  "node_modules/before-after-hook/lib/add.js"(exports2, module2) {
     module2.exports = addHook;
     function addHook(state, kind, name, hook) {
       var orig = hook;
@@ -7755,9 +7755,9 @@ var require_add = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/before-after-hook/lib/remove.js
+// node_modules/before-after-hook/lib/remove.js
 var require_remove = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/before-after-hook/lib/remove.js"(exports2, module2) {
+  "node_modules/before-after-hook/lib/remove.js"(exports2, module2) {
     module2.exports = removeHook;
     function removeHook(state, name, method) {
       if (!state.registry[name]) {
@@ -7774,9 +7774,9 @@ var require_remove = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/before-after-hook/index.js
+// node_modules/before-after-hook/index.js
 var require_before_after_hook = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/before-after-hook/index.js"(exports2, module2) {
+  "node_modules/before-after-hook/index.js"(exports2, module2) {
     var register = require_register();
     var addHook = require_add();
     var removeHook = require_remove();
@@ -7830,9 +7830,9 @@ var require_before_after_hook = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/endpoint/dist-node/index.js
+// node_modules/@octokit/endpoint/dist-node/index.js
 var require_dist_node2 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/endpoint/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/endpoint/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8176,9 +8176,9 @@ var require_dist_node2 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/deprecation/dist-node/index.js
+// node_modules/deprecation/dist-node/index.js
 var require_dist_node3 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/deprecation/dist-node/index.js"(exports2) {
+  "node_modules/deprecation/dist-node/index.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var Deprecation = class extends Error {
@@ -8194,9 +8194,9 @@ var require_dist_node3 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/wrappy/wrappy.js
+// node_modules/wrappy/wrappy.js
 var require_wrappy = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/wrappy/wrappy.js"(exports2, module2) {
+  "node_modules/wrappy/wrappy.js"(exports2, module2) {
     module2.exports = wrappy;
     function wrappy(fn, cb) {
       if (fn && cb) return wrappy(fn)(cb);
@@ -8224,9 +8224,9 @@ var require_wrappy = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/once/once.js
+// node_modules/once/once.js
 var require_once = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/once/once.js"(exports2, module2) {
+  "node_modules/once/once.js"(exports2, module2) {
     var wrappy = require_wrappy();
     module2.exports = wrappy(once);
     module2.exports.strict = wrappy(onceStrict);
@@ -8268,9 +8268,9 @@ var require_once = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/request-error/dist-node/index.js
+// node_modules/@octokit/request-error/dist-node/index.js
 var require_dist_node4 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/request-error/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/request-error/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __create2 = Object.create;
     var __defProp2 = Object.defineProperty;
@@ -8360,9 +8360,9 @@ var require_dist_node4 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/request/dist-node/index.js
+// node_modules/@octokit/request/dist-node/index.js
 var require_dist_node5 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/request/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/request/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8570,9 +8570,9 @@ var require_dist_node5 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/graphql/dist-node/index.js
+// node_modules/@octokit/graphql/dist-node/index.js
 var require_dist_node6 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/graphql/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/graphql/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8707,9 +8707,9 @@ var require_dist_node6 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/auth-token/dist-node/index.js
+// node_modules/@octokit/auth-token/dist-node/index.js
 var require_dist_node7 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/auth-token/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/auth-token/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8778,9 +8778,9 @@ var require_dist_node7 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/core/dist-node/index.js
+// node_modules/@octokit/core/dist-node/index.js
 var require_dist_node8 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/core/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/core/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8944,9 +8944,9 @@ var require_dist_node8 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/plugin-request-log/dist-node/index.js
+// node_modules/@octokit/plugin-request-log/dist-node/index.js
 var require_dist_node9 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/plugin-request-log/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/plugin-request-log/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -8994,9 +8994,9 @@ var require_dist_node9 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
+// node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js
 var require_dist_node10 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/rest/node_modules/@octokit/plugin-paginate-rest/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -9389,9 +9389,9 @@ var require_dist_node10 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
+// node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js
 var require_dist_node11 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/rest/node_modules/@octokit/plugin-rest-endpoint-methods/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -11622,9 +11622,9 @@ var require_dist_node11 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/rest/dist-node/index.js
+// node_modules/@octokit/rest/dist-node/index.js
 var require_dist_node12 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/@octokit/rest/dist-node/index.js"(exports2, module2) {
+  "node_modules/@octokit/rest/dist-node/index.js"(exports2, module2) {
     "use strict";
     var __defProp2 = Object.defineProperty;
     var __getOwnPropDesc2 = Object.getOwnPropertyDescriptor;
@@ -11663,9 +11663,9 @@ var require_dist_node12 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv-formats/dist/formats.js
+// node_modules/ajv-formats/dist/formats.js
 var require_formats = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv-formats/dist/formats.js"(exports2) {
+  "node_modules/ajv-formats/dist/formats.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.formatNames = exports2.fastFormats = exports2.fullFormats = void 0;
@@ -11866,9 +11866,9 @@ var require_formats = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/draft7.js
+// node_modules/ajv/dist/vocabularies/draft7.js
 var require_draft7 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/vocabularies/draft7.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/draft7.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var core_1 = require_core2();
@@ -11888,9 +11888,9 @@ var require_draft7 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-draft-07.json
+// node_modules/ajv/dist/refs/json-schema-draft-07.json
 var require_json_schema_draft_07 = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports2, module2) {
+  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports2, module2) {
     module2.exports = {
       $schema: "http://json-schema.org/draft-07/schema#",
       $id: "http://json-schema.org/draft-07/schema#",
@@ -12045,9 +12045,9 @@ var require_json_schema_draft_07 = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/ajv.js
+// node_modules/ajv/dist/ajv.js
 var require_ajv = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv/dist/ajv.js"(exports2, module2) {
+  "node_modules/ajv/dist/ajv.js"(exports2, module2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.MissingRefError = exports2.ValidationError = exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = exports2.Ajv = void 0;
@@ -12115,9 +12115,9 @@ var require_ajv = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv-formats/dist/limit.js
+// node_modules/ajv-formats/dist/limit.js
 var require_limit = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv-formats/dist/limit.js"(exports2) {
+  "node_modules/ajv-formats/dist/limit.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.formatLimitDefinition = void 0;
@@ -12187,9 +12187,9 @@ var require_limit = __commonJS({
   }
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv-formats/dist/index.js
+// node_modules/ajv-formats/dist/index.js
 var require_dist = __commonJS({
-  "../../rr-direct-openrouter-wire188-20261021/source/node_modules/ajv-formats/dist/index.js"(exports2, module2) {
+  "node_modules/ajv-formats/dist/index.js"(exports2, module2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     var formats_1 = require_formats();
@@ -12319,7 +12319,7 @@ var fs27 = __toESM(require("fs"));
 var fs2 = __toESM(require("fs"));
 var path = __toESM(require("path"));
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/js-yaml/dist/js-yaml.mjs
+// node_modules/js-yaml/dist/js-yaml.mjs
 function getDefaultExportFromCjs(x2) {
   return x2 && x2.__esModule && Object.prototype.hasOwnProperty.call(x2, "default") ? x2["default"] : x2;
 }
@@ -15630,7 +15630,7 @@ function effectiveInlineMaxComments(value) {
   return value;
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v3/external.js
+// node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -15742,7 +15742,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v3/helpers/util.js
+// node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_2) => {
@@ -15876,7 +15876,7 @@ var getParsedType = (data) => {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v3/ZodError.js
+// node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -15994,7 +15994,7 @@ ZodError.create = (issues) => {
   return error3;
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v3/locales/en.js
+// node_modules/zod/v3/locales/en.js
 var errorMap = (issue2, _ctx) => {
   let message;
   switch (issue2.code) {
@@ -16097,7 +16097,7 @@ var errorMap = (issue2, _ctx) => {
 };
 var en_default = errorMap;
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v3/errors.js
+// node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map2) {
   overrideErrorMap = map2;
@@ -16106,7 +16106,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v3/helpers/parseUtil.js
+// node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path: path34, errorMaps, issueData } = params;
   const fullPath = [...path34, ...issueData.path || []];
@@ -16216,14 +16216,14 @@ var isDirty = (x2) => x2.status === "dirty";
 var isValid = (x2) => x2.status === "valid";
 var isAsync = (x2) => typeof Promise !== "undefined" && x2 instanceof Promise;
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v3/helpers/errorUtil.js
+// node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v3/types.js
+// node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path34, key) {
     this._cachedPath = [];
@@ -29526,10 +29526,10 @@ function sha2563(value) {
   return (0, import_crypto5.createHash)("sha256").update(value).digest("hex");
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/p-retry/index.js
+// node_modules/p-retry/index.js
 var import_retry = __toESM(require_retry2(), 1);
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/is-network-error/index.js
+// node_modules/is-network-error/index.js
 var objectToString = Object.prototype.toString;
 var isError = (value) => objectToString.call(value) === "[object Error]";
 var errorMessages = /* @__PURE__ */ new Set([
@@ -29567,7 +29567,7 @@ function isNetworkError(error3) {
   return errorMessages.has(message);
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/p-retry/index.js
+// node_modules/p-retry/index.js
 var AbortError = class extends Error {
   constructor(message) {
     super();
@@ -45520,7 +45520,7 @@ var GraphCache = class _GraphCache {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/brace-expansion/node_modules/balanced-match/dist/esm/index.js
+// node_modules/brace-expansion/node_modules/balanced-match/dist/esm/index.js
 var balanced = (a2, b2, str2) => {
   const ma2 = a2 instanceof RegExp ? maybeMatch(a2, str2) : a2;
   const mb = b2 instanceof RegExp ? maybeMatch(b2, str2) : b2;
@@ -45573,7 +45573,7 @@ var range = (a2, b2, str2) => {
   return result2;
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/brace-expansion/dist/esm/index.js
+// node_modules/brace-expansion/dist/esm/index.js
 var escSlash = "\0SLASH" + Math.random() + "\0";
 var escOpen = "\0OPEN" + Math.random() + "\0";
 var escClose = "\0CLOSE" + Math.random() + "\0";
@@ -45786,7 +45786,7 @@ function expand_(str2, max, maxLength, isTop) {
   return acc;
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/minimatch/dist/esm/assert-valid-pattern.js
+// node_modules/minimatch/dist/esm/assert-valid-pattern.js
 var MAX_PATTERN_LENGTH = 1024 * 64;
 var assertValidPattern = (pattern) => {
   if (typeof pattern !== "string") {
@@ -45797,7 +45797,7 @@ var assertValidPattern = (pattern) => {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/minimatch/dist/esm/brace-expressions.js
+// node_modules/minimatch/dist/esm/brace-expressions.js
 var posixClasses = {
   "[:alnum:]": ["\\p{L}\\p{Nl}\\p{Nd}", true],
   "[:alpha:]": ["\\p{L}\\p{Nl}", true],
@@ -45906,7 +45906,7 @@ var parseClass = (glob, position) => {
   return [comb, uflag, endPos - pos, true];
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/minimatch/dist/esm/unescape.js
+// node_modules/minimatch/dist/esm/unescape.js
 var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}) => {
   if (magicalBraces) {
     return windowsPathsNoEscape ? s2.replace(/\[([^/\\])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\])\]/g, "$1$2").replace(/\\([^/])/g, "$1");
@@ -45914,7 +45914,7 @@ var unescape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = true } = {}
   return windowsPathsNoEscape ? s2.replace(/\[([^/\\{}])\]/g, "$1") : s2.replace(/((?!\\).|^)\[([^/\\{}])\]/g, "$1$2").replace(/\\([^/{}])/g, "$1");
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/minimatch/dist/esm/ast.js
+// node_modules/minimatch/dist/esm/ast.js
 var _a;
 var types2 = /* @__PURE__ */ new Set(["!", "?", "+", "*", "@"]);
 var isExtglobType = (c2) => types2.has(c2);
@@ -46558,7 +46558,7 @@ var AST = class {
 };
 _a = AST;
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/minimatch/dist/esm/escape.js
+// node_modules/minimatch/dist/esm/escape.js
 var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {}) => {
   if (magicalBraces) {
     return windowsPathsNoEscape ? s2.replace(/[?*()[\]{}]/g, "[$&]") : s2.replace(/[?*()[\]\\{}]/g, "\\$&");
@@ -46566,7 +46566,7 @@ var escape2 = (s2, { windowsPathsNoEscape = false, magicalBraces = false } = {})
   return windowsPathsNoEscape ? s2.replace(/[?*()[\]]/g, "[$&]") : s2.replace(/[?*()[\]\\]/g, "\\$&");
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/minimatch/dist/esm/index.js
+// node_modules/minimatch/dist/esm/index.js
 var minimatch = (p2, pattern, options = {}) => {
   assertValidPattern(pattern);
   if (!options.nocomment && pattern.charAt(0) === "#") {
@@ -101330,7 +101330,7 @@ function parseContextToolsPlan(json3) {
 var import_node_http = require("node:http");
 var import_node_crypto2 = require("node:crypto");
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/core.js
+// node_modules/zod/v4/core/core.js
 var NEVER2 = Object.freeze({
   status: "aborted"
 });
@@ -101390,7 +101390,7 @@ function config(newConfig) {
   return globalConfig;
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/util.js
+// node_modules/zod/v4/core/util.js
 var util_exports = {};
 __export(util_exports, {
   BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES,
@@ -101911,7 +101911,7 @@ var Class = class {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/errors.js
+// node_modules/zod/v4/core/errors.js
 var initializer = (inst, def) => {
   inst.name = "$ZodError";
   Object.defineProperty(inst, "_zod", {
@@ -101986,7 +101986,7 @@ function formatError(error3, _mapper) {
   return fieldErrors;
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/parse.js
+// node_modules/zod/v4/core/parse.js
 var _parse = (_Err) => (schema2, value, _ctx, _params) => {
   const ctx = _ctx ? Object.assign(_ctx, { async: false }) : { async: false };
   const result2 = schema2._zod.run({ value, issues: [] }, ctx);
@@ -102036,7 +102036,7 @@ var _safeParseAsync = (_Err) => async (schema2, value, _ctx) => {
 };
 var safeParseAsync = /* @__PURE__ */ _safeParseAsync($ZodRealError);
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/regexes.js
+// node_modules/zod/v4/core/regexes.js
 var cuid = /^[cC][^\s-]{8,}$/;
 var cuid2 = /^[0-9a-z]+$/;
 var ulid = /^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{26}$/;
@@ -102095,7 +102095,7 @@ var _null2 = /null/i;
 var lowercase = /^[^A-Z]*$/;
 var uppercase = /^[^a-z]*$/;
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/checks.js
+// node_modules/zod/v4/core/checks.js
 var $ZodCheck = /* @__PURE__ */ $constructor("$ZodCheck", (inst, def) => {
   var _a3;
   inst._zod ?? (inst._zod = {});
@@ -102480,7 +102480,7 @@ var $ZodCheckOverwrite = /* @__PURE__ */ $constructor("$ZodCheckOverwrite", (ins
   };
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/doc.js
+// node_modules/zod/v4/core/doc.js
 var Doc = class {
   constructor(args = []) {
     this.content = [];
@@ -102516,14 +102516,14 @@ var Doc = class {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/versions.js
+// node_modules/zod/v4/core/versions.js
 var version = {
   major: 4,
   minor: 0,
   patch: 0
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/schemas.js
+// node_modules/zod/v4/core/schemas.js
 var $ZodType = /* @__PURE__ */ $constructor("$ZodType", (inst, def) => {
   var _a3;
   inst ?? (inst = {});
@@ -103809,7 +103809,7 @@ function handleRefineResult(result2, payload, input, inst) {
   }
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/locales/en.js
+// node_modules/zod/v4/locales/en.js
 var parsedType = (data) => {
   const t2 = typeof data;
   switch (t2) {
@@ -103927,7 +103927,7 @@ function en_default2() {
   };
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/registries.js
+// node_modules/zod/v4/core/registries.js
 var $output = Symbol("ZodOutput");
 var $input = Symbol("ZodInput");
 var $ZodRegistry = class {
@@ -103977,7 +103977,7 @@ function registry() {
 }
 var globalRegistry = /* @__PURE__ */ registry();
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/core/api.js
+// node_modules/zod/v4/core/api.js
 function _string(Class2, params) {
   return new Class2({
     type: "string",
@@ -104457,7 +104457,7 @@ function _refine(Class2, fn, _params) {
   return schema2;
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-compat.js
 function isZ4Schema(s2) {
   const schema2 = s2;
   return !!schema2._zod;
@@ -104520,7 +104520,7 @@ function getLiteralValue(schema2) {
   return void 0;
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/classic/iso.js
+// node_modules/zod/v4/classic/iso.js
 var iso_exports = {};
 __export(iso_exports, {
   ZodISODate: () => ZodISODate,
@@ -104561,7 +104561,7 @@ function duration2(params) {
   return _isoDuration(ZodISODuration, params);
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/classic/errors.js
+// node_modules/zod/v4/classic/errors.js
 var initializer2 = (inst, issues) => {
   $ZodError.init(inst, issues);
   inst.name = "ZodError";
@@ -104595,13 +104595,13 @@ var ZodRealError = $constructor("ZodError", initializer2, {
   Parent: Error
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/classic/parse.js
+// node_modules/zod/v4/classic/parse.js
 var parse2 = /* @__PURE__ */ _parse(ZodRealError);
 var parseAsync2 = /* @__PURE__ */ _parseAsync(ZodRealError);
 var safeParse3 = /* @__PURE__ */ _safeParse(ZodRealError);
 var safeParseAsync2 = /* @__PURE__ */ _safeParseAsync(ZodRealError);
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/classic/schemas.js
+// node_modules/zod/v4/classic/schemas.js
 var ZodType2 = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   $ZodType.init(inst, def);
   inst.def = def;
@@ -105252,7 +105252,7 @@ function preprocess(fn, schema2) {
   return pipe(transform(fn), schema2);
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/classic/compat.js
+// node_modules/zod/v4/classic/compat.js
 var ZodIssueCode2 = {
   invalid_type: "invalid_type",
   too_big: "too_big",
@@ -105267,7 +105267,7 @@ var ZodIssueCode2 = {
   custom: "custom"
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/classic/coerce.js
+// node_modules/zod/v4/classic/coerce.js
 var coerce_exports = {};
 __export(coerce_exports, {
   bigint: () => bigint2,
@@ -105292,10 +105292,10 @@ function date3(params) {
   return _coercedDate(ZodDate2, params);
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod/v4/classic/external.js
+// node_modules/zod/v4/classic/external.js
 config(en_default2());
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/types.js
 var LATEST_PROTOCOL_VERSION = "2025-11-25";
 var DEFAULT_NEGOTIATED_PROTOCOL_VERSION = "2025-03-26";
 var SUPPORTED_PROTOCOL_VERSIONS = [LATEST_PROTOCOL_VERSION, "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
@@ -106817,18 +106817,18 @@ var UrlElicitationRequiredError = class extends McpError {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/interfaces.js
 function isTerminal4(status) {
   return status === "completed" || status === "failed" || status === "cancelled";
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod-to-json-schema/dist/esm/Options.js
+// node_modules/zod-to-json-schema/dist/esm/Options.js
 var ignoreOverride = Symbol("Let zodToJsonSchema decide on which parser to use");
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/zod-to-json-schema/dist/esm/parsers/string.js
+// node_modules/zod-to-json-schema/dist/esm/parsers/string.js
 var ALPHA_NUMERIC = new Set("ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvxyz0123456789");
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js
 function getMethodLiteral(schema2) {
   const shape = getObjectShape(schema2);
   const methodSchema = shape?.method;
@@ -106849,7 +106849,7 @@ function parseWithCompat(schema2, data) {
   return result2.data;
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.js
 var DEFAULT_REQUEST_TIMEOUT_MSEC = 6e4;
 var Protocol = class {
   constructor(_options) {
@@ -107803,7 +107803,7 @@ function mergeCapabilities(base, additional) {
   return result2;
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/validation/ajv-provider.js
 var import_ajv = __toESM(require_ajv(), 1);
 var import_ajv_formats2 = __toESM(require_dist(), 1);
 function createDefaultAjvInstance() {
@@ -107871,7 +107871,7 @@ var AjvJsonSchemaValidator = class {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/server.js
 var ExperimentalServerTasks = class {
   constructor(_server) {
     this._server = _server;
@@ -108084,7 +108084,7 @@ var ExperimentalServerTasks = class {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/helpers.js
 function assertToolsCallTaskCapability(requests, method, entityName) {
   if (!requests) {
     throw new Error(`${entityName} does not support task creation (required for ${method})`);
@@ -108119,7 +108119,7 @@ function assertClientRequestTaskCapability(requests, method, entityName) {
   }
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js
 var Server = class extends Protocol {
   /**
    * Initializes this server with the given name and version information.
@@ -108499,14 +108499,14 @@ var Server = class extends Protocol {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@hono/node-server/dist/constants-BLSFu_RU.mjs
+// node_modules/@hono/node-server/dist/constants-BLSFu_RU.mjs
 var X_ALREADY_SENT = "x-hono-already-sent";
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@hono/node-server/dist/index.mjs
+// node_modules/@hono/node-server/dist/index.mjs
 var import_node_http2 = require("node:http2");
 var import_node_stream = require("node:stream");
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/hono/dist/helper/websocket/index.js
+// node_modules/hono/dist/helper/websocket/index.js
 var defineWebSocketHelper = (handler) => {
   return (...args) => {
     if (typeof args[0] === "function") {
@@ -108532,7 +108532,7 @@ var defineWebSocketHelper = (handler) => {
   };
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@hono/node-server/dist/index.mjs
+// node_modules/@hono/node-server/dist/index.mjs
 var RequestError = class extends Error {
   constructor(message, options) {
     super(message, options);
@@ -109536,7 +109536,7 @@ var upgradeWebSocket = defineWebSocketHelper(async (c2, events, options) => {
   return new Response();
 });
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/webStandardStreamableHttp.js
 var WebStandardStreamableHTTPServerTransport = class {
   constructor(options = {}) {
     this._started = false;
@@ -110138,7 +110138,7 @@ data:
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/server/streamableHttp.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/streamableHttp.js
 var StreamableHTTPServerTransport = class {
   constructor(options = {}) {
     this._requestContext = /* @__PURE__ */ new WeakMap();
@@ -110320,7 +110320,7 @@ var import_promises3 = require("node:dns/promises");
 var import_node_https = require("node:https");
 var import_node_net = require("node:net");
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/client.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/experimental/tasks/client.js
 var ExperimentalClientTasks = class {
   constructor(_client) {
     this._client = _client;
@@ -110474,7 +110474,7 @@ var ExperimentalClientTasks = class {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js
 function applyElicitationDefaults(schema2, data) {
   if (!schema2 || data === null || typeof data !== "object")
     return;
@@ -110994,7 +110994,7 @@ var Client = class extends Protocol {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/transport.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/transport.js
 function normalizeHeaders(headers) {
   if (!headers)
     return {};
@@ -111021,7 +111021,7 @@ function createFetchWithInit(baseFetch = fetch, baseInit) {
   };
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/pkce-challenge/dist/index.node.js
+// node_modules/pkce-challenge/dist/index.node.js
 var crypto7;
 crypto7 = globalThis.crypto?.webcrypto ?? // Node.js [18-16] REPL
 globalThis.crypto ?? // Node.js >18
@@ -111064,7 +111064,7 @@ async function pkceChallenge(length) {
   };
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/auth.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/auth.js
 var SafeUrlSchema = url().superRefine((val, ctx) => {
   if (!URL.canParse(val)) {
     ctx.addIssue({
@@ -111208,7 +111208,7 @@ var OAuthTokenRevocationRequestSchema = object2({
   token_type_hint: string2().optional()
 }).strip();
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/shared/auth-utils.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/shared/auth-utils.js
 function resourceUrlFromServerUrl(url2) {
   const resourceURL = typeof url2 === "string" ? new URL(url2) : new URL(url2.href);
   resourceURL.hash = "";
@@ -111228,7 +111228,7 @@ function checkResourceAllowed({ requestedResource, configuredResource }) {
   return requestedPath.startsWith(configuredPath);
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/server/auth/errors.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/server/auth/errors.js
 var OAuthError = class extends Error {
   constructor(message, errorUri) {
     super(message);
@@ -111323,7 +111323,7 @@ var OAUTH_ERRORS = {
   [InvalidTargetError.errorCode]: InvalidTargetError
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js
 var UnauthorizedError = class extends Error {
   constructor(message) {
     super(message ?? "Unauthorized");
@@ -111864,7 +111864,7 @@ async function registerClient(authorizationServerUrl, { metadata, clientMetadata
   return OAuthClientInformationFullSchema.parse(await response.json());
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/eventsource-parser/dist/index.js
+// node_modules/eventsource-parser/dist/index.js
 var ParseError = class extends Error {
   constructor(message, options) {
     super(message), this.name = "ParseError", this.type = options.type, this.field = options.field, this.value = options.value, this.line = options.line;
@@ -112040,7 +112040,7 @@ function isEventPrefix(chunk, i2, firstCharCode) {
   return firstCharCode === 101 && chunk.charCodeAt(i2 + 1) === 118 && chunk.charCodeAt(i2 + 2) === 101 && chunk.charCodeAt(i2 + 3) === 110 && chunk.charCodeAt(i2 + 4) === 116 && chunk.charCodeAt(i2 + 5) === 58;
 }
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/eventsource-parser/dist/stream.js
+// node_modules/eventsource-parser/dist/stream.js
 var EventSourceParserStream = class extends TransformStream {
   constructor({ onError, onRetry, onComment, maxBufferSize } = {}) {
     let parser;
@@ -112065,7 +112065,7 @@ var EventSourceParserStream = class extends TransformStream {
   }
 };
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js
+// node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js
 var DEFAULT_STREAMABLE_HTTP_RECONNECTION_OPTIONS = {
   initialReconnectionDelay: 1e3,
   maxReconnectionDelay: 3e4,
@@ -114275,7 +114275,7 @@ function isReviewActionV2ScmMutationEnvName(name) {
 // src/codex-oauth/crypto.ts
 var import_crypto27 = require("crypto");
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/libsodium/dist/modules-esm/libsodium.mjs
+// node_modules/libsodium/dist/modules-esm/libsodium.mjs
 var import_meta = {};
 async function A(A3 = {}) {
   var I2, g2 = A3, C2 = !!globalThis.window, B2 = !!globalThis.WorkerGlobalScope, Q2 = (globalThis.process?.versions?.node && globalThis.process, import_meta.url);
@@ -114473,7 +114473,7 @@ async function A(A3 = {}) {
 }
 var libsodium_default = A;
 
-// ../../rr-direct-openrouter-wire188-20261021/source/node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
+// node_modules/libsodium-wrappers/dist/modules-esm/libsodium-wrappers.mjs
 var r;
 var t = {};
 if (void 0 === globalThis.crypto || "function" != typeof globalThis.crypto.getRandomValues) throw new Error("globalThis.crypto.getRandomValues is not available. The ESM build of libsodium requires a secure random source (available in all browsers and Node.js 19+).");

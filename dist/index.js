@@ -29492,6 +29492,9 @@ function getProviderReviewTotalAttempts(configuredAttempts) {
   return Math.max(1, Math.floor(configuredAttempts ?? 1));
 }
 function shouldRetryProviderReviewError(error2) {
+  if (isTransientLaneSaturation(error2)) {
+    return true;
+  }
   if (error2 instanceof RateLimitError || error2.name === "RateLimitError") {
     return false;
   }
@@ -29507,6 +29510,9 @@ function buildProviderReviewPromptForAttempt(basePrompt, attempt, previousError)
   if (attempt <= 1) {
     return basePrompt;
   }
+  if (previousError && isTransientLaneSaturation(previousError)) {
+    return basePrompt;
+  }
   const reason = previousError ? ` Reason: ${sanitizeRetryReason(previousError.message)}` : "";
   return [
     basePrompt,
@@ -29517,6 +29523,9 @@ function buildProviderReviewPromptForAttempt(basePrompt, attempt, previousError)
     "No markdown, no prose, no code fences, comments, trailing commas, or text before/after the JSON.",
     'If no findings, return exactly {"findings":[],"revalidations":[]}.'
   ].join("\n");
+}
+function isTransientLaneSaturation(error2) {
+  return formatErrorForClassification(error2).toLowerCase().includes("lane_saturated");
 }
 function formatErrorForClassification(error2) {
   const errorWithCode = error2;

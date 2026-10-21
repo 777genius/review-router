@@ -144919,7 +144919,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.190",
+  version: "1.0.191",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -205158,9 +205158,28 @@ function findingExcerpt(message, locale) {
   const first = message.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd().split(/\r?\n\s*\r?\n/)[0] ?? "";
   if (/^(?: {4}|\t|\s*(?:`{3}|~{3}|<|\||#{1,6}\s|>|[-*+]\s|\d+[.)]\s))/.test(
     first
-  ) || /\n\s*\|?\s*:?-{3}/.test(first))
+  ))
     return "";
-  return plainExcerpt(first.replace(/\s+/g, " ").trim(), 320, locale);
+  const lines = first.split(/\r?\n/);
+  const paragraph = [];
+  for (const line of lines) {
+    if (/^ {0,3}(?:=+[ \t]*$|-+[ \t]*$|\|?\s*:?-{3})/.test(line)) return "";
+    if (/^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|(?:[-*_][ \t]*){3,}$)/.test(
+      line
+    ) || htmlInterruptsParagraph(line))
+      break;
+    paragraph.push(line);
+  }
+  return plainExcerpt(
+    paragraph.join(" ").replace(/\s+/g, " ").trim(),
+    320,
+    locale
+  );
+}
+function htmlInterruptsParagraph(line) {
+  return /^ {0,3}<(?:!--|\?|!\[CDATA\[|![A-Z]|\/?(?:script|pre|style|textarea|address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t]|\/?>|$))/i.test(
+    line
+  );
 }
 function markdownBlocks(value) {
   const blocks2 = [];

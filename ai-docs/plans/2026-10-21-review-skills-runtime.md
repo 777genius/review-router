@@ -79,3 +79,15 @@ Skill discovery and directory-scoped `AGENTS.md` inheritance are not implemented
 by the inspected engine. [The runtime guide](../../docs/review-skills.md#ocr-rules-and-agent-integrations)
 records the exact inspected sources and separates this from ReviewRouter's
 explicit opt-in Git roots. No automatic agent-instruction loader was added.
+
+Main subsequently advanced to `b4d8bd5676841b5a1967618bab460a5046bcbf30`
+(compact review comments, version 1.0.189). It was merged into this branch;
+the only conflict was `dist/index.js.map`, resolved by the normal build from
+both source sets. An independent GPT-6.1 Sol xhigh critic confirmed byte-for-byte
+retention of main-owned output files and premerge Skills files, and matched 13
+relevant source-map entries to disk. Full typecheck and the combined Skills,
+contract, artifact and reviewer-summary batch passed **77/77**. The paired
+SaaS signed-HTTP test also passed against this merged runtime. Its first
+attempt stopped in fixture reset with SQLSTATE 53100 because the shared disk
+was full; the successful repeat followed cleanup of our reproducible caches
+and compression of our stopped TEST databases with complete backups retained.

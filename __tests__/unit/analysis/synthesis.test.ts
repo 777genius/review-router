@@ -1,4 +1,5 @@
 import { SynthesisEngine } from '../../../src/analysis/synthesis';
+import { MarkdownFormatterV2 } from '../../../src/output/formatter-v2';
 import { DEFAULT_CONFIG } from '../../../src/config/defaults';
 import { Finding, PRContext } from '../../../src/types';
 
@@ -141,7 +142,7 @@ describe('SynthesisEngine', () => {
     expect(review.summary).toContain('## No findings');
     expect(review.summary).not.toContain('PR #1:');
     expect(review.summary).not.toContain('| Item | Result |');
-    expect(review.summary).toContain('# ReviewRouter');
+    expect(review.summary).not.toContain('# ReviewRouter');
     expect(review.summary).not.toContain('| Duration |');
     expect(review.summary).not.toContain('| Tokens |');
     expect(review.summary).not.toContain('| Cost |');
@@ -249,9 +250,9 @@ describe('SynthesisEngine', () => {
       'critical',
       'minor',
     ]);
-    expect(review.summary).toContain('## 2 findings (1 critical, 1 minor)');
+    expect(review.summary).toContain('🔴 **1 critical** · 🔵 **1 minor**');
     expect(review.summary).toContain(
-      '<summary>critical · src/critical.ts:20 · Critical issue</summary>'
+      '- **critical · Critical issue** · <code>src/critical.ts:20</code>'
     );
     expect(review.summary).toContain('Unsafe behavior on the login path.');
     expect(review.summary).toContain('**Fix**');
@@ -280,9 +281,46 @@ describe('SynthesisEngine', () => {
       pr
     );
 
-    expect(review.summary).toContain('## 1 замечание (1 major)');
+    expect(review.summary).toContain('🟡 **1 major**');
     expect(review.summary).toContain('**Место:**');
     expect(review.summary).toContain('Обход аутентификации');
     expect(review.summary).toContain('Фильтр email больше не применяется.');
+  });
+  it('preserves trusted fork/head links through summary reformatting and avoids deleted head paths', () => {
+    const finding: Finding = {
+      file: 'src/users.ts',
+      line: 10,
+      severity: 'critical',
+      title: 'Tenant escape',
+      message: 'The tenant guard is missing.',
+    };
+    const sourcePr: PRContext = {
+      ...pr,
+      headSha: 'a'.repeat(40),
+      sourceRepositoryUrl: 'https://github.com/contributor/fork',
+      files: [
+        {
+          filename: finding.file,
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ],
+    };
+    const review = new SynthesisEngine(DEFAULT_CONFIG).synthesize(
+      [finding],
+      sourcePr
+    );
+    const sourceLink = `https://github.com/contributor/fork/blob/${'a'.repeat(40)}/src/users.ts#L10`;
+    expect(review.summary).toContain(sourceLink);
+    expect(new MarkdownFormatterV2().format(review)).toContain(sourceLink);
+    expect(new MarkdownFormatterV2().format(review)).not.toContain('<picture>');
+    const deleted = new SynthesisEngine(DEFAULT_CONFIG).synthesize([finding], {
+      ...sourcePr,
+      files: [{ ...sourcePr.files[0], status: 'removed' }],
+    });
+    expect(deleted.summary).not.toContain('/blob/');
+    expect(deleted.findings[0]).toEqual(finding);
   });
 });

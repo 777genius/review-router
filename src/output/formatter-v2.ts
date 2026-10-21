@@ -1,9 +1,17 @@
 import { Review } from '../types';
-import { renderReviewSummary } from './reviewer-summary';
+import {
+  renderReviewSummary,
+  type ReviewerSummaryOptions,
+} from './reviewer-summary';
 
 /** Compatibility facade; all review paths share one presentation renderer. */
 export class MarkdownFormatterV2 {
-  format(review: Review): string {
-    return renderReviewSummary(review);
+  constructor(private readonly options: ReviewerSummaryOptions = {}) {}
+
+  format(
+    review: Review,
+    options: ReviewerSummaryOptions = this.options
+  ): string {
+    return renderReviewSummary(review, undefined, options);
   }
 }

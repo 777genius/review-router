@@ -30,6 +30,7 @@ import { MermaidGenerator } from './output/mermaid';
 import { FeedbackFilter } from './github/feedback';
 import { ReviewLedger } from './github/ledger';
 import { ConfigLoader } from './config/loader';
+import { reviewBannerBaseUrlFromEnvironment } from './config/review-router-endpoints';
 import { FeedbackTracker } from './learning/feedback-tracker';
 import { QuietModeFilter } from './learning/quiet-mode';
 import { CodeGraphBuilder } from './analysis/context/graph-builder';
@@ -414,7 +415,9 @@ export async function createComponents(
     githubClient,
     config.dryRun
   );
-  const formatter = new MarkdownFormatterV2();
+  const formatter = new MarkdownFormatterV2({
+    bannerBaseUrl: reviewBannerBaseUrlFromEnvironment(),
+  });
   const trustedReviewThreadAuthors = trustedReviewThreadAuthorsFromEnv();
   const reviewThreadInventory = new ReviewThreadInventoryLoader(
     githubClient,

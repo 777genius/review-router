@@ -564,7 +564,8 @@ export function renderReviewerSummaryMarkdown(
   const findings = [...input.findings].sort(compareSummaryFindings);
   for (const finding of findings) {
     const overview = compactFindingLine(finding, input.source);
-    const excerpt = findings.length <= 3 ? findingExcerpt(finding.message) : '';
+    const excerpt =
+      findings.length <= 3 ? findingExcerpt(finding.message, locale) : '';
     const preview = [
       overview,
       ...(excerpt ? ['', escapeMarkdownText(excerpt)] : []),
@@ -922,8 +923,13 @@ function findingSourceUrl(
         )
       )
       .join('/');
-    const start = finding.startLine ?? finding.line;
-    const end = finding.endLine ?? start;
+    const hasRange =
+      finding.startLine !== undefined &&
+      finding.endLine !== undefined &&
+      finding.startLine < finding.endLine;
+    const start =
+      hasRange && finding.line > 0 ? finding.startLine! : finding.line;
+    const end = hasRange ? finding.endLine! : start;
     const anchor =
       Number.isSafeInteger(start) && start > 0
         ? `#L${start}${Number.isSafeInteger(end) && end > start ? `-L${end}` : ''}`
@@ -1976,15 +1982,44 @@ const compactCopy = Object.fromEntries(
   ])
 ) as Record<ReviewerSummaryLocale, CompactCopy>;
 
-function plainExcerpt(value: string, maxChars: number): string {
+function plainExcerpt(
+  value: string,
+  maxChars: number,
+  locale: ReviewerSummaryLocale
+): string {
   const chars = Array.from(value);
   if (chars.length <= maxChars) return value;
   const candidate = chars.slice(0, maxChars - 1).join('');
   const lastSpace = candidate.search(/\s+\S*$/u);
-  return lastSpace > 0 ? `${candidate.slice(0, lastSpace).trimEnd()}…` : '';
+  if (lastSpace > 0) return `${candidate.slice(0, lastSpace).trimEnd()}…`;
+  // CJK prose often has no spaces. ICU supplies word boundaries without
+  // splitting long identifiers; URL tokens must remain whole as well.
+  const urls = Array.from(
+    value.matchAll(/\b(?:[a-z][a-z\d+.-]*:|www\.)\S+/giu),
+    (match) => ({
+      start: match.index!,
+      end: match.index! + match[0].length,
+    })
+  );
+  let boundary = 0;
+  for (const segment of new Intl.Segmenter(locale, {
+    granularity: 'word',
+  }).segment(value)) {
+    const end = segment.index + segment.segment.length;
+    if (end > candidate.length) break;
+    if (
+      segment.isWordLike &&
+      !urls.some((url) => url.start < end && end < url.end)
+    )
+      boundary = end;
+  }
+  return boundary > 0 ? `${value.slice(0, boundary).trimEnd()}…` : '';
 }
 
-function findingExcerpt(message: string): string {
+function findingExcerpt(
+  message: string,
+  locale: ReviewerSummaryLocale
+): string {
   const first =
     message
       .replace(/^(?:[ \t]*\r?\n)+/, '')
@@ -1997,7 +2032,7 @@ function findingExcerpt(message: string): string {
     /\n\s*\|?\s*:?-{3}/.test(first)
   )
     return '';
-  return plainExcerpt(first.replace(/\s+/g, ' ').trim(), 320);
+  return plainExcerpt(first.replace(/\s+/g, ' ').trim(), 320, locale);
 }
 
 /** Split only at paragraph boundaries outside code fences. */

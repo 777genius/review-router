@@ -81633,7 +81633,7 @@ ${safeFindingBody(line.message)}`
   const findings = [...input.findings].sort(compareSummaryFindings);
   for (const finding of findings) {
     const overview = compactFindingLine(finding, input.source);
-    const excerpt = findings.length <= 3 ? findingExcerpt(finding.message) : "";
+    const excerpt = findings.length <= 3 ? findingExcerpt(finding.message, locale) : "";
     const preview = [
       overview,
       ...excerpt ? ["", escapeMarkdownText(excerpt)] : []
@@ -81846,8 +81846,9 @@ function findingSourceUrl(finding, source) {
         (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`
       )
     ).join("/");
-    const start = finding.startLine ?? finding.line;
-    const end = finding.endLine ?? start;
+    const hasRange = finding.startLine !== void 0 && finding.endLine !== void 0 && finding.startLine < finding.endLine;
+    const start = hasRange && finding.line > 0 ? finding.startLine : finding.line;
+    const end = hasRange ? finding.endLine : start;
     const anchor = Number.isSafeInteger(start) && start > 0 ? `#L${start}${Number.isSafeInteger(end) && end > start ? `-L${end}` : ""}` : "";
     return `${repo.origin}${repo.pathname.replace(/\/$/, "")}/blob/${source.headSha}/${path15}${anchor}`;
   } catch {
@@ -82724,20 +82725,37 @@ var compactCopy = Object.fromEntries(
     )
   ])
 );
-function plainExcerpt(value, maxChars) {
+function plainExcerpt(value, maxChars, locale) {
   const chars = Array.from(value);
   if (chars.length <= maxChars) return value;
   const candidate = chars.slice(0, maxChars - 1).join("");
   const lastSpace = candidate.search(/\s+\S*$/u);
-  return lastSpace > 0 ? `${candidate.slice(0, lastSpace).trimEnd()}\u2026` : "";
+  if (lastSpace > 0) return `${candidate.slice(0, lastSpace).trimEnd()}\u2026`;
+  const urls = Array.from(
+    value.matchAll(/\b(?:[a-z][a-z\d+.-]*:|www\.)\S+/giu),
+    (match) => ({
+      start: match.index,
+      end: match.index + match[0].length
+    })
+  );
+  let boundary = 0;
+  for (const segment of new Intl.Segmenter(locale, {
+    granularity: "word"
+  }).segment(value)) {
+    const end = segment.index + segment.segment.length;
+    if (end > candidate.length) break;
+    if (segment.isWordLike && !urls.some((url) => url.start < end && end < url.end))
+      boundary = end;
+  }
+  return boundary > 0 ? `${value.slice(0, boundary).trimEnd()}\u2026` : "";
 }
-function findingExcerpt(message) {
+function findingExcerpt(message, locale) {
   const first = message.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd().split(/\r?\n\s*\r?\n/)[0] ?? "";
   if (/^(?: {4}|\t|\s*(?:`{3}|~{3}|<|\||#{1,6}\s|>|[-*+]\s|\d+[.)]\s))/.test(
     first
   ) || /\n\s*\|?\s*:?-{3}/.test(first))
     return "";
-  return plainExcerpt(first.replace(/\s+/g, " ").trim(), 320);
+  return plainExcerpt(first.replace(/\s+/g, " ").trim(), 320, locale);
 }
 function markdownBlocks(value) {
   const blocks = [];

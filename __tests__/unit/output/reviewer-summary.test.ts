@@ -634,6 +634,39 @@ describe('compact summary publication contract', () => {
     expect(lifecycle).toContain(`\n\n${code}\n\n<code>`);
   });
 
+  it('uses word boundaries for a CJK paragraph without spaces', () => {
+    const message = '安全检查'.repeat(100);
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'zh',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    const excerpt = outsideDetails(markdown)
+      .split('\n\n')
+      .find((block) => block.startsWith('安全'));
+    // 319 available code points end halfway through 检查; preserve the whole
+    // preceding word 安全 and add the ellipsis within the 320-character cap.
+    expect(excerpt).toBe(`${'安全检查'.repeat(79)}安全…`);
+    expect(Array.from(excerpt!).length).toBeLessThanOrEqual(320);
+    expect(markdown).toContain(message);
+  });
+
+  it.each([
+    'LongEnglishIdentifier'.repeat(30),
+    `https://example.com/${'segment/'.repeat(80)}`,
+  ])(
+    'keeps an oversized indivisible identifier or URL out of the preview',
+    (message) => {
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message }],
+      });
+      expect(outsideDetails(markdown)).not.toContain(message.slice(0, 24));
+      expect(markdown).toContain(message);
+    }
+  );
+
   it('keeps all same-location findings in severity/stable order and uses compact previews for four findings', () => {
     const findings = [
       { ...finding, title: 'Z last', severity: 'minor' as const },
@@ -794,6 +827,24 @@ describe('compact summary publication contract', () => {
       expect(fallback).toContain('<code>src/auth.ts:44</code>');
     }
   });
+
+  it.each([{ startLine: 8 }, { endLine: 12 }])(
+    'uses the displayed line for a partial range: %j',
+    (partial) => {
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, line: 10, ...partial }],
+        source: {
+          repositoryHtmlUrl: 'https://github.com/owner/repo',
+          headSha: 'a'.repeat(40),
+        },
+      });
+      expect(markdown).toContain(
+        `[<code>src/auth.ts:10</code>](https://github.com/owner/repo/blob/${'a'.repeat(40)}/src/auth.ts#L10)`
+      );
+    }
+  );
 
   it('uses only public count/enumeration parameters in optional theme banners and rewrites their incomplete state', () => {
     const markdown = renderReviewerSummaryMarkdown({

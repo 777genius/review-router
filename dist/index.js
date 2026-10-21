@@ -22902,6 +22902,7 @@ var AccountGatewayModelTransport = class {
     try {
       const waitUntil = import_perf_hooks.performance.now() + ACCOUNT_GATEWAY_BOUNDS.waitBudgetMs;
       let waits = 0;
+      let transientAttempts = 0;
       let response;
       let denial;
       for (; ; ) {
@@ -22911,12 +22912,23 @@ var AccountGatewayModelTransport = class {
         httpStatus = null;
         currentRequestRef = void 0;
         denial = void 0;
-        response = await this.request(
-          "POST",
-          `${BASE}/responses`,
-          body,
-          controller.signal
-        );
+        try {
+          response = await this.request(
+            "POST",
+            `${BASE}/responses`,
+            body,
+            controller.signal
+          );
+        } catch (error2) {
+          if (controller.signal.aborted || !transientRequestFailure(error2) || transientAttempts >= TRANSIENT_RETRY_DELAYS.length || import_perf_hooks.performance.now() + TRANSIENT_RETRY_DELAYS[transientAttempts] > waitUntil)
+            throw error2;
+          observeTransport(this.observe, "upstream_request", false, null, error2);
+          await (0, import_promises2.setTimeout)(TRANSIENT_RETRY_DELAYS[transientAttempts], void 0, {
+            signal: controller.signal
+          });
+          transientAttempts++;
+          continue;
+        }
         responseReceived = true;
         httpStatus = response.statusCode ?? 502;
         currentRequestRef = safeReference(
@@ -22939,13 +22951,26 @@ var AccountGatewayModelTransport = class {
         } finally {
           clearTimeout(controlTimer);
         }
-        if (httpStatus !== 503 || response.headers["x-reviewrouter-request-ref"] !== void 0 || !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+        const referenced = response.headers["x-reviewrouter-request-ref"] !== void 0;
+        if (httpStatus === 503 && !referenced && /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
           response.headers["content-type"] ?? ""
-        ) || denial === void 0 || !relaySaturated(denial) || waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits || import_perf_hooks.performance.now() + 1e3 > waitUntil)
-          break;
-        await (0, import_promises2.setTimeout)(1e3, void 0, { signal: controller.signal });
-        waits++;
-        if (import_perf_hooks.performance.now() >= waitUntil) break;
+        ) && denial !== void 0 && relaySaturated(denial)) {
+          if (waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits || import_perf_hooks.performance.now() + 1e3 > waitUntil)
+            break;
+          await (0, import_promises2.setTimeout)(1e3, void 0, { signal: controller.signal });
+          waits++;
+          if (import_perf_hooks.performance.now() >= waitUntil) break;
+          continue;
+        }
+        if (!referenced && (httpStatus === 502 || httpStatus === 504) && transientAttempts < TRANSIENT_RETRY_DELAYS.length && import_perf_hooks.performance.now() + TRANSIENT_RETRY_DELAYS[transientAttempts] <= waitUntil) {
+          observeTransport(this.observe, "upstream_headers", true, httpStatus);
+          await (0, import_promises2.setTimeout)(TRANSIENT_RETRY_DELAYS[transientAttempts], void 0, {
+            signal: controller.signal
+          });
+          transientAttempts++;
+          continue;
+        }
+        break;
       }
       const status = response.statusCode ?? 502;
       responseReceived = true;
@@ -23373,6 +23398,21 @@ async function boundedBytes(body, maximum, signal) {
 }
 function safeReference(value) {
   return typeof value === "string" && /^[A-Za-z0-9._~-]{1,200}$/.test(value) ? value : void 0;
+}
+var TRANSIENT_RETRY_DELAYS = [1e3, 2e3, 4e3];
+var TRANSIENT_ERRNO = /* @__PURE__ */ new Set([
+  "ECONNABORTED",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "EPIPE",
+  "ETIMEDOUT",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "EAI_AGAIN"
+]);
+function transientRequestFailure(error2) {
+  return error2 instanceof Error && error2.name !== "AbortError" && typeof error2.code === "string" && TRANSIENT_ERRNO.has(error2.code);
 }
 function relaySaturated(bytes) {
   try {

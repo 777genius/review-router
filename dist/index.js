@@ -29412,7 +29412,9 @@ async function withRetry(fn, options) {
           `Retryable error: attempt ${attempt} of ${maxAttempts}`,
           err.message
         );
-        await new Promise((resolve5) => setTimeout(resolve5, delay3));
+        await new Promise(
+          (resolve5) => setTimeout(resolve5, Math.max(delay3, options.retryDelayMs?.(err) ?? 0))
+        );
         delay3 = Math.min(delay3 * factor, options.maxTimeout ?? 4e3);
       }
     }
@@ -29525,7 +29527,13 @@ function buildProviderReviewPromptForAttempt(basePrompt, attempt, previousError)
   ].join("\n");
 }
 function isTransientLaneSaturation(error2) {
-  return formatErrorForClassification(error2).toLowerCase().includes("lane_saturated");
+  const text = formatErrorForClassification(error2).toLowerCase();
+  if (text.includes("lane_saturated")) return true;
+  return text.includes("relay_saturated") && text.includes("not_dispatched");
+}
+var LANE_SATURATION_RETRY_DELAY_MS = 1e3;
+function providerReviewRetryDelayMs(error2) {
+  return isTransientLaneSaturation(error2) ? LANE_SATURATION_RETRY_DELAY_MS : 0;
 }
 function formatErrorForClassification(error2) {
   const errorWithCode = error2;
@@ -29791,6 +29799,7 @@ var LLMExecutor = class {
               retries: totalAttempts - 1,
               minTimeout: 0,
               maxTimeout: 0,
+              retryDelayMs: providerReviewRetryDelayMs,
               retryOn: (error2) => {
                 previousError = error2;
                 return shouldRetryProviderReviewError(error2) && (this.providerExecutionPolicy?.canStartOptionalRetry() ?? true);

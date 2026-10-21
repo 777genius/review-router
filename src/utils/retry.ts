@@ -7,6 +7,9 @@ export interface RetryOptions {
   minTimeout?: number;
   maxTimeout?: number;
   retryOn?: (error: Error) => boolean;
+  /** Lower bound for the next delay after this failure; never shortens the
+   * existing exponential timing. */
+  retryDelayMs?: (error: Error) => number;
 }
 
 export async function withRetry<T>(
@@ -31,7 +34,9 @@ export async function withRetry<T>(
           `Retryable error: attempt ${attempt} of ${maxAttempts}`,
           err.message
         );
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.max(delay, options.retryDelayMs?.(err) ?? 0))
+        );
         delay = Math.min(delay * factor, options.maxTimeout ?? 4000);
       }
     }

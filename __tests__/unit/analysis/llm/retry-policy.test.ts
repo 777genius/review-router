@@ -2,6 +2,7 @@ import { RateLimitError } from '../../../../src/providers/base';
 import {
   buildProviderReviewPromptForAttempt,
   getProviderReviewTotalAttempts,
+  providerReviewRetryDelayMs,
   shouldRetryProviderReviewError,
 } from '../../../../src/analysis/llm/retry-policy';
 
@@ -45,6 +46,43 @@ describe('LLM retry policy', () => {
         )
       )
     ).toBe(true);
+  });
+
+  it('retries a forwarded relay saturation envelope only when it proves not_dispatched', () => {
+    expect(
+      shouldRetryProviderReviewError(
+        new Error(
+          'upstream 503 {"error":{"code":"relay_saturated","effect":"not_dispatched"}}'
+        )
+      )
+    ).toBe(true);
+    expect(
+      shouldRetryProviderReviewError(
+        new Error(
+          'upstream 503 {"error":{"code":"relay_saturated","effect":"effect_unknown"}}'
+        )
+      )
+    ).toBe(false);
+    expect(
+      shouldRetryProviderReviewError(
+        new Error(
+          'upstream 503 {"error":{"code":"admission_limited","effect":"not_dispatched"}}'
+        )
+      )
+    ).toBe(false);
+  });
+
+  it('waits the gateway retry-after floor before transient saturation retries', () => {
+    expect(
+      providerReviewRetryDelayMs(
+        new Error(
+          'upstream 503 {"error":{"code":"lane_saturated","effect":"not_dispatched"}}'
+        )
+      )
+    ).toBe(1000);
+    expect(
+      providerReviewRetryDelayMs(new Error('returned invalid review JSON'))
+    ).toBe(0);
   });
 
   it('keeps terminal budget exhaustion non-retryable', () => {

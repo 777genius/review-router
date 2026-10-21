@@ -7,6 +7,7 @@ import { withTimeout } from '../../utils/timeout';
 import {
   buildProviderReviewPromptForAttempt,
   getProviderReviewTotalAttempts,
+  providerReviewRetryDelayMs,
   shouldRetryProviderReviewError,
 } from './retry-policy';
 import { ExecutionDeadline } from '../../review-execution/domain/execution-deadline';
@@ -297,6 +298,7 @@ export class LLMExecutor {
               retries: totalAttempts - 1,
               minTimeout: 0,
               maxTimeout: 0,
+              retryDelayMs: providerReviewRetryDelayMs,
               retryOn: (error) => {
                 previousError = error;
                 return (

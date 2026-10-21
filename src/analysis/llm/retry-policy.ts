@@ -99,9 +99,21 @@ export function buildProviderReviewPromptForAttempt(
 // envelope outranks textual non-retry patterns, which cannot otherwise tell
 // transient saturation apart from terminal budget exhaustion.
 function isTransientLaneSaturation(error: Error): boolean {
-  return formatErrorForClassification(error)
-    .toLowerCase()
-    .includes('lane_saturated');
+  const text = formatErrorForClassification(error).toLowerCase();
+  if (text.includes('lane_saturated')) return true;
+  // The forwarded relay envelope keeps its relay_saturated code after the
+  // transport's in-transport waits; only the not_dispatched effect proves
+  // non-entry (effect_unknown stays terminal).
+  return text.includes('relay_saturated') && text.includes('not_dispatched');
+}
+
+// Every lane_saturated denial is published with retry-after 1; that header is
+// consumed at the gateway boundary, so executor-level saturation retries honor
+// the same fixed floor instead of burning the whole attempt budget at once.
+const LANE_SATURATION_RETRY_DELAY_MS = 1000;
+
+export function providerReviewRetryDelayMs(error: Error): number {
+  return isTransientLaneSaturation(error) ? LANE_SATURATION_RETRY_DELAY_MS : 0;
 }
 
 function formatErrorForClassification(error: Error): string {

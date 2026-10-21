@@ -38,8 +38,7 @@ A workspace administrator saves the connection separately:
 connection's logical credential map. They do not evaluate JavaScript, shell, or
 arbitrary GitHub expressions. GitHub does not expand these templates inside the
 JSON; the runner broker resolves them using the explicit map below. Every
-configured header contains a bound placeholder;
-anonymous connections use empty headers and credentials. Missing, empty, multiline,
+configured header contains a bound placeholder; anonymous connections use empty headers and credentials. Missing, empty, multiline,
 or unsolicited credential values make the selected integration unavailable.
 
 The generated caller forwards only the explicitly selected workflow secrets:
@@ -49,8 +48,8 @@ secrets:
   mcp_secrets_json: ${{ format('{{"DOCS_TOKEN":{0}}}', toJSON(secrets.DOCS_MCP_TOKEN)) }}
 ```
 
-The reusable workflow receives this exact logical map as JSON. Do not forward `toJSON(secrets)` or use `secrets: inherit`. GitHub credential bytes
-stay in the trusted runner parent. Dashboard credentials use authenticated,
+The reusable workflow receives this exact logical map as JSON. Do not forward
+`toJSON(secrets)` or use `secrets: inherit`. GitHub credential bytes stay in the trusted runner parent. Dashboard credentials use authenticated,
 run-scoped delivery; Dashboard-only selections need no caller secret mapping.
 GitHub secret availability follows GitHub: fork pull requests and Dependabot
 runs usually receive empty secrets, so a selected GitHub credential is
@@ -70,8 +69,7 @@ unavailable. A tool's ordinary query error allows a corrected query. Failed or
 uncertain dispatches are not automatically replayed.
 
 Only approved remote Streamable HTTP endpoints over HTTPS on public addresses
-are supported. DNS answers and
-the actual TLS destination are checked on each connection; redirects, automatic
+are supported. DNS answers and the actual TLS destination are checked on each connection; redirects, automatic
 OAuth discovery, proxy environment routing, local stdio, setup commands and
 arbitrary environment configuration are unsupported. The selected server receives
 model-generated tool arguments. Its output is untrusted evidence, and its

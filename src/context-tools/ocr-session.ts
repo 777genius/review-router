@@ -85,9 +85,11 @@ export async function prepareOcrContextTools(input: {
     const chunks: Uint8Array[] = [];
     let bytes = 0;
     try {
-      while (true) {
-        const item = await reader.read();
-        if (item.done) break;
+      for (
+        let item = await reader.read();
+        !item.done;
+        item = await reader.read()
+      ) {
         bytes += item.value.byteLength;
         if (bytes > plan.limits.responseBytes)
           throw contextToolsError('response_too_large');

@@ -283,9 +283,15 @@ export class LegacyReviewProjectionPolicyAdapter
         occurrence.state !== FindingOccurrenceState.SuppressedByHuman
     );
     const currentOccurrences = activeOccurrences.filter(isCurrentOccurrence);
+    const legacyFindings = new Map(
+      currentOccurrences.map((occurrence) => [
+        occurrence,
+        toLegacyFinding(occurrence),
+      ])
+    );
     const pr = toLegacyPrContext(query);
     const review = this.synthesis.synthesizeWithProviderExecutionSummary(
-      currentOccurrences.map(toLegacyFinding),
+      [...legacyFindings.values()],
       pr,
       {
         planned: query.providerExecution.plannedProviders,
@@ -293,7 +299,12 @@ export class LegacyReviewProjectionPolicyAdapter
       }
     );
     const placements = query.occurrences.map((occurrence) =>
-      this.placeOccurrence(occurrence, review, query.revisionFiles)
+      this.placeOccurrence(
+        occurrence,
+        review,
+        query.revisionFiles,
+        legacyFindings.get(occurrence)
+      )
     );
     const incomplete = isReviewerSummaryIncomplete({
       incomplete: query.coverage.state === ProjectionCoverageState.Partial,
@@ -384,7 +395,8 @@ export class LegacyReviewProjectionPolicyAdapter
   private placeOccurrence(
     occurrence: FindingOccurrence,
     review: Review,
-    revisionFiles: readonly RevisionFile[]
+    revisionFiles: readonly RevisionFile[],
+    sourceFinding: Finding | undefined
   ): FindingPlacementDecision {
     if (!isCurrentOccurrence(occurrence)) {
       return summaryPlacement(occurrence, 'historical lifecycle occurrence');
@@ -415,8 +427,8 @@ export class LegacyReviewProjectionPolicyAdapter
     }
     const inline = review.inlineComments.find(
       (comment) =>
-        normalizePath(comment.path) === normalizePath(occurrence.filePath) &&
-        comment.line === line
+        sourceFinding !== undefined &&
+        this.synthesis.sourceFindingForInlineComment(comment) === sourceFinding
     );
     if (!inline) {
       return {

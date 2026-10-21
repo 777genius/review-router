@@ -27,7 +27,14 @@ export interface ProviderExecutionSummary {
 }
 
 export class SynthesisEngine {
+  // Keep provenance off serialized comments; locations are not finding identities.
+  private readonly inlineSourceFindings = new WeakMap<InlineComment, Finding>();
+
   constructor(private readonly config: ReviewConfig) {}
+
+  sourceFindingForInlineComment(comment: InlineComment): Finding | undefined {
+    return this.inlineSourceFindings.get(comment);
+  }
 
   synthesize(
     findings: Finding[],
@@ -184,22 +191,26 @@ export class SynthesisEngine {
       )
       .slice(0, this.config.inlineMaxComments);
 
-    return sorted.map((f) => ({
-      path: f.file,
-      startLine: f.startLine,
-      line: f.line,
-      endLine: f.endLine,
-      side: 'RIGHT',
-      body: this.commentBody(f),
-      severity: f.severity,
-      title: f.title,
-      category: f.category,
-      provider: f.provider,
-      providers: f.providers,
-      confidence: f.confidence,
-      hasConsensus: f.hasConsensus,
-      suggestion: f.suggestion,
-    }));
+    return sorted.map((f) => {
+      const comment: InlineComment = {
+        path: f.file,
+        startLine: f.startLine,
+        line: f.line,
+        endLine: f.endLine,
+        side: 'RIGHT',
+        body: this.commentBody(f),
+        severity: f.severity,
+        title: f.title,
+        category: f.category,
+        provider: f.provider,
+        providers: f.providers,
+        confidence: f.confidence,
+        hasConsensus: f.hasConsensus,
+        suggestion: f.suggestion,
+      };
+      this.inlineSourceFindings.set(comment, f);
+      return comment;
+    });
   }
 
   private commentBody(finding: Finding): string {

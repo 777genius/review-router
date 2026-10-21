@@ -1,7 +1,7 @@
 {
   "canonicalizerDigest": "12408727c244f65242534d3060983b87221715f2086631ab743c2c6f6248629a",
   "contractExportVersion": 1,
-  "expectedPublicActionBaseCommit": "eb763ba12c432e522f3119071a52623f200e3429",
+  "expectedPublicActionBaseCommit": "e716b9632d8e892bfea7d41102a2d0fab3306ec1",
   "generatedFileDigests": {
     "companion-contracts.ts": "8216881b7b78fafc1b81d753f6adc1421856553e1e8d94cffe8071cbeb69a8c0",
     "fixtures/context-tools-v1.json": "bfb01a041ade951c16ae6f4066a1a160338191ec8ef3a1c5a059eff1a2c7a19b",
@@ -58,10 +58,10 @@
     "usage-price-v1.ts": "e6b8dba84ed5032f4c68fb7d29f4802a51173faa956de20a47683ef0a6075cf4",
     "usage-producer-v1.ts": "62757092d80bd472f1c4d64125ee8152acf2bb450148acd18539cd5372cfd1f2",
     "usage-responses-v1.ts": "00c2c3d916530e07341afc1b8369999e228f193f1579265991c43afcb0b4881e",
-    "usage-v1.ts": "74e2217620e72cfd6bfddde732bfa548e76b8cc81f974b6e358320ced7ed8585"
+    "usage-v1.ts": "1c57f859af274c26e7fb8d3f0759d1b64c2ef6d532960df1e0c02bff38e4a61c"
   },
   "goldenFixtureDigest": "d6d5a918ce9e5e01a14aa9714a77d6557fcaee90c68e272cbc3f925f3e4c94a4",
   "protocolVersion": "2",
-  "saasSourceCommit": "6d0cf7ddb3afe51586213779c966ba33967d88da",
+  "saasSourceCommit": "6009ef3bdcb00a042c1a6c9b793a035820c22f66",
   "schemaDigest": "32bb25cd3490660dbaeecaa168f162ba97ff171e2dfab69e1bd435bc2e1cf3d3"
 }

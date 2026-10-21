@@ -129239,7 +129239,9 @@ async function startCodexUsageRelay(input) {
         }
         const body2 = Buffer.concat(chunks);
         const parsed = JSON.parse(body2.toString("utf8"));
-        if (typeof parsed.model !== "string" || parsed.model.length < 1 || parsed.model.length > 200 || Array.from(parsed.model).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
+        if (typeof parsed.model !== "string" || parsed.model.length < 1 || parsed.model.length > 200 || Array.from(parsed.model).some(
+          (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127
+        )) {
           response.writeHead(400).end();
           return;
         }
@@ -131072,6 +131074,18 @@ var providerApiCheckoutCompanionContract = Object.freeze({
   path: "/api/action/v2/provider-api/checkout",
   providerApiAuthMode: "openrouter-api",
   workflowSchemaVersion: 2
+});
+var prDescriptionContract = Object.freeze({
+  taskKind: "pr_description",
+  runtimeEnvKey: "UPDATE_PR_DESCRIPTION",
+  capabilityRuntimeEnvKey: "REVIEW_ROUTER_PR_DESCRIPTION_CAPABILITY_JSON",
+  promptVersion: "pr-description-v1",
+  outputSchemaVersion: 1,
+  maxPromptBytes: 32768,
+  maxGeneratedMarkdownBytes: 8192,
+  maxOutputTokens: 1200,
+  deadlineMs: 6e4,
+  attemptBudget: 1
 });
 
 // src/review-orchestration/infrastructure/account-gateway-model-transport.ts
@@ -198262,6 +198276,12 @@ var manifest_default = {
         "review_investigation_context_gateway_open",
         "review_investigation_context_gateway_seal"
       ]
+    }
+  ],
+  auxiliaryExtensions: [
+    {
+      extensionId: "pr-description.v1",
+      canonicalizerDigest: "aa043184eb0a1a0cf230d8fbb03c6a63a05b950c82c0107bee7d2533c386eed0"
     }
   ],
   canonicalizerGoldenFixtureDigest: "9f638db73ec3696da7f3aa842ed10b7cf7c466986dfbd45b1a602e3b08d75c57",

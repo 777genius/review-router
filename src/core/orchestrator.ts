@@ -15,6 +15,7 @@ import { PullRequestLoader } from '../github/pr-loader';
 import { CommentPoster } from '../github/comment-poster';
 import { MarkdownFormatter } from '../output/formatter';
 import { MarkdownFormatterV2 } from '../output/formatter-v2';
+import { reviewerSummarySourceFromPr } from '../output/reviewer-summary';
 import { MermaidGenerator } from '../output/mermaid';
 import { FeedbackFilter, ReviewCommentState } from '../github/feedback';
 import {
@@ -464,6 +465,7 @@ export class ReviewOrchestrator {
           incrementalPlan.lastReview,
           start
         );
+        reusedReview.sourceRevision = reviewerSummarySourceFromPr(pr);
         await this.projectCurrentStateOntoReusedReview(
           pr,
           reusedReview,

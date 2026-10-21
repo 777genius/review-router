@@ -912,9 +912,9 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     expect(projected.summaryBody).not.toMatch(
       /^##\s+Review complete(?:d)?\b/im
     );
-    expect(projected.summaryBody).toContain('# ReviewRouter');
-    expect(projected.summaryBody).toContain('## Summary');
-    expect(projected.summaryBody).toContain('## Findings');
+    expect(projected.summaryBody).not.toContain('# ReviewRouter');
+    expect(projected.summaryBody).not.toContain('## Summary');
+    expect(projected.summaryBody).not.toContain('## Findings');
     expect(projected.summaryBody).not.toContain('| Duration |');
     expect(projected.summaryBody).not.toContain('| Tokens |');
     expect(projected.summaryBody).not.toContain('| Cost |');

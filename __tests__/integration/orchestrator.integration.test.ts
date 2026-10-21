@@ -401,7 +401,10 @@ describe('ReviewOrchestrator integration (offline)', () => {
       })
     );
     expect(lastUpdate.body).toContain('<!-- review-router-bot -->');
-    expect(lastUpdate.body).toContain('# ReviewRouter');
+    expect(lastUpdate.body).toContain('<!-- reviewrouter:summary-status -->');
+    expect(lastUpdate.body).toContain('**major · LLM issue**');
+    expect(lastUpdate.body).toContain('<summary>Review details</summary>');
+    expect(lastUpdate.body).not.toContain('# ReviewRouter');
     expect(lastUpdate.body).toContain('<!-- review-router-summary:');
     expect(lastUpdate.body).not.toContain(
       '<!-- review-router-progress-tracker -->'

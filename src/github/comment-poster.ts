@@ -1,5 +1,9 @@
 import { InlineComment, FileChange, Severity, ReviewConfig } from '../types';
 import { GitHubClient } from './client';
+import {
+  REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
+  REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER,
+} from '../output/reviewer-summary';
 import { logger } from '../utils/logger';
 import {
   chooseBestAddedLineForComment,
@@ -510,7 +514,9 @@ export class CommentPoster {
     if (!body) return false;
     return (
       body.includes(CommentPoster.BOT_COMMENT_MARKER) &&
-      body.includes('# ReviewRouter') &&
+      (body.includes('# ReviewRouter') ||
+        body.includes(REVIEW_SUMMARY_STATUS_COMPLETE_MARKER) ||
+        body.includes(REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER)) &&
       !body.includes(CommentPoster.INLINE_FALLBACK_MARKER) &&
       !body.includes(CommentPoster.INLINE_SKIP_HELP_MARKER)
     );

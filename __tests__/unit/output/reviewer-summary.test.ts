@@ -635,6 +635,70 @@ describe('compact summary publication contract', () => {
   });
 
   it.each([
+    'Use `Promise<void>` and `<T>` with `a & b`.',
+    'Use ``a`<T>`` with an exact two-backtick delimiter.',
+    'Use \\```Promise<void>`` with an escaped leading backtick.',
+    'Treat `<img src=x>` as literal source.',
+    'Use `Promise<\nvoid>` across a soft line break.',
+  ])('preserves HTML characters inside matched inline code: %s', (message) => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message: `${message}\n\n<b>Outside HTML</b>` }],
+    });
+    expect(markdown).toContain(message);
+    expect(markdown).toContain('&lt;b&gt;Outside HTML&lt;/b&gt;');
+    const lifecycle = renderReviewerLifecycleMarkdown({
+      language: 'en',
+      lines: [
+        {
+          kind: 'active',
+          title: finding.title,
+          locationLabel: 'src/<T>.ts:1',
+          message,
+        },
+      ],
+    });
+    expect(lifecycle).toContain(message);
+    expect(lifecycle).toContain('<code>src/&lt;T&gt;.ts:1</code>');
+  });
+
+  it.each([
+    '`unmatched<T> with ``another<U>',
+    '\\`<b>escaped backticks</b>\\`',
+    '`first<T>\n\nsecond<U>`',
+    '`before\n<div>unsafe token</div>\nafter`',
+    '`before\n# Heading <b>unsafe token</b>\nafter`',
+    '`before<T>\n===\nafter`',
+  ])('escapes HTML outside valid inline code spans: %s', (message) => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    const details = markdown.slice(markdown.indexOf('<details>'));
+    expect(details).not.toMatch(/<(?:T|U|b|div)>/);
+    expect(details).toContain('&lt;');
+  });
+
+  it('keeps disclosure neutralization and fenced code safety around inline code', () => {
+    const message =
+      'Use `Promise<void>` and `</details>`.\n\n```ts\nconst value: Promise<void> = task();\n```';
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    expect(markdown).toContain('Use `Promise<void>` and `&lt;/details&gt;`.');
+    expect(markdown).toContain(
+      '```ts\nconst value: Promise<void> = task();\n```'
+    );
+    expect(markdown.match(/<details>/g)?.length).toBe(
+      markdown.match(/<\/details>/g)?.length
+    );
+  });
+
+  it.each([
     '```ts\nconst hiddenBlock = true;\n```',
     '~~~ts\nconst hiddenBlock = true;\n~~~',
     '   ```ts\nconst hiddenBlock = true;\n   ```',

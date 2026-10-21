@@ -2039,19 +2039,21 @@ function findingExcerpt(
     if (/^ {0,3}(?:=+[ \t]*$|-+[ \t]*$|\|?\s*:?-{3})/.test(line)) return '';
     // Block constructs can interrupt a paragraph without a preceding blank
     // line. Keep soft-wrapped prose together, but never expose the next block.
-    if (
-      /^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|(?:[-*_][ \t]*){3,}$)/.test(
-        line
-      ) ||
-      htmlInterruptsParagraph(line)
-    )
-      break;
+    if (markdownInterruptsParagraph(line)) break;
     paragraph.push(line);
   }
   return plainExcerpt(
     paragraph.join(' ').replace(/\s+/g, ' ').trim(),
     320,
     locale
+  );
+}
+
+function markdownInterruptsParagraph(line: string): boolean {
+  return (
+    /^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
+      line
+    ) || htmlInterruptsParagraph(line)
   );
 }
 
@@ -2101,27 +2103,72 @@ function hasControlCharacters(value: string): boolean {
 }
 
 function safeFindingBody(value: string): string {
-  // Escape prose HTML, preserve fenced source, and neutralize attempts to close
-  // the generated disclosures. The original body remains in the JSON artifact.
+  // Escape prose HTML, preserve code, and neutralize attempts to close the
+  // generated disclosures. The original body remains in the JSON artifact.
   let fence: string | undefined;
-  const lines = neutralizeDetailsMarkup(value)
-    .split('\n')
-    .map((line) => {
-      const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-      if (match && !fence) {
-        fence = match[1];
-        return line;
-      }
-      if (fence) {
-        if (
-          new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line)
-        )
-          fence = undefined;
-        return line;
-      }
-      return line.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-    });
+  const lines: string[] = [];
+  let prose: string[] = [];
+  const flush = () => {
+    if (prose.length) lines.push(escapeHtmlOutsideCodeSpans(prose.join('\n')));
+    prose = [];
+  };
+  for (const line of neutralizeDetailsMarkup(value).split('\n')) {
+    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (match && !fence) {
+      flush();
+      fence = match[1];
+      lines.push(line);
+    } else if (fence) {
+      if (new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
+        fence = undefined;
+      lines.push(line);
+    } else if (markdownInterruptsParagraph(line)) {
+      // A block interruptor ends a paragraph even without a blank line. Never
+      // preserve raw HTML through backticks that GFM cannot match across it.
+      flush();
+      lines.push(escapeHtmlOutsideCodeSpans(line));
+    } else prose.push(line);
+  }
+  flush();
   return markdownBlocks(lines.join('\n')).join('\n\n');
+}
+
+function escapeHtmlOutsideCodeSpans(value: string): string {
+  const escape = (text: string) =>
+    text.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  // Code spans can cross soft breaks, but never a paragraph or fenced block.
+  return value
+    .split(/(\r?\n[ \t]*\r?\n)/)
+    .map((paragraph) => {
+      const ticks = Array.from(paragraph.matchAll(/`+/g));
+      let result = '';
+      let cursor = 0;
+      for (let index = 0; index < ticks.length; index++) {
+        const opening = ticks[index]!;
+        let slashes = 0;
+        for (
+          let position = opening.index! - 1;
+          position >= 0 && paragraph[position] === '\\';
+          position--
+        )
+          slashes++;
+        const start = opening.index! + (slashes % 2);
+        const delimiterLength = opening[0].length - (slashes % 2);
+        if (delimiterLength === 0) continue;
+        const closing = ticks.findIndex(
+          (tick, candidate) =>
+            candidate > index && tick[0].length === delimiterLength
+        );
+        if (closing < 0) continue;
+        const end = ticks[closing]!.index! + ticks[closing]![0].length;
+        result +=
+          escape(paragraph.slice(cursor, start)) + paragraph.slice(start, end);
+        cursor = end;
+        index = closing;
+      }
+      return result + escape(paragraph.slice(cursor));
+    })
+    .join('');
 }
 
 function renderReviewerBanner(

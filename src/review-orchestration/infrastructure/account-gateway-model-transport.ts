@@ -234,6 +234,7 @@ export class AccountGatewayModelTransport {
     try {
       const waitUntil = performance.now() + ACCOUNT_GATEWAY_BOUNDS.waitBudgetMs;
       let waits = 0;
+      let transientAttempts = 0;
       let response: IncomingMessage;
       let denial: Buffer | undefined;
       for (;;) {
@@ -244,12 +245,29 @@ export class AccountGatewayModelTransport {
         currentRequestRef = undefined;
         denial = undefined;
         // Admission/model headers retain the existing whole-request deadline.
-        response = await this.request(
-          'POST',
-          `${BASE}/responses`,
-          body,
-          controller.signal
-        );
+        try {
+          response = await this.request(
+            'POST',
+            `${BASE}/responses`,
+            body,
+            controller.signal
+          );
+        } catch (error) {
+          if (
+            controller.signal.aborted ||
+            !transientRequestFailure(error) ||
+            transientAttempts >= TRANSIENT_RETRY_DELAYS.length ||
+            performance.now() + TRANSIENT_RETRY_DELAYS[transientAttempts] >
+              waitUntil
+          )
+            throw error;
+          observeTransport(this.observe, 'upstream_request', false, null, error);
+          await wait(TRANSIENT_RETRY_DELAYS[transientAttempts], undefined, {
+            signal: controller.signal,
+          });
+          transientAttempts++;
+          continue;
+        }
         responseReceived = true;
         httpStatus = response.statusCode ?? 502;
         currentRequestRef = safeReference(
@@ -273,23 +291,46 @@ export class AccountGatewayModelTransport {
         } finally {
           clearTimeout(controlTimer);
         }
-        // Only this fixed-origin, pre-request positive denial permits another
-        // POST. Unknown effects and any request reference remain terminal.
+        // Only fixed-origin failures provably before application dispatch
+        // permit another POST: this positive pre-request denial, or a rejection
+        // carrying no request reference (the application assigns references at
+        // admission). Any request reference or unknown effect stays terminal.
+        const referenced =
+          response.headers['x-reviewrouter-request-ref'] !== undefined;
         if (
-          httpStatus !== 503 ||
-          response.headers['x-reviewrouter-request-ref'] !== undefined ||
-          !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+          httpStatus === 503 &&
+          !referenced &&
+          /^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
             response.headers['content-type'] ?? ''
-          ) ||
-          denial === undefined ||
-          !relaySaturated(denial) ||
-          waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits ||
-          performance.now() + 1000 > waitUntil
-        )
-          break;
-        await wait(1000, undefined, { signal: controller.signal });
-        waits++;
-        if (performance.now() >= waitUntil) break;
+          ) &&
+          denial !== undefined &&
+          relaySaturated(denial)
+        ) {
+          if (
+            waits >= ACCOUNT_GATEWAY_BOUNDS.maxWaits ||
+            performance.now() + 1000 > waitUntil
+          )
+            break;
+          await wait(1000, undefined, { signal: controller.signal });
+          waits++;
+          if (performance.now() >= waitUntil) break;
+          continue;
+        }
+        if (
+          !referenced &&
+          (httpStatus === 502 || httpStatus === 504) &&
+          transientAttempts < TRANSIENT_RETRY_DELAYS.length &&
+          performance.now() + TRANSIENT_RETRY_DELAYS[transientAttempts] <=
+            waitUntil
+        ) {
+          observeTransport(this.observe, 'upstream_headers', true, httpStatus);
+          await wait(TRANSIENT_RETRY_DELAYS[transientAttempts], undefined, {
+            signal: controller.signal,
+          });
+          transientAttempts++;
+          continue;
+        }
+        break;
       }
       const status = response.statusCode ?? 502;
       responseReceived = true;
@@ -825,6 +866,29 @@ function safeReference(value: unknown): string | undefined {
   return typeof value === 'string' && /^[A-Za-z0-9._~-]{1,200}$/.test(value)
     ? value
     : undefined;
+}
+// A request-stage socket failure or a rejection without any request reference
+// is provably before application dispatch (the gateway assigns references at
+// admission), so one bounded re-dispatch cannot duplicate an unknown effect.
+const TRANSIENT_RETRY_DELAYS = [1000, 2000, 4000] as const;
+const TRANSIENT_ERRNO = new Set([
+  'ECONNABORTED',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'EPIPE',
+  'ETIMEDOUT',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
+function transientRequestFailure(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.name !== 'AbortError' &&
+    typeof (error as NodeJS.ErrnoException).code === 'string' &&
+    TRANSIENT_ERRNO.has((error as NodeJS.ErrnoException).code as string)
+  );
 }
 function relaySaturated(bytes: Buffer): boolean {
   try {

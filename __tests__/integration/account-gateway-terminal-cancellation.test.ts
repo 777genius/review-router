@@ -47,7 +47,11 @@ const completed = (id: string) =>
 const partial =
   'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"partial"}\n\n';
 
-async function bounded<T>(work: Promise<T>, phase: string): Promise<T> {
+async function bounded<T>(
+  work: Promise<T>,
+  phase: string,
+  timeoutMs = 4000
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -55,7 +59,7 @@ async function bounded<T>(work: Promise<T>, phase: string): Promise<T> {
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(
           () => reject(new Error(`synthetic_timeout:${phase}`)),
-          4000
+          timeoutMs
         );
       }),
     ]);
@@ -579,7 +583,11 @@ async function failedResponseDiagnostic(upstream502: boolean): Promise<void> {
       startLocalGatewayModelTransport(transport, observe),
       'diagnostic-local'
     );
-    const response = await bounded(post(local), 'diagnostic-headers');
+    const response = await bounded(
+      post(local, 15_000),
+      'diagnostic-headers',
+      15_000
+    );
     const chunks: Buffer[] = [];
     await bounded(
       (async () => {
@@ -594,7 +602,14 @@ async function failedResponseDiagnostic(upstream502: boolean): Promise<void> {
         ? upstreamBody
         : '{"error":{"code":"relay_unknown","effect":"effect_unknown"}}'
     );
-    assert.equal(requests, 1, 'failed Responses must never be retried');
+    // A provable pre-dispatch failure receives exactly one bounded transient
+    // re-dispatch budget (1 + 3); every attempt keeps a closed diagnostic and
+    // the final failed status/body is still forwarded unchanged.
+    assert.equal(
+      requests,
+      4,
+      'failed Responses are re-dispatched only within the bounded transient budget'
+    );
     if (upstream502)
       assert.deepEqual(diagnostics, [
         {
@@ -603,9 +618,27 @@ async function failedResponseDiagnostic(upstream502: boolean): Promise<void> {
           httpStatus: 502,
           errorCategory: 'none',
         },
+        {
+          stage: 'upstream_headers',
+          responseReceived: true,
+          httpStatus: 502,
+          errorCategory: 'none',
+        },
+        {
+          stage: 'upstream_headers',
+          responseReceived: true,
+          httpStatus: 502,
+          errorCategory: 'none',
+        },
+        {
+          stage: 'upstream_headers',
+          responseReceived: true,
+          httpStatus: 502,
+          errorCategory: 'none',
+        },
       ]);
     else {
-      assert.equal(diagnostics.length, 1);
+      assert.equal(diagnostics.length, 4);
       for (const diagnostic of diagnostics)
         assert.deepEqual(diagnostic, {
           stage: 'upstream_request',
@@ -1018,7 +1051,7 @@ if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
         ['--test', '--test-reporter=tap', observer],
         {
           cwd: root,
-          timeout: 120_000,
+          timeout: 180_000,
           killSignal: 'SIGKILL',
           maxBuffer: 1_048_576,
           env: {
@@ -1042,5 +1075,5 @@ if (process.env.RR_TERMINAL_CANCELLATION_PROBE === '--probe') {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  }, 120_000);
+  }, 180_000);
 }

@@ -456,7 +456,8 @@ describe('Codex OAuth rotating setup PR preview', () => {
     expect(prepareCli).toHaveBeenCalledWith(
       expect.objectContaining({
         approvedAgent: expect.objectContaining({
-          profileRef: 'codex-default',
+          profileRef: 'codex-skills-v1',
+          reviewSkillsVersion: 1,
           packageVersion: '0.147.0',
           modelTransports: ['account_gateway', 'provider_api'],
         }),

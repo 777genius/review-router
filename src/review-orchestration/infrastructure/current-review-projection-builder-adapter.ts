@@ -19,6 +19,7 @@ export interface ReviewProjectionCommandFactoryPort {
   create(input: {
     readonly acceptedEvidence: readonly AcceptedReviewWorkSlotEvidence[];
     readonly exhaustedWorkSlotIds: readonly string[];
+    readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
     readonly reviewRevisionHash: string;
   }): Promise<BuildCurrentReviewProjectionCommand>;
 }

@@ -65,6 +65,7 @@ export interface ProjectReviewPresentationQuery {
   readonly presentation: ReviewProjectionPresentationContext;
   readonly providerExecution: ProviderExecutionSummaryFact;
   readonly coverage: ReviewCoverageFact;
+  readonly incompleteCauses?: readonly string[];
   readonly occurrences: readonly FindingOccurrence[];
   readonly revisionFiles: readonly RevisionFile[];
   readonly limits: ReviewProjectionLimits;

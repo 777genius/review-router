@@ -201,6 +201,32 @@ describe('reviewer summary markdown', () => {
     }
   });
 
+  it('explains the concrete cause of an incomplete review in plain language', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics: {
+        totalFindings: 0,
+        critical: 0,
+        major: 0,
+        minor: 0,
+        providersUsed: 1,
+        providersSuccess: 0,
+      },
+      findings: [],
+      incomplete: true,
+      incompleteCauses: ['attempt_budget_exhausted', 'deadline_reached'],
+    });
+
+    expect(markdown).toContain('**Why the review is incomplete:**');
+    expect(markdown).toContain(
+      'The review provider exhausted its retry attempts without returning evidence'
+    );
+    expect(markdown).toContain(
+      'The review ran out of its execution time budget'
+    );
+    expect(markdown).not.toContain('attempt_budget_exhausted');
+  });
+
   it('finishes the scope table before incomplete coverage details', () => {
     const markdown = renderReviewerSummaryMarkdown({
       language: 'English',

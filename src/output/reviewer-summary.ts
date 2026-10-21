@@ -26,12 +26,25 @@ export type ReviewerSummaryLocale =
   | 'ja'
   | 'ko';
 
+export type ReviewIncompleteCauseCode =
+  | 'attempt_budget_exhausted'
+  | 'not_runnable'
+  | 'provider_lane_busy'
+  | 'investigation_deferred'
+  | 'restored_terminal'
+  | 'deadline_reached'
+  | 'admission_limited';
+
 type ReviewerSummaryCopy = {
   readonly noFindingsHeading: string;
   readonly limitedNoFindingsHeading: string;
   readonly dismissedNote: (count: number) => string;
   readonly findingsHeading: (input: SeverityCounts) => string;
   readonly providerFailures: (failed: number, planned: number) => string;
+  readonly incompleteCauseHeading: string;
+  readonly incompleteCauses: Readonly<
+    Record<ReviewIncompleteCauseCode, string>
+  >;
   readonly location: string;
   readonly fix: string;
   readonly incompleteHeading: (count: number) => string;
@@ -221,6 +234,7 @@ export type ReviewerSummaryInput = ReviewerSummaryOptions & {
     | 'providersSuccess'
   >;
   readonly incomplete?: boolean;
+  readonly incompleteCauses?: readonly string[];
   readonly coverage?: {
     readonly complete: boolean;
     readonly totalFiles: number;
@@ -322,6 +336,16 @@ export function renderReviewerSummaryMarkdown(
     heading,
   ];
   if (incomplete) lines.push('', copy.incompleteNote);
+  const incompleteCauseCodes = (input.incompleteCauses ?? []).filter(
+    (code): code is ReviewIncompleteCauseCode =>
+      Object.hasOwn(copy.incompleteCauses, code)
+  );
+  if (incomplete && incompleteCauseCodes.length > 0) {
+    lines.push('', copy.incompleteCauseHeading);
+    for (const code of incompleteCauseCodes) {
+      lines.push(`- ${copy.incompleteCauses[code]}`);
+    }
+  }
   if (incomplete && severityLine) lines.push('', severityLine);
   const chrome = compactCopy[locale];
   const banner = renderReviewerBanner(input, locale, incomplete, counts);
@@ -1004,6 +1028,21 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} ${count === 1 ? 'finding' : 'findings'} dismissed by maintainer/admin \`/rr skip\` ${count === 1 ? 'override' : 'overrides'}.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${englishFindingWord(counts.total)} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Why the review is incomplete:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'The review provider exhausted its retry attempts without returning evidence — usually the AI model service is rate-limiting or unreachable. This is a provider-side problem, not a verdict on the code.',
+      not_runnable: 'A required review unit could not be run at all.',
+      provider_lane_busy:
+        'The review provider stayed unavailable (busy or at capacity) for the entire run.',
+      investigation_deferred:
+        'A context investigation was deferred, so the review could not cover everything.',
+      restored_terminal:
+        'This run resumed a previous attempt that already ended without evidence.',
+      deadline_reached: 'The review ran out of its execution time budget.',
+      admission_limited:
+        'Admission policy limited this review before it could finish.',
+    },
     providerFailures: (failed, planned) =>
       `${failed} of ${planned} review providers failed.`,
     location: 'Location',
@@ -1033,6 +1072,21 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `Замечаний отклонено: ${count}. Причина — команда \`/rr skip\` сопровождающего или администратора.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${slavicFindingWord(counts.total, ['замечание', 'замечания', 'замечаний'])} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Почему ревью не завершено:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'Провайдер ревью исчерпал попытки, не получив результатов — обычно сервис ИИ-модели ограничивает запросы или недоступен. Это проблема на стороне провайдера, а не вердикт по коду.',
+      not_runnable: 'Обязательный блок ревью не удалось запустить вообще.',
+      provider_lane_busy:
+        'Провайдер ревью был недоступен (занят или на пределе мощности) весь запуск.',
+      investigation_deferred:
+        'Расследование контекста было отложено, поэтому ревью не смогло покрыть всё.',
+      restored_terminal:
+        'Этот запуск продолжил предыдущую попытку, уже завершившуюся без результатов.',
+      deadline_reached: 'У ревью закончился временной бюджет выполнения.',
+      admission_limited:
+        'Политика допуска ограничила это ревью до его завершения.',
+    },
     providerFailures: (failed, planned) =>
       `Не сработали ${failed} из ${planned} провайдеров ревью.`,
     location: 'Место',
@@ -1062,6 +1116,21 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `Відхилено зауважень: ${count}. Причина — команда \`/rr skip\` супроводжувача або адміністратора.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${slavicFindingWord(counts.total, ['зауваження', 'зауваження', 'зауважень'])} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: "**Чому рев'ю не завершено:**",
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        "Провайдер рев'ю вичерпав спроби, не отримавши результатів — зазвичай сервіс ШІ-моделі обмежує запити або недоступний. Це проблема на боці провайдера, а не вердикт щодо коду.",
+      not_runnable: "Обов'язковий блок рев'ю не вдалося запустити взагалі.",
+      provider_lane_busy:
+        "Провайдер рев'ю був недоступний (зайнятий або на межі потужності) весь запуск.",
+      investigation_deferred:
+        "Дослідження контексту було відкладено, тому рев'ю не змогло охопити все.",
+      restored_terminal:
+        'Цей запуск продовжив попередню спробу, яка вже завершилася без результатів.',
+      deadline_reached: "У рев'ю закінчився часовий бюджет виконання.",
+      admission_limited:
+        "Політика допуску обмежила це рев'ю до його завершення.",
+    },
     providerFailures: (failed, planned) =>
       `Не спрацювали ${failed} з ${planned} провайдерів рев’ю.`,
     location: 'Місце',
@@ -1091,6 +1160,23 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} hallazgos descartados por la orden \`/rr skip\` de un mantenedor o administrador.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${counts.total === 1 ? 'hallazgo' : 'hallazgos'} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Por qué la revisión no está completa:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'El proveedor de revisión agotó sus intentos sin devolver evidencia; normalmente el servicio del modelo de IA limita las peticiones o no está disponible. Es un problema del proveedor, no un veredicto sobre el código.',
+      not_runnable:
+        'No se pudo ejecutar en absoluto una unidad de revisión obligatoria.',
+      provider_lane_busy:
+        'El proveedor de revisión estuvo indisponible (ocupado o al límite de capacidad) durante toda la ejecución.',
+      investigation_deferred:
+        'Se aplazó una investigación de contexto, así que la revisión no pudo cubrirlo todo.',
+      restored_terminal:
+        'Esta ejecución reanudó un intento anterior que ya había terminado sin evidencia.',
+      deadline_reached:
+        'La revisión agotó su presupuesto de tiempo de ejecución.',
+      admission_limited:
+        'La política de admisión limitó esta revisión antes de que pudiera completarse.',
+    },
     providerFailures: (failed, planned) =>
       `Fallaron ${failed} de ${planned} proveedores de revisión.`,
     location: 'Ubicación',
@@ -1120,6 +1206,22 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} achados dispensados pelo comando \`/rr skip\` de um mantenedor ou administrador.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${counts.total === 1 ? 'achado' : 'achados'} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Por que a revisão não está completa:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'O provedor de revisão esgotou suas tentativas sem retornar evidência; normalmente o serviço do modelo de IA limita as solicitações ou está indisponível. É um problema do provedor, não um veredito sobre o código.',
+      not_runnable:
+        'Não foi possível executar uma unidade de revisão obrigatória.',
+      provider_lane_busy:
+        'O provedor de revisão ficou indisponível (ocupado ou no limite de capacidade) durante toda a execução.',
+      investigation_deferred:
+        'Uma investigação de contexto foi adiada, então a revisão não conseguiu cobrir tudo.',
+      restored_terminal:
+        'Esta execução retomou uma tentativa anterior que já havia terminado sem evidência.',
+      deadline_reached: 'A revisão esgotou seu orçamento de tempo de execução.',
+      admission_limited:
+        'A política de admissão limitou esta revisão antes que ela pudesse ser concluída.',
+    },
     providerFailures: (failed, planned) =>
       `${failed} de ${planned} provedores de revisão falharam.`,
     location: 'Local',
@@ -1149,6 +1251,22 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} anomalies écartées par la commande \`/rr skip\` d’un responsable ou administrateur.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${counts.total === 1 ? 'anomalie' : 'anomalies'} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Pourquoi la revue est incomplète :**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        "Le fournisseur de revue a épuisé ses tentatives sans renvoyer de preuve ; en général, le service du modèle d'IA limite les requêtes ou est indisponible. C'est un problème du fournisseur, pas un verdict sur le code.",
+      not_runnable:
+        "Une unité de revue obligatoire n'a pas pu être exécutée du tout.",
+      provider_lane_busy:
+        "Le fournisseur de revue est resté indisponible (occupé ou à saturation) pendant toute l'exécution.",
+      investigation_deferred:
+        "Une investigation de contexte a été reportée, la revue n'a donc pas pu tout couvrir.",
+      restored_terminal:
+        'Cette exécution a repris une tentative précédente déjà terminée sans preuve.',
+      deadline_reached: "La revue a épuisé son budget de temps d'exécution.",
+      admission_limited:
+        "La politique d'admission a limité cette revue avant qu'elle ne puisse se terminer.",
+    },
     providerFailures: (failed, planned) =>
       `${failed} fournisseur(s) de revue sur ${planned} ont échoué.`,
     location: 'Emplacement',
@@ -1178,6 +1296,23 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} Befunde durch den Befehl \`/rr skip\` eines Maintainers oder Administrators verworfen.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${counts.total === 1 ? 'Befund' : 'Befunde'} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Warum die Prüfung unvollständig ist:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'Der Prüfanbieter hat seine Versuche aufgebraucht, ohne Ergebnisse zurückzugeben; normalerweise begrenzt der KI-Modellservice die Anfragen oder ist nicht erreichbar. Das ist ein Problem des Anbieters, kein Urteil über den Code.',
+      not_runnable:
+        'Eine erforderliche Prüfeinheit konnte überhaupt nicht ausgeführt werden.',
+      provider_lane_busy:
+        'Der Prüfanbieter war während des gesamten Laufs nicht verfügbar (ausgelastet oder an der Kapazitätsgrenze).',
+      investigation_deferred:
+        'Eine Kontextuntersuchung wurde verschoben, daher konnte die Prüfung nicht alles abdecken.',
+      restored_terminal:
+        'Dieser Lauf hat einen früheren Versuch fortgesetzt, der bereits ohne Ergebnisse endete.',
+      deadline_reached:
+        'Der Prüfung ist ihr Ausführungszeitbudget ausgegangen.',
+      admission_limited:
+        'Die Zulassungsrichtlinie hat diese Prüfung begrenzt, bevor sie abschließen konnte.',
+    },
     providerFailures: (failed, planned) =>
       `${failed} von ${planned} Review-Providern sind fehlgeschlagen.`,
     location: 'Stelle',
@@ -1209,6 +1344,23 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} riscontri esclusi dal comando \`/rr skip\` di un manutentore o amministratore.`,
     findingsHeading: (counts) =>
       `## ${counts.total} ${counts.total === 1 ? 'rilievo' : 'rilievi'} (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**Perché la revisione è incompleta:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'Il fornitore della revisione ha esaurito i tentativi senza restituire evidenze; di solito il servizio del modello IA limita le richieste o non è raggiungibile. È un problema del fornitore, non un verdetto sul codice.',
+      not_runnable:
+        "Non è stato possibile eseguire affatto un'unità di revisione obbligatoria.",
+      provider_lane_busy:
+        "Il fornitore della revisione è rimasto non disponibile (occupato o al limite della capacità) per tutta l'esecuzione.",
+      investigation_deferred:
+        "Un'indagine sul contesto è stata rinviata, quindi la revisione non ha potuto coprire tutto.",
+      restored_terminal:
+        'Questa esecuzione ha ripreso un tentativo precedente già concluso senza evidenze.',
+      deadline_reached:
+        'La revisione ha esaurito il suo budget di tempo di esecuzione.',
+      admission_limited:
+        'La politica di ammissione ha limitato questa revisione prima che potesse concludersi.',
+    },
     providerFailures: (failed, planned) =>
       `${failed} di ${planned} provider di review non sono riusciti.`,
     location: 'Posizione',
@@ -1238,6 +1390,18 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} 个问题由维护者或管理员通过 \`/rr skip\` 命令忽略。`,
     findingsHeading: (counts) =>
       `## ${counts.total} 个问题（${formatSeverityCounts(counts)}）`,
+    incompleteCauseHeading: '**为什么本次审查未完成：**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        '审查提供方用尽了重试次数仍未返回证据——通常是 AI 模型服务限流或不可达。这是提供方一侧的问题，不是对代码的评判。',
+      not_runnable: '一个必需的审查单元根本无法运行。',
+      provider_lane_busy:
+        '整个运行期间审查提供方一直不可用（繁忙或达到容量上限）。',
+      investigation_deferred: '上下文调查被推迟，因此审查无法覆盖全部内容。',
+      restored_terminal: '本次运行接续了之前一次已经无证据结束的尝试。',
+      deadline_reached: '审查的执行时间预算已用尽。',
+      admission_limited: '准入策略在审查完成之前对其进行了限制。',
+    },
     providerFailures: (failed, planned) =>
       `${planned} 个审查提供方中有 ${failed} 个失败。`,
     location: '位置',
@@ -1263,6 +1427,21 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `${count} 件の指摘がメンテナーまたは管理者の \`/rr skip\` コマンドにより除外されました。`,
     findingsHeading: (counts) =>
       `## 指摘 ${counts.total} 件（${formatSeverityCounts(counts)}）`,
+    incompleteCauseHeading: '**レビューが完了しなかった理由:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        'レビュー提供者が証拠を返さずに再試行を使い切りました。通常は AI モデルサービスのレート制限または到達不能が原因で、コードの評価ではなく提供者側の問題です。',
+      not_runnable: '必須のレビュー単元をまったく実行できませんでした。',
+      provider_lane_busy:
+        '実行全体を通じてレビュー提供者が利用不能でした（混雑または容量上限）。',
+      investigation_deferred:
+        'コンテキスト調査が先送りされたため、レビューが全体をカバーできませんでした。',
+      restored_terminal:
+        'この実行は、証拠なしで終了した以前の試行を再開したものです。',
+      deadline_reached: 'レビューの実行時間予算が尽きました。',
+      admission_limited:
+        '採用ポリシーにより、レビューが完了する前に制限されました。',
+    },
     providerFailures: (failed, planned) =>
       `レビュープロバイダー ${planned} 件中 ${failed} 件が失敗しました。`,
     location: '場所',
@@ -1291,6 +1470,20 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `유지관리자 또는 관리자의 \`/rr skip\` 명령으로 이슈 ${count}개를 제외했습니다.`,
     findingsHeading: (counts) =>
       `## 이슈 ${counts.total}개 (${formatSeverityCounts(counts)})`,
+    incompleteCauseHeading: '**리뷰가 완료되지 않은 이유:**',
+    incompleteCauses: {
+      attempt_budget_exhausted:
+        '리뷰 제공자가 증거를 반환하지 못한 채 재시도를 모두 소진했습니다. 보통 AI 모델 서비스의 요청 제한 또는 연결 불가가 원인이며, 코드에 대한 평가가 아니라 제공자 측 문제입니다.',
+      not_runnable: '필수 리뷰 단위를 전혀 실행할 수 없었습니다.',
+      provider_lane_busy:
+        '실행 내내 리뷰 제공자를 사용할 수 없었습니다(혼잡 또는 용량 한계).',
+      investigation_deferred:
+        '컨텍스트 조사가 연기되어 리뷰가 전체를 다루지 못했습니다.',
+      restored_terminal:
+        '이 실행은 증거 없이 끝난 이전 시도를 재개한 것입니다.',
+      deadline_reached: '리뷰의 실행 시간 예산이 소진되었습니다.',
+      admission_limited: '채택 정책이 리뷰가 끝나기 전에 제한했습니다.',
+    },
     providerFailures: (failed, planned) =>
       `리뷰 제공자 ${planned}개 중 ${failed}개가 실패했습니다.`,
     location: '위치',

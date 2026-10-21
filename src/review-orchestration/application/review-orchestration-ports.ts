@@ -1,4 +1,5 @@
 import type { MergeGateConclusion } from '../../review-projection/domain';
+import type { GeneratedPrDescription } from '../../control-plane/generated/review-action-v2/companion-contracts';
 
 export enum ReviewEvidenceLookupKind {
   Miss = 'miss',
@@ -54,6 +55,7 @@ export type ReviewInvestigationCapabilityDescriptor =
 export enum ReviewTaskKind {
   FindingDiscovery = 'finding_discovery',
   LifecycleRevalidation = 'lifecycle_revalidation',
+  PrDescription = 'pr_description',
 }
 
 export enum ReviewInvocationFailureClass {
@@ -168,7 +170,9 @@ export type PreparedReviewInvocation = {
   readonly manifestFacts: PreparedReviewInvocationManifestFacts;
   readonly coverageManifest: import('../domain').ReviewPromptCoverageManifest;
   /** Null for managed OCR invocations; Codex invocations always carry a plan. */
-  readonly investigationProbePlan: import('../../review-investigation/domain').ReviewInvestigationProbePlan | null;
+  readonly investigationProbePlan:
+    | import('../../review-investigation/domain').ReviewInvestigationProbePlan
+    | null;
   readonly investigationSeedEnvelope?:
     | import('../../review-investigation/domain').PreparedReviewInvestigationSeedEnvelope
     | null;
@@ -648,6 +652,18 @@ export interface PreparedReviewInvocationPort {
   }): Promise<ReviewObservationPayload>;
 }
 
+/** Optional parent task, never a review observation or provider vote. */
+export interface PrDescriptionGenerationPort {
+  prepare: PreparedReviewInvocationPort['prepare'];
+  execute(input: {
+    readonly invocation: PreparedReviewInvocation;
+    readonly manifest: ProviderInvocationManifest;
+    readonly lease: ReviewInvocationLease;
+    readonly signal: AbortSignal;
+  }): Promise<GeneratedPrDescription>;
+  unavailable(): void;
+}
+
 export enum ReviewInvestigationRecordingMode {
   RecordOnly = 'record_only',
   Authoritative = 'authoritative',
@@ -688,6 +704,7 @@ export interface CurrentReviewProjectionBuilderPort {
     readonly acceptedEvidence: readonly AcceptedReviewWorkSlotEvidence[];
     readonly exhaustedWorkSlotIds: readonly string[];
     readonly reviewRevisionHash: string;
+    readonly prDescription?: GeneratedPrDescription;
   }): Promise<CurrentReviewProjection>;
 }
 

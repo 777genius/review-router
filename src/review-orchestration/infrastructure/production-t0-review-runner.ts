@@ -27,6 +27,8 @@ import {
   REVIEW_EXECUTION_DEADLINE_ENV_KEY,
 } from '../../review-execution/infrastructure/execution-deadline-from-environment';
 import { GitHubClient } from '../../github/client';
+import { stripOwnedPrDescriptionBlocks } from '../../github/pr-description-markers';
+import { prDescriptionContract } from '../../control-plane/generated/review-action-v2/companion-contracts';
 import type { GitHubTokenProvider } from '../../github/token-provider';
 import { ReviewLedger } from '../../github/ledger';
 import { PullRequestLoader } from '../../github/pr-loader';
@@ -90,6 +92,7 @@ import {
   GitHubReviewRevisionGuard,
 } from './github-review-state-adapter';
 import { createProductionReviewProjectionBuilder } from './production-review-projection';
+import { createPrDescriptionGeneration } from './pr-description-generation';
 import {
   ReviewActionV2ControlPlaneAdapter,
   projectReviewRunAuthorization,
@@ -251,9 +254,21 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           input.providerApi.runtimeConfig.runtimeEnv
         )
       : ConfigLoader.load();
-    const config = input.accountGateway
-      ? { ...loadedConfig, providerRetries: 1 }
-      : loadedConfig;
+    const capturedDescriptionFlag =
+      admittedRuntime?.runtimeEnv[prDescriptionContract.runtimeEnvKey];
+    if (
+      capturedDescriptionFlag !== undefined &&
+      !['true', 'false'].includes(capturedDescriptionFlag)
+    )
+      throw new Error('review_action_v2_description_policy_invalid');
+    const config = {
+      ...loadedConfig,
+      ...(input.accountGateway ? { providerRetries: 1 } : {}),
+      // A missing captured flag means ON; ambient runner input cannot disable it.
+      updatePrDescription: admittedRuntime
+        ? capturedDescriptionFlag !== 'false'
+        : loadedConfig.updatePrDescription !== false,
+    };
     // Codex model selection stays before every effect (including on the OCR
     // path where the managed engine owns its own model capture).
     const codexProviderName = input.ocr
@@ -393,10 +408,27 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         config,
         process.env.REVIEWROUTER_RUNTIME_CONFIG_VERSION
       );
-      const ocrBackgroundParts = [pr.title, pr.body].filter(
-        (part) => part.trim().length > 0
-      );
+      const ocrBackgroundParts = [
+        pr.title,
+        stripOwnedPrDescriptionBlocks(pr.body),
+      ].filter((part) => part.trim().length > 0);
+      const prDescription = createPrDescriptionGeneration({
+        enabled: config.updatePrDescription,
+        capabilityJson:
+          admittedRuntime?.runtimeEnv[
+            prDescriptionContract.capabilityRuntimeEnvKey
+          ],
+        pr,
+        reviewRevisionHash: authorization.facts.reviewRevisionHash,
+        requestedModel: ocrModel,
+        providerKind: ReviewExecutionProviderKind.Ocr,
+        language: config.outputLanguage,
+        config,
+        transport: modelTransport,
+        warn: core.warning,
+      });
       const planned = planOcrReviewAssignments({
+        prDescriptionEnabled: prDescription !== undefined,
         authorization,
         pr,
         config,
@@ -448,7 +480,18 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
         }
       );
       const identities = new DeterministicReviewOrchestrationIdentity();
+      if (
+        prDescription &&
+        !planned.plan.assignments.some(
+          (assignment) =>
+            assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
+        )
+      )
+        core.warning(
+          'AI PR description omitted: no optional task budget remains.'
+        );
       const useCase = new RunT0ReviewOrchestration({
+        ...(prDescription ? { prDescription } : {}),
         controlPlane,
         revisionGuard,
         oidc: {
@@ -593,7 +636,25 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
           gatewayBundlePath,
         })
       : undefined;
+    const prDescription = createPrDescriptionGeneration({
+      enabled: config.updatePrDescription,
+      capabilityJson:
+        admittedRuntime?.runtimeEnv[
+          prDescriptionContract.capabilityRuntimeEnvKey
+        ],
+      pr,
+      reviewRevisionHash: authorization.facts.reviewRevisionHash,
+      requestedModel: model,
+      providerKind: ReviewExecutionProviderKind.Codex,
+      language: config.outputLanguage,
+      config,
+      transport:
+        input.providerApi?.modelTransport ??
+        input.accountGateway?.modelTransport,
+      warn: core.warning,
+    });
     const planned = planAssignments({
+      prDescriptionEnabled: prDescription !== undefined,
       authorization,
       pr,
       config,
@@ -747,7 +808,18 @@ export class ProductionT0ReviewRunner implements CodexOAuthV2ReviewRunnerPort {
             investigationRollout.verifiedCleanEnabled
           )
         : undefined;
+    if (
+      prDescription &&
+      !planned.plan.assignments.some(
+        (assignment) =>
+          assignment.workSlot.taskKind === ReviewTaskKind.PrDescription
+      )
+    )
+      core.warning(
+        'AI PR description omitted: no optional task budget remains.'
+      );
     const useCase = new RunT0ReviewOrchestration({
+      ...(prDescription ? { prDescription } : {}),
       controlPlane,
       revisionGuard,
       oidc: {
@@ -1803,6 +1875,7 @@ export async function prepareSingleT0ReviewPlan(input: {
 }
 
 export function planAssignments(input: {
+  readonly prDescriptionEnabled?: boolean;
   readonly accountGateway?: boolean;
   readonly authorization: ReviewRunAuthorization;
   readonly pr: PRContext;
@@ -1839,6 +1912,9 @@ export function planAssignments(input: {
   ]);
   const allBatches = tokenSafeBatches.length === 0 ? [[]] : tokenSafeBatches;
   const batches = allBatches.slice(0, maxSlots);
+  // Optional generation never displaces a required review assignment.
+  const descriptionEnabled =
+    input.prDescriptionEnabled === true && batches.length < maxSlots;
   const uncoveredPaths = Object.freeze(
     allBatches
       .slice(maxSlots)
@@ -1918,13 +1994,29 @@ export function planAssignments(input: {
           : CODEX_RETRY_POLICY_VERSION,
       },
     ],
-    batches: plannedBatches.map((batch, schedulingOrdinal) => ({
-      batchId: batch.batchId,
-      taskKind: batch.taskKind,
-      required: batch.required,
-      paths: batch.files.map((file) => file.filename),
-      schedulingOrdinal,
-    })),
+    batches: [
+      ...plannedBatches.map((batch, schedulingOrdinal) => ({
+        batchId: batch.batchId,
+        taskKind: batch.taskKind,
+        required: batch.required,
+        paths: batch.files.map((file) => file.filename),
+        schedulingOrdinal,
+      })),
+      ...(descriptionEnabled
+        ? [
+            {
+              batchId: createStableReviewBatchId({
+                taskKind: ReviewTaskKind.PrDescription,
+                members: [],
+              }),
+              taskKind: ReviewTaskKind.PrDescription,
+              required: false,
+              paths: [] as readonly string[],
+              schedulingOrdinal: plannedBatches.length,
+            },
+          ]
+        : []),
+    ],
     eligiblePaths: files.map((file) => file.filename),
     uncoveredPaths,
     excludedPaths: [],
@@ -1934,18 +2026,26 @@ export function planAssignments(input: {
   const byBatchId = new Map(
     plannedBatches.map((batch) => [batch.batchId, batch])
   );
-  const assignments = plan.assignments.map((assignment) => {
-    const batch = byBatchId.get(assignment.batchId);
-    if (!batch) throw new Error('review_action_v2_planned_batch_missing');
-    return Object.freeze({
-      workSlot: assignment.workSlot,
-      reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
-      mergeBaseSha: input.authorization.facts.mergeBaseSha,
-      context: batchContext(input.pr, batch.files),
-      lifecycleTargets: Object.freeze([...batch.lifecycleTargets]),
-      liveLifecycleStateHash: input.liveLifecycleStateHash,
+  const assignments = plan.assignments
+    .filter(
+      (assignment) =>
+        assignment.workSlot.taskKind !== ReviewTaskKind.PrDescription
+    )
+    .map((assignment) => {
+      const batch = byBatchId.get(assignment.batchId);
+      if (!batch) throw new Error('review_action_v2_planned_batch_missing');
+      return Object.freeze({
+        workSlot: assignment.workSlot,
+        reviewRevisionHash: input.authorization.facts.reviewRevisionHash,
+        mergeBaseSha: input.authorization.facts.mergeBaseSha,
+        context: batchContext(
+          { ...input.pr, body: stripOwnedPrDescriptionBlocks(input.pr.body) },
+          batch.files
+        ),
+        lifecycleTargets: Object.freeze([...batch.lifecycleTargets]),
+        liveLifecycleStateHash: input.liveLifecycleStateHash,
+      });
     });
-  });
   return Object.freeze({
     plan,
     assignments: Object.freeze(assignments),

@@ -6,14 +6,11 @@ import {
   verifyPullRequestHead,
 } from './pr-head-guard';
 
-const START_MARKER = '<!-- review-router-summary:start -->';
-const END_MARKER = '<!-- review-router-summary:end -->';
-const LEGACY_MARKER_PAIRS = [
-  [
-    '<!-- ai-robot-review-summary:start -->',
-    '<!-- ai-robot-review-summary:end -->',
-  ],
-] as const;
+import {
+  PR_DESCRIPTION_START_MARKER as START_MARKER,
+  PR_DESCRIPTION_END_MARKER as END_MARKER,
+  stripOwnedPrDescriptionBlocks,
+} from './pr-description-markers';
 
 type FileCohort = {
   key: string;
@@ -130,21 +127,7 @@ export class PullRequestDescriptionUpdater {
   }
 
   private removeExistingBlock(body: string): string {
-    const markerPairs = [
-      [START_MARKER, END_MARKER] as const,
-      ...LEGACY_MARKER_PAIRS,
-    ];
-
-    for (const [startMarker, endMarker] of markerPairs) {
-      const start = body.indexOf(startMarker);
-      const end = body.indexOf(endMarker);
-
-      if (start !== -1 && end !== -1 && end >= start) {
-        return `${body.slice(0, start)}${body.slice(end + endMarker.length)}`;
-      }
-    }
-
-    return body;
+    return stripOwnedPrDescriptionBlocks(body);
   }
 
   private buildSummaryBullets(pr: PRContext, cohorts: FileCohort[]): string[] {

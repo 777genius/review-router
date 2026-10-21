@@ -170,8 +170,21 @@ describe('committed production entrypoint artifact', () => {
             profile.agentKind === 'codex' &&
             profile.modelTransports.includes('provider_api')
         );
-        expect(approvedProfiles).toHaveLength(1);
-        const profile = approvedProfiles[0]!;
+        expect(
+          approvedProfiles.map((profile) => profile.profileRef).sort()
+        ).toEqual(['codex-default', 'codex-skills-v1']);
+        const profile = approvedProfiles.find(
+          (profile) => profile.profileRef === 'codex-default'
+        )!;
+        const skillsProfile = approvedProfiles.find(
+          (profile) => profile.profileRef === 'codex-skills-v1'
+        )!;
+        expect(profile).not.toHaveProperty('reviewSkillsVersion');
+        expect(skillsProfile).toMatchObject({
+          reviewSkillsVersion: 1,
+          binarySha256: profile.binarySha256,
+          packageVersion: profile.packageVersion,
+        });
         writeFakeNpm(
           path.join(fakeBin, 'npm'),
           fakeCodexPath,
@@ -182,6 +195,8 @@ describe('committed production entrypoint artifact', () => {
         // synthetic qualification data at the module-load seam; this smoke does
         // not certify a real Codex binary. The real digest guard
         // verifies our harmless fixture executable rather than a provider binary.
+        // The retained legacy and Skills profiles qualify the same executable;
+        // require exactly those two digest occurrences before substituting both.
         fs.writeFileSync(
           fixturePreloadPath,
           `
@@ -192,8 +207,8 @@ const originalCompile = Module.prototype._compile;
 Module.prototype._compile = function(source, filename) {
   if (fs.realpathSync(filename) === ${JSON.stringify(fs.realpathSync(artifactPath))}) {
     const qualifiedDigest = ${JSON.stringify(profile.binarySha256)};
-    if (source.split(qualifiedDigest).length !== 2) throw new Error('artifact_smoke_profile_fixture_mismatch');
-    source = source.replace(qualifiedDigest, ${JSON.stringify(sha256(fs.readFileSync(fakeCodexPath)))});
+    if (source.split(qualifiedDigest).length !== ${approvedProfiles.length + 1}) throw new Error('artifact_smoke_profile_fixture_mismatch');
+    source = source.replaceAll(qualifiedDigest, ${JSON.stringify(sha256(fs.readFileSync(fakeCodexPath)))});
   }
   return originalCompile.call(this, source, filename);
 };

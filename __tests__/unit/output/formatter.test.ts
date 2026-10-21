@@ -44,8 +44,11 @@ describe('MarkdownFormatter', () => {
       const review = createMinimalReview();
       const output = formatter.format(review);
 
-      expect(output).toContain('# ReviewRouter');
-      expect(output).toContain('## Summary');
+      expect(output).toContain('<!-- reviewrouter:review-status:complete -->');
+      expect(output).toContain('## No findings');
+      expect(output).not.toContain('# ReviewRouter');
+      expect(output).not.toContain('## Summary');
+      expect(output).toContain('<summary>Review details</summary>');
       expect(output).toContain('| Duration | 1.50s |');
       expect(output).toContain('| Cost | $0.0010 |');
       expect(output).toContain('| Tokens | 100 |');
@@ -59,7 +62,9 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('critical · src/test.ts:10');
+      expect(output).toContain(
+        '- **critical · critical issue** · <code>src/test.ts:10</code>'
+      );
       expect(output).toContain('src/test.ts:10');
       expect(output).toContain('critical issue');
       expect(output).toContain('This is a critical issue');
@@ -73,7 +78,9 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('major · src/test.ts:10');
+      expect(output).toContain(
+        '- **major · major issue** · <code>src/test.ts:10</code>'
+      );
       expect(output).toContain('major issue');
     });
 
@@ -85,7 +92,9 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('minor · src/test.ts:10');
+      expect(output).toContain(
+        '- **minor · minor issue** · <code>src/test.ts:10</code>'
+      );
       expect(output).toContain('minor issue');
     });
 
@@ -103,9 +112,15 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('critical · src/test.ts:10');
-      expect(output).toContain('major · src/test.ts:10');
-      expect(output).toContain('minor · src/test.ts:10');
+      expect(output).toContain(
+        '- **critical · critical issue** · <code>src/test.ts:10</code>'
+      );
+      expect(output).toContain(
+        '- **major · major issue** · <code>src/test.ts:10</code>'
+      );
+      expect(output).toContain(
+        '- **minor · minor issue** · <code>src/test.ts:10</code>'
+      );
     });
   });
 
@@ -214,7 +229,9 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('<summary>Impact Analysis Graph</summary>');
+      expect(output).toContain('<summary>Review details</summary>');
+      expect(output).toContain('### Impact Analysis Graph');
+      expect(output.match(/<details>/g)).toHaveLength(1);
       expect(output).toContain('```mermaid');
       expect(output).toContain('graph TD\n  A-->B');
       expect(output).toContain('```');
@@ -356,7 +373,9 @@ describe('MarkdownFormatter', () => {
 
       const output = formatter.format(review);
 
-      expect(output).toContain('<summary>AI-Generated Code Analysis</summary>');
+      expect(output).toContain('<summary>Review details</summary>');
+      expect(output).toContain('### AI-Generated Code Analysis');
+      expect(output.match(/<details>/g)).toHaveLength(1);
       expect(output).toContain('75.0% · likely');
     });
   });

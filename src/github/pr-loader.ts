@@ -148,6 +148,9 @@ export class PullRequestLoader {
       deletions: pr.deletions || 0,
       baseSha,
       headSha,
+      ...(pr.head?.repo?.html_url
+        ? { sourceRepositoryUrl: pr.head.repo.html_url }
+        : {}),
       loadCompleteness: this.describeCompleteness(omissions),
     };
   }

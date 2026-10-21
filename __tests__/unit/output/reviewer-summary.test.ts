@@ -634,6 +634,64 @@ describe('compact summary publication contract', () => {
     expect(lifecycle).toContain(`\n\n${code}\n\n<code>`);
   });
 
+  it.each([
+    '```ts\nconst hiddenBlock = true;\n```',
+    '~~~ts\nconst hiddenBlock = true;\n~~~',
+    '   ```ts\nconst hiddenBlock = true;\n   ```',
+    '```text\n---\nhiddenBlock\n```',
+    '<div>hiddenBlock</div>',
+    '<!-- hiddenBlock -->',
+    '# hiddenBlock',
+    '> hiddenBlock',
+    '- hiddenBlock',
+    '1. hiddenBlock',
+    '***\nhiddenBlock',
+  ])(
+    'stops the prose preview before an adjacent Markdown block: %s',
+    (block) => {
+      const prose = 'Requests can cross the tenant boundary.';
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message: `${prose}\n${block}` }],
+      });
+      const visible = outsideDetails(markdown);
+      expect(visible).toContain(prose);
+      expect(visible).not.toContain('hiddenBlock');
+      expect(markdown).toContain('hiddenBlock');
+      if (block.includes('```') || block.includes('~~~'))
+        expect(markdown).toContain(`${prose}\n${block}`);
+    }
+  );
+
+  it.each(['===', '---', '|---|---|'])(
+    'does not preview text that belongs to an adjacent heading or table: %s',
+    (delimiter) => {
+      const message = `Non-prose block title\n${delimiter}\nhiddenBlock`;
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message }],
+      });
+      expect(outsideDetails(markdown)).not.toContain('Non-prose block title');
+      expect(outsideDetails(markdown)).not.toContain('hiddenBlock');
+      expect(markdown).toContain(message);
+    }
+  );
+
+  it('keeps soft-wrapped prose and URLs together before an adjacent block', () => {
+    const prose =
+      'Read the tenant contract at\nhttps://example.com/tenant-boundary';
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message: `${prose}\n~~~ts\nhiddenBlock\n~~~` }],
+    });
+    expect(outsideDetails(markdown)).toContain(prose.replace('\n', ' '));
+    expect(outsideDetails(markdown)).not.toContain('hiddenBlock');
+    expect(markdown).toContain(prose);
+  });
+
   it('uses word boundaries for a CJK paragraph without spaces', () => {
     const message = '安全检查'.repeat(100);
     const markdown = renderReviewerSummaryMarkdown({

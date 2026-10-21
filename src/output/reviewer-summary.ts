@@ -2028,11 +2028,30 @@ function findingExcerpt(
   if (
     /^(?: {4}|\t|\s*(?:`{3}|~{3}|<|\||#{1,6}\s|>|[-*+]\s|\d+[.)]\s))/.test(
       first
-    ) ||
-    /\n\s*\|?\s*:?-{3}/.test(first)
+    )
   )
     return '';
-  return plainExcerpt(first.replace(/\s+/g, ' ').trim(), 320, locale);
+  const lines = first.split(/\r?\n/);
+  const paragraph: string[] = [];
+  for (const line of lines) {
+    // Setext headings and table headers are not ordinary paragraphs. Only
+    // inspect paragraph lines, never delimiters inside the following block.
+    if (/^ {0,3}(?:=+[ \t]*$|-+[ \t]*$|\|?\s*:?-{3})/.test(line)) return '';
+    // Block constructs can interrupt a paragraph without a preceding blank
+    // line. Keep soft-wrapped prose together, but never expose the next block.
+    if (
+      /^ {0,3}(?:`{3}|~{3}|<|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|(?:[-*_][ \t]*){3,}$)/.test(
+        line
+      )
+    )
+      break;
+    paragraph.push(line);
+  }
+  return plainExcerpt(
+    paragraph.join(' ').replace(/\s+/g, ' ').trim(),
+    320,
+    locale
+  );
 }
 
 /** Split only at paragraph boundaries outside code fences. */

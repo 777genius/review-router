@@ -204868,8 +204868,9 @@ function limitUtf8(value, maxBytes) {
   let block = [];
   let depth = 0;
   let fence;
-  for (const line of value.split("\n")) {
-    const next = advanceMarkdownFence(line, fence);
+  for (const original of value.split("\n")) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
     if (next.closing) block.push(next.closing);
     fence = next.fence;
     if (!fence) {
@@ -205072,10 +205073,11 @@ function closeMarkdownFence(fence) {
 }
 function advanceMarkdownFence(line, fence) {
   if (fence) {
-    if (new RegExp(
-      `^ {0,3}${fence.delimiter[0]}{${fence.delimiter.length},}[ \\t]*\\r?$`
-    ).test(line))
-      return {};
+    const closer = /^( *)(`{3,}|~{3,})[ \t]*\r?$/.exec(line);
+    if (closer && closer[2][0] === fence.delimiter[0] && closer[2].length >= fence.delimiter.length && closer[1].length <= fence.indent + 3)
+      return {
+        normalized: closer[1].length > 3 ? closeMarkdownFence(fence) : void 0
+      };
     if (!line.trim() || line.match(/^ */)[0].length >= fence.indent)
       return { fence };
     return {
@@ -205089,8 +205091,9 @@ function markdownBlocks(value) {
   const blocks2 = [];
   let lines = [];
   let fence;
-  for (const line of value.split("\n")) {
-    const next = advanceMarkdownFence(line, fence);
+  for (const original of value.split("\n")) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
     if (next.closing) lines.push(next.closing);
     fence = next.fence;
     if (!line.trim() && !fence) {
@@ -205127,7 +205130,7 @@ function safeFindingBody(value) {
     const next = advanceMarkdownFence(line, fence);
     fence = next.fence;
     if (previous && !next.closing) {
-      lines.push(line);
+      lines.push(next.normalized ?? line);
       continue;
     }
     if (next.closing) lines.push(next.closing);

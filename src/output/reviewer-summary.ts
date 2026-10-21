@@ -1818,8 +1818,9 @@ function limitUtf8(value: string, maxBytes: number): string {
   let block: string[] = [];
   let depth = 0;
   let fence: MarkdownFence | undefined;
-  for (const line of value.split('\n')) {
-    const next = advanceMarkdownFence(line, fence);
+  for (const original of value.split('\n')) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
     if (next.closing) block.push(next.closing);
     fence = next.fence;
     if (!fence) {
@@ -2079,14 +2080,25 @@ function closeMarkdownFence(fence: MarkdownFence): string {
 function advanceMarkdownFence(
   line: string,
   fence: MarkdownFence | undefined
-): { readonly fence?: MarkdownFence; readonly closing?: string } {
+): {
+  readonly fence?: MarkdownFence;
+  readonly closing?: string;
+  readonly normalized?: string;
+} {
   if (fence) {
+    const closer = /^( *)(`{3,}|~{3,})[ \t]*\r?$/.exec(line);
     if (
-      new RegExp(
-        `^ {0,3}${fence.delimiter[0]}{${fence.delimiter.length},}[ \\t]*\\r?$`
-      ).test(line)
+      closer &&
+      closer[2][0] === fence.delimiter[0] &&
+      closer[2].length >= fence.delimiter.length &&
+      closer[1].length <= fence.indent + 3
     )
-      return {};
+      // Wider closers may be container-relative. Normalize the physical line
+      // too, so top-level GFM and our conservative fence state cannot disagree.
+      return {
+        normalized:
+          closer[1].length > 3 ? closeMarkdownFence(fence) : undefined,
+      };
     // A container can end at a dedent even though a top-level fence would
     // continue. Close conservatively at the original indent before prose.
     if (!line.trim() || line.match(/^ */)![0].length >= fence.indent)
@@ -2104,8 +2116,9 @@ function markdownBlocks(value: string): string[] {
   const blocks: string[] = [];
   let lines: string[] = [];
   let fence: MarkdownFence | undefined;
-  for (const line of value.split('\n')) {
-    const next = advanceMarkdownFence(line, fence);
+  for (const original of value.split('\n')) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
     if (next.closing) lines.push(next.closing);
     fence = next.fence;
     if (!line.trim() && !fence) {
@@ -2147,7 +2160,7 @@ function safeFindingBody(value: string): string {
     const next = advanceMarkdownFence(line, fence);
     fence = next.fence;
     if (previous && !next.closing) {
-      lines.push(line);
+      lines.push(next.normalized ?? line);
       continue;
     }
     if (next.closing) lines.push(next.closing);

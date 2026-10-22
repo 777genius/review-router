@@ -505,11 +505,7 @@ describe('production review projection coverage', () => {
     );
   });
 
-  it.each([
-    { existingCode: null },
-    { existingCode: 'old_a();' },
-    { startLine: 2, endLine: 1 },
-  ])(
+  it.each([{ existingCode: null }, { existingCode: 'old_a();' }])(
     'keeps unverified OCR findings in file placement: %j',
     async (unverified) => {
       const envelope = await projectNativeOcrComments([
@@ -527,6 +523,42 @@ describe('production review projection coverage', () => {
       expect(envelope.publishing.summary.body).not.toContain('src/a.ts:1');
     }
   );
+
+  it('keeps a colliding OCR quote in file placement and still degrades', async () => {
+    const envelope = await projectNativeOcrComments(
+      [nativeOcrComment({ existingCode: 'unsafe_a();', endLine: 1 })],
+      'unsafe_a();\nunsafe_a();'
+    );
+
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].line).toBeUndefined();
+    expect(envelope.occurrences[0].placement.kind).toBe('file');
+    expect(envelope.occurrences[0].suggestion).toBeUndefined();
+    expect(envelope.publishing.inlineReviewChunks).toEqual([]);
+    expect(envelope.coverage.state).toBe('partial');
+  });
+
+  it('repairs a grounded quote with a bogus claimed range to its true span', async () => {
+    const envelope = await projectNativeOcrComments([
+      nativeOcrComment({
+        existingCode: 'unsafe_b();',
+        startLine: 2,
+        endLine: 1,
+        suggestionCode: 'safe_b();',
+      }),
+    ]);
+
+    expect(envelope.occurrences).toHaveLength(1);
+    expect(envelope.occurrences[0].anchorVerified).toBe(true);
+    expect(envelope.occurrences[0].placement).toMatchObject({
+      kind: 'inline',
+      path: 'src/a.ts',
+      line: 2,
+      endLine: 2,
+    });
+    expect(envelope.occurrences[0].suggestion).toBe('safe_b();');
+    expect(envelope.coverage.state).toBe('complete');
+  });
 
   it('preserves an unanchored finding when the first added line is a comment', async () => {
     const envelope = await projectNativeOcrComments(

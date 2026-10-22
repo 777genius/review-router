@@ -47,7 +47,8 @@ describe('verifyOcrSpan (verified span vs authorized HEAD)', () => {
   it('verifies an exact multi-line range', () => {
     const span = verifyOcrSpan({
       comment: comment({
-        existingCode: 'function add(a, b) { return a - b }\nfunction mul(a, b) { return a * b }',
+        existingCode:
+          'function add(a, b) { return a - b }\nfunction mul(a, b) { return a * b }',
         startLine: 1,
         endLine: 2,
       }),
@@ -83,19 +84,21 @@ describe('verifyOcrSpan (verified span vs authorized HEAD)', () => {
     expect(span).toEqual({ verified: false, reason: 'outside_diff' });
   });
 
-  it('rejects invalid ranges and missing existing code', () => {
+  it('repairs a grounded quote to its true span even when the claimed range is invalid', () => {
+    // The quoted block is real HEAD content; model line arithmetic may not
+    // be. Grounding decides the anchor (plan 56, §8.2 verified HEAD span).
     expect(
       verifyOcrSpan({
         comment: comment({ startLine: 0, endLine: 1 }),
         headContent: content,
       })
-    ).toEqual({ verified: false, reason: 'invalid_range' });
+    ).toEqual({ verified: true, startLine: 1, endLine: 1 });
     expect(
       verifyOcrSpan({
         comment: comment({ startLine: 2, endLine: 1 }),
         headContent: content,
       })
-    ).toEqual({ verified: false, reason: 'invalid_range' });
+    ).toEqual({ verified: true, startLine: 1, endLine: 1 });
     expect(
       verifyOcrSpan({
         comment: comment({ existingCode: null }),
@@ -248,5 +251,97 @@ describe('normalizeOcrFindings (§8.2)', () => {
         headFiles: headFiles({ 'calc.ts': content }),
       })
     ).toThrow(new OcrOutputTooLargeError('message'));
+  });
+});
+
+describe('verifyOcrSpan grounded-content repair', () => {
+  const content = [
+    'function add(a, b) { return a - b }',
+    'function mul(a, b) { return a * b }',
+  ].join('\n');
+
+  it('anchors a grounded quote at its true span when the claimed range is wrong', () => {
+    const span = verifyOcrSpan({
+      comment: comment({
+        existingCode: 'function mul(a, b) { return a * b }',
+        startLine: 1,
+        endLine: 1,
+      }),
+      headContent: content,
+    });
+    expect(span).toEqual({ verified: true, startLine: 2, endLine: 2 });
+  });
+
+  it('anchors a grounded code fragment to the line that contains it', () => {
+    const span = verifyOcrSpan({
+      comment: comment({
+        existingCode: 'return a - b',
+        startLine: 9,
+        endLine: 9,
+      }),
+      headContent: content,
+    });
+    expect(span).toEqual({ verified: true, startLine: 1, endLine: 1 });
+  });
+
+  it('keeps rejecting a quote that matches no HEAD content', () => {
+    expect(
+      verifyOcrSpan({
+        comment: comment({
+          existingCode: 'function sub(a, b) { return a - b }',
+          startLine: 0,
+          endLine: 1,
+        }),
+        headContent: content,
+      })
+    ).toEqual({ verified: false, reason: 'content_mismatch' });
+  });
+});
+
+describe('normalizeOcrFindings placement vs degradation (§8.2)', () => {
+  const content = 'function add(a, b) { return a - b }';
+
+  it('treats a grounded off-diff comment as natural file placement, not a degradation', () => {
+    const { findings, diagnostics } = normalizeOcrFindings({
+      comments: [comment()],
+      headFiles: headFiles({ 'calc.ts': content }),
+      // The quoted span is real HEAD content but not part of the PR diff.
+      diffPositions: new Map([['calc.ts', new Map([[7, 7]])]]),
+    });
+    expect(findings[0].line).toBe(0);
+    expect(findings[0].suggestion).toBeUndefined();
+    expect(diagnostics.reasons).not.toContain('unverified_native_span');
+    expect(diagnostics.partialFlagsRequired).toBe(false);
+  });
+
+  it('repairs a grounded quote to its true diff span without degrading the review', () => {
+    const { findings, diagnostics } = normalizeOcrFindings({
+      comments: [
+        comment({
+          existingCode: 'line two',
+          startLine: 1,
+          endLine: 1,
+          suggestionCode: 'line two fixed',
+        }),
+      ],
+      headFiles: headFiles({ 'calc.ts': 'line one\nline two' }),
+      diffPositions: new Map([['calc.ts', new Map([[2, 9]])]]),
+    });
+    expect(findings[0]).toMatchObject({
+      startLine: 2,
+      line: 2,
+      endLine: 2,
+      suggestion: 'line two fixed',
+    });
+    expect(diagnostics.partialFlagsRequired).toBe(false);
+  });
+
+  it('still degrades the review when quoted code cannot be grounded', () => {
+    const { diagnostics } = normalizeOcrFindings({
+      comments: [comment({ existingCode: 'function ghost() {}' })],
+      headFiles: headFiles({ 'calc.ts': content }),
+    });
+    expect(diagnostics.reasons).toContain('unverified_native_span');
+    expect(diagnostics.partialFlagsRequired).toBe(true);
   });
 });

@@ -110,6 +110,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
   async create(input: {
     readonly acceptedEvidence: readonly AcceptedReviewWorkSlotEvidence[];
     readonly exhaustedWorkSlotIds: readonly string[];
+    readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
     readonly reviewRevisionHash: string;
   }): Promise<BuildCurrentReviewProjectionCommand> {
     const evidence = validateAcceptedEvidence({
@@ -287,6 +288,17 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
       ),
       ...coverageLimitations,
     ].sort();
+    const incompleteCauses = Object.freeze(
+      [
+        ...new Set(
+          requiredExhaustedWorkSlotIds
+            .map((workSlotId) =>
+              input.exhaustedWorkSlotReasons?.get(workSlotId)
+            )
+            .filter((reason): reason is string => reason !== undefined)
+        ),
+      ].sort()
+    );
     const providerExecution = providerExecutionSummary(
       this.input.assignments,
       evidence
@@ -315,6 +327,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         deletions: this.input.pr.deletions,
       },
       providerExecution,
+      incompleteCauses,
       currentFindings: Object.freeze(
         findings.sort((left, right) =>
           compareCodeUnits(left.sourceFindingId, right.sourceFindingId)

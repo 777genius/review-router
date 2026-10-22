@@ -485,6 +485,27 @@ describe('production review projection coverage', () => {
     );
   });
 
+  it('explains the exhausted required slot cause in plain language', async () => {
+    const builder = projectionBuilder([assignment('required-slot', true)]);
+
+    const projection = await builder.build({
+      acceptedEvidence: [],
+      exhaustedWorkSlotIds: ['required-slot'],
+      exhaustedWorkSlotReasons: new Map([
+        ['required-slot', 'attempt_budget_exhausted'],
+      ]),
+      reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+    });
+    const summary = JSON.parse(projection.projectionEnvelopeCanonicalJson)
+      .publishing.summary.body;
+
+    expect(summary).toContain('**Why the review is incomplete:**');
+    expect(summary).toContain(
+      'The review provider exhausted its retry attempts without returning evidence'
+    );
+    expect(summary).not.toContain('attempt_budget_exhausted');
+  });
+
   it('counts one provider across batches and fails it when one required batch is exhausted', async () => {
     const builder = projectionBuilder([
       assignment('required-slot-1', true),

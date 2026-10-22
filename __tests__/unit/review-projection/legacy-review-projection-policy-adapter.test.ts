@@ -954,8 +954,8 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
       'Inline comments and lifecycle changes were withheld'
     );
     expect(projected.summaryBody).toContain('### Coverage not completed');
-    expect(projected.summaryBody).toContain(
-      '- work\\_slot\\_coverage\\_incomplete:slot-2'
+    expect(projected.summaryBody).not.toMatch(
+      /work\\?_slot\\?_coverage\\?_incomplete/
     );
     expect(projected.summaryBody).not.toMatch(
       /^##\s+Review complete(?:d)?\b/im

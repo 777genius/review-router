@@ -331,6 +331,7 @@ export class LegacyReviewProjectionPolicyAdapter
           .map(toReviewerSummaryFinding),
         metrics: review.metrics,
         incomplete,
+        incompleteCauses: query.incompleteCauses,
         coverage: {
           complete: query.coverage.state === ProjectionCoverageState.Complete,
           totalFiles: query.coverage.totalFiles,

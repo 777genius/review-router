@@ -703,6 +703,7 @@ export interface CurrentReviewProjectionBuilderPort {
   build(input: {
     readonly acceptedEvidence: readonly AcceptedReviewWorkSlotEvidence[];
     readonly exhaustedWorkSlotIds: readonly string[];
+    readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
     readonly reviewRevisionHash: string;
     readonly prDescription?: GeneratedPrDescription;
   }): Promise<CurrentReviewProjection>;

@@ -540,6 +540,7 @@ export class RunT0ReviewOrchestration {
       const projection = await this.dependencies.projectionBuilder.build({
         acceptedEvidence,
         exhaustedWorkSlotIds,
+        exhaustedWorkSlotReasons,
         reviewRevisionHash: command.reviewRevisionHash,
         ...(prDescription ? { prDescription } : {}),
       });

@@ -201,6 +201,84 @@ describe('reviewer summary markdown', () => {
     }
   });
 
+  it('explains the concrete cause of an incomplete review in plain language', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics: {
+        totalFindings: 0,
+        critical: 0,
+        major: 0,
+        minor: 0,
+        providersUsed: 1,
+        providersSuccess: 0,
+      },
+      findings: [],
+      incomplete: true,
+      incompleteCauses: ['attempt_budget_exhausted', 'deadline_reached'],
+    });
+
+    expect(markdown).toContain('**Why the review is incomplete:**');
+    expect(markdown).toContain(
+      'The review provider exhausted its retry attempts without returning evidence'
+    );
+    expect(markdown).toContain(
+      'The review ran out of its execution time budget'
+    );
+    expect(markdown).not.toContain('attempt_budget_exhausted');
+  });
+
+  it('keeps the attempt-budget explanation cause-neutral in every locale', () => {
+    for (const language of [
+      'en',
+      'ru',
+      'uk',
+      'es',
+      'pt',
+      'fr',
+      'de',
+      'it',
+      'zh',
+      'ja',
+      'ko',
+    ]) {
+      const copy = reviewerSummaryCopy(language);
+      expect(copy.incompleteCauses.attempt_budget_exhausted).not.toMatch(
+        /usually|обычно|зазвичай|normalmente|général|normalerweise|di solito|通常|보통/i
+      );
+    }
+  });
+
+  it('keeps machine limitation tokens out of the posted summary', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'English',
+      metrics,
+      findings: [],
+      incomplete: true,
+      incompleteCauses: ['deadline_reached'],
+      coverage: {
+        complete: false,
+        totalFiles: 2,
+        reviewedFiles: 1,
+        unreviewedFiles: 1,
+        mode: 'full',
+        limitations: [
+          'work_slot_exhausted:slot-1',
+          'coverage_manifest_missing:slot-2',
+          'A required file was not reviewed.',
+        ],
+        fullDiffFiles: 1,
+        compactedFiles: 0,
+        metadataOnlyFiles: 0,
+        skippedFiles: 1,
+        agenticContext: true,
+      },
+    });
+
+    expect(markdown).not.toMatch(/work\\?_slot\\?_exhausted/);
+    expect(markdown).not.toMatch(/coverage\\?_manifest\\?_missing/);
+    expect(markdown).toContain('A required file was not reviewed.');
+  });
+
   it('finishes the scope table before incomplete coverage details', () => {
     const markdown = renderReviewerSummaryMarkdown({
       language: 'English',

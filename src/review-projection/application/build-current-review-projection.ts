@@ -71,6 +71,7 @@ export interface BuildCurrentReviewProjectionCommand {
   readonly priorLineageHints: readonly PriorLineageHint[];
   readonly lifecycleRevalidations: readonly LifecycleRevalidation[];
   readonly coverage: ReviewCoverageFact;
+  readonly incompleteCauses?: readonly string[];
   readonly revisionFiles: readonly RevisionFile[];
   readonly diff: string;
   readonly failOnSeverity?: FindingSeverity;
@@ -176,6 +177,7 @@ export class BuildCurrentReviewProjection {
         presentation: command.presentation,
         providerExecution: command.providerExecution,
         coverage,
+        incompleteCauses: command.incompleteCauses,
         occurrences,
         lifecycle: { targets: inventory.targets, facts: lifecycleFacts },
         revisionFiles: command.revisionFiles,

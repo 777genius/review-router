@@ -1,6 +1,8 @@
 import { Finding, PRContext, Review, ReviewMetrics, Severity } from '../types';
 import { isLinkedCurrentFinding } from '../analysis/thread-lifecycle';
 import { coverageManifestFileStatusRank } from '../review-projection/domain';
+import { renderReviewBanner, reviewPresentationHeading } from './review-banner';
+import type { ReviewPresentation } from '../review-projection/domain/review-presentation';
 import { countMaxConsecutiveBackticks } from '../utils/suggestion-formatter';
 
 export const REVIEW_SUMMARY_STATUS_COMPLETE_MARKER =
@@ -222,6 +224,7 @@ export function reviewerSummarySourceFromPr(
 }
 
 export type ReviewerSummaryInput = ReviewerSummaryOptions & {
+  readonly reviewPresentation?: ReviewPresentation;
   readonly language: string | undefined;
   readonly findings: readonly ReviewerSummaryFinding[];
   readonly metrics: Pick<
@@ -272,12 +275,14 @@ export type ReviewerSummaryInput = ReviewerSummaryOptions & {
 };
 
 export function isReviewerSummaryIncomplete(input: {
+  readonly reviewPresentation?: ReviewPresentation;
   readonly incomplete?: boolean;
   readonly coverage?: { readonly complete: boolean };
   readonly metrics: Pick<ReviewMetrics, 'providersUsed' | 'providersSuccess'>;
 }): boolean {
   return (
     input.incomplete === true ||
+    input.reviewPresentation?.state === 'incomplete' ||
     input.coverage?.complete === false ||
     (input.metrics.providersUsed > 0 && input.metrics.providersSuccess === 0)
   );
@@ -290,12 +295,18 @@ export function renderReviewerSummaryMarkdown(
   const copy = reviewerSummaryCopy(input.language);
   const labels = sectionCopy[locale];
   const counts: SeverityCounts = {
-    total: input.metrics.totalFindings,
-    critical: input.metrics.critical,
-    major: input.metrics.major,
-    minor: input.metrics.minor,
+    total: input.reviewPresentation
+      ? Object.values(input.reviewPresentation.severity).reduce(
+          (sum, value) => sum + value,
+          0
+        )
+      : input.metrics.totalFindings,
+    critical:
+      input.reviewPresentation?.severity.critical ?? input.metrics.critical,
+    major: input.reviewPresentation?.severity.major ?? input.metrics.major,
+    minor: input.reviewPresentation?.severity.minor ?? input.metrics.minor,
   };
-  const previous = input.previousCounts;
+  const previous = input.reviewPresentation ? undefined : input.previousCounts;
   const historical =
     (input.lifecycle?.length ?? 0) > 0 || input.lifecycleAttention;
   const incomplete = isReviewerSummaryIncomplete(input);
@@ -315,18 +326,22 @@ export function renderReviewerSummaryMarkdown(
     })
     .filter(Boolean)
     .join(' · ');
-  const heading = incomplete
-    ? copy.incompleteHeading(counts.total)
-    : severityLine ||
-      (counts.total > 0
-        ? copy.findingsHeading(counts)
-        : historical
-          ? `## ${labels.previous}`
-          : input.dismissedFindings
-            ? `## ${labels.dismissed}`
-            : limitedScope
-              ? copy.limitedNoFindingsHeading
-              : copy.noFindingsHeading);
+  const heading =
+    (input.reviewPresentation
+      ? reviewPresentationHeading(input.reviewPresentation)
+      : '') ||
+    (incomplete
+      ? copy.incompleteHeading(counts.total)
+      : severityLine ||
+        (counts.total > 0
+          ? copy.findingsHeading(counts)
+          : historical
+            ? `## ${labels.previous}`
+            : input.dismissedFindings
+              ? `## ${labels.dismissed}`
+              : limitedScope
+                ? copy.limitedNoFindingsHeading
+                : copy.noFindingsHeading));
   const lines = [
     incomplete
       ? REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER
@@ -348,7 +363,7 @@ export function renderReviewerSummaryMarkdown(
   }
   if (incomplete && severityLine) lines.push('', severityLine);
   const chrome = compactCopy[locale];
-  const banner = renderReviewerBanner(input, locale, incomplete, counts);
+  const banner = renderReviewerBanner(input, incomplete, counts);
   if (banner) lines.push('', banner);
   let omitted = false;
   // Allocate before optional bodies: state and actionable warnings can never be
@@ -816,9 +831,11 @@ export function markReviewSummaryIncomplete(input: {
     )
     .replace(new RegExp(`${status}[^\\n]+`), `${status}${heading}`)
     .replace(
-      /(\/review-banner\/v1\.svg\?state=)complete(?=&amp;|&)/g,
+      /(\/review-banner\/v[12]\.svg\?state=)complete(?=&amp;|&)/g,
       '$1incomplete'
-    );
+    )
+    .replace('alt="Review complete"', 'alt="Review incomplete"')
+    .replace('alt="Review updated"', 'alt="Review incomplete"');
   if (rewritten.includes(copy.incompleteNote)) {
     return rewritten;
   }
@@ -1258,7 +1275,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Pourquoi la revue est incomplète :**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        "Le fournisseur de revue a épuisé ses tentatives sans renvoyer de preuve.",
+        'Le fournisseur de revue a épuisé ses tentatives sans renvoyer de preuve.',
       not_runnable:
         "Une unité de revue obligatoire n'a pas pu être exécutée du tout.",
       provider_lane_busy:
@@ -1396,8 +1413,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
       `## ${counts.total} 个问题（${formatSeverityCounts(counts)}）`,
     incompleteCauseHeading: '**为什么本次审查未完成：**',
     incompleteCauses: {
-      attempt_budget_exhausted:
-        '审查提供方用尽了重试次数仍未返回证据。',
+      attempt_budget_exhausted: '审查提供方用尽了重试次数仍未返回证据。',
       not_runnable: '一个必需的审查单元根本无法运行。',
       provider_lane_busy:
         '整个运行期间审查提供方一直不可用（繁忙或达到容量上限）。',
@@ -2421,46 +2437,28 @@ function escapeHtmlOutsideCodeSpans(value: string): string {
 
 function renderReviewerBanner(
   input: ReviewerSummaryInput,
-  locale: ReviewerSummaryLocale,
   incomplete: boolean,
   counts: SeverityCounts
 ): string {
-  if (!input.bannerBaseUrl) return '';
-  const displayed = {
-    critical: counts.critical + (input.previousCounts?.critical ?? 0),
-    major: counts.major + (input.previousCounts?.major ?? 0),
-    minor: counts.minor + (input.previousCounts?.minor ?? 0),
-    info: 0,
-  };
-  if (
-    !Object.values(displayed).every(
-      (value) => Number.isSafeInteger(value) && value >= 0 && value <= 9999
-    )
-  )
-    return '';
-  try {
-    const base = new URL(input.bannerBaseUrl);
-    if (
-      base.protocol !== 'https:' ||
-      base.username ||
-      base.password ||
-      base.search ||
-      base.hash ||
-      base.pathname !== '/'
-    )
-      return '';
-    const url = new URL('/review-banner/v1.svg', base);
-    url.search = new URLSearchParams({
+  return renderReviewBanner(
+    input.bannerBaseUrl,
+    input.reviewPresentation ?? {
+      variant: 'first',
       state: incomplete ? 'incomplete' : 'complete',
-      ...Object.fromEntries(
-        Object.entries(displayed).map(([key, value]) => [key, String(value)])
-      ),
-      lang: locale,
-    }).toString();
-    const light = escapeHtml(`${url}&theme=light`);
-    const dark = escapeHtml(`${url}&theme=dark`);
-    return `<picture>\n<source media="(prefers-color-scheme: dark)" srcset="${dark}">\n<source media="(prefers-color-scheme: light)" srcset="${light}">\n<img src="${light}" alt="ReviewRouter" width="640" height="110">\n</picture>`;
-  } catch {
-    return '';
-  }
+      severity: {
+        critical: counts.critical + (input.previousCounts?.critical ?? 0),
+        major: counts.major + (input.previousCounts?.major ?? 0),
+        minor: counts.minor + (input.previousCounts?.minor ?? 0),
+        info: 0,
+      },
+      ...(input.coverage
+        ? {
+            coverage: {
+              reviewed: input.coverage.reviewedFiles,
+              total: input.coverage.totalFiles,
+            },
+          }
+        : {}),
+    }
+  );
 }

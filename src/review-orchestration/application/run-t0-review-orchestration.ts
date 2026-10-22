@@ -276,7 +276,7 @@ export class RunT0ReviewOrchestration {
         );
       }
 
-      const [, restoredExecution] = await Promise.all([
+      const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
           reviewRevisionHash: command.reviewRevisionHash,
@@ -285,6 +285,10 @@ export class RunT0ReviewOrchestration {
           authorization,
           reviewRevisionHash: command.reviewRevisionHash,
         }),
+        this.dependencies.controlPlane.restoreComparisonBaseline?.({
+          authorization,
+          reviewRevisionHash: command.reviewRevisionHash,
+        }) ?? Promise.resolve(null),
       ]);
 
       execution = await this.dependencies.controlPlane.startExecution({
@@ -539,6 +543,7 @@ export class RunT0ReviewOrchestration {
           })
         : undefined;
       const projection = await this.dependencies.projectionBuilder.build({
+        comparisonBaseline,
         acceptedEvidence,
         exhaustedWorkSlotIds,
         exhaustedWorkSlotReasons,

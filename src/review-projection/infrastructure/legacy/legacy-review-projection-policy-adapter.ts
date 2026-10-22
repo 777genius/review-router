@@ -311,7 +311,9 @@ export class LegacyReviewProjectionPolicyAdapter
       )
     );
     const incomplete = isReviewerSummaryIncomplete({
-      incomplete: query.coverage.state === ProjectionCoverageState.Partial,
+      incomplete:
+        query.coverage.state === ProjectionCoverageState.Partial ||
+        query.reviewPresentation?.state === 'incomplete',
       metrics: review.metrics,
     });
     const summaryBody = limitReviewerPostedMarkdown(
@@ -326,6 +328,7 @@ export class LegacyReviewProjectionPolicyAdapter
             }
           : {}),
         language: this.config.outputLanguage,
+        reviewPresentation: query.reviewPresentation,
         findings: currentOccurrences
           .map(toLegacyFinding)
           .map(toReviewerSummaryFinding),
@@ -351,7 +354,10 @@ export class LegacyReviewProjectionPolicyAdapter
       checkTitle: incomplete
         ? query.coverage.state === ProjectionCoverageState.Partial
           ? 'Review incomplete - partial coverage'
-          : 'Review incomplete - no successful providers'
+          : review.metrics.providersUsed > 0 &&
+              review.metrics.providersSuccess === 0
+            ? 'Review incomplete - no successful providers'
+            : 'Review incomplete - unverified previous findings'
         : 'Review completed',
       checkSummary: summaryBody,
       checkConclusion: incomplete ? CheckConclusion.Neutral : undefined,

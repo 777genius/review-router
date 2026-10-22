@@ -35,8 +35,8 @@ export class CurrentReviewProjector {
         hint?.lineageId ?? this.createLineageId(input.scope, finding);
       if (hint) matchedLineages.add(hint.lineageId);
 
-      const target = this.findTargetForFinding(
-        finding,
+      const target = this.findTargetForLineage(
+        lineageId,
         input.inventory.targets
       );
       const suppressed =
@@ -60,9 +60,7 @@ export class CurrentReviewProjector {
         category: finding.category,
         normalizedFailureModeHash: finding.normalizedFailureModeHash,
         ...(finding.symbolAnchor ? { symbolAnchor: finding.symbolAnchor } : {}),
-        ...(finding.trustedMarker
-          ? { trustedMarker: finding.trustedMarker }
-          : {}),
+        trustedMarker: lineageId,
         ...(finding.anchorVerified !== undefined
           ? { anchorVerified: finding.anchorVerified }
           : {}),
@@ -89,10 +87,30 @@ export class CurrentReviewProjector {
     );
     for (const hint of input.priorLineageHints) {
       if (matchedLineages.has(hint.lineageId) || !hint.active) continue;
-      const target = this.findTargetForHint(hint, input.inventory.targets);
-      if (!target) continue;
-      const decision = decisionByTarget.get(target.targetId);
-      const state = this.priorOccurrenceState(target, decision?.verdict);
+      const target = this.findTargetForLineage(
+        hint.lineageId,
+        input.inventory.targets
+      );
+      const decision = target
+        ? decisionByTarget.get(target.targetId)
+        : undefined;
+      const observations = (input.inventory.resolvedObservations ?? []).filter(
+        (item) =>
+          item.lineageId === hint.lineageId &&
+          item.trustedMarker === hint.lineageId
+      );
+      const confirmedClosed =
+        input.inventory.complete &&
+        !input.inventory.targets.some(
+          (item) => item.trustedMarker === hint.lineageId
+        ) &&
+        observations.length === 1 &&
+        observations[0].confirmed;
+      const state = confirmedClosed
+        ? FindingOccurrenceState.Resolved
+        : target
+          ? this.priorOccurrenceState(target, decision?.verdict)
+          : FindingOccurrenceState.CarriedUnverified;
 
       occurrences.push({
         lineageId: hint.lineageId,
@@ -102,12 +120,12 @@ export class CurrentReviewProjector {
         category: hint.category,
         normalizedFailureModeHash: hint.normalizedFailureModeHash,
         ...(hint.symbolAnchor ? { symbolAnchor: hint.symbolAnchor } : {}),
-        ...(hint.trustedMarker ? { trustedMarker: hint.trustedMarker } : {}),
+        trustedMarker: hint.lineageId,
         title: hint.title,
         message: hint.message,
-        filePath: target.currentPath ?? hint.filePath,
+        filePath: target?.currentPath ?? hint.filePath,
         ...(hint.startLine !== undefined ? { startLine: hint.startLine } : {}),
-        ...(target.currentLine !== undefined
+        ...(target?.currentLine !== undefined
           ? { line: target.currentLine }
           : hint.line !== undefined
             ? { line: hint.line }
@@ -115,7 +133,7 @@ export class CurrentReviewProjector {
         ...(hint.endLine !== undefined ? { endLine: hint.endLine } : {}),
         placement: summaryPlacement(
           hint.lineageId,
-          target.currentPath ?? hint.filePath,
+          target?.currentPath ?? hint.filePath,
           'historical occurrence'
         ),
         providerVoteKeys: [],
@@ -136,14 +154,14 @@ export class CurrentReviewProjector {
     if (target.disposition === LifecycleTargetDisposition.CommandSuppressed) {
       return FindingOccurrenceState.SuppressedByHuman;
     }
-    if (hasValidTrustedResolutionMarker(target)) {
-      return FindingOccurrenceState.Resolved;
-    }
     if (target.disposition === LifecycleTargetDisposition.HumanReply) {
       return FindingOccurrenceState.Uncertain;
     }
+    if (hasValidTrustedResolutionMarker(target)) {
+      return FindingOccurrenceState.CarriedUnverified;
+    }
     if (verdict === LifecycleRevalidationVerdict.Resolved) {
-      return FindingOccurrenceState.Resolved;
+      return FindingOccurrenceState.CarriedUnverified;
     }
     if (verdict === LifecycleRevalidationVerdict.StillValid) {
       return FindingOccurrenceState.CarriedUnverified;
@@ -187,36 +205,14 @@ export class CurrentReviewProjector {
     return byLocation.length === 1 ? byLocation[0] : undefined;
   }
 
-  private findTargetForFinding(
-    finding: SelectedCurrentFinding,
+  private findTargetForLineage(
+    lineageId: string,
     targets: CurrentLifecycleInventory['targets']
   ): CurrentLifecycleInventory['targets'][number] | undefined {
-    if (finding.trustedMarker) {
-      const markerMatches = targets.filter(
-        (target) => target.trustedMarker === finding.trustedMarker
-      );
-      if (markerMatches.length === 1) return markerMatches[0];
-    }
-    const locationMatches = targets.filter(
-      (target) =>
-        normalizePath(target.currentPath ?? target.originalPath) ===
-          normalizePath(finding.filePath) &&
-        target.currentLine !== undefined &&
-        finding.line !== undefined &&
-        Math.abs(target.currentLine - finding.line) <= 2
+    const matches = targets.filter(
+      (target) => target.trustedMarker === lineageId
     );
-    return locationMatches.length === 1 ? locationMatches[0] : undefined;
-  }
-
-  private findTargetForHint(
-    hint: PriorLineageHint,
-    targets: CurrentLifecycleInventory['targets']
-  ): CurrentLifecycleInventory['targets'][number] | undefined {
-    if (!hint.trustedMarker) return undefined;
-    const markerMatches = targets.filter(
-      (target) => target.trustedMarker === hint.trustedMarker
-    );
-    return markerMatches.length === 1 ? markerMatches[0] : undefined;
+    return matches.length === 1 ? matches[0] : undefined;
   }
 
   private createLineageId(

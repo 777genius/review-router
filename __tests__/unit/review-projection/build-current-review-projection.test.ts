@@ -214,18 +214,22 @@ describe('BuildCurrentReviewProjection', () => {
       new LegacyReviewProjectionPolicyAdapter(DEFAULT_CONFIG)
     );
     const result = await useCase.execute(
-      command({ priorLineageHints: [hint({ trustedMarker: DEFAULT_MARKER })] })
+      command({
+        priorLineageHints: [
+          hint({ lineageId: DEFAULT_MARKER, trustedMarker: DEFAULT_MARKER }),
+        ],
+      })
     );
     expect(result.envelope.occurrences).toHaveLength(1);
     expect(result.envelope.occurrences[0].state).toBe(
       FindingOccurrenceState.Uncertain
     );
     expect(result.envelope.publishing.summary.allClear).toBe(false);
-    expect(result.envelope.occurrences[0].lineageId).toBe('lineage-1');
+    expect(result.envelope.occurrences[0].lineageId).toBe(DEFAULT_MARKER);
     expect(result.envelope.publishing.lifecycle).toEqual([
       expect.objectContaining({
         targetId: 'target-1',
-        lineageId: 'lineage-1',
+        lineageId: DEFAULT_MARKER,
         verdict: LifecycleRevalidationVerdict.Uncertain,
         mutationEligible: false,
       }),
@@ -389,6 +393,63 @@ describe('BuildCurrentReviewProjection', () => {
     await expect(useCase.execute(command())).resolves.toBeDefined();
   });
 
+  it('persists a pending candidate as active until a later closed observation confirms it', async () => {
+    const prior = hint({
+      lineageId: DEFAULT_MARKER,
+      trustedMarker: DEFAULT_MARKER,
+    });
+    const inv = new MutableInventoryPort(
+      inventory({ targets: [target({ viewerCanResolve: true })] })
+    );
+    const useCase = createUseCase(inv);
+    const pending = await useCase.execute(
+      command({
+        priorLineageHints: [prior],
+        lifecycleRevalidations: [
+          {
+            targetId: 'target-1',
+            providerVoteKey: 'provider',
+            verdict: LifecycleRevalidationVerdict.Resolved,
+          },
+        ],
+      })
+    );
+    expect(pending.envelope.occurrences[0].state).toBe(
+      FindingOccurrenceState.CarriedUnverified
+    );
+    expect(pending.envelope.snapshot.lineageHints[0]).toMatchObject({
+      lineageId: DEFAULT_MARKER,
+      active: true,
+      message: prior.message,
+    });
+    expect(pending.envelope.publishing.lifecycle[0].mutationEligible).toBe(
+      true
+    );
+    const nextHead = '3'.repeat(40);
+    inv.inventory = inventory({
+      loadedForHeadSha: nextHead,
+      targets: [],
+      resolvedObservations: [
+        {
+          lineageId: DEFAULT_MARKER,
+          trustedMarker: DEFAULT_MARKER,
+          confirmed: true,
+        },
+      ],
+    });
+    const confirmed = await useCase.execute(
+      command({
+        scope: { ...command().scope, reviewedHeadSha: nextHead },
+        priorLineageHints: pending.envelope.snapshot.lineageHints,
+      })
+    );
+    expect(confirmed.envelope.occurrences[0].state).toBe(
+      FindingOccurrenceState.Resolved
+    );
+    expect(confirmed.envelope.snapshot.lineageHints[0].active).toBe(false);
+    expect(confirmed.envelope.publishing.lifecycle).toHaveLength(0);
+  });
+
   it('classifies new, reconfirmed, changed, carried and resolved occurrences', async () => {
     const newFinding = finding({
       sourceFindingId: 'new',
@@ -425,25 +486,25 @@ describe('BuildCurrentReviewProjection', () => {
         currentFindings: [newFinding, reconfirmedFinding, changedFinding],
         priorLineageHints: [
           hint({
-            lineageId: 'same-lineage',
+            lineageId: SAME_MARKER,
             trustedMarker: SAME_MARKER,
             normalizedFailureModeHash: 'same-mode',
             title: 'Same defect',
           }),
           hint({
-            lineageId: 'changed-lineage',
+            lineageId: CHANGED_MARKER,
             trustedMarker: CHANGED_MARKER,
             normalizedFailureModeHash: 'changed-mode',
             title: 'Changed defect',
           }),
           hint({
-            lineageId: 'carried-lineage',
+            lineageId: CARRIED_MARKER,
             trustedMarker: CARRIED_MARKER,
             normalizedFailureModeHash: 'carried-mode',
             title: 'Carried defect',
           }),
           hint({
-            lineageId: 'resolved-lineage',
+            lineageId: RESOLVED_MARKER,
             trustedMarker: RESOLVED_MARKER,
             normalizedFailureModeHash: 'resolved-mode',
             title: 'Resolved defect',
@@ -476,7 +537,7 @@ describe('BuildCurrentReviewProjection', () => {
       'Changed defect': FindingOccurrenceState.Changed,
       'Same defect': FindingOccurrenceState.Reconfirmed,
       'Carried defect': FindingOccurrenceState.CarriedUnverified,
-      'Resolved defect': FindingOccurrenceState.Resolved,
+      'Resolved defect': FindingOccurrenceState.CarriedUnverified,
     });
     expect(
       result.envelope.occurrences.find(
@@ -637,7 +698,12 @@ describe('BuildCurrentReviewProjection', () => {
     );
     const useCase = createUseCase(inventoryPort);
     const active = await useCase.execute(
-      command({ currentFindings: [currentFinding] })
+      command({
+        currentFindings: [currentFinding],
+        priorLineageHints: [
+          hint({ lineageId: CURRENT_MARKER, trustedMarker: CURRENT_MARKER }),
+        ],
+      })
     );
     inventoryPort.inventory = inventory({
       lifecycleStateHash: 'human-reply-state',
@@ -649,7 +715,12 @@ describe('BuildCurrentReviewProjection', () => {
       ],
     });
     const replied = await useCase.execute(
-      command({ currentFindings: [currentFinding] })
+      command({
+        currentFindings: [currentFinding],
+        priorLineageHints: [
+          hint({ lineageId: CURRENT_MARKER, trustedMarker: CURRENT_MARKER }),
+        ],
+      })
     );
     inventoryPort.inventory = inventory({
       lifecycleStateHash: 'skip-state',
@@ -662,7 +733,12 @@ describe('BuildCurrentReviewProjection', () => {
       ],
     });
     const skipped = await useCase.execute(
-      command({ currentFindings: [currentFinding] })
+      command({
+        currentFindings: [currentFinding],
+        priorLineageHints: [
+          hint({ lineageId: CURRENT_MARKER, trustedMarker: CURRENT_MARKER }),
+        ],
+      })
     );
 
     expect(
@@ -678,9 +754,9 @@ describe('BuildCurrentReviewProjection', () => {
     expect(skipped.envelope.occurrences[0].blocking).toBe(false);
   });
 
-  it('treats a matching trusted resolution reply as resolved for #252-style inventory', async () => {
+  it('retains a still-open #252-style target despite an old trusted resolution reply', async () => {
     const prior = hint({
-      lineageId: 'lineage-252',
+      lineageId: FINDING_MARKER,
       trustedMarker: FINDING_MARKER,
       title: 'Old finding',
     });
@@ -703,7 +779,7 @@ describe('BuildCurrentReviewProjection', () => {
     );
 
     expect(result.envelope.occurrences[0].state).toBe(
-      FindingOccurrenceState.Resolved
+      FindingOccurrenceState.CarriedUnverified
     );
     expect(result.envelope.publishing.lifecycle[0]).toMatchObject({
       verdict: LifecycleRevalidationVerdict.Resolved,
@@ -742,7 +818,9 @@ describe('BuildCurrentReviewProjection', () => {
       });
       const result = await createUseCase(new MutableInventoryPort(inv)).execute(
         command({
-          priorLineageHints: [hint({ trustedMarker: FINDING_MARKER })],
+          priorLineageHints: [
+            hint({ lineageId: FINDING_MARKER, trustedMarker: FINDING_MARKER }),
+          ],
         })
       );
 

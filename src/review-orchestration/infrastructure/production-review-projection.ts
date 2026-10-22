@@ -20,6 +20,7 @@ import {
   type LifecycleRevalidation,
   type ReviewCoverageManifestFile,
   type ReviewProjectionLimits,
+  type ReviewComparisonBaseline,
 } from '../../review-projection/domain';
 import { LegacyReviewProjectionPolicyAdapter } from '../../review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter';
 import { reviewerSummarySourceFromPr } from '../../output/reviewer-summary';
@@ -42,7 +43,7 @@ import {
 } from './current-review-projection-builder-adapter';
 
 const productionReviewProjectionPolicyVersion =
-  'review-projection-policy.v5-t0';
+  'review-projection-policy.v6-comparison';
 
 export type ProductionWorkAssignmentFacts = {
   readonly workSlotId: string;
@@ -108,6 +109,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
   ) {}
 
   async create(input: {
+    readonly comparisonBaseline?: ReviewComparisonBaseline | null;
     readonly acceptedEvidence: readonly AcceptedReviewWorkSlotEvidence[];
     readonly exhaustedWorkSlotIds: readonly string[];
     readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
@@ -308,6 +310,11 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         .map(({ entry }) => entry)
         .sort((left, right) => compareCodeUnits(left.path, right.path))
     );
+    const comparisonBaseline =
+      input.comparisonBaseline?.sourceReviewedHeadSha !==
+      this.input.authorizationFacts.headSha
+        ? input.comparisonBaseline
+        : null;
 
     return Object.freeze({
       projectionPolicyVersion: productionReviewProjectionPolicyVersion,
@@ -333,7 +340,9 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
           compareCodeUnits(left.sourceFindingId, right.sourceFindingId)
         )
       ),
-      priorLineageHints: Object.freeze([]),
+      comparisonBaseline,
+      priorLineageHints:
+        comparisonBaseline?.priorLineageHints ?? Object.freeze([]),
       lifecycleRevalidations: Object.freeze(
         revalidations.sort((left, right) =>
           compareCodeUnits(left.targetId, right.targetId)

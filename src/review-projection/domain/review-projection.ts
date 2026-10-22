@@ -215,6 +215,12 @@ export interface CurrentLifecycleInventory {
   readonly complete: boolean;
   readonly warnings: readonly string[];
   readonly targets: readonly LiveLifecycleTarget[];
+  /** Fresh closed threads: observations only, never provider or mutation targets. */
+  readonly resolvedObservations?: readonly {
+    readonly lineageId: string;
+    readonly trustedMarker: string;
+    readonly confirmed: boolean;
+  }[];
 }
 
 export interface LifecycleRevalidation {

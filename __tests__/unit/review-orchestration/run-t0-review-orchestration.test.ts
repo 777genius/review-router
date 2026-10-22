@@ -43,6 +43,31 @@ import { MergeGateConclusion } from '../../../src/review-projection/domain';
 import { ExecutionDeadline } from '../../../src/review-execution/domain/execution-deadline';
 
 describe('RunT0ReviewOrchestration', () => {
+  it('forwards the immutable comparison baseline before projecting the current review', async () => {
+    const fixture = createFixture({ workSlotCount: 1 });
+    const baseline = Object.freeze({
+      schemaVersion: 'comparison_baseline.v1' as const,
+      appliedResolutions: [],
+      sourceReviewedHeadSha: '1'.repeat(40),
+      sourceReviewRevisionHash: 'b'.repeat(64),
+      sourceExecutionGeneration: '1',
+      snapshotVersion: 1,
+      projectionPolicyVersion: 'review-projection-policy.v5-t0' as const,
+      projectionEnvelopeVersion: 'review_projection.v1' as const,
+      priorLineageHints: [],
+    });
+    const restore = jest.fn().mockResolvedValue(baseline);
+    Object.assign(fixture.controlPlane, { restoreComparisonBaseline: restore });
+    await fixture.useCase.execute(fixture.command);
+    expect(restore).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+      expect.objectContaining({ comparisonBaseline: baseline })
+    );
+    expect(restore.mock.invocationCallOrder[0]).toBeLessThan(
+      jest.mocked(fixture.dependencies.projectionBuilder.build).mock
+        .invocationCallOrder[0]
+    );
+  });
   it.each(['generated', 'unknown', 'restored', 'joined', 'disabled'] as const)(
     'runs an optional PR description once after review slots (%s)',
     async (outcome) => {

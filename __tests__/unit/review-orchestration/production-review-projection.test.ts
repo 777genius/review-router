@@ -19,6 +19,111 @@ import {
 } from '../../../src/review-projection/domain';
 
 describe('production review projection coverage', () => {
+  it.each([
+    {
+      sourceHead: '2'.repeat(40),
+      withHint: false,
+      expectedUpdate: true,
+      expectedOccurrences: 0,
+    },
+    {
+      sourceHead: '2'.repeat(40),
+      withHint: true,
+      expectedUpdate: true,
+      expectedOccurrences: 1,
+    },
+    {
+      sourceHead: '3'.repeat(40),
+      withHint: true,
+      expectedUpdate: false,
+      expectedOccurrences: 0,
+    },
+  ])(
+    'uses only a distinct-head authoritative baseline ($withHint hints, $expectedUpdate update)',
+    async ({ sourceHead, withHint, expectedUpdate, expectedOccurrences }) => {
+      const inventory = completeLifecycleInventory();
+      const builder = createProductionReviewProjectionBuilder({
+        authorizationFacts,
+        pr,
+        config: DEFAULT_CONFIG,
+        protocolLimits,
+        assignments: [assignment('required-slot', true)],
+        uncoveredPaths: [],
+        uncoveredLifecycleTargetIds: [],
+        lifecycleInventory: inventory,
+      });
+      const baseline = {
+        schemaVersion: 'comparison_baseline.v1' as const,
+        sourceReviewedHeadSha: sourceHead,
+        sourceReviewRevisionHash: 'a'.repeat(64),
+        sourceExecutionGeneration: '1',
+        snapshotVersion: 1,
+        projectionPolicyVersion: 'review-projection-policy.v5-t0' as const,
+        projectionEnvelopeVersion: 'review_projection.v1' as const,
+        appliedResolutions: withHint
+          ? [
+              {
+                lineageId: `rrl_${'a'.repeat(32)}`,
+                targetId: `rrt_${'a'.repeat(16)}`,
+                threadId: 'thread',
+                markerFingerprint: `rrl_${'a'.repeat(32)}`,
+                resolvedAt: '2026-10-22T01:00:00.000Z',
+              },
+            ]
+          : [],
+        priorLineageHints: withHint
+          ? [
+              {
+                lineageId: `rrl_${'a'.repeat(32)}`,
+                category: 'correctness',
+                normalizedFailureModeHash: 'a'.repeat(64),
+                severity: FindingSeverity.Major,
+                title: 'Original summary-only bug',
+                message: 'Full original explanation.',
+                filePath: 'src/a.ts',
+                line: 1,
+                firstSeenHeadSha: sourceHead,
+                lastSeenHeadSha: sourceHead,
+                active: true,
+              },
+            ]
+          : [],
+      };
+      const result = await builder.build({
+        comparisonBaseline: baseline,
+        acceptedEvidence: [
+          acceptedEvidence(
+            'required-slot',
+            fullCoverageManifest('required-slot')
+          ),
+        ],
+        exhaustedWorkSlotIds: [],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      });
+      const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+      expect(envelope.occurrences).toHaveLength(expectedOccurrences);
+      expect(
+        envelope.publishing.summary.body.includes('## Review updated')
+      ).toBe(expectedUpdate);
+      expect(inventory.loadCurrent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          priorLineageHints: expectedUpdate ? baseline.priorLineageHints : [],
+          appliedResolutions: expectedUpdate
+            ? baseline.appliedResolutions
+            : undefined,
+        })
+      );
+      if (expectedOccurrences) {
+        expect(envelope.publishing.summary.body).toContain(
+          '0 new · 0 resolved · 1 open · 1 unverified (included in open)'
+        );
+        expect(envelope.publishing.summary.body).toContain(
+          'Original summary-only bug'
+        );
+        expect(envelope.snapshot.lineageHints[0].active).toBe(true);
+      }
+    }
+  );
   it.each([2, 3])(
     'adds optional description only when publication budget %s permits it',
     async (maxPublicationOperations) => {
@@ -72,7 +177,7 @@ describe('production review projection coverage', () => {
     LifecycleTargetDisposition.Active,
     LifecycleTargetDisposition.HumanReply,
   ])(
-    'retains off-diff %s history visibly without failing complete current coverage',
+    'retains off-diff %s history on a same-head rerun without failing current coverage',
     async (disposition) => {
       const target = {
         targetId: 'old-caller',
@@ -111,6 +216,17 @@ describe('production review projection coverage', () => {
         lifecycleInventory: inventory,
       });
       const result = await builder.build({
+        comparisonBaseline: {
+          schemaVersion: 'comparison_baseline.v1',
+          sourceReviewedHeadSha: authorizationFacts.headSha,
+          sourceReviewRevisionHash: authorizationFacts.reviewRevisionHash,
+          sourceExecutionGeneration: '1',
+          snapshotVersion: 1,
+          projectionPolicyVersion: 'review-projection-policy.v5-t0',
+          projectionEnvelopeVersion: 'review_projection.v1',
+          priorLineageHints: [],
+          appliedResolutions: [],
+        },
         acceptedEvidence: [
           acceptedEvidence(
             'required-slot',
@@ -125,6 +241,10 @@ describe('production review projection coverage', () => {
       expect(envelope.coverage.state).toBe('complete');
       expect(envelope.occurrences).toEqual([]);
       expect(envelope.publishing.summary.allClear).toBe(false);
+      expect(envelope.publishing.check.title).toBe(
+        'Review incomplete - unverified previous findings'
+      );
+      expect(envelope.publishing.check.conclusion).toBe('neutral');
       expect(envelope.publishing.summary.body).toContain(target.title);
       expect(envelope.publishing.summary.body).toContain(target.originalPath);
       expect(envelope.publishing.summary.body).toContain(
@@ -428,7 +548,7 @@ describe('production review projection coverage', () => {
     const summary = envelope.publishing.summary.body;
 
     expect(envelope.projectionPolicyVersion).toBe(
-      'review-projection-policy.v5-t0'
+      'review-projection-policy.v6-comparison'
     );
     expect(envelope.authoritativeObservationIds).toEqual([
       'observation-required-slot',

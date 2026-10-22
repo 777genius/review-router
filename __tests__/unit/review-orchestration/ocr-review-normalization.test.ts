@@ -141,6 +141,26 @@ describe('normalizeOcrFindings (§8.2)', () => {
     expect(diagnostics.partialFlagsRequired).toBe(false);
   });
 
+  it.each([
+    [
+      '### **Keep `foo_bar` compatible with C#**',
+      'Keep foo_bar compatible with C#',
+    ],
+    ['foo_bar must preserve C# and a*b', 'foo_bar must preserve C# and a*b'],
+    ['---\n___\n* * *\nFix `foo_bar` with _care_', 'Fix foo_bar with care'],
+  ])(
+    'preserves meaningful punctuation in the title from %s',
+    (message, title) => {
+      const { findings, diagnostics } = normalizeOcrFindings({
+        comments: [comment({ content: message })],
+        headFiles: headFiles({ 'calc.ts': content }),
+      });
+      expect(findings[0].title).toBe(title);
+      expect(findings[0].message).toBe(message);
+      expect(diagnostics.partialFlagsRequired).toBe(false);
+    }
+  );
+
   it('skips an empty normalized title while preserving valid sibling findings', () => {
     const { findings, diagnostics } = normalizeOcrFindings({
       comments: [comment({ content: '###\n**' }), comment()],

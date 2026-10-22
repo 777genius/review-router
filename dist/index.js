@@ -223275,9 +223275,13 @@ function normalizeOcrRepoPath(raw) {
   return path37;
 }
 function plainTitleLine(content) {
-  const firstLine = content.split(/\r\n|\r|\n/u).map(
-    (line2) => line2.replace(/[^\P{Z}\u00a0]/gu, " ").replace(/[`#>*_~[\]]/gu, "").replace(/\s+/gu, " ").trim()
-  ).find((line2) => line2.length > 0) ?? "";
+  const firstLine = content.split(/\r\n|\r|\n/u).map((line2) => {
+    const title = line2.replace(/[^\P{Z}\u00a0]/gu, " ").replace(/^\s*#{1,6}(?:\s+|$)/u, "").replace(
+      /(^|[\s([{])(\*\*|__|\*|_|~~)(?=\S)(.*?\S)\2(?=$|[\s.,!?;:)\]}])/gu,
+      "$1$3"
+    ).replace(/(`+)(.+?)\1/gu, "$2").replace(/\s+/gu, " ").trim();
+    return /^[`#>*_~[\]\s-]+$/u.test(title) ? "" : title;
+  }).find((line2) => line2.length > 0) ?? "";
   return firstLine.slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
 }
 function normalizeOcrFindings(input) {

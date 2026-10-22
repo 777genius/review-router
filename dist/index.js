@@ -153537,10 +153537,12 @@ var FindingFilter = class {
     );
   }
   isConcreteRuntimeRegression(finding) {
-    if (this.isStyleOrFormattingIssue(finding) || this.isLintOrStyleIssue(finding)) {
+    if (this.isStyleOrFormattingIssue(finding)) {
       return false;
     }
-    const text2 = (finding.title + " " + finding.message).toLowerCase();
+    const text2 = (this.isLintOrStyleIssue(finding) ? [finding.title, finding.message].flatMap((value) => value.split(/(?<=[.!?])\s+/u)).filter(
+      (message) => !this.isLintOrStyleIssue({ ...finding, title: "", message })
+    ).join(" ") : finding.title + " " + finding.message).toLowerCase();
     if (this.isRuntimeStateOrDiagnosticRegression(text2)) {
       return true;
     }
@@ -162436,7 +162438,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.195",
+  version: "1.0.196",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

@@ -236145,6 +236145,22 @@ function buildOcrControlledRuleText(input) {
   )}
 `;
 }
+var OCR_BACKGROUND_HARD_CHAR_LIMIT = 8e3;
+function boundOcrBackgroundText(backgroundText) {
+  if (backgroundText === null || backgroundText.length <= OCR_BACKGROUND_HARD_CHAR_LIMIT) {
+    return backgroundText;
+  }
+  const kept = [];
+  let utf16Length = 0;
+  for (const char of backgroundText) {
+    if (kept.length + 1 > OCR_BACKGROUND_HARD_CHAR_LIMIT || utf16Length + char.length > OCR_BACKGROUND_HARD_CHAR_LIMIT) {
+      break;
+    }
+    kept.push(char);
+    utf16Length += char.length;
+  }
+  return kept.join("");
+}
 function buildOcrSemanticInvocationPreimage(input) {
   return canonicalJson14({
     contract: "ocr-semantic-identity.v1",
@@ -236348,7 +236364,7 @@ var OcrReviewInvocationAdapter = class {
       throw new Error("review_action_v2_ocr_nothing_to_review");
     }
     const ruleText = this.options.ruleText;
-    const backgroundText = this.options.backgroundText;
+    const backgroundText = boundOcrBackgroundText(this.options.backgroundText);
     const revision = Object.freeze({
       baseSha: assignment.context.baseSha,
       mergeBaseSha: assignment.mergeBaseSha,

@@ -230,6 +230,39 @@ export function buildOcrControlledRuleText(input: {
 }
 
 /**
+ * Upstream OCR hard-aborts when --background-file content exceeds 8000
+ * characters ("background content is N characters, exceeding the hard limit
+ * of 8000 (aborting)"), so bound the background before it reaches the
+ * semantic identity preimage and the background file. Verified boundary:
+ * 8000 characters continue, 8001 abort.
+ */
+export const OCR_BACKGROUND_HARD_CHAR_LIMIT = 8000;
+
+export function boundOcrBackgroundText(
+  backgroundText: string | null
+): string | null {
+  if (
+    backgroundText === null ||
+    backgroundText.length <= OCR_BACKGROUND_HARD_CHAR_LIMIT
+  ) {
+    return backgroundText;
+  }
+  const kept: string[] = [];
+  let utf16Length = 0;
+  for (const char of backgroundText) {
+    if (
+      kept.length + 1 > OCR_BACKGROUND_HARD_CHAR_LIMIT ||
+      utf16Length + char.length > OCR_BACKGROUND_HARD_CHAR_LIMIT
+    ) {
+      break;
+    }
+    kept.push(char);
+    utf16Length += char.length;
+  }
+  return kept.join('');
+}
+
+/**
  * §8.3 semantic identity preimage: refs/trees, engine + binary identity,
  * rules/background, model, effort, budgets and output contract. Excludes URL,
  * capability token, temp paths, session ids and loopback ports entirely; those
@@ -523,7 +556,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       throw new Error('review_action_v2_ocr_nothing_to_review');
     }
     const ruleText = this.options.ruleText;
-    const backgroundText = this.options.backgroundText;
+    const backgroundText = boundOcrBackgroundText(this.options.backgroundText);
     const revision: OcrNativeManifestAdmission = Object.freeze({
       baseSha: assignment.context.baseSha,
       mergeBaseSha: assignment.mergeBaseSha,

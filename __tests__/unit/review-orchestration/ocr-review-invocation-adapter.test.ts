@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
+  boundOcrBackgroundText,
   buildOcrControlledRuleText,
   OcrReviewInvocationAdapter,
   planOcrReviewAssignments,
@@ -197,6 +198,27 @@ describe('planOcrReviewAssignments (§4.3 one slot, one vote identity)', () => {
   });
 });
 
+describe('boundOcrBackgroundText (upstream 8000-character hard limit)', () => {
+  it('passes null and within-limit text through unchanged', () => {
+    expect(boundOcrBackgroundText(null)).toBeNull();
+    expect(boundOcrBackgroundText('short')).toBe('short');
+    const atLimit = 'a'.repeat(8_000);
+    expect(boundOcrBackgroundText(atLimit)).toBe(atLimit);
+  });
+
+  it('truncates over-limit text to the limit preserving the prefix', () => {
+    const input = `Fix add()\n\n${'x'.repeat(8_541)}`;
+    expect(boundOcrBackgroundText(input)).toBe(input.slice(0, 8_000));
+  });
+
+  it('bounds astral text on both code points and UTF-16 units', () => {
+    const bounded = boundOcrBackgroundText('\u{1F389}'.repeat(5_000)) ?? '';
+    expect(bounded).toBe('\u{1F389}'.repeat(4_000));
+    expect([...bounded].length).toBeLessThanOrEqual(8_000);
+    expect(bounded.length).toBeLessThanOrEqual(8_000);
+  });
+});
+
 describe('OcrReviewInvocationAdapter', () => {
   let runDirectory: string;
   let checkoutRoot: string;
@@ -357,6 +379,7 @@ describe('OcrReviewInvocationAdapter', () => {
       readonly signal?: AbortSignal;
       readonly previewTimeoutMs?: () => number;
     };
+    readonly backgroundText?: string | null;
   }): {
     adapter: OcrReviewInvocationAdapter;
     workSlot: ReviewWorkSlotPlan;
@@ -383,7 +406,7 @@ describe('OcrReviewInvocationAdapter', () => {
         language: 'en',
         assignedPaths: ['calc.ts'],
       }),
-      backgroundText: null,
+      backgroundText: options.backgroundText ?? null,
       checkoutRoot,
       processRunner: options.processRunner,
       previewRunner: options.previewRunner,
@@ -451,6 +474,26 @@ describe('OcrReviewInvocationAdapter', () => {
     expect(serializedRequest).not.toContain('Bearer');
     expect(serializedRequest).not.toContain('127.0.0.1');
     expect(serializedRequest).not.toContain(bridge.capabilityAuthorization);
+  });
+
+  it('bounds background text to the binary hard limit before preview and identity', async () => {
+    const { bridge } = bridgeFixture();
+    const preview = previewRunner();
+    const { adapter, workSlot } = adapterFixture({
+      bridge,
+      processRunner: unusedRunner,
+      previewRunner: preview.runner,
+      backgroundText: `Fix add()\n\n${'x'.repeat(8_541)}`,
+    });
+    await adapter.prepare({ workSlot, attemptOrdinal: 1 });
+    // Upstream OCR hard-aborts above 8000 characters, so the file behind
+    // --background-file must be bounded to the value hashed into identity.
+    const backgroundPath = path.join(runDirectory, 'background.md');
+    const written = fs.readFileSync(backgroundPath, 'utf8');
+    expect([...written].length).toBeLessThanOrEqual(8_000);
+    expect(written.length).toBeLessThanOrEqual(8_000);
+    expect(preview.calls[0].argv).toContain('--background-file');
+    expect(preview.calls[0].argv).toContain(backgroundPath);
   });
 
   it('keeps §8.3 semantic identity stable across URL/capability churn and sensitive to model', async () => {

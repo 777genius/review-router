@@ -16,8 +16,9 @@ import type { OcrNativeComment } from './ocr-review-outcome-contract';
 /**
  * Bounds of the current consumer evidence contract (plan 56, §8.2):
  * payload 512 KiB, 200 findings, path 1024, message 16384 characters,
- * maxTitleLength 512. The payload bound is checked exactly by the adapter
- * after the existing normalizer serializes the observation.
+ * category 128, suggestion 16384, maxTitleLength 512. The payload bound is
+ * checked exactly by the adapter after the existing normalizer serializes
+ * the observation.
  */
 export const OCR_NORMALIZATION_LIMITS = Object.freeze({
   maxPayloadBytes: 512 * 1024,
@@ -25,6 +26,8 @@ export const OCR_NORMALIZATION_LIMITS = Object.freeze({
   maxPathChars: 1024,
   maxMessageChars: 16384,
   maxTitleChars: 512,
+  maxCategoryChars: 128,
+  maxSuggestionChars: 16384,
 });
 
 export type OcrSpanUnverifiedReason =
@@ -160,13 +163,15 @@ function plainTitleLine(content: string): string {
   const firstLine =
     content
       .split(/\r\n|\r|\n/u)
-      .map((line) => line.replace(/[^\P{Z}\u00a0]/gu, ' ').trim())
+      .map((line) =>
+        line
+          .replace(/[^\P{Z}\u00a0]/gu, ' ')
+          .replace(/[`#>*_~[\]]/gu, '')
+          .replace(/\s+/gu, ' ')
+          .trim()
+      )
       .find((line) => line.length > 0) ?? '';
-  return firstLine
-    .replace(/[`#>*_~[\]]/gu, '')
-    .replace(/\s+/gu, ' ')
-    .trim()
-    .slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
+  return firstLine.slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
 }
 
 /**
@@ -206,6 +211,15 @@ export function normalizeOcrFindings(input: {
     if (content.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
       throw new OcrOutputTooLargeError('message');
     }
+    const title = plainTitleLine(content);
+    if (title.length === 0) {
+      skipped.push({ index, reason: 'invalid_native_finding' });
+      return;
+    }
+    const category = comment.category ?? 'correctness';
+    if (category.length > OCR_NORMALIZATION_LIMITS.maxCategoryChars) {
+      throw new OcrOutputTooLargeError('category');
+    }
 
     const headContent = input.headFiles.get(path);
     const span =
@@ -238,6 +252,15 @@ export function normalizeOcrFindings(input: {
       reasons.add('unclassified_native_severity');
     }
 
+    if (
+      span.verified &&
+      comment.suggestionCode !== null &&
+      comment.suggestionCode.length >
+        OCR_NORMALIZATION_LIMITS.maxSuggestionChars
+    ) {
+      throw new OcrOutputTooLargeError('suggestion');
+    }
+
     findings.push({
       file: path,
       ...(span.verified
@@ -252,9 +275,9 @@ export function normalizeOcrFindings(input: {
             line: 0,
           }),
       severity,
-      title: plainTitleLine(content),
+      title,
       message: content,
-      category: comment.category ?? 'correctness',
+      category,
       ...(span.verified && comment.suggestionCode !== null
         ? { suggestion: comment.suggestionCode }
         : {}),

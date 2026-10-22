@@ -137254,7 +137254,9 @@ var OCR_NORMALIZATION_LIMITS = Object.freeze({
   maxFindings: 200,
   maxPathChars: 1024,
   maxMessageChars: 16384,
-  maxTitleChars: 512
+  maxTitleChars: 512,
+  maxCategoryChars: 128,
+  maxSuggestionChars: 16384
 });
 function normalizeEol(value) {
   return value.split(/\r\n|\r|\n/u);
@@ -137325,8 +137327,10 @@ function normalizeOcrRepoPath(raw) {
   return path18;
 }
 function plainTitleLine(content) {
-  const firstLine = content.split(/\r\n|\r|\n/u).map((line2) => line2.replace(/[^\P{Z}\u00a0]/gu, " ").trim()).find((line2) => line2.length > 0) ?? "";
-  return firstLine.replace(/[`#>*_~[\]]/gu, "").replace(/\s+/gu, " ").trim().slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
+  const firstLine = content.split(/\r\n|\r|\n/u).map(
+    (line2) => line2.replace(/[^\P{Z}\u00a0]/gu, " ").replace(/[`#>*_~[\]]/gu, "").replace(/\s+/gu, " ").trim()
+  ).find((line2) => line2.length > 0) ?? "";
+  return firstLine.slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
 }
 function normalizeOcrFindings(input) {
   const findings = [];
@@ -137343,6 +137347,15 @@ function normalizeOcrFindings(input) {
     if (content.length > OCR_NORMALIZATION_LIMITS.maxMessageChars) {
       throw new OcrOutputTooLargeError("message");
     }
+    const title = plainTitleLine(content);
+    if (title.length === 0) {
+      skipped.push({ index, reason: "invalid_native_finding" });
+      return;
+    }
+    const category = comment.category ?? "correctness";
+    if (category.length > OCR_NORMALIZATION_LIMITS.maxCategoryChars) {
+      throw new OcrOutputTooLargeError("category");
+    }
     const headContent = input.headFiles.get(path18);
     const span = headContent !== void 0 ? verifyOcrSpan({
       comment,
@@ -137357,6 +137370,9 @@ function normalizeOcrFindings(input) {
     if (mappedSeverity === void 0) {
       reasons.add("unclassified_native_severity");
     }
+    if (span.verified && comment.suggestionCode !== null && comment.suggestionCode.length > OCR_NORMALIZATION_LIMITS.maxSuggestionChars) {
+      throw new OcrOutputTooLargeError("suggestion");
+    }
     findings.push({
       file: path18,
       ...span.verified ? {
@@ -137369,9 +137385,9 @@ function normalizeOcrFindings(input) {
         line: 0
       },
       severity,
-      title: plainTitleLine(content),
+      title,
       message: content,
-      category: comment.category ?? "correctness",
+      category,
       ...span.verified && comment.suggestionCode !== null ? { suggestion: comment.suggestionCode } : {}
     });
   });
@@ -144932,7 +144948,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.204",
+  version: "1.0.205",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",

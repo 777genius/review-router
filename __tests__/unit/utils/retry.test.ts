@@ -1,10 +1,15 @@
-import { withRetry, RetryOptions } from '../../../src/utils/retry';
+import { withRetry } from '../../../src/utils/retry';
 
 describe('withRetry per-error delay', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
   it('applies the per-error delay floor on every retry', async () => {
-    const started = Date.now();
     let calls = 0;
-    const result = await withRetry(
+    const result = withRetry(
       async () => {
         calls += 1;
         if (calls < 3) throw new Error('synthetic transient lane');
@@ -16,16 +21,23 @@ describe('withRetry per-error delay', () => {
         maxTimeout: 0,
         retryOn: () => true,
         retryDelayMs: () => 120,
-      } as RetryOptions
+      }
     );
-    expect(result).toBe('recovered');
-    expect(Date.now() - started).toBeGreaterThanOrEqual(240);
+
+    await jest.advanceTimersByTimeAsync(119);
+    expect(calls).toBe(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(calls).toBe(2);
+    await jest.advanceTimersByTimeAsync(119);
+    expect(calls).toBe(2);
+    await jest.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toBe('recovered');
+    expect(calls).toBe(3);
   });
 
   it('keeps the existing exponential timing when no per-error delay is provided', async () => {
-    const started = Date.now();
     let calls = 0;
-    await withRetry(
+    const result = withRetry(
       async () => {
         calls += 1;
         if (calls < 2) throw new Error('synthetic transient');
@@ -33,13 +45,17 @@ describe('withRetry per-error delay', () => {
       },
       { retries: 1, minTimeout: 50, maxTimeout: 50, retryOn: () => true }
     );
-    expect(Date.now() - started).toBeGreaterThanOrEqual(50);
+
+    await jest.advanceTimersByTimeAsync(49);
+    expect(calls).toBe(1);
+    await jest.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toBe('ok');
+    expect(calls).toBe(2);
   });
 
   it('applies the per-error delay floor when retryOn is omitted', async () => {
     let calls = 0;
-    const started = Date.now();
-    await withRetry(
+    const result = withRetry(
       async () => {
         calls += 1;
         if (calls < 2) throw new Error('transient');
@@ -47,6 +63,11 @@ describe('withRetry per-error delay', () => {
       },
       { retries: 2, minTimeout: 0, maxTimeout: 0, retryDelayMs: () => 120 }
     );
-    expect(Date.now() - started).toBeGreaterThanOrEqual(120);
+
+    await jest.advanceTimersByTimeAsync(119);
+    expect(calls).toBe(1);
+    await jest.advanceTimersByTimeAsync(1);
+    await expect(result).resolves.toBe('ok');
+    expect(calls).toBe(2);
   });
 });

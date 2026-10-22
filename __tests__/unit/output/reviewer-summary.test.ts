@@ -6,6 +6,7 @@ import {
   resolveReviewerSummaryLocale,
   reviewerSummaryCopy,
 } from '../../../src/output/reviewer-summary';
+import { normalizeOcrFindings } from '../../../src/review-orchestration/infrastructure/ocr-review-normalization';
 
 describe('reviewer summary markdown', () => {
   const metrics = {
@@ -630,6 +631,150 @@ describe('compact summary publication contract', () => {
   };
   const outsideDetails = (markdown: string) =>
     markdown.replace(/<details>[\s\S]*?<\/details>/g, '');
+
+  it('compacts an OCR paragraph-derived title without repeating it or changing the finding', () => {
+    const message =
+      'The `* line.quantity` factor was dropped, so the subtotal only sums unit prices. ' +
+      'Any cart line with `quantity > 1` will be undercharged. ' +
+      'Restore the multiplier so `total + line.price * line.quantity` preserves the cart contract. ' +
+      'The existing test expects two units at twelve and three units at five to total thirty-nine. '.repeat(
+        5
+      );
+    const normalized = normalizeOcrFindings({
+      comments: [
+        {
+          path: 'src/cart.js',
+          content: message,
+          severity: 'critical',
+          category: 'correctness',
+          existingCode: null,
+          suggestionCode: null,
+          startLine: null,
+          endLine: null,
+        },
+      ],
+      headFiles: new Map(),
+    }).findings[0];
+    const original = JSON.stringify(normalized);
+    expect(normalized.title).toHaveLength(512);
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [normalized],
+    });
+    const visible = outsideDetails(markdown);
+    const headline = visible
+      .split('\n')
+      .find((line) => line.startsWith('- **critical'))!;
+    expect(headline).toContain(
+      'The \\* line.quantity factor was dropped, so the subtotal only sums unit prices.'
+    );
+    expect(headline).not.toContain('undercharged');
+    expect(visible.match(/factor was dropped/g)).toHaveLength(1);
+    expect(visible).toContain(
+      'Any cart line with quantity &gt; 1 will be undercharged.'
+    );
+    expect(visible).toContain('total + line.price \\* line.quantity');
+    expect(visible).not.toContain('`');
+    expect(markdown).toContain(normalized.message);
+    expect(JSON.stringify(normalized)).toBe(original);
+  });
+
+  it.each(['en', 'zh'])(
+    'bounds independent long titles at word boundaries in %s without dropping the body',
+    (language) => {
+      const title =
+        language === 'zh'
+          ? '安全检查'.repeat(80)
+          : 'Check the authorization boundary before reading tenant data '.repeat(
+              8
+            );
+      const markdown = renderReviewerSummaryMarkdown({
+        language,
+        metrics,
+        findings: [{ ...finding, title }],
+      });
+      const headline = outsideDetails(markdown)
+        .split('\n')
+        .find((line) => line.startsWith('- **critical'))!;
+      const displayed = headline.split('critical · ')[1].split('**')[0];
+      expect(Array.from(displayed).length).toBeLessThanOrEqual(120);
+      expect(displayed).toMatch(/…$/);
+      expect(title.startsWith(displayed.slice(0, -1))).toBe(true);
+      if (language === 'en') expect(title[displayed.length - 1]).toMatch(/\s/);
+      expect(outsideDetails(markdown)).toContain(finding.message);
+      const lifecycleLine = {
+        kind: 'carried' as const,
+        title,
+        message: finding.message,
+        locationLabel: 'src/auth.ts:44',
+      };
+      const carried = renderReviewerSummaryMarkdown({
+        language,
+        metrics,
+        findings: [],
+        lifecycle: [lifecycleLine],
+      });
+      expect(outsideDetails(carried)).not.toContain(title);
+      expect(carried).toContain(title);
+      expect(
+        renderReviewerLifecycleMarkdown({ language, lines: [lifecycleLine] })
+      ).toContain(displayed);
+    }
+  );
+
+  it('recognizes a title derived from the first physical line of soft-wrapped prose', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [
+        {
+          ...finding,
+          title: 'The quantity multiplier was dropped',
+          message:
+            'The quantity multiplier was dropped\nfrom the subtotal calculation. Restore it for multi-unit carts.',
+        },
+      ],
+    });
+    const visible = outsideDetails(markdown);
+    expect(visible.match(/quantity multiplier was dropped/g)).toHaveLength(1);
+    expect(visible).toContain('calculation.**');
+    expect(visible).toContain('\n\nRestore it for multi-unit carts.');
+  });
+
+  it('keeps preview code operators readable while escaping HTML and unmatched delimiters', () => {
+    const message =
+      'Use `Promise<void>` and ``a`b`` when `total * quantity > 1 && ready`. Escape <img src=x> and unmatched ` safely.';
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    const visible = outsideDetails(markdown);
+    expect(visible).toContain('Use Promise&lt;void&gt; and a\\`b when total');
+    expect(visible).toContain('Promise&lt;void&gt;');
+    expect(visible).toContain('a\\`b');
+    expect(visible).toContain('total \\* quantity &gt; 1 &amp;&amp; ready');
+    expect(visible).toContain('unmatched \\` safely');
+    expect(visible).not.toContain('<img');
+    expect(markdown).toContain('`Promise<void>`');
+  });
+
+  it.each([
+    ['# injected heading', '\\# injected heading'],
+    ['---', '\\---'],
+    ['1. injected list', '1\\. injected list'],
+  ])(
+    'keeps code-only preview text from becoming a Markdown block: %s',
+    (code, escaped) => {
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message: `\`${code}\`` }],
+      });
+      expect(outsideDetails(markdown)).toContain(`\n\n${escaped}`);
+    }
+  );
 
   it('shows a bounded ordinary paragraph and retains the full original body and fix', () => {
     const paragraph =

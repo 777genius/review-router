@@ -870,9 +870,12 @@ export class FindingFilter {
   }
 
   private isConcreteRuntimeRegression(finding: Finding): boolean {
-    // A concrete runtime impact takes precedence over incidental lint wording.
-    // Pure lint findings still fall through to the lint/style exclusion.
-    if (this.isStyleOrFormattingIssue(finding)) {
+    // A primary lint finding stays lint even when its diagnostic breaks CI.
+    // Runtime-led findings may still contain an incidental lint warning below.
+    if (
+      this.isStyleOrFormattingIssue(finding) ||
+      this.isLintOrStyleIssue({ ...finding, message: '' })
+    ) {
       return false;
     }
 

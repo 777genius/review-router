@@ -203002,7 +203002,7 @@ var FindingFilter = class {
     );
   }
   isConcreteRuntimeRegression(finding) {
-    if (this.isStyleOrFormattingIssue(finding)) {
+    if (this.isStyleOrFormattingIssue(finding) || this.isLintOrStyleIssue({ ...finding, message: "" })) {
       return false;
     }
     const text2 = (this.isLintOrStyleIssue(finding) ? [finding.title, finding.message].flatMap((value) => value.split(/(?<=[.!?])\s+/u)).filter(

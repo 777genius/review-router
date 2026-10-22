@@ -29,6 +29,13 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
       category: 'bug',
       title: 'Unused parameter',
       message:
+        'Unused parameter. The CI workflow now fails under strict configuration.',
+    },
+    {
+      providerIds: ['ocr'],
+      category: 'bug',
+      title: 'Unused parameter',
+      message:
         'Unused parameter will fail lint checks in the strict configuration.',
     },
     {

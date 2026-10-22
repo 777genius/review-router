@@ -29,7 +29,6 @@ export const OCR_NORMALIZATION_LIMITS = Object.freeze({
 
 export type OcrSpanUnverifiedReason =
   | 'missing_existing_code'
-  | 'invalid_range'
   | 'content_mismatch'
   | 'ambiguous_match'
   | 'outside_diff';
@@ -44,10 +43,12 @@ function normalizeEol(value: string): string[] {
 
 /**
  * Verify a native existing_code span against authorized HEAD content.
- * Verified only when the range is valid, the HEAD content of exactly that
- * range equals existing_code, the block occurs unambiguously in the file and
- * every line is a valid current PR diff position. A single matching line
- * number does not prove the span.
+ * The quoted block grounds itself: its unique occurrence in the file decides
+ * the true span, so a wrong model range or a code fragment is repaired to the
+ * grounded span instead of rejected. Verified only when the quote occurs
+ * exactly once and every line of the grounded span is a valid current PR diff
+ * position. A quote matching no HEAD content stays unverified; a colliding
+ * quote stays ambiguous.
  */
 export function verifyOcrSpan(input: {
   readonly comment: Pick<
@@ -57,46 +58,53 @@ export function verifyOcrSpan(input: {
   readonly headContent: string;
   readonly diffPositions?: ReadonlyMap<number, number>;
 }): OcrSpanVerification {
-  const { existingCode, startLine, endLine } = input.comment;
-  if (existingCode === null)
+  const { existingCode } = input.comment;
+  const quote = existingCode === null ? '' : existingCode.replace(/\s+$/u, '');
+  if (quote.length === 0) {
     return { verified: false, reason: 'missing_existing_code' };
-  if (startLine === null || endLine === null || endLine < startLine) {
-    return { verified: false, reason: 'invalid_range' };
   }
   const fileLines = normalizeEol(input.headContent);
-  if (startLine < 1 || endLine > fileLines.length) {
-    return { verified: false, reason: 'invalid_range' };
+  const haystack = fileLines.join('\n');
+  const needle = normalizeEol(quote).join('\n');
+  const lineStarts: number[] = [];
+  let lineStart = 0;
+  for (const line of fileLines) {
+    lineStarts.push(lineStart);
+    lineStart += line.length + 1;
   }
-  const blockLines = normalizeEol(existingCode.replace(/\s+$/u, ''));
-  const headBlock = fileLines.slice(startLine - 1, endLine);
-  if (
-    blockLines.length !== headBlock.length ||
-    blockLines.some((line, index) => line !== headBlock[index])
-  ) {
-    return { verified: false, reason: 'content_mismatch' };
-  }
-  // The matched block must occur exactly once in the file (unambiguous).
-  let occurrences = 0;
-  for (let index = 0; index + blockLines.length <= fileLines.length; index++) {
-    let matches = true;
-    for (let offset = 0; offset < blockLines.length; offset++) {
-      if (fileLines[index + offset] !== blockLines[offset]) {
-        matches = false;
-        break;
-      }
+  const lineAt = (position: number): number => {
+    let low = 0;
+    let high = lineStarts.length - 1;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (lineStarts[mid] <= position) low = mid;
+      else high = mid - 1;
     }
-    if (matches) occurrences++;
-    if (occurrences > 1) break;
+    return low + 1;
+  };
+  const spans: { startLine: number; endLine: number }[] = [];
+  for (
+    let at = haystack.indexOf(needle);
+    at >= 0;
+    at = haystack.indexOf(needle, at + 1)
+  ) {
+    spans.push({
+      startLine: lineAt(at),
+      endLine: lineAt(at + needle.length - 1),
+    });
   }
-  if (occurrences !== 1) return { verified: false, reason: 'ambiguous_match' };
+  if (spans.length === 0)
+    return { verified: false, reason: 'content_mismatch' };
+  if (spans.length > 1) return { verified: false, reason: 'ambiguous_match' };
+  const span = spans[0];
   if (input.diffPositions) {
-    for (let line = startLine; line <= endLine; line++) {
+    for (let line = span.startLine; line <= span.endLine; line++) {
       if (!input.diffPositions.has(line)) {
         return { verified: false, reason: 'outside_diff' };
       }
     }
   }
-  return { verified: true, startLine, endLine };
+  return { verified: true, startLine: span.startLine, endLine: span.endLine };
 }
 
 export type OcrFindingSkipReason = 'invalid_native_finding';
@@ -209,8 +217,15 @@ export function normalizeOcrFindings(input: {
               ? { diffPositions: input.diffPositions.get(path) }
               : {}),
           })
-        : ({ verified: false, reason: 'invalid_range' } as const);
-    if (!span.verified && span.reason !== 'missing_existing_code') {
+        : ({ verified: false, reason: 'content_mismatch' } as const);
+    // Only ungroundable (content_mismatch) or colliding (ambiguous_match)
+    // quotes degrade the review. Grounded content is real context evidence
+    // even when the model's range math is wrong or the span is outside the
+    // current diff: those degrade to file placement only (plan 56, §8.2).
+    if (
+      !span.verified &&
+      (span.reason === 'content_mismatch' || span.reason === 'ambiguous_match')
+    ) {
       reasons.add('unverified_native_span');
     }
 

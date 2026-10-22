@@ -223121,42 +223121,49 @@ function normalizeEol(value) {
   return value.split(/\r\n|\r|\n/u);
 }
 function verifyOcrSpan(input) {
-  const { existingCode, startLine, endLine } = input.comment;
-  if (existingCode === null)
+  const { existingCode } = input.comment;
+  const quote = existingCode === null ? "" : existingCode.replace(/\s+$/u, "");
+  if (quote.length === 0) {
     return { verified: false, reason: "missing_existing_code" };
-  if (startLine === null || endLine === null || endLine < startLine) {
-    return { verified: false, reason: "invalid_range" };
   }
   const fileLines = normalizeEol(input.headContent);
-  if (startLine < 1 || endLine > fileLines.length) {
-    return { verified: false, reason: "invalid_range" };
+  const haystack = fileLines.join("\n");
+  const needle = normalizeEol(quote).join("\n");
+  const lineStarts = [];
+  let lineStart = 0;
+  for (const line2 of fileLines) {
+    lineStarts.push(lineStart);
+    lineStart += line2.length + 1;
   }
-  const blockLines = normalizeEol(existingCode.replace(/\s+$/u, ""));
-  const headBlock = fileLines.slice(startLine - 1, endLine);
-  if (blockLines.length !== headBlock.length || blockLines.some((line2, index) => line2 !== headBlock[index])) {
-    return { verified: false, reason: "content_mismatch" };
-  }
-  let occurrences = 0;
-  for (let index = 0; index + blockLines.length <= fileLines.length; index++) {
-    let matches = true;
-    for (let offset = 0; offset < blockLines.length; offset++) {
-      if (fileLines[index + offset] !== blockLines[offset]) {
-        matches = false;
-        break;
-      }
+  const lineAt = (position) => {
+    let low = 0;
+    let high = lineStarts.length - 1;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (lineStarts[mid] <= position) low = mid;
+      else high = mid - 1;
     }
-    if (matches) occurrences++;
-    if (occurrences > 1) break;
+    return low + 1;
+  };
+  const spans = [];
+  for (let at2 = haystack.indexOf(needle); at2 >= 0; at2 = haystack.indexOf(needle, at2 + 1)) {
+    spans.push({
+      startLine: lineAt(at2),
+      endLine: lineAt(at2 + needle.length - 1)
+    });
   }
-  if (occurrences !== 1) return { verified: false, reason: "ambiguous_match" };
+  if (spans.length === 0)
+    return { verified: false, reason: "content_mismatch" };
+  if (spans.length > 1) return { verified: false, reason: "ambiguous_match" };
+  const span = spans[0];
   if (input.diffPositions) {
-    for (let line2 = startLine; line2 <= endLine; line2++) {
+    for (let line2 = span.startLine; line2 <= span.endLine; line2++) {
       if (!input.diffPositions.has(line2)) {
         return { verified: false, reason: "outside_diff" };
       }
     }
   }
-  return { verified: true, startLine, endLine };
+  return { verified: true, startLine: span.startLine, endLine: span.endLine };
 }
 var OcrOutputTooLargeError = class extends Error {
   constructor(bound) {
@@ -223202,8 +223209,8 @@ function normalizeOcrFindings(input) {
       comment,
       headContent,
       ...input.diffPositions ? { diffPositions: input.diffPositions.get(path37) } : {}
-    }) : { verified: false, reason: "invalid_range" };
-    if (!span.verified && span.reason !== "missing_existing_code") {
+    }) : { verified: false, reason: "content_mismatch" };
+    if (!span.verified && (span.reason === "content_mismatch" || span.reason === "ambiguous_match")) {
       reasons.add("unverified_native_span");
     }
     const mappedSeverity = comment.severity ? SEVERITY_MAP[comment.severity] : void 0;

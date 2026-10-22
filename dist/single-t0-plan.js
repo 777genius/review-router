@@ -203755,7 +203755,7 @@ function renderReviewerSummaryMarkdown(input) {
       "",
       `**${labels.scope}: ${input.coverage.reviewedFiles}/${input.coverage.totalFiles} \xB7 ${labels.unreviewed}: ${input.coverage.unreviewedFiles}**`
     );
-    for (const warning3 of input.coverage.limitations.slice(0, 3))
+    for (const warning3 of input.coverage.limitations.filter((value) => !isRawLimitationToken(value)).slice(0, 3))
       pushWarning(escapeMarkdownText(warning3));
   }
   if (input.lifecycleAttention) {
@@ -203814,7 +203814,7 @@ function renderReviewerSummaryMarkdown(input) {
     diagnostics.push("");
     if (!coverage.complete) diagnostics.push(copy.coverageHeading, "");
     diagnostics.push(
-      ...coverage.limitations.map((value) => `- ${escapeMarkdownText(value)}`)
+      ...coverage.limitations.filter((value) => !isRawLimitationToken(value)).map((value) => `- ${escapeMarkdownText(value)}`)
     );
     const manifestFiles = incomplete ? [...coverage.files ?? []].sort(compareCoverageManifestFiles) : (coverage.files ?? []).filter((file) => file.status !== "full");
     const manifestLines = [];
@@ -204203,7 +204203,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${englishFindingWord(counts.total)} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Why the review is incomplete:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "The review provider exhausted its retry attempts without returning evidence \u2014 usually the AI model service is rate-limiting or unreachable. This is a provider-side problem, not a verdict on the code.",
+      attempt_budget_exhausted: "The review provider exhausted its retry attempts without returning evidence.",
       not_runnable: "A required review unit could not be run at all.",
       provider_lane_busy: "The review provider stayed unavailable (busy or at capacity) for the entire run.",
       investigation_deferred: "A context investigation was deferred, so the review could not cover everything.",
@@ -204235,7 +204235,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0435", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u044F", "\u0437\u0430\u043C\u0435\u0447\u0430\u043D\u0438\u0439"])} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**\u041F\u043E\u0447\u0435\u043C\u0443 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432\u044C\u044E \u0438\u0441\u0447\u0435\u0440\u043F\u0430\u043B \u043F\u043E\u043F\u044B\u0442\u043A\u0438, \u043D\u0435 \u043F\u043E\u043B\u0443\u0447\u0438\u0432 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u043E\u0432 \u2014 \u043E\u0431\u044B\u0447\u043D\u043E \u0441\u0435\u0440\u0432\u0438\u0441 \u0418\u0418-\u043C\u043E\u0434\u0435\u043B\u0438 \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0438\u0432\u0430\u0435\u0442 \u0437\u0430\u043F\u0440\u043E\u0441\u044B \u0438\u043B\u0438 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D. \u042D\u0442\u043E \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430 \u043D\u0430 \u0441\u0442\u043E\u0440\u043E\u043D\u0435 \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u0430, \u0430 \u043D\u0435 \u0432\u0435\u0440\u0434\u0438\u043A\u0442 \u043F\u043E \u043A\u043E\u0434\u0443.",
+      attempt_budget_exhausted: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432\u044C\u044E \u0438\u0441\u0447\u0435\u0440\u043F\u0430\u043B \u043F\u043E\u043F\u044B\u0442\u043A\u0438, \u043D\u0435 \u043F\u043E\u043B\u0443\u0447\u0438\u0432 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u043E\u0432.",
       not_runnable: "\u041E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u0439 \u0431\u043B\u043E\u043A \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u0432\u043E\u043E\u0431\u0449\u0435.",
       provider_lane_busy: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432\u044C\u044E \u0431\u044B\u043B \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D (\u0437\u0430\u043D\u044F\u0442 \u0438\u043B\u0438 \u043D\u0430 \u043F\u0440\u0435\u0434\u0435\u043B\u0435 \u043C\u043E\u0449\u043D\u043E\u0441\u0442\u0438) \u0432\u0435\u0441\u044C \u0437\u0430\u043F\u0443\u0441\u043A.",
       investigation_deferred: "\u0420\u0430\u0441\u0441\u043B\u0435\u0434\u043E\u0432\u0430\u043D\u0438\u0435 \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442\u0430 \u0431\u044B\u043B\u043E \u043E\u0442\u043B\u043E\u0436\u0435\u043D\u043E, \u043F\u043E\u044D\u0442\u043E\u043C\u0443 \u0440\u0435\u0432\u044C\u044E \u043D\u0435 \u0441\u043C\u043E\u0433\u043B\u043E \u043F\u043E\u043A\u0440\u044B\u0442\u044C \u0432\u0441\u0451.",
@@ -204267,7 +204267,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${slavicFindingWord(counts.total, ["\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u043D\u044F", "\u0437\u0430\u0443\u0432\u0430\u0436\u0435\u043D\u044C"])} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**\u0427\u043E\u043C\u0443 \u0440\u0435\u0432'\u044E \u043D\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432'\u044E \u0432\u0438\u0447\u0435\u0440\u043F\u0430\u0432 \u0441\u043F\u0440\u043E\u0431\u0438, \u043D\u0435 \u043E\u0442\u0440\u0438\u043C\u0430\u0432\u0448\u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0456\u0432 \u2014 \u0437\u0430\u0437\u0432\u0438\u0447\u0430\u0439 \u0441\u0435\u0440\u0432\u0456\u0441 \u0428\u0406-\u043C\u043E\u0434\u0435\u043B\u0456 \u043E\u0431\u043C\u0435\u0436\u0443\u0454 \u0437\u0430\u043F\u0438\u0442\u0438 \u0430\u0431\u043E \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0438\u0439. \u0426\u0435 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u0430 \u043D\u0430 \u0431\u043E\u0446\u0456 \u043F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440\u0430, \u0430 \u043D\u0435 \u0432\u0435\u0440\u0434\u0438\u043A\u0442 \u0449\u043E\u0434\u043E \u043A\u043E\u0434\u0443.",
+      attempt_budget_exhausted: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432'\u044E \u0432\u0438\u0447\u0435\u0440\u043F\u0430\u0432 \u0441\u043F\u0440\u043E\u0431\u0438, \u043D\u0435 \u043E\u0442\u0440\u0438\u043C\u0430\u0432\u0448\u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0456\u0432.",
       not_runnable: "\u041E\u0431\u043E\u0432'\u044F\u0437\u043A\u043E\u0432\u0438\u0439 \u0431\u043B\u043E\u043A \u0440\u0435\u0432'\u044E \u043D\u0435 \u0432\u0434\u0430\u043B\u043E\u0441\u044F \u0437\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u0438 \u0432\u0437\u0430\u0433\u0430\u043B\u0456.",
       provider_lane_busy: "\u041F\u0440\u043E\u0432\u0430\u0439\u0434\u0435\u0440 \u0440\u0435\u0432'\u044E \u0431\u0443\u0432 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0438\u0439 (\u0437\u0430\u0439\u043D\u044F\u0442\u0438\u0439 \u0430\u0431\u043E \u043D\u0430 \u043C\u0435\u0436\u0456 \u043F\u043E\u0442\u0443\u0436\u043D\u043E\u0441\u0442\u0456) \u0432\u0435\u0441\u044C \u0437\u0430\u043F\u0443\u0441\u043A.",
       investigation_deferred: "\u0414\u043E\u0441\u043B\u0456\u0434\u0436\u0435\u043D\u043D\u044F \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442\u0443 \u0431\u0443\u043B\u043E \u0432\u0456\u0434\u043A\u043B\u0430\u0434\u0435\u043D\u043E, \u0442\u043E\u043C\u0443 \u0440\u0435\u0432'\u044E \u043D\u0435 \u0437\u043C\u043E\u0433\u043B\u043E \u043E\u0445\u043E\u043F\u0438\u0442\u0438 \u0432\u0441\u0435.",
@@ -204299,7 +204299,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "hallazgo" : "hallazgos"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Por qu\xE9 la revisi\xF3n no est\xE1 completa:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "El proveedor de revisi\xF3n agot\xF3 sus intentos sin devolver evidencia; normalmente el servicio del modelo de IA limita las peticiones o no est\xE1 disponible. Es un problema del proveedor, no un veredicto sobre el c\xF3digo.",
+      attempt_budget_exhausted: "El proveedor de revisi\xF3n agot\xF3 sus intentos sin devolver evidencia.",
       not_runnable: "No se pudo ejecutar en absoluto una unidad de revisi\xF3n obligatoria.",
       provider_lane_busy: "El proveedor de revisi\xF3n estuvo indisponible (ocupado o al l\xEDmite de capacidad) durante toda la ejecuci\xF3n.",
       investigation_deferred: "Se aplaz\xF3 una investigaci\xF3n de contexto, as\xED que la revisi\xF3n no pudo cubrirlo todo.",
@@ -204331,7 +204331,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "achado" : "achados"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Por que a revis\xE3o n\xE3o est\xE1 completa:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "O provedor de revis\xE3o esgotou suas tentativas sem retornar evid\xEAncia; normalmente o servi\xE7o do modelo de IA limita as solicita\xE7\xF5es ou est\xE1 indispon\xEDvel. \xC9 um problema do provedor, n\xE3o um veredito sobre o c\xF3digo.",
+      attempt_budget_exhausted: "O provedor de revis\xE3o esgotou suas tentativas sem retornar evid\xEAncia.",
       not_runnable: "N\xE3o foi poss\xEDvel executar uma unidade de revis\xE3o obrigat\xF3ria.",
       provider_lane_busy: "O provedor de revis\xE3o ficou indispon\xEDvel (ocupado ou no limite de capacidade) durante toda a execu\xE7\xE3o.",
       investigation_deferred: "Uma investiga\xE7\xE3o de contexto foi adiada, ent\xE3o a revis\xE3o n\xE3o conseguiu cobrir tudo.",
@@ -204363,7 +204363,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "anomalie" : "anomalies"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Pourquoi la revue est incompl\xE8te :**",
     incompleteCauses: {
-      attempt_budget_exhausted: "Le fournisseur de revue a \xE9puis\xE9 ses tentatives sans renvoyer de preuve ; en g\xE9n\xE9ral, le service du mod\xE8le d'IA limite les requ\xEAtes ou est indisponible. C'est un probl\xE8me du fournisseur, pas un verdict sur le code.",
+      attempt_budget_exhausted: "Le fournisseur de revue a \xE9puis\xE9 ses tentatives sans renvoyer de preuve.",
       not_runnable: "Une unit\xE9 de revue obligatoire n'a pas pu \xEAtre ex\xE9cut\xE9e du tout.",
       provider_lane_busy: "Le fournisseur de revue est rest\xE9 indisponible (occup\xE9 ou \xE0 saturation) pendant toute l'ex\xE9cution.",
       investigation_deferred: "Une investigation de contexte a \xE9t\xE9 report\xE9e, la revue n'a donc pas pu tout couvrir.",
@@ -204395,7 +204395,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "Befund" : "Befunde"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Warum die Pr\xFCfung unvollst\xE4ndig ist:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "Der Pr\xFCfanbieter hat seine Versuche aufgebraucht, ohne Ergebnisse zur\xFCckzugeben; normalerweise begrenzt der KI-Modellservice die Anfragen oder ist nicht erreichbar. Das ist ein Problem des Anbieters, kein Urteil \xFCber den Code.",
+      attempt_budget_exhausted: "Der Pr\xFCfanbieter hat seine Versuche aufgebraucht, ohne Ergebnisse zur\xFCckzugeben.",
       not_runnable: "Eine erforderliche Pr\xFCfeinheit konnte \xFCberhaupt nicht ausgef\xFChrt werden.",
       provider_lane_busy: "Der Pr\xFCfanbieter war w\xE4hrend des gesamten Laufs nicht verf\xFCgbar (ausgelastet oder an der Kapazit\xE4tsgrenze).",
       investigation_deferred: "Eine Kontextuntersuchung wurde verschoben, daher konnte die Pr\xFCfung nicht alles abdecken.",
@@ -204427,7 +204427,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} ${counts.total === 1 ? "rilievo" : "rilievi"} (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**Perch\xE9 la revisione \xE8 incompleta:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "Il fornitore della revisione ha esaurito i tentativi senza restituire evidenze; di solito il servizio del modello IA limita le richieste o non \xE8 raggiungibile. \xC8 un problema del fornitore, non un verdetto sul codice.",
+      attempt_budget_exhausted: "Il fornitore della revisione ha esaurito i tentativi senza restituire evidenze.",
       not_runnable: "Non \xE8 stato possibile eseguire affatto un'unit\xE0 di revisione obbligatoria.",
       provider_lane_busy: "Il fornitore della revisione \xE8 rimasto non disponibile (occupato o al limite della capacit\xE0) per tutta l'esecuzione.",
       investigation_deferred: "Un'indagine sul contesto \xE8 stata rinviata, quindi la revisione non ha potuto coprire tutto.",
@@ -204459,7 +204459,7 @@ var copies = {
     findingsHeading: (counts) => `## ${counts.total} \u4E2A\u95EE\u9898\uFF08${formatSeverityCounts(counts)}\uFF09`,
     incompleteCauseHeading: "**\u4E3A\u4EC0\u4E48\u672C\u6B21\u5BA1\u67E5\u672A\u5B8C\u6210\uFF1A**",
     incompleteCauses: {
-      attempt_budget_exhausted: "\u5BA1\u67E5\u63D0\u4F9B\u65B9\u7528\u5C3D\u4E86\u91CD\u8BD5\u6B21\u6570\u4ECD\u672A\u8FD4\u56DE\u8BC1\u636E\u2014\u2014\u901A\u5E38\u662F AI \u6A21\u578B\u670D\u52A1\u9650\u6D41\u6216\u4E0D\u53EF\u8FBE\u3002\u8FD9\u662F\u63D0\u4F9B\u65B9\u4E00\u4FA7\u7684\u95EE\u9898\uFF0C\u4E0D\u662F\u5BF9\u4EE3\u7801\u7684\u8BC4\u5224\u3002",
+      attempt_budget_exhausted: "\u5BA1\u67E5\u63D0\u4F9B\u65B9\u7528\u5C3D\u4E86\u91CD\u8BD5\u6B21\u6570\u4ECD\u672A\u8FD4\u56DE\u8BC1\u636E\u3002",
       not_runnable: "\u4E00\u4E2A\u5FC5\u9700\u7684\u5BA1\u67E5\u5355\u5143\u6839\u672C\u65E0\u6CD5\u8FD0\u884C\u3002",
       provider_lane_busy: "\u6574\u4E2A\u8FD0\u884C\u671F\u95F4\u5BA1\u67E5\u63D0\u4F9B\u65B9\u4E00\u76F4\u4E0D\u53EF\u7528\uFF08\u7E41\u5FD9\u6216\u8FBE\u5230\u5BB9\u91CF\u4E0A\u9650\uFF09\u3002",
       investigation_deferred: "\u4E0A\u4E0B\u6587\u8C03\u67E5\u88AB\u63A8\u8FDF\uFF0C\u56E0\u6B64\u5BA1\u67E5\u65E0\u6CD5\u8986\u76D6\u5168\u90E8\u5185\u5BB9\u3002",
@@ -204491,7 +204491,7 @@ var copies = {
     findingsHeading: (counts) => `## \u6307\u6458 ${counts.total} \u4EF6\uFF08${formatSeverityCounts(counts)}\uFF09`,
     incompleteCauseHeading: "**\u30EC\u30D3\u30E5\u30FC\u304C\u5B8C\u4E86\u3057\u306A\u304B\u3063\u305F\u7406\u7531:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "\u30EC\u30D3\u30E5\u30FC\u63D0\u4F9B\u8005\u304C\u8A3C\u62E0\u3092\u8FD4\u3055\u305A\u306B\u518D\u8A66\u884C\u3092\u4F7F\u3044\u5207\u308A\u307E\u3057\u305F\u3002\u901A\u5E38\u306F AI \u30E2\u30C7\u30EB\u30B5\u30FC\u30D3\u30B9\u306E\u30EC\u30FC\u30C8\u5236\u9650\u307E\u305F\u306F\u5230\u9054\u4E0D\u80FD\u304C\u539F\u56E0\u3067\u3001\u30B3\u30FC\u30C9\u306E\u8A55\u4FA1\u3067\u306F\u306A\u304F\u63D0\u4F9B\u8005\u5074\u306E\u554F\u984C\u3067\u3059\u3002",
+      attempt_budget_exhausted: "\u30EC\u30D3\u30E5\u30FC\u63D0\u4F9B\u8005\u304C\u8A3C\u62E0\u3092\u8FD4\u3055\u305A\u306B\u518D\u8A66\u884C\u3092\u4F7F\u3044\u5207\u308A\u307E\u3057\u305F\u3002",
       not_runnable: "\u5FC5\u9808\u306E\u30EC\u30D3\u30E5\u30FC\u5358\u5143\u3092\u307E\u3063\u305F\u304F\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
       provider_lane_busy: "\u5B9F\u884C\u5168\u4F53\u3092\u901A\u3058\u3066\u30EC\u30D3\u30E5\u30FC\u63D0\u4F9B\u8005\u304C\u5229\u7528\u4E0D\u80FD\u3067\u3057\u305F\uFF08\u6DF7\u96D1\u307E\u305F\u306F\u5BB9\u91CF\u4E0A\u9650\uFF09\u3002",
       investigation_deferred: "\u30B3\u30F3\u30C6\u30AD\u30B9\u30C8\u8ABF\u67FB\u304C\u5148\u9001\u308A\u3055\u308C\u305F\u305F\u3081\u3001\u30EC\u30D3\u30E5\u30FC\u304C\u5168\u4F53\u3092\u30AB\u30D0\u30FC\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
@@ -204523,7 +204523,7 @@ var copies = {
     findingsHeading: (counts) => `## \uC774\uC288 ${counts.total}\uAC1C (${formatSeverityCounts(counts)})`,
     incompleteCauseHeading: "**\uB9AC\uBDF0\uAC00 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC740 \uC774\uC720:**",
     incompleteCauses: {
-      attempt_budget_exhausted: "\uB9AC\uBDF0 \uC81C\uACF5\uC790\uAC00 \uC99D\uAC70\uB97C \uBC18\uD658\uD558\uC9C0 \uBABB\uD55C \uCC44 \uC7AC\uC2DC\uB3C4\uB97C \uBAA8\uB450 \uC18C\uC9C4\uD588\uC2B5\uB2C8\uB2E4. \uBCF4\uD1B5 AI \uBAA8\uB378 \uC11C\uBE44\uC2A4\uC758 \uC694\uCCAD \uC81C\uD55C \uB610\uB294 \uC5F0\uACB0 \uBD88\uAC00\uAC00 \uC6D0\uC778\uC774\uBA70, \uCF54\uB4DC\uC5D0 \uB300\uD55C \uD3C9\uAC00\uAC00 \uC544\uB2C8\uB77C \uC81C\uACF5\uC790 \uCE21 \uBB38\uC81C\uC785\uB2C8\uB2E4.",
+      attempt_budget_exhausted: "\uB9AC\uBDF0 \uC81C\uACF5\uC790\uAC00 \uC99D\uAC70\uB97C \uBC18\uD658\uD558\uC9C0 \uBABB\uD55C \uCC44 \uC7AC\uC2DC\uB3C4\uB97C \uBAA8\uB450 \uC18C\uC9C4\uD588\uC2B5\uB2C8\uB2E4.",
       not_runnable: "\uD544\uC218 \uB9AC\uBDF0 \uB2E8\uC704\uB97C \uC804\uD600 \uC2E4\uD589\uD560 \uC218 \uC5C6\uC5C8\uC2B5\uB2C8\uB2E4.",
       provider_lane_busy: "\uC2E4\uD589 \uB0B4\uB0B4 \uB9AC\uBDF0 \uC81C\uACF5\uC790\uB97C \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC5C8\uC2B5\uB2C8\uB2E4(\uD63C\uC7A1 \uB610\uB294 \uC6A9\uB7C9 \uD55C\uACC4).",
       investigation_deferred: "\uCEE8\uD14D\uC2A4\uD2B8 \uC870\uC0AC\uAC00 \uC5F0\uAE30\uB418\uC5B4 \uB9AC\uBDF0\uAC00 \uC804\uCCB4\uB97C \uB2E4\uB8E8\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
@@ -204972,6 +204972,9 @@ function compareCoverageManifestFiles(left, right) {
   if (left.path < right.path) return -1;
   if (left.path > right.path) return 1;
   return 0;
+}
+function isRawLimitationToken(value) {
+  return /^[a-z_]+:/.test(value);
 }
 function escapeMarkdownText(value) {
   return neutralizeDetailsMarkup(escapeHtml(value)).replace(

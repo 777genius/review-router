@@ -376,7 +376,9 @@ export function renderReviewerSummaryMarkdown(
       '',
       `**${labels.scope}: ${input.coverage.reviewedFiles}/${input.coverage.totalFiles} · ${labels.unreviewed}: ${input.coverage.unreviewedFiles}**`
     );
-    for (const warning of input.coverage.limitations.slice(0, 3))
+    for (const warning of input.coverage.limitations
+      .filter((value) => !isRawLimitationToken(value))
+      .slice(0, 3))
       pushWarning(escapeMarkdownText(warning));
   }
   if (input.lifecycleAttention) {
@@ -446,7 +448,9 @@ export function renderReviewerSummaryMarkdown(
     diagnostics.push('');
     if (!coverage.complete) diagnostics.push(copy.coverageHeading, '');
     diagnostics.push(
-      ...coverage.limitations.map((value) => `- ${escapeMarkdownText(value)}`)
+      ...coverage.limitations
+        .filter((value) => !isRawLimitationToken(value))
+        .map((value) => `- ${escapeMarkdownText(value)}`)
     );
     const manifestFiles = incomplete
       ? [...(coverage.files ?? [])].sort(compareCoverageManifestFiles)
@@ -1031,7 +1035,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Why the review is incomplete:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'The review provider exhausted its retry attempts without returning evidence — usually the AI model service is rate-limiting or unreachable. This is a provider-side problem, not a verdict on the code.',
+        'The review provider exhausted its retry attempts without returning evidence.',
       not_runnable: 'A required review unit could not be run at all.',
       provider_lane_busy:
         'The review provider stayed unavailable (busy or at capacity) for the entire run.',
@@ -1075,7 +1079,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Почему ревью не завершено:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'Провайдер ревью исчерпал попытки, не получив результатов — обычно сервис ИИ-модели ограничивает запросы или недоступен. Это проблема на стороне провайдера, а не вердикт по коду.',
+        'Провайдер ревью исчерпал попытки, не получив результатов.',
       not_runnable: 'Обязательный блок ревью не удалось запустить вообще.',
       provider_lane_busy:
         'Провайдер ревью был недоступен (занят или на пределе мощности) весь запуск.',
@@ -1119,7 +1123,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: "**Чому рев'ю не завершено:**",
     incompleteCauses: {
       attempt_budget_exhausted:
-        "Провайдер рев'ю вичерпав спроби, не отримавши результатів — зазвичай сервіс ШІ-моделі обмежує запити або недоступний. Це проблема на боці провайдера, а не вердикт щодо коду.",
+        "Провайдер рев'ю вичерпав спроби, не отримавши результатів.",
       not_runnable: "Обов'язковий блок рев'ю не вдалося запустити взагалі.",
       provider_lane_busy:
         "Провайдер рев'ю був недоступний (зайнятий або на межі потужності) весь запуск.",
@@ -1163,7 +1167,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Por qué la revisión no está completa:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'El proveedor de revisión agotó sus intentos sin devolver evidencia; normalmente el servicio del modelo de IA limita las peticiones o no está disponible. Es un problema del proveedor, no un veredicto sobre el código.',
+        'El proveedor de revisión agotó sus intentos sin devolver evidencia.',
       not_runnable:
         'No se pudo ejecutar en absoluto una unidad de revisión obligatoria.',
       provider_lane_busy:
@@ -1209,7 +1213,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Por que a revisão não está completa:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'O provedor de revisão esgotou suas tentativas sem retornar evidência; normalmente o serviço do modelo de IA limita as solicitações ou está indisponível. É um problema do provedor, não um veredito sobre o código.',
+        'O provedor de revisão esgotou suas tentativas sem retornar evidência.',
       not_runnable:
         'Não foi possível executar uma unidade de revisão obrigatória.',
       provider_lane_busy:
@@ -1254,7 +1258,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Pourquoi la revue est incomplète :**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        "Le fournisseur de revue a épuisé ses tentatives sans renvoyer de preuve ; en général, le service du modèle d'IA limite les requêtes ou est indisponible. C'est un problème du fournisseur, pas un verdict sur le code.",
+        "Le fournisseur de revue a épuisé ses tentatives sans renvoyer de preuve.",
       not_runnable:
         "Une unité de revue obligatoire n'a pas pu être exécutée du tout.",
       provider_lane_busy:
@@ -1299,7 +1303,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Warum die Prüfung unvollständig ist:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'Der Prüfanbieter hat seine Versuche aufgebraucht, ohne Ergebnisse zurückzugeben; normalerweise begrenzt der KI-Modellservice die Anfragen oder ist nicht erreichbar. Das ist ein Problem des Anbieters, kein Urteil über den Code.',
+        'Der Prüfanbieter hat seine Versuche aufgebraucht, ohne Ergebnisse zurückzugeben.',
       not_runnable:
         'Eine erforderliche Prüfeinheit konnte überhaupt nicht ausgeführt werden.',
       provider_lane_busy:
@@ -1347,7 +1351,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**Perché la revisione è incompleta:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'Il fornitore della revisione ha esaurito i tentativi senza restituire evidenze; di solito il servizio del modello IA limita le richieste o non è raggiungibile. È un problema del fornitore, non un verdetto sul codice.',
+        'Il fornitore della revisione ha esaurito i tentativi senza restituire evidenze.',
       not_runnable:
         "Non è stato possibile eseguire affatto un'unità di revisione obbligatoria.",
       provider_lane_busy:
@@ -1393,7 +1397,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**为什么本次审查未完成：**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        '审查提供方用尽了重试次数仍未返回证据——通常是 AI 模型服务限流或不可达。这是提供方一侧的问题，不是对代码的评判。',
+        '审查提供方用尽了重试次数仍未返回证据。',
       not_runnable: '一个必需的审查单元根本无法运行。',
       provider_lane_busy:
         '整个运行期间审查提供方一直不可用（繁忙或达到容量上限）。',
@@ -1430,7 +1434,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**レビューが完了しなかった理由:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        'レビュー提供者が証拠を返さずに再試行を使い切りました。通常は AI モデルサービスのレート制限または到達不能が原因で、コードの評価ではなく提供者側の問題です。',
+        'レビュー提供者が証拠を返さずに再試行を使い切りました。',
       not_runnable: '必須のレビュー単元をまったく実行できませんでした。',
       provider_lane_busy:
         '実行全体を通じてレビュー提供者が利用不能でした（混雑または容量上限）。',
@@ -1473,7 +1477,7 @@ const copies: Record<ReviewerSummaryLocale, ReviewerSummaryCopy> = {
     incompleteCauseHeading: '**리뷰가 완료되지 않은 이유:**',
     incompleteCauses: {
       attempt_budget_exhausted:
-        '리뷰 제공자가 증거를 반환하지 못한 채 재시도를 모두 소진했습니다. 보통 AI 모델 서비스의 요청 제한 또는 연결 불가가 원인이며, 코드에 대한 평가가 아니라 제공자 측 문제입니다.',
+        '리뷰 제공자가 증거를 반환하지 못한 채 재시도를 모두 소진했습니다.',
       not_runnable: '필수 리뷰 단위를 전혀 실행할 수 없었습니다.',
       provider_lane_busy:
         '실행 내내 리뷰 제공자를 사용할 수 없었습니다(혼잡 또는 용량 한계).',
@@ -1972,6 +1976,10 @@ function compareCoverageManifestFiles(
   if (left.path < right.path) return -1;
   if (left.path > right.path) return 1;
   return 0;
+}
+
+function isRawLimitationToken(value: string): boolean {
+  return /^[a-z_]+:/.test(value);
 }
 
 function escapeMarkdownText(value: string): string {

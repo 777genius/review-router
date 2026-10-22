@@ -131,6 +131,85 @@ describe('normalizeOcrFindings (§8.2)', () => {
     expect(findings[0].title).not.toContain('`');
   });
 
+  it('takes the first meaningful title after stripping markdown-only lines', () => {
+    const { findings, diagnostics } = normalizeOcrFindings({
+      comments: [comment({ content: '###\n**Broken arithmetic**\nDetails.' })],
+      headFiles: headFiles({ 'calc.ts': content }),
+    });
+    expect(findings[0].title).toBe('Broken arithmetic');
+    expect(findings[0].message).toBe('###\n**Broken arithmetic**\nDetails.');
+    expect(diagnostics.partialFlagsRequired).toBe(false);
+  });
+
+  it.each([
+    [
+      '### **Keep `foo_bar` compatible with C#**',
+      'Keep foo_bar compatible with C#',
+    ],
+    ['foo_bar must preserve C# and a*b', 'foo_bar must preserve C# and a*b'],
+    ['---\n___\n* * *\nFix `foo_bar` with _care_', 'Fix foo_bar with care'],
+  ])(
+    'preserves meaningful punctuation in the title from %s',
+    (message, title) => {
+      const { findings, diagnostics } = normalizeOcrFindings({
+        comments: [comment({ content: message })],
+        headFiles: headFiles({ 'calc.ts': content }),
+      });
+      expect(findings[0].title).toBe(title);
+      expect(findings[0].message).toBe(message);
+      expect(diagnostics.partialFlagsRequired).toBe(false);
+    }
+  );
+
+  it('skips an empty normalized title while preserving valid sibling findings', () => {
+    const { findings, diagnostics } = normalizeOcrFindings({
+      comments: [comment({ content: '###\n**' }), comment()],
+      headFiles: headFiles({ 'calc.ts': content }),
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].message).toBe(comment().content);
+    expect(diagnostics.skipped).toEqual([
+      { index: 0, reason: 'invalid_native_finding' },
+    ]);
+    expect(diagnostics.partialFlagsRequired).toBe(true);
+  });
+
+  it.each([
+    ['category', { category: 'x'.repeat(129) }],
+    ['suggestion', { suggestionCode: 'x'.repeat(16385) }],
+  ])(
+    'rejects an oversized %s before producing an evidence payload',
+    (bound, overrides) => {
+      expect(() =>
+        normalizeOcrFindings({
+          comments: [comment(overrides)],
+          headFiles: headFiles({ 'calc.ts': content }),
+        })
+      ).toThrow(new OcrOutputTooLargeError(bound));
+    }
+  );
+
+  it('preserves category and verified suggestion at the consumer limits', () => {
+    const category = 'x'.repeat(128);
+    const suggestionCode = 'x'.repeat(16384);
+    const { findings } = normalizeOcrFindings({
+      comments: [comment({ category, suggestionCode })],
+      headFiles: headFiles({ 'calc.ts': content }),
+    });
+    expect(findings[0]).toMatchObject({ category, suggestion: suggestionCode });
+  });
+
+  it('omits an oversized suggestion when its span is unverified', () => {
+    const { findings } = normalizeOcrFindings({
+      comments: [
+        comment({ existingCode: null, suggestionCode: 'x'.repeat(16385) }),
+      ],
+      headFiles: headFiles({ 'calc.ts': content }),
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].suggestion).toBeUndefined();
+  });
+
   it.each([
     ['critical', 'critical'],
     ['high', 'major'],

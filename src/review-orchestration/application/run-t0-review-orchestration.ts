@@ -378,8 +378,9 @@ export class RunT0ReviewOrchestration {
         }
         if (
           restoredSlot.state !== RestoredReviewWorkSlotState.Satisfied &&
-          (busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ??
-            0) >= this.maxBusyPollsPerProviderLane
+          this.providerLaneBusyBudgetExhausted(
+            busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0
+          )
         ) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
           exhaustedWorkSlotReasons.set(
@@ -1118,7 +1119,7 @@ export class RunT0ReviewOrchestration {
           input.busyPollsByProviderLane.get(
             input.workSlot.providerVoteIdentityHash
           ) ?? 0;
-        if (providerLaneBusyPollCount >= this.maxBusyPollsPerProviderLane) {
+        if (this.providerLaneBusyBudgetExhausted(providerLaneBusyPollCount)) {
           input.onEvent({
             type: ReviewOrchestrationEventType.SlotExhausted,
             workSlotId: input.workSlot.workSlotId,
@@ -1461,9 +1462,10 @@ export class RunT0ReviewOrchestration {
       input.workSlot.workSlotId,
       input.manifest.providerInvocationKey,
     ]);
+    const busyPollBudget = this.providerLaneBusyPollBudget();
     for (
       let busyPollCount = 0;
-      busyPollCount < this.maxBusyPollsPerProviderLane;
+      busyPollCount < busyPollBudget;
       busyPollCount += 1
     ) {
       await this.assertRevisionCurrent(input.revision);
@@ -2171,6 +2173,18 @@ export class RunT0ReviewOrchestration {
       return undefined;
     }
     return description;
+  }
+
+  private providerLaneBusyPollBudget(): number {
+    // A finite execution deadline bounds the wait itself; the poll cap is
+    // only the fallback bound for runs configured without a deadline.
+    return Number.isFinite(this.executionDeadlineRemainingMs())
+      ? Number.POSITIVE_INFINITY
+      : this.maxBusyPollsPerProviderLane;
+  }
+
+  private providerLaneBusyBudgetExhausted(busyPollCount: number): boolean {
+    return busyPollCount >= this.providerLaneBusyPollBudget();
   }
 
   private canStartBatch(): boolean {

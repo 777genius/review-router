@@ -191066,7 +191066,9 @@ var RunT0ReviewOrchestration = class {
           });
           continue;
         }
-        if (restoredSlot.state !== "satisfied" /* Satisfied */ && (busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0) >= this.maxBusyPollsPerProviderLane) {
+        if (restoredSlot.state !== "satisfied" /* Satisfied */ && this.providerLaneBusyBudgetExhausted(
+          busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0
+        )) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
           exhaustedWorkSlotReasons.set(
             workSlot.workSlotId,
@@ -191694,7 +191696,7 @@ var RunT0ReviewOrchestration = class {
         const providerLaneBusyPollCount = input.busyPollsByProviderLane.get(
           input.workSlot.providerVoteIdentityHash
         ) ?? 0;
-        if (providerLaneBusyPollCount >= this.maxBusyPollsPerProviderLane) {
+        if (this.providerLaneBusyBudgetExhausted(providerLaneBusyPollCount)) {
           input.onEvent({
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: input.workSlot.workSlotId
@@ -191991,7 +191993,8 @@ var RunT0ReviewOrchestration = class {
       input.workSlot.workSlotId,
       input.manifest.providerInvocationKey
     ]);
-    for (let busyPollCount = 0; busyPollCount < this.maxBusyPollsPerProviderLane; busyPollCount += 1) {
+    const busyPollBudget = this.providerLaneBusyPollBudget();
+    for (let busyPollCount = 0; busyPollCount < busyPollBudget; busyPollCount += 1) {
       await this.assertRevisionCurrent(input.revision);
       const acquire = await this.dependencies.controlPlane.acquireInvocationLease({
         authorization: input.authorization,
@@ -192509,6 +192512,12 @@ var RunT0ReviewOrchestration = class {
       return void 0;
     }
     return description;
+  }
+  providerLaneBusyPollBudget() {
+    return Number.isFinite(this.executionDeadlineRemainingMs()) ? Number.POSITIVE_INFINITY : this.maxBusyPollsPerProviderLane;
+  }
+  providerLaneBusyBudgetExhausted(busyPollCount) {
+    return busyPollCount >= this.providerLaneBusyPollBudget();
   }
   canStartBatch() {
     return this.dependencies.executionDeadline?.canStartBatch() ?? true;

@@ -2280,6 +2280,61 @@ describe('RunT0ReviewOrchestration', () => {
     );
   });
 
+  it('waits on a busy provider lane past the poll cap while the execution deadline allows', async () => {
+    const fixture = createFixture({ maxAttempts: 1 });
+    const secondSlot: ReviewWorkSlotPlan = {
+      ...fixture.command.workSlots[0]!,
+      workSlotId: 'slot-2',
+      shardKey: 'batch-2',
+    };
+    const workSlots = [...fixture.command.workSlots, secondSlot];
+    const command = {
+      ...fixture.command,
+      workSlots,
+      workSlotsCanonicalJson: canonicalizeReviewWorkSlots(workSlots),
+    };
+    jest
+      .mocked(fixture.dependencies.revisionGuard.loadCurrentRevision)
+      .mockResolvedValue(revisionOf(command));
+    fixture.controlPlane.restoreExecution
+      .mockReset()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        ...restoredAdmission(command, {
+          state: RestoredReviewWorkSlotState.Pending,
+          acceptedObservationRefId: null,
+        }).restoredExecution,
+        version: '2',
+        streamVersion: '2',
+      });
+    fixture.controlPlane.acquireInvocationLease
+      .mockResolvedValueOnce({
+        status: ReviewInvocationLeaseAcquireOutcomeStatus.Busy,
+      })
+      .mockResolvedValueOnce({
+        status: ReviewInvocationLeaseAcquireOutcomeStatus.Busy,
+      })
+      .mockResolvedValue({
+        status: ReviewInvocationLeaseAcquireOutcomeStatus.Acquired,
+        lease,
+      });
+    Object.assign(fixture.dependencies, {
+      executionDeadline: orchestrationDeadline(
+        600_000,
+        fixture.dependencies.clock.monotonicNowMs
+      ),
+    });
+    const useCase = new RunT0ReviewOrchestration(fixture.dependencies, 30, 1);
+
+    const result = await useCase.execute(command);
+
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+      4
+    );
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(2);
+  });
+
   it('treats a server-side attempt budget exhaustion as an exhausted slot', async () => {
     const fixture = createFixture({ maxAttempts: 1 });
     fixture.controlPlane.acquireInvocationLease.mockResolvedValue({

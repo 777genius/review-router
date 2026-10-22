@@ -151864,6 +151864,7 @@ var ExecutionDeadline = class {
 
 // src/review-execution/infrastructure/execution-deadline-from-environment.ts
 var REVIEW_EXECUTION_DEADLINE_ENV_KEY = "REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS";
+var DEFAULT_EXECUTION_BUDGET_MS = 235 * 6e4;
 var DEFAULT_COMPLETION_RESERVE_MS = 12e4;
 var DEFAULT_MINIMUM_BATCH_START_WINDOW_MS = 3e4;
 var DEFAULT_MINIMUM_RETRY_START_WINDOW_MS = 3e4;
@@ -151879,7 +151880,7 @@ function parseOptionalEpochMs(value) {
 }
 function createExecutionDeadlineFromEnvironment(environment = process.env, clock) {
   return new ExecutionDeadline(
-    parseOptionalEpochMs(environment[REVIEW_EXECUTION_DEADLINE_ENV_KEY]),
+    parseOptionalEpochMs(environment[REVIEW_EXECUTION_DEADLINE_ENV_KEY]) ?? (clock?.now() ?? Date.now()) + DEFAULT_EXECUTION_BUDGET_MS,
     {
       completionReserveMs: DEFAULT_COMPLETION_RESERVE_MS,
       minimumBatchStartWindowMs: DEFAULT_MINIMUM_BATCH_START_WINDOW_MS,

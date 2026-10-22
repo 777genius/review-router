@@ -6,6 +6,10 @@ import {
 export const REVIEW_EXECUTION_DEADLINE_ENV_KEY =
   'REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS';
 
+// Mirrors the reusable workflow's default review_timeout_minutes (240)
+// minus its 5-minute reserve, so runtime-path runs stay deadline-bounded.
+const DEFAULT_EXECUTION_BUDGET_MS = 235 * 60_000;
+
 const DEFAULT_COMPLETION_RESERVE_MS = 120_000;
 const DEFAULT_MINIMUM_BATCH_START_WINDOW_MS = 30_000;
 const DEFAULT_MINIMUM_RETRY_START_WINDOW_MS = 30_000;
@@ -26,7 +30,8 @@ export function createExecutionDeadlineFromEnvironment(
   clock?: EpochClock
 ): ExecutionDeadline {
   return new ExecutionDeadline(
-    parseOptionalEpochMs(environment[REVIEW_EXECUTION_DEADLINE_ENV_KEY]),
+    parseOptionalEpochMs(environment[REVIEW_EXECUTION_DEADLINE_ENV_KEY]) ??
+      (clock?.now() ?? Date.now()) + DEFAULT_EXECUTION_BUDGET_MS,
     {
       completionReserveMs: DEFAULT_COMPLETION_RESERVE_MS,
       minimumBatchStartWindowMs: DEFAULT_MINIMUM_BATCH_START_WINDOW_MS,

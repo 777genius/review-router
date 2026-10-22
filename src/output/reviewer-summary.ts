@@ -411,7 +411,7 @@ export function renderReviewerSummaryMarkdown(
     lines.push('', `**${labels.previous} (${visibleLifecycle.length})**`);
     for (const line of visibleLifecycle) {
       pushWarning(
-        `- **${copy.lifecycle[line.kind]}** · ${escapeMarkdownText(line.title)} · ${escapeCoverageManifestPath(line.locationLabel)}`
+        `- **${copy.lifecycle[line.kind]}** · ${escapeMarkdownText(compactFindingPresentation(line, locale).title)} · ${escapeCoverageManifestPath(line.locationLabel)}`
       );
     }
   }
@@ -606,12 +606,23 @@ export function renderReviewerSummaryMarkdown(
   };
   const findings = [...input.findings].sort(compareSummaryFindings);
   for (const finding of findings) {
-    const overview = compactFindingLine(finding, input.source);
-    const excerpt =
-      findings.length <= 3 ? findingExcerpt(finding.message, locale) : '';
+    const presentation = compactFindingPresentation(finding, locale);
+    const overview = compactFindingLine(
+      finding,
+      presentation.title,
+      input.source
+    );
+    const excerpt = findings.length <= 3 ? presentation.excerpt : '';
     const preview = [
       overview,
-      ...(excerpt ? ['', escapeMarkdownText(excerpt)] : []),
+      ...(excerpt
+        ? [
+            '',
+            escapeMarkdownText(excerpt)
+              .replace(/^([#+-])/, '\\$1')
+              .replace(/^(\d+)([.)])(?=\s)/, '$1\\$2'),
+          ]
+        : []),
     ].join('\n');
     const details = renderFindingDetails(copy, finding, chrome);
     if (!append(`${preview}\n\n${details}`, maxSummaryBytes - 6_000)) {
@@ -791,7 +802,7 @@ export function renderReviewerLifecycleMarkdown(input: {
   const blocks = input.lines.map((line) => {
     const label = copy.lifecycle[line.kind];
     const summary = escapeHtml(
-      `${label} · ${line.locationLabel} · ${line.title}`.trim()
+      `${label} · ${line.locationLabel} · ${compactFindingPresentation(line, resolveReviewerSummaryLocale(input.language)).title}`.trim()
     );
     const body = [
       safeFindingBody(line.message.trimEnd()),
@@ -925,11 +936,12 @@ function renderFindingDetails(
 
 function compactFindingLine(
   finding: ReviewerSummaryFinding,
+  title: string,
   source?: ReviewerSummaryOptions['source']
 ): string {
   const location = escapeCoverageManifestPath(findingLocationLabel(finding));
   const url = findingSourceUrl(finding, source);
-  return `- **${finding.severity} · ${escapeMarkdownText(singleLineText(finding.title).trim())}** · ${url ? `[${location}](${url})` : location}`;
+  return `- **${finding.severity} · ${escapeMarkdownText(title)}** · ${url ? `[${location}](${url})` : location}`;
 }
 
 function findingSourceUrl(
@@ -2230,10 +2242,74 @@ function plainExcerpt(
   return boundary > 0 ? `${value.slice(0, boundary).trimEnd()}…` : '';
 }
 
-function findingExcerpt(
-  message: string,
+function compactFindingPresentation(
+  finding: Pick<ReviewerSummaryFinding, 'title' | 'message'>,
   locale: ReviewerSummaryLocale
-): string {
+): { readonly title: string; readonly excerpt: string } {
+  const paragraph = plainInlineCode(findingParagraph(finding.message));
+  const originalTitle = plainInlineCode(singleLineText(finding.title).trim());
+  const firstSentence = (value: string) => {
+    const sentences = new Intl.Segmenter(locale, {
+      granularity: 'sentence',
+    }).segment(value);
+    return sentences[Symbol.iterator]().next().value?.segment.trim() ?? value;
+  };
+  // Some adapters derive a title from the message, stripping Markdown and
+  // truncating at their wire limit. Compare content without punctuation so
+  // display can recover operators from the intact body without changing IDs.
+  const comparable = (value: string) => value.replace(/[^\p{L}\p{N}]/gu, '');
+  const titleKey = comparable(originalTitle);
+  const paragraphKey = comparable(paragraph);
+  const firstLineKey = comparable(
+    finding.message.split(/\r\n|\r|\n/u).find((line) => line.trim()) ?? ''
+  );
+  const derived =
+    titleKey.length > 0 &&
+    (titleKey === paragraphKey ||
+      titleKey === comparable(firstSentence(paragraph)) ||
+      (titleKey === firstLineKey && paragraphKey.startsWith(titleKey)) ||
+      (Array.from(originalTitle).length > 120 &&
+        paragraphKey.startsWith(titleKey)));
+  const title =
+    plainExcerpt(
+      firstSentence(derived ? paragraph : originalTitle),
+      120,
+      locale
+    ) || '…';
+  const consumed = title.endsWith('…') ? title.slice(0, -1) : title;
+  const remaining =
+    derived && paragraph.startsWith(consumed)
+      ? paragraph.slice(consumed.length).trimStart()
+      : paragraph;
+  return { title, excerpt: plainExcerpt(remaining, 320, locale) };
+}
+
+/** Plain preview text: remove matched code delimiters, retaining operators. */
+function plainInlineCode(value: string): string {
+  const ticks = Array.from(value.matchAll(/`+/g));
+  let result = '';
+  let cursor = 0;
+  for (let index = 0; index < ticks.length; index++) {
+    const opening = ticks[index]!;
+    let slashes = 0;
+    for (let at = opening.index! - 1; at >= 0 && value[at] === '\\'; at--)
+      slashes++;
+    if (slashes % 2) continue;
+    const closing = ticks.findIndex(
+      (tick, candidate) =>
+        candidate > index && tick[0].length === opening[0].length
+    );
+    if (closing < 0) continue;
+    result +=
+      value.slice(cursor, opening.index!) +
+      value.slice(opening.index! + opening[0].length, ticks[closing]!.index!);
+    cursor = ticks[closing]!.index! + ticks[closing]![0].length;
+    index = closing;
+  }
+  return result + value.slice(cursor);
+}
+
+function findingParagraph(message: string): string {
   const first =
     message
       .replace(/^(?:[ \t]*\r?\n)+/, '')
@@ -2256,11 +2332,7 @@ function findingExcerpt(
     if (markdownInterruptsParagraph(line)) break;
     paragraph.push(line);
   }
-  return plainExcerpt(
-    paragraph.join(' ').replace(/\s+/g, ' ').trim(),
-    320,
-    locale
-  );
+  return paragraph.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 function markdownInterruptsParagraph(line: string): boolean {

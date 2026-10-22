@@ -144932,7 +144932,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.203",
+  version: "1.0.204",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -204100,7 +204100,7 @@ function renderReviewerSummaryMarkdown(input) {
     lines.push("", `**${labels.previous} (${visibleLifecycle.length})**`);
     for (const line2 of visibleLifecycle) {
       pushWarning(
-        `- **${copy.lifecycle[line2.kind]}** \xB7 ${escapeMarkdownText(line2.title)} \xB7 ${escapeCoverageManifestPath(line2.locationLabel)}`
+        `- **${copy.lifecycle[line2.kind]}** \xB7 ${escapeMarkdownText(compactFindingPresentation(line2, locale).title)} \xB7 ${escapeCoverageManifestPath(line2.locationLabel)}`
       );
     }
   }
@@ -204265,11 +204265,19 @@ ${safeFindingBody(line2.message)}`
   };
   const findings = [...input.findings].sort(compareSummaryFindings);
   for (const finding of findings) {
-    const overview = compactFindingLine(finding, input.source);
-    const excerpt = findings.length <= 3 ? findingExcerpt(finding.message, locale) : "";
+    const presentation = compactFindingPresentation(finding, locale);
+    const overview = compactFindingLine(
+      finding,
+      presentation.title,
+      input.source
+    );
+    const excerpt = findings.length <= 3 ? presentation.excerpt : "";
     const preview = [
       overview,
-      ...excerpt ? ["", escapeMarkdownText(excerpt)] : []
+      ...excerpt ? [
+        "",
+        escapeMarkdownText(excerpt).replace(/^([#+-])/, "\\$1").replace(/^(\d+)([.)])(?=\s)/, "$1\\$2")
+      ] : []
     ].join("\n");
     const details2 = renderFindingDetails(copy, finding, chrome);
     if (!append(`${preview}
@@ -204458,10 +204466,10 @@ function renderFindingDetails(copy, finding, chrome) {
   parts.push("", "</details>");
   return parts.join("\n");
 }
-function compactFindingLine(finding, source) {
+function compactFindingLine(finding, title, source) {
   const location = escapeCoverageManifestPath(findingLocationLabel(finding));
   const url3 = findingSourceUrl(finding, source);
-  return `- **${finding.severity} \xB7 ${escapeMarkdownText(singleLineText(finding.title).trim())}** \xB7 ${url3 ? `[${location}](${url3})` : location}`;
+  return `- **${finding.severity} \xB7 ${escapeMarkdownText(title)}** \xB7 ${url3 ? `[${location}](${url3})` : location}`;
 }
 function findingSourceUrl(finding, source) {
   if (!source || !/^[a-f0-9]{40,64}$/i.test(source.headSha)) return void 0;
@@ -205495,7 +205503,52 @@ function plainExcerpt(value, maxChars, locale) {
   }
   return boundary > 0 ? `${value.slice(0, boundary).trimEnd()}\u2026` : "";
 }
-function findingExcerpt(message, locale) {
+function compactFindingPresentation(finding, locale) {
+  const paragraph = plainInlineCode(findingParagraph(finding.message));
+  const originalTitle = plainInlineCode(singleLineText(finding.title).trim());
+  const firstSentence = (value) => {
+    const sentences = new Intl.Segmenter(locale, {
+      granularity: "sentence"
+    }).segment(value);
+    return sentences[Symbol.iterator]().next().value?.segment.trim() ?? value;
+  };
+  const comparable = (value) => value.replace(/[^\p{L}\p{N}]/gu, "");
+  const titleKey = comparable(originalTitle);
+  const paragraphKey = comparable(paragraph);
+  const firstLineKey = comparable(
+    finding.message.split(/\r\n|\r|\n/u).find((line2) => line2.trim()) ?? ""
+  );
+  const derived = titleKey.length > 0 && (titleKey === paragraphKey || titleKey === comparable(firstSentence(paragraph)) || titleKey === firstLineKey && paragraphKey.startsWith(titleKey) || Array.from(originalTitle).length > 120 && paragraphKey.startsWith(titleKey));
+  const title = plainExcerpt(
+    firstSentence(derived ? paragraph : originalTitle),
+    120,
+    locale
+  ) || "\u2026";
+  const consumed = title.endsWith("\u2026") ? title.slice(0, -1) : title;
+  const remaining = derived && paragraph.startsWith(consumed) ? paragraph.slice(consumed.length).trimStart() : paragraph;
+  return { title, excerpt: plainExcerpt(remaining, 320, locale) };
+}
+function plainInlineCode(value) {
+  const ticks = Array.from(value.matchAll(/`+/g));
+  let result2 = "";
+  let cursor = 0;
+  for (let index = 0; index < ticks.length; index++) {
+    const opening = ticks[index];
+    let slashes = 0;
+    for (let at = opening.index - 1; at >= 0 && value[at] === "\\"; at--)
+      slashes++;
+    if (slashes % 2) continue;
+    const closing = ticks.findIndex(
+      (tick, candidate) => candidate > index && tick[0].length === opening[0].length
+    );
+    if (closing < 0) continue;
+    result2 += value.slice(cursor, opening.index) + value.slice(opening.index + opening[0].length, ticks[closing].index);
+    cursor = ticks[closing].index + ticks[closing][0].length;
+    index = closing;
+  }
+  return result2 + value.slice(cursor);
+}
+function findingParagraph(message) {
   const first = message.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd().split(/\r?\n\s*\r?\n/)[0] ?? "";
   if (/^(?: {4}|\t|\s*(?:`{3}|~{3}|<|\||#{1,6}\s|>|[-*+]\s|\d+[.)]\s))/.test(
     first
@@ -205508,11 +205561,7 @@ function findingExcerpt(message, locale) {
     if (markdownInterruptsParagraph(line2)) break;
     paragraph.push(line2);
   }
-  return plainExcerpt(
-    paragraph.join(" ").replace(/\s+/g, " ").trim(),
-    320,
-    locale
-  );
+  return paragraph.join(" ").replace(/\s+/g, " ").trim();
 }
 function markdownInterruptsParagraph(line2) {
   return !!readMarkdownFenceOpening(line2) || /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(

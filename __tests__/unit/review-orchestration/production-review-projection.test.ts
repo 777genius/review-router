@@ -20,6 +20,120 @@ import {
 
 describe('production review projection coverage', () => {
   it.each([
+    { kind: 'concrete', eligible: true, mode: 'resolve' as const },
+    { kind: 'concrete', eligible: false, mode: 'report' as const },
+    { kind: 'concrete', eligible: false, mode: 'off' as const },
+    { kind: 'missing evidence', eligible: false, mode: 'resolve' as const },
+    { kind: 'wrong fingerprint', eligible: false, mode: 'resolve' as const },
+  ])(
+    'preserves $kind lifecycle evidence in $mode mode through the real factory without relaxing resolution policy',
+    async ({ kind, eligible, mode }) => {
+      const lineageId = `rrl_${'a'.repeat(32)}`;
+      const inventory = completeLifecycleInventory();
+      inventory.loadCurrent.mockResolvedValue({
+        ...(await inventory.loadCurrent()),
+        targets: [
+          {
+            targetId: 'target',
+            threadId: 'thread',
+            trustedMarker: lineageId,
+            title: 'Prior bug',
+            message: 'Original full explanation.',
+            severity: FindingSeverity.Major,
+            originalPath: 'src/a.ts',
+            currentPath: 'src/a.ts',
+            currentLine: 1,
+            parentCommentUpdatedAt: '2026-10-22T00:00:00.000Z',
+            threadCommentCount: 1,
+            threadStateHash: 'a'.repeat(64),
+            disposition: LifecycleTargetDisposition.Active,
+            viewerCanResolve: true,
+          },
+        ],
+      });
+      const builder = createProductionReviewProjectionBuilder({
+        authorizationFacts,
+        pr,
+        config: { ...DEFAULT_CONFIG, reviewThreadLifecycle: mode },
+        protocolLimits,
+        assignments: [assignment('required-slot', true)],
+        uncoveredPaths: [],
+        uncoveredLifecycleTargetIds: [],
+        lifecycleInventory: inventory,
+      });
+      const baseline = {
+        schemaVersion: 'comparison_baseline.v1' as const,
+        sourceReviewedHeadSha: '2'.repeat(40),
+        sourceReviewRevisionHash: 'a'.repeat(64),
+        sourceExecutionGeneration: '1',
+        snapshotVersion: 1,
+        projectionPolicyVersion:
+          'review-projection-policy.v6-comparison' as const,
+        projectionEnvelopeVersion: 'review_projection.v1' as const,
+        appliedResolutions: [],
+        priorLineageHints: [
+          {
+            lineageId,
+            category: 'correctness',
+            normalizedFailureModeHash: 'a'.repeat(64),
+            severity: FindingSeverity.Major,
+            title: 'Prior bug',
+            message: 'Original full explanation.',
+            filePath: 'src/a.ts',
+            line: 1,
+            firstSeenHeadSha: '1'.repeat(40),
+            lastSeenHeadSha: '2'.repeat(40),
+            active: true,
+          },
+        ],
+      };
+      const result = await builder.build({
+        comparisonBaseline: baseline,
+        acceptedEvidence: [
+          acceptedEvidence(
+            'required-slot',
+            fullCoverageManifest('required-slot'),
+            [],
+            [],
+            [
+              {
+                targetId: 'target',
+                fingerprint:
+                  kind === 'wrong fingerprint' ? 'b'.repeat(24) : lineageId,
+                verdict: 'resolved',
+                confidence: 1,
+                rationale: 'Current code removes the unsafe return.',
+                evidence:
+                  kind === 'missing evidence'
+                    ? []
+                    : [
+                        {
+                          path: 'src/a.ts',
+                          startLine: 1,
+                          endLine: 1,
+                          reason: 'Current code removes the unsafe return.',
+                        },
+                      ],
+              },
+            ]
+          ),
+        ],
+        exhaustedWorkSlotIds: [],
+        reviewRevisionHash: authorizationFacts.reviewRevisionHash,
+      });
+      const envelope = JSON.parse(result.projectionEnvelopeCanonicalJson);
+      expect(envelope.coverage.state).toBe('complete');
+      expect(envelope.publishing.lifecycle[0]).toMatchObject({
+        verdict: eligible ? 'resolved' : 'uncertain',
+        mutationEligible: eligible,
+      });
+      expect(envelope.snapshot.lineageHints[0].active).toBe(true);
+      expect(envelope.publishing.summary.body).toContain(
+        '0 new · 0 resolved · 1 open · 1 unverified (included in open)'
+      );
+    }
+  );
+  it.each([
     {
       sourceHead: '2'.repeat(40),
       withHint: false,
@@ -1297,12 +1411,13 @@ function acceptedEvidence(
   workSlotId: string,
   coverageManifest: ReturnType<typeof createReviewPromptCoverageManifest>,
   qualityFlags: string[] = [],
-  normalizedFindings: Record<string, unknown>[] = []
+  normalizedFindings: Record<string, unknown>[] = [],
+  normalizedLifecycleRevalidations: Record<string, unknown>[] = []
 ) {
   const payloadCanonicalJson = JSON.stringify({
     payloadVersion: 2,
     normalizedFindings,
-    normalizedLifecycleRevalidations: [],
+    normalizedLifecycleRevalidations,
   });
   return {
     workSlotId,

@@ -231,7 +231,8 @@ export class LegacyReviewProjectionPolicyAdapter
       );
     const providerResults = lifecycleProviderResults(query);
     const lifecycle = new ThreadLifecycleAggregator().aggregate({
-      mode: 'report',
+      mode:
+        this.config.reviewThreadLifecycle === 'resolve' ? 'resolve' : 'report',
       targets,
       plannedProviders: providerResults.map((result) => result.name),
       providerResults,
@@ -267,6 +268,7 @@ export class LegacyReviewProjectionPolicyAdapter
     collect(
       [
         ...lifecycle.previousUncertain,
+        ...lifecycle.mutationSkipped,
         ...lifecycle.manualAttention,
         ...lifecycle.skipped,
       ],
@@ -675,6 +677,12 @@ function lifecycleProviderResults(
       content: '',
       revalidations: revalidations.map((revalidation) => ({
         targetId: revalidation.targetId,
+        ...(revalidation.fingerprint
+          ? { fingerprint: revalidation.fingerprint }
+          : {}),
+        ...(revalidation.evidence
+          ? { evidence: revalidation.evidence.map((item) => ({ ...item })) }
+          : {}),
         verdict: revalidation.verdict,
         ...(revalidation.confidence !== undefined
           ? { confidence: revalidation.confidence }

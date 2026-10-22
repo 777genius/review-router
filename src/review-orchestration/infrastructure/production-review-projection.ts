@@ -536,7 +536,34 @@ function toRevalidation(
   ) {
     throw new Error('review_action_v2_revalidation_verdict_invalid');
   }
+  if (value.fingerprint != null && typeof value.fingerprint !== 'string') {
+    throw new Error('review_action_v2_revalidation_fingerprint_invalid');
+  }
+  const evidence = Array.isArray(value.evidence)
+    ? value.evidence
+        .filter(isRecord)
+        .filter(
+          (item) =>
+            typeof item.path === 'string' && typeof item.reason === 'string'
+        )
+        .map((item) =>
+          Object.freeze({
+            path: item.path as string,
+            reason: item.reason as string,
+            ...(optionalPositiveInteger(item.startLine) !== undefined
+              ? { startLine: optionalPositiveInteger(item.startLine) }
+              : {}),
+            ...(optionalPositiveInteger(item.endLine) !== undefined
+              ? { endLine: optionalPositiveInteger(item.endLine) }
+              : {}),
+          })
+        )
+    : [];
   return Object.freeze({
+    evidence: Object.freeze(evidence),
+    ...(optionalString(value.fingerprint)
+      ? { fingerprint: optionalString(value.fingerprint) }
+      : {}),
     targetId: requireString(value.targetId, 'revalidation_target_id'),
     providerVoteKey: observation.providerVoteIdentityHash,
     verdict: verdict as LifecycleRevalidationVerdict,

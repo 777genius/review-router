@@ -144925,7 +144925,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.199",
+  version: "1.0.200",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -206048,7 +206048,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
     );
     const providerResults = lifecycleProviderResults(query);
     const lifecycle = new ThreadLifecycleAggregator().aggregate({
-      mode: "report",
+      mode: this.config.reviewThreadLifecycle === "resolve" ? "resolve" : "report",
       targets,
       plannedProviders: providerResults.map((result2) => result2.name),
       providerResults,
@@ -206080,6 +206080,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
     collect(
       [
         ...lifecycle.previousUncertain,
+        ...lifecycle.mutationSkipped,
         ...lifecycle.manualAttention,
         ...lifecycle.skipped
       ],
@@ -206391,6 +206392,8 @@ function lifecycleProviderResults(query) {
       content: "",
       revalidations: revalidations.map((revalidation) => ({
         targetId: revalidation.targetId,
+        ...revalidation.fingerprint ? { fingerprint: revalidation.fingerprint } : {},
+        ...revalidation.evidence ? { evidence: revalidation.evidence.map((item) => ({ ...item })) } : {},
         verdict: revalidation.verdict,
         ...revalidation.confidence !== void 0 ? { confidence: revalidation.confidence } : {},
         ...revalidation.rationale ? { rationale: revalidation.rationale } : {}
@@ -206926,7 +206929,22 @@ function toRevalidation(observation, value) {
   )) {
     throw new Error("review_action_v2_revalidation_verdict_invalid");
   }
+  if (value.fingerprint != null && typeof value.fingerprint !== "string") {
+    throw new Error("review_action_v2_revalidation_fingerprint_invalid");
+  }
+  const evidence = Array.isArray(value.evidence) ? value.evidence.filter(isRecord8).filter(
+    (item) => typeof item.path === "string" && typeof item.reason === "string"
+  ).map(
+    (item) => Object.freeze({
+      path: item.path,
+      reason: item.reason,
+      ...optionalPositiveInteger(item.startLine) !== void 0 ? { startLine: optionalPositiveInteger(item.startLine) } : {},
+      ...optionalPositiveInteger(item.endLine) !== void 0 ? { endLine: optionalPositiveInteger(item.endLine) } : {}
+    })
+  ) : [];
   return Object.freeze({
+    evidence: Object.freeze(evidence),
+    ...optionalString(value.fingerprint) ? { fingerprint: optionalString(value.fingerprint) } : {},
     targetId: requireString2(value.targetId, "revalidation_target_id"),
     providerVoteKey: observation.providerVoteIdentityHash,
     verdict,

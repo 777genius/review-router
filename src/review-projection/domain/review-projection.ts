@@ -225,6 +225,13 @@ export interface CurrentLifecycleInventory {
 
 export interface LifecycleRevalidation {
   readonly targetId: string;
+  readonly fingerprint?: string;
+  readonly evidence?: readonly {
+    readonly path: string;
+    readonly reason: string;
+    readonly startLine?: number;
+    readonly endLine?: number;
+  }[];
   readonly providerVoteKey: string;
   readonly verdict: LifecycleRevalidationVerdict;
   readonly confidence?: number;

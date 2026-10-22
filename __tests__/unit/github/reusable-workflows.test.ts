@@ -193,6 +193,13 @@ describe('production reusable workflows', () => {
 
   it('accepts the installed ABI and rejects incompatible input or permission changes', () => {
     const original = readRepoFile('.github/workflows/reviewrouter-runtime.yml');
+    const runtimeStep = parseWorkflow(
+      '.github/workflows/reviewrouter-runtime.yml'
+    ).jobs?.review?.steps?.find((step) => step.name === 'Run ReviewRouter');
+    expect(runtimeStep?.env).toMatchObject({
+      REVIEW_ROUTER_MODE: 'account-gateway',
+      REVIEW_ROUTER_REVIEW_BANNER: '${{ vars.REVIEW_ROUTER_REVIEW_BANNER }}',
+    });
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rr-channel-abi-'));
     try {
       const candidate = path.join(temp, 'workflow.yml');

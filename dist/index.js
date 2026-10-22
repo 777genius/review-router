@@ -151864,6 +151864,7 @@ var ExecutionDeadline = class {
 
 // src/review-execution/infrastructure/execution-deadline-from-environment.ts
 var REVIEW_EXECUTION_DEADLINE_ENV_KEY = "REVIEWROUTER_EXECUTION_DEADLINE_EPOCH_MS";
+var DEFAULT_EXECUTION_BUDGET_MS = 235 * 6e4;
 var DEFAULT_COMPLETION_RESERVE_MS = 12e4;
 var DEFAULT_MINIMUM_BATCH_START_WINDOW_MS = 3e4;
 var DEFAULT_MINIMUM_RETRY_START_WINDOW_MS = 3e4;
@@ -151879,7 +151880,7 @@ function parseOptionalEpochMs(value) {
 }
 function createExecutionDeadlineFromEnvironment(environment = process.env, clock) {
   return new ExecutionDeadline(
-    parseOptionalEpochMs(environment[REVIEW_EXECUTION_DEADLINE_ENV_KEY]),
+    parseOptionalEpochMs(environment[REVIEW_EXECUTION_DEADLINE_ENV_KEY]) ?? (clock?.now() ?? Date.now()) + DEFAULT_EXECUTION_BUDGET_MS,
     {
       completionReserveMs: DEFAULT_COMPLETION_RESERVE_MS,
       minimumBatchStartWindowMs: DEFAULT_MINIMUM_BATCH_START_WINDOW_MS,
@@ -206911,7 +206912,9 @@ var RunT0ReviewOrchestration = class {
           });
           continue;
         }
-        if (restoredSlot.state !== "satisfied" /* Satisfied */ && (busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0) >= this.maxBusyPollsPerProviderLane) {
+        if (restoredSlot.state !== "satisfied" /* Satisfied */ && this.providerLaneBusyBudgetExhausted(
+          busyPollsByProviderLane.get(workSlot.providerVoteIdentityHash) ?? 0
+        )) {
           exhaustedWorkSlotIds.push(workSlot.workSlotId);
           exhaustedWorkSlotReasons.set(
             workSlot.workSlotId,
@@ -207539,7 +207542,7 @@ var RunT0ReviewOrchestration = class {
         const providerLaneBusyPollCount = input.busyPollsByProviderLane.get(
           input.workSlot.providerVoteIdentityHash
         ) ?? 0;
-        if (providerLaneBusyPollCount >= this.maxBusyPollsPerProviderLane) {
+        if (this.providerLaneBusyBudgetExhausted(providerLaneBusyPollCount)) {
           input.onEvent({
             type: "slot_exhausted" /* SlotExhausted */,
             workSlotId: input.workSlot.workSlotId
@@ -207836,7 +207839,8 @@ var RunT0ReviewOrchestration = class {
       input.workSlot.workSlotId,
       input.manifest.providerInvocationKey
     ]);
-    for (let busyPollCount = 0; busyPollCount < this.maxBusyPollsPerProviderLane; busyPollCount += 1) {
+    const busyPollBudget = this.providerLaneBusyPollBudget();
+    for (let busyPollCount = 0; busyPollCount < busyPollBudget; busyPollCount += 1) {
       await this.assertRevisionCurrent(input.revision);
       const acquire = await this.dependencies.controlPlane.acquireInvocationLease({
         authorization: input.authorization,
@@ -208354,6 +208358,12 @@ var RunT0ReviewOrchestration = class {
       return void 0;
     }
     return description;
+  }
+  providerLaneBusyPollBudget() {
+    return Number.isFinite(this.executionDeadlineRemainingMs()) ? Number.POSITIVE_INFINITY : this.maxBusyPollsPerProviderLane;
+  }
+  providerLaneBusyBudgetExhausted(busyPollCount) {
+    return busyPollCount >= this.providerLaneBusyPollBudget();
   }
   canStartBatch() {
     return this.dependencies.executionDeadline?.canStartBatch() ?? true;

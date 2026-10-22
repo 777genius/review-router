@@ -120008,9 +120008,15 @@ function exact(value, keys2, optionalKeys2 = []) {
   ))
     invalid();
 }
+function hasControlCharacter(value) {
+  for (let index = 0; index < value.length; index++) {
+    if (value.charCodeAt(index) <= 31) return true;
+  }
+  return false;
+}
 function text(value, nullable2 = false) {
   if (nullable2 && value === null) return;
-  if (typeof value !== "string" || !value.length || value.length > 256 || /[\u0000-\u001f]/.test(value))
+  if (typeof value !== "string" || !value.length || value.length > 256 || hasControlCharacter(value))
     invalid();
 }
 function choice(value, choices) {
@@ -120136,7 +120142,7 @@ function validateUsageFact(f) {
     f.identity.attemptId,
     f.identity.provider
   ]) {
-    if (typeof s !== "string" || s.length < 1 || s.length > 256 || /[\u0000-\u001f]/.test(s))
+    if (typeof s !== "string" || s.length < 1 || s.length > 256 || hasControlCharacter(s))
       invalid();
   }
   if (!/^\d{4}-\d\d-\d\dT.*Z$/.test(f.identity.occurredAt) || !Number.isFinite(Date.parse(f.identity.occurredAt)))
@@ -144919,7 +144925,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.191",
+  version: "1.0.197",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -202998,10 +203004,12 @@ var FindingFilter = class {
     );
   }
   isConcreteRuntimeRegression(finding) {
-    if (this.isStyleOrFormattingIssue(finding) || this.isLintOrStyleIssue(finding)) {
+    if (this.isStyleOrFormattingIssue(finding) || this.isLintOrStyleIssue({ ...finding, message: "" })) {
       return false;
     }
-    const text2 = (finding.title + " " + finding.message).toLowerCase();
+    const text2 = (this.isLintOrStyleIssue(finding) ? [finding.title, finding.message].flatMap((value) => value.split(/(?<=[.!?])\s+/u)).filter(
+      (message) => !this.isLintOrStyleIssue({ ...finding, title: "", message })
+    ).join(" ") : finding.title + " " + finding.message).toLowerCase();
     if (this.isRuntimeStateOrDiagnosticRegression(text2)) {
       return true;
     }
@@ -204989,11 +204997,11 @@ function limitUtf8(value, maxBytes) {
   let block = [];
   let depth = 0;
   let fence;
-  for (const line of value.split("\n")) {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) fence = match[1];
-    else if (fence && new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
-      fence = void 0;
+  for (const original of value.split("\n")) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
+    if (next.closing) block.push(next.closing);
+    fence = next.fence;
     if (!fence) {
       depth += (line.match(/<details\b[^>]*>/gi) ?? []).length;
       depth -= (line.match(/<\/details>/gi) ?? []).length;
@@ -205164,10 +205172,7 @@ function findingExcerpt(message, locale) {
   const paragraph = [];
   for (const line of lines) {
     if (/^ {0,3}(?:=+[ \t]*$|-+[ \t]*$|\|?\s*:?-{3})/.test(line)) return "";
-    if (/^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|(?:[-*_][ \t]*){3,}$)/.test(
-      line
-    ) || htmlInterruptsParagraph(line))
-      break;
+    if (markdownInterruptsParagraph(line)) break;
     paragraph.push(line);
   }
   return plainExcerpt(
@@ -205176,26 +205181,56 @@ function findingExcerpt(message, locale) {
     locale
   );
 }
+function markdownInterruptsParagraph(line) {
+  return !!readMarkdownFenceOpening(line) || /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
+    line
+  ) || htmlInterruptsParagraph(line);
+}
 function htmlInterruptsParagraph(line) {
   return /^ {0,3}<(?:!--|\?|!\[CDATA\[|![A-Z]|\/?(?:script|pre|style|textarea|address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t]|\/?>|$))/i.test(
     line
   );
 }
+function readMarkdownFenceOpening(line) {
+  const match = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match || match[2][0] === "`" && match[3].includes("`"))
+    return void 0;
+  return { delimiter: match[2], indent: match[1].length };
+}
+function closeMarkdownFence(fence) {
+  return " ".repeat(fence.indent) + fence.delimiter;
+}
+function advanceMarkdownFence(line, fence) {
+  if (fence) {
+    const closer = /^( *)(`{3,}|~{3,})[ \t]*\r?$/.exec(line);
+    if (closer && closer[2][0] === fence.delimiter[0] && closer[2].length >= fence.delimiter.length && closer[1].length <= fence.indent + 3)
+      return {
+        normalized: closer[1].length < fence.indent || closer[1].length > 3 ? closeMarkdownFence(fence) : void 0
+      };
+    if (!line.trim() || line.match(/^ */)[0].length >= fence.indent)
+      return { fence };
+    return {
+      fence: readMarkdownFenceOpening(line),
+      closing: closeMarkdownFence(fence)
+    };
+  }
+  return { fence: readMarkdownFenceOpening(line) };
+}
 function markdownBlocks(value) {
   const blocks2 = [];
   let lines = [];
   let fence;
-  for (const line of value.split("\n")) {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) fence = { char: match[1][0], length: match[1].length };
-    else if (fence && new RegExp(`^\\s{0,3}${fence.char}{${fence.length},}\\s*$`).test(line))
-      fence = void 0;
+  for (const original of value.split("\n")) {
+    const next = advanceMarkdownFence(original, fence);
+    const line = next.normalized ?? original;
+    if (next.closing) lines.push(next.closing);
+    fence = next.fence;
     if (!line.trim() && !fence) {
       if (lines.length) blocks2.push(lines.join("\n"));
       lines = [];
     } else lines.push(line);
   }
-  if (fence) lines.push(fence.char.repeat(fence.length));
+  if (fence) lines.push(closeMarkdownFence(fence));
   if (lines.length) blocks2.push(lines.join("\n"));
   return blocks2;
 }
@@ -205213,20 +205248,57 @@ function hasControlCharacters(value) {
 }
 function safeFindingBody(value) {
   let fence;
-  const lines = neutralizeDetailsMarkup(value).split("\n").map((line) => {
-    const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
-    if (match && !fence) {
-      fence = match[1];
-      return line;
+  const lines = [];
+  let prose = [];
+  const flush = () => {
+    if (prose.length) lines.push(escapeHtmlOutsideCodeSpans(prose.join("\n")));
+    prose = [];
+  };
+  for (const line of neutralizeDetailsMarkup(value).split("\n")) {
+    const previous = fence;
+    const next = advanceMarkdownFence(line, fence);
+    fence = next.fence;
+    if (previous && !next.closing) {
+      lines.push(next.normalized ?? line);
+      continue;
     }
+    if (next.closing) lines.push(next.closing);
     if (fence) {
-      if (new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`).test(line))
-        fence = void 0;
-      return line;
-    }
-    return line.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-  });
+      flush();
+      lines.push(line);
+    } else if (markdownInterruptsParagraph(line)) {
+      flush();
+      lines.push(escapeHtmlOutsideCodeSpans(line));
+    } else prose.push(line);
+  }
+  flush();
   return markdownBlocks(lines.join("\n")).join("\n\n");
+}
+function escapeHtmlOutsideCodeSpans(value) {
+  const escape3 = (text2) => text2.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return value.split(/(\r?\n[ \t]*\r?\n)/).map((paragraph) => {
+    const ticks = Array.from(paragraph.matchAll(/`+/g));
+    let result2 = "";
+    let cursor = 0;
+    for (let index = 0; index < ticks.length; index++) {
+      const opening = ticks[index];
+      let slashes = 0;
+      for (let position = opening.index - 1; position >= 0 && paragraph[position] === "\\"; position--)
+        slashes++;
+      const start = opening.index + slashes % 2;
+      const delimiterLength = opening[0].length - slashes % 2;
+      if (delimiterLength === 0) continue;
+      const closing = ticks.findIndex(
+        (tick, candidate) => candidate > index && tick[0].length === delimiterLength
+      );
+      if (closing < 0) continue;
+      const end = ticks[closing].index + ticks[closing][0].length;
+      result2 += escape3(paragraph.slice(cursor, start)) + paragraph.slice(start, end);
+      cursor = end;
+      index = closing;
+    }
+    return result2 + escape3(paragraph.slice(cursor));
+  }).join("");
 }
 function renderReviewerBanner(input, locale, incomplete, counts) {
   if (!input.bannerBaseUrl) return "";

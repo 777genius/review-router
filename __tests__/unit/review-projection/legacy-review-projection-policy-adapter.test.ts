@@ -27,6 +27,20 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
     {
       providerIds: ['ocr'],
       category: 'bug',
+      title: 'Unused parameter',
+      message:
+        'Unused parameter. The CI workflow now fails under strict configuration.',
+    },
+    {
+      providerIds: ['ocr'],
+      category: 'bug',
+      title: 'Unused parameter',
+      message:
+        'Unused parameter will fail lint checks in the strict configuration.',
+    },
+    {
+      providerIds: ['ocr'],
+      category: 'bug',
       message: 'Consider using const instead of let for this variable.',
     },
   ])(
@@ -103,6 +117,40 @@ describe('LegacyReviewProjectionPolicyAdapter', () => {
       'observation-1',
       'observation-2',
     ]);
+  });
+
+  it('retains a concrete customer isolation bug with an incidental lint warning', async () => {
+    // Own synthetic PR113: the final projection discarded a real data exposure
+    // solely because its explanation also mentioned lint/compiler checks.
+    const finding = candidate({
+      providerIds: ['ocr'],
+      providerVoteKeys: ['ocr/account-1'],
+      category: 'bug',
+      severity: FindingSeverity.Critical,
+      filePath: 'src/invoice-store.mts',
+      startLine: 17,
+      line: 17,
+      endLine: 18,
+      anchorVerified: true,
+      title:
+        "Removing the customerId filter breaks the core contract of listForCustomer: the method now returns invoices for all customers whenever customerId is passed in. This is both a correctness bug and a data-exposure risk — any caller asking for one customer's invoices receives other customers' invoices as well. Existing tests in test/invoice-store.test.mts (e.g. expectIds(store.listForCustomer('customer-c'), )) depend on this filtering and will fail with this change. Additionally, the now-unused customerId param",
+      message:
+        "Removing the `customerId` filter breaks the core contract of `listForCustomer`: the method now returns invoices for **all** customers whenever `customerId` is passed in. This is both a correctness bug and a data-exposure risk — any caller asking for one customer's invoices receives other customers' invoices as well. Existing tests in `test/invoice-store.test.mts` (e.g. `expectIds(store.listForCustomer('customer-c'), [])`) depend on this filtering and will fail with this change. Additionally, the now-unused `customerId` parameter will trip `noUnusedParameters`-style lint/compiler checks. The filter line should be restored.",
+    });
+    const selected = await adapter.selectCurrent({
+      findings: [finding],
+      revisionFiles: [],
+      diff: '',
+      limits: REVIEW_PROJECTION_ABSOLUTE_LIMITS,
+    });
+
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toMatchObject({
+      severity: FindingSeverity.Critical,
+      filePath: finding.filePath,
+      message: finding.message,
+      sourceFindingIds: ['a'],
+    });
   });
 
   it.each([false, true])(

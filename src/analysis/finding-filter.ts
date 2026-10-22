@@ -870,14 +870,29 @@ export class FindingFilter {
   }
 
   private isConcreteRuntimeRegression(finding: Finding): boolean {
+    // A primary lint finding stays lint even when its diagnostic breaks CI.
+    // Runtime-led findings may still contain an incidental lint warning below.
     if (
       this.isStyleOrFormattingIssue(finding) ||
-      this.isLintOrStyleIssue(finding)
+      this.isLintOrStyleIssue({ ...finding, message: '' })
     ) {
       return false;
     }
 
-    const text = (finding.title + ' ' + finding.message).toLowerCase();
+    // Compiler/CI consequences of lint are not independent runtime impact.
+    // For mixed findings, require the existing impact rules to match a sentence
+    // without lint wording; the lint exclusion still handles pure diagnostics.
+    const text = (
+      this.isLintOrStyleIssue(finding)
+        ? [finding.title, finding.message]
+            .flatMap((value) => value.split(/(?<=[.!?])\s+/u))
+            .filter(
+              (message) =>
+                !this.isLintOrStyleIssue({ ...finding, title: '', message })
+            )
+            .join(' ')
+        : finding.title + ' ' + finding.message
+    ).toLowerCase();
     if (this.isRuntimeStateOrDiagnosticRegression(text)) {
       return true;
     }

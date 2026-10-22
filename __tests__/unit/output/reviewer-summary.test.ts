@@ -661,9 +661,139 @@ describe('compact summary publication contract', () => {
   });
 
   it.each([
+    'Use `Promise<void>` and `<T>` with `a & b`.',
+    'Use ``a`<T>`` with an exact two-backtick delimiter.',
+    'Use \\```Promise<void>`` with an escaped leading backtick.',
+    'Treat `<img src=x>` as literal source.',
+    'Use `Promise<\nvoid>` across a soft line break.',
+  ])('preserves HTML characters inside matched inline code: %s', (message) => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message: `${message}\n\n<b>Outside HTML</b>` }],
+    });
+    expect(markdown).toContain(message);
+    expect(markdown).toContain('&lt;b&gt;Outside HTML&lt;/b&gt;');
+    const lifecycle = renderReviewerLifecycleMarkdown({
+      language: 'en',
+      lines: [
+        {
+          kind: 'active',
+          title: finding.title,
+          locationLabel: 'src/<T>.ts:1',
+          message,
+        },
+      ],
+    });
+    expect(lifecycle).toContain(message);
+    expect(lifecycle).toContain('<code>src/&lt;T&gt;.ts:1</code>');
+  });
+
+  it.each([
+    '`unmatched<T> with ``another<U>',
+    '\\`<b>escaped backticks</b>\\`',
+    '`first<T>\n\nsecond<U>`',
+    '`before\n<div>unsafe token</div>\nafter`',
+    '`before\n# Heading <b>unsafe token</b>\nafter`',
+    '`before<T>\n===\nafter`',
+  ])('escapes HTML outside valid inline code spans: %s', (message) => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    const details = markdown.slice(markdown.indexOf('<details>'));
+    expect(details).not.toMatch(/<(?:T|U|b|div)>/);
+    expect(details).toContain('&lt;');
+  });
+
+  it('keeps disclosure neutralization and fenced code safety around inline code', () => {
+    const message =
+      'Use `Promise<void>` and `</details>`.\n\n```ts\nconst value: Promise<void> = task();\n```';
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    expect(markdown).toContain('Use `Promise<void>` and `&lt;/details&gt;`.');
+    expect(markdown).toContain(
+      '```ts\nconst value: Promise<void> = task();\n```'
+    );
+    expect(markdown.match(/<details>/g)?.length).toBe(
+      markdown.match(/<\/details>/g)?.length
+    );
+  });
+
+  it.each([
+    '```bad`info\n<img src=x alt=unsafeBoundary>\n```',
+    '- container\n  ```html\n  code\n<img src=x alt=unsafeBoundary>\n  ```',
+    '\t```html\n<img src=x alt=unsafeBoundary>\n```',
+    '- container\n  ```html\n  code\n    ```\n  <img src=x alt=unsafeBoundary>',
+    '  ```html\n  code\n    ```\n  <img src=x alt=unsafeBoundary>',
+    '- container\n  ```html\n  code\n```\nAfter fence <img src=x alt=unsafeBoundary>',
+    '  ```html\n  code\n```\nAfter fence <img src=x alt=unsafeBoundary>',
+  ])('escapes HTML beyond an invalid or dedented fence: %s', (message) => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [{ ...finding, message }],
+    });
+    expect(markdown).not.toContain('<img src=x alt=unsafeBoundary>');
+    expect(markdown).toContain('&lt;img src=x alt=unsafeBoundary&gt;');
+    if (message.includes('\n```\nAfter fence'))
+      expect(markdown).toContain('  code\n  ```\nAfter fence');
+    if (message.includes('\n    ```\n')) {
+      expect(markdown).toContain('  code\n  ```\n  &lt;img');
+      const limited = limitReviewerPostedMarkdown(markdown, 350);
+      expect(limited.match(/<details>/g)?.length ?? 0).toBe(
+        limited.match(/<\/details>/g)?.length ?? 0
+      );
+      expect(Buffer.byteLength(limited)).toBeLessThanOrEqual(350);
+    }
+    expect(markdown.match(/<details>/g)?.length).toBe(
+      markdown.match(/<\/details>/g)?.length
+    );
+  });
+
+  it.each(['```ts', '~~~info`allowed'])(
+    'preserves valid zero-indent fences and inline code: %s',
+    (opener) => {
+      const closer = opener.startsWith('`') ? '```' : '~~~';
+      const message = `Use \`Promise<void>\`.\n\n${opener}\nconst html = '<img src=x>';\n${closer}`;
+      const markdown = renderReviewerSummaryMarkdown({
+        language: 'en',
+        metrics,
+        findings: [{ ...finding, message }],
+      });
+      expect(markdown).toContain(message);
+    }
+  );
+
+  it('closes container fences at their original indent before dedents and at EOF', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [
+        {
+          ...finding,
+          message:
+            '- container\n  ~~~html\n  <b>inside</b>\n<img src=x>\n  ~~~text\n  remaining code',
+        },
+      ],
+    });
+    expect(markdown).toContain('  <b>inside</b>\n  ~~~\n&lt;img src=x&gt;');
+    expect(markdown).toContain('  remaining code\n  ~~~\n\n**Location:**');
+    const limited = limitReviewerPostedMarkdown(markdown, 350);
+    expect(limited.match(/<details>/g)?.length ?? 0).toBe(
+      limited.match(/<\/details>/g)?.length ?? 0
+    );
+    expect(Buffer.byteLength(limited)).toBeLessThanOrEqual(350);
+  });
+
+  it.each([
     '```ts\nconst hiddenBlock = true;\n```',
     '~~~ts\nconst hiddenBlock = true;\n~~~',
-    '   ```ts\nconst hiddenBlock = true;\n   ```',
+    '   ```ts\n   const hiddenBlock = true;\n   ```',
     '```text\n---\nhiddenBlock\n```',
     '<div>hiddenBlock</div>',
     '<!-- hiddenBlock -->',

@@ -2,6 +2,13 @@ import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import {
+  canonicalizeReviewActionV2Request,
+  ReviewActionV2OperationId,
+  ReviewSnapshotRestorePurpose,
+  reviewActionV2PublishedProtocolVersion,
+  reviewActionV2PublishedSchemaDigest,
+} from '../../../src/control-plane/generated/review-action-v2/review-action-v2';
+import {
   resolveReviewActionV2Activation,
   ReviewActionV2RuntimeMode,
   verifyReviewActionV2Handoff,
@@ -49,6 +56,42 @@ describe('review Action v2 handoff gate', () => {
     expect(() => verifyReviewActionV2Handoff(root)).toThrow(
       'review_action_v2_handoff_file_digest_mismatch'
     );
+  });
+
+  it('canonicalizes exact restores without inventing an optional purpose, while preserving explicit null and comparison intent', () => {
+    const request = {
+      protocolVersion: reviewActionV2PublishedProtocolVersion,
+      schemaDigest: reviewActionV2PublishedSchemaDigest,
+      requestId: 'snapshot-restore-request',
+      authorizationToken: 'authorization.token',
+      reviewRevisionHash: 'a'.repeat(64),
+    };
+    const canonicalize = (purpose?: ReviewSnapshotRestorePurpose | null) =>
+      canonicalizeReviewActionV2Request(
+        ReviewActionV2OperationId.ReviewSnapshotRestore,
+        { ...request, purpose }
+      );
+    const absent = canonicalizeReviewActionV2Request(
+      ReviewActionV2OperationId.ReviewSnapshotRestore,
+      request
+    );
+
+    expect(canonicalize(undefined)).toBe(absent);
+    expect(JSON.parse(absent)).toEqual({
+      reviewRevisionHash: request.reviewRevisionHash,
+    });
+    expect(JSON.parse(canonicalize(null))).toEqual({
+      purpose: null,
+      reviewRevisionHash: request.reviewRevisionHash,
+    });
+    expect(
+      JSON.parse(
+        canonicalize(ReviewSnapshotRestorePurpose.ComparisonBaselineV1)
+      )
+    ).toEqual({
+      purpose: 'comparison_baseline.v1',
+      reviewRevisionHash: request.reviewRevisionHash,
+    });
   });
 
   function copyGeneratedFixture(): string {

@@ -144925,7 +144925,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.201",
+  version: "1.0.202",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -178035,12 +178035,12 @@ var manifest_default = {
   protocolVersion: "2",
   schemaDigest: "71f316821909667e1b7cc704bed330ef6cfa7ac44cf51d58935ba3238ab92504",
   goldenFixtureDigest: "25cbbf9c205d69c8bb9f32d074ce4df8d81a77a3fce070383abbd282245a6b9f",
-  canonicalizerDigest: "5f4c0b37b363a8dcfb1447ac093bd6fda1da7938cd887afe36f17236d2dee437",
+  canonicalizerDigest: "bf61d04d42e158b26e4b651b62700b10212496487d7e20ac6e705272dc1d6a5f",
   extensions: [
     {
       extensionId: "review-investigation-shadow.v1",
       schemaDigest: "0a53623b20bfbef7dbe222dea7aed44ae3237d2f0c7facb72bb99086ef9bc5f2",
-      canonicalizerDigest: "635f5db62a446f01f5059f973ce4ae815c10b653a7870d438eaf91e2345d9cf9",
+      canonicalizerDigest: "ccaf3515f1c04bc31ba1bcf7084d414221f61cb4b24b440a4ecad121ccdaa378",
       operationIds: [
         "review_investigation_open_v2",
         "review_investigation_lease_acquire",
@@ -180952,7 +180952,7 @@ var reviewActionV2PublishedSchemaDigest = "71f316821909667e1b7cc704bed330ef6cfa7
 var reviewInvestigationExtensionV1 = {
   extensionId: "review-investigation-shadow.v1",
   schemaDigest: "0a53623b20bfbef7dbe222dea7aed44ae3237d2f0c7facb72bb99086ef9bc5f2",
-  canonicalizerDigest: "635f5db62a446f01f5059f973ce4ae815c10b653a7870d438eaf91e2345d9cf9",
+  canonicalizerDigest: "ccaf3515f1c04bc31ba1bcf7084d414221f61cb4b24b440a4ecad121ccdaa378",
   operationIds: [
     "review_investigation_open_v2",
     "review_investigation_lease_acquire",
@@ -183710,8 +183710,8 @@ var reviewActionV2Operations = [
         type: "hash"
       },
       {
-        optional: true,
         name: "purpose",
+        optional: true,
         type: "nullable_enum",
         enumTypeName: "ReviewSnapshotRestorePurpose",
         enumValues: ["comparison_baseline.v1"]
@@ -183918,7 +183918,9 @@ function canonicalizeReviewActionV2Request(operationId, request3) {
   );
   if (!descriptor) throw new Error("review_action_v2_operation_unknown");
   const body2 = Object.fromEntries(
-    descriptor.requestFields.map((field) => [
+    descriptor.requestFields.filter(
+      (field) => !("optional" in field && field.optional && request3[field.name] === void 0)
+    ).map((field) => [
       field.name,
       request3[field.name]
     ])

@@ -207054,6 +207054,10 @@ var RunT0ReviewOrchestration = class {
           "review_orchestration_execution_authorization_window_insufficient"
         );
       }
+      const comparisonBaselineRequest = {
+        authorization,
+        reviewRevisionHash: command.reviewRevisionHash
+      };
       const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
@@ -207063,10 +207067,14 @@ var RunT0ReviewOrchestration = class {
           authorization,
           reviewRevisionHash: command.reviewRevisionHash
         }),
-        this.dependencies.controlPlane.restoreComparisonBaseline?.({
-          authorization,
-          reviewRevisionHash: command.reviewRevisionHash
-        }) ?? Promise.resolve(null)
+        Promise.resolve().then(
+          () => this.dependencies.controlPlane.restoreComparisonBaseline?.(
+            comparisonBaselineRequest
+          ) ?? null
+        ).catch(() => {
+          this.dependencies.signal?.throwIfAborted();
+          return null;
+        })
       ]);
       execution = await this.dependencies.controlPlane.startExecution({
         authorization,
@@ -234149,7 +234157,9 @@ var BuildCurrentReviewProjection = class {
       baseline: command.comparisonBaseline,
       coverage,
       incomplete: command.providerExecution.succeededProviders === 0 && command.providerExecution.plannedProviders > 0 || lifecycleFacts.some(
-        (fact) => fact.verdict !== "suppressed_by_human" && !occurrences.some((item) => item.lineageId === fact.lineageId)
+        (fact) => fact.verdict !== "suppressed_by_human" && !occurrences.some(
+          (item) => item.lineageId === (fact.lineageId ?? fact.markerFingerprint)
+        )
       ),
       occurrences
     });

@@ -276,6 +276,10 @@ export class RunT0ReviewOrchestration {
         );
       }
 
+      const comparisonBaselineRequest = {
+        authorization,
+        reviewRevisionHash: command.reviewRevisionHash,
+      };
       const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
@@ -285,10 +289,17 @@ export class RunT0ReviewOrchestration {
           authorization,
           reviewRevisionHash: command.reviewRevisionHash,
         }),
-        this.dependencies.controlPlane.restoreComparisonBaseline?.({
-          authorization,
-          reviewRevisionHash: command.reviewRevisionHash,
-        }) ?? Promise.resolve(null),
+        Promise.resolve()
+          .then(
+            () =>
+              this.dependencies.controlPlane.restoreComparisonBaseline?.(
+                comparisonBaselineRequest
+              ) ?? null
+          )
+          .catch(() => {
+            this.dependencies.signal?.throwIfAborted();
+            return null;
+          }),
       ]);
 
       execution = await this.dependencies.controlPlane.startExecution({

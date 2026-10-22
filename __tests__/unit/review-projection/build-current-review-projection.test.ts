@@ -691,6 +691,41 @@ describe('BuildCurrentReviewProjection', () => {
     );
   });
 
+  it('keeps an exact current finding complete on a same-head rerun without prior hints, while unmatched history remains incomplete', async () => {
+    const inventoryPort = new MutableInventoryPort(inventory());
+    const useCase = createUseCase(
+      inventoryPort,
+      testLimits(),
+      new LegacyReviewProjectionPolicyAdapter(DEFAULT_CONFIG)
+    );
+    const current = command({ currentFindings: [finding()] });
+    const first = await useCase.execute(current);
+    const emittedMarker = first.envelope.occurrences[0].lineageId;
+    inventoryPort.inventory = inventory({
+      targets: [target({ trustedMarker: emittedMarker })],
+    });
+    const rerun = await useCase.execute(current);
+    expect(rerun.envelope.publishing.lifecycle[0].lineageId).toBeUndefined();
+    expect(rerun.envelope.publishing.lifecycle[0].markerFingerprint).toBe(
+      emittedMarker
+    );
+    expect(rerun.envelope.publishing.check.title).toBe('Review completed');
+    expect(rerun.envelope.publishing.summary.body).toContain(
+      '<!-- reviewrouter:review-status:complete -->'
+    );
+    expect(rerun.envelope.publishing.summary.allClear).toBe(false);
+    inventoryPort.inventory = inventory({
+      targets: [target({ trustedMarker: `rrl_${'b'.repeat(32)}` })],
+    });
+    const unmatched = await useCase.execute(current);
+    expect(unmatched.envelope.publishing.check.title).toBe(
+      'Review incomplete - unverified previous findings'
+    );
+    expect(unmatched.envelope.publishing.summary.body).toContain(
+      '<!-- reviewrouter:review-status:incomplete -->'
+    );
+  });
+
   it('changes projection when a current human reply or skip changes inventory', async () => {
     const currentFinding = finding({ trustedMarker: CURRENT_MARKER });
     const inventoryPort = new MutableInventoryPort(

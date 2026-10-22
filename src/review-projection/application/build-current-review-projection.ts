@@ -186,7 +186,10 @@ export class BuildCurrentReviewProjection {
         lifecycleFacts.some(
           (fact) =>
             fact.verdict !== 'suppressed_by_human' &&
-            !occurrences.some((item) => item.lineageId === fact.lineageId)
+            !occurrences.some(
+              (item) =>
+                item.lineageId === (fact.lineageId ?? fact.markerFingerprint)
+            )
         ),
       occurrences,
     });

@@ -43,6 +43,94 @@ import { MergeGateConclusion } from '../../../src/review-projection/domain';
 import { ExecutionDeadline } from '../../../src/review-execution/domain/execution-deadline';
 
 describe('RunT0ReviewOrchestration', () => {
+  it.each(['rejection', 'synchronous throw'])(
+    'continues without optional comparison history after a baseline %s',
+    async (failure) => {
+      const fixture = createFixture({ workSlotCount: 1 });
+      const restore = jest.fn().mockImplementation(() => {
+        const error = new Error('comparison_history_unavailable');
+        if (failure === 'synchronous throw') throw error;
+        return Promise.reject(error);
+      });
+      Object.assign(fixture.controlPlane, {
+        restoreComparisonBaseline: restore,
+      });
+      const result = await fixture.useCase.execute(fixture.command);
+      expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+      expect(restore).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.restoreSnapshot).toHaveBeenCalledTimes(1);
+      expect(fixture.controlPlane.restoreExecution).toHaveBeenCalled();
+      expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+        expect.objectContaining({ comparisonBaseline: null })
+      );
+      expect(fixture.controlPlane.requestPublication).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('preserves cancellation while optional comparison history is unavailable', async () => {
+    const fixture = createFixture({ workSlotCount: 1 });
+    const abort = new AbortController();
+    Object.assign(fixture.dependencies, { signal: abort.signal });
+    Object.assign(fixture.controlPlane, {
+      restoreComparisonBaseline: jest.fn().mockImplementation(async () => {
+        abort.abort(new Error('cancelled_during_comparison'));
+        throw new Error('comparison_history_unavailable');
+      }),
+    });
+    await expect(fixture.useCase.execute(fixture.command)).rejects.toThrow(
+      'cancelled_during_comparison'
+    );
+    expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+  });
+
+  it.each(['restoreSnapshot', 'restoreExecution'] as const)(
+    'retains required %s failures even when optional history also fails',
+    async (operation) => {
+      const fixture = createFixture({ workSlotCount: 1 });
+      fixture.controlPlane[operation]
+        .mockReset()
+        .mockRejectedValueOnce(new Error('required_restore_failed'));
+      Object.assign(fixture.controlPlane, {
+        restoreComparisonBaseline: jest
+          .fn()
+          .mockRejectedValue(new Error('comparison_history_unavailable')),
+      });
+      const result = await fixture.useCase.execute(fixture.command);
+      expect(result).toMatchObject({
+        status: ReviewOrchestrationResultStatus.Failed,
+        failureCode: 'required_restore_failed',
+      });
+      expect(fixture.controlPlane.startExecution).not.toHaveBeenCalled();
+      expect(
+        fixture.dependencies.projectionBuilder.build
+      ).not.toHaveBeenCalled();
+    }
+  );
+  it('forwards the immutable comparison baseline before projecting the current review', async () => {
+    const fixture = createFixture({ workSlotCount: 1 });
+    const baseline = Object.freeze({
+      schemaVersion: 'comparison_baseline.v1' as const,
+      appliedResolutions: [],
+      sourceReviewedHeadSha: '1'.repeat(40),
+      sourceReviewRevisionHash: 'b'.repeat(64),
+      sourceExecutionGeneration: '1',
+      snapshotVersion: 1,
+      projectionPolicyVersion: 'review-projection-policy.v5-t0' as const,
+      projectionEnvelopeVersion: 'review_projection.v1' as const,
+      priorLineageHints: [],
+    });
+    const restore = jest.fn().mockResolvedValue(baseline);
+    Object.assign(fixture.controlPlane, { restoreComparisonBaseline: restore });
+    await fixture.useCase.execute(fixture.command);
+    expect(restore).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.projectionBuilder.build).toHaveBeenCalledWith(
+      expect.objectContaining({ comparisonBaseline: baseline })
+    );
+    expect(restore.mock.invocationCallOrder[0]).toBeLessThan(
+      jest.mocked(fixture.dependencies.projectionBuilder.build).mock
+        .invocationCallOrder[0]
+    );
+  });
   it.each(['generated', 'unknown', 'restored', 'joined', 'disabled'] as const)(
     'runs an optional PR description once after review slots (%s)',
     async (outcome) => {

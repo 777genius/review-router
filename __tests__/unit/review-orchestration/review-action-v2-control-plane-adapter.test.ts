@@ -1467,6 +1467,57 @@ describe('ReviewActionV2ControlPlaneAdapter', () => {
     }
   );
 
+  it('reads an explicit empty comparison baseline without changing exact snapshot restore', async () => {
+    const baseline = {
+      schemaVersion: 'comparison_baseline.v1',
+      appliedResolutions: [],
+      sourceReviewedHeadSha: '1'.repeat(40),
+      sourceReviewRevisionHash: 'b'.repeat(64),
+      sourceExecutionGeneration: '1',
+      snapshotVersion: 1,
+      projectionPolicyVersion: 'review-projection-policy.v5-t0',
+      projectionEnvelopeVersion: 'review_projection.v1',
+      priorLineageHints: [],
+    };
+    const execute = jest.fn().mockResolvedValue({
+      status: 'found',
+      restoreMode: 'comparison_baseline.v1',
+      snapshotVersion: 1,
+      sourceExecutionGeneration: '1',
+      payloadCanonicalJson: JSON.stringify(baseline),
+    });
+    const adapter = createAdapter(execute);
+    const input = {
+      authorization,
+      reviewRevisionHash: startInput.reviewRevisionHash,
+    };
+    expect(await adapter.restoreComparisonBaseline(input)).toEqual(baseline);
+    expect(execute).toHaveBeenLastCalledWith(
+      ReviewActionV2OperationId.ReviewSnapshotRestore,
+      {
+        authorizationToken: authorization.authorizationToken,
+        reviewRevisionHash: startInput.reviewRevisionHash,
+        purpose: 'comparison_baseline.v1',
+      }
+    );
+    await adapter.restoreSnapshot(input);
+    expect(execute.mock.calls[1][1]).not.toHaveProperty('purpose');
+    execute.mockResolvedValueOnce({
+      status: 'found',
+      restoreMode: 'exact_projection',
+      payloadCanonicalJson: JSON.stringify(baseline),
+    });
+    expect(await adapter.restoreComparisonBaseline(input)).toBeNull();
+    execute.mockResolvedValueOnce({
+      status: 'found',
+      restoreMode: 'comparison_baseline.v1',
+      snapshotVersion: 2,
+      sourceExecutionGeneration: '1',
+      payloadCanonicalJson: JSON.stringify(baseline),
+    });
+    expect(await adapter.restoreComparisonBaseline(input)).toBeNull();
+  });
+
   it('restores a bounded exact-revision execution instead of dropping it', async () => {
     const execute = jest.fn().mockResolvedValue({
       status: ReviewExecutionRestoreResultStatus.Found,

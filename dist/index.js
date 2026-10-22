@@ -245,13 +245,13 @@ var require_scope = __commonJS({
       }
     };
     exports2.ValueScopeName = ValueScopeName;
-    var line = (0, code_1._)`\n`;
+    var line2 = (0, code_1._)`\n`;
     var ValueScope = class extends Scope {
       constructor(opts) {
         super(opts);
         this._values = {};
         this._scope = opts.scope;
-        this.opts = { ...opts, _n: opts.lines ? line : code_1.nil };
+        this.opts = { ...opts, _n: opts.lines ? line2 : code_1.nil };
       }
       get() {
         return this._scope;
@@ -29021,8 +29021,8 @@ var require_connection = __commonJS({
             return;
           }
           const secWSAccept = response.headersList.get("Sec-WebSocket-Accept");
-          const digest4 = crypto10.createHash("sha1").update(keyValue + uid).digest("base64");
-          if (secWSAccept !== digest4) {
+          const digest5 = crypto10.createHash("sha1").update(keyValue + uid).digest("base64");
+          if (secWSAccept !== digest5) {
             failWebsocketConnection(ws, "Incorrect hash received in Sec-WebSocket-Accept header.");
             return;
           }
@@ -30136,12 +30136,12 @@ var require_eventsource_stream = __commonJS({
       }
       return true;
     }
-    function isFieldName(line, length, field) {
+    function isFieldName(line2, length, field) {
       if (length !== field.length) {
         return false;
       }
       for (let i2 = 0; i2 < length; i2++) {
-        if (line[i2] !== field[i2]) {
+        if (line2[i2] !== field[i2]) {
           return false;
         }
       }
@@ -30287,31 +30287,31 @@ var require_eventsource_stream = __commonJS({
        * @param {Buffer} line
        * @param {EventSourceStreamEvent} event
        */
-      parseLine(line, event) {
-        if (line.length === 0) {
+      parseLine(line2, event) {
+        if (line2.length === 0) {
           return;
         }
-        const colonPosition = line.indexOf(COLON);
+        const colonPosition = line2.indexOf(COLON);
         if (colonPosition === 0) {
           return;
         }
-        let fieldLength = line.length;
-        let valueStart = line.length;
+        let fieldLength = line2.length;
+        let valueStart = line2.length;
         if (colonPosition !== -1) {
           fieldLength = colonPosition;
           valueStart = colonPosition + 1;
-          if (line[valueStart] === SPACE2) {
+          if (line2[valueStart] === SPACE2) {
             ++valueStart;
           }
         }
-        if (isFieldName(line, fieldLength, DATA)) {
+        if (isFieldName(line2, fieldLength, DATA)) {
           if (this.maxEventSize > 0 && this.dataLineCount >= this.maxDataLines) {
             throw createMaxEventSizeExceededError();
           }
-          const valueBytes = line.length - valueStart;
+          const valueBytes = line2.length - valueStart;
           const dataSize = this.eventFieldSizes.data + (event.data === void 0 ? 0 : 1) + valueBytes;
           this.setEventFieldSize("data", dataSize);
-          const value = line.toString("utf8", valueStart);
+          const value = line2.toString("utf8", valueStart);
           if (event.data === void 0) {
             event.data = value;
           } else {
@@ -30321,24 +30321,24 @@ ${value}`;
           this.dataLineCount++;
           return;
         }
-        if (isFieldName(line, fieldLength, RETRY)) {
-          if (isASCIINumberBytes(line, valueStart)) {
-            this.setEventFieldSize("retry", line.length - valueStart);
-            event.retry = line.toString("utf8", valueStart);
+        if (isFieldName(line2, fieldLength, RETRY)) {
+          if (isASCIINumberBytes(line2, valueStart)) {
+            this.setEventFieldSize("retry", line2.length - valueStart);
+            event.retry = line2.toString("utf8", valueStart);
           }
           return;
         }
-        if (isFieldName(line, fieldLength, ID2)) {
-          if (isValidLastEventIdBytes(line, valueStart)) {
-            this.setEventFieldSize("id", line.length - valueStart);
-            event.id = line.toString("utf8", valueStart);
+        if (isFieldName(line2, fieldLength, ID2)) {
+          if (isValidLastEventIdBytes(line2, valueStart)) {
+            this.setEventFieldSize("id", line2.length - valueStart);
+            event.id = line2.toString("utf8", valueStart);
           }
           return;
         }
-        if (isFieldName(line, fieldLength, EVENT)) {
-          if (valueStart < line.length) {
-            this.setEventFieldSize("event", line.length - valueStart);
-            event.event = line.toString("utf8", valueStart);
+        if (isFieldName(line2, fieldLength, EVENT)) {
+          if (valueStart < line2.length) {
+            this.setEventFieldSize("event", line2.length - valueStart);
+            event.event = line2.toString("utf8", valueStart);
           }
         }
       }
@@ -100575,8 +100575,8 @@ var require_zip_archive_output_stream = __commonJS({
       var process5 = deflate ? new DeflateCRC32Stream(this.options.zlib) : new CRC32Stream();
       var error4 = null;
       function handleStuff() {
-        var digest4 = process5.digest().readUInt32BE(0);
-        ae2.setCrc(digest4);
+        var digest5 = process5.digest().readUInt32BE(0);
+        ae2.setCrc(digest5);
         ae2.setSize(process5.size());
         ae2.setCompressedSize(process5.size(true));
         this._afterAppend(ae2);
@@ -120380,28 +120380,28 @@ function requireSnippet() {
     const maxLineLength = options.maxLength - (options.indent + lineNoLength + 3);
     for (let i2 = 1; i2 <= options.linesBefore; i2++) {
       if (foundLineNo - i2 < 0) break;
-      const line2 = getLine(
+      const line22 = getLine(
         mark.buffer,
         lineStarts[foundLineNo - i2],
         lineEnds[foundLineNo - i2],
         mark.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo - i2]),
         maxLineLength
       );
-      result2 = common2.repeat(" ", options.indent) + padStart2((mark.line - i2 + 1).toString(), lineNoLength) + " | " + line2.str + "\n" + result2;
+      result2 = common2.repeat(" ", options.indent) + padStart2((mark.line - i2 + 1).toString(), lineNoLength) + " | " + line22.str + "\n" + result2;
     }
-    const line = getLine(mark.buffer, lineStarts[foundLineNo], lineEnds[foundLineNo], mark.position, maxLineLength);
-    result2 += common2.repeat(" ", options.indent) + padStart2((mark.line + 1).toString(), lineNoLength) + " | " + line.str + "\n";
-    result2 += common2.repeat("-", options.indent + lineNoLength + 3 + line.pos) + "^\n";
+    const line2 = getLine(mark.buffer, lineStarts[foundLineNo], lineEnds[foundLineNo], mark.position, maxLineLength);
+    result2 += common2.repeat(" ", options.indent) + padStart2((mark.line + 1).toString(), lineNoLength) + " | " + line2.str + "\n";
+    result2 += common2.repeat("-", options.indent + lineNoLength + 3 + line2.pos) + "^\n";
     for (let i2 = 1; i2 <= options.linesAfter; i2++) {
       if (foundLineNo + i2 >= lineEnds.length) break;
-      const line2 = getLine(
+      const line22 = getLine(
         mark.buffer,
         lineStarts[foundLineNo + i2],
         lineEnds[foundLineNo + i2],
         mark.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo + i2]),
         maxLineLength
       );
-      result2 += common2.repeat(" ", options.indent) + padStart2((mark.line + i2 + 1).toString(), lineNoLength) + " | " + line2.str + "\n";
+      result2 += common2.repeat(" ", options.indent) + padStart2((mark.line + i2 + 1).toString(), lineNoLength) + " | " + line22.str + "\n";
     }
     return result2.replace(/\n$/, "");
   }
@@ -122729,17 +122729,17 @@ function requireDumper() {
     let result2 = "";
     const length = string4.length;
     while (position < length) {
-      let line;
+      let line2;
       const next = string4.indexOf("\n", position);
       if (next === -1) {
-        line = string4.slice(position);
+        line2 = string4.slice(position);
         position = length;
       } else {
-        line = string4.slice(position, next + 1);
+        line2 = string4.slice(position, next + 1);
         position = next + 1;
       }
-      if (line.length && line !== "\n") result2 += ind;
-      result2 += line;
+      if (line2.length && line2 !== "\n") result2 += ind;
+      result2 += line2;
     }
     return result2;
   }
@@ -122924,15 +122924,15 @@ function requireDumper() {
     let match2;
     while (match2 = lineRe.exec(string4)) {
       const prefix2 = match2[1];
-      const line = match2[2];
-      moreIndented = line[0] === " ";
-      result2 += prefix2 + (!prevMoreIndented && !moreIndented && line !== "" ? "\n" : "") + foldLine(line, width);
+      const line2 = match2[2];
+      moreIndented = line2[0] === " ";
+      result2 += prefix2 + (!prevMoreIndented && !moreIndented && line2 !== "" ? "\n" : "") + foldLine(line2, width);
       prevMoreIndented = moreIndented;
     }
     return result2;
   }
-  function foldLine(line, width) {
-    if (line === "" || line[0] === " ") return line;
+  function foldLine(line2, width) {
+    if (line2 === "" || line2[0] === " ") return line2;
     const breakRe = / [^ ]/g;
     let match2;
     let start = 0;
@@ -122940,20 +122940,20 @@ function requireDumper() {
     let curr = 0;
     let next = 0;
     let result2 = "";
-    while (match2 = breakRe.exec(line)) {
+    while (match2 = breakRe.exec(line2)) {
       next = match2.index;
       if (next - start > width) {
         end = curr > start ? curr : next;
-        result2 += "\n" + line.slice(start, end);
+        result2 += "\n" + line2.slice(start, end);
         start = end + 1;
       }
       curr = next;
     }
     result2 += "\n";
-    if (line.length - start > width && curr > start) {
-      result2 += line.slice(start, curr) + "\n" + line.slice(curr + 1);
+    if (line2.length - start > width && curr > start) {
+      result2 += line2.slice(start, curr) + "\n" + line2.slice(curr + 1);
     } else {
-      result2 += line.slice(start);
+      result2 += line2.slice(start);
     }
     return result2.slice(1);
   }
@@ -129314,7 +129314,7 @@ async function startCodexUsageRelay(input) {
                 if (!delimiter5) break;
                 const frame = pending.slice(0, delimiter5.index);
                 pending = pending.slice(delimiter5.index + delimiter5[0].length);
-                const data = frame.split(/\r\n|\n|\r/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
+                const data = frame.split(/\r\n|\n|\r/).filter((line2) => line2.startsWith("data:")).map((line2) => line2.slice(5).trimStart()).join("\n");
                 if (data !== "[DONE]") observeJson(data);
               }
             }
@@ -129404,12 +129404,12 @@ function trimDiff(diff, maxBytes) {
   const fileChunks = [];
   const lines = diff.split("\n");
   let currentChunk = [];
-  for (const line of lines) {
-    if (line.startsWith("diff --git ") && currentChunk.length > 0) {
+  for (const line2 of lines) {
+    if (line2.startsWith("diff --git ") && currentChunk.length > 0) {
       fileChunks.push(currentChunk.join("\n"));
-      currentChunk = [line];
+      currentChunk = [line2];
     } else {
-      currentChunk.push(line);
+      currentChunk.push(line2);
     }
   }
   if (currentChunk.length > 0) {
@@ -129495,7 +129495,7 @@ function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchR
   const added = mapAddedLines(patch);
   if (added.length === 0) return reportedLine;
   const nearby = added.filter(
-    (line) => Math.abs(line.line - reportedLine) <= searchRadius
+    (line2) => Math.abs(line2.line - reportedLine) <= searchRadius
   );
   if (nearby.length === 0) return reportedLine;
   const bodyTokens = tokenizeForLineScoring(commentBody);
@@ -129522,7 +129522,7 @@ function chooseBestAddedLineForComment(patch, reportedLine, commentBody, searchR
     ) ? -2 : 0;
     return proximity + overlap + riskScore + interpolationScore + callScore + declarationPenalty;
   };
-  const current = nearby.find((line) => line.line === reportedLine);
+  const current = nearby.find((line2) => line2.line === reportedLine);
   const currentScore = current ? score(current) : Number.NEGATIVE_INFINITY;
   const best = [...nearby].sort(
     (a2, b2) => score(b2) - score(a2) || Math.abs(a2.line - reportedLine) - Math.abs(b2.line - reportedLine)
@@ -129622,14 +129622,14 @@ function filterDiffByFiles(diff, files) {
     currentChunk = [];
     includeCurrent = false;
   };
-  for (const line of lines) {
-    const normalizedLine = line.replace(/\r$/, "");
+  for (const line2 of lines) {
+    const normalizedLine = line2.replace(/\r$/, "");
     const isHeader = normalizedLine.startsWith("diff --git ");
     if (isHeader) {
       pushChunkIfIncluded();
       const match2 = normalizedLine.match(/^diff --git\s+a\/(.+?)\s+b\/(.+)$/);
       if (!match2) {
-        currentChunk.push(line);
+        currentChunk.push(line2);
         continue;
       }
       const rawA = match2[1].trim();
@@ -129637,9 +129637,9 @@ function filterDiffByFiles(diff, files) {
       const aPath = unquoteGitPath(rawA);
       const bPath = unquoteGitPath(rawB);
       includeCurrent = target.has(bPath) || target.has(aPath);
-      currentChunk.push(line);
+      currentChunk.push(line2);
     } else {
-      currentChunk.push(line);
+      currentChunk.push(line2);
     }
   }
   pushChunkIfIncluded();
@@ -129746,15 +129746,15 @@ function splitDiffIntoChunks(diff) {
     currentA = "";
     currentB = "";
   };
-  for (const line of lines) {
-    const normalizedLine = line.replace(/\r$/, "");
+  for (const line2 of lines) {
+    const normalizedLine = line2.replace(/\r$/, "");
     const match2 = normalizedLine.match(/^diff --git\s+a\/(.+?)\s+b\/(.+)$/);
     if (match2) {
       push();
       currentA = unquoteGitPath(match2[1].trim());
       currentB = unquoteGitPath(match2[2].trim());
     }
-    current.push(line);
+    current.push(line2);
   }
   push();
   return chunks;
@@ -130631,8 +130631,8 @@ function bundledReviewAgentForTransport(transport) {
     throw new Error("review_agent_profile_unavailable");
   return profiles[0];
 }
-function readApprovedReviewAgent(json3, digest4) {
-  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest4) || (0, import_node_crypto2.createHash)("sha256").update(json3).digest("hex") !== digest4)
+function readApprovedReviewAgent(json3, digest5) {
+  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest5) || (0, import_node_crypto2.createHash)("sha256").update(json3).digest("hex") !== digest5)
     throw new Error("review_agent_profile_digest_mismatch");
   const profile = parseReviewAgentProfiles([JSON.parse(json3)])[0];
   if (!profile) throw new Error("review_agent_profile_invalid");
@@ -131916,7 +131916,7 @@ function failureFact(bytes, ref) {
 }
 function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUNDS.streamFrameBytes, observeUsage, observeCompleted) {
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  let line = "";
+  let line2 = "";
   let skipLf = false;
   let data = [];
   let event = "";
@@ -131925,7 +131925,7 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
   let rawLineBytes = 0;
   let rawLineLastByte = 0;
   function endLine() {
-    if (!line) {
+    if (!line2) {
       if (data.length) {
         const joined = data.join("\n");
         if (joined !== "[DONE]") {
@@ -131948,10 +131948,10 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
       }
       data = [];
       event = "";
-    } else if (line.startsWith("data:"))
-      data.push(line.slice(5).replace(/^ /, ""));
-    else if (line.startsWith("event:")) event = line.slice(6).replace(/^ /, "");
-    line = "";
+    } else if (line2.startsWith("data:"))
+      data.push(line2.slice(5).replace(/^ /, ""));
+    else if (line2.startsWith("event:")) event = line2.slice(6).replace(/^ /, "");
+    line2 = "";
   }
   function consume(text2) {
     for (const character of text2) {
@@ -131963,7 +131963,7 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
       if (character === "\r" || character === "\n") {
         endLine();
         skipLf = character === "\r";
-      } else line += character;
+      } else line2 += character;
     }
   }
   return {
@@ -131986,7 +131986,7 @@ function responsesStreamAudit(observe, maximumFrameBytes = ACCOUNT_GATEWAY_BOUND
     },
     finish() {
       consume(decoder.decode());
-      if (line || data.length || !completed) throw new Error();
+      if (line2 || data.length || !completed) throw new Error();
     }
   };
 }
@@ -133349,7 +133349,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
       "</deterministic_review_prompt>",
       "",
       ...REVIEW_OUTPUT_CONTRACT
-    ].filter((line) => line !== void 0).join("\n");
+    ].filter((line2) => line2 !== void 0).join("\n");
   }
   wrapPromptOnlyReviewPrompt(prompt) {
     return [
@@ -133916,10 +133916,10 @@ ${JSON.stringify(outputSchema)}` : prompt;
   }
   inspectActualModel(stdout) {
     const models = /* @__PURE__ */ new Set();
-    for (const line of stdout.split(/\r?\n/u)) {
-      if (!line.trim()) continue;
+    for (const line2 of stdout.split(/\r?\n/u)) {
+      if (!line2.trim()) continue;
       try {
-        this.collectSessionConfiguredModels(JSON.parse(line), models, 0);
+        this.collectSessionConfiguredModels(JSON.parse(line2), models, 0);
       } catch {
       }
     }
@@ -133982,10 +133982,10 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const commands = [];
     let commandExecutions = 0;
     let readOnlyExplorationCommands = 0;
-    for (const line of stdout.split(/\r?\n/)) {
-      if (!line.trim()) continue;
+    for (const line2 of stdout.split(/\r?\n/)) {
+      if (!line2.trim()) continue;
       try {
-        const event = JSON.parse(line);
+        const event = JSON.parse(line2);
         const command = this.extractCommandFromCodexEvent(event);
         if (!command) continue;
         commandExecutions += 1;
@@ -134081,10 +134081,10 @@ ${JSON.stringify(outputSchema)}` : prompt;
     const commandNames = /* @__PURE__ */ new Set();
     const files = /* @__PURE__ */ new Set();
     let commandCount = 0;
-    for (const line of stdout.split(/\r?\n/)) {
-      if (!line.trim()) continue;
+    for (const line2 of stdout.split(/\r?\n/)) {
+      if (!line2.trim()) continue;
       try {
-        const event = JSON.parse(line);
+        const event = JSON.parse(line2);
         const item = event?.item;
         if (item?.type !== "command_execution" || typeof item.command !== "string") {
           continue;
@@ -134119,8 +134119,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
     return [...matches].map((match2) => match2[1]).filter(Boolean);
   }
   formatCliError(stderr, stdout) {
-    const diagnosticInput = (raw2, stdoutOnly) => raw2.split(/\r?\n/).filter((line) => {
-      const trimmed = line.trim();
+    const diagnosticInput = (raw2, stdoutOnly) => raw2.split(/\r?\n/).filter((line2) => {
+      const trimmed = line2.trim();
       if (!trimmed || /^https?:\/\/\S+$/i.test(trimmed)) return false;
       try {
         const event = JSON.parse(trimmed);
@@ -134139,7 +134139,7 @@ ${JSON.stringify(outputSchema)}` : prompt;
         return false;
       } catch {
         return /not supported|invalid_request_error|auth|error|failed|timed out|timeout|capacity|limit|quota|stream disconnected before completion|stream closed before response\.completed/i.test(
-          line
+          line2
         );
       }
     }).join("\n");
@@ -134149,17 +134149,17 @@ ${JSON.stringify(outputSchema)}` : prompt;
       return this.truncateCliError([...new Set(jsonMessages)].join(" "));
     }
     const raw = this.sanitizeCliErrorText(input);
-    const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter((line) => {
-      const nestedDiagnostics = this.extractCliErrorMessages(line);
+    const lines = raw.split(/\r?\n/).map((line2) => line2.trim()).filter(Boolean).filter((line2) => {
+      const nestedDiagnostics = this.extractCliErrorMessages(line2);
       return nestedDiagnostics.length === 0 || nestedDiagnostics.some(
         (message) => !this.isPlaceholderCliDiagnostic(message)
       );
     }).filter(
-      (line) => !line.startsWith("user") && !line.includes("Respond with exactly:")
+      (line2) => !line2.startsWith("user") && !line2.includes("Respond with exactly:")
     );
     const important = lines.filter(
-      (line) => /not supported|invalid_request_error|auth|error|failed|timed out|timeout|capacity|limit|quota/i.test(
-        line
+      (line2) => /not supported|invalid_request_error|auth|error|failed|timed out|timeout|capacity|limit|quota/i.test(
+        line2
       )
     );
     const summary2 = (important.length > 0 ? important : lines).join(" ");
@@ -134224,8 +134224,8 @@ ${JSON.stringify(outputSchema)}` : prompt;
         }
       }
     };
-    for (const line of raw.split(/\r?\n/)) {
-      const trimmed = line.trim();
+    for (const line2 of raw.split(/\r?\n/)) {
+      const trimmed = line2.trim();
       if (!trimmed) continue;
       if (trimmed.startsWith("{") && trimmed.endsWith("}") || trimmed.startsWith("[") && trimmed.endsWith("]")) {
         try {
@@ -134686,8 +134686,8 @@ function parseOpenCodeModels(output) {
   let currentModel = null;
   let jsonLines = [];
   for (let i2 = 0; i2 < lines.length; i2++) {
-    const line = lines[i2];
-    if (line.match(/^[a-z][a-z0-9-]+\//)) {
+    const line2 = lines[i2];
+    if (line2.match(/^[a-z][a-z0-9-]+\//)) {
       if (jsonLines.length > 0 && currentModel) {
         try {
           const jsonStr = jsonLines.join("\n");
@@ -134704,10 +134704,10 @@ function parseOpenCodeModels(output) {
         } catch {
         }
       }
-      currentModel = line.trim();
+      currentModel = line2.trim();
       jsonLines = [];
-    } else if (currentModel && line.trim()) {
-      jsonLines.push(line);
+    } else if (currentModel && line2.trim()) {
+      jsonLines.push(line2);
     }
   }
   if (jsonLines.length > 0 && currentModel) {
@@ -135375,9 +135375,9 @@ var ValidationDetector = class {
       hasErrorReturn = true;
     }
     for (let i2 = 0; i2 < lines.length; i2++) {
-      const line = lines[i2];
+      const line2 = lines[i2];
       const lineNum = startLine + i2;
-      const trimmed = line.trim();
+      const trimmed = line2.trim();
       const typeofMatch = trimmed.match(
         /typeof\s+(\w+)\s*(!==?|===?)\s*['"](\w+)['"]/
       );
@@ -135519,13 +135519,13 @@ var ValidationDetector = class {
       }))
     };
   }
-  trackVariable(variables, varName, line, checked) {
+  trackVariable(variables, varName, line2, checked) {
     const existing = variables.get(varName) || {
       initialized: false,
       checkedBeforeUse: false,
       lines: []
     };
-    existing.lines.push(line);
+    existing.lines.push(line2);
     if (checked) {
       existing.checkedBeforeUse = true;
     }
@@ -135830,19 +135830,19 @@ var TrivialDetector = class {
   extractChangesFromPatch(patch) {
     const lines = patch.split("\n");
     const changes = lines.filter(
-      (line) => line.startsWith("+") || line.startsWith("-")
+      (line2) => line2.startsWith("+") || line2.startsWith("-")
     );
-    const actualChanges = changes.filter((line) => !this.isDiffMetadata(line));
-    const additions = actualChanges.filter((line) => line.startsWith("+")).map((line) => line.substring(1));
-    const deletions = actualChanges.filter((line) => line.startsWith("-")).map((line) => line.substring(1));
+    const actualChanges = changes.filter((line2) => !this.isDiffMetadata(line2));
+    const additions = actualChanges.filter((line2) => line2.startsWith("+")).map((line2) => line2.substring(1));
+    const deletions = actualChanges.filter((line2) => line2.startsWith("-")).map((line2) => line2.substring(1));
     return { additions, deletions };
   }
   /**
    * Check if a line is diff metadata (not actual code change)
    */
-  isDiffMetadata(line) {
-    if (/^(\+\+\+ |--- )/.test(line)) return true;
-    if (/^@@/.test(line)) return true;
+  isDiffMetadata(line2) {
+    if (/^(\+\+\+ |--- )/.test(line2)) return true;
+    if (/^@@/.test(line2)) return true;
     return false;
   }
   /**
@@ -135904,18 +135904,18 @@ var TrivialDetector = class {
   /**
    * Extract identifiers (variable/function names) from a line of code
    */
-  extractIdentifiers(line) {
-    const matches = line.match(/\b[a-zA-Z_$][a-zA-Z0-9_$]*\b/g);
+  extractIdentifiers(line2) {
+    const matches = line2.match(/\b[a-zA-Z_$][a-zA-Z0-9_$]*\b/g);
     return matches || [];
   }
   /**
    * Extract string literals from a line of code
    */
-  extractStrings(line) {
+  extractStrings(line2) {
     const strings = [];
-    const singleQuoted = line.match(/'([^']*)'/g);
-    const doubleQuoted = line.match(/"([^"]*)"/g);
-    const templateLiteral = line.match(/`([^`]*)`/g);
+    const singleQuoted = line2.match(/'([^']*)'/g);
+    const doubleQuoted = line2.match(/"([^"]*)"/g);
+    const templateLiteral = line2.match(/`([^`]*)`/g);
     if (singleQuoted) strings.push(...singleQuoted);
     if (doubleQuoted) strings.push(...doubleQuoted);
     if (templateLiteral) strings.push(...templateLiteral);
@@ -135924,8 +135924,8 @@ var TrivialDetector = class {
   /**
    * Check if a line is an import or export statement
    */
-  isImportOrExport(line) {
-    const trimmed = line.trim();
+  isImportOrExport(line2) {
+    const trimmed = line2.trim();
     return trimmed.startsWith("import ") || trimmed.startsWith("export ") || trimmed.startsWith("from ") || trimmed.includes("require(");
   }
   /**
@@ -136939,12 +136939,12 @@ function createReviewInvestigationProbePlan(input) {
       );
     }
     const patch = diffByPath.get(file.path) ?? file.patch ?? "";
-    for (const line of changedLines(patch)) {
-      extractDeclarationIdentifiers(line, add);
-      extractImportExportRelations(line, add);
-      extractStructuredRelations(file.path, line, add);
-      extractRuntimeContractRelations(line, add);
-      extractSideEffectRelations(line, add);
+    for (const line2 of changedLines(patch)) {
+      extractDeclarationIdentifiers(line2, add);
+      extractImportExportRelations(line2, add);
+      extractStructuredRelations(file.path, line2, add);
+      extractRuntimeContractRelations(line2, add);
+      extractSideEffectRelations(line2, add);
     }
     if (discardedCandidateOccurrences > 0) {
       perFileTruncations.push({
@@ -137061,7 +137061,7 @@ function createProbe(candidate) {
     riskPriority: candidate.riskPriority
   });
 }
-function extractDeclarationIdentifiers(line, add) {
+function extractDeclarationIdentifiers(line2, add) {
   const declarations = [
     /\b(?:export\s+(?:default\s+)?)?(?:declare\s+)?(?:async\s+)?(?:function|class|interface|type|enum|namespace|const|let|var|struct|trait|record)\s+([A-Za-z_$][A-Za-z0-9_$]*)/gu,
     /\b(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)/gu,
@@ -137071,14 +137071,14 @@ function extractDeclarationIdentifiers(line, add) {
     /\b(?:public|protected)\s+(?:(?:static|async|final|abstract|override|readonly)\s+)*(?:[A-Za-z_$][A-Za-z0-9_$<>,.?]*(?:\[\])?\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>\n]*>)?\s*\(/gu
   ];
   for (const pattern of declarations) {
-    for (const match2 of line.matchAll(pattern)) {
+    for (const match2 of line2.matchAll(pattern)) {
       add("declaration_identifier" /* DeclarationIdentifier */, match2[1]);
     }
   }
 }
-function extractImportExportRelations(line, add) {
+function extractImportExportRelations(line2, add) {
   if (!/\b(?:import|export|require|include|use)\b|^\s*\}(?:\s|\/\*.*?\*\/)*from(?:\s|\/\*.*?\*\/)*["'`]/u.test(
-    line
+    line2
   )) {
     return;
   }
@@ -137089,11 +137089,11 @@ function extractImportExportRelations(line, add) {
     /\buse\s+([A-Za-z_][A-Za-z0-9_:]*)/gu
   ];
   for (const pattern of modulePatterns) {
-    for (const match2 of line.matchAll(pattern)) {
+    for (const match2 of line2.matchAll(pattern)) {
       add("module_path" /* ModulePath */, match2[1]);
     }
   }
-  for (const match2 of line.matchAll(/\{([^{}]+)\}/gu)) {
+  for (const match2 of line2.matchAll(/\{([^{}]+)\}/gu)) {
     for (const item of match2[1].split(",")) {
       const names = item.trim().replace(/^type\s+/u, "").split(/\s+as\s+/u).map((value) => value.trim());
       for (const name of names) {
@@ -137104,7 +137104,7 @@ function extractImportExportRelations(line, add) {
     }
   }
 }
-function extractStructuredRelations(path37, line, add) {
+function extractStructuredRelations(path37, line2, add) {
   const dartSource = /\.dart$/iu.test(path37);
   const keyPatterns = [
     // Dart's unquoted labels and assignments are arguments/variables, not
@@ -137118,20 +137118,20 @@ function extractStructuredRelations(path37, line, add) {
     /\bREFERENCES\s+["`]?([A-Za-z_][A-Za-z0-9_$]*)["`]?/giu
   ];
   for (const pattern of keyPatterns) {
-    for (const match2 of line.matchAll(pattern)) {
+    for (const match2 of line2.matchAll(pattern)) {
       add("structured_key" /* StructuredKey */, match2[1]);
     }
   }
   if (STRUCTURED_PATH_PATTERN.test(path37)) {
-    for (const literal2 of quotedLiterals(line)) {
+    for (const literal2 of quotedLiterals(line2)) {
       if (isContractLiteral(literal2)) {
         add("structured_key" /* StructuredKey */, literal2);
       }
     }
   }
 }
-function extractRuntimeContractRelations(line, add) {
-  const declarationLine = line.replace(
+function extractRuntimeContractRelations(line2, add) {
+  const declarationLine = line2.replace(
     /\/\*.*?\*\//gu,
     (comment) => " ".repeat(comment.length)
   );
@@ -137140,25 +137140,25 @@ function extractRuntimeContractRelations(line, add) {
   )) {
     const statementEnd = declarationLine.indexOf(";");
     if (statementEnd < 0) return;
-    line = line.slice(statementEnd + 1);
+    line2 = line2.slice(statementEnd + 1);
   }
-  const isRuntimeLine = RUNTIME_CONTRACT_KEYWORD_PATTERN.test(line);
-  const isRouteCall = ROUTE_CALL_PATTERN.test(line);
+  const isRuntimeLine = RUNTIME_CONTRACT_KEYWORD_PATTERN.test(line2);
+  const isRouteCall = ROUTE_CALL_PATTERN.test(line2);
   if (!isRuntimeLine && !isRouteCall) return;
-  for (const match2 of line.matchAll(/[A-Za-z_$][A-Za-z0-9_$]*/gu)) {
+  for (const match2 of line2.matchAll(/[A-Za-z_$][A-Za-z0-9_$]*/gu)) {
     if (RUNTIME_CONTRACT_IDENTIFIER_PATTERN.test(match2[0])) {
       add("runtime_contract_identifier" /* RuntimeContractIdentifier */, match2[0]);
     }
   }
-  for (const literal2 of quotedLiterals(line)) {
+  for (const literal2 of quotedLiterals(line2)) {
     if (isContractLiteral(literal2) || isRouteCall && literal2.startsWith("/")) {
       add("runtime_contract_identifier" /* RuntimeContractIdentifier */, literal2);
     }
   }
 }
-function extractSideEffectRelations(line, add) {
+function extractSideEffectRelations(line2, add) {
   let found = false;
-  for (const match2 of line.matchAll(
+  for (const match2 of line2.matchAll(
     /\b(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/gu
   )) {
     if (SIDE_EFFECT_NAME_PATTERN.test(match2[1])) {
@@ -137167,7 +137167,7 @@ function extractSideEffectRelations(line, add) {
     }
   }
   if (!found) return;
-  for (const literal2 of quotedLiterals(line)) {
+  for (const literal2 of quotedLiterals(line2)) {
     if (isContractLiteral(literal2)) {
       add("side_effect_identifier" /* SideEffectIdentifier */, literal2);
     }
@@ -137205,8 +137205,8 @@ function candidateRiskPriority(probeKind, sourcePath) {
       return changedPathSemanticRiskPriority(sourcePath);
   }
 }
-function quotedLiterals(line) {
-  return [...line.matchAll(/["'`]([^"'`\r\n]{1,256})["'`]/gu)].map(
+function quotedLiterals(line2) {
+  return [...line2.matchAll(/["'`]([^"'`\r\n]{1,256})["'`]/gu)].map(
     (match2) => match2[1]
   );
 }
@@ -137215,8 +137215,8 @@ function isContractLiteral(value) {
 }
 function changedLines(patch) {
   return patch.split(/\r?\n/u).filter(
-    (line) => line.startsWith("+") && !line.startsWith("+++") || line.startsWith("-") && !line.startsWith("---")
-  ).map((line) => line.slice(1));
+    (line2) => line2.startsWith("+") && !line2.startsWith("+++") || line2.startsWith("-") && !line2.startsWith("---")
+  ).map((line2) => line2.slice(1));
 }
 function splitDiffByDestinationPath(diff) {
   const chunks = /* @__PURE__ */ new Map();
@@ -137352,7 +137352,7 @@ var PromptBuilder = class {
    * Get call context from code graph for better fix suggestions.
    * Returns callers and callees for symbols near the target line.
    */
-  getCallContext(file, line) {
+  getCallContext(file, line2) {
     if (!this.codeGraph) {
       return null;
     }
@@ -137361,7 +137361,7 @@ var PromptBuilder = class {
       if (!fileSymbols || fileSymbols.length === 0) {
         return null;
       }
-      const nearbySymbol = fileSymbols.filter((def) => Math.abs(def.line - line) <= 20).sort((a2, b2) => Math.abs(a2.line - line) - Math.abs(b2.line - line))[0];
+      const nearbySymbol = fileSymbols.filter((def) => Math.abs(def.line - line2) <= 20).sort((a2, b2) => Math.abs(a2.line - line2) - Math.abs(b2.line - line2))[0];
       if (!nearbySymbol) {
         return null;
       }
@@ -139379,13 +139379,13 @@ function collectMarkerMatches(body2, pattern) {
 var INLINE_MARKER_RE = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/i;
 var INLINE_MARKER_RE_GLOBAL = /<!--\s*(?:review-router|ai-robot-review)-inline:([a-f0-9]{16})\s*-->/gi;
 var MAX_NEARBY_LINE_DISTANCE = 12;
-function signatureFromInlineComment(path37, line, body2) {
+function signatureFromInlineComment(path37, line2, body2) {
   const cleanBody = stripInlineFingerprintMarkers(body2);
   const severity = extractSeverity(cleanBody);
   if (severity) {
     return [
       (path37 || "unknown").toLowerCase(),
-      String(line ?? 0),
+      String(line2 ?? 0),
       severity
     ].join(":");
   }
@@ -139393,12 +139393,12 @@ function signatureFromInlineComment(path37, line, body2) {
   const title = titleMatch ? titleMatch[1] : cleanBody.split("\n")[0] || "unknown";
   return [
     (path37 || "unknown").toLowerCase(),
-    String(line ?? 0),
+    String(line2 ?? 0),
     normalizeForSignature(title)
   ].join(":");
 }
-function fingerprintFromInlineComment(path37, line, body2) {
-  return (0, import_crypto7.createHash)("sha256").update(signatureFromInlineComment(path37, line, body2)).digest("hex").slice(0, 16);
+function fingerprintFromInlineComment(path37, line2, body2) {
+  return (0, import_crypto7.createHash)("sha256").update(signatureFromInlineComment(path37, line2, body2)).digest("hex").slice(0, 16);
 }
 function inlineFingerprintMarker(fingerprint) {
   return `<!-- review-router-inline:${fingerprint} -->`;
@@ -139414,19 +139414,19 @@ function extractFindingFingerprint(body2) {
   const parsed = parseFindingMarker(body2);
   return parsed.kind === "valid" /* Valid */ ? parsed.fingerprint : null;
 }
-function appendInlineFingerprintMarker(body2, path37, line) {
+function appendInlineFingerprintMarker(body2, path37, line2) {
   const sanitizedBody = stripReservedFindingMarkerSyntax(body2);
   const parts = [sanitizedBody.trimEnd()];
   if (!extractInlineFingerprint(sanitizedBody)) {
     parts.push(
       inlineFingerprintMarker(
-        fingerprintFromInlineComment(path37, line, sanitizedBody)
+        fingerprintFromInlineComment(path37, line2, sanitizedBody)
       )
     );
   }
   parts.push(
     findingFingerprintMarker(
-      findingFingerprintFromInlineComment(path37, line, sanitizedBody)
+      findingFingerprintFromInlineComment(path37, line2, sanitizedBody)
     )
   );
   return parts.join("\n\n");
@@ -139517,7 +139517,7 @@ function extractNormalizedTitle(body2) {
   return stripSeverityPrefix(extractTitle(body2));
 }
 function extractCoreMessage(body2) {
-  return semanticText(body2).split("\n").map((line) => line.trim()).filter(Boolean).filter((line) => !/^\*\*.+\*\*$/.test(line)).slice(0, 6).join(" ");
+  return semanticText(body2).split("\n").map((line2) => line2.trim()).filter(Boolean).filter((line2) => !/^\*\*.+\*\*$/.test(line2)).slice(0, 6).join(" ");
 }
 function stableFindingFingerprint(input) {
   const canonical = [
@@ -140021,6 +140021,12 @@ function unique(values) {
 }
 
 // src/review-projection/domain/review-projection.ts
+var FindingSeverity = /* @__PURE__ */ ((FindingSeverity3) => {
+  FindingSeverity3["Critical"] = "critical";
+  FindingSeverity3["Major"] = "major";
+  FindingSeverity3["Minor"] = "minor";
+  return FindingSeverity3;
+})(FindingSeverity || {});
 var LifecycleRevalidationVerdict = /* @__PURE__ */ ((LifecycleRevalidationVerdict2) => {
   LifecycleRevalidationVerdict2["Resolved"] = "resolved";
   LifecycleRevalidationVerdict2["StillValid"] = "still_valid";
@@ -140093,8 +140099,8 @@ var CurrentReviewProjector = class {
       const hint = this.matchPriorLineage(finding, input.priorLineageHints);
       const lineageId = hint?.lineageId ?? this.createLineageId(input.scope, finding);
       if (hint) matchedLineages.add(hint.lineageId);
-      const target = this.findTargetForFinding(
-        finding,
+      const target = this.findTargetForLineage(
+        lineageId,
         input.inventory.targets
       );
       const suppressed = target?.disposition === "command_suppressed" /* CommandSuppressed */;
@@ -140108,7 +140114,7 @@ var CurrentReviewProjector = class {
         category: finding.category,
         normalizedFailureModeHash: finding.normalizedFailureModeHash,
         ...finding.symbolAnchor ? { symbolAnchor: finding.symbolAnchor } : {},
-        ...finding.trustedMarker ? { trustedMarker: finding.trustedMarker } : {},
+        trustedMarker: lineageId,
         ...finding.anchorVerified !== void 0 ? { anchorVerified: finding.anchorVerified } : {},
         title: finding.title,
         message: finding.message,
@@ -140130,10 +140136,18 @@ var CurrentReviewProjector = class {
     );
     for (const hint of input.priorLineageHints) {
       if (matchedLineages.has(hint.lineageId) || !hint.active) continue;
-      const target = this.findTargetForHint(hint, input.inventory.targets);
-      if (!target) continue;
-      const decision = decisionByTarget.get(target.targetId);
-      const state3 = this.priorOccurrenceState(target, decision?.verdict);
+      const target = this.findTargetForLineage(
+        hint.lineageId,
+        input.inventory.targets
+      );
+      const decision = target ? decisionByTarget.get(target.targetId) : void 0;
+      const observations = (input.inventory.resolvedObservations ?? []).filter(
+        (item) => item.lineageId === hint.lineageId && item.trustedMarker === hint.lineageId
+      );
+      const confirmedClosed = input.inventory.complete && !input.inventory.targets.some(
+        (item) => item.trustedMarker === hint.lineageId
+      ) && observations.length === 1 && observations[0].confirmed;
+      const state3 = confirmedClosed ? "resolved" /* Resolved */ : target ? this.priorOccurrenceState(target, decision?.verdict) : "carried_unverified" /* CarriedUnverified */;
       occurrences.push({
         lineageId: hint.lineageId,
         sourceFindingIds: [],
@@ -140142,16 +140156,16 @@ var CurrentReviewProjector = class {
         category: hint.category,
         normalizedFailureModeHash: hint.normalizedFailureModeHash,
         ...hint.symbolAnchor ? { symbolAnchor: hint.symbolAnchor } : {},
-        ...hint.trustedMarker ? { trustedMarker: hint.trustedMarker } : {},
+        trustedMarker: hint.lineageId,
         title: hint.title,
         message: hint.message,
-        filePath: target.currentPath ?? hint.filePath,
+        filePath: target?.currentPath ?? hint.filePath,
         ...hint.startLine !== void 0 ? { startLine: hint.startLine } : {},
-        ...target.currentLine !== void 0 ? { line: target.currentLine } : hint.line !== void 0 ? { line: hint.line } : {},
+        ...target?.currentLine !== void 0 ? { line: target.currentLine } : hint.line !== void 0 ? { line: hint.line } : {},
         ...hint.endLine !== void 0 ? { endLine: hint.endLine } : {},
         placement: summaryPlacement(
           hint.lineageId,
-          target.currentPath ?? hint.filePath,
+          target?.currentPath ?? hint.filePath,
           "historical occurrence"
         ),
         providerVoteKeys: [],
@@ -140167,14 +140181,14 @@ var CurrentReviewProjector = class {
     if (target.disposition === "command_suppressed" /* CommandSuppressed */) {
       return "suppressed_by_human" /* SuppressedByHuman */;
     }
-    if (hasValidTrustedResolutionMarker(target)) {
-      return "resolved" /* Resolved */;
-    }
     if (target.disposition === "human_reply" /* HumanReply */) {
       return "uncertain" /* Uncertain */;
     }
+    if (hasValidTrustedResolutionMarker(target)) {
+      return "carried_unverified" /* CarriedUnverified */;
+    }
     if (verdict === "resolved" /* Resolved */) {
-      return "resolved" /* Resolved */;
+      return "carried_unverified" /* CarriedUnverified */;
     }
     if (verdict === "still_valid" /* StillValid */) {
       return "carried_unverified" /* CarriedUnverified */;
@@ -140197,24 +140211,11 @@ var CurrentReviewProjector = class {
     );
     return byLocation.length === 1 ? byLocation[0] : void 0;
   }
-  findTargetForFinding(finding, targets) {
-    if (finding.trustedMarker) {
-      const markerMatches = targets.filter(
-        (target) => target.trustedMarker === finding.trustedMarker
-      );
-      if (markerMatches.length === 1) return markerMatches[0];
-    }
-    const locationMatches = targets.filter(
-      (target) => normalizePath(target.currentPath ?? target.originalPath) === normalizePath(finding.filePath) && target.currentLine !== void 0 && finding.line !== void 0 && Math.abs(target.currentLine - finding.line) <= 2
+  findTargetForLineage(lineageId, targets) {
+    const matches = targets.filter(
+      (target) => target.trustedMarker === lineageId
     );
-    return locationMatches.length === 1 ? locationMatches[0] : void 0;
-  }
-  findTargetForHint(hint, targets) {
-    if (!hint.trustedMarker) return void 0;
-    const markerMatches = targets.filter(
-      (target) => target.trustedMarker === hint.trustedMarker
-    );
-    return markerMatches.length === 1 ? markerMatches[0] : void 0;
+    return matches.length === 1 ? matches[0] : void 0;
   }
   createLineageId(scope, finding) {
     return `rrl_${hashProjectionFact({
@@ -140414,6 +140415,176 @@ function assertWithinProjectionLimit(limitName, actual, limits) {
   }
 }
 
+// src/review-projection/domain/comparison-baseline.ts
+var boundedText = external_exports.string().min(1).refine((value) => Buffer.byteLength(value) <= REVIEW_PROJECTION_ABSOLUTE_LIMITS.maxStringBytes);
+var sha = external_exports.string().regex(/^[a-f0-9]{40}$/);
+var digest = external_exports.string().regex(/^[a-f0-9]{64}$/);
+var line = external_exports.number().int().positive().safe();
+var hintSchema = external_exports.object({
+  lineageId: external_exports.string().regex(/^rrl_[a-f0-9]{32}$/),
+  category: boundedText,
+  normalizedFailureModeHash: digest,
+  symbolAnchor: boundedText.optional(),
+  trustedMarker: external_exports.string().regex(/^(?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64})$/).optional(),
+  severity: external_exports.nativeEnum(FindingSeverity),
+  title: boundedText,
+  message: boundedText,
+  filePath: boundedText,
+  startLine: line.optional(),
+  line: line.optional(),
+  endLine: line.optional(),
+  firstSeenHeadSha: sha,
+  lastSeenHeadSha: sha,
+  active: external_exports.boolean()
+}).strict();
+var appliedResolutionSchema = external_exports.object({
+  lineageId: external_exports.string().regex(/^rrl_[a-f0-9]{32}$/),
+  targetId: boundedText,
+  threadId: boundedText,
+  markerFingerprint: external_exports.string().regex(/^(?:rrl_[a-f0-9]{32}|[a-f0-9]{24,64})$/),
+  resolvedAt: external_exports.string().refine((value) => {
+    const date4 = new Date(value);
+    return Number.isFinite(date4.getTime()) && date4.toISOString() === value;
+  })
+}).strict();
+var baselineSchema = external_exports.object({
+  schemaVersion: external_exports.literal("comparison_baseline.v1"),
+  sourceReviewedHeadSha: sha,
+  sourceReviewRevisionHash: digest,
+  sourceExecutionGeneration: external_exports.string().regex(/^[1-9][0-9]{0,18}$/).refine((value) => BigInt(value) <= 9223372036854775807n),
+  snapshotVersion: external_exports.number().int().positive().safe(),
+  projectionPolicyVersion: external_exports.enum([
+    "review-projection-policy.v5-t0",
+    "review-projection-policy.v6-comparison"
+  ]),
+  projectionEnvelopeVersion: external_exports.literal("review_projection.v1"),
+  priorLineageHints: external_exports.array(hintSchema).max(REVIEW_PROJECTION_ABSOLUTE_LIMITS.maxLineageHints),
+  appliedResolutions: external_exports.array(appliedResolutionSchema).max(REVIEW_PROJECTION_ABSOLUTE_LIMITS.maxLifecycleTargets)
+}).strict();
+function parseReviewComparisonBaseline(value) {
+  if (typeof value !== "string" || Buffer.byteLength(value) > REVIEW_PROJECTION_ABSOLUTE_LIMITS.maxProjectionBytes)
+    return null;
+  try {
+    const parsed = baselineSchema.safeParse(JSON.parse(value));
+    if (!parsed.success) return null;
+    const hints = parsed.data.priorLineageHints;
+    const resolutions = parsed.data.appliedResolutions;
+    if (new Set(
+      resolutions.map(
+        (item) => JSON.stringify([item.lineageId, item.threadId, item.targetId])
+      )
+    ).size !== resolutions.length)
+      return null;
+    if (resolutions.some(
+      (item) => !hints.some((hint) => hint.lineageId === item.lineageId) || item.markerFingerprint !== item.lineageId
+    ))
+      return null;
+    if (new Set(hints.map((hint) => hint.lineageId)).size !== hints.length)
+      return null;
+    if (hints.some(
+      (hint) => hint.startLine !== void 0 && hint.endLine !== void 0 && hint.startLine > hint.endLine
+    ))
+      return null;
+    return deepFreezeProjection(parsed.data);
+  } catch {
+    return null;
+  }
+}
+
+// src/review-projection/domain/review-presentation.ts
+function deriveReviewPresentation(input) {
+  const baseline = input.baseline?.sourceReviewedHeadSha !== input.reviewedHeadSha ? input.baseline : null;
+  const prior = new Map(
+    baseline?.priorLineageHints.map((hint) => [hint.lineageId, hint])
+  );
+  const occurrences = new Map(
+    input.occurrences.map((item) => [item.lineageId, item])
+  );
+  const severity = { critical: 0, major: 0, minor: 0, info: 0 };
+  const changes = { new: 0, resolved: 0, open: 0, unverified: 0 };
+  for (const item of occurrences.values()) {
+    if (item.state === "suppressed_by_human" /* SuppressedByHuman */) continue;
+    if (item.state === "resolved" /* Resolved */) {
+      if (prior.get(item.lineageId)?.active) changes.resolved++;
+      continue;
+    }
+    severity[item.severity]++;
+    changes.open++;
+    if (!prior.has(item.lineageId) && [
+      "new" /* New */,
+      "reconfirmed" /* Reconfirmed */,
+      "changed" /* Changed */
+    ].includes(item.state))
+      changes.new++;
+    if ([
+      "carried_unverified" /* CarriedUnverified */,
+      "uncertain" /* Uncertain */
+    ].includes(item.state))
+      changes.unverified++;
+  }
+  return Object.freeze({
+    variant: baseline ? "update" : "first",
+    state: input.incomplete || input.coverage.state !== "complete" /* Complete */ ? "incomplete" : "complete",
+    severity: Object.freeze(severity),
+    coverage: Object.freeze({
+      reviewed: input.coverage.reviewedFiles,
+      total: input.coverage.totalFiles
+    }),
+    ...baseline ? { changes: Object.freeze(changes) } : {}
+  });
+}
+
+// src/output/review-banner.ts
+function renderReviewBanner(baseUrl2, presentation) {
+  if (!baseUrl2) return "";
+  const numeric2 = {
+    ...presentation.severity,
+    ...presentation.coverage,
+    ...presentation.changes
+  };
+  if (!Object.values(numeric2).every(
+    (value) => Number.isSafeInteger(value) && value >= 0 && value <= 9999
+  ))
+    return "";
+  if (presentation.coverage && presentation.coverage.reviewed > presentation.coverage.total)
+    return "";
+  if (presentation.variant === "first" ? !!presentation.changes : !presentation.changes)
+    return "";
+  if (presentation.changes && (presentation.changes.new > presentation.changes.open || presentation.changes.unverified > presentation.changes.open))
+    return "";
+  try {
+    const base = new URL(baseUrl2);
+    if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash || base.pathname !== "/")
+      return "";
+    const url3 = new URL("/review-banner/v2.svg", base);
+    url3.search = new URLSearchParams({
+      state: presentation.state,
+      variant: presentation.variant,
+      ...Object.fromEntries(
+        Object.entries(numeric2).map(([key, value]) => [key, String(value)])
+      )
+    }).toString();
+    const source = (theme, layout) => `${url3}&theme=${theme}&layout=${layout}`.replaceAll("&", "&amp;");
+    return `<picture>
+<source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="${source("dark", "compact")}">
+<source media="(max-width: 600px)" srcset="${source("light", "compact")}">
+<source media="(prefers-color-scheme: dark)" srcset="${source("dark", "wide")}">
+<img src="${source("light", "wide")}" alt="${presentation.state === "incomplete" ? "Review incomplete" : presentation.variant === "update" ? "Review updated" : "Review complete"}" width="100%">
+</picture>`;
+  } catch {
+    return "";
+  }
+}
+function reviewPresentationHeading(presentation) {
+  if (presentation.variant === "update" && presentation.changes) {
+    const changes = presentation.changes;
+    return `## ${presentation.state === "incomplete" ? "Review incomplete" : "Review updated"}
+
+${changes.new} new \xB7 ${changes.resolved} resolved \xB7 ${changes.open} open${changes.unverified ? ` \xB7 ${changes.unverified} unverified (included in open)` : ""}`;
+  }
+  return "";
+}
+
 // src/utils/suggestion-formatter.ts
 function countMaxConsecutiveBackticks(str2) {
   const backtickSequences = str2.match(/`+/g);
@@ -140501,19 +140672,22 @@ function reviewerSummarySourceFromPr(pr2) {
   };
 }
 function isReviewerSummaryIncomplete(input) {
-  return input.incomplete === true || input.coverage?.complete === false || input.metrics.providersUsed > 0 && input.metrics.providersSuccess === 0;
+  return input.incomplete === true || input.reviewPresentation?.state === "incomplete" || input.coverage?.complete === false || input.metrics.providersUsed > 0 && input.metrics.providersSuccess === 0;
 }
 function renderReviewerSummaryMarkdown(input) {
   const locale = resolveReviewerSummaryLocale(input.language);
   const copy = reviewerSummaryCopy(input.language);
   const labels = sectionCopy[locale];
   const counts = {
-    total: input.metrics.totalFindings,
-    critical: input.metrics.critical,
-    major: input.metrics.major,
-    minor: input.metrics.minor
+    total: input.reviewPresentation ? Object.values(input.reviewPresentation.severity).reduce(
+      (sum, value) => sum + value,
+      0
+    ) : input.metrics.totalFindings,
+    critical: input.reviewPresentation?.severity.critical ?? input.metrics.critical,
+    major: input.reviewPresentation?.severity.major ?? input.metrics.major,
+    minor: input.reviewPresentation?.severity.minor ?? input.metrics.minor
   };
-  const previous = input.previousCounts;
+  const previous = input.reviewPresentation ? void 0 : input.previousCounts;
   const historical = (input.lifecycle?.length ?? 0) > 0 || input.lifecycleAttention;
   const incomplete = isReviewerSummaryIncomplete(input);
   const limitedScope = input.coverage && (input.coverage.unreviewedFiles > 0 || (input.coverage.compactedFiles ?? 0) > 0 || (input.coverage.metadataOnlyFiles ?? 0) > 0 || (input.coverage.skippedFiles ?? 0) > 0 || input.coverage.limitations.length > 0);
@@ -140521,7 +140695,7 @@ function renderReviewerSummaryMarkdown(input) {
     const count2 = counts[severity] + (previous?.[severity] ?? 0);
     return count2 > 0 ? `${["\u{1F534}", "\u{1F7E1}", "\u{1F535}"][i2]} **${count2} ${severity}**` : "";
   }).filter(Boolean).join(" \xB7 ");
-  const heading = incomplete ? copy.incompleteHeading(counts.total) : severityLine2 || (counts.total > 0 ? copy.findingsHeading(counts) : historical ? `## ${labels.previous}` : input.dismissedFindings ? `## ${labels.dismissed}` : limitedScope ? copy.limitedNoFindingsHeading : copy.noFindingsHeading);
+  const heading = (input.reviewPresentation ? reviewPresentationHeading(input.reviewPresentation) : "") || (incomplete ? copy.incompleteHeading(counts.total) : severityLine2 || (counts.total > 0 ? copy.findingsHeading(counts) : historical ? `## ${labels.previous}` : input.dismissedFindings ? `## ${labels.dismissed}` : limitedScope ? copy.limitedNoFindingsHeading : copy.noFindingsHeading));
   const lines = [
     incomplete ? REVIEW_SUMMARY_STATUS_INCOMPLETE_MARKER : REVIEW_SUMMARY_STATUS_COMPLETE_MARKER,
     `<!-- reviewrouter:summary-locale:${locale} -->`,
@@ -140540,7 +140714,7 @@ function renderReviewerSummaryMarkdown(input) {
   }
   if (incomplete && severityLine2) lines.push("", severityLine2);
   const chrome = compactCopy[locale];
-  const banner = renderReviewerBanner(input, locale, incomplete, counts);
+  const banner = renderReviewerBanner(input, incomplete, counts);
   if (banner) lines.push("", banner);
   let omitted = false;
   const pushWarning = (value) => {
@@ -140575,13 +140749,13 @@ function renderReviewerSummaryMarkdown(input) {
       pushWarning(escapeMarkdownText(warning3));
   }
   const visibleLifecycle = (input.lifecycle ?? []).filter(
-    (line) => line.kind === "active" || line.kind === "uncertain" || line.kind === "carried"
+    (line2) => line2.kind === "active" || line2.kind === "uncertain" || line2.kind === "carried"
   );
   if (visibleLifecycle.length) {
     lines.push("", `**${labels.previous} (${visibleLifecycle.length})**`);
-    for (const line of visibleLifecycle) {
+    for (const line2 of visibleLifecycle) {
       pushWarning(
-        `- **${copy.lifecycle[line.kind]}** \xB7 ${escapeMarkdownText(line.title)} \xB7 ${escapeCoverageManifestPath(line.locationLabel)}`
+        `- **${copy.lifecycle[line2.kind]}** \xB7 ${escapeMarkdownText(line2.title)} \xB7 ${escapeCoverageManifestPath(line2.locationLabel)}`
       );
     }
   }
@@ -140630,18 +140804,18 @@ function renderReviewerSummaryMarkdown(input) {
     const manifestFiles = incomplete ? [...coverage.files ?? []].sort(compareCoverageManifestFiles) : (coverage.files ?? []).filter((file) => file.status !== "full");
     const manifestLines = [];
     for (const file of manifestFiles.slice(0, maxCoverageFileLines)) {
-      const line = `- ${escapeCoverageManifestPath(file.path)} - ${escapeMarkdownText(file.status)}${file.reason ? ` \u2014 ${escapeMarkdownText(file.reason)}` : ""}`;
+      const line2 = `- ${escapeCoverageManifestPath(file.path)} - ${escapeMarkdownText(file.status)}${file.reason ? ` \u2014 ${escapeMarkdownText(file.reason)}` : ""}`;
       const projected = [
         ...incomplete && manifestLines.length === 0 ? [copy.manifestHeading, ""] : [],
         ...manifestLines,
-        line,
+        line2,
         "",
         copy.moreFiles(manifestFiles.length - manifestLines.length)
       ];
       if (utf8Bytes(projected.join("\n")) > 16e3) {
         break;
       }
-      manifestLines.push(line);
+      manifestLines.push(line2);
     }
     if (incomplete && manifestFiles.length > 0)
       diagnostics.push(copy.manifestHeading, "");
@@ -140656,9 +140830,9 @@ function renderReviewerSummaryMarkdown(input) {
       `### ${labels.previous}`,
       "",
       ...history.map(
-        (line) => `- **${copy.lifecycle[line.kind]}** \xB7 ${escapeMarkdownText(line.title)} \xB7 ${escapeCoverageManifestPath(line.locationLabel)}
+        (line2) => `- **${copy.lifecycle[line2.kind]}** \xB7 ${escapeMarkdownText(line2.title)} \xB7 ${escapeCoverageManifestPath(line2.locationLabel)}
 
-${safeFindingBody(line.message)}`
+${safeFindingBody(line2.message)}`
       )
     );
   const measured = input.measurements;
@@ -141813,15 +141987,15 @@ function limitUtf8(value, maxBytes) {
   let fence;
   for (const original of value.split("\n")) {
     const next = advanceMarkdownFence(original, fence);
-    const line = next.normalized ?? original;
+    const line2 = next.normalized ?? original;
     if (next.closing) block.push(next.closing);
     fence = next.fence;
     if (!fence) {
-      depth += (line.match(/<details\b[^>]*>/gi) ?? []).length;
-      depth -= (line.match(/<\/details>/gi) ?? []).length;
+      depth += (line2.match(/<details\b[^>]*>/gi) ?? []).length;
+      depth -= (line2.match(/<\/details>/gi) ?? []).length;
     }
-    block.push(line);
-    if (!fence && depth === 0 && (!line.trim() || line.includes("</details>"))) {
+    block.push(line2);
+    if (!fence && depth === 0 && (!line2.trim() || line2.includes("</details>"))) {
       const candidate = [...retained, ...block].join("\n");
       if (utf8Bytes(candidate + suffix) > maxBytes) break;
       retained.push(...block);
@@ -141984,10 +142158,10 @@ function findingExcerpt(message, locale) {
     return "";
   const lines = first.split(/\r?\n/);
   const paragraph = [];
-  for (const line of lines) {
-    if (/^ {0,3}(?:=+[ \t]*$|-+[ \t]*$|\|?\s*:?-{3})/.test(line)) return "";
-    if (markdownInterruptsParagraph(line)) break;
-    paragraph.push(line);
+  for (const line2 of lines) {
+    if (/^ {0,3}(?:=+[ \t]*$|-+[ \t]*$|\|?\s*:?-{3})/.test(line2)) return "";
+    if (markdownInterruptsParagraph(line2)) break;
+    paragraph.push(line2);
   }
   return plainExcerpt(
     paragraph.join(" ").replace(/\s+/g, " ").trim(),
@@ -141995,18 +142169,18 @@ function findingExcerpt(message, locale) {
     locale
   );
 }
-function markdownInterruptsParagraph(line) {
-  return !!readMarkdownFenceOpening(line) || /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
-    line
-  ) || htmlInterruptsParagraph(line);
+function markdownInterruptsParagraph(line2) {
+  return !!readMarkdownFenceOpening(line2) || /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|=+[ \t]*$|\|?\s*:?-{3}|(?:[-*_][ \t]*){3,}$)/.test(
+    line2
+  ) || htmlInterruptsParagraph(line2);
 }
-function htmlInterruptsParagraph(line) {
+function htmlInterruptsParagraph(line2) {
   return /^ {0,3}<(?:!--|\?|!\[CDATA\[|![A-Z]|\/?(?:script|pre|style|textarea|address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t]|\/?>|$))/i.test(
-    line
+    line2
   );
 }
-function readMarkdownFenceOpening(line) {
-  const match2 = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line);
+function readMarkdownFenceOpening(line2) {
+  const match2 = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line2);
   if (!match2 || match2[2][0] === "`" && match2[3].includes("`"))
     return void 0;
   return { delimiter: match2[2], indent: match2[1].length };
@@ -142014,21 +142188,21 @@ function readMarkdownFenceOpening(line) {
 function closeMarkdownFence(fence) {
   return " ".repeat(fence.indent) + fence.delimiter;
 }
-function advanceMarkdownFence(line, fence) {
+function advanceMarkdownFence(line2, fence) {
   if (fence) {
-    const closer = /^( *)(`{3,}|~{3,})[ \t]*\r?$/.exec(line);
+    const closer = /^( *)(`{3,}|~{3,})[ \t]*\r?$/.exec(line2);
     if (closer && closer[2][0] === fence.delimiter[0] && closer[2].length >= fence.delimiter.length && closer[1].length <= fence.indent + 3)
       return {
         normalized: closer[1].length < fence.indent || closer[1].length > 3 ? closeMarkdownFence(fence) : void 0
       };
-    if (!line.trim() || line.match(/^ */)[0].length >= fence.indent)
+    if (!line2.trim() || line2.match(/^ */)[0].length >= fence.indent)
       return { fence };
     return {
-      fence: readMarkdownFenceOpening(line),
+      fence: readMarkdownFenceOpening(line2),
       closing: closeMarkdownFence(fence)
     };
   }
-  return { fence: readMarkdownFenceOpening(line) };
+  return { fence: readMarkdownFenceOpening(line2) };
 }
 function markdownBlocks(value) {
   const blocks2 = [];
@@ -142036,13 +142210,13 @@ function markdownBlocks(value) {
   let fence;
   for (const original of value.split("\n")) {
     const next = advanceMarkdownFence(original, fence);
-    const line = next.normalized ?? original;
+    const line2 = next.normalized ?? original;
     if (next.closing) lines.push(next.closing);
     fence = next.fence;
-    if (!line.trim() && !fence) {
+    if (!line2.trim() && !fence) {
       if (lines.length) blocks2.push(lines.join("\n"));
       lines = [];
-    } else lines.push(line);
+    } else lines.push(line2);
   }
   if (fence) lines.push(closeMarkdownFence(fence));
   if (lines.length) blocks2.push(lines.join("\n"));
@@ -142068,22 +142242,22 @@ function safeFindingBody(value) {
     if (prose.length) lines.push(escapeHtmlOutsideCodeSpans(prose.join("\n")));
     prose = [];
   };
-  for (const line of neutralizeDetailsMarkup(value).split("\n")) {
+  for (const line2 of neutralizeDetailsMarkup(value).split("\n")) {
     const previous = fence;
-    const next = advanceMarkdownFence(line, fence);
+    const next = advanceMarkdownFence(line2, fence);
     fence = next.fence;
     if (previous && !next.closing) {
-      lines.push(next.normalized ?? line);
+      lines.push(next.normalized ?? line2);
       continue;
     }
     if (next.closing) lines.push(next.closing);
     if (fence) {
       flush();
-      lines.push(line);
-    } else if (markdownInterruptsParagraph(line)) {
+      lines.push(line2);
+    } else if (markdownInterruptsParagraph(line2)) {
       flush();
-      lines.push(escapeHtmlOutsideCodeSpans(line));
-    } else prose.push(line);
+      lines.push(escapeHtmlOutsideCodeSpans(line2));
+    } else prose.push(line2);
   }
   flush();
   return markdownBlocks(lines.join("\n")).join("\n\n");
@@ -142114,40 +142288,26 @@ function escapeHtmlOutsideCodeSpans(value) {
     return result2 + escape4(paragraph.slice(cursor));
   }).join("");
 }
-function renderReviewerBanner(input, locale, incomplete, counts) {
-  if (!input.bannerBaseUrl) return "";
-  const displayed = {
-    critical: counts.critical + (input.previousCounts?.critical ?? 0),
-    major: counts.major + (input.previousCounts?.major ?? 0),
-    minor: counts.minor + (input.previousCounts?.minor ?? 0),
-    info: 0
-  };
-  if (!Object.values(displayed).every(
-    (value) => Number.isSafeInteger(value) && value >= 0 && value <= 9999
-  ))
-    return "";
-  try {
-    const base = new URL(input.bannerBaseUrl);
-    if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash || base.pathname !== "/")
-      return "";
-    const url3 = new URL("/review-banner/v1.svg", base);
-    url3.search = new URLSearchParams({
+function renderReviewerBanner(input, incomplete, counts) {
+  return renderReviewBanner(
+    input.bannerBaseUrl,
+    input.reviewPresentation ?? {
+      variant: "first",
       state: incomplete ? "incomplete" : "complete",
-      ...Object.fromEntries(
-        Object.entries(displayed).map(([key, value]) => [key, String(value)])
-      ),
-      lang: locale
-    }).toString();
-    const light = escapeHtml(`${url3}&theme=light`);
-    const dark = escapeHtml(`${url3}&theme=dark`);
-    return `<picture>
-<source media="(prefers-color-scheme: dark)" srcset="${dark}">
-<source media="(prefers-color-scheme: light)" srcset="${light}">
-<img src="${light}" alt="ReviewRouter" width="640" height="110">
-</picture>`;
-  } catch {
-    return "";
-  }
+      severity: {
+        critical: counts.critical + (input.previousCounts?.critical ?? 0),
+        major: counts.major + (input.previousCounts?.major ?? 0),
+        minor: counts.minor + (input.previousCounts?.minor ?? 0),
+        info: 0
+      },
+      ...input.coverage ? {
+        coverage: {
+          reviewed: input.coverage.reviewedFiles,
+          total: input.coverage.totalFiles
+        }
+      } : {}
+    }
+  );
 }
 
 // src/utils/severity.ts
@@ -142445,7 +142605,7 @@ ${fence}`;
   }
 };
 function suggestionToDiff(suggestion) {
-  return suggestion.trimEnd().split("\n").map((line) => `+${line}`).join("\n");
+  return suggestion.trimEnd().split("\n").map((line2) => `+${line2}`).join("\n");
 }
 function isSingleLineSuggestion(suggestion) {
   return suggestion.trimEnd().split("\n").length === 1;
@@ -142548,12 +142708,12 @@ var PATTERNS = [
 function detectPatternFindings(filename, addedLines) {
   if (filename.includes("analysis/ast/patterns.ts")) return [];
   const findings = [];
-  for (const { line, content } of addedLines) {
+  for (const { line: line2, content } of addedLines) {
     for (const pattern of PATTERNS) {
       if (pattern.regex.test(content)) {
         findings.push({
           file: filename,
-          line,
+          line: line2,
           severity: pattern.severity,
           title: pattern.title,
           message: pattern.message,
@@ -142605,10 +142765,10 @@ var ASTAnalyzer = class {
           const fnNode = node.childForFieldName("function");
           if (fnNode && fnNode.text === "console.log") {
             const row = node.startPosition.row;
-            const line = lineLookup[row] ?? row + 1;
+            const line2 = lineLookup[row] ?? row + 1;
             findings.push({
               file: filename,
-              line,
+              line: line2,
               severity: "minor",
               title: "Console logging left in code",
               message: "Remove debug logging before merging.",
@@ -142619,10 +142779,10 @@ var ASTAnalyzer = class {
         }
         if (node.type === "debugger_statement") {
           const row = node.startPosition.row;
-          const line = lineLookup[row] ?? row + 1;
+          const line2 = lineLookup[row] ?? row + 1;
           findings.push({
             file: filename,
-            line,
+            line: line2,
             severity: "major",
             title: "Debugger statement",
             message: "Debugger statements should be removed.",
@@ -142632,10 +142792,10 @@ var ASTAnalyzer = class {
         }
         if (language === "typescript" && node.type === "predefined_type" && node.text === "any") {
           const row = node.startPosition.row;
-          const line = lineLookup[row] ?? row + 1;
+          const line2 = lineLookup[row] ?? row + 1;
           findings.push({
             file: filename,
-            line,
+            line: line2,
             severity: "major",
             title: "Unsafe any type",
             message: "Avoid using `any`; prefer specific types.",
@@ -142647,10 +142807,10 @@ var ASTAnalyzer = class {
           const body2 = node.childForFieldName("body");
           if (body2 && body2.namedChildCount === 0) {
             const row = node.startPosition.row;
-            const line = lineLookup[row] ?? row + 1;
+            const line2 = lineLookup[row] ?? row + 1;
             findings.push({
               file: filename,
-              line,
+              line: line2,
               severity: "major",
               title: "Empty catch block",
               message: "Handle or log errors in catch blocks.",
@@ -142662,10 +142822,10 @@ var ASTAnalyzer = class {
       } else {
         if (node.type === "call" && node.child(0)?.text === "print") {
           const row = node.startPosition.row;
-          const line = lineLookup[row] ?? row + 1;
+          const line2 = lineLookup[row] ?? row + 1;
           findings.push({
             file: filename,
-            line,
+            line: line2,
             severity: "minor",
             title: "Debug print statement",
             message: "Remove debug print statements before merging.",
@@ -142686,11 +142846,11 @@ var ASTAnalyzer = class {
   }
   runHeuristics(filename, addedLines) {
     const findings = [];
-    for (const { line, content } of addedLines) {
+    for (const { line: line2, content } of addedLines) {
       if (content.includes("Promise<any>") && !content.includes("/Promise<any>/") || /:\\s*any\\b/.test(content) && !content.includes("/:\\s*any\\b/")) {
         findings.push({
           file: filename,
-          line,
+          line: line2,
           severity: "major",
           title: "Unsafe any type",
           message: "Avoid using `any`; prefer specific types.",
@@ -142701,7 +142861,7 @@ var ASTAnalyzer = class {
       if (/catch\s*\([^)]*\)\s*{\s*}/.test(content)) {
         findings.push({
           file: filename,
-          line,
+          line: line2,
           severity: "major",
           title: "Empty catch block",
           message: "Handle or log errors in catch blocks.",
@@ -143105,8 +143265,8 @@ var IncrementalReviewer = class _IncrementalReviewer {
   /**
    * Validate that a string is a valid git SHA
    */
-  isValidSha(sha) {
-    return /^[a-f0-9]{40}$/i.test(sha);
+  isValidSha(sha2) {
+    return /^[a-f0-9]{40}$/i.test(sha2);
   }
   /**
    * Get list of files changed since the last review
@@ -143780,12 +143940,12 @@ function detectSecrets(file) {
     return findings;
   }
   const addedLines = mapAddedLines(file.patch);
-  for (const { line, content } of addedLines) {
+  for (const { line: line2, content } of addedLines) {
     for (const pattern of SECRET_PATTERNS) {
       if (pattern.regex.test(content)) {
         findings.push({
           file: file.filename,
-          line,
+          line: line2,
           severity: "critical",
           title: pattern.title,
           message: pattern.message,
@@ -144286,14 +144446,14 @@ function validateSuggestionRange(startLine, endLine, patch) {
     };
   }
   const lineMap = mapLinesToPositions(patch);
-  for (let line = startLine; line <= endLine; line++) {
-    if (!lineMap.has(line)) {
-      return { isValid: false, reason: `Line ${line} not found in diff` };
+  for (let line2 = startLine; line2 <= endLine; line2++) {
+    if (!lineMap.has(line2)) {
+      return { isValid: false, reason: `Line ${line2} not found in diff` };
     }
   }
   const positions = [];
-  for (let line = startLine; line <= endLine; line++) {
-    const pos = lineMap.get(line);
+  for (let line2 = startLine; line2 <= endLine; line2++) {
+    const pos = lineMap.get(line2);
     if (pos !== void 0) {
       positions.push(pos);
     }
@@ -145048,10 +145208,10 @@ ${content.substring(0, 500)}...`
     }
     return { keys: keys2, comments: activeComments };
   }
-  hasInlineDuplicate(activeComments, path37, line, body2) {
+  hasInlineDuplicate(activeComments, path37, line2, body2) {
     const marker2 = extractInlineFingerprint(body2);
-    return activeComments.keys.has(signatureFromInlineComment(path37, line, body2)) || activeComments.keys.has(fingerprintFromInlineComment(path37, line, body2)) || (marker2 ? activeComments.keys.has(marker2) : false) || activeComments.comments.some(
-      (comment) => isLikelySameInlineFinding(comment, { path: path37, line, body: body2 })
+    return activeComments.keys.has(signatureFromInlineComment(path37, line2, body2)) || activeComments.keys.has(fingerprintFromInlineComment(path37, line2, body2)) || (marker2 ? activeComments.keys.has(marker2) : false) || activeComments.comments.some(
+      (comment) => isLikelySameInlineFinding(comment, { path: path37, line: line2, body: body2 })
     );
   }
   /**
@@ -145672,12 +145832,12 @@ ${comment.body.substring(0, 200)}...`
         if (Buffer.byteLength(para, "utf8") > _CommentPoster.MAX_COMMENT_SIZE) {
           const lines = para.split("\n");
           let lineChunk = "";
-          for (const line of lines) {
-            if (Buffer.byteLength(lineChunk + line + "\n", "utf8") > _CommentPoster.MAX_COMMENT_SIZE) {
+          for (const line2 of lines) {
+            if (Buffer.byteLength(lineChunk + line2 + "\n", "utf8") > _CommentPoster.MAX_COMMENT_SIZE) {
               chunks.push(lineChunk.trim());
               lineChunk = "";
             }
-            lineChunk += line + "\n";
+            lineChunk += line2 + "\n";
           }
           current = lineChunk + "\n\n";
         } else {
@@ -145993,7 +146153,7 @@ ${generatedBlock}` : generatedBlock;
     return `${this.changeVerb(file)} ${target} test coverage.`;
   }
   summarizeDocsFile(file, patch) {
-    const headings = patch.additions.map((line) => line.match(/^#{1,4}\s+(.+)/)?.[1]?.trim()).filter((heading) => Boolean(heading)).slice(0, 2);
+    const headings = patch.additions.map((line2) => line2.match(/^#{1,4}\s+(.+)/)?.[1]?.trim()).filter((heading) => Boolean(heading)).slice(0, 2);
     if (headings.length > 0) {
       return `${this.changeVerb(file)} documentation for ${headings.join(", ")}.`;
     }
@@ -146001,10 +146161,10 @@ ${generatedBlock}` : generatedBlock;
   }
   summarizeDependencyFile(file, patch) {
     const additions = patch.additions.filter(
-      (line) => line.trim() && !line.trim().startsWith("#")
+      (line2) => line2.trim() && !line2.trim().startsWith("#")
     ).length;
     const deletions = patch.deletions.filter(
-      (line) => line.trim() && !line.trim().startsWith("#")
+      (line2) => line2.trim() && !line2.trim().startsWith("#")
     ).length;
     if (additions > 0 && deletions > 0) {
       return `${this.changeVerb(file)} dependency lock entries and version metadata.`;
@@ -146039,21 +146199,21 @@ ${generatedBlock}` : generatedBlock;
     const additions = [];
     const deletions = [];
     const context5 = [];
-    for (const line of patch.split("\n")) {
-      if (line.startsWith("+++") || line.startsWith("---")) {
+    for (const line2 of patch.split("\n")) {
+      if (line2.startsWith("+++") || line2.startsWith("---")) {
         continue;
       }
-      if (line.startsWith("@@")) {
-        const headerContext = line.replace(/^@@[^@]*@@\s*/, "").trim();
+      if (line2.startsWith("@@")) {
+        const headerContext = line2.replace(/^@@[^@]*@@\s*/, "").trim();
         if (headerContext) context5.push(headerContext);
         continue;
       }
-      if (line.startsWith("+")) {
-        additions.push(line.slice(1).trim());
-      } else if (line.startsWith("-")) {
-        deletions.push(line.slice(1).trim());
-      } else if (line.trim()) {
-        context5.push(line.trim());
+      if (line2.startsWith("+")) {
+        additions.push(line2.slice(1).trim());
+      } else if (line2.startsWith("-")) {
+        deletions.push(line2.slice(1).trim());
+      } else if (line2.trim()) {
+        context5.push(line2.trim());
       }
     }
     return { additions, deletions, context: context5 };
@@ -146077,9 +146237,9 @@ ${generatedBlock}` : generatedBlock;
         primary: false
       }
     ];
-    for (const line of lines) {
+    for (const line2 of lines) {
       for (const { pattern, primary: isPrimary } of patterns) {
-        const match2 = line.match(pattern);
+        const match2 = line2.match(pattern);
         if (match2?.[1]) {
           const symbol = match2[1];
           if (!this.isGenericSymbol(symbol)) {
@@ -146105,7 +146265,7 @@ ${deleted}`;
     if (deleted.includes("?.") || deleted.includes("??") || /\bnull\b/.test(combined) || /\bfallback\b/.test(combined)) {
       topics.push("fallback/null handling");
     }
-    if (patch.additions.some((line) => line.startsWith("return ")) || patch.deletions.some((line) => line.startsWith("return "))) {
+    if (patch.additions.some((line2) => line2.startsWith("return ")) || patch.deletions.some((line2) => line2.startsWith("return "))) {
       topics.push("return value handling");
     }
     if (/\bthrow\b|\bcatch\b|\btry\b/.test(combined)) {
@@ -146172,8 +146332,8 @@ ${deleted}`;
   }
   extractConfigKeys(lines) {
     const keys2 = [];
-    for (const line of lines) {
-      const trimmed = line.trim();
+    for (const line2 of lines) {
+      const trimmed = line2.trim();
       const match2 = trimmed.match(/^["']?([A-Za-z0-9_.-]+)["']?\s*[:=]/);
       if (match2?.[1] && !match2[1].match(/^\d+$/)) {
         keys2.push(this.truncate(match2[1], 48));
@@ -146687,11 +146847,11 @@ var ContextRetriever = class {
   buildSnippets(file) {
     const added = mapAddedLines(file.patch);
     if (added.length === 0) return [];
-    return added.map((line) => ({
+    return added.map((line2) => ({
       filename: file.filename,
-      startLine: line.line,
-      endLine: line.line,
-      code: line.content
+      startLine: line2.line,
+      endLine: line2.line,
+      code: line2.content
     }));
   }
   extractImports(patch) {
@@ -146888,9 +147048,9 @@ var FeedbackFilter = class {
       );
       for (const comment of comments) {
         const activeLine = comment.line;
-        const line = activeLine ?? comment.original_line;
+        const line2 = activeLine ?? comment.original_line;
         const body2 = comment.body || "";
-        const signature = this.signatureFromComment(comment.path, line, body2);
+        const signature = this.signatureFromComment(comment.path, line2, body2);
         const marker2 = extractInlineFingerprint(body2);
         if (isReviewRouterInlineComment(body2) && activeLine != null) {
           alreadyPosted.add(signature);
@@ -147023,8 +147183,8 @@ var FeedbackFilter = class {
       (existing) => isLikelySameDismissedFinding(existing, comment)
     );
   }
-  signatureFromComment(path37, line, body2) {
-    return signatureFromInlineComment(path37, line, body2);
+  signatureFromComment(path37, line2, body2) {
+    return signatureFromInlineComment(path37, line2, body2);
   }
 };
 function skippedFindingBody(skip) {
@@ -147144,9 +147304,9 @@ var TOKEN_STOPWORDS = /* @__PURE__ */ new Set([
   "when",
   "with"
 ]);
-function locationKey(path37, line) {
-  if (!path37 || line == null) return null;
-  return `${path37.toLowerCase()}:${line}`;
+function locationKey(path37, line2) {
+  if (!path37 || line2 == null) return null;
+  return `${path37.toLowerCase()}:${line2}`;
 }
 
 // src/github/ledger.ts
@@ -148420,12 +148580,12 @@ var CodeGraphBuilder = class {
   extractAddedLines(patch) {
     const lines = patch.split("\n");
     const addedLines = [];
-    for (const line of lines) {
-      if (line.startsWith("@@")) {
+    for (const line2 of lines) {
+      if (line2.startsWith("@@")) {
         continue;
       }
-      if (line.startsWith("+") && !line.startsWith("+++")) {
-        addedLines.push(line.substring(1));
+      if (line2.startsWith("+") && !line2.startsWith("+++")) {
+        addedLines.push(line2.substring(1));
       }
     }
     return addedLines;
@@ -148621,8 +148781,8 @@ var PromptGenerator = class {
       lines.push("");
       lines.push("    Fix prompt:");
       const promptLines = prompt.fixPrompt.split("\n");
-      for (const line of promptLines) {
-        lines.push(`    ${line}`);
+      for (const line2 of promptLines) {
+        lines.push(`    ${line2}`);
       }
       lines.push("");
       lines.push("-".repeat(50));
@@ -150606,14 +150766,15 @@ var ReviewThreadInventoryLoader = class {
     this.trustedAuthors = trustedAuthors;
     this.observationAuthors = observationAuthors;
   }
-  async load(prNumber) {
+  async load(prNumber, priorLineageHints = [], appliedResolutions = []) {
     const inventory = {
       candidates: [],
       manualAttention: [],
       manualAttentionIssues: [],
       dedupeComments: [],
       warnings: [],
-      failed: false
+      failed: false,
+      resolvedObservations: []
     };
     try {
       let cursor;
@@ -150640,7 +150801,12 @@ var ReviewThreadInventoryLoader = class {
           throw new Error("pull request review thread nodes were missing");
         }
         for (const thread of threads.nodes || []) {
-          await this.classifyThread(thread, inventory);
+          await this.classifyThread(
+            thread,
+            inventory,
+            priorLineageHints,
+            appliedResolutions
+          );
         }
         if (threads.pageInfo.hasNextPage) {
           if (!threads.pageInfo.endCursor) {
@@ -150658,6 +150824,7 @@ var ReviewThreadInventoryLoader = class {
       if (inventory.failed) {
         inventory.candidates = [];
         inventory.dedupeComments = [];
+        inventory.resolvedObservations = [];
       }
     } catch (error4) {
       logger.warn(
@@ -150669,18 +150836,25 @@ var ReviewThreadInventoryLoader = class {
       inventory.manualAttentionIssues = [];
       inventory.dedupeComments = [];
       inventory.failed = true;
+      inventory.resolvedObservations = [];
       inventory.warnings.push("review thread lifecycle inventory failed");
     }
     return inventory;
   }
-  async classifyThread(thread, inventory) {
-    if (thread.isResolved) {
-      return;
-    }
+  async classifyThread(thread, inventory, priorLineageHints, appliedResolutions) {
+    if (thread.isResolved && priorLineageHints.length === 0) return;
     if (!thread.comments || !Array.isArray(thread.comments.nodes)) {
       throw new Error(`thread ${thread.id} comments connection was missing`);
     }
     let comments = thread.comments.nodes;
+    if (thread.isResolved) {
+      const parent2 = comments[0];
+      const marker3 = parseFindingMarker(parent2?.body ?? "");
+      if (!parent2 || !this.isTrustedAuthor(parent2.author) || marker3.kind !== "valid" /* Valid */ || !priorLineageHints.some(
+        (hint) => hint.active && hint.lineageId === marker3.fingerprint
+      ))
+        return;
+    }
     if (thread.comments.pageInfo.hasNextPage) {
       comments = await this.loadRemainingThreadComments(
         thread.id,
@@ -150699,6 +150873,10 @@ var ReviewThreadInventoryLoader = class {
       parent.author?.__typename
     );
     const marker2 = parseFindingMarker(parent.body ?? "");
+    if (thread.isResolved && (marker2.kind !== "valid" /* Valid */ || !priorLineageHints.some(
+      (hint) => hint.active && hint.lineageId === marker2.fingerprint
+    )))
+      return;
     if (marker2.kind === "conflict" /* Conflict */ || marker2.kind === "malformed" /* Malformed */) {
       if (managedObservation) {
         const reason = marker2.kind === "conflict" /* Conflict */ ? "conflicting_finding_marker" : "malformed_finding_marker";
@@ -150716,6 +150894,35 @@ var ReviewThreadInventoryLoader = class {
       return;
     }
     if (marker2.kind === "absent" /* Absent */) {
+      return;
+    }
+    if (thread.isResolved) {
+      if ((inventory.resolvedObservations?.length ?? 0) >= REVIEW_PROJECTION_ABSOLUTE_LIMITS.maxLifecycleTargets)
+        throw new Error("closed review observation limit exceeded");
+      const matching = priorLineageHints.filter(
+        (hint) => hint.active && hint.lineageId === marker2.fingerprint
+      );
+      if (matching.length !== 1 || !trustedAuthor) return;
+      const targetId2 = targetIdFor(thread.id, parent.id, marker2.fingerprint);
+      const resolution = findTrustedResolutionMarker({
+        comments,
+        targetId: targetId2,
+        fingerprint: marker2.fingerprint,
+        expectedAuthor: parent.author,
+        isTrustedAuthor: (author) => this.isTrustedAuthor(author)
+      });
+      const receipts = appliedResolutions.filter(
+        (item) => item.lineageId === matching[0].lineageId && item.targetId === targetId2 && item.threadId === thread.id && item.markerFingerprint === marker2.fingerprint
+      );
+      const resolvedAt = receipts.length === 1 ? receipts[0].resolvedAt : resolution?.commentUpdatedAt;
+      const humanInteraction = comments.slice(1).some((comment) => !this.isTrustedAuthor(comment.author));
+      inventory.resolvedObservations?.push({
+        lineageId: matching[0].lineageId,
+        trustedMarker: marker2.fingerprint,
+        confirmed: resolvedAt !== void 0 && !humanInteraction && normalizeCommentTimestamp(
+          parent.updatedAt ?? requireCommentTimestamp(parent.createdAt)
+        ) <= resolvedAt
+      });
       return;
     }
     const threadStateHash = hashReviewLifecycleThreadState({
@@ -153760,8 +153967,8 @@ var FindingFilter = class {
     }
     return this.isBlankBraceOrCommentLine(mappedLine.trim(), finding.line);
   }
-  isBlankBraceOrCommentLine(line, lineNumber) {
-    if (line === "" || line === "}" || line === "};" || line === "])" || line === "]);" || line.startsWith("//") || line.startsWith("/*") || line.startsWith("*")) {
+  isBlankBraceOrCommentLine(line2, lineNumber) {
+    if (line2 === "" || line2 === "}" || line2 === "};" || line2 === "])" || line2 === "]);" || line2.startsWith("//") || line2.startsWith("/*") || line2.startsWith("*")) {
       logger.debug(
         `Line ${lineNumber} is blank/brace/comment, likely incorrect line number`
       );
@@ -159257,9 +159464,9 @@ var ReviewOrchestrator = class {
       return true;
     }
     const path37 = target.currentPath || target.originalPath;
-    const line = target.currentLine ?? target.originalLine;
-    if (path37 && line != null && reviewCommentState.commandDismissedLocations?.has(
-      `${path37.toLowerCase()}:${line}`
+    const line2 = target.currentLine ?? target.originalLine;
+    if (path37 && line2 != null && reviewCommentState.commandDismissedLocations?.has(
+      `${path37.toLowerCase()}:${line2}`
     )) {
       return true;
     }
@@ -159267,7 +159474,7 @@ var ReviewOrchestrator = class {
     return this.components.feedbackFilter.isInlineCommandDismissed(
       {
         path: path37,
-        line: line ?? 0,
+        line: line2 ?? 0,
         side: "RIGHT",
         body: target.message,
         severity,
@@ -159582,13 +159789,13 @@ var ReviewOrchestrator = class {
     const commentReactions = [];
     for (const comment of comments) {
       const file = comment.path;
-      const line = comment.line || comment.original_line || 0;
+      const line2 = comment.line || comment.original_line || 0;
       const providerMatch = comment.body?.match(/\*\*Provider:\*\* `([^`]+)`/);
       const provider = providerMatch?.[1];
       if (!commentedFiles.has(file)) {
         commentedFiles.set(file, []);
       }
-      commentedFiles.get(file).push({ line, provider });
+      commentedFiles.get(file).push({ line: line2, provider });
       const reactions = await octokit.rest.reactions.listForPullRequestReviewComment({
         owner,
         repo,
@@ -159597,7 +159804,7 @@ var ReviewOrchestrator = class {
       commentReactions.push({
         commentId: comment.id,
         file,
-        line,
+        line: line2,
         provider,
         reactions: reactions.data.map((r2) => ({
           user: r2.user?.login || "unknown",
@@ -160362,7 +160569,7 @@ function formatReviewFailureSummary(error4, prNumber) {
     "```",
     "",
     "</details>"
-  ].filter((line) => line !== void 0).join("\n");
+  ].filter((line2) => line2 !== void 0).join("\n");
 }
 function codexOAuthReseedCommand(code) {
   if (code !== "codex_oauth_stale" && code !== "codex_oauth_invalid_secret") {
@@ -160616,7 +160823,7 @@ function cleanCandidateText(value) {
   return value.replace(/^>\s?.*$/gm, " ").replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/\|[-:| ]+\|/g, " ").replace(/\s+/g, " ").trim();
 }
 function looksUnsafeCandidateText(value) {
-  return /(?:diff --git|@@\s+-\d+|\+\+\+\s|---\s)/.test(value) || /(?:BEGIN|END)\s+(?:RSA|OPENSSH|PRIVATE)\s+KEY/i.test(value) || /(?:gh[pousr]_|github_pat_|sk-)[A-Za-z0-9_-]+/.test(value) || /(?:system|assistant|developer)\s*:/i.test(value) || value.split("\n").filter((line) => /^\s*[+->]/.test(line)).length > 4;
+  return /(?:diff --git|@@\s+-\d+|\+\+\+\s|---\s)/.test(value) || /(?:BEGIN|END)\s+(?:RSA|OPENSSH|PRIVATE)\s+KEY/i.test(value) || /(?:gh[pousr]_|github_pat_|sk-)[A-Za-z0-9_-]+/.test(value) || /(?:system|assistant|developer)\s*:/i.test(value) || value.split("\n").filter((line2) => /^\s*[+->]/.test(line2)).length > 4;
 }
 
 // src/control-plane/review-request.ts
@@ -162181,7 +162388,7 @@ function canonicalJson4(value) {
 }
 
 // src/control-plane/generated/review-action-v2/usage-producer-v1.ts
-var digest = (value) => (0, import_crypto21.createHash)("sha256").update(canonicalJson4(value)).digest("hex");
+var digest2 = (value) => (0, import_crypto21.createHash)("sha256").update(canonicalJson4(value)).digest("hex");
 var UsageDelivery = class _UsageDelivery {
   constructor(options, grant, privateKey, directory) {
     this.options = options;
@@ -162272,7 +162479,7 @@ var UsageDelivery = class _UsageDelivery {
         snapshot2.eventId,
         snapshot2.revision
       ]);
-      const hash2 = digest(snapshot2);
+      const hash2 = digest2(snapshot2);
       const existing = this.pending.get(key);
       if (existing) {
         if (existing.hash !== hash2) throw new Error("usage_hash_conflict");
@@ -162561,7 +162768,7 @@ async function uploadUsageArtifact(name, file) {
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.200",
+  version: "1.0.201",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -165475,9 +165682,9 @@ var CodexAppServerChildTurn = class {
     if (this.closed || !this.input.child.stdin.writable) {
       return Promise.reject(processFailure2());
     }
-    let line;
+    let line2;
     try {
-      line = `${JSON.stringify(message)}
+      line2 = `${JSON.stringify(message)}
 `;
     } catch {
       return Promise.reject(
@@ -165485,7 +165692,7 @@ var CodexAppServerChildTurn = class {
       );
     }
     return new Promise((resolve6, reject) => {
-      this.input.child.stdin.write(line, "utf8", (error4) => {
+      this.input.child.stdin.write(line2, "utf8", (error4) => {
         if (error4) reject(processFailure2());
         else resolve6();
       });
@@ -165499,11 +165706,11 @@ var CodexAppServerChildTurn = class {
     try {
       let newline = this.stdoutBuffer.indexOf(10);
       while (newline >= 0) {
-        let line = this.stdoutBuffer.subarray(0, newline);
+        let line2 = this.stdoutBuffer.subarray(0, newline);
         this.stdoutBuffer = this.stdoutBuffer.subarray(newline + 1);
-        if (line.at(-1) === 13) line = line.subarray(0, -1);
-        if (!this.acceptEvent(line.byteLength)) return;
-        this.receiveLine(line);
+        if (line2.at(-1) === 13) line2 = line2.subarray(0, -1);
+        if (!this.acceptEvent(line2.byteLength)) return;
+        this.receiveLine(line2);
         newline = this.stdoutBuffer.indexOf(10);
       }
       if (!this.acceptEvent(this.stdoutBuffer.byteLength)) return;
@@ -165539,14 +165746,14 @@ var CodexAppServerChildTurn = class {
     this.killProcessGroup();
     return false;
   }
-  receiveLine(line) {
-    if (line.byteLength === 0) return;
+  receiveLine(line2) {
+    if (line2.byteLength === 0) return;
     let decoded;
     try {
       decoded = new import_util23.TextDecoder("utf-8", {
         fatal: true,
         ignoreBOM: true
-      }).decode(line);
+      }).decode(line2);
     } catch {
       throw streamFailure2("stdout_utf8" /* StdoutUtf8 */);
     }
@@ -165606,9 +165813,9 @@ var CodexAppServerChildTurn = class {
     this.input.request.signal?.removeEventListener("abort", this.onAbort);
     try {
       if (this.forcedTermination === null && this.terminalError === null && this.stdoutBuffer.byteLength > 0) {
-        let line = this.stdoutBuffer;
-        if (line.at(-1) === 13) line = line.subarray(0, -1);
-        this.receiveLine(line);
+        let line2 = this.stdoutBuffer;
+        if (line2.at(-1) === 13) line2 = line2.subarray(0, -1);
+        this.receiveLine(line2);
       }
     } catch (error4) {
       this.terminalError = error4 instanceof ReviewAgentExecutionError ? error4 : streamFailure2("trailing_stdout" /* TrailingStdout */);
@@ -198207,6 +198414,16 @@ var review_snapshot_restore_schema_default = {
         reviewRevisionHash: {
           type: "string",
           pattern: "^[a-f0-9]{64}$"
+        },
+        purpose: {
+          anyOf: [
+            {
+              enum: ["comparison_baseline.v1"]
+            },
+            {
+              type: "null"
+            }
+          ]
         }
       }
     },
@@ -198917,14 +199134,14 @@ var review_snapshot_restore_schema_default = {
 var manifest_default = {
   contractSourceVersion: 1,
   protocolVersion: "2",
-  schemaDigest: "32bb25cd3490660dbaeecaa168f162ba97ff171e2dfab69e1bd435bc2e1cf3d3",
-  goldenFixtureDigest: "d6d5a918ce9e5e01a14aa9714a77d6557fcaee90c68e272cbc3f925f3e4c94a4",
-  canonicalizerDigest: "12408727c244f65242534d3060983b87221715f2086631ab743c2c6f6248629a",
+  schemaDigest: "71f316821909667e1b7cc704bed330ef6cfa7ac44cf51d58935ba3238ab92504",
+  goldenFixtureDigest: "25cbbf9c205d69c8bb9f32d074ce4df8d81a77a3fce070383abbd282245a6b9f",
+  canonicalizerDigest: "5f4c0b37b363a8dcfb1447ac093bd6fda1da7938cd887afe36f17236d2dee437",
   extensions: [
     {
       extensionId: "review-investigation-shadow.v1",
-      schemaDigest: "9ab22a39cc983b88ae50576ece6a777d72d904d09654d3f4c51a20fc13c29003",
-      canonicalizerDigest: "5dc6b98d93527381c4337c9e05ea58a910b3b26342140300992077884f4d04ec",
+      schemaDigest: "0a53623b20bfbef7dbe222dea7aed44ae3237d2f0c7facb72bb99086ef9bc5f2",
+      canonicalizerDigest: "635f5db62a446f01f5059f973ce4ae815c10b653a7870d438eaf91e2345d9cf9",
       operationIds: [
         "review_investigation_open_v2",
         "review_investigation_lease_acquire",
@@ -201832,12 +202049,12 @@ var manifest_default = {
 
 // src/control-plane/generated/review-action-v2/review-action-v2.ts
 var reviewActionV2PublishedProtocolVersion = "2";
-var reviewActionV2PublishedSchemaDigest = "32bb25cd3490660dbaeecaa168f162ba97ff171e2dfab69e1bd435bc2e1cf3d3";
-var reviewActionV2CanonicalizerDigest = "12408727c244f65242534d3060983b87221715f2086631ab743c2c6f6248629a";
+var reviewActionV2PublishedSchemaDigest = "71f316821909667e1b7cc704bed330ef6cfa7ac44cf51d58935ba3238ab92504";
+var reviewActionV2CanonicalizerDigest = "5f4c0b37b363a8dcfb1447ac093bd6fda1da7938cd887afe36f17236d2dee437";
 var reviewInvestigationExtensionV1 = {
   extensionId: "review-investigation-shadow.v1",
-  schemaDigest: "9ab22a39cc983b88ae50576ece6a777d72d904d09654d3f4c51a20fc13c29003",
-  canonicalizerDigest: "5dc6b98d93527381c4337c9e05ea58a910b3b26342140300992077884f4d04ec",
+  schemaDigest: "0a53623b20bfbef7dbe222dea7aed44ae3237d2f0c7facb72bb99086ef9bc5f2",
+  canonicalizerDigest: "635f5db62a446f01f5059f973ce4ae815c10b653a7870d438eaf91e2345d9cf9",
   operationIds: [
     "review_investigation_open_v2",
     "review_investigation_lease_acquire",
@@ -204610,6 +204827,13 @@ var reviewActionV2Operations = [
       {
         name: "reviewRevisionHash",
         type: "hash"
+      },
+      {
+        optional: true,
+        name: "purpose",
+        type: "nullable_enum",
+        enumTypeName: "ReviewSnapshotRestorePurpose",
+        enumValues: ["comparison_baseline.v1"]
       }
     ],
     allOrNoneRequestFieldGroups: [],
@@ -204776,7 +205000,9 @@ function parseReviewActionV2Request(operationId, input) {
     validateField("oidcToken", "token", input.oidcToken, issues);
     validateProtocolOffers(input.supportedProtocols, issues);
   }
-  for (const field of descriptor.requestFields)
+  for (const field of descriptor.requestFields) {
+    if ("optional" in field && field.optional && input[field.name] === void 0)
+      continue;
     validateField(
       field.name,
       field.type,
@@ -204784,6 +205010,7 @@ function parseReviewActionV2Request(operationId, input) {
       issues,
       "enumValues" in field ? field.enumValues : void 0
     );
+  }
   for (const group of descriptor.allOrNoneRequestFieldGroups) {
     const nullCount = group.filter((field) => input[field] === null).length;
     if (nullCount !== 0 && nullCount !== group.length) {
@@ -206827,7 +207054,11 @@ var RunT0ReviewOrchestration = class {
           "review_orchestration_execution_authorization_window_insufficient"
         );
       }
-      const [, restoredExecution] = await Promise.all([
+      const comparisonBaselineRequest = {
+        authorization,
+        reviewRevisionHash: command.reviewRevisionHash
+      };
+      const [, restoredExecution, comparisonBaseline] = await Promise.all([
         this.dependencies.controlPlane.restoreSnapshot({
           authorization,
           reviewRevisionHash: command.reviewRevisionHash
@@ -206835,6 +207066,14 @@ var RunT0ReviewOrchestration = class {
         this.dependencies.controlPlane.restoreExecution({
           authorization,
           reviewRevisionHash: command.reviewRevisionHash
+        }),
+        Promise.resolve().then(
+          () => this.dependencies.controlPlane.restoreComparisonBaseline?.(
+            comparisonBaselineRequest
+          ) ?? null
+        ).catch(() => {
+          this.dependencies.signal?.throwIfAborted();
+          return null;
         })
       ]);
       execution = await this.dependencies.controlPlane.startExecution({
@@ -207054,6 +207293,7 @@ var RunT0ReviewOrchestration = class {
         restored: restoredExecution !== null
       }) : void 0;
       const projection = await this.dependencies.projectionBuilder.build({
+        comparisonBaseline,
         acceptedEvidence,
         exhaustedWorkSlotIds,
         exhaustedWorkSlotReasons,
@@ -208503,14 +208743,14 @@ function validateCommand(command) {
       throw new Error("review_orchestration_commit_sha_invalid");
     }
   }
-  for (const digest4 of [
+  for (const digest5 of [
     command.reviewRevisionHash,
     command.compatibilityKey,
     command.planHash,
     command.assignmentManifestHash,
     command.ownerIdHash
   ]) {
-    if (!/^[a-f0-9]{64}$/.test(digest4)) {
+    if (!/^[a-f0-9]{64}$/.test(digest5)) {
       throw new Error("review_orchestration_digest_invalid");
     }
   }
@@ -208626,7 +208866,7 @@ function validateManifest(manifest) {
     manifest.manifestKey,
     manifest.providerInvocationKey,
     manifest.providerVoteIdentityHash
-  ].every((digest4) => /^[a-f0-9]{64}$/.test(digest4))) {
+  ].every((digest5) => /^[a-f0-9]{64}$/.test(digest5))) {
     throw new Error("review_orchestration_manifest_invalid");
   }
 }
@@ -208740,8 +208980,8 @@ function emitReviewInvestigationTelemetry(message) {
 // src/review-orchestration/infrastructure/context-gateway-failed-seal.ts
 var import_crypto27 = require("crypto");
 var emptyCanonicalJson = "{}";
-var emptyCanonicalJsonHash = digest2(emptyCanonicalJson);
-var failedTerminalOutcomeHash = digest2(
+var emptyCanonicalJsonHash = digest3(emptyCanonicalJson);
+var failedTerminalOutcomeHash = digest3(
   "reviewrouter:context-gateway-provider-failed:v1"
 );
 function createFailedContextGatewaySealPayload(input) {
@@ -208762,7 +209002,7 @@ function createFailedContextGatewaySealPayload(input) {
     replayMaterialHash: emptyCanonicalJsonHash
   });
 }
-function digest2(value) {
+function digest3(value) {
   return (0, import_crypto27.createHash)("sha256").update(value, "utf8").digest("hex");
 }
 
@@ -209085,6 +209325,22 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
       throw controlPlaneFailure(error4);
     });
   }
+  async restoreComparisonBaseline(input) {
+    const request3 = {
+      authorizationToken: input.authorization.authorizationToken,
+      reviewRevisionHash: input.reviewRevisionHash,
+      purpose: "comparison_baseline.v1" /* ComparisonBaselineV1 */
+    };
+    const result2 = await this.client.execute("review_snapshot_restore" /* ReviewSnapshotRestore */, request3).catch((error4) => {
+      throw controlPlaneFailure(error4);
+    });
+    if (result2.status !== "found" /* Found */ || result2.restoreMode !== "comparison_baseline.v1")
+      return null;
+    const baseline = parseReviewComparisonBaseline(result2.payloadCanonicalJson);
+    if (!baseline || baseline.snapshotVersion !== result2.snapshotVersion || baseline.sourceExecutionGeneration !== result2.sourceExecutionGeneration)
+      return null;
+    return baseline;
+  }
   async restoreExecution(input) {
     const result2 = await this.client.execute("review_execution_restore" /* ReviewExecutionRestore */, {
       authorizationToken: input.authorization.authorizationToken,
@@ -209224,7 +209480,7 @@ var ReviewActionV2ControlPlaneAdapter = class _ReviewActionV2ControlPlaneAdapter
         result2.contextReplayPlanHash,
         "context_replay_plan_hash"
       );
-      if (digest3(replayPlanCanonicalJson) !== replayPlanHash || observation.contextDependencyAttestationId !== attestationId || observation.contextDependencyAttestationHash !== attestationHash) {
+      if (digest4(replayPlanCanonicalJson) !== replayPlanHash || observation.contextDependencyAttestationId !== attestationId || observation.contextDependencyAttestationHash !== attestationHash) {
         throw new Error("review_action_v2_context_replay_identity_mismatch");
       }
       return {
@@ -209736,7 +209992,7 @@ function parseLookupObservation(result2, input) {
   );
   const payloadHash = requireDigest3(result2.payloadHash, "payload_hash");
   const byteCount = requireNonNegativeInteger3(result2.byteCount, "byte_count");
-  if (payloadHash !== digest3(payloadCanonicalJson) || byteCount !== Buffer.byteLength(payloadCanonicalJson, "utf8")) {
+  if (payloadHash !== digest4(payloadCanonicalJson) || byteCount !== Buffer.byteLength(payloadCanonicalJson, "utf8")) {
     throw new Error("review_action_v2_lookup_payload_identity_mismatch");
   }
   const contextAttestationId = result2.contextDependencyAttestationId ?? null;
@@ -210403,11 +210659,11 @@ function requireNonNegativeInteger3(value, field) {
 function isRecord4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function digest3(value) {
+function digest4(value) {
   return (0, import_crypto28.createHash)("sha256").update(value).digest("hex");
 }
 function deterministicIdempotencyKey(purpose, parts) {
-  return `rr:${purpose}:${digest3(
+  return `rr:${purpose}:${digest4(
     JSON.stringify({
       parts,
       purpose
@@ -211716,8 +211972,8 @@ var Doc = class {
     const lines = content.split("\n").filter((x2) => x2);
     const minIndent = Math.min(...lines.map((x2) => x2.length - x2.trimStart().length));
     const dedented = lines.map((x2) => x2.slice(minIndent)).map((x2) => " ".repeat(this.indent * 2) + x2);
-    for (const line of dedented) {
-      this.content.push(line);
+    for (const line2 of dedented) {
+      this.content.push(line2);
     }
   }
   compile() {
@@ -221186,20 +221442,20 @@ ${value2}`, dataLines++;
     }
     if (firstCharCode === 58) {
       if (onComment) {
-        const line2 = chunk.slice(start, end);
-        onComment(line2.slice(chunk.charCodeAt(start + 1) === SPACE ? 2 : 1));
+        const line22 = chunk.slice(start, end);
+        onComment(line22.slice(chunk.charCodeAt(start + 1) === SPACE ? 2 : 1));
       }
       return;
     }
-    const line = chunk.slice(start, end), fieldSeparatorIndex = line.indexOf(":");
+    const line2 = chunk.slice(start, end), fieldSeparatorIndex = line2.indexOf(":");
     if (fieldSeparatorIndex === -1) {
-      processField(line, "", line);
+      processField(line2, "", line2);
       return;
     }
-    const field = line.slice(0, fieldSeparatorIndex), offset = line.charCodeAt(fieldSeparatorIndex + 1) === SPACE ? 2 : 1, value = line.slice(fieldSeparatorIndex + offset);
-    processField(field, value, line);
+    const field = line2.slice(0, fieldSeparatorIndex), offset = line2.charCodeAt(fieldSeparatorIndex + 1) === SPACE ? 2 : 1, value = line2.slice(fieldSeparatorIndex + offset);
+    processField(field, value, line2);
   }
-  function processField(field, value, line) {
+  function processField(field, value, line2) {
     switch (field) {
       case "event":
         eventType = value || void 0;
@@ -221216,7 +221472,7 @@ ${value}`, dataLines++;
           new ParseError(`Invalid \`retry\` value: "${value}"`, {
             type: "invalid-retry",
             value,
-            line
+            line: line2
           })
         );
         break;
@@ -221224,7 +221480,7 @@ ${value}`, dataLines++;
         onError(
           new ParseError(
             `Unknown field "${field.length > 20 ? `${field.slice(0, 20)}\u2026` : field}"`,
-            { type: "unknown-field", field, value, line }
+            { type: "unknown-field", field, value, line: line2 }
           )
         );
         break;
@@ -222329,10 +222585,10 @@ async function prepareOcrContextTools(input) {
         throw contextToolsError("server_unavailable");
       }
     };
-    for (const sha of /* @__PURE__ */ new Set([input.headSha, input.mergeBaseSha])) {
-      if (!/^[a-f0-9]{40}$/.test(sha))
+    for (const sha2 of /* @__PURE__ */ new Set([input.headSha, input.mergeBaseSha])) {
+      if (!/^[a-f0-9]{40}$/.test(sha2))
         throw contextToolsError("server_unavailable");
-      await readGit(["cat-file", "-e", `${sha}^{commit}`]);
+      await readGit(["cat-file", "-e", `${sha2}^{commit}`]);
     }
     builtins["repository.docs.read"] = {
       definition: {
@@ -222355,14 +222611,14 @@ async function prepareOcrContextTools(input) {
           file
         ) || file.split("/").some((segment) => segment.startsWith(".") || segment === ""))
           throw contextToolsError("scope_denied");
-        const sha = args.revision === "head" ? input.headSha : input.mergeBaseSha;
-        const entry = await readGit(["ls-tree", "-l", "-z", sha, "--", file]);
+        const sha2 = args.revision === "head" ? input.headSha : input.mergeBaseSha;
+        const entry = await readGit(["ls-tree", "-l", "-z", sha2, "--", file]);
         const admitted = /^(?:100644|100755) blob [a-f0-9]{40}\s+(\d+)\t/.exec(
           entry.stdout
         );
         if (!admitted || Number(admitted[1]) > 65536)
           throw contextToolsError("scope_denied");
-        const result2 = await readGit(["show", `${sha}:${file}`]);
+        const result2 = await readGit(["show", `${sha2}:${file}`]);
         if (result2.stdout.includes("\0"))
           throw contextToolsError("scope_denied");
         return {
@@ -222371,7 +222627,7 @@ async function prepareOcrContextTools(input) {
               type: "text",
               text: JSON.stringify({
                 source: "git",
-                sha,
+                sha: sha2,
                 path: file,
                 text: redactSensitiveText(result2.stdout)
               })
@@ -222875,7 +223131,7 @@ function verifyOcrSpan(input) {
   }
   const blockLines = normalizeEol(existingCode.replace(/\s+$/u, ""));
   const headBlock = fileLines.slice(startLine - 1, endLine);
-  if (blockLines.length !== headBlock.length || blockLines.some((line, index) => line !== headBlock[index])) {
+  if (blockLines.length !== headBlock.length || blockLines.some((line2, index) => line2 !== headBlock[index])) {
     return { verified: false, reason: "content_mismatch" };
   }
   let occurrences = 0;
@@ -222892,8 +223148,8 @@ function verifyOcrSpan(input) {
   }
   if (occurrences !== 1) return { verified: false, reason: "ambiguous_match" };
   if (input.diffPositions) {
-    for (let line = startLine; line <= endLine; line++) {
-      if (!input.diffPositions.has(line)) {
+    for (let line2 = startLine; line2 <= endLine; line2++) {
+      if (!input.diffPositions.has(line2)) {
         return { verified: false, reason: "outside_diff" };
       }
     }
@@ -222921,7 +223177,7 @@ function normalizeOcrRepoPath(raw) {
   return path37;
 }
 function plainTitleLine(content) {
-  const firstLine = content.split(/\r\n|\r|\n/u).map((line) => line.replace(/[^\P{Z}\u00a0]/gu, " ").trim()).find((line) => line.length > 0) ?? "";
+  const firstLine = content.split(/\r\n|\r|\n/u).map((line2) => line2.replace(/[^\P{Z}\u00a0]/gu, " ").trim()).find((line2) => line2.length > 0) ?? "";
   return firstLine.replace(/[`#>*_~[\]]/gu, "").replace(/\s+/gu, " ").trim().slice(0, OCR_NORMALIZATION_LIMITS.maxTitleChars);
 }
 function normalizeOcrFindings(input) {
@@ -233626,7 +233882,11 @@ var FreshGitHubLifecycleInventory = class {
   loader;
   async loadCurrent(query) {
     const [raw, ledger] = await Promise.all([
-      this.loader.load(query.scope.pullRequestNumber),
+      this.loader.load(
+        query.scope.pullRequestNumber,
+        query.priorLineageHints,
+        query.appliedResolutions
+      ),
       this.ledger.load(query.scope.pullRequestNumber)
     ]);
     return mapFreshInventory(raw, query.scope.reviewedHeadSha, ledger);
@@ -233719,7 +233979,8 @@ function mapFreshInventory(raw, expectedHeadSha, ledger) {
     commandLedgerWatermark: commandLedgerWatermarkValue,
     complete: true,
     warnings: Object.freeze(warnings),
-    targets: Object.freeze(targets)
+    targets: Object.freeze(targets),
+    resolvedObservations: Object.freeze(raw.resolvedObservations ?? [])
   });
 }
 function toProjectionSeverity(severity) {
@@ -233833,7 +234094,9 @@ var BuildCurrentReviewProjection = class {
   async execute(command) {
     this.validateCommand(command);
     const inventory = await this.dependencies.lifecycleInventory.loadCurrent({
-      scope: command.scope
+      scope: command.scope,
+      priorLineageHints: command.priorLineageHints,
+      appliedResolutions: command.comparisonBaseline?.appliedResolutions
     });
     this.validateInventory(command.scope, inventory);
     const coverage = normalizeCoverage(command.coverage, inventory);
@@ -233889,7 +234152,19 @@ var BuildCurrentReviewProjection = class {
       occurrences,
       command.revisionFiles
     );
+    const reviewPresentation = deriveReviewPresentation({
+      reviewedHeadSha: command.scope.reviewedHeadSha,
+      baseline: command.comparisonBaseline,
+      coverage,
+      incomplete: command.providerExecution.succeededProviders === 0 && command.providerExecution.plannedProviders > 0 || lifecycleFacts.some(
+        (fact) => fact.verdict !== "suppressed_by_human" && !occurrences.some(
+          (item) => item.lineageId === (fact.lineageId ?? fact.markerFingerprint)
+        )
+      ),
+      occurrences
+    });
     const presentation = await this.dependencies.presentationPolicy.projectPresentation({
+      reviewPresentation,
       scope: command.scope,
       presentation: command.presentation,
       providerExecution: command.providerExecution,
@@ -233902,7 +234177,7 @@ var BuildCurrentReviewProjection = class {
     });
     occurrences = applyPlacementDecisions(occurrences, presentation.placements);
     const coverageOnly = coverage.state === "partial" /* Partial */;
-    const allClear = !coverageOnly && canClaimAllClear(coverage, inventory, occurrences, gate, lifecycleFacts);
+    const allClear = !coverageOnly && reviewPresentation.state === "complete" && canClaimAllClear(coverage, inventory, occurrences, gate, lifecycleFacts);
     const inlineChunks = coverageOnly ? [] : buildInlineChunks(occurrences, this.limits);
     const summaryBody = coverageOnly ? [
       "ReviewRouter did not complete required coverage. Preliminary findings are preserved below; inline comments and lifecycle changes were held back.",
@@ -234231,14 +234506,14 @@ function buildLifecycleFacts(inventory, decisions, hints, coverage, occurrences,
   return [...inventory.targets].sort((left, right) => left.targetId.localeCompare(right.targetId)).map((target) => {
     const decision = decisionByTarget.get(target.targetId);
     const matchingHints = hints.filter(
-      (candidate) => candidate.trustedMarker === target.trustedMarker && candidate.active
+      (candidate) => candidate.lineageId === target.trustedMarker && candidate.active
     );
     const hint = matchingHints.length === 1 ? matchingHints[0] : void 0;
     const suppressed = target.disposition === "command_suppressed" /* CommandSuppressed */;
     const currentOccurrencePresent = occurrences.some(
       (occurrence) => occurrence.trustedMarker === target.trustedMarker && (occurrence.state === "new" /* New */ || occurrence.state === "reconfirmed" /* Reconfirmed */ || occurrence.state === "changed" /* Changed */)
     );
-    const trustedResolved = !currentOccurrencePresent && hasValidTrustedResolutionMarker(target);
+    const trustedResolved = !currentOccurrencePresent && target.disposition === "active" /* Active */ && hasValidTrustedResolutionMarker(target);
     const verdict = suppressed ? "suppressed_by_human" : trustedResolved ? "resolved" /* Resolved */ : decision?.verdict ?? "uncertain" /* Uncertain */;
     const reasonCodes = sortedUnique2([
       ...decision?.reasonCodes ?? [],
@@ -234283,7 +234558,7 @@ function buildSnapshotFacts(occurrences) {
       category: occurrence.category,
       normalizedFailureModeHash: occurrence.normalizedFailureModeHash,
       ...occurrence.symbolAnchor ? { symbolAnchor: occurrence.symbolAnchor } : {},
-      ...occurrence.trustedMarker ? { trustedMarker: occurrence.trustedMarker } : {},
+      trustedMarker: occurrence.lineageId,
       severity: occurrence.severity,
       title: occurrence.title,
       message: occurrence.message,
@@ -234610,7 +234885,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
     );
     const providerResults = lifecycleProviderResults(query);
     const lifecycle = new ThreadLifecycleAggregator().aggregate({
-      mode: "report",
+      mode: this.config.reviewThreadLifecycle === "resolve" ? "resolve" : "report",
       targets,
       plannedProviders: providerResults.map((result2) => result2.name),
       providerResults,
@@ -234642,6 +234917,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
     collect(
       [
         ...lifecycle.previousUncertain,
+        ...lifecycle.mutationSkipped,
         ...lifecycle.manualAttention,
         ...lifecycle.skipped
       ],
@@ -234680,7 +234956,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
       )
     );
     const incomplete = isReviewerSummaryIncomplete({
-      incomplete: query.coverage.state === "partial" /* Partial */,
+      incomplete: query.coverage.state === "partial" /* Partial */ || query.reviewPresentation?.state === "incomplete",
       metrics: review.metrics
     });
     const summaryBody = limitReviewerPostedMarkdown(
@@ -234693,6 +234969,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
           }
         } : {},
         language: this.config.outputLanguage,
+        reviewPresentation: query.reviewPresentation,
         findings: currentOccurrences.map(toLegacyFinding).map(toReviewerSummaryFinding),
         metrics: review.metrics,
         incomplete,
@@ -234712,7 +234989,7 @@ var LegacyReviewProjectionPolicyAdapter = class {
     return {
       summaryBody,
       checkName: "ReviewRouter",
-      checkTitle: incomplete ? query.coverage.state === "partial" /* Partial */ ? "Review incomplete - partial coverage" : "Review incomplete - no successful providers" : "Review completed",
+      checkTitle: incomplete ? query.coverage.state === "partial" /* Partial */ ? "Review incomplete - partial coverage" : review.metrics.providersUsed > 0 && review.metrics.providersSuccess === 0 ? "Review incomplete - no successful providers" : "Review incomplete - unverified previous findings" : "Review completed",
       checkSummary: summaryBody,
       checkConclusion: incomplete ? "neutral" /* Neutral */ : void 0,
       placements
@@ -234771,8 +235048,8 @@ var LegacyReviewProjectionPolicyAdapter = class {
         reason: "finding has no verified current span"
       };
     }
-    const line = occurrence.line ?? occurrence.endLine;
-    if (line === void 0) {
+    const line2 = occurrence.line ?? occurrence.endLine;
+    if (line2 === void 0) {
       return {
         lineageId: occurrence.lineageId,
         kind: "file" /* File */,
@@ -234793,11 +235070,11 @@ var LegacyReviewProjectionPolicyAdapter = class {
     }
     if (occurrence.anchorVerified === true) {
       const positions = mapLinesToPositions(revisionFile.patch);
-      const rangeStart = occurrence.startLine ?? line;
-      const rangeEnd = occurrence.endLine ?? line;
+      const rangeStart = occurrence.startLine ?? line2;
+      const rangeEnd = occurrence.endLine ?? line2;
       const low = Math.min(rangeStart, rangeEnd);
       const high = Math.max(rangeStart, rangeEnd);
-      let rangePlaceable = positions.has(line);
+      let rangePlaceable = positions.has(line2);
       for (let current = low; rangePlaceable && current <= high; current += 1) {
         rangePlaceable = positions.has(current);
       }
@@ -234952,6 +235229,8 @@ function lifecycleProviderResults(query) {
       content: "",
       revalidations: revalidations.map((revalidation) => ({
         targetId: revalidation.targetId,
+        ...revalidation.fingerprint ? { fingerprint: revalidation.fingerprint } : {},
+        ...revalidation.evidence ? { evidence: revalidation.evidence.map((item) => ({ ...item })) } : {},
         verdict: revalidation.verdict,
         ...revalidation.confidence !== void 0 ? { confidence: revalidation.confidence } : {},
         ...revalidation.rationale ? { rationale: revalidation.rationale } : {}
@@ -235133,7 +235412,7 @@ function sha25614(value) {
 }
 
 // src/review-orchestration/infrastructure/production-review-projection.ts
-var productionReviewProjectionPolicyVersion = "review-projection-policy.v5-t0";
+var productionReviewProjectionPolicyVersion = "review-projection-policy.v6-comparison";
 function createProductionReviewProjectionBuilder(input) {
   const limits = projectionLimits(input.config, input.protocolLimits);
   const policy = new LegacyReviewProjectionPolicyAdapter(input.config, {
@@ -235333,6 +235612,7 @@ var ProductionReviewProjectionCommandFactory = class {
     const manifestFiles = Object.freeze(
       [...manifestByPath.values()].map(({ entry }) => entry).sort((left, right) => compareCodeUnits8(left.path, right.path))
     );
+    const comparisonBaseline = input.comparisonBaseline?.sourceReviewedHeadSha !== this.input.authorizationFacts.headSha ? input.comparisonBaseline : null;
     return Object.freeze({
       projectionPolicyVersion: productionReviewProjectionPolicyVersion,
       authoritativeObservationIds,
@@ -235356,7 +235636,8 @@ var ProductionReviewProjectionCommandFactory = class {
           (left, right) => compareCodeUnits8(left.sourceFindingId, right.sourceFindingId)
         )
       ),
-      priorLineageHints: Object.freeze([]),
+      comparisonBaseline,
+      priorLineageHints: comparisonBaseline?.priorLineageHints ?? Object.freeze([]),
       lifecycleRevalidations: Object.freeze(
         revalidations.sort(
           (left, right) => compareCodeUnits8(left.targetId, right.targetId)
@@ -235485,7 +235766,22 @@ function toRevalidation(observation, value) {
   )) {
     throw new Error("review_action_v2_revalidation_verdict_invalid");
   }
+  if (value.fingerprint != null && typeof value.fingerprint !== "string") {
+    throw new Error("review_action_v2_revalidation_fingerprint_invalid");
+  }
+  const evidence = Array.isArray(value.evidence) ? value.evidence.filter(isRecord10).filter(
+    (item) => typeof item.path === "string" && typeof item.reason === "string"
+  ).map(
+    (item) => Object.freeze({
+      path: item.path,
+      reason: item.reason,
+      ...optionalPositiveInteger(item.startLine) !== void 0 ? { startLine: optionalPositiveInteger(item.startLine) } : {},
+      ...optionalPositiveInteger(item.endLine) !== void 0 ? { endLine: optionalPositiveInteger(item.endLine) } : {}
+    })
+  ) : [];
   return Object.freeze({
+    evidence: Object.freeze(evidence),
+    ...optionalString(value.fingerprint) ? { fingerprint: optionalString(value.fingerprint) } : {},
     targetId: requireString3(value.targetId, "revalidation_target_id"),
     providerVoteKey: observation.providerVoteIdentityHash,
     verdict,
@@ -236512,8 +236808,8 @@ var fs26 = __toESM(require("fs/promises"));
 var os14 = __toESM(require("os"));
 var path29 = __toESM(require("path"));
 var import_util31 = require("util");
-function readApprovedReviewAgentKind(json3, digest4) {
-  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest4) || (0, import_node_crypto7.createHash)("sha256").update(json3).digest("hex") !== digest4) {
+function readApprovedReviewAgentKind(json3, digest5) {
+  if (Buffer.byteLength(json3) > 16384 || !/^[a-f0-9]{64}$/.test(digest5) || (0, import_node_crypto7.createHash)("sha256").update(json3).digest("hex") !== digest5) {
     throw new Error("review_agent_profile_digest_mismatch");
   }
   const row = JSON.parse(json3);
@@ -236523,8 +236819,8 @@ function readApprovedReviewAgentKind(json3, digest4) {
   }
   return kind;
 }
-function readApprovedOcrReviewAgent(json3, digest4) {
-  if (readApprovedReviewAgentKind(json3, digest4) !== "ocr") {
+function readApprovedOcrReviewAgent(json3, digest5) {
+  if (readApprovedReviewAgentKind(json3, digest5) !== "ocr") {
     throw new Error("review_agent_profile_invalid");
   }
   const row = JSON.parse(json3);
@@ -237800,9 +238096,9 @@ function nullableCanonicalJson(value, field) {
   return value;
 }
 function requireDigest5(value, field) {
-  const digest4 = requireString4(value, field);
-  if (!/^[a-f0-9]{64}$/.test(digest4)) throw invalidResponse(`${field}_invalid`);
-  return digest4;
+  const digest5 = requireString4(value, field);
+  if (!/^[a-f0-9]{64}$/.test(digest5)) throw invalidResponse(`${field}_invalid`);
+  return digest5;
 }
 function requireNonNegativeInteger4(value, field) {
   if (!Number.isSafeInteger(value) || Number(value) < 0) {
@@ -238025,8 +238321,8 @@ function leaseFromAcquire(input) {
   return lease;
 }
 function deterministicId2(namespace, parts) {
-  const digest4 = (0, import_crypto43.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
-  return `rr:${namespace}:${digest4}`;
+  const digest5 = (0, import_crypto43.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  return `rr:${namespace}:${digest5}`;
 }
 function requireString5(value, field) {
   if (typeof value !== "string" || value.length === 0) {
@@ -239248,8 +239544,8 @@ var ReviewActionV2InvestigationContextAttestationAdapter = class {
   }
 };
 function deterministicId3(namespace, parts) {
-  const digest4 = (0, import_crypto44.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
-  return `rr:${namespace}:${digest4}`;
+  const digest5 = (0, import_crypto44.createHash)("sha256").update(JSON.stringify(parts), "utf8").digest("hex").slice(0, 40);
+  return `rr:${namespace}:${digest5}`;
 }
 function requireString6(value, field) {
   if (typeof value !== "string" || value.length === 0) {
@@ -243567,8 +243863,8 @@ function skippedReasonSummary(reason) {
 function skippedReasonLabel(reason) {
   return reason.replace(/_/g, " ");
 }
-function shortSha(sha) {
-  return sha.slice(0, 12);
+function shortSha(sha2) {
+  return sha2.slice(0, 12);
 }
 function githubRunUrl(inputs) {
   const runId = process.env.GITHUB_RUN_ID;

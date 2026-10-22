@@ -1,4 +1,7 @@
-import type { MergeGateConclusion } from '../../review-projection/domain';
+import type {
+  MergeGateConclusion,
+  ReviewComparisonBaseline,
+} from '../../review-projection/domain';
 import type { GeneratedPrDescription } from '../../control-plane/generated/review-action-v2/companion-contracts';
 
 export enum ReviewEvidenceLookupKind {
@@ -449,6 +452,10 @@ export interface ReviewActionV2ControlPlanePort {
     readonly authorization: ReviewRunAuthorization;
     readonly reviewRevisionHash: string;
   }): Promise<void>;
+  restoreComparisonBaseline?(input: {
+    readonly authorization: ReviewRunAuthorization;
+    readonly reviewRevisionHash: string;
+  }): Promise<ReviewComparisonBaseline | null>;
   restoreExecution(input: {
     readonly authorization: ReviewRunAuthorization;
     readonly reviewRevisionHash: string;
@@ -701,6 +708,7 @@ export interface ReviewInvocationLeaseSupervisorPort {
 
 export interface CurrentReviewProjectionBuilderPort {
   build(input: {
+    readonly comparisonBaseline?: ReviewComparisonBaseline | null;
     readonly acceptedEvidence: readonly AcceptedReviewWorkSlotEvidence[];
     readonly exhaustedWorkSlotIds: readonly string[];
     readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;

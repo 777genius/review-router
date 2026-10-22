@@ -20,6 +20,7 @@ import {
   type LifecycleRevalidation,
   type ReviewCoverageManifestFile,
   type ReviewProjectionLimits,
+  type ReviewComparisonBaseline,
 } from '../../review-projection/domain';
 import { LegacyReviewProjectionPolicyAdapter } from '../../review-projection/infrastructure/legacy/legacy-review-projection-policy-adapter';
 import { reviewerSummarySourceFromPr } from '../../output/reviewer-summary';
@@ -42,7 +43,7 @@ import {
 } from './current-review-projection-builder-adapter';
 
 const productionReviewProjectionPolicyVersion =
-  'review-projection-policy.v5-t0';
+  'review-projection-policy.v6-comparison';
 
 export type ProductionWorkAssignmentFacts = {
   readonly workSlotId: string;
@@ -108,6 +109,7 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
   ) {}
 
   async create(input: {
+    readonly comparisonBaseline?: ReviewComparisonBaseline | null;
     readonly acceptedEvidence: readonly AcceptedReviewWorkSlotEvidence[];
     readonly exhaustedWorkSlotIds: readonly string[];
     readonly exhaustedWorkSlotReasons?: ReadonlyMap<string, string>;
@@ -308,6 +310,11 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
         .map(({ entry }) => entry)
         .sort((left, right) => compareCodeUnits(left.path, right.path))
     );
+    const comparisonBaseline =
+      input.comparisonBaseline?.sourceReviewedHeadSha !==
+      this.input.authorizationFacts.headSha
+        ? input.comparisonBaseline
+        : null;
 
     return Object.freeze({
       projectionPolicyVersion: productionReviewProjectionPolicyVersion,
@@ -333,7 +340,9 @@ class ProductionReviewProjectionCommandFactory implements ReviewProjectionComman
           compareCodeUnits(left.sourceFindingId, right.sourceFindingId)
         )
       ),
-      priorLineageHints: Object.freeze([]),
+      comparisonBaseline,
+      priorLineageHints:
+        comparisonBaseline?.priorLineageHints ?? Object.freeze([]),
       lifecycleRevalidations: Object.freeze(
         revalidations.sort((left, right) =>
           compareCodeUnits(left.targetId, right.targetId)
@@ -527,7 +536,34 @@ function toRevalidation(
   ) {
     throw new Error('review_action_v2_revalidation_verdict_invalid');
   }
+  if (value.fingerprint != null && typeof value.fingerprint !== 'string') {
+    throw new Error('review_action_v2_revalidation_fingerprint_invalid');
+  }
+  const evidence = Array.isArray(value.evidence)
+    ? value.evidence
+        .filter(isRecord)
+        .filter(
+          (item) =>
+            typeof item.path === 'string' && typeof item.reason === 'string'
+        )
+        .map((item) =>
+          Object.freeze({
+            path: item.path as string,
+            reason: item.reason as string,
+            ...(optionalPositiveInteger(item.startLine) !== undefined
+              ? { startLine: optionalPositiveInteger(item.startLine) }
+              : {}),
+            ...(optionalPositiveInteger(item.endLine) !== undefined
+              ? { endLine: optionalPositiveInteger(item.endLine) }
+              : {}),
+          })
+        )
+    : [];
   return Object.freeze({
+    evidence: Object.freeze(evidence),
+    ...(optionalString(value.fingerprint)
+      ? { fingerprint: optionalString(value.fingerprint) }
+      : {}),
     targetId: requireString(value.targetId, 'revalidation_target_id'),
     providerVoteKey: observation.providerVoteIdentityHash,
     verdict: verdict as LifecycleRevalidationVerdict,

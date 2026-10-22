@@ -1138,6 +1138,58 @@ describe('compact summary publication contract', () => {
     }
   );
 
+  it('renders truthful update counters and responsive images from the same presentation', () => {
+    const markdown = renderReviewerSummaryMarkdown({
+      language: 'en',
+      metrics,
+      findings: [finding],
+      bannerBaseUrl: 'https://reviewrouter.org',
+      reviewPresentation: {
+        variant: 'update',
+        state: 'incomplete',
+        severity: { critical: 1, major: 1, minor: 0, info: 0 },
+        coverage: { reviewed: 2, total: 3 },
+        changes: { new: 1, resolved: 2, open: 2, unverified: 1 },
+      },
+    });
+    expect(markdown).toContain(
+      '<!-- reviewrouter:review-status:incomplete -->'
+    );
+    expect(markdown).toContain('## Review incomplete');
+    expect(markdown).toContain(
+      '1 new · 2 resolved · 2 open · 1 unverified (included in open)'
+    );
+    expect(markdown).toContain('width="100%"');
+    expect(markdown).not.toMatch(/height=|width="640"/);
+    expect(markdown).toContain(
+      'media="(max-width: 600px) and (prefers-color-scheme: dark)"'
+    );
+    const urls = [...markdown.matchAll(/(?:src|srcset)="([^"]+)"/g)].map(
+      (match) => new URL(match[1].replaceAll('&amp;', '&'))
+    );
+    expect(urls.map((url) => url.searchParams.get('layout'))).toEqual([
+      'compact',
+      'compact',
+      'wide',
+      'wide',
+    ]);
+    for (const url of urls) {
+      expect(Object.fromEntries(url.searchParams)).toEqual(
+        expect.objectContaining({
+          variant: 'update',
+          state: 'incomplete',
+          reviewed: '2',
+          total: '3',
+          new: '1',
+          resolved: '2',
+          open: '2',
+          unverified: '1',
+        })
+      );
+    }
+    expect(outsideDetails(markdown)).toContain('Guard the tenant boundary');
+  });
+
   it('uses only public count/enumeration parameters in optional theme banners and rewrites their incomplete state', () => {
     const markdown = renderReviewerSummaryMarkdown({
       language: 'Russian',
@@ -1149,26 +1201,28 @@ describe('compact summary publication contract', () => {
     const urls = [...markdown.matchAll(/(?:src|srcset)="([^"]+)"/g)].map(
       (match) => new URL(match[1].replaceAll('&amp;', '&'))
     );
-    expect(urls).toHaveLength(3);
+    expect(urls).toHaveLength(4);
     for (const url of urls) {
-      expect(url.pathname).toBe('/review-banner/v1.svg');
+      expect(url.pathname).toBe('/review-banner/v2.svg');
       expect([...url.searchParams.keys()]).toEqual([
         'state',
+        'variant',
         'critical',
         'major',
         'minor',
         'info',
-        'lang',
         'theme',
+        'layout',
       ]);
       expect(url.searchParams.get('critical')).toBe('3');
-      expect(url.searchParams.get('lang')).toBe('ru');
+      expect(url.searchParams.get('variant')).toBe('first');
       expect(url.searchParams.get('state')).toBe('complete');
       expect(url.href).not.toContain('auth');
     }
     expect(urls.map((url) => url.searchParams.get('theme'))).toEqual([
       'dark',
       'light',
+      'dark',
       'light',
     ]);
     const revised = markReviewSummaryIncomplete({
@@ -1177,7 +1231,7 @@ describe('compact summary publication contract', () => {
       preliminaryFindingCount: 1,
     });
     expect(revised).not.toContain('state=complete');
-    expect(revised.match(/state=incomplete/g)).toHaveLength(3);
+    expect(revised.match(/state=incomplete/g)).toHaveLength(4);
     expect(outsideDetails(revised)).toContain('Guard the tenant boundary');
     expect(
       renderReviewerSummaryMarkdown({

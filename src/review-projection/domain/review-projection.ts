@@ -215,10 +215,23 @@ export interface CurrentLifecycleInventory {
   readonly complete: boolean;
   readonly warnings: readonly string[];
   readonly targets: readonly LiveLifecycleTarget[];
+  /** Fresh closed threads: observations only, never provider or mutation targets. */
+  readonly resolvedObservations?: readonly {
+    readonly lineageId: string;
+    readonly trustedMarker: string;
+    readonly confirmed: boolean;
+  }[];
 }
 
 export interface LifecycleRevalidation {
   readonly targetId: string;
+  readonly fingerprint?: string;
+  readonly evidence?: readonly {
+    readonly path: string;
+    readonly reason: string;
+    readonly startLine?: number;
+    readonly endLine?: number;
+  }[];
   readonly providerVoteKey: string;
   readonly verdict: LifecycleRevalidationVerdict;
   readonly confidence?: number;

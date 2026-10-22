@@ -18,9 +18,13 @@ import {
   SelectedCurrentFinding,
 } from '../domain/review-projection';
 import { ReviewProjectionLimits } from '../domain/review-projection-limits';
+import type { AppliedReviewResolution } from '../domain/comparison-baseline';
+import type { ReviewPresentation } from '../domain/review-presentation';
 
 export interface LoadCurrentLifecycleInventoryQuery {
   readonly scope: ReviewProjectionScope;
+  readonly priorLineageHints?: readonly PriorLineageHint[];
+  readonly appliedResolutions?: readonly AppliedReviewResolution[];
 }
 
 export interface CurrentLifecycleInventoryPort {
@@ -57,6 +61,7 @@ export interface ReviewLifecyclePolicyPort {
 }
 
 export interface ProjectReviewPresentationQuery {
+  readonly reviewPresentation?: ReviewPresentation;
   readonly lifecycle?: {
     readonly targets: readonly LiveLifecycleTarget[];
     readonly facts: readonly ReviewProjectionLifecycleFact[];

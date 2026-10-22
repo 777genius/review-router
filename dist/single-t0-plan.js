@@ -144925,7 +144925,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.202",
+  version: "1.0.203",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -192480,22 +192480,60 @@ var RunT0ReviewOrchestration = class {
         input.workSlot.workSlotId,
         manifest.providerInvocationKey
       ]);
-      const acquired = await this.dependencies.controlPlane.acquireInvocationLease({
-        authorization: input.authorization,
-        idempotencyKey: this.idempotencyKey("description-lease-acquire", [
-          acquireRequestId
-        ]),
-        execution: input.execution,
-        workSlot: input.workSlot,
-        manifest,
-        acquireRequestId,
-        ownerIdHash: input.command.ownerIdHash
-      });
-      if (acquired.status !== "acquired" /* Acquired */) {
-        generator.unavailable();
-        return void 0;
+      const waitStartedAt = this.dependencies.clock.monotonicNowMs();
+      let busyPollCount = 0;
+      let waitedMs = 0;
+      while (!lease) {
+        this.dependencies.signal?.throwIfAborted();
+        if (!this.canStartInvocation(2)) {
+          generator.unavailable();
+          return void 0;
+        }
+        if (busyPollCount > 0) {
+          const waitRemainingMs = Math.min(
+            5e3 - waitedMs,
+            5e3 - (this.dependencies.clock.monotonicNowMs() - waitStartedAt)
+          );
+          const delayMs = this.clampProviderDelay(
+            Math.min(500 * 2 ** Math.min(busyPollCount - 1, 4), waitRemainingMs)
+          );
+          if (delayMs <= 0) {
+            generator.unavailable();
+            return void 0;
+          }
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
+          waitedMs += delayMs;
+          this.dependencies.signal?.throwIfAborted();
+          await this.assertRevisionCurrent(input.command);
+          if (waitedMs >= 5e3 || this.dependencies.clock.monotonicNowMs() - waitStartedAt >= 5e3 || !this.canStartInvocation(2)) {
+            generator.unavailable();
+            return void 0;
+          }
+        }
+        const acquired = await this.dependencies.controlPlane.acquireInvocationLease({
+          authorization: input.authorization,
+          idempotencyKey: this.idempotencyKey("description-lease-acquire", [
+            acquireRequestId
+          ]),
+          execution: input.execution,
+          workSlot: input.workSlot,
+          manifest,
+          acquireRequestId,
+          ownerIdHash: input.command.ownerIdHash
+        });
+        if (acquired.status === "busy" /* Busy */) {
+          busyPollCount += 1;
+          continue;
+        }
+        if (acquired.status !== "acquired" /* Acquired */) {
+          generator.unavailable();
+          return void 0;
+        }
+        lease = acquired.lease;
       }
-      lease = acquired.lease;
       description = await this.dependencies.leaseSupervisor.run({
         lease,
         renew: async () => {

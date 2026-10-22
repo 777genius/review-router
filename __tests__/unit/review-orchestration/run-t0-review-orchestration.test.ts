@@ -131,7 +131,16 @@ describe('RunT0ReviewOrchestration', () => {
         .invocationCallOrder[0]
     );
   });
-  it.each(['generated', 'unknown', 'restored', 'joined', 'disabled'] as const)(
+  it.each([
+    'generated',
+    'unknown',
+    'restored',
+    'joined',
+    'disabled',
+    'busy-then-acquired',
+    'busy-timeout',
+    'busy-abort',
+  ] as const)(
     'runs an optional PR description once after review slots (%s)',
     async (outcome) => {
       const fixture = createFixture({ workSlotCount: 2 });
@@ -160,6 +169,14 @@ describe('RunT0ReviewOrchestration', () => {
           providerRequestEnvelopeHash: hash('request'),
         },
       };
+      let descriptionWaitStartedAt: number | undefined;
+      let descriptionWaitElapsedMs = 0;
+      const captureDescriptionWait = () => {
+        if (descriptionWaitStartedAt !== undefined)
+          descriptionWaitElapsedMs =
+            fixture.dependencies.clock.monotonicNowMs() -
+            descriptionWaitStartedAt;
+      };
       const generator = {
         prepare: jest.fn(
           async (
@@ -180,20 +197,38 @@ describe('RunT0ReviewOrchestration', () => {
             throw new Error('synthetic_effect_unknown');
           return description;
         }),
-        unavailable: jest.fn(),
+        unavailable: jest.fn(captureDescriptionWait),
       };
       Object.assign(fixture.dependencies, { prDescription: generator });
-      if (outcome === 'joined') {
+      if (outcome === 'joined' || outcome.startsWith('busy-')) {
         const acquire =
           fixture.controlPlane.acquireInvocationLease.getMockImplementation()!;
+        let descriptionAttempts = 0;
         fixture.controlPlane.acquireInvocationLease.mockImplementation(
-          async (input) =>
-            input.workSlot.taskKind === ReviewTaskKind.PrDescription
-              ? {
-                  status: ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable,
-                }
-              : acquire(input)
+          async (input) => {
+            if (input.workSlot.taskKind !== ReviewTaskKind.PrDescription)
+              return acquire(input);
+            descriptionWaitStartedAt ??=
+              fixture.dependencies.clock.monotonicNowMs();
+            captureDescriptionWait();
+            descriptionAttempts += 1;
+            if (outcome === 'busy-then-acquired' && descriptionAttempts > 1)
+              return acquire(input);
+            return {
+              status:
+                outcome === 'joined'
+                  ? ReviewInvocationLeaseAcquireOutcomeStatus.NotRunnable
+                  : ReviewInvocationLeaseAcquireOutcomeStatus.Busy,
+            };
+          }
         );
+        if (outcome === 'busy-abort') {
+          const abort = new AbortController();
+          Object.assign(fixture.dependencies, { signal: abort.signal });
+          fixture.dependencies.delay.sleep = jest.fn(async () => {
+            abort.abort(new Error('description_wait_cancelled'));
+          });
+        }
       }
       if (outcome === 'restored') {
         const refresh =
@@ -208,6 +243,14 @@ describe('RunT0ReviewOrchestration', () => {
           )
           .mockImplementation(refresh);
       }
+      if (outcome === 'busy-abort') {
+        await expect(fixture.useCase.execute(fixture.command)).rejects.toThrow(
+          'description_wait_cancelled'
+        );
+        expect(generator.execute).not.toHaveBeenCalled();
+        expect(fixture.controlPlane.finalizeExecution).not.toHaveBeenCalled();
+        return;
+      }
       const result = await fixture.useCase.execute(fixture.command);
       expect([
         result.status,
@@ -215,15 +258,41 @@ describe('RunT0ReviewOrchestration', () => {
       ]).toEqual([ReviewOrchestrationResultStatus.Completed, null]);
       expect(fixture.controlPlane.commitEvidence).toHaveBeenCalledTimes(2);
       expect(fixture.controlPlane.attachObservation).toHaveBeenCalledTimes(2);
-      const invoked = outcome === 'generated' || outcome === 'unknown';
+      const invoked =
+        outcome === 'generated' ||
+        outcome === 'unknown' ||
+        outcome === 'busy-then-acquired';
       expect(generator.execute).toHaveBeenCalledTimes(invoked ? 1 : 0);
       const descriptionAcquisitions =
         fixture.controlPlane.acquireInvocationLease.mock.calls.filter(
           ([input]) => input.workSlot.taskKind === ReviewTaskKind.PrDescription
         );
-      expect(descriptionAcquisitions).toHaveLength(
-        invoked || outcome === 'joined' ? 1 : 0
-      );
+      if (outcome === 'busy-timeout') {
+        expect(descriptionAcquisitions.length).toBeGreaterThan(1);
+        expect(descriptionAcquisitions.length).toBeLessThanOrEqual(5);
+      } else {
+        expect(descriptionAcquisitions).toHaveLength(
+          outcome === 'busy-then-acquired'
+            ? 2
+            : invoked || outcome === 'joined'
+              ? 1
+              : 0
+        );
+      }
+      if (outcome.startsWith('busy-')) {
+        expect(
+          descriptionAcquisitions.every(
+            ([input]) =>
+              input.acquireRequestId ===
+                descriptionAcquisitions[0][0].acquireRequestId &&
+              input.idempotencyKey ===
+                descriptionAcquisitions[0][0].idempotencyKey &&
+              input.manifest === descriptionAcquisitions[0][0].manifest
+          )
+        ).toBe(true);
+        expect(descriptionWaitElapsedMs).toBeLessThanOrEqual(5_000);
+        expect(descriptionWaitElapsedMs).toBeGreaterThan(0);
+      }
       expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
         invoked ? 3 : 2
       );
@@ -231,7 +300,9 @@ describe('RunT0ReviewOrchestration', () => {
         fixture.dependencies.projectionBuilder.build
       ).mock.calls[0][0];
       expect(projectionInput.prDescription).toEqual(
-        outcome === 'generated' ? description : undefined
+        outcome === 'generated' || outcome === 'busy-then-acquired'
+          ? description
+          : undefined
       );
       expect(fixture.controlPlane.finalizeExecution).toHaveBeenCalledWith(
         expect.objectContaining({ allowPartial: false })

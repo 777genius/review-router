@@ -2105,25 +2105,69 @@ export class RunT0ReviewOrchestration {
         input.workSlot.workSlotId,
         manifest.providerInvocationKey,
       ]);
-      const acquired =
-        await this.dependencies.controlPlane.acquireInvocationLease({
-          authorization: input.authorization,
-          idempotencyKey: this.idempotencyKey('description-lease-acquire', [
+      const waitStartedAt = this.dependencies.clock.monotonicNowMs();
+      let busyPollCount = 0;
+      let waitedMs = 0;
+      while (!lease) {
+        this.dependencies.signal?.throwIfAborted();
+        if (!this.canStartInvocation(2)) {
+          generator.unavailable();
+          return undefined;
+        }
+        if (busyPollCount > 0) {
+          const waitRemainingMs = Math.min(
+            5_000 - waitedMs,
+            5_000 - (this.dependencies.clock.monotonicNowMs() - waitStartedAt)
+          );
+          const delayMs = this.clampProviderDelay(
+            Math.min(500 * 2 ** Math.min(busyPollCount - 1, 4), waitRemainingMs)
+          );
+          if (delayMs <= 0) {
+            generator.unavailable();
+            return undefined;
+          }
+          await this.dependencies.delay.sleep(
+            delayMs,
+            this.dependencies.signal
+          );
+          waitedMs += delayMs;
+          this.dependencies.signal?.throwIfAborted();
+          await this.assertRevisionCurrent(input.command);
+          if (
+            waitedMs >= 5_000 ||
+            this.dependencies.clock.monotonicNowMs() - waitStartedAt >= 5_000 ||
+            !this.canStartInvocation(2)
+          ) {
+            generator.unavailable();
+            return undefined;
+          }
+        }
+        const acquired =
+          await this.dependencies.controlPlane.acquireInvocationLease({
+            authorization: input.authorization,
+            idempotencyKey: this.idempotencyKey('description-lease-acquire', [
+              acquireRequestId,
+            ]),
+            execution: input.execution,
+            workSlot: input.workSlot,
+            manifest,
             acquireRequestId,
-          ]),
-          execution: input.execution,
-          workSlot: input.workSlot,
-          manifest,
-          acquireRequestId,
-          ownerIdHash: input.command.ownerIdHash,
-        });
-      if (
-        acquired.status !== ReviewInvocationLeaseAcquireOutcomeStatus.Acquired
-      ) {
-        generator.unavailable();
-        return undefined;
+            ownerIdHash: input.command.ownerIdHash,
+          });
+        if (
+          acquired.status === ReviewInvocationLeaseAcquireOutcomeStatus.Busy
+        ) {
+          busyPollCount += 1;
+          continue;
+        }
+        if (
+          acquired.status !== ReviewInvocationLeaseAcquireOutcomeStatus.Acquired
+        ) {
+          generator.unavailable();
+          return undefined;
+        }
+        lease = acquired.lease;
       }
-      lease = acquired.lease;
       description = await this.dependencies.leaseSupervisor.run({
         lease,
         renew: async () => {

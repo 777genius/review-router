@@ -217,6 +217,8 @@ export type PreparedReviewInvocationManifestFacts = {
   readonly outputSchemaHash: string;
   readonly filePatchManifestHash: string;
   readonly contextManifestHash: string;
+  /** Null/absent means no memory text was included in this invocation. */
+  readonly memoryBundleHash?: string | null;
   readonly lifecycleTargetSetHash: string | null;
   readonly liveLifecycleStateHash: string | null;
   readonly toolPolicyHash: string;
@@ -657,6 +659,11 @@ export interface PreparedReviewInvocationPort {
     readonly sourceReviewRevisionHash: string;
     readonly signal: AbortSignal;
   }): Promise<ReviewObservationPayload>;
+}
+
+/** Admission changes require a fresh prompt/manifest before cache or inference. */
+export interface ReviewMemoryAdmissionPort {
+  isEligible(memoryBundleHash: string | null | undefined): Promise<boolean>;
 }
 
 /** Optional parent task, never a review observation or provider vote. */

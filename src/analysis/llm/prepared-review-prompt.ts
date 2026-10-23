@@ -18,6 +18,8 @@ export type PreparedPromptPathCoverage = Readonly<{
 
 export type PreparedReviewPromptV3 = Readonly<{
   version: 'prepared_review_prompt.v3';
+  /** Identity of the exact rendered memory included in both prompt variants. */
+  memoryBundleHash?: string;
   reviewSkills?: Readonly<{ capturedDigest: string; executionDigest: string }>;
   /** Shared review context without a terminal provider output contract. */
   investigationContextPrompt: string;

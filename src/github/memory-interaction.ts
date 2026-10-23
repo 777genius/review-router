@@ -70,10 +70,18 @@ export function memoryCommandLabel(command: ActionMemoryCommand): string {
       return `delete ${command.memoryItemId}`;
     case 'list_memory':
       return `list ${command.view}`;
+    case 'operation_status':
+      return `status ${command.operationId}`;
   }
 }
 
 function parseMemoryCommand(body: string): ActionMemoryCommand | null {
+  const status =
+    /^\/rr\s+(?:memory-status|memory\s+status)\s+([a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\s*$/i.exec(
+      body
+    );
+  if (status)
+    return { kind: 'operation_status', operationId: status[1].toLowerCase() };
   const confirm = new RegExp(
     `^/rr\\s+(?:remember|confirm-memory|confirm\\s+memory)\\s+${suggestionIdPattern}\\b`,
     'i'

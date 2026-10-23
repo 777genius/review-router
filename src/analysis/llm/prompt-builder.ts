@@ -3,6 +3,7 @@ import {
   renderReviewSkillsForPaths,
   type ReviewSkillsExecutionInput,
 } from '../../review-skills/review-skills';
+import type { ReviewMemorySnapshot } from '../../control-plane/review-memory-v2';
 import { createHash } from 'crypto';
 import {
   LifecycleTarget,
@@ -125,7 +126,8 @@ export class PromptBuilder {
   async buildPreparedV2(
     pr: PRContext,
     prNumber?: number,
-    lifecycleTargets: LifecycleTarget[] = []
+    lifecycleTargets: LifecycleTarget[] = [],
+    memorySnapshot?: ReviewMemorySnapshot | null
   ): Promise<PreparedReviewPromptV3> {
     // Validate PR context
     if (!pr || typeof pr !== 'object') {
@@ -339,8 +341,12 @@ export class PromptBuilder {
       );
     }
 
-    if (this.memoryPromptContext) {
-      pushShared(this.memoryPromptContext, '');
+    const memoryPrompt =
+      memorySnapshot === undefined
+        ? this.memoryPromptContext
+        : memorySnapshot?.renderedPrompt;
+    if (memoryPrompt) {
+      pushShared(memoryPrompt, '');
     }
 
     // Auto-detect and inject defensive programming context
@@ -456,6 +462,7 @@ export class PromptBuilder {
 
     return Object.freeze({
       version: 'prepared_review_prompt.v3',
+      ...(memorySnapshot ? { memoryBundleHash: memorySnapshot.hash } : {}),
       ...(this.reviewSkills.kind === 'legacy'
         ? {}
         : {

@@ -3,6 +3,7 @@ import {
   type ReviewSkillsExecutionInput,
 } from '../../review-skills/review-skills';
 import { CONTEXT_TOOLS_PROFILE } from '../../context-tools/contract';
+import type { ReviewMemorySession } from '../../control-plane/review-memory-v2';
 import {
   ReviewInvocationConfigurationMismatchError,
   ReviewInvocationConfigurationMismatchReason,
@@ -159,6 +160,7 @@ export type OcrReviewInvocationOptions = Readonly<{
   /** Controlled additive rule text; also the full reviewPrompt (§4.2). */
   ruleText: string;
   reviewSkills?: ReviewSkillsExecutionInput;
+  reviewMemory?: Pick<ReviewMemorySession, 'current'>;
   /** Untrusted PR business context; repository text, never tool policy. */
   backgroundText: string | null;
   checkoutRoot: string;
@@ -277,6 +279,23 @@ export function buildOcrSkillsControlledRuleText(input: {
  * semantic identity preimage and the background file. Verified boundary:
  * 8000 characters continue, 8001 abort.
  */
+/** Append the identical memory bytes to every exact-path rule. The managed
+ * runner chooses one rule per path; adding an unrelated global rule would lose
+ * either memory or the captured review skills under first-match resolution. */
+function appendOcrReviewMemory(ruleText: string, memory: string): string {
+  const document = JSON.parse(ruleText) as { rules: Record<string, unknown>[] };
+  if (!Array.isArray(document.rules) || document.rules.length === 0) {
+    throw new Error('review_memory_ocr_rule_invalid');
+  }
+  for (const rule of document.rules) {
+    const key = typeof rule.rule === 'string' ? 'rule' : 'content';
+    if (typeof rule[key] !== 'string')
+      throw new Error('review_memory_ocr_rule_invalid');
+    rule[key] = `${rule[key]}\n\n${memory}`;
+  }
+  return `${JSON.stringify(document, null, 2)}\n`;
+}
+
 export const OCR_BACKGROUND_HARD_CHAR_LIMIT = 8000;
 
 export function boundOcrBackgroundText(
@@ -596,7 +615,13 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
       // and without claiming an OCR observation (§4.3).
       throw new Error('review_action_v2_ocr_nothing_to_review');
     }
-    const ruleText = this.options.ruleText;
+    const memorySnapshot = this.options.reviewMemory?.current();
+    const ruleText = memorySnapshot
+      ? appendOcrReviewMemory(
+          this.options.ruleText,
+          memorySnapshot.renderedPrompt
+        )
+      : this.options.ruleText;
     const backgroundText = boundOcrBackgroundText(this.options.backgroundText);
     const revision: OcrNativeManifestAdmission = Object.freeze({
       baseSha: assignment.context.baseSha,
@@ -744,6 +769,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         }))
       ),
       contextManifestHash: canonicalJson({
+        ...(memorySnapshot ? { memoryBundleHash: memorySnapshot.hash } : {}),
         ...(this.options.reviewSkills?.kind === 'captured'
           ? {
               reviewSkills: {
@@ -830,6 +856,7 @@ export class OcrReviewInvocationAdapter implements PreparedReviewInvocationPort 
         outputSchemaHash: sha256(manifestPreimages.outputSchemaHash),
         filePatchManifestHash: sha256(manifestPreimages.filePatchManifestHash),
         contextManifestHash: sha256(manifestPreimages.contextManifestHash),
+        memoryBundleHash: memorySnapshot?.hash ?? null,
         lifecycleTargetSetHash: null,
         liveLifecycleStateHash: null,
         toolPolicyHash: sha256(manifestPreimages.toolPolicyHash),

@@ -43,6 +43,120 @@ import { MergeGateConclusion } from '../../../src/review-projection/domain';
 import { ExecutionDeadline } from '../../../src/review-execution/domain/execution-deadline';
 
 describe('RunT0ReviewOrchestration', () => {
+  it('never reuses a counted lease with a changed memory manifest after post-acquire revocation', async () => {
+    const fixture = createFixture();
+    let eligible = true;
+    const prepare = (
+      fixture.dependencies.invocations.prepare as jest.Mock
+    ).getMockImplementation()!;
+    (fixture.dependencies.invocations.prepare as jest.Mock).mockImplementation(
+      async (input) => {
+        const invocation = await prepare(input);
+        return {
+          ...invocation,
+          manifestFacts: {
+            ...invocation.manifestFacts,
+            memoryBundleHash: eligible ? hash('memory') : null,
+          },
+        };
+      }
+    );
+    Object.assign(fixture.dependencies, {
+      memoryAdmission: { isEligible: jest.fn(async () => eligible) },
+    });
+    const acquire =
+      fixture.controlPlane.acquireInvocationLease.getMockImplementation()!;
+    fixture.controlPlane.acquireInvocationLease.mockImplementation(
+      async (input) => {
+        const result = await acquire(input);
+        if (
+          result.status === ReviewInvocationLeaseAcquireOutcomeStatus.Acquired
+        )
+          eligible = false;
+        return result;
+      }
+    );
+    const result = await fixture.useCase.execute(fixture.command);
+    // The existing server contract counts acquisition before inference. Until
+    // unused-lease admission is qualified, preserve confidentiality and expose
+    // this continuity limitation rather than run a new prompt under an old lease.
+    expect(result.status).not.toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(fixture.dependencies.invocations.execute).not.toHaveBeenCalled();
+    expect(fixture.controlPlane.releaseInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+    expect(
+      (fixture.dependencies.invocations.prepare as jest.Mock).mock.calls.map(
+        ([input]) => input.attemptOrdinal
+      )
+    ).toEqual([1, 1]);
+  });
+
+  it('reprepares without memory at the same attempt when revocation arrives during a cache lookup', async () => {
+    const fixture = createFixture();
+    let eligible = true;
+    const prepare = (
+      fixture.dependencies.invocations.prepare as jest.Mock
+    ).getMockImplementation()!;
+    (fixture.dependencies.invocations.prepare as jest.Mock).mockImplementation(
+      async (input) => {
+        const invocation = await prepare(input);
+        return {
+          ...invocation,
+          reviewPrompt: eligible
+            ? 'review with frozen memory'
+            : 'review without memory',
+          manifestFacts: {
+            ...invocation.manifestFacts,
+            memoryBundleHash: eligible ? hash('memory') : null,
+          },
+        };
+      }
+    );
+    Object.assign(fixture.dependencies, {
+      memoryAdmission: { isEligible: jest.fn(async () => eligible) },
+    });
+    fixture.controlPlane.lookupEvidence
+      .mockImplementationOnce(async () => {
+        eligible = false;
+        return {
+          kind: ReviewEvidenceLookupKind.Hit,
+          observation: acceptedObservation,
+          attachment: {
+            kind: 'exact_revision_reuse',
+            capability: 'stale-memory-capability',
+            reuseSafetyDecisionHash: hash('reuse-safety'),
+          },
+        };
+      })
+      .mockResolvedValue({ kind: ReviewEvidenceLookupKind.Miss });
+    const result = await fixture.useCase.execute(fixture.command);
+    expect(result.status).toBe(ReviewOrchestrationResultStatus.Completed);
+    expect(fixture.dependencies.invocations.prepare).toHaveBeenCalledTimes(2);
+    expect(
+      (fixture.dependencies.invocations.prepare as jest.Mock).mock.calls.map(
+        ([input]) => input.attemptOrdinal
+      )
+    ).toEqual([1, 1]);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledTimes(1);
+    expect(fixture.dependencies.invocations.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocation: expect.objectContaining({
+          reviewPrompt: 'review without memory',
+          manifestFacts: expect.objectContaining({ memoryBundleHash: null }),
+        }),
+      })
+    );
+    expect(fixture.controlPlane.attachObservation).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachmentCapability: 'stale-memory-capability',
+      })
+    );
+    expect(fixture.controlPlane.acquireInvocationLease).toHaveBeenCalledTimes(
+      1
+    );
+  });
+
   it.each(['rejection', 'synchronous throw'])(
     'continues without optional comparison history after a baseline %s',
     async (failure) => {

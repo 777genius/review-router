@@ -17,22 +17,62 @@ import {
   contextToolsError,
 } from '../../../src/context-tools/contract';
 
+type RemoteScenario = {
+  id: string;
+  url: string;
+  tool: string;
+  args: Record<string, string>;
+  expectedText: RegExp;
+};
+const remoteScenarios: RemoteScenario[] = [
+  {
+    id: 'deepwiki',
+    url: 'https://mcp.deepwiki.com/mcp',
+    tool: 'read_wiki_structure',
+    args: { repoName: 'microsoft/TypeScript' },
+    expectedText: /TypeScript|Overview/i,
+  },
+  {
+    id: 'learn',
+    url: 'https://learn.microsoft.com/api/mcp',
+    tool: 'microsoft_docs_search',
+    args: {
+      query:
+        'Azure Blob Storage JavaScript uploadData conditions ifNoneMatch overwrite',
+    },
+    expectedText: /learn\.microsoft\.com/i,
+  },
+  {
+    id: 'cloudflare',
+    url: 'https://docs.mcp.cloudflare.com/mcp',
+    tool: 'search_cloudflare_documentation',
+    args: { query: 'Workers KV expirationTtl minimum 60 seconds' },
+    expectedText: /developers\.cloudflare\.com/i,
+  },
+];
+const liveMcp = process.env.REVIEWROUTER_TEST_LIVE_MCP === '1';
+const liveDeepWiki = process.env.REVIEWROUTER_TEST_LIVE_DEEPWIKI === '1';
 const binary = process.env.REVIEWROUTER_TEST_APPROVED_OCR_BINARY;
-if (process.env.REVIEWROUTER_TEST_LIVE_DEEPWIKI === '1' && !binary)
-  throw new Error(
-    'Live DeepWiki qualification requires the approved OCR binary'
-  );
+if ((liveMcp || liveDeepWiki) && !binary)
+  throw new Error('Live MCP qualification requires the approved OCR binary');
 const nativeTest = binary ? test : test.skip;
-/** This qualification uses a synthetic local model endpoint and never reaches a provider. */
-const scenarios = [
-  { valid: true, remote: false },
-  { valid: false, remote: false },
-  ...(process.env.REVIEWROUTER_TEST_LIVE_DEEPWIKI === '1'
-    ? [{ valid: true, remote: true }]
-    : []),
+/** Uses a synthetic local model endpoint; external opt-in MCP servers are real. */
+const scenarios: Array<{
+  valid: boolean;
+  label: string;
+  remote?: RemoteScenario;
+}> = [
+  { valid: true, label: 'builtin' },
+  { valid: false, label: 'invalid capability' },
+  ...(liveMcp
+    ? remoteScenarios
+    : liveDeepWiki
+      ? remoteScenarios.slice(0, 1)
+      : []
+  ).map((remote) => ({ valid: true, label: remote.id, remote })),
 ];
 nativeTest.each(scenarios)(
-  'approved rr.3 invokes MCP and reuses its result; valid=$valid remote=$remote',
+  'approved rr.3 invokes MCP and reuses its result; valid=$valid server=$label',
   async ({ valid, remote }) => {
     expect(
       createHash('sha256').update(fs.readFileSync(binary!)).digest('hex')
@@ -75,11 +115,11 @@ nativeTest.each(scenarios)(
       servers: remote
         ? [
             {
-              id: 'deepwiki',
+              id: remote.id,
               version: 1,
-              url: 'https://mcp.deepwiki.com/mcp',
+              url: remote.url,
               headers: {},
-              tools: ['read_wiki_structure'],
+              tools: [remote.tool],
               credentials: {},
             },
           ]
@@ -118,7 +158,7 @@ nativeTest.each(scenarios)(
     let stubModelRequests = 0;
     let resultUsed = false;
     const selectedTool = remote
-      ? 'rr_mcp_deepwiki_read_wiki_structure'
+      ? `rr_mcp_${remote.id}_${remote.tool}`
       : 'rr_repository_docs_read';
     let remoteResult: unknown;
     // Inspect the actual next native model request, not a direct test-client call.
@@ -177,7 +217,7 @@ nativeTest.each(scenarios)(
                 name,
                 arguments:
                   name === selectedTool && remote
-                    ? JSON.stringify({ repoName: 'microsoft/TypeScript' })
+                    ? JSON.stringify(remote.args)
                     : '{}',
               },
             ],
@@ -325,7 +365,7 @@ nativeTest.each(scenarios)(
           // OCR flattens MCP text blocks into its function_call_output string.
           expect(typeof remoteResult).toBe('string');
           expect((remoteResult as string).length).toBeGreaterThan(100);
-          expect(remoteResult).toMatch(/TypeScript|Overview/i);
+          expect(remoteResult).toMatch(remote.expectedText);
           expect(remoteResult).not.toMatch(
             /context_tools_|Error calling tool/i
           );

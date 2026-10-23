@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       live_mcp:
-        description: Exercise the real anonymous DeepWiki HTTPS server through OCR
+        description: Exercise real anonymous DeepWiki, Microsoft Learn and Cloudflare MCP through OCR
         type: boolean
         default: false
 
@@ -42,9 +42,9 @@ jobs:
       # Use per-test timeout and open-handle detection to avoid hangs
       - run: npm run test -- --maxWorkers=2 --detectOpenHandles --testTimeout=20000
       - name: Qualify native OCR MCP invocation and result reuse
-        timeout-minutes: 3
+        timeout-minutes: 6
         env:
-          REVIEWROUTER_TEST_LIVE_DEEPWIKI: ${{ github.event_name == 'workflow_dispatch' && inputs.live_mcp && '1' || '0' }}
+          REVIEWROUTER_TEST_LIVE_MCP: ${{ github.event_name == 'workflow_dispatch' && inputs.live_mcp && '1' || '0' }}
         run: |
           mkdir -p tmp/native-mcp-ci
           curl --fail --silent --show-error --location \

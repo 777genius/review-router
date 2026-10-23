@@ -1319,6 +1319,7 @@ describe('compact summary publication contract', () => {
       'wide',
     ]);
     for (const url of urls) {
+      expect(url.pathname).toBe('/review-banner/v1.svg');
       expect(Object.fromEntries(url.searchParams)).toEqual(
         expect.objectContaining({
           variant: 'update',
@@ -1348,7 +1349,7 @@ describe('compact summary publication contract', () => {
     );
     expect(urls).toHaveLength(4);
     for (const url of urls) {
-      expect(url.pathname).toBe('/review-banner/v2.svg');
+      expect(url.pathname).toBe('/review-banner/v1.svg');
       expect([...url.searchParams.keys()]).toEqual([
         'state',
         'variant',

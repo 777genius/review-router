@@ -45,7 +45,7 @@ export function renderReviewBanner(
       base.pathname !== '/'
     )
       return '';
-    const url = new URL('/review-banner/v2.svg', base);
+    const url = new URL('/review-banner/v1.svg', base);
     url.search = new URLSearchParams({
       state: presentation.state,
       variant: presentation.variant,

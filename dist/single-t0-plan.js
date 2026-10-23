@@ -144952,7 +144952,7 @@ var import_os5 = require("os");
 // package.json
 var package_default = {
   name: "review-router",
-  version: "1.0.205",
+  version: "1.0.206",
   description: "ReviewRouter GitHub Action for PR summaries, inline findings, and optional merge-blocking checks.",
   main: "dist/index.js",
   type: "commonjs",
@@ -203921,7 +203921,7 @@ function renderReviewBanner(baseUrl2, presentation) {
     const base = new URL(baseUrl2);
     if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash || base.pathname !== "/")
       return "";
-    const url3 = new URL("/review-banner/v2.svg", base);
+    const url3 = new URL("/review-banner/v1.svg", base);
     url3.search = new URLSearchParams({
       state: presentation.state,
       variant: presentation.variant,

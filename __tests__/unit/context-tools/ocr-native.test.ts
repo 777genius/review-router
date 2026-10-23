@@ -18,11 +18,22 @@ import {
 } from '../../../src/context-tools/contract';
 
 const binary = process.env.REVIEWROUTER_TEST_APPROVED_OCR_BINARY;
+if (process.env.REVIEWROUTER_TEST_LIVE_DEEPWIKI === '1' && !binary)
+  throw new Error(
+    'Live DeepWiki qualification requires the approved OCR binary'
+  );
 const nativeTest = binary ? test : test.skip;
 /** This qualification uses a synthetic local model endpoint and never reaches a provider. */
-nativeTest.each([true, false])(
-  'approved rr.3 native MCP list precedes its first grouping request; valid capability=%s',
-  async (valid) => {
+const scenarios = [
+  { valid: true, remote: false },
+  { valid: false, remote: false },
+  ...(process.env.REVIEWROUTER_TEST_LIVE_DEEPWIKI === '1'
+    ? [{ valid: true, remote: true }]
+    : []),
+];
+nativeTest.each(scenarios)(
+  'approved rr.3 invokes MCP and reuses its result; valid=$valid remote=$remote',
+  async ({ valid, remote }) => {
     expect(
       createHash('sha256').update(fs.readFileSync(binary!)).digest('hex')
     ).toBe('2f62d6fbb326e74d0fe9377f0224f1b56520bcefee688c58073fa1a30e45f1c9');
@@ -60,8 +71,19 @@ nativeTest.each([true, false])(
     const head = git('rev-parse', 'HEAD');
     const preimage = {
       version: 1,
-      builtinTools: ['repository.docs.read'],
-      servers: [],
+      builtinTools: remote ? [] : ['repository.docs.read'],
+      servers: remote
+        ? [
+            {
+              id: 'deepwiki',
+              version: 1,
+              url: 'https://mcp.deepwiki.com/mcp',
+              headers: {},
+              tools: ['read_wiki_structure'],
+              credentials: {},
+            },
+          ]
+        : [],
       limits: {
         startupTimeoutMs: 30000,
         callTimeoutMs: 30000,
@@ -78,7 +100,7 @@ nativeTest.each([true, false])(
     const broker = await startContextToolsBroker({
       plan,
       mask: () => undefined,
-      deadlineMs: Date.now() + 15000,
+      deadlineMs: Date.now() + (remote ? 90000 : 15000),
       builtins: {
         'repository.docs.read': {
           definition: { name: 'docs', inputSchema: { type: 'object' } },
@@ -94,6 +116,23 @@ nativeTest.each([true, false])(
     let sentContextCall = false;
     let stubModelRequests = 0;
     let resultUsed = false;
+    const selectedTool = remote
+      ? 'rr_mcp_deepwiki_read_wiki_structure'
+      : 'rr_repository_docs_read';
+    let remoteResult: unknown;
+    // Inspect the actual next native model request, not a direct test-client call.
+    function findToolOutput(value: unknown): void {
+      if (Array.isArray(value)) {
+        value.forEach(findToolOutput);
+        return;
+      }
+      if (!value || typeof value !== 'object') return;
+      const item = value as Record<string, unknown>;
+      if (item.type === 'function_call_output' && item.call_id === 'call_1') {
+        remoteResult = item.output;
+      }
+      Object.values(item).forEach(findToolOutput);
+    }
     let nativeExitCode: number | null = null;
     const controller = new AbortController();
     const upstream = new AccountGatewayModelTransport(
@@ -112,14 +151,11 @@ nativeTest.each([true, false])(
         };
         if (JSON.stringify(body.input).includes('MCP_NATIVE_CONTEXT_USED'))
           resultUsed = true;
+        if (remote && sentContextCall) findToolOutput(body.input);
         const available =
-          body.tools?.some((tool) => tool.name === 'rr_repository_docs_read') ??
-          false;
-        const name =
-          available && !sentContextCall
-            ? 'rr_repository_docs_read'
-            : 'task_done';
-        if (name === 'rr_repository_docs_read') sentContextCall = true;
+          body.tools?.some((tool) => tool.name === selectedTool) ?? false;
+        const name = available && !sentContextCall ? selectedTool : 'task_done';
+        if (name === selectedTool) sentContextCall = true;
         const index = ++stubModelRequests;
         const payload = {
           type: 'response.completed',
@@ -134,7 +170,10 @@ nativeTest.each([true, false])(
                 id: `fc_${index}`,
                 call_id: `call_${index}`,
                 name,
-                arguments: '{}',
+                arguments:
+                  name === selectedTool && remote
+                    ? JSON.stringify({ repoName: 'microsoft/TypeScript' })
+                    : '{}',
               },
             ],
             usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
@@ -170,7 +209,7 @@ nativeTest.each([true, false])(
               'Bearer '.length
             ),
             model: 'test-model',
-            timeout_sec: 5,
+            timeout_sec: remote ? 45 : 5,
           },
         },
         telemetry: { enabled: false },
@@ -239,10 +278,13 @@ nativeTest.each([true, false])(
         child.stderr.on('data', (chunk: Buffer) => {
           nativeDiagnostic = (nativeDiagnostic + chunk.toString()).slice(-4096);
         });
-        const timeout = setTimeout(() => {
-          child.kill('SIGKILL');
-          reject(new Error('native grouping deadline'));
-        }, 12000);
+        const timeout = setTimeout(
+          () => {
+            child.kill('SIGKILL');
+            reject(new Error('native grouping deadline'));
+          },
+          remote ? 85000 : 12000
+        );
         child.once('error', (error) => {
           if (error.name !== 'AbortError') {
             clearTimeout(timeout);
@@ -263,9 +305,25 @@ nativeTest.each([true, false])(
       expect(firstModelReceipt?.nativeConnected).toBe(valid);
       expect(firstModelReceipt?.calls).toBe(0);
       if (valid) {
+        if (nativeExitCode !== 0)
+          throw new Error(
+            nativeDiagnostic.replaceAll(
+              broker.config.capability,
+              '[CAPABILITY]'
+            )
+          );
         expect(nativeExitCode).toBe(0);
         expect(sentContextCall).toBe(true);
-        expect(resultUsed).toBe(true);
+        if (remote) {
+          // A connected server or tools/list alone cannot satisfy these assertions.
+          // OCR flattens MCP text blocks into its function_call_output string.
+          expect(typeof remoteResult).toBe('string');
+          expect((remoteResult as string).length).toBeGreaterThan(100);
+          expect(remoteResult).toMatch(/TypeScript|Overview/i);
+          expect(remoteResult).not.toMatch(
+            /context_tools_|Error calling tool/i
+          );
+        } else expect(resultUsed).toBe(true);
         expect(broker.receipt()).toMatchObject({
           nativeConnected: true,
           calls: 1,
@@ -288,5 +346,5 @@ nativeTest.each([true, false])(
       fs.rmSync(scratch, { recursive: true, force: true });
     }
   },
-  20000
+  100000
 );
